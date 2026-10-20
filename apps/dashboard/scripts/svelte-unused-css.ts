@@ -3,10 +3,10 @@
  * anyone knowing. Svelte drops a rule whose selector matches no element it
  * can see in the component, and writes it into the compiled stylesheet as
  * `/* (unused) … *\/`. A rule on an attribute only script sets (tab-drag's
- * `data-lifted`), or on a class the cutover moved off the markup, is such a
- * rule, and the product then never draws it. svelte-check passes on warnings
- * and the style compare only sees the states its tape reaches, so neither
- * proves no declaration was lost; this reads the compiler's own output.
+ * `data-lifted`), or on a class no markup carries any more, is such a rule,
+ * and the product then never draws it. svelte-check passes on warnings, so
+ * it does not prove no declaration was lost; this reads the compiler's own
+ * output.
  *
  * Every `src/**\/*.svelte` goes through the project's preprocess and
  * compiler options as vite.config.ts gives them to sveltekit()

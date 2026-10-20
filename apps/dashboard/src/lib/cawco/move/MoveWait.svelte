@@ -32,6 +32,7 @@
   import { Progress } from "#lib/components/ui/progress/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
+    type StepInk,
     type StepStatus,
     ThinkingStep,
     ThinkingSteps,
@@ -190,6 +191,15 @@
     failed: IconError,
     stopped: IconStop,
     asking: IconNeedsYou,
+  };
+  /** Each phase's glyph ink; a step still ahead keeps the kit's muted one. */
+  const INK: Record<Phase, StepInk | undefined> = {
+    done: "done",
+    active: "active",
+    ahead: undefined,
+    failed: "fail",
+    stopped: "muted",
+    asking: "attn",
   };
   const STATUS: Record<Phase, StepStatus> = {
     done: "complete",
@@ -451,6 +461,7 @@
           >
             <ThinkingStep
               icon={GLYPHS[row.phase]}
+              ink={INK[row.phase]}
               isLast={index === rows.length - 1}
               label={row.label}
               status={STATUS[row.phase]}

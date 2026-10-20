@@ -305,7 +305,7 @@ function watchHydration(): void {
         ?.textContent?.trim() ?? "none",
     add: (() => {
       const add = document
-        .querySelector("[data-session-tabs] .tnew")
+        .querySelector("[data-session-tabs] [data-tnew]")
         ?.getBoundingClientRect();
       return add ? Math.round(add.left) : null;
     })(),
@@ -314,7 +314,7 @@ function watchHydration(): void {
       const last = [...(strip?.querySelectorAll("[data-session-tab]") ?? [])]
         .at(-1)
         ?.getBoundingClientRect();
-      const add = strip?.querySelector(".tnew")?.getBoundingClientRect();
+      const add = strip?.querySelector("[data-tnew]")?.getBoundingClientRect();
       return `last tab ends ${last ? Math.round(last.right) : "-"}, + at ${add ? Math.round(add.left) : "-"}`;
     })(),
   });

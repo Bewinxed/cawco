@@ -179,7 +179,8 @@
   >
     {#if !hosted}
       <div
-        class="mx-auto mt-4 mb-3 hidden h-1.5 w-[100px] shrink-0 rounded-[var(--radius-pill)] bg-neutral-2 group-data-[vaul-drawer-direction=bottom]/drawer-content:block"
+        data-slot="drawer-grabber"
+        class="mx-auto mt-4 mb-3 hidden h-c-grabber-h w-c-grabber-w shrink-0 rounded-pill bg-neutral-2 group-data-[vaul-drawer-direction=bottom]/drawer-content:block"
       ></div>
     {/if}
     <!-- vaul takes pointer capture on every press in the sheet, which leaves

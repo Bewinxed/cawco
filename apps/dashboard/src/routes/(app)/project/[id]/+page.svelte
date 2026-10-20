@@ -2122,6 +2122,7 @@
                     <TaskFilterPopover
                       compact
                       {filter}
+                      look="in-bar"
                       {find}
                       onchange={setFilter}
                       tasks={[...tasks, ...archived]}

@@ -93,8 +93,15 @@
   {...restProps}
 >
   <!-- Its words in an element, so the mark line centres their x-height on
-       the unfold mark's (app.css). -->
-  <span class="mark-text">{@render children?.()}</span>
+       the unfold mark's (app.css). In a view's bar they clip with an
+       ellipsis where the trigger has shrunk below them. -->
+  <span
+    class={cn(
+      "mark-text",
+      look === "in-bar" &&
+        "relative min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+    )}>{@render children?.()}</span
+  >
   {#if mark === "chevron"}
     <IconChevronDown
       class="size-icon-md text-ink-muted pointer-events-none motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-(--ease-out) in-data-[state=open]:rotate-180"

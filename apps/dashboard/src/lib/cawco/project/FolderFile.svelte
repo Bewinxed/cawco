@@ -118,6 +118,7 @@
   </section>
 {:else}
   <SideSurface
+    of="file"
     label="A file of the project's folder"
     {onclose}
     title={path}

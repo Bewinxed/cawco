@@ -406,6 +406,7 @@
         />
         <Panel position="top-left">
           <p
+            data-slot="legend"
             class="m-0 max-w-c-map-node-w text-ink-muted type-meta text-pretty"
           >
             Above, what renders {name} ({map.usedIn.length}). Below, what

@@ -35,6 +35,7 @@
     onclick,
     flush,
     hung = false,
+    glyphOnly = false,
     ...rest
   }: Omit<HTMLAttributes<HTMLElement>, "onclick"> & {
     value: string;
@@ -58,6 +59,11 @@
      * one outline's centre (PaneTabs).
      */
     hung?: boolean;
+    /**
+     * The segment draws its glyph alone: the name stays its accessible
+     * name, never drawn (a host's title says it under the pointer).
+     */
+    glyphOnly?: boolean;
   } = $props();
 
   const tabs = useTabs();
@@ -420,7 +426,10 @@
          the sheet say which one is chosen. Each layer is clipped for the
          ellipsis, so the line box is left whole — a trimmed one would lose
          its descenders to the clip. -->
-    <span data-slot="tab-item-label" class="pick-inherit grid min-w-0">
+    <span
+      data-slot="tab-item-label"
+      class={cn("pick-inherit grid min-w-0", glyphOnly && "sr-only")}
+    >
       <span
         data-slot="text"
         class="col-start-1 row-start-1 min-w-0 truncate leading-(--item) font-medium"

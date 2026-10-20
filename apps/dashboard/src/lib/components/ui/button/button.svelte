@@ -10,7 +10,7 @@
   import { pressVariants } from "./press.js";
 
   export const buttonVariants = tv({
-    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-[var(--border-button-outline)] bg-[var(--surface-raised)] bg-clip-padding font-medium text-[var(--ink-strong)] text-body leading-none tracking-[-0.01em] [--hit-edge:1px] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-border-button-outline bg-surface-raised bg-clip-padding font-medium text-body text-ink-strong leading-none tracking-[-0.01em] [--hit-edge:1px] hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       /* The press, by size (./press.ts, The Press Rule): a compact button
          scales; one stretched full width, as a list row or a card's body,
@@ -22,27 +22,26 @@
       },
       variant: {
         default:
-          "border-transparent bg-[image:var(--action-surface)] bg-[var(--action-solid)] text-[var(--on-action)] hover:bg-[image:var(--action-surface-hover)] hover:bg-[var(--action-hover)]",
-        outline:
-          "aria-expanded:not-aria-current-page:bg-[var(--surface-hover)]",
+          "border-transparent bg-action-solid bg-action-surface text-on-action hover:bg-action-hover hover:bg-action-surface-hover",
+        outline: "aria-expanded:not-aria-current-page:bg-surface-hover",
         secondary:
-          "border-[var(--border-hairline)] bg-[var(--surface-recess)] hover:bg-[var(--surface-hover)]",
+          "border-border-hairline bg-surface-recess hover:bg-surface-hover",
         ghost:
-          "border-transparent bg-transparent aria-expanded:not-aria-current-page:bg-[var(--surface-hover)]",
+          "border-transparent bg-transparent aria-expanded:not-aria-current-page:bg-surface-hover",
         destructive:
-          "border-[var(--error-9)] bg-transparent text-[var(--error-11)] hover:bg-[var(--error-3)]",
+          "border-error-9 bg-transparent text-error-11 hover:bg-error-3",
         /* A grant wider than what was asked (DESIGN.md, The Consequential
            Grant Rule): warning tint, warning ink and a real edge, the same at
            rest and under the pointer, so it is never made more inviting. */
         grant:
-          "border-[var(--status-attn-ink)] bg-[var(--status-attn-bg)] text-[color:var(--status-attn-ink)] hover:bg-[var(--status-attn-bg)]",
+          "border-status-attn-ink bg-status-attn-bg text-status-attn-ink hover:bg-status-attn-bg",
         link: "border-transparent bg-transparent text-link-ink underline-offset-4 hover:bg-transparent hover:underline",
       },
       size: {
         default:
           "h-9 gap-(--btn-gap) px-space-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         xs: "h-6 gap-(--btn-gap) px-2 text-label [--btn-gap:4px] [--btn-icon:12px] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
-        sm: "h-[30px] gap-(--btn-gap) px-[11px] text-label [--btn-gap:7px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        sm: "h-c-btn-h-sm gap-(--btn-gap) px-space-3 text-label [--btn-gap:var(--space-2)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         /* A control standing in a composer shell (DESIGN.md, Composer:
            "34px Attach … and Send/Stop … each at the concentric 5px
@@ -51,7 +50,7 @@
           "h-c-composer-field gap-(--btn-gap) px-space-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         icon: "size-9",
         "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-icon-sm",
-        "icon-sm": "size-[30px]",
+        "icon-sm": "size-c-btn-h-sm",
         "icon-lg": "size-11",
         "icon-composer": "size-c-composer-field",
       },
@@ -93,6 +92,13 @@
       },
       /** A control inset in a field takes the field's tighter corner. */
       shape: { inset: "rounded-xs" },
+      /** In a view's bar (ViewBar, `data-bar`): the composer field's height,
+          at least as wide, as wide as its glyph and count make it, never
+          shrinking, at the bar's control corner. */
+      look: {
+        "in-bar":
+          "group-data-bar:h-c-composer-field group-data-bar:w-auto group-data-bar:min-w-c-composer-field group-data-bar:flex-none group-data-bar:rounded-(--bar-control-radius)",
+      },
       /** It may shrink below its words, or up to a field's cap. */
       width: { shrink: "min-w-0", capped: "min-w-0 max-w-112" },
       /** Pulled into what stands beside it, or set off from it. */
@@ -133,8 +139,15 @@
           elsewhere. */
       layout: { wide: "max-phone:hidden" },
       /** Open, it draws no fill while the pointer is off it (its words and
-          chevron say it is open). */
-      expanded: { unfilled: "aria-expanded:unhovered:bg-transparent" },
+          chevron say it is open), or the pressed step (`surface-pressed`, the
+          kit Toggle's on step) while what it opens stands. */
+      expanded: {
+        unfilled: "aria-expanded:unhovered:bg-transparent",
+        pressed: "aria-expanded:not-aria-current-page:bg-surface-pressed",
+      },
+      /** Set back while what it acts on is elsewhere (a page's Comment or
+          Draw mode): half strength, still pressable. */
+      dimmed: { true: "opacity-50" },
       /** A path, in the mono face at the label size. */
       face: { path: "font-mono font-normal text-label" },
       /** The last of a row of actions: its end padding moved to its start
@@ -224,6 +237,7 @@
     edge,
     fit,
     shape,
+    look,
     width,
     margin,
     gap,
@@ -232,6 +246,7 @@
     align,
     layout,
     expanded,
+    dimmed,
     face,
     toggle,
     figures,
@@ -264,6 +279,7 @@
         edge,
         fit,
         shape,
+        look,
         width,
         margin,
         gap,
@@ -272,6 +288,7 @@
         align,
         layout,
         expanded,
+        dimmed,
         face,
         toggle,
         figures,

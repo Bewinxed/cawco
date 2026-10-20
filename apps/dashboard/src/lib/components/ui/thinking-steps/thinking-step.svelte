@@ -1,9 +1,34 @@
 <script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
   /**
    * `pending` is not drawn; `ahead` is drawn muted, a step still to come in
    * a column that shows how long it is (a project's move).
    */
   export type StepStatus = "complete" | "active" | "pending" | "ahead";
+
+  /**
+   * The step's glyph cell, a line tall and the transcript's 16px glyph cell
+   * wide. Its ink: the body's by default, or the outcome the step stands for
+   * (a move's steps: done, running, failed, waiting on the person, stopped).
+   */
+  export const thinkingStepIcon = tv({
+    base: "grid h-lh min-h-icon-md w-icon-md place-items-center status-ahead:text-ink-subtle",
+    variants: {
+      ink: {
+        done: "text-status-done-glyph",
+        active: "text-ink-strong",
+        fail: "text-status-fail-glyph",
+        attn: "text-status-attn-glyph",
+        muted: "text-ink-muted",
+      },
+    },
+  });
+
+  export type StepInk = NonNullable<
+    VariantProps<typeof thinkingStepIcon>["ink"]
+  >;
 </script>
 
 <script lang="ts">
@@ -21,6 +46,7 @@
     label = "",
     description,
     status = "complete",
+    ink,
     enters = false,
     fades = false,
     isLast = false,
@@ -33,6 +59,8 @@
     label?: string;
     description?: string;
     status?: StepStatus;
+    /** The glyph's ink: the outcome the step stands for; none, the body's. */
+    ink?: StepInk;
     /**
      * This step is new — it appeared under a block already on screen — and
      * fades in (--dur-menu). Read once, at mount: a step drawn with its block
@@ -96,8 +124,7 @@
     >
       <span
         data-slot="thinking-step-icon"
-        data-thinking-step-icon
-        class="grid h-lh min-h-icon-md w-icon-md place-items-center status-ahead:text-ink-subtle"
+        class={thinkingStepIcon({ ink })}
         data-status={status}
         >{#key glyph}
           <span
@@ -127,9 +154,11 @@
       data-enters={entering || undefined}
     >
       {#if label}
+        <!-- The label wraps, never truncates: a long word (a branch, a path)
+             breaks where it must, as the description does. -->
         <span
           data-slot="thinking-step-label"
-          class="font-normal text-ink-strong transition-control status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-transparent motion-safe:data-shimmer:step-shimmer motion-safe:data-shimmer:animate-step-shimmer"
+          class="font-normal wrap-anywhere text-ink-strong transition-control status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-transparent motion-safe:data-shimmer:step-shimmer motion-safe:data-shimmer:animate-step-shimmer"
           data-shimmer={status === "active" || undefined}
           data-status={status}>{label}</span
         >

@@ -813,6 +813,7 @@
   </section>
 {:else}
   <SideSurface
+    of="task"
     label="Task {taskId}"
     {onclose}
     recessed={false}

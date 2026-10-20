@@ -38,8 +38,7 @@ import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import { until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
-const PANE =
-  ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"])';
+const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;
 const LIST = '[data-pin-list-pop] [data-slot="pin-list"]';
 type Theme = "light" | "dark";
@@ -672,7 +671,7 @@ const rejoined = async (at: At) => {
     30_000
   ).catch(() => drawn(page));
   stand.refuseWrite();
-  const band = page.locator(`${PANE} .error[role="alert"] p`);
+  const band = page.locator(`${PANE} [data-slot="failure"][role="alert"] p`);
   const said = await until(
     "the band saying the hub's reason",
     async () => ((await band.count()) ? await band.textContent() : null),

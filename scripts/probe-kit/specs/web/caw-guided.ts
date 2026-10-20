@@ -287,7 +287,9 @@ const readPanel = (page: Page) =>
     const paneStyle = pane ? getComputedStyle(pane) : null;
     const paneBox = box(pane);
     const before = shell ? getComputedStyle(shell, "::before") : null;
-    const grabber = shell?.querySelector(":scope > div.mx-auto");
+    const grabber = shell?.querySelector(
+      ':scope > [data-slot="drawer-grabber"]'
+    );
     const card = document.querySelector("[data-glass-card-frame]");
     return {
       vw: document.documentElement.clientWidth,

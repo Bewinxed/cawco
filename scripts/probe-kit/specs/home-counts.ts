@@ -383,11 +383,11 @@ const spec: Spec = {
       await settle(page);
       // The count trails the tab's hit inside its segment (TabItem's `trail`).
       const zero = await page.evaluate(() =>
-        [...document.querySelectorAll(".ff-tab")]
+        [...document.querySelectorAll("[data-ff-tab]")]
           .filter((tab) =>
-            (tab.querySelector(":scope > .hit")?.textContent ?? "").includes(
-              "Finished"
-            )
+            (
+              tab.querySelector(":scope > [data-hit]")?.textContent ?? ""
+            ).includes("Finished")
           )
           .map((tab) => ({
             badges: tab.querySelectorAll('[data-slot="count"]').length,

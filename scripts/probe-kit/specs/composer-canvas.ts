@@ -2309,7 +2309,7 @@ const dockCheck = async (on: On, clock: Clock) => {
       const node = document.querySelector(sel as string);
       const well = document
         .querySelector(
-          ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-side-well]'
+          ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-side-well]'
         )
         ?.getBoundingClientRect();
       const at = node?.getBoundingClientRect();
@@ -2395,7 +2395,7 @@ const dockCheck = async (on: On, clock: Clock) => {
   await clock.catchRuns(
     () =>
       page.click(
-        ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-label="Undock"]'
+        ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-label="Undock"]'
       ),
     MOTION,
     8000
@@ -2421,7 +2421,7 @@ const dockCheck = async (on: On, clock: Clock) => {
         frame: at ? [at.left, at.top, at.width, at.height] : null,
         slot: place ? [place.left, place.top, place.width, place.height] : null,
         panel: !!document.querySelector(
-          ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"])'
+          ':is([data-slot="preview-pane"], [data-side-card="preview"])'
         ),
       };
     },

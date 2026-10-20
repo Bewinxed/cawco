@@ -12,7 +12,7 @@
 import { type Kit, open, type Spec, settle } from "../../kit";
 
 const ROUTE = "/motion/folder-proof?at=1&work=working&theme=light";
-const PLUS = '[data-strip="session"] [data-slot="strip-new"] .tnew';
+const PLUS = '[data-strip="session"] [data-slot="strip-new"] [data-tnew]';
 
 const spec: Spec = {
   name: "pointer-hit",

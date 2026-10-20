@@ -1160,7 +1160,9 @@ async function readHead(page: Page): Promise<HeadRead> {
     const head = document.querySelector(
       "[data-bench-pane] [data-slot=side-head]"
     ) as HTMLElement;
-    const trigger = head.querySelector(".identity > *") as HTMLElement;
+    const trigger = head.querySelector(
+      "[data-slot=identity] > *"
+    ) as HTMLElement;
     const name = trigger.querySelector(
       "[data-slot=artifact-name]"
     ) as HTMLElement;
@@ -1274,7 +1276,7 @@ const EDGES_AT = ({
     if (data) {
       return `[${data.name}]`;
     }
-    const first = String(el.className).split(" ")[0];
+    const [first] = String(el.className).split(" ");
     return first ? `.${first}` : "";
   };
   const named = (el: Element, r: DOMRect, what: string) =>
@@ -1695,7 +1697,7 @@ const readMap = (page: Page) =>
       groups: [...pane.querySelectorAll("[data-slot=map-list] h3")].map(
         (one) => one.textContent ?? ""
       ),
-      legend: (pane.querySelector(".legend")?.textContent ?? "")
+      legend: (pane.querySelector("[data-slot=legend]")?.textContent ?? "")
         .replace(/\s+/g, " ")
         .trim(),
     };

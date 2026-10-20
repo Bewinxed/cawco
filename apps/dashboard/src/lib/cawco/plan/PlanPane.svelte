@@ -159,6 +159,7 @@
   {@render body()}
 {:else}
   <SideSurface
+    of="plan"
     label={planWords.plan}
     {onclose}
     recessed={false}

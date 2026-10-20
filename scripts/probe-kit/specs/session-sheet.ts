@@ -540,8 +540,7 @@ async function builtStories(
 }
 
 /** The artifact panel, as the session page holds it. */
-const PANE =
-  ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"])';
+const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 /** The canvas page's frame, which the panel themes (PreviewPane `data-scheme`). */
 const FRAME = `${PANE} iframe[data-scheme]`;
 /** The controls with words, which only a head 640px or wider draws (side/head.ts `WORDS_FROM`). */
@@ -570,7 +569,7 @@ const headOf = (page: Page) =>
       `${pane} [data-slot="side-head"]`
     );
     const style = head ? getComputedStyle(head) : null;
-    const lead = head?.querySelector(":scope > .identity > *");
+    const lead = head?.querySelector(":scope > [data-slot=identity] > *");
     const items = [
       ...(head?.querySelectorAll<HTMLElement>(":scope > [data-head-item]") ??
         []),

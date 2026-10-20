@@ -626,7 +626,7 @@ const pinWith = async (
   words: string
 ) => {
   await on.page
-    .locator("[data-slot='preview-pane'] button[aria-keyshortcuts='C']")
+    .locator("[data-side-card='preview'] button[aria-keyshortcuts='C']")
     .focus();
   await on.page.keyboard.press("c");
   await settle(on.page, 400);

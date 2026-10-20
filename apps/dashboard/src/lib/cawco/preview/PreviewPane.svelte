@@ -36,6 +36,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { Toggle } from "#lib/components/ui/toggle/index.js";
   import {
     IconAlert,
     IconChat,
@@ -2076,19 +2077,18 @@
      (SideSurface `items`, by the head's priority rule). -->
 {#snippet sendBar()}
   <!-- The page's picks the session has not heard; pins and ink go by themselves. -->
-  <button
+  <Button
     data-slot="send"
-    aria-busy={sending || undefined}
-    aria-disabled={sending || undefined}
-    class="touch-hit"
-    onclick={whileIdle(() => sending, sendPicks)}
+    onclick={sendPicks}
+    pending={sending}
+    size="sm"
     title="Send the page's picks to the session"
-    type="button"
+    variant="ghost"
   >
     <PendingContent icon={IconSend} pending={sending} />
     <span data-slot="send-label" class="in-form-compact:hidden">Send picks</span
     >
-  </button>
+  </Button>
 {/snippet}
 {#snippet sendMenu()}
   <DropdownMenu.Item
@@ -2100,17 +2100,15 @@
 {/snippet}
 
 {#snippet createBar()}
-  <button
-    aria-busy={making || undefined}
-    aria-disabled={making || undefined}
+  <Button
     aria-label="New canvas"
-    class="touch-hit"
-    onclick={whileIdle(() => making, newCanvas)}
+    icon={IconPlus}
+    onclick={newCanvas}
+    pending={making}
+    size="icon-sm"
     title="New canvas"
-    type="button"
-  >
-    <PendingContent icon={IconPlus} pending={making} />
-  </button>
+    variant="ghost"
+  />
 {/snippet}
 {#snippet createMenu()}
   <DropdownMenu.Item
@@ -2122,18 +2120,18 @@
 {/snippet}
 
 {#snippet undockBar()}
-  <button
+  <Button
     data-slot="other"
     aria-label="Undock"
-    class="touch-hit data-dimmed:opacity-50"
-    data-dimmed={(mode !== "interact" && !isCanvas) || undefined}
+    dimmed={mode !== "interact" && !isCanvas}
     disabled={!stage}
     onclick={() => giveBack(false)}
+    size="icon-sm"
     title="Undock"
-    type="button"
+    variant="ghost"
   >
     <IconUndock />
-  </button>
+  </Button>
 {/snippet}
 {#snippet undockMenu()}
   <DropdownMenu.Item disabled={!stage} onSelect={() => giveBack(false)}>
@@ -2144,15 +2142,16 @@
 {#snippet openBar()}
   {#if artifact}
     <!-- The same artifact, its doc and its tools, in a tab of its own. -->
-    <a
+    <Button
       data-slot="other"
       aria-label="Open in new tab"
-      class="touch-hit data-dimmed:opacity-50"
-      data-dimmed={(mode !== "interact" && !isCanvas) || undefined}
+      dimmed={mode !== "interact" && !isCanvas}
       href={`/artifact/${encodeURIComponent(artifact.id)}`}
       rel="noopener"
+      size="icon-sm"
       target="_blank"
-      title="Open in new tab"><IconExternal /></a
+      title="Open in new tab"
+      variant="ghost"><IconExternal /></Button
     >
   {/if}
 {/snippet}
@@ -2186,16 +2185,15 @@
 
 {#snippet inspectBar()}
   <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
-  <button
+  <Toggle
     aria-label={artifactWords.inspect}
-    aria-pressed={inspectOpen}
-    class="touch-hit"
-    onclick={() => showInspector(!inspectOpen)}
+    onPressedChange={(open) => showInspector(open)}
+    pressed={inspectOpen}
+    size="sm"
     title={artifactWords.inspectTitle}
-    type="button"
   >
     <IconTuning />
-  </button>
+  </Toggle>
 {/snippet}
 {#snippet inspectMenu()}
   <DropdownMenu.CheckboxItem
@@ -2218,6 +2216,7 @@
       <TabsList aria-label="Preview mode">
         <TabItem
           aria-keyshortcuts="V"
+          glyphOnly
           icon={IconInteract}
           label="Interact"
           title="Interact (V): the page gets every click"
@@ -2225,6 +2224,7 @@
         />
         <TabItem
           aria-keyshortcuts="C"
+          glyphOnly
           icon={IconComment}
           label="Comment"
           title="Comment (C): a click pins a comment"
@@ -2232,6 +2232,7 @@
         />
         <TabItem
           aria-keyshortcuts="D"
+          glyphOnly
           icon={IconPen}
           label="Draw"
           title="Draw (D): drag to draw on the page"
@@ -2274,7 +2275,9 @@
   <DropdownMenu.Root>
     <DropdownMenu.Trigger
       aria-label={`Mode: ${MODE_WORDS[mode]}`}
+      size="icon-sm"
       title={`Mode: ${MODE_WORDS[mode]} (V, C, D)`}
+      variant="ghost"
     >
       <Glyph />
     </DropdownMenu.Trigger>
@@ -2286,17 +2289,18 @@
 
 {#snippet commentsBar()}
   <!-- The Comments panel, floating over the page's top-right; the count is the open pins'. -->
-  <button
+  <Button
     data-slot="comments"
     aria-expanded={listOpen}
     aria-haspopup="dialog"
     aria-label={`Comments${openCount > 0 ? `, ${openCount} open` : ""}${pinsShown ? "" : ", pins hidden"}`}
-    class="mark-line touch-hit aria-expanded:bg-surface-pressed"
+    expanded="pressed"
     onclick={() => showList(!listOpen)}
+    size="sm"
     title={pinsShown
       ? "Comments (⇧C hides the pins)"
       : "Comments (⇧C shows the pins)"}
-    type="button"
+    variant="ghost"
   >
     <IconChat /><span class="in-form-compact:hidden" data-slot="comments-label"
       >Comments</span
@@ -2308,7 +2312,7 @@
       <!-- ⇧C hid the pins: said where the person looks for them. -->
       <IconEyeClosed />
     {/if}
-  </button>
+  </Button>
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item onSelect={() => showList(!listOpen)}>
@@ -2320,17 +2324,17 @@
 {/snippet}
 
 {#snippet reloadBar()}
-  <button
+  <Button
     data-slot="other"
     aria-label="Reload"
-    class="touch-hit data-dimmed:opacity-50"
-    data-dimmed={(mode !== "interact" && !isCanvas) || undefined}
+    dimmed={mode !== "interact" && !isCanvas}
     onclick={reloadPage}
+    size="icon-sm"
     title="Reload"
-    type="button"
+    variant="ghost"
   >
     <IconRefresh />
-  </button>
+  </Button>
 {/snippet}
 {#snippet reloadMenu()}
   <DropdownMenu.Item onSelect={reloadPage}>
@@ -2420,6 +2424,8 @@
   </section>
 {:else}
   <SideSurface
+    of="preview"
+    mode={isCanvas ? undefined : mode}
     closeFailed={failure?.again === "close"}
     {closing}
     items={headItems}
@@ -2830,6 +2836,7 @@
   </div>
   {#if failure}
     <div
+      data-slot="failure"
       class="absolute inset-x-0 bottom-0 flex items-center gap-space-3 px-space-3 py-space-2 bg-surface-raised border-t border-border-hairline"
       role="alert"
       transition:appear

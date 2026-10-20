@@ -39,6 +39,7 @@
     <div class="relative flex flex-col" in:unfold out:unfold {@attach morph()}>
       {#if problem}
         <span
+          data-slot="field-problem"
           class="max-w-c-measure type-meta text-status-fail-ink"
           in:crossIn
           out:crossOut>{problem}</span

@@ -50,8 +50,7 @@ const readFile = (page: Page, path: string) =>
         body?.querySelector('[data-slot="text"], [data-slot="md"]') !== null &&
         body !== null,
       page: document.querySelector("[data-file-page]") !== null,
-      card: document.querySelector('[data-side-surface-class~="folder-file"]')
-        ?.isConnected,
+      card: document.querySelector('[data-side-card="file"]')?.isConnected,
       file: new URL(location.href).searchParams.get("file"),
       path: location.pathname,
     };
@@ -145,9 +144,7 @@ const run = async (kit: Kit) => {
       reloaded.file === PLAN,
     JSON.stringify(reloaded)
   );
-  await desk
-    .locator('[data-side-surface-class~="folder-file"] [data-slot="close"]')
-    .click();
+  await desk.locator('[data-side-card="file"] [data-slot="close"]').click();
   await desk.waitForFunction(
     () => document.querySelector("[data-folder-file]") === null,
     null,

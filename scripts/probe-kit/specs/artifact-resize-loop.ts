@@ -166,8 +166,10 @@ function paintedFrames() {
   /** The drawn top of the composer over `split`'s conversation. */
   const drawnTop = (split: Element): Painted["composerTop"] => {
     const composer = split
-      .closest(".leaf")
-      ?.querySelector<HTMLElement>(":scope > .dock .lift")?.parentElement;
+      .closest('[data-slot="leaf"]')
+      ?.querySelector<HTMLElement>(
+        ':scope > [data-slot="dock"] [data-slot="lift"]'
+      )?.parentElement;
     if (!composer) {
       return "none";
     }
@@ -376,7 +378,7 @@ const cardState = (page: Page) =>
 
 /** The pane's Comment control, in the head or in More. */
 const COMMENT =
-  ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']';
+  ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']';
 
 /**
  * A pin dropped on the page's heading in Comment mode, and words written in

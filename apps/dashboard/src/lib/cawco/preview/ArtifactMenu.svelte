@@ -217,13 +217,16 @@
 </script>
 
 <DropdownMenu.Root bind:open>
+  <!-- The head's title as a control: the kit's sm ghost in the title face. -->
   <DropdownMenu.Trigger
     data-artifact-trigger
     aria-describedby={line ? lineId : undefined}
     class="max-w-full"
     data-artifact={shown.id}
     face="title"
+    size="sm"
     title={line || undefined}
+    variant="ghost"
   >
     {@const Glyph = GLYPHS[shown.kind]}
     <Glyph />

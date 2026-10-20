@@ -97,10 +97,12 @@
   </DropdownMenu.Sub>
 {:else}
   <DropdownMenu.Root>
-    <!-- The head's own button, as Inspect beside it: SideSurface's head recipe draws it; the trigger brings touch-hit. -->
+    <!-- The head's own control, as Inspect beside it: the kit's sm ghost. -->
     <DropdownMenu.Trigger
       aria-label="Canvas view"
+      size="icon-sm"
       title="Canvas view: map, scheme, widths, motion, zoom, verify"
+      variant="ghost"
     >
       <IconLayers />
     </DropdownMenu.Trigger>

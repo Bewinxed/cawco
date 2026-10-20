@@ -330,7 +330,7 @@ const run = async (kit: Kit) => {
   );
   // The pane's head offers Send picks only while the page has unsent picks: none now.
   const sendControl = page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="send"]'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="send"]'
   );
   const afterSend = await until(
     "the head's Send picks gone",

@@ -71,8 +71,7 @@ import {
   settle,
 } from "../kit";
 
-const PANE =
-  ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"])';
+const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;
 const NAME = "launch";
 

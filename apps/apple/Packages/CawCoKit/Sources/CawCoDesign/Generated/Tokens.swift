@@ -839,7 +839,7 @@ public enum Size {
     public static let cBtnWordsBlur: Double = 2
     /// The 24 Pointer Rule's floor (DESIGN.md Focus and hit areas): a small control's least hit box under a fine pointer.
     public static let cPointerFloor: Double = 24
-    /// wave 2: W9-behaviours. The 44 Touch Rule's floor (DESIGN.md Focus and hit areas): every control's least hit box under a coarse pointer, reached through `touch-hit`.
+    /// The 44 Touch Rule's floor (DESIGN.md Focus and hit areas): every control's least hit box under a coarse pointer, reached through `touch-hit`.
     public static let cTouchFloor: Double = 44
     /// The screen's margin a popover or a floating card keeps each side (DESIGN.md Breakpoints: "popovers widen to the viewport less 24px").
     public static let cScreenMargin: Double = 12
@@ -857,13 +857,13 @@ public enum Size {
     public static let cCombPitch: Double = 6
     /// An edge fade at full length at every width, where the kit's phone 16px would show nothing (Files' scrollers, Caw's panel).
     public static let cEdgeFadeLen: Double = 40
-    /// wave 2: W8-app-recipes. The house edge fade's length under 640px (kit-edge-fade, kit-edge-fade-block): short enough to read as an edge on a phone's narrow view, not a band across the content. Sits between the ladder's 14 and 18, so it is its own token.
+    /// The house edge fade's length under 640px (kit-edge-fade, kit-edge-fade-block): short enough to read as an edge on a phone's narrow view, not a band across the content. Sits between the ladder's 14 and 18, so it is its own token.
     public static let cEdgeFadeLenPhone: Double = 16
-    /// wave 2: W8-app-recipes. A floating surface's row (ui/menu-item): 32px on a fine pointer, 44px on a coarse one (cawco.coarse.tokens.json; DESIGN.md, The 44 Touch Rule). A row height, not spacing, so not space-8.
+    /// A floating surface's row (ui/menu-item): 32px on a fine pointer, 44px on a coarse one (cawco.coarse.tokens.json; DESIGN.md, The 44 Touch Rule). A row height, not spacing, so not space-8.
     public static let cMenuItemH: Double = 32
     /// `cMenuItemH` under a coarse pointer (touch).
     public static let cMenuItemHCoarse: Double = 44
-    /// wave 2: W8-app-recipes. The narrowest an icon card stands in its grid (ui/icon-card), the track floor of the auto-fit columns.
+    /// The narrowest an icon card stands in its grid (ui/icon-card), the track floor of the auto-fit columns.
     public static let cIconCardMin: Double = 160
     /// A sheet's height cap (DESIGN.md Drawer: "It is as tall as its content, up to 85vh").
     public static let cSheetMaxH: Double = 717.4

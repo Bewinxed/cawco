@@ -438,7 +438,7 @@ const run = async (kit: Kit) => {
 
   // 3a'. The usage popover's short names (rings `shownNames`): the two on
   // one email by their organizations, not by the domain they share.
-  await page.locator('[data-slot="strip"] .strip-hit').first().click();
+  await page.locator('[data-slot="strip"] [data-strip-hit]').first().click();
   const short = await until(
     "every account's cell in the usage popover",
     () =>

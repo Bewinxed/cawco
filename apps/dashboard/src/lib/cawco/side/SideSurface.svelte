@@ -26,9 +26,7 @@
    * pressed is still under the pointer to press back.
    */
   import { type Snippet, untrack } from "svelte";
-  import PendingContent, {
-    whileIdle,
-  } from "#lib/components/ui/button/pending-content.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu (DropdownMenu.Root, .Item, …), as every menu of the app imports it
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
@@ -63,7 +61,8 @@
     closing = false,
     closeFailed = false,
     recessed = true,
-    class: className = "",
+    of,
+    mode,
     well = $bindable(),
     section = $bindable(),
     children,
@@ -100,7 +99,14 @@
     closeFailed?: boolean;
     /** The content stands in the well; false: on the card itself. */
     recessed?: boolean;
-    class?: string;
+    /** What the card holds, its hook (`data-side-card`): the pane's own name. */
+    of?: "preview" | "task" | "file" | "plan";
+    /**
+     * A page's mode in the well (the preview's): Comment and Draw turn the
+     * well's own border the accent, inside its box, never a second ring;
+     * Interact leaves it as the page's own. None: the well has no ring.
+     */
+    mode?: "interact" | "comment" | "draw";
     well?: HTMLDivElement;
     section?: HTMLElement;
     /** The well's content. */
@@ -337,20 +343,20 @@
 
 {#snippet expandBar()}
   {#if expand}
-    <button
+    <Button
       aria-keyshortcuts={expanded ? "Escape" : undefined}
       aria-label={expanded ? expand.backLabel : "Expand"}
-      class="touch-hit"
       onclick={() => expand.toggle()}
+      size="icon-sm"
       title={expanded ? `${expand.backLabel} (Esc)` : "Expand"}
-      type="button"
+      variant="ghost"
     >
       {#if expanded}
         <IconMinimize />
       {:else}
         <IconMaximize />
       {/if}
-    </button>
+    </Button>
   {/if}
 {/snippet}
 
@@ -367,13 +373,13 @@
 {/snippet}
 
 <section
-  data-side-surface-class={className}
   data-slot="side-card"
+  data-side-card={of}
   data-side-surface-expanded={expanded || undefined}
   data-expanded-recessed={(expanded && recessed) || undefined}
   data-recessed={recessed || undefined}
   aria-label={label}
-  class="group/card @container flex h-full min-h-0 min-w-0 flex-col rounded-lg bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none data-side-surface-expanded:px-0 data-side-surface-expanded:pt-space-3 data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer {className}"
+  class="group/card @container flex h-full min-h-0 min-w-0 flex-col rounded-lg bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none data-side-surface-expanded:px-0 data-side-surface-expanded:pt-space-3 data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
   style:--expanded-inset="calc(var(--space-3) + var(--space-2))"
   style:--card-max="calc(100% - var(--sheet-hidden, 0px))"
   bind:this={section}
@@ -398,11 +404,15 @@
          title control's ring is not cut. Its text stands where the controls'
          text does, their inset: a switch before it takes its own inset
          back, and a title control's padding is its text's inset. -->
+    <!-- Under a title control, a line standing beneath it (`data-lined`)
+         gives the control its height back: it grows to its two lines, a
+         `--space-1` above and below. -->
     <div
       data-slot="identity"
       data-controlled={titleControl ? "" : undefined}
       data-switched={switcher ? "" : undefined}
-      class="-m-space-1 flex min-w-(--name-keeps) flex-1 flex-col items-start overflow-hidden p-space-1 ps-space-3 data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1"
+      data-lined={(titleControl && subtitle && subtitleStands) || undefined}
+      class="-m-space-1 flex min-w-(--name-keeps) flex-1 flex-col items-start overflow-hidden p-space-1 ps-space-3 *:max-w-full data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1 data-lined:[&>:is(button,a)]:h-auto data-lined:[&>:is(button,a)]:py-space-1"
       style:--name-keeps="{nameKeeps}px"
       bind:this={identity}
     >
@@ -456,7 +466,9 @@
             ? `More, ${moreCount.of} ${moreCount.n} open`
             : "More"}
           face="count"
+          size={moreCount ? "sm" : "icon-sm"}
           title="More"
+          variant="ghost"
         >
           <IconMore />
           {#if moreCount}
@@ -478,27 +490,29 @@
     {#if !items && expand?.available}
       {@render expandBar()}
     {/if}
-    <button
+    <Button
       data-slot="close"
-      aria-busy={closing || undefined}
-      aria-disabled={closing || undefined}
       aria-label="Close"
-      class="touch-hit"
-      style:--btn-icon="var(--icon-md)"
-      onclick={whileIdle(() => closing, onclose)}
+      failed={closeFailed}
+      icon={IconClose}
+      onclick={onclose}
+      pending={closing}
+      size="icon-sm"
       title="Close"
-      type="button"
-    >
-      <PendingContent failed={closeFailed} icon={IconClose} pending={closing} />
-    </button>
+      variant="ghost"
+    />
   </header>
   {#if recessed}
     <!-- The content's ground: a well inside its edge (surface-well,
          border-well: the recess and hairline by day, deeper with a clear
-         edge at night). -->
+         edge at night). A page's Comment or Draw mode rings it in the accent
+         (`mode`), the ring easing in and out except while the split
+         slides, and points a crosshair. -->
     <div
       data-side-well
-      class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-well bg-surface-well group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+      data-mode={mode && mode !== "interact" ? mode : undefined}
+      data-ringed={mode ? "" : undefined}
+      class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-well bg-surface-well data-ringed:outline-(length:--focus-ring-width) data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:outline-offset-(--focus-ring-inset) data-ringed:transition-[outline-color] data-ringed:duration-(--dur-control) data-ringed:ease-in-out data-mode:cursor-crosshair data-mode:outline-accent group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
       bind:this={well}
     >
       {@render children()}

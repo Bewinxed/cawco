@@ -306,7 +306,7 @@
   }
 
   /* The mono face never ligates: here for code, and in the `font-mono`
-     utility (wave 2: W9-behaviours) for everything else set in it. */
+     utility (the behaviours, below) for everything else set in it. */
   code,
   pre {
     font-family: var(--font-mono);
@@ -1027,154 +1027,6 @@
     pointer-events: none;
   }
 
-  /* Kit parts restyled by their host, until each part takes the look as a
-     variant of its own (wave 2): a ThinkingStep's glyph in its phase's ink
-     under MoveWait; WorkTabs' sizes on the fluid tabs; the preview's well
-     ring and its mode tabs' glyph-only segments; the view bar's trigger
-     words and filter trigger; the project details' asked toggle's breath;
-     a segmented radio's glyph. */
-  [data-slot="wait"]
-    [data-slot="row"][data-phase="done"]
-    [data-thinking-step-icon] {
-    color: var(--status-done-glyph);
-  }
-  [data-slot="wait"]
-    [data-slot="row"][data-phase="active"]
-    [data-thinking-step-icon] {
-    color: var(--ink-strong);
-  }
-  [data-slot="wait"]
-    [data-slot="row"][data-phase="failed"]
-    [data-thinking-step-icon] {
-    color: var(--status-fail-glyph);
-  }
-  [data-slot="wait"]
-    [data-slot="row"][data-phase="asking"]
-    [data-thinking-step-icon] {
-    color: var(--status-attn-glyph);
-  }
-  [data-slot="wait"]
-    [data-slot="row"][data-phase="stopped"]
-    [data-thinking-step-icon] {
-    color: var(--ink-muted);
-  }
-  /* A move step's label wraps, never truncates. */
-  [data-slot="wait"] [data-slot="row"] [data-slot="thinking-step-label"] {
-    overflow-wrap: anywhere;
-  }
-  /* The preview's well: Comment and Draw turn its own border the accent,
-     inside its box, never a second ring; Interact leaves it as the page's
-     own. The ring eases except while the split slides. */
-  [data-side-well]:has(> [data-slot="pin-room"]) {
-    outline: var(--focus-ring-width) solid transparent;
-    outline-offset: var(--focus-ring-inset);
-
-    &:not(:where([data-split-sliding] *)) {
-      transition: outline-color var(--dur-control) var(--ease-in-out);
-    }
-    &:has(> [data-slot="pin-room"][data-mode]) {
-      outline-color: var(--accent);
-      cursor: crosshair;
-    }
-  }
-  /* The preview's mode control keeps its segments to their glyphs: each
-     name stays its accessible name and its title, never drawn. */
-  [data-slot="modes"] [data-slot="ff-tab"] [data-slot="tab-item-label"] {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  [data-slot="view-bar"] > [data-slot="select-trigger"] > .mark-text {
-    position: relative;
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  [data-slot="view-bar"] > [data-filter-trigger] {
-    flex: none;
-    min-inline-size: var(--c-composer-field);
-    inline-size: auto;
-    block-size: var(--c-composer-field);
-    border-radius: var(--bar-control-radius);
-  }
-  [data-slot="tab"][role="radio"] svg {
-    flex: none;
-  }
-
-  /* A side surface's head controls (SideSurface's head, whatever its host
-     puts there): a 30px ghost of the label role, muted at rest, the hover
-     fill under a resting pointer, pressed and on as the kit's. In this
-     layer, so a kit part's own utilities (ArtifactMenu's `face="title"`)
-     still win over it. */
-  [data-slot="side-head"] :is(button, a):not([role="tab"]) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-1);
-    min-width: var(--c-btn-h-sm);
-    height: var(--c-btn-h-sm);
-    padding: 0 var(--space-2);
-    border: 0;
-    border-radius: var(--radius-sm);
-    color: var(--ink-muted);
-    background: transparent;
-    text-decoration: none;
-    font-family: inherit;
-    font-style: inherit;
-    line-height: inherit;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out),
-      transform var(--dur-control) var(--ease-out),
-      opacity var(--dur-control) var(--ease-in-out);
-  }
-  [data-slot="side-head"] :is(button, a):not([role="tab"]) svg {
-    width: var(--icon-md);
-    height: var(--icon-md);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="side-head"]
-      :is(button, a):not([role="tab"]):is(:active, [data-pressed]) {
-      transform: scale(var(--press-scale));
-    }
-  }
-  [data-slot="side-head"] button[aria-pressed="true"]:not([role="tab"]) {
-    background: var(--surface-pressed);
-    color: var(--ink-strong);
-  }
-  [data-slot="side-head"] button:disabled {
-    opacity: 0.5;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    [data-slot="side-head"]
-      :is(button, a):not([role="tab"], [aria-pressed="true"]):hover {
-      background: var(--surface-hover);
-    }
-  }
-  [data-slot="side-head"] > :is(button, a) {
-    flex: none;
-  }
-  [data-slot="identity"] > * {
-    max-inline-size: 100%;
-  }
-  [data-slot="identity"][data-controlled]:has(
-      > [data-slot="subtitle"]:not([data-dropped])
-    )
-    > :is(button, a) {
-    block-size: auto;
-    padding-block: var(--space-1);
-  }
-  [data-slot="side-head"]:has([role="tablist"]:not([data-head-item] *))
-    [data-slot="identity"] {
-    --inset: var(--space-1);
-  }
-
   /* A touch is the browser's to pan only across the axis a sheet leaves by,
      on every element inside it: the browser reads touch-action from the
      finger's element up to the nearest scroller, so a scrolling list in the
@@ -1831,8 +1683,8 @@
 }
 
 /* A row held under a finger (utils/longpress.ts marks it `data-holding`,
-   whatever row it is) takes the press tint (`press-tint`, wave 2:
-   W9-behaviours, below) for as long as it is held, over the row's own fill:
+   whatever row it is) takes the press tint (`press-tint`, the behaviours,
+   below) for as long as it is held, over the row's own fill:
    `#\#` is an id no element has, so `:is(…, #\#)` matches as its other
    argument does and weighs an id (Selectors 4). Its inks go strong by day,
    as a pressed control's do. */
@@ -2771,8 +2623,8 @@
 
 /* The shared sheet, utilities under the names its consumers write: the
    new-session dialog's (it says how it keeps its cascade). Tailwind inlines
-   an import where it stands, so it comes after the rules above, as
-   .cutover/shared-sheets.md orders it. */
+   an import where it stands, so it comes after the rules above: its rules
+   follow them in the cascade. */
 /* biome-ignore-start lint/correctness/noInvalidPositionAtImportRule: Tailwind's compiler inlines each import in place; the place is the cascade order */
 @import "./lib/cawco/spawn/ns-theme.css";
 /* biome-ignore-end lint/correctness/noInvalidPositionAtImportRule: the import above */
@@ -2868,8 +2720,8 @@
 
 /* The flip itself starts no element transitions: `overrides`, above. */
 
-/* wave 2: W5-overlays */
-/* What scrolls in a sheet names the scroll timeline (`--sheet-scroll`) its
+/* ---- Sheets ------------------------------------------------------------
+   What scrolls in a sheet names the scroll timeline (`--sheet-scroll`) its
    header's seam follows (the kit drawer's `timeline-scope`, above): a
    scroll-driven animation, which Tailwind has no utility for. */
 @utility kit-sheet-scroll {
@@ -2892,8 +2744,8 @@
   }
 }
 
-/* wave 2: W7-sheets */
-/* Event Calendar's DOM (@event-calendar/core renders every element here;
+/* ---- Event Calendar ----------------------------------------------------
+   Event Calendar's DOM (@event-calendar/core renders every element here;
    none takes a class from us but the chips' `classNames`), on the calendar
    view's host. Its own sheet is in `vendor`, so these win by layer. */
 @layer components {
@@ -3046,7 +2898,7 @@
   }
 }
 
-/* wave 2: W9-behaviours ----------------------------------------------------
+/* ---- Behaviours --------------------------------------------------------
    The behaviours the whole app names, one custom utility each
    (tailwindcss.com/docs/adding-custom-styles#adding-custom-utilities), so a
    class is the one way any of them reaches an element. Each draws at zero
@@ -3238,8 +3090,8 @@
   font-variant-ligatures: none;
 }
 
-/* wave 2: W6-layout */
-/* A pane whose group's divider holds the keyboard (paneforge marks it
+/* ---- Layout ------------------------------------------------------------
+   A pane whose group's divider holds the keyboard (paneforge marks it
    `data-active="keyboard"` while it has focus): a step from the keyboard is
    a jump, so the panes either side tween to it (ui/resizable Pane, `grid`).
    Here rather than in variants.css, which `bun run variants` writes whole. */
@@ -3273,12 +3125,12 @@
   );
 }
 
-/* wave 2: W8-app-recipes */
-/* The app's shared behaviours as Tailwind utilities, same names, users
-   unchanged (tailwindcss.com/docs/adding-custom-styles#adding-custom-utilities).
-   The looks the old sheet classes drew are kit recipes now: ui/chip,
-   ui/menu-item, ui/section-header `sectionHeadVariants`, ui/dock-shell,
-   ui/button `sendVariants`, ui/icon-card. */
+/* ---- App recipes -------------------------------------------------------
+   The app's shared behaviours as Tailwind utilities
+   (tailwindcss.com/docs/adding-custom-styles#adding-custom-utilities). The
+   looks are kit recipes: ui/chip, ui/menu-item, ui/section-header
+   `sectionHeadVariants`, ui/dock-shell, ui/button `sendVariants`,
+   ui/icon-card. */
 
 /* A scroller whose content runs past an edge fades that edge out, only that
    edge, only while there is more to scroll to. The fade lengths ride the

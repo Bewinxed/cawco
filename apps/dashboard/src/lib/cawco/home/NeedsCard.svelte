@@ -703,6 +703,7 @@
            its reason, in the transcript's command rule, cut with an
            ellipsis. -->
       <code
+        data-slot="needs-command"
         class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-row mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-size-meta text-ellipsis whitespace-pre text-ink-muted"
         >{item.request.presentation.command.trim().split("\n")[0]}</code
       >

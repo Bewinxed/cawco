@@ -4,9 +4,8 @@
  * route and the states it opens.
  *
  * Every root and every action finds its element by what a restyle keeps:
- * a tag, a role, an accessible name, a `data-*` attribute, a kit recipe
- * class (`.kit-pop`, `.kit-hang`, which stay classes). Never by a
- * component's own class: the lanes delete those.
+ * a tag, a role, an accessible name, a `data-*` attribute. Never by a
+ * class: a class is a style.
  *
  * A route opens on the built dashboard against the hub tape ("built"), or,
  * for a `/motion/` bench (a built dashboard 404s them), on the dev server
@@ -108,7 +107,7 @@ export interface Surface {
 
 /** An open layer: a dialog, sheet, drawer, menu or popover standing open. */
 export const LAYER =
-  "[role=dialog][data-state=open], [role=menu][data-state=open], [data-slot$='-content'][data-state=open], .kit-pop[data-state=open], .kit-hang[data-state=open]";
+  "[role=dialog][data-state=open], [role=menu][data-state=open], [data-slot$='-content'][data-state=open]";
 /** A menu standing open: a dropdown's or a context menu's content. */
 const OPEN_MENU = "[role=menu][data-state=open]";
 /** A dialog standing open: a sheet, a drawer, a modal. */
@@ -1626,7 +1625,7 @@ export const SURFACES: Surface[] = [
           await page.focus("[data-chosen] [data-session-tab]");
           await page.keyboard.press("ArrowDown");
         },
-        root: ".kit-hang[data-state=open]",
+        root: "[data-session-details-popover][data-state=open]",
         ready: {
           shows: '[aria-label="Session details"][data-state=open]',
         },

@@ -2,8 +2,8 @@
  * Holds the number of numeric spacing and sizing utilities in the
  * dashboard's class strings (`gap-2`, `p-1.5`, `-mt-0.5`, `phone:h-9`) from
  * rising. The owner kept Tailwind's numeric step (`--spacing`, theme.css) so
- * a value no token carries keeps its utility through the cutover to the
- * token theme; each such class is a value waiting for a token, so their
+ * a value no token carries keeps its utility beside the token theme; each
+ * such class is a value waiting for a token, so their
  * number may fall, never rise. A zero (`m-0`, `inset-0`, which a `margin: 0`
  * becomes), a fraction (`w-1/2`) and a keyword (`w-full`, `h-px`) are not
  * counted. The class strings are the ones scripts/class-strings.ts reads.

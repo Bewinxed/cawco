@@ -169,12 +169,10 @@
   <section class="h-c-bench-side-h w-c-bench-side-w min-w-0" data-probe="side">
     <SideSurface label="Preview" onclose={noop} title="Preview">
       {#snippet actions()}
-        <button aria-label="Inspect" aria-pressed="true" type="button"
-          ><IconEye /></button
+        <Toggle aria-label="Inspect" pressed={true} size="sm"
+          ><IconEye /></Toggle
         >
-        <button aria-label="Draw" aria-pressed="false" type="button"
-          ><IconPen /></button
-        >
+        <Toggle aria-label="Draw" pressed={false} size="sm"><IconPen /></Toggle>
       {/snippet}
       <p>Well</p>
     </SideSurface>

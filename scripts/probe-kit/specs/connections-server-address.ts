@@ -90,7 +90,7 @@ const spec: Spec = {
     await form.getByRole("button", { name: "Sign in", exact: true }).click();
     const refusal = await form
       .locator('[data-slot="field-field"]', { has: page.locator(FIELD) })
-      .locator(".error")
+      .locator('[data-slot="field-problem"]')
       .textContent({ timeout: 5000 })
       .catch(() => null);
     kit.check(

@@ -495,6 +495,7 @@
 
       <div class="flex min-w-0 flex-col">
         <div
+          data-slot="step-box"
           class="relative overflow-hidden rounded-lg border border-border-well bg-surface-well"
           style:--swatch-ground="var(--surface-well)"
           {@attach morph()}
@@ -551,6 +552,7 @@
         </div>
         {#if refused}
           <p
+            data-slot="refused"
             class="type-meta mt-space-3 text-status-fail-ink"
             role="alert"
             in:appear

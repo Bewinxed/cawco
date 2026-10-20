@@ -5413,7 +5413,7 @@
         "value": 44,
         "unit": "px"
       },
-      "$description": "wave 2: W9-behaviours. The 44 Touch Rule's floor (DESIGN.md Focus and hit areas): every control's least hit box under a coarse pointer, reached through `touch-hit`."
+      "$description": "The 44 Touch Rule's floor (DESIGN.md Focus and hit areas): every control's least hit box under a coarse pointer, reached through `touch-hit`."
     },
     "c-screen-margin": {
       "$type": "dimension",
@@ -5485,7 +5485,7 @@
         "value": 16,
         "unit": "px"
       },
-      "$description": "wave 2: W8-app-recipes. The house edge fade's length under 640px (kit-edge-fade, kit-edge-fade-block): short enough to read as an edge on a phone's narrow view, not a band across the content. Sits between the ladder's 14 and 18, so it is its own token."
+      "$description": "The house edge fade's length under 640px (kit-edge-fade, kit-edge-fade-block): short enough to read as an edge on a phone's narrow view, not a band across the content. Sits between the ladder's 14 and 18, so it is its own token."
     },
     "c-menu-item-h": {
       "$type": "dimension",
@@ -5493,7 +5493,7 @@
         "value": 32,
         "unit": "px"
       },
-      "$description": "wave 2: W8-app-recipes. A floating surface's row (ui/menu-item): 32px on a fine pointer, 44px on a coarse one (cawco.coarse.tokens.json; DESIGN.md, The 44 Touch Rule). A row height, not spacing, so not space-8."
+      "$description": "A floating surface's row (ui/menu-item): 32px on a fine pointer, 44px on a coarse one (cawco.coarse.tokens.json; DESIGN.md, The 44 Touch Rule). A row height, not spacing, so not space-8."
     },
     "c-icon-card-min": {
       "$type": "dimension",
@@ -5501,7 +5501,7 @@
         "value": 160,
         "unit": "px"
       },
-      "$description": "wave 2: W8-app-recipes. The narrowest an icon card stands in its grid (ui/icon-card), the track floor of the auto-fit columns."
+      "$description": "The narrowest an icon card stands in its grid (ui/icon-card), the track floor of the auto-fit columns."
     },
     "c-sheet-max-h": {
       "$type": "dimension",

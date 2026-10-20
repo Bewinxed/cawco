@@ -225,6 +225,7 @@
           class="size-icon-md flex-none text-ink-muted"
         />
         <span
+          data-slot="name"
           class="type-label min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap"
           >{artifact.name}</span
         >

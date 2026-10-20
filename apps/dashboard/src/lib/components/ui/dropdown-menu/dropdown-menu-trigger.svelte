@@ -6,10 +6,10 @@
    * Its callers' looks. `face`: its words' face. `title`: a pane head's
    * title, the name of what is on show (the artifact switcher), its glyph
    * and chevron on its words' line: the label role and the strong ink, as
-   * the head's own title (SideSurface `.title`; DESIGN.md, The Role, Not
-   * Size Rule, The Mark Line Rule). `count`: a glyph and the count it
-   * holds on one line (a pane head's More), its look its head's control's
-   * (app.css `side-head`). `look`: the trigger by its role.
+   * the head's own title (SideSurface's `title`; DESIGN.md, The Role, Not
+   * Size Rule, The Mark Line Rule), its padding the title's inset there.
+   * `count`: a glyph and the count it holds on one line (a pane head's
+   * More). `look`: the trigger by its role.
    * `attach`: the composer's Attach (DESIGN.md, Composer: "34px Attach
    * (raised, control edge) … at the concentric 5px radius. They scale to
    * 0.97 on press"); while the composer's controls are inert under an ask
@@ -18,7 +18,8 @@
   export const dropdownMenuTriggerVariants = tv({
     variants: {
       face: {
-        title: "mark-line type-label min-w-0 text-ink-strong",
+        title:
+          "mark-line type-label min-w-0 gap-space-1 px-space-2 text-ink-strong",
         count: "mark-line",
       },
       look: {

@@ -314,7 +314,7 @@ const pageInComment = (frame: Frame, on: boolean) =>
  */
 const rowsOf = async (on: On) => {
   const button = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[data-slot="comments"]'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
   );
   if ((await button.getAttribute("aria-expanded")) !== "true") {
     await button.click();
@@ -325,7 +325,7 @@ const rowsOf = async (on: On) => {
 };
 const shutList = async (on: On) => {
   const button = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[data-slot="comments"]'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
   );
   if ((await button.getAttribute("aria-expanded")) === "true") {
     await button.click();
@@ -338,7 +338,7 @@ const shutList = async (on: On) => {
 /** The head's Interact: Comment's way back, as the old toggle's second press was. */
 const interactTab = (on: On) =>
   on.page.locator(
-    ":is([data-slot=\"preview-pane\"], [data-side-surface-class~=\"preview-pane\"]) [role='tab'][aria-keyshortcuts='V']"
+    ":is([data-slot=\"preview-pane\"], [data-side-card=\"preview\"]) [role='tab'][aria-keyshortcuts='V']"
   );
 
 /** The overlay's outline over the page, in the frame's viewport. */
@@ -427,7 +427,7 @@ const run = async (kit: Kit) => {
 /** 1. C, a tap, the card at the pin, Esc and Esc. */
 const commentChecks = async (on: On, frame: Frame) => {
   const comment = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.focus();
   await on.page.keyboard.press("c");
@@ -436,7 +436,7 @@ const commentChecks = async (on: On, frame: Frame) => {
   await settle(on.page, 300);
   const edge = await on.page.evaluate(() => {
     const well = document.querySelector(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-side-well]'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-side-well]'
     );
     const probe = document.createElement("span");
     probe.style.color = "var(--accent)";
@@ -683,7 +683,7 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
   ).catch(() => docOf(frame));
   const sendControls = await on.page
     .locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="send"]'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="send"]'
     )
     .count();
   const words = message?.last ?? "";
@@ -1069,7 +1069,7 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
   );
 
   const commentButton = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   const modeBefore = await commentButton.getAttribute("aria-selected");
   await tray.getByRole("button", { name: "Place again" }).click();
@@ -1416,7 +1416,7 @@ const frameChecks = async (on: On) => {
       `inner ${JSON.stringify(standing)}; outer overlay elements ${outerHost}`
     );
     const comment = on.page.locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
     );
     await comment.click();
     await pageInComment(outer, true);
@@ -1492,7 +1492,7 @@ const frameChecks = async (on: On) => {
 
     await on.page
       .locator(
-        ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-label="Reload"]'
+        ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-label="Reload"]'
       )
       .click();
     const reloaded = (await until(
@@ -1636,7 +1636,7 @@ const scaledFrameChecks = async (on: On) => {
     await settle(on.page, 600);
     await on.page
       .locator(
-        ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+        ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
       )
       .click();
     await pageInComment(outer, true);
@@ -1760,7 +1760,7 @@ const scaledFrameChecks = async (on: On) => {
  */
 const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   const comment = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.click();
   await pageInComment(frame, true);
@@ -2053,7 +2053,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
   );
 
   const comment = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.click();
   await pageInComment(frame, true);
@@ -2201,7 +2201,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
 
   await on.page
     .locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-label="Reload"]'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-label="Reload"]'
     )
     .click();
   const reloaded = await loaded(frame);
@@ -2246,7 +2246,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
   ).catch(() => null);
   await on.page
     .locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-label="Reload"]'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-label="Reload"]'
     )
     .click();
   const reordered = await loaded(reloaded);
@@ -2324,7 +2324,7 @@ const inkAt = (frame: Frame) =>
 const dismissChecks = async (on: On) => {
   let frame = await pageFrame(on);
   const comment = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   const cards = () => on.page.locator('[data-slot="pin-card"]').count();
   const pinsNow = async () => (await docOf(frame)).pins as Pins;
@@ -2710,7 +2710,7 @@ const wordlessChecks = async (on: On) => {
   await settle(on.page, 400);
   await on.page
     .locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
     )
     .click();
   await pageInComment(frame, true);
@@ -2970,7 +2970,7 @@ const insertChecks = async (on: On) => {
   }
   await on.page
     .locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
     )
     .click();
   await pageInComment(frame, true);
@@ -3234,7 +3234,7 @@ const listChecks = async (on: On) => {
   }
   await on.page
     .locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
     )
     .click();
   await pageInComment(frame, true);
@@ -3336,7 +3336,7 @@ const listLeg = async (
   });
   await settle(screen, 300);
   const button = screen.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[data-slot="comments"]'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
   );
   if ((await button.getAttribute("aria-expanded")) !== "true") {
     await button.click();

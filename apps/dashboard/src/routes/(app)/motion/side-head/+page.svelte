@@ -14,6 +14,7 @@
   import { planWords } from "@cawco/core";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { IconCopy, IconExternal, IconMaximize } from "#lib/icons.js";
 
   const CARDS = [
@@ -58,20 +59,26 @@
         titleControl={card.key === "plan" ? planName : undefined}
       >
         {#snippet actions()}
-          <button aria-label="Copy" data-action type="button"
-            ><IconCopy /></button
+          <Button aria-label="Copy" data-action size="icon-sm" variant="ghost"
+            ><IconCopy /></Button
           >
           {#if card.key === "file"}
-            <button aria-label="Expand" data-action type="button"
-              ><IconMaximize /></button
+            <Button
+              aria-label="Expand"
+              data-action
+              size="icon-sm"
+              variant="ghost"><IconMaximize /></Button
             >
           {:else}
-            <button class="mark-line" data-action type="button"
-              ><IconExternal /><span>{planWords.openInCanvas}</span></button
+            <Button data-action size="sm" variant="ghost"
+              ><IconExternal /><span>{planWords.openInCanvas}</span></Button
             >
             <!-- A desk's split gives every side card its Expand. -->
-            <button aria-label="Expand" data-action type="button"
-              ><IconMaximize /></button
+            <Button
+              aria-label="Expand"
+              data-action
+              size="icon-sm"
+              variant="ghost"><IconMaximize /></Button
             >
           {/if}
         {/snippet}

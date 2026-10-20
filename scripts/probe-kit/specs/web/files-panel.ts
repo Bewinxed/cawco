@@ -528,7 +528,7 @@ const desk = async (
     const card = [
       ...document.querySelectorAll<HTMLElement>("[data-files-card]"),
     ].find((one) => one.title === name);
-    const words = card?.querySelector<HTMLElement>(".name");
+    const words = card?.querySelector<HTMLElement>('[data-slot="name"]');
     return words
       ? {
           cut: words.scrollWidth > words.clientWidth,

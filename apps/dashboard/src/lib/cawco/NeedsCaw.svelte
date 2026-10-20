@@ -604,7 +604,7 @@
     data-count={count}
     viewBox="0 0 {RING_BOX} {RING_BOX}"
   >
-    <g class="@max-desk/shell:hidden">
+    <g data-slot="round" class="@max-desk/shell:hidden">
       {#each arcSlots.filter((k) => roundLow(k) === low) as k (k)}
         <path
           class="rim-arc fill-none stroke-status-attn-glyph"

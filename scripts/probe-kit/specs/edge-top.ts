@@ -79,7 +79,7 @@ const ARC_RADIUS = /A ([\d.]+) /;
 const FIRST_Y = /^M [\d.]+ ([\d.]+)/;
 const TOOLS = '[data-slot="tools"]';
 const MACHINES = `${TOOLS} [data-machines]`;
-const JUMP_SVG = `${TOOLS} .jump > svg`;
+const JUMP_SVG = `${TOOLS} button[data-share="jump"] > svg`;
 
 /** An svg's ink across, viewport px: its shapes' geometry boxes, grown by half a stroke where stroked; null when not drawn. */
 const svgInk = (page: Page, selector: string) =>
@@ -138,7 +138,7 @@ const numberInk = (page: Page) =>
 const faceInk = (page: Page) =>
   page.evaluate(() => {
     const canvas = document.querySelector<HTMLCanvasElement>(
-      "[data-needs-caw] .face[data-box] canvas"
+      "[data-needs-caw] [data-caw-face] canvas"
     );
     const ctx = canvas?.getContext("2d");
     if (!(canvas && ctx && canvas.width > 0)) {
@@ -176,13 +176,21 @@ const glassStyles = (page: Page) =>
       const m = machines ? getComputedStyle(machines) : null;
       const j = jump ? getComputedStyle(jump) : null;
       return {
-        count: caw?.querySelector(".rim")?.getAttribute("data-count") ?? "?",
+        count:
+          caw?.querySelector("[data-slot=rim]")?.getAttribute("data-count") ??
+          "?",
         roundArc:
-          caw?.querySelector(".rim .round .arc")?.getAttribute("d") ?? "",
+          caw
+            ?.querySelector("[data-slot=rim] [data-slot=round] path")
+            ?.getAttribute("d") ?? "",
         standArc:
-          caw?.querySelector(".rim .standing .arc")?.getAttribute("d") ?? "",
+          caw
+            ?.querySelector("[data-slot=rim] [data-slot=standing] path")
+            ?.getAttribute("d") ?? "",
         round:
-          (caw?.querySelector(".rim .round")?.getClientRects().length ?? 0) > 0,
+          (caw
+            ?.querySelector("[data-slot=rim] [data-slot=round]")
+            ?.getClientRects().length ?? 0) > 0,
         pad: m ? [m.paddingInlineStart, m.paddingInlineEnd] : null,
         jump: j
           ? { inline: j.inlineSize, block: j.blockSize, color: j.color }
@@ -223,9 +231,12 @@ const px = (n: number | null) => (n === null ? "none" : n.toFixed(2));
 const glassLeg = async (kit: Kit, page: Page, leg: string, desk: boolean) => {
   await page.waitForFunction(
     () =>
-      document.querySelector("[data-needs-caw] .rim .arc") !== null &&
+      document.querySelector("[data-needs-caw] [data-slot=rim] path") !==
+        null &&
       (document
-        .querySelector<HTMLCanvasElement>("[data-needs-caw] .face canvas")
+        .querySelector<HTMLCanvasElement>(
+          "[data-needs-caw] [data-caw-face] canvas"
+        )
         ?.getContext("2d")
         ?.getImageData(0, 0, 1, 1) ?? null) !== null,
     undefined,
