@@ -9,13 +9,15 @@
       keyboard or pointer state, and eases only with motion. A split's
       handle is gone while its surface is shut (`data-hidden`); while the
       surface has the whole split (`data-expanded`) the handle stands on the
-      page area's edge, under the sidebar's grip, so its hit area stands
-      just inside the surface instead: a grip's width, a step in. */
+      page area's edge, under the sidebar's grip (a grip's width centred on
+      the rail's edge, Shell), so its hit area is the surface's first grip's
+      width instead, from its first pixel: the grip keeps the pixels it
+      covers, and a stroke begun a few pixels further in is the page's. */
   export const resizableHandleVariants = tv({
     variants: {
       look: {
         split:
-          "bg-border-hairline transition-[background-color] duration-(--dur-control) ease-out hover:bg-border-control data-hidden:hidden data-active:bg-ink-muted data-expanded:after:left-space-1 data-expanded:after:w-c-side-grip-w data-expanded:after:translate-x-0",
+          "bg-border-hairline transition-[background-color] duration-(--dur-control) ease-out hover:bg-border-control data-hidden:hidden data-active:bg-ink-muted data-expanded:after:left-px data-expanded:after:w-c-side-grip-w data-expanded:after:translate-x-0",
         grid: "bg-border-hairline not-active-keyboard:not-active-pointer:hover:bg-border-control active-keyboard:bg-ink-muted active-pointer:bg-ink-muted motion-safe:transition-[background-color] motion-safe:duration-(--dur-control) motion-safe:ease-out motion-reduce:transition-off",
       },
     },

@@ -41,7 +41,11 @@
         default:
           "h-9 gap-(--btn-gap) px-space-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         xs: "h-6 gap-(--btn-gap) px-2 text-label [--btn-gap:4px] [--btn-icon:12px] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
-        sm: "h-c-btn-h-sm gap-(--btn-gap) px-space-3 text-label [--btn-gap:var(--space-2)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        /* In a head control's compact form (side/head.ts, `data-form`), its
+           words not drawn, it stands as its glyph: the icon size's square,
+           the glyph centred inside its edge, and a count it still says kept
+           that inset from the glyph and the edge. */
+        sm: "h-c-btn-h-sm gap-(--btn-gap) px-space-3 text-label [--btn-gap:var(--space-2)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 in-form-compact:min-w-c-btn-h-sm in-form-compact:px-[calc((var(--c-btn-h-sm)-var(--btn-icon))/2-1px)]",
         lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         /* A control standing in a composer shell (DESIGN.md, Composer:
            "34px Attach … and Send/Stop … each at the concentric 5px
