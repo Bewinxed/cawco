@@ -819,6 +819,7 @@
     recessed={false}
     {switcher}
     title={switcher ? undefined : taskId}
+    titleCode
   >
     {@render content()}
   </SideSurface>

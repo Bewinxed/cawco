@@ -13,7 +13,10 @@
   import { decisionsWords, PREVIEW_LOCKED_MESSAGE } from "@cawco/core";
   import { untrack } from "svelte";
   import { enterPage, pageSource } from "#lib/cawco/preview/page-source.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { IconDocument } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
 
   let {
@@ -41,6 +44,8 @@
   let problem = $state<string | null>(null);
   let connected = false;
   let turnedAway = 0;
+  /** Asks again: Retry on the page's failure reads where it is served afresh. */
+  let tries = $state(0);
 
   const place = $derived(
     `/__cawco/page/${artifactId}/${card ? `#${encodeURIComponent(card)}` : ""}`
@@ -59,6 +64,8 @@
   // Where its project's pages are served, asked once per project and page.
   $effect(() => {
     const project = projectId;
+    // biome-ignore lint/complexity/noVoid: read so a Retry runs the effect again
+    void tries;
     const wanted = untrack(() => place);
     let live = true;
     problem = null;
@@ -143,8 +150,22 @@
   });
 </script>
 
+{#snippet again()}
+  <Button
+    onclick={() => {
+      tries += 1;
+    }}
+    size="sm"
+    variant="outline">{decisionsWords.retry}</Button
+  >
+{/snippet}
+
 {#if problem}
-  <p class="type-body m-0 py-space-5 text-ink-muted" role="alert">{problem}</p>
+  <!-- The page didn't open: the Empty recipe, named for the page, the hub's
+       words for why, and Retry (DESIGN.md, Empty). -->
+  <div role="alert">
+    <EmptyState action={again} icon={IconDocument} line={problem} {title} />
+  </div>
 {:else if src}
   <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
   <iframe

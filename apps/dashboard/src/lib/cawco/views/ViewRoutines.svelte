@@ -637,9 +637,12 @@
      you, after its title. -->
 {#snippet meta(id: Part)}
   {@const said = metaOf(id)}
-  <span data-num data-slot="count" class="num type-meta text-ink-subtle"
-    >{said.count}</span
-  >
+  <!-- Drawn only above 0 (DESIGN.md, The Earned Count Rule). -->
+  {#if said.count > 0}
+    <span data-num data-slot="count" class="num type-meta text-ink-subtle"
+      >{said.count}</span
+    >
+  {/if}
   {#if said.needs > 0}
     <span
       data-slot="needs"

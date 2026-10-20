@@ -553,7 +553,8 @@
 <!-- Caw's settings, off `⋯`: the project's own, beside its other settings. -->
 {#if touch.current}
   <Drawer.Root bind:open={cawOpen}>
-    <Drawer.Content pad="safe-bottom">
+    <!-- The recipe's foot: 16px plus the safe area (DESIGN.md, Drawer). -->
+    <Drawer.Content>
       <Drawer.Header>
         <Drawer.Title>Caw, lead of {project.name}</Drawer.Title>
       </Drawer.Header>

@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * One limit as a bar (design/usage-tracker.md §1): a track that is always
+   * One limit as a bar (DESIGN.md, Limit bar): a track that is always
    * there, a fill, and the pace tick, a 2px gap. It reads one of two ways
    * (`reads`), and says which to assistive tech:
    *

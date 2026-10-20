@@ -16,8 +16,10 @@
    * away; a press elsewhere on the page is the page's.
    *
    * On a phone it is the kit's bottom sheet (DESIGN.md, Drawer): full-bleed,
-   * flush on the screen's foot, its grabber, then the panel. A press outside,
-   * Escape or a drag down puts it away.
+   * flush on the screen's foot, its grabber, then the panel. It holds
+   * nothing: no scrim, and the page above it stays live, since nothing he
+   * asks goes wrong while the reader acts elsewhere (DESIGN.md, The Open
+   * Page Rule). Escape, his seat or a drag down puts it away.
    */
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
@@ -64,13 +66,13 @@
 </script>
 
 {#if phone.current}
-  <Drawer.Root onOpenChange={setOpen} {open}>
+  <Drawer.Root modal={false} onOpenChange={setOpen} {open}>
     <!-- The kit's bottom sheet as its recipe draws it (ui/drawer): full-bleed
          and flush on the screen's foot, its top corners rounded, its hairline
          along the top edge. The panel runs edge to edge inside it, from under
          the grabber to the foot, which keeps the safe area clear itself
          (ThreadPane's docked composer). -->
-    <Drawer.Content data-caw-float-sheet height="cap" pad="none">
+    <Drawer.Content data-caw-float-sheet height="cap" modal={false} pad="none">
       <Drawer.Title visible={false}>Caw, lead of {projectName}</Drawer.Title>
       <div class="flex min-h-0 flex-auto flex-col overflow-hidden">
         {#key projectId}

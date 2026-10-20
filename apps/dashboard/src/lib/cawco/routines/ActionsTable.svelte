@@ -91,7 +91,7 @@
      status. -->
 <div
   data-slot="actions-ledger"
-  style:--card-cols="var(--lead-w) minmax(0, 1fr) auto"
+  style:--card-cols="var(--c-row-lead) minmax(0, 1fr) auto"
   style:--lead-w="calc(var(--c-row-lead) + var(--space-3))"
 >
   <Table.Root

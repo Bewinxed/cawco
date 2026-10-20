@@ -29,7 +29,10 @@
       {:else if "strong" in part}
         <b class="font-medium text-ink-strong">{part.strong}</b>
       {:else if "figure" in part}
-        <b class="mono-figure font-medium text-ink-strong">{part.figure}</b>
+        <!-- A time never wraps (DESIGN.md, the dial wall's time). -->
+        <b class="mono-figure font-medium whitespace-nowrap text-ink-strong"
+          >{part.figure}</b
+        >
       {:else}
         <span
           data-slot="dot"

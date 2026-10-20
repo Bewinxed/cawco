@@ -1,7 +1,7 @@
 <script lang="ts">
   import { bucketStart, type LimitWindow } from "@cawco/core";
   /**
-   * Usage (design/usage-tracker.md §3): will it last, first. The Limits block
+   * Usage: will it last, first. The Limits block
    * leads with the window that stops you first and every window under it;
    * then where the spend goes, then its history, both over one range. Nothing
    * is said twice and no row is named by an id.

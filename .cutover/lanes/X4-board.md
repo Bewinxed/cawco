@@ -81,3 +81,39 @@ Context: an operator's ledger glanced at between other work; a quiet screen must
 
 - views-canvas phone node overlap / edges through nodes (L884) and the decisions-graph 34% fit (L602): not read after the pane change and not changed (DecisionGraph / TaskCanvasFit). Open in this lane.
 - The group rows marked polish that no bullet names and I did not reach: project-details label-value wall (L507), board-stages arrow chains (L507), usage-rest wraps beside the dial (L777/L778), "Export CSV" wrap on phone, usage-project ledger column heads on phone (L639), views-decisions empty page, task-review-opening skeleton size (L846), board-archive Done/Archived overlap (L623/L639), board-drop ask tile, board-stages-ask cut verb. Not read.
+
+## Re-audit (Sonnet review of cawco-audit/X4-board 8b91385d5, answered once)
+
+Reads on this round's head, through the kit's walk (desk fine, phone 390 coarse).
+
+- #1 holds: after integration (X5 StopTray.svelte:965 → variant="destructive").
+- #2 route: X5 lightbox/Lightbox.svelte (project-caw-note: the document view as a flat panel, not the dialog tray and body) #2.
+- #3 holds: after integration (X2 9a04fa511, section-header `border-seam` → `border-hairline`).
+- #4 holds: project-new template cards: they are the channel-card radio recipe (TemplateCards.svelte head: "the channel-card recipe: one selection frame for the set"), and DESIGN.md L827 gives that card "edge is `border-control`"; not the raised content card.
+- #4 fixed: views-made card-in-card-in-card (L750 card: no border): PostCard drew `border border-border-hairline` and dropped its shadow when compact. Now the card recipe in the tile's well: border-top-width 0px, raised oklch(0.993 0.004 85) / oklch(0.248 0.006 70), tile shadow kept. The tile (raised card) holding the well is L565's sanctioned well.
+- #5 fixed: views-made comment author round (L919, L682): PostCard mark `rounded-pill` → `rounded-xs`. After: 26x26, border-radius 5px.
+- #6 fixed: project-caw-settings phone foot (L817 "16px plus the safe area above the foot"): `pad="safe-bottom"` overrode the recipe's foot. Now the recipe's own: content padding-bottom 16px, panel foot y828 of an 844 viewport.
+- #7 holds: after integration (X2's Drawer title head, taken by CawFloat via its kit-swap at integration).
+- #8 fixed: scrim behind Caw's sheet on a phone. L710 is Caw's notifications panel from the top bar's glass; CawFloat is his thread panel on the project page, so L710 does not settle it. L505 does (The Open Page Rule: a scrim only "when acting elsewhere would make the open question wrong"): nothing he asks breaks while the reader acts elsewhere. CawFloat's Drawer.Root and Content `modal={false}` (vaul renders no overlay then: `shouldRender = ctx.modal.current`, vaul-svelte use-drawer-overlay). After (caw-on-panel 390): `[data-slot=drawer-overlay]` count 0, sheet aria-modal "false"; desk dock unchanged.
+- #9 gap: views-routines schedule as words (L507 Show Don't Tell): a schedule drawn as times on a line is new UI with no kit part yet; not built in this round. Proposal: a 24h / week strip under the routine's name in RoutineDetail.
+- #10 holds: caw-on-rest / caw-on-panel "three suggestion cards" (L840 "at most one action", L844 The Empty Starts Work Rule): the starters are the one action, the start of Caw's work on the board, as the integrator routed from X5. After: 3 starters 176x72.7 at 1440, 354x56 each at 390 (equal; the review's ~270 wrap and taller third no longer stand).
+- #10 fixed: views-decision-page's not-found (L840): PageFrame drew the hub's words as a bare body line. Now the Empty recipe: document mark, the page's title, the hub's reason as its line, and Retry (which reads where the page is served again). After: title "Chip wraps" 20px / 18px, line "Not on the tape.", action "Retry". The tape gap itself is X0-coverage's.
+- #11 route: the session lane, workspace/SessionDetails.svelte (session card head and body one tone, L704) #11.
+- #12 fixed: task head id in Figtree on desk (L610 Code: paths and IDs): TaskPane passes `titleCode` to SideSurface. After: task-failed "tsk-2" and task-open "tsk-1" in JetBrains Mono Variable, data-code.
+- #12 fixed: due time in mono (L602 Meta: timestamps): TaskCard's `data-when` dropped the mono face. After: "Sun 03:00 AM" in Figtree Variable (tabular via .num).
+- note fixed: task phone page's foot (the detail ending ~75px above the foot, Fields cut): the task and file pages padded for the view bar (`pb-(--bar-reach)`, 75px), which only the view pages draw. Now `pb-(--safe-bottom)`. After (task-rich-details 390): page padding-bottom 0px; the task body scrolls to the viewport foot (y239.5 + 604.5 = 844, scrollHeight 1002).
+- note fixed: views-routines Approved actions text off the Routines column: the card's lead track was the ledger's (`c-row-lead` + space-3) inside the card's own 11px pad. Now `c-row-lead`. After: both tables' text starts x303 at 1440 and x68 at 390.
+- note fixed: usage-rest "back in 4h / 56m" splits (L783 "It never wraps"): Words' figure `whitespace-nowrap`. After: "4h 56m" white-space nowrap.
+- note fixed (X2): "Event sources 0" and "Working 0" (L725 The Earned Count Rule): the block heads' and board columns' counts are drawn only above 0; the column's name still says it ("Working, 0 tasks"). After (board-rest): Working, Done, Dropped count null, Ready "5", Review "1"; views-routines heads hold no "0".
+- note holds: board-archive "open Archived covers Done/Dropped, Done cut mid-word": the open rail stands beside the board (rail x1067, board x253–1056), the columns run under the board's own end with its edge fade; nothing overlaps.
+- note route: X5 StopTray.svelte (project-forget phone: the tray section drawn x0–390, its tile's right edge on the viewport; its foot y790 over the bar's top y780 at rest, the page's 75px clearance under it) project-forget.
+- note route: X5 lightbox/Lightbox.svelte (project-caw-note phone: the mono line clipped with no wrap) project-caw-note.
+- note holds: decisions-graph / views-canvas fit (L602, L884): as logged above, open (gap) in this lane, not changed this round.
+- note route: integrator, routes/project/[id]/view/[name]/+page.svelte:83 (not on this list: the app's web view of one view, `pt-space-4` and 14px sides against L635's 25/21) views-week-page.
+- X2 holds: CawFloat on a phone (L710, L817): settled by #8 (L505) and #7 (X2's drawer head).
+- X2 holds: ViewRoutines' Caw-can't-start empty state (`emptyOff`) has no action: L840 allows "at most one action", and L844's by-hand way exists only where the dashboard offers one; routines have none, so it says why.
+- X2 holds: the project's empty board (L840/L844): with Caw, the starters (read above); without, NewTaskForm, its one action.
+- X2 holds: Review column coral-3 wash (L580): read on this tree: kind-you column bg oklch(0.957 0.009 84) (band), name ink-strong.
+- X2 holds: task card title clipped in the squeezed Review column (L625): the column runs under the board scroller's edge fade beside the task pane (mask `calc(100% - 40px)`); the title itself clamps to 2 lines with an ellipsis-free wrap (`line-clamp-2 wrap-anywhere`), cut only by the scroll edge.
+- X2 holds: views-routines phone header band stopping at x197: fixed earlier this lane (Routine 263px at 390).
+- doc fixed: the usage files citing the missing design/usage-tracker.md: usage.ts (header dropped, "Limit windows (DESIGN.md, Limit bar)"), LimitBar ("DESIGN.md, Limit bar"), History, WhereItGoes and the usage page (citation dropped). `git grep -n usage-tracker` now finds only this file.

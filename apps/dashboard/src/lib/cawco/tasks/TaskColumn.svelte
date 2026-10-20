@@ -105,12 +105,16 @@
       >
         {label}
       </h3>
-      <span
-        data-num
-        data-slot="count"
-        class="num ms-auto type-meta text-ink-subtle"
-        ><MorphText text={String(count)} /></span
-      >
+      <!-- Drawn only above 0 (DESIGN.md, The Earned Count Rule); the
+           section's name says the number whatever it is. -->
+      {#if count > 0}
+        <span
+          data-num
+          data-slot="count"
+          class="num ms-auto type-meta text-ink-subtle"
+          ><MorphText text={String(count)} /></span
+        >
+      {/if}
     </span>
     <span
       data-slot="kind"

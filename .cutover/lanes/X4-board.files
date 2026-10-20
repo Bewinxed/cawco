@@ -135,3 +135,4 @@ design/tokens/cawco.dark.tokens.json
 design/tokens/cawco.tokens.json
 packages/core/src/words/routines.ts
 packages/hub/skills/decision-page/kit/tokens.css
+apps/dashboard/src/lib/cawco/usage.ts

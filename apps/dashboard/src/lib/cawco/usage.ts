@@ -1,6 +1,5 @@
 /**
- * Usage & cost helpers for the /usage page and the sidebar meter
- * (design/usage-tracker.md). The summary and limits JSON shapes are core's
+ * Usage & cost helpers for the /usage page and the sidebar meter. The summary and limits JSON shapes are core's
  * (`UsageSummary`, `UsageLimitsResponse`); this module reads them.
  */
 import type {
@@ -83,7 +82,7 @@ export const totalTokensOf = (r: {
   reasoning: number;
 }): number => r.input + r.output + r.cacheCreation + r.cacheRead + r.reasoning;
 
-/* ---- Limit windows (design/usage-tracker.md §1) ------------------------- */
+/* ---- Limit windows (DESIGN.md, Limit bar) ------------------------------- */
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;

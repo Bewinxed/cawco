@@ -1960,9 +1960,7 @@
           <!-- A phone: the folder's file is its own page, with Back to the view. -->
           <div
             data-slot="project-page"
-            class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)"
-            style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
-            style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
+            class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--safe-bottom)"
           >
             {#key openFile}
               <FolderFile
@@ -1978,9 +1976,7 @@
           <!-- A phone: the task is its own page, with Back to the view. -->
           <div
             data-slot="project-page"
-            class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)"
-            style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
-            style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
+            class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--safe-bottom)"
           >
             <TaskPane
               {allowedFrom}

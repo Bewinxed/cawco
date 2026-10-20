@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * History (design/usage-tracker.md §3): what each harness cost over the
+   * History: what each harness cost over the
    * page's range, as two small charts — one per harness, each on its own
    * scale, never one chart with two axes, because the two are not the same
    * kind of money. Hours for a window or a day, the hub's days for a week or

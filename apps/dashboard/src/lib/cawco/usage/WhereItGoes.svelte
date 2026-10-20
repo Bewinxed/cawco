@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Where it goes (design/usage-tracker.md §3, owner pick f): one block, one
+   * Where it goes (owner pick f): one block, one
    * harness at a time, by session, model or machine, over the page's range.
    * One neutral bar per row with its value at the tip, the top eight, then
    * the rest a press away. Sessions stand under the machine that ran them,
