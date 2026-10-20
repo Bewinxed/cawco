@@ -598,6 +598,9 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
             (view.superview?.superview as? any RowHost)?.lost(view)
             view.removeFromSuperview()
             row = view
+            #if DEBUG
+            if Pace.probing, view is PieceView { Pace.pieceStood(view) }
+            #endif
             contentView.addSubview(view)
             top = nil
             if !(view is any FrameRow) {

@@ -19,11 +19,7 @@
    *   in place, the composer staying where it is. Ask Caw (the head's
    *   button, the views bar's "+") shows a new thread here (`lead.fresh`).
    */
-  import {
-    CAW_DENIED_TOOLS,
-    type CawHarness,
-    type HarnessKind,
-  } from "@cawco/core";
+  import { CAW_DENIED_TOOLS, type HarnessKind } from "@cawco/core";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { cawco, threadsOf } from "#lib/cawco/client.svelte.js";
@@ -183,9 +179,7 @@
   $effect(() => () => clearTimeout(cardTimer));
 
   /** The harnesses Caw runs on, as the hub lists them (its `CAW_HARNESSES`). */
-  const CAW_HARNESSES = Object.keys(CAW_DENIED_TOOLS) as CawHarness[];
-  const runsCaw = (harness: HarnessKind): harness is CawHarness =>
-    (CAW_HARNESSES as HarnessKind[]).includes(harness);
+  const CAW_HARNESSES = Object.keys(CAW_DENIED_TOOLS) as HarnessKind[];
   /** A model was picked in the card: its pending and refusal are the card's model line. */
   let choosing = $state(false);
   /**
@@ -206,9 +200,6 @@
             harness: HarnessKind;
             model: string;
           }) => {
-            if (!runsCaw(harness)) {
-              return;
-            }
             choosing = true;
             lead.configure(
               harness === lead.view?.harness

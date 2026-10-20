@@ -52,7 +52,9 @@ import {
   type CdpViewer,
   cdpInputOf,
 } from "./cdp-takeover";
+import { endWatch, watchView } from "./cdp-watch";
 import { nekoLogin } from "./container-host";
+import { setFront } from "./front-origin";
 import { gateOf } from "./gate";
 import {
   allBrowsers,
@@ -346,6 +348,13 @@ export const shieldBrowser = async (
       link.close();
     }
   }
+  // The band names the page in front, the one the person sees.
+  if (take.targetId) {
+    setFront(key, take.targetId);
+  }
+  // The views watching the page while nobody held it open again on the
+  // take-over's own screencast.
+  endWatch(key, "The person took the browser over.");
   await viewFor(key, record, take);
   if (record.host === "container" && args.viewer) {
     await neko(record, `/room/control/give/${encodeURIComponent(args.viewer)}`);
@@ -494,6 +503,7 @@ const release = async (
 ): Promise<void> => {
   tellHub(answer, said);
   held.delete(key);
+  setFront(key, null);
   await rm(shieldFile(key), { force: true });
   await recordTakeover(key, undefined).catch((error: unknown) =>
     console.warn(`[browser] ${key}'s take-over was not cleared: ${why(error)}`)
@@ -515,9 +525,11 @@ export const browserViewers = (key: BrowserKey, count: number): void => {
 };
 
 /**
- * A view of the local host's take-over (the machine's preview listener's
- * `/__cawco/browser/<key>/cdp`): frames to it, its input onto the page.
- * Undefined when `key` is not taken over on the local host.
+ * A view of the local host's browser (the machine's preview listener's
+ * `/__cawco/browser/<key>/cdp`): while the person holds it, the take-over's
+ * frames and their input onto the page; while nobody does, the page in
+ * front's frames alone, its input dropped (cdp-watch.ts). Undefined when
+ * `key` is no live local browser, or shows no page.
  */
 export const cdpView = async (
   key: BrowserKey,
@@ -525,7 +537,20 @@ export const cdpView = async (
 ): Promise<
   { input: (text: string) => void; leave: () => void } | undefined
 > => {
-  const cdp = await held.get(key)?.cdp;
+  const take = held.get(key);
+  if (!take) {
+    const record = await readBrowser(key);
+    if (!(record?.host === "local" && record.state === "live")) {
+      return;
+    }
+    const leave = await watchView(
+      key,
+      `http://127.0.0.1:${portsOf(record).devtools}`,
+      viewer
+    );
+    return leave ? { input: () => undefined, leave } : undefined;
+  }
+  const cdp = await take.cdp;
   if (!cdp) {
     return;
   }

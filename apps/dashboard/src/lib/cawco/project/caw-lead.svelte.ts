@@ -23,9 +23,9 @@
  */
 
 import {
-  type CawHarness,
   type CawInitiated,
   type CawView,
+  type HarnessKind,
   type ProjectCap,
   questionsOf,
   type StarterPlace,
@@ -247,7 +247,7 @@ export class CawLead {
 
   /** Turns the lead on or off, or moves it to another harness or model. */
   async configure(change: {
-    harness?: CawHarness;
+    harness?: HarnessKind;
     /** Turning him off with what he started still running: it finishes or stops. */
     initiated?: CawInitiated;
     model?: string | null;

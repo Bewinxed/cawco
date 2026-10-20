@@ -106,7 +106,11 @@ export const hubOriginOf = (url: string): string | undefined =>
  * authenticate to the hub, with the session's credential in a session's
  * shell and the machine's elsewhere (hub-git.ts `serveHubCredential`). Only
  * the helper's name is written; no credential is. Nothing while this agent
- * knows no hub.
+ * knows no hub, and nothing when the config says all this already: a
+ * workspace's create calls this on its source repository every time, and a
+ * rewrite each time met any other writer of that config (another agent on
+ * the computer readying it, the owner's own git) at its lock: "could not
+ * lock config file .git/config: File exists" (link-under-load, 2026-10-20).
  */
 export const useHubCredentialHelper = (repo: string): void => {
   const config = (...args: string[]) =>
@@ -122,6 +126,17 @@ export const useHubCredentialHelper = (repo: string): void => {
   const remote = `${origin}/git/`;
   const helper = `!${cawcoCommand("git-credential").map(shellWord).join(" ")}`;
   const key = `credential.${origin}.helper`;
+  const said = (...args: string[]) => {
+    const read = config(...args);
+    return read.exitCode === 0 ? read.stdout.toString() : undefined;
+  };
+  if (
+    said("--get-all", key) === `\n${helper}\n` &&
+    said("--get-all", `credential.${remote}.helper`) === undefined &&
+    said("--get", `lfs.${remote}.locksverify`) === "false\n"
+  ) {
+    return;
+  }
   // Exit 5 when there is none to unset. The `/git/`-scoped key is what an
   // earlier build wrote: it matched none of git-lfs's requests.
   config("--unset-all", key);

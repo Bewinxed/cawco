@@ -7,26 +7,52 @@
  * callback and resized the very boxes it watched).
  *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
- * mock model), a page artifact with an ask, opened on its own tab
- * (`/artifact/<id>`) and beside its session (`/session/<id>`) at desk 1440,
- * and on its own tab at phone 390, in light and in dark. Each leg opens the
- * page, then sweeps the viewport narrower and back in small steps, so the
- * head moves controls into More and back out again (beside the session and
- * on the phone, More is read standing at some widths and gone at both ends:
- * the sweep crossed its threshold both ways; the own tab at desk has room
- * for every control at every width). On opening and over the sweep, the
- * page sent the hub no error report and logged no ResizeObserver loop.
+ * mock model), a page artifact with an ask made by a session, in light and
+ * in dark (a thread showing its Caw's, ThreadPane, is
+ * artifact-resize-loop-thread, which runs on the host):
  *
- * A loop is named in the check that fails (`heldBack`): the boxes delivered
- * in its frame before it ("delivered first"), whose callbacks ran as it
- * built, and those delivered in the frame after it, the notifications it
+ * - Opened on its own tab (`/artifact/<id>`) and beside its session
+ *   (`/session/<id>`) at desk 1440, and on its own tab at phone 390. Each
+ *   leg opens the page, then sweeps the viewport narrower and back in small
+ *   steps, so the head moves controls into More and back out again (beside
+ *   the session and on the phone, More is read standing at some widths and
+ *   gone at both ends: the sweep crossed its threshold both ways; the own
+ *   tab at desk has room for every control at every width).
+ * - A pin's card open beside the session at desk 1440, with words in its
+ *   thread, while the window's height sweeps down and back: the card is
+ *   squeezed (its head and foot alone outgrow it, PinCard `squeezed`) at
+ *   some heights and not at both ends.
+ * - Beside the session in a fine pointer's desk window 860 wide, where the
+ *   pane is under 900px and the preview is the sheet on the composer
+ *   (layoutPolicy.sideDrawer), opened from a link once the board lists it,
+ *   so the session's pane mounts with its preview already open: every frame
+ *   painted from the one the split first stands in is read (a task posted
+ *   from each frame's callbacks runs once that frame is painted), and the
+ *   first of them shows the sheet with its preview, and none shows the
+ *   preview beside the conversation.
+ *
+ * On opening and over every sweep, the page sent the hub no error report
+ * and logged no ResizeObserver loop. A desk page draws its scrollbars as a
+ * desk's Chromium does (the kit's `scrollbars`): the card starting to scroll
+ * takes their width from what it holds.
+ *
+ * A loop is named in the check that fails: the callbacks of its frame in
+ * order (`loopFrames`: which observer, which boxes at which depth), and the
+ * boxes delivered in the frame after it (`heldBack`), the notifications it
  * held back.
  *
  *   bun scripts/probe-kit/run.ts artifact-resize-loop
  */
 import type { Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, type Spec, settle, type Theme } from "../kit";
+import {
+  type Kit,
+  type KitFleet,
+  open,
+  type Spec,
+  settle,
+  type Theme,
+} from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -91,13 +117,120 @@ const respond = (request: Seen): Reply => {
   return reply;
 };
 
+/** One frame as painted, from the one the split first stands in. */
+interface Painted {
+  /** The preview's card beside the conversation, at a width. */
+  beside: boolean;
+  /**
+   * The top of the composer standing over the conversation, as drawn (its
+   * parts with a box that paint, as SideSheet's `drawnTop` reads them):
+   * "none" while the conversation has no composer, "undrawn" while none of
+   * its parts paints.
+   */
+  composerTop: number | "none" | "undrawn";
+  /** The host's foot: the sheet's floor, where it stands. */
+  floor: number | null;
+  /** The preview's card in the sheet on the composer. */
+  sheet: boolean;
+  /** The sheet's host stands (SideSheet is mounted), and its height. */
+  sheetHost: number | null;
+  /** The split stands open: the conversation's pane chose the desk's layout (Split `open`). */
+  splitOpen: boolean;
+}
+
 declare global {
   interface Window {
     /** Each box a ResizeObserver was handed in the delivery after a loop error: the notifications that loop held back. */
     __heldBack?: string[];
     /** Each loop's frame, its callbacks in the order they ran: the observer (by the first box it watched), and each box with its depth. */
     __loopFrames?: string[][];
+    /** Every frame painted from the one the split first stands in. */
+    __painted?: Painted[];
+    /** The pane (`data-pane`, its tab's id) whose split the frames are read in; none, nothing is read. */
+    __paintPane?: string;
+    /** The frame as it stands now, read as each painted one is; none before the pane's split stands. */
+    __readPaint?: () => Painted | null;
   }
+}
+
+/**
+ * Reads each frame as it was painted: a message posted from the frame's
+ * callbacks is a task, which runs once that frame's rendering (its
+ * deliveries and what they changed included) is done. Once `__paintPane`
+ * names a pane, from the first frame that pane's split stands in, up to 600
+ * frames. Runs in the page before its own scripts.
+ */
+function paintedFrames() {
+  const painted: Painted[] = [];
+  window.__painted = painted;
+  /** The drawn top of the composer over `split`'s conversation. */
+  const drawnTop = (split: Element): Painted["composerTop"] => {
+    const composer = split
+      .closest(".leaf")
+      ?.querySelector<HTMLElement>(":scope > .dock .lift")?.parentElement;
+    if (!composer) {
+      return "none";
+    }
+    let top = Number.POSITIVE_INFINITY;
+    for (const part of composer.querySelectorAll<HTMLElement>(
+      ":scope > .composer, .ask, .lift .kit-tray-chip, .suggest:has(.track), .progress-slot > *, .perch"
+    )) {
+      const box = part.getBoundingClientRect();
+      if (
+        box.height > 0 &&
+        part.checkVisibility({
+          opacityProperty: true,
+          visibilityProperty: true,
+        })
+      ) {
+        top = Math.min(top, box.top);
+      }
+    }
+    return Number.isFinite(top) ? top : "undrawn";
+  };
+  const read = (): Painted | null => {
+    const pane = window.__paintPane
+      ? document.querySelector(
+          `[data-slot="pane"][data-pane="${CSS.escape(window.__paintPane)}"]`
+        )
+      : null;
+    const split = pane?.querySelector('[data-slot="side-split"]');
+    if (!split) {
+      return null;
+    }
+    const beside = split.querySelector(
+      '[data-side-pane] [data-slot="side-card"]'
+    );
+    const host = document.querySelector<HTMLElement>(
+      '[data-slot="preview-sheet-host"]'
+    );
+    const hostBox = host?.getBoundingClientRect();
+    return {
+      splitOpen: split.classList.contains("open"),
+      sheetHost: hostBox ? hostBox.height : null,
+      floor: hostBox ? hostBox.bottom : null,
+      composerTop: drawnTop(split),
+      beside: !!beside && beside.getBoundingClientRect().width > 0,
+      sheet: !!document.querySelector(
+        '[data-preview-sheet] [data-slot="side-card"]'
+      ),
+    };
+  };
+  window.__readPaint = read;
+  const channel = new MessageChannel();
+  channel.port1.onmessage = () => {
+    const frame = read();
+    if (frame) {
+      painted.push(frame);
+    }
+  };
+  const tick = () => {
+    if (painted.length < 600) {
+      channel.port2.postMessage(0);
+      requestAnimationFrame(tick);
+    }
+  };
+  requestAnimationFrame(tick);
 }
 
 /**
@@ -191,9 +324,9 @@ function heard(page: Page) {
       posts.push(request.postData() ?? "");
     }
   });
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      errors.push(message.text());
+  page.on("console", (line) => {
+    if (line.type() === "error") {
+      errors.push(line.text());
     }
   });
   page.on("pageerror", (error) => errors.push(error.message));
@@ -218,32 +351,174 @@ const moreStands = (page: Page) =>
       )
   );
 
+/** Whether the open pin's card is squeezed: its thread keeps its height and the card scrolls (PinCard `squeezed`). */
+/**
+ * The open pin's card: squeezed (PinCard `squeezed`, its room `data-whole`),
+ * and the width its own scrollbar takes from what it holds (its box less its
+ * client width and its two 1px edges).
+ */
+const cardState = (page: Page) =>
+  page.evaluate(() => {
+    const card = document.querySelector<HTMLElement>('[data-slot="pin-card"]');
+    return {
+      squeezed: !!card?.querySelector("[data-whole]"),
+      scrollbar: card ? card.offsetWidth - card.clientWidth - 2 : null,
+    };
+  });
+
+/** The pane's Comment control, in the head or in More. */
+const COMMENT =
+  ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']';
+
+/**
+ * A pin dropped on the page's heading in Comment mode, and words written in
+ * its thread: its card stays open, with a head, a thread and a foot.
+ */
+const dropPin = async (page: Page): Promise<void> => {
+  await page.locator(COMMENT).first().focus();
+  await page.keyboard.press("c");
+  const frame = await (
+    await page.locator('iframe[title="Preview"]').elementHandle()
+  )?.contentFrame();
+  if (!frame) {
+    throw new Error("no preview frame to pin on");
+  }
+  await until(
+    "the page's Comment mode on",
+    () =>
+      frame.evaluate(
+        () =>
+          document
+            .querySelector("cawco-overlay")
+            ?.shadowRoot?.querySelector(".layer")
+            ?.classList.contains("comment") ?? false
+      ),
+    Boolean,
+    5000
+  );
+  await settle(page, 300);
+  const box = await frame.locator("h1").boundingBox();
+  if (!box) {
+    throw new Error("the page's heading has no box to pin");
+  }
+  await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
+  const card = page.locator('[data-slot="pin-card"]').first();
+  await card.waitFor({ timeout: 5000 });
+  await card
+    .getByRole("textbox")
+    .fill(
+      "The chips wrap onto a second line too early: the third one drops while there is still room beside the second."
+    );
+  await card.getByRole("button", { name: "Reply" }).click();
+  await page
+    .locator('[data-slot="pin-card"] [data-slot="entry"]')
+    .first()
+    .waitFor({ timeout: 5000 });
+  await settle(page, 300);
+};
+
+interface Step {
+  height: number;
+  width: number;
+}
+
 interface Leg {
   /** The sweep takes the head's controls into More and back: the artifact's own tab at desk has room for all of them at every width. */
   crosses: boolean;
-  heights: number;
   name: string;
+  /** What is opened before the sweep (a pin's card). */
+  open?: (page: Page) => Promise<void>;
   path: string;
   ready: string;
+  /** The sweep squeezes the open pin's card and lets it go. */
+  squeezes?: boolean;
+  steps: Step[];
   theme: Theme;
   view: "desk" | "phone";
-  widths: number[];
 }
 
-/** Each width from `from` to `to` in `step` px, both ends included. */
+/** Each number from `from` to `to` in `step`, both ends included. */
 const sweep = (from: number, to: number, step: number): number[] => {
   const out: number[] = [];
   const by = from > to ? -step : step;
-  for (let w = from; by < 0 ? w > to : w < to; w += by) {
-    out.push(w);
+  for (let at = from; by < 0 ? at > to : at < to; at += by) {
+    out.push(at);
   }
   out.push(to);
   return out;
 };
 
-const runLeg = async (kit: Kit, base: string, leg: Leg) => {
-  const page = await kit.page(leg.view, { theme: leg.theme, init: [heldBack] });
+/** Each box the loops held back, with how many times. */
+const tally = (boxes: string[]) =>
+  Object.fromEntries(
+    [...new Set(boxes)].map((box) => [
+      box,
+      boxes.filter((one) => one === box).length,
+    ])
+  );
+
+/** A post as the hub was sent it, its message alone. */
+const message = (post: string) => {
+  try {
+    return (JSON.parse(post) as { message?: string }).message ?? post;
+  } catch {
+    return post;
+  }
+};
+
+/** What the page has said so far, to be read again past it. */
+const mark = async (page: Page, said: ReturnType<typeof heard>) => ({
+  posts: said.posts.length,
+  errors: said.errors.length,
+  held: await page.evaluate(() => window.__heldBack?.length ?? 0),
+  loopFrames: await page.evaluate(() => window.__loopFrames?.length ?? 0),
+});
+
+/** Checks that nothing between `from` and `to` (marks) was sent to the hub or logged as a loop, naming any loop. */
+const checkQuiet = async (
+  kit: Kit,
+  page: Page,
+  said: ReturnType<typeof heard>,
+  what: string,
+  from: Awaited<ReturnType<typeof mark>>,
+  to: Awaited<ReturnType<typeof mark>>,
+  extra: object = {}
+) => {
+  const posts = said.posts.slice(from.posts, to.posts);
+  const loops = said.errors
+    .slice(from.errors, to.errors)
+    .filter((line) => LOOP.test(line));
+  kit.check(
+    `${what} posts nothing to /api/dashboard-errors and logs no ResizeObserver loop`,
+    posts.length === 0 && loops.length === 0,
+    JSON.stringify({
+      posts: posts.map(message),
+      loops,
+      ...extra,
+      heldBack: tally(
+        (await page.evaluate(() => window.__heldBack ?? [])).slice(
+          from.held,
+          to.held
+        )
+      ),
+      loopFrames: (await page.evaluate(() => window.__loopFrames ?? [])).slice(
+        from.loopFrames,
+        to.loopFrames
+      ),
+    })
+  );
+};
+
+export const runLeg = async (kit: Kit, base: string, leg: Leg) => {
+  // A desk draws its scrollbars and a phone overlays them: a box that starts
+  // or stops scrolling at desk narrows or widens what it holds.
+  const page = await kit.page(leg.view, {
+    theme: leg.theme,
+    init: [heldBack],
+    scrollbars: leg.view === "desk",
+  });
   const said = heard(page);
+  const start = await mark(page, said);
   await open(page, `${base}${leg.path}`, leg.ready);
   await page
     .frameLocator('iframe[title="Preview"]')
@@ -251,100 +526,274 @@ const runLeg = async (kit: Kit, base: string, leg: Leg) => {
     .waitFor({ timeout: 60_000 });
   await settle(page);
   await frames(page);
-  const opened = {
-    posts: said.posts.length,
-    errors: said.errors.length,
-    held: await page.evaluate(() => [...(window.__heldBack ?? [])]),
-    loopFrames: await page.evaluate(() => window.__loopFrames?.length ?? 0),
-  };
-  const widest = await moreStands(page);
-  /** The widths More stood at, as the sweep went. */
-  const moreAt: number[] = [];
-  /** The widths a step to which the page sent a report at. */
-  const postedAt: number[] = [];
-  const least = Math.min(...leg.widths);
-  for (const width of leg.widths) {
+  if (leg.open) {
+    await leg.open(page);
+    await frames(page);
+  }
+  const opened = await mark(page, said);
+  const [first] = leg.steps;
+  const last = leg.steps.at(-1) ?? first;
+  const moreAtStart = await moreStands(page);
+  /** The steps More stood at, and the open card was squeezed at, as the sweep went. */
+  const moreAt: Step[] = [];
+  /** The open card at each step: squeezed, and its own scrollbar's width. */
+  const cards: ({ step: Step } & Awaited<ReturnType<typeof cardState>>)[] = [];
+  /** The steps a step to which the page sent a report at. */
+  const postedAt: Step[] = [];
+  for (const step of leg.steps) {
     const before = said.posts.length;
-    // biome-ignore lint/performance/noAwaitInLoops: one width, laid out and delivered, before the next
-    await page.setViewportSize({ width, height: leg.heights });
+    // biome-ignore lint/performance/noAwaitInLoops: one size, laid out and delivered, before the next
+    await page.setViewportSize(step);
     await frames(page);
     if (await moreStands(page)) {
-      moreAt.push(width);
+      moreAt.push(step);
+    }
+    if (leg.squeezes) {
+      cards.push({ step, ...(await cardState(page)) });
     }
     if (said.posts.length > before) {
-      postedAt.push(width);
+      postedAt.push(step);
     }
   }
   await settle(page);
   await frames(page);
-  const held = await page.evaluate(() => [...(window.__heldBack ?? [])]);
-  /** Each box the loops held back, with how many times. */
-  const tally = (boxes: string[]) =>
-    Object.fromEntries(
-      [...new Set(boxes)].map((box) => [
-        box,
-        boxes.filter((one) => one === box).length,
-      ])
+  const swept = await mark(page, said);
+  const size = (step: Step) => `${step.width}×${step.height}`;
+  const squeezedAt = cards.filter((card) => card.squeezed).map((c) => c.step);
+  const scrollbarAt = cards
+    .filter((card) => card.scrollbar)
+    .map((card) => `${size(card.step)}:${card.scrollbar}px`);
+  const least = leg.steps.reduce((a, b) =>
+    b.width * b.height < a.width * a.height ? b : a
+  );
+  await checkQuiet(
+    kit,
+    page,
+    said,
+    `${leg.name}: opening the artifact${leg.open ? " and a pin's card" : ""}`,
+    start,
+    opened
+  );
+  await checkQuiet(
+    kit,
+    page,
+    said,
+    `${leg.name}: a resize sweep ${size(first)}→${size(least)}→${size(last)}`,
+    opened,
+    swept,
+    { postedAt: postedAt.map(size) }
+  );
+  if (leg.squeezes) {
+    kit.check(
+      `${leg.name}: the sweep squeezed the open pin's card and let it go (squeezed at some sizes, at neither end)`,
+      squeezedAt.length > 0 &&
+        !squeezedAt.includes(first) &&
+        !squeezedAt.includes(last),
+      JSON.stringify({ squeezedAt: squeezedAt.map(size) })
     );
-  const sweepPosts = said.posts.slice(opened.posts);
-  const loops = said.errors
-    .slice(opened.errors)
-    .filter((line) => LOOP.test(line));
-  /** A post as the hub was sent it, its message alone. */
-  const message = (post: string) => {
-    try {
-      return (JSON.parse(post) as { message?: string }).message ?? post;
-    } catch {
-      return post;
-    }
-  };
-  kit.check(
-    `${leg.name}: opening the artifact posts nothing to /api/dashboard-errors and logs no ResizeObserver loop`,
-    opened.posts === 0 &&
-      !said.errors.slice(0, opened.errors).some((line) => LOOP.test(line)),
-    JSON.stringify({
-      posts: said.posts.slice(0, opened.posts).map(message),
-      errors: said.errors.slice(0, opened.errors),
-      heldBack: tally(opened.held),
-      loopFrames: (await page.evaluate(() => window.__loopFrames ?? [])).slice(
-        0,
-        opened.loopFrames
-      ),
-    })
-  );
-  kit.check(
-    `${leg.name}: a resize sweep ${leg.widths[0]}→${least}→${leg.widths.at(-1)} posts nothing to /api/dashboard-errors and logs no ResizeObserver loop`,
-    sweepPosts.length === 0 && loops.length === 0,
-    JSON.stringify({
-      posts: sweepPosts.map(message),
-      postedAt,
-      loops,
-      heldBack: tally(held.slice(opened.held.length)),
-      loopFrames: (await page.evaluate(() => window.__loopFrames ?? [])).slice(
-        opened.loopFrames
-      ),
-    })
-  );
+    kit.check(
+      `${leg.name}: squeezed, the card scrolls and its scrollbar takes width from its head and foot (a desk's scrollbars drawn)`,
+      scrollbarAt.length > 0,
+      JSON.stringify({ scrollbarAt })
+    );
+  }
   if (!leg.crosses) {
-    kit.note(
-      `${leg.name}: the head held every control at every width (More stood at ${moreAt.length} of them)`
-    );
+    if (!leg.squeezes) {
+      kit.note(
+        `${leg.name}: the head held every control at every size (More stood at ${moreAt.length} of them)`
+      );
+    }
     await page.context().close();
     return;
   }
   kit.check(
-    `${leg.name}: the sweep crossed the head's More threshold, both ways (More stood at some widths, none at ${leg.widths[0]}px or ${leg.widths.at(-1)}px)`,
-    moreAt.length > 0 && !widest && !moreAt.includes(leg.widths.at(-1) ?? 0),
+    `${leg.name}: the sweep crossed the head's More threshold, both ways (More stood at some sizes, at neither end)`,
+    moreAt.length > 0 &&
+      !moreAtStart &&
+      !moreAt.includes(first) &&
+      !moreAt.includes(last),
     JSON.stringify({
-      moreAtStart: widest,
-      moreFrom: Math.max(0, ...moreAt),
-      moreTo: Math.min(...moreAt),
+      moreAtStart,
+      moreFrom: moreAt[0] ? size(moreAt[0]) : null,
+      moreTo: moreAt.at(-1) ? size(moreAt.at(-1) as Step) : null,
     })
   );
   await page.context().close();
 };
 
-const run = async (kit: Kit) => {
+/** A fine pointer's desk window under the side sheet's 900px line. */
+const NARROW_DESK = { width: 860, height: 900 };
+
+/**
+ * In a fine pointer's desk window 860 wide, where the preview is the sheet on
+ * the composer: the board opened first (`/`), until it lists the
+ * conversation's row (`path`'s link): the fleet's frame that lists it carries
+ * every session's preview, so the dashboard holds its preview open. Then the
+ * conversation opened from a link (SvelteKit routes the click in the page),
+ * so its pane (`pane`, its tab's id) mounts with the preview already open.
+ * The first frame painted with that pane's split standing already shows the
+ * sheet with its preview, none shows the preview beside the conversation,
+ * and opening sent and logged no loop.
+ */
+export const runNarrow = async (
+  kit: Kit,
+  base: string,
+  leg: { name: string; pane: string; path: string; theme: Theme }
+) => {
+  const page = await kit.page("desk", {
+    theme: leg.theme,
+    init: [heldBack, paintedFrames],
+    scrollbars: true,
+  });
+  await page.setViewportSize(NARROW_DESK);
+  const said = heard(page);
+  const start = await mark(page, said);
+  await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector(`a[href="${leg.path}"]`, {
+    state: "attached",
+    timeout: 60_000,
+  });
+  await settle(page);
+  const before = await page.evaluate(() => window.__painted?.length ?? 0);
+  await page.evaluate(
+    ({ href, pane }) => {
+      window.__paintPane = pane;
+      const link = document.createElement("a");
+      link.href = href;
+      link.textContent = "Its conversation";
+      document.body.append(link);
+      link.click();
+    },
+    { href: leg.path, pane: leg.pane }
+  );
+  /** The preview's page drew in the sheet: its heading stands in the sheet's frame. */
+  const sheetLoaded = await page
+    .frameLocator("[data-preview-sheet] iframe[title='Preview']")
+    .locator("h1")
+    .waitFor({ timeout: 60_000 })
+    .then(
+      () => true,
+      () => false
+    );
+  await settle(page);
+  await frames(page);
+  const opened = await mark(page, said);
+  const routed = await page.evaluate(
+    () => performance.getEntriesByType("navigation").length
+  );
+  const painted = await page.evaluate(() => window.__painted ?? []);
+  const settled = painted.at(-1);
+  const besideAt = painted.findIndex((frame) => frame.beside);
+  const sheetAt = painted.findIndex((frame) => frame.sheet);
+  /** What the sheet holds once the wait is over: its frames, and its card's words. */
+  const sheetHolds = await page.evaluate(() => {
+    const sheet = document.querySelector("[data-preview-sheet]");
+    return sheet
+      ? {
+          frames: sheet.querySelectorAll("iframe").length,
+          says: (sheet.textContent ?? "").trim().slice(0, 160),
+        }
+      : null;
+  });
+  kit.check(
+    `${leg.name}: in a fine pointer's ${NARROW_DESK.width}px desk window, the first frame painted with the split standing shows the preview's sheet, the page draws in it, and no frame shows the preview beside the conversation`,
+    before === 0 &&
+      routed === 1 &&
+      sheetLoaded &&
+      painted.length > 0 &&
+      painted[0].sheet &&
+      besideAt === -1,
+    JSON.stringify({
+      sheetLoaded,
+      sheetHolds,
+      framesBeforeTheLink: before,
+      documentsLoaded: routed,
+      frames: painted.length,
+      firstFrames: painted.slice(0, 7),
+      sheetFirstAt: sheetAt,
+      besideFirstAt: besideAt,
+    })
+  );
+  kit.check(
+    `${leg.name}: once open, the sheet stands on the composer (its floor is the composer's drawn top)`,
+    !!settled &&
+      settled.sheet &&
+      typeof settled.composerTop === "number" &&
+      settled.floor !== null &&
+      Math.abs(settled.floor - settled.composerTop) <= 1,
+    JSON.stringify({
+      settled,
+      firstWithComposer: painted.findIndex(
+        (frame) => typeof frame.composerTop === "number"
+      ),
+    })
+  );
+  // A draft of four lines grows the pill: the composer's top rises, and the
+  // sheet standing on it rises with it.
+  await page.locator('[data-slot="composer-field"]').first().click();
+  for (const line of ["The chips wrap", "at 320", "and the gap", "doubles."]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one line, then its break, in order
+    await page.keyboard.type(line);
+    await page.keyboard.press("Shift+Enter");
+  }
+  await settle(page);
+  await frames(page);
+  const written = await page.evaluate(() => window.__readPaint?.() ?? null);
+  kit.check(
+    `${leg.name}: a draft of four lines raises the composer, and the sheet stands on it still`,
+    !!settled &&
+      !!written &&
+      typeof settled.composerTop === "number" &&
+      typeof written.composerTop === "number" &&
+      written.composerTop < settled.composerTop - 1 &&
+      written.floor !== null &&
+      Math.abs(written.floor - written.composerTop) <= 1,
+    JSON.stringify({ before: settled, written })
+  );
+  await checkQuiet(
+    kit,
+    page,
+    said,
+    `${leg.name}: opening the board, then the conversation from a link, in a ${NARROW_DESK.width}px desk window`,
+    start,
+    opened
+  );
+  await page.context().close();
+};
+
+/** Asks the session `marker` is sent to, through the mock model, to make a page artifact; answers its id. */
+export const made = async (
+  kit: Kit,
+  marker: string,
+  name: string,
+  send: () => Promise<unknown>
+): Promise<string | null> => {
+  asks.set(marker, {
+    name: CREATE,
+    input: {
+      kind: "page",
+      does: "judge",
+      ask: "Judge the chip wraps: pin anything that reads wrong on a narrow pane",
+      name,
+      html: PAGE,
+    },
+  });
+  await send();
+  const created = (await until(
+    `the artifact_create call (${marker})`,
+    () => answered.get(marker),
+    Boolean,
+    180_000
+  )) as string;
+  const id = created.match(ANSWERED_ID)?.[1] ?? null;
+  if (!id) {
+    kit.check(`artifact ${name} is made`, false, created.slice(0, 400));
+  }
+  return id;
+};
+
+/** A scratch fleet whose sessions answer through {@link respond}: sessiond, hub and agent up, its account signed in. */
+export const fleetUp = async (kit: Kit): Promise<KitFleet> => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
@@ -354,36 +803,35 @@ const run = async (kit: Kit) => {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  const session = await fleet.spawn("claude", "Chip wraps", fleet.repo);
+  return fleet;
+};
 
-  asks.set("1", {
-    name: CREATE,
-    input: {
-      kind: "page",
-      does: "judge",
-      ask: "Judge the chip wraps: pin anything that reads wrong on a narrow pane",
-      name: "chip-wraps",
-      html: PAGE,
-    },
-  });
-  await fleet.send(session, "PROBE-CALL:1");
-  const created = (await until(
-    "the artifact_create call",
-    () => answered.get("1"),
-    Boolean,
-    180_000
-  )) as string;
-  const id = created.match(ANSWERED_ID)?.[1];
+const steps = (widths: number[], height: number): Step[] =>
+  widths.map((width) => ({ width, height }));
+/**
+ * At desk the head holds every control down to past the phone's line: the
+ * sweep goes under it to take controls into More, and back.
+ */
+export const DESK_SWEEP = steps(
+  [...sweep(1440, 400, 20), ...sweep(420, 1440, 20)],
+  900
+);
+const PHONE_SWEEP = steps([...sweep(390, 320, 5), ...sweep(325, 390, 5)], 844);
+/** The pin's card at the desk's width, the window's height taken down and back. */
+const TALL_SWEEP = [...sweep(900, 240, 20), ...sweep(260, 900, 20)].map(
+  (height) => ({ width: 1440, height })
+);
+
+const run = async (kit: Kit) => {
+  const fleet = await fleetUp(kit);
+  const session = await fleet.spawn("claude", "Chip wraps", fleet.repo);
+  const id = await made(kit, "1", "chip-wraps", () =>
+    fleet.send(session, "PROBE-CALL:1")
+  );
   if (!id) {
-    kit.check("the artifact is made", false, created.slice(0, 400));
     return;
   }
-
   const base = await fleet.dashboard();
-  // At desk the head holds every control down to past the phone's line: the
-  // sweep goes under it to take controls into More.
-  const desk = [...sweep(1440, 400, 20), ...sweep(420, 1440, 20)];
-  const phone = [...sweep(390, 320, 5), ...sweep(325, 390, 5)];
   for (const theme of ["light", "dark"] as const) {
     const legs: Leg[] = [
       {
@@ -392,8 +840,7 @@ const run = async (kit: Kit) => {
         theme,
         path: `/artifact/${id}`,
         ready: '[data-slot="side-card"]',
-        widths: desk,
-        heights: 900,
+        steps: DESK_SWEEP,
         crosses: false,
       },
       {
@@ -402,9 +849,19 @@ const run = async (kit: Kit) => {
         theme,
         path: `/session/${session}`,
         ready: "[data-artifact-trigger]",
-        widths: desk,
-        heights: 900,
+        steps: DESK_SWEEP,
         crosses: true,
+      },
+      {
+        name: `desk ${theme}, a pin's card open beside its session`,
+        view: "desk",
+        theme,
+        path: `/session/${session}`,
+        ready: "[data-artifact-trigger]",
+        open: dropPin,
+        steps: TALL_SWEEP,
+        crosses: false,
+        squeezes: true,
       },
       {
         name: `phone ${theme}, its own tab`,
@@ -412,8 +869,7 @@ const run = async (kit: Kit) => {
         theme,
         path: `/artifact/${id}`,
         ready: '[data-slot="side-card"]',
-        widths: phone,
-        heights: 844,
+        steps: PHONE_SWEEP,
         crosses: true,
       },
     ];
@@ -421,6 +877,12 @@ const run = async (kit: Kit) => {
       // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
       await runLeg(kit, base, leg);
     }
+    await runNarrow(kit, base, {
+      name: `narrow desk ${theme}, beside its session`,
+      pane: session,
+      path: `/session/${session}`,
+      theme,
+    });
   }
 };
 

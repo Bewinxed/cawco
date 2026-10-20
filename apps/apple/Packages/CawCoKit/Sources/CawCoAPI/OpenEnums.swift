@@ -1280,44 +1280,6 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/CawHarness`.
-    public enum CawHarness: OpenEnum {
-        case claude
-        case opencode
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "claude": self = .claude
-            case "opencode": self = .opencode
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .claude: "claude"
-            case .opencode: "opencode"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.claude, .opencode]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
     /// `#/components/schemas/CawNotWokenReason`.
     public enum CawNotWokenReason: OpenEnum {
         case capped

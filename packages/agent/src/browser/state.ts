@@ -34,7 +34,7 @@ import {
   isBrowserKey,
 } from "@cawco/core/browser";
 import type { MediaPath } from "@cawco/core/capabilities";
-import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
+import { lockBy, openLockFile, unlock } from "@cawco/core/flock";
 import { cawcoDataDir } from "@cawco/core/paths";
 import {
   isDamagedRecord,
@@ -222,7 +222,6 @@ export const allBrowsers = async (): Promise<BrowserRecord[]> => {
 
 /** How long a caller waits for a lock another holds before it says so. */
 const LOCK_WAIT_MS = 15 * 60_000;
-const LOCK_POLL_MS = 100;
 
 /**
  * Runs `work` holding the lock at `path`: a start takes minutes the first
@@ -235,15 +234,10 @@ const holding = async <T>(
 ): Promise<T> => {
   const fd = openLockFile(path, true);
   try {
-    const until = Date.now() + LOCK_WAIT_MS;
-    while (!tryLock(fd)) {
-      if (Date.now() > until) {
-        throw new Error(
-          `${what} is held by another process of this machine for over ${LOCK_WAIT_MS / 60_000} minutes.`
-        );
-      }
-      // biome-ignore lint/performance/noAwaitInLoops: polling a lock another process holds.
-      await Bun.sleep(LOCK_POLL_MS);
+    if (!(await lockBy(fd, Date.now() + LOCK_WAIT_MS))) {
+      throw new Error(
+        `${what} is held by another process of this machine for over ${LOCK_WAIT_MS / 60_000} minutes.`
+      );
     }
     return await work();
   } finally {

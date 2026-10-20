@@ -279,11 +279,15 @@
 
   /** The archived tasks, for the board's Archived rail. */
   let archived = $state<TaskSummary[]>([]);
+  /** Reads of the archived tasks so far: only the newest one's answer is kept. */
+  let archivedReads = 0;
   async function readArchived() {
     const id = projectId;
+    archivedReads += 1;
+    const ticket = archivedReads;
     try {
       const read = await listArchived(id);
-      if (id === projectId) {
+      if (id === projectId && ticket === archivedReads) {
         archived = read.tasks;
       }
     } catch {
@@ -358,16 +362,23 @@
         : null
   );
 
+  /** Reads of the views, and of the dated tasks, so far: only each newest one's answer is kept. */
+  let viewsReads = 0;
+  let datedReads = 0;
   async function readViews() {
     const id = projectId;
+    viewsReads += 1;
+    const ticket = viewsReads;
     try {
       const read = await viewsOf(id);
-      if (id === projectId) {
+      if (id === projectId && ticket === viewsReads) {
         views = read;
         viewsProblem = null;
       }
     } catch (error) {
-      viewsProblem = message(error);
+      if (ticket === viewsReads) {
+        viewsProblem = message(error);
+      }
     } finally {
       viewsRead = true;
     }
@@ -375,11 +386,13 @@
 
   async function readDated() {
     const id = projectId;
+    datedReads += 1;
+    const ticket = datedReads;
     try {
       const read = (await viewTool(id, "tasks", {})) as {
         rows: ViewTaskRow[];
       };
-      if (id === projectId) {
+      if (id === projectId && ticket === datedReads) {
         dated = read.rows;
       }
     } catch {

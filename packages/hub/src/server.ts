@@ -336,7 +336,11 @@ import {
 } from "@cawco/core/binary-updates";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import type { BrowserFrame, BrowserHandedBackFrame } from "@cawco/core/browser";
+import {
+  type BrowserFrame,
+  type BrowserHandedBackFrame,
+  isBrowserKey,
+} from "@cawco/core/browser";
 import { crossSiteRefusal, pageOrigin } from "@cawco/core/browser-gate";
 import {
   CANVAS_LIMITS,
@@ -2900,6 +2904,10 @@ export const createServer = (
       () => pending.remember(requestId, envelope, outlivesHub),
       () => {
         registry.broadcast(clientCopy(envelope));
+        // A browser ask is read by its session's artifact tabs too.
+        if ((envelope.payload as PermissionRequestFrame).browserAsk) {
+          artifactSessions.refresh(envelope.instanceId);
+        }
         if (
           !existed &&
           (envelope.payload as { routedTo?: string }).routedTo !== "parent"
@@ -3009,6 +3017,13 @@ export const createServer = (
       );
       return opened.ok ? { ok: true } : { ok: false, error: opened.error };
     },
+    // Every dashboard (the app's included) follows the fleet's browsers, and
+    // so does a browser artifact's own tab (its frame's `browser`). Called
+    // only once the hub serves, so `artifactSessions` is made by then.
+    publish: (frame) => {
+      registry.broadcast({ verb: "frames", machineId: "hub", payload: frame });
+      artifactSessions.refresh();
+    },
     tell: (instanceId, text) => tellSession(instanceId, text, "browser"),
     // The gate id its browser door is (agent door.ts): its workspace's,
     // else the session's own.
@@ -3054,12 +3069,6 @@ export const createServer = (
     park: (envelope) => parkForPerson(envelope),
     settle: (requestId) => {
       pending.resolve(requestId);
-    },
-    takeOver: async (requestId) => {
-      const ask = browserAsks.get(requestId);
-      if (ask) {
-        await browsers.takeover(ask.key, { requestId });
-      }
     },
   });
   /**
@@ -3253,6 +3262,10 @@ export const createServer = (
   pending.onSettled((parked, outcome, said) => {
     if (!(parked.requestId && parked.instanceId)) {
       return;
+    }
+    // A browser ask leaves its session's artifact tabs too.
+    if ((parked.payload as PermissionRequestFrame).browserAsk) {
+      artifactSessions.refresh(parked.instanceId);
     }
     const { threadId } = parked.payload as { threadId?: string };
     if (threadId) {
@@ -8750,12 +8763,16 @@ export const createServer = (
   };
 
   /**
-   * Asks a machine something and waits for the frame that answers it. A machine
-   * that is not connected and one that will not answer are told apart on
-   * purpose: the first is the fleet's own state (unanswered, reason "dead",
-   * nothing sent), the second is a machine that has something wrong with it
-   * (unanswered, reason "timeout"). An answered frame with `ok: false` is the
-   * machine's refusal.
+   * Asks a machine something and waits for the frame that answers it. A
+   * machine is asked as a send to it is delivered (core handover.ts
+   * `presenceOf`): connected, the request goes now; reconnecting, inside the
+   * window its last link's drop opened, it is held from now and goes on its
+   * next register ({@link resendHeld}), as one in flight when its link
+   * dropped is; offline, it is not sent (unanswered, reason "dead"). Asked
+   * while away, a create's inputs write failed at once with "isn't
+   * connected" while the machine was back 3 s later (2026-10-20). One that
+   * will not answer is unanswered, reason "timeout"; an answered frame with
+   * `ok: false` is the machine's refusal.
    */
   const callAgent = (
     machineId: string,
@@ -8766,7 +8783,7 @@ export const createServer = (
     instanceId?: string
   ): Promise<Bounded<ControlResult>> => {
     const agent = registry.agent(machineId);
-    if (!agent) {
+    if (!agent && machinePresence(machineId).kind !== "reconnecting") {
       return Promise.resolve({ kind: "unanswered", reason: "dead", after: 0 });
     }
 
@@ -8785,7 +8802,10 @@ export const createServer = (
         ...(instanceId && { instanceId }),
         payload,
       } satisfies Envelope<ControlPayload>;
-      sendFrame(agent, frame);
+      // Away: held, with no socket, for its machine's next register.
+      if (agent) {
+        sendFrame(agent, frame);
+      }
       return frame;
     });
   };
@@ -16212,8 +16232,40 @@ export const createServer = (
     (instanceId): ArtifactSessionFrame => {
       const target = previewTargets.get(instanceId);
       const [row] = db.listedBoardInstancesByIds([instanceId]);
+      // A browser artifact's key is its page (core `ArtifactKind`), on the
+      // session's machine.
+      const key =
+        target && "page" in target.source && isBrowserKey(target.source.page)
+          ? target.source.page
+          : null;
+      // The session's open browser ask for that browser: by its artifact or its key.
+      const asked = key
+        ? pending.list().find((envelope) => {
+            const named = (envelope.payload as PermissionRequestFrame)
+              .browserAsk;
+            return (
+              envelope.instanceId === instanceId &&
+              !!named &&
+              (named.artifactId === target?.artifact.id || named.key === key)
+            );
+          })
+        : undefined;
+      const browserAsk = (asked?.payload as PermissionRequestFrame | undefined)
+        ?.browserAsk;
       return {
         type: "artifact.session",
+        ask:
+          asked?.requestId && browserAsk
+            ? { requestId: asked.requestId, browserAsk }
+            : null,
+        browser:
+          key && row
+            ? (browsers
+                .list()
+                .find(
+                  (one) => one.key === key && one.machineId === row.machineId
+                ) ?? null)
+            : null,
         preview: target
           ? previewFrame(
               instanceId,
@@ -16300,6 +16352,37 @@ export const createServer = (
       pulses: Object.fromEntries(pulses),
     },
   });
+
+  /**
+   * A dashboard's first frames, as its socket opens: the board, before it is
+   * asked for, so the rail fills before the REST snapshot lands. A law broken
+   * on the board fails this snapshot (laws.ts), and the break goes to every
+   * dashboard, this one among them; a snapshot that went is followed by
+   * every law caught broken before it. Then the fleet's browsers, whole, to
+   * a page on this wire: a browser view paints from them and follows each
+   * `browser_list` frame after, never polling.
+   */
+  const greetDashboard = (ws: HubSocket, older: boolean): void => {
+    const board = laws.hold(() => instancesFrame(""));
+    const broken = laws.broken();
+    if (board) {
+      sendFrame(ws, board);
+      for (const payload of owedAfterBoard(broken)) {
+        sendFrame(ws, {
+          verb: "frames",
+          machineId: "hub",
+          payload,
+        } satisfies Envelope<FramePayload>);
+      }
+    }
+    if (!older) {
+      sendFrame(ws, {
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "browser_list", browsers: browsers.list() },
+      } satisfies Envelope<FramePayload>);
+    }
+  };
 
   /**
    * Each row as it was last published, serialised, by id. A publish sends
@@ -17999,8 +18082,7 @@ export const createServer = (
         return;
       }
       // A browser ask (browser-tools.ts): a Decline answers its call; an
-      // Approve is the take-over, settled once it has started (the ask
-      // taken off every screen), its refusal the hub's own words.
+      // Approve is refused with the sentence saying to take over.
       if (browserAsks.owns(requestId)) {
         await browserAsks.answer(requestId, result);
         if (receipt.outcome !== "answered") {
@@ -27254,6 +27336,20 @@ export const createServer = (
               : `${still} sessions still run in ${project.name}; stop them first.`
           );
         }
+        // Its browsers go first (their profiles, its sign-ins): one that
+        // can't be removed keeps the project, in the hub's words.
+        if (project) {
+          try {
+            await browsers.forgetProject(params.id);
+          } catch (error) {
+            // The project is kept: a conflict, whatever stopped its
+            // browser's removal, said in the hub's words.
+            if (error instanceof BrowserRefusal) {
+              return status(409, error.message);
+            }
+            throw error;
+          }
+        }
         const machines = new Set(
           db.project(params.id)?.places.map((place) => place.machineId)
         );
@@ -29406,7 +29502,8 @@ export const createServer = (
                 break;
               }
               // A machine's browsers, whole: kept by the hub's browser registry
-              // (browsers.ts, Projects spec §5.11); no screen is sent them.
+              // (browsers.ts, Projects spec §5.11), which tells every
+              // dashboard the fleet's browsers whole (`browser_list`).
               if (kind === "browsers") {
                 browsers.heard(
                   message.machineId,
@@ -31160,24 +31257,9 @@ export const createServer = (
           registry.noteDashboardOrigin(page);
           // Its previews may be framed from it, and from no other origin.
           noteParent(page);
-          // The board, before it is asked for: the FIRST message every
-          // dashboard receives, unconditionally, so the rail fills before the
-          // REST snapshot lands.
-          // A law broken on the board fails this snapshot (laws.ts), and the
-          // break goes to every dashboard, this one among them. A snapshot
-          // that went is followed by every law caught broken before it.
-          const board = laws.hold(() => instancesFrame(""));
-          const broken = laws.broken();
-          if (board) {
-            sendFrame(ws, board);
-            for (const payload of owedAfterBoard(broken)) {
-              sendFrame(ws, {
-                verb: "frames",
-                machineId: "hub",
-                payload,
-              } satisfies Envelope<FramePayload>);
-            }
-          }
+          // The board, then the browsers: the FIRST messages every dashboard
+          // receives, unconditionally.
+          greetDashboard(ws, older);
           // A reconnected dashboard earns the current sign-in state again.
           // The snapshot follows startup discovery on this socket.
           detach(

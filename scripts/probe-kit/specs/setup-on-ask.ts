@@ -8,9 +8,8 @@
  *
  * - First words open its Setup thread (as they always have); then a second
  *   thread, "chat", is a plain conversation Caw answers.
- * - Then, on each harness Caw runs on (core `CAW_DENIED_TOOLS`: Claude Code
- *   and OpenCode; pi cannot put his calls to the hub's gate, so Caw does not
- *   run there) in turn, Caw moved to it, the person writes in chat: "can you
+ * - Then, on each harness Caw runs on (core `CAW_DENIED_TOOLS`: Claude Code,
+ *   OpenCode and pi) in turn, Caw moved to it, the person writes in chat: "can you
  *   set this project up again? I moved the checkout". The mock stands in for
  *   Caw's understanding of the ask: it calls project_setup with chat's id
  *   and `change: ["place"]`, then follows the steps it answers: the setup
@@ -39,10 +38,8 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: one harness at a time, as the person moves Caw
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  CAW_DENIED_TOOLS,
-  type CawHarness,
-} from "../../../packages/core/src/delegate-types";
+import { CAW_DENIED_TOOLS } from "../../../packages/core/src/delegate-types";
+import type { HarnessKind } from "../../../packages/core/src/harness";
 import {
   MACHINE,
   MODEL,
@@ -64,7 +61,7 @@ const CODE_MODE = "execute";
 const PAGE_FILE = "decisions/setup/page.html";
 
 /** The harnesses Caw runs on: the ones whose every shell and edit call the hub's gate decides. */
-const CAW_HARNESSES = Object.keys(CAW_DENIED_TOOLS) as CawHarness[];
+const CAW_HARNESSES = Object.keys(CAW_DENIED_TOOLS) as HarnessKind[];
 
 /**
  * The setup page the mock's Caw writes, from the kit as the steps say: the
@@ -326,7 +323,7 @@ const askOn = async (
   kit: Kit,
   fleet: KitFleet,
   projectId: string,
-  harness: CawHarness,
+  harness: HarnessKind,
   reads: {
     cawAnswers: (threadId: string) => { body: string }[];
     leadOf: () => string | undefined;

@@ -138,16 +138,22 @@
    */
   let previewShare = $state(0);
   /**
-   * The pane's width as the layout below reads it: the bound width, taken in
-   * the next frame's callbacks. The binding hears it in a ResizeObserver
-   * callback; read there, a pane crossing 900px swapped the split for the
-   * sheet inside that delivery, and the panes it mounted were observed at a
-   * depth the delivery had passed ("ResizeObserver loop completed with
+   * The pane's width as the layout below reads it. Its first width (none laid
+   * yet) is taken as the binding reports it, so the first frame painted is
+   * the split or the sheet the pane's width asks for. Every change after it
+   * is taken in the next frame's callbacks: the binding hears it in a
+   * ResizeObserver callback, and read there, a pane crossing 900px swapped
+   * the split for the sheet inside that delivery, mounting panes observed at
+   * a depth the delivery had passed ("ResizeObserver loop completed with
    * undelivered notifications").
    */
   let laidWidth = $state(0);
   $effect(() => {
     const width = paneWidth;
+    if (untrack(() => laidWidth) === 0) {
+      laidWidth = width;
+      return;
+    }
     const frame = requestAnimationFrame(() => {
       laidWidth = width;
     });

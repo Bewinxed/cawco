@@ -60,7 +60,6 @@ import {
   type BlockPage,
   BOARD_ONLY_DENIED_TOOLS,
   CAW_DENIED_TOOLS,
-  type CawHarness,
   type CawInitiated,
   type CawNotWokenReason,
   type CawRunning,
@@ -69,6 +68,7 @@ import {
   CURATOR_DENIED_TOOLS,
   type Envelope,
   type EventThreadMessage,
+  type HarnessKind,
   handoffMarker,
   type InstanceRow,
   type ItemEnd,
@@ -173,7 +173,7 @@ const modelAfter = (
 };
 
 /** The harnesses Caw runs on, in the order a picker offers them. */
-export const CAW_HARNESSES = Object.keys(CAW_DENIED_TOOLS) as CawHarness[];
+export const CAW_HARNESSES = Object.keys(CAW_DENIED_TOOLS) as HarnessKind[];
 
 /** Caw's denied tools on `harness`; refused on a harness whose shell and edit calls the hub's gate cannot decide. */
 export const cawDenied = (harness: string): readonly string[] => {
@@ -182,27 +182,27 @@ export const cawDenied = (harness: string): readonly string[] => {
       `Caw does not run on ${harness}: it cannot put each of Caw's shell and edit calls to the hub first.`
     );
   }
-  return CAW_DENIED_TOOLS[harness as CawHarness];
+  return CAW_DENIED_TOOLS[harness as HarnessKind];
 };
 
 /** A fleet-watch triage run's denied tools on `harness` (core `BOARD_ONLY_DENIED_TOOLS`): the board alone. */
 const boardOnlyDenied = (harness: string): readonly string[] => {
   if (!(harness in BOARD_ONLY_DENIED_TOOLS)) {
     throw new Error(
-      `Fleet-watch triage does not run on ${harness}: it cannot deny its edit and shell tools.`
+      `Fleet-watch triage does not run on ${harness}: it cannot be fenced to CawCo's tools alone.`
     );
   }
-  return BOARD_ONLY_DENIED_TOOLS[harness as CawHarness];
+  return BOARD_ONLY_DENIED_TOOLS[harness as HarnessKind];
 };
 
-/** A memory curator's denied tools on `harness` (core `CURATOR_DENIED_TOOLS`); refused on one that cannot deny them. */
+/** A memory curator's denied tools on `harness` (core `CURATOR_DENIED_TOOLS`); refused on one that cannot fence it. */
 const curatorDenied = (harness: string): readonly string[] => {
   if (!(harness in CURATOR_DENIED_TOOLS)) {
     throw new Error(
-      `The memory curator does not run on ${harness}: it cannot deny the curator's edit, shell and web tools. Give the Memory curator routine a delegate type on Claude Code or OpenCode.`
+      `The memory curator does not run on ${harness}: it cannot be fenced to CawCo's tools alone.`
     );
   }
-  return CURATOR_DENIED_TOOLS[harness as CawHarness];
+  return CURATOR_DENIED_TOOLS[harness as HarnessKind];
 };
 
 /**
@@ -2442,7 +2442,7 @@ export const createCaw = ({
           refuse(400, (error as Error).message);
         }
       }
-      const harness = (change.harness as CawHarness | undefined) ?? undefined;
+      const harness = (change.harness as HarnessKind | undefined) ?? undefined;
       const on = change.on ?? project.caw;
       const rehomed = harness !== undefined && harness !== project.cawHarness;
       const model = modelAfter(project.cawModel, change.model, rehomed);

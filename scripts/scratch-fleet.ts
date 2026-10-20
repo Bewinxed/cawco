@@ -2578,12 +2578,14 @@ async function standUp(
     title: string,
     cwd = workdir,
     /** More of the spawn's payload (its `projectId`). */
-    extra: object = {}
+    extra: object = {},
+    /** The machine it starts on: one {@link launchMachine} added, say. */
+    machineId = MACHINE
   ): Promise<string> => {
     const instanceId = crypto.randomUUID();
     await post({
       verb: "spawn",
-      machineId: MACHINE,
+      machineId,
       instanceId,
       requestId: crypto.randomUUID(),
       payload: {
@@ -2605,13 +2607,18 @@ async function standUp(
     return instanceId;
   };
   /** A person's message to a session, through the dashboard; its uuid. */
-  const send = async (instanceId: string, text: string): Promise<string> => {
+  const send = async (
+    instanceId: string,
+    text: string,
+    /** The session's machine: one {@link launchMachine} added, say. */
+    machineId = MACHINE
+  ): Promise<string> => {
     const uuid = crypto.randomUUID();
     await post({
       type: "command",
       commandId: crypto.randomUUID(),
       kind: "send",
-      machineId: MACHINE,
+      machineId,
       sessionId: instanceId,
       payload: {
         instanceId,

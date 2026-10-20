@@ -1,6 +1,7 @@
 /** Pi's agent adapter owns only custody and transport, never a running SDK turn. */
 import { resumeCursor, type SpawnPayload } from "@cawco/core";
 import { workspaceSpillDir } from "@cawco/core/paths";
+import { sessionFleetDenials } from "../denied-tools";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import type { KeeperReading } from "../keepers";
 import { parseProcId, procIdFor } from "../proc-id";
@@ -57,7 +58,17 @@ export class PiHarness extends PiProfile implements Harness {
         throw new Error(credential.reason);
       }
     }
-    return await spawnPi(spec, withAccountReads(spec, ctx));
+    // The fleet's baseline and the to-do set beside the spawn's own denials,
+    // as every harness takes them (denied-tools.ts `sessionFleetDenials`):
+    // its host maps them to pi's names (core `piToolsFor`).
+    const fleet = await sessionFleetDenials(spec.cawcoTodos);
+    return await spawnPi(
+      {
+        ...spec,
+        denyTools: [...new Set([...fleet, ...(spec.denyTools ?? [])])],
+      },
+      withAccountReads(spec, ctx)
+    );
   }
 
   /** The keepers there for custody to read, the current one first. */

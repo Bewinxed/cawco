@@ -39,7 +39,10 @@
  *    project's Caw edits list. Anything else (an edit with no list, any other
  *    write, a line the gate cannot read; or those writes in a turn an event,
  *    a routine, a report, a nudge, an inbox of outside events or a web read
- *    woke) raises the Approve card, the ask parked as any session's is.
+ *    woke) raises the Approve card, the ask parked as any session's is. A
+ *    PowerShell line, which the gate's POSIX reader cannot read, and a pi
+ *    lead's call of a tool from the person's own extensions, which may do
+ *    anything, always raise it.
  * 6. **Visible**: every call is a `lead_calls` row and a note in the thread
  *    his turn answers: the command, its exit, the files it touched; a
  *    refusal with why, your Deny as yours.
@@ -88,7 +91,43 @@ export type GateDecision = GateVerdict | { kind: "withdrawn"; why: string };
 const GATED: ReadonlySet<string> = new Set([
   ...LEAD_GATED_TOOLS.claude,
   ...LEAD_GATED_TOOLS.opencode,
+  ...LEAD_GATED_TOOLS.pi,
 ]);
+
+/**
+ * Shells whose lines {@link readShell} (a POSIX shell's reader) cannot read:
+ * Claude Code's Windows `PowerShell`. A line of one never runs without your
+ * card, however it reads: PowerShell runs a command from `( … )` and `{ … }`
+ * where a POSIX shell reads words. Its shared-checkout refusals still apply.
+ */
+const UNREAD_SHELLS: ReadonlySet<string> = new Set(["PowerShell"]);
+
+/**
+ * What a lead's call is, by its tool: a shell line, a file edit, or any
+ * other tool. That last kind is a pi lead's: his host puts to the gate every
+ * call of a tool CawCo did not give him, one a person's own pi extension
+ * registered (agent pi-runtime.ts `PiLeadGate`).
+ */
+type CallKind = "shell" | "edit" | "tool";
+
+const kindOf = (tool: string): CallKind => {
+  if (LEAD_SHELL_TOOLS.has(tool)) {
+    return "shell";
+  }
+  return GATED.has(tool) ? "edit" : "tool";
+};
+
+/**
+ * Whether an ask is one of a lead's calls the gate decides: a shell or edit
+ * tool's, or any tool ask a pi lead's host raised (only gated calls are put
+ * to the hub from there, {@link CallKind}).
+ */
+const isGated = (ask: PermissionRequestFrame): boolean =>
+  GATED.has(ask.toolName) ||
+  (ask.harness === "pi" && (ask.requestKind ?? "tool") === "tool");
+
+/** The most of a tool call's input its row keeps as its command. */
+const TOOL_INPUT_KEPT = 2000;
 
 // --- the shell, read -------------------------------------------------------
 
@@ -954,7 +993,7 @@ const shellFiles = (command: string): string[] => {
 
 // --- edits -----------------------------------------------------------------
 
-/** The files an edit call names: Claude's `file_path`/`notebook_path`, OpenCode's `filepath` or its resources. */
+/** The files an edit call names: Claude's `file_path`/`notebook_path`, OpenCode's `filepath` or its resources, pi's `path`. */
 const editFiles = (input: Record<string, unknown>): string[] => {
   const named = [
     input.file_path,
@@ -1080,7 +1119,9 @@ const resultText = (content: unknown): string => {
 interface Call {
   command: string;
   files: string[];
-  shell: boolean;
+  kind: CallKind;
+  /** A shell line the gate can read ({@link UNREAD_SHELLS}); false for any other call. */
+  readable: boolean;
 }
 
 /** Whether a wake is yours: it read your words and nothing from outside, and no web content. */
@@ -1151,9 +1192,12 @@ const verdictOf = (row: LeadCallRow): GateVerdict => {
 };
 
 /** What a ran call's note says of how it went. */
-const ranBody = (row: LeadCallRow, shell: boolean): string => {
+const ranBody = (row: LeadCallRow, kind: CallKind): string => {
   const approved = row.approved ? " · you approved it" : "";
-  if (shell) {
+  if (kind === "tool") {
+    return `${row.exit === "failed" ? "Failed" : "Done"}${approved}`;
+  }
+  if (kind === "shell") {
     const files = row.files.length > 0 ? ` · ${row.files.join(", ")}` : "";
     const exit =
       row.exit === "failed" ? "Failed" : `Exit ${row.exit ?? "not reported"}`;
@@ -1165,7 +1209,7 @@ const ranBody = (row: LeadCallRow, shell: boolean): string => {
 /** A call's note in its thread, by its outcome; none while it waits on your card. */
 const noteFor = (row: LeadCallRow): ThreadNote | undefined => {
   const what = shortly(row.command);
-  const shell = LEAD_SHELL_TOOLS.has(row.tool);
+  const kind = kindOf(row.tool);
   switch (row.outcome) {
     case "refused":
       return {
@@ -1180,9 +1224,14 @@ const noteFor = (row: LeadCallRow): ThreadNote | undefined => {
       };
     case "ran":
       return {
-        title: shell ? `Caw · ran \`${what}\`` : `Caw · edited ${what}`,
-        body: ranBody(row, shell),
-        event: { kind: "caw", what: shell ? "ran" : "edited", command: what },
+        title:
+          kind === "edit" ? `Caw · edited ${what}` : `Caw · ran \`${what}\``,
+        body: ranBody(row, kind),
+        event: {
+          kind: "caw",
+          what: kind === "edit" ? "edited" : "ran",
+          command: what,
+        },
       };
     case "asked":
       return;
@@ -1216,7 +1265,7 @@ const exitOf = (
     structuredContent?: Record<string, unknown>;
   }
 ): string => {
-  if (!LEAD_SHELL_TOOLS.has(row.tool)) {
+  if (kindOf(row.tool) !== "shell") {
     return block.is_error ? "failed" : "ok";
   }
   const exit = block.structuredContent?.exit;
@@ -1258,22 +1307,56 @@ export const createLeadGate = ({
 
   /** The call's words for its row and its note. */
   const describe = (lead: InstanceRow, ask: PermissionRequestFrame): Call => {
-    const shell = LEAD_SHELL_TOOLS.has(ask.toolName);
-    if (shell) {
+    const kind = kindOf(ask.toolName);
+    if (kind === "shell") {
       const command = unboundedCommand(
         typeof ask.input.command === "string" ? ask.input.command : ""
       );
-      return { shell, command, files: shellFiles(command) };
+      return {
+        kind,
+        command,
+        files: shellFiles(command),
+        readable: !UNREAD_SHELLS.has(ask.toolName),
+      };
+    }
+    if (kind === "tool") {
+      return {
+        kind,
+        command: `${ask.toolName} ${JSON.stringify(ask.input)}`.slice(
+          0,
+          TOOL_INPUT_KEPT
+        ),
+        files: [],
+        readable: false,
+      };
     }
     const files = editFiles(ask.input).map((file) => inPlace(lead.cwd, file));
-    return { shell, command: files.join(", "), files };
+    return { kind, command: files.join(", "), files, readable: false };
   };
 
   /**
    * The verdict on one of a lead's calls, from the rules in order: budget,
    * shared checkout, the project's Caw edits and size, wake source. `edits`
-   * is what the project declares, for an edit.
+   * is what the project declares, for an edit. Any other tool's call (a pi
+   * lead's tool from the person's own extensions) may do anything, so past
+   * the budget it is put to you.
    */
+  /** Why a call is refused outright, by the budget, the shared checkout or the project's Caw edits; nothing for one that is not. */
+  const refusalOf = (
+    call: Call,
+    wake: Wake,
+    isShared: boolean,
+    edits: CawEdits
+  ): string | undefined => {
+    const refused = overBudget(wake);
+    if (refused || call.kind === "tool") {
+      return refused;
+    }
+    return call.kind === "shell"
+      ? sharedDenied(call, isShared)
+      : editDenied(call, wake, edits);
+  };
+
   const judge = (
     lead: InstanceRow,
     call: Call,
@@ -1282,15 +1365,14 @@ export const createLeadGate = ({
     const wake = wakeOf(lead.id);
     wake.calls += 1;
     const isShared = shared(lead);
-    const refused =
-      overBudget(wake) ??
-      (call.shell
-        ? sharedDenied(call, isShared)
-        : editDenied(call, wake, edits));
+    const refused = refusalOf(call, wake, isShared, edits);
     if (refused) {
       return { kind: "deny", message: refused };
     }
-    if (!call.shell) {
+    if (call.kind === "tool") {
+      return { kind: "card" };
+    }
+    if (call.kind === "edit") {
       for (const file of call.files) {
         wake.files.add(file);
       }
@@ -1301,9 +1383,10 @@ export const createLeadGate = ({
         : { kind: "card" };
     }
     // A line that only reads runs whatever woke him; the tidy writes only
-    // in a turn your words woke; anything else is put to you.
+    // in a turn your words woke; anything else, and any line the gate cannot
+    // read, is put to you.
     if (
-      call.shell &&
+      call.readable &&
       (readOnly(call.command) ||
         (yours(wake) && allowlisted(call.command, isShared)))
     ) {
@@ -1407,8 +1490,8 @@ export const createLeadGate = ({
 
     /**
      * A permission ask from `lead`, before it is parked: the gate's verdict,
-     * or none for an ask that is not a lead's shell or edit call (it parks as
-     * any ask). A replay of one already judged answers the same, and spends
+     * or none for an ask that is not one of a lead's gated calls
+     * ({@link isGated}; it parks as any ask). A replay of one already judged answers the same, and spends
      * nothing again. An edit's verdict waits on the project's gate.md read.
      */
     async decide(
@@ -1421,7 +1504,7 @@ export const createLeadGate = ({
         lead.role !== "lead" ||
         !lead.projectId ||
         !requestId ||
-        !GATED.has(ask.toolName)
+        !isGated(ask)
       ) {
         return;
       }
@@ -1431,7 +1514,7 @@ export const createLeadGate = ({
       }
       const call = describe(lead, ask);
       let edits: CawEdits = { kind: "none" };
-      if (!call.shell) {
+      if (call.kind === "edit") {
         reading.set(requestId, { instanceId: lead.id });
         // The read never throws: a failure is what gate.md says now.
         edits = await cawEdits(lead.projectId).catch(
@@ -1465,7 +1548,11 @@ export const createLeadGate = ({
         tool: ask.toolName,
         command: call.command,
         files: call.files,
-        writes: !(call.shell && allowlisted(call.command, true)),
+        writes: !(
+          call.kind === "shell" &&
+          call.readable &&
+          allowlisted(call.command, true)
+        ),
         outcome: OUTCOME_OF[verdict.kind],
         approved: false,
         why: verdict.kind === "deny" ? verdict.message : null,

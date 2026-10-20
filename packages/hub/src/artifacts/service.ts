@@ -4309,7 +4309,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         try {
           merged = mergeProgram(existing, statements);
         } catch (error) {
-          throw unmerged(error);
+          throw error instanceof ProgramRefusal
+            ? refusedProgram(error)
+            : unmerged(error);
         }
         return programRevised(instance, row, existing, merged);
       };

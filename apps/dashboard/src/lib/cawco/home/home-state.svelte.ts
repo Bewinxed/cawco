@@ -936,6 +936,8 @@ class Home {
   #waiting = $state<Record<string, TaskSummary[]>>({});
   /** The change count each project's waiting tasks were last read at. */
   readonly #waitingRead = new Map<string, number>();
+  /** Each project's reads of its waiting tasks so far, by project id. */
+  readonly #waitingAsked = new Map<string, number>();
 
   constructor() {
     $effect.root(() => {
@@ -951,9 +953,15 @@ class Home {
           }
           this.#waitingRead.set(project.id, changes);
           const { id } = project;
+          const ticket = (this.#waitingAsked.get(id) ?? 0) + 1;
+          this.#waitingAsked.set(id, ticket);
           listTasksWaiting(id)
             .then((tasks) => {
-              this.#waiting = { ...this.#waiting, [id]: tasks };
+              // Reads of one project overlap when its tasks change fast:
+              // only the newest one's answer is kept.
+              if (this.#waitingAsked.get(id) === ticket) {
+                this.#waiting = { ...this.#waiting, [id]: tasks };
+              }
             })
             .catch(() => {
               // The next change reads it again; Needs you keeps the last read.

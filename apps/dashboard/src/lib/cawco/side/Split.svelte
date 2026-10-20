@@ -96,14 +96,20 @@
    */
   const DIVIDER = 1;
   /**
-   * The split's width as the panes are sized from it: the bound width, taken
-   * in the next frame's callbacks. The binding hears it in a ResizeObserver
-   * callback; read there, the floor and the panes' sizes it sets resized the
-   * panes inside that delivery.
+   * The split's width as the panes are sized from it. Its first width (none
+   * laid yet) is taken as the binding reports it, so the first frame painted
+   * stands the panes at their sizes. Every change after it is taken in the
+   * next frame's callbacks: the binding hears it in a ResizeObserver
+   * callback, and read there, the floor and the panes' sizes it sets resized
+   * the panes inside that delivery.
    */
   let laidWidth = $state(0);
   $effect(() => {
     const now = width;
+    if (untrack(() => laidWidth) === 0) {
+      laidWidth = now;
+      return;
+    }
     const frame = requestAnimationFrame(() => {
       laidWidth = now;
     });

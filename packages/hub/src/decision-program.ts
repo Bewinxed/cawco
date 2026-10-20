@@ -246,6 +246,76 @@ const idProblems = (read: ProgramRead): string[] => {
   ];
 };
 
+/** The opener each closer ends. */
+const CLOSES: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
+/** The closer each opener needs. */
+const CLOSERS: Record<string, string> = { "(": ")", "[": "]", "{": "}" };
+
+/** Where a line and column fall in `text`, 1-based, at offset `at`. */
+const lineAt = (text: string, at: number): { column: number; line: number } => {
+  const before = text.slice(0, at).split("\n");
+  return { line: before.length, column: (before.at(-1)?.length ?? 0) + 1 };
+};
+
+/** An opener `text` leaves open: a quote, or a bracket. */
+interface Unclosed {
+  at: number;
+  char: string;
+  quote: boolean;
+}
+
+/**
+ * What `text` leaves open at its end, by lang-core's `autoClose` scan
+ * (statements.ts): an open string first, else the innermost open bracket;
+ * null when everything closes.
+ */
+const unclosedIn = (text: string): Unclosed | null => {
+  const open: Unclosed[] = [];
+  let quote: Unclosed | null = null;
+  let escaped = false;
+  for (let at = 0; at < text.length; at += 1) {
+    const char = text[at] ?? "";
+    if (escaped) {
+      escaped = false;
+    } else if (quote) {
+      escaped = char === "\\";
+      quote = char === quote.char ? null : quote;
+    } else if (char === '"' || char === "'") {
+      quote = { at, char, quote: true };
+    } else if (CLOSERS[char]) {
+      open.push({ at, char, quote: false });
+    } else if (CLOSES[char] && open.at(-1)?.char === CLOSES[char]) {
+      open.pop();
+    }
+  }
+  return quote ?? open.at(-1) ?? null;
+};
+
+/**
+ * Why `text` does not parse whole: the string or call it leaves open, named
+ * by its statement and where it opens; null when everything closes.
+ * lang-core's parse closes them for a streaming reply and only flags
+ * `meta.incomplete`: a kept page is no stream, so it is refused instead.
+ */
+export const unclosedProblem = (text: string): string | null => {
+  const left = unclosedIn(text);
+  if (!left) {
+    return null;
+  }
+  const [statement] = text
+    .slice(0, left.at)
+    .split("\n")
+    .flatMap((each) => STATEMENT.exec(each)?.[1] ?? [])
+    .slice(-1);
+  const { line, column } = lineAt(text, left.at);
+  const what = left.quote
+    ? `the string opened at line ${line}, column ${column} is never closed: end it with ${left.char}`
+    : `the ${left.char} opened at line ${line}, column ${column} is never closed: close it with ${CLOSERS[left.char]}`;
+  return statement
+    ? `${statement}: ${what}.`
+    : `${what[0]?.toUpperCase()}${what.slice(1)}.`;
+};
+
 /**
  * `raw` as a decision page's program, or a {@link ProgramRefusal} with every
  * reason: its size and code first, then the parser's mistakes, then its ids.
@@ -271,6 +341,10 @@ export const checkProgram = (raw: string): CheckedProgram => {
     .map((token) => `@${token.v} is an action: a decision page runs none.`);
   if (actions.length > 0) {
     refuse(actions);
+  }
+  const unclosed = unclosedProblem(program);
+  if (unclosed) {
+    refuse([unclosed]);
   }
   const result = parser.parse(program);
   const problems: string[] = [];
@@ -359,12 +433,18 @@ export interface StatementChange {
 /**
  * `statements` merged into `existing` by name (lang-core `mergeStatements`:
  * the same name replaces, a new name is added, what nothing reaches is
- * dropped), and what that changed.
+ * dropped), and what that changed. Statements that leave a string or call
+ * open are refused as written ({@link unclosedProblem}), before the merge
+ * can carry the open tail into a statement of the page's.
  */
 export const mergeProgram = (
   existing: string,
   statements: string
 ): { change: StatementChange; merged: string } => {
+  const unclosed = unclosedProblem(statements);
+  if (unclosed) {
+    refuse([unclosed]);
+  }
   const merged = `${mergeStatements(existing, statements, "root").trim()}\n`;
   const before = statementsOf(existing);
   const after = statementsOf(merged);

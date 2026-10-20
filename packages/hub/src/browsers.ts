@@ -15,6 +15,16 @@
  * - `POST /api/browsers/:key/handback`: control taken back, the page loaded
  *   again, the gate open; the ask's call answers with the page's origin.
  * - `POST /api/browsers/:key/start`, `/stop`, `GET /api/browsers`.
+ * - `POST /api/browsers/:key/remove`: the browser stopped and its profile
+ *   deleted on its machine (its sign-ins forgotten), refused while the
+ *   person holds it; answered once its row is gone. Forgetting a project
+ *   removes each of its browsers this way first.
+ *
+ * What a machine says of a browser right now and the hub keeps nowhere
+ * else (why it failed, how far its image is, the origin of the page it
+ * shows) is held in memory from its latest frame and listed with the row:
+ * live facts, which a hub restart reads again from the machine's next
+ * frame, never served back from a table.
  *
  * Every route is the person's: a session's credential is refused by the
  * hub's gate (hub-auth.ts, "Only the person takes over").
@@ -33,6 +43,7 @@
 import type { InstanceRow } from "@cawco/core";
 import {
   BROWSER_HANDBACK,
+  BROWSER_REMOVE,
   BROWSER_ROWS,
   BROWSER_SHIELD,
   BROWSER_START,
@@ -41,9 +52,11 @@ import {
   type BrowserHandback,
   type BrowserHandedBackFrame,
   type BrowserKey,
+  type BrowserListFrame,
   type BrowserRow,
   type BrowserShieldArgs,
   isBrowserKey,
+  type ListedBrowser,
   SHIELD_WORDS,
 } from "@cawco/core/browser";
 import { Elysia, t } from "elysia";
@@ -68,11 +81,18 @@ const CALL_MS = 15 * 60_000;
 /** How long a browser's own stream relay credential lasts (Projects spec item 4). */
 const RELAY_TTL_MS = 7 * 24 * 60 * 60_000;
 
+/** What a machine says of a browser now, kept from its latest frame (core `BrowserRow`). */
+export type LiveBrowserFacts = Pick<BrowserRow, "why" | "progress" | "origin">;
+
 /** A refusal the routes answer with its status and the sentence. */
 export class BrowserRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409 | 503;
-  constructor(status: 400 | 403 | 404 | 409 | 503, message: string) {
-    super(message);
+  constructor(
+    status: 400 | 403 | 404 | 409 | 503,
+    message: string,
+    options?: ErrorOptions
+  ) {
+    super(message, options);
     this.status = status;
   }
 }
@@ -93,6 +113,8 @@ export interface BrowsersDeps {
   ) => import("@cawco/core/browser").BrowserRelay | null;
   /** Brings an artifact to the front of its session's panel (server.ts `openPreview`). */
   open: (artifact: ArtifactRow) => Promise<{ ok: boolean; error?: string }>;
+  /** Sends every dashboard the fleet's browsers, whole (core `BrowserListFrame`). */
+  publish: (frame: BrowserListFrame) => void;
   /** Says something to a session, as the hub. */
   tell: (instanceId: string, text: string) => void;
   /** The gate id a session's browser door is (agent door.ts): its workspace's, else its own id. */
@@ -148,6 +170,18 @@ const rowFrom = (row: BrowserRow): Omit<StoredBrowser, "machineId"> => ({
 
 export const createBrowsers = (deps: BrowsersDeps) => {
   const { db } = deps;
+  /** Each browser's live facts, by machine and key, from its machine's latest frame or answer. */
+  const live = new Map<string, LiveBrowserFacts>();
+  const liveKey = (machineId: string, key: BrowserKey): string =>
+    `${machineId}\u0000${key}`;
+  const noteLive = (machineId: string, row: BrowserRow): void => {
+    const facts: LiveBrowserFacts = {
+      ...(row.why ? { why: row.why } : {}),
+      ...(row.progress ? { progress: row.progress } : {}),
+      ...(row.origin ? { origin: row.origin } : {}),
+    };
+    live.set(liveKey(machineId, row.key), facts);
+  };
 
   /** `instance`'s browser artifact, made the first time it is listed or asked about. */
   const artifactFor = (instance: InstanceRow, key: BrowserKey): ArtifactRow => {
@@ -202,8 +236,15 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     );
   };
 
-  const keep = (machineId: string, row: BrowserRow): void =>
+  /** Every dashboard told the fleet's browsers as they stand now: after each change of any. */
+  const told = (): void =>
+    deps.publish({ kind: "browser_list", browsers: browsers.list() });
+
+  const keep = (machineId: string, row: BrowserRow): void => {
     db.browsers.put(machineId, rowFrom(row));
+    noteLive(machineId, row);
+    told();
+  };
 
   const shield = async (
     machineId: string,
@@ -281,6 +322,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     const row = db.browsers.get(machineId, key);
     if (row?.takeover) {
       db.browsers.put(machineId, { ...row, takeover: null });
+      told();
     }
     deps.asks().handedBack(machineId, key, origin, requestId);
   };
@@ -303,6 +345,15 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         }
       }
       db.browsers.replace(machineId, frame.browsers.map(rowFrom));
+      for (const at of live.keys()) {
+        if (at.startsWith(`${machineId}\u0000`)) {
+          live.delete(at);
+        }
+      }
+      for (const row of frame.browsers) {
+        noteLive(machineId, row);
+      }
+      told();
     },
 
     /** A take-over its machine ended, whichever way: told before the record's frame, with the page's origin. */
@@ -448,11 +499,62 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       return row;
     },
 
-    /** Every browser of the fleet, for Settings and the project page. */
-    list(): (StoredBrowser & { machineName: string })[] {
+    /**
+     * Removes `key` on its machine: stopped, its profile (its sign-ins)
+     * deleted, its row gone. Refused while the person holds it.
+     */
+    async remove(key: BrowserKey, named: string | undefined): Promise<void> {
+      const machineId = machineOf(key, named);
+      if (db.browsers.get(machineId, key)?.takeover) {
+        throw new BrowserRefusal(
+          409,
+          "You have control of this browser now. Hand it back first, then forget its sign-ins."
+        );
+      }
+      answered<unknown>(
+        await deps.call(machineId, BROWSER_REMOVE, [{ key }], CALL_MS),
+        deps.machineName(machineId),
+        "be removed"
+      );
+      db.browsers.remove(machineId, key);
+      live.delete(liveKey(machineId, key));
+      told();
+    },
+
+    /**
+     * A project being forgotten: each of its browsers, on every machine,
+     * handed back when the person holds it, then removed. The first that
+     * can't be is the forget's refusal, the project kept.
+     */
+    async forgetProject(projectId: string): Promise<void> {
+      const key: BrowserKey = `project:${projectId}`;
+      for (const row of db.browsers.list()) {
+        if (row.key !== key) {
+          continue;
+        }
+        try {
+          if (row.takeover) {
+            // biome-ignore lint/performance/noAwaitInLoops: one machine at a time, each answered before the next.
+            await browsers.handback(key, row.machineId);
+          }
+          await browsers.remove(key, row.machineId);
+        } catch (error) {
+          // biome-ignore lint/style/useErrorCause: the cause rides the refusal's options, its third argument.
+          throw new BrowserRefusal(
+            error instanceof BrowserRefusal ? error.status : 503,
+            `Its browser on ${deps.machineName(row.machineId)} wasn't removed: ${error instanceof Error ? error.message : String(error)} The project is kept; Forget tries again.`,
+            { cause: error }
+          );
+        }
+      }
+    },
+
+    /** Every browser of the fleet, for Settings, the project page and every browser view. */
+    list(): ListedBrowser[] {
       return db.browsers.list().map((row) => ({
         ...row,
         machineName: deps.machineName(row.machineId),
+        ...live.get(liveKey(row.machineId, row.key)),
       }));
     },
   };
@@ -518,4 +620,13 @@ export const browserRoutes = (browsers: Browsers) =>
       { body: machineBody },
       ({ params, body }) =>
         run(() => browsers.stop(keyOf(params.key), body.machineId))
+    )
+    .post(
+      "/api/browsers/:key/remove",
+      { body: machineBody },
+      ({ params, body }) =>
+        run(async () => {
+          await browsers.remove(keyOf(params.key), body.machineId);
+          return { ok: true as const };
+        })
     );

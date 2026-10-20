@@ -6,6 +6,7 @@ import type { HarnessContext, HarnessSession } from "../harness";
 import { startPiHost } from "./pi-runtime";
 import {
   backgroundShell,
+  type PiGateAsk,
   type PiHostCommand,
   type PiHostEvent,
   type PiHostState,
@@ -26,6 +27,8 @@ const state: PiHostState = {
 };
 let session: HarnessSession | undefined;
 let starting: Promise<void> | undefined;
+/** A lead's calls put to the hub and not answered yet, by request ({@link PiHostState.asks}). */
+const asks = new Map<string, PiGateAsk>();
 
 function start(
   command: Extract<PiHostCommand, { type: "start" }>
@@ -73,8 +76,17 @@ function start(
       state.held = state.held.filter((held) => held !== uuid);
       output({ type: "rejected", uuid, error: String(error) });
     },
-    permission: () => {
-      throw new Error("pi does not ask permissions");
+    // A lead's shell and edit calls (pi-runtime `PiLeadGate`): each to its
+    // agent, which parks it with the hub, and kept until it is over.
+    permission: (request) => {
+      asks.set(request.requestId, request);
+      state.asks = [...asks.values()];
+      output({ type: "permission", request });
+    },
+    permissionResolved: (requestId, outcome = "answered") => {
+      asks.delete(requestId);
+      state.asks = [...asks.values()];
+      output({ type: "permission_resolved", requestId, outcome });
     },
     emit: () => {
       throw new Error("pi host cannot emit hub envelopes");
@@ -123,6 +135,12 @@ async function handle(command: PiHostCommand): Promise<void> {
     case "stop":
       await session.stop();
       output({ type: "reply", id: command.id });
+      return;
+    case "permission":
+      session.resolvePermission(command.requestId, command.result);
+      return;
+    case "withdraw":
+      session.withdrawPermission(command.requestId, command.message);
       return;
     default:
       return;

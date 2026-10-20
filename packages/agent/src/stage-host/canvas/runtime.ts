@@ -127,6 +127,8 @@ const UNMOUNT_MARGIN = 3;
 const SWEEP_KEPT = 3;
 /** The quiet after the last change before a report is posted. Ours. */
 const REPORT_QUIET_MS = 200;
+/** The smallest an embed draws a story's words, in px: scaled further, they stop being legible. The owner's call ("if the scale would put body text under ~10px, say so"). */
+const EMBED_TYPE_FLOOR = 10;
 
 export type WidthSlot = number | "own";
 
@@ -325,8 +327,8 @@ export function boot(options: BootOptions): void {
    * A decision page's Preview (`by=embed`): a second page of a canvas that
    * draws only the stories `story` names (every story when it names none),
    * at rest, one under another in the page's own flow at their own size,
-   * each as wide as its form up to the embed's width, with none of the
-   * canvas's chrome; it never posts, and tells the page holding it how tall
+   * centred, one wider than the embed scaled down to fit it (`fitToEmbed`),
+   * with none of the canvas's chrome; it never posts, and tells the page holding it how tall
    * it stands (`cawco:embed-size`), so the frame is as tall as it.
    */
   const embed = params.get("by") === "embed";
@@ -599,13 +601,19 @@ export function boot(options: BootOptions): void {
 
   const sectionOf = (file: string) => sections.find((one) => one.file === file);
 
-  /** Whether the page draws story `name`: an embed only the ones it names, any other page every one. */
-  const drawsStory = (name: string): boolean =>
-    named.size === 0 || named.has(name);
+  /**
+   * The stories of `all` the page draws: an embed's the ones it names, in
+   * the order it names them (a Preview's `stories`), any other page's every
+   * one, in its file's order.
+   */
+  const toDraw = <One extends { name: string }>(all: readonly One[]): One[] =>
+    named.size === 0
+      ? [...all]
+      : [...named].flatMap((name) => all.filter((one) => one.name === name));
 
-  /** The stories a section draws, in its file's order. */
+  /** The stories a section draws, in the order `toDraw` gives. */
   const storiesOf = (section: Section): Story[] =>
-    (section.mod?.SHEET.stories ?? []).filter((one) => drawsStory(one.name));
+    toDraw(section.mod?.SHEET.stories ?? []);
 
   /** The columns a section's stories take, from the view. */
   const slotsOf = (): { scheme: Column["scheme"]; width: WidthSlot }[] => {
@@ -842,6 +850,47 @@ export function boot(options: BootOptions): void {
     }
   }
 
+  /**
+   * An embed's frame at its own width, never reflowed below it: a story
+   * wider than the embed is scaled down to fit it with CSS zoom, which
+   * scales its box and its paint together (MDN, zoom: it "scales the
+   * targeted element, which can affect the page layout", where scale()
+   * leaves the layout), so the embed stands as tall as what it draws and a
+   * narrower story centres in it at its own size. The scale stops where the
+   * story's words would be drawn under EMBED_TYPE_FLOOR: a story still
+   * wider than the embed there scrolls sideways in its frame
+   * (`data-cawco-wide`), its words legible.
+   */
+  function fitToEmbed(frame: Frame): void {
+    const width = widthOf(frame.story, frame.column.width);
+    const room = world.clientWidth;
+    const fit = width === null || room === 0 ? 1 : Math.min(1, room / width);
+    const type = fit < 1 ? typeOf(frame.body) : null;
+    const scale =
+      type === null ? fit : Math.max(fit, Math.min(1, EMBED_TYPE_FLOOR / type));
+    frame.body.style.zoom = scale < 1 ? String(scale) : "";
+    frame.el.toggleAttribute(
+      "data-cawco-wide",
+      width !== null && width * scale > room + 0.5
+    );
+  }
+
+  /** The font size most of a story's words stand at, in its own px (CSS zoom leaves the computed size alone); null before it draws any. */
+  function typeOf(body: HTMLElement): number | null {
+    const sizes = new Map<number, number>();
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const many = (node.textContent ?? "").trim().length;
+      if (many && node.parentElement) {
+        const size = Number.parseFloat(
+          getComputedStyle(node.parentElement).fontSize
+        );
+        sizes.set(size, (sizes.get(size) ?? 0) + many);
+      }
+    }
+    return [...sizes].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  }
+
   /** The frame's body set for its column: its scheme, width and forced state. */
   function dress(frame: Frame): void {
     const { body, column, story } = frame;
@@ -853,9 +902,10 @@ export function boot(options: BootOptions): void {
     body.style.backgroundColor = ground.background;
     body.style.color = ground.color;
     const width = widthOf(story, column.width);
-    // An embed's frame is as wide as its form where the embed holds it, else the embed's own width: the component at its own size, never scaled.
-    const across = embed ? `min(${width}px, 100%)` : `${width}px`;
-    body.style.width = width === null ? "" : across;
+    body.style.width = width === null ? "" : `${width}px`;
+    if (embed) {
+      fitToEmbed(frame);
+    }
     for (const states of Object.values(FORCED)) {
       for (const state of states) {
         body.classList.remove(allClass(state));
@@ -2252,6 +2302,12 @@ export function boot(options: BootOptions): void {
     drawEdges();
     later();
     if (embed) {
+      // The embed's width changed: each frame wider than it fits it again.
+      for (const section of sections) {
+        for (const frame of section.frames.values()) {
+          fitToEmbed(frame);
+        }
+      }
       // The page holding an embed (a decision page's Preview) makes its frame this tall: the frames whole, no inner scroll.
       window.parent.postMessage(
         { type: CANVAS_EMBED_SIZE, height: Math.ceil(world.offsetHeight) },
@@ -2436,10 +2492,7 @@ export function boot(options: BootOptions): void {
   };
   // Each section stands in its place until it draws, now every column's rule is defined; its load waits on the observer's first callback.
   for (const section of sections) {
-    standIn(
-      section,
-      (plans[section.file]?.stories ?? []).filter((one) => drawsStory(one.name))
-    );
+    standIn(section, toDraw(plans[section.file]?.stories ?? []));
   }
   window.__cawcoCanvas = canvasState;
   if (card) {

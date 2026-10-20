@@ -57,6 +57,7 @@ import {
   type Kit,
   type KitFleet,
   open,
+  pressIn,
   type Spec,
   settle,
 } from "../kit";
@@ -384,7 +385,7 @@ const emptyChecks = async (on: OnCanvas) => {
       rail.chrome.every((one) => !one.drawn),
     JSON.stringify(rail)
   );
-  await frame.click(".canvas-empty-action");
+  await pressIn(frame, ".canvas-empty-action");
   const pen = await until(
     "Draw picking the pen",
     () => frame.locator('.rail-box[aria-label^="Pen"][data-chosen]').count(),
@@ -539,7 +540,7 @@ const imageChecks = async (on: OnCanvas) => {
       `[data-slot="canvas-stage"][data-canvas-stages-docked][data-artifact="${id}"] iframe`
     )
     .boundingBox()) as { x: number; y: number; width: number; height: number };
-  await frame.click('.rail-box[aria-label^="Select"]');
+  await pressIn(frame, '.rail-box[aria-label^="Select"]');
   await page.mouse.click(
     well.x + well.width * 0.3,
     well.y + well.height * 0.75
@@ -2161,10 +2162,10 @@ const doubleTapCheck = async (on: OnCanvas, frame: Frame) => {
   const back = await railNow(frame);
   const backRuns = await glyphRuns(frame);
   // The rail's eraser box keeps choosing the eraser in its own box.
-  await frame.click('[data-action="tool:eraser"]');
+  await pressIn(frame, '[data-action="tool:eraser"]');
   await settle(on.page, 300);
   const picked = await railNow(frame);
-  await frame.click('[data-action="tool:freedraw"]');
+  await pressIn(frame, '[data-action="tool:freedraw"]');
   await settle(on.page, 300);
   on.kit.check(
     "23: cawco:pencil-double-tap swaps the eraser's glyph into the pen's box, still chosen on surface-pressed, the eraser's own box not chosen, as one --dur-control run pair on opacity/transform/blur; a second swaps the pen's back; the rail's eraser box picks the eraser in its own box",
@@ -2526,7 +2527,7 @@ const shapeChecks = async (on: OnCanvas) => {
     Boolean,
     30_000
   )) as Frame;
-  await frame.click('.rail-box[aria-label^="Pen"]');
+  await pressIn(frame, '.rail-box[aria-label^="Pen"]');
   await settle(on.page, 400);
   const pen = await penOn(on);
   const well = await on.page.locator(PANEL_CANVAS).boundingBox();
@@ -2644,9 +2645,9 @@ const penChecks = async (
   const read = reader(on, id);
   // 3. A pen stroke over B.
   const frame = await canvasFrame(page);
-  await frame.click('.rail-box[aria-label="Zoom"]');
-  await frame.click('.rail-item:has-text("Zoom to fit")');
-  await frame.click('.rail-box[aria-label^="Pen"]');
+  await pressIn(frame, '.rail-box[aria-label="Zoom"]');
+  await pressIn(frame, '.rail-item:has-text("Zoom to fit")');
+  await pressIn(frame, '.rail-box[aria-label^="Pen"]');
   await settle(page, 400);
   const well = await page.locator(PANEL_CANVAS).boundingBox();
   if (!well) {

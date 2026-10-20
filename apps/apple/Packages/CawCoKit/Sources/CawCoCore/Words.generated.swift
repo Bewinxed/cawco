@@ -216,6 +216,13 @@ public enum Words {
 
             public static let neverBackup = "Never use as a backup"
 
+            /// At a plan limit with extra usage on (core `AtPlanLimit`): on, its sessions keep going there.
+            public static let extraUsage = "Keep going on extra usage at a plan limit"
+
+            public static let extraUsageOn = "Its sessions carry on here, paid from its extra usage."
+
+            public static let extraUsageOff = "Its sessions move to an account with plan room."
+
             public static let reserve = "Stop placing new work past"
 
             public static let reserveUnit = "% of the week"

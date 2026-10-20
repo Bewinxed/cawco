@@ -123,6 +123,9 @@ const RULES: readonly [string, RegExp, Access][] = [
 /** A browser's take-over and hand-back (browsers.ts): the person's act alone, refused to a session in its own words. */
 const TAKEOVER_ROUTE = /^\/api\/browsers\/[^/]+\/(?:takeover|handback)$/;
 const TAKEOVER_REFUSED = "Only the person takes over";
+/** Forgetting a browser's sign-ins (browsers.ts `/remove`): the person's alone, in the same words' shape. */
+const REMOVE_ROUTE = /^\/api\/browsers\/[^/]+\/remove$/;
+const REMOVE_REFUSED = "Only the person forgets a browser's sign-ins";
 
 /** A browser view's routes (browser-routes.ts), where the view's own client sends a Bearer that is no credential of the hub's. */
 const BROWSER_VIEW = /^\/ws\/browser\/[^/]+\/[^/]+\/(?:api(?:\/.*)?|cdp)$/;
@@ -511,6 +514,9 @@ export const createHubAuth = ({
   const refusal = (caller: Caller, method: string, path: string): Response => {
     if (caller.kind === "session" && TAKEOVER_ROUTE.test(path)) {
       return new Response(TAKEOVER_REFUSED, { status: 403 });
+    }
+    if (caller.kind === "session" && REMOVE_ROUTE.test(path)) {
+      return new Response(REMOVE_REFUSED, { status: 403 });
     }
     if (caller.kind === "session") {
       return new Response(

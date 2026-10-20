@@ -21,6 +21,7 @@ import {
   type Frame,
   type FrameLocator,
   firefox,
+  type Locator,
   type Page,
   webkit,
 } from "playwright-core";
@@ -70,6 +71,30 @@ export const VIEWS = {
   ipadWide: { width: 1376, height: 1032, touch: true },
 } as const;
 export type View = keyof typeof VIEWS;
+
+/**
+ * Chromium's pointer and hover, a desk's: a mouse, which hovers. Unpinned,
+ * Linux Chromium reads them from the host's input devices
+ * (ui/base/pointer/pointer_device_linux.cc: `return {pointer_types ?
+ * pointer_types : POINTER_TYPE_NONE, hover_types};`), so on a machine with no
+ * mouse a desk page matched `(pointer: none)` and `(hover: none)`: no
+ * `.pointer-hit` area (app.css, under `(pointer: fine)`) and no hover style
+ * applied. These are the page's embedder settings; a touch context (`hasTouch`,
+ * `Emulation.setTouchEmulationEnabled`) lays coarse and none over them and
+ * gives them back when touch is off (core/inspector/dev_tools_emulator.cc
+ * `SetTouchEventEmulationEnabled`), so one browser serves both. The values
+ * are blink's mojom enums: PointerType kPointerFineType 4, HoverType
+ * kHoverHoverType 2. `Emulation.setEmulatedMedia` leaves `pointer` and
+ * `hover` as they are (Chromium 156, read in a page).
+ */
+const DESK_POINTER =
+  "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2";
+
+/** What a view's page matches: a desk's mouse, or a touch screen's finger. */
+const POINTER_OF = (touch: boolean) =>
+  touch
+    ? { pointer: "coarse", hover: "none" }
+    : { pointer: "fine", hover: "hover" };
 
 /** Below this, a touch view is a phone (DESIGN.md's 640px breakpoint). */
 const PHONE_MAX_WIDTH = 640;
@@ -134,6 +159,13 @@ export interface PageOptions {
   oneProcess?: boolean;
   /** Device pixels per css px, when a spec reads another device (an iPhone's 3). */
   scale?: number;
+  /**
+   * Chromium only: scrollbars that take their width, as a desk's Chromium
+   * draws them (app.css's thin ones). Unset, Playwright's headless Chromium
+   * hides them (`--hide-scrollbars`), so a box that starts or stops
+   * scrolling never narrows what it holds.
+   */
+  scrollbars?: boolean;
   theme?: Theme;
   /**
    * The WebKit build a WebKit page runs on, by its Playwright revision,
@@ -819,7 +851,8 @@ export class Run {
     oneProcess = false,
     own?: string,
     wholeRaster = false,
-    hostRules?: string
+    hostRules?: string,
+    scrollbars = false
   ): Promise<Browser> {
     const key = [
       engine,
@@ -828,6 +861,7 @@ export class Run {
       wholeRaster && "whole-raster",
       own,
       hostRules && `hosts:${hostRules}`,
+      scrollbars && "scrollbars",
     ]
       .filter(Boolean)
       .join("-");
@@ -865,7 +899,9 @@ export class Run {
                 ]
               : []),
             ...(hostRules ? [`--host-resolver-rules=${hostRules}`] : []),
+            DESK_POINTER,
           ],
+          ...(scrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}),
           env,
         }),
     } satisfies Record<Engine, () => Promise<Browser>>;
@@ -1015,7 +1051,8 @@ export class Run {
           options.oneProcess,
           options.browser,
           options.wholeRaster,
-          options.hostRules
+          options.hostRules,
+          options.scrollbars
         );
         const phoneAgent = PHONE_AGENT[options.engine ?? "chromium"];
         const context = await browser.newContext({
@@ -1052,6 +1089,27 @@ export class Run {
           kit.check("the page's renderer runs to the end", false, page.url());
           page.close().catch(() => undefined);
         });
+        // The page stands for its device in what it points with: a desk's
+        // mouse, a touch screen's finger (DESK_POINTER). A leg on a page that
+        // does not fails here, before it measures what the owner never sees.
+        const want = POINTER_OF(v.touch);
+        const missed = await page.evaluate(
+          ({ pointer, hover }) =>
+            [
+              `(pointer: ${pointer})`,
+              `(hover: ${hover})`,
+              `(any-pointer: ${pointer})`,
+              `(any-hover: ${hover})`,
+            ].filter((query) => !matchMedia(query).matches),
+          want
+        );
+        if (missed.length > 0) {
+          kit.check(
+            `${view}: the page points as its device does`,
+            false,
+            `${options.engine ?? "chromium"} does not match ${missed.join(" ")}`
+          );
+        }
         return page;
       },
     };
@@ -1399,56 +1457,65 @@ export const frames = (page: Page): Promise<void> =>
       )
   );
 
-/** How many times {@link pressIn} presses before a press its frame never heard is a failure. */
+/** How many times {@link pressIn} presses before a press its `<iframe>` element took is a failure. */
 const PRESSES = 3;
 
 /**
  * Clicks `selector` in `frame`, a preview's frame of another origin, and
- * returns once its frame's window heard the press. Chromium hit-tests a
- * press sent over the DevTools protocol against the compositor's last
- * frame, and a frame not yet in it takes the press as its `<iframe>`
- * element in the parent: "the compositor might not be up-to-date yet
- * resulting in a misclick (the iframe element becomes the event target
+ * returns once a press went past the frame's `<iframe>` element. Chromium
+ * hit-tests a press sent over the DevTools protocol against the
+ * compositor's last frame, and a frame not yet in it takes the press as its
+ * `<iframe>` element in the parent: "the compositor might not be up-to-date
+ * yet resulting in a misclick (the iframe element becomes the event target
  * instead of the content inside the iframe)" (Puppeteer's
  * test/src/oopif.spec.ts, on crbug.com/1334119). Playwright's click hears
  * no event in the frame and calls it done (its injected
  * `setupHitTargetInterceptor`: `return result || "done"`). A person presses
  * only what was drawn: each press waits for two frames of the page inside
- * and two of the page around it, and a press the frame's window never
- * heard reached nothing in the page, so it is made again.
+ * and two of the page around it, and a press the `<iframe>` element itself
+ * took reached nothing in the page, so it is made again. The element is
+ * watched, not the frame's window: the preview overlay's own window
+ * listener stops a Comment or Draw press before any listener added later
+ * (`preview-overlay/page.ts`, `stopImmediatePropagation`).
  */
 export async function pressIn(
   frame: Frame | FrameLocator,
   selector: string
 ): Promise<void> {
   const root = frame.locator(":root");
+  // Both handles evaluate alike; the cast names the one signature.
+  const element = (
+    "owner" in frame ? frame.owner() : await frame.frameElement()
+  ) as Pick<Locator, "evaluate">;
   for (let press = 1; press <= PRESSES; press += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: each press waits on the one before it
+    await element.evaluate((el: Element) => {
+      const kept = el as unknown as { __kitTook: boolean };
+      kept.__kitTook = false;
+      el.addEventListener(
+        "pointerdown",
+        (event: Event) => {
+          kept.__kitTook = event.target === el;
+        },
+        { once: true }
+      );
+    });
     await root.evaluate(
       () =>
-        new Promise<void>((done) => {
-          const kept = window as unknown as { __kitPressed: boolean };
-          kept.__kitPressed = false;
-          addEventListener(
-            "pointerdown",
-            () => {
-              kept.__kitPressed = true;
-            },
-            { capture: true, once: true }
-          );
-          requestAnimationFrame(() => requestAnimationFrame(() => done()));
-        })
+        new Promise<void>((done) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => done()))
+        )
     );
     await frames(root.page());
     await frame.locator(selector).click();
-    const heard = await root.evaluate(
-      () => (window as unknown as { __kitPressed: boolean }).__kitPressed
+    const took = await element.evaluate(
+      (el: Element) => (el as unknown as { __kitTook: boolean }).__kitTook
     );
-    if (heard) {
+    if (!took) {
       return;
     }
   }
   throw new Error(
-    `${selector}: none of ${PRESSES} presses reached its frame's window; the parent's <iframe> took each`
+    `${selector}: the parent's <iframe> took each of ${PRESSES} presses`
   );
 }

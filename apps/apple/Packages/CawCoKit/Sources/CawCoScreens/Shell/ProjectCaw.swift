@@ -269,7 +269,8 @@ final class ProjectCawPanel: KitPopoverController {
         harness.menuOnOpen(options: .singleSelection) { [weak self] in
             guard let self else { return [] }
             let current = lead.view?.harness.rawValue ?? ""
-            return ["claude", "opencode"].map { value in
+            // Caw runs on every harness (core `CAW_DENIED_TOOLS` names each).
+            return Components.Schemas.HarnessKind.allCases.map(\.rawValue).map { value in
                 UIAction(title: ModelCatalog.harnessName(value), state: value == current ? .on : .off) { [weak self] _ in
                     guard value != current else { return }
                     Task { await self?.lead.configure(harness: value) }

@@ -13,7 +13,7 @@
  * nothing until it can: no compiled list stands in for the fleet's.
  *
  * Two consumers read the resolved denials:
- *  1. The spawn paths (`claude.ts`, `opencode.ts`), through
+ *  1. The spawn paths (`claude.ts`, `opencode.ts`, `pi.ts`), through
  *     {@link sessionFleetDenials}: the baseline, plus the to-do and plan-mode
  *     set when the fleet's choice or the session's own (its delegate type's)
  *     is on.

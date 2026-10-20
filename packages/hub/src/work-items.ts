@@ -4895,69 +4895,85 @@ export const createWorkItems = ({
     published(item);
     spawnedUnder?.(instanceId, parent.id);
 
-    const launch = (): void => {
-      try {
-        // A fork opens with what it is.
-        const fork = settings.forkOf ? forkLine(workspace) : "";
-        spawn(
+    // A fork opens with what it is.
+    const fork = settings.forkOf ? forkLine(workspace) : "";
+    try {
+      // Its session's row stands from now, as its item does: a live item
+      // whose session has no row is one whose session is gone
+      // ({@link followSessions}).
+      spawn(
+        workspace.machineId,
+        spawnOf(instanceId, item.title, parent, workspace, settings),
+        item.id,
+        // Autonomous by definition: it must never sit waiting on a tool
+        // permission prompt nobody is watching for. Questions still ask.
+        // Its parent caused it: Full Send only when the parent is in it now,
+        // read off its row as it stands after the workspace was cut.
+        unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode),
+        ahead && { accountId: ahead.placement.accountId }
+      );
+    } catch (error) {
+      // An Error with no message still names its kind: String() gives "TypeError".
+      const message =
+        (error instanceof Error && error.message) || String(error);
+      update(item.id, {
+        state: "failed",
+        error: `Its session did not start: ${message}`,
+        endedAt: new Date(),
+      });
+      throw error;
+    }
+    /** Its first message, which names its inputs: sent once they are in. */
+    const brief = (): void => {
+      send(
+        messageOf(
+          instanceId,
           workspace.machineId,
-          spawnOf(instanceId, item.title, parent, workspace, settings),
-          item.id,
-          // Autonomous by definition: it must never sit waiting on a tool
-          // permission prompt nobody is watching for. Questions still ask.
-          // Its parent caused it: Full Send only when the parent is in it now,
-          // read off its row as it stands after the workspace was cut.
-          unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode),
-          ahead && { accountId: ahead.placement.accountId }
-        );
-        send(
-          messageOf(
-            instanceId,
-            workspace.machineId,
-            parent,
-            withWorkspaceLine(
-              withInputsLine(
-                `${handoffMarker(sessionLabel(parent).name, parent.id)}${fork}${request.prompt}`,
-                inputs.files
-              ),
-              workspace.repoRoot,
-              workspace.base,
-              landingOf(item)
-            )
+          parent,
+          withWorkspaceLine(
+            withInputsLine(
+              `${handoffMarker(sessionLabel(parent).name, parent.id)}${fork}${request.prompt}`,
+              inputs.files
+            ),
+            workspace.repoRoot,
+            workspace.base,
+            landingOf(item)
           )
-        );
-      } catch (error) {
-        // An Error with no message still names its kind: String() gives "TypeError".
-        const message =
-          (error instanceof Error && error.message) || String(error);
-        update(item.id, {
-          state: "failed",
-          error: `Its session did not start: ${message}`,
-          endedAt: new Date(),
-        });
-        throw error;
-      }
+        )
+      );
     };
     if (handInFirst && inputs.files.length > 0) {
-      // The caller is answered now, with its workspace and item: putting the
-      // inputs in waits on nothing the answer says, and behind a conductor's
-      // burst it held the answer past the caller's own deadline (2026-10-20,
-      // link-under-load: "the hub did not answer within 30000 ms" for 10 of
-      // 16 lanes, each clone cut and its inputs still on their way). The
-      // session starts once they are in; inputs that cannot go fail the item
-      // in their words, and its report says so.
+      // The caller is answered now, with its workspace, item and session:
+      // putting the inputs in waits on nothing the answer says, and behind a
+      // conductor's burst it held the answer past the caller's own deadline
+      // (2026-10-20, link-under-load: "the hub did not answer within 30000
+      // ms" for 10 of 16 lanes, each clone cut and its inputs still on their
+      // way). The session is spawned with its item; its brief, which names
+      // the inputs, goes once they are in. Spawning only then left a live
+      // item with no session row while they went, which reads as a session
+      // gone: the item failed, its workspace retired under the inputs still
+      // being written ("ENOENT … rename …/inputs/…", 2026-10-20). Inputs that
+      // cannot go fail the item in their words, its report says so, and its
+      // session ends.
+      /** Its inputs did not go: the item fails in their words, and its session ends. */
+      const notIn = (error: unknown): Promise<void> => {
+        const reason = `Its inputs did not reach its $TMPDIR/inputs/, so its brief was not sent: ${(error instanceof Error && error.message) || String(error)}`;
+        const ended = finish(item, { state: "failed", error: reason });
+        const [row] = db.getInstancesByIds([instanceId]);
+        if (row) {
+          report(row, `${reason}${reportLine(ended)}`, true);
+        }
+        return end(instanceId);
+      };
       handIn(workspace, inputs)
-        .then(launch, (error: unknown) => {
-          update(item.id, {
-            state: "failed",
-            error: `Its inputs did not reach its $TMPDIR/inputs/, so its session did not start: ${(error instanceof Error && error.message) || String(error)}`,
-            endedAt: new Date(),
-          });
-        })
-        // A launch that throws has failed its item already.
-        .catch(() => undefined);
+        .then(brief, notIn)
+        .catch((stopped: unknown) =>
+          console.warn(
+            `[work-items] ${item.id}: its session, whose inputs did not go in, is told to stop and has not confirmed it: ${stopped instanceof Error ? stopped.message : String(stopped)}`
+          )
+        );
     } else {
-      launch();
+      brief();
     }
 
     return {

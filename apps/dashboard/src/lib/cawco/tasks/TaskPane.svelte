@@ -245,17 +245,26 @@
     }
   });
 
+  /**
+   * Reads of the task, and of its history, so far: only each newest one's
+   * answer is kept. A write's answer counts as the newest read of the task,
+   * and the hub's `tasks.changed` after it reads the task again.
+   */
+  let taskReads = 0;
+  let historyReads = 0;
   async function read(id: string) {
     readProblem = null;
+    taskReads += 1;
+    const ticket = taskReads;
     // biome-ignore lint/complexity/noVoid: the history reads beside the task and sets its own state
     void readActivity(id);
     try {
       const fresh = await readTask(projectId, id);
-      if (taskId === id) {
+      if (taskId === id && ticket === taskReads) {
         task = fresh;
       }
     } catch (error) {
-      if (taskId === id) {
+      if (taskId === id && ticket === taskReads) {
         readProblem = message(error);
       }
     }
@@ -264,13 +273,15 @@
   /** Its file's history; a refusal is said over the activity, in the hub's words. */
   async function readActivity(id: string) {
     historyProblem = null;
+    historyReads += 1;
+    const ticket = historyReads;
     try {
       const answered = await readHistory(projectId, id);
-      if (taskId === id) {
+      if (taskId === id && ticket === historyReads) {
         history = answered.events;
       }
     } catch (error) {
-      if (taskId === id) {
+      if (taskId === id && ticket === historyReads) {
         historyProblem = message(error);
       }
     }
@@ -278,6 +289,7 @@
 
   /** Every write answers with the task as the hub wrote it, and is a commit in its history. */
   function took(next: TaskView) {
+    taskReads += 1;
     task = next;
     onchanged(next);
     // biome-ignore lint/complexity/noVoid: the history reads again and sets its own state
@@ -309,6 +321,7 @@
     }
     const moved = await onmove(shown.id, stage);
     if (moved.id === taskId) {
+      taskReads += 1;
       task = moved;
       // biome-ignore lint/complexity/noVoid: the move is a commit in its history
       void readActivity(moved.id);

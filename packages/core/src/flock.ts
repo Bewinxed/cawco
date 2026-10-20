@@ -49,6 +49,14 @@ export const openLockFile = (path: string, create: boolean): number =>
     0o666
   );
 
+/**
+ * Directory `path` opened read-only and close-on-exec, for its lock: every
+ * process that opens the same directory meets the same lock, and nothing is
+ * written into it.
+ */
+export const openDirLock = (path: string): number =>
+  openSync(path, constants.O_RDONLY + constants.O_DIRECTORY + CLOEXEC);
+
 /** Takes `fd`'s file's lock now, or answers false: another holds it. */
 export const tryLock = (fd: number): boolean =>
   loadLibc().flock(fd, LOCK_EX_NOW) === 0;
@@ -63,6 +71,29 @@ export const tryShare = (fd: number): boolean =>
 /** Lets `fd`'s lock go, the descriptor kept for the next take. */
 export const release = (fd: number): void => {
   loadLibc().flock(fd, LOCK_UN);
+};
+
+/** How often a wait for a lock another process holds looks again. */
+const LOCK_POLL_MS = 100;
+
+/**
+ * Takes `fd`'s file's lock once whoever holds it lets it go, waiting at most
+ * until `deadline` (epoch ms); answers false when it is still held then. The
+ * kernel offers no wait that leaves the event loop running, so it looks every
+ * {@link LOCK_POLL_MS}.
+ */
+export const lockBy = async (
+  fd: number,
+  deadline: number
+): Promise<boolean> => {
+  while (!tryLock(fd)) {
+    if (Date.now() >= deadline) {
+      return false;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: polling a lock another process holds.
+    await Bun.sleep(LOCK_POLL_MS);
+  }
+  return true;
 };
 
 /** Lets `fd`'s lock go and closes it. */

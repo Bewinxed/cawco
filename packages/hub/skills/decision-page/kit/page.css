@@ -200,6 +200,9 @@ a {
   color: var(--ink-muted);
   max-width: 72ch;
 }
+/* A card's media: two side by side on a wide page; one, or three and more,
+   in one column at the card's full width (`solo`), so several ways compared
+   each stand at one width. */
 .dp-show {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
@@ -254,15 +257,22 @@ a {
 .dp-optmedia {
   min-inline-size: 0;
 }
+/* The chip is DESIGN.md's option chip (app.css .kit-chip): at least 30px,
+   8px radius, label type on the raised surface behind a control's edge,
+   its keycap digit; hovered under a fine pointer it takes the hover fill.
+   Its line and cost stand under the label, so it grows past 30px. */
 .dp-opt {
   font: inherit;
-  text-align: left;
+  font-size: var(--text-label);
+  line-height: var(--leading-label);
+  text-align: start;
   cursor: pointer;
-  background: var(--surface-page);
+  background: var(--surface-raised);
   color: var(--ink-strong);
   border: 1px solid var(--border-control);
-  border-radius: var(--radius-lg);
-  padding: var(--space-3) var(--space-3);
+  border-radius: var(--radius-sm);
+  min-block-size: 30px;
+  padding: var(--space-2) var(--space-3);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -270,14 +280,12 @@ a {
   overflow-wrap: anywhere;
   transition:
     border-color var(--dur-control) var(--ease-out),
-    background-color var(--dur-control) var(--ease-out),
-    transform var(--dur-control) var(--ease-out);
+    background-color var(--dur-control) var(--ease-out);
 }
-.dp-opt:hover {
-  border-color: var(--ink-muted);
-}
-.dp-opt:active {
-  transform: scale(0.985);
+@media (hover: hover) and (pointer: fine) {
+  .dp-opt:not([data-cawco-picked]):hover {
+    background: var(--surface-hover);
+  }
 }
 .dp-opt:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -288,6 +296,14 @@ a {
   align-items: center;
   gap: var(--space-2);
   font-weight: var(--weight-strong);
+}
+/* The Mark Line Rule (DESIGN.md; app.css .mark-line): the label's words
+   are trimmed to their x-height band and given the trimmed room back as
+   padding, so centring the line puts their x-height's middle on the
+   keycap's. The keycap is a box, centred as one. */
+.dp-opt b > :not(.dp-kc) {
+  text-box: trim-both ex alphabetic;
+  padding-block: calc((1lh - 1ex) / 2);
 }
 /* Each option's keycap: its digit in the card (page.js numbers them). */
 .dp-opt .dp-kc {
@@ -305,7 +321,7 @@ a {
   font-weight: var(--weight-body);
   line-height: 1;
 }
-.dp-opt span {
+.dp-opt > span {
   font-size: var(--text-label);
   color: var(--ink-muted);
   line-height: 1.4;
