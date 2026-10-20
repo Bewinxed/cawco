@@ -45,7 +45,9 @@
  *    every option enabled with its keycap; every option DESIGN.md's option
  *    chip (30px and up, 8px radius, raised, its label on its keycap's line
  *    by The Mark Line Rule); at 390 the note and Send picks 44px tall
- *    (DESIGN.md, The 44 Touch Rule).
+ *    (DESIGN.md, The 44 Touch Rule), and every control on the page reaching
+ *    44px under a finger; at 1440 every control reaching 24px (The 24
+ *    Pointer Rule); nothing spilling its box or past the window.
  * 9. The page's own capture, stacked from the window at each scroll
  *    (decision-embeds.ts `capturePage`), paints every embed: no embed's box
  *    in it is one flat colour. Its files are what a delegate can hand
@@ -81,6 +83,7 @@ import {
   type Embed,
   embedDrawFaults,
   idOf,
+  pageReach,
   readEmbeds,
   startDecisionStage,
 } from "../../decision-embeds";
@@ -403,6 +406,7 @@ function readLayout() {
   const stage = well?.querySelector("[data-slot=media-stage]");
   const piece = stage?.firstElementChild;
   const foot = document.querySelector<HTMLElement>("[data-slot=page-foot]");
+  const footAt = at(foot);
   const send = document.querySelector<HTMLElement>("[data-send]");
   const sendAt = send?.getBoundingClientRect();
   const hit = sendAt
@@ -459,7 +463,7 @@ function readLayout() {
     },
     foot: {
       position: foot ? getComputedStyle(foot).position : "",
-      bottom: at(foot) ? (at(foot)?.y ?? 0) + (at(foot)?.h ?? 0) : 0,
+      bottom: footAt ? footAt.y + footAt.h : 0,
       page: document.documentElement.scrollHeight,
       send: !!(hit && send?.contains(hit)),
     },
@@ -1128,6 +1132,22 @@ const spec: Spec = {
               said.noteAdd >= 44 && field >= 44 && said.send.h >= 44
             );
           }
+          // Every control on the page, a window at a time (decision-embeds.ts
+          // `pageReach`): under a finger each one's area reaches 44px (The 44
+          // Touch Rule); at a desk 24px, drawn so or through its hit area
+          // (The 24 Pointer Rule); on neither does anything spill its box or
+          // stand past the window.
+          const reach = await pageReach(page);
+          const short = reach.controls.filter((one) =>
+            view === "phone" ? !one.touch : !one.pointer
+          );
+          kit.check(
+            `${leg}: every control reaches ${view === "phone" ? "44px under a finger" : "24px under a mouse"} and nothing spills (${reach.controls.length} controls: ${reach.controls.map((one) => `${one.name.slice(0, 40)} ${one.w}×${one.h}`).join(", ")})`,
+            reach.controls.length > 0 &&
+              short.length === 0 &&
+              reach.spills.length === 0,
+            [...short.map((one) => one.line), ...reach.spills].join("\n    ")
+          );
 
           const capture = await capturePage(
             page,

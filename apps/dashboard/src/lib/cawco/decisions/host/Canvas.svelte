@@ -16,6 +16,7 @@
   import { CANVAS_EMBED_SIZE } from "@cawco/core/stage";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { frameObserver } from "../../frame-observer.js";
   import { hubRefusal } from "../../hub-read.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { served } from "./page.svelte.js";
@@ -64,7 +65,7 @@
 
   // The frame follows the page's theme.
   $effect(() => {
-    const now = scheme.now;
+    const { now } = scheme;
     frame?.contentWindow?.postMessage(
       { type: "cawco:theme", theme: now },
       location.origin
@@ -77,7 +78,7 @@
   );
   $effect(() => {
     const heard = (event: MessageEvent) => {
-      const said = event.data as {
+      const told = event.data as {
         height?: unknown;
         margin?: unknown;
         type?: unknown;
@@ -85,12 +86,12 @@
       } | null;
       if (
         event.source === frame?.contentWindow &&
-        said?.type === CANVAS_EMBED_SIZE &&
-        typeof said.width === "number" &&
-        typeof said.height === "number" &&
-        typeof said.margin === "number"
+        told?.type === CANVAS_EMBED_SIZE &&
+        typeof told.width === "number" &&
+        typeof told.height === "number" &&
+        typeof told.margin === "number"
       ) {
-        shape = { width: said.width, height: said.height, margin: said.margin };
+        shape = { width: told.width, height: told.height, margin: told.margin };
       }
     };
     addEventListener("message", heard);
@@ -99,16 +100,19 @@
 
   let stage = $state<HTMLDivElement>();
   let room = $state(0);
+  // The well's room: read now, and a change in the next frame (frameObserver).
   $effect(() => {
-    const held = stage;
-    if (!held) {
+    const well = stage;
+    if (!well) {
       return;
     }
-    const watch = new ResizeObserver(() => {
-      room = held.clientWidth;
-    });
-    watch.observe(held);
-    return () => watch.disconnect();
+    const read = () => {
+      room = well.clientWidth;
+    };
+    read();
+    const sizes = frameObserver(read);
+    sizes.observe(well);
+    return () => sizes.disconnect();
   });
 
   /**

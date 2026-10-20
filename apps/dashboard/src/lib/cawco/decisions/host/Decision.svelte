@@ -134,7 +134,13 @@
    */
   const rows = $derived.by(() => {
     let at = 1;
-    const next = (any: boolean) => (any ? ++at : 0);
+    const next = (any: boolean) => {
+      if (!any) {
+        return 0;
+      }
+      at += 1;
+      return at;
+    };
     const line = next(options.some((option) => option.line));
     const cost = next(options.some((option) => option.cost));
     const media = next(options.some((option) => option.media));
@@ -896,7 +902,8 @@
           onclick={(event: MouseEvent) => proceed(pressBy(event))}
           size={coarse.current ? "lg" : "default"}
           variant={page && page.working() !== id ? "outline" : "default"}
-          >Continue<Kbd aria-hidden="true" data-box>↵</Kbd></Button
+          >Continue<Kbd aria-hidden="true" data-box reach="keyboard">↵</Kbd
+          ></Button
         >
       </div>
     {/if}

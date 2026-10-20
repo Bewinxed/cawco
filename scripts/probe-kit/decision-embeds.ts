@@ -19,7 +19,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import type { Page } from "playwright-core";
+import type { Frame, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { buildStageHost } from "../../packages/agent/src/stage-host/build";
 import { decisionHostFile } from "../../packages/core/src/decision-host";
@@ -32,6 +32,7 @@ import { FOLDER_FILE_LIMIT } from "../../packages/hub/src/project-folder";
 import { until } from "../scratch-fleet";
 import { type ShotRead, shootEmbedded } from "./canvas-shots";
 import { ROOT, settle, type Theme } from "./kit";
+import { reachOf } from "./surfaces/reach";
 
 declare global {
   interface Window {
@@ -1008,7 +1009,7 @@ function wholesOf(pictures: string): { from: number; to: number }[] {
  * foot was cut off (a 390 page read 5845px tall that stood 9124px).
  */
 export async function capturePage(page: Page, path: string): Promise<Capture> {
-  await scrollThrough(page);
+  await scrollThrough(page, () => settle(page, 300));
   const size = await page.evaluate(() => ({
     full: document.documentElement.scrollHeight,
     height: innerHeight,
@@ -1087,11 +1088,263 @@ export async function capturePage(page: Page, path: string): Promise<Capture> {
   return { files, paints: await embedPaints(page, out), picture: out, wholes };
 }
 
+/** One control of a page as the probe kit's reach reader read it (surfaces/reach.ts `reachOf`). */
+export interface ControlReach {
+  /** Its drawn box, CSS px. */
+  h: number;
+  /** Its line as `reachOf` wrote it, for a report. */
+  line: string;
+  /** Its element and its name: one key per control across the windows. */
+  name: string;
+  /** Every window that read it had a press 24px across it land on it: drawn that big, or reaching it (The 24 Pointer Rule). */
+  pointer: boolean;
+  /** Every window that read it had its 44px area land on it (The 44 Touch Rule). */
+  touch: boolean;
+  w: number;
+}
+
+/** Half the 44px a finger's area reaches (DESIGN.md, The 44 Touch Rule). */
+const TOUCH_HALF = 22;
+/** Half the 24px a mouse's area reaches (DESIGN.md, The 24 Pointer Rule). */
+const POINTER_HALF = 12;
+/** One side of a `reachOf` line: how far past its drawn edge a press landed, how far it had to, and what it met. */
+const SIDE =
+  /^(left|right|up|down) reach ([\d.]+) need ([\d.]+)(?: SHORT)? \(then (.*)\)$/;
+
+/**
+ * Whether a control's every side reaches 24px through its centre (The 24
+ * Pointer Rule: "a control drawn smaller than 24×24 reaches 24px through
+ * `.pointer-hit`, with the same midpoint stops"), from `reachOf`'s sides:
+ * each must reach the 24px box's edge, or the midpoint to a nearer
+ * neighbour (the lesser of that edge and the side's own 44px need, which is
+ * already the midpoint where a neighbour is nearer), or the page's edge.
+ */
+function reachesPointer(sides: string[], w: number, h: number): boolean {
+  return sides.every((one) => {
+    const [, side, reach = "0", need = "0", stop] = SIDE.exec(one) ?? [];
+    if (!side) {
+      return false;
+    }
+    const half = side === "left" || side === "right" ? w / 2 : h / 2;
+    const want = Math.max(0, Math.min(POINTER_HALF - half, Number(need)));
+    return want <= 0.5 || stop === "page edge" || Number(reach) >= want - 0.5;
+  });
+}
+
+/** The elements an SVG draws inside it, by their local names. */
+const SVG_INNER = new Set([
+  "circle",
+  "clipPath",
+  "defs",
+  "ellipse",
+  "foreignObject",
+  "g",
+  "image",
+  "line",
+  "marker",
+  "mask",
+  "path",
+  "pattern",
+  "polygon",
+  "polyline",
+  "rect",
+  "symbol",
+  "text",
+  "textPath",
+  "tspan",
+  "use",
+]);
+
+/**
+ * Every control of the page open in `page`, read by the probe kit's reach
+ * reader (surfaces/reach.ts `reachOf`: a press through its centre 0.5px
+ * inside its 44px box lands on it, one 0.5px past it does not, the midpoint
+ * standing in where a neighbour is nearer), a window at a time down the
+ * page. A control is read in a window where its whole 44px box stands clear
+ * of the page's sticky foot, or inside the foot: what stands under the foot
+ * is the foot's to a finger there, and in reach a scroll later. Each control
+ * once, by its element and name (a short read in any window keeps it
+ * short), and beside them what spills its own box sideways or stands past
+ * the window's right edge.
+ */
+export async function pageReach(
+  page: Page | Frame
+): Promise<{ controls: ControlReach[]; spills: string[] }> {
+  // Its document's own frames (a page in the panel's frame paints on its
+  // own), then a moment for an embed's.
+  const rest = () =>
+    page.evaluate(
+      () =>
+        new Promise<void>((done) => {
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => setTimeout(done, 300))
+          );
+        })
+    );
+  const full = await scrollThrough(page, rest);
+  const height = await page.evaluate(() => innerHeight);
+  const controls = new Map<string, ControlReach>();
+  const spills = new Set<string>();
+  for (let top = 0; top < full; top += height / 2) {
+    await page.evaluate(
+      (y) => window.scrollTo(0, y),
+      Math.max(0, Math.min(top, full - height))
+    );
+    await rest();
+    const foot = await page.evaluate(() => {
+      const box = document.querySelector("[data-slot=page-foot]");
+      // Its own controls' boxes, as reachOf rounds them (to 0.5px).
+      const half = (n: number) => Math.round(n * 2) / 2;
+      // Each box wider inside than out whose contents (its text and its
+      // elements' boxes, a Range's rects: never generated content) stand
+      // inside it: what passes its edge is a pseudo-element, a control's
+      // transparent hit area (The 44 Touch Rule's `::after`), not a spill.
+      // As reachOf rounds a spill's box (to 1px).
+      const areas = [...document.body.getElementsByTagName("*")]
+        .filter((el) => el.scrollWidth > el.clientWidth + 1)
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          const contents = document.createRange();
+          contents.selectNodeContents(el);
+          // No contents at all (an empty control): its pseudo-elements are
+          // all that can pass its edge.
+          if (contents.getClientRects().length === 0) {
+            return true;
+          }
+          const c = contents.getBoundingClientRect();
+          return c.left >= r.left - 1 && c.right <= r.right + 1;
+        })
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return `${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}x${Math.round(r.height)}`;
+        });
+      // Each box past the window's right edge that a clipping box standing
+      // inside the window holds (a well's sideways scroller under its edge
+      // fade): the scroller's content, never past the page. As reachOf
+      // rounds a box past the window (to 1px).
+      const held = [...document.body.getElementsByTagName("*")]
+        .filter((el) => el.getBoundingClientRect().right > innerWidth + 0.5)
+        .filter((el) => {
+          // Any box above it that clips and stands in the window holds it
+          // (an SVG's own `overflow: hidden` clips, but stands past too).
+          for (let up = el.parentElement; up; up = up.parentElement) {
+            if (
+              getComputedStyle(up).overflowX !== "visible" &&
+              up.getBoundingClientRect().right <= innerWidth + 0.5
+            ) {
+              return true;
+            }
+          }
+          return false;
+        })
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return `${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}x${Math.round(r.height)}`;
+        });
+      return {
+        areas,
+        held,
+        top: box?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
+        own: [...(box?.querySelectorAll("button, textarea, input") ?? [])].map(
+          (one) => {
+            const r = one.getBoundingClientRect();
+            return `${half(r.x)},${half(r.y)} ${half(r.width)}x${half(r.height)}`;
+          }
+        ),
+      };
+    });
+    for (const line of (await page.evaluate(reachOf)).split("\n")) {
+      takeReach(line, foot, controls, spills);
+    }
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await rest();
+  return { controls: [...controls.values()], spills: [...spills] };
+}
+
+/**
+ * Whether a `reachOf` spill or past line at `box` ("x,y wxh") is a layout's
+ * fault. Not a spill: an element inside an SVG (a diagram's words) has no
+ * CSS box, so its scroll and client widths say nothing of one (CSSOM View's
+ * `clientWidth` is a CSS layout box's); a visually hidden region (the
+ * page's live words, `sr-only`: a 1px box that clips) holds its words wider
+ * than itself by design; a box at one of `seen.areas` passes its edge by a
+ * control's transparent hit area alone. Not past the page: a box at one of
+ * `seen.held`, a scroller's content.
+ */
+const layoutFault = (
+  kind: string,
+  tag: string,
+  box: string,
+  seen: { areas: string[]; held: string[] }
+): boolean =>
+  kind === "past"
+    ? !seen.held.includes(box)
+    : !(SVG_INNER.has(tag) || box.endsWith(" 1x1") || seen.areas.includes(box));
+
+/**
+ * One line of `reachOf` in a window whose sticky foot stands at `foot.top`
+ * with its own controls at `foot.own` (their boxes), whose boxes at
+ * `foot.areas` pass their edge by a hit area alone and at `foot.held`
+ * stand in a scroller: a layout's fault (`layoutFault`) kept as it is;
+ * a control kept by its key where it is one of the foot's own or its 44px
+ * box stands clear of the foot, a short read over an earlier ok.
+ */
+function takeReach(
+  line: string,
+  foot: { areas: string[]; held: string[]; own: string[]; top: number },
+  controls: Map<string, ControlReach>,
+  spills: Set<string>
+): void {
+  const [kind, tag, role, slot, name, at, size, , , , ...sides] =
+    line.split("\t");
+  if (!(kind && at && size)) {
+    return;
+  }
+  if (kind === "spill" || kind === "past") {
+    if (layoutFault(kind, tag ?? "", `${at} ${size}`, foot)) {
+      spills.add(line);
+    }
+    return;
+  }
+  const [, y = 0] = at.split(",").map(Number);
+  const [w = 0, h = 0] = size.split("x").map(Number);
+  if (
+    !foot.own.includes(`${at} ${size}`) &&
+    y + h / 2 + TOUCH_HALF > foot.top
+  ) {
+    return;
+  }
+  const key = [tag, role && `[${role}]`, slot && `[${slot}]`, ` ${name}`].join(
+    ""
+  );
+  const touch = kind === "ok";
+  const pointer = reachesPointer(sides, w, h);
+  const held = controls.get(key);
+  if (!held || (held.touch && !touch) || (held.pointer && !pointer)) {
+    controls.set(key, {
+      name: key,
+      w,
+      h,
+      touch: touch && (held?.touch ?? true),
+      pointer: pointer && (held?.pointer ?? true),
+      line,
+    });
+  }
+}
+
 /** How many passes over the page `scrollThrough` takes at most before it stops waiting for the height to hold. */
 const THROUGH_PASSES = 6;
 
-/** Scrolls `page` through, half a window at a time, until its height is the same after a pass as before it; back at the top. */
-async function scrollThrough(page: Page): Promise<void> {
+/**
+ * Scrolls `page` through, half a window at a time, until its height is the
+ * same after a pass as before it, waiting `rest` at each stop; back at the
+ * top. Its height as it held.
+ */
+async function scrollThrough(
+  page: Page | Frame,
+  rest: () => Promise<void>
+): Promise<number> {
   let tall = -1;
   for (let pass = 0; pass < THROUGH_PASSES; pass += 1) {
     const now = await page.evaluate(
@@ -1104,11 +1357,12 @@ async function scrollThrough(page: Page): Promise<void> {
     const step = await page.evaluate(() => Math.max(1, innerHeight / 2));
     for (let y = 0; y < tall; y += step) {
       await page.evaluate((top) => window.scrollTo(0, top), y);
-      await settle(page, 300);
+      await rest();
     }
   }
   await page.evaluate(() => window.scrollTo(0, 0));
-  await settle(page, 300);
+  await rest();
+  return tall;
 }
 
 /** Each embed's box on the page open in `page`, read in `png`, a picture of the whole page at the window's device scale. */

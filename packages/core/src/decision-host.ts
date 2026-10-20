@@ -41,6 +41,7 @@ const KIT_DIR = new URL("../../hub/skills/decision-page/kit/", import.meta.url)
 const PUBLIC_PATH = "/__cawco/decision/";
 
 const RAW = /\?raw$/;
+const ANY = /.*/;
 
 /**
  * Vite's `?raw` import, which the kit's class merging reads the token theme
@@ -54,7 +55,7 @@ const rawImports: Bun.BunPlugin = {
       path: resolve(dirname(importer), path.replace(RAW, "")),
       namespace: "raw",
     }));
-    build.onLoad({ filter: /.*/, namespace: "raw" }, async ({ path }) => ({
+    build.onLoad({ filter: ANY, namespace: "raw" }, async ({ path }) => ({
       contents: await readFile(path, "utf8"),
       loader: "text",
     }));
@@ -194,9 +195,9 @@ function iconIdsOnly(plugin: Bun.BunPlugin): Bun.BunPlugin {
           if (key === "onResolve") {
             return (
               options: Bun.PluginConstraints,
-              resolve: Parameters<Bun.PluginBuilder["onResolve"]>[1]
+              answer: Parameters<Bun.PluginBuilder["onResolve"]>[1]
             ) => {
-              target.onResolve({ ...options, filter: ICON_ID }, resolve);
+              target.onResolve({ ...options, filter: ICON_ID }, answer);
               return narrowed;
             };
           }

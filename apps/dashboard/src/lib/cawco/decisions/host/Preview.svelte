@@ -24,6 +24,7 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import cawDark from "../../../../../../../packages/hub/skills/decision-page/kit/caw/dark-working.webp";
   import cawLight from "../../../../../../../packages/hub/skills/decision-page/kit/caw/light-working.webp";
+  import { dur } from "../../motion/curves.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { served } from "./page.svelte.js";
   import { scheme } from "./scheme.svelte.js";
@@ -91,13 +92,8 @@
    */
   const PING_MS = 1000;
   const PINGS = 30;
-  /** `--dur-wait-grace` in ms, from the kit's tokens: a wait shows nothing before it (DESIGN.md, The Real Wait Rule). */
-  const grace = () =>
-    Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue(
-        "--dur-wait-grace"
-      )
-    ) || 0;
+  /** `--dur-wait-grace` in ms, in the unit host.css writes it (motion `dur`: its minifier writes `1000ms` as `1s`): a wait shows nothing before it (DESIGN.md, The Real Wait Rule). */
+  const grace = () => dur("--dur-wait-grace");
   /**
    * An embed's address once its origin serves it: its ping (core
    * `PREVIEW_PING_PATH`, open to any page) answers ok when the machine's

@@ -114,8 +114,14 @@
      styles.css), no glass and no blur: a row the default control's height
      (44px under a finger, The 44 Touch Rule), its track the control edge's
      groove, its fill the pressed step, its handle raised; names in the label
-     role and values in meta, tabular (The Tabular Figure Rule); the house
-     focus ring. */
+     role and every value field in meta, tabular Figtree (a list's column of
+     figures, The Tabular Figure Rule and DESIGN.md's Measured figure), never
+     DialKit's own Geist Mono, a face the page doesn't have; the colour
+     swatch, drawn 20px, reaching 24px under a mouse and 44px under a finger
+     through the house's hit areas (The 24 Pointer Rule, The 44 Touch Rule),
+     its row opening to 14px on touch so the swatch's area and the value
+     field's never meet, and each value field its row's height under a
+     finger; the house focus ring. */
   [data-slot="dials"] .dialkit-root {
     --dial-surface: var(--border-control);
     --dial-surface-hover: var(--surface-hover);
@@ -149,9 +155,31 @@
     & [class$="-label"] {
       font: var(--type-label);
     }
-    & :is(.dialkit-slider-value, .dialkit-slider-input) {
+    &
+      :is(
+        .dialkit-slider-value,
+        .dialkit-slider-input,
+        .dialkit-pad-value,
+        .dialkit-color-value,
+        .dialkit-color-css-input
+      ) {
       font: var(--type-meta);
       font-variant-numeric: tabular-nums;
+    }
+    & .dialkit-color-inputs {
+      @media (pointer: coarse) {
+        gap: var(--space-4);
+      }
+    }
+    /* A field draws no `::after`, so under a finger its own box fills its
+       row's 44px (it has no fill and no edge: it draws the same). */
+    & :is(.dialkit-color-value, .dialkit-pad-value, .dialkit-slider-input) {
+      @media (pointer: coarse) {
+        min-block-size: var(--dial-row-height);
+      }
+    }
+    & .dialkit-color-swatch {
+      @apply pointer-hit touch-hit;
     }
     & .dialkit-slider-handle {
       background: var(--surface-raised);

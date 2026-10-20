@@ -72,7 +72,11 @@
 import type { Locator, Page } from "playwright-core";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import { Clock, type Run } from "../../anim";
-import { CAWCO_BRIDGE, startDecisionStage } from "../../decision-embeds";
+import {
+  CAWCO_BRIDGE,
+  pageReach,
+  startDecisionStage,
+} from "../../decision-embeds";
 import { traceMain } from "../../frames";
 import { type Kit, type Spec, settle } from "../../kit";
 
@@ -973,6 +977,25 @@ async function continueStep(
   tokens: Tokens
 ) {
   await toContinue(page, "path");
+  // Its ↵ hint only where there is an Enter to press (B9: "Show an Enter
+  // hint only where Enter is safe"; ui/kbd `reach: keyboard`), as Send's.
+  const hints = await page.evaluate(() =>
+    [
+      "#decision-path [data-continue] [data-slot=kbd]",
+      "[data-send] [data-slot=kbd]",
+    ].map(
+      (selector) =>
+        [...document.querySelectorAll(selector)].filter((key) =>
+          key.checkVisibility()
+        ).length
+    )
+  );
+  kit.check(
+    `${label}: Continue's ↵ and Send's keys stand only where there is a keyboard (${view === "phone" ? "none under a finger" : "shown under a mouse"}: Continue ${hints[0]}, Send ${hints[1]})`,
+    view === "phone"
+      ? hints[0] === 0 && hints[1] === 0
+      : hints[0] === 1 && hints[1] === 2
+  );
   const before = await foldOf(page, "path");
   const footBefore = await footOf(page, "path");
   const sourceBefore = (await flightOf(page, "path", "direct")).source;
@@ -1315,6 +1338,21 @@ async function leg(
   const open = await continueStep(kit, page, clock, view, label, tokens);
   await changeStep(kit, page, clock, view, label, tokens, open);
   await liveSteps(kit, page, clock, view, label, tokens);
+  // Every card decided: each decided line's Change, and Send, read a window
+  // at a time (decision-embeds.ts `pageReach`): under a finger each
+  // control's area reaches 44px (The 44 Touch Rule); at a desk 24px, drawn
+  // so or through its hit area (The 24 Pointer Rule); nothing spills.
+  const reach = await pageReach(page);
+  const short = reach.controls.filter((one) =>
+    view === "phone" ? !one.touch : !one.pointer
+  );
+  kit.check(
+    `${label}: every card decided, every control reaches ${view === "phone" ? "44px under a finger" : "24px under a mouse"} and nothing spills (${reach.controls.length} controls: ${reach.controls.map((one) => `${one.name.slice(0, 40)} ${one.w}×${one.h}`).join(", ")})`,
+    reach.controls.some((one) => one.name.includes("Change")) &&
+      short.length === 0 &&
+      reach.spills.length === 0,
+    [...short.map((one) => one.line), ...reach.spills].join("\n    ")
+  );
   kit.check(
     `${label}: the page reported no error`,
     errors.length === 0,
@@ -2099,6 +2137,13 @@ const coralOf = (page: Page) =>
         return {
           what: one.hasAttribute("data-send") ? "send" : `${card} continue`,
           inView: at.bottom > 0 && at.top < innerHeight && at.height > 0,
+          // Its keycaps as drawn on the coral: their fill and ink.
+          keys: [...one.querySelectorAll<HTMLElement>("[data-slot=kbd]")]
+            .filter((key) => key.checkVisibility())
+            .map((key) => {
+              const s = getComputedStyle(key);
+              return `${key.textContent?.trim() ?? ""} ${s.backgroundColor} on ${getComputedStyle(one).backgroundColor}, ink ${s.color}`;
+            }),
         };
       });
   });
@@ -2213,6 +2258,11 @@ async function coralLeg(
     `${label}: at every step (load, each pick, each Continue, the last Continue, a Change and its Continue again) at most one coral button shows, and it is the next act: the working card's Continue, else Send once no card stands open`,
     steps.length === 9 && wrong.length === 0,
     JSON.stringify({ wrong, steps })
+  );
+  // What a keycap draws on the coral: the kit Kbd's own look, which has no
+  // form for a primary button's fill (the lane's kit-swap on ui/kbd).
+  kit.note(
+    `${label}: the keycaps on the coral: ${[...new Set(steps.flatMap((one) => one.coral.flatMap((button) => button.keys)))].join("; ")}`
   );
   const [h0, hHalf, h1] = [turn["0"], turn["0.5"], turn["1"]];
   kit.check(

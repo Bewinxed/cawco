@@ -12,7 +12,9 @@
  *     built (Image, Diagram, Canvas, Preview, Dials) draws in the panel's
  *     frame, in light and dark, at 390 and 1440: its cards, each piece
  *     there and loaded, and an overflow sweep that finds nothing past the
- *     frame's width.
+ *     frame's width; every control reaching 44px under a finger at 390
+ *     (The 44 Touch Rule) and 24px under a mouse at 1440 (The 24 Pointer
+ *     Rule); every DialKit value field in the meta role, tabular Figtree.
  * (b) A pick writes `state.<id>` with the program's hash; a Comment pin and
  *     an ink stroke anchor by the card's id; a revision (statements) that
  *     puts a decision ahead keeps the pin on its card, the ink on its
@@ -66,6 +68,7 @@ import type { Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { pageReach } from "../decision-embeds";
 import {
   type Kit,
   type KitFleet,
@@ -363,7 +366,7 @@ const canvasBoxes = (frame: Frame) =>
                 };
               };
             };
-          }
+          } | null
         )?.cawcoArtifact?.doc;
         const els = (doc?.getArray("elements").toArray() ?? [])
           .map(
@@ -436,6 +439,41 @@ const mediaIn = (frame: Frame) =>
             (el) => getComputedStyle(el).position !== "fixed"
           )
       ),
+      // Each DialKit value field in the meta role, tabular Figtree (host.css):
+      // its face, size and figures as drawn, beside the size it should be:
+      // the meta role's, or for an <input> the house's field floor where
+      // that holds (design.css `@layer overrides`: under `max-phone`, below
+      // theme.css's 640px `--breakpoint-phone`, or a coarse pointer).
+      dialValues: (() => {
+        // Each token resolved to px on a probe in the page.
+        const px = (token: string) => {
+          const probe = document.createElement("span");
+          probe.style.fontSize = `var(${token})`;
+          document.body.append(probe);
+          const size = Number.parseFloat(getComputedStyle(probe).fontSize);
+          probe.remove();
+          return size;
+        };
+        const meta = px("--text-meta");
+        const floor = px("--text-field-floor");
+        const floored =
+          matchMedia("(width < 640px)").matches ||
+          matchMedia("(pointer: coarse)").matches;
+        return [
+          ...document.querySelectorAll<HTMLElement>(
+            ".dialkit-root :is(.dialkit-slider-value, .dialkit-slider-input, .dialkit-pad-value, .dialkit-color-value, .dialkit-color-css-input)"
+          ),
+        ].map((el) => {
+          const s = getComputedStyle(el);
+          return {
+            field: el.className.split(" ")[0] ?? "",
+            face: s.fontFamily.split(",")[0]?.trim() ?? "",
+            size: s.fontSize,
+            want: `${el.localName === "input" && floored ? Math.max(meta, floor) : meta}px`,
+            figures: s.fontVariantNumeric,
+          };
+        });
+      })(),
       faces: [...document.fonts]
         .filter((face) => face.status === "loaded")
         .map((face) => face.family),
@@ -850,6 +888,17 @@ const mediaLeg = async (
     JSON.stringify(media)
   );
   kit.check(
+    `(a) ${leg}: every DialKit value field in the meta role, tabular Figtree, never DialKit's Geist Mono, a field at the house's 16px floor where it holds (${media.dialValues.map((one) => `${one.field} ${one.face} ${one.size} of ${one.want} ${one.figures}`).join(", ")})`,
+    media.dialValues.length > 0 &&
+      media.dialValues.every(
+        (one) =>
+          one.face.includes("Figtree") &&
+          one.size === one.want &&
+          one.figures === "tabular-nums"
+      ),
+    JSON.stringify(media.dialValues)
+  );
+  kit.check(
     `(a) ${leg}: the house faces loaded in the page, and a Row of Text and a Badge drawn on the host's own styles`,
     media.faces.some((family) => family.includes("Figtree")) &&
       media.row.display === "flex" &&
@@ -899,6 +948,22 @@ const mediaLeg = async (
         ["gantt", false],
       ]),
     JSON.stringify({ diagrams: media.diagrams, opens: media.opens })
+  );
+  // Every control of the page in the panel's frame, each piece's own
+  // (Open as canvas, Open to draw, the Dials controls) among them, a window
+  // at a time (decision-embeds.ts `pageReach`): under a finger each one's
+  // area reaches 44px (The 44 Touch Rule); at a desk 24px, drawn so or
+  // through its hit area (The 24 Pointer Rule); nothing spills.
+  const reach = await pageReach(frame);
+  const short = reach.controls.filter((one) =>
+    view === "phone" ? !one.touch : !one.pointer
+  );
+  kit.check(
+    `(a) ${leg}: every control reaches ${view === "phone" ? "44px under a finger" : "24px under a mouse"} and nothing spills (${reach.controls.length} controls: ${reach.controls.map((one) => `${one.name.slice(0, 40)} ${one.w}×${one.h}`).join(", ")})`,
+    reach.controls.some((one) => one.name.includes("Open to draw")) &&
+      short.length === 0 &&
+      reach.spills.length === 0,
+    [...short.map((one) => one.line), ...reach.spills].join("\n    ")
   );
   await shown.close();
 };

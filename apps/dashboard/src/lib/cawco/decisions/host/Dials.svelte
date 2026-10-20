@@ -19,7 +19,10 @@
   }: OpenUIRenderProps<{ name: unknown; config: Record<string, unknown> }> =
     $props();
 
-  type Drawn = { root: HTMLElement; destroy: () => void };
+  interface Drawn {
+    destroy: () => void;
+    root: HTMLElement;
+  }
   type DrawIn = (
     target: HTMLElement,
     name: string,
@@ -81,7 +84,7 @@
   });
   // DialKit's own drawings (a spring's curve) follow the page's scheme.
   $effect(() => {
-    const now = scheme.now;
+    const { now } = scheme;
     if (drawn) {
       drawn.root.dataset.theme = now;
     }

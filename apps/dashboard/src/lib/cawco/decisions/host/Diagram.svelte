@@ -17,6 +17,7 @@
 -->
 <script lang="ts">
   import { Button } from "#lib/components/ui/button/index.js";
+  import { frameObserver } from "../../frame-observer.js";
   import { hubRefusal } from "../../hub-read.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { overlayTag } from "./page.svelte.js";
@@ -107,21 +108,23 @@
     };
   });
 
-  // The well's room, as it changes.
+  // The well's room: read now, and a change in the next frame (frameObserver).
   $effect(() => {
-    const held = stage;
-    if (!held) {
+    const well = stage;
+    if (!well) {
       return;
     }
-    const watch = new ResizeObserver(() => {
-      const pad = getComputedStyle(held);
+    const read = () => {
+      const pad = getComputedStyle(well);
       room =
-        held.clientWidth -
+        well.clientWidth -
         (Number.parseFloat(pad.paddingInlineStart) || 0) -
         (Number.parseFloat(pad.paddingInlineEnd) || 0);
-    });
-    watch.observe(held);
-    return () => watch.disconnect();
+    };
+    read();
+    const sizes = frameObserver(read);
+    sizes.observe(well);
+    return () => sizes.disconnect();
   });
 
   /** Too wide for the well even at its floor: it scrolls sideways. */

@@ -7,8 +7,8 @@ import {
   crossSiteRefusal,
   PAGE_ORIGIN_HEADER,
 } from "@cawco/core/browser-gate";
-import { CSS_TARGET } from "@cawco/core/css-target";
 import { unlayeredRules } from "@cawco/core/css-layers";
+import { CSS_TARGET } from "@cawco/core/css-target";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
