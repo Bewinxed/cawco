@@ -482,7 +482,7 @@ export const measureRoles = (): RoleSize[] => {
       createFleetWatch({
         asking: () => false,
         // Read once as it is made; nothing else is read while measuring.
-        db: { fleetWatchOn: () => false } as never,
+        db: { fleetWatchOn: () => false, watchNotices: () => [] } as never,
         end: () => undefined,
         interrupt: () => undefined,
         lifetime,

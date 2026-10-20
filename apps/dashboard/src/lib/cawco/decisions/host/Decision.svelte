@@ -21,8 +21,7 @@
   The pick a pointer makes moves (DESIGN.md, The Stay In Context Rule): the
   option turns chosen where it stands, and once its colour has landed (its
   own colour runs, `--dur-control`, L732) the body folds shut over
-  `--dur-panel` on the drawer curve (L479: "container size changes"; L856, a
-  queued message folding to its tag) while, on that clock, the chosen
+  `--dur-settle` on `--ease-crossfade` while, on that clock, the chosen
   option's keycap and label fly from its chip to the head (L485, The One
   Object Rule, motion/share: the source hidden while its copy flies), the
   state line leaves its slot over `--dur-exit`, and the card's padding and
@@ -37,6 +36,14 @@
   at once. With reduced motion the body fades and its height lands at the
   end, where the scroll is placed, and the head chip fades in where it
   stands (L517: "flights do not fly").
+
+  The clock is page-length travel (the card's height and the page's scroll
+  move a thousand pixels and more), so it runs on the one house curve that
+  never moves a change more than an eighth in a frame (L690: "`ease-crossfade`
+  … moves at most 7.2% of a change in any 1/60s at 400ms; every other house
+  curve moves more than an eighth in one frame there, which reads as a
+  lurch"); on the drawer over `--dur-panel` (L479) one frame carried 24% of
+  the card's height (decision-pick's live trace).
 -->
 <script lang="ts">
   import { pickOf } from "@cawco/core/decisions";
@@ -268,16 +275,28 @@
    */
   function landing(node: HTMLElement, gap: number, from: HTMLElement): number {
     const scroller = document.scrollingElement ?? document.documentElement;
-    const was = [node.style.height, node.style.marginBottom];
+    // The page's own scroll as it stands: the read below lays the page out
+    // at its folded height, and the browser clamps the scroll to that
+    // shorter page (it fell 321px on a card near the foot, the fold's
+    // first frame); it is put back before anything is drawn.
+    const stood = scroller.scrollTop;
+    // Held as `fold` ends it: no height, the gap given back, and clipped, so
+    // what it holds no longer reaches past it into the page's height.
+    const was = [
+      node.style.height,
+      node.style.marginBottom,
+      node.style.overflow,
+    ];
     node.style.height = "0px";
     node.style.marginBottom = `${-gap}px`;
+    node.style.overflow = "hidden";
     const top = (el: Element) =>
       el.getBoundingClientRect().top +
       scroller.scrollTop -
       (Number.parseFloat(getComputedStyle(el).scrollMarginTop) || 0);
     const cards = cardsOnPage();
     const [next] = openCardsAfter(from);
-    let to = scroller.scrollTop;
+    let to = stood;
     if (next) {
       to = top(cards.indexOf(next) === cards.indexOf(from) + 1 ? from : next);
     } else {
@@ -293,7 +312,8 @@
       }
     }
     const most = scroller.scrollHeight - scroller.clientHeight;
-    [node.style.height, node.style.marginBottom] = was;
+    [node.style.height, node.style.marginBottom, node.style.overflow] = was;
+    scroller.scrollTop = stood;
     return Math.min(Math.max(0, to), Math.max(0, most));
   }
 
@@ -330,7 +350,7 @@
    * clock (motion/share `closeInto`), the run hidden until it lands, so the
    * screen shows one of each; then the head lets them go.
    */
-  function closeBack(box: HTMLElement, ms: number) {
+  function closeBack(box: HTMLElement, ms: number, easing: string) {
     if (!returning) {
       return;
     }
@@ -338,7 +358,7 @@
       ...box.querySelectorAll<HTMLElement>("header [data-pick]"),
     ].flatMap((chip) => {
       const target = runOf(chip.dataset.pick ?? "");
-      const flight = target ? closeInto(chip, target, ms) : undefined;
+      const flight = target ? closeInto(chip, target, ms, easing) : undefined;
       if (!(target && flight)) {
         return [];
       }
@@ -358,8 +378,8 @@
   let stopRide: (() => void) | undefined;
 
   /**
-   * A pointer's turn, moving: the body folds over --dur-panel on the drawer
-   * curve, the card's padding and the page's scroll (`to`, when it shuts)
+   * A pointer's turn, moving: the body folds over --dur-settle on
+   * --ease-crossfade, the card's padding and the page's scroll (`to`, when it shuts)
    * on its clock; shut, focus goes on once it lands; open, the head's chips
    * fly home.
    */
@@ -370,8 +390,8 @@
     gap: number,
     to: number | null
   ) {
-    const ms = dur("--dur-panel");
-    const easing = ease("--ease-drawer");
+    const ms = dur("--dur-settle");
+    const easing = ease("--ease-crossfade");
     // The body starts from its drawn height less what the head grew by as
     // it turned, so the card stands at the height it was drawn at on the
     // fold's first frame (DESIGN.md, The Nothing Jumps Rule).
@@ -395,7 +415,7 @@
       );
     }
     if (!shut) {
-      closeBack(box, ms);
+      closeBack(box, ms, easing);
       return;
     }
     const landed = () => nextStop(box)?.focus({ preventScroll: true });
@@ -524,6 +544,8 @@
                 mode: "grow",
                 anchor: "b",
                 now: true,
+                ms: dur("--dur-settle"),
+                easing: ease("--ease-crossfade"),
               })}
               aria-hidden="true"
               class="dp-pick"

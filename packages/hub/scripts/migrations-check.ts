@@ -237,9 +237,15 @@ try {
   // What a given database's start empties by itself, never a migration: the
   // task index (project_task_*), rebuilt from project folders a copy does
   // not carry, and the tool-call keys, kept 10 minutes past their answer
-  // (tool-call-keys.ts TOOL_CALL_KEY_KEPT_MS) and pruned as the hub starts.
+  // (tool-call-keys.ts TOOL_CALL_KEY_KEPT_MS) and pruned as the hub starts,
+  // and fleet watch's notices, each dropped at the hub's start once its
+  // session runs no more or its work item is over (fleet-watch.ts, the sweep
+  // in createFleetWatch).
   const startEmpties = (name: string): boolean =>
-    !!GIVEN && (name.startsWith("project_task") || name === "tool_call_keys");
+    !!GIVEN &&
+    (name.startsWith("project_task") ||
+      name === "tool_call_keys" ||
+      name === "fleet_watch_notices");
   const emptied = [...before.rows]
     .filter(([name, n]) => n > 0 && (after.rows.get(name) ?? 0) === 0)
     .filter(([name]) => !startEmpties(name))
