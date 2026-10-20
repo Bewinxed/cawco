@@ -33,6 +33,13 @@ type SourceColumn =
   | "sourceServeCommand"
   | "sourceServeCwd";
 
+/**
+ * A project's page, by its row: the project's by its name, whichever
+ * session wrote it, and living as long as its source in the project's
+ * folder (schema.ts `artifacts.instanceId`). A held next version is none.
+ */
+export const projectPage = sql`${artifacts.kind} = 'page' and ${artifacts.projectId} is not null and ${artifacts.heldFor} is null`;
+
 /** An artifact as everything reads it: what it shows as one {@link PreviewSource}. */
 export type ArtifactRow = Omit<StoredArtifact, SourceColumn> & {
   source: PreviewSource;
@@ -105,9 +112,13 @@ export interface ArtifactChange {
   seq: number;
 }
 
-/** What may change on an artifact after it is made: never its id, session, project, kind or birth. */
+/**
+ * What may change on an artifact after it is made: never its id, project,
+ * kind or birth. Its session changes only for a project's page another
+ * session of the project makes again ({@link ArtifactsDb.projectPage}).
+ */
 export type ArtifactPatch = Partial<
-  Omit<ArtifactRow, "id" | "instanceId" | "projectId" | "kind" | "createdAt">
+  Omit<ArtifactRow, "id" | "projectId" | "kind" | "createdAt">
 >;
 
 /** The rows artifacts/ keeps: the list, and each document's update log. */
@@ -155,6 +166,11 @@ export interface ArtifactsDb {
     machineId: string;
     path: string;
   }) => ArtifactRow[];
+  /** A project's page of a name, whichever session wrote it, or none now ({@link projectPage}). */
+  readonly projectPage: (
+    projectId: string,
+    name: string
+  ) => ArtifactRow | undefined;
   /** Removes an artifact and its log. */
   readonly remove: (id: string) => void;
   /** Keeps `artifactId` as what session `instanceId`'s panel shows, in place of any other. */
@@ -282,6 +298,20 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       .orderBy(desc(artifacts.createdAt))
       .all()
       .map(artifactOf),
+  projectPage: (projectId, name) => {
+    const row = db
+      .select()
+      .from(artifacts)
+      .where(
+        and(
+          projectPage,
+          eq(artifacts.projectId, projectId),
+          eq(artifacts.name, name)
+        )
+      )
+      .get();
+    return row && artifactOf(row);
+  },
   previewing: ({ id, machineId, path }) =>
     db
       .select()

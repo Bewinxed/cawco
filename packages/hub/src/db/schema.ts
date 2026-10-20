@@ -3617,9 +3617,16 @@ export const artifacts = sqliteTable(
   "artifacts",
   {
     id: text("id").primaryKey(),
-    instanceId: text("instance_id")
-      .notNull()
-      .references(() => instances.id, { onDelete: "cascade" }),
+    /**
+     * The session whose panel holds it. A project's page outlives it: its
+     * life is its source's in the project's folder (`decisions/<name>/`), so
+     * a deleted session leaves it here with no session (null), its picks and
+     * places kept. Every other artifact goes with its session
+     * (db/index.ts `dropInstances`).
+     */
+    instanceId: text("instance_id").references(() => instances.id, {
+      onDelete: "set null",
+    }),
     /**
      * The session whose `artifact_create` last made it: the owner itself, or
      * a delegate that handed it to its parent (`to: "parent"`), which may
@@ -3694,10 +3701,19 @@ export const artifacts = sqliteTable(
   },
   (table) => [
     index("artifacts_instance").on(table.instanceId, table.createdAt),
-    // A held next version shares its artifact's name.
+    // A held next version shares its artifact's name. A project's page is
+    // the project's by its name, whichever session wrote it; every other
+    // artifact is its session's by kind and name.
     uniqueIndex("artifacts_instance_name")
       .on(table.instanceId, table.kind, table.name)
-      .where(sql`${table.heldFor} is null`),
+      .where(
+        sql`${table.heldFor} is null and (${table.projectId} is null or ${table.kind} <> 'page')`
+      ),
+    uniqueIndex("artifacts_project_page")
+      .on(table.projectId, table.name)
+      .where(
+        sql`${table.heldFor} is null and ${table.projectId} is not null and ${table.kind} = 'page'`
+      ),
     uniqueIndex("artifacts_held_for").on(table.heldFor),
   ]
 );

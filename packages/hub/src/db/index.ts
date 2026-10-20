@@ -85,13 +85,14 @@ import {
   lt,
   lte,
   ne,
+  not,
   notInArray,
   or,
   type SQL,
   sql,
 } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { type MigrationMeta, readMigrationFiles } from "drizzle-orm/migrator";
 import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Context, Effect, Layer } from "effect";
 import { bundledSkills, starterSkills } from "../bundled-skills";
@@ -103,7 +104,7 @@ import type { StagesTemplate } from "../stages";
 import { workflowSkill } from "../workflows/skills";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type ActionsDb, actionsDb } from "./actions";
-import { type ArtifactsDb, artifactsDb } from "./artifacts";
+import { type ArtifactsDb, artifactsDb, projectPage } from "./artifacts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type BlocksDb, blocksDb } from "./blocks";
 import { type BrowsersDb, browsersDb } from "./browsers";
@@ -115,6 +116,10 @@ import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type IngressDb, ingressDb } from "./ingress";
 import { type LfsOffersDb, lfsOffersDb } from "./lfs-offers";
 import { type MemoryFactsDb, memoryFactsDb } from "./memory-facts";
+import {
+  mergeProjectPages,
+  PROJECT_PAGES_MIGRATION_WHEN,
+} from "./merge-project-pages";
 import { type PreviewsDb, previewsDb } from "./previews";
 import { type RelaysDb, relaysDb } from "./relays";
 import { type RoutinesDb, routinesDb } from "./routines";
@@ -2867,7 +2872,32 @@ const make = async (path: string): Promise<DbShape> => {
   // holds, and its cascades run.
   db.$client.run("PRAGMA foreign_keys = OFF");
   try {
-    migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+    // Every migration before 0275, then a project's page rows of one name
+    // folded into one (merge-project-pages.ts), then 0275 makes its name the
+    // project's, and the rest: drizzle applies only what is newer than the
+    // last one applied, so each runs once, in order.
+    const migrations = readMigrationFiles({ migrationsFolder: MIGRATIONS_DIR });
+    // What drizzle's bun-sqlite `migrate` is (its migrator.js), whose
+    // dialect and session its types keep internal.
+    const { dialect, session } = db as unknown as {
+      dialect: {
+        migrate: (
+          migrations: MigrationMeta[],
+          session: unknown,
+          config: { migrationsFolder: string }
+        ) => void;
+      };
+      session: unknown;
+    };
+    dialect.migrate(
+      migrations.filter(
+        (one) => one.folderMillis < PROJECT_PAGES_MIGRATION_WHEN
+      ),
+      session,
+      { migrationsFolder: MIGRATIONS_DIR }
+    );
+    mergeProjectPages(db.$client);
+    dialect.migrate(migrations, session, { migrationsFolder: MIGRATIONS_DIR });
   } finally {
     rmSync(migrating, { force: true });
   }
@@ -3238,6 +3268,12 @@ const make = async (path: string): Promise<DbShape> => {
     tx.update(instances)
       .set({ parentInstanceId: null })
       .where(inArray(instances.parentInstanceId, list))
+      .run();
+    // Their artifacts go with them, but a project's page: its life is its
+    // source's in the project's folder, so it stays with no session (the
+    // key's set null), its picks and places kept.
+    tx.delete(artifacts)
+      .where(and(inArray(artifacts.instanceId, list), not(projectPage)))
       .run();
     tx.delete(instances).where(inArray(instances.id, list)).run();
   };
@@ -8184,6 +8220,10 @@ const make = async (path: string): Promise<DbShape> => {
               .run();
           }
         }
+        // Its pages go with it: their sources were its folder's.
+        tx.delete(artifacts)
+          .where(and(projectPage, eq(artifacts.projectId, id)))
+          .run();
         tx.delete(projects).where(eq(projects.id, id)).run();
       });
     },
@@ -8314,6 +8354,22 @@ const make = async (path: string): Promise<DbShape> => {
             .where(eq(actions.id, action.id))
             .run();
         }
+        // A page of a name the kept project has goes: the kept project's
+        // source of that name stood (project-merge.ts copies only the files
+        // it lacks), and a project's page is the project's by its name.
+        const keptNames = tx
+          .select({ name: artifacts.name })
+          .from(artifacts)
+          .where(and(projectPage, eq(artifacts.projectId, keepId)));
+        tx.delete(artifacts)
+          .where(
+            and(
+              projectPage,
+              eq(artifacts.projectId, dupId),
+              inArray(artifacts.name, keptNames)
+            )
+          )
+          .run();
         // Its routines with their routes and polls, the events it took in,
         // its actions, relays and moves, Caw's turns and calls, its
         // artifacts and notices: the kept project's from now on, where the

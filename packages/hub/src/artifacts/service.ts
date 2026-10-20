@@ -992,6 +992,19 @@ export interface ArtifactServiceDeps {
     delivery: MarksDelivery
   ) => Promise<MarksOutcome>;
   docs: ArtifactDocs;
+  /**
+   * Page `name`'s source taken out of project `projectId`'s folder
+   * (`decisions/<name>/page.oui` or its built `index.html`) in one commit by
+   * `instance`: a project's page lives as long as it. Why not, when the
+   * folder refuses.
+   */
+  dropPage: (
+    instance: InstanceRow,
+    projectId: string,
+    name: string
+  ) => Promise<
+    { refused: string; status: ArtifactRefusal["status"] } | undefined
+  >;
   /** Whether a session has ended: it takes no input now, so its marks go to its project's Caw. */
   ended: (instance: InstanceRow) => boolean;
   /** What a folder preview of `dir` loads, weighed on machine `machineId`, and the desk captures on its start page at `path` (agent preview.ts `previewWeight`). Throws an {@link ArtifactRefusal} saying why it can't. */
@@ -1196,6 +1209,58 @@ export interface ArtifactServiceDeps {
 
 export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const { db, docs } = deps;
+
+  /** The session whose panel holds `row`; none for a project's page whose session is gone (schema.ts `artifacts.instanceId`). */
+  const holder = (row: ArtifactRow): InstanceRow | undefined =>
+    row.instanceId === null ? undefined : deps.instance(row.instanceId);
+
+  /**
+   * What a create of `kind` and `name` in `owner`'s panel lands on: in a
+   * project, its page of that name whoever wrote it (a project's page is the
+   * project's by its name, db/artifacts.ts `projectPage`); else the owner's
+   * own of that kind and name.
+   */
+  const namedFor = (
+    owner: InstanceRow,
+    kind: ArtifactRow["kind"],
+    name: string
+  ): ArtifactRow | undefined =>
+    (kind === "page" && owner.projectId
+      ? db.projectPage(owner.projectId, name)
+      : undefined) ?? db.byName(owner.id, kind, name);
+
+  /**
+   * The session a project's page moved from, when another's create took it
+   * (placed): its panel lets it go, closed when it showed it.
+   */
+  const letGo = async (
+    from: string | undefined,
+    row: ArtifactRow
+  ): Promise<void> => {
+    if (from === undefined) {
+      return;
+    }
+    if (deps.showing(from) === row.id) {
+      await deps.close(from);
+      return;
+    }
+    deps.relist(from);
+  };
+
+  /** A project's page, the project's by its name and as long-lived as its source there (db/artifacts.ts `projectPage`). */
+  const isProjectPage = (row: ArtifactRow): boolean =>
+    row.kind === "page" && row.projectId !== null && row.heldFor === null;
+
+  /** Whether its session's panel shows `row` now. */
+  const inPanel = (row: ArtifactRow): boolean =>
+    row.instanceId !== null && deps.showing(row.instanceId) === row.id;
+
+  /** Every view of `row`'s session's panel hears its artifacts again; none for a page no session holds. */
+  const relistOf = (row: ArtifactRow): void => {
+    if (row.instanceId !== null) {
+      deps.relist(row.instanceId);
+    }
+  };
 
   /**
    * Each artifact's kept thumbnail (`<root>/<id>/thumbnail.json` beside its
@@ -1542,7 +1607,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     change: (target: ArtifactRow) => Promise<T>
   ): Promise<T> => {
     const holding = holdNext(instance, row);
-    const owner = deps.instance(row.instanceId);
+    const owner = holder(row);
     if (!(holding && owner)) {
       return await change(row);
     }
@@ -1617,7 +1682,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           .filter(
             (row) =>
               row.instanceId !== instance.id &&
-              deps.instance(row.instanceId)?.projectId === projectId
+              holder(row)?.projectId === projectId
           )
       ),
   ];
@@ -1667,7 +1732,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (row.instanceId === instance.id) {
       return true;
     }
-    const writer = deps.instance(row.instanceId);
+    const writer = holder(row);
     return !!writer && deps.ended(writer);
   };
 
@@ -2234,12 +2299,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     html: string;
     program?: BuiltProgram;
   }> => {
-    const was = db.byName(owner.id, "page", input.name);
+    const was = namedFor(owner, "page", input.name);
+    // Another session's page of the project's is the owner's once made again (placed).
     const page = await pageBuilt(
       maker,
       input,
       owner,
-      !(was && holdsChange(maker, was))
+      !(was && holdsChange(maker, { ...was, instanceId: owner.id }))
     );
     const broken = page.program
       ? await brokenBy(
@@ -2561,7 +2627,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const deliverMarks = async (id: string) => {
     const row = db.get(id);
-    const instance = row ? deps.instance(row.instanceId) : undefined;
+    const instance = row ? holder(row) : undefined;
     if (!(row && instance)) {
       held.delete(id);
       return;
@@ -3174,8 +3240,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     sheet?: SheetRead
   ) => {
     stageWritten(row, state, sheet);
-    if (deps.showing(row.instanceId) === row.id) {
-      deps.relist(row.instanceId);
+    if (inPanel(row)) {
+      relistOf(row);
     }
   };
   const stageWritten = (
@@ -3748,10 +3814,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   ): {
     before: ArtifactRow | undefined;
     holding: ReturnType<typeof holdNext>;
+    /** The session whose panel held the project's page this create made again, when it was another's. */
+    movedFrom?: string | undefined;
     row: ArtifactRow;
   } => {
     const now = new Date();
-    const before = db.byName(owner.id, input.kind, input.name);
+    const found = namedFor(owner, input.kind, input.name);
+    // The project's page another session wrote, or one whose session is
+    // gone: made again here, it is this panel's, its doc and picks kept.
+    const moved = found && found.instanceId !== owner.id;
+    const before = moved
+      ? (db.update(found.id, { instanceId: owner.id }) as ArtifactRow)
+      : found;
+    const movedFrom = moved ? (found.instanceId ?? undefined) : undefined;
     const asked = askedOf(input);
     if (before) {
       const holding = holdNext(maker, before);
@@ -3763,7 +3838,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         revision: target.revision + 1,
         updatedAt: now,
       }) as ArtifactRow;
-      return { before, holding, row };
+      return { before, holding, movedFrom, row };
     }
     const row = db.create({
       id: crypto.randomUUID(),
@@ -3814,7 +3889,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** Whether the person has something to do on it now, as `artifact_list` reads it for its owner. */
   const waitingOnPerson = (row: ArtifactRow): boolean => {
-    const owner = deps.instance(row.instanceId);
+    const owner = holder(row);
     return !!owner && statusOf(owner, row).waitingOn.includes("person");
   };
 
@@ -3902,7 +3977,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       row.heldFor === null
     );
     const program = page.program as BuiltProgram;
-    mediaHeld(deps.instance(row.instanceId) ?? instance, program);
+    mediaHeld(holder(row) ?? instance, program);
     const before = new Set(readKept(existing).cards.map((card) => card.id));
     const after = program.read.cards.map((card) => card.id);
     const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
@@ -3951,7 +4026,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             ).length,
           }
         : undefined;
-    const shown = deps.showing(row.instanceId) === row.id;
+    const shown = inPanel(row);
     const opened = row.openedRevision === row.revision;
     const draft = doc.getMap("meta").get("draft") === true;
     // Handed up and not opened, or a maker's change held for the parent to open.
@@ -3980,7 +4055,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       name: row.name,
       does: row.does,
       ask: row.ask,
-      ...(row.instanceId === caller.id ? {} : { session: row.instanceId }),
+      ...(row.instanceId === null || row.instanceId === caller.id
+        ? {}
+        : { session: row.instanceId }),
       ...handedBy(row),
       shown,
       opened,
@@ -4137,10 +4214,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!row) {
         throw new ArtifactRefusal(404, `No artifact ${id} on this hub.`);
       }
+      if (row.instanceId === null) {
+        throw new ArtifactRefusal(
+          404,
+          `No session holds ${row.name} now: it is its project's page, in the project's Decisions tab.`
+        );
+      }
       return {
         ...summaryOf(row),
         instanceId: row.instanceId,
-        shown: deps.showing(row.instanceId) === row.id,
+        shown: inPanel(row),
       };
     },
 
@@ -4202,10 +4285,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           source,
         });
       }
-      const { before, holding, row } = placed(making, input, {
+      const { before, holding, movedFrom, row } = placed(making, input, {
         source,
         machineId,
       });
+      await letGo(movedFrom, row);
       if (html !== null) {
         writePage(row.id, html, program);
       }
@@ -4469,7 +4553,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         updatedAt: new Date(),
       }) as ArtifactRow;
       stampMeta(next, null);
-      if (deps.showing(next.instanceId) === next.id) {
+      if (inPanel(next)) {
         await show(next, "agent");
       }
       return { id: next.id, revision: next.revision, spec };
@@ -4493,7 +4577,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       db.update(row.id, { ask, updatedAt: new Date() });
       askNow(row.id, ask);
       // Every view of the panel hears the frame again with the new ask; nothing reloads.
-      deps.relist(row.instanceId);
+      relistOf(row);
       return { id: row.id, ask };
     },
 
@@ -4657,7 +4741,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return {
         ...canvasFile(id),
         png: pictureOf(id),
-        ...deps.previewAddress(row.instanceId),
+        // A canvas is always its session's: only a project's page outlives one.
+        ...deps.previewAddress(row.instanceId as string),
       };
     },
 
@@ -4784,6 +4869,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const instance = sessionOf(instanceId);
       const row = own(instance, id);
       const wasShown = deps.showing(instance.id) === row.id;
+      // A project's page is its source in the project's folder: both go, the
+      // source first, so a refused commit leaves the page as it was.
+      if (isProjectPage(row)) {
+        const refused = await deps.dropPage(
+          instance,
+          row.projectId as string,
+          row.name
+        );
+        if (refused) {
+          throw new ArtifactRefusal(refused.status, refused.refused);
+        }
+      }
       discard(row);
       if (!wasShown) {
         deps.relist(instance.id);
@@ -4799,6 +4896,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       await deps.close(instance.id);
       return { showing: null };
+    },
+
+    /**
+     * Project `projectId`'s page `name` once its source left the folder
+     * (`decisions/<name>/` holds no page.oui or index.html now): it goes,
+     * and the panel that showed it closes. Nothing when it has none.
+     */
+    sourceGone: async (projectId: string, name: string): Promise<void> => {
+      const row = db.projectPage(projectId, name);
+      if (!row) {
+        return;
+      }
+      const shown = inPanel(row);
+      discard(row);
+      if (shown && row.instanceId !== null) {
+        await deps.close(row.instanceId);
+      } else {
+        relistOf(row);
+      }
     },
 
     /**

@@ -1870,6 +1870,13 @@
       "when": 1792449527252,
       "tag": "0274_account_at_plan_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 275,
+      "version": "6",
+      "when": 1792462132027,
+      "tag": "0275_project_pages_outlive_sessions",
+      "breakpoints": true
     }
   ]
 }
