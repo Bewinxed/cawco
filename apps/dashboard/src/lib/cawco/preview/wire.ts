@@ -134,15 +134,26 @@ export function previewPinId(value: unknown): string | null {
   return typeof value === "string" && PIN_ID.test(value) ? value : null;
 }
 
-/** Where a pin's disc stands in the page's viewport, px; null when it is not on the page. */
-export function previewPinAt(
-  value: unknown
-): { r: number; x: number; y: number } | null {
+/** A pin standing on the page: its disc and the box of what it stands on, in the page's viewport, px. */
+export interface PreviewPinAt {
+  box: { h: number; w: number; x: number; y: number };
+  r: number;
+  x: number;
+  y: number;
+}
+
+/** Where a pin's disc stands in the page's viewport, and the box of what it stands on, px; null when it is not on the page. */
+export function previewPinAt(value: unknown): PreviewPinAt | null {
   const raw = record(value);
-  const x = finite(raw?.x);
-  const y = finite(raw?.y);
-  const r = finite(raw?.r);
-  return x === null || y === null || r === null ? null : { x, y, r };
+  const box = record(raw?.box);
+  const read = [raw?.x, raw?.y, raw?.r, box?.x, box?.y, box?.w, box?.h].map(
+    finite
+  );
+  if (read.some((n) => n === null)) {
+    return null;
+  }
+  const [x, y, r, bx, by, bw, bh] = read as number[];
+  return { x, y, r, box: { x: bx, y: by, w: bw, h: bh } };
 }
 
 /*

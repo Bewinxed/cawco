@@ -152,6 +152,8 @@ const pinCard = (n: number) => `[data-slot=pin-card][data-pin-card="${n}"]`;
 const GONE_SAYS = /^Its element is gone from the page/;
 const PLACING_SAYS = /^Tap the page where it goes/;
 const TAB_RESOLVED = /^Resolved/;
+/** The pane's Comment mode, as its compact mode menu names it. */
+const COMMENT_MODE = /^Comment/;
 /** The pane's artifact doc socket on the hub. */
 const ARTIFACT_DOC_SOCKET = /\/ws\/artifact\//;
 const MACHINES_EMPTY = "h1[data-slot=title]";
@@ -765,12 +767,25 @@ const askPlace = async (page: Page) => {
  * the page's doc, which the pane's doc hears, and its card opens.
  */
 const dropPin = async (page: Page) => {
-  await page
+  const segment = page
     .locator("button[aria-keyshortcuts='C']")
-    .filter({ visible: true })
-    .first()
-    .focus();
-  await page.keyboard.press("c");
+    .filter({ visible: true });
+  if ((await segment.count()) > 0) {
+    await segment.first().focus();
+    await page.keyboard.press("c");
+  } else {
+    // A phone's head stands the mode as one menu (`Mode: Interact`): Comment chosen from it.
+    await page
+      .locator('button[aria-label^="Mode:"]')
+      .filter({ visible: true })
+      .first()
+      .click();
+    await page
+      .getByRole("menuitemradio", { name: COMMENT_MODE })
+      .filter({ visible: true })
+      .first()
+      .click();
+  }
   const frame = page.frameLocator(PREVIEW_FRAME);
   await frame
     .locator("cawco-overlay .layer.comment")
@@ -823,7 +838,8 @@ const seedPins = async (page: Page) => {
       thread: [string, string][],
       resolved = false
     ) => ({
-      id: `seed-pin-${number}`,
+      // A pin's id as the overlay makes one (wire.ts `PIN_ID`, 36 of hex and dashes).
+      id: `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`,
       number,
       kind: "comment",
       // Anchored as a tap on the heading writes it: by its selector and its words.
@@ -846,21 +862,27 @@ const seedPins = async (page: Page) => {
     doc.transact(() => {
       const pins = doc.getMap("pins");
       pins.set(
-        "seed-pin-1",
+        "00000000-0000-4000-8000-000000000001",
         pin(1, "h1", [
           ["person", "Make this heading a bit bigger"],
           ["agent", "Done: the heading is a step larger now."],
         ])
       );
-      pins.set("seed-pin-2", pin(2, "h1", [["person", long]]));
       pins.set(
-        "seed-pin-3",
+        "00000000-0000-4000-8000-000000000002",
+        pin(2, "h1", [["person", long]])
+      );
+      pins.set(
+        "00000000-0000-4000-8000-000000000003",
         pin(3, "#a-card-the-page-dropped", [
           ["person", "This card's label should sit on one line"],
         ])
       );
       for (let n = 4; n <= 9; n += 1) {
-        pins.set(`seed-pin-${n}`, pin(n, "h1", [["person", long]], true));
+        pins.set(
+          `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+          pin(n, "h1", [["person", long]], true)
+        );
       }
     });
   }, LONG_COMMENT);
@@ -2678,7 +2700,7 @@ export const SURFACES: Surface[] = [
         route: (s) => `/session/${s.art}`,
         act: dropPin,
         root: "body",
-        widths: ["desk"],
+        widths: ["desk", "phone"],
         ready: (s) => ({ shows: on(s.art, '[aria-label="Pin 1"]') }),
       },
       // The pane's Comments panel, its pins seeded: a short comment the agent

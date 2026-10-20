@@ -109,6 +109,7 @@
   import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
   import {
     type PaneKey,
+    type PreviewPinAt,
     previewError,
     previewErrorOf,
     previewKey,
@@ -1257,7 +1258,7 @@
   /** The pin whose card is open. */
   let openPin = $state<string | null>(null);
   /** Its disc in the page's viewport, as the page tells it while it scrolls. */
-  let pinAt = $state<{ r: number; x: number; y: number } | null>(null);
+  let pinAt = $state<PreviewPinAt | null>(null);
   /** The pin J and K stand on. */
   let focusedPin = $state<string | null>(null);
   /** The moved pin a tap places again, and the mode the pane goes back to once it is placed. */
@@ -1281,8 +1282,8 @@
     room: number;
     side: "top" | "bottom";
   } | null>(null);
-  /** The card's gap from its pin, px (PinCard's `GAP`). */
-  const PIN_GAP = 12;
+  /** The card's gap from its pin, px (PinCard's `GAP`, `--space-3`). */
+  const PIN_GAP = 11;
   /** The panel's room beside a stuck pin `at` (the page's viewport px), on the side with more of it. */
   function yieldFor(
     id: string,

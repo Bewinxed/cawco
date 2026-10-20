@@ -57,6 +57,7 @@
   import LiveDot from "./LiveDot.svelte";
   import PinDisc from "./PinDisc.svelte";
   import { pinName, pinSelector } from "./pin-name";
+  import type { PreviewPinAt } from "./wire";
 
   let {
     pin,
@@ -80,8 +81,8 @@
     agentName: string;
     /** The pin's own address: its artifact's page, opening this pin's card. */
     link: string;
-    /** The pin's disc in the well, px; null while it is not on screen. */
-    at: { r: number; x: number; y: number } | null;
+    /** The pin's disc and the box of what it stands on, in the well, px; null while it is not on screen. */
+    at: PreviewPinAt | null;
     /** The card's room in the well, px: the well beside the Comments panel when it is open. */
     room: { h: number; w: number };
     /** Where the well can't hold the card beside the panel, and on a phone: at the well's foot, full width. */
@@ -233,25 +234,52 @@
     });
   });
 
-  /** The card's gap from its pin and from the well's edge, px: the space scale's. */
-  const GAP = 12;
+  /** The card's gap from what it stands beside (`--space-3`, the ladder's step at the card's own padding), and from its room's edge, px. */
+  const GAP = 11;
   const EDGE = 8;
 
-  /** Beside its pin, on the side with room; inside its room. A pin not on the page (its element gone) stands at its room's top-right. */
+  /** The card's top beside a span from `y`: inside its room. */
+  const topFrom = (y: number) =>
+    Math.max(EDGE, Math.min(y, room.h - height - EDGE));
+  /** The card's left over a span from `x`: inside its room. */
+  const leftFrom = (x: number) =>
+    Math.max(EDGE, Math.min(x, room.w - width - EDGE));
+
+  /**
+   * Beside what its pin stands on, where its room allows: the element's end
+   * side, else its start side, else below it; else beside the pin itself,
+   * on the side with room. A pin not on the page (its element gone) stands
+   * at its room's top-right.
+   */
   const place = $derived.by(() => {
     if (sheet) {
       return null;
     }
     if (!at) {
-      return { left: Math.max(EDGE, room.w - width - EDGE), top: EDGE };
+      return {
+        left: Math.max(EDGE, room.w - width - EDGE),
+        top: EDGE,
+        side: "room",
+      };
+    }
+    const { box } = at;
+    const end = box.x + box.w + GAP;
+    if (end + width <= room.w - EDGE) {
+      return { left: end, top: topFrom(box.y), side: "end" };
+    }
+    const start = box.x - GAP - width;
+    if (start >= EDGE) {
+      return { left: start, top: topFrom(box.y), side: "start" };
+    }
+    const below = box.y + box.h + GAP;
+    if (below + height <= room.h - EDGE) {
+      return { left: leftFrom(box.x), top: below, side: "below" };
     }
     let left = at.x + at.r + GAP;
     if (left + width > room.w - EDGE) {
       left = at.x - at.r - GAP - width;
     }
-    left = Math.max(EDGE, Math.min(left, room.w - width - EDGE));
-    const top = Math.max(EDGE, Math.min(at.y - at.r, room.h - height - EDGE));
-    return { left, top };
+    return { left: leftFrom(left), top: topFrom(at.y - at.r), side: "pin" };
   });
 
   const source = $derived(
@@ -328,6 +356,7 @@
   data-pin-card={pin.number}
   role="dialog"
   bind:this={card}
+  data-side={place?.side}
   style:left={place ? `${place.left}px` : undefined}
   style:top={place ? `${place.top}px` : undefined}
   style:max-width={sheet ? undefined : `${Math.max(0, room.w - 2 * EDGE)}px`}

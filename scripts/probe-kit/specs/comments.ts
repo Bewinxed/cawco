@@ -512,14 +512,40 @@ const commentChecks = async (on: On, frame: Frame) => {
     .boundingBox({ timeout: 2000 })
     .catch(() => null);
   const cardBox = await card.boundingBox({ timeout: 2000 }).catch(() => null);
+  // Beside what the pin stands on, the gap `--space-3` (11): its end side,
+  // its start side or below it, on the side PinCard says (`data-side`).
+  const para = await frame
+    .locator("#para")
+    .boundingBox({ timeout: 2000 })
+    .catch(() => null);
+  const side = await card.getAttribute("data-side").catch(() => null);
+  const GAP = 11;
+  const at = {
+    end: (c: Rect, p: Rect) => Math.abs(c.x - (p.x + p.w + GAP)) <= 3,
+    start: (c: Rect, p: Rect) => Math.abs(c.x + c.w - (p.x - GAP)) <= 3,
+    below: (c: Rect, p: Rect) => Math.abs(c.y - (p.y + p.h + GAP)) <= 3,
+  } as const;
+  const asRect = (bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) =>
+    ({
+      x: bounds.x,
+      y: bounds.y,
+      w: bounds.width,
+      h: bounds.height,
+    }) as Rect;
   const beside =
     !!disc &&
     !!cardBox &&
-    (Math.abs(cardBox.x - (disc.x + disc.width + 12)) <= 3 ||
-      Math.abs(cardBox.x + cardBox.width - (disc.x - 12)) <= 3) &&
-    Math.abs(cardBox.y - disc.y) <= 3;
+    !!para &&
+    (side === "end" || side === "start" || side === "below") &&
+    at[side](asRect(cardBox), asRect(para)) &&
+    !meets(asRect(cardBox), asRect(para));
   on.kit.check(
-    "1: a tap writes pin 1 with the paragraph's selector, source and text, and opens its card beside the pin",
+    "1: a tap writes pin 1 with the paragraph's selector, source and text, and opens its card beside the paragraph it stands on, never over it",
     pin?.kind === "comment" &&
       pin.by === "person" &&
       pin.anchor.selector === "#para" &&
@@ -529,7 +555,7 @@ const commentChecks = async (on: On, frame: Frame) => {
       Array.isArray(pin.thread) &&
       pin.thread.length === 0 &&
       beside,
-    `pin ${JSON.stringify(pin && { kind: pin.kind, anchor: pin.anchor, thread: pin.thread })}; disc ${JSON.stringify(disc)}; card ${JSON.stringify(cardBox)}; said ${on.said.slice(0, 3).join(" | ") || "nothing"}`
+    `pin ${JSON.stringify(pin && { kind: pin.kind, anchor: pin.anchor, thread: pin.thread })}; disc ${JSON.stringify(disc)}; paragraph ${JSON.stringify(para)}; card ${JSON.stringify(cardBox)} on side ${side}; said ${on.said.slice(0, 3).join(" | ") || "nothing"}`
   );
   if (!(pin && cardBox)) {
     return null;
@@ -3883,7 +3909,60 @@ const resolvedCardChecks = async (
 };
 
 /** One size: the panel opened and read on Open, a gone pin's card, a resolved pin's card from a scrolled Resolved. */
-const panelLeg = async (on: On, screen: Page, name: string) => {
+/**
+ * Pin 1's card, opened from its row: it stands beside the heading the pin
+ * stands on where the well allows (its end side, its start side, below it),
+ * never over it; as the foot sheet where the well stacks. Both rects on the
+ * dashboard's screen, the heading's read in the page's own frame.
+ */
+const pinnedCardChecks = async (
+  screen: Page,
+  frame: Frame,
+  list: Locator,
+  check: PanelCheck
+) => {
+  await list.locator('[data-pin-row="1"]').click();
+  await settle(screen, 800);
+  // Beside, the card stands once the page has said where its pin stands (`cawco:pin-at`).
+  await until(
+    "pin 1's card placed",
+    () =>
+      screen
+        .locator('[data-slot="pin-card"]')
+        .evaluate(
+          (el) => el.hasAttribute("data-sheet") || el.dataset.side !== "room"
+        ),
+    Boolean,
+    3000
+  ).catch(() => undefined);
+  const card = await screen.locator('[data-slot="pin-card"]').evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return {
+      rect: { x: r.x, y: r.y, w: r.width, h: r.height },
+      side: el.getAttribute("data-side") ?? "sheet",
+    };
+  });
+  const offset = await screen
+    .locator(FRAME)
+    .first()
+    .evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { x: r.x + el.clientLeft, y: r.y + el.clientTop };
+    });
+  const inPage = await frame.locator("#a").evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  });
+  const heading = { ...inPage, x: inPage.x + offset.x, y: inPage.y + offset.y };
+  check(
+    `pin 1's card stands clear of the heading it pins (side: ${card.side})`,
+    !meets(card.rect, heading),
+    { card: card.rect, side: card.side, heading }
+  );
+  await closeCard(screen, 400);
+};
+
+const panelLeg = async (on: On, screen: Page, frame: Frame, name: string) => {
   const check: PanelCheck = (what, ok, detail) =>
     on.kit.check(`k (${name}): ${what}`, ok, JSON.stringify(detail));
   const comments = screen.locator(`${PANE_SEL} button[data-slot="comments"]`);
@@ -3900,6 +3979,7 @@ const panelLeg = async (on: On, screen: Page, name: string) => {
     .catch(() => undefined);
   await settle(screen, 600);
   const stacked = await panelRestChecks(screen, check);
+  await pinnedCardChecks(screen, frame, list, check);
   await goneCardChecks(screen, list, stacked, check);
   await resolvedCardChecks(screen, list, stacked, check);
   if ((await comments.getAttribute("aria-expanded")) === "true") {
@@ -3944,7 +4024,8 @@ const writePanelPins = (frame: Frame) =>
         thread: [string, string][],
         resolved = false
       ) => ({
-        id: `panel-pin-${number}`,
+        // A pin's id as the overlay makes one (wire.ts `PIN_ID`, 36 of hex and dashes).
+        id: `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`,
         number,
         kind: "comment",
         anchor: { selector, text: "" },
@@ -3962,20 +4043,26 @@ const writePanelPins = (frame: Frame) =>
       });
       doc.transact(() => {
         const pins = doc.getMap("pins");
-        pins.set("panel-pin-1", pin(1, "#a", [["person", long]]));
         pins.set(
-          "panel-pin-2",
+          "00000000-0000-4000-8000-000000000001",
+          pin(1, "#a", [["person", long]])
+        );
+        pins.set(
+          "00000000-0000-4000-8000-000000000002",
           pin(2, "#b", [
             ["person", short],
             ["person", "And keep its weight as it is."],
           ])
         );
         pins.set(
-          "panel-pin-3",
+          "00000000-0000-4000-8000-000000000003",
           pin(3, "#nowhere-on-this-page", [["person", "On a card it dropped"]])
         );
         for (let n = 4; n <= 9; n += 1) {
-          pins.set(`panel-pin-${n}`, pin(n, "#b", [["person", long]], true));
+          pins.set(
+            `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+            pin(n, "#b", [["person", long]], true)
+          );
         }
       });
     },
@@ -4033,7 +4120,9 @@ const panelChecks = async (on: On) => {
   await until(
     "pin 3 moved aside by the overlay",
     async () =>
-      (await docOf(frame)).pins["panel-pin-3"] as { movedAt?: string },
+      (await docOf(frame)).pins["00000000-0000-4000-8000-000000000003"] as {
+        movedAt?: string;
+      },
     (pin) => !!pin?.movedAt,
     10_000
   ).catch(() => undefined);
@@ -4047,14 +4136,14 @@ const panelChecks = async (on: On) => {
     await collapse.click();
     await settle(on.page, 800);
   }
-  await panelLeg(on, on.page, "1440 default split");
+  await panelLeg(on, on.page, frame, "1440 default split");
   const expand = on.page
     .locator(PANE_SEL)
     .getByRole("button", { name: "Expand", exact: true });
   if ((await expand.count()) === 1) {
     await expand.click();
     await settle(on.page, 800);
-    await panelLeg(on, on.page, "1440 expanded");
+    await panelLeg(on, on.page, frame, "1440 expanded");
     await on.page.keyboard.press("Escape");
     await settle(on.page, 600);
   } else {
@@ -4084,7 +4173,7 @@ const panelChecks = async (on: On) => {
     ).catch(() => null);
     if (shown) {
       await settle(screen, 600);
-      await panelLeg(on, screen, name);
+      await panelLeg(on, screen, shown, name);
     } else {
       on.kit.check(
         `k (${name}): the panel page in the pane`,

@@ -14,3 +14,5 @@ scripts/probe-kit/specs/pin-list-hold.ts
 apps/dashboard/src/routes/(app)/motion/chosen-hover/+page.svelte
 scripts/probe-kit/surfaces/capture.ts
 scripts/probe-kit/surfaces/catalogue.ts
+apps/dashboard/src/lib/cawco/preview/wire.ts
+packages/agent/src/preview-overlay/pins.ts
