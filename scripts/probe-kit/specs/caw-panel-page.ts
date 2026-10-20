@@ -73,27 +73,6 @@ interface Sweep {
 /** A frame the report says was drawn. */
 const DRAWN = /:drawn$/;
 
-/** The client's own line for a hub read that failed (suggest.svelte.ts, `[cawco] /api/jev failed:`). */
-const HUB_READ_FAILED = /^\[cawco\] (\/api\/[\w/-]+) failed:/;
-/** A hub route, from the page's own origin. */
-const HUB_ROUTE = /^https?:\/\/[^/]+(\/api\/[\w/-]+)/;
-
-/**
- * A console error that is the hub's read failing, and which: the stage has
- * no hub, so a shipped component that reads one on mount (the floating
- * thread's composer reads `/api/jev`) is answered 500, as with the hub away.
- * Null for any other error.
- */
-export function hubRead(text: string, url: string): string | null {
-  const said = HUB_READ_FAILED.exec(text)?.[1];
-  if (said) {
-    return said;
-  }
-  return text.startsWith("Failed to load resource")
-    ? (HUB_ROUTE.exec(url)?.[1] ?? null)
-    : null;
-}
-
 /**
  * Every rest frame of one states file, read in the page. It is handed to
  * `page.evaluate` whole, so it holds its own helpers and literals.
@@ -434,16 +413,8 @@ const spec: Spec = {
       );
       const page = await kit.page("desk");
       const logged: string[] = [];
-      /** The hub's reads the stage can't answer (it has no hub), each once. */
-      const hubless = new Set<string>();
       page.on("console", (message) => {
-        if (message.type() !== "error") {
-          return;
-        }
-        const hub = hubRead(message.text(), message.location().url);
-        if (hub) {
-          hubless.add(hub);
-        } else {
+        if (message.type() === "error") {
           logged.push(message.text());
         }
       });
@@ -552,9 +523,9 @@ const spec: Spec = {
         hangs.slice(0, 8).join(" | ") || "all stand"
       );
       kit.check(
-        "no console errors on the canvases, the hub's reads a hub-less stage can't answer aside",
+        "no console errors on the canvases",
         logged.length === 0,
-        `${logged.slice(0, 5).join(" | ") || "none"}; set aside: ${[...hubless].join(", ") || "none"}`
+        logged.slice(0, 5).join(" | ") || "none"
       );
     } finally {
       stage.kill("SIGTERM");
