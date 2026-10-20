@@ -53,6 +53,8 @@
     submitCommand,
   } from "./client.svelte";
   import { cleanDetail } from "./command-detail";
+  import EmptyAsk from "./EmptyAsk.svelte";
+  import { askFirst, firstAskLabel } from "./empty-asks";
   import { instanceTitle, projectOfRow } from "./home/home-state.svelte";
   import { deadlineIn } from "./hub-read";
   import { delegateHandle, rowHref } from "./links";
@@ -1244,12 +1246,22 @@
             </div>
           {:else if blank}
             <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
+              <!-- Its own agent fills it (The Empty Starts Work Rule, a
+                   session's own case): the ask goes in this composer, unsent;
+                   with none here, the New Session form in its folder. -->
               <EmptyState
                 pad="transcript"
                 icon={IconChat}
                 line="Write the first message below."
                 title="Nothing has been said here yet"
-              />
+              >
+                {#snippet action()}
+                  <EmptyAsk
+                    label={firstAskLabel(session?.harness)}
+                    onask={(anchor) => askFirst(viewId, writable, anchor)}
+                  />
+                {/snippet}
+              </EmptyState>
             </div>
           {:else if mounted}
             <div class="flex min-h-0 flex-auto flex-col">

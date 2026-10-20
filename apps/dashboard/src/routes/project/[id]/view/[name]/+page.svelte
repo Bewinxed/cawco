@@ -11,6 +11,7 @@
   import { stageLabel } from "#lib/cawco/project-tasks.js";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
   import { viewsOf } from "#lib/cawco/views-api.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconAlert } from "#lib/icons.js";
@@ -22,16 +23,21 @@
 
   let view = $state<ProjectView | null>(null);
   let problem = $state<string | null>(null);
+  /** The project has no view of that name: Caw is the one who makes one. */
+  let missing = $state(false);
+  /** The read the page waits on; an older one that answers late is let go. */
+  let latest = 0;
 
-  $effect(() => {
-    const id = projectId;
-    const wanted = name;
-    let live = true;
+  /** Reads the project's views for `wanted`: on arrival, and on each Retry. */
+  function read(id: string, wanted: string) {
+    latest += 1;
+    const mine = latest;
     view = null;
     problem = null;
+    missing = false;
     viewsOf(id)
       .then((views) => {
-        if (!live) {
+        if (mine !== latest) {
           return;
         }
         const found =
@@ -41,17 +47,30 @@
           view = found;
         } else {
           problem = `The project has no view called ${wanted}.`;
+          missing = true;
         }
       })
       .catch((error: unknown) => {
-        if (live) {
+        if (mine === latest) {
           problem = failureWords(error);
         }
       });
-    return () => {
-      live = false;
-    };
+  }
+
+  $effect(() => {
+    read(projectId, name);
   });
+
+  /**
+   * The Empty Starts Work Rule: a view that isn't there is Caw's to make, so
+   * the action opens the project's page with these words in his composer,
+   * unsent (`?ask=`); a read that failed is read again.
+   */
+  const askHref = $derived(
+    `/project/${encodeURIComponent(projectId)}?ask=${encodeURIComponent(
+      `Make a view called ${stageLabel(name)} for this project.`
+    )}`
+  );
 
   const hrefOf = (task: string) =>
     `/project/${encodeURIComponent(projectId)}?task=${encodeURIComponent(task)}`;
@@ -92,7 +111,18 @@
   style:--pad-right-narrow="max(var(--space-5), env(safe-area-inset-right))"
 >
   {#if problem}
-    <EmptyState icon={IconAlert} line={problem} title="This view didn't open" />
+    <EmptyState icon={IconAlert} line={problem} title="This view didn't open">
+      {#snippet action()}
+        {#if missing}
+          <Button href={askHref} variant="outline">Ask Caw for this view</Button
+          >
+        {:else}
+          <Button onclick={() => read(projectId, name)} variant="outline"
+            >Retry</Button
+          >
+        {/if}
+      {/snippet}
+    </EmptyState>
   {:else if view}
     <ViewOpenUi {hrefOf} onopen={open} {projectId} {view} />
   {:else}

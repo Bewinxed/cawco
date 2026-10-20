@@ -7,6 +7,7 @@
   } from "#lib/cawco/blocks/BlockPage.svelte";
   import { cawco, startThread, threadsOf } from "#lib/cawco/client.svelte.js";
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
+  import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import {
     failureWords as message,
@@ -14,6 +15,8 @@
     unreachable,
   } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
+  import { addMachine } from "#lib/cawco/join/join.svelte.js";
+  import { CAW_NO_MACHINE } from "#lib/cawco/project/caw-lead.svelte.js";
   import { GLYPHS } from "#lib/cawco/project/StarterCards.svelte";
   /**
    * A project's routines: what runs on its own (Routines), what fires it
@@ -95,6 +98,7 @@
     IconPauseCircle,
     IconPin,
     IconPlay,
+    IconServer,
     IconShield,
     IconTrash,
   } from "#lib/icons.js";
@@ -948,7 +952,11 @@
           {/snippet}
         </EmptyState>
       {:else}
+        <!-- Caw makes routines and can't start (The Empty Starts Work
+             Rule's second sentence): the line says why, and its one action
+             is the way by hand, a machine for him to start on. -->
         <EmptyState
+          action={addMachineByHand}
           icon={IconClock}
           line={words.emptyOff(cawProblem ?? words.away)}
           title={words.empty}
@@ -1009,27 +1017,42 @@
   {/if}
 {/snippet}
 
-{#snippet connectSource()}
+{#snippet addMachineByHand()}
   <Button
-    onclick={() => {
+    aria-haspopup="dialog"
+    onclick={() => addMachine.show()}
+    variant="outline"
+  >
+    <IconServer />
+    <span>Add machine</span>
+  </Button>
+{/snippet}
+
+{#snippet connectSource()}
+  <EmptyAsk
+    byHand={addMachineByHand}
+    canStart={canTalk}
+    label={words.connectSource}
+    onask={() => {
       if (!empty) {
         asking = true;
         askDraft.focusWanted = true;
       }
       pick(words.connectSourceAsk);
     }}
+    reason={cawProblem ?? CAW_NO_MACHINE}
     size="sm"
-    variant="outline">{words.connectSource}</Button
-  >
+  />
 {/snippet}
 
 {#snippet sourcesBody()}
   {#if sourceCount === 0}
     <!-- Its one action puts the ask in Caw's composer, unsent (The Empty
-         Starts Work Rule); with Caw away the line alone says how one comes. -->
+         Starts Work Rule); with Caw away, why, and a machine for him to
+         start on by hand. -->
     <div class="px-space-3">
       <EmptyState
-        action={canTalk ? connectSource : undefined}
+        action={connectSource}
         icon={IconHook}
         line={words.noSourcesLine}
         title={words.noSourcesTitle}

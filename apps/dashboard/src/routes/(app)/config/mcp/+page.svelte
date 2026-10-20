@@ -10,6 +10,14 @@
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
+  import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
+  import {
+    askLabel,
+    askNewSession,
+    FLEET_ASKS,
+    NO_SESSION_CAN_START,
+    sessionCanStart,
+  } from "#lib/cawco/empty-asks.js";
   import {
     describeMcp,
     isRemoteMcp,
@@ -140,11 +148,29 @@
   {/snippet}
 
   {#if servers.length === 0}
+    <!-- Its one action asks a new session for a server (The Empty Starts
+         Work Rule); with no machine online, why, and Add server by hand. -->
     <EmptyState
       icon={section.icon}
       line={words.emptyLine}
       title={words.emptyTitle}
-    />
+    >
+      {#snippet action()}
+        <EmptyAsk
+          canStart={sessionCanStart()}
+          label={askLabel(FLEET_ASKS.mcp.what)}
+          onask={(anchor) => askNewSession(FLEET_ASKS.mcp.words, anchor)}
+          reason={NO_SESSION_CAN_START}
+        >
+          {#snippet byHand()}
+            <Button href="/config/mcp/new" variant="outline">
+              <IconPlus />
+              <span>{words.add}</span>
+            </Button>
+          {/snippet}
+        </EmptyAsk>
+      {/snippet}
+    </EmptyState>
   {:else}
     <RowList label={words.list}>
       {#each servers as row (row.name)}

@@ -41,7 +41,7 @@
 <script lang="ts">
   /**
    * The one empty state: a Solar duotone mark, a title in the title role,
-   * one plain line saying why, and at most one next action. It is a claim
+   * one plain line saying why, and its one next action. It is a claim
    * that there is nothing to show, so it renders only once the data is known
    * to be empty — never while it is still being read. `mark` stands in
    * for the glyph where something drawn is the mark (Caw on an empty board).
@@ -75,7 +75,12 @@
       title: string;
       /** Why there is nothing; absent where the title and the action say it all. */
       line?: string | Snippet;
-      action?: Snippet;
+      /**
+       * Its one action, never absent (DESIGN.md, The Empty Starts Work
+       * Rule): the work that would fill it, or where that can't start, why
+       * and the way by hand (cawco/EmptyAsk).
+       */
+      action: Snippet;
       inline?: boolean;
     } = $props();
 </script>
@@ -109,7 +114,7 @@
   {#if inline}
     <!-- One sentence: what is missing, then why, in meta. -->
     <p
-      class="mark-text min-w-0 flex-[1_1_auto] type-meta text-ink-muted text-pretty [&_code]:text-label"
+      class="mark-text min-w-0 flex-[1_1_auto] type-meta text-ink-muted text-pretty wrap-anywhere [&_code]:text-label"
     >
       <span
         class="max-w-c-measure-short type-meta font-medium tracking-title text-ink-strong text-balance"
@@ -120,25 +125,25 @@
     </p>
   {:else}
     <!-- The title in the title role, the why in muted body, each at the
-         short reading measure (DESIGN.md, Empty: "up to 60ch"). -->
+         short reading measure (DESIGN.md, Empty: "up to 60ch"); a name with
+         no break in it (a view's, a filter's) breaks rather than pushing
+         the block past its column. -->
     <p
-      class="max-w-c-measure-short type-title tracking-title text-ink-strong text-balance"
+      class="max-w-c-measure-short type-title tracking-title text-ink-strong text-balance wrap-anywhere"
       data-slot="empty-title"
     >
       {title}
     </p>
     {#if line}
       <p
-        class="mark-text max-w-c-measure-short type-body text-ink-muted text-pretty [&_code]:text-label"
+        class="mark-text max-w-c-measure-short type-body text-ink-muted text-pretty wrap-anywhere [&_code]:text-label"
         data-slot="empty-line"
       >
         {@render why()}
       </p>
     {/if}
   {/if}
-  {#if action}
-    <div class={emptyActionVariants({ inline, actionWidth })} data-box>
-      {@render action()}
-    </div>
-  {/if}
+  <div class={emptyActionVariants({ inline, actionWidth })} data-box>
+    {@render action()}
+  </div>
 </div>

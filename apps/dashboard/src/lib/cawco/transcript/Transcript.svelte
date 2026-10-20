@@ -51,6 +51,8 @@
     reconnectingNow,
     type SessionState,
   } from "../client.svelte";
+  import EmptyAsk from "../EmptyAsk.svelte";
+  import { askFirst, firstAskLabel } from "../empty-asks";
   import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
@@ -3901,25 +3903,24 @@
          below. Left-aligned: this surface is a ledger. -->
     <div class="isolate" in:crossIn>
       <!-- Its one action starts the work (DESIGN.md, The Empty Starts Work
-           Rule): the keys go to this session's composer, where the first
-           instruction is written; with no composer standing, none. -->
+           Rule, a session's own case): its own agent asked, in this
+           session's composer, unsent; with no composer standing, the New
+           Session form in its folder with the same words. -->
       <EmptyState
         icon={IconChat}
         line="Send the first instruction below — / lists this session's commands, @ names a machine or session."
         title="No messages yet"
       >
         {#snippet action()}
-          {@const draft = paneDrafts.get(session.instanceId)}
-          {#if draft}
-            <Button
-              onclick={() => {
-                draft.focusWanted = true;
-              }}
-              variant="outline"
-            >
-              Write the first instruction
-            </Button>
-          {/if}
+          <EmptyAsk
+            label={firstAskLabel(session.harness)}
+            onask={(anchor) =>
+              askFirst(
+                session.instanceId,
+                paneDrafts.has(session.instanceId),
+                anchor
+              )}
+          />
         {/snippet}
       </EmptyState>
     </div>

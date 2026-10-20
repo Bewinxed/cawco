@@ -275,11 +275,18 @@
 {/snippet}
 
 {#if catalog.length === 0}
+  <!-- The catalog ships in the hub's build (core TOOL_CATALOG), so no
+       session can fill it (The Empty Starts Work Rule's second sentence):
+       the line says so, and the way by hand is updating the hub. -->
   <EmptyState
     icon={IconTerminal}
-    line="The hub's catalog is empty, so there is nothing to install yet."
+    line="This hub's build carries no tools to install. They ship with CawCo, so updating the hub brings them."
     title="Nothing to install"
-  />
+  >
+    {#snippet action()}
+      <Button href="/config/updates" variant="outline">Open Updates</Button>
+    {/snippet}
+  </EmptyState>
 {:else if machines.length === 0}
   <NoMachines
     line="Tools install on your own machines, and none has joined this hub. Add one and it reports what it already has."

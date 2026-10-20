@@ -342,6 +342,25 @@
       untrack(() => lead.arrive(blank));
     }
   });
+  /**
+   * Words for Caw carried here (`?ask=`, from an empty state off this page:
+   * the view route's, The Empty Starts Work Rule): once he is read they
+   * stand in his panel's composer, the caret after them, nothing sent, and
+   * the URL lets them go so a reload doesn't put them back.
+   */
+  $effect(() => {
+    const words = page.url.searchParams.get("ask");
+    if (!words || list === null || lead.project === null) {
+      return;
+    }
+    untrack(() => {
+      lead.draft.ask(words);
+      lead.open = true;
+      const url = new URL(page.url.href);
+      url.searchParams.delete("ask");
+      goto(url, { replace: true, reset: false }).catch(() => undefined);
+    });
+  });
   /** His panel stands docked beside the page, which yields it its room (CawFloat). */
   const docked = $derived(lead.open && lead.anchor !== null);
 

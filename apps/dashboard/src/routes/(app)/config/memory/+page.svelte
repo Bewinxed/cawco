@@ -23,6 +23,7 @@
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import { toast } from "#lib/cawco/toasts.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconBook, IconSearch, IconTrash } from "#lib/icons.js";
@@ -182,10 +183,22 @@
     {/each}
   </RowList>
   {#if !mainShown && shown.length === 0}
+    <!-- A filter with no match is the filter's empty, not memory's: the
+         documents are there, and a memory is what a session learned, never
+         one made up to match a search. Its one action lifts the filter. -->
     <EmptyState
       icon={IconSearch}
       line="Try fewer letters, or clear the filter."
       title={words.noMatch(filter.trim())}
-    />
+    >
+      {#snippet action()}
+        <Button
+          onclick={() => {
+            filter = "";
+          }}
+          variant="outline">Remove the filter</Button
+        >
+      {/snippet}
+    </EmptyState>
   {/if}
 </SectionFrame>

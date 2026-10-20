@@ -9,6 +9,14 @@
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore } from "#lib/cawco/config/store.svelte.js";
+  import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
+  import {
+    askLabel,
+    askNewSession,
+    FLEET_ASKS,
+    NO_SESSION_CAN_START,
+    sessionCanStart,
+  } from "#lib/cawco/empty-asks.js";
   import {
     draftOf,
     type FleetHook,
@@ -101,11 +109,23 @@
   {/snippet}
 
   {#if hooks.length === 0}
+    <!-- Its one action asks a new session for a hook (The Empty Starts Work
+         Rule); with no machine online it says why, the starters and "Or
+         write one from scratch" under it being the way by hand. -->
     <EmptyState
       icon={section.icon}
       line="Start from one of these — they are ordinary hooks once added, and you can change every part of them."
       title="Nothing runs yet"
-    />
+    >
+      {#snippet action()}
+        <EmptyAsk
+          canStart={sessionCanStart()}
+          label={askLabel(FLEET_ASKS.hooks.what)}
+          onask={(anchor) => askNewSession(FLEET_ASKS.hooks.words, anchor)}
+          reason={NO_SESSION_CAN_START}
+        />
+      {/snippet}
+    </EmptyState>
     <RowList label="Starter hooks">
       {#each HOOK_TEMPLATES as template (template.title)}
         <SectionRow

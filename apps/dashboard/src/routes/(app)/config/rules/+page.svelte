@@ -6,6 +6,14 @@
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, withStats } from "#lib/cawco/config/store.svelte.js";
+  import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
+  import {
+    askLabel,
+    askNewSession,
+    FLEET_ASKS,
+    NO_SESSION_CAN_START,
+    sessionCanStart,
+  } from "#lib/cawco/empty-asks.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import {
@@ -130,11 +138,23 @@
   {/snippet}
 
   {#if rules.length === 0}
+    <!-- Its one action asks a new session for a rule (The Empty Starts Work
+         Rule); with no machine online it says why, the starters and "Or
+         write one from scratch" under it being the way by hand. -->
     <EmptyState
       icon={section.icon}
       line="Start from one of these — they are ordinary rules once added, and you can change every part of them."
       title="Nothing is watching yet"
-    />
+    >
+      {#snippet action()}
+        <EmptyAsk
+          canStart={sessionCanStart()}
+          label={askLabel(FLEET_ASKS.rules.what)}
+          onask={(anchor) => askNewSession(FLEET_ASKS.rules.words, anchor)}
+          reason={NO_SESSION_CAN_START}
+        />
+      {/snippet}
+    </EmptyState>
     <RowList label="Starter rules">
       {#each RULE_TEMPLATES as template (template.title)}
         <SectionRow
@@ -172,11 +192,23 @@
       </Button>
     </div>
   {:else if shown.length === 0}
+    <!-- The filter's empty, not the list's: the rules are there, none is
+         waiting, and nothing should be made to wait. Its action lifts the
+         filter on them. -->
     <EmptyState
       icon={section.icon}
       line="Every session that was told something has answered for it."
       title="No rule is waiting on an answer"
-    />
+    >
+      {#snippet action()}
+        <Button
+          onclick={() => {
+            waitingOnly = false;
+          }}
+          variant="outline">Remove the filter</Button
+        >
+      {/snippet}
+    </EmptyState>
   {:else}
     <RowList label="Rules">
       {#each shown as row (row.id)}

@@ -35,6 +35,9 @@
  * machine doesn't take) opens its permission picker where the message is,
  * the row naming why in our words; a pick relaunches it and the message
  * goes.
+ * An empty Configure › Hooks (The Empty Starts Work Rule, a fleet surface)
+ * opens the same form from its "Ask Claude Code for a hook", the ask's
+ * words in the first prompt with the focus, editable, nothing started.
  *
  *   bun scripts/probe-kit/run.ts web strip-new-session
  */
@@ -1409,6 +1412,84 @@ async function keyStartLeg(kit: Kit, base: string, source: string) {
   await page.close();
 }
 
+/** What an empty Configure › Hooks asks a new session for (empty-asks.ts FLEET_ASKS.hooks). */
+const HOOK_ASK =
+  "Make a CawCo hook for my fleet: look at what my sessions keep doing before or after their work, and have a hook run it for them.";
+/** What the person adds to the ask's words, proving them theirs to edit. */
+const HOOK_EDIT = " Only for bun projects.";
+
+/**
+ * The Empty Starts Work Rule on a fleet surface: Configure › Hooks with no
+ * hooks offers "Ask Claude Code for a hook"; pressed, the New Session form
+ * opens hanging from it, its first prompt holding the ask's words with the
+ * focus in it, nothing started; the words take a keystroke at their end.
+ */
+async function emptyAskLeg(
+  kit: Kit,
+  base: string,
+  rows: () => { id: string }[]
+) {
+  const page = await kit.page("desk", { theme: "light" });
+  await page.addInitScript(() => {
+    localStorage.removeItem("cawco-spawn-prefs");
+  });
+  const ASK = "[data-empty-ask]";
+  await open(page, `${base}/config/hooks`, ASK, 120_000);
+  await settle(page, 400);
+  const label = (await page.locator(ASK).textContent())?.trim() ?? null;
+  const before = rows().length;
+  await page.locator(ASK).click();
+  await page.waitForSelector(POPOVER, { state: "visible", timeout: 15_000 });
+  await settle(page, 400);
+  const read = () =>
+    page.evaluate(
+      ({ popover, ask }) => {
+        const pop = document.querySelector<HTMLElement>(popover);
+        const field = pop?.querySelector<HTMLElement>(
+          '[aria-label="First prompt"]'
+        );
+        const from = document.querySelector<HTMLElement>(ask);
+        const box = pop?.getBoundingClientRect();
+        const anchor = from?.getBoundingClientRect();
+        return {
+          open: !!pop && pop.getClientRects().length > 0,
+          hangs: !!(box && anchor) && box.top >= anchor.bottom - 1,
+          text: field?.innerText.trim() ?? null,
+          editable: field?.isContentEditable ?? false,
+          focused:
+            !!field &&
+            (field === document.activeElement ||
+              field.contains(document.activeElement)),
+        };
+      },
+      { popover: POPOVER, ask: ASK }
+    );
+  const opened = await read();
+  kit.check(
+    '1440 (fine), Configure › Hooks empty: its one action reads "Ask Claude Code for a hook"; pressed, the New Session form opens hanging from it, its first prompt holding the ask\'s words, the focus in it, editable, and no session started',
+    label === "Ask Claude Code for a hook" &&
+      opened.open &&
+      opened.hangs &&
+      opened.text === HOOK_ASK &&
+      opened.editable &&
+      opened.focused &&
+      rows().length === before,
+    JSON.stringify({ label, opened, before, after: rows().length })
+  );
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type(HOOK_EDIT);
+  await settle(page, 200);
+  const edited = await read();
+  kit.check(
+    "1440 (fine), Configure › Hooks empty: the ask's words are the person's to edit (typed at their end, they read back with the edit), still nothing started",
+    edited.text === `${HOOK_ASK}${HOOK_EDIT}`.trim() &&
+      rows().length === before,
+    JSON.stringify({ text: edited.text, after: rows().length })
+  );
+  await page.keyboard.press("Escape");
+  await page.close();
+}
+
 const respond = (): Reply => ({ everyMs: 20, words: ["Ready."] });
 
 const spec: Spec = {
@@ -1439,6 +1520,7 @@ const spec: Spec = {
       await runLeg(kit, base, source, each, rows, row);
     }
     await railLeg(kit, base);
+    await emptyAskLeg(kit, base, rows);
     await keyStartLeg(kit, base, source);
     await spawnLinkLeg(kit, base, row(source)?.machine_id ?? "");
     await sizeLeg(kit, base, source);

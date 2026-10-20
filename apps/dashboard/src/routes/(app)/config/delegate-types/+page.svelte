@@ -7,6 +7,14 @@
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore } from "#lib/cawco/config/store.svelte.js";
   import type { DelegateType } from "#lib/cawco/delegate-types.js";
+  import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
+  import {
+    askLabel,
+    askNewSession,
+    FLEET_ASKS,
+    NO_SESSION_CAN_START,
+    sessionCanStart,
+  } from "#lib/cawco/empty-asks.js";
   import HarnessLogo from "#lib/cawco/HarnessLogo.svelte";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { folderFileHref } from "#lib/cawco/project-tasks.js";
@@ -87,11 +95,31 @@
   <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={section.hue} icon={section.icon} label={words.fleet} />
     {#if types.length === 0}
+      <!-- Its one action asks a new session for the fleet's types (The
+           Empty Starts Work Rule); with no machine online, why, and New
+           delegate type by hand. -->
       <EmptyState
         icon={section.icon}
         line={words.emptyLine}
         title={words.emptyTitle}
-      />
+      >
+        {#snippet action()}
+          <EmptyAsk
+            canStart={sessionCanStart()}
+            label={askLabel(FLEET_ASKS.delegateTypes.what)}
+            onask={(anchor) =>
+              askNewSession(FLEET_ASKS.delegateTypes.words, anchor)}
+            reason={NO_SESSION_CAN_START}
+          >
+            {#snippet byHand()}
+              <Button href="/config/delegate-types/new" variant="outline">
+                <IconPlus />
+                <span>{words.add}</span>
+              </Button>
+            {/snippet}
+          </EmptyAsk>
+        {/snippet}
+      </EmptyState>
     {:else}
       <RowList label={words.list}>
         {#each types as row (row.name)}
