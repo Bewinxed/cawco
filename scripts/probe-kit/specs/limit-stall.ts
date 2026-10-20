@@ -23,7 +23,9 @@
  *
  * - move: only A is limited. Within {@link MOVE_WITHIN_MS} of A's refusal
  *   it runs on B, the request there carrying its earlier turns (its brief
- *   and its first answer), and its item runs on to done.
+ *   and its first answer), and its item runs on to done. Once its turn on
+ *   B is recorded and it sleeps, B's admission ledger holds its charge no
+ *   longer (the hub's `[admission]` line says it goes).
  * - warm: as move, but its brief's answer wrote a 1-hour cache, so its
  *   cache is measured to outlast A's reset 2 minutes on (hub at-limit.ts
  *   `decideAtLimit`): waiting costs nothing and a move would re-read it
@@ -579,6 +581,7 @@ const delegated = async (
 
 const moveLeg = async (
   kit: Kit,
+  fleet: KitFleet,
   look: Looks,
   instance: string
 ): Promise<void> => {
@@ -615,6 +618,37 @@ const moveLeg = async (
     "move: its item runs on, to done",
     state === "done",
     `state ${state}`
+  );
+  // Its turn on B is recorded, so its cost is in B's measured spend: the
+  // charge its move took on B goes (hub admission.ts `prune`), and B takes
+  // the next move against its room alone.
+  const released = (log: string) =>
+    log
+      .split("\n")
+      .find(
+        (line) =>
+          line.startsWith("[admission] ") &&
+          line.includes(`(${instance.slice(0, 8)})`) &&
+          line.includes("its charge on Probe B goes")
+      );
+  const status = () =>
+    fleet.query<{ status: string }>(
+      "SELECT status FROM instances WHERE id = ?",
+      instance
+    )[0]?.status ?? null;
+  const settled = await until(
+    "move: it sleeps on B and B no longer holds its charge",
+    async () => ({ line: released(await fleet.logs("hub")), at: status() }),
+    (one) => !!one.line && one.at === "sleeping",
+    120_000
+  ).catch(async () => ({
+    line: released(await fleet.logs("hub")),
+    at: status(),
+  }));
+  kit.check(
+    "move: once it ran on B and slept there, B's admission ledger no longer holds its charge",
+    !!settled.line,
+    `${settled.line ? JSON.stringify(settled.line) : "no line releasing its charge on B"}; status ${settled.at}`
   );
 };
 
@@ -1039,7 +1073,7 @@ const run = async (kit: Kit) => {
   const look = looks(fleet, orch);
   const moving = await delegated(kit, fleet, orch, "move");
   if (moving) {
-    await moveLeg(kit, look, moving);
+    await moveLeg(kit, fleet, look, moving);
   }
   // A free again before the next delegate is placed: pinned to A, it would
   // otherwise start on B.

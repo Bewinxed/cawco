@@ -17,9 +17,15 @@ import { SESSION_WINDOW_MS } from "./placement";
  * {@link ADMIT_CEILING_PCT}; the rest stay where they are for the next
  * account with room, or their own account's reset.
  *
- * A charge stands until the target's reading has taken it in: a reading
- * newer than the session's first turn there, or the window's reset; or once
- * the session is over.
+ * The target's measured state is its reading plus the spend `turn_usage`
+ * recorded there since that reading (a Claude turn that reached the model
+ * confirms the reading up to it: server.ts `recordTurnUsage`). A charge
+ * stands only while its move's cost is not in that state: it goes once the
+ * session's first turn on the target is recorded, once it sleeps on the
+ * target with no turn there (nothing more of the move's cost is coming; a
+ * wake is admitted again like any move), once it is over, or at the
+ * window's reset. One that sleeps still owing its move (taken up at its
+ * wake) keeps its charge: it is not on the target yet.
  *
  * Affinity ({@link admittedHere}): a session moved onto its account inside
  * that account's current 5-hour window stays there. Another account freeing
@@ -143,11 +149,15 @@ const aloneWords = (
   named: string,
   standing: number,
   unmeasured: boolean,
-  unpriced: boolean
+  unpriced: boolean,
+  spentUnpriced: boolean
 ): string => {
   const why = [
     ...(unmeasured ? [`${named}'s window isn't measured in dollars yet`] : []),
     ...(unpriced ? ["its model has no listed price"] : []),
+    ...(spentUnpriced
+      ? [`a turn on ${named} since its reading has no price`]
+      : []),
   ].join(" and ");
   const now =
     standing === 0
@@ -186,26 +196,81 @@ export const createAdmission = (db: DbShape) => {
     return value;
   };
 
-  /** Drops the charges the target's readings have taken in, or that stand for nothing now. */
+  /** The target's name, as a journal line says it. */
+  const nameOf = (accountId: string): string => {
+    const account = db.accounts.get(accountId);
+    return account ? accountNameAmong(account, db.accounts.list()) : accountId;
+  };
+
+  /** Drops `id`'s charge, its line saying why. */
+  const release = (id: string, why: string): void => {
+    const charge = charges.get(id);
+    if (!charge) {
+      return;
+    }
+    charges.delete(id);
+    const [row] = db.getInstancesByIds([id]);
+    console.info(
+      `[admission] ${row?.title ? `${row.title} (${id.slice(0, 8)})` : id.slice(0, 8)}: its charge on ${nameOf(charge.accountId)} goes, ${why}.`
+    );
+  };
+
+  /** Drops the charges whose cost the target's measured state holds now, or that stand for nothing. */
   const prune = (now: number): void => {
     for (const [id, charge] of charges) {
       const [row] = db.getInstancesByIds([id]);
       const window = sessionWindow(db, charge.accountId, now);
       if (
         !row ||
-        ["stopping", "stopped", "discarded", "error"].includes(row.status) ||
-        window.resetsAt !== charge.resetsAt
+        ["stopping", "stopped", "discarded", "error"].includes(row.status)
       ) {
-        charges.delete(id);
+        release(id, "as the session is over");
+        continue;
+      }
+      if (window.resetsAt !== charge.resetsAt) {
+        release(id, "as its 5-hour window reset");
         continue;
       }
       const first = db.turnUsage
         .list({ accountId: charge.accountId, since: charge.at })
         .find((turn) => turn.instanceId === id);
-      if (first && (window.reading?.lastSeenAt ?? 0) > first.at.getTime()) {
-        charges.delete(id);
+      if (first) {
+        release(
+          id,
+          `as its turn there is recorded (${usdWords(first.costUsd)}), so its cost is in the account's measured spend`
+        );
       }
     }
+  };
+
+  /**
+   * The spend `turn_usage` recorded on `accountId` since its reading, in
+   * dollars: the turns its reading has not taken in. A Claude turn that
+   * reached the model confirms the reading up to it, so only the others
+   * count; within the open 5-hour window, or since the last one reset.
+   * Null when one of them is unpriced.
+   */
+  const spentSince = (
+    accountId: string,
+    window: ReturnType<typeof sessionWindow>,
+    now: number
+  ): number | null => {
+    // The open window began 5 hours before its reset; a window over began
+    // a new one at its reset.
+    const held = window.reading?.windows.find((one) => one.kind === "session");
+    let opened = now - SESSION_WINDOW_MS;
+    if (window.resetsAt) {
+      opened = Date.parse(window.resetsAt) - SESSION_WINDOW_MS;
+    } else if (held?.resetsAt) {
+      opened = Date.parse(held.resetsAt);
+    }
+    const since = Math.max(window.reading?.lastSeenAt ?? 0, opened);
+    const turns = db.turnUsage
+      .list({ accountId, since })
+      .filter((turn) => turn.at.getTime() > since);
+    return turns.some((turn) => turn.costUsd === null)
+      ? null
+      : turns.reduce((sum, turn) => sum + (turn.costUsd ?? 0), 0);
   };
 
   /**
@@ -236,6 +301,7 @@ export const createAdmission = (db: DbShape) => {
     const pendingUsd = standing.some((one) => one.usd === null)
       ? null
       : standing.reduce((sum, one) => sum + (one.usd ?? 0), 0);
+    const spentUsd = spentSince(target.id, window, now);
     const reRead = `re-reading ${kWords(projected.tokens)} ${carries ? "from its carried cache" : "into a cold cache"} costs ${usdWords(projected.reReadUsd)}, plus ${usdWords(projected.allowanceUsd)} for its next turn`;
     const base = {
       ceilingPct: ADMIT_CEILING_PCT,
@@ -247,26 +313,28 @@ export const createAdmission = (db: DbShape) => {
       perPct === null ||
       perPct <= 0 ||
       cost === null ||
-      pendingUsd === null
+      pendingUsd === null ||
+      spentUsd === null
     ) {
       return {
         ...base,
         ok: standing.length === 0,
         pendingPct: null,
         thisPct: null,
-        words: `${reRead}; ${aloneWords(named, standing.length, perPct === null, cost === null)}`,
+        words: `${reRead}; ${aloneWords(named, standing.length, perPct === null, cost === null, spentUsd === null)}`,
       };
     }
     const thisPct = cost / perPct;
     const pendingPct = pendingUsd / perPct;
-    const after = window.percent + pendingPct + thisPct;
+    const spentPct = spentUsd / perPct;
+    const after = window.percent + spentPct + pendingPct + thisPct;
     const ok = after <= ADMIT_CEILING_PCT;
     return {
       ...base,
       ok,
       pendingPct,
       thisPct,
-      words: `${reRead}, ≈${thisPct.toFixed(1)}% of ${named}'s 5-hour window at $${perPct.toFixed(2)} a percent; ${named} reads ${Math.round(window.percent)}% with ${pendingPct.toFixed(1)}% already admitted, so this takes it to ${after.toFixed(1)}%, ${ok ? "under" : "past"} the ${ADMIT_CEILING_PCT}% admission ceiling`,
+      words: `${reRead}, ≈${thisPct.toFixed(1)}% of ${named}'s 5-hour window at $${perPct.toFixed(2)} a percent; ${named} reads ${Math.round(window.percent)}%, ${spentPct.toFixed(1)}% recorded since that reading and ${pendingPct.toFixed(1)}% already admitted, so this takes it to ${after.toFixed(1)}%, ${ok ? "under" : "past"} the ${ADMIT_CEILING_PCT}% admission ceiling`,
     };
   };
 
@@ -287,6 +355,25 @@ export const createAdmission = (db: DbShape) => {
     /** A move that did not go: its charge goes with it. */
     refund(instanceId: string): void {
       charges.delete(instanceId);
+    },
+    /** A turn was recorded (server.ts `recordTurnUsage`): a charge whose cost it holds goes now, its line said as it happens. */
+    recorded(): void {
+      prune(Date.now());
+    },
+    /**
+     * `instanceId` went to sleep. On the account it was charged onto, with
+     * no turn there, nothing more of its move's cost is coming: the charge
+     * goes, and a wake is admitted again like any move. One not on it yet
+     * owes its move still (taken up at its wake), so its charge stands.
+     */
+    asleep(instanceId: string): void {
+      const now = Date.now();
+      prune(now);
+      const charge = charges.get(instanceId);
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (charge && row?.accountId === charge.accountId) {
+        release(instanceId, "as it went to sleep there with no turn");
+      }
     },
     /**
      * Whether `row` was moved onto the account it is on inside that

@@ -7165,6 +7165,13 @@ export const createServer = (
   };
 
   /**
+   * The one ledger every move onto an account is charged against
+   * (admission.ts): at-limit, rebalance and the cold wake. A recorded turn
+   * and a sleep tell it ({@link recordTurnUsage}, {@link sessionAsleep}).
+   */
+  const admission = createAdmission(db);
+
+  /**
    * A session's process went away with nothing failed: its machine put it to
    * sleep at rest, or the process ended on its own (`asleep`, see
    * `SessionSupervisor.sleep` and its `closed` in the agent). The row is filed
@@ -7184,6 +7191,8 @@ export const createServer = (
     console.log(
       `[hub] ${instanceId} is asleep: its machine stopped it at rest`
     );
+    // Asleep where it was moved with no turn there, its move costs nothing more.
+    admission.asleep(instanceId);
     losePending(instanceId, true);
     // Asks its delegates had routed to it and it never answered are the
     // reader's from here, as when any parent's process goes.
@@ -22604,6 +22613,8 @@ export const createServer = (
       at
     );
     db.turnUsage.put(session.id, turn.rows, turn.seen);
+    // Its spend is recorded: a charge whose move it was goes.
+    admission.recorded();
     // A Claude turn that reached the model and said nothing of its account's
     // limits left them where they stood: its Claude Code reports every move.
     const reached = turn.rows.some(
@@ -23486,9 +23497,6 @@ export const createServer = (
     const expires = promptCacheExpiresAt(row, state.lastTurnAt);
     return state.midTurn || expires === null || expires > Date.now();
   };
-
-  /** The one ledger every move onto an account is charged against (admission.ts): at-limit, rebalance and the wake below. */
-  const admission = createAdmission(db);
 
   /**
    * A Claude session woken for a send with its cache cold is re-placed
