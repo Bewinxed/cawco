@@ -122,6 +122,13 @@ export interface PageOptions {
   oneProcess?: boolean;
   /** Device pixels per css px, when a spec reads another device (an iPhone's 3). */
   scale?: number;
+  /**
+   * Chromium only: scrollbars that take their width, as a desk's Chromium
+   * draws them (app.css's thin ones). Unset, Playwright's headless Chromium
+   * hides them (`--hide-scrollbars`), so a box that starts or stops
+   * scrolling never narrows what it holds.
+   */
+  scrollbars?: boolean;
   theme?: Theme;
   /**
    * The WebKit build a WebKit page runs on, by its Playwright revision,
@@ -614,9 +621,10 @@ export class Run {
     engine: Engine,
     revision?: string,
     oneProcess = false,
-    hostRules?: string
+    hostRules?: string,
+    scrollbars = false
   ): Promise<Browser> {
-    const key = `${revision ? `${engine}-${revision}` : engine}${oneProcess ? "-one-process" : ""}${hostRules ? `-hosts:${hostRules}` : ""}`;
+    const key = `${revision ? `${engine}-${revision}` : engine}${oneProcess ? "-one-process" : ""}${hostRules ? `-hosts:${hostRules}` : ""}${scrollbars ? "-scrollbars" : ""}`;
     const known = this.browsers.get(key);
     if (known) {
       return known;
@@ -651,6 +659,7 @@ export class Run {
               : []),
             ...(hostRules ? [`--host-resolver-rules=${hostRules}`] : []),
           ],
+          ...(scrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}),
           env,
         }),
     } satisfies Record<Engine, () => Promise<Browser>>;
@@ -788,7 +797,8 @@ export class Run {
           options.engine ?? "chromium",
           options.engine === "webkit" ? options.webkit : undefined,
           options.oneProcess,
-          options.hostRules
+          options.hostRules,
+          options.scrollbars
         );
         const phoneAgent = PHONE_AGENT[options.engine ?? "chromium"];
         const context = await browser.newContext({

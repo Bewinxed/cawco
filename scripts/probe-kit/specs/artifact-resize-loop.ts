@@ -32,7 +32,9 @@
  *   preview beside the conversation.
  *
  * On opening and over every sweep, the page sent the hub no error report
- * and logged no ResizeObserver loop.
+ * and logged no ResizeObserver loop. A desk page draws its scrollbars as a
+ * desk's Chromium does (the kit's `scrollbars`): the card starting to scroll
+ * takes their width from what it holds.
  *
  * A loop is named in the check that fails: the callbacks of its frame in
  * order (`loopFrames`: which observer, which boxes at which depth), and the
@@ -119,6 +121,15 @@ const respond = (request: Seen): Reply => {
 interface Painted {
   /** The preview's card beside the conversation, at a width. */
   beside: boolean;
+  /**
+   * The top of the composer standing over the conversation, as drawn (its
+   * parts with a box that paint, as SideSheet's `drawnTop` reads them):
+   * "none" while the conversation has no composer, "undrawn" while none of
+   * its parts paints.
+   */
+  composerTop: number | "none" | "undrawn";
+  /** The host's foot: the sheet's floor, where it stands. */
+  floor: number | null;
   /** The preview's card in the sheet on the composer. */
   sheet: boolean;
   /** The sheet's host stands (SideSheet is mounted), and its height. */
@@ -137,6 +148,8 @@ declare global {
     __painted?: Painted[];
     /** The pane (`data-pane`, its tab's id) whose split the frames are read in; none, nothing is read. */
     __paintPane?: string;
+    /** The frame as it stands now, read as each painted one is; none before the pane's split stands. */
+    __readPaint?: () => Painted | null;
   }
 }
 
@@ -150,8 +163,32 @@ declare global {
 function paintedFrames() {
   const painted: Painted[] = [];
   window.__painted = painted;
-  const channel = new MessageChannel();
-  channel.port1.onmessage = () => {
+  /** The drawn top of the composer over `split`'s conversation. */
+  const drawnTop = (split: Element): Painted["composerTop"] => {
+    const composer = split
+      .closest(".leaf")
+      ?.querySelector<HTMLElement>(":scope > .dock .lift")?.parentElement;
+    if (!composer) {
+      return "none";
+    }
+    let top = Number.POSITIVE_INFINITY;
+    for (const part of composer.querySelectorAll<HTMLElement>(
+      ":scope > .composer, .ask, .lift .kit-tray-chip, .suggest:has(.track), .progress-slot > *, .perch"
+    )) {
+      const box = part.getBoundingClientRect();
+      if (
+        box.height > 0 &&
+        part.checkVisibility({
+          opacityProperty: true,
+          visibilityProperty: true,
+        })
+      ) {
+        top = Math.min(top, box.top);
+      }
+    }
+    return Number.isFinite(top) ? top : "undrawn";
+  };
+  const read = (): Painted | null => {
     const pane = window.__paintPane
       ? document.querySelector(
           `[data-slot="pane"][data-pane="${CSS.escape(window.__paintPane)}"]`
@@ -159,7 +196,7 @@ function paintedFrames() {
       : null;
     const split = pane?.querySelector('[data-slot="side-split"]');
     if (!split) {
-      return;
+      return null;
     }
     const beside = split.querySelector(
       '[data-side-pane] [data-slot="side-card"]'
@@ -167,14 +204,25 @@ function paintedFrames() {
     const host = document.querySelector<HTMLElement>(
       '[data-slot="preview-sheet-host"]'
     );
-    painted.push({
+    const hostBox = host?.getBoundingClientRect();
+    return {
       splitOpen: split.classList.contains("open"),
-      sheetHost: host ? host.getBoundingClientRect().height : null,
+      sheetHost: hostBox ? hostBox.height : null,
+      floor: hostBox ? hostBox.bottom : null,
+      composerTop: drawnTop(split),
       beside: !!beside && beside.getBoundingClientRect().width > 0,
       sheet: !!document.querySelector(
         '[data-preview-sheet] [data-slot="side-card"]'
       ),
-    });
+    };
+  };
+  window.__readPaint = read;
+  const channel = new MessageChannel();
+  channel.port1.onmessage = () => {
+    const frame = read();
+    if (frame) {
+      painted.push(frame);
+    }
   };
   const tick = () => {
     if (painted.length < 600) {
@@ -304,10 +352,19 @@ const moreStands = (page: Page) =>
   );
 
 /** Whether the open pin's card is squeezed: its thread keeps its height and the card scrolls (PinCard `squeezed`). */
-const cardSqueezed = (page: Page) =>
-  page.evaluate(
-    () => !!document.querySelector('[data-slot="pin-card"] [data-whole]')
-  );
+/**
+ * The open pin's card: squeezed (PinCard `squeezed`, its room `data-whole`),
+ * and the width its own scrollbar takes from what it holds (its box less its
+ * client width and its two 1px edges).
+ */
+const cardState = (page: Page) =>
+  page.evaluate(() => {
+    const card = document.querySelector<HTMLElement>('[data-slot="pin-card"]');
+    return {
+      squeezed: !!card?.querySelector("[data-whole]"),
+      scrollbar: card ? card.offsetWidth - card.clientWidth - 2 : null,
+    };
+  });
 
 /** The pane's Comment control, in the head or in More. */
 const COMMENT =
@@ -453,7 +510,13 @@ const checkQuiet = async (
 };
 
 export const runLeg = async (kit: Kit, base: string, leg: Leg) => {
-  const page = await kit.page(leg.view, { theme: leg.theme, init: [heldBack] });
+  // A desk draws its scrollbars and a phone overlays them: a box that starts
+  // or stops scrolling at desk narrows or widens what it holds.
+  const page = await kit.page(leg.view, {
+    theme: leg.theme,
+    init: [heldBack],
+    scrollbars: leg.view === "desk",
+  });
   const said = heard(page);
   const start = await mark(page, said);
   await open(page, `${base}${leg.path}`, leg.ready);
@@ -473,7 +536,8 @@ export const runLeg = async (kit: Kit, base: string, leg: Leg) => {
   const moreAtStart = await moreStands(page);
   /** The steps More stood at, and the open card was squeezed at, as the sweep went. */
   const moreAt: Step[] = [];
-  const squeezedAt: Step[] = [];
+  /** The open card at each step: squeezed, and its own scrollbar's width. */
+  const cards: ({ step: Step } & Awaited<ReturnType<typeof cardState>>)[] = [];
   /** The steps a step to which the page sent a report at. */
   const postedAt: Step[] = [];
   for (const step of leg.steps) {
@@ -484,8 +548,8 @@ export const runLeg = async (kit: Kit, base: string, leg: Leg) => {
     if (await moreStands(page)) {
       moreAt.push(step);
     }
-    if (leg.squeezes && (await cardSqueezed(page))) {
-      squeezedAt.push(step);
+    if (leg.squeezes) {
+      cards.push({ step, ...(await cardState(page)) });
     }
     if (said.posts.length > before) {
       postedAt.push(step);
@@ -495,6 +559,10 @@ export const runLeg = async (kit: Kit, base: string, leg: Leg) => {
   await frames(page);
   const swept = await mark(page, said);
   const size = (step: Step) => `${step.width}×${step.height}`;
+  const squeezedAt = cards.filter((card) => card.squeezed).map((c) => c.step);
+  const scrollbarAt = cards
+    .filter((card) => card.scrollbar)
+    .map((card) => `${size(card.step)}:${card.scrollbar}px`);
   const least = leg.steps.reduce((a, b) =>
     b.width * b.height < a.width * a.height ? b : a
   );
@@ -522,6 +590,11 @@ export const runLeg = async (kit: Kit, base: string, leg: Leg) => {
         !squeezedAt.includes(first) &&
         !squeezedAt.includes(last),
       JSON.stringify({ squeezedAt: squeezedAt.map(size) })
+    );
+    kit.check(
+      `${leg.name}: squeezed, the card scrolls and its scrollbar takes width from its head and foot (a desk's scrollbars drawn)`,
+      scrollbarAt.length > 0,
+      JSON.stringify({ scrollbarAt })
     );
   }
   if (!leg.crosses) {
@@ -570,6 +643,7 @@ export const runNarrow = async (
   const page = await kit.page("desk", {
     theme: leg.theme,
     init: [heldBack, paintedFrames],
+    scrollbars: true,
   });
   await page.setViewportSize(NARROW_DESK);
   const said = heard(page);
@@ -608,6 +682,7 @@ export const runNarrow = async (
     () => performance.getEntriesByType("navigation").length
   );
   const painted = await page.evaluate(() => window.__painted ?? []);
+  const settled = painted.at(-1);
   const besideAt = painted.findIndex((frame) => frame.beside);
   const sheetAt = painted.findIndex((frame) => frame.sheet);
   /** What the sheet holds once the wait is over: its frames, and its card's words. */
@@ -638,6 +713,42 @@ export const runNarrow = async (
       sheetFirstAt: sheetAt,
       besideFirstAt: besideAt,
     })
+  );
+  kit.check(
+    `${leg.name}: once open, the sheet stands on the composer (its floor is the composer's drawn top)`,
+    !!settled &&
+      settled.sheet &&
+      typeof settled.composerTop === "number" &&
+      settled.floor !== null &&
+      Math.abs(settled.floor - settled.composerTop) <= 1,
+    JSON.stringify({
+      settled,
+      firstWithComposer: painted.findIndex(
+        (frame) => typeof frame.composerTop === "number"
+      ),
+    })
+  );
+  // A draft of four lines grows the pill: the composer's top rises, and the
+  // sheet standing on it rises with it.
+  await page.locator('[data-slot="composer-field"]').first().click();
+  for (const line of ["The chips wrap", "at 320", "and the gap", "doubles."]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one line, then its break, in order
+    await page.keyboard.type(line);
+    await page.keyboard.press("Shift+Enter");
+  }
+  await settle(page);
+  await frames(page);
+  const written = await page.evaluate(() => window.__readPaint?.() ?? null);
+  kit.check(
+    `${leg.name}: a draft of four lines raises the composer, and the sheet stands on it still`,
+    !!settled &&
+      !!written &&
+      typeof settled.composerTop === "number" &&
+      typeof written.composerTop === "number" &&
+      written.composerTop < settled.composerTop - 1 &&
+      written.floor !== null &&
+      Math.abs(written.floor - written.composerTop) <= 1,
+    JSON.stringify({ before: settled, written })
   );
   await checkQuiet(
     kit,

@@ -269,8 +269,14 @@
     // and with what it shows on rows it keeps laid out whether or not they
     // show anything: a chip arriving in the tray row, the suggestions
     // filling theirs, another conversation's tray shown, a part stepping
-    // aside for an ask (its `visibility` going at the end of its fade). None
-    // of those changes a box's size; each is read in the frame after it.
+    // aside for an ask (its `visibility` going at the end of its fade), a
+    // part rising in or going (its Svelte transition, the pill's `rise`). None
+    // of those changes a box's size; each is read in the frame after it. A
+    // Svelte transition runs on the Web Animations API, which fires no
+    // `transitionend`: its `introend` and `outroend` are the element's own,
+    // never bubbling, so they are heard on their way down (`capture`). A sheet
+    // that stood while the pill rose in found no part of it drawn, and stood
+    // at no height for good.
     for (const part of composer?.children ?? []) {
       observer.observe(part);
     }
@@ -282,6 +288,8 @@
         subtree: true,
       });
       composer.addEventListener("transitionend", remeasure);
+      composer.addEventListener("introend", remeasure, { capture: true });
+      composer.addEventListener("outroend", remeasure, { capture: true });
     }
     window.addEventListener("resize", measure);
     window.visualViewport?.addEventListener("resize", measure);
@@ -291,6 +299,8 @@
       shows.disconnect();
       cancelAnimationFrame(pending);
       composer?.removeEventListener("transitionend", remeasure);
+      composer?.removeEventListener("introend", remeasure, { capture: true });
+      composer?.removeEventListener("outroend", remeasure, { capture: true });
       window.removeEventListener("resize", measure);
       window.visualViewport?.removeEventListener("resize", measure);
       window.visualViewport?.removeEventListener("scroll", measure);
