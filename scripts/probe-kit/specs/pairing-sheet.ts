@@ -40,12 +40,15 @@ const drawn = (stage: string, scheme: "light" | "dark"): string =>
 /** The fixtures' `verificationUriComplete`, as the hub makes one. */
 const PAYLOAD =
   "https://cawco.local/config/devices?code=JWK-HDQ&hub=7c1e9a52-4b3d-4f08-9d2e-61a0c8b5e3f4";
-/** Each story whose key stands at rest, and what it reads. */
+/** Each story whose key stands at rest, and what it reads: a denied face as its head still reads, and a fresh code by itself rests on the next code. */
 const KEYS: Record<string, string> = {
   Waiting: PAYLOAD,
   WaitingRipple: PAYLOAD,
   WaitingSweep: PAYLOAD,
   LastMinute: PAYLOAD,
+  Expired: PAYLOAD.replace("JWK-HDQ", "PLN-RVT"),
+  FaceSqueeze: PAYLOAD,
+  FaceWince: PAYLOAD,
   Scanner: PAYLOAD,
   ScanMatched: PAYLOAD,
   ScanMatchedAsk: PAYLOAD,
@@ -198,7 +201,8 @@ function geometry(): string[] {
     }
     for (const card of frame.querySelectorAll('[data-slot="qr"] .card')) {
       const svg = card.querySelector("svg.code");
-      if (svg) {
+      // A moment's still (Moments, [data-at]) holds the card mid-act, flown or shrunk on purpose.
+      if (svg && !card.closest("[data-at]")) {
         const c = card.getBoundingClientRect();
         const pad =
           Number.parseFloat(getComputedStyle(card).paddingTop) * zoomOf(card);

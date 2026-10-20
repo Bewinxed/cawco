@@ -26,8 +26,8 @@
    *
    * ANIMATION STORYBOARD (each beat in the house's tokens)
    *
-   *   asking     the key's card and its six boxes stand as skeletons;
-   *              Caw is loading
+   *   asking     the key's card holds a cloud of dots drifting where the
+   *              code is being made, over empty boxes; Caw is loading
    *   arrive     the dots shuffle and lock (PairingQr) while the letters
    *              type in on the same beat; then the key waits
    *   waiting    the card pings (or rings ripple from the head, or a light

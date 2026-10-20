@@ -1,6 +1,6 @@
 <script lang="ts" module>
   /**
-   * What the key is doing: asked for (the skeleton), arriving, waiting to
+   * What the key is doing: being made (a drifting cloud), arriving, waiting to
    * be scanned, stepped back while the person checks, swallowed (approved),
    * flown up to Caw (approved, the other take), burst (denied) or drained
    * (expired).
@@ -40,11 +40,13 @@
    * ANIMATION STORYBOARD (each act a CSS animation on transform and
    * opacity, on the page's clock; every dot carries its own seeded numbers)
    *
+   *   loading  no code yet: a stand-in's dots at their scattered start,
+   *            stepped back, drifting once a breath; no finder eyes
    *   arrive   every dot from a scattered start, shuffling twice, then
    *            locking on its module over dur-settle, its own share of
    *            dur-panel late: the key reads the instant it settles
    *   wait     ping: one ring leaves the card's own edge once a breath,
-   *            growing by qr-pulse-scale as it fades
+   *            growing to qr-ping-scale as it fades from qr-ping-opacity
    *            ripple: the head breathes and one ring screens out from it
    *            sweep: the scan's spinner (below), while it waits
    *            warm: the ring or light takes the warn ink (the last minute)
@@ -97,9 +99,20 @@
   /** How far a falling dot drops before it is gone, in modules. */
   const FALL = 8;
 
-  const matrix = $derived(
-    payload ? encode(payload, { ecc: "H", border: 0 }) : null
-  );
+  /**
+   * While the hub makes the code there is none to draw: a stand-in of a
+   * real pairing's length gives the cloud its dots, scattered, so the card
+   * is visibly working and its dots become the code when it lands.
+   */
+  const STAND_IN = "x".repeat(96);
+  const matrix = $derived.by(() => {
+    if (payload) {
+      return encode(payload, { ecc: "H", border: 0 });
+    }
+    return act === "loading" ? encode(STAND_IN, { ecc: "H", border: 0 }) : null;
+  });
+  /** The text the dots' numbers are seeded from. */
+  const source = $derived(payload ?? STAND_IN);
   const side = $derived(matrix?.size ?? 0);
   /** The tile's side in modules: odd, so it centres on a module. */
   const logo = $derived.by(() => {
@@ -137,10 +150,10 @@
   }
 
   const drawing = $derived.by(() => {
-    if (!(matrix && payload)) {
+    if (!matrix) {
       return { dots: [] as Dot[], eyes: [] as { x: number; y: number }[] };
     }
-    const random = seeded(payload);
+    const random = seeded(source);
     const middle = (side - 1) / 2;
     const reach = Math.hypot(middle, middle);
     // The tile and half a module round it are kept clear of modules.
@@ -200,7 +213,6 @@
 >
   <div class="card">
     <div class="field">
-      <span class="skeleton kit-skeleton"></span>
       {#if matrix}
         <svg
           style:--fall={FALL}
@@ -266,7 +278,7 @@
       <!-- One ring leaving the card's own edge. -->
       <span
         aria-hidden="true"
-        class="ping pointer-events-none absolute inset-0 rounded-lg border-2 border-[var(--brand-solid)] opacity-[var(--qr-glint-opacity)]"
+        class="ping pointer-events-none absolute inset-0 rounded-lg border-2 border-[var(--brand-solid)] opacity-[var(--qr-ping-opacity)]"
       ></span>
     {:else if act === "wait" && wait === "ripple"}
       <!-- One ring out from the head: what it crosses glints. -->
@@ -302,21 +314,12 @@
     inline-size: 100%;
     block-size: 100%;
   }
-  .skeleton,
   .code {
+    display: block;
     grid-area: 1 / 1;
     inline-size: 100%;
     block-size: 100%;
-    transition:
-      opacity var(--dur-pop) var(--ease-in-out),
-      filter var(--dur-pop) var(--ease-in-out);
-  }
-  /* Nested in the card: the card's radius less its padding. */
-  .skeleton {
-    border-radius: max(0px, calc(var(--radius-lg) - var(--space-3)));
-  }
-  .code {
-    display: block;
+    transition: opacity var(--dur-pop) var(--ease-in-out);
   }
   .dot,
   .eye {
@@ -340,19 +343,27 @@
     border-radius: 22%;
     object-fit: cover;
   }
+  /* loading: the code being made, a cloud of its dots at their scattered
+     start, stepped back; no finder eyes until the code is there. */
   [data-act="loading"] .code {
-    opacity: 0;
-    filter: blur(var(--fold-blur));
+    opacity: var(--qr-dim-opacity);
   }
-  .qr:not([data-act="loading"]) .skeleton {
+  [data-act="loading"] .dot {
+    transform: translate(calc(var(--dx) * 1px), calc(var(--dy) * 1px));
+  }
+  [data-act="loading"] .eye {
     opacity: 0;
-    filter: blur(var(--fold-blur));
   }
   [data-act="dim"] .code {
     opacity: var(--qr-dim-opacity);
   }
 
   @media (prefers-reduced-motion: no-preference) {
+    /* loading: the cloud drifts, each dot on its own beat of a breath. */
+    [data-act="loading"] .dot {
+      animation: qr-drift var(--breath) var(--ease-in-out)
+        calc(var(--r) * var(--breath) * -1) infinite alternate;
+    }
     /* arrive: from a scattered start, shuffling twice, locking. */
     [data-act="arrive"] .dot {
       animation: qr-shuffle var(--dur-settle) var(--ease-in-out)
@@ -440,6 +451,15 @@
       transform: translate(calc(var(--dx) * -0.2px), calc(var(--dy) * 0.2px));
     }
   }
+  /* Between the shuffle's first two places, so the cloud is the shuffle's start. */
+  @keyframes qr-drift {
+    from {
+      transform: translate(calc(var(--dx) * 1px), calc(var(--dy) * 1px));
+    }
+    to {
+      transform: translate(calc(var(--dy) * -0.5px), calc(var(--dx) * 0.5px));
+    }
+  }
   @keyframes qr-eye {
     from {
       opacity: 0;
@@ -474,12 +494,12 @@
   }
   @keyframes qr-ping {
     from {
-      opacity: var(--qr-glint-opacity);
+      opacity: var(--qr-ping-opacity);
       transform: scale(1);
     }
     to {
       opacity: 0;
-      transform: scale(var(--qr-pulse-scale));
+      transform: scale(var(--qr-ping-scale));
     }
   }
   .ripple {

@@ -83,6 +83,13 @@
         return { kind: "checking", ...live(AT_REST) };
       case "failed":
         return FAILED;
+      case "expired":
+        // A fresh code by itself: where that take comes to rest is a new code waiting.
+        if (expired === "refresh") {
+          code = FIXTURE.nextCode;
+          return { kind: "waiting", ...live(AT_REST) };
+        }
+        return ended(stop);
       default:
         return ended(stop);
     }
