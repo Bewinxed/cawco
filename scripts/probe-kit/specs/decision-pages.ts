@@ -847,7 +847,9 @@ const marks = async (on: On, frame: Frame) => {
 const embedLeg = async (on: On, frame: Frame) => {
   const { desk, kit } = on;
   await mode(desk, frame, "V");
-  await pressIn(frame.frameLocator(EMBED).first(), ":root");
+  // An embed out of view gets no animation frames, and pressIn waits on two.
+  await frame.locator(EMBED).first().scrollIntoViewIfNeeded();
+  await pressIn(frame.frameLocator(EMBED).first(), "body");
   const heard = await until(
     "the embed heard the click",
     () =>
