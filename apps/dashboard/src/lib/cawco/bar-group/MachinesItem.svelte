@@ -2,22 +2,24 @@
   /**
    * MachinesButton with its fleet as a prop, for the bar group's states
    * files: the same item (Shell's `.bar-item`, its classes, its Tip, its
-   * Solar `server-2` symbol) with the count gone, as the design advisor
-   * settled (Apple HIG, Toolbars: "Prefer simple, recognizable symbols for
-   * items instead of text"). How a problem shows is the open choice:
+   * Solar `server-2` symbol). How a problem shows is the open choice:
    *
-   * - `badge` (proposed): the symbol stays in the group's muted ink and an
-   *   exclamation badge sits on its lower-trailing corner, Apple's own idiom
-   *   for an object with a problem (`externaldrive.badge.exclamationmark`).
-   *   The disc is 9px across, centred at (22.5, 22.5) of the 28px item, in
-   *   `status-fail-glyph` when a machine is down and `status-attn-glyph`
-   *   otherwise. A 1.5px ring round it (radius 6) is cut from the symbol, and
-   *   the exclamation is cut from the disc, so the glass shows through both.
-   *   It arrives scaled from 0.25 with its opacity on `--dur-toggle` and
-   *   `--ease-out`; with less motion it only fades.
-   * - `tint` (today): the whole symbol in the status ink.
+   * - `badge` (proposed): the symbol stays in the group's muted ink and a
+   *   badge sits on its lower-trailing corner, Apple's own idiom for an
+   *   object with a problem, its shape saying which: a cross when a machine
+   *   is down (`externaldrive.badge.xmark`), in `status-fail-glyph`, and an
+   *   exclamation mark when one needs attention, a sign-in say
+   *   (`externaldrive.badge.exclamationmark`), in `status-attn-glyph`. The
+   *   disc is 9px across, centred at (22.5, 22.5) of the 28px item. A 1.5px
+   *   ring round it (radius 6) is cut from the symbol, and the glyph is cut
+   *   from the disc, so the glass shows through both. It arrives scaled from
+   *   0.25 with its opacity on `--dur-toggle` and `--ease-out`; with less
+   *   motion it only fades.
+   * - `tint`: the whole symbol in the status ink.
    *
-   * The words carry the rest, as today: the label and the tooltip naming
+   * `counted` draws the bar as it ships today: the number of machines beside
+   * the symbol (Shell's item-with-a-number recipe, `data-counted`). The
+   * words carry the rest in every form: the label and the tooltip naming
    * each machine and what is wrong.
    */
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
@@ -28,9 +30,12 @@
   let {
     machines,
     mark,
+    counted = false,
   }: {
     machines: readonly FleetMachine[];
     mark: "badge" | "tint";
+    /** Today's number beside the symbol. */
+    counted?: boolean;
   } = $props();
 
   const tone = $derived(toneOf(machines));
@@ -56,30 +61,44 @@
       aria-haspopup="dialog"
       aria-label={label(machines)}
       class="bar-item machines mark-line touch-hit press-tint"
+      data-counted={counted || undefined}
       data-mark={mark}
       data-tone={tone}
       type="button"
     >
       <IconServer aria-hidden="true" class="bar-symbol" />
+      {#if counted}
+        <span data-slot="num" class="num">{machines.length}</span>
+      {/if}
       {#if mark === "badge" && tone}
         <svg
           data-slot="badge"
           aria-hidden="true"
           class="badge"
+          data-glyph={tone === "fail" ? "xmark" : "exclamationmark"}
           viewBox="0 0 9 9"
           transition:arrive
         >
           <mask id="{cut}-mark">
             <circle cx="4.5" cy="4.5" fill="white" r="4.5" />
-            <rect
-              fill="black"
-              height="3.5"
-              rx="0.75"
-              width="1.5"
-              x="3.75"
-              y="1.5"
-            />
-            <circle cx="4.5" cy="6.75" fill="black" r="0.75" />
+            {#if tone === "fail"}
+              <path
+                d="M3.1 3.1 5.9 5.9M5.9 3.1 3.1 5.9"
+                stroke="black"
+                stroke-linecap="round"
+                stroke-width="1.5"
+              />
+            {:else}
+              <rect
+                fill="black"
+                height="3.5"
+                rx="0.75"
+                width="1.5"
+                x="3.75"
+                y="1.5"
+              />
+              <circle cx="4.5" cy="6.75" fill="black" r="0.75" />
+            {/if}
           </mask>
           <circle cx="4.5" cy="4.5" mask="url(#{cut}-mark)" r="4.5" />
         </svg>
@@ -89,8 +108,8 @@
 </Tip>
 
 <style>
-  /* Today: the whole symbol in the status ink. Named under `.machines` to
-     outrank the group's `.bar-symbol` ink, as MachinesButton does. */
+  /* The whole symbol in the status ink. Named under `.machines` to outrank
+     the group's `.bar-symbol` ink, as MachinesButton does. */
   .machines[data-mark="tint"][data-tone="attn"] :global(.bar-symbol) {
     color: var(--status-attn-glyph);
   }

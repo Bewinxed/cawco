@@ -15,16 +15,27 @@
  * 3. Every frame stands whole in its card (none scrolls sideways), and each
  *    is its own Preview captioned Desk or Phone.
  * 4. The group as drawn, read off the engine in each frame (scaled back to
- *    the item's 28px): no number in any item; every desk symbol 20px, the
- *    lens too, except in "Smaller, as today" where it is 16px; the badge a
- *    9px disc centred at (22.5, 22.5) of its item, in the fail ink with the
- *    Mac down and the attention ink with it needing a sign-in, the server
+ *    the item's 28px): no number in any item but the "Today" frame's Files
+ *    and machines; every desk symbol 20px, the search glyph too, except in
+ *    "16px, the size today" and "Today" where it is 16px; the badge a 9px
+ *    disc centred at (22.5, 22.5) of its item, in the fail ink with the Mac
+ *    down and the attention ink with it needing a sign-in, the server
  *    symbol in the muted ink and cut by a radial mask; the tint option's
- *    symbol in that status ink with no badge; the dot a 6px disc centred at
- *    (23, 5) in `brand-solid`, the folder cut by a radial mask; the phone's
- *    glass Caw alone, 32px.
- * 5. The page never scrolls sideways, and logs no console error.
- * 6. The page's own capture, taken window by window as the owner scrolls
+ *    and Today's symbol in that status ink with no badge; the dot a 6px
+ *    disc centred at (23, 5) in `brand-solid`, the folder cut by a radial
+ *    mask.
+ * 5. Down and needing a sign-in differ in shape, not colour alone (WCAG
+ *    1.4.1): the down badge's knockout is a cross (two stroked lines), the
+ *    sign-in badge's an exclamation mark (a bar and a dot).
+ * 6. Every desk frame draws at 1:1 on both pages (its zoom 1), so the badge
+ *    stands 9 CSS px across as drawn, at 390 too.
+ * 7. The 20px search glyph's ink weight against the server's, rasterised
+ *    from each symbol's own SVG in its ink at 4× (the one thing drawing
+ *    alone decides): its mean coverage within a third of the server's, and
+ *    full-ink detail at least half the server's share, where Solar's own
+ *    lens (the 16px option) has almost none.
+ * 8. The page never scrolls sideways, and logs no console error.
+ * 9. The page's own capture, taken window by window as the owner scrolls
  *    it (decision-embeds.ts `capturePage`), paints every embed.
  *
  * Writes each leg's page in tiles a window tall, each under 1 MiB, to
@@ -77,7 +88,7 @@ const STATES = "src/lib/cawco/bar-group";
 const CANVASES: Record<string, string> = {
   "problem-badge": "ProblemBadge",
   "problem-tint": "ProblemTint",
-  "problem-phone": "ProblemPhone",
+  "bar-today": "Today",
   "files-none": "NewFilesNone",
   "files-dot": "NewFilesDot",
   "jump-group": "JumpGroupSize",
@@ -91,7 +102,7 @@ const OPTION =
 const PREVIEW = /^\w+ = Preview\("([0-9a-f-]+)"/;
 /** A frame of the group read as wordless by `embedDrawFaults`: its symbols carry no text. */
 const WORDLESS =
-  /^(ProblemBadge|ProblemTint|ProblemPhone|NewFilesNone|NewFilesDot|JumpGroupSize|JumpToday)\/(Down|SignIn|Caw|NewFiles|Desk): \d+px tall, 0 characters$/;
+  /^(ProblemBadge|ProblemTint|NewFilesNone|NewFilesDot|JumpGroupSize|JumpToday)\/(Down|SignIn|NewFiles|Desk): \d+px tall, 0 characters$/;
 /** The most a capture tile may weigh: a picture a reader opens whole. */
 const MIB = 1024 * 1024;
 /** A frame's caption names its form after the option's label: "A badge · Desk, the Mac down". */
@@ -174,7 +185,12 @@ interface ItemRead {
   dot: { cx: number; cy: number; side: number } | null;
   /** The badge's fill and the dot's background, as computed. */
   dotInk: string;
+  /** The badge as drawn, CSS px across, unscaled. */
+  drawn: number;
   fill: string;
+  /** The badge's glyph by name, and the shapes its knockout is cut by. */
+  glyph: string;
+  glyphShapes: string;
   item: string;
   /** The symbol's mask-image. */
   mask: string;
@@ -234,6 +250,7 @@ function readGroups(): GroupRead[] {
         muted: ink("var(--ink-muted)"),
       },
       items: [...group.querySelectorAll<HTMLElement>("[data-bar-item]")].map(
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: evaluated in the embed's page, so every read stands in this one self-contained function
         (item) => {
           const origin = item.getBoundingClientRect();
           const unit = origin.height / 28;
@@ -263,6 +280,16 @@ function readGroups(): GroupRead[] {
             badge: box(badge, origin, unit),
             dot: box(dot, origin, unit),
             fill: badge ? getComputedStyle(badge).fill : "",
+            drawn: badge
+              ? Math.round(badge.getBoundingClientRect().width * 100) / 100
+              : 0,
+            glyph: badge?.getAttribute("data-glyph") ?? "",
+            glyphShapes: badge
+              ? [...badge.querySelectorAll("mask > *")]
+                  .filter((shape) => shape.getAttribute("fill") !== "white")
+                  .map((shape) => shape.tagName)
+                  .join(",")
+              : "",
             dotInk: dot ? getComputedStyle(dot).backgroundColor : "",
           };
         }
@@ -274,22 +301,9 @@ function readGroups(): GroupRead[] {
 /** Within half a pixel of the item's units. */
 const near = (a: number, b: number) => Math.abs(a - b) <= 0.5;
 
-/** The phone's glass: Caw alone on it, 32px. */
-function phoneFaults(story: string, group: GroupRead): string[] {
-  const alone =
-    group.items.length === 1 &&
-    group.items[0]?.item === "caw" &&
-    near(group.glass, 32);
-  return story !== "Caw" || alone
-    ? []
-    : [
-        `phone glass ${group.glass}px holding ${group.items.map((one) => one.item).join(", ")}`,
-      ];
-}
-
-/** Every desk symbol 20px, the lens 16px only in "Smaller, as today". */
+/** Every desk symbol 20px, the search glyph 16px only in "16px, the size today" and Today. */
 function sizeFaults(file: string, group: GroupRead): string[] {
-  const lensSide = file === "JumpToday" ? 16 : 20;
+  const lensSide = file === "JumpToday" || file === "Today" ? 16 : 20;
   return group.items.flatMap((one) => {
     if (one.item === "caw") {
       return [];
@@ -312,7 +326,7 @@ function machineFaults(
   if (!server) {
     return ["no machines item"];
   }
-  if (file === "ProblemTint") {
+  if (file === "ProblemTint" || file === "Today") {
     return server.badge || server.symbolInk !== tone
       ? [
           `tint: server ink ${server.symbolInk} (its ink ${tone}), badge ${JSON.stringify(server.badge)}`,
@@ -323,10 +337,22 @@ function machineFaults(
     return server.badge ? ["a badge with nothing wrong"] : [];
   }
   const b = server.badge;
+  const shape =
+    story === "Down"
+      ? { glyph: "xmark", shapes: "path" }
+      : { glyph: "exclamationmark", shapes: "rect,circle" };
   return [
     ...(b && near(b.cx, 22.5) && near(b.cy, 22.5) && near(b.side, 9)
       ? []
       : [`badge at ${JSON.stringify(b)}`]),
+    ...(server.glyph === shape.glyph && server.glyphShapes === shape.shapes
+      ? []
+      : [
+          `badge glyph ${server.glyph} cut by ${server.glyphShapes}, not ${shape.glyph} cut by ${shape.shapes}`,
+        ]),
+    ...(Math.abs(server.drawn - 9) <= 0.25
+      ? []
+      : [`badge drawn ${server.drawn}px across, not 9px`]),
     ...(server.fill === tone
       ? []
       : [`badge fill ${server.fill}, its ink ${tone}`]),
@@ -368,18 +394,22 @@ function groupFaults(
   story: string,
   groups: GroupRead[]
 ): string[] {
-  return groups.flatMap((group) => [
-    ...group.items
+  // Today's bar carries its numbers beside Files and the machines; no option does.
+  const numbered = file === "Today" ? "files,machines" : "";
+  return groups.flatMap((group) => {
+    const nums = group.items
       .filter((one) => one.num)
-      .map((one) => `a number in ${one.item}`),
-    ...(file === "ProblemPhone"
-      ? phoneFaults(story, group)
-      : [
-          ...sizeFaults(file, group),
-          ...machineFaults(file, story, group),
-          ...folderFaults(file, group),
-        ]),
-  ]);
+      .map((one) => one.item)
+      .join(",");
+    return [
+      ...(nums === numbered
+        ? []
+        : [`numbers in ${nums || "nothing"}, not ${numbered || "nothing"}`]),
+      ...sizeFaults(file, group),
+      ...machineFaults(file, file === "Today" ? "Down" : story, group),
+      ...folderFaults(file, group),
+    ];
+  });
 }
 
 /** Every embed's group read off the engine, against what its canvas proposes. */
@@ -390,7 +420,7 @@ async function groupChecks(page: Page, embeds: Embed[], say: Say) {
   for (const [index, handle] of handles.entries()) {
     const e = embeds[index];
     const file = Object.values(CANVASES).find((one) => e?.file === one);
-    if (!(e && file) || e.named[0] === "Machines") {
+    if (!(e && file)) {
       continue;
     }
     const groups =
@@ -416,9 +446,108 @@ async function groupChecks(page: Page, embeds: Embed[], say: Say) {
     );
   }
   say(
-    "the group as drawn: no numbers, one symbol size, the badge, dot and lens where each option puts them",
+    "the group as drawn: numbers only in Today's, one symbol size, the badge (a cross when down, an exclamation mark when it needs a sign-in, 9px as drawn), dot and search glyph where each option puts them",
     faults.length === 0 && reads.length > 0,
     faults.join(" | ") || reads.join("; ")
+  );
+}
+
+/** One symbol's ink, rasterised from its own SVG in its own ink at 4×: its mean coverage and its share at full ink. */
+interface Ink {
+  full: number;
+  mean: number;
+}
+
+/** Read in the embed's document: the search glyph's and the server's ink, each rasterised from its SVG alone. */
+async function readInk(): Promise<{ lens: Ink; server: Ink } | null> {
+  const frame = document.querySelector(
+    '.cawco-frame[data-cawco-interaction="rest"] [data-bar-group]'
+  );
+  const lens = frame?.querySelector<SVGSVGElement>(".jump > svg");
+  const server = frame?.querySelector<SVGSVGElement>("[data-machines] > svg");
+  if (!(lens && server)) {
+    return null;
+  }
+  const side = 80;
+  const inkOf = async (svg: SVGSVGElement): Promise<Ink> => {
+    const copy = svg.cloneNode(true) as SVGSVGElement;
+    copy.setAttribute("width", String(side));
+    copy.setAttribute("height", String(side));
+    copy.setAttribute("style", "color:#000");
+    copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    const image = new Image();
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(copy.outerHTML)}`;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = side;
+    canvas.height = side;
+    const paint = canvas.getContext("2d", { willReadFrequently: true });
+    paint?.drawImage(image, 0, 0, side, side);
+    const data = paint?.getImageData(0, 0, side, side).data ?? [];
+    let sum = 0;
+    let full = 0;
+    for (let at = 3; at < data.length; at += 4) {
+      sum += data[at] ?? 0;
+      full += (data[at] ?? 0) >= 230 ? 1 : 0;
+    }
+    const pixels = side * side;
+    return {
+      mean: Math.round((sum / 255 / pixels) * 1000) / 1000,
+      full: Math.round((full / pixels) * 1000) / 1000,
+    };
+  };
+  return { lens: await inkOf(lens), server: await inkOf(server) };
+}
+
+/**
+ * The 20px search glyph weighs as the server does: its mean ink within a
+ * third of the server's, and full-ink detail at least half the server's
+ * share. Solar's own lens (the 16px option) is read beside it.
+ */
+async function inkChecks(page: Page, embeds: Embed[], say: Say) {
+  const handles = await page.$$(EMBED_FRAME);
+  const read: Record<string, { lens: Ink; server: Ink } | null> = {};
+  for (const [index, handle] of handles.entries()) {
+    const file = embeds[index]?.file ?? "";
+    if (file === "JumpGroupSize" || file === "JumpToday") {
+      read[file] =
+        (await (await handle.contentFrame())?.evaluate(readInk)) ?? null;
+    }
+  }
+  const ours = read.JumpGroupSize;
+  const ok =
+    !!ours &&
+    Math.abs(ours.lens.mean - ours.server.mean) <= ours.server.mean / 3 &&
+    ours.lens.full >= ours.server.full / 2;
+  say(
+    "the 20px search glyph's ink weighs as the server's: mean within a third, full-ink detail at least half its share",
+    ok,
+    Object.entries(read)
+      .map(
+        ([file, one]) =>
+          `${file}: ${one ? `lens mean ${one.lens.mean} full ${one.lens.full}, server mean ${one.server.mean} full ${one.server.full}` : "not read"}`
+      )
+      .join("; ")
+  );
+}
+
+/** Every desk frame draws at its own size, 1:1, so the badge stays 9px. */
+function zoomChecks(embeds: Embed[], say: Say) {
+  const scaled = embeds.flatMap((e) =>
+    e.frames
+      .filter((f) => f.zoom !== 1)
+      .map((f) => `“${e.caption}” ${f.story} at ${f.zoom}×`)
+  );
+  say(
+    "every frame draws at 1:1 (no zoom), so the badge stands 9px as drawn",
+    scaled.length === 0,
+    scaled.join(" | ") ||
+      embeds
+        .map(
+          (e) =>
+            `${e.caption} ${e.frames.map((f) => `${f.w}px at ${f.zoom}×`).join(" ")}`
+        )
+        .join("; ")
   );
 }
 
@@ -579,6 +708,8 @@ const spec: Spec = {
             check(leg, assertion, ok, output);
           frameChecks(embeds, say);
           await groupChecks(page, embeds, say);
+          zoomChecks(embeds, say);
+          await inkChecks(page, embeds, say);
           await page.evaluate(() => window.scrollTo(0, 0));
           const across = await page.evaluate(() => ({
             scroll: document.documentElement.scrollWidth,

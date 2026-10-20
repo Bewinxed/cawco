@@ -3,8 +3,8 @@
  * components): Files, Jump, the machines and Caw's head on their glass, with
  * the counts and the tinted symbol gone (Apple HIG, Toolbars), drawn with
  * the recommended answer to each open choice: a machine problem as a badge,
- * no mark on Files, Jump's glyph at the group's 20px. Desk frames are the
- * trailing end of the 1440px bar on a conversation; phone frames are the
+ * no mark on Files, the search glyph at the group's 20px in its cut. Desk frames are the
+ * trailing 260px of the 1440px bar on a conversation; phone frames are the
  * 390px screen. The meta's args are every story's; a story's own args are
  * what it changes.
  */
@@ -12,7 +12,7 @@ import BarGroup from "./BarGroup.svelte";
 import { AT_REST, ONE_DOWN, SIGN_IN } from "./fixtures";
 import SidebarMachines from "./SidebarMachines.svelte";
 
-const DESK = 360;
+const DESK = 260;
 
 export default {
   title: "Top bar/Trailing group",
@@ -24,7 +24,7 @@ export default {
 /** Desk, at rest: four symbols in the group's muted ink, no numbers. */
 export const AtRest = {};
 
-/** Desk: the Mac stopped answering, so the machines symbol wears the fail badge. */
+/** Desk: the Mac stopped answering, so the machines symbol wears the cross badge. */
 export const OneDown = {
   args: { machines: ONE_DOWN },
   from: "AtRest",
@@ -33,7 +33,7 @@ export const OneDown = {
   },
 };
 
-/** Desk: OpenCode on the Mac needs signing in, so the badge is the attention ink. */
+/** Desk: OpenCode on the Mac needs signing in, so the badge is an exclamation mark. */
 export const NeedsSignIn = { args: { machines: SIGN_IN } };
 
 /** Desk: new files landed, drawn with the dot (the alternative to no mark). */

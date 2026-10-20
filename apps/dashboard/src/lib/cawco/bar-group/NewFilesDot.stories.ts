@@ -8,7 +8,7 @@ export default {
   title: "New files/A dot",
   component: BarGroup,
   args: { form: "desk", files: "dot" },
-  parameters: { viewport: 360 },
+  parameters: { viewport: 260 },
 };
 
 /** Desk: new files landed, the dot on the folder. */

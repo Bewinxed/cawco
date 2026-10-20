@@ -8,7 +8,7 @@ export default {
   title: "New files/No mark",
   component: BarGroup,
   args: { form: "desk", files: "none" },
-  parameters: { viewport: 360 },
+  parameters: { viewport: 260 },
 };
 
 /** Desk: new files landed; the folder looks as it always does. */
