@@ -124,7 +124,7 @@ const S = {
   week: "DESIGN.md:779 The week",
   spent: "DESIGN.md:780 The cell; token ring-track-spent",
   notes: "DESIGN.md:829 Release notes; token note-new-ink",
-  duotone: "DESIGN.md:923 Solar Duotone Rule; token glyph-duo-status-opacity",
+  solid: "DESIGN.md:925 Solar Duotone Rule (a status mark is the solid bold cut)",
   ring: "DESIGN.md:927 One Ring Rule (non-text 3:1, WCAG 2.2 SC 1.4.11)",
   glyphs: "token status-live-glyph",
   breath: "DESIGN.md:511 Live work breathes; token breath-floor",
@@ -313,27 +313,15 @@ const PAIRS: Pair[] = [
       source: S.breath,
     }))
   ),
-  // An alert row's status glyph: its disc on the recess, its strokes on the disc.
-  ...["ink-strong", "status-done-ink", "status-attn-ink"].flatMap((ink) => [
-    {
-      label: `${ink} disc (glyph-duo-status-opacity) on surface-recess`,
-      fg: ink,
-      fgOpacity: "motion.glyph-duo-status-opacity",
-      bg: ["surface-recess"],
-      floor: UI,
-      source: S.duotone,
-    },
-    {
-      label: `${ink} strokes on its disc`,
-      fg: ink,
-      bg: [
-        "surface-recess",
-        `color-mix(in srgb, {color.${ink}} calc({motion.glyph-duo-status-opacity} * 100%), transparent)`,
-      ],
-      floor: UI,
-      source: S.duotone,
-    },
-  ]),
+  // An alert row's status glyph, solid: its mark on the recess, its inner
+  // mark knocked out to the recess through it (one pair, both ways).
+  ...["ink-strong", "status-done-ink", "status-attn-ink"].map((ink) => ({
+    label: `${ink} solid status glyph on surface-recess`,
+    fg: ink,
+    bg: ["surface-recess"],
+    floor: UI,
+    source: S.solid,
+  })),
   // The chosen session tab's rim: its stroke over the tab's own sheet, read
   // against the shelf above its top and against the fills either side of its
   // sides (its sheet, and a receded neighbour's). Painted so, it measures the
