@@ -89,7 +89,7 @@
   const PLACEHOLDER_OF = {
     thread: "Message Caw",
     "cant-read": null,
-    "cant-start": "Caw reads it when a machine is back",
+    "cant-start": "Waits until Caw can start",
     "not-woken": "Message Caw",
     empty: "Message Caw",
   } as const;

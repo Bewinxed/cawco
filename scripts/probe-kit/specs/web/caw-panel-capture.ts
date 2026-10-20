@@ -240,7 +240,7 @@ const spec: Spec = {
       `${JSON.stringify(
         {
           page: "78a326ed-76cd-44b0-90c3-5e3261a17b56",
-          revision: 3,
+          revision: 4,
           program: "decisions/caw-panel/page.oui",
           shots,
           cards: cardsOf(PROGRAM),

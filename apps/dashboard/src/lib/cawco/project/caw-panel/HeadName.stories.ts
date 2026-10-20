@@ -6,7 +6,7 @@ import PanelScreen from "./PanelScreen.svelte";
 export default {
   title: "Caw's panel head/Caw alone",
   component: PanelScreen,
-  args: { scene: "thread", head: "name" },
+  args: { scene: "thread", head: "name", landed: false },
 };
 
 /** Desk: nothing waits on you, so nothing stands beside his name. */
