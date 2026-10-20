@@ -267,21 +267,26 @@ const heldPhase = async (kit: Kit, scene: Scene): Promise<Workspace> => {
     item?.state === "failed" && held.state === "held",
     `${item?.state} ${item?.error ?? ""}; ${held.state}; ${await workspaceLines(fleet, ws.id)}`
   );
+  const reports = () =>
+    fleet.query<{ body: string | null; notice: number | null }>(
+      "SELECT json_extract(payload, '$.body') AS body, json_extract(payload, '$.notice') AS notice FROM delegate_events WHERE parent_instance_id = ? AND instance_id = ? AND kind = 'report' ORDER BY id",
+      scene.parentId,
+      s.instanceId
+    );
+  // S's own report names its workspace too (work-items.ts `reportLine`):
+  // the hold is the notice that names it.
+  const isHoldNotice = (row: { body: string | null; notice: number | null }) =>
+    row.notice === 1 && (row.body ?? "").includes(ws.id);
   const notice = await until(
     "the parent's notice of S's held workspace",
-    () =>
-      fleet.query<{ body: string | null; notice: number | null }>(
-        "SELECT json_extract(payload, '$.body') AS body, json_extract(payload, '$.notice') AS notice FROM delegate_events WHERE parent_instance_id = ? AND instance_id = ? AND kind = 'report' ORDER BY id",
-        scene.parentId,
-        s.instanceId
-      ),
-    (rows) => rows.some((row) => (row.body ?? "").includes(ws.id)),
+    reports,
+    (rows) => rows.some(isHoldNotice),
     30_000
-  ).catch(() => []);
-  const told = notice.find((row) => (row.body ?? "").includes(ws.id));
+  ).catch(reports);
+  const told = notice.find(isHoldNotice);
   check(
     "(c) its parent is told, as a notice: the workspace, 1 commit on no remote, and discard_workspace",
-    told?.notice === 1 &&
+    told !== undefined &&
       (told.body ?? "").includes("holds 1 commit on no remote") &&
       (told.body ?? "").includes("discard_workspace"),
     JSON.stringify(notice).slice(0, 1500)
