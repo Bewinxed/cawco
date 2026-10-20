@@ -12,9 +12,11 @@
  * against the same tape ("dev").
  */
 import type { Locator, Page, WebSocketRoute } from "playwright-core";
+import { MACHINE } from "../../scratch-fleet";
 import { COMPOSER_FIELD } from "../kit";
 import {
   DELEGATE_TITLE,
+  MEDIA_PAGE,
   type Scene,
   STUDIO_HOST,
   STUDIO_MACHINE,
@@ -43,6 +45,13 @@ export interface Ready {
 export interface State {
   /** What opens it, on its route freshly loaded (the walk loads each state's route anew), with the scene's ids. */
   act?: (page: Page, scene: Scene) => Promise<unknown>;
+  /**
+   * The error the state exists to cause, as the dashboard reports it (a
+   * region's failure line stands over the throw it caught): said as
+   * `expected:`, never failing the run, where any other error does
+   * (capture.ts).
+   */
+  expects?: { error: RegExp };
   /**
    * It reads the frame its act leaves, which the page's next frame and
    * timer take down (catch-up/switch: "Catching up…" until Transcript's
@@ -139,7 +148,6 @@ const START_SIGN_IN = /^Start sign-in/;
 const GROWN_DRAFT =
   /Wrap the chip's label at the badge\.\s*Keep the count whole\.\s*Then measure it on a phone\./;
 const CATCHING_UP_LINE = /^Catching up…$/;
-const STARTS_WITH_MACHINE = /^This session starts once its machine/;
 /** A preview drawn in its frame, the pane's pin list, and the page's where-to-start (MachinesEmpty's title). */
 const PREVIEW_READY = "iframe[data-ready=true]";
 const PIN_LIST = 'section[data-slot=pin-list][aria-label="Comments"]';
@@ -283,6 +291,147 @@ const SORT = /Sort sessions/;
 const JUMP_BUTTON = /Jump|Search/;
 /** The skills page's way in for a skill from a source. */
 const FETCH_SKILL = /Fetch|Add skill|New skill/;
+/** Svelte's keyed each meeting a key twice, as the dashboard reports it. */
+const EACH_KEY_DUPLICATE = /each_key_duplicate/;
+/**
+ * Recent unfolded, unless it stands open already: the page keeps it as the
+ * person left it (an earlier state of the pass opened it).
+ */
+const recentOpen = async (page: Page) => {
+  const disclosure = page
+    .locator("[data-slot=recent] [data-slot=disclosure]")
+    .filter({ visible: true })
+    .first();
+  if ((await disclosure.getAttribute("aria-expanded")) !== "true") {
+    await disclosure.click();
+  }
+  await page
+    .locator("[data-slot=home-recent-session-tree] li")
+    .first()
+    .waitFor();
+};
+
+/** Connect a machine's title, which its dialog and drawer open with. */
+const CONNECT_A_MACHINE = /^Connect a machine/;
+/** The stored transcript's title, as its row says it. */
+const STORED_TITLE = /Sketch the tray's empty state/;
+/** The usage page's project filter, opened. */
+const usageProjects = async (page: Page) => {
+  await page
+    .locator('[data-slot=select-trigger][aria-label="Project"]')
+    .filter({ visible: true })
+    .first()
+    .click();
+  await page
+    .locator("[data-slot=select-content][data-state=open] [role=option]")
+    .first()
+    .waitFor();
+};
+
+/** How many projects the many-projects fleet holds beside the scene's own. */
+const MORE_PROJECTS = 40;
+/** The first of them, which the open list stands in view (the rest run past it). */
+const FIRST_MORE_PROJECT = /^Project 1$/;
+
+/**
+ * The fleet's projects read with {@link MORE_PROJECTS} more, each the
+ * scene's first project under a name and id of its own and placed nowhere:
+ * a fleet whose project lists run past their room.
+ */
+const manyProjects = (page: Page) =>
+  page.route(PROJECTS_READ, async (route) => {
+    const response = await route.fetch();
+    const projects = (await response.json()) as Record<string, unknown>[];
+    const first = projects[0] ?? {};
+    await route.fulfill({
+      response,
+      json: [
+        ...projects,
+        ...Array.from({ length: MORE_PROJECTS }, (_, i) => ({
+          ...first,
+          id: `probe-project-${i + 1}`,
+          name: `Project ${i + 1}`,
+          places: [],
+        })),
+      ],
+    });
+  });
+
+/** The Full Send ask's yes (PermissionSection's). */
+const SWITCH_FULL_SEND = /^Switch to Full Send$/;
+/** The permission mode the scene's sessions run on. */
+const SCENE_MODE = "bypassPermissions";
+/** A refused send's way back: its row's Choose a mode (MessageRow). */
+const CHOOSE_A_MODE = /^Choose a mode$/;
+/** No machine at all, where a page needs one (config NoMachines' title). */
+const NO_MACHINES = /No machines yet/;
+/** A model's combobox (ModelCombobox's "Model"). */
+const MODEL_CHIP = /^Model/;
+/** The workflows page's New workflow, its two kinds, and a project menu's upstream row (core upstream-guard.ts `title`). */
+const NEW_WORKFLOW = /^New workflow$/;
+const NEW_WORKFLOW_KINDS = /New graph[\s\S]*New program/;
+const UPSTREAM = /^Other people's repositories/;
+/** An artifact shown in its session's panel (artifact-api.ts `showArtifact`). */
+const ARTIFACT_SHOW = /\/api\/instances\/[^/]+\/artifacts\/[^/]+\/show$/;
+/** A component canvas's map (artifact-api.ts `fetchCanvasMap`), and the scene's Card's (core `CanvasMap`). */
+const CANVAS_MAP_READ = /\/artifacts\/[^/]+\/map$/;
+const thumbOf = (states: ("drawn" | "failed" | "unseen")[]) => ({
+  w: 380,
+  h: 190,
+  frames: states.map((state, i) => ({
+    x: (i % 2) * 200,
+    y: Math.floor(i / 2) * 100,
+    w: 180,
+    h: 90,
+    state,
+  })),
+});
+const CARD_MAP = {
+  center: {
+    at: null,
+    drawn: 3,
+    file: "src/Card.svelte",
+    name: "Card",
+    states: 4,
+    statesFiles: ["src/Card.stories.ts"],
+    thumb: thumbOf(["drawn", "drawn", "failed", "unseen"]),
+  },
+  usedIn: [
+    {
+      at: "src/App.svelte:12",
+      drawn: 0,
+      file: "src/App.svelte",
+      name: "App",
+      states: 0,
+      statesFiles: [],
+      thumb: null,
+    },
+  ],
+  madeOf: [
+    {
+      at: "src/Card.svelte:8",
+      drawn: 2,
+      file: "src/Badge.svelte",
+      name: "Badge",
+      states: 2,
+      statesFiles: ["src/Badge.stories.ts"],
+      thumb: thumbOf(["drawn", "drawn"]),
+    },
+  ],
+};
+/** A run's read (workflows.ts `getRun`), and the question it is parked on in run-ask (core `WorkflowAsk`). */
+const RUN_READ = /\/api\/workflow-runs\/[^/]+$/;
+const RUN_ASK = {
+  allowOther: true,
+  answeredBy: "operator",
+  options: [
+    { label: "Wrap", description: "Two lines, then cut" },
+    { label: "Truncate", description: "One line, the count kept whole" },
+  ],
+  parkedAt: "2026-10-01T09:00:00.000Z",
+  question: "Which wrap does the chip row take?",
+  stepId: "ask-wrap",
+};
 /** The memory page's new-memory control. */
 const NEW_MEMORY = /New memory|New/;
 /** Caw's seat on the project page. */
@@ -377,6 +526,9 @@ const PROJECT_RUNNING = "**/api/projects/*/running";
 const PROJECT_RUNNING_PATH = /^\/api\/projects\/[^/]+\/running$/;
 /** The fleet's projects, which the page's first read waits on with its machines and sessions (client.svelte.ts `refresh`). */
 const PROJECTS_READ = "**/api/projects";
+/** The fleet's hooks, which a hook's editor waits on (config store `hooks`), and its path. */
+const HOOKS_READ = "**/api/fleet/hooks";
+const HOOKS_READ_PATH = /^\/api\/fleet\/hooks$/;
 /** {@link PROJECTS_READ}'s path. */
 const PROJECTS_READ_PATH = /^\/api\/projects$/;
 /** An artifact's read, which a task's presented page finds its session by (ArtifactStage `findArtifact`). */
@@ -613,6 +765,183 @@ const unlockStudio = (answer?: UnlockAnswer) => async (page: Page) => {
 };
 
 /**
+ * The page reloaded with every hub message it is sent run through `patch`
+ * first (a message the hub sends in parts put together and sent whole):
+ * a state the scene's hub never stood in, drawn from the hub's own message
+ * with what that state changes in it. The route stays the page's, so such a
+ * state comes last in its surface.
+ */
+const hubPatched =
+  (
+    patch: (message: HubMessage) => HubMessage,
+    answer?: (frame: string) => unknown
+  ) =>
+  async (page: Page) => {
+    await page.routeWebSocket(DASHBOARD_SOCKET, (ws) => {
+      const hub = ws.connectToServer();
+      const parts = new Map<string, string>();
+      hub.onMessage((frame) => {
+        if (typeof frame !== "string") {
+          ws.send(frame);
+          return;
+        }
+        const message = JSON.parse(frame) as HubMessage & {
+          part?: { id: string; last: boolean };
+          text?: string;
+        };
+        if (!message.part) {
+          ws.send(JSON.stringify(patch(message)));
+          return;
+        }
+        const text = (parts.get(message.part.id) ?? "") + (message.text ?? "");
+        if (!message.part.last) {
+          parts.set(message.part.id, text);
+          return;
+        }
+        parts.delete(message.part.id);
+        ws.send(JSON.stringify(patch(JSON.parse(text) as HubMessage)));
+      });
+      // What the page asks that `answer` answers in the hub's place; the
+      // rest goes to the hub.
+      ws.onMessage((frame) => {
+        const answered = typeof frame === "string" ? answer?.(frame) : null;
+        if (answered) {
+          ws.send(JSON.stringify(answered));
+          return;
+        }
+        hub.send(frame);
+      });
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => window.kitHydrated === true);
+  };
+
+/**
+ * A machine's answer to the page's control `method` (client.svelte.ts
+ * `askMachine`), as the hub relays a machine's `control_result`.
+ */
+const machineAnswer =
+  (method: string, result: unknown) =>
+  (frame: string): unknown => {
+    const asked = JSON.parse(frame) as {
+      machineId?: string;
+      payload?: { method?: string };
+      requestId?: string;
+      verb?: string;
+    };
+    if (!(asked.verb === "control" && asked.payload?.method === method)) {
+      return null;
+    }
+    return {
+      verb: "frames",
+      machineId: asked.machineId,
+      requestId: asked.requestId,
+      payload: {
+        kind: "control_result",
+        ok: true,
+        requestId: asked.requestId,
+        result,
+      },
+    };
+  };
+
+/**
+ * A transcript stored on the machine that no hub row lists (core
+ * `NeutralSessionInfo`): Recent's stored row (SessionRow with its info,
+ * StoredSessionMenu). The scene's machine lists only its rows' own.
+ */
+const STORED_SESSION = {
+  createdAt: Date.parse("2026-10-12T10:00:00.000Z"),
+  cwd: "/home/probe/code/chip-tray",
+  firstTitle: "Sketch the tray's empty state",
+  harness: "claude",
+  lastModified: Date.parse("2026-10-12T11:30:00.000Z"),
+  sessionId: "probe-stored-session",
+};
+
+/** A hub message, as far as a patch reads it. */
+interface HubMessage {
+  payload?: { kind?: string; moves?: Record<string, unknown>[] };
+}
+
+/** Every move job a message carries (the `instances` frame's, a `moves` frame's), each as `job` makes it. */
+const movesAs =
+  (job: (was: Record<string, unknown>) => Record<string, unknown>) =>
+  (message: HubMessage): HubMessage =>
+    Array.isArray(message.payload?.moves)
+      ? {
+          ...message,
+          payload: {
+            ...message.payload,
+            moves: message.payload.moves.map(job),
+          },
+        }
+      : message;
+
+/**
+ * `id`'s last words to it refused because its machine doesn't take the
+ * mode it runs on (the scene's sessions run on Bypass permissions), as the
+ * hub records such a send (core transcript-rules.ts: `state: "failed"`,
+ * `sendModeAsk` naming the refused mode): its row asks for another
+ * (MessageRow's Choose a mode). The scene's machine takes every mode.
+ */
+const modeRefused = (id: string) => (page: Page) =>
+  page.route(TRANSCRIPT_READ, async (route) => {
+    if (!route.request().url().includes(id)) {
+      await route.fallback();
+      return;
+    }
+    const response = await route.fetch();
+    const read = (await response.json()) as {
+      blocks?: { metadata?: object; type?: string }[];
+    };
+    const blocks = read.blocks ?? [];
+    const last = blocks.findLastIndex((block) => block.type === "user");
+    await route.fulfill({
+      response,
+      json: {
+        ...read,
+        blocks: blocks.map((block, i) =>
+          i === last
+            ? {
+                ...block,
+                state: "failed",
+                metadata: {
+                  ...block.metadata,
+                  sendModeAsk: {
+                    harness: "claude",
+                    machineId: MACHINE,
+                    refused: SCENE_MODE,
+                  },
+                },
+              }
+            : block
+        ),
+      },
+    });
+  });
+
+/** The parked move cloning, two fifths of its bytes in (MoveWait's progress bar). */
+const MOVE_CLONING = movesAs((job) => {
+  const total = Number(job.bytes) || 340 * 1024 * 1024;
+  return {
+    ...job,
+    stage: "clone",
+    progress: { bytes: Math.floor(total * 0.4), total },
+  };
+});
+/** The parked move failed at its clone, git's last line its detail. */
+const MOVE_FAILED = movesAs((job) => ({
+  ...job,
+  stage: "failed",
+  error: {
+    stage: "clone",
+    message: "The clone stopped before it finished",
+    detail: "fatal: early EOF",
+  },
+}));
+
+/**
  * A transcript's row pressed, scrolled to as a person scrolls to it: the
  * transcript draws only the rows near its view (its virtualiser), so a row
  * far above the newest is mounted once the transcript is wheeled up to it.
@@ -650,6 +979,81 @@ const MOVE_AND_START = /^Move & start$/;
 /** A row in the Machines chip's popover (MachinesChip's), and a machine's, not its Add. */
 const MACHINE_ROW_ANY = "button[data-slot=row]";
 const MACHINE_ROW = `${MACHINE_ROW_ANY}:not([data-add])`;
+/**
+ * The side split come to rest after a resize: the side card's box the same
+ * over three of the browser's frames (it slides to its new share).
+ */
+const splitSettled = (page: Page) =>
+  page.waitForFunction(
+    () =>
+      new Promise<boolean>((resolve) => {
+        const card = document.querySelector("[data-slot=side-card]");
+        const boxes: string[] = [];
+        const read = () => {
+          const r = card?.getBoundingClientRect();
+          boxes.push(r ? `${r.x},${r.width}` : "");
+          if (boxes.length < 3) {
+            requestAnimationFrame(read);
+            return;
+          }
+          resolve(new Set(boxes).size === 1);
+        };
+        requestAnimationFrame(read);
+      })
+  );
+
+/**
+ * The side's divider dragged as a person drags it to the side's floor
+ * (side/floor.ts `SIDE_FLOOR_PX`, 320px), and no further: past it the side
+ * collapses (Split.svelte, both panes `collapsible`). Then the split at rest.
+ */
+const SIDE_FLOOR = 320;
+const sideToFloor = async (page: Page) => {
+  const handle = page
+    .locator("[data-slot=side-split] [role=separator]")
+    .first();
+  const split = await page
+    .locator("[data-slot=side-split]")
+    .first()
+    .boundingBox();
+  const grip = await handle.boundingBox();
+  if (!(split && grip)) {
+    throw new Error("the side split or its divider has no box");
+  }
+  const y = grip.y + grip.height / 2;
+  await page.mouse.move(grip.x + grip.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(split.x + split.width - SIDE_FLOOR - 2, y, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  await splitSettled(page);
+};
+
+/** The place picker (PlacePick's form). */
+const PLACE_PICK = "form[data-slot=place-pick]";
+const PLACE_TRIGGER = `${PLACE_PICK} [data-slot=select-trigger]`;
+
+/**
+ * The place picker's machines open, from the keyboard (its trigger stands
+ * under the pane's pin room, which a pointer meets first), the first one
+ * highlighted.
+ */
+const machinesOpen = async (page: Page) => {
+  await askPlace(page);
+  const trigger = page.locator(PLACE_TRIGGER).first();
+  await trigger.focus();
+  await page.keyboard.press("ArrowDown");
+  await page
+    .locator("[data-slot=select-content][data-state=open] [role=option]")
+    .first()
+    .waitFor();
+};
+/** A context menu's submenu standing open, the Pause until… row and its ends, and a session menu's Account. */
+const SUB_MENU = "[data-slot=context-menu-sub-content][data-state=open]";
+const PAUSE_UNTIL = /^Pause until/;
+const PAUSE_ENDS = /\d/;
+const ACCOUNT_ITEM = /^Account/;
 
 /**
  * In the spawn sheet: the cawco project, on the one online machine that is
@@ -740,6 +1144,70 @@ const fromMore = (item: string) => async (page: Page) => {
   await cawSheetAway(page);
   await press(MORE_FOR_CAWCO)(page);
   await page.getByRole("menuitem", { name: item }).click();
+};
+
+/** A thread's read (client.svelte.ts `readThread`), and an LFS offer's (`readLfsOffer`). */
+const THREAD_READ = /\/api\/projects\/[^/]+\/threads\/[^/]+$/;
+const LFS_OFFER = "probe-lfs-offer";
+const LFS_OFFER_READ = new RegExp(`/api/lfs-offers/${LFS_OFFER}$`);
+
+/**
+ * Every thread read with the hub's note of a folder made a repository, its
+ * large files left out (place-repo.ts `noteMade`), after its last message;
+ * and the offer it carries read open, a row per pattern (core
+ * `LfsOfferState`).
+ */
+const withLfsOffer = async (page: Page) => {
+  await page.route(THREAD_READ, async (route) => {
+    const response = await route.fetch();
+    const read = (await response.json()) as {
+      messages: { createdAt: number; threadId: string }[];
+    };
+    const last = read.messages.at(-1);
+    await route.fulfill({
+      response,
+      json: {
+        ...read,
+        messages: [
+          ...read.messages,
+          {
+            id: "probe-repo-made",
+            threadId: last?.threadId ?? "",
+            createdAt: (last?.createdAt ?? 0) + 60_000,
+            author: "event",
+            noteTitle: "Made chip-tray a git repository",
+            body: "~/code/chip-tray was a plain folder, so CawCo made it a git repository to cut workspaces from.",
+            event: {
+              kind: "repo",
+              root: "~/code/chip-tray",
+              machineId: STUDIO_MACHINE,
+              commit: "4f2a9c1e7b3d",
+              lfsOffer: LFS_OFFER,
+            },
+          },
+        ],
+      },
+    });
+  });
+  await page.route(LFS_OFFER_READ, (route) =>
+    route.fulfill({
+      status: 200,
+      json: {
+        answer: "open",
+        commit: null,
+        id: LFS_OFFER,
+        root: "~/code/chip-tray",
+        rows: [
+          {
+            bytes: 184 * 1024 * 1024,
+            count: 2,
+            paths: ["assets/tray-demo.mov", "assets/tray-demo-390.mov"],
+            pattern: "*.mov",
+          },
+        ],
+      },
+    })
+  );
 };
 
 /** Caw's panel on the project page, then `then` in his thread. */
@@ -1005,6 +1473,68 @@ const docSocket = (mode: "hold" | "refuse") => async (page: Page) => {
 };
 
 /**
+ * The preview's Comment mode on, as a person turns it on: C, with the
+ * pane's mode control focused, until the page has heard it (its overlay's
+ * layer in comment mode, comments.ts `pageInComment`).
+ */
+const commentMode = async (page: Page) => {
+  const frame = page.frameLocator(PREVIEW_FRAME);
+  await frame.locator("h1").waitFor();
+  const heard = frame.locator("cawco-overlay .layer.comment");
+  if ((await heard.count()) > 0) {
+    return;
+  }
+  await paneKey(page, "c");
+  await heard.waitFor({ state: "attached" });
+};
+
+/**
+ * A key pressed in the preview's pane, as its shortcuts hear it (PreviewPane
+ * `paneKey`: only from inside the pane): the mode control focused where the
+ * head stands it, else the head's artifact name.
+ */
+const paneKey = async (page: Page, key: string) => {
+  const mode = page
+    .locator("[aria-keyshortcuts='C']")
+    .filter({ visible: true });
+  const inPane =
+    (await mode.count()) > 0
+      ? mode.first()
+      : page
+          .locator("[data-artifact-trigger]")
+          .filter({ visible: true })
+          .first();
+  await inPane.focus();
+  await page.keyboard.press(key);
+};
+
+/**
+ * One pin on the preview's `target`, its words said and sent (⌘↩ in its
+ * card's field), then its card closed: the pin stands with its thread.
+ */
+const pinWith = async (page: Page, target: string, words: string) => {
+  await commentMode(page);
+  const box = await page
+    .frameLocator(PREVIEW_FRAME)
+    .locator(target)
+    .boundingBox();
+  if (!box) {
+    throw new Error(`the preview's ${target} has no box`);
+  }
+  await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
+  const card = page
+    .locator("[data-slot=pin-card]")
+    .filter({ visible: true })
+    .first();
+  const field = card.getByRole("textbox");
+  await field.fill(words);
+  await field.press("ControlOrMeta+Enter");
+  await card.locator("[data-slot=thread]").waitFor();
+  await card.getByRole("button", { name: "Close", exact: true }).click();
+  await card.waitFor({ state: "detached" });
+};
+
+/**
  * A sheet's inspector open: once its page has drawn a story (and said its
  * stories and props to the pane, `cawco:sheet`), Inspect pressed, and the
  * chosen story's props standing as controls, a row each.
@@ -1214,7 +1744,57 @@ const BENCHES: [string, string, string][] = [
     'nav[aria-label="Usage popover bench"]',
   ],
   ["finder", "/dev/finder", 'main ol[aria-label="Sent"]'],
+  ["artifact-head", "/motion/artifact-head", "[data-bench-pane]"],
+  ["breath-floor", "/motion/breath-floor", "[data-breather=catch-up]"],
+  ["pointer-hit", "/motion/pointer-hit", "[data-probe-hit]"],
+  [
+    "prompt-head",
+    "/motion/prompt-head",
+    "main#main-content section[data-slot=hitl]",
+  ],
+  ["side-head", "/motion/side-head", "[data-card]"],
+  ["signin-problem", "/motion/signin-problem", "[data-bench]"],
+  ["step-ink", "/motion/step-ink", "[data-ink]"],
 ];
+/**
+ * The overlays bench's layers, each opened from its own opener
+ * (`data-open`) and standing open: what each kit overlay draws open (its
+ * content, its overlay, its parts).
+ */
+const OVERLAYS: [string, string][] = [
+  ["sheet", "[data-slot=sheet-content][data-state=open]"],
+  ["dialog", OPEN_DIALOG],
+  ["alert-dialog", "[role=alertdialog][data-state=open]"],
+  ["drawer", "[data-slot=drawer-content][data-state=open]"],
+  ["dropdown-menu", OPEN_MENU],
+  ["popover", OPEN_POPOVER],
+  ["select", "[data-slot=select-content][data-state=open] [role=option]"],
+  ["context-menu", OPEN_MENU],
+];
+/** A bench's states past its rest, by the bench's name. */
+const BENCH_STATES: Record<string, State[]> = {
+  overlays: OVERLAYS.map(([layer, open]): State => ({
+    name: layer,
+    act: (page) =>
+      page
+        .locator(`[data-open="${layer}"]`)
+        .first()
+        .click(layer === "context-menu" ? { button: "right" } : {}),
+    root: "body",
+    ready: { shows: open },
+  })),
+};
+
+/** The session's Files: the bar's on a desk, the rail's Files row on a phone (its drawer). */
+const openFiles = async (page: Page) => {
+  const bar = page.locator("[data-files-control]").filter({ visible: true });
+  if ((await bar.count()) > 0) {
+    await bar.first().click();
+    return;
+  }
+  await openRail(page);
+  await page.locator("[data-sidebar-files]").first().click();
+};
 /** The config sections, each with its page's title (SectionFrame's `h1`, sections.ts `label`). */
 const CONFIG: [string, string][] = [
   ["accounts", "Accounts"],
@@ -1229,6 +1809,7 @@ const CONFIG: [string, string][] = [
   ["phone", "Phone"],
   ["previews", "Previews"],
   ["rules", "Rules"],
+  ["browsers", "Browsers"],
   ["skills", "Skills & plugins"],
   ["spend", "Spend"],
   ["subagents", "Subagents"],
@@ -1277,6 +1858,57 @@ const EDITORS: Record<string, State[]> = {
                   shows: `${field("Hook name")}, [data-delete]`,
                   path: at(`/config/hooks/${s.hook}`),
                 }),
+              },
+            ]
+          : []),
+        // The scene's hook while the hooks are still read: the editor's
+        // skeleton (EditorRoute). Last (its route stays).
+        ...(section === "hooks"
+          ? [
+              {
+                name: "editor-reading",
+                route: (s: Scene) => `/config/hooks/${s.hook}`,
+                act: reloadedWith((page) =>
+                  neverAnswered(page, HOOKS_READ, HOOKS_READ_PATH)
+                ),
+                root: "body",
+                ready: { shows: `main ${SKELETON}`, not: field("Hook name") },
+              },
+            ]
+          : []),
+        // A new delegate type's model: its combobox open, the models to search.
+        ...(section === "delegate-types"
+          ? [
+              {
+                name: "model",
+                route: () => "/config/delegate-types/new",
+                act: (page: Page) =>
+                  page
+                    .getByRole("combobox", { name: MODEL_CHIP })
+                    .filter({ visible: true })
+                    .first()
+                    .click(),
+                root: "body",
+                ready: { shows: "[data-slot=command-input]" },
+              },
+            ]
+          : []),
+        // A new server that runs remote: its transport and its headers' rows.
+
+        ...(section === "mcp"
+          ? [
+              {
+                name: "editor-remote",
+                route: () => "/config/mcp/new",
+                act: (page: Page) =>
+                  page
+                    .locator("[data-slot=toggle-group-item][data-value=remote]")
+                    .first()
+                    .click(),
+                root: "body",
+                ready: {
+                  shows: "fieldset:has(> legend) input[aria-label$=' name']",
+                },
               },
             ]
           : []),
@@ -1337,7 +1969,12 @@ const EDITORS: Record<string, State[]> = {
           .getByRole("textbox", { name: "Filter memory files" })
           .fill("no-such-file"),
       root: "body",
-      ready: { shows: "p[data-slot=note]", says: /no-such-file/ },
+      // X3: the kit's EmptyState, its title naming the filter; this base
+      // still draws the note line, which goes once X3's branch lands.
+      ready: {
+        shows: "[data-slot=empty] [data-slot=empty-title], p[data-slot=note]",
+        says: /no-such-file/,
+      },
     },
     // The fleet's memory in its editor.
     {
@@ -1356,9 +1993,12 @@ const EDITORS: Record<string, State[]> = {
       hub: "unregistered",
       route: () => "/config/memory/CLAUDE.md",
       root: "body",
+      // X3: the shared kit EmptyState (NoMachines), its title saying it;
+      // this base still draws the bare button, which goes once X3's branch
+      // lands.
       ready: {
-        shows: "button[aria-haspopup=dialog]",
-        says: /^No machines yet$/,
+        shows: "[data-slot=empty], button[aria-haspopup=dialog]",
+        says: NO_MACHINES,
         path: at("/config/memory/CLAUDE.md"),
       },
     },
@@ -1510,6 +2150,16 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: { shows: HOME, not: `${HOME} [role=status]` },
       },
+      {
+        // Recent unfolded: the sessions and the stored ones, newest first.
+        name: "recent",
+        act: async (page) => {
+          await recentOpen(page);
+        },
+        root: "body",
+        inView: "[data-slot=home-recent-session-tree]",
+        ready: { shows: "[data-slot=home-recent-session-tree] li" },
+      },
       // The fleet not read yet: the home's first line says so (StatusLine,
       // until the home's reads are in: home-state.svelte.ts `ready`). The
       // hub's own `reading` holds `/api/fleet` (scene.ts `HOLDS`), which only
@@ -1543,6 +2193,22 @@ export const SURFACES: Surface[] = [
         act: openKeychain,
         root: "body",
         ready: { shows: `${UNLOCK_TILE} input[aria-label^="Login password"]` },
+      },
+      {
+        // The offline Mac's menu, its Pause until… opened: each end beside its clock.
+        name: "machine-pause",
+        widths: ["desk"],
+        act: async (page) => {
+          await press(MACHINES)(page);
+          await page
+            .locator(LAYER)
+            .getByText(STUDIO_HOST, { exact: true })
+            .first()
+            .click({ button: "right" });
+          await page.getByRole("menuitem", { name: PAUSE_UNTIL }).click();
+        },
+        root: "body",
+        ready: { shows: SUB_MENU, says: PAUSE_ENDS },
       },
       {
         // The machines list's Add machine: Connect a machine, on its
@@ -1596,6 +2262,25 @@ export const SURFACES: Surface[] = [
         },
       },
       {
+        // Recent unfolded with a transcript stored on the machine that no
+        // row lists: its stored row among the sessions. Last on this hub (its
+        // route stays).
+        name: "recent-stored",
+        act: async (page) => {
+          await hubPatched(
+            (message) => message,
+            machineAnswer("listSessions", [STORED_SESSION])
+          )(page);
+          await recentOpen(page);
+        },
+        root: "body",
+        inView: "[data-slot=home-recent-session-tree]",
+        ready: {
+          shows: "[data-slot=home-recent-session-tree] li",
+          says: STORED_TITLE,
+        },
+      },
+      {
         // The hub's socket open and silent on its tape (scene.ts `HOLDS`):
         // the status line, on the way.
         name: "connecting",
@@ -1611,7 +2296,7 @@ export const SURFACES: Surface[] = [
   },
   {
     // The top bar alone, its glass group included (Shell's
-    // `data-slot="top"`): on the home, and over a conversation's tabs
+    // `data-slot="top"`): on a phone's home, and over a conversation's tabs
     // (hosting them on a desk, floating over them on a phone). The bar
     // glass's own compare against the base reads it at both widths.
     name: "top-bar",
@@ -1619,10 +2304,13 @@ export const SURFACES: Surface[] = [
     route: () => "/",
     states: [
       {
+        // The home is the page under the drawer's width alone: `/` goes on
+        // to `/session` (routes/(app)/+page.server.ts), which a desk opens
+        // on the workspace's conversation (top-bar/session's).
         name: "home",
-        widths: ["desk", "phone"],
+        widths: ["phone"],
         root: TOP_BAR,
-        ready: { shows: TOP_BAR, path: /^\/$/ },
+        ready: { shows: `body:has(${HOME}) ${TOP_BAR}`, path: /^\/session$/ },
       },
       {
         name: "session",
@@ -1677,6 +2365,20 @@ export const SURFACES: Surface[] = [
         root: "body",
         widths: ["desk"],
         ready: { shows: "[data-nest-host]:has([data-session-hover-tone])" },
+      },
+      {
+        // The row's menu, its Account opened: the accounts it can run on.
+        name: "row-account",
+        act: async (page) => {
+          await page
+            .getByRole("link", { name: IDLE_ROW })
+            .first()
+            .click({ button: "right" });
+          await page.getByRole("menuitem", { name: ACCOUNT_ITEM }).click();
+        },
+        root: "body",
+        widths: ["desk"],
+        ready: { shows: `${SUB_MENU} [role=menuitemradio]` },
       },
       {
         // The same fleet two days on: the project's stopped sessions past
@@ -1922,6 +2624,40 @@ export const SURFACES: Surface[] = [
         ready: (s) => ({ shows: on(s.moving, MOVE_WAIT) }),
       },
       {
+        // The same move said yes to and cloning: its bytes so far.
+        name: "move-cloning",
+        hub: "moving",
+        route: (s) => `/session/${s.moving}`,
+        act: hubPatched(MOVE_CLONING),
+        root: MAIN,
+        ready: (s) => ({
+          shows: on(s.moving, "[data-slot=wait] [data-slot=progress]"),
+        }),
+      },
+      {
+        // The same move failed at its clone: what stopped it.
+        name: "move-failed",
+        hub: "moving",
+        route: (s) => `/session/${s.moving}`,
+        act: hubPatched(MOVE_FAILED),
+        root: MAIN,
+        ready: (s) => ({
+          shows: on(s.moving, "[data-slot=wait] [data-slot=alert-title]"),
+        }),
+      },
+      {
+        // A / in the composer: the skills and commands the session lists.
+        name: "slash",
+        act: async (page) => {
+          await emptyComposer(page);
+          await page.keyboard.type("/");
+        },
+        root: "body",
+        ready: {
+          shows: "#composer-menu [data-slot=command-item]",
+        },
+      },
+      {
         // The delegate it started, reported back: its card opened, its transcript inline.
         name: "delegate",
         route: (s) => `/session/${s.split}`,
@@ -2001,6 +2737,18 @@ export const SURFACES: Surface[] = [
         ready: { shows: "iframe[title='Canvas']" },
       },
       {
+        // Its last send refused, its machine not taking its mode: the row's
+        // Choose a mode pressed, the session's own picker open (ModePick).
+        // Before the last (its routes stay).
+        name: "mode-ask",
+        act: async (page, scene) => {
+          await reloadedWith(modeRefused(scene.chips))(page);
+          await pressInTranscript(page, CHOOSE_A_MODE);
+        },
+        root: "body",
+        ready: { shows: `${NS_POP} [data-perm]` },
+      },
+      {
         // The hub's socket dropped, and the catch-up read on reconnecting
         // (client.svelte.ts `rereadFollowed`) refused: the rows held where
         // they are, the view not caught up. Last (its routes stay).
@@ -2044,6 +2792,21 @@ export const SURFACES: Surface[] = [
         ready: {
           shows: OPEN_MENU,
           says: /Project details…[\s\S]*Forget project…/,
+        },
+      },
+      {
+        // The ⋯ menu's upstream choice opened: whose repositories its
+        // sessions may post to.
+        name: "upstream",
+        act: async (page) => {
+          await cawSheetAway(page);
+          await press(MORE_FOR_CAWCO)(page);
+          await page.getByRole("menuitem", { name: UPSTREAM }).click();
+        },
+        root: "body",
+        widths: ["desk"],
+        ready: {
+          shows: "[data-slot=dropdown-menu-sub-content][data-state=open]",
         },
       },
       // Caw's seat: his thread beside the board.
@@ -2113,6 +2876,21 @@ export const SURFACES: Surface[] = [
           shows: '[data-placeholder^="A repo, a launch, a brand"]',
           path: /^\/project\/new$/,
         },
+      },
+      {
+        // A folder the project placed made a repository, its large files
+        // left out: Caw's note, Git LFS offered under it (LfsOfferActions).
+        // The scene placed none, so its thread is read with the note the hub
+        // files then (place-repo.ts `noteMade`), and the offer as the hub
+        // answers it. Before the last (its routes stay).
+        name: "caw-lfs",
+        act: async (page) => {
+          await reloadedWith(withLfsOffer)(page);
+          await openCaw(page);
+        },
+        root: "body",
+        inView: "[data-lfs-pattern]",
+        ready: { shows: "[data-lfs-pattern]" },
       },
       {
         // The forget pressed while what runs in the project is still being
@@ -2355,6 +3133,18 @@ export const SURFACES: Surface[] = [
         root: MAIN,
         ready: { shows: DECISION_PAGE, path: /[?&]page=pricing\b/ },
       },
+      // Its pages still open for picks, each its program drawn in its frame
+      // by the decision host (decision-host.ts); the media page's card
+      // draws every media part of the library (scene.ts `mediaProgram`).
+      ...["landing", "onboarding", MEDIA_PAGE].map((name): State => ({
+        name,
+        route: (s) => `/project/${s.decisions}?view=decisions&page=${name}`,
+        root: MAIN,
+        ready: {
+          shows: `${DECISION_PAGE.replace(" [data-slot=page-head]", "")} iframe`,
+          path: new RegExp(`[?&]page=${name}\\b`),
+        },
+      })),
       {
         name: "graph",
         route: (s) => `/project/${s.decisions}?view=decisions&mode=graph`,
@@ -2468,6 +3258,29 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: { shows: "[data-project-spend-row]" },
       },
+      {
+        // Its project filter open.
+        name: "project-pick",
+        act: (page) => usageProjects(page),
+        root: "body",
+        ready: {
+          shows: "[data-slot=select-content][data-state=open] [role=option]",
+        },
+      },
+      // A fleet of many projects: the filter's list as long as the fleet's.
+      // Last (its route stays).
+      {
+        name: "project-pick-many",
+        act: async (page) => {
+          await reloadedWith(manyProjects)(page);
+          await usageProjects(page);
+        },
+        root: "body",
+        ready: {
+          shows: "[data-slot=select-content][data-state=open] [role=option]",
+          says: FIRST_MORE_PROJECT,
+        },
+      },
     ],
   },
   {
@@ -2523,6 +3336,23 @@ export const SURFACES: Surface[] = [
         ready: { shows: `${nsPop("permission")} [data-perm=fullSend]` },
       },
       {
+        // Full Send chosen: its warning over Start.
+        name: "full-send",
+        act: inSheet(
+          press(PERMISSION_CHIP),
+          (page) =>
+            page
+              .locator(`${nsPop("permission")} [data-perm=fullSend]`)
+              .first()
+              .click(),
+          press(SWITCH_FULL_SEND)
+        ),
+        root: "[role=dialog][data-state=open]",
+        ready: {
+          shows: `${OPEN_DIALOG} [data-slot=start-notice] [data-slot=alert-title]`,
+        },
+      },
+      {
         name: "account",
         act: inSheet(press(ACCOUNT_CHIP)),
         root: "body",
@@ -2573,6 +3403,47 @@ export const SURFACES: Surface[] = [
           says: /^\/tray-check$/,
         },
       },
+      {
+        // The `/` menu's skill chosen: its chip on the prompt's line
+        // (PromptEditor's reference chip, `data-chip`).
+        name: "chip",
+        act: inSheet(async (page) => {
+          // The prompt's draft is kept across the sheet's openings: emptied first.
+          await page.getByRole("textbox", { name: "First prompt" }).click();
+          await page.keyboard.press("ControlOrMeta+a");
+          await page.keyboard.press("Delete");
+          await page.keyboard.type("/");
+          await page
+            .locator(`${NS_POP} [data-slot=trigger-menu-label]`)
+            .first()
+            .waitFor();
+          await page.keyboard.press("Enter");
+        }),
+        root: "[role=dialog][data-state=open]",
+        ready: {
+          shows: `${OPEN_DIALOG} [data-chip]`,
+          says: /tray-check/,
+          not: NS_POP,
+        },
+      },
+      {
+        // Another harness the machine runs, picked on the model's rail: an
+        // enabled rail item chosen, the models swapped to its list.
+        name: "harness",
+        act: inSheet((page) =>
+          page
+            .locator(
+              `${OPEN_DIALOG} [data-slot=rail] [role=radio][aria-checked=false]:enabled`
+            )
+            .first()
+            .click()
+        ),
+        root: "[role=dialog][data-state=open]",
+        ready: {
+          shows: `${OPEN_DIALOG} [data-slot=rail] [role=radio][aria-checked=true]:enabled`,
+          not: `${OPEN_DIALOG} [data-slot=rail] [role=radio][aria-checked=true][data-rail-item=claude]`,
+        },
+      },
     ],
   },
   {
@@ -2611,6 +3482,24 @@ export const SURFACES: Surface[] = [
         },
         root: LAYER,
         ready: { shows: `${JUMP} ${FIND_PEEK}` },
+      },
+      {
+        // Nothing typed, → on its first stop: the asks waiting for you, their
+        // sort a segmented control (Finder's `waitingList`).
+        name: "waiting",
+        act: async (page) => {
+          await openJump(page);
+          await page
+            .locator(`${JUMP} [role=option]`)
+            .filter({ visible: true })
+            .first()
+            .waitFor();
+          await page.keyboard.press("ArrowRight");
+        },
+        root: LAYER,
+        ready: {
+          shows: `${JUMP} [role=radiogroup][aria-label=Sort] [role=radio][aria-checked=true]`,
+        },
       },
     ],
   },
@@ -2653,6 +3542,13 @@ export const SURFACES: Surface[] = [
         name: "rest",
         root: "body",
         ready: { shows: "h1", says: /^Workflows$/, path: at("/workflows") },
+      },
+      {
+        // New workflow: its menu, a graph or a program, each made on its press.
+        name: "new",
+        act: press(NEW_WORKFLOW),
+        root: LAYER,
+        ready: { shows: OPEN_MENU, says: NEW_WORKFLOW_KINDS },
       },
       {
         // The scene's workflow is a program's (`origin: "code"`): it has no
@@ -2716,6 +3612,23 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: { shows: "[data-slot=when]" },
       },
+      // Its case compared with a value: the value's JSON field.
+      {
+        name: "graph-compare",
+        route: (s) => `/workflows/${s.graph}`,
+        act: async (page) => {
+          await pickNode(GRAPH_BRANCH)(page);
+          await page
+            .getByRole("combobox", { name: "Operator" })
+            .first()
+            .selectOption("eq");
+        },
+        root: "body",
+        ready: {
+          shows:
+            "[data-slot=when] [data-slot=when] textarea, [data-slot=when] [data-slot=when] input",
+        },
+      },
       // The finished run in its own pane: its steps.
       {
         name: "run",
@@ -2723,6 +3636,28 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: (s) => ({
           shows: on(`run:${s.run}`, '[role=img][aria-label="Passed"]'),
+        }),
+      },
+      {
+        // The same run parked on its question to you: the question's card,
+        // its options and your own answer. The scene's run finished, so its
+        // read is answered waiting, as the hub answers a parked run's. Last
+        // (its route stays).
+        name: "run-ask",
+        route: (s) => `/session/run:${s.run}`,
+        act: reloadedWith((page) =>
+          page.route(RUN_READ, async (route) => {
+            const response = await route.fetch();
+            const run = (await response.json()) as Record<string, unknown>;
+            await route.fulfill({
+              response,
+              json: { ...run, status: "waiting", ask: RUN_ASK },
+            });
+          })
+        ),
+        root: "body",
+        ready: (s) => ({
+          shows: on(`run:${s.run}`, "[data-slot=card] [data-slot=card-title]"),
         }),
       },
     ],
@@ -3069,6 +4004,94 @@ export const SURFACES: Surface[] = [
           shows: on(s.art, `${PIN_LIST} [data-pin-list-failed]`),
         }),
       },
+      {
+        // Its machine's list open, then a machine chosen: the folders on it.
+        name: "place-machines",
+        route: (s) => `/session/${s.art}`,
+        act: async (page) => {
+          await machinesOpen(page);
+        },
+        root: "body",
+        widths: ["desk"],
+        ready: {
+          shows: "[data-slot=select-content][data-state=open] [role=option]",
+        },
+      },
+      {
+        name: "place-folder",
+        route: (s) => `/session/${s.art}`,
+        act: async (page) => {
+          await machinesOpen(page);
+          // The list stands in its own layer, over the pane: pressed there.
+          await page
+            .locator(
+              "[data-slot=select-content][data-state=open] [role=option]"
+            )
+            .first()
+            .click();
+          // Browse: the machine's folders, from the keyboard as the machine was.
+          await page
+            .locator(`${PLACE_PICK} [data-slot=collapsible-trigger]`)
+            .first()
+            .focus();
+          await page.keyboard.press("Enter");
+        },
+        root: "body",
+        widths: ["desk"],
+        ready: {
+          // The folders' picker in Browse: its way up a folder (DirectoryPicker).
+          shows: `${PLACE_PICK} [data-slot=collapsible][data-state=open] [aria-label="Parent directory"]`,
+          not: "[data-slot=select-content][data-state=open]",
+        },
+      },
+      {
+        // The pane head's artifact menu: the session's artifacts, each its row.
+        name: "menu",
+        route: (s) => `/session/${s.art}`,
+        act: (page) =>
+          page
+            .locator("[data-artifact-trigger]")
+            .filter({ visible: true })
+            .first()
+            .click(),
+        root: LAYER,
+        ready: {
+          shows: "[data-artifact-list][data-state=open] [data-artifact-row]",
+        },
+      },
+      {
+        // A page with a short name, in a pane at its floor, a comment pinned
+        // on it and a pick not yet sent: Comments with its count and Send
+        // picks stand in the head beside the mode and Close, and leave the
+        // ask's line less than it needs (SideSurface `subtitleStands`: its
+        // own width, up to 120px), so the artifact menu says it as its first
+        // row (ArtifactMenu's `menu-line`). A live scene's state: the tape
+        // holds no short-named page.
+        name: "menu-narrow",
+        // The scene's short-named page (scene.ts `SHORT_PAGE`): a long name
+        // keeps the head's room for itself, and the line stands.
+        route: (s) => `/session/${s.media}`,
+        widths: ["desk"],
+        act: async (page) => {
+          await pinWith(page, "h1", "Keep the heading on one line.");
+          await paneKey(page, "v");
+          await page
+            .frameLocator(PREVIEW_FRAME)
+            .locator("[data-option=wrap]")
+            .click();
+          await page.locator("[data-slot=send]").first().waitFor();
+          await sideToFloor(page);
+          await page
+            .locator("[data-artifact-trigger]")
+            .filter({ visible: true })
+            .first()
+            .click();
+        },
+        root: LAYER,
+        ready: {
+          shows: "[data-artifact-list][data-state=open] [data-slot=menu-line]",
+        },
+      },
     ],
   },
   {
@@ -3085,6 +4108,41 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: { shows: INSPECTOR_ROW },
       },
+      {
+        // The head's View: Map, the scheme and the width, the menu open.
+        name: "view",
+        act: async (page) => {
+          await page
+            .frameLocator(PREVIEW_FRAME)
+            .locator(SHEET_STORY)
+            .first()
+            .waitFor();
+          await headControl("view", "View")(page);
+        },
+        root: LAYER,
+        ready: { shows: `${OPEN_MENU} [role=menuitemcheckbox]` },
+      },
+      {
+        // Map mode: the canvas's component among what renders it and what it renders.
+        name: "map",
+        widths: ["desk"],
+        act: async (page) => {
+          await page
+            .frameLocator(PREVIEW_FRAME)
+            .locator(SHEET_STORY)
+            .first()
+            .waitFor();
+          // The map's read (a stage's, which the sheet's tape never heard):
+          // answered as the stage answers it for the scene's Card.
+          await page.route(CANVAS_MAP_READ, (route) =>
+            route.fulfill({ status: 200, json: CARD_MAP })
+          );
+          await headControl("view", "View")(page);
+          await page.getByRole("menuitemcheckbox", { name: "Map" }).click();
+        },
+        root: "body",
+        ready: { shows: "[data-slot=canvas-map] [data-slot=map-node]" },
+      },
     ],
   },
   {
@@ -3097,6 +4155,8 @@ export const SURFACES: Surface[] = [
       {
         name: "tabs",
         act: tabsFail,
+        // The doubled tab's keyed list throws (PaneTabs' `{#each tabs … (tab.key)}`).
+        expects: { error: EACH_KEY_DUPLICATE },
         root: "body",
         ready: { shows: "[data-region-failed=tabs]" },
       },
@@ -3196,15 +4256,39 @@ export const SURFACES: Surface[] = [
           says: /^Connect a machine to run sessions$/,
         },
       },
+      {
+        // Its first way to connect one pressed: Connect a machine, the
+        // dialog on a desk and the bottom drawer on a phone.
+        name: "connect",
+        hub: "unregistered",
+        act: async (page) => {
+          await page
+            .locator("[data-slot=icon-card][aria-haspopup=dialog]")
+            .filter({ visible: true })
+            .first()
+            .focus();
+          await page.keyboard.press("Enter");
+        },
+        root: "body",
+        ready: {
+          // The dialog is named by its title; the drawer by its label.
+          shows: `${OPEN_DIALOG}, [data-slot=drawer-content][data-state=open]`,
+          says: CONNECT_A_MACHINE,
+        },
+      },
       // A session on the machine that went away: what its pane can still show.
       {
         name: "session",
         hub: "machineless",
         route: (s) => `/session/${s.chips}`,
         root: MAIN,
+        // Its transcript, all its pane has with nothing to run it (the
+        // hub's machines all offline: its `machineless` state). The note
+        // this asserted, "This session starts once its machine has memory
+        // for it", was the recording host's own memory pressure, not this.
         ready: (s) => ({
-          shows: on(s.chips, "[data-slot=ftitle]"),
-          says: STARTS_WITH_MACHINE,
+          shows: on(s.chips, "[role=log][aria-label='Session transcript']"),
+          not: STOP_AGENT,
         }),
       },
     ],
@@ -3244,7 +4328,10 @@ export const SURFACES: Surface[] = [
     name: `bench-${name}`,
     serve: "dev",
     route: () => path,
-    states: [{ name: "rest", root: "body", ready: { shows: draws } }],
+    states: [
+      { name: "rest", root: "body", ready: { shows: draws } },
+      ...(BENCH_STATES[name] ?? []),
+    ],
   })),
   {
     // The Comments panel on the chosen-hover bench, read whole: its section
@@ -3258,6 +4345,95 @@ export const SURFACES: Surface[] = [
         root: "[data-bench] section[data-probe=pins]",
         inView: "[data-bench] section[data-probe=pins]",
         ready: { shows: `[data-probe=pins] ${PIN_ROW}` },
+      },
+    ],
+  },
+  {
+    // The session's Files: the bar's glass card on a desk, the drawer from
+    // the rail's Files row on a phone; then an artifact picked in it,
+    // floating on Files' leading side (a desk's alone).
+    name: "files",
+    serve: "built",
+    route: (s) => `/session/${s.art}`,
+    states: [
+      {
+        name: "open",
+        act: openFiles,
+        root: "body",
+        ready: {
+          shows:
+            ":is([data-files-panel], [data-files-sheet]) [data-files-card]",
+        },
+      },
+      {
+        name: "picked",
+        widths: ["desk"],
+        act: async (page) => {
+          // The pick shows the artifact in its session's panel first (hub
+          // `…/show`, which the tape never heard): answered as the hub
+          // answers it. Last (its route stays).
+          await page.route(ARTIFACT_SHOW, (route) =>
+            route.fulfill({ status: 200, json: { ok: true } })
+          );
+          await openFiles(page);
+          await page
+            .locator("[data-files-panel] [data-files-card]")
+            .first()
+            .click();
+        },
+        root: "body",
+        ready: { shows: "[data-files-float][data-state=open]" },
+      },
+      {
+        // The floating panel's artifact menu: in its narrower head the ask's
+        // line gives way, and the menu says it first (ArtifactMenu's line).
+        name: "float-menu",
+        widths: ["desk"],
+        act: async (page) => {
+          await page.route(ARTIFACT_SHOW, (route) =>
+            route.fulfill({ status: 200, json: { ok: true } })
+          );
+          await openFiles(page);
+          await page
+            .locator("[data-files-panel] [data-files-card]")
+            .first()
+            .click();
+          await page
+            .locator(
+              "[data-files-float][data-state=open] [data-artifact-trigger]"
+            )
+            .first()
+            .click();
+        },
+        root: LAYER,
+        ready: {
+          shows: "[data-artifact-list][data-state=open] [data-artifact-row]",
+        },
+      },
+    ],
+  },
+  {
+    // A New Session opened from the session strip's "+": the popover at it,
+    // not the dialog.
+    name: "strip-new",
+    serve: "built",
+    route: (s) => `/session/${s.chips}`,
+    states: [
+      {
+        name: "popover",
+        widths: ["desk"],
+        act: (page) =>
+          page
+            .locator("[data-slot=strip-new] [data-tnew]")
+            .filter({ visible: true })
+            .first()
+            .click(),
+        root: "[data-ns-popover][data-state=open]",
+        ready: {
+          shows:
+            '[data-ns-popover][data-state=open] [aria-label="First prompt"]',
+          not: OPEN_DIALOG,
+        },
       },
     ],
   },

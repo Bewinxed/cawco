@@ -24,6 +24,7 @@ import {
 } from "../hub-tape";
 import { adopted, type Kit, ROOT, type Theme, type View } from "../kit";
 import { actHolds, type State, type Surface, type Width } from "./catalogue";
+import { DECISION_HOST, decisionHostAnswer } from "./decision-host";
 import { elementAt, holdStill, installReader, PROPS } from "./read";
 import { type ReadyRead, readyOf } from "./ready";
 import { type Scene, VARIANTS, type Variant } from "./scene";
@@ -65,6 +66,13 @@ export const PASSES: Pass[] = [
   ),
   { name: "desk light reduced", width: "desk", theme: "light", reduced: true },
 ];
+
+/**
+ * Whether the walk serves what it builds itself with Svelte's dev compile
+ * (`PROBE_SVELTE_DEV=1`: the coverage read, whose elements must name their
+ * files): a decision page's host (decision-host.ts).
+ */
+const svelteDev = (): boolean => process.env.PROBE_SVELTE_DEV === "1";
 
 /** Where a page can reach this machine: a loopback origin. */
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
@@ -113,11 +121,31 @@ export class Servers {
     return this.dev.then((d) => d.base);
   }
 
-  /** Routes a page's context: its previews' origins on the tape. */
-  attach(context: BrowserContext): Promise<void> {
-    return this.tape.attach(
-      context,
-      (url) => LOOPBACK.has(url.hostname) && !this.own.has(url.host)
+  /**
+   * Routes a page's context: its previews' origins on the tape, and on
+   * each a decision page's host built from this tree (decision-host.ts),
+   * routed after the tape's so it answers first.
+   */
+  async attach(context: BrowserContext): Promise<void> {
+    const preview = (url: URL) =>
+      LOOPBACK.has(url.hostname) && !this.own.has(url.host);
+    await this.tape.attach(context, preview);
+    await context.route(
+      (url) => preview(url) && url.pathname.startsWith(DECISION_HOST),
+      async (route) => {
+        const path = new URL(route.request().url()).pathname.slice(
+          DECISION_HOST.length
+        );
+        const answer = await decisionHostAnswer(path, svelteDev());
+        if (!answer) {
+          return route.fulfill({ status: 404, body: "" });
+        }
+        return route.fulfill({
+          status: answer.status,
+          headers: Object.fromEntries(answer.headers),
+          body: Buffer.from(await answer.arrayBuffer()),
+        });
+      }
     );
   }
 
@@ -803,6 +831,10 @@ const STILL_FRAMES = 3;
 async function pageReady(page: Page): Promise<void> {
   await hydrated(page, "body");
   await page.waitForFunction(() => window.kitHydrated === true);
+  // X5: data-first-render. Once the Shell's root carries it as its first
+  // render settles, this timed run becomes the clock run on, a frame at a
+  // time, until `[data-first-render]` stands (a page with no Shell: none
+  // to wait on), and FIRST_RENDER_MS goes.
   await page.clock.runFor(FIRST_RENDER_MS);
   let last = "";
   let still = 0;
@@ -881,6 +913,50 @@ async function arrive(page: Page): Promise<void> {
   }
   await stand(page);
 }
+
+/** An error the dashboard hit while a state was on screen: its entry (`<surface>-<state>`), the pass, and what it said. */
+export interface PageError {
+  entry: string;
+  message: string;
+  pass: string;
+}
+
+/**
+ * Every error the walk's pages hit, each against the state on screen when
+ * it came: what the dashboard reports to its hub (hooks.client.ts posts it
+ * to `/api/dashboard-errors`), and what the page throws past every handler.
+ */
+export const pageErrors: PageError[] = [];
+
+/** `page`'s errors, from here on, into {@link pageErrors}. */
+function watchErrors(page: Page, pass: Pass): void {
+  const add = (message: string) => {
+    const label = tracing.get(page)?.label ?? "(before a state)";
+    pageErrors.push({
+      entry: label.replace("/", "-"),
+      pass: pass.name,
+      message,
+    });
+  };
+  page.on("pageerror", (error) => add(error.message.split("\n")[0] ?? ""));
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === DASHBOARD_ERRORS
+    ) {
+      const posted = request.postData() ?? "";
+      let message = posted;
+      try {
+        message = String((JSON.parse(posted) as { message?: unknown }).message);
+      } catch {
+        // Not JSON: said as it came.
+      }
+      add(message);
+    }
+  });
+}
+/** Where the dashboard reports an error to its hub (hooks.client.ts). */
+const DASHBOARD_ERRORS = "/api/dashboard-errors";
 
 /** A state whose ready assertion did not hold once its page stood: it is not the state its name says. */
 export class NotReady extends Error {
@@ -1026,6 +1102,7 @@ export async function walk(
           return;
         }
         const page = await passPage(kit, pass, tape.at);
+        watchErrors(page, pass);
         heldOn.set(page, (request) => servers.holds(request));
         socketHeldOn.set(page, (url) => servers.holdsSocket(url));
         await servers.attach(page.context());

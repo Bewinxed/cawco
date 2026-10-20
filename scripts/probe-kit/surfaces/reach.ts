@@ -1,21 +1,28 @@
 /**
- * What a finger can reach on a page, read by the engine: every visible
- * control's drawn box and how far past each edge a press still lands on it
- * (`document.elementFromPoint`, which a `::after` hit area answers for its
- * element), held to DESIGN.md's 44 Touch Rule (L929): "On a coarse pointer
- * every control's tappable area reaches 44×44 through a transparent
- * `::after` (`.touch-hit`, WCAG 2.5.8), while its drawn size and the layout
- * stay the same. Where neighbours sit closer, `--hit-gap-x` and
- * `--hit-gap-y` stop each area at the midpoint … Menu items and nav rows
- * are 44px tall on touch."
+ * What a finger or a mouse can reach on a page, read by the engine: every
+ * visible control's drawn box and how far past each edge a press still
+ * lands on it (`document.elementFromPoint`, which a `::after` hit area
+ * answers for its element), held to the page's own pointer's rule
+ * (DESIGN.md): on a coarse pointer The 44 Touch Rule, "every control's
+ * tappable area reaches 44×44 through a transparent `::after` … Menu items
+ * and nav rows are 44px tall on touch"; on a fine one The 24 Pointer Rule,
+ * "a control drawn smaller than 24×24 reaches 24px through `.pointer-hit`,
+ * with the same midpoint stops".
  *
  * Each axis is read through the control's centre: a press 0.5px inside the
- * 44px box centred on it must land on it, and one 0.5px beyond must not.
- * Where a neighbouring control's drawn box is nearer than that, the
- * midpoint between them stands in for the box's edge. Menu items and nav
- * rows are also held to a 44px drawn height. Beside them, every element
- * that spills its own box sideways, or stands past the viewport's right
- * edge, for a layout's symptom.
+ * target's box (44px or 24px) centred on it must land on it, and one 0.5px
+ * beyond must not. Where a neighbouring control's drawn box is nearer than
+ * that, the midpoint between them stands in for the box's edge. On a
+ * coarse pointer menu items and nav rows are also held to a 44px drawn
+ * height. A control a modal layer's overlay covers (an open dialog's,
+ * drawer's or sheet's scrim stands over its centre) is out of reach by
+ * design, and not read; nor is one visually hidden (`sr-only`, a skip
+ * link until it takes the focus). Beside them, every element that spills
+ * its own box sideways, or stands past the viewport's right edge, for a
+ * layout's symptom: never what is no spill (an SVG's insides, a visually
+ * hidden region, words cut on purpose with an ellipsis, a box passed only
+ * by a part placed on purpose, as a hit area's `::after` or an absolutely
+ * placed handle is, or by what a part of it clips, a scroller's content).
  *
  * `reachOf` runs in the page (`page.evaluate`): self-contained. Written by
  * capture.ts `--reach`, a TSV per capture.
@@ -24,7 +31,11 @@
 export function reachOf(): string {
   const CONTROLS =
     "button, a[href], input:not([type=hidden]), select, textarea, [role=button], [role=tab], [role=menuitem], [role=menuitemradio], [role=menuitemcheckbox], [role=option], [role=switch], [role=checkbox], [role=radio], [role=slider]";
-  const HALF = 22;
+  /** The pointer's target, half of it: The 44 Touch Rule on a coarse pointer, The 24 Pointer Rule on a fine one. */
+  const coarse = matchMedia("(pointer: coarse)").matches;
+  const HALF = coarse ? 22 : 12;
+  /** An open modal layer's overlay: what stands over the page behind it. */
+  const OVERLAY = "[data-slot$='-overlay'][data-state=open]";
   const STEP = 0.5;
   const visible = (el: Element) => {
     const r = el.getBoundingClientRect();
@@ -47,11 +58,33 @@ export function reachOf(): string {
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 48);
+  /**
+   * Whether `el` is visually hidden (`sr-only`: clipped to nothing, by
+   * `clip-path: inset(50%)` or `clip: rect(0 0 0 0)`, or a 1px box that
+   * clips): words for a reader, shown to no eye and no finger.
+   */
+  const visuallyHidden = (el: Element, s = getComputedStyle(el)) =>
+    s.clipPath.startsWith("inset(50%") ||
+    s.clip === "rect(0px, 0px, 0px, 0px)" ||
+    (el.clientWidth <= 1 &&
+      el.clientHeight <= 1 &&
+      (s.overflowX === "hidden" || s.overflowX === "clip"));
+  /** Whether an open modal layer's overlay stands over `el`'s centre: out of reach behind it. */
+  const underOverlay = (el: Element) => {
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(
+      Math.min(innerWidth - 1, Math.max(0, r.left + r.width / 2)),
+      Math.min(innerHeight - 1, Math.max(0, r.top + r.height / 2))
+    );
+    return Boolean(hit?.closest(OVERLAY));
+  };
   const controls = [...document.querySelectorAll(CONTROLS)].filter(
     (el) =>
       visible(el) &&
       // A control inside another control is the outer one's to answer for.
-      !el.parentElement?.closest(CONTROLS)
+      !el.parentElement?.closest(CONTROLS) &&
+      !underOverlay(el) &&
+      !visuallyHidden(el)
   );
   const owns = (el: Element, hit: Element | null) =>
     hit !== null && (hit === el || el.contains(hit));
@@ -178,9 +211,11 @@ export function reachOf(): string {
         stop: stop === undefined ? "page edge" : said(stop),
       };
     });
+    // A row's 44px height is the touch rule's alone.
     const row =
-      el.matches("[role^=menuitem]") ||
-      el.closest("nav, [data-sidebar=menu], [role=menu]") !== null;
+      coarse &&
+      (el.matches("[role^=menuitem]") ||
+        el.closest("nav, [data-sidebar=menu], [role=menu]") !== null);
     const after = getComputedStyle(el, "::after");
     // Its hit area as drawn (a `::after` that clips inside its own control,
     // or takes no presses, reaches nothing), and what of the control clips it.
@@ -233,9 +268,92 @@ export function reachOf(): string {
     );
   }
   // What spills sideways: its content wider than its box where it shows
-  // the spill, or its box past the viewport's right edge.
+  // the spill, or its box past the viewport's right edge. Neither is a
+  // layout's symptom where:
+  // - it is drawn inside an SVG (a diagram's words, a glyph's paths): it
+  //   has no CSS box, so its scroll and client widths say nothing of one
+  //   (CSSOM View's `clientWidth` is a CSS layout box's); the `<svg>`
+  //   itself is read;
+  // - it is a visually hidden region (`sr-only`, clipped to nothing), which
+  //   holds its words wider than itself by design;
+  // - it cuts its words on purpose (`text-overflow: ellipsis`);
+  // - what passes its edge is placed there on purpose, not pushed out by
+  //   its flow: a pseudo-element (a control's transparent hit area, The 44
+  //   Touch Rule's `::after`), or a part placed absolutely or fixed (a graph
+  //   node's port handles, half outside its card), or moved by its own
+  //   transform or offsets. Its in-flow contents,
+  //   its text and the boxes laid out in its flow, stand inside it, each
+  //   read on screen as its box is, so a transform's scale (a zoomed
+  //   canvas's viewport) moves both alike;
+  // - it stands past the window inside a box that clips and stands in the
+  //   window (a scroller's content, under its edge fade): never past the page.
+  const SVG = "http://www.w3.org/2000/svg";
+  const inSvg = (el: Element) =>
+    el.namespaceURI === SVG && el.localName !== "svg";
+  const cut = (s: CSSStyleDeclaration) =>
+    s.overflowX === "hidden" || s.overflowX === "clip";
+  /** Words cut on purpose: a box that ends them in an ellipsis. */
+  const truncates = (s: CSSStyleDeclaration) =>
+    cut(s) && s.textOverflow === "ellipsis";
+  /** A part placed where it stands, not laid there by its flow: out of flow, or moved off its place by its own transform or offsets. */
+  const placedOnPurpose = (style: CSSStyleDeclaration) =>
+    style.position === "absolute" ||
+    style.position === "fixed" ||
+    style.transform !== "none" ||
+    style.translate !== "none" ||
+    (style.position === "relative" &&
+      [style.left, style.right, style.top, style.bottom].some(
+        (side) => side !== "auto" && side !== "0px"
+      ));
+  /** Whether `el`'s in-flow contents (its text, and every box laid out in its flow) stand inside its box `r`, both read on screen. */
+  const flowInside = (el: Element, r: DOMRect) => {
+    const within = (left: number, right: number) =>
+      left >= r.left - 1 && right <= r.right + 1;
+    const walk = (node: Node): boolean => {
+      for (const kid of node.childNodes) {
+        if (kid.nodeType === Node.TEXT_NODE) {
+          const text = document.createRange();
+          text.selectNodeContents(kid);
+          for (const rect of text.getClientRects()) {
+            if (!within(rect.left, rect.right)) {
+              return false;
+            }
+          }
+          continue;
+        }
+        if (!(kid instanceof Element)) {
+          continue;
+        }
+        const style = getComputedStyle(kid);
+        if (placedOnPurpose(style)) {
+          continue;
+        }
+        const box = kid.getBoundingClientRect();
+        if (box.width > 0 && !within(box.left, box.right)) {
+          return false;
+        }
+        // What a part clips stays inside its own box: read no deeper.
+        if (!(cut(style) || walk(kid))) {
+          return false;
+        }
+      }
+      return true;
+    };
+    return walk(el);
+  };
+  const heldInWindow = (el: Element) => {
+    for (let up = el.parentElement; up; up = up.parentElement) {
+      if (
+        getComputedStyle(up).overflowX !== "visible" &&
+        up.getBoundingClientRect().right <= innerWidth + 0.5
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
   for (const el of document.body.getElementsByTagName("*")) {
-    if (!visible(el)) {
+    if (!visible(el) || inSvg(el)) {
       continue;
     }
     const r = el.getBoundingClientRect();
@@ -245,8 +363,12 @@ export function reachOf(): string {
       el.clientWidth > 0 &&
       (s.overflowX === "visible" ||
         s.overflowX === "hidden" ||
-        s.overflowX === "clip");
-    const past = r.right > innerWidth + 0.5 && s.position !== "fixed";
+        s.overflowX === "clip") &&
+      !visuallyHidden(el, s) &&
+      !truncates(s) &&
+      !flowInside(el, r);
+    const past =
+      r.right > innerWidth + 0.5 && s.position !== "fixed" && !heldInWindow(el);
     if (spills || past) {
       lines.push(
         [

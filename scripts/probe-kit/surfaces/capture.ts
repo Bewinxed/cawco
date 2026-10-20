@@ -16,6 +16,13 @@
  * pass's theme drawn. An entry that does not hold is not captured; the run
  * says so with its name and what stood instead, and exits 1.
  *
+ * A label is a lane's name as its brief gives it (`X2-overlays`), folded
+ * to lower case for its folder and branch (`audit-x2-overlays`). Every error
+ * the dashboard hit is printed against the entry and pass on screen when it
+ * came (walk.ts `pageErrors`): `expected: <entry> <pass> <message>` for
+ * the error its entry exists to cause (catalogue `expects`), else
+ * `error: <entry> <pass> <message>`, which fails the run.
+ *
  * Written outside the tracked tree, so a lane's `git status` stays clean:
  * `$TMPDIR/captures/audit-<label>/` (the ignored `.probe/captures/` with no
  * TMPDIR). It holds `<entry>-<desk|phone>-<light|dark>.png` (the state's
@@ -47,19 +54,21 @@ import { entrySlug, ROOT, Run, type Spec } from "../kit";
 import { type State, SURFACES, type Surface, type Width } from "./catalogue";
 import { reachOf } from "./reach";
 import { outline } from "./ready";
-import { PASSES, type Pass, walkTapes } from "./walk";
+import { PASSES, type Pass, pageErrors, walkTapes } from "./walk";
 
 // Six surfaces walked at once (walk.ts `PROBE_SURFACES`), unless the run says otherwise.
 process.env.PROBE_SURFACES ??= "6";
 const args = process.argv.slice(2);
-const label = args
+/** The label as given (a lane's name, `X2-overlays`), and the folder's: folded to lower case. */
+const given = args
   .find((arg) => arg.startsWith("--label="))
   ?.slice("--label=".length);
+const label = given?.toLowerCase();
 const all = args.includes("--all");
 const outlines = args.includes("--outline");
 const reaches = args.includes("--reach");
 const named = args.filter((arg) => !arg.startsWith("--"));
-/** A label as a folder's name takes it: lower case, digits and dashes. */
+/** A label as a folder's name takes it, once folded: lower case, digits and dashes. */
 const LABEL = /^[a-z0-9][a-z0-9-]*$/;
 /** A capture's file name, whose outline and reach are written beside its name. */
 const PNG = /\.png$/;
@@ -176,6 +185,8 @@ async function clipOf(page: Page, root: string) {
   };
 }
 
+/** Each page error's line, `expected:` or `error:`, as the run said it. */
+const said: string[] = [];
 /** The manifest's lines this run writes, by entry, width and theme. */
 const lines = new Map<string, string>();
 let failures = 0;
@@ -244,6 +255,22 @@ const spec: Spec = {
         kit.check(`${entry} ${px} ${theme}`, false, `${why}${wrote}`);
       }
     );
+    // Each error the dashboard hit, against the entry and pass on screen
+    // (walk.ts `pageErrors`): one its entry exists to cause (catalogue
+    // `expects`) is said as expected; any other fails the run.
+    for (const error of pageErrors) {
+      const expected = ENTRIES.get(error.entry)?.state.expects?.error;
+      if (expected?.test(error.message)) {
+        said.push(`expected: ${error.entry} ${error.pass} ${error.message}`);
+      } else {
+        said.push(`error: ${error.entry} ${error.pass} ${error.message}`);
+        kit.check(
+          `${error.entry} ${error.pass}: no page error`,
+          false,
+          error.message
+        );
+      }
+    }
     if (misses.length > 0) {
       kit.note(
         `the tapes answered ${misses.length} request(s) with "not on the tape": ${misses.slice(0, 8).join("; ")}`
@@ -260,7 +287,7 @@ const spec: Spec = {
     const rows = [...kept, ...lines.values()].sort();
     await writeFile(MANIFEST, `${[HEAD, ...rows].join("\n")}\n`);
     kit.note(
-      `${lines.size - failures} capture(s), ${failures} not ready, in ${OUT} (MANIFEST.tsv): commit it as .cutover/audit-${label}/ on cawco-audit/${label}, never on the lane branch`
+      `${lines.size - failures} capture(s), ${failures} not ready, in ${OUT} (MANIFEST.tsv${given === label ? "" : `; --label=${given} folded to ${label}`}): commit it as .cutover/audit-${label}/ on cawco-audit/${label}, never on the lane branch`
     );
   },
 };
@@ -273,6 +300,9 @@ try {
 }
 if (run.failed.length > 0) {
   console.log(`FAILED:\n${run.failed.join("\n")}`);
+}
+for (const line of said) {
+  console.log(line);
 }
 console.log(
   run.failures === 0
