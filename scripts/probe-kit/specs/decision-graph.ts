@@ -10,7 +10,9 @@
  *   bun scripts/probe-kit/run.ts decision-graph
  *
  * (a) A page whose `after` names a card its other page lacks is told so
- *     on create (`broken.unlinked`, naming that page and card).
+ *     on create (`broken.unlinked`, naming that page and card). A statement
+ *     whose string never closes is refused, on create and on revision,
+ *     naming the statement and where the string opens.
  * (b) A second session of the project reads the first's page with its
  *     program, and revises it: one statement drops a picked decision that
  *     the other page comes after, one drops a picked option. Its answer
@@ -47,6 +49,17 @@ later = Option("later", "Next month", "More time to polish.", false, [], "The wa
 promo = Decision("promo", "Is there a launch discount?", [none, half], "Price is the pitch.", [], ["pricing#discount"])
 none = Option("none", "No discount", "The price stands.", true, [], "Fewer sign-ups the first week.")
 half = Option("half", "Half off", "The first month at half.", false, [], "A month of half revenue.")`;
+
+/** A page whose last Diagram's string never closes (its `")` lost), as a leaf once published it. */
+const OPEN_STRING = `root = Decisions("Pick the link", [link])
+link = Decision("link", "Does the link open?", [yes, no], "It opens in place.", [linkyesd])
+yes = Option("yes", "Yes", "It opens.", true, [], "One more page to keep.")
+no = Option("no", "No", "It stays shut.", false, [], "The reader goes elsewhere.")
+linkyesd = Diagram("flowchart LR\\nTap --> Open`;
+
+/** The same lost `")` in a revision of a kept page. */
+const OPEN_TAIL = `shape = Decision("shape", "What does a customer pay for?", [seat, machine], "A machine is what the fleet costs to run.", [linkyesd])
+linkyesd = Diagram("flowchart LR\\nSeat --> Machine`;
 
 /** The second session's revision: the trial taken out, the seat option replaced by a team one. */
 const REVISION = `root = Decisions("Price the hosted plan", [shape])
@@ -115,6 +128,25 @@ const run = async (kit: Kit) => {
         ],
       }),
     JSON.stringify(launch.broken)
+  );
+  const answered = (made: unknown) => `kept ${JSON.stringify(made)}`;
+  const refusal = (error: unknown) => String(error);
+  const unclosedCreate = await page("open", OPEN_STRING).then(
+    answered,
+    refusal
+  );
+  const unclosedRevision = await fleet
+    .api(`${at(writer)}/${pricing.id}/statements`, { statements: OPEN_TAIL })
+    .then(answered, refusal);
+  kit.check(
+    "(a) a statement whose string never closes is refused on create and on revision, 422, naming the statement and where it opens",
+    unclosedCreate.includes(
+      ` 422 linkyesd: the string opened at line 5, column 20 is never closed: end it with ".`
+    ) &&
+      unclosedRevision.includes(
+        ` 422 linkyesd: the string opened at line 2, column 20 is never closed: end it with ".`
+      ),
+    `${unclosedCreate.slice(0, 300)} | ${unclosedRevision.slice(0, 300)}`
   );
   const picked = await fetch(`${fleet.base}${at(writer)}/${pricing.id}`, {
     method: "PATCH",
