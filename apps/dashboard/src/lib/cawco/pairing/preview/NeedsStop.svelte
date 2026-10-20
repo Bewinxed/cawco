@@ -1,12 +1,14 @@
 <script lang="ts">
   /**
-   * The pairing sheet's Needs you stop: Caw's real panel (CawPanel) on a
-   * fixture feed holding one pairing, Scan code at its head's trailing edge
-   * and the pairing row as the app shows it. Preview only.
+   * The pairing sheet's Needs you stop: Caw's panel as this design draws it
+   * (pairing/needs/CawPanel, a copy of the live one with Scan code and the
+   * pairing row's code line; the live panel is unchanged until the owner
+   * picks) on a fixture feed holding one pairing, Scan code at its head's
+   * trailing edge and the pairing row as the app shows it. Preview only.
    */
-  import CawPanel from "../../home/CawPanel.svelte";
   import type { CawFeed } from "../../home/caw-feed.svelte";
   import type { NeedsItem } from "../../home/home-state.svelte";
+  import CawPanel from "../needs/CawPanel.svelte";
   import { FIXTURE } from "./fixture";
 
   const raisedAt = Date.now() - 20_000;

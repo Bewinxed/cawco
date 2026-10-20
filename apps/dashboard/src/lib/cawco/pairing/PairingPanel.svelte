@@ -1,8 +1,35 @@
 <script lang="ts" module>
-  import type { PairingStage } from "../hub-auth.svelte";
+  /**
+   * Where pairing stands, as this design asks hub-auth to keep it: an
+   * answered or expired code is kept with the hub that gave it, so the cells
+   * go on showing it, tinted by the answer, and its QR fades where it stood;
+   * a refusal keeps the hub's status. The live hub-auth `PairingStage` takes
+   * this shape only once the owner picks this design.
+   */
+  export type PairingStage =
+    | { kind: "idle" }
+    | { kind: "asking" }
+    | {
+        kind: "waiting";
+        userCode: string;
+        expiresAt: number;
+        /** What a QR beside the code carries (core `PairingStart`). */
+        verificationUriComplete: string;
+      }
+    | {
+        kind: "approved" | "denied" | "expired";
+        userCode: string;
+        verificationUriComplete: string;
+      }
+    | {
+        kind: "failed";
+        message: string;
+        /** The hub's answer's status, or null when no answer came. */
+        status: number | null;
+      };
 
   /**
-   * The screen's stage: the hub's (hub-auth `PairingStage`), and the moment
+   * The screen's stage: the hub's (`PairingStage` above), and the moment
    * a paired phone has scanned the key and its person is deciding.
    */
   export type PanelStage =

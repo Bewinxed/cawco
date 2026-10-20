@@ -24,12 +24,9 @@ import type {
 } from "@cawco/core";
 import { heardFrame, heardSince, readLeaves } from "./heard";
 import { failureWords, hubRefusal } from "./hub-read";
+import { leaveThePage } from "./leaving";
 
-/**
- * Where pairing stands for this browser. An answered or expired code is
- * kept, with the hub that gave it: the pairing screen's cells go on showing
- * it, tinted by the answer, and its QR fades where it stood.
- */
+/** Where pairing stands for this browser. */
 export type PairingStage =
   | { kind: "idle" }
   | { kind: "asking" }
@@ -40,17 +37,8 @@ export type PairingStage =
       /** What a QR beside the code carries (core `PairingStart`). */
       verificationUriComplete: string;
     }
-  | {
-      kind: "approved" | "denied" | "expired";
-      userCode: string;
-      verificationUriComplete: string;
-    }
-  | {
-      kind: "failed";
-      message: string;
-      /** The hub's answer's status, or null when no answer came. */
-      status: number | null;
-    };
+  | { kind: "denied" | "expired" }
+  | { kind: "failed"; message: string };
 
 export const hubAuth = $state<{
   caller: CallerKind;
@@ -130,30 +118,18 @@ export async function startPairing(): Promise<void> {
       body: JSON.stringify({ kind: "browser" }),
     });
     if (!response.ok) {
-      // Its status kept: the pairing screen says why from it, the hub's own
-      // words under Show details.
-      hubAuth.pairing = {
-        kind: "failed",
-        message: (await hubRefusal(response)).message,
-        status: response.status,
-      };
-      return;
+      throw await hubRefusal(response);
     }
     started = (await response.json()) as PairingStart;
   } catch (error) {
-    hubAuth.pairing = {
-      kind: "failed",
-      message: failureWords(error),
-      status: null,
-    };
+    hubAuth.pairing = { kind: "failed", message: failureWords(error) };
     return;
   }
-  const { userCode, verificationUriComplete } = started;
   hubAuth.pairing = {
     kind: "waiting",
-    userCode,
+    userCode: started.userCode,
     expiresAt: Date.now() + started.expiresIn * 1000,
-    verificationUriComplete,
+    verificationUriComplete: started.verificationUriComplete,
   };
   let interval = started.interval * 1000;
   const poll = async () => {
@@ -172,23 +148,14 @@ export async function startPairing(): Promise<void> {
     }
     switch (answer.status) {
       case "approved":
-        // The cookie came with this answer: the screen draws the moment,
-        // then the app opens as this device (PairingScreen).
-        hubAuth.pairing = {
-          kind: "approved",
-          userCode,
-          verificationUriComplete,
-        };
+        // The cookie came with this answer: the app opens as this device.
+        leaveThePage(() => location.reload());
         return;
       case "access_denied":
-        hubAuth.pairing = { kind: "denied", userCode, verificationUriComplete };
+        hubAuth.pairing = { kind: "denied" };
         return;
       case "expired_token":
-        hubAuth.pairing = {
-          kind: "expired",
-          userCode,
-          verificationUriComplete,
-        };
+        hubAuth.pairing = { kind: "expired" };
         return;
       case "slow_down":
         interval += 5000;
