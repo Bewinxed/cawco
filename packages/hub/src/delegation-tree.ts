@@ -16,12 +16,25 @@ import { isHubParent } from "./work-items";
 /** `live`: items not dismissed that are not ended or ended in the last hour; `all`: every one. */
 export type DelegateListInclude = "live" | "all";
 
+/**
+ * One `delegate_list` read. With `since` or `before`, only items whose
+ * lifetime touches that window: started before `before`, and ended after
+ * `since` or still live.
+ */
+export interface DelegateListQuery {
+  before?: Date;
+  include: DelegateListInclude;
+  since?: Date;
+}
+
 /** How long an ended item stays in a `live` read. */
 const ENDED_LIVE_MS = 3_600_000;
 
 export interface DelegateNode {
   cacheWarm: boolean;
   children: DelegateNode[];
+  /** When its newest item ended; null while it is live. */
+  endedAt: string | null;
   instanceId: string;
   /** While its landing waits (the Mac's build slot, its turn to land): "queued for the Mac's build slot behind …", since when. */
   landingWait?: { words: string; since: string };
@@ -43,6 +56,8 @@ export interface DelegateNode {
    * waits at the hub and goes once it runs.
    */
   stalled?: { words: string; until?: string };
+  /** When its session's first item started. */
+  startedAt: string;
   /** `stalled` while {@link stalled} says so: never `running` at its limit. */
   state:
     | "starting"
@@ -93,19 +108,56 @@ const firstLine = (text: string | null): string | undefined =>
     .map((line) => line.trim())
     .find(Boolean);
 
-/** One item per session: the newest, since a follow-up continues the same session. */
-const newestPerSession = (items: WorkItemRow[]): WorkItemRow[] => {
-  const seen = new Map<string, WorkItemRow>();
+/** A session's items: a follow-up continues the same session in a newer one. */
+interface Session {
+  /** Its newest item, the one the node shows. */
+  item: WorkItemRow;
+  items: WorkItemRow[];
+  startedAt: Date;
+}
+
+/** One entry per session, in the order they started. */
+const sessionsOf = (items: WorkItemRow[]): Session[] => {
+  const seen = new Map<string, Session>();
   for (const item of items) {
     const known = seen.get(item.instanceId);
-    if (!known || item.createdAt > known.createdAt) {
-      seen.set(item.instanceId, item);
+    if (!known) {
+      seen.set(item.instanceId, {
+        item,
+        items: [item],
+        startedAt: item.createdAt,
+      });
+      continue;
+    }
+    known.items.push(item);
+    if (item.createdAt > known.item.createdAt) {
+      known.item = item;
+    }
+    if (item.createdAt < known.startedAt) {
+      known.startedAt = item.createdAt;
     }
   }
   return [...seen.values()].sort(
-    (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+    (a, b) => a.startedAt.getTime() - b.startedAt.getTime()
   );
 };
+
+/** When the session's first item started, and when its newest ended (null while live). */
+const spanOf = ({
+  item,
+  startedAt,
+}: Session): Pick<DelegateNode, "startedAt" | "endedAt"> => ({
+  startedAt: startedAt.toISOString(),
+  endedAt: item.endedAt ? item.endedAt.toISOString() : null,
+});
+
+/** Whether any of the session's items was live inside the query's window; with no window, true. */
+const touches = (session: Session, query: DelegateListQuery): boolean =>
+  session.items.some(
+    (item) =>
+      (!query.before || item.createdAt < query.before) &&
+      (!(query.since && item.endedAt) || item.endedAt > query.since)
+  );
 
 /** In a `live` read: not dismissed (work-items `dismiss`), and not ended, or ended within the hour. */
 const isLive = (item: WorkItemRow, now: number): boolean =>
@@ -120,7 +172,7 @@ const isLive = (item: WorkItemRow, now: number): boolean =>
  * session row's `parentInstanceId` walked up to the top (a session with no
  * parent, or one a routine or a design check started, which reports to no
  * session), then every delegate under that top, one level at a time, by the
- * same work items `delegate_list` reads ({@link newestPerSession}).
+ * same work items `delegate_list` reads ({@link sessionsOf}).
  */
 export const treeSessions = (
   db: Pick<DbShape, "getInstancesByIds" | "workItemsOfParents">,
@@ -139,8 +191,8 @@ export const treeSessions = (
   const tree = new Set<string>([top.id, ...above]);
   let level = [top.id];
   while (level.length > 0) {
-    level = newestPerSession(db.workItemsOfParents(level))
-      .map((item) => item.instanceId)
+    level = sessionsOf(db.workItemsOfParents(level))
+      .map((session) => session.item.instanceId)
       .filter((id) => !tree.has(id));
     for (const id of level) {
       tree.add(id);
@@ -198,10 +250,11 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
   };
 
   const nodeOf = async (
-    item: WorkItemRow,
+    session: Session,
     row: KeepAliveRow | undefined,
     children: DelegateNode[]
   ): Promise<DelegateNode> => {
+    const { item } = session;
     const waiting = item.waitUntil && item.waitReason;
     // A finished item's headline is its report at a glance; else its
     // report's first line, or why it failed.
@@ -219,6 +272,7 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
       state: waiting ? "waiting" : item.state,
       machine: row ? deps.machineName(row.machineId) : "",
       workspaceId: item.workspaceId,
+      ...spanOf(session),
       lastActivityAt: activity.lastActivityAt.toISOString(),
       cacheWarm: activity.cacheWarm,
       queued: db.sendsIn(item.instanceId, ["pending"]).length,
@@ -248,43 +302,45 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
   };
 
   /**
-   * The caller's delegation tree. Children are read one level at a time;
-   * `seen` keeps a session from appearing twice, however the parents run.
+   * The caller's delegation tree, in start order. Children are read one level
+   * at a time; `seen` keeps a session from appearing twice, however the
+   * parents run. A session the query leaves out still stands while a child
+   * it keeps hangs under it.
    */
   const read = async (
     caller: InstanceRow,
-    include: DelegateListInclude = "live",
+    query: DelegateListQuery,
     now = Date.now()
   ): Promise<DelegateNode[]> => {
     const seen = new Set<string>([caller.id]);
+    const kept = (session: Session): boolean =>
+      (query.include === "all" || isLive(session.item, now)) &&
+      touches(session, query);
     const build = async (items: WorkItemRow[]): Promise<DelegateNode[]> => {
-      const level = newestPerSession(items).filter(
-        (item) => !seen.has(item.instanceId)
+      const level = sessionsOf(items).filter(
+        (session) => !seen.has(session.item.instanceId)
       );
-      for (const item of level) {
-        seen.add(item.instanceId);
+      for (const session of level) {
+        seen.add(session.item.instanceId);
       }
       if (level.length === 0) {
         return [];
       }
-      const ids = level.map((item) => item.instanceId);
+      const ids = level.map((session) => session.item.instanceId);
       const rows = new Map(
         db.getInstancesByIds(ids).map((row) => [row.id, row])
       );
       const below = db.workItemsOfParents(ids);
       const nodes = await Promise.all(
-        level.map(async (item) => {
+        level.map(async (session) => {
+          const id = session.item.instanceId;
           const children = await build(
-            below.filter((child) => child.parentInstanceId === item.instanceId)
+            below.filter((child) => child.parentInstanceId === id)
           );
-          if (
-            include === "live" &&
-            children.length === 0 &&
-            !isLive(item, now)
-          ) {
+          if (children.length === 0 && !kept(session)) {
             return;
           }
-          return nodeOf(item, rows.get(item.instanceId), children);
+          return nodeOf(session, rows.get(id), children);
         })
       );
       return nodes.filter((node): node is DelegateNode => !!node);
@@ -301,7 +357,9 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
     const rest = await build(
       attempts.filter((item) => !attemptIds.has(item.parentInstanceId))
     );
-    return [...mine, ...rest];
+    return [...mine, ...rest].sort((a, b) =>
+      a.startedAt.localeCompare(b.startedAt)
+    );
   };
 
   return { read };

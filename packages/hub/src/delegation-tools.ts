@@ -42,6 +42,21 @@ const sessionTitle = () =>
     .max(SESSION_TITLE_MAX)
     .describe(SESSION_TITLE_DESCRIPTION);
 
+const ISO_TIME =
+  "an ISO date or datetime, like 2026-10-20 or 2026-10-20T14:00Z";
+/** An ISO time opens on its date; `Date.parse` alone takes "Oct 20" too. */
+const ISO_DATE_FIRST = /^\d{4}-\d{2}-\d{2}/;
+
+/** A bound of `delegate_list`'s window: an ISO date or datetime the hub's clock reads. */
+const isoTime = () =>
+  z
+    .string()
+    .refine(
+      (text) => ISO_DATE_FIRST.test(text) && !Number.isNaN(Date.parse(text)),
+      { error: `Give ${ISO_TIME}.` }
+    )
+    .optional();
+
 /** The account a session runs on, for `delegate` and `start_session`. */
 const accountParameter = () =>
   z
@@ -824,17 +839,26 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "delegate_list",
-      "Your delegation tree: each delegate you started, theirs nested, with its work item's state (stalled: its account's limit stopped it; it goes on by itself, as stalled says), last activity, cache warmth, queued messages, what it waits on, and plan progress; under queued, delegates waiting for owned files, with when queued and the live item and globs holding them; under held, workspaces whose items ended with unlanded work. Read it before handing off or calling one stuck.",
+      "Your delegation tree in start order, theirs nested: each delegate's state, activity, cache warmth, waits and plan; under queued, delegates waiting for owned files; under held, workspaces whose items ended with unlanded work. Read it before handing off, calling one stuck, or recapping a time span.",
       {
         include: z
           .enum(["live", "all"])
           .optional()
           .describe(
-            "live (default): items not dismissed that are not ended, or ended in the last hour. all: every item."
+            "live: not dismissed, not ended over an hour ago. all: every item. Default live; all with since or before."
           ),
+        since: isoTime().describe(
+          "ISO time: only items ended after it, or live."
+        ),
+        before: isoTime().describe("ISO time: only items started before it."),
       },
-      async ({ include }) => {
-        const tree = await actions.delegateList(include ?? "live");
+      async ({ include, since, before }) => {
+        const windowed = since !== undefined || before !== undefined;
+        const tree = await actions.delegateList({
+          include: include ?? (windowed ? "all" : "live"),
+          ...(since === undefined ? {} : { since: new Date(since) }),
+          ...(before === undefined ? {} : { before: new Date(before) }),
+        });
         return {
           content: [{ type: "text" as const, text: JSON.stringify(tree) }],
           structuredContent: tree,

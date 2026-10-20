@@ -39,7 +39,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { ForgeWrite } from "@cawco/core/upstream-post";
 import type { WorkBudget, WorkItemSubmission } from "./db/schema";
-import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
+import type { DelegateListQuery, DelegateNode } from "./delegation-tree";
 import { hubHttpUrl, selfFetch } from "./hub-self";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
@@ -783,9 +783,7 @@ export interface HandoffDeps {
   /** What it is working on, so the receiver knows who is calling. */
   readonly cwd: string;
   /** This session's own delegation tree, read by the hub (delegation-tree.ts). */
-  readonly delegateList?: (
-    include: DelegateListInclude
-  ) => Promise<DelegateNode[]>;
+  readonly delegateList?: (query: DelegateListQuery) => Promise<DelegateNode[]>;
   /**
    * Hands a send to the hub's one send path now, and answers what became of
    * it: refused sends throw with the hub's reason.
@@ -968,7 +966,7 @@ export interface HandoffActions {
    * delegates still queued; and the fleet's held workspaces, whose items
    * ended with work that is nowhere else (work-items.ts `settle`).
    */
-  readonly delegateList: (include: DelegateListInclude) => Promise<{
+  readonly delegateList: (query: DelegateListQuery) => Promise<{
     delegates: DelegateNode[];
     held: HeldWork[];
     queued: QueuedDelegate[];
@@ -1572,14 +1570,14 @@ export const handoffActions = ({
   instancesByShortId,
   threads,
 }: HandoffDeps): HandoffActions => ({
-  async delegateList(include) {
+  async delegateList(query) {
     if (!delegateList) {
       throw new Error(
         "delegate_list is read by the hub, which is not wired here."
       );
     }
     const [delegates, waiting, spent] = await Promise.all([
-      delegateList(include),
+      delegateList(query),
       fetch(
         `${hubHttpUrl()}/api/work-items/queued?for=${encodeURIComponent(instanceId)}`
       ),

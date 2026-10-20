@@ -34,7 +34,7 @@ import {
   type Listable,
   loadsUpfront,
 } from "./delegation-tools";
-import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
+import type { DelegateListQuery, DelegateNode } from "./delegation-tree";
 import type { AttemptStart } from "./dispatch";
 import type { FleetWatch } from "./fleet-watch";
 import { type createHubTools, DESIGN_VERDICT, HUB_TOOLS } from "./hub-tools";
@@ -256,7 +256,7 @@ export function createDelegationMcp(options: {
   /** `delegate_list`: the calling session's own delegation tree (delegation-tree.ts). */
   delegationTree?: (
     actor: InstanceRow,
-    include: DelegateListInclude
+    query: DelegateListQuery
   ) => Promise<DelegateNode[]>;
   /**
    * Caw's own tools (threads, views, his folder, the decision graph), for a
@@ -864,7 +864,7 @@ export function createDelegationMcp(options: {
       workflowStepId: actor.workflowStepId ?? undefined,
       workflowRunId: actor.workflowRunId ?? undefined,
       projectId: actor.projectId ?? undefined,
-      delegateList: tree ? (include) => tree(actor, include) : undefined,
+      delegateList: tree ? (query) => tree(actor, query) : undefined,
       sendToUser: (message) => options.sendToUser(actor, message),
       shownRefusal: (tool, paths) => options.shownRefusal?.(actor, tool, paths),
       instancesByShortId: options.instancesByShortId,

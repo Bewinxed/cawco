@@ -26,6 +26,11 @@
  *     its work lands and its workspace retires, not held.
  * (d) V commits and finishes blocked, held: its parent's discard_workspace
  *     archives it with a carry holding V's commit, its clone gone.
+ * (e) P starts and stays live; Q starts and lands; R starts once Q ended.
+ *     The parent's delegate_list with a window from Q's start to its end
+ *     answers P and Q, in start order, with their starts and ends (P's end
+ *     null), and nothing else of the parent's tree; one from R's start
+ *     answers P and R. A window bound that is no ISO time is refused.
  *
  *   bun scripts/probe-kit/run.ts workspace-held
  */
@@ -36,17 +41,19 @@ import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
-const TAG = /PROBE-HELD-([ASXTUV])/;
-type Tag = "A" | "S" | "X" | "T" | "U" | "V";
+const TAG = /PROBE-HELD-([ASXTUVPQR])/;
+type Tag = "A" | "S" | "X" | "T" | "U" | "V" | "P" | "Q" | "R";
 const FINISH = "mcp__cawco__finish_item";
 const COMMIT =
   "git -c user.name=Delegate -c user.email=d@probe.test commit -qm";
-/** A's go: a file the probe writes into A's TMPDIR once X has landed. */
-const GO_A = "probe-go-A";
+/** The go of a delegate that waits (A, P): a file the probe writes into its TMPDIR. */
+const goFile = (tag: Tag) => `probe-go-${tag}`;
 /** Marks a command prints that its own text never holds. */
 const committed = (tag: Tag) => `HELD-COMMIT-${tag}-$((40+2))`;
 const committedSeen = (tag: Tag) => `HELD-COMMIT-${tag}-42`;
-const A_WENT = "A-WENT-42";
+/** What a waiting delegate prints once its go came. */
+const went = (tag: Tag) => `${tag}-WENT-$((40+2))`;
+const wentSeen = (tag: Tag) => `${tag}-WENT-42`;
 const U_MOVED = "U-MOVED-42";
 /** How finish_item refuses a clone that holds work in no commit (work-items.ts `leftoversIn`). */
 const NOT_FINISHED = "Not finished: your clone holds work that is in no commit";
@@ -155,9 +162,10 @@ const respond = (request: Seen): Reply => {
   }
   switch (tag) {
     case "A":
-      if (!request.all.includes(A_WENT)) {
+    case "P":
+      if (!request.all.includes(wentSeen(tag))) {
         return tool("Bash", {
-          command: `while [ ! -f "$TMPDIR/${GO_A}" ]; do sleep 1; done; echo A-WENT-$((40+2))`,
+          command: `while [ ! -f "$TMPDIR/${goFile(tag)}" ]; do sleep 1; done; echo ${went(tag)}`,
           description: "Wait for the probe's go",
           timeout: 600_000,
         });
@@ -339,7 +347,7 @@ const rebasedPhase = async (
     xItem?.state === "done" && (xItem.result ?? "").includes("Landed on main"),
     `${xItem?.state} ${xItem?.error ?? ""} ${(xItem?.result ?? "").slice(0, 400)}`
   );
-  await writeFile(join(wa.tmp ?? "", GO_A), "go\n");
+  await writeFile(join(wa.tmp ?? "", goFile("A")), "go\n");
   const aItem = await scene.ended(a);
   if (aItem?.state !== "done") {
     await sayLogs(kit, fleet, "A", a.instanceId);
@@ -454,6 +462,113 @@ const discardPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   );
 };
 
+/** One delegate as delegate_list answers it (hub delegation-tree.ts `DelegateNode`). */
+interface Listed {
+  endedAt: string | null;
+  instanceId: string;
+  startedAt: string;
+}
+
+/** delegate_list's delegates, as the parent's call answered them, or what it answered instead. */
+const listed = (said: {
+  status: number;
+  text: string;
+}): { delegates?: Listed[]; refused?: string } => {
+  if (said.status !== 200) {
+    return { refused: `${said.status} ${said.text.slice(0, 600)}` };
+  }
+  const result = JSON.parse(said.text) as {
+    content?: { text?: string }[];
+    isError?: boolean;
+    structuredContent?: { delegates: Listed[] };
+  };
+  return result.isError
+    ? { refused: result.content?.[0]?.text ?? "" }
+    : { delegates: result.structuredContent?.delegates };
+};
+
+/** (e) delegate_list with a window answers the delegates live inside it, in start order. */
+const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
+  const { check } = kit;
+  const { fleet, workspaceOf } = scene;
+  const span = (started: Started) =>
+    fleet.query<{ created_at: number; ended_at: number | null }>(
+      "SELECT created_at, ended_at FROM work_items WHERE id = ?",
+      started.workItemId
+    )[0];
+  const iso = (ms: number | null | undefined) =>
+    typeof ms === "number" ? new Date(ms).toISOString() : null;
+  const p = await scene.delegate("P");
+  const q = await scene.delegate("Q");
+  const qItem = await scene.ended(q);
+  const r = await scene.delegate("R");
+  const rItem = await scene.ended(r);
+  const [ps, qs, rs] = [span(p), span(q), span(r)];
+  check(
+    "(e) Q lands while P runs, then R starts after Q ended and lands",
+    qItem?.state === "done" &&
+      rItem?.state === "done" &&
+      ps?.ended_at === null &&
+      typeof qs?.ended_at === "number" &&
+      rs !== undefined &&
+      rs.created_at > qs.ended_at,
+    `${qItem?.state} ${rItem?.state}; P ${JSON.stringify(ps)} Q ${JSON.stringify(qs)} R ${JSON.stringify(rs)}`
+  );
+  const around = listed(
+    await scene.callAsParent("delegate_list", {
+      since: iso(qs?.created_at),
+      before: iso(qs?.ended_at),
+    })
+  );
+  const shown = (around.delegates ?? []).map((one) => ({
+    id: one.instanceId,
+    startedAt: one.startedAt,
+    endedAt: one.endedAt,
+  }));
+  check(
+    "(e) a window from Q's start to its end answers P then Q, nothing else, with their starts and ends (P's end null)",
+    JSON.stringify(shown) ===
+      JSON.stringify([
+        { id: p.instanceId, startedAt: iso(ps?.created_at), endedAt: null },
+        {
+          id: q.instanceId,
+          startedAt: iso(qs?.created_at),
+          endedAt: iso(qs?.ended_at),
+        },
+      ]),
+    `${around.refused ?? ""}${JSON.stringify(shown)}; P ${p.instanceId} Q ${q.instanceId} R ${r.instanceId}`
+  );
+  const after = listed(
+    await scene.callAsParent("delegate_list", {
+      since: iso(rs?.created_at),
+    })
+  );
+  const afterIds = (after.delegates ?? []).map((one) => one.instanceId);
+  check(
+    "(e) a window from R's start answers P then R",
+    JSON.stringify(afterIds) === JSON.stringify([p.instanceId, r.instanceId]),
+    `${after.refused ?? ""}${JSON.stringify(afterIds)}`
+  );
+  const loose = listed(
+    await scene.callAsParent("delegate_list", { since: "yesterday" })
+  );
+  check(
+    "(e) a bound that is no ISO time is refused, saying the form",
+    (loose.refused ?? "").includes("ISO date or datetime"),
+    loose.refused ?? JSON.stringify(loose.delegates).slice(0, 400)
+  );
+  await writeFile(
+    join(workspaceOf(p.workspaceId).tmp ?? "", goFile("P")),
+    "go\n"
+  );
+  const pItem = await scene.ended(p);
+  check(
+    "(e) P lands once its go comes",
+    pItem?.state === "done",
+    `${pItem?.state} ${pItem?.error ?? ""}`
+  );
+};
+
 const spec: Spec = {
   name: "workspace-held",
   run: async (kit: Kit) => {
@@ -565,6 +680,7 @@ const spec: Spec = {
     await rebasedPhase(kit, scene, ws);
     await leftoversPhase(kit, scene);
     await discardPhase(kit, scene);
+    await windowPhase(kit, scene);
   },
 };
 

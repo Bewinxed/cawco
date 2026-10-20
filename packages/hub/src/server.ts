@@ -22153,7 +22153,7 @@ export const createServer = (
     projectFromSession: (actor) =>
       projectOffers.accept(actor.id, sessionActor(actor)),
     writePlan: (actor, written) => plans.write(actor, written),
-    delegationTree: (actor, include) => delegationTree.read(actor, include),
+    delegationTree: (actor, query) => delegationTree.read(actor, query),
     cawTools: (actor, toolUseId) => caw.tools(actor, toolUseId),
     routineTools: (actor, toolUseId) => routines.tools(actor, toolUseId),
     ingressTools: (actor) => ingress.tools(actor),
