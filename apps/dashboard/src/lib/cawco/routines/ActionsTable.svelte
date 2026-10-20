@@ -88,24 +88,22 @@
   data-slot="actions-ledger"
   style:--lead-w="calc(var(--c-row-lead) + var(--space-3))"
 >
-  <Table.Root data-actions aria-label={label} layout="ledger">
+  <Table.Root data-actions aria-label={label} layout="ledger" stickyBand>
     <Table.Header>
       <Table.Row variant="band">
-        <Table.Head class="h-c-toolbar-ctl w-(--lead-w)" variant="caps"
+        <Table.Head class="w-(--lead-w)" variant="band"
           ><span class="sr-only">{words.columnService}</span></Table.Head
         >
-        <Table.Head class="h-c-toolbar-ctl" variant="caps"
-          >{words.columnAction}</Table.Head
-        >
+        <Table.Head variant="band">{words.columnAction}</Table.Head>
         <Table.Head
           data-slot="actions-table-col-status"
-          class="h-c-toolbar-ctl w-c-routine-time-w"
-          variant="caps">{words.columnStatus}</Table.Head
+          class="w-c-routine-time-w"
+          variant="band">{words.columnStatus}</Table.Head
         >
         <Table.Head
           data-slot="actions-table-col-when"
-          class="h-c-toolbar-ctl w-c-ledger-when-w"
-          variant="caps">{words.columnWhen}</Table.Head
+          class="w-c-ledger-when-w"
+          variant="band">{words.columnWhen}</Table.Head
         >
       </Table.Row>
     </Table.Header>
@@ -118,10 +116,7 @@
           class="group/row"
           data-status={said.status}
         >
-          <Table.Cell
-            class="h-c-btn-h-lg num align-middle"
-            rule="between"
-            variant="list"
+          <Table.Cell rule="between" variant="list"
             ><span data-slot="mark" class="grid w-c-row-lead place-items-center"
               ><ProviderLogo
                 class="size-icon-md"
@@ -129,11 +124,7 @@
               /></span
             ></Table.Cell
           >
-          <Table.Cell
-            class="h-c-btn-h-lg num align-middle"
-            rule="between"
-            variant="list"
-          >
+          <Table.Cell rule="between" variant="list">
             <span
               data-slot="what"
               class="block truncate type-label text-ink-row"
@@ -147,20 +138,10 @@
               >
             {/if}
           </Table.Cell>
-          <Table.Cell
-            class="h-c-btn-h-lg num align-middle"
-            data-cell="status"
-            rule="between"
-            variant="list"
-          >
+          <Table.Cell data-cell="status" rule="between" variant="list">
             <RunStatus status={said.status} text={said.word} />
           </Table.Cell>
-          <Table.Cell
-            class="h-c-btn-h-lg num align-middle"
-            data-cell="when"
-            rule="between"
-            variant="list"
-          >
+          <Table.Cell data-cell="when" rule="between" variant="list">
             {#if said.at !== null}
               <time
                 data-when

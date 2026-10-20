@@ -40,38 +40,28 @@
   <div
     class="overflow-x-auto rounded-md bg-surface-raised inset-ring inset-ring-border-hairline"
   >
-    <Table.Root class="border-collapse text-start max-phone:block">
-      <Table.Header class="max-phone:hidden">
-        <Table.Row
-          class="align-top max-phone:grid max-phone:grid-cols-fluid-auto max-phone:items-center"
-          variant="stacks-ruled"
-        >
+    <!-- Under 640px each row is a card: the machine and what it runs, then
+         the update across the card. -->
+    <Table.Root stacks="phone" style="--card-cols: minmax(0, 1fr) auto">
+      <Table.Header>
+        <Table.Row>
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-          <Table.Head class="h-auto" scope="col" variant="matrix-corner"
-            >Machine</Table.Head
-          >
-          <Table.Head class="h-auto" scope="col" variant="matrix-column"
-            >Running</Table.Head
-          >
-          <Table.Head class="h-auto" scope="col" variant="matrix-column-wide"
+          <Table.Head scope="col" variant="matrix-corner">Machine</Table.Head>
+          <Table.Head scope="col" variant="matrix-column">Running</Table.Head>
+          <Table.Head scope="col" variant="matrix-column-wide"
             >Update</Table.Head
           >
           <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
         </Table.Row>
       </Table.Header>
-      <Table.Body class="max-phone:block">
+      <Table.Body>
         {#each machines as machine (machine.machineId)}
           {@const os = machineOs(machine.os)}
           {@const online = isOnline(machine)}
-          <Table.Row
-            class="max-phone:grid max-phone:grid-cols-fluid-auto max-phone:items-center"
-            inactive={!online}
-            variant="stacks-ruled"
-          >
+          <Table.Row inactive={!online} variant="stacks-ruled">
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               data-update-table-machine
-              class="h-auto"
               scope="row"
               variant="matrix-row"
             >
@@ -111,7 +101,7 @@
               </span>
             </Table.Cell>
             <Table.Cell
-              class="whitespace-normal max-phone:col-span-full"
+              class="@max-phone/table:col-span-full"
               variant="matrix-stacks-under"
             >
               <UpdateCell {machine} {policy} />

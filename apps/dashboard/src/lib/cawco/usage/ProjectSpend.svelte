@@ -457,47 +457,50 @@
         data-slot="ledger"
         class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
       >
+        <!-- Under 640px each row is a card: its name across it, then its
+             count, spend and last word; each band stays as its section's
+             title. -->
         <Table.Root
-          class="max-phone:block"
           layout="ledger"
-          style="--col-count: 8rem; --col-usd: 6rem; --col-last: 6rem; --row-cols: 1fr auto auto"
+          stacks="phone"
+          style="--card-cols: minmax(0, 1fr) auto auto"
         >
           {#if spend.threads.length > 0 || spend.caw.unthreadedMonthUsd > 0}
-            <Table.Header class="max-phone:block">
-              <Table.Row class="max-phone:flex" variant="band">
+            <Table.Header section>
+              <Table.Row variant="band">
                 <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                <Table.Head class="h-c-toolbar-ctl" variant="caps" scope="col"
-                  >Caw</Table.Head
-                >
+                <Table.Head variant="band" scope="col">Caw</Table.Head>
                 <Table.Head
-                  class="h-c-toolbar-ctl w-(--col-count) max-phone:hidden"
-                  variant="caps"
+                  class="w-c-ledger-count-w"
+                  variant="band"
                   scope="col">Wakes</Table.Head
                 >
                 <Table.Head
-                  class="h-c-toolbar-ctl w-(--col-usd) text-end max-phone:hidden"
-                  variant="caps"
+                  edge="end"
+                  class="w-c-ledger-usd-w"
+                  variant="band"
                   scope="col">Spent</Table.Head
                 >
                 <Table.Head
                   data-col-last
-                  class="h-c-toolbar-ctl w-(--col-last) text-end max-phone:hidden"
-                  variant="caps"
+                  edge="end"
+                  class="w-c-ledger-when-w"
+                  variant="band"
                   scope="col">Last</Table.Head
                 >
                 <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
               </Table.Row>
             </Table.Header>
-            <Table.Body class="max-phone:block">
+            <Table.Body>
               {#each spend.threads as thread (thread.id)}
                 <Table.Row
                   data-project-spend-row
-                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols)"
+                  class="relative"
                   variant="stacks"
                 >
                   <Table.Cell
                     variant="ledger-stacks"
-                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto max-phone:col-span-full"
+                    class="@max-phone/table:col-span-full"
                   >
                     <a
                       data-slot="name"
@@ -509,21 +512,22 @@
                   <Table.Cell
                     data-num
                     variant="ledger-stacks"
-                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-count)"
+                    class="w-c-ledger-count-w"
                     >{thread.wakes}
                     {thread.wakes === 1 ? "wake" : "wakes"}</Table.Cell
                   >
                   <Table.Cell
                     data-num
+                    edge="end"
                     variant="ledger-stacks"
-                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-usd) text-end max-phone:text-start"
-                    >{usd(thread.usd)}</Table.Cell
+                    class="w-c-ledger-usd-w">{usd(thread.usd)}</Table.Cell
                   >
                   <Table.Cell
                     data-num
                     data-col-last
+                    edge="end"
                     variant="ledger-stacks"
-                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-last) text-end max-phone:text-start"
+                    class="w-c-ledger-when-w"
                     >{formatAgeShort(thread.lastAt, now)}</Table.Cell
                   >
                 </Table.Row>
@@ -531,73 +535,73 @@
               {#if spend.caw.unthreadedMonthUsd > 0}
                 <Table.Row
                   data-project-spend-row
-                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols)"
+                  class="relative"
                   variant="stacks"
                 >
                   <Table.Cell
                     variant="ledger-stacks"
-                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto max-phone:col-span-full"
+                    class="@max-phone/table:col-span-full"
                     ><span
                       data-slot="name"
                       class="type-label block truncate text-ink-row no-underline"
                       >Not in a thread</span
                     ></Table.Cell
                   >
-                  <Table.Cell
-                    variant="ledger-stacks"
-                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto w-(--col-count)"
+                  <Table.Cell variant="ledger-stacks" class="w-c-ledger-count-w"
                   ></Table.Cell>
                   <Table.Cell
                     data-num
+                    edge="end"
                     variant="ledger-stacks"
-                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-usd) text-end max-phone:text-start"
+                    class="w-c-ledger-usd-w"
                     >{usd(spend.caw.unthreadedMonthUsd)}</Table.Cell
                   >
                   <Table.Cell
                     data-col-last
+                    edge="end"
                     variant="ledger-stacks"
-                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto w-(--col-last) text-end max-phone:text-start"
+                    class="w-c-ledger-when-w"
                   ></Table.Cell>
                 </Table.Row>
               {/if}
             </Table.Body>
           {/if}
           {#if spend.attempts.length > 0}
-            <Table.Header class="max-phone:block">
-              <Table.Row class="max-phone:flex" variant="band">
+            <Table.Header section>
+              <Table.Row variant="band">
                 <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                <Table.Head class="h-c-toolbar-ctl" variant="caps" scope="col"
-                  >Attempts</Table.Head
-                >
+                <Table.Head variant="band" scope="col">Attempts</Table.Head>
                 <Table.Head
-                  class="h-c-toolbar-ctl w-(--col-count) max-phone:hidden"
-                  variant="caps"
+                  class="w-c-ledger-count-w"
+                  variant="band"
                   scope="col">Tries</Table.Head
                 >
                 <Table.Head
-                  class="h-c-toolbar-ctl w-(--col-usd) text-end max-phone:hidden"
-                  variant="caps"
+                  edge="end"
+                  class="w-c-ledger-usd-w"
+                  variant="band"
                   scope="col">Spent</Table.Head
                 >
                 <Table.Head
                   data-col-last
-                  class="h-c-toolbar-ctl w-(--col-last) text-end max-phone:hidden"
-                  variant="caps"
+                  edge="end"
+                  class="w-c-ledger-when-w"
+                  variant="band"
                   scope="col">Now</Table.Head
                 >
                 <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
               </Table.Row>
             </Table.Header>
-            <Table.Body class="max-phone:block">
+            <Table.Body>
               {#each spend.attempts as attempt (attempt.taskId)}
                 <Table.Row
                   data-project-spend-row
-                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols)"
+                  class="relative"
                   variant="stacks"
                 >
                   <Table.Cell
                     variant="ledger-stacks"
-                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto max-phone:col-span-full"
+                    class="@max-phone/table:col-span-full"
                   >
                     <a
                       data-slot="name"
@@ -615,7 +619,7 @@
                   <Table.Cell
                     data-num
                     variant="ledger-stacks"
-                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-count)"
+                    class="w-c-ledger-count-w"
                     >{attempt.attempts}
                     {attempt.attempts === 1
                       ? "attempt"
@@ -623,81 +627,70 @@
                   >
                   <Table.Cell
                     data-num
+                    edge="end"
                     variant="ledger-stacks"
-                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-usd) text-end max-phone:text-start"
-                    >{usd(attempt.usd)}</Table.Cell
+                    class="w-c-ledger-usd-w">{usd(attempt.usd)}</Table.Cell
                   >
                   <Table.Cell
                     data-col-last
+                    edge="end"
                     variant="ledger-stacks"
-                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto w-(--col-last) text-end max-phone:text-start"
+                    class="w-c-ledger-when-w"
                     >{STATE_WORD[attempt.state] ?? attempt.state}</Table.Cell
                   >
                 </Table.Row>
               {/each}
             </Table.Body>
           {/if}
-          <Table.Body class="max-phone:block">
+          <Table.Body>
             {#if spend.others.monthUsd > 0}
-              <Table.Row
-                data-project-spend-row
-                class="relative max-phone:grid max-phone:grid-cols-(--row-cols)"
-                variant="stacks"
-              >
+              <Table.Row data-project-spend-row class="relative" variant="stacks">
                 <Table.Cell
                   variant="ledger-stacks"
-                  class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto max-phone:col-span-full"
+                  class="@max-phone/table:col-span-full"
                   ><span
                     data-slot="name"
                     class="type-label block truncate text-ink-row no-underline"
                     >Other sessions</span
                   ></Table.Cell
                 >
-                <Table.Cell
-                  variant="ledger-stacks"
-                  class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto w-(--col-count)"
+                <Table.Cell variant="ledger-stacks" class="w-c-ledger-count-w"
                 ></Table.Cell>
                 <Table.Cell
                   data-num
+                  edge="end"
                   variant="ledger-stacks"
-                  class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-usd) text-end max-phone:text-start"
-                  >{usd(spend.others.monthUsd)}</Table.Cell
+                  class="w-c-ledger-usd-w">{usd(spend.others.monthUsd)}</Table.Cell
                 >
                 <Table.Cell
                   data-col-last
+                  edge="end"
                   variant="ledger-stacks"
-                  class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto w-(--col-last) text-end max-phone:text-start"
+                  class="w-c-ledger-when-w"
                 ></Table.Cell>
               </Table.Row>
             {/if}
-            <Table.Row
-              data-project-spend-row
-              class="relative max-phone:grid max-phone:grid-cols-(--row-cols)"
-              variant="stacks"
-            >
-              <Table.Cell
-                variant="ledger-stacks"
-                class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto max-phone:col-span-full"
+            <Table.Row data-project-spend-row class="relative" variant="stacks">
+              <Table.Cell variant="ledger-stacks" class="@max-phone/table:col-span-full"
                 ><span
                   data-slot="name"
                   class="type-label block truncate text-ink-row no-underline"
                   >This month</span
                 ></Table.Cell
               >
-              <Table.Cell
-                variant="ledger-stacks"
-                class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto w-(--col-count)"
+              <Table.Cell variant="ledger-stacks" class="w-c-ledger-count-w"
               ></Table.Cell>
               <Table.Cell
                 data-num
+                edge="end"
                 variant="ledger-stacks"
-                class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-usd) text-end max-phone:text-start"
-                >{usd(spend.monthUsd)}</Table.Cell
+                class="w-c-ledger-usd-w">{usd(spend.monthUsd)}</Table.Cell
               >
               <Table.Cell
                 data-col-last
+                edge="end"
                 variant="ledger-stacks"
-                class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto w-(--col-last) text-end max-phone:text-start"
+                class="w-c-ledger-when-w"
               ></Table.Cell>
             </Table.Row>
           </Table.Body>

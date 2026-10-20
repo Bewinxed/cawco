@@ -113,7 +113,7 @@
 
 <div
   data-slot="detail"
-  class="flex flex-col gap-space-4 px-space-3 pb-space-4 @routines-ledger-400px/routines-ledger:ps-(--detail-lead)"
+  class="flex flex-col gap-space-4 px-space-3 pb-space-4 @table-400px/table:ps-(--detail-lead)"
   style:--detail-lead="calc(var(--c-row-lead) + var(--space-3) * 2)"
 >
   <div
@@ -161,29 +161,34 @@
         data-slot="runs-ledger"
         class="overflow-hidden rounded-sm border border-border-hairline bg-surface-raised"
       >
+        <!-- Result is the column this ledger exists for and keeps its floor
+             (c-ledger-title-min): Took folds under 576px, When and Outcome
+             take their narrow widths under 496px, and under 424px each run
+             is a card, its result across it, then when and outcome. -->
         <Table.Root
           data-runs
           aria-labelledby="runs-{routine.id}"
           layout="ledger"
+          stacks="narrow"
+          style="--card-cols: auto minmax(0, 1fr)"
         >
           <Table.Header>
             <Table.Row variant="band">
               <Table.Head
                 data-slot="routine-detail-col-when"
-                class="h-c-toolbar-ctl w-c-ledger-when-w @max-routines-ledger-399px/routines-ledger:w-c-ledger-when-w-narrow"
-                variant="caps">{words.columnWhen}</Table.Head
+                class="w-c-ledger-when-w @max-table-496px/table:w-c-ledger-when-w-narrow"
+                variant="band">{words.columnWhen}</Table.Head
               >
               <Table.Head
-                class="h-c-toolbar-ctl w-c-ledger-outcome-w @max-routines-ledger-399px/routines-ledger:w-c-ledger-outcome-w-narrow"
-                variant="caps">{words.columnOutcome}</Table.Head
+                class="w-c-ledger-outcome-w @max-table-496px/table:w-c-ledger-outcome-w-narrow"
+                variant="band">{words.columnOutcome}</Table.Head
               >
               <Table.Head
-                class="h-c-toolbar-ctl w-c-ledger-took-w @max-routines-ledger-399px/routines-ledger:hidden"
-                variant="caps">{words.columnTook}</Table.Head
+                class="w-c-ledger-took-w"
+                fold="runs-took"
+                variant="band">{words.columnTook}</Table.Head
               >
-              <Table.Head class="h-c-toolbar-ctl" variant="caps"
-                >{words.columnResult}</Table.Head
-              >
+              <Table.Head variant="band">{words.columnResult}</Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -195,9 +200,10 @@
                 data-run
                 class="group/run"
                 data-outcome={outcome.status}
+                variant="stacks"
               >
                 <Table.Cell
-                  class="h-c-btn-h-lg w-c-ledger-when-w num @max-routines-ledger-399px/routines-ledger:w-c-ledger-when-w-narrow"
+                  class="w-c-ledger-when-w @max-table-496px/table:w-c-ledger-when-w-narrow"
                   data-cell="when"
                   rule="top"
                   variant="ledger"
@@ -210,7 +216,7 @@
                   >
                 </Table.Cell>
                 <Table.Cell
-                  class="h-c-btn-h-lg w-c-ledger-outcome-w num @max-routines-ledger-399px/routines-ledger:w-c-ledger-outcome-w-narrow"
+                  class="w-c-ledger-outcome-w @max-table-496px/table:w-c-ledger-outcome-w-narrow"
                   data-cell="outcome"
                   rule="top"
                   variant="ledger"
@@ -218,15 +224,16 @@
                   <RunStatus status={outcome.status} text={outcome.word} />
                 </Table.Cell>
                 <Table.Cell
-                  class="h-c-btn-h-lg w-c-ledger-took-w num @max-routines-ledger-399px/routines-ledger:hidden"
+                  class="w-c-ledger-took-w"
                   data-cell="took"
+                  fold="runs-took"
                   rule="top"
                   variant="ledger"
                 >
                   <span data-slot="num" class="num">{tookOf(run)}</span>
                 </Table.Cell>
                 <Table.Cell
-                  class="h-c-btn-h-lg num"
+                  class="@max-table-424px/table:col-span-full @max-table-424px/table:row-start-1"
                   data-cell="result"
                   rule="top"
                   variant="ledger"

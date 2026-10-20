@@ -297,12 +297,12 @@
   <div
     class="overflow-x-auto rounded-md bg-surface-raised inset-ring inset-ring-border-hairline"
   >
-    <Table.Root class="border-collapse text-left">
+    <Table.Root>
       <Table.Header>
-        <Table.Row class="align-top">
+        <Table.Row>
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           <Table.Head
-            class="sticky z-(--layer-sticky) h-auto"
+            class="z-(--layer-sticky)"
             scope="col"
             variant="matrix-corner-pinned">Machine</Table.Head
           >
@@ -310,14 +310,10 @@
           {#each catalog as spec (spec.id)}
             {@const policy = policyOf(spec)}
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head
-              class="h-auto whitespace-normal"
-              scope="col"
-              variant="matrix-column-wide-plain"
-            >
+            <Table.Head scope="col" variant="matrix-column-wide-plain">
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <div class="flex flex-col items-start gap-space-2">
-                <span class="mark-line flex items-center gap-1.5">
+                <span class="mark-line flex items-center gap-space-2">
                   <span class="text-label text-ink-strong">{spec.name}</span>
                   <a
                     data-box
@@ -363,7 +359,7 @@
           <Table.Row inactive={!online}>
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="sticky z-(--layer-sticky) h-auto"
+              class="z-(--layer-sticky)"
               scope="row"
               variant="matrix-row-pinned"
             >
@@ -379,9 +375,9 @@
                       >{machineLabel(machine.hostname)}</span
                     >
                     <span
-                      class="size-2 shrink-0 rounded-full {online
-                        ? 'bg-success-9'
-                        : 'bg-ink-muted/40'}"
+                      class="size-(--status-dot-size) shrink-0 rounded-pill {online
+                        ? 'bg-presence-online'
+                        : 'bg-presence-off'}"
                     ></span>
                   </span>
                   <span class="text-label text-ink-muted"
@@ -391,7 +387,7 @@
               </span>
             </Table.Head>
             {#each catalog as spec (spec.id)}
-              <Table.Cell class="group/cell whitespace-normal" variant="matrix">
+              <Table.Cell class="group/cell" variant="matrix">
                 {@render cell(machine, spec, online)}
               </Table.Cell>
             {/each}

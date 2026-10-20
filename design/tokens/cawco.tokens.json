@@ -5900,7 +5900,7 @@
         "value": 4.5,
         "unit": "rem"
       },
-      "$description": "The When column in a ledger under 400px."
+      "$description": "The When column in a runs ledger under 496px, where Result's floor (c-ledger-title-min) beside When and Outcome at full width no longer fits (build-tokens.ts CONTAINERS table-496px); under 424px the runs are cards."
     },
     "c-ledger-outcome-w": {
       "$type": "dimension",
@@ -5916,7 +5916,7 @@
         "value": 8,
         "unit": "rem"
       },
-      "$description": "The Outcome column in a ledger under 400px."
+      "$description": "The Outcome column in a runs ledger under 496px, where Result's floor (c-ledger-title-min) beside When and Outcome at full width no longer fits (build-tokens.ts CONTAINERS table-496px); under 424px the runs are cards."
     },
     "c-ledger-took-w": {
       "$type": "dimension",
@@ -5925,6 +5925,54 @@
         "unit": "rem"
       },
       "$description": "The Runs ledger's Took column."
+    },
+    "c-ledger-band-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      },
+      "$description": "A ledger's header band: its column heads in caps on surface-band, one line, held at the top while the rows scroll under it (DESIGN.md, Density: \"a 32px header band\"; ledger-header height)."
+    },
+    "c-ledger-row-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      },
+      "$description": "A ledger's row pitch: every row of a ledger, a list or a generated view's table, a name over its meta line or one line of meta (DESIGN.md, Density: \"a 44px row pitch\"; ledger-row height)."
+    },
+    "c-ledger-count-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "rem"
+      },
+      "$description": "A ledger's count column: a count and its noun in meta, \"12 attempts\" (Usage's project spend: Wakes, Tries)."
+    },
+    "c-ledger-usd-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "rem"
+      },
+      "$description": "A ledger's spend column: a month's dollars in tabular meta, \"$1,234.56\", on the column's end (Usage's project spend: Spent)."
+    },
+    "c-matrix-col-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 14,
+        "unit": "rem"
+      },
+      "$description": "A matrix's wide column, its floor: a tool's name, its count and its Required switch over each machine's cell (Command-line tools), an update's state and its act (Updates)."
+    },
+    "c-ledger-title-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 14,
+        "unit": "rem"
+      },
+      "$description": "A ledger title's least width, the column the ledger exists for: about 30 characters of the label role before it truncates. A ledger's lesser columns fold until the title keeps it (the task ledger's container widths in build-tokens.ts CONTAINERS are this plus its column widths)."
     },
     "c-side-grip-w": {
       "$type": "dimension",

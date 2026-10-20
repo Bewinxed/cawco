@@ -270,10 +270,31 @@ const KEYFRAMES: Record<string, string> = {
 const CONTAINERS = {
   "field-group": "28rem",
   details: "30rem",
-  "routines-ledger-34rem": "34rem",
+  "table-34rem": "34rem",
   "task-frame": "56rem",
-  "routines-ledger-399px": "399px",
-  "routines-ledger-400px": "400px",
+  "table-400px": "400px",
+  // The routine runs ledger's, by the same rule (Result its floor): its
+  // card under When and Outcome at their narrow widths (c-ledger-when-w-narrow
+  // 72px, c-ledger-outcome-w-narrow 128px) + 224px:
+  "table-424px": "424px",
+  // When and Outcome at full width (c-ledger-when-w 96px,
+  // c-ledger-outcome-w 176px) from 96 + 176 + 224:
+  "table-496px": "496px",
+  // Took (c-ledger-took-w, 80px) from 496 + 80:
+  "table-576px": "576px",
+  // The task ledger's folds: each width is the title's floor
+  // (c-ledger-title-min, 224px) plus the columns standing beside it, so no
+  // column shows until the title can give up its width and keep the floor.
+  // Always shown: the tick (icon-md + 2 × space-3, 38px), Stage
+  // (c-task-col-stage-w, 192px), Updated (c-task-col-time-w, 112px): 566px.
+  // Id (c-task-col-id-w, 104px) from 566 + 104:
+  "table-670px": "670px",
+  // To-dos (c-task-col-todos-w, 96px) from 670 + 96:
+  "table-766px": "766px",
+  // Created (c-task-col-time-w, 112px) from 766 + 112:
+  "table-878px": "878px",
+  // Labels (c-task-col-labels-w, 224px) from 878 + 224:
+  "table-1102px": "1102px",
   "stop-tray": "420px",
   kinds: "480px",
   "decisions-520px": "520px",
