@@ -143,7 +143,7 @@
         No sessions for “{mention.words}”
       </p>
     {:else if late}
-      <Skeleton class="h-c-btn-h mx-space-3 my-space-2" />
+      <Skeleton class="mx-space-3 my-space-2" height="control" />
     {/if}
   </div>
 </div>

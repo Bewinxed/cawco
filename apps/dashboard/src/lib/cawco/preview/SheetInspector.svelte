@@ -230,8 +230,8 @@
         role="status"
       >
         {#each [0, 1, 2] as row (row)}
-          <Skeleton class="w-2/5 h-(--text-label)" radius="text" />
-          <Skeleton class="h-c-input-h mb-space-2" radius="tile" />
+          <Skeleton class="w-2/5" line="label" radius="text" />
+          <Skeleton class="mb-space-2" height="field" radius="tile" />
         {/each}
       </div>
     {:else if sheet.stories.length === 0}

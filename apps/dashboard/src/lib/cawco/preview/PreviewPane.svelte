@@ -35,6 +35,7 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     IconAlert,
     IconChat,
@@ -2532,10 +2533,13 @@
       class="group/cover absolute inset-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] dur-control ease-out data-ready:opacity-0"
       role={stageWaiting ? "status" : undefined}
     >
-      <span
+      <Skeleton
+        class="w-2/5"
         data-slot="block"
-        class="kit-skeleton block h-space-3 w-2/5 rounded-xs animate-wait-grace-in group-data-ready/cover:animation-paused group-data-ready/cover:after:animation-paused"
-      ></span>
+        line="body"
+        radius="text"
+        reveal="wait-grace"
+      />
       {#if stageWaiting}
         <!-- A sheet's stage on its way: the project's own dev toolchain (Vite, Astro or Nuxt), started or woken by the daemon. -->
         <p

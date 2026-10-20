@@ -312,9 +312,9 @@
         <span
           aria-hidden="true"
           data-slot="suggest-shimmer"
-          class="shimmer block w-c-suggest-shimmer-w h-c-suggest-chip flex-none pointer-events-auto"
+          class="block w-c-suggest-shimmer-w flex-none pointer-events-auto"
           in:fade={{ duration: dur("--dur-panel"), easing: easeOut }}
-          ><Skeleton class="size-full" /></span
+          ><Skeleton class="w-full" height="chip" /></span
         >
       {/if}
       {#if failure}

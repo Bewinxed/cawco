@@ -154,7 +154,7 @@
       style:--ask-end-in="var(--ask-end, 0)"
       style:--ask-indent-in="var(--ask-indent, 0)"
     >
-      <Spinner aria-hidden="true" class="size-icon-sm" />
+      <Spinner aria-hidden="true" box="small" />
       <span>Reading what runs in {asked.name}…</span>
     </p>
   {/if}

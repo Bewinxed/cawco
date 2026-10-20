@@ -131,7 +131,7 @@
     </span>
   {:else if shown === "installing"}
     <Badge class="h-auto" size="cell" tone="muted" variant="ghost">
-      <Spinner class="size-icon-md shrink-0" />
+      <Spinner class="shrink-0" />
       <span>Installing…</span>
     </Badge>
   {:else if shown === "missing"}

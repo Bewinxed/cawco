@@ -413,19 +413,19 @@
         data-slot="row"
         class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap"
       >
-        <Skeleton class="h-icon-sm w-2/3" />
+        <Skeleton class="w-2/3" line="meta" />
       </div>
       <div
         data-slot="row"
         class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap"
       >
-        <Skeleton class="h-icon-sm w-1/2" />
+        <Skeleton class="w-1/2" line="meta" />
       </div>
       <div
         data-slot="row"
         class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap"
       >
-        <Skeleton class="h-icon-sm w-3/4" />
+        <Skeleton class="w-3/4" line="meta" />
       </div>
     </div>
   {/if}

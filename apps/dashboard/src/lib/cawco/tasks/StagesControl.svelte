@@ -205,8 +205,8 @@
       {:else if !problem}
         {#each [0, 1, 2, 3, 4, 5, 6] as row (row)}
           <li class="flex flex-col gap-space-1 px-space-3 py-space-2">
-            <Skeleton class="h-space-4" width="name" />
-            <Skeleton class="h-icon-sm w-full" />
+            <Skeleton line="label" width="name" />
+            <Skeleton class="w-full" line="meta" />
           </li>
         {/each}
       {/if}

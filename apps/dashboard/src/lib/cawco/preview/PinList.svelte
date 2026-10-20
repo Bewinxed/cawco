@@ -27,6 +27,7 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconClose } from "#lib/icons.js";
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import type { ListHold } from "./artifact-doc";
@@ -194,13 +195,10 @@
           <span
             class="flex items-center gap-space-2 min-h-c-artifact-row-h px-space-2 py-0"
           >
-            <span class="kit-skeleton size-c-pin flex-none rounded-pill"></span>
+            <Skeleton cell="pin" class="flex-none" radius="pill" />
             <span class="flex flex-1 min-w-0 flex-col gap-space-1">
-              <span class="kit-skeleton block w-3/5 h-(--text-label) rounded-xs"
-              ></span>
-              <span
-                class="kit-skeleton block w-17/20 h-(--text-meta) rounded-xs"
-              ></span>
+              <Skeleton class="w-3/5" line="label" radius="text" />
+              <Skeleton class="w-17/20" line="meta" radius="text" />
             </span>
           </span>
         {/each}

@@ -2,16 +2,23 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  /** Its callers' looks, each as they drew it. */
+  /**
+   * The spinner (DESIGN.md, Spinner): a 16px ring at 25% with a 25% arc,
+   * turning once per `--dur-loop`; it keeps turning under reduced motion
+   * (The Reduced Motion Rule: an indeterminate spinner keeps turning).
+   */
   export const spinnerVariants = tv({
+    base: "size-icon-md animate-spin",
     variants: {
       /** The muted ink; or the live glyph while its run is running. */
       tone: {
         muted: "text-ink-muted",
         "live-running": "group-status-running/time:text-status-live-glyph",
       },
-      /** 24px, a page's own wait. */
-      box: { large: "size-6" },
+      /** Its box by where it stands (DESIGN.md Icons, Sizes): 16px in a
+          control or a row by default; `small`, 12px beside meta text and
+          in a badge; `large`, 24px, a page's own wait. */
+      box: { small: "size-icon-sm", large: "size-6" },
       /** In a glyph cell that shows it only while busy (`glyph-busy`),
           fading in and out; held still while hidden. */
       reveal: {
@@ -41,11 +48,7 @@
 
 <svg
   aria-label={ariaLabel}
-  class={cn(
-    "size-icon-md animate-spin",
-    spinnerVariants({ tone, box, reveal }),
-    className
-  )}
+  class={cn(spinnerVariants({ tone, box, reveal }), className)}
   fill="none"
   {role}
   stroke="currentColor"

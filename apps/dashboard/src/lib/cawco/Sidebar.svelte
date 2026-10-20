@@ -647,11 +647,11 @@
        ever pushed down. -->
   <Sidebar.Group aria-busy="true" aria-label="Loading" data-flip pad="rail">
     <div class="flex h-space-8 items-center px-space-3">
-      <Skeleton class="h-icon-sm" width="label" />
+      <Skeleton height="x-height" radius="line" type="label" width="label" />
     </div>
     <div class="flex flex-col gap-space-row">
       {#each Array.from({ length: rows }, (_, row) => row) as row (row)}
-        <Skeleton class="h-c-btn-h-sm w-full" />
+        <Skeleton class="w-full" height="control-sm" />
       {/each}
     </div>
   </Sidebar.Group>

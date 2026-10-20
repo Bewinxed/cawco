@@ -109,6 +109,7 @@
 </script>
 
 <script lang="ts">
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     type LightboxShot,
     lightbox,
@@ -314,10 +315,7 @@
         style:--w={intrinsic?.width}
       >
         {#if loaded !== src}
-          <span
-            aria-hidden="true"
-            class="kit-skeleton absolute inset-0 rounded-sm"
-          ></span>
+          <Skeleton aria-hidden="true" fill="frame" />
         {/if}
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: image load/error lifecycle events; the containing button owns interaction. -->
         <img

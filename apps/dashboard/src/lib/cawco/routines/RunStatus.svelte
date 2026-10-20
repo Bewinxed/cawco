@@ -53,7 +53,8 @@
   {#if status === "running"}
     <Spinner
       aria-hidden="true"
-      class="size-icon-sm flex-none"
+      box="small"
+      class="flex-none"
       role="presentation"
       tone="live-running"
     />

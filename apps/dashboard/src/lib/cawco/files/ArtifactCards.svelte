@@ -170,8 +170,8 @@
         style:--lane={(i % count) + 1}
         style:--span="span {Math.ceil(columnWidth * PANE + WORDS_PX + gap)}"
       >
-        <Skeleton class="aspect-16/10 w-full" radius="chip" />
-        <Skeleton class="my-space-2 h-space-2 w-3/5" radius="text" />
+        <Skeleton class="w-full" height="picture" radius="chip" />
+        <Skeleton class="my-space-2 w-3/5" line="label" radius="text" />
       </div>
     {/each}
   {/if}

@@ -701,14 +701,22 @@
               >
                 <span
                   class="grid w-c-row-lead flex-none place-items-center text-ink-muted"
-                  data-box><Skeleton class="size-icon-md" radius="text" /></span
+                  data-box><Skeleton cell="glyph" radius="text" /></span
                 >
                 <Skeleton
-                  class="h-space-2 w-(--name-w)"
-                  radius="text"
+                  class="w-(--name-w)"
+                  height="x-height"
+                  radius="line"
                   style="--name-w: {share * 100}%"
+                  type="label"
                 />
-                <Skeleton class="ms-auto h-space-2 w-space-4" radius="text" />
+                <Skeleton
+                  class="ms-auto"
+                  height="x-height"
+                  radius="line"
+                  type="meta"
+                  width="age"
+                />
               </div>
             {/each}
           </div>

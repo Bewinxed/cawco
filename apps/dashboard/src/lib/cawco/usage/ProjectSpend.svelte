@@ -222,7 +222,7 @@
   {:else if !spend}
     <div class="grid grid-cols-stat-tiles gap-space-3">
       {#each [0, 1, 2, 3, 4] as i (i)}
-        <Skeleton class="h-c-stat-h" radius="tile" />
+        <Skeleton height="stat" radius="tile" />
       {/each}
     </div>
     <Skeleton height="chart" radius="card" />

@@ -249,9 +249,9 @@
       class="flex flex-col gap-space-3"
       role="status"
     >
-      <Skeleton class="h-icon-md w-1/2" />
-      <Skeleton class="h-space-7 w-full" />
-      <Skeleton class="h-space-7 w-full" />
+      <Skeleton class="w-1/2" line="meta" />
+      <Skeleton class="w-full" line="body" />
+      <Skeleton class="w-full" line="body" />
     </div>
   {:else}
     <!-- What the tab cannot say, before the run: it stands at the page's
