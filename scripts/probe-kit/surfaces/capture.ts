@@ -16,12 +16,22 @@
  * pass's theme drawn. An entry that does not hold is not captured; the run
  * says so with its name and what stood instead, and exits 1.
  *
- * Written into `.cutover/audit-<label>/`, ready to commit:
- * `<entry>-<desk|phone>-<light|dark>.png` (the state's root: the viewport
- * for a page, the open layer's box for a menu, sheet or card), and
- * `MANIFEST.tsv` (entry, width, theme, file, the ready assertion's read). A
- * second run into the same label replaces the entries it names and keeps
- * the others. An entry the catalogue gives no phone (`widths`) is captured
+ * Written outside the tracked tree, so a lane's `git status` stays clean:
+ * `$TMPDIR/captures/audit-<label>/` (the ignored `.probe/captures/` with no
+ * TMPDIR). It holds `<entry>-<desk|phone>-<light|dark>.png` (the state's
+ * root: the viewport for a page, the open layer's box for a menu, sheet or
+ * card) and `MANIFEST.tsv` (entry, width, theme, file, the ready
+ * assertion's read). A second run into the same label replaces the entries
+ * it names and keeps the others.
+ *
+ * Captures never go on a lane branch: their PNGs would carry it past what
+ * the iOS landing step takes. They go on `cawco-audit/<label>`, cut from
+ * the lane's head, as `.cutover/audit-<label>/`:
+ *
+ *   git switch -c cawco-audit/<label>
+ *   cp -r "$TMPDIR/captures/audit-<label>" .cutover/
+ *   git add .cutover/audit-<label> && git commit && git switch -
+ * An entry the catalogue gives no phone (`widths`) is captured
  * at 1440 alone. `--outline` also writes each capture's outline (every
  * element a state can be told by) beside the run's output, in
  * `$TMPDIR/probe-kit/capture/`; a state that fails writes its own always.
@@ -31,7 +41,7 @@
  */
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { entrySlug, ROOT, Run, type Spec } from "../kit";
 import { type State, SURFACES, type Surface } from "./catalogue";
@@ -56,7 +66,7 @@ const PNG = /\.png$/;
 
 if (!(label && LABEL.test(label)) || (!all && named.length === 0)) {
   console.log(
-    "usage: bun scripts/probe-kit/surfaces/capture.ts --label=<label> (<entry>… | --all) [--outline] [--reach]"
+    "usage: bun scripts/probe-kit/surfaces/capture.ts --label=<label> (<entry>… | --all) [--outline] [--reach]\n  writes $TMPDIR/captures/audit-<label>/ (outside the tree); commit it as .cutover/audit-<label>/ on cawco-audit/<label>, never on the lane branch"
   );
   process.exit(2);
 }
@@ -95,7 +105,11 @@ const PIXELS: Record<Pass["width"], number> = {
   phone: 390,
 };
 
-const OUT = join(ROOT, ".cutover", `audit-${label}`);
+const OUT = join(
+  process.env.TMPDIR ?? join(ROOT, ".probe"),
+  "captures",
+  `audit-${label}`
+);
 const MANIFEST = join(OUT, "MANIFEST.tsv");
 const HEAD = "entry\twidth\ttheme\tfile\tready";
 
@@ -236,7 +250,7 @@ const spec: Spec = {
     const rows = [...kept, ...lines.values()].sort();
     await writeFile(MANIFEST, `${[HEAD, ...rows].join("\n")}\n`);
     kit.note(
-      `${lines.size - failures} capture(s), ${failures} not ready, in ${relative(ROOT, OUT)} (MANIFEST.tsv)`
+      `${lines.size - failures} capture(s), ${failures} not ready, in ${OUT} (MANIFEST.tsv): commit it as .cutover/audit-${label}/ on cawco-audit/${label}, never on the lane branch`
     );
   },
 };

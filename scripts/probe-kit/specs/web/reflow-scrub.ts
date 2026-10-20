@@ -22,7 +22,7 @@ async function read(kit: Kit): Promise<void> {
   const page = await kit.page("desk", { theme: "light" });
   await open(
     page,
-    `${await kit.bench()}${ROUTE}&theme=light`,
+    `${await kit.bench()}${ROUTE}`,
     `${LIST} [data-flip]`,
     120_000
   );
