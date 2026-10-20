@@ -50,15 +50,21 @@
  *    proposal's why, and the builder is told.
  * 5. The builder hands in a home screen it has not committed: the task stays
  *    in working, a verifier session (its item's parent `verifier:<the
- *    builder's item>`) gets the uncommitted part as a patch in its inputs,
+ *    builder's item>`) gets the uncommitted part as a patch in its inputs
+ *    and runs its brief's set-up (the builder's commit, the patch applied),
  *    and its one finding reaches the builder as one message naming the
  *    element's file:line and selector.
  * 6. The builder fixes it and commits; the next hand-in is checked again,
  *    passes, lands, and the task waits in review, its two rounds a finding
  *    and a pass.
+ * 7. With the builder landed, each verifier's item ended done at its
+ *    verdict and its workspace retired, row archived and clone gone: its
+ *    verdict put its clone back as it was cut (hub design-verify.ts
+ *    `RESTORE`), so neither the patch nor the builder's commits held it.
  *
  *   bun scripts/probe-kit/run.ts design-approve
  */
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Frame } from "playwright-core";
@@ -464,16 +470,20 @@ const t3PhaseOf = (last: string): typeof t3Phase => {
   return "idle";
 };
 
-/** Each verifier round's calls, in order; a verifier session takes the next round when it first asks. */
-const verifierRounds: Call[][] = [
-  [
-    {
-      name: BASH,
-      input: {
-        command: `test -s "$TMPDIR/inputs/design-check.patch" && echo PATCH-HANDED || echo PATCH-MISSING`,
-        description: "Look for the builder's uncommitted work",
-      },
-    },
+/** The set-up a verifier's brief says to run first (hub design-verify.ts `briefOf`): the builder's commit, and its patch when it has one. */
+const SET_UP = /run `(git checkout --detach [0-9a-f]{40}[^`]*)` first/;
+/** The verifier's first call: its brief's set-up as written, then what its clone holds. */
+const setUpCall = (setUp: string): Call => ({
+  name: BASH,
+  input: {
+    command: `${setUp} && { test -s "$TMPDIR/inputs/design-check.patch" && echo PATCH-HANDED || echo PATCH-NONE; } && git status --porcelain`,
+    description: "Set up the builder's work as the brief says",
+  },
+});
+/** Each verifier round's calls, in order, from its brief's set-up; a verifier session takes the next round when it first asks. */
+const verifierRounds: ((setUp: string) => Call[])[] = [
+  (setUp) => [
+    setUpCall(setUp),
     {
       name: VERDICT,
       input: {
@@ -482,7 +492,8 @@ const verifierRounds: Call[][] = [
       },
     },
   ],
-  [
+  (setUp) => [
+    setUpCall(setUp),
     {
       name: VERDICT,
       input: { findings: [], summary: "The home screen draws in the system." },
@@ -575,7 +586,9 @@ const next = (request: Seen, key: string | undefined): Reply => {
 const verifierNext = (request: Seen): Reply => {
   const key = `VERIFIER:${VERIFIER_AT.exec(request.all)?.[1] ?? "?"}`;
   if (!attempts.has(key)) {
-    attempts.set(key, verifierRounds.shift() ?? []);
+    const round = verifierRounds.shift();
+    const setUp = SET_UP.exec(request.all)?.[1] ?? "echo NO-SET-UP-IN-BRIEF";
+    attempts.set(key, round ? round(setUp) : []);
     verifierKeys.push(key);
   }
   return next(request, key);
@@ -1256,7 +1269,7 @@ const run = async (kit: Kit) => {
   const midway = await read(t3);
   const handed = (answers.get(verifierKeys[0] ?? "") ?? []).join(" ");
   kit.check(
-    "5: the uncommitted hand-in stays in working, its verifier (parent verifier:<item>) gets it as a patch, and its tied finding reaches the builder as one message",
+    "5: the uncommitted hand-in stays in working, its verifier (parent verifier:<item>) gets it as a patch and applies it as its brief says, and its tied finding reaches the builder as one message",
     midway.stage === "working" &&
       roundOne.length === 1 &&
       verifiers.every((row) =>
@@ -1264,6 +1277,7 @@ const run = async (kit: Kit) => {
       ) &&
       verifiers.length === 1 &&
       handed.includes("PATCH-HANDED") &&
+      handed.includes("?? screens/") &&
       findingsSent().length === 1,
     `stage ${midway.stage}; rounds ${roundOne.map((row) => row.state).join(", ")}; verifier parents ${verifiers.map((row) => row.parent_instance_id.slice(0, 18)).join(", ")}; verifier saw “${handed.slice(0, 120)}”; ${findingsSent().length} findings message(s)`
   );
@@ -1282,6 +1296,47 @@ const run = async (kit: Kit) => {
     "6: the fixed hand-in is checked again, passes, lands, and its task waits in review",
     landed.stage === "review" && rounds.join(",") === "findings,passed",
     `stage ${landed.stage}; rounds ${rounds.join(", ")}`
+  );
+
+  // ── 7. Each verifier ends done, and its workspace retires holding nothing ─
+  // Its clone sat on the builder's commit with the patch applied; its
+  // verdict puts it back as it was cut (hub design-verify.ts `RESTORE`).
+  const verifierPlaces = () =>
+    fleet.query<{
+      item: string;
+      path: string;
+      state: string;
+      workspace: string;
+    }>(
+      "SELECT i.state AS item, w.id AS workspace, w.state AS state, w.path AS path FROM work_items i JOIN workspaces w ON w.id = i.workspace_id WHERE i.id IN (SELECT verifier_item_id FROM design_checks WHERE task_id = ?)",
+      t3
+    );
+  const gone = (row: { path: string; state: string }) =>
+    row.state === "archived" && !existsSync(row.path);
+  const retired = await until(
+    "T3's verifiers' workspaces retired",
+    verifierPlaces,
+    (rows) => rows.length === 2 && rows.every(gone),
+    240_000
+  ).catch(() => verifierPlaces());
+  const verdicts = verifierKeys.map((key) =>
+    (answers.get(key) ?? []).find((one) => one.includes('"recorded"'))
+  );
+  const workspaceLines = (await fleet.logs("hub"))
+    .split("\n")
+    .filter((line) =>
+      retired.some((row) => line.includes(row.workspace.slice(0, 8)))
+    )
+    .slice(-6);
+  kit.check(
+    "7: after the builder lands, each verifier's item ended done once its verdict was in, and its workspace retired (row archived, clone gone): none held",
+    retired.length === 2 &&
+      retired.every((row) => row.item === "done" && gone(row)) &&
+      verdicts.length === 2 &&
+      verdicts.every(
+        (one) => one !== undefined && !one.includes("Not finished")
+      ),
+    `${retired.map((row) => `${row.workspace.slice(0, 8)} item ${row.item}, workspace ${row.state}, clone ${existsSync(row.path) ? "still there" : "gone"}`).join("; ")}; verdicts ${verdicts.map((one) => `“${(one ?? "(none)").slice(0, 160)}”`).join(", ")}; hub ${workspaceLines.join(" | ")}`
   );
 };
 
