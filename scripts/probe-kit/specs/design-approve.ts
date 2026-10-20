@@ -625,7 +625,9 @@ const pinWith = async (
   selector: string,
   words: string
 ) => {
-  await on.page.locator(".preview-pane button[aria-keyshortcuts='C']").focus();
+  await on.page
+    .locator("[data-slot='preview-pane'] button[aria-keyshortcuts='C']")
+    .focus();
   await on.page.keyboard.press("c");
   await settle(on.page, 400);
   const b = await screenBox(on, frame, selector);

@@ -2298,7 +2298,9 @@
       : "Comments (⇧C shows the pins)"}
     type="button"
   >
-    <IconChat /><span class="in-form-compact:hidden">Comments</span>
+    <IconChat /><span class="in-form-compact:hidden" data-slot="comments-label"
+      >Comments</span
+    >
     {#if openCount > 0}
       <span data-slot="count" class="min-w-c-count-digit">{openCount}</span>
     {/if}
@@ -2311,7 +2313,8 @@
 {#snippet commentsMenu()}
   <DropdownMenu.Item onSelect={() => showList(!listOpen)}>
     <IconChat /><span>Comments</span>{#if openCount > 0}<span
-        class="ms-auto text-ink-muted num">{openCount}</span
+        class="ms-auto text-ink-muted num"
+        data-slot="count">{openCount}</span
       >{/if}
   </DropdownMenu.Item>
 {/snippet}
@@ -2545,6 +2548,7 @@
         <!-- A sheet's stage on its way: the project's own dev toolchain (Vite, Astro or Nuxt), started or woken by the daemon. -->
         <p
           class="mt-space-3 mx-0 mb-0 text-ink-muted type-meta animate-wait-grace-in group-data-ready/cover:animation-paused group-data-ready/cover:after:animation-paused"
+          data-slot="cover-state"
         >
           {stageWaiting}
         </p>

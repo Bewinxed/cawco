@@ -1459,8 +1459,9 @@ const legs = async (
   const form = await desk.evaluate(() => {
     const at = document.querySelector('[data-bind-form="github"]');
     return {
-      project: at?.querySelector<HTMLSelectElement>(".bind-project select")
-        ?.value,
+      project: at?.querySelector<HTMLSelectElement>(
+        'select[aria-label="GitHub Project"]'
+      )?.value,
       map: Object.fromEntries(
         [...(at?.querySelectorAll("[data-status-map] label") ?? [])].map(
           (label) => [

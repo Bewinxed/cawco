@@ -689,8 +689,10 @@
   --animate-ns-panel: ns-panel var(--dur-fade) var(--ease-out) both;
   --animate-ns-pop-in: ns-pop-in var(--dur-pop) var(--ease-drawer) both;
   --animate-ns-pop-out: ns-pop-out var(--dur-exit) var(--ease-out) both;
-  --animate-filed-fade: kit-fade-in var(--dur-pop) var(--ease-out) backwards;
-  --animate-filed-rise: rise-in var(--dur-pop) var(--ease-out) backwards;
+  --animate-filed-fade: kit-fade-in var(--dur-pop) var(--ease-out)
+    var(--arrive-delay, 0ms) backwards;
+  --animate-filed-rise: rise-in var(--dur-pop) var(--ease-out)
+    var(--arrive-delay, 0ms) backwards;
   --animate-offer-settle: rise-in calc(var(--dur-control) * 2) var(--ease-out)
     backwards;
   --animate-face-out: kit-fade-out var(--dur-exit) var(--ease-out) forwards;

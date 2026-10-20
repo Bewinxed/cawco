@@ -2212,6 +2212,7 @@
   {#if placementRefusal}
     <div
       class="flex-none pt-space-2"
+      data-slot="start-notice"
       data-vaul-no-drag
       in:unfold|global
       out:unfold
@@ -2233,6 +2234,7 @@
   {#if modeRefused && !placementRefusal}
     <div
       class="flex-none pt-space-2"
+      data-slot="start-notice"
       data-vaul-no-drag
       in:unfold|global
       out:unfold
@@ -2248,6 +2250,7 @@
   {#if fullSendWarning}
     <div
       class="flex-none pt-space-2"
+      data-slot="start-notice"
       data-vaul-no-drag
       in:unfold|global
       out:unfold

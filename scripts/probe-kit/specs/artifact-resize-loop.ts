@@ -173,7 +173,15 @@ function paintedFrames() {
     }
     let top = Number.POSITIVE_INFINITY;
     for (const part of composer.querySelectorAll<HTMLElement>(
-      ":scope > .composer, .ask, .lift .kit-tray-chip, .suggest:has(.track), .progress-slot > *, .perch"
+      // SideSheet's COMPOSER_PARTS, the parts the sheet measures.
+      [
+        ':scope > [data-slot="composer"]',
+        '[data-slot="ask"]',
+        '[data-slot="lift"] [data-tray-chip]',
+        '[data-slot="suggest"]:has([data-slot="track"])',
+        '[data-slot="progress-slot"] > *',
+        '[data-slot="perch"]',
+      ].join(", ")
     )) {
       const box = part.getBoundingClientRect();
       if (

@@ -424,7 +424,7 @@ const desk = async (
   const regions = await page.evaluate(() =>
     [
       ...document.querySelectorAll<HTMLElement>(
-        ".files-pop [data-files-region]"
+        "[data-glass-card-frame='files-pop'] [data-files-region]"
       ),
     ].map((region) => {
       const scroller = region.querySelector<HTMLElement>("[data-files-scroll]");
@@ -449,7 +449,7 @@ const desk = async (
   // 4. The vermillion rule.
   const rule = await page.evaluate(() => {
     const second = document.querySelector<HTMLElement>(
-      ".files-pop [data-files-rule]"
+      "[data-glass-card-frame='files-pop'] [data-files-rule]"
     );
     const style = second ? getComputedStyle(second) : null;
     return style
@@ -460,7 +460,11 @@ const desk = async (
         }
       : null;
   });
-  const vermillion = await tokenColour(page, "--brand-solid", ".files-pop");
+  const vermillion = await tokenColour(
+    page,
+    "--brand-solid",
+    "[data-glass-card-frame='files-pop']"
+  );
   kit.check(
     `4 (${theme}): the rule between the regions is the vermillion token, brand-solid, whole`,
     rule?.color === vermillion &&
@@ -473,7 +477,7 @@ const desk = async (
   const more = await page.evaluate(() =>
     [
       ...document.querySelectorAll<HTMLElement>(
-        ".files-pop [data-files-region]"
+        "[data-glass-card-frame='files-pop'] [data-files-region]"
       ),
     ].map((region) => {
       const scroller = region.querySelector<HTMLElement>("[data-files-scroll]");
@@ -628,8 +632,9 @@ const desk = async (
           position: getComputedStyle(box).position,
           edge: getComputedStyle(box).borderTopColor,
           outline,
-          splitDocked: document.querySelectorAll(".transcript-pane ~ * iframe")
-            .length,
+          splitDocked: document.querySelectorAll(
+            '[data-slot="side-split"] iframe'
+          ).length,
         }
       : null;
   });
@@ -747,9 +752,12 @@ const reviewLegs = async (
   const opened = Date.now();
   const atOpen = await slow.evaluate(() => ({
     waits: document.querySelectorAll("[data-files-wait]").length,
-    counts: document.querySelectorAll(".files-pop [data-files-head-count]")
-      .length,
-    none: document.querySelectorAll(".files-pop .files-none").length,
+    counts: document.querySelectorAll(
+      "[data-glass-card-frame='files-pop'] [data-files-head-count]"
+    ).length,
+    none: document.querySelectorAll(
+      "[data-glass-card-frame='files-pop'] [data-files-none]"
+    ).length,
   }));
   await slow.waitForTimeout(Math.max(0, 1500 - (Date.now() - opened)));
   const pastGrace = await slow.evaluate(() => ({
@@ -758,8 +766,9 @@ const reviewLegs = async (
     attachmentsWait: !!document.querySelector(
       '[data-files-wait="attachments"]'
     ),
-    counts: document.querySelectorAll(".files-pop [data-files-head-count]")
-      .length,
+    counts: document.querySelectorAll(
+      "[data-glass-card-frame='files-pop'] [data-files-head-count]"
+    ).length,
   }));
   await slow.locator("[data-files-card]").first().waitFor({ timeout: 15_000 });
   await slow.waitForTimeout(400);
@@ -846,7 +855,7 @@ const reviewLegs = async (
   );
   const ring = await page.evaluate(() => {
     const field = document.querySelector<HTMLElement>(
-      ".files-pop [data-slot='finder-field']"
+      "[data-glass-card-frame='files-pop'] [data-slot='finder-field']"
     );
     const swatch = document.createElement("span");
     swatch.style.color = "var(--focus-ring)";
@@ -927,7 +936,7 @@ const reviewLegs = async (
   );
   // 18. A press inside a picture's lightbox is not outside Files.
   await page
-    .locator('[data-files-region="attachments"] button.attachment-row')
+    .locator('[data-files-region="attachments"] button[data-menu-item]')
     .first()
     .click();
   await page.waitForTimeout(800);
@@ -955,9 +964,11 @@ const reviewLegs = async (
     const pop = document
       .querySelector("[data-glass-card-frame='files-pop']")
       ?.getBoundingClientRect();
-    const heads = [...document.querySelectorAll(".files-pop .files-head")].map(
-      (head) => head.getBoundingClientRect()
-    );
+    const heads = [
+      ...document.querySelectorAll(
+        "[data-glass-card-frame='files-pop'] [data-files-region] > h3"
+      ),
+    ].map((head) => head.getBoundingClientRect());
     return {
       pop: pop ? { top: pop.top, bottom: pop.bottom } : null,
       heads: heads.map((head) => ({ top: head.top, bottom: head.bottom })),
@@ -1350,11 +1361,11 @@ const roundThree = async (
       };
       return [
         ...document.querySelectorAll<HTMLElement>(
-          ".files-pop [data-files-region]"
+          "[data-glass-card-frame='files-pop'] [data-files-region]"
         ),
       ].map((region) => {
         const head = region
-          .querySelector<HTMLElement>(".files-head")
+          .querySelector<HTMLElement>(":scope > h3")
           ?.getBoundingClientRect();
         const scroller = region.querySelector<HTMLElement>(
           "[data-files-scroll]"
@@ -1514,7 +1525,7 @@ const roundThree = async (
   await steady.locator("[data-files-control]").click();
   await steady.locator("[data-files-row]").first().waitFor({ timeout: 30_000 });
   const rowsBefore = await steady.locator("[data-files-row]").count();
-  const held = steady.locator("[data-files-row] .attachment-row").first();
+  const held = steady.locator("[data-files-row] > [data-menu-item]").first();
   const heldName = await held.getAttribute("title");
   await held.focus();
   await fleet.post({
@@ -1618,12 +1629,14 @@ const roundThree = async (
   await jump.waitForTimeout(1500);
   await jump.keyboard.press("Control+KeyK");
   await jump
-    .locator(".jump-pop [data-slot='finder-field'] input")
+    .locator(
+      "[data-glass-card-frame='jump-pop'] [data-slot='finder-field'] input"
+    )
     .waitFor({ timeout: 10_000 });
   await jump.waitForTimeout(300);
   const jumpRing = await jump.evaluate(() => {
     const ringed = document.querySelector<HTMLElement>(
-      ".jump-pop [data-slot='finder-field']"
+      "[data-glass-card-frame='jump-pop'] [data-slot='finder-field']"
     );
     const style = ringed ? getComputedStyle(ringed) : null;
     const swatch = document.createElement("span");
@@ -1717,7 +1730,7 @@ const roundThree = async (
       }
     }
   );
-  await recordIntros(emptied, ".files-empty-place");
+  await recordIntros(emptied, "[data-files-empty]");
   await emptied.locator("[data-files-control]").click();
   await emptied
     .locator("[data-files-wait]")
@@ -1770,7 +1783,8 @@ const narrowLeg = async (
     segments: [
       ...document.querySelectorAll<HTMLElement>("[data-files-segment]"),
     ].map((one) => one.textContent?.replace(/\s+/g, " ").trim()),
-    regions: document.querySelectorAll(".files-pop").length,
+    regions: document.querySelectorAll("[data-glass-card-frame='files-pop']")
+      .length,
   }));
   kit.check(
     `9 (${width} ${theme}): Files is the vaul drawer, Artifacts | Attachments tabs`,

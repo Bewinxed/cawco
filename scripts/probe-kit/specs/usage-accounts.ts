@@ -448,7 +448,9 @@ const run = async (kit: Kit) => {
             ids.map((id) => [
               id,
               document
-                .querySelector(`.cell-d[data-account="${id}"] [data-name]`)
+                .querySelector(
+                  `[data-slot="cell-d"][data-account="${id}"] [data-name]`
+                )
                 ?.textContent?.replace(/\s+/g, " ")
                 .trim() ?? null,
             ])
@@ -480,7 +482,7 @@ const run = async (kit: Kit) => {
     .first()
     .hover();
   const shownLimit = await page
-    .waitForSelector(".session-details-popover [data-limit-left]", {
+    .waitForSelector("[data-session-details-popover] [data-limit-left]", {
       timeout: 15_000,
     })
     .then((node) => node.textContent())

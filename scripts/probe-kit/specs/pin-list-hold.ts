@@ -150,9 +150,9 @@ const drawn = (page: Page): Promise<Drawn> =>
             surface.join()
           : null,
         skeletonHeights: [
-          ...(root?.querySelectorAll(".skeleton-row") ?? []),
+          ...(root?.querySelectorAll('[data-slot="skeleton-row"]') ?? []),
         ].map((row) => heightOf(row) ?? 0),
-        rowHeight: heightOf(root?.querySelector(".pin-row")),
+        rowHeight: heightOf(root?.querySelector('[data-slot="pin-row"]')),
         tabs: [...(root?.querySelectorAll('[role="tab"]') ?? [])].map(
           (tab) => tab.textContent?.trim() ?? ""
         ),

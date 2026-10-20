@@ -74,7 +74,7 @@ const twMergeConfig = {
       "grid-cols": [{ "grid-cols": ["fluid-auto", "mark-fluid"] }],
       "auto-rows": [{ "auto-rows": ["line", "band", "band-phone"] }],
       "animation-duration": [{ "anim-dur": durations }],
-      "animation-delay": [{ "anim-delay": durations }, "arrive-delay"],
+      "animation-delay": [{ "anim-delay": durations }],
       "type-role": [{ type: utilities("type") }],
       // app.css's per-side shorthands, one group to a side, which
       // tailwind-merge would otherwise read as that side's colour and drop

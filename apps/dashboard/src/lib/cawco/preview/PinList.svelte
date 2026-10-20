@@ -194,6 +194,7 @@
         {#each [0, 1, 2] as skeleton (skeleton)}
           <span
             class="flex items-center gap-space-2 min-h-c-artifact-row-h px-space-2 py-0"
+            data-slot="skeleton-row"
           >
             <Skeleton cell="pin" class="flex-none" radius="pill" />
             <span class="flex flex-1 min-w-0 flex-col gap-space-1">

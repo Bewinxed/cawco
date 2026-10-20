@@ -2334,12 +2334,6 @@
   );
 }
 
-/* An animation's start from a hook its host sets per element (a filed
-   task's place in its reply's cascade). The theme's own steps are
-   `anim-delay-*`. */
-@utility arrive-delay {
-  animation-delay: var(--arrive-delay);
-}
 /* A RowFault whose reason is a note, nothing failed (a not-woken note). */
 @utility fault-ink-muted {
   --fault-ink: var(--ink-muted);

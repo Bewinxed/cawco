@@ -227,8 +227,9 @@
   >
     {@const Glyph = GLYPHS[shown.kind]}
     <Glyph />
-    <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-      >{shown.name}</span
+    <span
+      class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+      data-slot="artifact-name">{shown.name}</span
     >
     <IconChevronDown />
   </DropdownMenu.Trigger>

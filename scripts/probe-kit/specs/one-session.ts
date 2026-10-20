@@ -204,7 +204,7 @@ const spec: Spec = {
     const base = await fleet.dashboard();
     const page = await kit.page("desk");
     await page.setViewportSize(VIEWPORT);
-    const rowsOfA = `[data-slot="pane"][data-pane="${a}"] h2[data-slot="who"]`;
+    const rowsOfA = `[data-slot="pane"][data-pane="${a}"] h2[data-turn-who]`;
     await open(page, `${base}/session/${a}`, rowsOfA, 120_000);
     kit.check(
       "A's rows are drawn before the unknown id",

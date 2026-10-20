@@ -199,10 +199,13 @@ const ANIMATIONS: Record<string, string> = {
   "animate-ns-panel": "ns-panel var(--dur-fade) var(--ease-out) both",
   "animate-ns-pop-in": "ns-pop-in var(--dur-pop) var(--ease-drawer) both",
   "animate-ns-pop-out": "ns-pop-out var(--dur-exit) var(--ease-out) both",
-  // A reply's filed tasks arrive in a cascade (`arrive-delay`), rising, or
-  // with reduced motion fading; a project offer settles in the same rise.
-  "animate-filed-fade": "kit-fade-in var(--dur-pop) var(--ease-out) backwards",
-  "animate-filed-rise": "rise-in var(--dur-pop) var(--ease-out) backwards",
+  // A reply's filed tasks arrive in a cascade (each card's `--arrive-delay`,
+  // inside the value so no later shorthand resets it), rising, or with
+  // reduced motion fading; a project offer settles in the same rise.
+  "animate-filed-fade":
+    "kit-fade-in var(--dur-pop) var(--ease-out) var(--arrive-delay, 0ms) backwards",
+  "animate-filed-rise":
+    "rise-in var(--dur-pop) var(--ease-out) var(--arrive-delay, 0ms) backwards",
   "animate-offer-settle":
     "rise-in calc(var(--dur-control) * 2) var(--ease-out) backwards",
   // An offer's face swapping: the old out, the new in.

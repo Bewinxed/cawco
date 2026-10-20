@@ -576,7 +576,9 @@ const headOf = (page: Page) =>
         []),
     ].map((one) => {
       const control = one.querySelector("[aria-label], button");
-      const word = one.querySelector(".comments-label, .send-label");
+      const word = one.querySelector(
+        "[data-slot=comments-label], [data-slot=send-label]"
+      );
       return {
         key: one.dataset.headItem ?? "",
         stands: !one.hidden,
@@ -1050,7 +1052,7 @@ async function neverDrawnLeg(
   });
   const waited = Date.now();
   const covered = await desk
-    .locator(`${PANE} [data-slot="cover"] .cover-state`)
+    .locator(`${PANE} [data-slot="cover"] [data-slot="cover-state"]`)
     .textContent({ timeout: 30_000 })
     .catch(() => null);
   const stuck = await desk

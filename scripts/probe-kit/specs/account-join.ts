@@ -540,7 +540,7 @@ const spec: Spec = {
       .click();
     const dialog = page.getByRole("dialog", { name: "New Session" });
     const title = dialog
-      .locator(".start-notice [data-slot=alert-title]")
+      .locator("[data-slot=start-notice] [data-slot=alert-title]")
       .first();
     const shown = await until(
       "New session's refusal",
