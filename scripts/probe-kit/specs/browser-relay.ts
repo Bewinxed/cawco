@@ -514,25 +514,29 @@ const minted = async (
   );
 };
 
-/** coturn's session ids in a line: `session 001000000000000001`. */
-const SESSION = /session (\d+)/g;
-
 /**
- * coturn's lines of `username`'s sessions: those naming it (`user <…>`), and
- * every line of a session one of them names (coturn's "A peer IP … denied in
- * the range" names no user, its session's 403 does).
+ * coturn's lines refusing `ip` as a peer. 4.18.0 logs every refusal at ERROR
+ * whatever its verbosity: "A peer IP %s denied in the range: %s in server %d
+ * (session %018llu)" (ns_turn_server.c `good_peer_addr`), the peer as coturn
+ * read it (P read as its own media address, `--external-ip`).
  */
-const linesOf = (lines: string[], username: string): string[] => {
-  const sessions = new Set(
-    lines
-      .filter((line) => line.includes(`<${username}>`))
-      .flatMap((line) => [...line.matchAll(SESSION)].map((one) => one[1]))
+const deniedPeer = (lines: string[], ips: string[]): string[] =>
+  lines.filter((line) =>
+    ips.some((ip) => line.includes(`A peer IP ${ip} denied in the range`))
   );
-  return lines.filter(
-    (line) =>
-      line.includes(username) ||
-      [...line.matchAll(SESSION)].some((one) => sessions.has(one[1]))
-  );
+
+/** coturn's requests processed for `username`, by method: logged with `--verbose` alone ("realm <…> user <…>: incoming packet REFRESH processed, success (session …)"). */
+const PROCESSED = /user <([^>]*)>: incoming packet (\w+) processed/;
+
+const requestsOf = (lines: string[], username: string): Map<string, number> => {
+  const seen = new Map<string, number>();
+  for (const line of lines) {
+    const read = PROCESSED.exec(line);
+    if (read?.[1] === username && read[2]) {
+      seen.set(read[2], (seen.get(read[2]) ?? 0) + 1);
+    }
+  }
+  return seen;
 };
 
 /** Assertion 1: coturn's arguments, its seat on the media network, what is published, and its log at start. */
@@ -736,6 +740,8 @@ interface UclientRead {
 /** How many data messages each uclient session sends (`-n`), and how many sessions `-y -c` makes: two, each the other's peer. */
 const UCLIENT_MESSAGES = 10;
 const UCLIENT_SESSIONS = 2;
+/** How long coturn's last lines of a run have to reach its log. */
+const LOG_SETTLE_MS = 1000;
 /**
  * The most `send(2)` calls of its own a passing uclient run may have had
  * refused. turnutils_uclient (coturn 4.18.0 src/apps/uclient/uclient.c)
@@ -847,15 +853,22 @@ const relayToRelay = async (
         leg.network
       )
     );
-    const denied = linesOf(
-      await coturnLines(on.container, since),
-      fresh.username
-    ).filter((line) => DENIED.test(line));
+    // coturn's log since the run began, a moment after its end, so its
+    // last lines are written: refusals of the relayed addresses (P, read as
+    // coturn's own) are this run's, as no other check asks for them.
+    await Bun.sleep(LOG_SETTLE_MS);
+    const lines = await coturnLines(on.container, since);
+    const denied = deniedPeer(lines, [on.media, args.address]);
+    const seen = requestsOf(lines, fresh.username);
+    const requests =
+      seen.size > 0
+        ? `; coturn processed for its user ${[...seen].map(([method, count]) => `${method} ${count}`).join(", ")}`
+        : "";
     for (const line of denied.slice(-20)) {
       kit.note(`coturn: ${line.trim()}`);
     }
     kit.check(
-      `3 · turnutils_uclient -y from ${leg.from}: exit ${run.code}, sent ${run.sent} of ${expected}, received ${run.received}, lost ${run.lost}; ${run.dropped} of its own control sends refused by its socket (at most ${CONTROL_SENDS}: uclient counts a failed send(2) as dropped, and with every data message sent none was data); ${denied.length} denials of its sessions in coturn's log${on.where}`,
+      `3 · turnutils_uclient -y from ${leg.from}: exit ${run.code}, sent ${run.sent} of ${expected}, received ${run.received}, lost ${run.lost}; ${run.dropped} of its own control sends refused by its socket (at most ${CONTROL_SENDS}: uclient counts a failed send(2) as dropped, and with every data message sent none was data)${requests}; ${denied.length} refusals of P or ${on.media} in coturn's log${on.where}`,
       run.code === 0 &&
         run.sent === expected &&
         run.received === run.sent &&
@@ -1269,6 +1282,9 @@ const refusedLegs = async (
       network: network.name,
       port: standIn,
       certs: dir,
+      // Each request processed, by user: the relay-to-relay runs then name
+      // which of uclient's control requests reached coturn.
+      extra: ["--verbose"],
     });
     try {
       if (

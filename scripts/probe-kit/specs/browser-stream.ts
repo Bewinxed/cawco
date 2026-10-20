@@ -103,6 +103,18 @@ const OTHER_NETWORK = "cawco-stream-probe-other";
 const OTHER_NEKO = "cawco-stream-probe-neko";
 /** The neko's media port inside its container: never published. */
 const OTHER_MEDIA_PORT = 52_000;
+/** The rootless Podman that resolves host-gateway through pasta's --map-guest-addr. */
+const PODMAN_MAP_GUEST = [5, 3] as const;
+
+/** Whether a version `major.minor…` is older than `[major, minor]`. */
+const olderThan = (
+  version: string,
+  [major, minor]: readonly [number, number]
+): boolean => {
+  const [have = 0, haveMinor = 0] = version.split(".").map(Number);
+  return have < major || (have === major && haveMinor < minor);
+};
+
 /** The name leg 9's neko reaches this machine by: the runtime's host-gateway. */
 const HOST_ALIAS = "cawco-relay-host";
 /** The host part of a `stun:<address>:` URL. */
@@ -727,6 +739,7 @@ const legsWith = async (kit: Kit, at: At, stun: string): Promise<void> => {
     ws,
     docker: at.runtime.docker,
     relay: at.relay,
+    runtime: at.runtime,
     stun,
   };
   const image = await containerLeg(kit, leg);
@@ -751,6 +764,8 @@ interface Leg {
 interface ContainerLegAt extends Leg {
   docker: Runtime["docker"];
   relay: RelayAt;
+  /** The runtime, by kind and version: leg 9 names what it needs of it. */
+  runtime: Runtime;
   /** The fleet's STUN server, as the hub and the agent are told it. */
   stun: string;
 }
@@ -1215,7 +1230,25 @@ const otherMachineLeg = async (
   leg: ContainerLegAt,
   image: string
 ): Promise<void> => {
-  const { docker, page, relay, stun } = leg;
+  const { docker, page, relay, runtime, stun } = leg;
+  // A rootless Podman resolves host-gateway to the host from 5.3 on, through
+  // pasta's --map-guest-addr ("Podman now uses the pasta --map-guest-addr
+  // option by default which is used for the host.containers.internal entry
+  // to allow the container to reach the host by default", podman #23791);
+  // before it, a container reaches its host's own address not at all ("Since
+  // pasta copies the IP address of the main interface, connections to that
+  // IP from containers do not work", podman rootless.md).
+  if (
+    runtime.kind === "podman" &&
+    runtime.rootless &&
+    olderThan(runtime.version, PODMAN_MAP_GUEST)
+  ) {
+    kit.check(
+      `9 · the stand-in for another machine reaches this one through host-gateway, which a rootless Podman gives from ${PODMAN_MAP_GUEST.join(".")} on (with passt from 2024-08-14): this runtime is Podman ${runtime.version}`,
+      false
+    );
+    return;
+  }
   const media =
     await import("../../../packages/agent/src/browser/media-network");
   const { relayUrlsFor } =
