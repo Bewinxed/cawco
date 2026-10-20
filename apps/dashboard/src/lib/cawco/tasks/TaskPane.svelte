@@ -509,11 +509,12 @@
       {:else}
         <h2 data-slot="title" class="m-0 type-title tracking-title">
           <button
-            class="block w-full -mx-space-1 p-space-1 rounded-sm type-title text-ink-strong text-start text-balance hover:enabled:bg-surface-hover press-tint focus-inset"
+            class="block w-(--title-w) -mx-space-1 p-space-1 rounded-sm type-title text-ink-strong text-start text-balance hover:enabled:bg-surface-hover press-tint focus-inset"
             disabled={!shown}
             onclick={() => {
               titleDraft = shown?.title ?? "";
             }}
+            style:--title-w="calc(100% + var(--space-1) * 2)"
             title="Edit the title"
             type="button"
           >

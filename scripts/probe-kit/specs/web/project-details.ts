@@ -29,6 +29,10 @@
  *    line is short: its text as wide as its box, the press tint's bleed
  *    costing it nothing), and a name too long for the column ends in an
  *    ellipsis inside it, its box reaching the column's edge and its bleed.
+ *    A task's title (its pane, from the desk legs) wraps in its heading's
+ *    whole width.
+ * 6. At 1440, a session's rename field in the rail's row is its words'
+ *    column widened by the bleed on each side, and stands clear of Peek.
  *
  *   bun scripts/probe-kit/run.ts web project-details
  */
@@ -180,6 +184,7 @@ interface Setup {
   named: string;
   project: { id: string; name: string };
   second: string;
+  src: string;
   url: string;
 }
 
@@ -234,6 +239,7 @@ const setUp = async (kit: Kit): Promise<Setup> => {
     named,
     project,
     second,
+    src,
     url: `${base}/project/${project.id}`,
   };
 };
@@ -299,6 +305,30 @@ const leg = async (
   await page.waitForURL((href) => href.href.includes(taskId), {
     timeout: 15_000,
   });
+  if (desk) {
+    // The task's title wraps in its heading's whole width: the press tint's
+    // bleed (-mx-space-1) costs it nothing.
+    const title = page.locator(
+      `[data-task-pane="${taskId}"] h2[data-slot="title"]`
+    );
+    await title.locator("button").waitFor();
+    const wraps = await title.evaluate((h2) => {
+      const button = h2.querySelector("button") as HTMLElement;
+      const style = getComputedStyle(button);
+      return {
+        heading: h2.getBoundingClientRect().width,
+        text:
+          button.clientWidth -
+          Number.parseFloat(style.paddingLeft) -
+          Number.parseFloat(style.paddingRight),
+      };
+    });
+    kit.check(
+      `${tag}: the task's title wraps in its heading's whole width`,
+      Math.abs(wraps.text - wraps.heading) <= 0.5,
+      JSON.stringify(wraps)
+    );
+  }
   // A phone opens the task as its own page: Back finds the tray waiting.
   if (!desk) {
     await page.goBack();
@@ -605,6 +635,99 @@ const names = async (kit: Kit, { base, fleet, named }: Setup) => {
   await page.close();
 };
 
+/** The rail's home tab that lists sessions ended unseen (its count may follow). */
+const FINISHED = /Finished/;
+
+/** A session row's words, title (or its field), age column and Peek, by its item. */
+const readRow = (page: Page, item: string) =>
+  page.evaluate((selector) => {
+    const row = document.querySelector(selector);
+    const at = (el: Element | null | undefined) => {
+      const r = el?.getBoundingClientRect();
+      return r ? { left: r.left, right: r.right } : null;
+    };
+    const peek = row?.querySelector("[data-session-row-peek]");
+    // The action nearest the words: Archive, left of Peek, when it is there.
+    const nearest = row?.querySelector("[data-archive]") ?? peek;
+    const probe = document.createElement("div");
+    probe.style.width = "var(--space-1)";
+    document.body.append(probe);
+    const space1 = probe.getBoundingClientRect().width;
+    probe.remove();
+    const title = row?.querySelector('[data-slot="title"]');
+    return {
+      field: title?.tagName === "INPUT",
+      focused: title !== undefined && title === document.activeElement,
+      words: at(row?.querySelector('[data-slot="words"]')),
+      title: at(title),
+      end: at(row?.querySelector('[data-slot="end"]')),
+      peek: at(peek),
+      action: at(nearest),
+      shown: nearest ? getComputedStyle(nearest).opacity === "1" : null,
+      space1,
+    };
+  }, item);
+
+/**
+ * 6: a session's rename field in its row on the home's list. Its words'
+ * column yields Peek's room while the row is hovered or holds the focus
+ * (SessionRow `--words-room`: the button and space-1), so the field, bled
+ * space-1 past the column, ends at Peek's edge and never under it.
+ */
+const rename = async (kit: Kit, { fleet, url }: Setup) => {
+  // Outside any project: its row is the rail's home list's, where Peek is.
+  const id = await fleet.spawn("claude", "Rename me");
+  const said = await fleet.send(id, "hello");
+  await until(
+    "the turn read",
+    () => fleet.sendRow(said),
+    (one) => one?.state === "read",
+    120_000
+  );
+  const page = await kit.page("desk");
+  // By its buttons: renaming, the row's link gives way to the field's form.
+  const item = `[data-slot="item"][data-peek][data-archivable]:has([data-archive][aria-label="Archive Rename me"])`;
+  // Its turn ended unseen: the rail's home lists it under Finished, with
+  // Peek and Archive. Its own page would mark it seen.
+  await open(page, url, LINE);
+  await page.getByRole("tab", { name: FINISHED }).first().click();
+  await page.locator(item).first().waitFor({ timeout: 60_000 });
+  const row = page.locator(item).first();
+  await row.hover();
+  await settle(page, 300);
+  const rest = await readRow(page, item);
+  kit.check(
+    "1440: under the pointer, the session's title ends space-1 left of Archive and Peek",
+    rest.title !== null &&
+      rest.action !== null &&
+      rest.shown === true &&
+      Math.abs(rest.action.left - rest.title.right - rest.space1) <= 0.5,
+    JSON.stringify(rest)
+  );
+  await row.locator("a[data-session-row-row]").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
+  await page.locator(`${item} input[data-slot="title"]`).waitFor();
+  // The pointer off the row: the focus alone holds Peek's room.
+  await page.mouse.move(0, 0);
+  await settle(page, 300);
+  const edit = await readRow(page, item);
+  kit.check(
+    "1440: the rename field, focused, is its words' column bled space-1 each side, ending at Archive's edge and never under it",
+    edit.field &&
+      edit.focused &&
+      edit.words !== null &&
+      edit.title !== null &&
+      edit.action !== null &&
+      edit.shown === true &&
+      Math.abs(edit.title.left - (edit.words.left - edit.space1)) <= 0.5 &&
+      Math.abs(edit.title.right - (edit.words.right + edit.space1)) <= 0.5 &&
+      edit.title.right <= edit.action.left + 0.5,
+    JSON.stringify(edit)
+  );
+  await page.keyboard.press("Escape");
+  await page.close();
+};
+
 const run = async (kit: Kit) => {
   const setup = await setUp(kit);
   for (const { view, name } of LEGS) {
@@ -615,6 +738,7 @@ const run = async (kit: Kit) => {
   await rows(kit, setup);
   await refusals(kit, setup);
   await names(kit, setup);
+  await rename(kit, setup);
 };
 
 export default { name: "project-details", run } satisfies Spec;

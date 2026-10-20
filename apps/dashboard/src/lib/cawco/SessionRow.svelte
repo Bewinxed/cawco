@@ -336,7 +336,7 @@
         aria-label="Session title"
         autocomplete="off"
         autofocus
-        class="block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label w-full -mx-space-1 px-space-1 border border-border-control rounded-xs bg-surface-raised text-ink-strong read-only:text-ink-muted group-data-context/session-row:group-not-data-current/session-row:text-ink-muted focus-inset"
+        class="block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label w-(--title-w) -mx-space-1 px-space-1 border border-border-control rounded-xs bg-surface-raised text-ink-strong read-only:text-ink-muted group-data-context/session-row:group-not-data-current/session-row:text-ink-muted focus-inset"
         data-box
         onblur={() => {
           // Left after a refusal, it stays as typed, said under the row; Try
@@ -353,6 +353,7 @@
           }
         }}
         readonly={renaming !== null}
+        style:--title-w="calc(100% + var(--space-1) * 2)"
         spellcheck="false"
         bind:value={draft}
         {@attach (node) => node.select()}
