@@ -29559,7 +29559,7 @@
               "type": "boolean"
             },
             "cawHarness": {
-              "$ref": "#/components/schemas/CawHarness"
+              "$ref": "#/components/schemas/HarnessKind"
             },
             "cawModel": {
               "type": [
@@ -29787,7 +29787,7 @@
             "type": "boolean"
           },
           "cawHarness": {
-            "$ref": "#/components/schemas/CawHarness"
+            "$ref": "#/components/schemas/HarnessKind"
           },
           "cawModel": {
             "type": [
@@ -30002,7 +30002,7 @@
             "type": "boolean"
           },
           "cawHarness": {
-            "$ref": "#/components/schemas/CawHarness"
+            "$ref": "#/components/schemas/HarnessKind"
           },
           "cawModel": {
             "type": [
@@ -30237,7 +30237,7 @@
             "type": "boolean"
           },
           "cawHarness": {
-            "$ref": "#/components/schemas/CawHarness"
+            "$ref": "#/components/schemas/HarnessKind"
           },
           "cawModel": {
             "type": [
@@ -30424,7 +30424,7 @@
             "type": "boolean"
           },
           "cawHarness": {
-            "$ref": "#/components/schemas/CawHarness"
+            "$ref": "#/components/schemas/HarnessKind"
           },
           "cawModel": {
             "type": [
@@ -33261,7 +33261,7 @@
             "description": "How hard the model thinks: the same {@link EffortLevel} scale every other effort control uses."
           },
           "harness": {
-            "$ref": "#/components/schemas/CawHarness"
+            "$ref": "#/components/schemas/HarnessKind"
           },
           "model": {
             "type": "string"
@@ -33286,6 +33286,15 @@
           "harness",
           "model",
           "name"
+        ]
+      },
+      "HarnessKind": {
+        "description": "The harnesses cawco can spawn sessions on. Adding one is a new adapter.",
+        "type": "string",
+        "enum": [
+          "claude",
+          "opencode",
+          "pi"
         ]
       },
       "Undoable": {
@@ -39558,7 +39567,7 @@
             ]
           },
           "harness": {
-            "$ref": "#/components/schemas/CawHarness"
+            "$ref": "#/components/schemas/HarnessKind"
           },
           "leadInstanceId": {
             "description": "Caw's session, once the hub has started one.",
@@ -39605,15 +39614,6 @@
           "problem",
           "running",
           "spendUsd"
-        ]
-      },
-      "CawHarness": {
-        "description": "The harnesses a project's Caw can run on: the ones whose every shell and edit call the hub's gate decides.",
-        "type": "string",
-        "enum": [
-          "claude",
-          "opencode",
-          "pi"
         ]
       },
       "CawRunning": {
@@ -43527,7 +43527,7 @@
                     ]
                   },
                   "harness": {
-                    "$ref": "#/components/schemas/CawHarness"
+                    "$ref": "#/components/schemas/HarnessKind"
                   },
                   "model": {
                     "type": "string"
@@ -45311,15 +45311,6 @@
           "dontAsk",
           "fullSend",
           "plan"
-        ]
-      },
-      "HarnessKind": {
-        "description": "The harnesses cawco can spawn sessions on. Adding one is a new adapter.",
-        "type": "string",
-        "enum": [
-          "claude",
-          "opencode",
-          "pi"
         ]
       },
       "EffortLevel": {
@@ -49887,7 +49878,7 @@
             "type": "string"
           },
           "harness": {
-            "$ref": "#/components/schemas/CawHarness",
+            "$ref": "#/components/schemas/HarnessKind",
             "description": "The harnesses cawco can spawn sessions on. Adding one is a new adapter."
           },
           "machineId": {
@@ -51089,7 +51080,7 @@
             ]
           },
           "movedFrom": {
-            "$ref": "#/components/schemas/CawHarness",
+            "$ref": "#/components/schemas/HarnessKind",
             "description": "The store it was moved from: `~/.claude`, pi's own `auth.json`, OpenCode's own; null when not moved."
           },
           "reason": {

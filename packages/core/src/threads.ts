@@ -3,8 +3,12 @@
  * the hub's `caw.ts`). The shapes the routes answer, the `thread.upsert` and
  * `thread.message` frames carry, and the dashboard draws.
  */
-import type { CawHarness } from "./delegate-types";
-import type { PlaceLfsRow, UserAnswers, UserQuestion } from "./harness";
+import type {
+  HarnessKind,
+  PlaceLfsRow,
+  UserAnswers,
+  UserQuestion,
+} from "./harness";
 
 /** A project's Caw, as `GET`/`PATCH /api/projects/:id/caw` answer it. */
 export interface CawView {
@@ -14,7 +18,7 @@ export interface CawView {
    * when he is at rest or a thread's turn.
    */
   answering: string | null;
-  harness: CawHarness;
+  harness: HarnessKind;
   /** Caw's session, once the hub has started one. */
   leadInstanceId: string | null;
   /** The model Caw's session runs; null: its harness's default. */

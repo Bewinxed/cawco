@@ -564,7 +564,7 @@ export const projects = sqliteTable("projects", {
   caw: integer("caw", { mode: "boolean" }).notNull().default(false),
   /** The harness Caw runs on: one whose every shell and edit call the hub's gate decides. */
   cawHarness: text("caw_harness")
-    .$type<import("@cawco/core").CawHarness>()
+    .$type<HarnessKind>()
     .notNull()
     .default("claude"),
   /** The model Caw's session runs; null: the harness's own default. */

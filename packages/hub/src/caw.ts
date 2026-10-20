@@ -60,7 +60,6 @@ import {
   type BlockPage,
   BOARD_ONLY_DENIED_TOOLS,
   CAW_DENIED_TOOLS,
-  type CawHarness,
   type CawInitiated,
   type CawNotWokenReason,
   type CawRunning,
@@ -70,6 +69,7 @@ import {
   type Envelope,
   type EventThreadMessage,
   type FencedHarness,
+  type HarnessKind,
   handoffMarker,
   type InstanceRow,
   type ItemEnd,
@@ -174,7 +174,7 @@ const modelAfter = (
 };
 
 /** The harnesses Caw runs on, in the order a picker offers them. */
-export const CAW_HARNESSES = Object.keys(CAW_DENIED_TOOLS) as CawHarness[];
+export const CAW_HARNESSES = Object.keys(CAW_DENIED_TOOLS) as HarnessKind[];
 
 /** Caw's denied tools on `harness`; refused on a harness whose shell and edit calls the hub's gate cannot decide. */
 export const cawDenied = (harness: string): readonly string[] => {
@@ -183,7 +183,7 @@ export const cawDenied = (harness: string): readonly string[] => {
       `Caw does not run on ${harness}: it cannot put each of Caw's shell and edit calls to the hub first.`
     );
   }
-  return CAW_DENIED_TOOLS[harness as CawHarness];
+  return CAW_DENIED_TOOLS[harness as HarnessKind];
 };
 
 /** The harnesses a fleet-watch triage run starts on: the ones that fence it to CawCo's tools (core `FencedHarness`). */
@@ -2447,7 +2447,7 @@ export const createCaw = ({
           refuse(400, (error as Error).message);
         }
       }
-      const harness = (change.harness as CawHarness | undefined) ?? undefined;
+      const harness = (change.harness as HarnessKind | undefined) ?? undefined;
       const on = change.on ?? project.caw;
       const rehomed = harness !== undefined && harness !== project.cawHarness;
       const model = modelAfter(project.cawModel, change.model, rehomed);

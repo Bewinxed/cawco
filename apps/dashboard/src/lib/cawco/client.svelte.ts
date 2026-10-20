@@ -20,7 +20,6 @@ import type {
   AvailableCommand,
   BrowserAskFrame,
   BuildInfo,
-  CawHarness,
   CawInitiated,
   CawView,
   ClaudeLimits,
@@ -6401,7 +6400,7 @@ export const cawOf = (projectId: string): Promise<CawView> =>
 export const configureCaw = (
   projectId: string,
   change: {
-    harness?: CawHarness;
+    harness?: HarnessKind;
     /** Turning him off with what he started still running: it finishes or stops. */
     initiated?: CawInitiated;
     model?: string | null;

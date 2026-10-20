@@ -39,7 +39,6 @@ typeOverrides:
     CallerKind: OpenEnums.CallerKind
     CapPeriod: OpenEnums.CapPeriod
     CatalogTypeSource: OpenEnums.CatalogTypeSource
-    CawHarness: OpenEnums.CawHarness
     CawNotWokenReason: OpenEnums.CawNotWokenReason
     CawRunningKind: OpenEnums.CawRunningKind
     ClaudeLimitsErrorKind: OpenEnums.ClaudeLimitsErrorKind

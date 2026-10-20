@@ -43,7 +43,7 @@ export interface DelegateType {
   description: string;
   /** How hard the model thinks: the same {@link EffortLevel} scale every other effort control uses. */
   effort?: EffortLevel;
-  harness: "claude" | "opencode" | "pi";
+  harness: HarnessKind;
   model: string;
   /** Unique across the fleet; what a `delegate` call's `type` param names. */
   name: string;
@@ -195,10 +195,7 @@ export const CAW_DENIED_TOOLS = {
   ],
   opencode: ["Agent"],
   pi: ["powershell"],
-} as const satisfies Partial<Record<HarnessKind, readonly string[]>>;
-
-/** The harnesses a project's Caw can run on: the ones whose every shell and edit call the hub's gate decides. */
-export type CawHarness = keyof typeof CAW_DENIED_TOOLS;
+} as const satisfies Record<HarnessKind, readonly string[]>;
 
 /**
  * Caw's shell and edit tools, by the name each harness asks permission
@@ -216,7 +213,7 @@ export const LEAD_GATED_TOOLS = {
   claude: ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit"],
   opencode: ["shell", "edit"],
   pi: ["bash", "edit", "write"],
-} as const satisfies Record<CawHarness, readonly string[]>;
+} as const satisfies Record<HarnessKind, readonly string[]>;
 
 /** Which of a lead's gated tools are shell, by any harness's name; the rest edit files. */
 export const LEAD_SHELL_TOOLS: ReadonlySet<string> = new Set([
@@ -231,7 +228,7 @@ export const LEAD_SHELL_TOOLS: ReadonlySet<string> = new Set([
  * and no other. pi's session loads the person's own extensions, which may
  * register any tool, so pi has no fence.
  */
-export type FencedHarness = Exclude<CawHarness, "pi">;
+export type FencedHarness = Exclude<HarnessKind, "pi">;
 
 /**
  * What a session on the board alone may never call: no edit, shell or
