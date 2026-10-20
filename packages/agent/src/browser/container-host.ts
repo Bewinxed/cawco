@@ -9,6 +9,10 @@
  * neko's HTTP and Chromium's DevTools are published on 127.0.0.1 alone; the
  * media port, UDP and TCP, on every address, advertised with the machine's
  * own addresses so a screen on the LAN or the tailnet connects directly.
+ * Every container stands on the runtime's media network at its slot's
+ * address (media-network.ts), where the stream relay's coturn stands too on
+ * the relay's machine; its relay URLs are composed for this machine
+ * (relay-urls.ts).
  *
  * The media port is published for what the runtime forwards
  * (media-forwarding.ts), measured once the container is live, and a
@@ -29,6 +33,7 @@ import { readWithin } from "@cawco/core/bounded";
 import type { BrowserKey, BrowserRelay } from "@cawco/core/browser";
 import { BROWSER_SCREEN, browserSlug } from "@cawco/core/browser";
 import type { MediaPath } from "@cawco/core/capabilities";
+import { machineId } from "@cawco/core/machine-id";
 import { stunServer } from "@cawco/core/stream-relay";
 import type Docker from "dockerode";
 import { ensureImage } from "./image";
@@ -40,6 +45,14 @@ import {
   mediaProtocols,
   recordMeasurement,
 } from "./media-forwarding";
+import {
+  ensureMediaNetwork,
+  type MediaNetwork,
+  onMediaNetwork,
+  relayMediaAddress,
+  slotAddress,
+} from "./media-network";
+import { relayKeyOf, relayUrlsFor } from "./relay-urls";
 import type { Runtime } from "./runtime";
 import {
   type BrowserHost,
@@ -169,11 +182,18 @@ export const removeOwned = async (
   );
 };
 
+/** The relay as neko is given it: the credential, at the URLs composed for this machine. */
+export interface NekoRelay {
+  credential: string;
+  urls: string[];
+  username: string;
+}
+
 /** The env neko starts with. */
 const nekoEnv = (
   record: BrowserRecord,
   passwords: { admin: string; user: string },
-  relay: BrowserRelay | undefined,
+  relay: NekoRelay | undefined,
   media: MediaPath,
   addresses: string[],
   stun: string
@@ -204,9 +224,10 @@ const nekoEnv = (
     // Always named: with neither list set neko gives both
     // stun.l.google.com:19302 (server/internal/config/webrtc.go, "add default
     // stun server if none are configured"), a server no one chose. Its own
-    // candidates come from the relay and the fleet's STUN server; each
-    // viewer's list is the hub's, put in the offer it relays
-    // (hub browser-routes.ts), so neko gives none of its own.
+    // candidates come from the relay, at the URLs composed for this machine
+    // (relay-urls.ts), and the fleet's STUN server; each viewer's list is the
+    // hub's, put in the offer it relays (hub browser-routes.ts), so neko
+    // gives none of its own.
     `NEKO_WEBRTC_ICESERVERS_BACKEND=${JSON.stringify([
       ...(relay ? [relay] : []),
       { urls: [stun] },
@@ -219,6 +240,39 @@ const nekoEnv = (
 const relayExpiry = (relay: BrowserRelay): number | undefined => {
   const seconds = Number(relay.username.split(":")[0]);
   return Number.isFinite(seconds) ? seconds * 1000 : undefined;
+};
+
+/**
+ * Whether `record`'s container was made as a start asks now: the same image,
+ * published on the record's ports, the media port published for what the
+ * runtime forwards now, at its slot's address on the media network, made
+ * with the STUN server named now, and its relay credential, for the same
+ * relay, good for a day more (or no relay asked for). Otherwise a new one is
+ * made on the same volume, with the credential just minted. One made before
+ * it named its STUN server has neko's own default in it, and is made again.
+ */
+const keptAsAsked = (
+  record: BrowserRecord,
+  now: { image: string; media: MediaPath; address: string },
+  relay: BrowserRelay | undefined
+): boolean => {
+  const kept = record.container;
+  const published = portsOf(record);
+  const relayHolds =
+    !relay ||
+    (record.relayKey === relayKeyOf(relay) &&
+      (record.relayExpiresAt ?? 0) > Date.now() + RELAY_RENEW_MS);
+  return (
+    !!kept &&
+    kept.image === now.image &&
+    kept.media === now.media &&
+    kept.address === now.address &&
+    kept.ports?.http === published.http &&
+    kept.ports?.devtools === published.devtools &&
+    kept.ports?.media === published.media &&
+    kept.stun === stunServer() &&
+    relayHolds
+  );
 };
 
 /** Waits until `url` answers 2xx, or throws after {@link LIVE_MS}. */
@@ -287,26 +341,13 @@ export class ContainerHost implements BrowserHost {
     const { endpoint } = this.#runtime;
     const forwarding = await mediaForwarding(endpoint);
     let { media } = forwarding;
-    // The same image, published on the record's ports, the media port
-    // published for what the runtime forwards now, made with the STUN server
-    // named now, and its relay credential good for a day more (or no relay
-    // asked for): the container as it is. Otherwise a new one on the same
-    // volume, with the credential just minted. One made before it named its
-    // STUN server has neko's own default in it, and is made again.
-    const relayHolds =
-      !options.relay ||
-      (record.relayUrls?.join(" ") === options.relay.urls.join(" ") &&
-        (record.relayExpiresAt ?? 0) > Date.now() + RELAY_RENEW_MS);
-    const published = portsOf(record);
+    const network = await ensureMediaNetwork(this.#docker);
+    if (record.slot === undefined) {
+      throw new Error(`${record.key} has no slot on the container host.`);
+    }
+    const address = slotAddress(network, record.slot);
     let reuse =
-      kept &&
-      kept.image === image &&
-      kept.media === media &&
-      kept.ports?.http === published.http &&
-      kept.ports?.devtools === published.devtools &&
-      kept.ports?.media === published.media &&
-      kept.stun === stunServer() &&
-      relayHolds
+      kept && keptAsAsked(record, { image, media, address }, options.relay)
         ? await this.#docker
             .getContainer(kept.id)
             .inspect()
@@ -338,14 +379,15 @@ export class ContainerHost implements BrowserHost {
       if (!container) {
         // biome-ignore lint/performance/noAwaitInLoops: each round waits on the container it made.
         await removeContainers(this.#docker, owner, record.key, [kept?.id]);
-        container = await this.#create(
-          record,
+        container = await this.#create(record, {
           image,
           volume,
-          options.relay,
+          relay: options.relay,
           media,
-          owner
-        );
+          owner,
+          network,
+          address,
+        });
       }
       await this.#live(container.id, ports);
       const measured = await measureMedia(
@@ -369,19 +411,19 @@ export class ContainerHost implements BrowserHost {
       reuse = false;
     }
     // A new container carries the credential it was made with, or none.
-    const { relayExpiresAt, relayUrls, ...rest } = record;
+    const { relayExpiresAt, relayKey, ...rest } = record;
     const relay = reuse
-      ? { relayExpiresAt, relayUrls }
+      ? { relayExpiresAt, relayKey }
       : {
           relayExpiresAt: options.relay && relayExpiry(options.relay),
-          relayUrls: options.relay?.urls,
+          relayKey: options.relay && relayKeyOf(options.relay),
         };
     const next: BrowserRecord = {
       ...rest,
       ...(relay.relayExpiresAt === undefined
         ? {}
         : { relayExpiresAt: relay.relayExpiresAt }),
-      ...(relay.relayUrls ? { relayUrls: relay.relayUrls } : {}),
+      ...(relay.relayKey ? { relayKey: relay.relayKey } : {}),
       host: "container",
       container,
       state: "live",
@@ -425,16 +467,33 @@ export class ContainerHost implements BrowserHost {
 
   async #create(
     record: BrowserRecord,
-    image: string,
-    volume: string,
-    relay: BrowserRelay | undefined,
-    media: MediaPath,
-    owner: string
+    made: {
+      image: string;
+      volume: string;
+      relay: BrowserRelay | undefined;
+      media: MediaPath;
+      owner: string;
+      network: MediaNetwork;
+      /** Its slot's address on the media network. */
+      address: string;
+    }
   ): Promise<NonNullable<BrowserRecord["container"]>> {
+    const { image, volume, relay, media, owner, network, address } = made;
     const { http, devtools, media: port } = portsOf(record);
     const passwords = { admin: password(), user: password() };
     const stun = stunServer();
     const protocols = mediaProtocols(media);
+    const placed = onMediaNetwork(network.name, address);
+    const neko = relay
+      ? {
+          username: relay.username,
+          credential: relay.credential,
+          urls: relayUrlsFor(relay, {
+            machineId: await machineId(),
+            relayMedia: relayMediaAddress(network),
+          }),
+        }
+      : undefined;
     const created = await this.#docker.createContainer({
       name: nameOf(owner, record.key),
       Image: image,
@@ -442,11 +501,12 @@ export class ContainerHost implements BrowserHost {
       Env: nekoEnv(
         record,
         passwords,
-        relay,
+        neko,
         media,
         await machineAddresses(),
         stun
       ),
+      NetworkingConfig: placed.NetworkingConfig,
       ExposedPorts: {
         "8080/tcp": {},
         "9222/tcp": {},
@@ -455,6 +515,7 @@ export class ContainerHost implements BrowserHost {
         ),
       },
       HostConfig: {
+        NetworkMode: placed.NetworkMode,
         PortBindings: {
           "8080/tcp": [{ HostIp: "127.0.0.1", HostPort: String(http) }],
           "9222/tcp": [{ HostIp: "127.0.0.1", HostPort: String(devtools) }],
@@ -478,6 +539,7 @@ export class ContainerHost implements BrowserHost {
     });
     return {
       id: created.id,
+      address,
       image,
       media,
       ports: { http, devtools, media: port },

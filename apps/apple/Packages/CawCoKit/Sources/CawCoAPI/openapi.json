@@ -33976,13 +33976,12 @@
                 ]
               },
               "state": {
-                "description": "`refused`: no UPnP or NAT-PMP answered; `partial`: the router opened\n443 and capped the relay range; `by-hand`: forwarded by hand, proven\nonly by the last step.",
+                "description": "`refused`: no UPnP or NAT-PMP answered; `by-hand`: forwarded by hand,\nproven only by the last step.",
                 "enum": [
                   "asking",
                   "by-hand",
                   "done",
                   "needs",
-                  "partial",
                   "refused",
                   "waiting"
                 ],
@@ -57353,6 +57352,10 @@
               "total"
             ]
           },
+          "reach": {
+            "$ref": "#/components/schemas/RelayReach",
+            "description": "The relay's machine's own addresses, read as it goes live: where another fleet machine's browser reaches it without the internet."
+          },
           "state": {
             "$ref": "#/components/schemas/StreamRelayState"
           },
@@ -57387,6 +57390,28 @@
           "tcp443",
           "tls",
           "udp443"
+        ]
+      },
+      "RelayReach": {
+        "description": "The relay's machine's own IPv4 addresses (agent media-forwarding.ts\n`machineAddresses`): its LAN ones (RFC 1918) and its tailnet ones\n(100.64/10). Another fleet machine's browser names the relay at one of\nthem before its public address (agent relay-urls.ts), through the listener\npublished on every address.",
+        "type": "object",
+        "properties": {
+          "lan": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tailnet": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "lan",
+          "tailnet"
         ]
       },
       "RelayJourneyFrame": {

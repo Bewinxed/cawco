@@ -9,7 +9,6 @@
  * (stream-relay.ts), as the hub sends it.
  */
 import {
-  RELAY_RANGE_WORDS,
   type RelayStep,
   type RelaySummary,
   suggestedName,
@@ -193,7 +192,7 @@ const forwarder = {
       network: "published",
       need: {
         kind: "forwarder",
-        why: `Colima forwards only TCP from its VM, and the stream relay needs UDP and TCP 443 and UDP ${RELAY_RANGE_WORDS}: switch it to its forwarder that carries both.`,
+        why: "Colima forwards only TCP from its VM, and the stream relay needs UDP and TCP 443: switch it to its forwarder that carries both.",
         command: "colima stop && colima start --port-forwarder grpc",
       },
     },
@@ -227,18 +226,6 @@ const routerRefused = {
 export const RouterRefused = { args: routerRefused, parameters: desk };
 /** B′ · The router refused, in Caw's panel or on a phone. */
 export const RouterRefusedPhone = { args: routerRefused, parameters: phone };
-
-const routerPartial = {
-  steps: path({
-    name: ticked.name,
-    router: { step: "router", state: "partial", how: "UPnP" },
-    runtime: ticked.runtime,
-  }),
-};
-/** B′ · The router opened 443 and capped the relay range: the range to forward by hand. */
-export const RouterPartial = { args: routerPartial, parameters: desk };
-/** B′ · The range by hand, on a phone. */
-export const RouterPartialPhone = { args: routerPartial, parameters: phone };
 
 const nameSkipped = {
   steps: path({

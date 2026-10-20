@@ -46,6 +46,8 @@ import {
 export interface BrowserRecord {
   /** The container host's: its container, image and volume, what its media port was published for, and neko's two passwords. */
   container?: {
+    /** Its slot's address on the runtime's media network (media-network.ts): one made elsewhere is made again. */
+    address?: string;
     adminPassword: string;
     id: string;
     image: string;
@@ -80,8 +82,8 @@ export interface BrowserRecord {
   relay?: BrowserRelay;
   /** When the stream relay's credential the container was started with lapses (ms epoch). */
   relayExpiresAt?: number;
-  /** The stream relay's URLs that credential is for. */
-  relayUrls?: string[];
+  /** The relay that credential is for, its URLs and its reach (relay-urls.ts `relayKeyOf`). */
+  relayKey?: string;
   /**
    * A container browser whose runtime does not answer now: not live, its
    * `why` naming the runtime, started again as soon as the runtime answers.

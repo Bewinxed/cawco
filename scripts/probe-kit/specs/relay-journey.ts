@@ -31,11 +31,11 @@
  * 2. the name: suggested from the domain, checked (doesn't resolve,
  *    proxied, points elsewhere), Cloudflare refusing a token, then adding the
  *    record DNS only and ticking;
- * 3. the router: an IGD v1 router capping the range (443 mapped, the range a
- *    forward by hand), one refusing on UPnP and NAT-PMP (the forwards), one
- *    with NAT-PMP alone mapping all, an IGD v1 one taking only permanent
- *    leases, and an IGD v2 one mapping all, each taking back what the one
- *    before held;
+ * 3. the router: an IGD v1 router capping its table (443 mapped, which is all
+ *    the relay needs: the step ticks), one refusing on UPnP and NAT-PMP (the
+ *    forwards, UDP and TCP 443 alone), one with NAT-PMP alone, an IGD v1 one
+ *    taking only permanent leases, and an IGD v2 one, each taking back what
+ *    the one before held;
  * 4–6. no container runtime under the scratch agent (its `DOCKER_HOST` names a
  *    socket nothing answers on yet, on every machine): the low ports not drawn,
  *    the certificate failing with that sentence and Retry, the name skipped
@@ -66,7 +66,6 @@ import type { MachineCapabilities } from "../../../packages/core/src/capabilitie
 import {
   type RelayAnswer,
   type RelayStep,
-  STREAM_RELAY_PORTS,
   STREAM_RELAY_WORDS as words,
 } from "../../../packages/core/src/stream-relay";
 import {
@@ -793,46 +792,35 @@ const run = async (kit: Kit): Promise<void> => {
       JSON.stringify({ calls: cloudflare.asked })
     );
 
-    // 3 · The router: v1 capping the range, refusing on UPnP and NAT-PMP, NAT-PMP alone, v1 taking only permanent leases, then v2 mapping all.
+    // 3 · The router: v1 capping its table, refusing on UPnP and NAT-PMP, NAT-PMP alone, v1 taking only permanent leases, then v2. The relay needs UDP and TCP 443 alone (its relay range stays inside its container).
     gateway.mode.version = 1;
     gateway.mode.cap = 10;
     const routerAsk = await stepSays(page, "router", words.routerAsk);
     await settings(page).getByRole("button", { name: words.openPorts }).click();
-    const partial = await journeyUntil(
+    const capped = await journeyUntil(
       fleet,
       "the router answered",
-      (answer) => stepOf(answer, "router")?.state === "partial",
+      (answer) => stepOf(answer, "router")?.state === "done",
       90_000
     );
-    const partialWords = await stepSays(
+    const cappedWords = await stepSays(
       page,
       "router",
-      words.routerPartial("UPnP")
+      words.routerDone("UPnP")
     );
     const listener = [...gateway.table.keys()].sort();
     kit.check(
-      `3 · an IGD v1 router capping its table: "${routerAsk?.slice(0, 60)}…" asked only on Open the ports; it opened UDP and TCP 443 (${listener.join(", ")}, to ${routerLan}) and took the range back; the card shows the range to forward by hand`,
+      `3 · an IGD v1 router capping its table: "${routerAsk?.slice(0, 60)}…" asked only on Open the ports; it opened UDP and TCP 443 (${listener.join(", ")}, to ${routerLan}), which is all the relay needs, and the step ticks "${words.routerDone("UPnP")}"`,
       routerAsk?.includes(words.routerAsk) === true &&
-        stepOf(partial, "router")?.how === "UPnP" &&
+        stepOf(capped, "router")?.how === "UPnP" &&
         listener.join() === "tcp:443,udp:443" &&
         [...gateway.table.values()].every(
           (one) => one.client === routerLan && one.lease === LEASE_S
         ) &&
         gateway.actions[0] === `AddPortMapping UDP 443 ${LEASE_S}` &&
-        // The cap of 10 holds UDP and TCP 443 and the range's first 8: its
-        // ninth refused, its eighth taken back.
-        gateway.actions.includes(
-          `AddPortMapping UDP ${STREAM_RELAY_PORTS.relayRange[0] + 8} ${LEASE_S}`
-        ) &&
-        gateway.actions.includes(
-          `DeletePortMapping UDP ${STREAM_RELAY_PORTS.relayRange[0] + 7}`
-        ) &&
-        partialWords?.includes(words.routerPartial("UPnP")) === true &&
-        partialWords.includes(
-          words.rangeForward(routerLan).split(" ")[0] ?? ""
-        ),
+        cappedWords?.includes(words.routerDone("UPnP")) === true,
       JSON.stringify({
-        partialWords,
+        cappedWords,
         table: listener,
         actions: gateway.actions.slice(0, 3),
       })
@@ -842,13 +830,16 @@ const run = async (kit: Kit): Promise<void> => {
     await act(fleet, { act: "open-ports" });
     const refused = await journeyOf(fleet);
     const refusedWords = await stepSays(page, "router", words.routerRefused);
+    const forwardsLine = words.forwards(routerLan, false);
     kit.check(
-      `3 · a router refusing every mapping on UPnP and NAT-PMP alike (the ports held before taken back, ${gateway.table.size} left): the forwards to make by hand, "${words.forwards(routerLan, false)}"`,
+      `3 · a router refusing every mapping on UPnP and NAT-PMP alike (the ports held before taken back, ${gateway.table.size} left): the forwards to make by hand, UDP and TCP 443 alone, "${forwardsLine}"`,
       stepOf(refused, "router")?.state === "refused" &&
         gateway.table.size === 0 &&
         natPmp.table.size === 0 &&
         natPmp.asked.includes(`map UDP 443 ${LEASE_S}`) &&
-        refusedWords?.includes(words.routerRefused) === true,
+        refusedWords?.includes(words.routerRefused) === true &&
+        forwardsLine === `UDP 443 · TCP 443 → ${routerLan}` &&
+        refusedWords.includes(forwardsLine),
       String(refusedWords)
     );
     gateway.mode.refuse = false;
@@ -863,15 +854,13 @@ const run = async (kit: Kit): Promise<void> => {
       "router",
       words.routerDone("NAT-PMP")
     );
-    const natPmpUdp = [...natPmp.table.values()].filter(
-      (one) => one.protocol === "udp"
-    ).length;
+    const natPmpSize = natPmp.table.size;
     kit.check(
-      `3 · a router with UPnP off and NAT-PMP on: NAT-PMP mapped UDP and TCP 443 and all ${natPmpUdp - 1} ports of the range, each leased ${LEASE_S} s (asked first ${JSON.stringify(natPmp.asked.slice(0, 3))}); the step ticks "${words.routerDone("NAT-PMP")}"`,
+      `3 · a router with UPnP off and NAT-PMP on: NAT-PMP mapped UDP and TCP 443, each leased ${LEASE_S} s (asked first ${JSON.stringify(natPmp.asked.slice(0, 3))}); the step ticks "${words.routerDone("NAT-PMP")}"`,
       stepOf(byNatPmp, "router")?.state === "done" &&
         stepOf(byNatPmp, "router")?.how === "NAT-PMP" &&
         natPmp.table.has("tcp:443") &&
-        natPmpUdp === 250 &&
+        natPmp.table.has("udp:443") &&
         [...natPmp.table.values()].every((one) => one.lease === LEASE_S) &&
         gateway.table.size === 0 &&
         natPmpWords?.includes(words.routerDone("NAT-PMP")) === true,
@@ -888,12 +877,14 @@ const run = async (kit: Kit): Promise<void> => {
     const leases = [
       ...new Set([...gateway.table.values()].map((one) => one.lease)),
     ];
+    const permanentSize = gateway.table.size;
     kit.check(
-      `3 · an IGD v1 router taking only permanent leases: NAT-PMP's ${natPmpUdp + 1} mappings taken back first (${natPmp.table.size} left), then each port asked again for a permanent lease on its 725 (${gateway.actions.slice(0, 2).join(", ")}), all ${gateway.table.size} held with lease ${leases.join()}`,
+      `3 · an IGD v1 router taking only permanent leases: NAT-PMP's ${natPmpSize} mappings taken back first (${natPmp.table.size} left), then each port asked again for a permanent lease on its 725 (${gateway.actions.slice(0, 2).join(", ")}), UDP and TCP 443 among the ${permanentSize} held, all with lease ${leases.join()}`,
       stepOf(permanent, "router")?.state === "done" &&
         stepOf(permanent, "router")?.how === "UPnP" &&
         natPmp.table.size === 0 &&
-        gateway.table.size === 251 &&
+        gateway.table.has("tcp:443") &&
+        gateway.table.has("udp:443") &&
         leases.join() === "0" &&
         gateway.actions[0] === `AddPortMapping UDP 443 ${LEASE_S}` &&
         gateway.actions[1] === "AddPortMapping UDP 443 0",
@@ -904,20 +895,18 @@ const run = async (kit: Kit): Promise<void> => {
     gateway.actions.length = 0;
     await act(fleet, { act: "open-ports" });
     const mapped = await journeyOf(fleet);
-    const udp = [...gateway.table.values()].filter(
-      (one) => one.protocol === "udp"
-    ).length;
     const takenBack = gateway.actions.filter((one) =>
       one.startsWith("DeletePortMapping ")
     ).length;
     const adds = gateway.actions.filter((one) => one.startsWith("Add"));
     kit.check(
-      `3 · an IGD v2 router: the permanent ones taken back (${takenBack} deletes), then AddPortMapping, so each port is the relay's own and not one AddAnyPortMapping picks, for UDP and TCP 443 and all ${udp - 1} ports of the range, leased ${LEASE_S} s; the step ticks "${words.routerDone("UPnP")}"`,
+      `3 · an IGD v2 router: the permanent ones taken back (${takenBack} deletes), then AddPortMapping, so each port is the relay's own and not one AddAnyPortMapping picks, for UDP and TCP 443, leased ${LEASE_S} s; the step ticks "${words.routerDone("UPnP")}"`,
       stepOf(mapped, "router")?.state === "done" &&
         gateway.table.has("tcp:443") &&
-        udp === 250 &&
-        takenBack === 251 &&
-        adds.length === 251 &&
+        gateway.table.has("udp:443") &&
+        takenBack === permanentSize &&
+        adds.includes(`AddPortMapping UDP 443 ${LEASE_S}`) &&
+        adds.includes(`AddPortMapping TCP 443 ${LEASE_S}`) &&
         adds.every(
           (one) =>
             one.startsWith("AddPortMapping ") && one.endsWith(` ${LEASE_S}`)

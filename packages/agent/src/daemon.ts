@@ -310,7 +310,6 @@ const relayStartOf = (args: unknown): RelayStartArgs => {
     typeof given.address === "string" &&
     given.address.length > 0 &&
     (given.hostname === undefined || typeof given.hostname === "string") &&
-    (given.externalIp === undefined || typeof given.externalIp === "string") &&
     Array.isArray(range) &&
     range.length === 2 &&
     range.every((port) => Number.isInteger(port))

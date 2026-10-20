@@ -1220,8 +1220,8 @@ export function createPreviewListeners(
       return `it is ${fleet} port`;
     }
     // A machine of the fleet may run the stream relay on these (443, 444,
-    // 5349, 5350 and its relay range): no preview ever takes one, wherever
-    // CAWCO_PREVIEW_PORTS puts the range.
+    // 5349, 5350): no preview ever takes one, wherever CAWCO_PREVIEW_PORTS
+    // puts the range.
     if (isStreamRelayPort(port)) {
       return "it is the stream relay's port";
     }

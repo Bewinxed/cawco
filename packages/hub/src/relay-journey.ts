@@ -252,11 +252,7 @@ const routerStepOf = (facts: StepFacts, asking: boolean): StepOf<"router"> => {
     return { step: "router", state: asking ? "asking" : "needs", ...forwards };
   }
   if (outside.length > 0) {
-    return {
-      step: "router",
-      state: "done",
-      ...(journey.router === "partial" ? how : {}),
-    };
+    return { step: "router", state: "done" };
   }
   if (relayNow?.state === "live") {
     return { step: "router", state: "by-hand" };
@@ -745,7 +741,6 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   const start = async (
     journey: StoredJourney,
     machine: RelayMachine,
-    candidate: RelayCandidate | undefined,
     named: boolean
   ): Promise<void> => {
     if (!journey.machineId) {
@@ -758,7 +753,6 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       await relay.setup({
         machineId: journey.machineId,
         address: machine.address,
-        externalIp: candidate?.externalIp ?? null,
         hostname: named ? journey.name : null,
       });
     } catch (error) {
@@ -849,7 +843,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   /** The certificate, the start and a fleet machine's proof, each begun once everything before it stands. */
   const workDue = (journey: StoredJourney, computed: Computed): void => {
     const now = Date.now();
-    const { machine, candidate } = computed;
+    const { machine } = computed;
     if (
       computed.eligibleCert &&
       !(certifying || journey.certificateWhy) &&
@@ -863,7 +857,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       !starting &&
       !relayFor(journey, computed.named)
     ) {
-      start(journey, machine, candidate, computed.named).catch(() => undefined);
+      start(journey, machine, computed.named).catch(() => undefined);
     }
     if (computed.startDone && journey.liveAt === null) {
       db.journeyUpdate({ liveAt: now });
@@ -978,12 +972,13 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
           read.value.error ?? "The router was not asked."
         );
       }
+      // The listener is all a router opens for the relay: its relay range
+      // stays inside its container (agent relay.ts).
       const mapped = read.value.result as RelayMapped;
-      let router: StoredJourney["router"] = "refused";
-      if (mapped.listener) {
-        router = mapped.range ? "mapped" : "partial";
-      }
-      db.journeyUpdate({ router, routerHow: mapped.how });
+      db.journeyUpdate({
+        router: mapped.listener ? "mapped" : "refused",
+        routerHow: mapped.how,
+      });
     } finally {
       routerAsking = false;
       publish();

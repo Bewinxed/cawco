@@ -621,14 +621,6 @@
         words.copyForwards,
         false
       )}
-    {:else if step.state === "partial"}
-      <p class={NOTE}>{words.routerPartial(step.how ?? "UPnP")}</p>
-      {@render copyable(
-        words.forwardsLabel,
-        words.rangeForward(machineNow.lan ?? machineNow.address),
-        words.copyForwards,
-        false
-      )}
     {:else}
       <p class={NOTE}>{words.routerAsk}</p>
       <div class={CONTROLS}>

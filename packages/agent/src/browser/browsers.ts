@@ -44,6 +44,7 @@ import { ContainerHost, nekoSession, RELAY_RENEW_MS } from "./container-host";
 import { frontOrigin, setOriginSink, syncOrigins } from "./front-origin";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
+import { relayKeyOf } from "./relay-urls";
 import { findRuntime, type Runtime } from "./runtime";
 import {
   missingSignIns,
@@ -501,14 +502,14 @@ export const reserveBrowser = async (key: BrowserKey): Promise<void> => {
   gateFor(await reserved(key));
 };
 
-/** Whether a live container's relay credential is near its end and a fresh one came. */
+/** Whether a live container's relay credential is near its end, or is for another relay, and a fresh one came. */
 const relayDue = (
   record: BrowserRecord,
   relay: BrowserRelay | undefined
 ): boolean =>
   !!relay &&
   record.host === "container" &&
-  (record.relayUrls?.join(" ") !== relay.urls.join(" ") ||
+  (record.relayKey !== relayKeyOf(relay) ||
     (record.relayExpiresAt ?? 0) < Date.now() + RELAY_RENEW_MS);
 
 /** Stops the browser of `key`, keeping its profile. */

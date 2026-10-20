@@ -79,6 +79,7 @@ import type { MachinePath } from "@cawco/core/machine-path";
 import type {
   RelayPortHealth,
   RelayPorts,
+  RelayReach,
   StreamRelayState,
 } from "@cawco/core/stream-relay";
 import { UPSTREAM_POSTS } from "@cawco/core/upstream-guard";
@@ -3824,8 +3825,6 @@ export const streamRelay = sqliteTable("stream_relay", {
   address: text("address").notNull(),
   /** A DNS name pointing at the machine: TLS answers for it once its certificate stands. */
   hostname: text("hostname"),
-  /** coturn's `external-ip`, when the address is not one of the machine's own. */
-  externalIp: text("external_ip"),
   /** Sealed: whoever holds it mints credentials the relay accepts. Null when the hub's key does not open it. */
   secret: sealedText("secret").notNull(),
   /** Whether the person wants it running: Stop relay sets it false, Start relay true. */
@@ -3833,6 +3832,8 @@ export const streamRelay = sqliteTable("stream_relay", {
   state: text("state").$type<StreamRelayState>().notNull().default("starting"),
   /** What its machine has bound, as its last frame said. */
   ports: text("ports", { mode: "json" }).$type<RelayPorts>(),
+  /** Its machine's own LAN and tailnet addresses, as its last live frame said: every browser's mint carries them. */
+  reach: text("reach", { mode: "json" }).$type<RelayReach>(),
   why: text("why"),
   /** The command `why` names as its fix, word for word inside it (shown as code). */
   whyCommand: text("why_command"),
@@ -3915,7 +3916,7 @@ export const streamRelayJourney = sqliteTable("stream_relay_journey", {
   /** Sealed: the person's Cloudflare API token (Zone · DNS · Edit), for the record and the certificate's DNS challenge. */
   cloudflareToken: sealedText("cloudflare_token"),
   /** What the router answered "Open the ports" with; null before it was asked. */
-  router: text("router").$type<"mapped" | "partial" | "refused">(),
+  router: text("router").$type<"mapped" | "refused">(),
   routerHow: text("router_how").$type<"UPnP" | "NAT-PMP">(),
   /** The machine's runtime may bind the relay's lowest port, as last read. */
   lowPorts: integer("low_ports", { mode: "boolean" }).notNull().default(false),

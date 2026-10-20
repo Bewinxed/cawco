@@ -1,8 +1,9 @@
 /**
- * The hub's part of a browser's stream (Projects spec §5.11, build item 4):
- * a viewer reaches neko's REST and signaling, and the local host's take-over
- * view, on the hub's own origin (hub browser-routes.ts), through the
- * machine's browser listener (agent preview.ts `listenBrowsers`).
+ * The hub's part of a browser's stream (Projects spec §5.11, build item 4)
+ * and the stream relay's relay-to-relay path: a viewer reaches neko's REST
+ * and signaling, and the local host's take-over view, on the hub's own origin
+ * (hub browser-routes.ts), through the machine's browser listener (agent
+ * preview.ts `listenBrowsers`).
  *
  * On a scratch fleet (real hub, agent and sessiond), with a headless
  * Chromium (playwright-core) as the viewer on a page of the hub's origin:
@@ -10,56 +11,60 @@
  * - container host: `GET /ws/browser/<i>/<a>/api/whoami` through the hub,
  *   sent with a token neko never made, answers a viewer session of neko's
  *   (the hub swapped its own in);
+ * - 6 · neko's own ICE servers are exactly what agent relay-urls.ts composes
+ *   for this machine (on the relay's machine `turn:<coturn's media
+ *   address>:443?transport=udp` alone), with the credential minted for
+ *   `browser:<key>`, then the fleet's STUN server, nothing of Google's; and
+ *   coturn's log shows neko's allocation from its slot's address (.10 + s)
+ *   on the media network;
  * - the viewer's `signal/provide` carries `iceservers` the hub minted for
  *   it: the relay's URLs, `<expiry>:viewer:<neko session>` good for 12 h,
  *   and the credential HMAC-SHA1 of that under the relay's secret; then the
- *   fleet's STUN server, alone;
- * - neko's own ICE servers name that STUN server and nothing else (never
- *   neko's default, Google's), and it gives viewers none of its own;
- * - that credential allocates on coturn;
- * - the viewer connects; its selected pair is host/host on the LAN;
- * - coturn carries a datagram both ways, the hops a relayed pair takes: its
- *   relay socket to a UDP echo on this machine's address (neko's candidates
- *   name it) and back to the client, and this machine to the relayed address
- *   and the client's answer back, each line naming the address each end saw;
- * - the same viewer with `iceTransportPolicy: "relay"` connects through
- *   coturn over UDP. Failed, it prints what decides the hop: the viewer's
- *   getStats() (its candidates, neko's, every pair with its checks each way
- *   and their answers, its ICE and DTLS states), coturn's lines for its
- *   sessions (this spec's coturn runs `--verbose`: each permission granted
- *   or refused, each session's peer traffic at its end) and neko's ICE lines,
- *   and names the hop in the failure line;
+ *   fleet's STUN server, alone; that credential allocates on coturn;
+ * - 7 · the viewer connects; its selected pair is host/host on the LAN;
+ * - 8 · the same viewer with `iceTransportPolicy: "relay"` connects relay to
+ *   relay inside the one coturn: getStats' selected pair local relay, remote
+ *   relay, both addresses P. Failed, it prints what decides the hop: the
+ *   viewer's getStats() (its candidates, neko's, every pair with its checks
+ *   each way), coturn's lines for its sessions (`--verbose`) and neko's ICE
+ *   lines, and names the hop in the failure line;
+ * - 9 · another fleet machine's browser, stood up by this spec: a neko of the
+ *   same image on a bridge network of its own (not the media network), given
+ *   the URL list relay-urls.ts composes for another machine (the relay's LAN
+ *   URL through the published listener, then its public ones), reached by a
+ *   relay-only viewer straight on its own signaling: the selected pair relay
+ *   to relay, both addresses P;
  * - the daemon is told the view count as a socket opens (1) and closes (0);
  * - local host (`DOCKER_HOST=unix:///nonexistent`): the `/cdp` view of a
  *   take-over carries frames whose header reads 1280x800, and a tap sent up
  *   it lands on the page.
  *
- * The relay is this spec's own coturn (the relay's image and arguments, a
- * secret made here), on a stand-in for 443 picked as browser-relay.ts picks
- * one: it relays to this machine's own LAN address, which neko's candidates
- * name, as the relay does, through the exception the relay's arguments make
- * for this machine's own browsers (agent relay.ts `ownPeers`). The hub is
- * given a relay record for it under a machine that never connects, its
- * state `stopped`: the hub mints from it and never starts, stops or probes
- * it. The record's URLs name 443, so the viewer's page points them at the
- * stand-in before its peer connection reads them; the browser is started
- * before the record is written, so neko holds no relay of its own. The
- * fleet's STUN server is a stand-in (relay-journey.ts `stunStandIn`) on
- * every address of this machine, answering its LAN address, named to the hub
- * and the agent by `CAWCO_STUN_SERVER`. No real relay, router, DNS name,
- * STUN server or Cloudflare is touched.
+ * The relay is this spec's own coturn, made as the agent makes the relay
+ * (agent relay.ts): its image and arguments, a secret made here, on the
+ * runtime's media network at the relay's own address (.2), its listener (443
+ * inside) published on a stand-in port picked as browser-relay.ts picks one.
+ * So it runs only where this runtime has no relay (no `cawco-relay`). The hub
+ * is given a relay record for it under this fleet's own machine, with this
+ * machine's LAN address as P and its reach, state `stopped`: the hub mints
+ * from it and never starts, stops or probes it. The record's URLs name 443,
+ * so a viewer's page points them at the stand-in before its peer connection
+ * reads them. The fleet's STUN server is a stand-in (relay-journey.ts
+ * `stunStandIn`) on every address of this machine, answering its LAN address,
+ * named to the hub and the agent by `CAWCO_STUN_SERVER`. No real relay,
+ * router, DNS name, STUN server or Cloudflare is touched.
  *
- * That coturn runs as the agent runs the relay (agent relay.ts): on the host
- * network where the runtime's is this machine's own (obelisk's Podman),
- * else published through the runtime's VM forwarder (a Mac's OrbStack,
- * Colima or Docker Desktop), the forwarder's address let through once its
- * first binding shows it. Colima must run its grpc forwarder for UDP
- * (`colima stop && colima start --port-forwarder grpc`).
+ * With `--relay-address <R> --relay-secret <S>` the relay is another fleet
+ * machine's instead: browser-relay run there with `--address <R> --secret <S>
+ * --hold <s>`. Then this spec starts no coturn, the record names a machine
+ * that is not this one (P = R, its LAN reach R), this machine's browser is
+ * given the other-machine URL list by the agent itself, and legs 6–8 run
+ * against that relay on 443 (6 without coturn's log, which stays there); leg
+ * 9's stand-in is not run.
  *
  * Run on the host, outside every workspace boundary (a boundary hides the
  * runtime's socket and the browser's ports):
  *
- *   bun scripts/probe-kit/run.ts browser-stream [--address <this machine's LAN address>]
+ *   bun scripts/probe-kit/run.ts browser-stream [--address <this machine's LAN address>] [--relay-address <R> --relay-secret <S>]
  */
 import { Database } from "bun:sqlite";
 import { randomBytes } from "node:crypto";
@@ -68,17 +73,29 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import type { Runtime } from "../../../packages/agent/src/browser/runtime";
-import type { BrowserKey } from "../../../packages/core/src/browser";
-import { STREAM_RELAY_PORT } from "../../../packages/core/src/stream-relay";
+import type {
+  BrowserKey,
+  BrowserRelay,
+} from "../../../packages/core/src/browser";
+import {
+  STREAM_RELAY_PORT,
+  STREAM_RELAY_PORTS,
+  streamRelayUrls,
+} from "../../../packages/core/src/stream-relay";
 import { until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
-import { binding, freeStandIn, onPort, turn } from "./browser-relay";
+import { freeStandIn, startProbeCoturn, turn } from "./browser-relay";
 import { stunStandIn } from "./relay-journey";
 
 /** This spec's coturn: never the relay's own `cawco-relay`. */
 const COTURN = "cawco-relay-stream-probe";
-/** The machine the hub's relay record names: none of the fleet's, so nothing ever starts or probes it. */
-const RELAY_MACHINE = "browser-stream-probe";
+/** The machine the hub's record names in `--relay-address` mode: none of this fleet's. */
+const OTHER_RELAY_MACHINE = "browser-stream-relay";
+/** Leg 9's stand-in for another fleet machine: its bridge network and its neko. */
+const OTHER_NETWORK = "cawco-stream-probe-other";
+const OTHER_NEKO = "cawco-stream-probe-neko";
+/** The neko's media port inside its container: never published. */
+const OTHER_MEDIA_PORT = 52_000;
 /** How long a viewer's credential lasts (hub browser-routes.ts). */
 const VIEWER_TTL_S = 12 * 60 * 60;
 const TAP_PAGE =
@@ -434,6 +451,24 @@ const saidAgain = (fleet: KitFleet, line: string, before: number) =>
     () => false
   );
 
+/** Where the relay is, as every leg reads it. */
+interface RelayAt {
+  /** P: the address every allocation is reported at, the record's address. */
+  address: string;
+  /** This spec's coturn; absent when the relay is another machine's. */
+  coturn?: Container;
+  /** The machine the record names: this fleet's own, or another's. */
+  machineId: string;
+  /** coturn's address on the media network, on this machine's runtime. */
+  media: string;
+  /** The listener's port as a viewer reaches it: a stand-in, or 443. */
+  port: number;
+  /** The relay's machine's LAN addresses, as the record's reach says them. */
+  reachLan: string[];
+  secret: string;
+  where: string;
+}
+
 const run = async (kit: Kit): Promise<void> => {
   const realHome = homedir();
   const { findRuntime } =
@@ -460,7 +495,77 @@ const run = async (kit: Kit): Promise<void> => {
   )) {
     return;
   }
+  const media =
+    await import("../../../packages/agent/src/browser/media-network");
+  const network = await media.ensureMediaNetwork(runtime.docker);
+  const here: Here = {
+    address,
+    network: network.name,
+    realHome,
+    relayMedia: media.relayMediaAddress(network),
+    runtime,
+  };
+  const otherAddress = flag("relay-address");
+  const otherSecret = flag("relay-secret");
+  if (!(otherAddress || otherSecret)) {
+    await ownCoturnRun(kit, here);
+    return;
+  }
+  if (
+    kit.check(
+      `--relay-address and --relay-secret given together: ${otherAddress ?? "no address"}`,
+      !!(otherAddress && otherSecret)
+    ) &&
+    otherAddress &&
+    otherSecret
+  ) {
+    await legs(kit, {
+      realHome,
+      runtime,
+      lan: address,
+      relay: {
+        address: otherAddress,
+        machineId: OTHER_RELAY_MACHINE,
+        media: here.relayMedia,
+        port: STREAM_RELAY_PORT,
+        reachLan: [otherAddress],
+        secret: otherSecret,
+        where: ` (the relay on another fleet machine at ${otherAddress})`,
+      },
+    });
+  }
+};
 
+/** This machine as the run found it: its LAN address, its runtime and media network, coturn's seat there. */
+interface Here {
+  address: string;
+  network: string;
+  realHome: string;
+  relayMedia: string;
+  runtime: Runtime;
+}
+
+/** Every leg against this spec's own coturn, at the relay's seat on this runtime. */
+const ownCoturnRun = async (kit: Kit, here: Here): Promise<void> => {
+  const { address, realHome, relayMedia, runtime } = here;
+  const network = { name: here.network };
+  const { MACHINE } = await import("../../scratch-fleet");
+  const relay = await import("../../../packages/agent/src/browser/relay");
+  const held = await runtime.docker
+    .getContainer(relay.RELAY_CONTAINER)
+    .inspect()
+    .then(
+      () => true,
+      () => false
+    );
+  if (
+    !kit.check(
+      `no relay on this runtime (container ${relay.RELAY_CONTAINER} ${held ? "present: its .2 is the one this spec's coturn takes; stop it in Settings › Browsers first" : "absent"})`,
+      !held
+    )
+  ) {
+    return;
+  }
   const standIn = await freeStandIn();
   if (
     !kit.check(
@@ -472,179 +577,78 @@ const run = async (kit: Kit): Promise<void> => {
     return;
   }
   const secret = randomBytes(32).toString("base64url");
-  const where = ` (this spec's coturn on ${address}:${standIn}, a stand-in for 443${runtime.ownNetwork ? "" : `, published through ${runtime.endpoint}`})`;
-  const coturn = await startCoturn(kit, runtime, {
-    address,
-    secret,
-    standIn,
-    where,
-  });
-  if (!coturn) {
-    return;
-  }
-  try {
-    await legs(kit, {
-      address,
-      coturn,
-      docker: runtime.docker,
-      realHome,
-      runtime: runtime.endpoint,
-      secret,
-      standIn,
-      where,
-    });
-  } finally {
-    await coturn.remove({ force: true }).catch(() => undefined);
-  }
-};
-
-/** A binding's answer, `up (<ip>:<port>)`: the address coturn saw it from. */
-const SEEN_FROM = /^up \((.+):\d+\)$/;
-
-/**
- * This spec's coturn, the relay's image and arguments on a stand-in for 443,
- * once it answers a binding: on the host network where the runtime's is the
- * machine's own, else published through its VM's forwarder as the agent
- * publishes the relay (agent relay.ts), the forwarder's address let through
- * once a binding shows it.
- */
-const startCoturn = async (
-  kit: Kit,
-  runtime: Runtime,
-  on: { address: string; secret: string; standIn: number; where: string }
-) => {
-  const { address, secret, standIn, where } = on;
-  const { docker } = runtime;
-  const relay = await import("../../../packages/agent/src/browser/relay");
-  const { STREAM_RELAY_PORTS } =
-    await import("../../../packages/core/src/stream-relay");
-  const { isPublicAddress } =
-    await import("../../../packages/core/src/public-address");
+  const where = ` (this spec's coturn at ${relayMedia} on ${network.name}, P ${address}, its listener published on ${standIn}, a stand-in for 443${runtime.ownNetwork ? "" : ` through ${runtime.endpoint}`})`;
   const { pullImage } =
     await import("../../../packages/agent/src/browser/image");
-  await pullImage(docker, relay.RELAY_IMAGE, (step) =>
+  await pullImage(runtime.docker, relay.RELAY_IMAGE, (step) =>
     kit.note(`${relay.RELAY_IMAGE}: ${step.done}/${step.total} layers`)
   );
-  const { relayRange } = STREAM_RELAY_PORTS;
-  const [first, last] = relayRange;
-  // The relay's own exception for this machine's browsers: neko's candidates
-  // name `address`, so it must be among them.
-  const own = await relay.ownPeers();
-  if (
-    !kit.check(
-      `the relay lets this machine's own browsers through: ${own.join(", ") || "no address"}, ${address} among them`,
-      own.includes(address)
-    )
-  ) {
-    return;
-  }
-  const ports = runtime.ownNetwork
-    ? []
-    : [
-        `${standIn}/udp`,
-        `${standIn}/tcp`,
-        ...Array.from(
-          { length: last - first + 1 },
-          (_, at) => `${first + at}/udp`
-        ),
-      ];
-  const made = async (forwarder?: string) => {
-    await docker
-      .getContainer(COTURN)
-      .remove({ force: true })
-      .catch(() => undefined);
-    const container = await docker.createContainer({
-      name: COTURN,
-      Image: relay.RELAY_IMAGE,
-      Cmd: [
-        ...relay
-          .coturnArgs(
-            { secret, address, relayRange },
-            false,
-            runtime.ownNetwork
-              ? { kind: "host", own }
-              : { kind: "published", forwarder, own }
-          )
-          .map(onPort(standIn)),
-        // Each request's answer, each permission, and each session's peer
-        // traffic at its end ("peer usage"), read when the relay-only leg fails.
-        "--verbose",
-      ],
-      ...(runtime.ownNetwork
-        ? { HostConfig: { NetworkMode: "host" } }
-        : {
-            ExposedPorts: Object.fromEntries(ports.map((port) => [port, {}])),
-            HostConfig: {
-              PortBindings: Object.fromEntries(
-                ports.map((port) => [
-                  port,
-                  [{ HostIp: "0.0.0.0", HostPort: port.split("/")[0] }],
-                ])
-              ),
-            },
-          }),
+  const coturn = await startProbeCoturn(runtime.docker, {
+    name: COTURN,
+    args: {
+      secret,
+      address,
+      relayRange: STREAM_RELAY_PORTS.relayRange,
+    },
+    certified: false,
+    seat: { media: relayMedia, otherPublic: [] },
+    network: network.name,
+    port: standIn,
+    // Each request's answer, each permission, and each session's peer
+    // traffic at its end ("peer usage"), read when a relay-only leg fails.
+    extra: ["--verbose"],
+  });
+  try {
+    if (
+      !kit.check(
+        `coturn answers on udp ${standIn}: ${coturn.bound}${where}`,
+        coturn.bound.startsWith("up")
+      )
+    ) {
+      return;
+    }
+    await legs(kit, {
+      realHome,
+      runtime,
+      lan: address,
+      relay: {
+        address,
+        coturn: coturn.container,
+        machineId: MACHINE,
+        media: relayMedia,
+        port: standIn,
+        reachLan: [address],
+        secret,
+        where,
+      },
     });
-    await container.start();
-    // A VM's forwarder binds a moment after the guest does (Lima: every 3 s).
-    const bound = await until(
-      "coturn answers a STUN binding",
-      () => binding(`stun:${address}:${standIn}?transport=udp`),
-      (answer) => answer.startsWith("up"),
-      30_000
-    ).catch((error: unknown) => String(error));
-    return { container, bound };
-  };
-  let coturn = await made();
-  const seen = SEEN_FROM.exec(coturn.bound)?.[1];
-  if (
-    !runtime.ownNetwork &&
-    seen &&
-    !isPublicAddress(seen) &&
-    seen !== address
-  ) {
-    kit.note(
-      `the forwarder hands coturn every peer as ${seen}: let through its denied ranges, as the agent's relay does`
-    );
-    coturn = await made(seen);
+  } finally {
+    await coturn.container.remove({ force: true }).catch(() => undefined);
   }
-  if (
-    kit.check(
-      `coturn answers on udp ${standIn}: ${coturn.bound}${where}`,
-      coturn.bound.startsWith("up")
-    )
-  ) {
-    return coturn.container;
-  }
-  await coturn.container.remove({ force: true }).catch(() => undefined);
 };
 
 /** A container on the runtime. */
 type Container = ReturnType<Runtime["docker"]["getContainer"]>;
 
 interface At {
-  address: string;
-  /** This spec's coturn. */
-  coturn: Container;
-  docker: Runtime["docker"];
+  /** This machine's LAN address. */
+  lan: string;
   realHome: string;
-  runtime: string;
-  secret: string;
-  standIn: number;
-  where: string;
+  relay: RelayAt;
+  runtime: Runtime;
 }
 
-/** Both legs, with the fleet's STUN server this spec's stand-in on every address, answering this machine's LAN one. */
+/** Every leg, with the fleet's STUN server this spec's stand-in on every address, answering this machine's LAN one. */
 const legs = async (kit: Kit, at: At): Promise<void> => {
-  const stun = await stunStandIn(at.address, "0.0.0.0");
+  const stun = await stunStandIn(at.lan, "0.0.0.0");
   try {
-    await legsWith(kit, at, `stun:${at.address}:${stun.port}`);
+    await legsWith(kit, at, `stun:${at.lan}:${stun.port}`);
   } finally {
     stun.socket.close();
   }
 };
 
 const legsWith = async (kit: Kit, at: At, stun: string): Promise<void> => {
-  const { address, coturn, docker, secret, standIn, where } = at;
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
   const browsersPath =
     process.env.PLAYWRIGHT_BROWSERS_PATH ??
@@ -666,25 +670,25 @@ const legsWith = async (kit: Kit, at: At, stun: string): Promise<void> => {
   fleet.launch("hub", [], { CAWCO_STUN_SERVER: stun });
   await fleet.hubUp();
   fleet.fileAccount();
-  await agentOn(`unix://${at.runtime}`);
+  await agentOn(`unix://${at.runtime.endpoint}`);
   await fleet.accountSignedIn();
   process.env.XDG_DATA_HOME = fleet.env.XDG_DATA_HOME as string;
   const ws = fleet.base.replace(HTTP_SCHEME, "ws");
   const page = await kit.page("desk");
   await page.goto(`${fleet.base}/health`);
 
-  await containerLeg(kit, {
+  const leg: ContainerLegAt = {
     fleet,
     page,
     ws,
-    address,
-    coturn,
-    docker,
-    secret,
-    standIn,
+    docker: at.runtime.docker,
+    relay: at.relay,
     stun,
-    where,
-  });
+  };
+  const image = await containerLeg(kit, leg);
+  if (image && at.relay.coturn) {
+    await otherMachineLeg(kit, leg, image);
+  }
   // The local leg mints nothing: the record goes.
   fleet.write("DELETE FROM stream_relay");
   // Local host: the runtime hidden, the agent again.
@@ -700,25 +704,31 @@ interface Leg {
   ws: string;
 }
 
-/** The hub's relay record for this spec's coturn, under a machine that never connects. */
-const writeRelay = async (
-  fleet: KitFleet,
-  address: string,
-  secret: string
-): Promise<void> => {
+interface ContainerLegAt extends Leg {
+  docker: Runtime["docker"];
+  relay: RelayAt;
+  /** The fleet's STUN server, as the hub and the agent are told it. */
+  stun: string;
+}
+
+/** The hub's relay record for the relay, under the machine it names, with its reach; state `stopped`, so the hub never starts nor probes it. */
+const writeRelay = async (fleet: KitFleet, relay: RelayAt): Promise<void> => {
   const { makeSecretBox } =
     await import("../../../packages/hub/src/secret-box");
   const db = new Database(join(fleet.sandbox, "hub", "hub.db"));
   try {
     db.exec("PRAGMA busy_timeout = 15000");
-    // The record names a machine that is not in the fleet.
+    // The record may name a machine that is not in the fleet.
     db.exec("PRAGMA foreign_keys = OFF");
     db.query(
-      "INSERT INTO stream_relay (id, machine_id, address, hostname, external_ip, secret, wanted, state, health, created_at) VALUES ('relay', ?, ?, NULL, NULL, ?, 1, 'stopped', '[]', ?)"
+      "INSERT INTO stream_relay (id, machine_id, address, hostname, secret, wanted, state, health, reach, created_at) VALUES ('relay', ?, ?, NULL, ?, 1, 'stopped', '[]', ?, ?)"
     ).run(
-      RELAY_MACHINE,
-      address,
-      makeSecretBox(join(fleet.sandbox, "hub", "secrets.key")).seal(secret),
+      relay.machineId,
+      relay.address,
+      makeSecretBox(join(fleet.sandbox, "hub", "secrets.key")).seal(
+        relay.secret
+      ),
+      JSON.stringify({ lan: relay.reachLan, tailnet: [] }),
       Date.now()
     );
   } finally {
@@ -755,23 +765,20 @@ const countLeg = async (
   );
 };
 
-/** Container host: neko's REST and signaling through the hub, the viewer's credential, both pairs, the count. */
+/**
+ * Container host: the relay record first, so neko is given the relay; its
+ * ICE servers as relay-urls.ts composes them; neko's REST and signaling
+ * through the hub; the viewer's credential; the direct pair and the
+ * relay-to-relay pair; coturn's view of neko's allocation; the count. Answers
+ * the browser's image, for leg 9's neko.
+ */
 const containerLeg = async (
   kit: Kit,
-  leg: Leg & {
-    address: string;
-    coturn: Container;
-    docker: Runtime["docker"];
-    secret: string;
-    standIn: number;
-    /** The fleet's STUN server, as the hub and the agent are told it. */
-    stun: string;
-    where: string;
-  }
-): Promise<void> => {
-  const { fleet, page, ws, address, secret, standIn, stun } = leg;
-  // Container host. The browser starts before the relay record is written:
-  // neko is given no relay of its own, so nothing of it reaches 443.
+  leg: ContainerLegAt
+): Promise<string | undefined> => {
+  const { fleet, page, ws, relay, stun } = leg;
+  await writeRelay(fleet, relay);
+  const since = Math.floor(Date.now() / 1000) - 1;
   const boxed = await sessionIn(fleet, "stream-container");
   const artifact = await browserOf(fleet, boxed.key, boxed.instance);
   if (!(
@@ -782,8 +789,10 @@ const containerLeg = async (
   )) {
     return;
   }
-  await nekoIce(kit, leg.docker, boxed.key, stun);
-  await writeRelay(fleet, address, secret);
+  const { readBrowser } =
+    await import("../../../packages/agent/src/browser/state");
+  const made = (await readBrowser(boxed.key))?.container;
+  await nekoIce(kit, leg, boxed.key);
   const base = `/ws/browser/${boxed.instance}/${artifact}`;
 
   // As neko's client asks: its own token as its Bearer, which the hub's gate
@@ -809,7 +818,7 @@ const containerLeg = async (
     url: `${ws}${base}/api/ws?token=not-a-neko-token`,
     policy: "all" as const,
     from: STREAM_RELAY_PORT,
-    to: standIn,
+    to: relay.port,
   });
   const [server, stunEntry] = direct.iceservers ?? [];
   const username = server?.username ?? "";
@@ -819,16 +828,15 @@ const containerLeg = async (
     `signal/provide relayed with iceservers=${JSON.stringify(direct.iceservers)}`,
     direct.iceservers?.length === 2 &&
       JSON.stringify(stunEntry) === JSON.stringify({ urls: [stun] }) &&
-      server?.urls.join(" ") ===
-        `turn:${address}:${STREAM_RELAY_PORT}?transport=udp turn:${address}:${STREAM_RELAY_PORT}?transport=tcp` &&
+      server?.urls.join(" ") === streamRelayUrls(relay.address).join(" ") &&
       kind === "viewer" &&
       !!session &&
       session === direct.session &&
       Math.abs(lasts - VIEWER_TTL_S) < 120 &&
-      server.credential === turnCredential(secret, username),
+      server.credential === turnCredential(relay.secret, username),
     JSON.stringify(direct)
   );
-  await allocates(kit, leg, username, server?.credential ?? "");
+  await allocates(kit, relay, username, server?.credential ?? "");
   // Direct on the LAN, no relay: the local candidate carries no
   // `relayProtocol` ("only present for local relay candidates",
   // webrtc-stats; libwebrtc sets it on a prflx made from a relay candidate
@@ -838,46 +846,84 @@ const containerLeg = async (
   // response matches no local candidate (p2p/base/connection.cc
   // `MaybeUpdateLocalCandidate`), as the runtime's port forwarding into
   // neko's container rewrites the viewer's source.
+  const lanAddresses = await lanOf();
   kit.check(
-    `a headless Chromium viewer connects; getStats() selected pair ${direct.pair?.local.type}/${direct.pair?.remote.type} on the LAN, no relay (local relayProtocol ${direct.pair?.local.relayProtocol ?? "absent"} → remote ${direct.pair?.remote.type} ${direct.pair?.remote.address})`,
+    `7 · a headless Chromium viewer connects; getStats() selected pair ${direct.pair?.local.type}/${direct.pair?.remote.type} on the LAN, no relay (local relayProtocol ${direct.pair?.local.relayProtocol ?? "absent"} → remote ${direct.pair?.remote.type} ${direct.pair?.remote.address})`,
     !!direct.pair &&
       direct.pair.local.relayProtocol === undefined &&
       direct.pair.remote.type === "host" &&
-      direct.pair.remote.address === address,
+      lanAddresses.includes(direct.pair.remote.address ?? ""),
     JSON.stringify(direct)
   );
-  const { readBrowser } =
-    await import("../../../packages/agent/src/browser/state");
-  await relayHopsLeg(kit, leg, {
-    username,
-    credential: server?.credential ?? "",
+  const relayed = await page.evaluate(view, {
+    url: `${ws}${base}/api/ws`,
+    policy: "relay" as const,
+    from: STREAM_RELAY_PORT,
+    to: relay.port,
   });
-  await relayPair(
-    kit,
-    leg,
-    `${ws}${base}/api/ws`,
-    (await readBrowser(boxed.key))?.container?.id
-  );
+  await relayPair(kit, leg, {
+    label: `8 · a relay-only viewer of this machine's browser${relay.coturn ? ", on the relay's machine" : ", the relay on another fleet machine"}`,
+    relayed,
+    since,
+    neko: made?.id,
+  });
+  if (relay.coturn && made?.address) {
+    // neko allocates as its peer connection gathers: by now, once.
+    const lines = await coturnLines(relay.coturn, since);
+    const from = lines.filter((line) => line.includes(`${made.address}:`));
+    kit.check(
+      `6 · coturn's log shows neko's allocation from its slot's address ${made.address} on the media network: ${
+        from
+          .slice(0, 2)
+          .map((line) => line.trim())
+          .join(" | ") || "no line"
+      }${relay.where}`,
+      from.length > 0,
+      lines.slice(-30).join("\n")
+    );
+  }
 
   await countLeg(kit, leg, boxed.key, `${ws}${base}/api/ws`);
   await post(fleet, `/api/browsers/${encodeURIComponent(boxed.key)}/stop`, {
     machineId: "scratch-fleet",
   });
+  return made?.image;
+};
+
+/** This machine's own IPv4 addresses on its LAN and tailnet: where neko's host candidates are advertised. */
+const lanOf = async (): Promise<string[]> => {
+  const { machineAddresses } =
+    await import("../../../packages/agent/src/browser/media-forwarding");
+  return (await machineAddresses()).filter((one) => !one.includes(":"));
+};
+
+/** coturn's lines since `since` (s epoch). */
+const coturnLines = async (
+  coturn: Container,
+  since: number
+): Promise<string[]> => {
+  const { logsOf } = await import("../../../packages/agent/src/browser/relay");
+  return (await logsOf(coturn, { since }).catch(() => "")).split("\n");
 };
 
 /**
- * neko's own ICE servers as its container was made: the fleet's STUN server
- * alone (the browser started before the relay record, so no relay), none
- * for its viewers, and nothing of Google's, neko's default.
+ * 6 · neko's own ICE servers as its container was made: the relay at the
+ * URLs agent relay-urls.ts composes for this machine, with the credential the
+ * hub minted for `browser:<key>`; then the fleet's STUN server; none for its
+ * viewers, and nothing of Google's, neko's default.
  */
 const nekoIce = async (
   kit: Kit,
-  docker: Runtime["docker"],
-  key: BrowserKey,
-  stun: string
+  { docker, relay, stun }: ContainerLegAt,
+  key: BrowserKey
 ): Promise<void> => {
   const { readBrowser } =
     await import("../../../packages/agent/src/browser/state");
+  const { relayUrlsFor } =
+    await import("../../../packages/agent/src/browser/relay-urls");
+  const { turnCredential } =
+    await import("../../../packages/hub/src/stream-relay");
+  const { MACHINE } = await import("../../scratch-fleet");
   const made = (await readBrowser(key))?.container;
   const env = made
     ? ((await docker.getContainer(made.id).inspect()).Config.Env ?? [])
@@ -886,9 +932,23 @@ const nekoIce = async (
     env.find((one) => one.startsWith(`${name}=`))?.slice(name.length + 1);
   const backend = named("NEKO_WEBRTC_ICESERVERS_BACKEND");
   const frontend = named("NEKO_WEBRTC_ICESERVERS_FRONTEND");
+  const [given, stunEntry] = JSON.parse(backend ?? "[]") as BrowserRelay[];
+  const expected = relayUrlsFor(
+    {
+      username: "",
+      credential: "",
+      urls: streamRelayUrls(relay.address),
+      reach: { machineId: relay.machineId, lan: relay.reachLan, tailnet: [] },
+    },
+    { machineId: MACHINE, relayMedia: relay.media }
+  );
+  const username = given?.username ?? "";
   kit.check(
-    `neko's own ICE servers: backend ${backend}, frontend ${frontend}, the record's STUN server ${made?.stun}; no Google server in its env`,
-    backend === JSON.stringify([{ urls: [stun] }]) &&
+    `6 · neko's own ICE servers: backend ${backend}, frontend ${frontend}; relay-urls.ts says ${JSON.stringify(expected)} for this machine; the record's STUN server ${made?.stun}; no Google server in its env`,
+    given?.urls.join(" ") === expected.join(" ") &&
+      username.split(":").slice(1).join(":") === `browser:${key}` &&
+      given.credential === turnCredential(relay.secret, username) &&
+      JSON.stringify(stunEntry) === JSON.stringify({ urls: [stun] }) &&
       frontend === "[]" &&
       made?.stun === stun &&
       !env.some((one) => one.includes("google")),
@@ -896,55 +956,21 @@ const nekoIce = async (
   );
 };
 
-/** Where this spec's coturn is, as a leg reads it. */
-interface Relayed {
-  address: string;
-  standIn: number;
-  where: string;
-}
-
-/** The viewer's credential allocates on this spec's coturn. */
+/** The viewer's credential allocates on the relay, its relayed address P. */
 const allocates = async (
   kit: Kit,
-  { address, standIn, where }: Relayed,
+  relay: RelayAt,
   username: string,
   credential: string
 ): Promise<void> => {
-  const allocated = await turn(`turn:${address}:${standIn}?transport=udp`, {
-    username,
-    credential,
-  });
+  const allocated = await turn(
+    `turn:${relay.address}:${relay.port}?transport=udp`,
+    { username, credential }
+  );
   kit.check(
-    `the minted credential allocates on coturn (relayed ${allocated.relayed ?? `nothing: ${allocated.error ?? allocated.allocateCode}`})${where}`,
-    allocated.allocated,
+    `the minted credential allocates on coturn (relayed ${allocated.relayed ?? `nothing: ${allocated.error ?? allocated.allocateCode}`})${relay.where}`,
+    allocated.allocated && allocated.relayed?.split(":")[0] === relay.address,
     JSON.stringify(allocated)
-  );
-};
-
-/**
- * Each hop a relayed pair's packets take, carried by coturn alone, with the
- * address each end saw: coturn's relay socket to this machine's address (the
- * way the viewer's checks reach neko, whose candidates name that address) and
- * back, then this machine to the relayed address (the way neko's checks reach
- * the viewer) and back. Published, both cross the VM's network and its
- * forwarder, which the direct leg never needs.
- */
-const relayHopsLeg = async (
-  kit: Kit,
-  { address, standIn, where }: Relayed,
-  user: { username: string; credential: string }
-): Promise<void> => {
-  const { relayHops, brokenHop } = await import("./browser-relay");
-  const hops = await relayHops(
-    `turn:${address}:${standIn}?transport=udp`,
-    user,
-    address
-  );
-  const broken = brokenHop(hops, address);
-  kit.check(
-    `the relay carries a datagram both ways: coturn's relay socket → ${address} heard from ${hops.out.heardFrom ?? "nothing"}, answered by ${hops.out.answeredBy ?? "nothing"}; this machine → the relayed ${hops.relayed ?? "nothing"} heard from ${hops.in.heardFrom ?? "nothing"}, answered from ${hops.in.answeredFrom ?? "nothing"}${broken ? `; broke at ${broken}` : ""}${where}`,
-    broken === undefined,
-    JSON.stringify(hops)
   );
 };
 
@@ -1033,8 +1059,14 @@ const iceVerdict = (
       line.includes("CREATE_PERMISSION processed, success") ||
       line.includes("CHANNEL_BIND processed, success")
   );
-  if (!granted) {
+  if (coturn.length > 0 && !granted) {
     return `coturn granted the viewer no permission${refused.length ? `, and refused: ${refused.join(" | ")}` : ""}`;
+  }
+  const remoteRelay = ice.candidates.remote.filter((one) =>
+    one.startsWith("relay")
+  );
+  if (remoteRelay.length === 0) {
+    return "neko gave the viewer no relay candidate: its allocation on the relay never came (its ICE lines say why)";
   }
   const toNeko = ice.pairs.filter((pair) => pair.remote.includes(address));
   const checked = ice.pairs.some((pair) => pair.sent > 0);
@@ -1054,52 +1086,43 @@ const iceVerdict = (
   return `a pair succeeded (${succeeded.map((pair) => `${pair.local} ↔ ${pair.remote}${pair.nominated ? " nominated" : ""}`).join(", ")}), ice ${ice.transport?.ice}, dtls ${ice.transport?.dtls}`;
 };
 
-/** The viewer connected through this spec's coturn alone; failed, the evidence printed and the hop it broke at named. */
+/**
+ * A relay-only view's verdict: its selected pair relay to relay inside the
+ * one coturn, both addresses P (a remote `prflx` at P is neko's relayed
+ * address met by a check before its candidate). Failed, the evidence printed
+ * and the hop it broke at named.
+ */
 const relayPair = async (
   kit: Kit,
-  {
-    page,
-    address,
-    coturn,
-    docker,
-    standIn,
-    where,
-  }: Leg & Relayed & { coturn: Container; docker: Runtime["docker"] },
-  url: string,
-  neko: string | undefined
+  { docker, relay }: ContainerLegAt,
+  shown: { label: string; relayed: ViewRead; since: number; neko?: string }
 ): Promise<void> => {
-  const since = Math.floor(Date.now() / 1000) - 1;
-  const relayed = await page.evaluate(view, {
-    url,
-    policy: "relay" as const,
-    from: STREAM_RELAY_PORT,
-    to: standIn,
-  });
-  // Through this spec's coturn over UDP: the local candidate's
-  // `relayProtocol` is "udp" and its `url` this coturn's. libwebrtc reports
-  // both for a relay candidate and for a prflx it made of one
-  // (pc/rtc_stats_collector.cc: `candidate.is_relay() ||
-  // (candidate.is_prflx() && !relay_protocol.empty())`), the type it reads
-  // when neko's mapped address for the relayed one matches none it knows.
-  const turnUrl = `turn:${address}:${standIn}?transport=udp`;
+  const { relayed } = shown;
+  const local = relayed.pair?.local;
+  const remote = relayed.pair?.remote;
   const ok =
-    (relayed.pair?.local.type === "relay" ||
-      relayed.pair?.local.type === "prflx") &&
-    relayed.pair.local.relayProtocol === "udp" &&
-    relayed.pair.local.url === turnUrl;
+    (local?.type === "relay" || local?.type === "prflx") &&
+    local.relayProtocol === "udp" &&
+    local.address === relay.address &&
+    (remote?.type === "relay" || remote?.type === "prflx") &&
+    remote.address === relay.address;
+  const line = `${shown.label}: selected pair ${local?.type} ${local?.address} (relayProtocol ${local?.relayProtocol}, via ${local?.url}) ↔ ${remote?.type} ${remote?.address}; P ${relay.address}`;
   if (ok) {
-    kit.check(
-      `the same viewer with iceTransportPolicy relay: selected pair ${relayed.pair?.local.type} relayProtocol ${relayed.pair?.local.relayProtocol} via ${relayed.pair?.local.url}${where}`,
-      true,
-      JSON.stringify(relayed)
-    );
+    kit.check(`${line}${relay.where}`, true, JSON.stringify(relayed));
     return;
   }
   const username = relayed.iceservers?.[0]?.username ?? "";
-  const turnLines = await coturnSaid(coturn, since, username);
-  const nekoLines = await nekoSaid(docker, neko, since, relayed.session);
+  const turnLines = relay.coturn
+    ? await coturnSaid(relay.coturn, shown.since, username)
+    : [];
+  const nekoLines = await nekoSaid(
+    docker,
+    shown.neko,
+    shown.since,
+    relayed.session
+  );
   const { ice } = relayed;
-  for (const line of [
+  for (const text of [
     `viewer's states: ${ice?.states.join(" → ") || "none"}`,
     `viewer's candidates: ${ice?.candidates.local.join(", ") || "none"}`,
     `neko's candidates, as the viewer has them: ${ice?.candidates.remote.join(", ") || "none"}`,
@@ -1109,16 +1132,177 @@ const relayPair = async (
         `pair ${pair.local} ↔ ${pair.remote}: ${pair.state}${pair.nominated ? " nominated" : ""}, the viewer's checks ${pair.sent} (answered ${pair.sentAnswered}), neko's checks ${pair.received} (answered ${pair.receivedAnswered})`
     ) ?? []),
     `viewer's transport: ice ${ice?.transport?.ice}, dtls ${ice?.transport?.dtls}`,
-    ...turnLines.slice(-LINES).map((text) => `coturn: ${text.trim()}`),
-    ...nekoLines.slice(-LINES).map((text) => `neko: ${text.trim()}`),
+    ...turnLines.slice(-LINES).map((one) => `coturn: ${one.trim()}`),
+    ...nekoLines.slice(-LINES).map((one) => `neko: ${one.trim()}`),
   ]) {
-    kit.note(`relay-only view: ${line}`);
+    kit.note(`${shown.label}: ${text}`);
   }
   kit.check(
-    `the same viewer with iceTransportPolicy relay: selected pair ${relayed.pair?.local.type} relayProtocol ${relayed.pair?.local.relayProtocol} via ${relayed.pair?.local.url}; ${relayed.error ?? "no error"}; broke at ${iceVerdict(ice, turnLines, address)}${where}`,
+    `${line}; ${relayed.error ?? "no error"}; broke at ${iceVerdict(ice, turnLines, relay.address)}${relay.where}`,
     false,
     JSON.stringify({ ...relayed, coturn: turnLines, neko: nekoLines })
   );
+};
+
+/** What a member may do in neko, as the agent's own neko profile says (container-host.ts). */
+const PROFILE = {
+  name: "",
+  can_login: true,
+  can_connect: true,
+  can_watch: true,
+  can_host: true,
+  can_share_media: false,
+  can_access_clipboard: true,
+  sends_inactive_cursor: false,
+  can_see_inactive_cursors: false,
+};
+
+/**
+ * 9 · Another fleet machine's browser, stood up here: a neko of the agent's
+ * image on a bridge network of its own, at a fixed address, given the URL
+ * list relay-urls.ts composes for a machine that is not the relay's (the
+ * relay's LAN URL, then its public ones, each through the published
+ * listener's stand-in), and a relay-only viewer on its own signaling. Its
+ * allocations reach coturn through the published listener, as another
+ * machine's do; the pair must still be relay to relay.
+ */
+const otherMachineLeg = async (
+  kit: Kit,
+  leg: ContainerLegAt,
+  image: string
+): Promise<void> => {
+  const { docker, page, relay, stun } = leg;
+  const media =
+    await import("../../../packages/agent/src/browser/media-network");
+  const { relayUrlsFor } =
+    await import("../../../packages/agent/src/browser/relay-urls");
+  const { mintCredential } =
+    await import("../../../packages/hub/src/stream-relay");
+  const network = await media.ensureMediaNetwork(docker, OTHER_NETWORK);
+  const address = media.slotAddress(network, 0);
+  const http = await freeStandIn();
+  if (http === undefined) {
+    kit.check("9 · a free port for the stand-in neko's HTTP", false);
+    return;
+  }
+  const record = {
+    secret: relay.secret,
+    address: relay.address,
+    hostname: null,
+    machineId: relay.machineId,
+    reach: { lan: relay.reachLan, tailnet: [] },
+  };
+  const browser = mintCredential(record, "browser:other-machine", 60 * 60_000);
+  const viewer = mintCredential(
+    { ...record, machineId: undefined },
+    "viewer:other-machine",
+    60 * 60_000
+  );
+  const composed = relayUrlsFor(browser, {
+    machineId: "another-fleet-machine",
+    relayMedia: relay.media,
+  });
+  const urls = composed.map((url) =>
+    url.replace(`:${STREAM_RELAY_PORT}?`, `:${relay.port}?`)
+  );
+  const passwords = {
+    admin: randomBytes(18).toString("base64url"),
+    user: randomBytes(18).toString("base64url"),
+  };
+  const placed = media.onMediaNetwork(network.name, address);
+  await docker
+    .getContainer(OTHER_NEKO)
+    .remove({ force: true })
+    .catch(() => undefined);
+  const since = Math.floor(Date.now() / 1000) - 1;
+  const neko = await docker.createContainer({
+    name: OTHER_NEKO,
+    Image: image,
+    Env: [
+      "NEKO_DESKTOP_SCREEN=1280x800@30",
+      "NEKO_SERVER_BIND=0.0.0.0:8080",
+      "NEKO_MEMBER_PROVIDER=multiuser",
+      `NEKO_MEMBER_MULTIUSER_ADMIN_PASSWORD=${passwords.admin}`,
+      `NEKO_MEMBER_MULTIUSER_USER_PASSWORD=${passwords.user}`,
+      `NEKO_MEMBER_MULTIUSER_ADMIN_PROFILE=${JSON.stringify({ ...PROFILE, is_admin: true })}`,
+      `NEKO_MEMBER_MULTIUSER_USER_PROFILE=${JSON.stringify({ ...PROFILE, is_admin: false })}`,
+      "NEKO_SESSION_IMPLICIT_HOSTING=false",
+      "NEKO_SESSION_COOKIE_ENABLED=false",
+      "NEKO_CAPTURE_VIDEO_CODEC=vp8",
+      "NEKO_WEBRTC_ICELITE=false",
+      `NEKO_WEBRTC_UDPMUX=${OTHER_MEDIA_PORT}`,
+      `NEKO_WEBRTC_TCPMUX=${OTHER_MEDIA_PORT}`,
+      `NEKO_WEBRTC_NAT1TO1=${address}`,
+      `NEKO_WEBRTC_ICESERVERS_BACKEND=${JSON.stringify([
+        { urls, username: browser.username, credential: browser.credential },
+        { urls: [stun] },
+      ])}`,
+      `NEKO_WEBRTC_ICESERVERS_FRONTEND=${JSON.stringify([
+        {
+          urls: viewer.urls,
+          username: viewer.username,
+          credential: viewer.credential,
+        },
+      ])}`,
+    ],
+    ExposedPorts: { "8080/tcp": {} },
+    NetworkingConfig: placed.NetworkingConfig,
+    HostConfig: {
+      NetworkMode: placed.NetworkMode,
+      PortBindings: {
+        "8080/tcp": [{ HostIp: "127.0.0.1", HostPort: String(http) }],
+      },
+      ShmSize: 2 * 1024 ** 3,
+    },
+  });
+  try {
+    await neko.start();
+    await until(
+      "the stand-in neko answers",
+      () =>
+        fetch(`http://127.0.0.1:${http}/health`).then(
+          (answer) => answer.ok,
+          () => false
+        ),
+      (up) => up,
+      90_000
+    );
+    const login = (await (
+      await fetch(`http://127.0.0.1:${http}/api/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "viewer", password: passwords.user }),
+      })
+    ).json()) as { token?: string };
+    const relayed = await page.evaluate(view, {
+      url: `ws://127.0.0.1:${http}/api/ws?token=${login.token ?? ""}`,
+      policy: "relay" as const,
+      from: STREAM_RELAY_PORT,
+      to: relay.port,
+    });
+    kit.note(
+      `9 · the stand-in neko at ${address} on ${network.name} (${network.subnet}), given ${JSON.stringify(urls)} (relay-urls.ts for another machine: ${JSON.stringify(composed)}, 443 read as the stand-in ${relay.port})`
+    );
+    kit.check(
+      `9 · relay-urls.ts names the relay's LAN URL first for another machine on its LAN: ${composed[0]}`,
+      composed[0] ===
+        `turn:${relay.reachLan[0]}:${STREAM_RELAY_PORT}?transport=udp`,
+      JSON.stringify(composed)
+    );
+    await relayPair(kit, leg, {
+      label:
+        "9 · a relay-only viewer of another fleet machine's browser (a neko on its own bridge network)",
+      relayed,
+      since,
+      neko: neko.id,
+    });
+  } finally {
+    await neko.remove({ force: true }).catch(() => undefined);
+    await docker
+      .getNetwork(OTHER_NETWORK)
+      .remove()
+      .catch(() => undefined);
+  }
 };
 
 /** Local host: the take-over view through the hub, its frames and a tap. */

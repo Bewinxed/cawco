@@ -42,6 +42,7 @@ import {
   type RelayFrame,
   type RelayPortHealth,
   type RelayPortName,
+  type RelayReach,
   type RelayRenewed,
   type RelayStartArgs,
   STREAM_RELAY_PORT,
@@ -73,10 +74,18 @@ export const turnCredential = (secret: string, username: string): string =>
 /**
  * A credential good for `ttlMs` from now: the username `<expiry, unix
  * seconds>:<userId>` (coturn's `rest-api-separator` is `:`), its password,
- * and the relay's URLs.
+ * the relay's URLs, and with the relay's machine its `reach`: that machine
+ * and its own LAN and tailnet addresses, which a browser of the fleet
+ * composes its URLs from (agent relay-urls.ts).
  */
 export const mintCredential = (
-  relay: { secret: string; address: string; hostname: string | null },
+  relay: {
+    secret: string;
+    address: string;
+    hostname: string | null;
+    machineId?: string;
+    reach?: RelayReach | null;
+  },
   userId: string,
   ttlMs: number,
   now = Date.now()
@@ -86,6 +95,15 @@ export const mintCredential = (
     username,
     credential: turnCredential(relay.secret, username),
     urls: streamRelayUrls(relay.address, relay.hostname),
+    ...(relay.machineId
+      ? {
+          reach: {
+            machineId: relay.machineId,
+            lan: relay.reach?.lan ?? [],
+            tailnet: relay.reach?.tailnet ?? [],
+          },
+        }
+      : {}),
   };
 };
 
@@ -156,24 +174,16 @@ export const candidateOf = (
   };
   if (own) {
     // The hub sees it from another public address (a cloud NAT in front of
-    // it): the relay is reached at that one, and coturn reports it for its
-    // allocations, mapped onto the interface's (`external-ip=<public>/<private>`).
+    // it): the relay is reached at that one.
     return seen && seen !== own
-      ? { ...base, address: seen, lan: null, externalIp: `${seen}/${own}` }
+      ? { ...base, address: seen, lan: null }
       : { ...base, address: own, lan: null };
   }
   const nat = reach?.nat;
   if (nat) {
-    return {
-      ...base,
-      address: nat.address,
-      lan: nat.lan,
-      externalIp: `${nat.address}/${nat.lan}`,
-    };
+    return { ...base, address: nat.address, lan: nat.lan };
   }
-  return seen
-    ? { ...base, address: seen, lan: null, externalIp: seen }
-    : undefined;
+  return seen ? { ...base, address: seen, lan: null } : undefined;
 };
 
 /** One port's STUN binding: answered within {@link STUN_MS}, or why not. */
@@ -256,7 +266,6 @@ const answered = <T>(
 /** What the journey hands a start: the machine, where it is reached, its name. */
 export interface RelaySetup {
   address: string;
-  externalIp: string | null;
   hostname: string | null;
   machineId: string;
 }
@@ -304,7 +313,6 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       address: relay.address,
       relayRange: STREAM_RELAY_PORTS.relayRange,
       ...(relay.hostname ? { hostname: relay.hostname } : {}),
-      ...(relay.externalIp ? { externalIp: relay.externalIp } : {}),
     };
   };
 
@@ -361,6 +369,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       ports: frame.ports,
       why: frame.why ?? null,
       whyCommand: frame.command ?? null,
+      ...(frame.reach ? { reach: frame.reach } : {}),
     });
   };
 
@@ -420,6 +429,8 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
           secret: relay.secret,
           address: relay.address,
           hostname: relay.hostname,
+          machineId: relay.machineId,
+          reach: relay.reach,
         },
         userId,
         ttlMs
@@ -430,7 +441,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       return answered<RelayCertified>(read, machineName(machineId), "issued")
         .expiresAt;
     },
-    setup: async ({ machineId, address, externalIp, hostname }) => {
+    setup: async ({ machineId, address, hostname }) => {
       const before = db.read();
       if (before && before.machineId !== machineId) {
         // One relay for the fleet: the one before goes from its own machine,
@@ -441,7 +452,6 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
         machineId,
         address,
         hostname,
-        externalIp,
         // The secret a relay already had stays: a credential minted from it
         // still answers while the relay starts again on its new settings.
         secret:
