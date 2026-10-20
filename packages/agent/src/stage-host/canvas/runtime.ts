@@ -601,13 +601,19 @@ export function boot(options: BootOptions): void {
 
   const sectionOf = (file: string) => sections.find((one) => one.file === file);
 
-  /** Whether the page draws story `name`: an embed only the ones it names, any other page every one. */
-  const drawsStory = (name: string): boolean =>
-    named.size === 0 || named.has(name);
+  /**
+   * The stories of `all` the page draws: an embed's the ones it names, in
+   * the order it names them (a Preview's `stories`), any other page's every
+   * one, in its file's order.
+   */
+  const toDraw = <One extends { name: string }>(all: readonly One[]): One[] =>
+    named.size === 0
+      ? [...all]
+      : [...named].flatMap((name) => all.filter((one) => one.name === name));
 
-  /** The stories a section draws, in its file's order. */
+  /** The stories a section draws, in the order `toDraw` gives. */
   const storiesOf = (section: Section): Story[] =>
-    (section.mod?.SHEET.stories ?? []).filter((one) => drawsStory(one.name));
+    toDraw(section.mod?.SHEET.stories ?? []);
 
   /** The columns a section's stories take, from the view. */
   const slotsOf = (): { scheme: Column["scheme"]; width: WidthSlot }[] => {
@@ -2495,10 +2501,7 @@ export function boot(options: BootOptions): void {
   };
   // Each section stands in its place until it draws, now every column's rule is defined; its load waits on the observer's first callback.
   for (const section of sections) {
-    standIn(
-      section,
-      (plans[section.file]?.stories ?? []).filter((one) => drawsStory(one.name))
-    );
+    standIn(section, toDraw(plans[section.file]?.stories ?? []));
   }
   window.__cawcoCanvas = canvasState;
   if (card) {
