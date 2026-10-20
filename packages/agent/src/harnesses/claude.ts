@@ -3757,9 +3757,27 @@ class ClaudeSession implements HarnessSession {
     resolve({ behavior: "deny", message });
   }
 
+  /**
+   * Cuts the turn, and stops every background task the CLI still runs
+   * (shells, monitors, subagents, workflows) through its own `stop_task`, so
+   * the CLI holds each one stopped by its host: an interrupted session stays
+   * idle, and a task whose command the agent then ends in its workspace
+   * (session.ts, boundary.ts `endSessionWork`) is not one whose end wakes
+   * it. A task already gone is no refusal ("`stop_task` control requests
+   * now return success when the target task is already gone", SDK 0.3.163).
+   */
   async interrupt(): Promise<void> {
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — a stream that already ended has nothing left to interrupt
     await this.#handle.interrupt().catch(() => {});
+    await Promise.all(
+      [...this.#background.keys()].map((taskId) =>
+        this.#handle.stopTask(taskId).catch((error: unknown) => {
+          console.warn(
+            `[claude] ${this.instanceId}: its background task ${taskId} could not be stopped: ${error instanceof Error ? error.message : String(error)}`
+          );
+        })
+      )
+    );
   }
 
   async stop(): Promise<void> {

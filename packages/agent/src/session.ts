@@ -52,6 +52,7 @@ import {
   CONTROL_CARRY_SESSIONS,
   CONTROL_FORGET_CREDENTIALS,
   CONTROL_GIT_CHANGES,
+  CONTROL_INTERRUPT,
   CONTROL_LIST_SESSIONS,
   CONTROL_MCP_FLEET_HEAL,
   CONTROL_QUERIES,
@@ -132,6 +133,7 @@ import { withFiles } from "./attachments";
 import {
   type Boundary,
   boundaryFor,
+  endSessionWork,
   hookArmed,
   recheckNarrowed,
   shellQuote,
@@ -4447,6 +4449,30 @@ export class SessionSupervisor {
     });
   }
 
+  /**
+   * Ends everything session `instanceId` left running in a workspace
+   * (boundary.ts {@link endSessionWork}): an interrupt or a stop of it
+   * leaves nothing of its running, on every harness. Said in the log; a
+   * reading that fails is said, and the interrupt or stop goes on.
+   */
+  async #endWork(
+    instanceId: string,
+    why: "interrupted" | "stopped"
+  ): Promise<void> {
+    try {
+      const { ended, left } = await endSessionWork(instanceId);
+      if (ended.length > 0) {
+        console.info(
+          `[agent] ${instanceId}: ${why}, so what it left running in its workspace ended: pid ${ended.join(", ")}${left.length > 0 ? `; pid ${left.join(", ")} still ran after SIGKILL` : ""}`
+        );
+      }
+    } catch (error) {
+      warn(
+        `${instanceId}: ${why}, but what it left running in its workspace could not be read, so it was not ended: ${errorText(error)}`
+      );
+    }
+  }
+
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stop settles carried, sessiond-held and discarded custody with the same receipt
   async #stop({
     instanceId,
@@ -4570,6 +4596,9 @@ export class SessionSupervisor {
         await this.#endHeld(instanceId);
         ended = { harness: kind, resourcesClosed: true };
       }
+      // Its process is gone, and sessiond swept what it started on the host;
+      // what its commands left inside its workspace's boundary goes too.
+      await this.#endWork(instanceId, "stopped");
       this.#resumable.delete(instanceId);
       this.#handed.delete(instanceId);
       forgetTaken(instanceId);
@@ -4911,7 +4940,15 @@ export class SessionSupervisor {
         });
         return;
       }
-      const result = await this.#call(instanceId, kind, method, args);
+      // An interrupted session is idle: nothing it started in its workspace
+      // runs on, to end later and wake it, whether or not its process was
+      // there to hear the interrupt.
+      const result = await this.#call(instanceId, kind, method, args).finally(
+        () =>
+          method === CONTROL_INTERRUPT && instanceId
+            ? this.#endWork(instanceId, "interrupted")
+            : undefined
+      );
       this.sink({
         kind: "control_result",
         instanceId,

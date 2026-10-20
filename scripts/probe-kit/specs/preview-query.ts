@@ -35,7 +35,7 @@ const FORMS = [
   "/src/lib/assets/caw/idle.riv?import&url",
   "/src/lib/assets/caw/idle.riv?url",
   "/src/x.ts?a&b=1",
-  "/src/lib/cawco/pairing/PairingQr.svelte?svelte&type=style&lang.css",
+  "/src/lib/cawco/Sidebar.svelte?svelte&type=style&lang.css",
 ];
 const INSTANCE = "00000000-0000-4000-8000-0000000a0e71";
 const TOKEN = "preview-query-probe-relay-token-0";
