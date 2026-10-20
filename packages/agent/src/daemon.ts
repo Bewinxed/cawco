@@ -152,6 +152,7 @@ import {
   onSigninsChanged,
 } from "./accounts";
 import { resolveClaudeExecutable, unlockKeychain } from "./auth";
+import { keepAwakeWhileWorking } from "./awake";
 import {
   BinaryUpdater,
   latestBinaryUpdate,
@@ -3029,6 +3030,9 @@ export const startDaemon = (rediscover = false) =>
           return network ? [network] : [];
         }),
     });
+    // While a turn, a gate step, a boundary's command or a heavy run is live
+    // here, the OS does not idle-sleep this machine (awake.ts).
+    keepAwakeWhileWorking(() => supervisor.turnsRunning());
     // A sign-in moves what a workspace's policy denies: every boundary is
     // checked for a narrowed access at once (boundary.ts `recheckNarrowed`).
     onSigninsChanged(accountsChangedHere);

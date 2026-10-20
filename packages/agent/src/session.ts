@@ -1495,8 +1495,28 @@ export class SessionSupervisor {
   }
 
   /**
-   * The sessions mid-turn right now, with undecided custody counted busy: the
-   * answer {@link AGENT_BUSY} gives over the wire, for the hub's keep-alive and
+   * The sessions mid-turn right now, every harness's: a turn this agent
+   * started and has not seen end, a held child's turn not decided yet, and
+   * OpenCode's own word on its turns ({@link Harness.busyInstances}). What
+   * {@link busyNow} reports, and what the agent's hold on idle sleep counts
+   * (awake.ts).
+   */
+  async turnsRunning(): Promise<string[]> {
+    const opencode = (await this.#adapter("opencode").busyInstances?.()) ?? [];
+    return [
+      ...new Set([
+        ...[...this.#busy].filter(
+          (id) => this.#sessions.get(id)?.harness !== "opencode"
+        ),
+        ...this.#turnPending,
+        ...opencode,
+      ]),
+    ];
+  }
+
+  /**
+   * The sessions mid-turn right now ({@link turnsRunning}), with undecided
+   * custody counted busy: the answer {@link AGENT_BUSY} gives over the wire, for the hub's keep-alive and
    * for a restart of the session keeper, which kills the turns. An agent
    * restart reads {@link restartHolds} instead: the keeper runs a turn on
    * through one.
@@ -1504,18 +1524,13 @@ export class SessionSupervisor {
   async busyNow(): Promise<AgentBusyReport> {
     // Recovery must defer retirement, not the machine control reply. A hold
     // can outlast the hub's five-second RPC window; unknown is honestly busy.
-    const opencode = (await this.#adapter("opencode").busyInstances?.()) ?? [];
     const ready = this.custodyReady;
     const recovery = ready
       ? []
       : [...this.#custodyInstances, `agent:recovery-${this.#custodyState}`];
     const instances = [
       ...new Set([
-        ...[...this.#busy].filter(
-          (id) => this.#sessions.get(id)?.harness !== "opencode"
-        ),
-        ...this.#turnPending,
-        ...opencode,
+        ...(await this.turnsRunning()),
         ...recovery,
         ...this.#imageRequests.values(),
       ]),
