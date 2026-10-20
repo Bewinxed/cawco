@@ -6,8 +6,10 @@
  * - the first card embeds two states files, a ledger of six 480px months
  *   and the note under it, which stands past three heights of the embed's
  *   frame (runtime.ts UNMOUNT_MARGIN, where the far observer puts a section
- *   to sleep), and its Recommended option embeds the note's one story by
- *   name (`Preview(…, ["Pinned"])`);
+ *   to sleep), its Recommended option embeds the note's one story by
+ *   name (`Preview(…, ["Pinned"])`), and its other option two months
+ *   named against the file's order (`Preview(…, ["March", "January"])`),
+ *   drawn in the order named;
  * - the second card holds three Previews: the side card at 360px (wider
  *   than a card's media on a phone) and at 1400px (wider than any card),
  *   the note, and the ledger's first month.
@@ -103,6 +105,12 @@ const PREVIEWS: Record<
     stories: ["January"],
     shows: ["January"],
   },
+  // Named against the file's order: drawn in the order named.
+  "March, then January": {
+    files: [LEDGER],
+    stories: ["March", "January"],
+    shows: ["March", "January"],
+  },
 };
 /** The second card's three media, by caption. */
 const TRIO = ["The side card", "The note", "January's lines"];
@@ -110,7 +118,7 @@ const TRIO = ["The side card", "The note", "January's lines"];
 const PROGRAM = [
   `root = Decisions("The spend ledger", [ledger, side])`,
   `ledger = Decision("ledger", "Where does the pinned note stand?", [under, alone], "The ledger is long; the note is what a person acts on.", [book])`,
-  `under = Option("under", "Under the ledger", "The note after every line.", false, [], "A person scrolls past sixty lines to reach it.")`,
+  `under = Option("under", "Under the ledger", "The note after every line.", false, [order], "A person scrolls past sixty lines to reach it.")`,
   `alone = Option("alone", "On its own", "The note in a card of its own.", true, [note], "The ledger loses its summary line.")`,
   `book = Preview("${BOOK_ID}", "The ledger and its note")`,
   `note = Preview("${NOTE_ID}", "The note alone", ["Pinned"])`,
@@ -120,6 +128,7 @@ const PROGRAM = [
   `card1 = Preview("${SIDE_ID}", "The side card")`,
   `pin1 = Preview("${NOTE_ID}", "The note", ["Pinned"])`,
   `month1 = Preview("${MONTH_ID}", "January's lines", ["January"])`,
+  `order = Preview("${MONTH_ID}", "March, then January", ["March", "January"])`,
 ].join("\n");
 
 /** The fixture copied to scratch and installed once: the project the stage draws. */
