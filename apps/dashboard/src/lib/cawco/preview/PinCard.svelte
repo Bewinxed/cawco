@@ -324,7 +324,7 @@
   data-sheet={sheet || undefined}
   data-slot="pin-card"
   aria-label={`Pin ${pin.number}`}
-  class="group/pin pointer-events-auto absolute z-2 motion-safe:animate-pin-card-in flex flex-col gap-space-2 w-(--card-w) max-h-(--card-max) overflow-y-auto overscroll-contain p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-hairline data-sheet:inset-x-0 data-sheet:bottom-0 data-sheet:w-full data-sheet:max-h-7/10 data-sheet:border-x-0 data-sheet:border-b-0 data-sheet:rounded-b-none data-sheet:pb-(--sheet-pb)"
+  class="group/pin pointer-events-auto absolute z-2 motion-safe:animate-pin-card-in flex flex-col gap-space-2 coarse:gap-space-5 w-(--card-w) max-h-(--card-max) overflow-y-auto overscroll-contain p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-hairline data-sheet:inset-x-0 data-sheet:bottom-0 data-sheet:w-full data-sheet:max-h-7/10 data-sheet:border-x-0 data-sheet:border-b-0 data-sheet:rounded-b-none data-sheet:pb-(--sheet-pb)"
   data-pin-card={pin.number}
   role="dialog"
   bind:this={card}
@@ -340,7 +340,7 @@
 >
   <header
     data-slot="head"
-    class="flex shrink-0 items-center gap-space-2"
+    class="flex shrink-0 items-center gap-space-2 coarse:gap-space-5"
     bind:this={head}
   >
     <PinDisc number={pin.number} resolved={!!pin.resolvedAt} />
@@ -349,7 +349,10 @@
       class="flex flex-1 min-w-0 flex-col"
       title={selector ?? undefined}
     >
-      <span data-slot="name" class="truncate text-ink-strong type-label"
+      <!-- What it stands on, whole to two lines and cut there: the card's head is never cut to a word. -->
+      <span
+        data-slot="name"
+        class="line-clamp-2 wrap-anywhere text-ink-strong type-label"
         >{pinName(pin)}</span
       >
       {#if source}

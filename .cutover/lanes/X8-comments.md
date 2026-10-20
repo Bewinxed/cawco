@@ -45,5 +45,33 @@ Start 0f64468e11d27314a553e5ed64d5df3b3734c4c8. Every read below is the engine's
 - fixed: "misusing primary/secondary". Reply is the card's one primary (A pin's card); read 1 primary, 0 outline across the panel and the card.
 - fixed: the "Place again" pattern is gone. The gone pin's card says the loss once, in meta, with a ghost action (A pin's card); leg 5 read.
 - fixed: the panel is the kit's floating surface (L885 audit row); read fill, 1px edge and shadow.
-- holds: the card head's anchor name truncates with an ellipsis beside its three glyphs (artifact-pin reach `span[name] "Three ways a long chip wraps" 118 of 172, overflow hidden`). L623 truncates a name inside its row; the selector stands in the anchor's tooltip.
+- fixed (review 6): the card head's anchor words now wrap to two lines and are cut there (`line-clamp-2 wrap-anywhere`), no longer truncated on one (`truncate`, 118 of 172px on c1be634a1).
 - holds: the panel's controls at desk are the kit's 30px glyph buttons and 24px tabs, which meet the 24 Pointer Rule by their drawn size (artifact-comments reach: `Close comments 30x30`, `Open 52x24`, `Resolved 74x24`).
+
+## The design review of c1be634a1 (NOT READY), answered
+- fixed (1, 2, 3 and the gaps): the catalogue's artifact entries were seeded with nothing. `seedPins` (catalogue.ts) now writes the pins as the overlay does, in the page's doc, which the tape relays to the pane (hub-tape.ts, the artifact socket):
+  - 1: six words, which the agent answered;
+  - 2: 48 words;
+  - 3: on an element the page doesn't have (gone);
+  - 4–9: long, resolved.
+
+  New states on `artifact` (capture names in the report):
+  - `comments`, `comments-resolved`, `comments-row-card`, `comments-reply`, `comments-row-back`, `comments-gone`, `comments-placing`: desk, 820, 390.
+  - `comments-beside`: 1440 expanded.
+  - `comments-row-focus`, `comments-row-hover`, `comments-row-press`: desk.
+  - `comments-reading`, `comments-fault`: desk, 390.
+  - `place-pick`: desk, 390, with the panel open first.
+
+  Each declares its ready selector. Read: rows `pin-row 1 … 477x50`, `pin-row 2 … 477x95`, `pin-row data-moved 3 … 477x44`.
+- fixed (4): the bench's pins hold real messages, the first answered by the agent.
+- holds (5): the bench's ~165px panel is the bench, not the clamp. The bench draws PinList bare in a flex-wrapped `<section class="min-w-0">` sized to its content; the clamp is the pane's Popover (`--pin-list-w`, PreviewPane). The bench section now stands at the floor (`w-c-pin-list-min`). The real clamp at 1440 expanded is `comments-beside`; comments.ts leg k reads `well 1211 → panel 363.296875`.
+- fixed (6): the card head wraps to two lines (above). comments.ts reads `the card's head words wrap, cut at two lines`.
+- holds (7): A pin's card is "the raised card recipe beside its pin" (DESIGN.md, A pin's card). The card stands 12px from the disc on the side with room; leg j reads the disc and the card clear of each other.
+- route (7): placing the card beside the pinned element, not just its disc, needs the element's box in the overlay's `cawco:pin-at` (packages/agent/src/preview-overlay/pins.ts `tell` sends only `x, y, r`) and in X5's `wire.ts` `previewPinAt`. One-line proposal: the overlay adds the element's box and PinCard prefers the side of the element with room.
+- fixed (8): the place picker is the page asking the person (PlacePick: "over the whole of the preview's well"). The Comments panel over its Folder field broke The Open Page Rule (DESIGN.md L505: a surface that asks "opens in the page, beside what it concerns"). The panel now stands aside while a pick is open (`listAway` includes `picking`) and comes back on its tab and scroll. Read: catalogue `place-pick` holds `shows: form[data-slot=place-pick]` with `not: [data-pin-list-pop]`, the panel opened first.
+- holds (9): Reply with an empty field is disabled for real (`disabled={!draft.trim()}`), the standard pattern (https://ui.shadcn.com/docs/components/button: the disabled button; Apple HIG buttons). comments.ts reads it at four sizes: empty `disabled true` at the kit's disabled opacity, filled `disabled false, opacity 1`, the same fill.
+- fixed (touch reach at 390 and 820, coarse, L929): the card's head glyphs and its notice action stood 7px apart, and each 44 area took its neighbour's half. The read on c1be634a1: `Resolve pin … right reach 0 need 3.5 SHORT`, `down reach 0 need 3.5 SHORT`. On a coarse pointer the head row and the card's column now stand `space-5` (18) apart, the ladder's step past the 15px two 44 areas need, as SectionRow, ViewBar, Composer and the pane head widen theirs on coarse. Read at 390: `Resolve pin ok … right reach 6.5 need 7`, `More for pin 3 ok`, `Close ok`, `Pin it somewhere else ok`, Reply (enabled) `ok … up reach 7.5 need 3.5`. 820 reads the same.
+- holds (touch reach, panel, 390): `Close comments ok`, `Open 3 ok` (::after 62x44), `Resolved 6 ok`, and rows `pin-row … 344x50.5 ok`, `344x95 ok`, `344x44 ok`.
+- route (touch reach, the pane head, X5): at 390 the pane head's `More` and `Close` (SideSurface) read `right reach 6 need 7 SHORT`. `Dismiss … rebalances` 24x24 `SHORT` is Caw's notice list. Neither is this lane's.
+- holds (live dot): the tape's chip-wraps session is idle, so no capture can draw the live dot. comments.ts leg 4 reads it while the agent's turn runs: `live dot seen true`.
+- capture.ts (asked and granted): `CAPTURED` keeps desk and phone and adds the tablet pass only where a wanted state names `tablet`. Read: `bench-chosen-hover-rest` gives the same four names as on c1be634a1; `artifact-comments` adds `-tablet-light` and `-tablet-dark`.

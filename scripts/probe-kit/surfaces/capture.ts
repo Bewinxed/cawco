@@ -95,9 +95,16 @@ const surfaces: Surface[] = SURFACES.map((surface) => ({
   ),
 })).filter((surface) => surface.states.length > 0);
 
-/** 1440 and 390, light and dark. */
+/** 1440 and 390, light and dark; 820 too where a state names `tablet` in its `widths`. */
 const CAPTURED = PASSES.filter(
-  (pass) => !pass.reduced && (pass.width === "desk" || pass.width === "phone")
+  (pass) =>
+    !pass.reduced &&
+    (pass.width === "desk" ||
+      pass.width === "phone" ||
+      (pass.width === "tablet" &&
+        surfaces.some((surface) =>
+          surface.states.some((state) => state.widths?.includes("tablet"))
+        )))
 );
 const PIXELS: Record<Pass["width"], number> = {
   desk: 1440,

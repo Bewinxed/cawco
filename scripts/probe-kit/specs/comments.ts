@@ -3768,6 +3768,45 @@ const goneCardChecks = async (
       !!gone.card?.buttons.every((b) => b.kind !== "outline"),
     gone.card?.buttons
   );
+  // Reply with nothing written is disabled for real (shadcn's and the HIG's
+  // pattern), the kit's disabled opacity over its own fill; a word enables it.
+  const cardEl = screen.locator('[data-slot="pin-card"]');
+  const reply = cardEl.getByRole("button", { name: "Reply", exact: true });
+  const replyState = () =>
+    reply.evaluate((b) => ({
+      disabled: (b as HTMLButtonElement).disabled,
+      opacity: getComputedStyle(b).opacity,
+      fill: getComputedStyle(b).backgroundColor,
+    }));
+  const field = cardEl
+    .locator("textarea[data-field]")
+    .filter({ visible: true })
+    .first();
+  const empty = await replyState();
+  await field.fill("A word");
+  const filled = await replyState();
+  await field.fill("");
+  check(
+    "Reply is disabled while the field is empty (the kit's disabled opacity over its own fill), enabled at full opacity once a word is written",
+    empty.disabled &&
+      !filled.disabled &&
+      filled.opacity === "1" &&
+      empty.fill === filled.fill,
+    { empty, filled }
+  );
+  // The head's words wrap to two lines and are cut there, never cut on one.
+  const name = await cardEl.locator('[data-slot="name"]').evaluate((el) => ({
+    clamp: getComputedStyle(el).webkitLineClamp,
+    wrap: getComputedStyle(el).whiteSpace,
+    lines: Math.round(
+      el.clientHeight / Number.parseFloat(getComputedStyle(el).lineHeight)
+    ),
+  }));
+  check(
+    "the card's head words wrap, cut at two lines",
+    name.clamp === "2" && name.wrap !== "nowrap" && name.lines <= 2,
+    name
+  );
   const c = gone.card?.box;
   const p = gone.pop;
   const r = gone.room;

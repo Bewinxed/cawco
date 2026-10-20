@@ -69,7 +69,7 @@
       os: "Linux",
     },
   ];
-  const pin = (id: string, number: number): Pin => ({
+  const pin = (id: string, number: number, words: string[]): Pin => ({
     anchor: { element: `e${number}` },
     at: "2026-10-18T09:00:00Z",
     by: "person",
@@ -77,9 +77,23 @@
     id,
     kind: "comment",
     number,
-    thread: [],
+    thread: words.map((text, i) => ({
+      at: "2026-10-18T09:00:00Z",
+      by: i === 0 ? "person" : "agent",
+      id: `${id}-${i}`,
+      text,
+    })),
   });
-  const pins: Pin[] = [pin("pin-1", 1), pin("pin-2", 2)];
+  // The rows as the panel draws them: a comment answered, and one waiting.
+  const pins: Pin[] = [
+    pin("pin-1", 1, [
+      "Make this heading a bit bigger",
+      "Done: the heading is a step larger now.",
+    ]),
+    pin("pin-2", 2, [
+      "The paragraph under it starts before the eye has settled; give the heading more room above it.",
+    ]),
+  ];
   const noop = () => undefined;
 
   let markdown = $state("");
@@ -199,7 +213,8 @@
   <section class="w-c-bench-field-w min-w-0" data-probe="slash">
     <MarkdownEditor bind:value={markdown} label="Notes" />
   </section>
-  <section class="min-w-0" data-probe="pins">
+  <!-- At the Comments panel's floor (c-pin-list-min): the pane's clamp is the popover's, which the bench draws without. -->
+  <section class="w-c-pin-list-min min-w-0" data-probe="pins">
     <PinList
       focused="pin-1"
       hold="ready"

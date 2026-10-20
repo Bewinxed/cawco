@@ -1303,8 +1303,15 @@
   let pinRoom = $state<HTMLDivElement>();
   /** The open card rises as the foot sheet: on a phone, and where the well can't hold it beside the open panel. */
   const cardSheet = $derived(sheet || (stacked && listOpen));
-  /** The panel stands aside while a card stands at the foot, and comes back as it was (its tab, its scroll) when the card closes. */
-  const listAway = $derived(listOpen && cardSheet && !!cardPin);
+  /**
+   * The panel stands aside while a card stands at the foot, and while the
+   * page asks for a place (PlacePick takes the well: what asks stands
+   * clear, The Open Page Rule), and comes back as it was (its tab, its
+   * scroll) when either ends.
+   */
+  const listAway = $derived(
+    listOpen && ((cardSheet && !!cardPin) || !!picking)
+  );
   /** The panel's tab and its rows' scroll, kept while it stands aside. */
   let listFilter = $state<"open" | "resolved">("open");
   let listScroll = $state(0);
