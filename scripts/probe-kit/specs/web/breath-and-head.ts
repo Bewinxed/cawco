@@ -376,6 +376,46 @@ async function sideHead(kit: Kit, bench: string): Promise<void> {
       face.size === face.wantSize,
     JSON.stringify(face)
   );
+  // A head control is the kit's sm ghost (DESIGN.md: each the `sm` ghost;
+  // Ghost: transparent until hovered): 30px, no fill at rest, the hover
+  // fill under the pointer, the strong ink. Its transition is run to its
+  // end before each read.
+  const CLOSE = '[data-card="file"] [data-slot="close"]';
+  const ghost = async () =>
+    await page.evaluate((at) => {
+      for (const run of document.getAnimations()) {
+        run.finish();
+      }
+      const el = document.querySelector<HTMLElement>(at);
+      const probe = document.createElement("span");
+      probe.style.cssText =
+        "display:block;background-color:var(--surface-hover);color:var(--ink-strong);block-size:var(--c-btn-h-sm)";
+      document.body.append(probe);
+      const want = getComputedStyle(probe);
+      const own = el ? getComputedStyle(el) : null;
+      const read = {
+        height: el?.getBoundingClientRect().height ?? null,
+        wantHeight: want.blockSize,
+        background: own?.backgroundColor ?? null,
+        hoverFill: want.backgroundColor,
+        ink: own?.color ?? null,
+        wantInk: want.color,
+      };
+      probe.remove();
+      return read;
+    }, CLOSE);
+  await page.mouse.move(0, 0);
+  const rest = await ghost();
+  await page.hover(CLOSE);
+  const over = await ghost();
+  kit.check(
+    "a head control is the kit's sm ghost: 30px, no fill at rest, the hover fill under the pointer, the strong ink",
+    rest.height === Number.parseFloat(rest.wantHeight) &&
+      rest.background === "rgba(0, 0, 0, 0)" &&
+      over.background === over.hoverFill &&
+      rest.ink === rest.wantInk,
+    JSON.stringify({ rest, over })
+  );
 }
 
 interface PromptHead {

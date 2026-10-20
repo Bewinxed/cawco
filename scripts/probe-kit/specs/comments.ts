@@ -454,6 +454,35 @@ const commentChecks = async (on: On, frame: Frame) => {
     pressed === "true" && edge.outline === edge.accent,
     `aria-selected ${pressed}; outline ${edge.outline}, accent ${edge.accent}`
   );
+  // The mode's segments draw their glyphs alone (TabItem `glyphOnly`): the
+  // name is sr-only, still the tab's accessible name.
+  const label = await comment.evaluate((tab) => {
+    const words = tab.querySelector<HTMLElement>(
+      '[data-slot="tab-item-label"]'
+    );
+    const style = words ? getComputedStyle(words) : null;
+    return {
+      position: style?.position ?? null,
+      width: words?.getBoundingClientRect().width ?? null,
+      clip: style?.clipPath ?? null,
+      text: words?.textContent?.trim() ?? null,
+    };
+  });
+  const named = await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="modes"]'
+    )
+    .getByRole("tab", { name: "Comment", exact: true })
+    .count();
+  on.kit.check(
+    "1: the mode's segments draw their glyphs alone: the name sr-only, still the tab's name",
+    label.position === "absolute" &&
+      label.width === 1 &&
+      label.clip === "inset(50%)" &&
+      label.text === "Comment" &&
+      named === 1,
+    JSON.stringify({ label, named })
+  );
 
   const b = await screenBox(on, frame, "#para");
   await on.page.mouse.click(b.x + b.w * 0.3, b.y + b.h / 2);

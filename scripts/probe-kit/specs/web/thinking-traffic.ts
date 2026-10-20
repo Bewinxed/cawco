@@ -383,6 +383,50 @@ async function lifecycle(kit: Kit, view: View, observer: string) {
   await page.close();
 }
 
+/** Each ink a step's glyph takes (ThinkingStep `ink`, MoveWait's phases), against its token. */
+const INK_TOKENS = {
+  done: "--status-done-glyph",
+  active: "--ink-strong",
+  fail: "--status-fail-glyph",
+  attn: "--status-attn-glyph",
+  muted: "--ink-muted",
+} as const;
+
+async function stepInk(kit: Kit) {
+  const page = await kit.page("desk", { theme: "light" });
+  await open(
+    page,
+    `${await kit.bench()}/motion/step-ink`,
+    '[data-ink] [data-slot="thinking-step-icon"]'
+  );
+  const read = await page.evaluate(
+    (tokens) =>
+      Object.entries(tokens).map(([ink, token]) => {
+        const cell = document.querySelector(
+          `[data-ink="${ink}"] [data-slot="thinking-step-icon"]`
+        );
+        const probe = document.createElement("span");
+        probe.style.color = `var(${token})`;
+        document.body.append(probe);
+        const want = getComputedStyle(probe).color;
+        probe.remove();
+        return {
+          ink,
+          token,
+          got: cell ? getComputedStyle(cell).color : null,
+          want,
+        };
+      }),
+    INK_TOKENS
+  );
+  kit.check(
+    "a step's glyph takes its ink's token: done, running, failed, waiting on you, stopped",
+    read.length === 5 && read.every((one) => one.got === one.want),
+    JSON.stringify(read)
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "thinking-traffic",
   run: async (kit) => {
@@ -394,6 +438,7 @@ const spec: Spec = {
       // biome-ignore lint/performance/noAwaitInLoops: each view's scenario runs alone, timed
       await lifecycle(kit, view, observer);
     }
+    await stepInk(kit);
   },
 };
 export default spec;
