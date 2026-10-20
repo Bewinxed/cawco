@@ -15,6 +15,12 @@
  *   (§5.4). It stands in for each harness's built-in plan mode, which every
  *   session is denied along with its own list (`OWN_LIST_DENIED`).
  *
+ * - **The person's changes** ({@link PlanEdit}): a step reworded, added,
+ *   removed, commented on, ticked or moved, recorded on the plan as a
+ *   {@link PlanChange} in their words, and told to whoever the plan answers
+ *   to (hub plan-changes.ts): the session itself, the session that delegated
+ *   it, or a task attempt's Caw.
+ *
  * Live, a session's followers hear it as AG-UI's state events
  * (https://docs.ag-ui.com/spec/1.0/basic): a snapshot when they subscribe or
  * the plan is replaced, else an RFC 6902 JSON Patch against the last one,
@@ -32,15 +38,110 @@ export type PlanStepStatus = (typeof PLAN_STEP_STATUSES)[number];
 export const PLAN_STEP_PRIORITIES = ["high", "medium", "low"] as const;
 export type PlanStepPriority = (typeof PLAN_STEP_PRIORITIES)[number];
 
+/** The person's comment on a step, in their words. */
+export interface PlanComment {
+  /** When they wrote it, ISO 8601. */
+  at: string;
+  text: string;
+}
+
+/**
+ * A step waiting on the person's choice: the card it asked on a decision
+ * page, set by the session as it asks (`todo_write`'s `waitsOn`). The plan
+ * draws it "Waiting on you" with a link to the card; it stops waiting when
+ * the page's Send carries a pick for that card.
+ */
+export interface PlanWait {
+  /** The page's artifact id. */
+  artifactId: string;
+  /** The decision's id on the page (`data-cawco-choice`, an OpenUI `Decision`'s id). */
+  card: string;
+}
+
 /** One step of a session's plan: an ACP plan entry, with an id and a nesting depth. */
 export interface PlanStep {
+  /** The person's comments on it, oldest first; kept by id across the session's writes. */
+  comments?: PlanComment[];
   content: string;
   /** Nesting by indent: 0 for a top-level step, one more than its parent's for a sub-step. */
   depth: number;
-  /** Stable within one list: the writer's, or the step's place. */
+  /** Stable within one list: the writer's, the step's place, or `you-…` for one the person added. */
   id: string;
   priority?: PlanStepPriority;
   status: PlanStepStatus;
+  /** It waits on the person's pick on a decision page. */
+  waitsOn?: PlanWait;
+}
+
+/** The person's changes to a plan, by what they do. */
+export const PLAN_EDIT_KINDS = [
+  "reword",
+  "add",
+  "remove",
+  "comment",
+  "tick",
+  "move",
+] as const;
+export type PlanEditKind = (typeof PLAN_EDIT_KINDS)[number];
+
+/**
+ * The changes that start an idle session (a change to the work); a tick or a
+ * move is recorded and heard on its next turn.
+ */
+export const PLAN_WAKING_EDITS: ReadonlySet<PlanEditKind> = new Set([
+  "reword",
+  "add",
+  "remove",
+  "comment",
+]);
+
+/**
+ * How long after the person's last waking change an idle session is started,
+ * all the changes of that window going as one message (the owner's pick,
+ * 2026-10-20: "starts it working 3 seconds after your last edit").
+ */
+export const PLAN_WAKE_QUIET_MS = 3000;
+
+/** A person's change to a session's plan, as `POST /api/instances/:id/plan/edits` takes it. */
+export type PlanEdit =
+  | { kind: "reword"; step: string; content: string }
+  /** `after`: the step it follows, at that step's depth; absent, the plan's end. */
+  | { kind: "add"; content: string; after?: string }
+  | { kind: "remove"; step: string }
+  | { kind: "comment"; step: string; text: string }
+  | { kind: "tick"; step: string; done: boolean }
+  /** One place up (-1) or down (1) among the steps at its depth, its sub-steps with it. */
+  | { kind: "move"; step: string; by: -1 | 1 };
+
+/**
+ * Who hears a change to a session's plan: the session itself, the session
+ * that delegated it (a delegate's plan is its parent's to pass on), or the
+ * project's Caw (a task attempt's plan: he dispatched it).
+ */
+export type PlanReceiver =
+  | { kind: "session"; instanceId: string }
+  | { kind: "caw"; projectId: string };
+
+/** A person's change, recorded on the plan in their words and told to its receiver. */
+export interface PlanChange {
+  /** When the person made it, ISO 8601. */
+  at: string;
+  id: string;
+  kind: PlanEditKind;
+  /** The step it changed (the step added, for `add`). */
+  step: string;
+  to: PlanReceiver;
+  /** When it went to {@link to} in a message, ISO 8601; absent while it waits. */
+  toldAt?: string;
+  /** Why it reached no one, when nothing could take it. */
+  undelivered?: string;
+  /** The step's words before the change; for `add`, the step it follows ("" at the top). */
+  was: string;
+  /**
+   * The person's words: the new words, the added step, the comment; `done` or
+   * `not done` for a tick; `up` or `down` for a move; "" for a removal.
+   */
+  words: string;
 }
 
 /** The session's spec, as it last wrote it. */
@@ -72,6 +173,8 @@ export interface TaskTodo {
  * a client's copy equal to.
  */
 export interface SessionPlan {
+  /** The person's latest changes to it, newest last. */
+  changes?: PlanChange[];
   /**
    * Always `cawco`: the steps are CawCo's list on every harness. Still sent
    * because the apps on TestFlight 20261015 through 20261018 decode it as

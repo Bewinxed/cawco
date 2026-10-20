@@ -183,6 +183,7 @@ import {
   openrouterConnection,
   type PriorConversation,
   parkedAsks,
+  planChanges,
   plugins,
   projectAccounts,
   projectOffers,
@@ -355,6 +356,7 @@ export type PushDeviceRow = Omit<
 > & { key: string; secret: string };
 export type ProjectOfferRow = typeof projectOffers.$inferSelect;
 export type SessionPlanRow = typeof sessionPlans.$inferSelect;
+export type PlanChangeRow = typeof planChanges.$inferSelect;
 /** What a session has done that taints its memory notes (memory.ts), its open subagents with it. */
 export type SessionTaintRow = typeof sessionTaints.$inferSelect & {
   subagents: OpenSubagent[];
@@ -711,6 +713,11 @@ export interface DbShape {
   readonly clearOpenRouterConnection: () => void;
   /** Closes the connection: the hub's lifetime's last release (lifetime.ts). */
   readonly close: () => void;
+  /** Marks changes told (`at`), or reaching no one (`undelivered`). */
+  readonly closePlanChanges: (
+    ids: readonly string[],
+    outcome: { at: Date } | { undelivered: string }
+  ) => void;
   /** The session's turn ended. */
   readonly closeTurn: (id: string) => void;
   /** A receipt for the current row's decision; deletes are finalized here. */
@@ -1497,6 +1504,8 @@ export interface DbShape {
       continuedInto?: string;
     }
   ) => PublicInstanceRow | undefined;
+  /** A plan's latest `limit` changes, oldest first. */
+  readonly planChangesOf: (instanceId: string, limit: number) => PlanChangeRow[];
   /** Each session's preview port, and the fleet's preview mode (preview.ts). */
   readonly previews: PreviewsDb;
   /** The harness conversations a session had before the one it runs now, oldest first (`instance_conversations`). */
@@ -1648,6 +1657,8 @@ export interface DbShape {
     machineId: string,
     openCodeGo: OpenCodeGoLimits | null
   ) => void;
+  /** Keeps one change the person made to a session's plan (plan-changes.ts). */
+  readonly putPlanChange: (row: PlanChangeRow) => void;
   readonly putPlugin: (plugin: {
     id: string;
     enabled?: boolean;
@@ -2109,6 +2120,8 @@ export interface DbShape {
     status: "moving" | "error",
     lastError?: string
   ) => boolean;
+  /** The plan's own session has written its steps, or heard why a write was refused. */
+  readonly settlePlanChanges: (instanceId: string) => void;
   readonly settleRemovedSession: (id: string, present: boolean) => void;
   readonly settleUnavailableRecovery: (id: string) => boolean;
   readonly setUpstreamPosts: (posts: UpstreamPosts) => void;
@@ -2244,6 +2257,12 @@ export interface DbShape {
    * is this hub's, and a source that came back heals without a refresh.
    */
   readonly unresolvedPlugins: () => string[];
+  /** A plan's changes its own session has not written its steps over since. */
+  readonly unsettledPlanChanges: (instanceId: string) => PlanChangeRow[];
+  /** What `receiver` is still owed, oldest first: not told, and nothing said it could not be. */
+  readonly untoldPlanChanges: (receiver: string) => PlanChangeRow[];
+  /** Every receiver still owed a change. */
+  readonly untoldPlanReceivers: () => string[];
   /** Moves one job; the row as it now is, or undefined when it is gone. */
   readonly updateContinuation: (
     id: string,
@@ -7085,6 +7104,76 @@ const make = async (path: string): Promise<DbShape> => {
         .from(sessionPlans)
         .where(eq(sessionPlans.instanceId, instanceId))
         .get(),
+    putPlanChange: (row) => {
+      db.insert(planChanges).values(row).run();
+    },
+    planChangesOf: (instanceId, limit) =>
+      db
+        .select()
+        .from(planChanges)
+        .where(eq(planChanges.instanceId, instanceId))
+        .orderBy(desc(planChanges.at), desc(planChanges.id))
+        .limit(limit)
+        .all()
+        .reverse(),
+    untoldPlanChanges: (receiver) =>
+      db
+        .select()
+        .from(planChanges)
+        .where(
+          and(
+            eq(planChanges.receiver, receiver),
+            isNull(planChanges.toldAt),
+            isNull(planChanges.undelivered)
+          )
+        )
+        .orderBy(asc(planChanges.at), asc(planChanges.id))
+        .all(),
+    untoldPlanReceivers: () =>
+      db
+        .selectDistinct({ receiver: planChanges.receiver })
+        .from(planChanges)
+        .where(
+          and(isNull(planChanges.toldAt), isNull(planChanges.undelivered))
+        )
+        .all()
+        .map((row) => row.receiver),
+    closePlanChanges: (ids, outcome) => {
+      if (ids.length === 0) {
+        return;
+      }
+      db.update(planChanges)
+        .set(
+          "at" in outcome
+            ? { toldAt: outcome.at, undelivered: null }
+            : { undelivered: outcome.undelivered, toldAt: null }
+        )
+        .where(inArray(planChanges.id, [...ids]))
+        .run();
+    },
+    unsettledPlanChanges: (instanceId) =>
+      db
+        .select()
+        .from(planChanges)
+        .where(
+          and(
+            eq(planChanges.instanceId, instanceId),
+            eq(planChanges.settled, false)
+          )
+        )
+        .orderBy(asc(planChanges.at), asc(planChanges.id))
+        .all(),
+    settlePlanChanges: (instanceId) => {
+      db.update(planChanges)
+        .set({ settled: true })
+        .where(
+          and(
+            eq(planChanges.instanceId, instanceId),
+            eq(planChanges.settled, false)
+          )
+        )
+        .run();
+    },
     putSessionSteps: (instanceId, steps) => {
       const updatedAt = new Date();
       db.insert(sessionPlans)

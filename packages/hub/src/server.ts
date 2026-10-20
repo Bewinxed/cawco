@@ -261,6 +261,7 @@ import {
   namedAccount,
   PAIRING_REQUIRED,
   PLACEMENT_STRATEGIES,
+  PLAN_ORIGIN,
   type PlacementPreview,
   type PlacementStrategy,
   PREVIEW_START,
@@ -664,6 +665,12 @@ import {
   place as placeAccount,
   unreportedHarnessRefusal,
 } from "./placement";
+import {
+  createPlanChanges,
+  type PlanChanges,
+  type PlanTold,
+  planChangeRoutes,
+} from "./plan-changes";
 import { createPlans, planRoutes } from "./plans";
 import {
   isHubDirectory,
@@ -7862,6 +7869,7 @@ export const createServer = (
       return;
     }
     tellForkFirst(envelope);
+    tellPlanFirst(envelope);
     return deliverToSession(envelope, ahead);
   };
 
@@ -8005,6 +8013,51 @@ export const createServer = (
             message: { role: "user", content: notice },
             parent_tool_use_id: null,
             origin: FORK_ORIGIN,
+            shouldQuery: false,
+          },
+        },
+      },
+      false
+    );
+  };
+
+  /**
+   * The person's changes to the plans a session hears of (plan-changes.ts),
+   * set once the plans are; until then nothing is owed.
+   */
+  let planChanges: PlanChanges | undefined;
+  /**
+   * A send that starts a turn goes behind what its session is owed of the
+   * person's plan changes (a tick or a move on it while it was idle; on a
+   * project's Caw, his project's task plans): one note its turn reads first,
+   * whoever sends that turn. The plan's own words go as they are.
+   */
+  const tellPlanFirst = ({ machineId, payload }: Envelope<SendPayload>) => {
+    const { instanceId, message } = payload;
+    if (
+      isKeepAlive(message) ||
+      !isQuerySend(payload) ||
+      (message.origin.kind === "system" && message.origin.name === PLAN_ORIGIN)
+    ) {
+      return;
+    }
+    const words = planChanges?.foldInto(instanceId);
+    if (!words) {
+      return;
+    }
+    deliverToSession(
+      {
+        verb: "send",
+        machineId,
+        instanceId,
+        payload: {
+          instanceId,
+          message: {
+            type: "user",
+            uuid: crypto.randomUUID(),
+            message: { role: "user", content: words },
+            parent_tool_use_id: null,
+            origin: { kind: "system", name: PLAN_ORIGIN },
             shouldQuery: false,
           },
         },
@@ -11840,8 +11893,10 @@ export const createServer = (
       const refused = await dropPage(instance, projectId, name);
       return refused && { status: refused.code, refused: refused.refused };
     },
-    sending: (instance, artifact, state) =>
-      applySetupPicks(artifact, instance.projectId, state, {
+    sending: (instance, artifact, state) => {
+      // A step of the session's plan that waited on a card picked here stops waiting.
+      plans.clearWaits(instance.id, artifact.id, new Set(Object.keys(state)));
+      return applySetupPicks(artifact, instance.projectId, state, {
         fleet: (choices) => setFleetChoices(fleetChoices, choices),
         // Set up opens the relay's journey, and its row stands in Needs you;
         // Later only answers the card.
@@ -11867,7 +11922,8 @@ export const createServer = (
         place: async (projectId, place) => {
           await addProjectPlace(projectId, place.machineId, place.path);
         },
-      }),
+      });
+    },
     showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
     listing: (instance) => browsers.listed(instance),
     // The same open, its list without what went: no pane reloads.
@@ -21277,6 +21333,117 @@ export const createServer = (
     plan: (instanceId) => plans.read(instanceId),
     tasks,
   });
+  /**
+   * The person's plan changes to a session, through the one send path as
+   * their own words go: taken, or refused in its words; `ended` when it
+   * cannot go on (its conversation gone, or its workspace retired for
+   * good), which a new session follows (plan-changes.ts).
+   */
+  const tellPlan = (instanceId: string, text: string): PlanTold => {
+    const origin = { kind: "system" as const, name: PLAN_ORIGIN };
+    const refusal = inputRefusal(instanceId, origin);
+    if (refusal?.gone || refusal?.refusal?.kind === "workspace-archived") {
+      return { kind: "ended", reason: refusal.reason };
+    }
+    if (refusal) {
+      return { kind: "refused", reason: refusal.reason };
+    }
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!row) {
+      return { kind: "refused", reason: "This session is gone." };
+    }
+    try {
+      const record = deliverSend({
+        verb: "send",
+        machineId: row.machineId,
+        instanceId,
+        payload: {
+          instanceId,
+          message: {
+            type: "user",
+            uuid: crypto.randomUUID(),
+            message: { role: "user", content: text },
+            parent_tool_use_id: null,
+            origin,
+          },
+        },
+      });
+      return record?.state === "failed"
+        ? { kind: "refused", reason: record.reason ?? "The send failed." }
+        : { kind: "taken" };
+    } catch (error) {
+      return {
+        kind: "refused",
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
+  };
+  /**
+   * The session that goes on from one that cannot (plan-changes.ts): in its
+   * project, on its machine, in its folder (its project's checkout there
+   * when its workspace is gone), on its harness and model, under its parent;
+   * its plan copied, opening on `opening` and the old session's records.
+   */
+  const goOnFrom = async (row: InstanceRow, opening: string) => {
+    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+    const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
+    const cwd =
+      workspace?.state === "archived"
+        ? db
+            .project(row.projectId ?? "")
+            ?.places.find(
+              (place) =>
+                place.kind === "checkout" && place.machineId === row.machineId
+            )?.path
+        : row.cwd;
+    if (!cwd) {
+      throw new Error(
+        `its workspace is gone, and its project has no checkout on ${machineName(row.machineId)}`
+      );
+    }
+    const instanceId = crypto.randomUUID();
+    await spawnFromHub(
+      row.machineId,
+      {
+        instanceId,
+        cwd,
+        harness: row.harness,
+        ...(row.model ? { model: row.model } : {}),
+        ...(row.projectId ? { projectId: row.projectId } : {}),
+        ...(row.parentInstanceId
+          ? { parent: { instanceId: row.parentInstanceId } }
+          : {}),
+        title: `${sessionName(row)} (continued)`,
+        spawnedBy: { instanceId: row.id },
+      },
+      "mainline",
+      row.permissionMode ?? undefined
+    );
+    plans.copySteps(row.id, instanceId);
+    const told = tellPlan(
+      instanceId,
+      `${opening}\n\n${await openItems.read(row.id)}`
+    );
+    if (told.kind !== "taken") {
+      throw new Error(told.reason);
+    }
+    return instanceId;
+  };
+  // The person's changes to a plan, and who hears them when (plan-changes.ts).
+  planChanges = createPlanChanges({
+    db,
+    busy: (instanceId) => pulses.get(instanceId)?.busy === true,
+    goOnFrom,
+    lifetime,
+    plans,
+    tell: tellPlan,
+    wakeCaw: async (projectId, text) => {
+      const woke = await caw.wakeOnce(projectId, { by: "you", text });
+      return woke.woke ? undefined : woke.why.words;
+    },
+  });
+  planChanges.resume();
+  const changesOfPlans = planChanges;
   // A routine moves a task on once its stage's hold is over (waits.ts).
   const waits = createWaits({
     lifetime,
@@ -21949,7 +22116,7 @@ export const createServer = (
       dispatcher.retryAttempt(projectId, ref, parent),
     projectFromSession: (actor) =>
       projectOffers.accept(actor.id, sessionActor(actor)),
-    writePlan: (actor, written) => plans.write(actor, written),
+    writePlan: (actor, written) => changesOfPlans.written(actor, written),
     delegationTree: (actor, include) => delegationTree.read(actor, include),
     cawTools: (actor, toolUseId) => caw.tools(actor, toolUseId),
     routineTools: (actor, toolUseId) => routines.tools(actor, toolUseId),
@@ -24040,6 +24207,7 @@ export const createServer = (
         lfsOfferRoutes(lfsOffers),
         starterRoutes(projectStarters),
         planRoutes(plans),
+        planChangeRoutes(changesOfPlans),
         dispatchRoutes(dispatcher),
         cawRoutes(caw),
         phoneRequestRoutes(jevTasks),
