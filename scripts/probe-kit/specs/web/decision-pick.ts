@@ -48,6 +48,10 @@
  *    pointer flies each chosen option's keycap and label from its own chip
  *    to its own place in the head on the fold's clock, each source hidden
  *    while its copy flies.
+ * 8. The reader's own scroll ends the ride: a 200px wheel (1440) or touch
+ *    drag (390) at ½ of the fold's held clock, then played on, the scroll
+ *    stays where the reader put it on every frame, and the fold and the
+ *    flight still land (L489, L491-492).
  *
  *   bun scripts/probe-kit/run.ts web decision-pick
  */
@@ -1036,6 +1040,163 @@ async function manyLeg(
   await page.close();
 }
 
+/**
+ * 8. The reader's scroll ends the ride (DESIGN.md L489, The Interruptible
+ * Rule; L491-492): a pointer's pick folds the card, and at ½ of its held
+ * clock the reader scrolls 200px (a real wheel at 1440, a touch drag at 390,
+ * through the DevTools input domain). Played on, the scroll stays where the
+ * reader put it on every frame, and the fold and the chosen option's flight
+ * still land.
+ */
+async function readerLeg(
+  kit: Kit,
+  url: string,
+  view: (typeof LEGS)[number]["view"],
+  theme: (typeof LEGS)[number]["theme"],
+  label: string
+) {
+  const page = await kit.page(view, { theme, init: [CAWCO_BRIDGE] });
+  await page.goto(url, { waitUntil: "load" });
+  await page.waitForFunction(
+    () => document.querySelectorAll(".diagram svg").length >= 2,
+    undefined,
+    { timeout: 30_000 }
+  );
+  await settle(page, 600);
+  await toOption(page, "path", "direct");
+  const clock = await Clock.on(page);
+  const chosen = await clock.catchRuns(
+    () => pressOn(page.locator('#decision-path [data-option="direct"]'), view),
+    '#decision-path [data-option="direct"]'
+  );
+  await clock.catchRuns(
+    async () => {
+      await clock.playOn(chosen);
+      await page.waitForFunction(
+        () =>
+          document
+            .getElementById("decision-path")
+            ?.hasAttribute("data-decided"),
+        undefined,
+        { timeout: 5000 }
+      );
+    },
+    "#decision-path",
+    5000
+  );
+  await clock.seek(0.5);
+  const half = await foldOf(page, "path");
+  const size = page.viewportSize() ?? { width: 390, height: 844 };
+  const cdp = await page.context().newCDPSession(page);
+  await page.evaluate(() => {
+    const heard: string[] = [];
+    (window as unknown as { kitGesture: string[] }).kitGesture = heard;
+    for (const type of [
+      "touchstart",
+      "touchmove",
+      "touchend",
+      "wheel",
+      "scroll",
+      "pointerdown",
+      "pointermove",
+    ]) {
+      addEventListener(type, () => heard.push(type), {
+        capture: true,
+        passive: true,
+      });
+    }
+  });
+  const x = Math.round(size.width / 2);
+  const y = Math.round(size.height * 0.7);
+  if (view === "phone") {
+    // A finger dragging 200px up the screen, a move a frame: raw touch input
+    // (the input domain's synthesized touch gesture pans nothing in this
+    // emulation, even at rest: 817 → 817, where this drag goes 817 → 1019).
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x, y }],
+    });
+    for (let step = 1; step <= 20; step += 1) {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x, y: y - step * 10 }],
+      });
+      await page.waitForTimeout(16);
+    }
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+  } else {
+    await cdp.send("Input.synthesizeScrollGesture", {
+      x,
+      y,
+      yDistance: -200,
+      gestureSourceType: "mouse",
+      speed: 1200,
+    });
+  }
+  await settle(page, 300);
+  const gesture = [
+    ...new Set(
+      await page.evaluate(
+        () => (window as unknown as { kitGesture: string[] }).kitGesture
+      )
+    ),
+  ];
+  const placed = await foldOf(page, "path");
+  // Played on: every frame's scroll until the fold has landed.
+  const played = page.evaluate(
+    () =>
+      new Promise<number[]>((done) => {
+        const seen: number[] = [];
+        const body = document.querySelector("#decision-path .dp-body");
+        const step = () => {
+          seen.push(scrollY);
+          if ((body?.getAnimations().length ?? 0) === 0 && seen.length > 2) {
+            done(seen);
+            return;
+          }
+          requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      })
+  );
+  await clock.release();
+  const frames = await played;
+  await settle(page, 300);
+  const landed = await foldOf(page, "path");
+  const flight = await flightOf(page, "path", "direct");
+  const moved = Math.abs(placed.scroll - half.scroll);
+  const kept = frames.every((at) => Math.abs(at - placed.scroll) <= 1);
+  kit.check(
+    `${label}: the reader's ${view === "phone" ? "touch drag" : "wheel"} of 200px at ½ of the fold ends the ride: the scroll stays where they put it on every frame after, and the fold and the chosen option's flight still land`,
+    moved >= 150 &&
+      kept &&
+      Math.abs(landed.scroll - placed.scroll) <= 1 &&
+      landed.decided &&
+      landed.body < 0.5 &&
+      flight.transform === "none" &&
+      !!flight.copy &&
+      !!flight.header &&
+      flight.copy.y >= flight.header.y - 0.5,
+    JSON.stringify({
+      gesture,
+      atHalf: half.scroll,
+      afterReader: placed.scroll,
+      moved,
+      frames,
+      landed: { scroll: landed.scroll, card: landed.card, body: landed.body },
+      flight: {
+        transform: flight.transform,
+        copy: flight.copy,
+        header: flight.header,
+      },
+    })
+  );
+  await page.close();
+}
+
 /** 6. Reduced motion. */
 async function stillLeg(
   kit: Kit,
@@ -1147,6 +1308,7 @@ const spec: Spec = {
         await keyLeg(kit, url, view, theme, label);
         await stillLeg(kit, url, view, theme, label);
         await manyLeg(kit, stage.pageUrl(MANY, theme), view, theme, label);
+        await readerLeg(kit, url, view, theme, label);
       }
     } finally {
       await stage.stop();
