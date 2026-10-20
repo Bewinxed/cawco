@@ -300,7 +300,7 @@
             aria-label="Project name"
             autocomplete="off"
             autofocus
-            class="focus-inset -mx-space-1 block w-full max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-border-control bg-surface-raised px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out read-only:text-ink-muted"
+            class="focus-inset -mx-space-1 block w-[calc(100%+var(--space-1)*2)] overflow-hidden text-ellipsis cursor-text rounded-xs border border-border-control bg-surface-raised px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out read-only:text-ink-muted"
             onblur={() => {
               // Left after a refusal, it stays as typed, the reason under
               // it; Enter or Try again sends it.
@@ -326,7 +326,7 @@
         {:else}
           <button
             data-slot="name"
-            class="press-tint -mx-space-1 block max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
+            class="press-tint -mx-space-1 block max-w-[calc(100%+var(--space-1)*2)] overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
             onclick={editName}
             title="Rename {project.name}"
             type="button"

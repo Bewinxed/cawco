@@ -280,7 +280,7 @@
     <button
       data-slot="attachment"
       aria-label="Open {task.id}: {nameOf(one)}"
-      class="inline-flex items-center gap-space-1 max-w-full min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-c-btn-h-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
+      class="inline-flex items-center gap-space-1 max-w-[calc(100%+var(--space-1)*2)] min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-c-btn-h-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
       onclick={() => onopen?.(task.id)}
       style:--attach-my="calc((1lh - var(--c-btn-h-xs)) / 2)"
       style:--attach-my-coarse="calc((1lh - var(--c-btn-h-lg)) / 2)"
@@ -295,7 +295,7 @@
   {:else}
     <a
       data-slot="attachment"
-      class="inline-flex items-center gap-space-1 max-w-full min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-c-btn-h-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
+      class="inline-flex items-center gap-space-1 max-w-[calc(100%+var(--space-1)*2)] min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-c-btn-h-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
       href={hrefOf(one)}
       rel="noopener"
       style:--attach-my="calc((1lh - var(--c-btn-h-xs)) / 2)"

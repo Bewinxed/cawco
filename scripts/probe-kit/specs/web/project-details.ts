@@ -24,6 +24,11 @@
  *    back at its value: a place whose folder is not absolute (the typed
  *    folder kept); and, for a project the hub no longer records, a landing
  *    and a Review change (404 "This project is no longer recorded").
+ * 5. At 1440, a project's name in its head shows whole when it is its
+ *    column's widest line (a project on its hub folder alone, whose place
+ *    line is short: its text as wide as its box, the press tint's bleed
+ *    costing it nothing), and a name too long for the column ends in an
+ *    ellipsis inside it, its box reaching the column's edge and its bleed.
  *
  *   bun scripts/probe-kit/run.ts web project-details
  */
@@ -172,6 +177,7 @@ interface Setup {
   base: string;
   fleet: KitFleet;
   gone: string;
+  named: string;
   project: { id: string; name: string };
   second: string;
   url: string;
@@ -191,6 +197,7 @@ const setUp = async (kit: Kit): Promise<Setup> => {
   const src = join(fleet.sandbox, "src");
   const second = join(fleet.sandbox, "second");
   const gone = join(fleet.sandbox, "gone");
+  const named = join(fleet.sandbox, "long");
   await writeFile(
     join(home, ".gitconfig"),
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
@@ -201,6 +208,7 @@ const setUp = async (kit: Kit): Promise<Setup> => {
     [src, "details"],
     [second, "details"],
     [gone, "gone"],
+    [named, "long"],
   ] as const) {
     await mkdir(dir, { recursive: true });
     const origin = `https://github.com/probe/${repo}.git`;
@@ -223,6 +231,7 @@ const setUp = async (kit: Kit): Promise<Setup> => {
     base,
     fleet,
     gone,
+    named,
     project,
     second,
     url: `${base}/project/${project.id}`,
@@ -525,6 +534,77 @@ const refusals = async (kit: Kit, { base, fleet, gone }: Setup) => {
   await page.close();
 };
 
+/** One word with no break in it (spaces and hyphens wrap the name instead). */
+const LONG_NAME =
+  "tidewater_harbour_authority_gauges_and_every_buoy_along_the_estuary_monorepo";
+
+/** 5: the name in its head, whole when it fits, ellipsized inside its column when not. */
+const names = async (kit: Kit, { base, fleet, named }: Setup) => {
+  const page = await kit.page("desk");
+  const legs = [
+    // No checkout: its place line is "Its folder on the hub", narrower than
+    // the name, so the name is its column's widest line.
+    { long: false, body: { name: "tidewaterharbour" } },
+    {
+      long: true,
+      body: { name: LONG_NAME, machineId: MACHINE, cwd: named },
+    },
+  ];
+  for (const { long, body } of legs) {
+    const made = await fleet.api<{ id: string }>("/api/projects", body);
+    await open(page, `${base}/project/${made.id}`, LINE);
+    await settle(page, 300);
+    const at = await page.evaluate((selector) => {
+      const button = document.querySelector<HTMLElement>(
+        '[data-slot="project-head"] [data-slot="title"] [data-slot="name"]'
+      );
+      const column = document.querySelector(
+        '[data-slot="project-head"] [data-slot="txt"]'
+      );
+      const line = document.querySelector<HTMLElement>(selector);
+      if (!(button && column && line)) {
+        return null;
+      }
+      const style = getComputedStyle(button);
+      const range = document.createRange();
+      range.selectNodeContents(button);
+      return {
+        text: range.getBoundingClientRect().width,
+        box:
+          button.clientWidth -
+          Number.parseFloat(style.paddingLeft) -
+          Number.parseFloat(style.paddingRight),
+        cut: button.scrollWidth > button.clientWidth,
+        overflow: style.textOverflow,
+        right: button.getBoundingClientRect().right,
+        bleed: Number.parseFloat(style.paddingRight),
+        column: column.getBoundingClientRect().right,
+        line: line.getBoundingClientRect().width,
+      };
+    }, LINE);
+    const detail = JSON.stringify(at);
+    if (long) {
+      kit.check(
+        "1440: a very long name ends in an ellipsis inside its column, its box reaching the column's edge and its bleed",
+        at?.cut === true &&
+          at.overflow === "ellipsis" &&
+          Math.abs(at.right - (at.column + at.bleed)) <= 0.5,
+        detail
+      );
+    } else {
+      kit.check(
+        "1440: a short name, its column's widest line, shows whole: its text as wide as its box",
+        at !== null &&
+          at.text > at.line &&
+          !at.cut &&
+          Math.abs(at.text - at.box) <= 0.5,
+        detail
+      );
+    }
+  }
+  await page.close();
+};
+
 const run = async (kit: Kit) => {
   const setup = await setUp(kit);
   for (const { view, name } of LEGS) {
@@ -534,6 +614,7 @@ const run = async (kit: Kit) => {
   }
   await rows(kit, setup);
   await refusals(kit, setup);
+  await names(kit, setup);
 };
 
 export default { name: "project-details", run } satisfies Spec;
