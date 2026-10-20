@@ -273,6 +273,45 @@ async function wideFades(page: Page, say: Say): Promise<void> {
   );
 }
 
+/** Why the hub's check refuses the program; null when it keeps it. */
+function programRefusal(): string | null {
+  try {
+    checkProgram(PROGRAM);
+    return null;
+  } catch (error) {
+    return (error as Error).message;
+  }
+}
+
+/** The console check's output: the errors heard, then the hub reads set aside. */
+function errorsSaid(errors: string[], hubless: Set<string>): string {
+  const heard = [...new Set(errors)].slice(0, 12).join(" | ") || "none";
+  return `${heard}; set aside: ${[...hubless].join(", ") || "none"}`;
+}
+
+/**
+ * What `page` says went wrong, as it goes: its console errors and thrown
+ * errors, the hub's reads a hub-less stage answers 500 kept apart by route
+ * (caw-panel-page.ts `hubRead`).
+ */
+function heardErrors(page: Page): { errors: string[]; hubless: Set<string> } {
+  const errors: string[] = [];
+  const hubless = new Set<string>();
+  page.on("console", (message) => {
+    if (message.type() !== "error") {
+      return;
+    }
+    const hub = hubRead(message.text(), message.location().url);
+    if (hub) {
+      hubless.add(hub);
+    } else {
+      errors.push(message.text().slice(0, 240));
+    }
+  });
+  page.on("pageerror", (error) => errors.push(error.message.slice(0, 240)));
+  return { errors, hubless };
+}
+
 /**
  * This run's files into OUT: this page's files from the last run out
  * (`caw-panel-*`), this run's in, every other page's captures left as
@@ -313,17 +352,12 @@ const spec: Spec = {
       kit.check(`${leg}: ${assertion}`, ok, output);
     };
 
-    let refusal = "";
-    try {
-      checkProgram(PROGRAM);
-    } catch (error) {
-      refusal = (error as Error).message;
-    }
+    const refusal = programRefusal();
     check(
       "program",
       "the hub's check keeps the program",
-      refusal === "",
-      refusal || "kept"
+      refusal === null,
+      refusal ?? "kept"
     );
     const previews = PROGRAM.split("\n").filter((line) =>
       PREVIEW.test(line)
@@ -344,23 +378,7 @@ const spec: Spec = {
           const leg = `${width === 1440 ? "1440×900" : "390×844"} ${theme}`;
           // With the overlay's bridge, as CawCo shows the page: picks live, no offline notice.
           const page = await kit.page(view, { theme, init: [CAWCO_BRIDGE] });
-          const errors: string[] = [];
-          /** The hub's reads the stage can't answer (it has no hub), each once. */
-          const hubless = new Set<string>();
-          page.on("console", (message) => {
-            if (message.type() !== "error") {
-              return;
-            }
-            const hub = hubRead(message.text(), message.location().url);
-            if (hub) {
-              hubless.add(hub);
-            } else {
-              errors.push(message.text().slice(0, 240));
-            }
-          });
-          page.on("pageerror", (error) =>
-            errors.push(error.message.slice(0, 240))
-          );
+          const { errors, hubless } = heardErrors(page);
           await page.goto(stage.pageUrl(NAME, theme), { waitUntil: "load" });
           await page.waitForSelector("[data-slot=decision]", {
             timeout: 30_000,
@@ -410,7 +428,7 @@ const spec: Spec = {
             leg,
             "no console errors, the page and its canvases, the hub's reads a hub-less stage can't answer aside",
             errors.length === 0,
-            `${[...new Set(errors)].slice(0, 12).join(" | ") || "none"}; set aside: ${[...hubless].join(", ") || "none"}`
+            errorsSaid(errors, hubless)
           );
           // The whole page as the owner scrolls it, window by window (decision-embeds.ts
           // `capturePage`: a full-page shot draws a cross-origin embed past the first window blank).
