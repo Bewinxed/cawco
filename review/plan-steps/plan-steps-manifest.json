@@ -25,28 +25,28 @@
   ],
   "legs": {
     "1440×900 light": {
-      "height": 5788,
+      "height": 5520,
       "drawings": [
         {
           "caption": "1 · One list",
           "top": 198,
           "width": 842,
           "full": true,
-          "tall": 982
+          "tall": 926
         },
         {
           "caption": "2 · Lanes",
-          "top": 1238,
+          "top": 1182,
           "width": 842,
           "full": true,
-          "tall": 980
+          "tall": 916
         },
         {
           "caption": "3 · Crew first",
-          "top": 2276,
+          "top": 2156,
           "width": 842,
           "full": true,
-          "tall": 909
+          "tall": 835
         }
       ],
       "files": [
@@ -59,13 +59,13 @@
           "named": ["Device"],
           "box": {
             "w": 818,
-            "h": 982
+            "h": 926
           },
-          "tall": 982,
+          "tall": 926,
           "frames": [
             {
               "story": "Device",
-              "h": 982,
+              "h": 926,
               "left": 229,
               "right": 589,
               "w": 360,
@@ -85,13 +85,13 @@
           "named": ["Device"],
           "box": {
             "w": 818,
-            "h": 980
+            "h": 916
           },
-          "tall": 980,
+          "tall": 916,
           "frames": [
             {
               "story": "Device",
-              "h": 980,
+              "h": 916,
               "left": 229,
               "right": 589,
               "w": 360,
@@ -111,13 +111,13 @@
           "named": ["Device"],
           "box": {
             "w": 818,
-            "h": 909
+            "h": 835
           },
-          "tall": 909,
+          "tall": 835,
           "frames": [
             {
               "story": "Device",
-              "h": 909,
+              "h": 835,
               "left": 229,
               "right": 589,
               "w": 360,
@@ -137,13 +137,13 @@
           "named": ["Opened"],
           "box": {
             "w": 854,
-            "h": 1260
+            "h": 1186
           },
-          "tall": 1260,
+          "tall": 1186,
           "frames": [
             {
               "story": "Opened",
-              "h": 1260,
+              "h": 1186,
               "left": 247,
               "right": 607,
               "w": 360,
@@ -246,6 +246,12 @@
               "missing": []
             }
           ],
+          "foots": [
+            {
+              "space": 21,
+              "padding": 21
+            }
+          ],
           "acts": [
             {
               "row": "fable-calendar-21c",
@@ -307,6 +313,12 @@
               "missing": []
             }
           ],
+          "foots": [
+            {
+              "space": 21,
+              "padding": 21
+            }
+          ],
           "acts": [
             {
               "row": "fable-calendar-21c",
@@ -355,6 +367,12 @@
             {
               "total": 7,
               "missing": []
+            }
+          ],
+          "foots": [
+            {
+              "space": 21,
+              "padding": 21
             }
           ],
           "acts": [
@@ -419,6 +437,12 @@
               "missing": []
             }
           ],
+          "foots": [
+            {
+              "space": 21,
+              "padding": 21
+            }
+          ],
           "acts": [
             {
               "row": "fable-calendar-21c",
@@ -470,6 +494,7 @@
           "pulseInk": [],
           "columns": [],
           "todos": [],
+          "foots": [],
           "acts": [],
           "cut": []
         },
@@ -522,34 +547,35 @@
           ],
           "columns": [],
           "todos": [],
+          "foots": [],
           "acts": [],
           "cut": []
         }
       }
     },
     "1440×900 dark": {
-      "height": 5788,
+      "height": 5520,
       "drawings": [
         {
           "caption": "1 · One list",
           "top": 198,
           "width": 842,
           "full": true,
-          "tall": 982
+          "tall": 926
         },
         {
           "caption": "2 · Lanes",
-          "top": 1238,
+          "top": 1182,
           "width": 842,
           "full": true,
-          "tall": 980
+          "tall": 916
         },
         {
           "caption": "3 · Crew first",
-          "top": 2276,
+          "top": 2156,
           "width": 842,
           "full": true,
-          "tall": 909
+          "tall": 835
         }
       ],
       "files": [
@@ -562,13 +588,13 @@
           "named": ["Device"],
           "box": {
             "w": 818,
-            "h": 982
+            "h": 926
           },
-          "tall": 982,
+          "tall": 926,
           "frames": [
             {
               "story": "Device",
-              "h": 982,
+              "h": 926,
               "left": 229,
               "right": 589,
               "w": 360,
@@ -588,13 +614,13 @@
           "named": ["Device"],
           "box": {
             "w": 818,
-            "h": 980
+            "h": 916
           },
-          "tall": 980,
+          "tall": 916,
           "frames": [
             {
               "story": "Device",
-              "h": 980,
+              "h": 916,
               "left": 229,
               "right": 589,
               "w": 360,
@@ -614,13 +640,13 @@
           "named": ["Device"],
           "box": {
             "w": 818,
-            "h": 909
+            "h": 835
           },
-          "tall": 909,
+          "tall": 835,
           "frames": [
             {
               "story": "Device",
-              "h": 909,
+              "h": 835,
               "left": 229,
               "right": 589,
               "w": 360,
@@ -640,13 +666,13 @@
           "named": ["Opened"],
           "box": {
             "w": 854,
-            "h": 1260
+            "h": 1186
           },
-          "tall": 1260,
+          "tall": 1186,
           "frames": [
             {
               "story": "Opened",
-              "h": 1260,
+              "h": 1186,
               "left": 247,
               "right": 607,
               "w": 360,
@@ -749,6 +775,12 @@
               "missing": []
             }
           ],
+          "foots": [
+            {
+              "space": 21,
+              "padding": 21
+            }
+          ],
           "acts": [
             {
               "row": "fable-calendar-21c",
@@ -810,6 +842,12 @@
               "missing": []
             }
           ],
+          "foots": [
+            {
+              "space": 21,
+              "padding": 21
+            }
+          ],
           "acts": [
             {
               "row": "fable-calendar-21c",
@@ -858,6 +896,12 @@
             {
               "total": 7,
               "missing": []
+            }
+          ],
+          "foots": [
+            {
+              "space": 21,
+              "padding": 21
             }
           ],
           "acts": [
@@ -922,6 +966,12 @@
               "missing": []
             }
           ],
+          "foots": [
+            {
+              "space": 21,
+              "padding": 21
+            }
+          ],
           "acts": [
             {
               "row": "fable-calendar-21c",
@@ -973,6 +1023,7 @@
           "pulseInk": [],
           "columns": [],
           "todos": [],
+          "foots": [],
           "acts": [],
           "cut": []
         },
@@ -1025,31 +1076,32 @@
           ],
           "columns": [],
           "todos": [],
+          "foots": [],
           "acts": [],
           "cut": []
         }
       }
     },
     "390×844 light": {
-      "height": 6338,
+      "height": 6214,
       "drawings": [
         {
           "caption": "1 · One list",
           "top": 222,
           "width": 334,
           "full": true,
-          "tall": 1073
+          "tall": 1019
         },
         {
           "caption": "2 · Lanes",
-          "top": 1353,
+          "top": 1299,
           "width": 334,
           "full": true,
           "tall": 980
         },
         {
           "caption": "3 · Crew first",
-          "top": 2392,
+          "top": 2338,
           "width": 334,
           "full": true,
           "tall": 906
@@ -1065,13 +1117,13 @@
           "named": ["Device"],
           "box": {
             "w": 310,
-            "h": 1073
+            "h": 1019
           },
-          "tall": 1073,
+          "tall": 1019,
           "frames": [
             {
               "story": "Device",
-              "h": 1073,
+              "h": 1019,
               "left": 0,
               "right": 310,
               "w": 310,
@@ -1143,13 +1195,13 @@
           "named": ["Opened"],
           "box": {
             "w": 338,
-            "h": 1183
+            "h": 1113
           },
-          "tall": 1183,
+          "tall": 1113,
           "frames": [
             {
               "story": "Opened",
-              "h": 1183,
+              "h": 1113,
               "left": 0,
               "right": 338,
               "w": 338,
@@ -1252,6 +1304,12 @@
               "missing": []
             }
           ],
+          "foots": [
+            {
+              "space": 13.7,
+              "padding": 14
+            }
+          ],
           "acts": [
             {
               "row": "fable-calendar-21c",
@@ -1313,6 +1371,12 @@
               "missing": []
             }
           ],
+          "foots": [
+            {
+              "space": 13.7,
+              "padding": 14
+            }
+          ],
           "acts": [
             {
               "row": "fable-calendar-21c",
@@ -1363,6 +1427,12 @@
               "missing": []
             }
           ],
+          "foots": [
+            {
+              "space": 13.7,
+              "padding": 14
+            }
+          ],
           "acts": [
             {
               "row": "fable-calendar-21c",
@@ -1411,6 +1481,12 @@
             {
               "total": 7,
               "missing": []
+            }
+          ],
+          "foots": [
+            {
+              "space": 21,
+              "padding": 21
             }
           ],
           "acts": [
@@ -1464,6 +1540,7 @@
           "pulseInk": [],
           "columns": [],
           "todos": [],
+          "foots": [],
           "acts": [],
           "cut": []
         },
@@ -1516,31 +1593,32 @@
           ],
           "columns": [],
           "todos": [],
+          "foots": [],
           "acts": [],
           "cut": []
         }
       }
     },
     "390×844 dark": {
-      "height": 6338,
+      "height": 6214,
       "drawings": [
         {
           "caption": "1 · One list",
           "top": 222,
           "width": 334,
           "full": true,
-          "tall": 1073
+          "tall": 1019
         },
         {
           "caption": "2 · Lanes",
-          "top": 1353,
+          "top": 1299,
           "width": 334,
           "full": true,
           "tall": 980
         },
         {
           "caption": "3 · Crew first",
-          "top": 2392,
+          "top": 2338,
           "width": 334,
           "full": true,
           "tall": 906
@@ -1556,13 +1634,13 @@
           "named": ["Device"],
           "box": {
             "w": 310,
-            "h": 1073
+            "h": 1019
           },
-          "tall": 1073,
+          "tall": 1019,
           "frames": [
             {
               "story": "Device",
-              "h": 1073,
+              "h": 1019,
               "left": 0,
               "right": 310,
               "w": 310,
@@ -1634,13 +1712,13 @@
           "named": ["Opened"],
           "box": {
             "w": 338,
-            "h": 1183
+            "h": 1113
           },
-          "tall": 1183,
+          "tall": 1113,
           "frames": [
             {
               "story": "Opened",
-              "h": 1183,
+              "h": 1113,
               "left": 0,
               "right": 338,
               "w": 338,
@@ -1743,6 +1821,12 @@
               "missing": []
             }
           ],
+          "foots": [
+            {
+              "space": 13.7,
+              "padding": 14
+            }
+          ],
           "acts": [
             {
               "row": "fable-calendar-21c",
@@ -1804,6 +1888,12 @@
               "missing": []
             }
           ],
+          "foots": [
+            {
+              "space": 13.7,
+              "padding": 14
+            }
+          ],
           "acts": [
             {
               "row": "fable-calendar-21c",
@@ -1854,6 +1944,12 @@
               "missing": []
             }
           ],
+          "foots": [
+            {
+              "space": 13.7,
+              "padding": 14
+            }
+          ],
           "acts": [
             {
               "row": "fable-calendar-21c",
@@ -1902,6 +1998,12 @@
             {
               "total": 7,
               "missing": []
+            }
+          ],
+          "foots": [
+            {
+              "space": 21,
+              "padding": 21
             }
           ],
           "acts": [
@@ -1955,6 +2057,7 @@
           "pulseInk": [],
           "columns": [],
           "todos": [],
+          "foots": [],
           "acts": [],
           "cut": []
         },
@@ -2007,6 +2110,7 @@
           ],
           "columns": [],
           "todos": [],
+          "foots": [],
           "acts": [],
           "cut": []
         }
@@ -2030,9 +2134,9 @@
       "output": "Recommended: Crew first, because it is the stack you asked for: which delegate is working on which step, and how far each has got, shows before you read a single step."
     },
     {
-      "check": "1440×900 light: the options' drawings stand one under another at the card's full width (842px), each captioned with its option, in their order (\"1 · One list\" 842px, \"2 · Lanes\" 842px, \"3 · Crew first\" 842px; drawn at 1, 1, 1; the page 5788px tall)",
+      "check": "1440×900 light: the options' drawings stand one under another at the card's full width (842px), each captioned with its option, in their order (\"1 · One list\" 842px, \"2 · Lanes\" 842px, \"3 · Crew first\" 842px; drawn at 1, 1, 1; the page 5520px tall)",
       "passed": true,
-      "output": "{\"labels\":[\"One list\",\"Lanes\",\"Crew first\"],\"drawings\":[{\"caption\":\"1 · One list\",\"top\":198,\"width\":842,\"full\":true,\"tall\":982},{\"caption\":\"2 · Lanes\",\"top\":1238,\"width\":842,\"full\":true,\"tall\":980},{\"caption\":\"3 · Crew first\",\"top\":2276,\"width\":842,\"full\":true,\"tall\":909}],\"zooms\":[1,1,1]}"
+      "output": "{\"labels\":[\"One list\",\"Lanes\",\"Crew first\"],\"drawings\":[{\"caption\":\"1 · One list\",\"top\":198,\"width\":842,\"full\":true,\"tall\":926},{\"caption\":\"2 · Lanes\",\"top\":1182,\"width\":842,\"full\":true,\"tall\":916},{\"caption\":\"3 · Crew first\",\"top\":2156,\"width\":842,\"full\":true,\"tall\":835}],\"zooms\":[1,1,1]}"
     },
     {
       "check": "1440×900 light: \"Fixed from your pins\" is a section with no pick, its first line \"If one still looks wrong, pin it.\", 4 pins quoted, 3 drawings",
@@ -2058,6 +2162,11 @@
       "check": "1440×900 light: every drawing of the plan shows each of its to-dos (OneList:Device 7 of 7, Lanes:Device 7 of 7, CrewFirst:Device 7 of 7, CrewFirst:Opened 7 of 7)",
       "passed": true,
       "output": "[]"
+    },
+    {
+      "check": "1440×900 light: every drawing's sheet closes on its plan's last row, the space under it the sheet's own bottom padding (OneList:Device 21px for 21px, Lanes:Device 21px for 21px, CrewFirst:Device 21px for 21px, CrewFirst:Opened 21px for 21px)",
+      "passed": true,
+      "output": "[{\"key\":\"OneList:Device\",\"space\":21,\"padding\":21},{\"key\":\"Lanes:Device\",\"space\":21,\"padding\":21},{\"key\":\"CrewFirst:Device\",\"space\":21,\"padding\":21},{\"key\":\"CrewFirst:Opened\",\"space\":21,\"padding\":21}]"
     },
     {
       "check": "1440×900 light: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (OneList fable-calendar-21c, OneList a11y-check-44e, Lanes fable-calendar-21c own line, Lanes a11y-check-44e, CrewFirst fable-calendar-21c, CrewFirst a11y-check-44e, CrewFirst fable-calendar-21c, CrewFirst a11y-check-44e)",
@@ -2120,12 +2229,12 @@
       "output": "1440px of content in a 1440px view"
     },
     {
-      "check": "1440×900 light: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-1440-light-1.png 962 KiB, rows 0–3286, plan-steps-1440-light-2.png 994 KiB, rows 3286–5788; 2880×11576)",
+      "check": "1440×900 light: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-1440-light-1.png 958 KiB, rows 0–3092, plan-steps-1440-light-2.png 992 KiB, rows 3092–5520; 2880×11040)",
       "passed": true,
       "output": "every file whole and within the limit"
     },
     {
-      "check": "1440×900 light: the page's own capture paints every embed (46.6%, 46.6%, 46.6%, 48.9%, 57.5%, 57.6% their commonest colour)",
+      "check": "1440×900 light: the page's own capture paints every embed (46.6%, 46.6%, 46.6%, 48.9%, 57.4%, 57.6% their commonest colour)",
       "passed": true,
       "output": "6 of 6 embeds painted"
     },
@@ -2140,9 +2249,9 @@
       "output": "Recommended: Crew first, because it is the stack you asked for: which delegate is working on which step, and how far each has got, shows before you read a single step."
     },
     {
-      "check": "1440×900 dark: the options' drawings stand one under another at the card's full width (842px), each captioned with its option, in their order (\"1 · One list\" 842px, \"2 · Lanes\" 842px, \"3 · Crew first\" 842px; drawn at 1, 1, 1; the page 5788px tall)",
+      "check": "1440×900 dark: the options' drawings stand one under another at the card's full width (842px), each captioned with its option, in their order (\"1 · One list\" 842px, \"2 · Lanes\" 842px, \"3 · Crew first\" 842px; drawn at 1, 1, 1; the page 5520px tall)",
       "passed": true,
-      "output": "{\"labels\":[\"One list\",\"Lanes\",\"Crew first\"],\"drawings\":[{\"caption\":\"1 · One list\",\"top\":198,\"width\":842,\"full\":true,\"tall\":982},{\"caption\":\"2 · Lanes\",\"top\":1238,\"width\":842,\"full\":true,\"tall\":980},{\"caption\":\"3 · Crew first\",\"top\":2276,\"width\":842,\"full\":true,\"tall\":909}],\"zooms\":[1,1,1]}"
+      "output": "{\"labels\":[\"One list\",\"Lanes\",\"Crew first\"],\"drawings\":[{\"caption\":\"1 · One list\",\"top\":198,\"width\":842,\"full\":true,\"tall\":926},{\"caption\":\"2 · Lanes\",\"top\":1182,\"width\":842,\"full\":true,\"tall\":916},{\"caption\":\"3 · Crew first\",\"top\":2156,\"width\":842,\"full\":true,\"tall\":835}],\"zooms\":[1,1,1]}"
     },
     {
       "check": "1440×900 dark: \"Fixed from your pins\" is a section with no pick, its first line \"If one still looks wrong, pin it.\", 4 pins quoted, 3 drawings",
@@ -2168,6 +2277,11 @@
       "check": "1440×900 dark: every drawing of the plan shows each of its to-dos (OneList:Device 7 of 7, Lanes:Device 7 of 7, CrewFirst:Device 7 of 7, CrewFirst:Opened 7 of 7)",
       "passed": true,
       "output": "[]"
+    },
+    {
+      "check": "1440×900 dark: every drawing's sheet closes on its plan's last row, the space under it the sheet's own bottom padding (OneList:Device 21px for 21px, Lanes:Device 21px for 21px, CrewFirst:Device 21px for 21px, CrewFirst:Opened 21px for 21px)",
+      "passed": true,
+      "output": "[{\"key\":\"OneList:Device\",\"space\":21,\"padding\":21},{\"key\":\"Lanes:Device\",\"space\":21,\"padding\":21},{\"key\":\"CrewFirst:Device\",\"space\":21,\"padding\":21},{\"key\":\"CrewFirst:Opened\",\"space\":21,\"padding\":21}]"
     },
     {
       "check": "1440×900 dark: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (OneList fable-calendar-21c, OneList a11y-check-44e, Lanes fable-calendar-21c own line, Lanes a11y-check-44e, CrewFirst fable-calendar-21c, CrewFirst a11y-check-44e, CrewFirst fable-calendar-21c, CrewFirst a11y-check-44e)",
@@ -2230,7 +2344,7 @@
       "output": "1440px of content in a 1440px view"
     },
     {
-      "check": "1440×900 dark: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-1440-dark-1.png 949 KiB, rows 0–3286, plan-steps-1440-dark-2.png 994 KiB, rows 3286–5788; 2880×11576)",
+      "check": "1440×900 dark: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-1440-dark-1.png 944 KiB, rows 0–3092, plan-steps-1440-dark-2.png 992 KiB, rows 3092–5520; 2880×11040)",
       "passed": true,
       "output": "every file whole and within the limit"
     },
@@ -2250,9 +2364,9 @@
       "output": "Recommended: Crew first, because it is the stack you asked for: which delegate is working on which step, and how far each has got, shows before you read a single step."
     },
     {
-      "check": "390×844 light: the options' drawings stand one under another at the card's full width (334px), each captioned with its option, in their order (\"1 · One list\" 334px, \"2 · Lanes\" 334px, \"3 · Crew first\" 334px; drawn at 0.861, 0.861, 0.861; the page 6338px tall)",
+      "check": "390×844 light: the options' drawings stand one under another at the card's full width (334px), each captioned with its option, in their order (\"1 · One list\" 334px, \"2 · Lanes\" 334px, \"3 · Crew first\" 334px; drawn at 0.861, 0.861, 0.861; the page 6214px tall)",
       "passed": true,
-      "output": "{\"labels\":[\"One list\",\"Lanes\",\"Crew first\"],\"drawings\":[{\"caption\":\"1 · One list\",\"top\":222,\"width\":334,\"full\":true,\"tall\":1073},{\"caption\":\"2 · Lanes\",\"top\":1353,\"width\":334,\"full\":true,\"tall\":980},{\"caption\":\"3 · Crew first\",\"top\":2392,\"width\":334,\"full\":true,\"tall\":906}],\"zooms\":[0.861,0.861,0.861]}"
+      "output": "{\"labels\":[\"One list\",\"Lanes\",\"Crew first\"],\"drawings\":[{\"caption\":\"1 · One list\",\"top\":222,\"width\":334,\"full\":true,\"tall\":1019},{\"caption\":\"2 · Lanes\",\"top\":1299,\"width\":334,\"full\":true,\"tall\":980},{\"caption\":\"3 · Crew first\",\"top\":2338,\"width\":334,\"full\":true,\"tall\":906}],\"zooms\":[0.861,0.861,0.861]}"
     },
     {
       "check": "390×844 light: \"Fixed from your pins\" is a section with no pick, its first line \"If one still looks wrong, pin it.\", 4 pins quoted, 3 drawings",
@@ -2278,6 +2392,11 @@
       "check": "390×844 light: every drawing of the plan shows each of its to-dos (OneList:Device 7 of 7, Lanes:Device 7 of 7, CrewFirst:Device 7 of 7, CrewFirst:Opened 7 of 7)",
       "passed": true,
       "output": "[]"
+    },
+    {
+      "check": "390×844 light: every drawing's sheet closes on its plan's last row, the space under it the sheet's own bottom padding (OneList:Device 13.7px for 14px, Lanes:Device 13.7px for 14px, CrewFirst:Device 13.7px for 14px, CrewFirst:Opened 21px for 21px)",
+      "passed": true,
+      "output": "[{\"key\":\"OneList:Device\",\"space\":13.7,\"padding\":14},{\"key\":\"Lanes:Device\",\"space\":13.7,\"padding\":14},{\"key\":\"CrewFirst:Device\",\"space\":13.7,\"padding\":14},{\"key\":\"CrewFirst:Opened\",\"space\":21,\"padding\":21}]"
     },
     {
       "check": "390×844 light: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (OneList fable-calendar-21c, OneList a11y-check-44e, Lanes fable-calendar-21c own line, Lanes a11y-check-44e, CrewFirst fable-calendar-21c, CrewFirst a11y-check-44e)",
@@ -2340,12 +2459,12 @@
       "output": "390px of content in a 390px view"
     },
     {
-      "check": "390×844 light: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-390-light-1.png 977 KiB, rows 0–4055, plan-steps-390-light-2.png 673 KiB, rows 4055–6338; 780×12676)",
+      "check": "390×844 light: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-390-light-1.png 976 KiB, rows 0–4001, plan-steps-390-light-2.png 671 KiB, rows 4001–6214; 780×12428)",
       "passed": true,
       "output": "every file whole and within the limit"
     },
     {
-      "check": "390×844 light: the page's own capture paints every embed (93.1%, 92.2%, 92.8%, 91.8%, 85.5%, 56.9% their commonest colour)",
+      "check": "390×844 light: the page's own capture paints every embed (92.8%, 92.2%, 92.8%, 91.2%, 85.5%, 56.9% their commonest colour)",
       "passed": true,
       "output": "6 of 6 embeds painted"
     },
@@ -2360,9 +2479,9 @@
       "output": "Recommended: Crew first, because it is the stack you asked for: which delegate is working on which step, and how far each has got, shows before you read a single step."
     },
     {
-      "check": "390×844 dark: the options' drawings stand one under another at the card's full width (334px), each captioned with its option, in their order (\"1 · One list\" 334px, \"2 · Lanes\" 334px, \"3 · Crew first\" 334px; drawn at 0.861, 0.861, 0.861; the page 6338px tall)",
+      "check": "390×844 dark: the options' drawings stand one under another at the card's full width (334px), each captioned with its option, in their order (\"1 · One list\" 334px, \"2 · Lanes\" 334px, \"3 · Crew first\" 334px; drawn at 0.861, 0.861, 0.861; the page 6214px tall)",
       "passed": true,
-      "output": "{\"labels\":[\"One list\",\"Lanes\",\"Crew first\"],\"drawings\":[{\"caption\":\"1 · One list\",\"top\":222,\"width\":334,\"full\":true,\"tall\":1073},{\"caption\":\"2 · Lanes\",\"top\":1353,\"width\":334,\"full\":true,\"tall\":980},{\"caption\":\"3 · Crew first\",\"top\":2392,\"width\":334,\"full\":true,\"tall\":906}],\"zooms\":[0.861,0.861,0.861]}"
+      "output": "{\"labels\":[\"One list\",\"Lanes\",\"Crew first\"],\"drawings\":[{\"caption\":\"1 · One list\",\"top\":222,\"width\":334,\"full\":true,\"tall\":1019},{\"caption\":\"2 · Lanes\",\"top\":1299,\"width\":334,\"full\":true,\"tall\":980},{\"caption\":\"3 · Crew first\",\"top\":2338,\"width\":334,\"full\":true,\"tall\":906}],\"zooms\":[0.861,0.861,0.861]}"
     },
     {
       "check": "390×844 dark: \"Fixed from your pins\" is a section with no pick, its first line \"If one still looks wrong, pin it.\", 4 pins quoted, 3 drawings",
@@ -2388,6 +2507,11 @@
       "check": "390×844 dark: every drawing of the plan shows each of its to-dos (OneList:Device 7 of 7, Lanes:Device 7 of 7, CrewFirst:Device 7 of 7, CrewFirst:Opened 7 of 7)",
       "passed": true,
       "output": "[]"
+    },
+    {
+      "check": "390×844 dark: every drawing's sheet closes on its plan's last row, the space under it the sheet's own bottom padding (OneList:Device 13.7px for 14px, Lanes:Device 13.7px for 14px, CrewFirst:Device 13.7px for 14px, CrewFirst:Opened 21px for 21px)",
+      "passed": true,
+      "output": "[{\"key\":\"OneList:Device\",\"space\":13.7,\"padding\":14},{\"key\":\"Lanes:Device\",\"space\":13.7,\"padding\":14},{\"key\":\"CrewFirst:Device\",\"space\":13.7,\"padding\":14},{\"key\":\"CrewFirst:Opened\",\"space\":21,\"padding\":21}]"
     },
     {
       "check": "390×844 dark: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (OneList fable-calendar-21c, OneList a11y-check-44e, Lanes fable-calendar-21c own line, Lanes a11y-check-44e, CrewFirst fable-calendar-21c, CrewFirst a11y-check-44e)",
@@ -2450,12 +2574,12 @@
       "output": "390px of content in a 390px view"
     },
     {
-      "check": "390×844 dark: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-390-dark-1.png 981 KiB, rows 0–4055, plan-steps-390-dark-2.png 674 KiB, rows 4055–6338; 780×12676)",
+      "check": "390×844 dark: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-390-dark-1.png 980 KiB, rows 0–4001, plan-steps-390-dark-2.png 673 KiB, rows 4001–6214; 780×12428)",
       "passed": true,
       "output": "every file whole and within the limit"
     },
     {
-      "check": "390×844 dark: the page's own capture paints every embed (93.2%, 92.2%, 92.8%, 91.4%, 85.5%, 56.9% their commonest colour)",
+      "check": "390×844 dark: the page's own capture paints every embed (92.8%, 92.2%, 92.9%, 90.8%, 85.5%, 56.9% their commonest colour)",
       "passed": true,
       "output": "6 of 6 embeds painted"
     }
