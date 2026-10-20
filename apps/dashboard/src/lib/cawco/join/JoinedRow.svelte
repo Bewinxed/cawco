@@ -8,6 +8,7 @@
    */
   import type { Attachment } from "svelte/attachments";
   import { fade } from "svelte/transition";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -78,7 +79,9 @@
     fit();
     // biome-ignore lint/complexity/noVoid: refit once the UI face has loaded; the first fit used whatever face was drawn
     void document.fonts.ready.then(fit);
-    const watch = new ResizeObserver(fit);
+    // Fitted above, and a change in the next frame (frameObserver): the
+    // label's words lay the row out again.
+    const watch = frameObserver(fit);
     watch.observe(sentence);
     return () => watch.disconnect();
   };

@@ -26,6 +26,7 @@
    */
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
@@ -278,42 +279,41 @@
    * gives them. When everything fits they take their own height.
    */
   const wholeRows = (node: HTMLElement) => {
-    let frame = 0;
-    const fold = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        node.style.maxBlockSize = "";
-        const room = node.clientHeight;
-        if (node.scrollHeight <= room + 1) {
-          return;
+    // Folded in the next frame (frameObserver), whatever asked: a resize,
+    // rows arriving, the window. The fold is the list's height.
+    const foldNow = () => {
+      node.style.maxBlockSize = "";
+      const room = node.clientHeight;
+      if (node.scrollHeight <= room + 1) {
+        return;
+      }
+      // Layout offsets, not drawn boxes: the popover is still scaling in
+      // from 0.92 when this first runs, and a transform moves no foot.
+      const footOf = (one: HTMLElement) => {
+        let top = 0;
+        for (
+          let at: HTMLElement | null = one;
+          at && at !== node;
+          at = at.offsetParent as HTMLElement | null
+        ) {
+          top += at.offsetTop;
         }
-        // Layout offsets, not drawn boxes: the popover is still scaling in
-        // from 0.92 when this first runs, and a transform moves no foot.
-        const footOf = (one: HTMLElement) => {
-          let top = 0;
-          for (
-            let at: HTMLElement | null = one;
-            at && at !== node;
-            at = at.offsetParent as HTMLElement | null
-          ) {
-            top += at.offsetTop;
-          }
-          return top + one.offsetHeight;
-        };
-        const feet = [
-          ...node.querySelectorAll<HTMLElement>(
-            "[data-flyover-anchor], [data-flyover-edge], .group"
-          ),
-        ]
-          .map(footOf)
-          .filter((foot) => foot <= room + 0.5);
-        const deepest = Math.max(0, ...feet);
-        if (deepest > 0) {
-          node.style.maxBlockSize = `${deepest}px`;
-        }
-      });
+        return top + one.offsetHeight;
+      };
+      const feet = [
+        ...node.querySelectorAll<HTMLElement>(
+          "[data-flyover-anchor], [data-flyover-edge], .group"
+        ),
+      ]
+        .map(footOf)
+        .filter((foot) => foot <= room + 0.5);
+      const deepest = Math.max(0, ...feet);
+      if (deepest > 0) {
+        node.style.maxBlockSize = `${deepest}px`;
+      }
     };
-    const sizes = new ResizeObserver(fold);
+    const sizes = frameObserver(foldNow);
+    const fold = () => sizes.request();
     const watch = () => {
       sizes.disconnect();
       for (const child of node.children) {
@@ -328,7 +328,6 @@
     children.observe(node, { childList: true });
     window.addEventListener("resize", fold);
     return () => {
-      cancelAnimationFrame(frame);
       sizes.disconnect();
       children.disconnect();
       window.removeEventListener("resize", fold);
@@ -336,9 +335,17 @@
   };
   /** Reads the room the marks span is given (it asks for every account's). */
   const roomFor = (node: HTMLElement) => {
-    const sizes = new ResizeObserver(([entry]) => {
-      marksRoom = entry.contentRect.width;
-    });
+    // Read now, and a change in the next frame (frameObserver): the marks
+    // that fit are counted from it. Its content box, as laid out.
+    const read = () => {
+      const style = getComputedStyle(node);
+      marksRoom =
+        (Number.parseFloat(style.inlineSize) || 0) -
+        (Number.parseFloat(style.paddingInlineStart) || 0) -
+        (Number.parseFloat(style.paddingInlineEnd) || 0);
+    };
+    read();
+    const sizes = frameObserver(read);
     sizes.observe(node);
     return () => sizes.disconnect();
   };

@@ -57,6 +57,7 @@
   } from "@cawco/core";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
@@ -184,8 +185,10 @@
         Number.parseFloat(styles.paddingBlockStart) -
         Number.parseFloat(styles.paddingBlockEnd);
     };
+    // Read now, and a change in the next frame (frameObserver): a filling
+    // block takes its height from it.
     measure();
-    const sizes = new ResizeObserver(measure);
+    const sizes = frameObserver(measure);
     sizes.observe(pane);
     return () => sizes.disconnect();
   });

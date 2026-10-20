@@ -104,8 +104,13 @@
  *         in:branch={{ glyph: ".tree-mark" }} out:branch={{ glyph: ".tree-mark" }}
  *         {@attach nestFrom(".tree-mark")}>
  */
+
 import type { Attachment } from "svelte/attachments";
 import type { TransitionConfig } from "svelte/transition";
+import {
+  type FrameObserver,
+  frameObserver,
+} from "#lib/cawco/frame-observer.js";
 import {
   CURVE,
   dur,
@@ -293,7 +298,7 @@ interface Nest {
 }
 
 const nests = new Map<Element, Nest>();
-let nestSizes: ResizeObserver | null = null;
+let nestSizes: FrameObserver | null = null;
 /** Lists drawn in this update, measured together before rows are read. */
 const drawnNow = new Set<Element>();
 /** Where the last list under each parent, and of each kind, stood. */
@@ -410,9 +415,10 @@ export function nestFrom(
     // The border box: the inset this sets (`--nest-pad`) resizes the
     // content box, and watching that would hear its own write back as a
     // second resize.
-    nestSizes ??= new ResizeObserver((entries) => {
-      measureNests(entries.map((entry) => entry.target));
-    });
+    // A list's first measure is the draw's (`settleDrawn`, before rows are
+    // read); a resize after it in the next frame (frameObserver): its insets
+    // lay the lists in it out again.
+    nestSizes ??= frameObserver(measureNests);
     nestSizes.observe(node, { box: "border-box" });
     return () => {
       nests.delete(node);

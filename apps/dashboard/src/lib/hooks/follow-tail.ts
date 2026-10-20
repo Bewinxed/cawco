@@ -58,6 +58,7 @@ export function followTail() {
       endMark = null;
       toEnd();
     };
+    // biome-ignore lint/style/noRestrictedGlobals: a list that keeps its tail writes only its scroll, which resizes nothing, and in the delivery, so no frame paints the list off its end
     const sizes = new ResizeObserver(toEnd);
     const watch = () => {
       sizes.disconnect();

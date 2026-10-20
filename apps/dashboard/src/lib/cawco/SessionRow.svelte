@@ -1,4 +1,8 @@
 <script lang="ts" module>
+  import {
+    type FrameObserver,
+    frameObserver,
+  } from "#lib/cawco/frame-observer.js";
   /**
    * The selection pill for a list of these rows (highlight): it sits under
    * the open session's row. Hover is the rail's one ghost, not the list's.
@@ -13,14 +17,20 @@
    * One size observer for every row's trailing column: each writes its
    * width on its row as `--trail-w` (`trailWidth`).
    */
-  let trailSizes: ResizeObserver | undefined;
+  let trailSizes: FrameObserver | undefined;
+  /** Writes a trailing column's laid-out width on its row (a border box, unscaled). */
+  const writeTrail = (column: Element) => {
+    column
+      .closest<HTMLElement>(".item")
+      ?.style.setProperty("--trail-w", getComputedStyle(column).inlineSize);
+  };
   const watchTrail = (node: HTMLElement): (() => void) => {
-    trailSizes ??= new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const [box] = entry.borderBoxSize;
-        entry.target
-          .closest<HTMLElement>(".item")
-          ?.style.setProperty("--trail-w", `${box.inlineSize}px`);
+    // Written now, and a change in the next frame (frameObserver): the
+    // row's title gives way to it.
+    writeTrail(node);
+    trailSizes ??= frameObserver((changed) => {
+      for (const column of changed) {
+        writeTrail(column);
       }
     });
     trailSizes.observe(node);

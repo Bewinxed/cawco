@@ -19,6 +19,7 @@
    * card fits now. A tap picks a card whatever fits.
    */
   import { RadioGroup } from "bits-ui";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -97,8 +98,10 @@
       }
       boxes = next;
     };
+    // Read now, and a change in the next frame (frameObserver): the peek
+    // stands on what it read.
     read();
-    const observer = new ResizeObserver(read);
+    const observer = frameObserver(read);
     observer.observe(node);
     return () => observer.disconnect();
   }

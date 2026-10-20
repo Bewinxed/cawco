@@ -12,6 +12,7 @@
    * inside `onMount`: this editor never runs on the server.
    */
   import { onMount } from "svelte";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
@@ -52,7 +53,7 @@
   const still = (node: HTMLElement) =>
     new Promise<void>((resolve) => {
       let timer = setTimeout(done, 150);
-      const sizes = new ResizeObserver(() => {
+      const sizes = frameObserver(() => {
         clearTimeout(timer);
         timer = setTimeout(done, 150);
       });

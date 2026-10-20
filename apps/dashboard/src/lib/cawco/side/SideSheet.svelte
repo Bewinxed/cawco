@@ -9,6 +9,7 @@
   import type { Snippet } from "svelte";
   import { tick, untrack } from "svelte";
   import { Drawer as Vaul } from "vaul-svelte";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { cawco } from "../client.svelte";
@@ -254,16 +255,13 @@
       availableHeight = composerTop - safeTop;
     };
     measure();
-    let pending = 0;
-    const remeasure = () => {
-      cancelAnimationFrame(pending);
-      pending = requestAnimationFrame(measure);
-    };
-    // A resize is read in the frame after it too: measured in the observer's
-    // callback, the sheet's new height (its host's) resized the pane in it
-    // inside that delivery, at a depth the delivery had passed, and the
-    // browser reported a ResizeObserver loop.
-    const observer = new ResizeObserver(remeasure);
+    // A resize is read in the frame after it too (frameObserver): measured
+    // in the observer's callback, the sheet's new height (its host's)
+    // resized the pane in it inside that delivery, at a depth the delivery
+    // had passed, and the browser reported a ResizeObserver loop. What else
+    // moves the composer asks for the same frame (`remeasure`).
+    const observer = frameObserver(measure);
+    const remeasure = () => observer.request();
     observer.observe(node);
     // The composer's top moves with its parts (a draft growing the pill)
     // and with what it shows on rows it keeps laid out whether or not they
@@ -297,7 +295,6 @@
     return () => {
       observer.disconnect();
       shows.disconnect();
-      cancelAnimationFrame(pending);
       composer?.removeEventListener("transitionend", remeasure);
       composer?.removeEventListener("introend", remeasure, { capture: true });
       composer?.removeEventListener("outroend", remeasure, { capture: true });

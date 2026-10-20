@@ -806,7 +806,7 @@
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     // Its first report is the frame's size now: every report starts the wait again.
-    const settled = new ResizeObserver(() => {
+    const settled = frameObserver(() => {
       clearTimeout(timer);
       timer = setTimeout(
         () => post({ type: "cawco:capture" }),
@@ -1340,42 +1340,39 @@
       post({ type: "cawco:covered", boxes: [] });
       return;
     }
-    let raf = 0;
-    const say = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const framed = frame.getBoundingClientRect();
-        const left = framed.left + frame.clientLeft;
-        const top = framed.top + frame.clientTop;
-        // The panel's wrapper stands where it is placed, at its laid-out size (its entrance scales the panel inside).
-        const boxes = [
-          panel.parentElement ?? panel,
-          ...(card > 0 && room
-            ? [room.querySelector('[data-slot="pin-card"]')]
-            : []),
-        ]
-          .filter((el): el is Element => !!el)
-          .map((el) => {
-            const r = el.getBoundingClientRect();
-            return {
-              x: r.left - left,
-              y: r.top - top,
-              w: r.width,
-              h: r.height,
-            };
-          });
-        post({ type: "cawco:covered", boxes });
-      });
+    // Said in the next frame (frameObserver), whatever moved it: the panel
+    // resized, or its wrapper placed again.
+    const sayNow = () => {
+      const framed = frame.getBoundingClientRect();
+      const left = framed.left + frame.clientLeft;
+      const top = framed.top + frame.clientTop;
+      // The panel's wrapper stands where it is placed, at its laid-out size (its entrance scales the panel inside).
+      const boxes = [
+        panel.parentElement ?? panel,
+        ...(card > 0 && room
+          ? [room.querySelector('[data-slot="pin-card"]')]
+          : []),
+      ]
+        .filter((el): el is Element => !!el)
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return {
+            x: r.left - left,
+            y: r.top - top,
+            w: r.width,
+            h: r.height,
+          };
+        });
+      post({ type: "cawco:covered", boxes });
     };
-    const sized = new ResizeObserver(say);
+    const sized = frameObserver(sayNow);
     sized.observe(panel);
-    const moved = new MutationObserver(say);
+    const moved = new MutationObserver(() => sized.request());
     if (panel.parentElement) {
       moved.observe(panel.parentElement, { attributeFilter: ["style"] });
     }
-    say();
+    sized.request();
     return () => {
-      cancelAnimationFrame(raf);
       sized.disconnect();
       moved.disconnect();
     };

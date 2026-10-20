@@ -17,6 +17,7 @@
   } from "@cawco/core/decisions";
   import { untrack } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
@@ -128,9 +129,11 @@
       const below = Number.parseFloat(getComputedStyle(node).bottom) || 0;
       dockRoom = Math.round(node.offsetHeight + below);
     };
-    const watch = new ResizeObserver(measure);
-    watch.observe(node);
+    // Read now, and a change in the next frame (frameObserver): the page
+    // pads for it.
     measure();
+    const watch = frameObserver(measure);
+    watch.observe(node);
     return () => watch.disconnect();
   });
 

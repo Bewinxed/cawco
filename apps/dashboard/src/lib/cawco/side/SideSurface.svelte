@@ -26,6 +26,7 @@
    * pressed is still under the pointer to press back.
    */
   import { type Snippet, untrack } from "svelte";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
@@ -298,15 +299,10 @@
       return;
     }
     let write: (() => void) | null = null;
-    let frame = 0;
-    const seen = new ResizeObserver(() => {
-      write = measureFit();
-      if (!frame) {
-        frame = requestAnimationFrame(() => {
-          frame = 0;
-          write?.();
-        });
-      }
+    const seen = frameObserver(() => write?.(), {
+      read: () => {
+        write = measureFit();
+      },
     });
     seen.observe(el);
     if (identity) {
@@ -317,10 +313,7 @@
     )) {
       seen.observe(child);
     }
-    return () => {
-      cancelAnimationFrame(frame);
-      seen.disconnect();
-    };
+    return () => seen.disconnect();
   });
   // A new line is measured as it comes, once it is drawn.
   $effect(() => {

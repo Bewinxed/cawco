@@ -83,6 +83,12 @@
                 "deniedGlobals": {
                   "localStorage": "Use $lib/cawco/storage: the browser may hand back no storage.",
                   "sessionStorage": "Use $lib/cawco/storage: the browser may hand back no storage.",
+                  // An answer written inside a ResizeObserver's delivery that
+                  // lays the page out again resizes boxes the delivery has
+                  // passed ("ResizeObserver loop completed with undelivered
+                  // notifications"). A site that must answer inside the
+                  // delivery says why in its biome-ignore.
+                  "ResizeObserver": "Use frameObserver ($lib/cawco/frame-observer): its answer comes in the next frame, so nothing it writes resizes a box inside the delivery.",
                 },
               },
             },

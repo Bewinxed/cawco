@@ -946,7 +946,7 @@ const run = async (kit: Kit) => {
   const fleet = await fleetUp(kit);
   // The session runs in a project's checkout, so the navigation lists it
   // under that project ({@link runNarrow}); no Caw is asked to set it up.
-  await fleet.api("/api/projects", {
+  const project = await fleet.api<{ id: string }>("/api/projects", {
     name: "Chip wraps",
     machineId: MACHINE,
     cwd: fleet.repo,
@@ -1025,6 +1025,86 @@ const run = async (kit: Kit) => {
       });
     }
   }
+  const pages = [
+    {
+      name: "the project's page",
+      path: `/project/${project.id}`,
+      ready: '[data-slot="caw-seat"]',
+    },
+    { name: "the board", path: "/", ready: "main" },
+    { name: "Configure", path: "/config", ready: "main" },
+    {
+      name: "a session",
+      path: `/session/${session}`,
+      ready: '[data-slot="pane"]',
+    },
+  ];
+  for (const one of pages) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
+    await runPageSweep(kit, base, one);
+  }
+};
+
+/** A desk window from 1440 wide to 900 and back, in 20px steps. */
+const PAGE_SWEEP = steps(
+  [...sweep(1440, 900, 20), ...sweep(920, 1440, 20)],
+  900
+);
+
+/**
+ * A page of the dashboard at desk 1440, its window taken down to 900 wide
+ * and back in small steps (the rail's line, Files' and the split's bands
+ * crossed both ways): opening it and the sweep send the hub nothing and log
+ * no ResizeObserver loop, and a loop names the observers of its frame.
+ */
+export const runPageSweep = async (
+  kit: Kit,
+  base: string,
+  leg: { name: string; path: string; ready: string }
+) => {
+  const page = await kit.page("desk", {
+    theme: "light",
+    init: [heldBack],
+    scrollbars: true,
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const said = heard(page);
+  const start = await mark(page, said);
+  await open(page, `${base}${leg.path}`, leg.ready);
+  await settle(page);
+  await frames(page);
+  const opened = await mark(page, said);
+  const postedAt: string[] = [];
+  for (const step of PAGE_SWEEP) {
+    const before = said.posts.length;
+    // biome-ignore lint/performance/noAwaitInLoops: one size, laid out and delivered, before the next
+    await page.setViewportSize(step);
+    await frames(page);
+    if (said.posts.length > before) {
+      postedAt.push(`${step.width}×${step.height}`);
+    }
+  }
+  await settle(page);
+  await frames(page);
+  const swept = await mark(page, said);
+  await checkQuiet(
+    kit,
+    page,
+    said,
+    `${leg.name}: opening it at desk 1440`,
+    start,
+    opened
+  );
+  await checkQuiet(
+    kit,
+    page,
+    said,
+    `${leg.name}: a resize sweep 1440×900→900×900→1440×900`,
+    opened,
+    swept,
+    { postedAt }
+  );
+  await page.context().close();
 };
 
 /** The session's own panel's page: in the split, or the sheet on the composer in a pane under 900px. */

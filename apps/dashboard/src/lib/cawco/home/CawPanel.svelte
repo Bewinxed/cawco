@@ -20,6 +20,7 @@
    * the dev bench's fixture (/motion/caw-notices).
    */
   import { damagedHubRecordWords } from "@cawco/core";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconNeedsYou, IconNotices } from "#lib/icons.js";
   import RebalanceNotices from "../accounts/RebalanceNotices.svelte";
@@ -57,16 +58,22 @@
     };
     // Its own box (the window, its cap) and each section's (rows arriving,
     // notes folding), the sections that come later too.
-    const sized = new ResizeObserver(read);
+    // Read now, and a change in the next frame (frameObserver): the fade
+    // comes and goes on it, and rows arriving in a delivery's own writes
+    // are heard there too.
+    const sized = frameObserver(read);
     const watch = () => {
       sized.observe(list);
       for (const child of list.children) {
         sized.observe(child);
       }
-      read();
     };
     watch();
-    const rows = new MutationObserver(watch);
+    read();
+    const rows = new MutationObserver(() => {
+      watch();
+      sized.request();
+    });
     rows.observe(list, { childList: true, subtree: true });
     return () => {
       sized.disconnect();

@@ -7,6 +7,7 @@
   import { accountsWords, HARNESSES, type HarnessKind } from "@cawco/core";
   import { untrack } from "svelte";
   import { crossfade } from "svelte/transition";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { autowidth } from "#lib/cawco/motion/autosize.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -125,11 +126,14 @@
    */
   let chosenHeight = $state(44);
   const chosen = (node: HTMLElement) => {
-    const sized = new ResizeObserver(() => {
+    // Read now, and a change in the next frame (frameObserver): the fill
+    // stands on it.
+    const read = () => {
       chosenHeight = node.offsetHeight;
-    });
+    };
+    read();
+    const sized = frameObserver(read);
     sized.observe(node);
-    chosenHeight = node.offsetHeight;
     return () => sized.disconnect();
   };
 

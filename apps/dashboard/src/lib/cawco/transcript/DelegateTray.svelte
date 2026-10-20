@@ -30,6 +30,7 @@
   import { tick, untrack } from "svelte";
   import { SvelteMap } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -479,8 +480,11 @@
         }
       };
       // Its parts change size with its state (a note arrives, a glyph
-      // swaps); the chip's own box may not, held as it is by the row.
-      const watch = new ResizeObserver(take);
+      // swaps); the chip's own box may not, held as it is by the row. Taken
+      // now, and a change in the next frame (frameObserver): its floors are
+      // written on its parts and the row lays out on them.
+      take();
+      const watch = frameObserver(take);
       for (const part of node.querySelectorAll(".mark, .words, .note, .slot")) {
         watch.observe(part);
       }
@@ -867,8 +871,10 @@
         sizes.observe(one);
       }
     };
-    const sizes = new ResizeObserver(take);
-    const rowsChange = new MutationObserver(take);
+    // Taken now, and a change in the next frame (frameObserver): the cap is
+    // the list's height. Rows arriving in a delivery's own writes too.
+    const sizes = frameObserver(take);
+    const rowsChange = new MutationObserver(() => sizes.request());
     rowsChange.observe(node, { childList: true });
     take();
     return () => {

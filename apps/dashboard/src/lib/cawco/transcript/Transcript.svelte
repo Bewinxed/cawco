@@ -2148,6 +2148,7 @@
       return;
     }
     const seen = new Set<Element>();
+    // biome-ignore lint/style/noRestrictedGlobals: a view at the tail follows the shelf's room by its scroll, which resizes nothing, in the delivery, so no frame paints the tail short of the end
     const sizes = new ResizeObserver((entries) => {
       // The shelf's room moved: a view at the tail follows it, frame by
       // frame as the shelf opens; one scrolled away keeps its place.
@@ -2606,6 +2607,7 @@
    * does the same from the other end.
    */
   function keepPlace(node: HTMLElement) {
+    // biome-ignore lint/style/noRestrictedGlobals: THE STRIP BEFORE THE LIST MOVES NOTHING: the view moves by the strip's growth after the frame's layout and before its paint, so the rows on screen never jump; deferred, a frame paints them pushed down
     const watch = new ResizeObserver(() => {
       const grew = node.offsetHeight - olderRoom;
       if (grew === 0) {

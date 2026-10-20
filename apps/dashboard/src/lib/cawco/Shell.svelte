@@ -14,6 +14,7 @@
   import { onMount, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { navSheet } from "#lib/cawco/motion/clock.svelte.js";
   import {
     crossOut,
@@ -728,7 +729,9 @@
         col.style.setProperty("--col-w", w);
       }
     };
-    const sizes = new ResizeObserver(place);
+    // Placed by the effect below as the groups stand, and a change in the
+    // next frame (frameObserver): the columns' widths are the bar's layout.
+    const sizes = frameObserver(place);
     sizes.observe(slot);
     // A column that comes or goes is a group that does: watch the groups the
     // columns stand over.

@@ -29,6 +29,7 @@
     deliverableKind,
     type ResultArtifact,
   } from "@cawco/core";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
@@ -141,9 +142,11 @@
         (line) => line.scrollHeight > line.clientHeight + 1
       );
     };
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
+    // Read now, and a change in the next frame (frameObserver): More comes
+    // and goes on it.
     measure();
+    const observer = frameObserver(measure);
+    observer.observe(node);
     return () => observer.disconnect();
   });
 

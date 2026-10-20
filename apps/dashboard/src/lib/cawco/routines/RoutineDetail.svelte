@@ -1,5 +1,6 @@
 <script lang="ts">
   import { type ApprovedActionView, routinesWords as words } from "@cawco/core";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   /**
    * A routine opened in place under its row: only what the row does not say
    * (the owner: "why are you repeating this info that is already up
@@ -104,8 +105,10 @@
     const measure = () => {
       long = node.scrollHeight > node.clientHeight + 1;
     };
+    // Read now, and a change in the next frame (frameObserver): More comes
+    // and goes on it.
     measure();
-    const watch = new ResizeObserver(measure);
+    const watch = frameObserver(measure);
     watch.observe(node);
     return () => watch.disconnect();
   });

@@ -128,6 +128,7 @@ export class GrownShape {
   /** What the drop waits on after the next morph lands, besides it. */
   #after: Promise<void> | null = null;
   /** The shell's laid-out width, followed: the shape is always as wide as it. */
+  // biome-ignore lint/style/noRestrictedGlobals: the observer exempted where it is made (the constructor), which answers in its delivery
   readonly #follow: ResizeObserver;
 
   constructor(
@@ -208,6 +209,7 @@ export class GrownShape {
     // The shell resized (the window, the panel): the shape takes its width,
     // its border box as laid out, which no transform it stands in changes.
     // Its first report lands the fraction `offsetWidth` rounded away.
+    // biome-ignore lint/style/noRestrictedGlobals: the shape is absolutely placed in its shell and redraws its own path and height, which resize no box watched; it takes the shell's width in the frame the shell took it
     this.#follow = new ResizeObserver(([entry]) => {
       const w = entry?.borderBoxSize[0]?.inlineSize ?? host.offsetWidth;
       if (w > 0 && Math.abs(w - this.#size.w) >= 0.01) {

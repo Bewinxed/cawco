@@ -15,6 +15,7 @@
     parseDiffFromFile,
   } from "@pierre/diffs";
   import { fade } from "svelte/transition";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import {
     crossIn,
@@ -82,7 +83,9 @@
   /** Draws the diff into the box; `drawn` once it has a height. */
   const draw = (_attempt: number) => (box: HTMLElement) => {
     const diff = houseDiff({ disableFileHeader: true });
-    const sizes = new ResizeObserver(() => {
+    // In the next frame (frameObserver): drawn, the box stops holding its
+    // expected height.
+    const sizes = frameObserver(() => {
       if (box.offsetHeight > 0) {
         drawn = true;
         sizes.disconnect();

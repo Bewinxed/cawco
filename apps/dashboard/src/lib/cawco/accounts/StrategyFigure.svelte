@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   /**
    * One strategy figure in its stage (figure.ts). It is built for the
    * stage's width and rebuilt when that, its lanes, its numbers or the theme
@@ -50,9 +51,13 @@
     if (!node) {
       return;
     }
-    const sizes = new ResizeObserver(() => {
+    // Read now, and a change in the next frame (frameObserver): the figure
+    // is drawn again at it.
+    const read = () => {
       width = node.clientWidth;
-    });
+    };
+    read();
+    const sizes = frameObserver(read);
     sizes.observe(node);
     const seen = new IntersectionObserver(
       ([entry]) => {

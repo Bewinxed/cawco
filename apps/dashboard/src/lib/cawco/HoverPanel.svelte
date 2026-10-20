@@ -78,6 +78,7 @@
   /** The shown content's size, kept as it changes; a leaving one never counts. */
   let size: { w: number; h: number } | null = null;
   const measure: Attachment<HTMLElement> = (node) => {
+    // biome-ignore lint/style/noRestrictedGlobals: reads only: the content's size, kept in a plain variable for the next trigger's hold
     const watcher = new ResizeObserver(() => {
       if (node.style.position !== "absolute") {
         size = { w: node.offsetWidth, h: node.offsetHeight };
