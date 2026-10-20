@@ -2001,7 +2001,7 @@
             <div
               data-slot="project-page"
               class={[
-                "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)",
+                "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:scroll-pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)",
                 fadeOn === "page" && "kit-edge-fade-block",
               ]}
               style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}

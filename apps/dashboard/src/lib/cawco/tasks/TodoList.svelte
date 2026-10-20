@@ -178,7 +178,7 @@
         {@const checked = ticking[ref] ?? todo.done}
         <li
           data-slot="todo"
-          class="group flex items-center gap-space-2 min-h-c-btn-h-sm ps-(--indent)"
+          class="group flex items-center gap-space-2 min-h-c-btn-h ps-(--indent)"
           style:--depth={todo.depth}
           style:--indent="calc(var(--depth, 0) * var(--space-6))"
         >
@@ -199,7 +199,6 @@
               <Input
                 aria-label="To-do"
                 autocomplete="off"
-                size="sm"
                 text="label"
                 disabled={busy}
                 onblur={() => saveEdit(todo)}

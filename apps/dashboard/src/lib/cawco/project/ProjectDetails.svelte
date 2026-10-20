@@ -611,7 +611,6 @@
     <NativeSelect.Root
       aria-label="GitHub Project"
       class="col-span-full w-full"
-      size="sm"
       bind:value={
         () => pickProject,
         (next) => {
@@ -648,7 +647,6 @@
           <NativeSelect.Root
             class="w-full"
             id="{uid}-status-{at}"
-            size="sm"
             bind:value={
               () => statusMap[stage] ?? "",
               (next) => {
@@ -825,7 +823,6 @@
             <NativeSelect.Root
               aria-label="Machine"
               class="w-full"
-              size="sm"
               bind:value={addMachine}
             >
               {#each cawco.machines as host (host.machineId)}
@@ -838,7 +835,6 @@
               aria-label="Folder on that machine"
               autocomplete="off"
               placeholder="/absolute/path on that machine"
-              size="sm"
               spellcheck="false"
               text="label"
               bind:value={addPath}
@@ -949,7 +945,6 @@
               aria-label={lfsWords.connection}
               class="w-full"
               disabled={lfsKeyed.length === 0}
-              size="sm"
               bind:value={lfsConnection}
             >
               {#each lfsKeyed as each (each.name)}
@@ -962,7 +957,6 @@
               aria-label={lfsWords.url}
               autocomplete="off"
               placeholder={lfsWords.urlPlaceholder}
-              size="sm"
               spellcheck="false"
               text="label"
               type="url"
@@ -1246,7 +1240,6 @@
                 aria-label="Connection"
                 class="w-full"
                 data-bind-connection
-                size="sm"
                 bind:value={
                   () => pickConnection,
                   (next) => {
@@ -1266,7 +1259,6 @@
                   aria-label={picking === "github" ? "Repository" : "Team"}
                   class="w-full"
                   data-bind-target
-                  size="sm"
                   bind:value={
                     () => pickTarget,
                     (next) => {

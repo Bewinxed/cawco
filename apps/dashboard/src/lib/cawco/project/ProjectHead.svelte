@@ -595,4 +595,11 @@
   />
 {/if}
 <!-- A forget asked from `⋯`, under the head, from where its title starts. -->
-<ForgetProjectTray at={forgetAt} class="tray-indent-space-7 max-w-128" />
+<!-- The tray on the page's gutters: 25px in at the start (18 under the desk
+     line, DESIGN.md L643) and 18 at the end, so it never meets the screen. -->
+<div class="contents" style:--ask-end="var(--space-5)">
+  <ForgetProjectTray
+    at={forgetAt}
+    class="tray-indent-space-7 max-w-128 max-desk:tray-indent-space-5"
+  />
+</div>

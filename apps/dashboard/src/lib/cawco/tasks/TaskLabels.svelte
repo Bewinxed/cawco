@@ -76,7 +76,6 @@
       autocomplete="off"
       class="w-c-task-label-field-w"
       list={listId}
-      size="sm"
       text="label"
       onblur={add}
       onkeydown={(event) => {

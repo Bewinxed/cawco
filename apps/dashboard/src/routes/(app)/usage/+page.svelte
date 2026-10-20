@@ -199,7 +199,7 @@
         type="single"
         value={filtered?.id ?? "all"}
       >
-        <Select.Trigger aria-label="Project" size="sm">
+        <Select.Trigger aria-label="Project">
           {filtered?.name ?? "All projects"}
         </Select.Trigger>
         <Select.Content>

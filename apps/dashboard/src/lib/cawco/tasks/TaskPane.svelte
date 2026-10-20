@@ -432,7 +432,7 @@
             type="single"
             value={shown.stage}
           >
-            <Select.Trigger aria-label="Stage" press="tint" size="sm">
+            <Select.Trigger aria-label="Stage" press="tint">
               {stageLabel(shown.stage)}
             </Select.Trigger>
             <Select.Content>
