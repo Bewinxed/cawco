@@ -182,20 +182,31 @@ function gridOf(args: { selector: string; grid: number }) {
         (node.textContent ?? "").trim() !== ""
     );
   /**
-   * Whether a box's mask draws the point at page x through: never where it
-   * has none; under the house edge fade (app.css `kit-edge-fade`, a wide
-   * embed's frame: runtime.ts `fitToEmbed`) within its fades alone, each as
-   * long as its own `--fade-start` and `--fade-end` (a cap only shortens
-   * one); everywhere under any other mask.
+   * Whether a box's mask draws the point at page (x, y) through: never
+   * where it has none; under the house edge fade (edge-fade.css) within its
+   * fades alone, each as long as its own `--fade-start` and `--fade-end` (a
+   * cap only shortens one): `kit-edge-fade` (a wide embed's frame:
+   * runtime.ts `fitToEmbed`) at its left and right, `kit-edge-fade-block`
+   * at its top and its foot, whose fade ends `--fade-inset-end` short of
+   * the box and leaves that band clear; everywhere under any other mask.
    */
-  const maskedAt = (at: Element, style: CSSStyleDeclaration, x: number) => {
+  const maskedAt = (
+    at: Element,
+    style: CSSStyleDeclaration,
+    x: number,
+    y: number
+  ) => {
     if (style.maskImage === "none") {
       return false;
     }
-    const start = Number.parseFloat(style.getPropertyValue("--fade-start"));
-    const end = Number.parseFloat(style.getPropertyValue("--fade-end"));
+    const fadeOf = (property: string) =>
+      Number.parseFloat(style.getPropertyValue(property));
+    const start = fadeOf("--fade-start");
+    const end = fadeOf("--fade-end");
+    const inline = at.classList.contains("kit-edge-fade");
+    const block = at.classList.contains("kit-edge-fade-block");
     if (!(
-      at.classList.contains("kit-edge-fade") &&
+      (inline || block) &&
       Number.isFinite(start) &&
       Number.isFinite(end)
     )) {
@@ -203,17 +214,21 @@ function gridOf(args: { selector: string; grid: number }) {
     }
     const box = at.getBoundingClientRect();
     const zoom = (at as HTMLElement).currentCSSZoom;
-    return x < box.left + start * zoom || x >= box.right - end * zoom;
+    if (inline) {
+      return x < box.left + start * zoom || x >= box.right - end * zoom;
+    }
+    const inset = fadeOf("--fade-inset-end") || 0;
+    return y < box.top + start * zoom || y >= box.bottom - (inset + end) * zoom;
   };
-  /** Drawn through, or mixed with what is under it: a box not at full opacity, filtered, blended or masked at page x, here or out to the page. */
-  const mixed = (hit: Element, x: number) => {
+  /** Drawn through, or mixed with what is under it: a box not at full opacity, filtered, blended or masked at page (x, y), here or out to the page. */
+  const mixed = (hit: Element, x: number, y: number) => {
     for (let at: Element | null = hit; at; at = at.parentElement) {
       const style = getComputedStyle(at);
       if (
         Number(style.opacity) < 1 ||
         style.filter !== "none" ||
         style.mixBlendMode !== "normal" ||
-        maskedAt(at, style, x)
+        maskedAt(at, style, x, y)
       ) {
         return true;
       }
@@ -613,7 +628,7 @@ function gridOf(args: { selector: string; grid: number }) {
     x: number,
     y: number
   ): [number, number, number] | null => {
-    if (mixed(hit, x)) {
+    if (mixed(hit, x, y)) {
       return null;
     }
     for (
