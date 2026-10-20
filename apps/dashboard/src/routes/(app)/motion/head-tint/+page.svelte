@@ -243,13 +243,13 @@
 <svelte:head><title>Transcript head proof | CawCo</title></svelte:head>
 
 <!-- Over the shell and anything it draws (a hub banner), under what the strip
-     opens: the session card and a tab's menu are portalled to the body with
-     the kit's own layer (z-50 and up, which bits-ui writes onto their
-     wrapper), so the bench sits one under it. One group, its strip on the
-     shelf and its panes under it. -->
+     opens: the session card and a tab's menu are portalled to the body on
+     the floating layer (--layer-float, which bits-ui writes onto their
+     wrapper), so the bench stands on the bench layer under it. One group,
+     its strip on the shelf and its panes under it. -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
-  class="@container/leaf fixed inset-0 z-(--z-bench) flex flex-col bg-surface-shelf pt-space-7 text-ink-strong"
+  class="@container/leaf fixed inset-0 z-(--layer-bench) flex flex-col bg-surface-shelf pt-space-7 text-ink-strong"
   data-head-tint
   onclickcapture={benchClick}
 >

@@ -137,7 +137,7 @@
   {#if matches.length}
     <div
       aria-label="Template paths"
-      class="kit-pop absolute top-full inset-x-0 max-h-c-completer-max-h overflow-y-auto z-30"
+      class="kit-pop absolute top-full inset-x-0 max-h-c-completer-max-h overflow-y-auto z-(--layer-float)"
       data-state="open"
       role="listbox"
       style:transform-origin={origin}

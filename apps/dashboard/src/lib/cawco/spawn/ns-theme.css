@@ -347,7 +347,7 @@
    44px through its own `touch-hit`. */
 @utility ns-pop {
   :where(.ns-theme&) {
-    z-index: 90;
+    z-index: var(--layer-float);
     position: relative;
     width: min(
       var(--ns-pop-width, var(--c-pop-w)),

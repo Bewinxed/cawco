@@ -302,7 +302,7 @@
         <Table.Row class="align-top">
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           <Table.Head
-            class="sticky z-10 h-auto"
+            class="sticky z-(--layer-sticky) h-auto"
             scope="col"
             variant="matrix-corner-pinned">Machine</Table.Head
           >
@@ -363,7 +363,7 @@
           <Table.Row inactive={!online}>
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="sticky z-10 h-auto"
+              class="sticky z-(--layer-sticky) h-auto"
               scope="row"
               variant="matrix-row-pinned"
             >

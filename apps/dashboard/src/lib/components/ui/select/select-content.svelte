@@ -41,7 +41,7 @@
 <SelectPortal {...portalProps}>
   <SelectPrimitive.Content
     class={cn(
-      "kit-pop relative isolate z-50 min-w-36 origin-(--bits-select-content-transform-origin) overflow-y-auto overflow-x-hidden",
+      "kit-pop relative isolate z-(--layer-float) min-w-36 origin-(--bits-select-content-transform-origin) overflow-y-auto overflow-x-hidden",
       className
     )}
     data-slot="select-content"

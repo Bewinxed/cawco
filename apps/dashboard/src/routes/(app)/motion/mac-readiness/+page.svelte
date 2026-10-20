@@ -105,7 +105,7 @@
 
 <nav
   aria-label="Readiness state"
-  class="fixed inset-x-space-2 top-space-2 z-60 flex pointer-events-auto flex-wrap gap-space-1"
+  class="fixed inset-x-space-2 top-space-2 z-(--layer-bench-controls) flex pointer-events-auto flex-wrap gap-space-1"
   onpointerdown={(event) => event.stopPropagation()}
 >
   {#each STATES as each (each.id)}

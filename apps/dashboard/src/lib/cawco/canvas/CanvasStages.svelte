@@ -123,13 +123,13 @@
 
 {#each [...stages.values()] as stage (stage.id)}
   <Portal>
-    <!-- The phone's panel is the sheet (z 40): the canvas stands in it
-         (stage.svelte.ts sets data-over-sheet). -->
+    <!-- The phone's panel is the sheet (--layer-sheet): the canvas stands in
+         it (stage.svelte.ts sets data-over-sheet). -->
     <div
       data-standing={stage.at === "composer" || undefined}
       data-canvas-stages-docked={stage.at === "panel" || undefined}
       data-slot="canvas-stage"
-      class="fixed z-15 overflow-hidden bg-surface-raised data-canvas-stages-docked:rounded-sm data-over-sheet:z-41 data-standing:border-b data-standing:border-b-border-hairline"
+      class="fixed z-(--layer-stage) overflow-hidden bg-surface-raised data-canvas-stages-docked:rounded-sm data-over-sheet:z-(--layer-sheet-stage) data-standing:border-b data-standing:border-b-border-hairline"
       data-artifact={stage.id}
       hidden
       bind:this={stage.el}

@@ -278,7 +278,7 @@
      every phone screen. -->
 <div
   data-slot="hub-band-slot"
-  class="pointer-events-none relative z-10 grid flex-none grid-rows-shut clip-block-start @container/hub-band data-open:grid-rows-open max-desk:-order-1 motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
+  class="pointer-events-none relative z-(--layer-band) grid flex-none grid-rows-shut clip-block-start @container/hub-band data-open:grid-rows-open max-desk:-order-1 motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
   data-open={band ? "" : undefined}
 >
   <!-- The live region stands from the first markup, so assistive tech has

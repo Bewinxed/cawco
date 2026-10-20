@@ -2712,7 +2712,7 @@
      makes them): fixed over the page, cut to each end's box. */
   .lift-copy {
     position: fixed;
-    z-index: 50;
+    z-index: var(--layer-flight);
     overflow: hidden;
     pointer-events: none;
     color: var(--ink-strong);

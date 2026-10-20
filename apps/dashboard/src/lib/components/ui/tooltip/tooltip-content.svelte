@@ -23,7 +23,7 @@
 <TooltipPortal {...portalProps}>
   <TooltipPrimitive.Content
     class={cn(
-      "kit-tip z-50 inline-flex w-fit max-w-80 origin-(--bits-tooltip-content-transform-origin) items-center gap-1.5 px-2.5 py-1.5",
+      "kit-tip z-(--layer-float) inline-flex w-fit max-w-80 origin-(--bits-tooltip-content-transform-origin) items-center gap-1.5 px-2.5 py-1.5",
       className
     )}
     data-slot="tooltip-content"
@@ -37,7 +37,7 @@
       {#snippet child({ props })}
         <div
           class={cn(
-            "z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-hair bg-[var(--ink-solid)] fill-[var(--ink-solid)] data-[side=left]:translate-x-[-1.5px] data-[side=right]:translate-x-[1.5px]",
+            "z-1 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-hair bg-[var(--ink-solid)] fill-[var(--ink-solid)] data-[side=left]:translate-x-[-1.5px] data-[side=right]:translate-x-[1.5px]",
             "data-[side=top]:translate-x-1/2 data-[side=top]:translate-y-[calc(-50%+2px)]",
             "data-[side=bottom]:-translate-x-1/2 data-[side=bottom]:-translate-y-[calc(-50%+1px)]",
             "data-[side=right]:translate-x-[calc(50%+2px)] data-[side=right]:translate-y-1/2",

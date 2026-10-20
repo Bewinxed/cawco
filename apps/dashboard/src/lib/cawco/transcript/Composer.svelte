@@ -2970,7 +2970,7 @@
   data-drawing={canvasUp || undefined}
   data-minimized={minimized || undefined}
   data-perched={!!perch || undefined}
-  class="group/dock absolute inset-x-0 top-0 bottom-(--dock-foot) max-desk:bottom-(--dock-foot-narrow) z-20 flex flex-col justify-end items-center pointer-events-none"
+  class="group/dock absolute inset-x-0 top-0 bottom-(--dock-foot) max-desk:bottom-(--dock-foot-narrow) z-(--layer-dock) flex flex-col justify-end items-center pointer-events-none"
   data-keeps-draft
   data-safe-bottom
   bind:this={dockEl}

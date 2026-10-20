@@ -243,7 +243,7 @@
 <!-- Over the shell: a conversation's group as the workspace lays one out
      (PaneLeaf `.leaf`, `.stack`, `.dock`), over the whole window. -->
 <div
-  class="fixed inset-0 z-40 flex flex-col text-ink-strong"
+  class="fixed inset-0 z-(--layer-bench) flex flex-col text-ink-strong"
   data-delegate-tray
 >
   <div

@@ -320,7 +320,7 @@
 <Portal
   ><div
     data-slot="preview-sheet-host"
-    class="fixed top-(--host-top) inset-x-0 z-40 overflow-clip pointer-events-none"
+    class="fixed top-(--host-top) inset-x-0 z-(--layer-sheet) overflow-clip pointer-events-none"
     data-active-snap={typeof snap === "string" ? 0.6 : snap}
     style:--host-top="env(safe-area-inset-top, 0px)"
     style:height="{availableHeight}px"

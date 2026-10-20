@@ -167,7 +167,7 @@
       <!-- A phone: a sheet from the glass, the field at its foot over the keyboard. -->
       <div
         data-slot="sheet"
-        class="fixed inset-0 z-20 flex flex-col bg-surface-raised pt-space-2"
+        class="fixed inset-0 z-(--layer-float) flex flex-col bg-surface-raised pt-space-2"
         data-finder-card
       >
         <div
@@ -189,7 +189,7 @@
       <!-- The glass's card, as it hangs: right-aligned under the bar, the page live under it. -->
       <div
         data-slot="finder-page-card"
-        class="absolute end-0 top-c-top-bar-h z-20 flex max-h-(--card-max-h) w-c-find-w flex-col overflow-hidden rounded-b-lg border border-border-control border-t-none bg-surface-raised shadow-overlay-hung"
+        class="absolute end-0 top-c-top-bar-h z-(--layer-float) flex max-h-(--card-max-h) w-c-find-w flex-col overflow-hidden rounded-b-lg border border-border-control border-t-none bg-surface-raised shadow-overlay-hung"
         data-finder-card
         role="dialog"
         aria-label="Jump"
