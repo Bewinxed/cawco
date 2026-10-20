@@ -34,10 +34,6 @@ export {
   default as SidebarMenuItem,
 } from "./sidebar-menu-item.svelte";
 export {
-  default as MenuSub,
-  default as SidebarMenuSub,
-} from "./sidebar-menu-sub.svelte";
-export {
   default as MenuSubButton,
   default as SidebarMenuSubButton,
 } from "./sidebar-menu-sub-button.svelte";

@@ -6,10 +6,6 @@ export {
   default as SheetContent,
 } from "./sheet-content.svelte";
 export {
-  default as Description,
-  default as SheetDescription,
-} from "./sheet-description.svelte";
-export {
   default as Footer,
   default as SheetFooter,
 } from "./sheet-footer.svelte";

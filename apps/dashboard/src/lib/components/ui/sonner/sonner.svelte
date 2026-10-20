@@ -155,6 +155,19 @@
     toastOptions={{
       ...restProps.toastOptions,
       class: cn("pointer-events-auto", restProps.toastOptions?.class),
+      /* A toast's action and cancel reach 44 under a finger (DESIGN.md,
+         The 44 Touch Rule), their drawn size unchanged. */
+      classes: {
+        ...restProps.toastOptions?.classes,
+        actionButton: cn(
+          "touch-hit",
+          restProps.toastOptions?.classes?.actionButton
+        ),
+        cancelButton: cn(
+          "touch-hit",
+          restProps.toastOptions?.classes?.cancelButton
+        ),
+      },
     }}
   >
     {#snippet loadingIcon()}

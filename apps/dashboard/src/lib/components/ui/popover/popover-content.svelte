@@ -75,6 +75,7 @@
 <script lang="ts">
   import { Popover as PopoverPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { type Morph, morph } from "#lib/cawco/motion/morph.svelte.js";
   import {
@@ -120,11 +121,20 @@
     } = $props();
 
   // Never flush with the screen's edge: it keeps the pages' gutter from it,
-  // pushed back in when its place would run it off a phone. The token is
-  // read in the browser, where the popover opens.
+  // pushed back in when its place would run it off. Under the phone line it
+  // is the viewport less the screen's margin each side (DESIGN.md,
+  // Breakpoints: "popovers widen to the viewport less 24px"), so it stands
+  // that margin in. The tokens are read in the browser, where it opens.
+  const phone = new MediaQuery("width < 640px");
   const inset = $derived(
-    collisionPadding ?? (browser ? numberOf("--space-5") : 0)
+    collisionPadding ??
+      (browser
+        ? numberOf(phone.current ? "--c-screen-margin" : "--space-5")
+        : 0)
   );
+  /* A hanging card (motion `hang`) frames its own width, and a bare one is
+     what it holds. */
+  const phoneWide = $derived(motion !== "hang" && !bare);
 
   // A popover whose content changes (a list arrives, an error appears)
   // tweens to its new height instead of jumping.
@@ -156,7 +166,12 @@
         frame,
         look,
       }),
-      className
+      className,
+      /* Its least and greatest width both, so whatever width its site
+         gives (a width of its own, or the room bits-ui measures) stands at
+         this one under the phone line. */
+      phoneWide &&
+        "max-phone:min-w-[calc(100vw-2*var(--c-screen-margin))] max-phone:max-w-[calc(100vw-2*var(--c-screen-margin))]"
     )}
     collisionPadding={inset}
     data-slot="popover-content"

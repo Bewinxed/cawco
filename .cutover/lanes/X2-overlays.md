@@ -79,6 +79,32 @@ route: X3 config-accounts-routing (note) — content hard-cut above the sticky C
 route: X5 lib/cawco/preview/PreviewPane.svelte:1026 (note) — sheet-inspect phone: "Outlin" cut by the inspector (the phone layout should be the sheet; kit-swap line above).
 fixed: bench-overlays-rest phone (note) — `routes/(app)/motion/overlays/+page.svelte` (mine): the openers' wrapping lines were spread over the 764px box by flex-wrap's `align-content: normal` (rows at y 62, 315, 574). `content-start`: after, rows at y 62, 99, 142 (the 7px `gap-space-2`), light and dark.
 
+## Dead kit parts (X0-coverage: 0 users by every exported name and path, stories included)
+deleted-file: apps/dashboard/src/lib/components/ui/alert-dialog/alert-dialog-description.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/alert-dialog/alert-dialog-media.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/card/card-action.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/card/card-description.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/command/command-dialog.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/command/command-link-item.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/command/command-separator.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/command/command-shortcut.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/context-menu/context-menu-checkbox-item.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/context-menu/context-menu-group-heading.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/context-menu/context-menu-label.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/popover/popover-description.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/popover/popover-header.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/sheet/sheet-description.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/sidebar/sidebar-menu-sub.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/table/table-caption.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/table/table-footer.svelte
+fixed: their index.ts export lines are gone with them, and the selectors that only reached them: alert-dialog-header `has-data-[slot=alert-dialog-media]:*` (3), alert-dialog-title `[[data-slot=alert-dialog-media]~&]:col-start-2`, card-header `has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto]`, command-item `[[data-slot=command-shortcut]~&]:hidden`. variants.css keeps `slot-alert-dialog-media` and `slot-command-shortcut` (build-variants never drops a written variant).
+route: X5 lib/cawco/Sidebar.svelte:12-13 (note) — its comment says the rail is built from "SidebarMenuSub / SidebarMenuSubButton"; it draws its own `ul data-slot="sidebar-menu-sub"`, and SidebarMenuSub is gone.
+
+## From X3's review (parent hand-off)
+fixed: config-memory-deleted, 390 coarse (L934) — the toast's "Undo" (sonner's own action button) was 48×24 with no `::after`. `ui/sonner/sonner.svelte` now gives sonner's action and cancel buttons `touch-hit` (`toastOptions.classes`). After: Undo 313,68 48×24, `::after` present; a press 21.5px under its centre lands on it, 22.5px misses, light and dark.
+fixed: config-skills-fetch, 390 (L647 "popovers widen to the viewport less 24px") — `ui/popover/popover-content.svelte`: under the phone line every kit popover (not a hanging card, not a bare one) is `calc(100vw - 2*--c-screen-margin)` wide and its collision padding is `--c-screen-margin`, so the site's own width and bits' available width give way to one rule. Before: Source/Path 353 wide at x 19 (`w-c-panel-w` capped by the available width under an 18px pad). After: 366 wide at x 12, 12px each side, light and dark.
+route: X5 lib/cawco/spawn/NsPopover.svelte:190 and lib/cawco/spawn/NsPopoverGroup.svelte:105 (config-accounts-device-sign-in) — the glide popover's `collisionPadding={8}` literal: it is 366 wide (glide-popover's `w-[calc(100vw-2*var(--c-screen-margin))]`) but stands at x 8 with 16 on the right; `collisionPadding` is the screen margin (`numberOf("--c-screen-margin")`), as the kit popover's under the phone line.
+
 ## interface-craft critique (Design Critique, over the engine reads above)
 fixed: L817 one header — every sheet the kit draws a head for has one name in the title role and one Close (closeCount 1 on drawer, sheet and dialog-sheet), Close on the title's line (middles equal to 0.1px), 16px in.
 fixed: L669 one scrim — a held surface over another adds no second wash or blur (project-caw-note: the upper scrim `bg rgba(0,0,0,0)`, `backdrop-filter none`).

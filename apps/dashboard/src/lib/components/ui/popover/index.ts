@@ -10,14 +10,6 @@ export {
   floatingSurface,
 } from "./popover-content.svelte";
 export {
-  default as Description,
-  default as PopoverDescription,
-} from "./popover-description.svelte";
-export {
-  default as Header,
-  default as PopoverHeader,
-} from "./popover-header.svelte";
-export {
   default as Portal,
   default as PopoverPortal,
 } from "./popover-portal.svelte";
