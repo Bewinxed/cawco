@@ -1,0 +1,24 @@
+start: 0f64468e11d27314a553e5ed64d5df3b3734c4c8
+apps/dashboard/src/lib/components/features/flow/FlowAutoFit.svelte
+apps/dashboard/src/lib/components/features/flow/FlowZoomTracker.svelte
+apps/dashboard/src/lib/components/features/flow/fit.ts
+apps/dashboard/src/lib/components/features/workflows/CodeView.svelte
+apps/dashboard/src/lib/components/features/workflows/JsonField.svelte
+apps/dashboard/src/lib/components/features/workflows/SchemaBuilder.svelte
+apps/dashboard/src/lib/components/features/workflows/TemplateInput.svelte
+apps/dashboard/src/lib/components/features/workflows/WhenFields.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowCanvas.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowCanvasTools.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowEdge.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowEditor.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowInspector.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowLaunch.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowNodeCard.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowProgram.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowRunView.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowStatus.svelte
+apps/dashboard/src/lib/components/features/workflows/journal-graph.ts
+apps/dashboard/src/lib/components/features/workflows/pane-slide.ts
+apps/dashboard/src/lib/components/features/workflows/workflow-ui.ts
+apps/dashboard/src/routes/(app)/workflows/+page.svelte
+apps/dashboard/src/routes/(app)/workflows/[id]/+page.svelte
