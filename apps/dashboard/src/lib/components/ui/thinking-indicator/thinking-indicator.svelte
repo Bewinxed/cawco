@@ -1,15 +1,17 @@
 <script lang="ts" module>
   import type { HTMLAttributes } from "svelte/elements";
+  import type { VariantProps } from "tailwind-variants";
   import { restOffscreen } from "#lib/cawco/motion/rest.js";
-  import type { WithElementRef } from "#lib/utils.js";
+  import { tv, type WithElementRef } from "#lib/utils.js";
   import type { SizeVariant } from "./size-context";
 
   export type ThinkingIndicatorProps = WithElementRef<
     HTMLAttributes<HTMLSpanElement>
-  > & {
-    showIcon?: boolean;
-    size?: SizeVariant;
-  };
+  > &
+    ThinkingIndicatorLooks & {
+      showIcon?: boolean;
+      size?: SizeVariant;
+    };
 
   const circle =
     "M 12 8 C 14.21 8 16 9.79 16 12 C 16 14.21 14.21 16 12 16 C 9.79 16 8 14.21 8 12 C 8 9.79 9.79 8 12 8 Z";
@@ -22,6 +24,16 @@
   ];
   const STILL = [{ name: "still", d: infinity }];
   const words = ["Thinking", "Moonwalking", "Planning", "Refining"];
+
+  /** Its callers' looks: inline in a line that pads it, its mark and words
+      the line's gap apart (`--indicator-gap`). */
+  export const thinkingIndicatorVariants = tv({
+    variants: { fit: { inline: "gap-(--indicator-gap) p-0" } },
+  });
+
+  export type ThinkingIndicatorLooks = VariantProps<
+    typeof thinkingIndicatorVariants
+  >;
 </script>
 
 <script lang="ts">
@@ -33,6 +45,7 @@
     class: className,
     showIcon = true,
     size,
+    fit,
     ref = $bindable(null),
     ...restProps
   }: ThinkingIndicatorProps = $props();
@@ -47,7 +60,11 @@
 </script>
 
 <span
-  class={cn("indicator", className)}
+  class={cn(
+    "flex items-center gap-space-2 px-space-3 py-space-2 font-family-inherit font-normal text-ink-muted",
+    thinkingIndicatorVariants({ fit }),
+    className
+  )}
   bind:this={ref}
   {...restProps}
   data-size={compact ? "compact" : "default"}
@@ -61,17 +78,24 @@
          each other on a 6s breath. Each is its own <svg> so its transform
          and opacity run on the compositor; morphing the path itself
          repainted the page every frame. -->
-    <span data-slot="mark" aria-hidden="true" class="mark">
+    <!-- The circle and the infinity trade places twice a three-breath loop,
+         each easing in and out: the circle widens and flattens as it fades,
+         the infinity settles out of a narrower, taller shape as it comes
+         up. The mark's box is the large icon (the medium one compact),
+         unless the caller sets --thinking-icon-size. -->
+    <span data-slot="mark" aria-hidden="true" class="grid flex-none">
       {#each motion.current ? MORPHING : STILL as mark (mark.name)}
         <svg
           aria-hidden="true"
-          class={mark.name}
+          class="col-start-1 row-start-1 size-(--box) motion-safe:origin-center motion-safe:mark-circle:animate-thinking-circle motion-safe:mark-lemniscate:animate-thinking-lemniscate"
+          data-mark={mark.name}
           fill="none"
           height={compact ? 18 : 20}
           stroke="currentColor"
           stroke-linecap="round"
           stroke-linejoin="round"
           stroke-width="1.5"
+          style:--box={`var(--thinking-icon-size, var(${compact ? "--icon-md" : "--icon-lg"}))`}
           viewBox="0 0 24 24"
           width={compact ? 18 : 20}
         >
@@ -80,184 +104,42 @@
       {/each}
     </span>
   {/if}
-  <span aria-hidden="true" class="labels" class:compact>
+  <span
+    data-slot="labels"
+    aria-hidden="true"
+    class="inline-grid overflow-hidden text-size-label leading-body font-medium data-compact:text-size-meta data-compact:font-normal"
+    data-compact={compact || undefined}
+  >
+    <!-- Every beat here is the breath (--breath): each word stands for two
+         of them in an eight-breath cycle, rising in and out, and the light
+         crosses a word once a breath. -->
     {#each words as word, index}
       <span
-        class="word"
-        style:--delay={`calc(var(--breath) * ${index * 2} - 0.24s)`}
-        class:first={index === 0}
+        class="col-start-1 row-start-1 whitespace-nowrap opacity-0 data-first:opacity-100 motion-safe:animate-thinking-word"
+        data-first={index === 0 || undefined}
+        data-slot="word"
+        style:--word-delay={`calc(var(--breath) * ${index * 2} - 0.24s)`}
       >
         <!-- The light passing over the word: the word again in the strong
-             ink, masked to a band. The band slides and the word inside it
-             slides back the same distance on the same curve, so the letters
-             stand still and only the light moves, all of it on the
-             compositor. -->
-        <span class="shimmer"
+             ink, masked to a band three words wide (the band enters from the
+             right and leaves on the left once a breath). The band slides and
+             the word inside it slides back the same distance on the same
+             curve, so the letters stand still and only the light moves, all
+             of it on the compositor. -->
+        <span class="motion-safe:relative motion-safe:inline-block"
           >{word}
           {#if motion.current}
-            <span class="sheen"><span class="sheen-word">{word}</span></span>
+            <span
+              class="motion-safe:pointer-events-none motion-safe:absolute motion-safe:inset-y-0 motion-safe:start-0 motion-safe:text-ink-strong motion-safe:sheen-band motion-safe:animate-thinking-sheen"
+              data-slot="sheen"
+              ><span
+                class="motion-safe:inline-block motion-safe:animate-thinking-sheen-hold"
+                data-slot="sheen-word">{word}</span
+              ></span
+            >
           {/if}</span
         >
       </span>
     {/each}
   </span>
 </span>
-
-<style>
-  .indicator {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    color: var(--ink-muted);
-    font-family: inherit;
-    font-weight: var(--weight-body);
-  }
-  .mark {
-    display: grid;
-    flex: 0 0 auto;
-
-    & > svg {
-      grid-area: 1 / 1;
-    }
-  }
-  .indicator svg {
-    width: var(--thinking-icon-size, 20px);
-    height: var(--thinking-icon-size, 20px);
-  }
-  .indicator[data-size="compact"] svg {
-    width: var(--thinking-icon-size, 16px);
-    height: var(--thinking-icon-size, 16px);
-  }
-  .labels {
-    display: inline-grid;
-    overflow: hidden;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-body);
-
-    &.compact {
-      font-size: var(--text-meta);
-      font-weight: var(--weight-body);
-    }
-  }
-
-  /* Every word contributes its actual width to the shared grid cell. */
-  .word {
-    grid-area: 1 / 1;
-    white-space: nowrap;
-    opacity: 0;
-
-    &.first {
-      opacity: 1;
-    }
-  }
-
-  /* Every beat here is the breath (--breath): each word stands for two of
-     them in an eight-breath cycle, the marks trade places on a three-breath
-     loop, and the light crosses a word once a breath. */
-  @media (prefers-reduced-motion: no-preference) {
-    .word {
-      animation: cycle calc(var(--breath) * 8) var(--ease-out) infinite both;
-      animation-delay: var(--delay);
-    }
-
-    /* The circle and the infinity trade places twice a loop, each easing in
-       and out: the circle widens and flattens as it fades, the infinity
-       settles out of a narrower, taller shape as it comes up. */
-    .circle,
-    .lemniscate {
-      transform-origin: 50% 50%;
-    }
-    .circle {
-      animation: circle calc(var(--breath) * 3) var(--ease-in-out) infinite both;
-    }
-    .lemniscate {
-      animation: lemniscate calc(var(--breath) * 3) var(--ease-in-out) infinite
-        both;
-    }
-
-    /* The band is the old gradient's geometry: three words wide, ink-strong
-       at its middle, fading to nothing 15% of its width either side. It
-       enters from the right and leaves on the left once a breath. */
-    .shimmer {
-      position: relative;
-      display: inline-block;
-    }
-    .sheen {
-      position: absolute;
-      inset-block: 0;
-      inset-inline-start: 0;
-      inline-size: 300%;
-      color: var(--ink-strong);
-      mask-image: linear-gradient(
-        90deg,
-        transparent 35%,
-        #000 50%,
-        transparent 65%
-      );
-      pointer-events: none;
-      animation: sheen var(--breath) var(--ease-in-out) infinite;
-    }
-    .sheen-word {
-      display: inline-block;
-      animation: sheen-hold var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-
-  @keyframes circle {
-    0%,
-    50%,
-    100% {
-      opacity: 1;
-      transform: none;
-    }
-    25%,
-    75% {
-      opacity: 0;
-      transform: scale(1.15, 0.8);
-    }
-  }
-  @keyframes lemniscate {
-    0%,
-    50%,
-    100% {
-      opacity: 0;
-      transform: scale(0.7, 1.1);
-    }
-    25%,
-    75% {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  @keyframes cycle {
-    0% {
-      opacity: 0;
-      transform: translateY(80%);
-    }
-    1.5%,
-    25% {
-      opacity: 1;
-      transform: translateY(0);
-    }
-    26%,
-    100% {
-      opacity: 0;
-      transform: translateY(-80%);
-    }
-  }
-
-  /* The band two words to the left; the word inside it two words back. */
-  @keyframes sheen {
-    to {
-      transform: translateX(-66.6667%);
-    }
-  }
-  @keyframes sheen-hold {
-    to {
-      transform: translateX(200%);
-    }
-  }
-</style>

@@ -128,7 +128,7 @@
 </script>
 
 <!-- Built on the row's first hover or focus, as LiveSessionMenu's is. -->
-<ContextMenu.Lazy class="contents">
+<ContextMenu.Lazy box="none">
   {#snippet trigger(props)}
     <div {...props}>{@render children()}</div>
   {/snippet}

@@ -3,6 +3,10 @@
   import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { NativeSelect } from "#lib/components/ui/native-select/index.js";
   import JsonField from "./JsonField.svelte";
 
   let {
@@ -45,24 +49,27 @@
   }
 </script>
 
-<div class="wf-stack">
-  <div class="wf-row wf-spread">
-    <h3>Result schema</h3>
-    <button
-      class="wf-btn"
+<div class="flex min-w-0 flex-col gap-space-4">
+  <div class="flex flex-wrap items-center justify-between gap-space-2">
+    <h3 class="type-label">Result schema</h3>
+    <Button
       onclick={() => {
         json = !json;
       }}
       type="button"
+      variant="outline"
     >
       {json ? "Field builder" : "Edit as JSON"}
-    </button>
+    </Button>
   </div>
   <!-- The two editors cross-fade in one place and the box tweens between
        their heights. -->
-  <div data-slot="swap" class="swap" {@attach morph()}>
+  <div data-slot="swap" class="grid min-w-0" {@attach morph()}>
     {#key json}
-      <div class="alt" transition:crossIn>
+      <div
+        class="col-start-1 row-start-1 flex flex-col gap-space-4 min-w-0"
+        transition:crossIn
+      >
         {#if json}
           <JsonField
             label="JSON Schema"
@@ -72,10 +79,17 @@
           />
         {:else}
           {#each fields as [name, schema], index (index)}
-            <div class="wf-well" in:unfold out:unfold>
-              <div class="wf-fields">
+            <div
+              class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
+              in:unfold
+              out:unfold
+            >
+              <div
+                class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1"
+              >
                 <label
-                  >Field name<input
+                  class="flex flex-col gap-space-2 type-label text-ink-muted"
+                  >Field name<Input
                     onchange={(event) =>
                       update(
                         name,
@@ -86,7 +100,9 @@
                     value={name}
                   /></label
                 ><label
-                  >Type<select
+                  class="flex flex-col gap-space-2 type-label text-ink-muted"
+                  >Type<NativeSelect
+                    class="w-full"
                     onchange={(event) =>
                       update(
                         name,
@@ -99,25 +115,21 @@
                     {#each ["string", "number", "integer", "boolean", "array", "object"] as type (type)}
                       <option>{type}</option>
                     {/each}
-                  </select></label
+                  </NativeSelect></label
                 >
               </div>
-              <div class="wf-row wf-spread">
-                <label class="wf-check"
-                  ><input
+              <div
+                class="flex flex-wrap items-center justify-between gap-space-2"
+              >
+                <label
+                  class="flex min-h-c-input-h items-center gap-space-2 type-label text-ink-muted"
+                  ><Checkbox
                     checked={required.includes(name)}
-                    onchange={(event) =>
-                      update(
-                        name,
-                        name,
-                        schema.type ?? "string",
-                        event.currentTarget.checked
-                      )}
-                    type="checkbox"
+                    onCheckedChange={(checked) =>
+                      update(name, name, schema.type ?? "string", checked)}
                   />Required</label
-                ><button
+                ><Button
                   aria-label="Remove field {name}"
-                  class="wf-btn"
                   onclick={() =>
                     onchange({
                       ...value,
@@ -127,14 +139,14 @@
                       required: required.filter((key) => key !== name),
                     })}
                   type="button"
+                  variant="outline"
                 >
                   Remove
-                </button>
+                </Button>
               </div>
             </div>
           {/each}
-          <button
-            class="wf-btn"
+          <Button
             onclick={() =>
               onchange({
                 ...value,
@@ -145,25 +157,12 @@
                 },
               })}
             type="button"
+            variant="outline"
           >
             Add field
-          </button>
+          </Button>
         {/if}
       </div>
     {/key}
   </div>
 </div>
-
-<style>
-  .swap {
-    display: grid;
-    min-width: 0;
-  }
-  .alt {
-    grid-area: 1 / 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    min-width: 0;
-  }
-</style>

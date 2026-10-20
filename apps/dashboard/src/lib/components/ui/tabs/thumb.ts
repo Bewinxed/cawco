@@ -1,5 +1,27 @@
 import { frameObserver } from "#lib/cawco/frame-observer.js";
 import { dur, ease } from "#lib/cawco/motion/curves.svelte.js";
+import { tv } from "#lib/utils.js";
+
+/**
+ * The segmented control (DESIGN.md, Segmented), used by Tabs and single
+ * toggle groups: a recess-deep groove, 10px round with a 3px pad, holding a
+ * lifted thumb (8px, the raised shadow) that `slideThumb` places under the
+ * chosen segment, and the segments: 30px tall, 10px in, label weight at
+ * line-height 1, muted until chosen. A segment presses with the tint
+ * (`press-tint` on the segment), never a scale. A group whose answer the hub
+ * still owes (`data-pending`) breathes its thumb, where motion is welcome.
+ * The segment is a mark line, so its words stand on their x-height.
+ */
+export const segmentedVariants = tv({
+  slots: {
+    group:
+      "group/segmented relative inline-flex items-center gap-space-row rounded-md bg-surface-recess-deep p-c-segmented-pad",
+    thumb:
+      "pointer-events-none absolute start-0 top-0 origin-top-left rounded-sm bg-surface-lift opacity-0 shadow-raised motion-safe:group-data-pending/segmented:animate-breath",
+    segment:
+      "mark-line relative inline-flex h-c-btn-h-sm items-center justify-center gap-c-segment-gap whitespace-nowrap rounded-sm px-c-segment-pad-x py-0 font-body font-medium text-ink-muted text-size-label leading-none transition-control data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
+  },
+});
 
 /**
  * Slides the thumb of a segmented group (tabs, single toggle group) under

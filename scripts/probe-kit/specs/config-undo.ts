@@ -33,6 +33,7 @@ import { userLayerLabel } from "../../../packages/core/src/claude-dirs";
 import { HOOK_TEMPLATES } from "../../../packages/core/src/hooks";
 import { RULE_TEMPLATES } from "../../../packages/core/src/rules";
 import type { Reply } from "../../scratch-fleet";
+import { Clock } from "../anim";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
 const SKILL = "probe-undo";
@@ -120,7 +121,7 @@ const asked = (page: Page) =>
   page.evaluate(
     () =>
       document.querySelectorAll(
-        '[role="dialog"], [role="alertdialog"], section.ask-here'
+        '[role="dialog"], [role="alertdialog"], section[data-ask]'
       ).length
   );
 
@@ -243,6 +244,7 @@ const probe = async (kit: Kit) => {
   await memory(on);
   await rule(on);
   await connection(on);
+  await toastFade(on);
   await page.close();
   await trash(on);
   await served.stop(true);
@@ -842,6 +844,127 @@ async function trash({ kit, fleet }: On) {
     lateAnswer.status === 404 &&
       !(await agentsOf(fleet)).some((one) => one.name === LATE),
     `${lateAnswer.status} ${lateAnswer.text}`
+  );
+}
+
+/**
+ * With reduced motion, the delete's toast still fades (DESIGN.md, Reduced
+ * Motion Rule: "Reduced motion means stillness. It does not mean an
+ * instant swap."). svelte-sonner turns every transition and animation on a
+ * toast off there, so the kit's Toaster fades it through the Web Animations
+ * API: in over --dur-panel, out over --dur-exit, both on --ease-out. The
+ * entrance is held on the clock and scrubbed to its start, middle and end;
+ * the exit (Undo) is read as the one run it starts, since sonner unmounts
+ * the toast 200ms on, by its own timer.
+ */
+async function toastFade({ kit, fleet, page, base }: On) {
+  const hookId = "probe-fade-hook";
+  const hookName = "Probe toast fade";
+  const toast = '[data-sonner-toast][data-front="true"]';
+  await hubSend(fleet, "PUT", `/api/fleet/hooks/${hookId}`, {
+    ...template.draft,
+    name: hookName,
+  });
+  const held = async () =>
+    (await hooksOf(fleet)).some((one) => one.id === hookId);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await open(page, `${base}/config/hooks`, `text=${hookName}`);
+  const tokens = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    const ms = (name: string) => {
+      const value = root.getPropertyValue(name).trim();
+      return Number.parseFloat(value) * (value.endsWith("ms") ? 1 : 1000);
+    };
+    return {
+      enter: ms("--dur-panel"),
+      exit: ms("--dur-exit"),
+      easing: root.getPropertyValue("--ease-out").trim(),
+    };
+  });
+  // The same curve by its numbers: the built sheet's minifier writes the
+  // token `cubic-bezier(.23, 1, .32, 1)`, the engine reports `0.23`.
+  const curve = (easing: string) =>
+    (easing.match(/-?\d*\.?\d+/g) ?? []).map(Number).join();
+  const same = (a: string, b: string) =>
+    a.split("(")[0] === b.split("(")[0] && curve(a) === curve(b);
+  const clock = await Clock.on(page);
+  try {
+    const entering = await clock.catchRuns(
+      () => deleteFromMenu(page, hookName, "Delete hook", held),
+      '[data-slot="toast-layer"]',
+      15_000
+    );
+    const own = await page.evaluate((at) => {
+      const el = document.querySelector(at);
+      return (
+        el?.getAnimations().map((run) => ({
+          props: (run.effect as KeyframeEffect).getKeyframes().map((frame) =>
+            Object.keys(frame)
+              .filter(
+                (key) =>
+                  !["offset", "easing", "composite", "computedOffset"].includes(
+                    key
+                  )
+              )
+              .join("+")
+          ),
+        })) ?? null
+      );
+    }, toast);
+    kit.check(
+      "toast fade: with reduced motion, the arriving toast holds one opacity animation",
+      own?.length === 1 &&
+        own[0].props.every((props) => props === "opacity") &&
+        entering.length === 1 &&
+        entering[0].type === "WebAnimation",
+      `getAnimations ${JSON.stringify(own)}; caught ${entering.map((run) => `${run.type} ${run.name} ${run.end}ms ${run.easing}`).join(", ")}`
+    );
+    kit.check(
+      "toast fade: it runs --dur-panel on --ease-out",
+      entering[0]?.end === tokens.enter &&
+        same(entering[0]?.easing ?? "", tokens.easing),
+      `${entering[0]?.end}ms ${entering[0]?.easing}; tokens ${tokens.enter}ms ${tokens.easing}`
+    );
+    const opacity: number[] = [];
+    for (const fraction of [0, 0.5, 1]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one fraction at a time, on the one clock
+      await clock.seek(fraction);
+      opacity.push(
+        await page.evaluate(
+          (at) =>
+            Number(
+              getComputedStyle(document.querySelector(at) as Element).opacity
+            ),
+          toast
+        )
+      );
+    }
+    kit.check(
+      "toast fade: scrubbed to 0, 0.5 and 1, its opacity reads 0, between, 1",
+      opacity[0] === 0 && opacity[1] > 0 && opacity[1] < 1 && opacity[2] === 1,
+      opacity.join(" → ")
+    );
+    await clock.release();
+    const leaving = await clock.catchRuns(
+      () => undo(page),
+      '[data-slot="toast-layer"]',
+      15_000
+    );
+    kit.check(
+      "toast fade: Undo's leave is one Web Animation, --dur-exit on --ease-out",
+      leaving.length === 1 &&
+        leaving[0].type === "WebAnimation" &&
+        leaving[0].end === tokens.exit &&
+        same(leaving[0].easing, tokens.easing),
+      `caught ${leaving.map((run) => `${run.type} ${run.name} ${run.end}ms ${run.easing}`).join(", ")}; tokens ${tokens.exit}ms ${tokens.easing}`
+    );
+  } finally {
+    await clock.release();
+    await page.emulateMedia({ reducedMotion: null });
+  }
+  kit.check(
+    "toast fade: Undo still puts the hook back",
+    (await until(held, Boolean)).ok
   );
 }
 

@@ -2,7 +2,8 @@
   /**
    * The usage popover (the relay) on a bench: the real strip and its real
    * popover (the rail's, on the desk) or sheet (on the phone), fed a staged
-   * forecast with no hub. `?theme=` light | dark, `?n=` 6 | 20 the number
+   * forecast with no hub, in the reader's theme (its Theme switch sets it,
+   * as the dashboard's own does). `?n=` 6 | 20 the number
    * of Claude accounts, `?view=` desktop | phone where it opens; on a desk
    * the phone view is this page at
    * 390×844 in a frame. Six: five accounts in Petralab (a group) and one in
@@ -33,13 +34,6 @@
     stageUsage(count, page.url.searchParams.get("stop"));
   });
 
-  const scheme = $derived(
-    page.url.searchParams.get("theme") === "dark" ? "dark" : "light"
-  );
-  $effect(() => {
-    theme.set(scheme);
-  });
-
   const hrefOf = (key: string, value: string) => {
     const query = new URLSearchParams(page.url.search);
     query.set(key, value);
@@ -66,7 +60,7 @@
       ? document.querySelector("[data-bench-strip]")
       : document;
     const hit = scope?.querySelector<HTMLElement>(
-      ".strip-hit:not([data-state='open']):not([aria-expanded='true'])"
+      "[data-strip-hit]:not([data-state='open']):not([aria-expanded='true'])"
     );
     hit?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
     hit?.click();
@@ -87,15 +81,11 @@
     };
   });
 
+  const THEMES = [
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+  ] as const;
   const SWITCHES = [
-    {
-      key: "theme",
-      label: "Theme",
-      options: [
-        { value: "light", label: "Light" },
-        { value: "dark", label: "Dark" },
-      ],
-    },
     {
       key: "n",
       label: "Accounts",
@@ -114,7 +104,7 @@
     },
   ] as const;
   const current = (key: string): string =>
-    ({ n: String(count), view, theme: scheme })[key] ?? "";
+    ({ n: String(count), view })[key] ?? "";
 </script>
 
 <svelte:head><title>Usage relay | CawCo</title></svelte:head>
@@ -122,12 +112,24 @@
 {#if !framed}
   <nav
     aria-label="Usage popover bench"
-    class="bench"
+    class="pointer-events-auto relative z-(--layer-bench-controls) flex flex-wrap justify-end gap-x-space-4 gap-y-space-2 p-space-2"
     onpointerdown={(event) => event.stopPropagation()}
   >
+    <span class="flex items-center gap-space-1">
+      <span class="type-meta text-ink-muted">Theme</span>
+      {#each THEMES as option (option.value)}
+        <Button
+          aria-pressed={theme.resolved === option.value}
+          onclick={() => theme.set(option.value)}
+          size="xs"
+          variant={theme.resolved === option.value ? "default" : "outline"}
+          >{option.label}</Button
+        >
+      {/each}
+    </span>
     {#each SWITCHES as each (each.key)}
-      <span class="switch">
-        <span class="switch-label">{each.label}</span>
+      <span class="flex items-center gap-space-1">
+        <span class="type-meta text-ink-muted">{each.label}</span>
         {#each each.options as option (option.value)}
           <Button
             aria-current={current(each.key) === option.value
@@ -146,49 +148,17 @@
 {/if}
 
 {#if phoneFrame}
-  <div class="phone">
-    <iframe height="844" src={frameSrc} title="Phone sheet" width="390"
+  <div class="grid place-items-center p-space-4">
+    <iframe
+      class="rounded-lg border border-border-control bg-surface-recess"
+      height="844"
+      src={frameSrc}
+      title="Phone sheet"
+      width="390"
     ></iframe>
   </div>
 {:else if ownStrip}
-  <div class="home-strip" data-bench-strip>
+  <div class="px-space-3" data-bench-strip>
     <UsageMeter variant="home" />
   </div>
 {/if}
-
-<style>
-  .bench {
-    position: fixed;
-    inset-block-start: var(--space-2);
-    inset-inline: var(--space-2);
-    z-index: 60;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2) var(--space-4);
-    justify-content: flex-end;
-    pointer-events: auto;
-  }
-  .switch {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-  .switch-label {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .phone {
-    display: grid;
-    place-items: center;
-    padding: 56px var(--space-4) var(--space-4);
-
-    & iframe {
-      border: 1px solid var(--border-control);
-      border-radius: var(--radius-lg);
-      background: var(--surface-recess);
-    }
-  }
-  .home-strip {
-    padding: 96px 12px 0;
-  }
-</style>

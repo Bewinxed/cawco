@@ -243,15 +243,20 @@
 
 <svelte:head><title>Lift bench · CawCo</title></svelte:head>
 
-<main>
+<main class="grid gap-space-2 p-space-4">
   {#each CASES as one, i (one.name)}
     <section
+      class="relative flex min-h-space-8 flex-col border border-border-hairline data-grid:grid"
       data-grid={one.grid || undefined}
       data-case={i}
-      class:grid={one.grid}
     >
       {#key views[i]}
-        <div class="view" data-view={views[i]} in:crossIn out:leaving={i}>
+        <div
+          class="flex items-center gap-space-2 bg-surface-raised p-space-2"
+          data-view={views[i]}
+          in:crossIn
+          out:leaving={i}
+        >
           <span>{one.name} · {views[i]}</span>
           <button type="button">Press</button>
         </div>
@@ -259,28 +264,3 @@
     </section>
   {/each}
 </main>
-
-<style>
-  main {
-    display: grid;
-    gap: var(--space-2);
-    padding: var(--space-4);
-  }
-  section {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    min-block-size: 3rem;
-    border: 1px solid var(--border-hairline);
-  }
-  section.grid {
-    display: grid;
-  }
-  .view {
-    display: flex;
-    gap: var(--space-2);
-    align-items: center;
-    padding: var(--space-2);
-    background: var(--surface-raised);
-  }
-</style>

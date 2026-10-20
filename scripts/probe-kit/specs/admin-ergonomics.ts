@@ -223,7 +223,7 @@ const run = async (kit: Kit) => {
   const before = (await status()).find((one) => one.name === PREVIEW);
   await page
     .locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
     )
     .focus();
   await page.keyboard.press("c");

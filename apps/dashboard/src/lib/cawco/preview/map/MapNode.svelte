@@ -12,7 +12,11 @@
   const card = $derived(data as unknown as MapCardData);
 </script>
 
-<div data-slot="map-node" class="map-node">
+<div
+  data-slot="map-node"
+  style:--xy-handle-background-color="transparent"
+  style:--xy-handle-border-color="transparent"
+>
   <Handle id="in" isConnectable={false} position={Position.Top} type="target" />
   <MapCard {...card} />
   <Handle
@@ -22,15 +26,3 @@
     type="source"
   />
 </div>
-
-<style>
-  .map-node :global(.svelte-flow__handle) {
-    inline-size: 1px;
-    block-size: 1px;
-    min-inline-size: 0;
-    min-block-size: 0;
-    border: 0;
-    background: transparent;
-    pointer-events: none;
-  }
-</style>

@@ -14,7 +14,7 @@
   import { Popover, PopoverContent } from "#lib/components/ui/popover/index.js";
   import NewSessionDialog from "./NewSessionDialog.svelte";
   import NewSessionForm from "./NewSessionForm.svelte";
-  import type { SpawnPrefill } from "./new-session.svelte";
+  import { FORM_SIZES, type SpawnPrefill } from "./new-session.svelte";
 
   let {
     open,
@@ -51,9 +51,12 @@
     <PopoverContent
       align="start"
       aria-label="New session"
-      class="ns-theme max-h-[calc(var(--bits-popover-content-available-height)-2px)] w-[min(var(--c-new-session-pop-w),calc(100vw-48px))] gap-0 bg-(--surface-recess)"
       customAnchor={anchor}
       data-ns-popover
+      gap="none"
+      height="room"
+      look="new-session"
+      morphs={{ on: FORM_SIZES }}
       onCloseAutoFocus={(event) => {
         event.preventDefault();
         // Back to the trigger, unless the press that closed it put the
@@ -69,6 +72,8 @@
         form?.focusPrompt();
       }}
       side="bottom"
+      style="--pop-w: min(var(--c-new-session-pop-w), 100vw - var(--space-8) * 1.5); --pop-max-h: calc(var(--bits-popover-content-available-height) - 2px)"
+      width="room"
       bind:ref={card}
     >
       <NewSessionForm {onclose} {open} {prefill} bind:this={form} />

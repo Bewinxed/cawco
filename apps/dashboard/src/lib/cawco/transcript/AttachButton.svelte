@@ -45,7 +45,7 @@
 
 <input
   data-slot="hidden-file"
-  class="hidden-file"
+  class="hidden"
   multiple
   onchange={onpick}
   type="file"
@@ -56,9 +56,10 @@
     <DropdownMenu.Trigger
       data-att-btn
       aria-label="Attach or draw"
-      class="att-btn"
+      class="flex-none"
+      look="attach"
     >
-      <IconPlus />
+      <IconPlus class="size-icon-md" />
     </DropdownMenu.Trigger>
     <DropdownMenu.Content align="start" side="top">
       <DropdownMenu.Item onSelect={() => input?.click()}>
@@ -74,64 +75,12 @@
   </DropdownMenu.Root>
 {:else}
   <button
-    data-slot="att-btn"
+    data-att-btn
     aria-label="Attach a file or image"
-    class="att-btn touch-hit"
+    class="touch-hit hit-edge-hair size-c-composer-field flex-none grid place-items-center rounded-xs border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out motion-safe:transition-[background-color,color,scale] hover:bg-surface-hover hover:text-ink-strong motion-safe:active:scale-(--press-scale) group-inert/ctrls:border-border-button-outline group-inert/ctrls:shadow-xs"
     onclick={() => input?.click()}
     type="button"
   >
-    <IconPlus />
+    <IconPlus class="size-icon-md" />
   </button>
 {/if}
-
-<style>
-  .hidden-file {
-    display: none;
-  }
-  /* css-scope: the menu's button is the kit Trigger's own, which Svelte never scopes; data-att-btn marks it, and this file alone writes that name */
-  .att-btn,
-  :global([data-att-btn]) {
-    --hit-edge: 1px;
-    width: var(--c-composer-field);
-    height: var(--c-composer-field);
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-    /* Concentric with the shell: outer radius less the inset that seats it. */
-    border-radius: calc(var(--radius-lg) - var(--c-composer-inset));
-    border: 1px solid var(--border-control);
-    background: var(--surface-raised);
-    color: var(--ink-muted);
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        background-color var(--dur-control) var(--ease-out),
-        color var(--dur-control) var(--ease-out),
-        transform var(--dur-control) var(--ease-out);
-    }
-  }
-  /* css-scope: the Trigger's glyph, as above */
-  .att-btn :global(svg),
-  :global([data-att-btn] svg) {
-    width: 16px;
-    height: 16px;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    /* css-scope: the Trigger's hover, as above */
-    .att-btn:hover,
-    :global([data-att-btn]:hover) {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    /* css-scope: the Trigger's press, as above; it is held as data-pressed (dropdown-menu-trigger.svelte), since its menu takes :active a frame in */
-    .att-btn:active,
-    :global([data-att-btn]:is(:active, [data-pressed])) {
-      transform: scale(var(--press-scale));
-    }
-  }
-</style>

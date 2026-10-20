@@ -21,40 +21,14 @@
   } = $props();
 </script>
 
-<span data-slot="state-pill" class="state-pill" data-tone={tone} {title}>
+<span
+  data-slot="state-pill"
+  class="type-label inline-flex h-c-pill-h max-w-full flex-none items-center gap-c-pill-gap rounded-pill px-space-3 whitespace-nowrap transition-[background-color,color] duration-(--dur-panel) ease-out tone-live:bg-status-live-bg tone-live:text-status-live-ink tone-done:bg-status-done-bg tone-done:text-status-done-ink"
+  data-tone={tone}
+  {title}
+>
   {word}
   {#if who}
-    <span data-slot="who" class="who">· {who}</span>
+    <span data-slot="who" class="min-w-0 truncate">· {who}</span>
   {/if}
 </span>
-
-<style>
-  .state-pill {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: 0.3em;
-    block-size: 24px;
-    max-inline-size: 100%;
-    padding: 0 10px;
-    border-radius: var(--radius-pill);
-    font: var(--type-label);
-    white-space: nowrap;
-    transition:
-      background-color var(--dur-panel) var(--ease-out),
-      color var(--dur-panel) var(--ease-out);
-  }
-  .state-pill[data-tone="live"] {
-    background: var(--status-live-bg);
-    color: var(--status-live-ink);
-  }
-  .state-pill[data-tone="done"] {
-    background: var(--status-done-bg);
-    color: var(--status-done-ink);
-  }
-  .who {
-    min-inline-size: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-</style>

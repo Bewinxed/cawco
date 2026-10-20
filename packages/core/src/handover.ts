@@ -799,7 +799,7 @@ const linkStep = (
       return link.kind === "registering" && link.retrying
         ? at({ ...link, retrying: false }, [{ kind: "register" }])
         : { state, commands: [] };
-    default:
+    case "link-lost":
       // What the next register hands back, its custody decides.
       return {
         state: { ...state, link: { kind: "down" }, custody: null },
@@ -829,7 +829,12 @@ export const step = (state: HandoverState, event: HandoverEvent): Stepped => {
       return beginCustody(state, event);
     case "keeper-word":
       return keeperWordStep(state, event);
-    default:
+    case "arm-listed":
+    case "arm-need":
+    case "arm-start":
+    case "arm-unread":
+    case "armed":
+    case "judge-exit":
       return armingStep(state, event);
   }
 };

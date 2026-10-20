@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
-   * New project's template cards (design §5): radio cards on app.css's icon
-   * cards (the channel-card recipe: one selection frame for the set, 1px
+   * New project's template cards (design §5): radio cards on the kit's icon
+   * cards (ui/icon-card; the channel-card recipe: one selection frame for the set, 1px
    * `brand-solid` over `surface-recess`), as many to a row as fit. The
    * frame is the house highlight's selection pill (components/ui/highlight,
    * the new-session dialog's list), drawn in that recipe: it glides to the
@@ -23,6 +23,10 @@
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import {
+    iconCardsVariants,
+    iconCardVariants,
+  } from "#lib/components/ui/icon-card/index.js";
   import Caw, { LEDGE_LINE, SAFE_MARGIN } from "../home/Caw.svelte";
   import CawPosePicture from "../home/CawPosePicture.svelte";
   import CardFace from "./CardFace.svelte";
@@ -142,27 +146,30 @@
   });
 </script>
 
-<div class="templates">
+<div class="pt-space-8">
   <RadioGroup.Root
     data-cards
     aria-label="Template"
-    class="icon-cards cards"
+    data-slot="icon-cards"
+    class={iconCardsVariants({ class: "gap-y-space-8" })}
     onValueChange={(next) => {
       selected = (next || null) as TemplateName | null;
     }}
     value={selected ?? ""}
     {@attach measure}
     {@attach highlight({
-      rows: ".icon-card",
-      selected: '.icon-card[data-state="checked"]',
+      rows: '[data-slot="icon-card"]',
+      selected: '[data-slot="icon-card"][data-state="checked"]',
       axis: "xy",
+      look: "card",
     })}
   >
     {#each cards as card (card.template)}
       {@const acted = action?.template === card.template ? action : undefined}
-      <div class="tcell">
+      <div class="relative grid">
         <RadioGroup.Item
-          class="icon-card"
+          data-slot="icon-card"
+          class={iconCardVariants()}
           data-template={card.template}
           value={card.template}
         >
@@ -180,21 +187,24 @@
             {/snippet}
             {#snippet aside()}
               {#if fit === card.template && peek}
-                <span class="fits" transition:appear>Fits your prompt</span>
+                <span class="type-label text-brand-ink" transition:appear
+                  >Fits your prompt</span
+                >
               {/if}
             {/snippet}
           </CardFace>
           {#if acted}
             <!-- The room its action stands in, under its notice. -->
-            <span aria-hidden="true" class="action-room"></span>
+            <span aria-hidden="true" class="mt-space-2 h-c-btn-h-sm"></span>
           {/if}
         </RadioGroup.Item>
         {#if acted}
           <Button
-            class="tcard-action"
+            class="absolute start-(--action-off) bottom-(--action-off) z-4"
             label={acted.label}
             onclick={acted.onclick}
             size="sm"
+            style="--action-off: calc(var(--space-4) + 1px)"
             variant="outline"
           />
         {/if}
@@ -205,10 +215,10 @@
       <div
         data-slot="peek"
         aria-hidden="true"
-        class="peek"
+        class="pointer-events-none absolute top-0 left-0 z-3 motion-safe:data-placed:transition-[translate] motion-safe:data-placed:duration-(--dur-panel) motion-safe:data-placed:ease-drawer"
         data-share={peekShare}
+        data-placed={placed || undefined}
         style:translate="{peekAt.x}px {peekAt.y}px"
-        class:placed
       >
         <Caw
           ledge
@@ -221,50 +231,3 @@
     {/if}
   </RadioGroup.Root>
 </div>
-
-<style>
-  /* Room above the first row for Caw: his rise over the ledge line takes
-     the gap above and the first lines of padding of a card in the row
-     above, never its words. */
-  .templates {
-    padding-top: var(--space-8);
-  }
-  /* The cards are app.css's icon cards; rows stand further apart here, so
-     Caw's rise has the room. */
-  .templates :global(.cards) {
-    row-gap: var(--space-8);
-  }
-  /* Each card's cell: the card fills it, and an action stands over the
-     room the card keeps for it. */
-  .tcell {
-    position: relative;
-    display: grid;
-  }
-  .action-room {
-    block-size: var(--c-btn-h-sm);
-    margin-block-start: var(--space-2);
-  }
-  .tcell :global(.tcard-action) {
-    position: absolute;
-    inset-inline-start: calc(var(--space-4) + 1px);
-    inset-block-end: calc(var(--space-4) + 1px);
-    z-index: 4;
-  }
-  .fits {
-    font: var(--type-label);
-    color: var(--brand-ink);
-  }
-  /* Caw stands on the fitting card, painted over the grid. */
-  .peek {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 3;
-    pointer-events: none;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .peek.placed {
-      transition: translate var(--dur-panel) var(--ease-drawer);
-    }
-  }
-</style>

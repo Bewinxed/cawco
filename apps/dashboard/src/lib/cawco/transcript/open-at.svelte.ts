@@ -53,7 +53,13 @@ function recordsOf(row: Row): Message[] {
       return row.messages;
     case "subagent":
       return [row.spawn, ...row.branch.messages];
-    default:
+    case "account":
+    case "compaction":
+    case "harness":
+    case "live":
+    case "livetool":
+    case "stream":
+    case "thinking":
       return [];
   }
 }

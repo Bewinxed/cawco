@@ -211,20 +211,23 @@
   };
 </script>
 
-<section aria-label="{projectName}'s spend" class="project-spend">
+<section
+  aria-label="{projectName}'s spend"
+  class="flex flex-col gap-space-group"
+>
   {#if refused && !spend}
-    <p data-slot="note" class="note" role="alert">
+    <p data-slot="note" class="type-meta text-ink-muted" role="alert">
       The spend for {projectName} could not be read: {refused}
     </p>
   {:else if !spend}
-    <div class="tiles">
+    <div class="grid grid-cols-stat-tiles gap-space-3">
       {#each [0, 1, 2, 3, 4] as i (i)}
-        <Skeleton class="h-[var(--c-stat-h)] rounded-[var(--radius-md)]" />
+        <Skeleton height="stat" radius="tile" />
       {/each}
     </div>
-    <Skeleton class="h-48 rounded-[var(--radius-lg)]" />
+    <Skeleton height="chart" radius="card" />
   {:else}
-    <div class="tiles" in:appear>
+    <div class="grid grid-cols-stat-tiles gap-space-3" in:appear>
       <StatTile label="Today" value={usd(spend.todayUsd)} />
       <StatTile label="This month" value={usd(spend.monthUsd)} />
       <StatTile
@@ -242,7 +245,9 @@
       >
         {#snippet action()}
           {#if onCapLine}
-            <span class="on-cap">{onCapLine}</span>
+            <span class="type-meta shrink grow basis-full text-ink-muted"
+              >{onCapLine}</span
+            >
           {/if}
           <Popover.Root bind:open={capOpen}>
             <Popover.Trigger>
@@ -259,21 +264,24 @@
             </Popover.Trigger>
             <Popover.Content
               align="start"
-              class="w-80 max-w-[calc(100vw-2*var(--space-5))]"
+              class="max-w-(--cap-max-w)"
+              style="--cap-max-w: calc(100vw - 2 * var(--space-5))"
+              width="wide"
             >
               <form
-                class="budget"
+                class="flex flex-col gap-space-3"
                 onsubmit={(event) => {
                   event.preventDefault();
                   saveCap();
                 }}
               >
-                <p data-slot="note" class="note">
+                <p data-slot="note" class="type-meta text-ink-muted">
                   What {projectName} may spend, its Caw and its attempts together.
                   Leave it empty for no limit.
                 </p>
-                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
-                <label data-slot="project-spend-field" class="field"
+                <label
+                  data-slot="project-spend-field"
+                  class="type-meta flex flex-col gap-space-1 text-ink-muted"
                   >Dollars
                   <Input
                     inputmode="decimal"
@@ -281,7 +289,10 @@
                     bind:value={capAmount}
                   /></label
                 >
-                <div data-slot="project-spend-field" class="field">
+                <div
+                  data-slot="project-spend-field"
+                  class="type-meta flex flex-col gap-space-1 text-ink-muted"
+                >
                   <span>Each</span>
                   <Tabs
                     onValueChange={(next) => {
@@ -297,7 +308,7 @@
                 </div>
                 <label
                   data-slot="project-spend-field"
-                  class="field"
+                  class="type-meta flex flex-col gap-space-1 text-ink-muted"
                   for="cap-on"
                   >When it is reached
                   <NativeSelect
@@ -320,11 +331,16 @@
                   </NativeSelect>
                 </label>
                 {#if capRefused}
-                  <p data-slot="refused" class="refused" role="alert" in:appear>
+                  <p
+                    data-slot="refused"
+                    class="type-meta text-error-11"
+                    role="alert"
+                    in:appear
+                  >
                     {capRefused}
                   </p>
                 {/if}
-                <div class="form-acts">
+                <div class="flex justify-end gap-space-2">
                   {#if cap}
                     <Button
                       label="Remove"
@@ -362,20 +378,21 @@
                 >
               {/snippet}
             </Popover.Trigger>
-            <Popover.Content align="start" class="w-72">
+            <Popover.Content align="start">
               <form
-                class="budget"
+                class="flex flex-col gap-space-3"
                 onsubmit={(event) => {
                   event.preventDefault();
                   saveBudget();
                 }}
               >
-                <p data-slot="note" class="note">
+                <p data-slot="note" class="type-meta text-ink-muted">
                   What one attempt at a task may spend before it stops. Leave a
                   field empty for no limit.
                 </p>
-                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
-                <label data-slot="project-spend-field" class="field"
+                <label
+                  data-slot="project-spend-field"
+                  class="type-meta flex flex-col gap-space-1 text-ink-muted"
                   >Dollars
                   <Input
                     inputmode="decimal"
@@ -383,8 +400,9 @@
                     bind:value={amount}
                   /></label
                 >
-                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
-                <label data-slot="project-spend-field" class="field"
+                <label
+                  data-slot="project-spend-field"
+                  class="type-meta flex flex-col gap-space-1 text-ink-muted"
                   >Turns
                   <Input
                     inputmode="numeric"
@@ -392,8 +410,9 @@
                     bind:value={turns}
                   /></label
                 >
-                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
-                <label data-slot="project-spend-field" class="field"
+                <label
+                  data-slot="project-spend-field"
+                  class="type-meta flex flex-col gap-space-1 text-ink-muted"
                   >Minutes
                   <Input
                     inputmode="numeric"
@@ -402,7 +421,12 @@
                   /></label
                 >
                 {#if budgetRefused}
-                  <p data-slot="refused" class="refused" role="alert" in:appear>
+                  <p
+                    data-slot="refused"
+                    class="type-meta text-error-11"
+                    role="alert"
+                    in:appear
+                  >
                     {budgetRefused}
                   </p>
                 {/if}
@@ -425,98 +449,189 @@
       <!-- This month's ledger: Caw's threads (and his turns no thread
            woke), the attempts, every other session, and their total, which
            is the This month tile. -->
-      <div data-slot="ledger" class="ledger">
-        <Table.Root class="table-fixed">
+      <div
+        data-slot="ledger"
+        class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+      >
+        <!-- Under 640px each row is a card: its name across it, then its
+             count, spend and last word; each band stays as its section's
+             title. -->
+        <Table.Root
+          layout="ledger"
+          stacks="phone"
+          style="--card-cols: minmax(0, 1fr) auto auto"
+        >
           {#if spend.threads.length > 0 || spend.caw.unthreadedMonthUsd > 0}
-            <Table.Header>
-              <Table.Row class="band border-0">
+            <Table.Header section>
+              <Table.Row variant="band">
                 <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                <Table.Head class="col-name" scope="col">Caw</Table.Head>
-                <Table.Head class="col-count" scope="col">Wakes</Table.Head>
-                <Table.Head class="col-usd" scope="col">Spent</Table.Head>
-                <Table.Head data-col-last class="col-last" scope="col"
-                  >Last</Table.Head
+                <Table.Head variant="band" scope="col">Caw</Table.Head>
+                <Table.Head
+                  class="w-c-ledger-count-w"
+                  variant="band"
+                  scope="col">Wakes</Table.Head
+                >
+                <Table.Head
+                  edge="end"
+                  class="w-c-ledger-usd-w"
+                  variant="band"
+                  scope="col">Spent</Table.Head
+                >
+                <Table.Head
+                  data-col-last
+                  edge="end"
+                  class="w-c-ledger-when-w"
+                  variant="band"
+                  scope="col">Last</Table.Head
                 >
                 <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
               </Table.Row>
             </Table.Header>
             <Table.Body>
               {#each spend.threads as thread (thread.id)}
-                <Table.Row data-project-spend-row class="row">
-                  <Table.Cell class="col-name">
+                <Table.Row
+                  data-project-spend-row
+                  class="relative"
+                  variant="stacks"
+                >
+                  <Table.Cell
+                    variant="ledger-stacks"
+                    class="@max-phone/table:col-span-full"
+                  >
                     <a
                       data-slot="name"
-                      class="name"
+                      class="type-label block truncate text-ink-row no-underline after:absolute after:inset-0"
                       href="/session/thread:{thread.id}"
                       >Thread · {thread.title}</a
                     >
                   </Table.Cell>
-                  <Table.Cell data-num class="col-count num"
+                  <Table.Cell
+                    data-num
+                    variant="ledger-stacks"
+                    class="w-c-ledger-count-w"
                     >{thread.wakes}
                     {thread.wakes === 1 ? "wake" : "wakes"}</Table.Cell
                   >
-                  <Table.Cell data-num class="col-usd num"
-                    >{usd(thread.usd)}</Table.Cell
+                  <Table.Cell
+                    data-num
+                    edge="end"
+                    variant="ledger-stacks"
+                    class="w-c-ledger-usd-w">{usd(thread.usd)}</Table.Cell
                   >
-                  <Table.Cell data-num data-col-last class="col-last num"
+                  <Table.Cell
+                    data-num
+                    data-col-last
+                    edge="end"
+                    variant="ledger-stacks"
+                    class="w-c-ledger-when-w"
                     >{formatAgeShort(thread.lastAt, now)}</Table.Cell
                   >
                 </Table.Row>
               {/each}
               {#if spend.caw.unthreadedMonthUsd > 0}
-                <Table.Row data-project-spend-row class="row">
-                  <Table.Cell class="col-name"
-                    ><span data-slot="name" class="name plain"
+                <Table.Row
+                  data-project-spend-row
+                  class="relative"
+                  variant="stacks"
+                >
+                  <Table.Cell
+                    variant="ledger-stacks"
+                    class="@max-phone/table:col-span-full"
+                    ><span
+                      data-slot="name"
+                      class="type-label block truncate text-ink-row no-underline"
                       >Not in a thread</span
                     ></Table.Cell
                   >
-                  <Table.Cell class="col-count"></Table.Cell>
-                  <Table.Cell data-num class="col-usd num"
+                  <Table.Cell variant="ledger-stacks" class="w-c-ledger-count-w"
+                  ></Table.Cell>
+                  <Table.Cell
+                    data-num
+                    edge="end"
+                    variant="ledger-stacks"
+                    class="w-c-ledger-usd-w"
                     >{usd(spend.caw.unthreadedMonthUsd)}</Table.Cell
                   >
-                  <Table.Cell data-col-last class="col-last"></Table.Cell>
+                  <Table.Cell
+                    data-col-last
+                    edge="end"
+                    variant="ledger-stacks"
+                    class="w-c-ledger-when-w"
+                  ></Table.Cell>
                 </Table.Row>
               {/if}
             </Table.Body>
           {/if}
           {#if spend.attempts.length > 0}
-            <Table.Header>
-              <Table.Row class="band border-0">
+            <Table.Header section>
+              <Table.Row variant="band">
                 <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                <Table.Head class="col-name" scope="col">Attempts</Table.Head>
-                <Table.Head class="col-count" scope="col">Tries</Table.Head>
-                <Table.Head class="col-usd" scope="col">Spent</Table.Head>
-                <Table.Head data-col-last class="col-last" scope="col"
-                  >Now</Table.Head
+                <Table.Head variant="band" scope="col">Attempts</Table.Head>
+                <Table.Head
+                  class="w-c-ledger-count-w"
+                  variant="band"
+                  scope="col">Tries</Table.Head
+                >
+                <Table.Head
+                  edge="end"
+                  class="w-c-ledger-usd-w"
+                  variant="band"
+                  scope="col">Spent</Table.Head
+                >
+                <Table.Head
+                  data-col-last
+                  edge="end"
+                  class="w-c-ledger-when-w"
+                  variant="band"
+                  scope="col">Now</Table.Head
                 >
                 <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
               </Table.Row>
             </Table.Header>
             <Table.Body>
               {#each spend.attempts as attempt (attempt.taskId)}
-                <Table.Row data-project-spend-row class="row">
-                  <Table.Cell class="col-name">
+                <Table.Row
+                  data-project-spend-row
+                  class="relative"
+                  variant="stacks"
+                >
+                  <Table.Cell
+                    variant="ledger-stacks"
+                    class="@max-phone/table:col-span-full"
+                  >
                     <a
                       data-slot="name"
-                      class="name"
+                      class="type-label block truncate text-ink-row no-underline after:absolute after:inset-0"
                       href="/project/{encodeURIComponent(
                         projectId
                       )}?task={attempt.taskId}"
-                      >{attempt.title}<span data-slot="id" class="id"
+                      >{attempt.title}<span
+                        data-slot="id"
+                        class="type-code liga-none ms-space-2 text-ink-subtle"
                         >{attempt.taskId}</span
                       ></a
                     >
                   </Table.Cell>
-                  <Table.Cell data-num class="col-count num"
+                  <Table.Cell
+                    data-num
+                    variant="ledger-stacks"
+                    class="w-c-ledger-count-w"
                     >{attempt.attempts}
                     {attempt.attempts === 1
                       ? "attempt"
                       : "attempts"}</Table.Cell
                   >
-                  <Table.Cell data-num class="col-usd num"
-                    >{usd(attempt.usd)}</Table.Cell
+                  <Table.Cell
+                    data-num
+                    edge="end"
+                    variant="ledger-stacks"
+                    class="w-c-ledger-usd-w">{usd(attempt.usd)}</Table.Cell
                   >
-                  <Table.Cell data-col-last class="col-last"
+                  <Table.Cell
+                    data-col-last
+                    edge="end"
+                    variant="ledger-stacks"
+                    class="w-c-ledger-when-w"
                     >{STATE_WORD[attempt.state] ?? attempt.state}</Table.Cell
                   >
                 </Table.Row>
@@ -525,187 +640,69 @@
           {/if}
           <Table.Body>
             {#if spend.others.monthUsd > 0}
-              <Table.Row data-project-spend-row class="row">
-                <Table.Cell class="col-name"
-                  ><span data-slot="name" class="name plain"
+              <Table.Row
+                data-project-spend-row
+                class="relative"
+                variant="stacks"
+              >
+                <Table.Cell
+                  variant="ledger-stacks"
+                  class="@max-phone/table:col-span-full"
+                  ><span
+                    data-slot="name"
+                    class="type-label block truncate text-ink-row no-underline"
                     >Other sessions</span
                   ></Table.Cell
                 >
-                <Table.Cell class="col-count"></Table.Cell>
-                <Table.Cell data-num class="col-usd num"
+                <Table.Cell variant="ledger-stacks" class="w-c-ledger-count-w"
+                ></Table.Cell>
+                <Table.Cell
+                  data-num
+                  edge="end"
+                  variant="ledger-stacks"
+                  class="w-c-ledger-usd-w"
                   >{usd(spend.others.monthUsd)}</Table.Cell
                 >
-                <Table.Cell data-col-last class="col-last"></Table.Cell>
+                <Table.Cell
+                  data-col-last
+                  edge="end"
+                  variant="ledger-stacks"
+                  class="w-c-ledger-when-w"
+                ></Table.Cell>
               </Table.Row>
             {/if}
-            <Table.Row data-project-spend-row class="row total">
-              <Table.Cell class="col-name"
-                ><span data-slot="name" class="name plain">This month</span
+            <Table.Row data-project-spend-row class="relative" variant="stacks">
+              <Table.Cell
+                variant="ledger-stacks"
+                class="@max-phone/table:col-span-full"
+                ><span
+                  data-slot="name"
+                  class="type-label block truncate text-ink-row no-underline"
+                  >This month</span
                 ></Table.Cell
               >
-              <Table.Cell class="col-count"></Table.Cell>
-              <Table.Cell data-num class="col-usd num"
-                >{usd(spend.monthUsd)}</Table.Cell
+              <Table.Cell variant="ledger-stacks" class="w-c-ledger-count-w"
+              ></Table.Cell>
+              <Table.Cell
+                data-num
+                edge="end"
+                variant="ledger-stacks"
+                class="w-c-ledger-usd-w">{usd(spend.monthUsd)}</Table.Cell
               >
-              <Table.Cell data-col-last class="col-last"></Table.Cell>
+              <Table.Cell
+                data-col-last
+                edge="end"
+                variant="ledger-stacks"
+                class="w-c-ledger-when-w"
+              ></Table.Cell>
             </Table.Row>
           </Table.Body>
         </Table.Root>
       </div>
     {:else}
-      <p data-slot="note" class="note">
+      <p data-slot="note" class="type-meta text-ink-muted">
         No spend on {projectName} yet. The first wake or attempt shows up here.
       </p>
     {/if}
   {/if}
 </section>
-
-<style>
-  .project-spend {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-group);
-  }
-  /* Two to a row on a phone, as many as fit on a desk; each tile's label
-     on one top line, whatever its figure or its control below. */
-  .tiles {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
-    gap: var(--space-3);
-  }
-  .ledger :global(tr.total td) {
-    border-block-end: 0;
-    color: var(--ink-strong);
-    font-weight: var(--weight-strong);
-  }
-  .name.plain::after {
-    content: none;
-  }
-  .on-cap {
-    flex: 1 1 100%;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .form-acts {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
-  .budget {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .note {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .refused {
-    font: var(--type-meta);
-    color: var(--error-11);
-  }
-  .ledger {
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .ledger :global(table) {
-    border-collapse: separate;
-    border-spacing: 0;
-  }
-  .ledger :global(tr.band) {
-    background: var(--surface-band);
-  }
-  .ledger :global(tr.band th) {
-    block-size: var(--c-toolbar-ctl);
-    padding-inline: var(--space-3);
-    font: var(--type-label);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--ink-muted);
-  }
-  .ledger :global(tr.row) {
-    position: relative;
-  }
-  .ledger :global(tr.row td) {
-    block-size: var(--c-btn-h-lg);
-    padding-block: 0;
-    padding-inline: var(--space-3);
-    border-block-end: 1px solid var(--border-hairline);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .ledger :global(.col-count) {
-    inline-size: 8rem;
-  }
-  .ledger :global(.col-usd) {
-    inline-size: 6rem;
-    text-align: end;
-    color: var(--ink-strong);
-  }
-  .ledger :global(.col-last) {
-    inline-size: 6rem;
-    text-align: end;
-  }
-  .name {
-    display: block;
-    overflow: hidden;
-    font: var(--type-label);
-    color: var(--ink-row);
-    text-decoration: none;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .name::after {
-    position: absolute;
-    inset: 0;
-    content: "";
-  }
-  /* The task's id after its name, in the code role, muted. */
-  .id {
-    margin-inline-start: var(--space-2);
-    font: var(--type-code);
-    font-variant-ligatures: none;
-    color: var(--ink-subtle);
-  }
-  /* Under 640px each ledger row is a two-line card: the name, then the rest. */
-  @media (max-width: 639px) {
-    .ledger :global(table),
-    .ledger :global(tbody),
-    .ledger :global(thead) {
-      display: block;
-    }
-    .ledger :global(tr.band) {
-      display: flex;
-    }
-    .ledger :global(tr.band th:not(.col-name)) {
-      display: none;
-    }
-    .ledger :global(tr.row) {
-      display: grid;
-      grid-template-columns: 1fr auto auto;
-      gap: var(--space-1) var(--space-3);
-      padding: var(--space-2) var(--space-3);
-      border-block-end: 1px solid var(--border-hairline);
-    }
-    .ledger :global(tr.row td) {
-      display: block;
-      inline-size: auto;
-      block-size: auto;
-      padding: 0;
-      border: 0;
-      text-align: start;
-    }
-    .ledger :global(tr.row td.col-name) {
-      grid-column: 1 / -1;
-    }
-  }
-</style>

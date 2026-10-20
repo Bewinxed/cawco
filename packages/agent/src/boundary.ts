@@ -1378,7 +1378,20 @@ const obeyArming = (command: HandoverCommand): void => {
       );
       return;
     }
-    default:
+    case "announce":
+    case "arm-listed":
+    case "custody-complete":
+    case "fail-owed":
+    case "hold":
+    case "park":
+    case "publish":
+    case "read-keeper":
+    case "register-lapsed":
+    case "register":
+    case "release-owed":
+    case "send-verdict":
+    case "settle":
+    case "start":
       return;
   }
 };

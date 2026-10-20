@@ -30,9 +30,10 @@
   );
 </script>
 
+<!-- The edge's paint through Svelte Flow's own edge properties, which its sheet reads for the path's stroke -->
 <BaseEdge
   {id}
   markerEnd="url(#{marker})"
   path={route[0]}
-  style="stroke: var(--ink-muted); stroke-width: var(--c-graph-edge)"
+  style="--xy-edge-stroke: var(--ink-muted); --xy-edge-stroke-width: var(--c-graph-edge)"
 />

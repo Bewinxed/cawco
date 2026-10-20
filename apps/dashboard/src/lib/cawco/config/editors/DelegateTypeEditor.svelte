@@ -195,19 +195,21 @@
       placeholder={words.namePlaceholder}
       bind:value={draft.name}
     />
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       {name ? words.nameKept : words.nameRule}
     </p>
     {#if problemFor("name")}
-      <p class="problem" in:appear>{problem}</p>
+      <p class="type-meta text-status-fail-ink" in:appear>{problem}</p>
     {:else if duplicate}
-      <p class="problem" in:appear>{duplicate}</p>
+      <p class="type-meta text-status-fail-ink" in:appear>{duplicate}</p>
     {/if}
     <Alert.Root>
       <Alert.Description>{words.newSessions}</Alert.Description>
     </Alert.Root>
     {#if failed}
-      <p class="problem" role="alert" in:appear>{failed}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+        {failed}
+      </p>
     {/if}
   {/snippet}
 
@@ -220,8 +222,8 @@
     >
       <Textarea
         aria-invalid={problemFor("description") ? "true" : undefined}
-        class="resize-y"
         id="type-description"
+        resize="block"
         onblur={() => {
           touched.description = true;
         }}
@@ -233,7 +235,9 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconCpu} label={words.runsOn}>
-    <p data-slot="note" class="note">{words.runsOnNote}</p>
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+      {words.runsOnNote}
+    </p>
     <Choice
       label={words.harness}
       onchange={(next) => {
@@ -247,13 +251,14 @@
     />
     <Field id="type-model" label={words.model} problem={problemFor("model")}>
       <ModelCombobox
-        class="w-full min-w-0 max-w-md"
+        class="w-full"
         harness={draft.harness}
         onchoose={(model) => {
           draft.model = model;
           touched.model = true;
         }}
         size="default"
+        width="capped"
         value={draft.model}
       />
     </Field>
@@ -276,11 +281,13 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconKey} label={words.reach}>
-    <p data-slot="note" class="note">{words.reachNote}</p>
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+      {words.reachNote}
+    </p>
     <Field id="type-skills" label={words.skills}>
       <Input
         autocomplete="off"
-        class="font-mono"
+        face="mono"
         id="type-skills"
         placeholder={words.skillsPlaceholder}
         spellcheck="false"
@@ -290,7 +297,7 @@
     <Field id="type-deny" label={words.denied}>
       <Input
         autocomplete="off"
-        class="font-mono"
+        face="mono"
         id="type-deny"
         placeholder={words.deniedPlaceholder}
         spellcheck="false"
@@ -305,15 +312,3 @@
     />
   </EditorSection>
 </EditorFrame>
-
-<style>
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-</style>

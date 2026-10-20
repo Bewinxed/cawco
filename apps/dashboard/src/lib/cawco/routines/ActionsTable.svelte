@@ -41,9 +41,10 @@
         return { status: "waiting", word: words.actionUnknown, at: ended };
       case "denied":
         return { status: "neutral", word: words.actionDenied, at: ended };
-      default:
-        return { status: "neutral", word: words.actionCancelled, at: ended };
+      case "cancelled":
+        break;
     }
+    return { status: "neutral", word: words.actionCancelled, at: ended };
   }
 </script>
 
@@ -83,24 +84,27 @@
     action.proposerTitle;
 </script>
 
-<div class="actions-ledger">
-  <Table.Root data-actions aria-label={label} class="actions table-fixed">
+<div
+  data-slot="actions-ledger"
+  style:--lead-w="calc(var(--c-row-lead) + var(--space-3))"
+>
+  <Table.Root data-actions aria-label={label} layout="ledger" stickyBand>
     <Table.Header>
-      <Table.Row class="band border-0">
-        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head class="col-mark" scope="col"
+      <Table.Row variant="band">
+        <Table.Head class="w-(--lead-w)" variant="band"
           ><span class="sr-only">{words.columnService}</span></Table.Head
         >
-        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head class="col-action" scope="col"
-          >{words.columnAction}</Table.Head
+        <Table.Head variant="band">{words.columnAction}</Table.Head>
+        <Table.Head
+          data-slot="actions-table-col-status"
+          class="w-c-routine-time-w"
+          variant="band">{words.columnStatus}</Table.Head
         >
-        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head class="col-status" scope="col"
-          >{words.columnStatus}</Table.Head
+        <Table.Head
+          data-slot="actions-table-col-when"
+          class="w-c-ledger-when-w"
+          variant="band">{words.columnWhen}</Table.Head
         >
-        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head class="col-when" scope="col">{words.columnWhen}</Table.Head>
       </Table.Row>
     </Table.Header>
     <Table.Body>
@@ -109,33 +113,40 @@
         {@const from = routineNames ? fromOf(action) : null}
         <Table.Row
           data-actions-table-action
-          class="action"
+          class="group/row"
           data-status={said.status}
         >
-          <Table.Cell class="col-mark"
-            ><span data-slot="mark" class="mark"
-              ><ProviderLogo provider={action.service.toLowerCase()} /></span
+          <Table.Cell rule="between" variant="list"
+            ><span data-slot="mark" class="grid w-c-row-lead place-items-center"
+              ><ProviderLogo
+                provider={action.service.toLowerCase()}
+                size="control"
+              /></span
             ></Table.Cell
           >
-          <Table.Cell class="col-action">
+          <Table.Cell rule="between" variant="list">
             <span
               data-slot="what"
-              class="what"
+              class="block truncate type-label text-ink-row"
               title="{action.service} · {action.tool}">{action.reason}</span
             >
             {#if from}
-              <span data-slot="from" class="from">{words.from(from)}</span>
+              <span
+                data-slot="from"
+                class="block truncate type-meta text-ink-muted"
+                >{words.from(from)}</span
+              >
             {/if}
           </Table.Cell>
-          <Table.Cell class="col-status" data-cell="status">
+          <Table.Cell data-cell="status" rule="between" variant="list">
             <RunStatus status={said.status} text={said.word} />
           </Table.Cell>
-          <Table.Cell class="col-when" data-cell="when">
+          <Table.Cell data-cell="when" rule="between" variant="list">
             {#if said.at !== null}
               <time
                 data-when
                 data-slot="num"
-                class="when num"
+                class="num whitespace-nowrap"
                 title={exactOf(said.at)}>{since(said.at)}</time
               >
             {/if}
@@ -145,73 +156,3 @@
     </Table.Body>
   </Table.Root>
 </div>
-
-<style>
-  .actions-ledger :global(table.actions) {
-    border-collapse: separate;
-    border-spacing: 0;
-  }
-  .actions-ledger :global(tr.band) {
-    background: var(--surface-band);
-  }
-  .actions-ledger :global(tr.band th) {
-    block-size: var(--c-toolbar-ctl);
-    padding-inline: var(--space-3);
-    font: var(--type-label);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--ink-muted);
-  }
-  .actions-ledger :global(tr.action > td) {
-    block-size: var(--c-btn-h-lg);
-    padding-block: var(--space-2);
-    padding-inline: var(--space-3);
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-muted);
-    vertical-align: middle;
-  }
-  .actions-ledger :global(tr.action + tr.action > td) {
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .actions-ledger :global(th.col-mark) {
-    inline-size: calc(var(--c-row-lead) + var(--space-3));
-    padding-inline-end: 0;
-  }
-  .actions-ledger :global(td.col-mark) {
-    padding-inline-end: 0;
-  }
-  .actions-ledger :global(th.col-status) {
-    inline-size: var(--c-routine-time-w);
-  }
-  .actions-ledger :global(th.col-when) {
-    inline-size: 6rem;
-  }
-  .mark {
-    display: grid;
-    place-items: center;
-    inline-size: var(--c-row-lead);
-  }
-  .mark :global(svg) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-  .what,
-  .from {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .what {
-    font: var(--type-label);
-    color: var(--ink-row);
-  }
-  .from {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .when {
-    white-space: nowrap;
-  }
-</style>

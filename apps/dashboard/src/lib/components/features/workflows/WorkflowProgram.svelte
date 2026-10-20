@@ -27,15 +27,23 @@
 <!-- The problems panel is marked for the program's own reflow: when a
      problem arrives or leaves, the panel's edge slides to its new place
      instead of jumping. -->
-<div class="program" {@attach reflow()}>
-  <p data-slot="note" class="wf-muted note">
+<div class="flex min-h-0 flex-1 flex-col" {@attach reflow()}>
+  <p
+    data-slot="note"
+    class="border-b border-b-border-hairline px-space-5 py-space-3 type-meta text-ink-muted max-wide:px-space-4"
+  >
     {#if origin === "editor"}
       Compiled from this graph on save. Edit the graph to change it.
     {:else}
       The program is the workflow. It saves as you type.
     {/if}
   </p>
-  <div data-slot="code" class="code">
+  <!-- The signature move: the program sits in a recessed well inside a raised
+       card, not flat on the page. -->
+  <div
+    data-slot="code"
+    class="mx-space-5 mt-space-4 mb-space-5 min-h-c-editor-well-min min-w-0 flex-1 rounded-md bg-surface-raised p-space-2 shadow-tile max-wide:mx-space-4"
+  >
     <CodeView
       {editable}
       label="Workflow program"
@@ -49,17 +57,19 @@
          come and go the house way (motion/rows). -->
     <section
       aria-label="Problems"
-      class="problems wf-stack"
+      class="flex max-h-c-wf-scroll-max-h min-w-0 flex-col gap-space-2 overflow-y-auto border-t border-t-border-hairline bg-surface-raised px-space-5 pt-space-4 pb-space-5 max-wide:px-space-4"
       data-flip
       {@attach reflow()}
     >
-      <div data-slot="head" class="head">
+      <div data-slot="head" class="grid">
         {#key problems.length > 0}
-          <div transition:crossIn>
+          <div class="col-start-1 row-start-1" transition:crossIn>
             {#if problems.length}
-              <h2 data-slot="num" class="num">Problems · {problems.length}</h2>
+              <h2 data-slot="num" class="num type-label">
+                Problems · {problems.length}
+              </h2>
             {:else}
-              <p class="wf-muted">
+              <p class="type-meta text-ink-muted">
                 The hub compiled and typechecked this program. No problems
                 found.
               </p>
@@ -68,9 +78,14 @@
         {/key}
       </div>
       {#each problems as problem, index (index)}
-        <p class="problem" data-flip>
+        <p
+          class="rounded-sm bg-surface-recess p-space-3 wrap-anywhere"
+          data-flip
+        >
           {#if problem.line}
-            <span class="line">Line {problem.line}</span>
+            <span class="me-space-2 text-ink-muted num"
+              >Line {problem.line}</span
+            >
           {/if}
           {problem.line ? withoutLine(problem.message) : problem.message}
         </p>
@@ -78,62 +93,3 @@
     </section>
   {/if}
 </div>
-
-<style>
-  .program {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-  }
-  .note {
-    padding: var(--space-3) var(--space-5);
-    border-bottom: 1px solid var(--border-hairline);
-  }
-  /* The signature move: the program sits in a recessed well inside a raised
-     card, not flat on the page. */
-  .code {
-    flex: 1;
-    min-height: 320px;
-    margin: var(--space-4) var(--space-5) var(--space-5);
-    padding: var(--space-2);
-    background: var(--surface-raised);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-tile);
-    min-width: 0;
-  }
-  .problems {
-    gap: var(--space-2);
-    padding: var(--space-4) var(--space-5) var(--space-5);
-    border-top: 1px solid var(--border-hairline);
-    background: var(--surface-raised);
-    max-height: 30dvh;
-    overflow-y: auto;
-  }
-  .head {
-    display: grid;
-  }
-  .head > div {
-    grid-area: 1 / 1;
-  }
-  .problem {
-    padding: var(--space-3);
-    background: var(--surface-recess);
-    border-radius: var(--radius-sm);
-    overflow-wrap: anywhere;
-  }
-  .line {
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-    margin-inline-end: var(--space-2);
-  }
-  @media (max-width: 1023px) {
-    .note,
-    .problems {
-      padding-inline: var(--space-4);
-    }
-    .code {
-      margin-inline: var(--space-4);
-    }
-  }
-</style>

@@ -17,6 +17,7 @@
   import { closeInto } from "#lib/cawco/motion/share.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconPlus } from "#lib/icons.js";
@@ -127,11 +128,13 @@
   </Popover.Trigger>
   <Popover.Content
     align="end"
-    class="w-[380px] max-w-[calc(100vw-2rem)] gap-3 p-3"
+    class="w-c-panel-w max-w-(--bits-popover-content-available-width)"
+    gap="form"
+    pad="form"
     bind:ref={surface}
   >
     <form
-      class="form"
+      class="flex flex-col gap-space-3"
       onsubmit={(event) => {
         event.preventDefault();
         if (ready && !busy) {
@@ -150,7 +153,7 @@
         {/snippet}
         <Input
           autocomplete="off"
-          class="font-mono"
+          face="mono"
           id="skill-source"
           oninput={() => {
             if (!named) {
@@ -169,7 +172,7 @@
       >
         {#snippet hint()}
           {words.landsIn}
-          <span class="font-mono"
+          <span class="font-(family-name:--font-mono)"
             >{project
               ? projectClaudeRelative("skills", skillName || "name")
               : userLayerLabel("skills", skillName || "name")}</span
@@ -178,7 +181,7 @@
         <Input
           aria-invalid={skillName !== "" && nameProblem ? "true" : undefined}
           autocomplete="off"
-          class="font-mono"
+          face="mono"
           id="skill-name"
           oninput={() => {
             named = true;
@@ -205,12 +208,21 @@
         />
       </div>
       {#if choices.length > 0}
-        <div class="choices" transition:unfold>
-          <span data-slot="note" class="note">{words.severalSkills}</span>
+        <div
+          class="flex flex-col max-h-c-choice-list-max-h overflow-y-auto"
+          transition:unfold
+        >
+          <span data-slot="note" class="type-meta text-ink-muted"
+            >{words.severalSkills}</span
+          >
           {#each choices as choice (choice)}
             <button
               data-slot="choice"
-              class="kit-item choice focus-inset"
+              class={menuItemVariants({
+                class:
+                  "px-space-3 text-start font-(family-name:--font-mono) text-size-meta text-ink-strong focus-inset",
+              })}
+              data-menu-item
               disabled={busy}
               onclick={() => choose(choice)}
               type="button"
@@ -221,7 +233,13 @@
         </div>
       {/if}
       {#if failed}
-        <p class="problem" role="alert" transition:unfold>{failed}</p>
+        <p
+          class="type-meta text-status-fail-ink"
+          role="alert"
+          transition:unfold
+        >
+          {failed}
+        </p>
       {/if}
       <Button
         class="self-end"
@@ -236,32 +254,3 @@
     </form>
   </Popover.Content>
 </Popover.Root>
-
-<style>
-  .form {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .note {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-  .choices {
-    display: flex;
-    flex-direction: column;
-    max-height: 13rem;
-    overflow-y: auto;
-  }
-  .choice {
-    padding: 0 10px;
-    text-align: left;
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--ink-strong);
-  }
-</style>

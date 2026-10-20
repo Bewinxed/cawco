@@ -12,6 +12,7 @@
    * zoom tools. In a pane under 640px it is a list: Used in, This canvas,
    * Made of.
    */
+  import "#lib/vendor-css/xyflow.css";
   import type { CanvasMap, CanvasMapNode } from "@cawco/core/stage";
   import {
     Background,
@@ -22,8 +23,6 @@
     Panel,
     SvelteFlow,
   } from "@xyflow/svelte";
-  import "@xyflow/svelte/dist/style.css";
-  import "#lib/components/features/workflows/workflows.css";
   import { untrack } from "svelte";
   import { fetchCanvasMap } from "#lib/cawco/artifact-api.js";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
@@ -308,10 +307,21 @@
   );
 </script>
 
-<div data-slot="canvas-map" class="canvas-map" bind:this={root}>
-  <span aria-hidden="true" class="narrow-sense" bind:this={sense}></span>
+<div
+  data-slot="canvas-map"
+  class="absolute inset-0 overflow-hidden bg-surface-recess"
+  bind:this={root}
+>
+  <span
+    aria-hidden="true"
+    class="absolute hidden @max-phone:block size-px pointer-events-none"
+    bind:this={sense}
+  ></span>
   {#if failure}
-    <div class="map-down" role="alert">
+    <div
+      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      role="alert"
+    >
       <EmptyState icon={IconAlert} title="The map didn't load">
         {#snippet line()}
           {failure}
@@ -330,23 +340,31 @@
       </EmptyState>
     </div>
   {:else if !map}
-    <p class="map-wait" role="status">Reading the canvas's map</p>
+    <p
+      class="m-0 p-space-5 text-ink-muted type-meta animate-wait-grace-show motion-safe:animate-wait-grace-in"
+      role="status"
+    >
+      Reading the canvas's map
+    </p>
   {:else if narrow}
-    <div data-slot="map-list" class="map-list">
+    <div
+      data-slot="map-list"
+      class="absolute inset-0 grid content-start gap-space-5 overflow-y-auto overscroll-contain p-space-4"
+    >
       {#each groups as group (group.key)}
         <section
           aria-label={group.words}
-          class="group"
+          class="grid gap-space-2"
           {@attach group.key === "center" && openAtCanvas}
         >
-          <h3 class="group-words">{group.words}</h3>
+          <h3 class="m-0 text-ink-muted type-caps">{group.words}</h3>
           {#if group.nodes.length === 0}
-            <p class="group-empty">{group.empty}</p>
+            <p class="m-0 text-ink-muted type-meta">{group.empty}</p>
           {:else}
-            <ul class="cards">
+            <ul class="grid gap-space-3 m-0 p-0 list-none">
               {#each group.nodes as node (node.file)}
                 <li>
-                  <MapCard {...cardOf(node, group.key)} />
+                  <MapCard {...cardOf(node, group.key)} class="w-auto" />
                 </li>
               {/each}
             </ul>
@@ -355,7 +373,12 @@
       {/each}
     </div>
   {:else}
-    <div data-slot="map-graph" class="map-graph">
+    <div
+      data-slot="map-graph"
+      class="absolute inset-0"
+      style:--xy-edge-stroke="var(--border-control)"
+      style:--xy-edge-stroke-width="var(--c-graph-edge)"
+    >
       <SvelteFlow
         colorMode={theme.current}
         deleteKey={null}
@@ -385,7 +408,10 @@
           {rowHeight}
         />
         <Panel position="top-left">
-          <p class="legend">
+          <p
+            data-slot="legend"
+            class="m-0 max-w-c-map-node-w text-ink-muted type-meta text-pretty"
+          >
             Above, what renders {name} ({map.usedIn.length}). Below, what
             {name} renders ({map.madeOf.length}).
           </p>
@@ -401,98 +427,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  /* Over the page in the well, on the recess the decision graph stands on; the page stays loaded under it. */
-  .canvas-map {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    background: var(--surface-recess);
-  }
-  .map-graph {
-    position: absolute;
-    inset: 0;
-
-    & :global(.svelte-flow__edge-path) {
-      stroke: var(--border-control);
-      stroke-width: var(--c-graph-edge);
-    }
-  }
-  /* Stands only in a pane under the head's narrow line: the map reads it. */
-  .narrow-sense {
-    position: absolute;
-    display: none;
-    inline-size: 1px;
-    block-size: 1px;
-    pointer-events: none;
-  }
-  @container (width < 640px) {
-    .narrow-sense {
-      display: block;
-    }
-  }
-  .legend {
-    margin: 0;
-    max-inline-size: var(--c-map-node-w);
-    color: var(--ink-muted);
-    font: var(--type-meta);
-    text-wrap: pretty;
-  }
-  /* Nothing until the read has lasted the grace (DESIGN.md's Real Wait Rule), then what it is waiting for. */
-  .map-wait {
-    margin: 0;
-    padding: var(--space-5);
-    color: var(--ink-muted);
-    font: var(--type-meta);
-    animation: kit-fade-in 1ms var(--dur-wait-grace) both;
-
-    @media (prefers-reduced-motion: no-preference) {
-      animation-duration: var(--dur-fade);
-      animation-timing-function: var(--ease-out);
-    }
-  }
-  .map-down {
-    position: absolute;
-    inset: 0;
-    overflow: auto;
-    padding-inline: var(--space-6);
-    background: var(--surface-well);
-  }
-  /* A narrow pane's map: the three groups as a list, each card the column's width. */
-  .map-list {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    align-content: start;
-    gap: var(--space-5);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: var(--space-4);
-
-    & :global([data-slot="map-card"]) {
-      inline-size: auto;
-    }
-  }
-  .group {
-    display: grid;
-    gap: var(--space-2);
-  }
-  .group-words {
-    margin: 0;
-    color: var(--ink-muted);
-    font: var(--type-caps);
-  }
-  .group-empty {
-    margin: 0;
-    color: var(--ink-muted);
-    font: var(--type-meta);
-  }
-  .cards {
-    display: grid;
-    gap: var(--space-3);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-</style>

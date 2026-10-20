@@ -371,7 +371,9 @@ export function floatPlace(): {
   right: number;
   width: number;
 } | null {
-  const card = document.querySelector<HTMLElement>(".kit-pop.files-pop");
+  const card = document.querySelector<HTMLElement>(
+    '[data-glass-card][data-glass-card-frame="files-pop"]'
+  );
   if (!card) {
     return null;
   }

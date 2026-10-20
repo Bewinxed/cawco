@@ -260,7 +260,7 @@ const oneChat = async (kit: Kit, fleet: KitFleet, lead: string) => {
     tab.evaluate(() => ({
       path: location.pathname,
       composers: document.querySelectorAll('[data-slot="composer"]').length,
-      continuedIn: document.querySelectorAll(".readonly.continued").length,
+      continuedIn: document.querySelectorAll('[data-slot="continued"]').length,
       line:
         [...document.querySelectorAll('[data-slot="words"]')]
           .map((one) => one.textContent ?? "")

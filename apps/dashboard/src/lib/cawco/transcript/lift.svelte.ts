@@ -154,7 +154,9 @@ export function fieldBox(
 /** A copy of the words standing in `box`, cut to it, over the whole page. */
 function copyAt(words: Node, box: WordsBox): HTMLElement {
   const copy = document.createElement("div");
-  copy.className = "lift-copy";
+  // Fixed over the page, cut to each end's box (Tailwind scans this file).
+  copy.className =
+    "fixed z-(--layer-flight) overflow-hidden pointer-events-none text-ink-strong";
   copy.setAttribute("aria-hidden", "true");
   copy.style.left = `${box.left}px`;
   copy.style.top = `${box.top}px`;
@@ -173,12 +175,16 @@ export function asBubble(words: HTMLElement): Node {
   const clone = words.cloneNode(true) as HTMLElement;
   // The bubble hides its own words while they fly; the copy is them.
   clone.style.visibility = "visible";
-  for (const control of clone.querySelectorAll(".turn-actions, .reason")) {
+  for (const control of clone.querySelectorAll(
+    '[data-slot="actions"], [data-slot="reason"]'
+  )) {
     control.remove();
   }
   // The well lets its words run to its edge; out of it they would stop at
   // the prose measure and wrap elsewhere.
-  for (const prose of clone.querySelectorAll<HTMLElement>(".msg")) {
+  for (const prose of clone.querySelectorAll<HTMLElement>(
+    '[data-slot="msg"]'
+  )) {
     prose.style.maxInlineSize = "none";
   }
   return clone;

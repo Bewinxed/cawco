@@ -99,7 +99,7 @@
   {#snippet toolbar()}
     <Input
       aria-label={words.filterLabel}
-      class="max-w-64"
+      measure="cap-sm"
       placeholder={words.filter}
       bind:value={filter}
     />
@@ -179,14 +179,8 @@
     {/each}
   </RowList>
   {#if !mainShown && shown.length === 0}
-    <p data-slot="note" class="note">{words.noMatch(filter.trim())}</p>
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+      {words.noMatch(filter.trim())}
+    </p>
   {/if}
 </SectionFrame>
-
-<style>
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>

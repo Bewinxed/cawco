@@ -41,30 +41,13 @@
         data-account-dot-dot
         {...tip}
         aria-label="On {name}"
-        class={["dot", inline && "inline"]}
+        class="inline-block size-space-2 flex-none rounded-pill bg-(color:--c) align-middle transition-[background-color] duration-(--dur-panel) ease-out data-inline:me-space-1"
         data-account-dot={account.id}
         data-box
+        data-inline={inline || undefined}
         role="img"
         style:--c="var(--account-{account.hue})"
       ></span>
     {/snippet}
   </Tip>
 {/if}
-
-<style>
-  .dot {
-    display: inline-block;
-    flex: none;
-    inline-size: 6px;
-    block-size: 6px;
-    border-radius: 50%;
-    background: var(--c);
-    /* In a line of words its middle is theirs: the baseline plus half the
-       x-height (DESIGN.md, The Mark Line Rule). */
-    vertical-align: middle;
-    transition: background-color var(--dur-panel) var(--ease-out);
-  }
-  .dot.inline {
-    margin-inline-end: var(--space-1);
-  }
-</style>

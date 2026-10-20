@@ -1,3 +1,82 @@
+<script lang="ts" module>
+  import { tv } from "#lib/utils.js";
+
+  /**
+   * The track's recipe (DESIGN.md, Fluid tabs and Folder tabs). Its size
+   * ladder is custom properties every tab reads (TabItem): the pad and the
+   * item add up to the control height, 36px by default and 28px compact, so
+   * the control lines up with the buttons, selects and inputs beside it; a
+   * finger takes one step up the ladder, its shape unchanged. `--shape` is
+   * the corner the overlays and items share, `--sheet` the chosen segment's
+   * surface.
+   *
+   * - `folder`: no well. The items stand on the row's shelf, the chosen one
+   *   a sheet with a rounded top and no bottom flaring out at its foot, so
+   *   the track keeps a flare's room at each end, and neighbours overlap by
+   *   the flare (the leading pad takes the first tab's overlap back). The
+   *   tabs' stacks meet in the track; the outlines bring their top corners
+   *   in by the slopes; a choice travels over `--choose-dur` on
+   *   `--choose-ease`, every part of it together (the owner's "Slow ·
+   *   400ms").
+   * - `scrollable`: hugs its items and gives way, never grows, when its row
+   *   is narrower than they are; the edges fade the tabs past them
+   *   (`kit-edge-fade`), and a chosen tab is brought clear of each fade.
+   * - `strip`: the host's tuning. `session` and `hosted` (PaneTabs, on its
+   *   own shelf or in a host's row; only its own shelf is the phone's bar): a step taller than
+   *   the default in a bar with room, the strip's own pad, the chosen sheet
+   *   in `tab-sheet` (the transcript's head dissolves into it), the hover
+   *   lifting an unchosen tab toward it, and the status rim's stroke (one
+   *   unit under more contrast or less transparency). Scrolling on a coarse
+   *   pointer its transparent padding grows into an equal negative margin,
+   *   so the controls' touch areas sit inside its clip; on a phone's own bar
+   *   the tabs are a row's height, on the bar's floor, the ends fading over
+   *   a short run so a tab slides under the toggle and Caw. `work`
+   *   (WorkTabs): its tabs' pad and the label's gap to its count close up
+   *   as the rail narrows (`--tight`), a tab after the first starts its
+   *   label past the overlap, and a tab is as wide as its label and count
+   *   together: a label never gives way, the header's spacing does.
+   */
+  export const tabsListVariants = tv({
+    base: "relative inline-flex flex-none select-none items-center gap-(--gap) rounded-(--radius) bg-(--muted) p-(--pad) [--gap:var(--space-row)] [--icon:var(--icon-md)] [--item:var(--c-tab-item)] [--pad:var(--space-1)] [--px:var(--c-tab-px)] [--radius:var(--radius-sm)] [--shape:calc(var(--radius)_-_var(--pad))] [--sheet:var(--surface-raised)] [--text:var(--text-label)] coarse:[--item:var(--space-8)]",
+    variants: {
+      size: {
+        default: "",
+        compact:
+          "[--item:var(--c-btn-h-xs)] [--pad:var(--space-row)] [--px:var(--c-segment-pad-x)] [--radius:var(--radius-xs)] coarse:[--item:var(--c-tab-item)]",
+      },
+      variant: {
+        segmented: "",
+        folder:
+          "isolate gap-0 rounded-none bg-transparent ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--dur-settle)] [--choose-ease:var(--ease-crossfade)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:var(--c-tab-slope-end)] [--slope-start:var(--c-tab-slope-start)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-[var(--z,var(--z-rest,1))] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap) [&>[data-slot=highlight-ghost]]:hidden",
+      },
+      scrollable: {
+        true: "kit-edge-fade no-scrollbar min-w-0 max-w-full flex-[0_1_auto] overflow-x-auto overflow-y-hidden [--edge-room-end:var(--fade-len)] [--edge-room-start:var(--fade-len)] [&>[data-slot=ff-tab]]:shrink-0",
+      },
+      strip: {
+        session:
+          "[--item:var(--strip-item)] [--px:var(--strip-px)] [--rim-w:var(--tab-rim-width)] [--sheet:var(--tab-sheet)] [--tab-hover:light-dark(var(--surface-recess),var(--surface-hover))] coarse:[--item:var(--strip-item)] reduced-transparency:[--rim-w:1] contrast-more:[--rim-w:1]",
+        hosted:
+          "[--item:var(--strip-item)] [--px:var(--strip-px)] [--rim-w:var(--tab-rim-width)] [--sheet:var(--tab-sheet)] [--tab-hover:light-dark(var(--surface-recess),var(--surface-hover))] coarse:[--item:var(--strip-item)] reduced-transparency:[--rim-w:1] contrast-more:[--rim-w:1]",
+        work: "[--item:var(--space-8)] [--px:calc(var(--space-2)_-_var(--tight)_*_0.09)] [--sheet:light-dark(var(--surface-raised),var(--surface-hover))] [--tab-fill:var(--surface-recess)] [--tab-hover:light-dark(var(--surface-hover),color-mix(in_oklch,var(--surface-fill)_50%,transparent))] coarse:[--item:var(--space-8)] [&_[data-ff-tab]]:min-w-max [&_[data-hit]]:shrink-0 [&_[data-slot=ff-tab]]:[--gap:max(0px,var(--space-row)_-_var(--tight)_*_0.06)] [&_[data-slot=ff-tab]~[data-slot=ff-tab]]:[--px-start:calc(var(--overlap)_+_var(--px))]",
+      },
+    },
+    compoundVariants: [
+      {
+        strip: "session",
+        scrollable: true,
+        class:
+          "max-desk:strip-edge-mask desk:coarse:-mt-(--strip-reach) coarse:-mb-(--strip-reach) desk:coarse:pt-[calc(var(--pad)_+_var(--strip-reach))] coarse:pb-(--strip-reach) max-desk:mt-0 max-desk:pt-[calc(var(--c-top-bar-h)_-_var(--c-tab-row-h))] max-desk:[--edge-room-start:calc(var(--fade-len)_*_1.5)] max-desk:[--fade-len:var(--strip-fade)] max-desk:[--overlap:var(--radius-sm)] max-desk:[--pad:0px] max-desk:[--radius:var(--radius-lg)]",
+      },
+      {
+        strip: "hosted",
+        scrollable: true,
+        class:
+          "coarse:-my-(--strip-reach) coarse:pt-[calc(var(--pad)_+_var(--strip-reach))] coarse:pb-(--strip-reach)",
+      },
+    ],
+  });
+</script>
+
 <script lang="ts">
   /**
    * The segmented control's track. Two overlays travel under the items —
@@ -744,7 +823,8 @@
     }
     // The tabs in the order (`rects.items`), which a leaving tab has left.
     const items = rects.items.flatMap(
-      (item) => item.querySelector<HTMLElement>(":scope > .hit") ?? []
+      (item) =>
+        item.querySelector<HTMLElement>(':scope > [data-slot="hit"]') ?? []
     );
     if (items.length === 0) {
       return;
@@ -1098,24 +1178,35 @@
       },
     };
   }
-
-  const px = (rect: {
-    left: number;
-    top: number;
-    width: number;
-    height: number;
-  }) =>
-    `transform:translate(${rect.left}px,${rect.top}px);width:${rect.width}px;height:${rect.height}px`;
 </script>
 
+<!-- The tabs (TabItem) and a host's boxes round them are the track's
+     children. A track that scrolls keeps every tab at its own width and
+     scrolls past the edge (its fades say there is more), never squeezing a
+     tab toward an ellipsis to fit: a tab's own cap is what ends a long
+     title. In a folder strip each tab, or the host's box round it, steps
+     back over its leading neighbour by the overlap and is one stack at its
+     rank (`--z`, the script; `--z-rest` until the track has ranked it): its
+     sheet, rim and everything written on it rise and fall together. The
+     track's own layers are not tabs: the highlight's ghost and pills
+     (absolutely placed, components/ui/highlight). The hover ghost is the
+     kit's, and folder tabs overlap, each in its own stack, so no one layer
+     can glide between a tab's card and its label: in a folder strip the
+     ghost stands down and the tab under the pointer lights its own card
+     (TabItem, `data-ghosted`). -->
 <div
   data-slot="ff-tabs-list"
   class={cn(
-    "ff-tabs-list",
-    scrollable && "scrollable kit-edge-fade",
+    tabsListVariants({
+      size: tabs.size,
+      variant: tabs.variant,
+      scrollable,
+      strip: tabs.strip,
+    }),
     className
   )}
   data-overflows={overflows ? "" : undefined}
+  data-scrollable={scrollable || undefined}
   data-ride={ride ? "" : undefined}
   {onfocusin}
   {onfocusout}
@@ -1126,246 +1217,47 @@
   use:rects.container
   use:sideways
   {@attach highlight({
-    rows: ".ff-tab",
+    rows: '[data-slot="ff-tab"]',
     axis: "x",
-    covered: ".ff-tab.selected",
+    covered: '[data-slot="ff-tab"][data-tab-item-selected]',
     laidOut: () => rects.rects,
   })}
   {...rest}
 >
+  <!-- The segment and the ring are placed by `transform`, not `left`/`top`:
+       moving between tabs is then a compositor-only translate. Only the
+       width change lays out, and it lays out one empty absolutely-positioned
+       box. The active segment: raised, at the moderate tier — critically
+       damped, lands without overshoot. Folder tabs draw their own sheet
+       (TabItem): it has to sit exactly on the chosen tab in the same frame
+       the tabs reflow, and a box placed from measurements lands a frame
+       late, wherever the tab used to be. -->
   {#if selectedRect}
+    {@const at = segmentRect ?? selectedRect}
     <div
+      data-slot="segment"
       aria-hidden="true"
-      class="segment"
-      style={px(segmentRect ?? selectedRect)}
-      class:travelling={travelRect !== undefined}
+      class="pointer-events-none absolute start-0 top-0 z-1 rounded-(--shape) bg-(--sheet) shadow-tile in-variant-folder:hidden hover-hover:beside-ghost:opacity-85 data-travelling:transition-off motion-safe:transition-segment motion-safe:data-travelling:transition-off"
+      style:transform="translate({at.left}px,{at.top}px)"
+      style:width="{at.width}px"
+      style:height="{at.height}px"
+      data-travelling={travelRect !== undefined || undefined}
     ></div>
   {/if}
+  <!-- The focus ring, gliding from tab to tab: the app's one ring, drawn
+       on the tab's own box (a tab sits flush in the strip). Above every tab
+       and every outline a host draws on them. -->
   {#if focusRect}
-    <div aria-hidden="true" class="focus-mark" style={px(focusRect)}></div>
+    <div
+      data-slot="ring"
+      aria-hidden="true"
+      class="pointer-events-none absolute start-0 top-0 z-4 rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:duration-(--dur-ghost) motion-safe:ease-out"
+      style:transform="translate({focusRect.left}px,{focusRect.top}px)"
+      style:width="{focusRect.width}px"
+      style:height="{focusRect.height}px"
+      style:--ring-z="calc(var(--stack-top) + 2)"
+      style:--ring-r="calc(var(--radius) + 2px) calc(var(--radius) + 2px) 0 0"
+    ></div>
   {/if}
   {@render children()}
 </div>
-
-<style>
-  /* The size ladder: the pad and the item add up to the control height —
-     36px by default, 28px compact — so the control lines up with the
-     buttons, selects and inputs beside it. `--shape` is the corner the
-     overlays and items share; `--sheet` is the chosen segment's surface. */
-  .ff-tabs-list {
-    --pad: 4px;
-    --item: 28px;
-    --gap: 2px;
-    --px: 12px;
-    --icon: 16px;
-    --text: var(--text-label);
-    --radius: var(--radius-sm);
-    --shape: calc(var(--radius) - var(--pad));
-    --sheet: var(--surface-raised);
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    flex: 0 0 auto;
-    gap: var(--gap);
-    padding: var(--pad);
-    border-radius: var(--radius);
-    background: var(--muted);
-    user-select: none;
-    -webkit-user-select: none;
-
-    /* A finger needs more room than a pointer: one step up the ladder on
-       a coarse pointer — a 40px control — its shape unchanged. */
-    @media (pointer: coarse) {
-      --item: 32px;
-    }
-
-    /* A scrolling track hugs its items and gives way — never grows —
-       when the row it sits in is narrower than they are. */
-    /* Where tabs run past an edge, that edge fades them out (app.css
-       .kit-edge-fade, on the track). */
-    &.scrollable {
-      /* A chosen tab is brought clear of each edge's fade (`inView`); a
-         host whose fades differ sets its own. */
-      --edge-room-start: var(--fade-len);
-      --edge-room-end: var(--fade-len);
-      flex: 0 1 auto;
-      min-inline-size: 0;
-      max-inline-size: 100%;
-      overflow-x: auto;
-      overflow-y: hidden;
-      scrollbar-width: none;
-
-      &::-webkit-scrollbar {
-        display: none;
-      }
-    }
-  }
-  /* A track that scrolls keeps every tab at its own width and scrolls past
-     the edge (its fades say there is more), never squeezing a tab toward an
-     ellipsis to fit: a tab's own cap is what ends a long title. */
-  .ff-tabs-list.scrollable > :global(.ff-tab) {
-    flex-shrink: 0;
-  }
-  :global([data-size="compact"]) .ff-tabs-list {
-    --pad: 2px;
-    --item: 24px;
-    --px: 10px;
-    --icon: 16px;
-    --text: var(--text-label);
-    --radius: var(--radius-xs);
-
-    /* Its own step up (24 → 28): this rule outranks the bare class, so
-       the ladder above would not move it. */
-    @media (pointer: coarse) {
-      --item: 28px;
-    }
-  }
-
-  /* Folder tabs: no well. The items stand on the row's shelf — the row
-     draws that hairline along its own bottom edge — and the chosen one
-     is a sheet with a rounded top and no bottom, in the surface of what
-     lies below, so it opens into it. */
-  :global([data-variant="folder"]) .ff-tabs-list {
-    --shape: var(--radius) var(--radius) 0 0;
-    /* The chosen sheet flares outward at its foot into the page below;
-       the track keeps that much room at each end so a scrolling track
-       does not clip the first or last flare. */
-    --flare: var(--radius);
-    /* Neighbouring tabs overlap by the flare: a tucked edge lies exactly
-       under the chosen sheet's foot, and the gap between tabs is gone. The
-       track's leading pad takes the first tab's overlap back. */
-    --overlap: var(--flare);
-    gap: 0;
-    padding-inline: calc(var(--flare) + var(--overlap)) var(--flare);
-    padding-block-end: 0;
-    border-radius: 0;
-    background: none;
-    /* The tabs' stacks meet in this one (the script above), kept in the
-       track. */
-    isolation: isolate;
-    /* The sides of every outline bring their top corners in by
-       `--slope-start` and `--slope-end` from the foot (the owner's pick:
-       1px and 0px). A choice travels over `--choose-dur` on
-       `--choose-ease`, every part of it together (the owner's pick, "Slow ·
-       400ms"; DESIGN.md, Folder tabs). */
-    --slope-start: 1px;
-    --slope-end: 0px;
-    --choose-dur: var(--dur-settle);
-    --choose-ease: var(--ease-crossfade);
-  }
-  /* The come-forward's clock (`tab-come-forward`): a number on the track
-     the run carries from 0 to 1, which nothing draws; each tab's pose is
-     read off the run's time. */
-  @property --forward {
-    syntax: "<number>";
-    inherits: false;
-    initial-value: 0;
-  }
-  /* A tab's rank in the stack (`--z`, the script's; `--z-rest`, from the
-     order and the value until the track ranks it), read only on the box
-     that carries it (its `z-index`, below; a leaving tab's own). Not
-     inherited: a choice re-ranks most of the strip, and as plain custom
-     properties each new rank restyled everything its tab holds (its
-     sheet, rim, name, glyph and controls), 430 elements a choice. No
-     initial value (`*`), so a box the track has not ranked yet still falls
-     back to its rest rank. */
-  @property --z {
-    syntax: "*";
-    inherits: false;
-  }
-  @property --z-rest {
-    syntax: "*";
-    inherits: false;
-  }
-
-  /* Each folder tab, or the host's box round it, steps back over its
-     leading neighbour by the overlap, and is one stack at its rank (`--z`,
-     the script; `--z-rest` until the track has ranked it): its sheet, rim
-     and everything written on it rise and fall together. The track's own
-     layers are not tabs: the highlight's ghost and pills (absolutely
-     placed, app.css .kit-highlight) taken into the flow with the overlap's
-     margin pulled every tab 16px back past the track's leading flare
-     room. */
-  :global([data-variant="folder"])
-    .ff-tabs-list
-    > :global(
-      :not(.segment, .focus-mark, .kit-ghost, .kit-pill, .kit-pill-trail)
-    ) {
-    position: relative;
-    z-index: var(--z, var(--z-rest, 1));
-    isolation: isolate;
-    margin-inline-start: calc(-1 * var(--overlap));
-  }
-  /* Placed by `transform`, not `left`/`top`: moving between tabs is then a
-     compositor-only translate. Only the width change lays out, and it lays
-     out one empty absolutely-positioned box. */
-  .segment,
-  .focus-mark {
-    position: absolute;
-    inset-block-start: 0;
-    inset-inline-start: 0;
-    pointer-events: none;
-    border-radius: var(--shape);
-  }
-  /* The active segment: raised, at the moderate tier — critically
-     damped, lands without overshoot. Steps back a little while another
-     tab is under the hover ghost, so the ghost reads as the thing about
-     to take over. */
-  .segment {
-    z-index: 1;
-    background: var(--sheet);
-    box-shadow: var(--shadow-tile);
-
-    @media (hover: hover) {
-      .ff-tabs-list:has(:global(.ff-tab[data-ghosted]:not(.selected))) > & {
-        opacity: 0.85;
-      }
-    }
-    /* Under a hand, or riding a settle read off its clock each frame: the
-       position is the motion, and an easing on top would lag the finger. */
-    &.travelling {
-      transition: none;
-    }
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        transform var(--dur-toggle) var(--ease-out),
-        width var(--dur-toggle) var(--ease-out),
-        height var(--dur-toggle) var(--ease-out),
-        opacity var(--dur-ghost) var(--ease-out);
-    }
-  }
-  /* Folder tabs draw their own sheet (TabItem): it has to sit exactly on
-     the chosen tab in the same frame the tabs reflow, and a box placed
-     from measurements lands a frame late, wherever the tab used to be. */
-  :global([data-variant="folder"]) .segment {
-    display: none;
-  }
-  /* The hover ghost is the kit's (app.css .kit-ghost), cut to the tab's
-     own shape and filled as the kit fills it: surface-hover, whole.
-     Folder tabs overlap, each in its own stack, so no one layer can glide
-     between a tab's card and its label: the tab under the pointer lights
-     its own card in the hover tint instead (TabItem, `data-ghosted`). */
-  :global([data-variant="folder"]) .ff-tabs-list > :global(.kit-ghost) {
-    display: none;
-  }
-  /* The focus ring, gliding from tab to tab: the app's one ring, drawn on
-     the tab's own box (a tab sits flush in the strip). */
-  .focus-mark {
-    z-index: 4;
-    border: var(--focus-ring-width) solid var(--focus-ring);
-    border-radius: var(--shape);
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        transform var(--dur-ghost) var(--ease-out),
-        width var(--dur-ghost) var(--ease-out),
-        height var(--dur-ghost) var(--ease-out);
-    }
-  }
-  /* Above every tab and every outline a host draws on them. */
-  :global([data-variant="folder"]) .focus-mark {
-    z-index: calc(var(--stack-top) + 2);
-    border-radius: calc(var(--radius) + 2px) calc(var(--radius) + 2px) 0 0;
-  }
-</style>

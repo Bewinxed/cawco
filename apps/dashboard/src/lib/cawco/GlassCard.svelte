@@ -105,12 +105,12 @@
     { card: "caw", leaving: false },
   ]);
   const shown = $derived(faces.find((face) => !face.leaving)?.card ?? "caw");
-  /** Each card's own frame: its width, its padding (their components). */
+  /** Each card's own frame (HangCard's `frame`), named on the card for the probes. */
   const FRAME = {
-    caw: "caw-pop gap-0",
-    machines: "machines-pop w-[min(20rem,calc(100vw-16px))] gap-0",
-    jump: "jump-pop gap-0",
-    files: "files-pop gap-0",
+    caw: "caw-pop",
+    machines: "machines-pop",
+    jump: "jump-pop",
+    files: "files-pop",
   } as const satisfies Record<Card, string>;
   const LABEL = {
     caw: "Needs you",
@@ -120,7 +120,7 @@
   } as const satisfies Record<Card, string>;
   /** Where each one puts the focus as it comes in. */
   const FOCUS = {
-    caw: "a.cover, button, .empty",
+    caw: 'a[data-slot="cover"], button, [data-slot="caw-panel-empty"]',
     machines: ".row",
     jump: "input",
     files: "input",
@@ -473,8 +473,9 @@
     align="end"
     anchor={glass}
     aria-label={LABEL[shown]}
-    class={[FRAME[shown], rehearsing && "invisible"]}
     data-glass-card-frame={FRAME[shown]}
+    data-rehearsing={rehearsing || undefined}
+    frame={shown}
     collisionPadding={placement.collisionPadding}
     customAnchor={glass}
     escapeKeydownBehavior={shown === "jump" || lightbox.current
@@ -562,7 +563,7 @@
     {#each faces as one (one.card)}
       <div
         data-slot="glass-face"
-        class="glass-face"
+        class="flex min-h-0 w-full flex-auto flex-col self-end rounded-inherit"
         data-face={one.card}
         {@attach mountFace(one.card)}
       >
@@ -579,20 +580,3 @@
     {/each}
   </HangCard>
 </Popover.Root>
-
-<style>
-  /* One card's contents, as they stood straight in the card: a column that
-     gives its own scroller (Caw's list, Jump's results) the card's bounds.
-     As wide as the card, and standing on its trailing edge: while the box
-     tweens (motion/morph holds the face at its own width) the card's
-     leading edge moves over it and clips it, and its rows never rewrap. */
-  .glass-face {
-    display: flex;
-    min-block-size: 0;
-    flex: 1 1 auto;
-    flex-direction: column;
-    align-self: flex-end;
-    inline-size: 100%;
-    border-radius: inherit;
-  }
-</style>

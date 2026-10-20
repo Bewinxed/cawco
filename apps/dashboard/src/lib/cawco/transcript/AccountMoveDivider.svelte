@@ -51,9 +51,13 @@
       case "moved":
       case "stopped":
         return row.move.resetsAt;
-      default:
-        return null;
+      case "continued":
+      case "ended":
+      case "signed-out":
+      case "unmoved":
+        break;
     }
+    return null;
   });
 
   $effect(() => {
@@ -83,176 +87,75 @@
       // A stop names no account: drawn in the neutral ink, never a failure's.
       case "ended":
         return null;
-      default:
-        return row.move.to?.hue ?? null;
+      case "continued":
+      case "moved":
+        break;
     }
+    return row.move.to?.hue ?? null;
   });
 </script>
 
-<div class="move" class:open>
+<div
+  data-open={open || undefined}
+  class="group/move @container mt-space-3 mb-space-1"
+>
   <!-- A button, so a keyboard and a finger can bring in the second line, as
        a pointer does by hovering. -->
   <button
     aria-expanded={open}
-    class="line focus-inset touch-hit"
+    class="peer/line flex items-center gap-space-3 w-full min-h-c-btn-h-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-ink-muted focus-inset touch-hit"
     onclick={() => {
       open = !open;
     }}
     type="button"
     style:--account={hue ? hueVar(hue) : "var(--ink-muted)"}
   >
-    <span class="arm"></span>
-    <span class="mid mark-line"
-      ><span data-slot="mark" class="mark" data-box
+    <span class="h-px flex-1 min-w-0 bg-border-control"></span>
+    <span
+      class="inline-flex items-center gap-space-2 min-w-0 whitespace-nowrap mark-line"
+      ><span
+        data-slot="mark"
+        class="inline-flex items-center gap-space-2"
+        data-box
         ><IconTransfer
           data-account-move-divider-glyph
           aria-hidden="true"
-          class="glyph"
+          class="flex-none size-space-4"
         />
-        <span data-slot="dot" aria-hidden="true" class="dot"></span></span
+        <span
+          data-slot="dot"
+          aria-hidden="true"
+          class="flex-none size-space-2 rounded-pill bg-(--account)"
+        ></span></span
       >
-      <span data-slot="words" class="words">{words.line}</span>
+      <span data-slot="words" class="min-w-0 overflow-clip text-ellipsis num"
+        >{words.line}</span
+      >
       {#if row.brief !== null}
-        <span data-slot="chev" class="chev" data-box
-          ><IconChevron aria-hidden="true" /></span
+        <span data-slot="chev" class="inline-flex flex-none" data-box
+          ><IconChevron
+            aria-hidden="true"
+            class="size-icon-sm group-data-open/move:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--dur-toggle) motion-safe:ease-in-out"
+          /></span
         >
       {/if}</span
     >
-    <span class="arm"></span>
+    <span class="h-px flex-1 min-w-0 bg-border-control"></span>
   </button>
-  <p data-slot="detail" class="detail"><span>{words.detail}</span></p>
+  <p
+    data-slot="detail"
+    class="grid grid-rows-shut opacity-0 text-center type-meta text-ink-subtle group-data-open/move:grid-rows-open group-data-open/move:opacity-100 peer-focus-visible/line:grid-rows-open peer-focus-visible/line:opacity-100 group-hover/move:grid-rows-open group-hover/move:opacity-100 @phone:grid-rows-open @phone:opacity-100 motion-safe:transition-[grid-template-rows,opacity] motion-safe:duration-(--dur-toggle) motion-safe:ease-out"
+  >
+    <span class="overflow-hidden">{words.detail}</span>
+  </p>
   {#if open && row.brief !== null}
-    <div class="brief" data-state="open" transition:unfold>
+    <div
+      data-slot="transcript-brief"
+      class="ms-(--x-text) pt-space-1"
+      data-state="open"
+      transition:unfold
+    >
       <MessageBody source={row.brief} />
     </div>
   {/if}
 </div>
-
-<style>
-  /* The container the wide rule is measured against: the transcript column. */
-  .move {
-    container-type: inline-size;
-    margin-block: var(--space-3) var(--space-1);
-  }
-  .line {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    align-items: center;
-    gap: var(--space-3);
-    inline-size: 100%;
-    min-block-size: var(--c-btn-h-sm);
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    cursor: pointer;
-  }
-  .arm {
-    block-size: 1px;
-    background: var(--border-control);
-  }
-  .mid {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    white-space: nowrap;
-  }
-  .mark {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .words {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    font-variant-numeric: tabular-nums;
-  }
-  .mid :global(.glyph) {
-    flex: none;
-    inline-size: 14px;
-    block-size: 14px;
-  }
-  .dot {
-    flex: none;
-    inline-size: 8px;
-    block-size: 8px;
-    border-radius: 50%;
-    background: var(--account);
-  }
-  /* The summary opens under the line: the chevron says so, turned down
-     while it is open. */
-  .chev {
-    display: inline-flex;
-    flex: none;
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-    .open & :global(svg) {
-      rotate: 90deg;
-    }
-  }
-  /* The second line: shut to nothing until it is shown, so a narrow
-     column keeps one line per move. */
-  .detail {
-    display: grid;
-    grid-template-rows: 0fr;
-    opacity: 0;
-    text-align: center;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-
-    & > span {
-      overflow: hidden;
-    }
-  }
-  .open .detail,
-  .line:focus-visible + .detail {
-    grid-template-rows: 1fr;
-    opacity: 1;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .move:hover .detail {
-      grid-template-rows: 1fr;
-      opacity: 1;
-    }
-  }
-  @container (min-width: 640px) {
-    .detail {
-      grid-template-rows: 1fr;
-      opacity: 1;
-    }
-  }
-  /* The summary, at the text column, where a compaction's brief opens, in
-     the muted ink of a note. */
-  .brief {
-    margin-inline-start: var(--x-text);
-    padding-block-start: var(--space-1);
-
-    & :global(.msg),
-    & :global(.msg .prose),
-    & :global(.msg .prose :is(h1, h2, h3, h4, h5, h6)) {
-      color: var(--ink-muted);
-    }
-    & :global(.msg .prose) {
-      --tw-prose-body: var(--ink-muted);
-      --tw-prose-headings: var(--ink-muted);
-      --tw-prose-bold: var(--ink-muted);
-    }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .detail {
-      transition:
-        grid-template-rows var(--dur-toggle) var(--ease-out),
-        opacity var(--dur-toggle) var(--ease-out);
-    }
-    .chev :global(svg) {
-      transition: rotate var(--dur-toggle) var(--ease-in-out);
-    }
-  }
-</style>

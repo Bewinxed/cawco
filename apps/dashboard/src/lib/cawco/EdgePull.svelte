@@ -40,28 +40,13 @@
   }
 </script>
 
+<!-- The screen's edge under the row: a press there is the pull's, not the
+     page's. A finger that goes down the edge scrolls the page under it; one
+     that goes inward is the pull's. -->
 <div
   data-slot="edge-pull"
   aria-hidden="true"
-  class="edge"
+  class="absolute start-0 end-auto top-c-top-bar-h bottom-0 z-(--layer-pull) w-c-edge-pull touch-pan-y side-right:start-auto side-right:end-0"
   data-side={side}
   onpointerdown={press}
 ></div>
-
-<style>
-  /* The screen's edge under the row: a press there is the pull's, not the
-     page's. */
-  .edge {
-    position: absolute;
-    inset-block: var(--c-top-bar-h) 0;
-    inset-inline: 0 auto;
-    z-index: 15;
-    inline-size: var(--c-edge-pull);
-    /* A finger that goes down the edge scrolls the page under it; one that
-       goes inward is the pull's. */
-    touch-action: pan-y;
-  }
-  .edge[data-side="right"] {
-    inset-inline: auto 0;
-  }
-</style>

@@ -77,25 +77,29 @@
 <Dialog.Root onOpenChangeComplete={(isOpen) => !isOpen && onClose()} bind:open>
   <Dialog.Content
     aria-label={`Diff: ${filePath}`}
-    bodyClass="flex h-full flex-col gap-0 overflow-hidden p-0"
-    class="h-[90vh] w-[95vw] sm:max-w-7xl"
+    body="document"
+    bodyPad="flush"
+    class="w-c-dialog-document-w"
+    height="cap"
+    width="document"
   >
-    <header data-slot="head" class="head">
+    <header
+      data-slot="head"
+      class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-2 py-space-3 ps-space-5 pe-c-dialog-close-clear border-b border-b-border-hairline"
+    >
       <div class="flex min-w-0 items-center gap-3">
         <div class="flex min-w-0 items-center gap-2">
-          <Dialog.Title class="truncate font-mono text-label"
-            >{filePath}</Dialog.Title
-          >
+          <Dialog.Title look="path">{filePath}</Dialog.Title>
           <CopyButton
-            class="h-6 w-6"
+            fit="square-24"
             size="icon-sm"
             text={filePath}
             variant="ghost"
           />
         </div>
         <div data-slot="num" class="num flex items-center gap-2 text-meta">
-          <span class="text-success">+{stats.additions}</span>
-          <span class="text-error">-{stats.deletions}</span>
+          <span class="text-success-9">+{stats.additions}</span>
+          <span class="text-error-9">-{stats.deletions}</span>
         </div>
       </div>
       <ToggleGroup.Root
@@ -117,11 +121,14 @@
       </ToggleGroup.Root>
     </header>
 
-    <div class="scroll">
+    <div class="relative flex-auto min-h-0 overflow-auto">
       {#key diffStyle}
         <div
           data-slot="layer"
-          class="layer"
+          class="min-h-full"
+          style:--diffs-font-size="var(--text-label)"
+          style:--diffs-line-height="var(--leading-code)"
+          style:--diffs-bg-separator-override="var(--muted)"
           in:crossIn
           out:crossOut
           {@attach drawn(diffStyle)}
@@ -130,31 +137,3 @@
     </div>
   </Dialog.Content>
 </Dialog.Root>
-
-<style>
-  /* Room on the inline end for the dialog's own close button. */
-  .head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px 12px;
-    padding: 12px 52px 12px 16px;
-    border-bottom: 1px solid var(--border-hairline);
-  }
-  .scroll {
-    position: relative;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: auto;
-  }
-  /* @pierre/diffs renders into a shadowRoot, so it can only be themed through
-     the inherited custom properties it documents in its core stylesheet;
-     every diff's colours are app.css's, the full view's size is its own. */
-  .layer {
-    min-height: 100%;
-    --diffs-font-size: 0.8125rem;
-    --diffs-line-height: 1.6;
-    --diffs-bg-separator-override: var(--muted);
-  }
-</style>

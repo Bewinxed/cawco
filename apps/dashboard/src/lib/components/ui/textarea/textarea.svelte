@@ -1,3 +1,34 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks, each as they drew it: the mono face, a text size, a
+      tall editor's least height, the page's fill, and a note written
+      straight into a composer (no field of its own: the composer's shell is
+      the field, DESIGN.md Inputs and fields, Field shell). A phone's 16px
+      floor is the base layer's, for every field. */
+  export const textareaVariants = tv({
+    variants: {
+      face: { mono: "font-mono" },
+      text: {
+        label: "text-label",
+        "pin-field": "group-data-sheet/pin:text-(length:--field-fs)",
+      },
+      height: { tall: "min-h-80" },
+      /** An editor's field the reader may also stretch by its corner (a
+          rule, a hook's command, a sample to test against), on top of
+          growing a line at a time. */
+      resize: { block: "resize-y" },
+      fill: { page: "bg-surface-page" },
+      look: {
+        note: "max-h-c-textarea-max-h min-h-c-composer-field min-w-0 border-transparent bg-transparent px-0 py-space-2 leading-ui shadow-none placeholder-shown:truncate",
+      },
+    },
+  });
+
+  export type TextareaLooks = VariantProps<typeof textareaVariants>;
+</script>
+
 <script lang="ts">
   import type { HTMLTextareaAttributes } from "svelte/elements";
   import { autosize } from "#lib/cawco/motion/autosize.svelte.js";
@@ -7,21 +38,29 @@
     ref = $bindable(null),
     value = $bindable(),
     class: className,
+    face,
+    text,
+    height,
+    resize,
+    fill,
+    look,
     "data-slot": dataSlot = "textarea",
     ...restProps
-  }: WithoutChildren<WithElementRef<HTMLTextareaAttributes>> = $props();
+  }: WithoutChildren<WithElementRef<HTMLTextareaAttributes>> &
+    TextareaLooks = $props();
 </script>
 
 <textarea
   class={cn(
-    "rounded-md shadow-xs [transition:var(--transition-control)] motion-safe:[transition:var(--transition-control),height_var(--dur-control)_var(--ease-out)]",
+    "rounded-md shadow-xs transition-control motion-safe:transition-control-grow",
     "flex min-h-16 w-full resize-none py-2",
-    "border border-[var(--border-control)]",
-    "bg-[var(--surface-raised)] px-3 text-[var(--ink-strong)]",
-    "text-body placeholder:text-muted-foreground",
+    "border border-border-control",
+    "bg-surface-raised px-3 text-ink-strong",
+    "text-body placeholder:text-ink-muted",
     "disabled:cursor-not-allowed disabled:opacity-50",
-    "aria-invalid:border-destructive",
-    "dark:aria-invalid:border-destructive/50",
+    "aria-invalid:border-error-9",
+    "dark:aria-invalid:border-error-9/50",
+    textareaVariants({ face, text, height, resize, fill, look }),
     className
   )}
   data-slot={dataSlot}

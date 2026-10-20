@@ -1160,8 +1160,12 @@ async function readHead(page: Page): Promise<HeadRead> {
     const head = document.querySelector(
       "[data-bench-pane] [data-slot=side-head]"
     ) as HTMLElement;
-    const trigger = head.querySelector(".identity > *") as HTMLElement;
-    const name = trigger.querySelector(".artifact-name") as HTMLElement;
+    const trigger = head.querySelector(
+      "[data-slot=identity] > *"
+    ) as HTMLElement;
+    const name = trigger.querySelector(
+      "[data-slot=artifact-name]"
+    ) as HTMLElement;
     const r = trigger.getBoundingClientRect();
     const under = document.elementFromPoint(r.right - 2, r.top + r.height / 2);
     const controls = [
@@ -1261,8 +1265,22 @@ const EDGES_AT = ({
   if (shadow) {
     scopes.push(shadow);
   }
+  // An element by its hook: its slot, else its first data attribute, else
+  // its first class (the canvas chrome's own DOM keeps classes).
+  const hookOf = (el: Element) => {
+    const slot = el.getAttribute("data-slot");
+    if (slot) {
+      return `[data-slot=${slot}]`;
+    }
+    const data = [...el.attributes].find((a) => a.name.startsWith("data-"));
+    if (data) {
+      return `[${data.name}]`;
+    }
+    const [first] = String(el.className).split(" ");
+    return first ? `.${first}` : "";
+  };
   const named = (el: Element, r: DOMRect, what: string) =>
-    `${el.tagName.toLowerCase()}.${String(el.className).split(" ")[0]} ${what} ${Math.round(r.width)}px`;
+    `${el.tagName.toLowerCase()}${hookOf(el)} ${what} ${Math.round(r.width)}px`;
   const near = (y: number) => Math.abs(y - at) <= 3;
   const painted = (width: string, kind: string) =>
     Number.parseFloat(width) > 0 && kind !== "none";
@@ -1341,7 +1359,7 @@ async function seamLeg(kit: Kit, page: Page, leg: string): Promise<void> {
   const well = await page.evaluate(() => {
     const box = (
       document.querySelector(
-        "[data-bench-pane] [data-slot=side-well]"
+        "[data-bench-pane] [data-side-well]"
       ) as HTMLElement
     ).getBoundingClientRect();
     return { top: box.top, width: Math.round(box.width) };
@@ -1353,7 +1371,7 @@ async function seamLeg(kit: Kit, page: Page, leg: string): Promise<void> {
       inside: "[data-bench-pane] *",
       shadows: true,
     })
-  ).filter((one) => !one.startsWith("div.side-well shadow"));
+  ).filter((one) => !one.startsWith("div[data-side-well] shadow"));
   // The page's top row, under the seam: an edge there narrower than the page would read as a stray line.
   const pageTop = canvasFrame
     ? (
@@ -1419,7 +1437,9 @@ async function openBench(
     `${bench}/motion/artifact-head?w=${width}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}&ask=${encodeURIComponent(ASK)}${query}`
   );
   const ready = await page
-    .waitForSelector("[data-bench-pane] iframe.ready", { timeout: 60_000 })
+    .waitForSelector("[data-bench-pane] iframe[data-ready]", {
+      timeout: 60_000,
+    })
     .then(() => true)
     .catch(() => false);
   if (!ready) {
@@ -1677,7 +1697,7 @@ const readMap = (page: Page) =>
       groups: [...pane.querySelectorAll("[data-slot=map-list] h3")].map(
         (one) => one.textContent ?? ""
       ),
-      legend: (pane.querySelector(".legend")?.textContent ?? "")
+      legend: (pane.querySelector("[data-slot=legend]")?.textContent ?? "")
         .replace(/\s+/g, " ")
         .trim(),
     };
@@ -1721,7 +1741,7 @@ async function mapLeg(
   await page.goto(
     `${bench}/motion/artifact-head?w=${width}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}&ask=${encodeURIComponent(ASK)}`
   );
-  await page.waitForSelector("[data-bench-pane] iframe.ready", {
+  await page.waitForSelector("[data-bench-pane] iframe[data-ready]", {
     timeout: 60_000,
   });
   await openMap(page);
@@ -1954,11 +1974,13 @@ async function artifactSwitchLeg(
         const pane = document.querySelector("[data-bench-pane]");
         return {
           name:
-            pane?.querySelector(".artifact-name")?.textContent?.trim() ?? null,
+            pane
+              ?.querySelector("[data-slot=artifact-name]")
+              ?.textContent?.trim() ?? null,
           line:
             pane?.querySelector("[data-slot=subtitle]")?.textContent ?? null,
           title:
-            pane?.querySelector("[data-slot=down] .kit-empty-title")
+            pane?.querySelector("[data-slot=down] [data-slot=empty-title]")
               ?.textContent ?? null,
         };
       });
@@ -1997,7 +2019,7 @@ async function ownTabLeg(
   await page.goto(
     `${bench}/motion/artifact-head?w=1024&own=1&name=${encodeURIComponent(OWN_NAME)}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}&ask=${encodeURIComponent(ASK)}`
   );
-  await page.waitForSelector("[data-bench-pane] iframe.ready", {
+  await page.waitForSelector("[data-bench-pane] iframe[data-ready]", {
     timeout: 60_000,
   });
   await page.waitForTimeout(3000);
@@ -2090,8 +2112,11 @@ async function stageDownLeg(
       const edge = box.getBoundingClientRect();
       const at = details?.getBoundingClientRect();
       return {
-        title: box.querySelector(".kit-empty-title")?.textContent ?? "",
-        line: box.querySelector(".kit-empty-line")?.textContent?.trim() ?? "",
+        title:
+          box.querySelector('[data-slot="empty-title"]')?.textContent ?? "",
+        line:
+          box.querySelector('[data-slot="empty-line"]')?.textContent?.trim() ??
+          "",
         button: button?.textContent?.trim() ?? null,
         expanded: button?.getAttribute("aria-expanded") ?? null,
         details: details?.textContent?.trim() ?? null,
@@ -2270,7 +2295,7 @@ async function readMore(page: Page) {
           .join(", "),
       head
     ),
-    count: await textOr(trigger.locator(".more-count")),
+    count: await textOr(trigger.locator('[data-slot="more-count"]')),
     label: (await trigger.getAttribute("aria-label")) ?? "",
     entry: "",
     opened: false,
@@ -2279,7 +2304,7 @@ async function readMore(page: Page) {
   const entry = page
     .locator("[data-slot=dropdown-menu-content] [role=menuitem]")
     .filter({ hasText: "Comments" });
-  said.entry = `${(await entry.textContent())?.trim()} (menu-count ${await textOr(entry.locator(".menu-count"))})`;
+  said.entry = `${(await entry.textContent())?.trim()} (menu-count ${await textOr(entry.locator("[data-slot=count]"))})`;
   await entry.click();
   said.opened = await page
     .locator("[data-pin-list-pop]")
@@ -2780,7 +2805,9 @@ const DESK_READ = () => {
   const comments = head.querySelector<HTMLElement>(
     ":scope > [data-head-item=comments]"
   );
-  const label = comments?.querySelector<HTMLElement>(".comments-label");
+  const label = comments?.querySelector<HTMLElement>(
+    "[data-slot=comments-label]"
+  );
   let container = comments?.parentElement ?? null;
   while (container && getComputedStyle(container).containerType === "normal") {
     container = container.parentElement;

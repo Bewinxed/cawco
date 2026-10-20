@@ -19,45 +19,18 @@
 </script>
 
 {#if src}
+  <!-- Shot's own box and image take no class: they are reached from here.
+       Their sizes are Shot's thumb's (48px, the image 100% of it, cover);
+       here the box may shrink, the picture shows the page's top, and at
+       night a single picture's corners follow the well's inset. -->
   <div
     data-slot="page-thumb"
     data-scheme={scheme}
     data-single={thumbnail.single || undefined}
     aria-hidden="true"
-    class="page-thumb"
+    class="h-(--tx-preview-thumb-h) w-(--tx-preview-thumb-w) shrink-0 overflow-hidden rounded-sm border border-border-well bg-surface-well data-single:data-[scheme=dark]:p-space-1 [&_[data-slot=shot-box]]:min-h-0 [&_img]:object-top data-single:data-[scheme=dark]:[&_img]:rounded-xs"
     inert
   >
     <Shot alt="Preview" size="thumb" src={`data:image/png;base64,${src}`} />
   </div>
 {/if}
-
-<style>
-  .page-thumb {
-    inline-size: var(--tx-preview-thumb-w);
-    block-size: var(--tx-preview-thumb-h);
-    flex-shrink: 0;
-    overflow: hidden;
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-sm);
-    background: var(--surface-well);
-
-    & :global(.box) {
-      block-size: 100%;
-      min-block-size: 0;
-    }
-    & :global(img) {
-      inline-size: 100%;
-      block-size: 100%;
-      object-fit: cover;
-      object-position: top;
-    }
-    /* A page with no dark of its own, at night: inset, the well round it. */
-    &[data-single][data-scheme="dark"] {
-      padding: var(--space-1);
-
-      & :global(img) {
-        border-radius: var(--radius-xs);
-      }
-    }
-  }
-</style>

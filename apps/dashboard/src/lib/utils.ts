@@ -1,15 +1,210 @@
 import { type ClassValue, clsx } from "clsx";
-import { extendTailwindMerge } from "tailwind-merge";
+import { extendTailwindMerge, validators } from "tailwind-merge";
 import { createTV } from "tailwind-variants";
+import theme from "./tokens/theme.css?raw";
 
-/** The theme's type scale (app.css `--text-*`). Unknown, tailwind-merge reads
- *  `text-label` as a colour and drops the colour class beside it. */
+/** The keys a namespace of the token theme holds (`--spacing-space-3` → `space-3`). */
+const keys = (ns: string): string[] =>
+  [...theme.matchAll(new RegExp(`^\\s*--${ns}-([a-z0-9-]+):`, "gm"))].map(
+    ([, key]) => key
+  );
+/** The names of the theme's `@utility <prefix>-<name>` rules. */
+const utilities = (prefix: string): string[] =>
+  [
+    ...theme.matchAll(new RegExp(`^@utility ${prefix}-([a-z0-9-]+) \\{`, "gm")),
+  ].map(([, name]) => name);
+const durations = keys("duration");
+/** What a `font` shorthand class resets: every font longhand group, and the other shorthands. */
+const fontResets = [
+  "type-role",
+  "font-shorthand",
+  "font-family",
+  "font-features",
+  "font-size",
+  "font-stretch",
+  "font-style",
+  "font-weight",
+  "fvn-normal",
+  "fvn-ordinal",
+  "fvn-slashed-zero",
+  "fvn-figure",
+  "fvn-spacing",
+  "fvn-fraction",
+  "leading",
+] as const;
+/** A value written in brackets or parentheses (`clip-path-(--clip)`). */
+const arbitrary = [validators.isArbitraryVariable, validators.isArbitraryValue];
+
+/**
+ * tailwind-merge keeps the later of two classes that set the same thing, so
+ * it has to know what each of the theme's names sets. Read from the theme
+ * itself: a key it did not know would be kept beside its rival (`p-space-3`
+ * and `p-space-1` both, the order in the stylesheet deciding), and a name it
+ * misread would drop a class (`text-label` read as a colour drops the colour
+ * beside it; `text-size-meta` too). `text-<role>` is a font size, as the
+ * role it sets is.
+ */
 const twMergeConfig = {
-  extend: { theme: { text: ["meta", "label", "body", "title", "kpi"] } },
+  extend: {
+    theme: {
+      text: utilities("text").filter((name) => !name.startsWith("size-")),
+      spacing: keys("spacing"),
+      radius: keys("radius"),
+      shadow: keys("shadow"),
+      "drop-shadow": keys("drop-shadow"),
+      leading: keys("leading"),
+      tracking: keys("tracking"),
+      ease: keys("ease"),
+      font: keys("font").filter((key) => !key.startsWith("weight-")),
+      "font-weight": keys("font-weight"),
+      breakpoint: keys("breakpoint"),
+      container: keys("container"),
+      animate: keys("animate"),
+    },
+    classGroups: {
+      "font-size": [{ "text-size": utilities("text-size") }],
+      "bg-image": [{ bg: utilities("bg") }],
+      // The theme's transition tokens, and app.css's `transition-off`.
+      transition: [
+        { transition: [...utilities("transition"), "off", "control-grow"] },
+      ],
+      animate: ["sheet-fade"],
+      content: [{ content: ["data-n", "placeholder"] }],
+      "grid-rows": [{ "grid-rows": ["shut", "open"] }],
+      "grid-cols": [{ "grid-cols": ["fluid-auto", "mark-fluid"] }],
+      "auto-rows": [{ "auto-rows": ["line", "band", "band-phone"] }],
+      "animation-duration": [{ "anim-dur": durations }],
+      "animation-delay": [{ "anim-delay": durations }],
+      "type-role": [{ type: utilities("type") }],
+      // app.css's per-side shorthands, one group to a side, which
+      // tailwind-merge would otherwise read as that side's colour and drop
+      // beside the side's real colour. They sort after every border utility,
+      // so they stand beside them.
+      "border-none-t": ["border-t-none"],
+      "border-none-b": ["border-b-none"],
+      "border-none-l": ["border-l-none"],
+      "border-none-r": ["border-r-none"],
+      "border-none-s": ["border-s-none"],
+      "border-style-t": ["border-t-dashed"],
+      // app.css's `outline: none` and `background` shorthands, a group each
+      // (`outline-off` would be read as an outline colour). They stand beside
+      // the longhands' utilities, and the sheet's order decides: `background-*`
+      // sorts after every `bg-*`, `outline-off` before Tailwind's outline
+      // longhands.
+      "outline-off": ["outline-off"],
+      "background-shorthand": [{ background: [validators.isAny] }],
+      // app.css's utilities for declarations Tailwind writes none for. Those
+      // that set a property tailwind-merge has a group for join it, so they
+      // replace a rival as it would; the rest are a group each.
+      rounded: ["rounded-inherit"],
+      "font-family": ["font-family-inherit"],
+      gap: ["gap-inherit"],
+      "color-scheme": ["scheme-inherit"],
+      "pointer-events": ["pointer-events-all"],
+      "max-h": ["max-h-inherit"],
+      "align-items": ["items-box-start", "items-box-end", "items-unsafe-end"],
+      "justify-content": ["justify-box-end"],
+      "justify-self": ["justify-self-box-start"],
+      "align-content": ["content-unsafe-end"],
+      "border-color": ["border-suggest-tint"],
+      "bg-color": ["bg-suggest-tint", "bg-suggest-tint-hover"],
+      "font-shorthand": ["font-inherit", "font-mono-meta"],
+      "line-clamp-undo": ["line-clamp-undo"],
+      "translate-raw": [{ "translate-raw": arbitrary }],
+      "clip-margin": [{ "clip-margin": [validators.isAny] }],
+      "overflow-anchor": ["anchor-none"],
+      "scroll-timeline": ["scroll-timeline-transcript-head"],
+      // Recipes: each sets its own custom properties.
+      "pane-tab-pads": ["pane-tab-pads"],
+      "pane-tab-rims": ["pane-tab-rims"],
+      "divider-chevron": ["divider-chevron"],
+      "turn-pad": ["turn-pad"],
+      // tailwind-merge's `break` group holds `break-words`, which Tailwind 4
+      // writes as overflow-wrap: word-break's value is a group of its own.
+      "word-break-word": ["break-word"],
+      "animation-play-state": ["animation-paused"],
+      "inks-strong": ["inks-strong"],
+      "tap-highlight": ["tap-highlight-none"],
+      "touch-callout": ["touch-callout-none"],
+      "content-visibility": ["content-visibility-hidden"],
+      "timeline-scope": ["timeline-scope-transcript-head"],
+      "writing-mode": ["writing-vertical-rl"],
+      direction: ["dir-rtl"],
+      "clip-path": [
+        { "clip-path": arbitrary },
+        "clip-block-start",
+        "clip-tab-foot",
+      ],
+      "grid-areas": [{ "grid-areas": arbitrary }],
+      "line-clamp-std": [{ "line-clamp-std": [validators.isInteger] }],
+      "ring-ground": [{ "ring-ground": [validators.isAny] }],
+      // The custom-property setters, one group to a property.
+      "hit-gap-x": [{ "hit-gap-x": [validators.isAny] }],
+      "hit-gap-y": [{ "hit-gap-y": arbitrary }],
+      "caw-neck": [{ "caw-neck": arbitrary }],
+      "press-by": [{ "press-by": arbitrary }],
+      "swap-away": [{ "swap-away": [validators.isInteger] }],
+      "rail-step": [{ "rail-step": arbitrary }],
+      "prompt-fs": [{ "prompt-fs": arbitrary }],
+      "fade-inset-end": [{ "fade-inset-end": arbitrary }],
+    },
+    // A `font` shorthand class (a type role, `font-inherit`) resets every
+    // font longhand, so it replaces an earlier class that set one, as a
+    // later `font:` declaration did (`type-meta` on a Badge drops its
+    // `text-label leading-none`). A longhand class after it is kept: it
+    // sorts after the shorthand and wins (scripts/role-order.ts).
+    conflictingClassGroups: {
+      "type-role": [...fontResets],
+      "font-shorthand": [...fontResets],
+    },
+  },
 };
-const twMerge = extendTailwindMerge(twMergeConfig);
+const twMerge = extendTailwindMerge<
+  | "animation-duration"
+  | "animation-delay"
+  | "type-role"
+  | "border-none-t"
+  | "border-none-b"
+  | "border-none-l"
+  | "border-none-r"
+  | "border-none-s"
+  | "border-style-t"
+  | "outline-off"
+  | "background-shorthand"
+  | "font-shorthand"
+  | "line-clamp-undo"
+  | "translate-raw"
+  | "clip-margin"
+  | "overflow-anchor"
+  | "scroll-timeline"
+  | "pane-tab-pads"
+  | "pane-tab-rims"
+  | "divider-chevron"
+  | "turn-pad"
+  | "word-break-word"
+  | "animation-play-state"
+  | "inks-strong"
+  | "tap-highlight"
+  | "touch-callout"
+  | "content-visibility"
+  | "timeline-scope"
+  | "writing-mode"
+  | "direction"
+  | "clip-path"
+  | "grid-areas"
+  | "line-clamp-std"
+  | "ring-ground"
+  | "hit-gap-x"
+  | "hit-gap-y"
+  | "caw-neck"
+  | "press-by"
+  | "swap-away"
+  | "rail-step"
+  | "prompt-fs"
+  | "fade-inset-end"
+>(twMergeConfig);
 
-/** `tv` for kit recipes, merging with the same type scale as `cn`. */
+/** `tv` for kit recipes, merging with the same theme as `cn`. */
 export const tv = createTV({ twMergeConfig });
 
 export function cn(...inputs: ClassValue[]) {

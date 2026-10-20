@@ -91,33 +91,49 @@
     data-plan-pane-expanded={!!expand?.expanded || undefined}
     data-slot="body"
     class={[
-      "body kit-edge-fade-block",
-      { sheet, "kit-sheet-scroll": sheet, expanded: !!expand?.expanded },
+      "kit-edge-fade-block flex-auto min-h-0 overflow-y-auto overscroll-contain touch-pan-y pbs-space-1 pbe-space-4 flex flex-col gap-space-2 data-sheet:pbs-space-3 data-sheet:pbe-0 data-sheet:mask-(--sheet-fade) data-plan-pane-expanded:w-full data-plan-pane-expanded:max-w-c-measure data-plan-pane-expanded:mx-auto",
+      sheet && "kit-sheet-scroll",
     ]}
+    style:--more-px="0"
+    style:--sheet-fade={sheet
+      ? "linear-gradient(to bottom, var(--mask-opaque) calc(100% - var(--fade-end)), transparent)"
+      : undefined}
   >
     {#if steps.length > 0}
       {#if stepsHeaded}
-        <h3 class="part-head">{planWords.steps}</h3>
+        <h3
+          class="m-0 type-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline"
+        >
+          {planWords.steps}
+        </h3>
       {/if}
       <PlanTree nodes={steps} />
     {/if}
 
     {#if plan?.spec}
-      <h3 class="part-head">{planWords.spec}</h3>
+      <h3
+        class="m-0 type-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline"
+      >
+        {planWords.spec}
+      </h3>
       <MessageBody source={plan.spec.markdown} />
     {/if}
 
     {#if showsTodos && plan?.taskId}
       {#if !onlyTodos}
-        <h3 class="part-head">
-          {planWords.todos} <span class="ref">{plan.taskId}</span>
+        <h3
+          class="m-0 type-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline"
+        >
+          {planWords.todos}
+          <span class="type-code text-ink-subtle">{plan.taskId}</span>
         </h3>
       {/if}
       <PlanTree nodes={todos} />
       {#if projectId}
         <Button
           data-more
-          class="more"
+          class="self-start"
+          pad="more"
           href="/project/{encodeURIComponent(
             projectId
           )}?view=canvas&task={encodeURIComponent(plan.taskId)}"
@@ -136,14 +152,14 @@
     <Drawer.Title>
       {cardTitle}
       {#if onlyTodos && plan?.taskId}
-        <span class="ref">{plan.taskId}</span>
+        <span class="type-code text-ink-subtle">{plan.taskId}</span>
       {/if}
     </Drawer.Title>
   </Drawer.Header>
   {@render body()}
 {:else}
   <SideSurface
-    class="plan-pane"
+    of="plan"
     label={planWords.plan}
     {onclose}
     recessed={false}
@@ -155,61 +171,3 @@
     {@render body()}
   </SideSurface>
 {/if}
-
-<style>
-  /* One column on the surface, its left edge the header's; it scrolls, and
-     a long spec is read whole in it. */
-  .body {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    touch-action: pan-y;
-    padding-block: var(--space-1) var(--space-4);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  /* Expanded over the whole session area (SideSplit), the column keeps the
-     house measure (72ch, as the reading well and the transcript's cards),
-     centred on the surface. */
-  .body.expanded {
-    inline-size: 100%;
-    max-inline-size: 72ch;
-    margin-inline: auto;
-  }
-  /* In the sheet the column starts under the header's seam, so only its
-     foot fades: a line scrolled up under the title is cut on the seam. */
-  .body.sheet {
-    padding-block: var(--space-3) 0;
-    mask-image: linear-gradient(
-      to bottom,
-      #000 calc(100% - var(--fade-end)),
-      transparent
-    );
-  }
-  /* A part's heading is text on the surface, as strong as anything the part
-     holds: body at 500 in the strong ink, which is where the spec's own
-     headings stop (MessageBody sets every markdown heading at body 500). A
-     part after the first starts on a seam, more space above its heading
-     than below, so the spec's headings read as inside it. */
-  .part-head {
-    margin: 0;
-    font: var(--type-body);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .part-head:not(:first-child) {
-    margin-block-start: var(--space-3);
-    padding-block-start: var(--space-4);
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .ref {
-    font: var(--type-code);
-    color: var(--ink-subtle);
-  }
-  .body :global(.more) {
-    align-self: flex-start;
-    padding-inline: 0;
-  }
-</style>

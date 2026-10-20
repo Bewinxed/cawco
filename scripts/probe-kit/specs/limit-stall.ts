@@ -1055,7 +1055,7 @@ const personAfter = async (
     tab.evaluate(() => ({
       path: location.pathname,
       composers: document.querySelectorAll('[data-slot="composer"]').length,
-      continuedIn: document.querySelectorAll(".readonly.continued").length,
+      continuedIn: document.querySelectorAll('[data-slot="continued"]').length,
     }));
   const shown = await until(
     "continued: the old page opens the live session",

@@ -12,7 +12,7 @@
 
 <span
   class={cn(
-    "ml-auto text-meta text-muted-foreground tracking-widest group-focus/context-menu-item:text-foreground",
+    "ml-auto text-ink-muted text-meta tracking-widest group-focus/context-menu-item:text-ink-strong",
     className
   )}
   data-slot="context-menu-shortcut"

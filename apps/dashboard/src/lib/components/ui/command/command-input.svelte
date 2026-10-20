@@ -13,7 +13,7 @@
   }: CommandPrimitive.InputProps = $props();
 </script>
 
-<div class="p-1 pb-0" data-slot="command-input-wrapper">
+<div class="p-space-1 pb-0" data-slot="command-input-wrapper">
   <InputGroup.Root>
     <CommandPrimitive.Input
       class={cn(
@@ -29,7 +29,7 @@
       {/snippet}
     </CommandPrimitive.Input>
     <InputGroup.Addon>
-      <IconSearch class="size-4 shrink-0 opacity-50" />
+      <IconSearch class="size-icon-md shrink-0 opacity-50" />
     </InputGroup.Addon>
   </InputGroup.Root>
 </div>

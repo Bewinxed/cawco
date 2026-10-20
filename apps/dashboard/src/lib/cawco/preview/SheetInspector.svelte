@@ -41,6 +41,7 @@
     NativeSelect,
     NativeSelectOption,
   } from "#lib/components/ui/native-select/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import {
     IconArrowDown,
@@ -194,14 +195,19 @@
 <aside
   data-sheet={layout === "sheet" || undefined}
   aria-label="Inspector"
-  class="inspector"
-  class:sheet={layout === "sheet"}
+  class="absolute inset-y-0 end-0 z-2 flex flex-col w-c-sheet-inspector-w max-w-full border-s border-s-border-hairline bg-surface-raised data-sheet:top-auto data-sheet:bottom-0 data-sheet:inset-x-0 data-sheet:w-auto data-sheet:max-h-3/5 data-sheet:border-s-none data-sheet:border-t data-sheet:border-t-border-hairline data-sheet:rounded-ss-lg data-sheet:rounded-se-lg data-sheet:shadow-drawer"
   data-inspector={layout}
+  style:--foot-pb="calc(var(--space-2) + env(safe-area-inset-bottom, 0px))"
   in:slide={{ leaving: false }}
   out:slide={{ leaving: true }}
 >
-  <header data-slot="head" class="head">
-    <h2 data-slot="title" class="title">{words.inspect}</h2>
+  <header
+    data-slot="head"
+    class="flex flex-none items-center gap-space-2 min-h-c-sheet-inspector-head-h ps-space-4 pe-space-2 border-b border-b-border-hairline"
+  >
+    <h2 data-slot="title" class="flex-1 m-0 text-ink-strong type-label">
+      {words.inspect}
+    </h2>
     <Button
       aria-label={words.closeInspector}
       class="touch-hit"
@@ -213,23 +219,32 @@
     />
   </header>
 
-  <div class="body">
+  <div
+    class="grid content-box-start gap-space-3 flex-1 min-h-0 overflow-auto px-space-4 py-space-3"
+  >
     {#if !sheet}
       <!-- The rows' own size while the page reads the sheet's props. -->
-      <div aria-label={words.readingProps} class="loading" role="status">
+      <div
+        aria-label={words.readingProps}
+        class="grid gap-space-2"
+        role="status"
+      >
         {#each [0, 1, 2] as row (row)}
-          <span class="kit-skeleton skeleton-name"></span>
-          <span class="kit-skeleton skeleton-control"></span>
+          <Skeleton class="w-2/5" line="label" radius="text" />
+          <Skeleton class="mb-space-2" height="field" radius="tile" />
         {/each}
       </div>
     {:else if sheet.stories.length === 0}
-      <p class="note">{words.noStories(fileName)}</p>
+      <p class="m-0 text-ink-muted type-meta">
+        {words.noStories(fileName)}
+      </p>
     {:else}
-      <div class="story">
+      <div class="flex items-center gap-space-2">
         <label class="sr-only" for={`${id}-story`}>{words.story}</label>
         <NativeSelect
-          class="story-pick"
+          class="flex-1"
           id={`${id}-story`}
+          measure="shrink"
           onchange={(event) =>
             inspector.choose((event.currentTarget as HTMLSelectElement).value)}
           size="sm"
@@ -241,7 +256,7 @@
             </NativeSelectOption>
           {/each}
         </NativeSelect>
-        <div class="story-ops">
+        <div class="flex gap-space-1">
           <Button
             aria-label={words.duplicateStory}
             disabled={!!inspector.writing}
@@ -283,34 +298,41 @@
       <AskHere asker={asks} at="remove-story" />
 
       {#if inspector.readOnly}
-        <p class="note" data-slot="read-only">{inspector.readOnly.reason}</p>
+        <p class="m-0 text-ink-muted type-meta" data-slot="read-only">
+          {inspector.readOnly.reason}
+        </p>
       {/if}
       {#if inspector.readOnly?.read === false}
         <!-- No controls: the file builds this story's component and args in code the reader can't follow. -->
       {:else if component}
-        <p class="where">
-          {component.name} · <code>{component.file}</code>
+        <p class="m-0 text-ink-muted type-meta">
+          {component.name} ·
+          <code class="type-code wrap-anywhere">{component.file}</code>
         </p>
         {#if component.note}
-          <p class="note">{component.note}</p>
+          <p class="m-0 text-ink-muted type-meta">{component.note}</p>
         {/if}
-        <ul class="props">
+        <ul class="grid gap-space-4 m-0 p-0 list-none">
           {#each ordered(component.props) as prop (prop.name)}
             {@const control =
               inspector.code(prop) === null && !inspector.readOnly
                 ? controlOf(prop)
                 : "code"}
             {@const value = inspector.value(prop)}
-            <li class="prop" data-prop={prop.name}>
-              <div class="prop-head">
-                <label class="prop-name" for={fieldId(prop)}>{prop.name}</label>
+            <li class="grid gap-space-1" data-prop={prop.name}>
+              <div class="flex items-center gap-space-2 min-h-space-6">
+                <label class="text-ink-strong type-label" for={fieldId(prop)}
+                  >{prop.name}</label
+                >
                 {#if prop.required}
-                  <span class="prop-meta">{words.required}</span>
+                  <span class="m-0 text-ink-muted type-meta"
+                    >{words.required}</span
+                  >
                 {/if}
                 {#if inspector.own(prop) && control !== "code" && control !== "slot"}
                   <Button
                     aria-label={words.resetProp(prop.name)}
-                    class="prop-reset"
+                    class="ms-auto"
                     icon={IconReset}
                     onclick={() => inspector.reset(prop)}
                     size="icon-xs"
@@ -343,7 +365,7 @@
                 </Tabs>
               {:else if control === "select"}
                 <NativeSelect
-                  class="prop-select"
+                  class="w-full"
                   id={fieldId(prop)}
                   name={prop.name}
                   onchange={(event) => {
@@ -379,7 +401,6 @@
               {:else if control === "text" || control === "number"}
                 <Input
                   autocomplete="off"
-                  class="prop-field"
                   id={fieldId(prop)}
                   list={listOf(prop)}
                   name={prop.name}
@@ -408,19 +429,26 @@
                   </datalist>
                 {/if}
               {:else if control === "slot"}
-                <p class="slot mark-line" id={fieldId(prop)}>
-                  <IconComment class="slot-glyph" />
+                <p
+                  class="mark-line flex items-center gap-space-2 m-0 text-ink-muted type-meta"
+                  id={fieldId(prop)}
+                >
+                  <IconComment class="shrink-0 size-icon-md" />
                   <span>{words.slot}</span>
                 </p>
               {:else}
-                <p data-slot="code" class="code" id={fieldId(prop)}>
-                  <code
+                <p
+                  data-slot="code"
+                  class="grid gap-space-1 m-0"
+                  id={fieldId(prop)}
+                >
+                  <code class="text-ink-strong type-code wrap-anywhere"
                     >{inspector.code(prop) ??
                       (inspector.readOnly && value !== undefined
                         ? JSON.stringify(value)
                         : prop.type.raw)}</code
                   >
-                  <span
+                  <span class="m-0 text-ink-muted type-meta"
                     >{inspector.code(prop) === null
                       ? words.setInFile
                       : words.codeInFile}</span
@@ -428,31 +456,42 @@
                 </p>
               {/if}
               {#if typeSaid(prop, control)}
-                <p class="prop-type"><code>{prop.type.raw}</code></p>
+                <p class="m-0 text-ink-muted type-meta">
+                  <code class="type-code wrap-anywhere">{prop.type.raw}</code>
+                </p>
               {/if}
               {#if prop.description}
-                <p class="prop-hint">{prop.description}</p>
+                <p class="m-0 text-ink-muted type-meta">{prop.description}</p>
               {/if}
             </li>
           {:else}
             {#if component.types !== "unknown"}
-              <li class="note">{words.takesNoProps(component.name)}</li>
+              <li class="m-0 text-ink-muted type-meta">
+                {words.takesNoProps(component.name)}
+              </li>
             {/if}
           {/each}
         </ul>
       {:else}
-        <p class="note">{words.noComponent} <code>component</code>.</p>
+        <p class="m-0 text-ink-muted type-meta">
+          {words.noComponent}
+          <code class="type-code wrap-anywhere">component</code>.
+        </p>
       {/if}
     {/if}
   </div>
 
-  <footer class="foot">
+  <footer
+    class="grid flex-none gap-space-2 px-space-3 pt-space-2 pb-(--foot-pb) border-t border-t-border-hairline"
+  >
     {#if inspector.problem}
-      <p class="problem" role="alert">{inspector.problem}</p>
+      <p class="m-0 text-data-bad type-meta" role="alert">
+        {inspector.problem}
+      </p>
     {/if}
     {#if naming}
-      <form class="naming" onsubmit={named}>
-        <label class="prop-name" for={`${id}-name`}>
+      <form class="grid gap-space-2 m-0" onsubmit={named}>
+        <label class="text-ink-strong type-label" for={`${id}-name`}>
           {naming === "add"
             ? words.newStoryName
             : words.nameCopy(story?.name ?? words.theStory)}
@@ -465,9 +504,12 @@
           placeholder={words.namePlaceholder}
         />
         {#if nameProblem}
-          <p class="problem">{nameProblem}</p>
+          <p class="m-0 text-data-bad type-meta">{nameProblem}</p>
         {/if}
-        <div data-slot="actions" class="actions">
+        <div
+          data-slot="actions"
+          class="flex items-center justify-end gap-space-2"
+        >
           <Button
             label={words.cancel}
             onclick={() => {
@@ -487,7 +529,7 @@
         </div>
       </form>
     {:else}
-      <div data-slot="actions" class="actions">
+      <div data-slot="actions" class="flex items-center gap-space-2">
         <Button
           disabled={!sheet || !!inspector.writing}
           icon={IconPlus}
@@ -497,7 +539,7 @@
           title={words.addStoryTitle}
           variant="ghost"
         />
-        <span class="spacer"></span>
+        <span class="flex-1"></span>
         <Button
           disabled={!inspector.dirty || !!inspector.writing}
           label={words.discard}
@@ -518,181 +560,3 @@
     {/if}
   </footer>
 </aside>
-
-<style>
-  /* The panel: the raised surface beside the page, a hairline its seam; its
-     controls scroll between the head and the foot. */
-  .inspector {
-    position: absolute;
-    inset-block: 0;
-    inset-inline-end: 0;
-    z-index: 2;
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-    inline-size: var(--c-sheet-inspector-w);
-    max-inline-size: 100%;
-    border-inline-start: 1px solid var(--border-hairline);
-    background: var(--surface-raised);
-  }
-  /* On a phone: the drawer recipe over the page's foot, edge to edge, its
-     top corners rounded and its hairline on top, as tall as it holds up to
-     the well's 60%, the page above it live. */
-  .inspector.sheet {
-    inset-block: auto 0;
-    inset-inline: 0;
-    inline-size: auto;
-    max-block-size: 60%;
-    border-inline-start: 0;
-    border-block-start: 1px solid var(--border-hairline);
-    border-start-start-radius: var(--radius-lg);
-    border-start-end-radius: var(--radius-lg);
-    box-shadow: var(--shadow-drawer);
-  }
-  .head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: var(--c-sheet-inspector-head-h);
-    padding-inline: var(--space-4) var(--space-2);
-    border-block-end: 1px solid var(--border-hairline);
-  }
-  .title {
-    flex: 1;
-    margin: 0;
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .body {
-    display: grid;
-    align-content: start;
-    gap: var(--space-3);
-    min-block-size: 0;
-    overflow: auto;
-    padding: var(--space-3) var(--space-4);
-  }
-  /* A prop row's name and control, as skeleton lines at their heights. */
-  .loading {
-    display: grid;
-    gap: var(--space-2);
-  }
-  .skeleton-name {
-    display: block;
-    inline-size: 40%;
-    block-size: var(--text-label);
-    border-radius: var(--radius-xs);
-  }
-  .skeleton-control {
-    display: block;
-    block-size: var(--c-input-h);
-    margin-block-end: var(--space-2);
-    border-radius: var(--radius-md);
-  }
-  .story {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .story :global(.story-pick) {
-    flex: 1;
-    min-inline-size: 0;
-  }
-  .story :global(.story-pick select) {
-    inline-size: 100%;
-  }
-  .story-ops {
-    display: flex;
-    gap: var(--space-1);
-  }
-  .where,
-  .note,
-  .prop-hint,
-  .prop-type,
-  .prop-meta,
-  .slot,
-  .code span {
-    margin: 0;
-    color: var(--ink-muted);
-    font: var(--type-meta);
-  }
-  .where code,
-  .prop-type code,
-  .code code,
-  .note code {
-    font: var(--type-code);
-    overflow-wrap: anywhere;
-  }
-  .props {
-    display: grid;
-    gap: var(--space-4);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .prop {
-    display: grid;
-    gap: var(--space-1);
-  }
-  .prop-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: var(--space-6);
-  }
-  .prop-name {
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .prop-head :global(.prop-reset) {
-    margin-inline-start: auto;
-  }
-  .prop :global(.prop-select),
-  .prop :global(.prop-select select) {
-    inline-size: 100%;
-  }
-  .slot {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .slot :global(.slot-glyph) {
-    flex-shrink: 0;
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-  .code {
-    display: grid;
-    gap: var(--space-1);
-    margin: 0;
-  }
-  .code code {
-    color: var(--ink-strong);
-  }
-  .foot {
-    display: grid;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3)
-      calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .spacer {
-    flex: 1;
-  }
-  .naming {
-    display: grid;
-    gap: var(--space-2);
-    margin: 0;
-  }
-  .naming .actions {
-    justify-content: flex-end;
-  }
-  .problem {
-    margin: 0;
-    color: var(--data-bad);
-    font: var(--type-meta);
-  }
-</style>

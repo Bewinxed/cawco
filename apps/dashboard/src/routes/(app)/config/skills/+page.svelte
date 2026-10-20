@@ -349,9 +349,9 @@
     {#if hubBroken.length > 0}
       <Button
         data-num
-        class="num"
         disabled={hubDown() !== null}
         failed={refetchFailed}
+        figures="tabular"
         icon={IconRefresh}
         label={words.fetchAllAgain(hubBroken.length)}
         onclick={refetchAll}
@@ -378,10 +378,12 @@
     />
   {/snippet}
 
-  <div data-slot="group" class="group">
+  <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={HUE} icon={IconBolt} label={words.skills} />
     {#if skills.length === 0}
-      <p data-slot="note" class="note">{words.noSkills}</p>
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+        {words.noSkills}
+      </p>
     {:else}
       <RowList label={words.skills}>
         {#each skills as row (row.name)}
@@ -449,11 +451,11 @@
                   <div
                     data-slot="listing"
                     aria-label={words.readingVersions(row.name)}
-                    class="listing"
+                    class="flex flex-col gap-space-row"
                     role="status"
                   >
                     {#each [0, 1] as line (line)}
-                      <Skeleton class="h-10 w-full" />
+                      <Skeleton class="w-full" height="item" />
                     {/each}
                   </div>
                 {:else}
@@ -472,13 +474,20 @@
         {/each}
       </RowList>
     {/if}
-    <p data-slot="note" class="note">{words.degraded}</p>
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+      {words.degraded}
+    </p>
   </div>
 
-  <div data-slot="group" class="group">
+  <div
+    data-slot="group"
+    class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
+  >
     <SectionHeader hue={HUE} icon={IconShop} label={words.marketplaces} />
     {#if marketplaces.length === 0}
-      <p data-slot="note" class="note">{words.noMarketplaces}</p>
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+        {words.noMarketplaces}
+      </p>
     {:else}
       <RowList label={words.marketplaces}>
         {#each marketplaces as row (row.name)}
@@ -507,6 +516,7 @@
             {/snippet}
             {#snippet trailing()}
               <Button
+                data-ghost
                 onclick={() => browse(row)}
                 size="sm"
                 title={words.readFrom(row.source)}
@@ -532,44 +542,68 @@
                   <div
                     data-slot="listing"
                     aria-label={words.reading(row.name)}
-                    class="listing"
+                    class="flex flex-col gap-space-row"
                     role="status"
                   >
                     {#each [0, 1, 2] as line (line)}
-                      <Skeleton class="h-10 w-full" />
+                      <Skeleton class="w-full" height="item" />
                     {/each}
                   </div>
                 {:else if unread[row.name]}
-                  <p class="caution" role="alert">{unread[row.name]}</p>
+                  <p class="type-meta text-status-attn-ink" role="alert">
+                    {unread[row.name]}
+                  </p>
                 {:else if (listings[row.name] ?? []).length === 0}
-                  <p data-slot="note" class="note">{words.listsNothing}</p>
+                  <p
+                    data-slot="note"
+                    class="type-meta max-w-c-measure text-ink-muted"
+                  >
+                    {words.listsNothing}
+                  </p>
                 {:else}
-                  <ul data-slot="listing" class="listing">
+                  <ul data-slot="listing" class="flex flex-col gap-space-row">
                     {#each listings[row.name] as plugin (plugin.name)}
                       {@const id = `${plugin.name}@${row.name}`}
-                      <li class="offer">
-                        <span data-slot="text" class="text">
-                          <span class="line">
-                            <span class="pname">{plugin.name}</span>
+                      <li
+                        class="flex flex-wrap items-center gap-space-2 rounded-sm bg-surface-recess px-space-3 py-space-2"
+                      >
+                        <span
+                          data-slot="text"
+                          class="flex min-w-0 shrink grow basis-c-offer-text-basis flex-col gap-space-row"
+                        >
+                          <span
+                            class="flex flex-wrap items-baseline gap-space-2"
+                          >
+                            <span class="type-label text-ink-strong"
+                              >{plugin.name}</span
+                            >
                             {#if plugin.version}
-                              <span data-slot="note" class="note font-mono"
+                              <span
+                                data-slot="note"
+                                class="type-meta max-w-c-measure text-ink-muted"
                                 >{plugin.version}</span
                               >
                             {/if}
                             {#if plugin.category}
-                              <span data-slot="note" class="note"
+                              <span
+                                data-slot="note"
+                                class="type-meta max-w-c-measure text-ink-muted"
                                 >{plugin.category}</span
                               >
                             {/if}
                           </span>
                           {#if plugin.description}
-                            <span data-slot="note" class="note"
+                            <span
+                              data-slot="note"
+                              class="type-meta max-w-c-measure text-ink-muted"
                               >{plugin.description}</span
                             >
                           {/if}
                         </span>
                         {#if installed(id)}
-                          <span data-slot="note" class="note"
+                          <span
+                            data-slot="note"
+                            class="type-meta max-w-c-measure text-ink-muted"
                             >{words.added}</span
                           >
                         {:else}
@@ -583,10 +617,7 @@
                             variant="outline"
                           />
                         {/if}
-                        <RowFault
-                          class="install-fault"
-                          reason={installFailed[id]}
-                        />
+                        <RowFault reason={installFailed[id]} />
                       </li>
                     {/each}
                   </ul>
@@ -599,10 +630,15 @@
     {/if}
   </div>
 
-  <div data-slot="group" class="group">
+  <div
+    data-slot="group"
+    class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
+  >
     <SectionHeader hue={HUE} icon={IconLayers} label={words.plugins} />
     {#if plugins.length === 0}
-      <p data-slot="note" class="note">{words.noPlugins}</p>
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+        {words.noPlugins}
+      </p>
     {:else}
       <RowList label={words.plugins}>
         {#each plugins as row (row.id)}
@@ -661,7 +697,9 @@
         {/each}
       </RowList>
     {/if}
-    <p data-slot="note" class="note">{words.pluginOff}</p>
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+      {words.pluginOff}
+    </p>
   </div>
 
   <MachineInventory
@@ -671,58 +709,3 @@
     taken={skills.map((row) => row.name)}
   />
 </SectionFrame>
-
-<style>
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .group + .group {
-    padding-top: 18px;
-    border-top: 1px solid var(--border-hairline);
-  }
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .caution {
-    font: var(--type-meta);
-    color: var(--status-attn-ink);
-  }
-  .listing {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .offer {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  .text {
-    display: flex;
-    flex: 1 1 240px;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-  .line {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 8px;
-  }
-  .pname {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-</style>

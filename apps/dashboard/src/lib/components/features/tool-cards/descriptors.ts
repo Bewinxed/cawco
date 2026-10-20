@@ -117,12 +117,11 @@ const INKS: Record<string, string> = {
   "tool-mcp": "text-tool-mcp",
   "tool-plan": "text-tool-plan",
   "tool-ask": "text-tool-ask",
-  "muted-foreground": "text-muted-foreground",
+  "muted-foreground": "text-ink-muted",
 };
 
 const glyph = (name: string): Component => GLYPHS[name] ?? IconToolGeneric;
-const inkClass = (token: string): string =>
-  INKS[token] ?? "text-muted-foreground";
+const inkClass = (token: string): string => INKS[token] ?? "text-ink-muted";
 
 /** The one classifier: the sentence and the group header both dispatch on it. */
 export function familyId(toolName: string | undefined): FamilyId {

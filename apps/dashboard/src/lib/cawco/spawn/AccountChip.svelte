@@ -28,6 +28,7 @@
 </script>
 
 <script lang="ts">
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   /**
    * The New session form's account chip, among the chosen model's tool
    * chips after effort and permissions: the account the session will run
@@ -72,42 +73,55 @@
   {onchange}
   {open}
   rows="[data-account-option]"
-  triggerClass="ns-chip-btn tool"
+  triggerClass={chipVariants({ variant: "setting" })}
+  triggerData={{ "data-tool": true }}
   width={360}
 >
   {#snippet trigger()}
     {#if shown}
-      <span data-slot="dot" class="dot" style:--c={shown.color}></span>
+      <span
+        data-slot="dot"
+        class="size-space-2 flex-none rounded-pill bg-(--c)"
+        style:--c={shown.color}
+      ></span>
     {/if}
-    <span data-slot="chip-label" class="chip-label" data-account-chip
-      >{label}</span
-    >
-    <Down class="chevron" />
+    <span data-slot="chip-label" data-account-chip>{label}</span>
+    <Down data-slot="chevron" />
   {/snippet}
-  <div data-slot="list" aria-label="Account" class="list" role="listbox">
+  <div
+    data-slot="list"
+    aria-label="Account"
+    class="flex flex-col p-space-2"
+    role="listbox"
+    style:--ring-ground="var(--surface-lift)"
+  >
     <button
       data-slot="option"
       aria-selected={tool.value === null}
-      class="option auto"
+      class="group press-tint transition-control type-label grid min-h-c-row-h w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong disabled:opacity-50"
       data-account-option="auto"
       onclick={() => pick(null)}
       role="option"
+      style:--cols="minmax(0, 1fr) var(--icon-md)"
       type="button"
     >
-      <span class="auto-label"
+      <span class="min-w-0 wrap-anywhere"
         >Auto{tool.auto.why ? ` · ${tool.auto.why}` : ""}</span
       >
-      <Check class="check" />
+      <Check
+        class="size-icon-md text-selected-icon opacity-0 transition-[opacity] duration-(--dur-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
+      />
     </button>
     {#each tool.options as option (option.id)}
       <button
         data-slot="option"
         aria-selected={tool.value === option.id}
-        class="option"
+        class="group press-tint transition-control grid min-h-c-row-h w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong disabled:opacity-50"
         data-account-option={option.id}
         disabled={option.disabled}
         onclick={() => pick(option.id)}
         role="option"
+        style:--cols="var(--icon-md) minmax(0, 1fr) var(--icon-md)"
         type="button"
       >
         {#if option.ring}
@@ -116,91 +130,22 @@
           <span
             data-account-chip-lead
             data-slot="dot"
-            class="dot lead"
+            class="size-space-2 flex-none justify-self-center rounded-pill bg-(--c)"
             style:--c={option.color}
           ></span>
         {/if}
-        <span data-slot="words" class="words">
+        <span data-slot="words" class="flex min-w-0 flex-col gap-space-row">
           <AccountName account={nameFields(option)} row wrap />
           {#if option.line.length > 0}
-            <span class="line"><Words parts={option.line} /></span>
+            <span class="type-meta text-ink-muted"
+              ><Words parts={option.line} /></span
+            >
           {/if}
         </span>
-        <Check class="check" />
+        <Check
+          class="size-icon-md text-selected-icon opacity-0 transition-[opacity] duration-(--dur-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
+        />
       </button>
     {/each}
   </div>
 </NsPopover>
-
-<style>
-  .dot {
-    flex: none;
-    inline-size: 6px;
-    block-size: 6px;
-    border-radius: 50%;
-    background: var(--c);
-  }
-  .dot.lead {
-    inline-size: 8px;
-    block-size: 8px;
-    margin-inline: 4px;
-  }
-  .list {
-    --ring-ground: var(--surface-lift);
-    display: flex;
-    flex-direction: column;
-    padding: var(--space-2);
-  }
-  .option {
-    display: grid;
-    grid-template-columns: 16px minmax(0, 1fr) 16px;
-    gap: var(--space-3);
-    align-items: center;
-    inline-size: 100%;
-    min-block-size: 40px;
-    padding: var(--space-2) var(--space-3);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--ink-strong);
-    text-align: start;
-    cursor: pointer;
-  }
-  .option.auto {
-    grid-template-columns: minmax(0, 1fr) 16px;
-    font: var(--type-label);
-  }
-  .option:disabled {
-    opacity: 0.6;
-    cursor: default;
-  }
-  .auto-label {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-  }
-  .words {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-inline-size: 0;
-  }
-  .line {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .option :global(.check) {
-    inline-size: 16px;
-    block-size: 16px;
-    color: var(--selected-icon);
-    opacity: 0;
-    transition: opacity var(--dur-control) var(--ease-out);
-  }
-  .option[aria-selected="true"] :global(.check) {
-    opacity: 1;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .option :global(.check) {
-      transition: none;
-    }
-  }
-</style>

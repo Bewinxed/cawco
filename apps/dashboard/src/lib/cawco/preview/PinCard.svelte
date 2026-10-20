@@ -142,10 +142,11 @@
     }
   });
   // Read at its end, the room stays there as its entries take their height
-  // (their words are set once they have loaded, after the room stands).
+  // (their words are set once they have loaded, after the room stands) and
+  // as the room itself takes its height (the card's cap, a squeeze).
   $effect(() => {
     const holder = roomEl;
-    const list = holder?.querySelector(".thread");
+    const list = holder?.querySelector('[data-slot="thread"]');
     if (!(holder && list)) {
       return;
     }
@@ -156,6 +157,7 @@
       }
     });
     watch.observe(list);
+    watch.observe(holder);
     return () => watch.disconnect();
   });
   const readAt = () => {
@@ -307,24 +309,42 @@
   data-sheet={sheet || undefined}
   data-slot="pin-card"
   aria-label={`Pin ${pin.number}`}
-  class="pin-card"
+  class="group/pin pointer-events-auto absolute z-2 motion-safe:animate-pin-card-in flex flex-col gap-space-2 w-(--card-w) max-h-(--card-max) overflow-y-auto overscroll-contain p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-hairline not-data-sheet:not-data-placed:top-space-2 not-data-sheet:not-data-placed:right-space-2 not-data-placed:data-sheet:start-0 data-sheet:end-0 data-sheet:bottom-0 data-sheet:w-full data-sheet:max-h-7/10 data-sheet:border-x-0 data-sheet:border-b-0 data-sheet:rounded-b-none data-sheet:pb-(--sheet-pb)"
   data-pin-card={pin.number}
+  data-placed={place ? "" : undefined}
   role="dialog"
   bind:this={card}
   style:left={place ? `${place.left}px` : undefined}
   style:top={place ? `${place.top}px` : undefined}
   style:max-width={sheet ? undefined : `${Math.max(0, room.w - 2 * EDGE)}px`}
-  class:sheet
+  style:--card-w="min(var(--c-pin-card-w), calc(100% - 16px))"
+  style:--card-max="calc(100% - 16px)"
+  style:--sheet-pb="calc(var(--space-3) + env(safe-area-inset-bottom, 0px))"
+  style:--field-fs="var(--text-field-floor)"
   bind:offsetHeight={height}
   bind:offsetWidth={width}
 >
-  <header data-slot="head" class="head" bind:this={head}>
+  <header
+    data-slot="head"
+    class="flex shrink-0 items-center gap-space-2"
+    bind:this={head}
+  >
     <PinDisc number={pin.number} resolved={!!pin.resolvedAt} />
-    <span data-slot="anchor" class="anchor" title={selector ?? undefined}>
-      <span data-slot="name" class="name">{pinName(pin)}</span>
+    <span
+      data-slot="anchor"
+      class="flex flex-1 min-w-0 flex-col"
+      title={selector ?? undefined}
+    >
+      <span data-slot="name" class="truncate text-ink-strong type-label"
+        >{pinName(pin)}</span
+      >
       {#if source}
         <!-- Cut from its start, so the file's name and line stay. -->
-        <span data-slot="source" class="source"><bdi>{source}</bdi></span>
+        <span
+          data-slot="source"
+          class="dir-rtl truncate text-left text-ink-muted type-code"
+          ><bdi>{source}</bdi></span
+        >
       {/if}
     </span>
     {#if live}
@@ -382,7 +402,7 @@
   {#if pin.thread.length > 0 && Body}
     <div
       data-whole={squeezed || undefined}
-      class={["room kit-edge-fade-block", squeezed && "whole"]}
+      class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain data-whole:shrink-0"
       data-pin-room
       onscroll={readAt}
       bind:this={roomEl}
@@ -390,13 +410,13 @@
       <!-- The transcript's turns (turn/: Turn, Well, Who): a run of one
            speaker's entries is one turn (its later entries grouped under the
            first's speaker line), the person's run one well. -->
-      <ol class="thread">
+      <ol data-slot="thread" class="m-0 p-0 list-none">
         {#each pin.thread as entry, i (entry.id)}
           {@const grouped = pin.thread[i - 1]?.by === entry.by}
-          <li data-slot="entry" class="entry" data-by={entry.by}>
+          <li data-slot="entry" class="group/entry" data-by={entry.by}>
             {#if entry.by === "person"}
               {@const runsOn = pin.thread[i + 1]?.by === "person"}
-              <Turn {grouped} {runsOn} you>
+              <Turn class="group-first/entry:mt-0" {grouped} {runsOn} you>
                 {#if !grouped}
                   <Who name="You" timestamp={entry.at} you />
                 {/if}
@@ -408,15 +428,18 @@
                 </Well>
               </Turn>
             {:else}
-              <Turn {grouped}>
+              <Turn class="group-first/entry:mt-0" {grouped}>
                 <Who {grouped} name={agentName} timestamp={entry.at} />
                 <Body source={entry.text} />
               </Turn>
             {/if}
             {#if entry.by === "agent" && entry.files?.length}
-              <p class="files">
+              <p class="flex flex-wrap gap-space-1 mt-space-1 mx-0 mb-0">
                 {#each entry.files as file (file)}
-                  <code>{file}</code>
+                  <code
+                    class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-code-bg type-code"
+                    >{file}</code
+                  >
                 {/each}
               </p>
             {/if}
@@ -425,13 +448,17 @@
       </ol>
     </div>
   {/if}
-  <div data-slot="foot" class="foot" bind:this={foot}>
+  <div
+    data-slot="foot"
+    class="flex shrink-0 flex-col gap-space-2"
+    bind:this={foot}
+  >
     <Textarea
       data-field
       aria-describedby={problem ? `pin-error-${pin.id}` : undefined}
       aria-invalid={problem ? true : undefined}
       aria-label={pin.thread.length > 0 ? "Reply" : "Comment"}
-      class="field"
+      text="pin-field"
       onkeydown={(event: KeyboardEvent) => {
         if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
           event.preventDefault();
@@ -444,9 +471,15 @@
       bind:value={draft}
     />
     {#if problem}
-      <p class="error" id={`pin-error-${pin.id}`} role="alert">{problem}</p>
+      <p
+        class="m-0 text-data-bad text-size-meta"
+        id={`pin-error-${pin.id}`}
+        role="alert"
+      >
+        {problem}
+      </p>
     {/if}
-    <footer data-slot="actions" class="actions">
+    <footer data-slot="actions" class="flex justify-end gap-space-2">
       <Button
         disabled={!draft.trim()}
         label="Reply"
@@ -457,145 +490,3 @@
     <AskHere asker={asks} at="delete" />
   </div>
 </div>
-
-<style>
-  /* The raised card recipe: 12px, control edge, hairline shadow, 11px padding. */
-  .pin-card {
-    position: absolute;
-    z-index: 2;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    width: min(var(--c-pin-card-w), calc(100% - 16px));
-    max-height: calc(100% - 16px);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: 11px;
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-hairline);
-  }
-  .pin-card:not(.sheet) {
-    top: var(--space-2);
-    right: var(--space-2);
-  }
-  .pin-card:not(.sheet)[style*="left"] {
-    right: auto;
-  }
-  /* On a phone: the house drawer's shape at the well's foot. */
-  .pin-card.sheet {
-    inset-inline: 0;
-    bottom: 0;
-    width: 100%;
-    max-height: 70%;
-    border-width: 1px 0 0;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    padding-bottom: calc(11px + env(safe-area-inset-bottom, 0px));
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .pin-card {
-      animation: pin-card-in var(--dur-pop) var(--ease-out);
-    }
-  }
-  @keyframes pin-card-in {
-    from {
-      opacity: 0;
-      transform: translateY(var(--pop-rise, 8px)) scale(0.96);
-    }
-  }
-  .head {
-    display: flex;
-    flex-shrink: 0;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  /* The one scroller: past the card's cap it gives up height, never the
-     head or the foot. The card itself scrolls only when the head and foot
-     alone outgrow its room (a phone's keyboard over a short well). It holds
-     what the rows place absolutely (a grouped speaker line's name, kept for
-     a screen reader), which otherwise stood on the card and made it scroll. */
-  .room {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  /* Squeezed (the head and foot alone outgrow the card): the thread keeps
-     its whole height inside the card's own scroll, never shrinking away. */
-  .room.whole {
-    flex-shrink: 0;
-  }
-  .foot {
-    display: flex;
-    flex-shrink: 0;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .anchor {
-    display: flex;
-    flex: 1;
-    min-width: 0;
-    flex-direction: column;
-  }
-  .name,
-  .source {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .name {
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .source {
-    /* rtl only to put the ellipsis at the start; the line stays at the left. */
-    direction: rtl;
-    text-align: left;
-    color: var(--ink-muted);
-    font: var(--text-meta) var(--font-mono);
-  }
-  /* The rows keep the transcript's rhythm: a turn --space-4 under the one
-     before, its speaker line --space-2 over its words. The first turn starts
-     at the room's own top. */
-  .thread {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .entry:first-child > :global(.turn) {
-    margin-block-start: 0;
-  }
-  .files {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1);
-    margin: var(--space-1) 0 0;
-
-    & code {
-      min-width: 0;
-      overflow-wrap: anywhere;
-      padding: 0 var(--space-1);
-      border-radius: var(--radius-xs);
-      background: var(--code-bg);
-      font: var(--text-meta) var(--font-mono);
-    }
-  }
-  /* 16px on a phone, so iOS does not zoom the page into the field. */
-  .sheet :global(.field) {
-    font-size: 16px;
-  }
-  .error {
-    margin: 0;
-    color: var(--data-bad);
-    font-size: var(--text-meta);
-  }
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
-</style>

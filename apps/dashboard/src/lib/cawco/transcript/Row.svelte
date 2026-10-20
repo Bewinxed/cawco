@@ -185,26 +185,21 @@
   /**
    * What fades in once the place is open. A rail row's content is what
    * stands on its rail (its children), found through the single-child
-   * wrappers a row can sit in (the live row's face); a surface that draws
-   * its own frame (`data-frame`) is the same. Anything else is the row.
+   * wrappers a row can sit in (the live row's face); a rail row says so
+   * (`data-tx-rail`), and a surface that draws its own frame (`data-frame`)
+   * is the same. Anything else is the row.
    */
   function contentOf(row: HTMLElement): Element[] {
+    const STANDS = "[data-tx-rail], [data-frame]";
     let element = row.firstElementChild;
     while (
       element &&
-      !(
-        element.classList.contains("rail-row") ||
-        element.hasAttribute("data-frame")
-      ) &&
+      !element.matches(STANDS) &&
       element.childElementCount === 1
     ) {
       element = element.firstElementChild;
     }
-    if (
-      element &&
-      (element.classList.contains("rail-row") ||
-        element.hasAttribute("data-frame"))
-    ) {
+    if (element?.matches(STANDS)) {
       return [...element.children];
     }
     return row.firstElementChild ? [row.firstElementChild] : [];
@@ -455,57 +450,25 @@
   });
 </script>
 
+<!-- The row's box is its whole height, its content's margins inside it
+     (flow-root): what is measured, handed on and tweened is what the list
+     lays out, and clipping it for a tween changes nothing. Continuation is
+     published, not reached for: rail blocks read --rail-head and --rail-gap
+     wherever they sit (`var(--rail-head, var(--rail))`). A row marked is the
+     record a conversation was opened at: the selection tint laid over the
+     whole row, a well's step past its edges and on its radius, so a message
+     in the reader's well and a line on the rail read the same. It fades in
+     where it stands and out once the reader has moved on; with less motion
+     it is simply there, then gone. -->
 <div
   data-slot="row"
-  class={["row", { continues }]}
+  data-continues={continues || undefined}
+  class="flow-root data-marked:relative data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-x-space-2 data-marked:before:inset-y-0 data-marked:before:rounded-well data-marked:before:bg-selection data-marked:before:starting:opacity-0 marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--dur-panel) motion-safe:data-marked:before:ease-out"
   data-marked={marked}
   data-row={rowKey}
   bind:this={node}
+  style:--rail-head={continues ? "var(--rail-body)" : undefined}
+  style:--rail-gap={continues ? "0" : undefined}
 >
   {@render children(ticket)}
 </div>
-
-<style>
-  .row {
-    /* The row's box is its whole height, its content's margins inside it:
-       what is measured, handed on and tweened is what the list lays out, and
-       clipping it for a tween changes nothing. */
-    display: flow-root;
-
-    /* Continuation is published, not reached for: rail blocks read these
-       wherever they sit (`var(--rail-head, var(--rail))`). */
-    &.continues {
-      --rail-head: var(--rail-body);
-      --rail-gap: 0px;
-    }
-  }
-  /* The record a conversation was opened at: the selection tint laid over
-     the whole row, a well's step past its edges and on its radius, so a
-     message in the reader's well and a line on the rail read the same. It
-     fades in where it stands and out once the reader has moved on; with less
-     motion it is simply there, then gone. */
-  .row[data-marked] {
-    position: relative;
-
-    &::before {
-      content: "";
-      position: absolute;
-      inset-block: 0;
-      inset-inline: calc(-1 * var(--space-2));
-      border-radius: var(--radius-well);
-      background: var(--selection);
-      pointer-events: none;
-      transition: opacity var(--dur-panel) var(--ease-out);
-
-      @starting-style {
-        opacity: 0;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        transition: none;
-      }
-    }
-    &[data-marked="off"]::before {
-      opacity: 0;
-    }
-  }
-</style>

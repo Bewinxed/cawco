@@ -12,6 +12,7 @@ import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
+import postcss, { type AtRule } from "postcss";
 import Icons from "unplugin-icons/vite";
 import {
   defineConfig,
@@ -20,6 +21,7 @@ import {
   searchForWorkspaceRoot,
   type ViteDevServer,
 } from "vite";
+import { groupsAsCombinators } from "./group-selectors.ts";
 import { publicOrigin } from "./public-origin.js";
 
 /**
@@ -225,19 +227,98 @@ const runningVersion = (): Plugin => ({
 
 // `/ws` is left to `server.proxy`, and HMR's upgrade to Vite.
 /**
- * Event Calendar's own palette (`src/styles/theme.css`) is not loaded: the
- * calendar view imports the library's layout stylesheet, and its first
- * line, the import of its theme, is taken out before Vite inlines the rest.
- * The project's tokens fill the `--ec-*` variables instead (PRD §5.2: the
- * libraries' themes are not loaded; our components carry DESIGN.md).
+ * A vendor component's own sheet, put in the libraries' `vendor` layer. These
+ * packages load theirs from their components, so it enters the build
+ * unlayered, where it would outrank every rule of the house, and no
+ * `@import … layer()` reaches it. Two ways in:
+ * - a Svelte component's `<style>`, which the compiler emits unlayered:
+ *   svelte-sonner 1.2.1 (Toaster.svelte), vaul-svelte 1.0.0-next.7
+ *   (components/drawer/drawer.svelte), bits-ui 2.19.5
+ *   (select/components/select-viewport.svelte), @xyflow/svelte 1.7.0 (its
+ *   A11yDescriptions, selection and edge-label components) and
+ *   svelte-streamdown 4.2.1 (its table, code and overlay elements);
+ * - a stylesheet a component imports from its script: Event Calendar 5.16.0
+ *   (src/Calendar.svelte: `import './styles/index.css'`) and PhotoSwipe 5.4.4
+ *   (lightbox/Lightbox.svelte: `import("photoswipe/style.css")`, which is
+ *   dist/photoswipe.css). This transform runs after Vite's own CSS plugin has
+ *   inlined a sheet's `@import`s (Event Calendar's theme.css, toolbar.css, …),
+ *   so the whole sheet takes the layer.
+ * Each sheet is wrapped in `@layer vendor { … }` where it enters the build,
+ * every declaration as the library wrote it, so app.css restyles their DOM
+ * from `components` by layer. A library's `!important` keeps its strength: an
+ * important declaration in an earlier layer wins
+ * (https://developer.mozilla.org/en-US/docs/Web/CSS/@layer).
+ *
+ * The bundle is held to it where it leaves the build: every style rule in
+ * every CSS asset stands in a cascade layer (wave-1 integration 43ee3780c
+ * moved one library to `@import … layer()` and missed that its component
+ * imported the same sheet again, unlayered, which silently outranked the
+ * house). One unlayered rule fails the build, naming its asset and selector.
+ * `@font-face`, `@property` and `@keyframes` hold no style rules, so they
+ * pass; a keyframe's `from`/`to` blocks are not style rules either.
  */
-const EC_INDEX = /@event-calendar[\\/]core[\\/]src[\\/]styles[\\/]index\.css$/;
-const EC_THEME_IMPORT = /@import\s+["']\.\/theme\.css["'];?/;
-export const calendarThemeOff = (): Plugin => ({
-  name: "cawco-calendar-theme-off",
-  enforce: "pre",
+const VENDOR_COMPONENT_SHEETS = [
+  "svelte-sonner",
+  "vaul-svelte",
+  "bits-ui",
+  "@xyflow/svelte",
+  "svelte-streamdown",
+];
+const VENDOR_IMPORTED_SHEETS = [
+  "@event-calendar/core/src/styles",
+  "photoswipe/dist",
+];
+const pathPattern = (path: string): string => path.split("/").join("[\\\\/]");
+const VENDOR_COMPONENT_STYLE = new RegExp(
+  [
+    `[\\\\/]node_modules[\\\\/](?:${VENDOR_COMPONENT_SHEETS.map(pathPattern).join("|")})[\\\\/].*\\.svelte\\?.*type=style`,
+    `[\\\\/]node_modules[\\\\/](?:${VENDOR_IMPORTED_SHEETS.map(pathPattern).join("|")})[\\\\/][^\\\\/?]+\\.css(?:\\?|$)`,
+  ].join("|")
+);
+/** Each style rule in `css` that no `@layer` holds, as its selector. */
+const unlayeredRules = (css: string): string[] => {
+  const found: string[] = [];
+  postcss.parse(css).walkRules((rule) => {
+    for (let at = rule.parent; at && at.type !== "root"; at = at.parent) {
+      if (
+        at.type === "atrule" &&
+        ((at as AtRule).name === "layer" ||
+          (at as AtRule).name.endsWith("keyframes"))
+      ) {
+        return;
+      }
+    }
+    found.push(rule.selector.replace(/\s+/g, " "));
+  });
+  return found;
+};
+export const vendorComponentSheets = (): Plugin => ({
+  name: "cawco-vendor-component-sheets",
   transform(code, id) {
-    return EC_INDEX.test(id) ? code.replace(EC_THEME_IMPORT, "") : null;
+    return VENDOR_COMPONENT_STYLE.test(id)
+      ? `@layer vendor {\n${code}\n}\n`
+      : null;
+  },
+  generateBundle(_options, bundle) {
+    const sheets = Object.values(bundle).filter(
+      (chunk) => chunk.type === "asset" && chunk.fileName.endsWith(".css")
+    );
+    if (sheets.length === 0) {
+      return;
+    }
+    const unlayered = sheets.flatMap((sheet) =>
+      sheet.type === "asset"
+        ? unlayeredRules(String(sheet.source)).map(
+            (selector) => `${sheet.fileName}: ${selector}`
+          )
+        : []
+    );
+    if (unlayered.length > 0) {
+      this.error(
+        `css layers: ${unlayered.length} unlayered style rule(s); a library's sheet joins vendorComponentSheets' list, a house rule moves into its layer:\n${unlayered.join("\n")}`
+      );
+    }
+    console.log(`css layers: ${sheets.length} assets, 0 unlayered rules`);
   },
 });
 
@@ -325,6 +406,28 @@ export const proseNotByClass = (): Plugin => ({
   },
 });
 
+/**
+ * Tailwind's `group-*` and `peer-*` rules, each `:is(A *)` written as the
+ * combinator it stands for (group-selectors.ts says why), where app.css
+ * enters the build with Tailwind's rules in it. A sheet with none, or one in
+ * a place no combinator can take, fails the build here.
+ */
+export const groupsByCombinator = (): Plugin => ({
+  name: "cawco-groups-by-combinator",
+  transform(code, id) {
+    if (!APP_CSS.test(id)) {
+      return null;
+    }
+    const { css, rewritten } = groupsAsCombinators(code, id);
+    if (rewritten === 0) {
+      throw new Error(
+        `no group-* or peer-* :is() was found in ${id}: re-read how Tailwind writes them and update group-selectors.ts`
+      );
+    }
+    return { code: css, map: null };
+  },
+});
+
 export default defineConfig(({ command }) => {
   // A build talks to no hub; only a vite server does, and only to the dev hub.
   if (command === "serve" && DEV_HUB) {
@@ -332,12 +435,13 @@ export default defineConfig(({ command }) => {
   }
   return {
     plugins: [
-      calendarThemeOff(),
+      vendorComponentSheets(),
       streamdownOverlayOwn(),
       hubProxy(),
       runningVersion(),
       tailwindcss(),
       proseNotByClass(),
+      groupsByCombinator(),
       sveltekit({
         preprocess: vitePreprocess(),
         compilerOptions: { experimental: { async: true } },
@@ -402,10 +506,16 @@ export default defineConfig(({ command }) => {
       dedupe: ["bits-ui"],
     },
     optimizeDeps: {
-      // svelte-streamdown is compiled like the app's own components, so its
-      // stylesheet passes through streamdownOverlayOwn in dev as in the build:
-      // prebundled, its styles are injected from the bundle's JS instead.
-      exclude: ["@xyflow/svelte", "svelte-streamdown"],
+      // svelte-streamdown, svelte-sonner and vaul-svelte are compiled like the
+      // app's own components, so their stylesheets pass through
+      // streamdownOverlayOwn and vendorComponentSheets in dev as in the build:
+      // prebundled, their styles are injected from the bundle's JS instead.
+      exclude: [
+        "@xyflow/svelte",
+        "svelte-streamdown",
+        "svelte-sonner",
+        "vaul-svelte",
+      ],
     },
     ssr: {
       // Both ship raw .svelte sources; dev SSR must compile them, not require them.
@@ -419,8 +529,6 @@ export default defineConfig(({ command }) => {
       // refuses a directory import (ERR_UNSUPPORTED_DIR_IMPORT) where vite's
       // resolver follows it. Bundled, the server never resolves them at all.
       noExternal: [
-        "tw-animate-css",
-        "shadcn-svelte",
         "@fontsource-variable/figtree",
         "@fontsource-variable/jetbrains-mono",
         "@fontsource/fredoka",

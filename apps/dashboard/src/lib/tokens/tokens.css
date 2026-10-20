@@ -24,6 +24,10 @@
     --spark: #f2d36b;
     --paper: #f4f0e6;
     --crow-ink: #171715;
+    /* OpenCode's published square logo, its inner square: the brand's own colouring per scheme (https://opencode.ai/brand, logo light square and logo dark square), never a house colour. */
+    --opencode-logo-core: light-dark(#cfcecd, #4b4646);
+    /* OpenCode's published square logo, its frame: the brand's own colouring per scheme (https://opencode.ai/brand), never a house colour. */
+    --opencode-logo-frame: light-dark(#211e1e, #f1ecec);
     /* Functional hues (Flexoki-derived). Error sits on crimson (hue 15) so failed never reads as the coral action. */
     --error-3: light-dark(oklch(90% 0.05 12), oklch(30% 0.08 12));
     --error-9: light-dark(oklch(50% 0.17 15), oklch(58% 0.17 15));
@@ -138,6 +142,20 @@
     --surface-raised: light-dark(var(--neutral-1), var(--neutral-3));
     --surface-card: var(--surface-raised);
     --surface-recess: light-dark(oklch(96.7% 0.008 84), oklch(22.2% 0.006 70));
+    /* The recess at alpha 0: the far stop of a fade into the recess (the transcript's foot fade, the suggestion row's floor), so the ramp keeps the recess's hue. */
+    --surface-recess-clear: oklch(from var(--surface-recess) l c h / 0);
+    /* An alpha mask's opaque stop. A mask reads alpha alone, so its colour never draws. */
+    --mask-opaque: #000000;
+    /* An alpha mask's stop at 10% (the phone tab strip's end fade). */
+    --mask-opaque-a10: rgb(0 0 0 / 0.1);
+    /* An alpha mask's stop at 15% (the phone tab strip's start fade). */
+    --mask-opaque-a15: rgb(0 0 0 / 0.15);
+    /* An alpha mask's stop at 50% (the phone tab strip's end fade). */
+    --mask-opaque-a50: rgb(0 0 0 / 0.5);
+    /* An alpha mask's stop at 60% (the phone tab strip's start fade). */
+    --mask-opaque-a60: rgb(0 0 0 / 0.6);
+    /* An alpha mask's stop at 90% (the phone tab strip's end fade). */
+    --mask-opaque-a90: rgb(0 0 0 / 0.9);
     /* A table's header band, one step under the field. */
     --surface-band: light-dark(oklch(95.7% 0.009 84), oklch(21.4% 0.006 70));
     --surface-recess-deep: light-dark(var(--neutral-4), var(--neutral-1));
@@ -167,6 +185,8 @@
     --surface-fill: light-dark(var(--neutral-4), var(--neutral-5));
     /* A filled control a step over surface-fill: its hover, and its on state (a parent's child count when its children are open). */
     --surface-fill-strong: light-dark(var(--neutral-6), var(--neutral-7));
+    /* A segment held down (a fluid tab, its trailing controls included): by day the step past the hover ghost, at night surface-fill. */
+    --press-fill: light-dark(var(--surface-fill-strong), var(--surface-fill));
     /* The kit Toggle's on step, where a pressed or chosen control stands (a chosen canvas tool, a pressed head button, a held tab): by day the surface-fill-strong step, a step past the hover; at night the surface-fill step, so it never reads as hovered. */
     --surface-pressed: light-dark(var(--neutral-6), var(--neutral-5));
     /* Hover on any control or row, the hover ghost under a list's row (highlight), and what rises over a hovered row. By day two steps past the field, so it shows on the field, the recess and a raised surface alike. */
@@ -290,6 +310,18 @@
     /* Status: four hues and a hueless idle (idle carries no fill). Needs-you is spark yellow, the one status that asks for a person. */
     --status-live-bg: color-mix(in oklab, var(--info-3) 76%, var(--info-9));
     --status-attn-bg: light-dark(oklch(91% 0.115 95), oklch(37% 0.07 92));
+    /* A task's needs section (TaskNeeds): the attention tint at a little under half, laid on the raised surface the task stands on. */
+    --needs-ground: color-mix(
+      in oklab,
+      var(--status-attn-bg) 45%,
+      var(--surface-raised)
+    );
+    /* The picked card among an account's routing strategies (StrategyPicker): the selection's tint at a little under half, laid on the raised surface. */
+    --strategy-card-picked: color-mix(
+      in oklab,
+      var(--selected-bg) 45%,
+      var(--surface-raised)
+    );
     --status-done-bg: color-mix(
       in oklab,
       var(--success-3) 76%,
@@ -355,10 +387,6 @@
     --presence-off: var(--neutral-8);
     /* Every scrollbar's thumb, inherited from the root. */
     --scrollbar-thumb: oklch(from var(--muted-foreground) l c h / 0.35);
-    /* A pairing QR's card, in both schemes: the day's neutral-1, never flipped. Drawn light on dark, the code is a reversed QR, which a reader without an inverted pass does not read (ZXing with tryInvert off read nothing from the night card); dark modules on a light field are the symbol ISO/IEC 18004 defines, so the card is the one surface that keeps its day colours at night. */
-    --qr-paper: oklch(99.3% 0.004 85);
-    /* A pairing QR's modules, in both schemes: the day's neutral-12 on qr-paper. */
-    --qr-ink: oklch(29.5% 0.01 70);
     /* The band of raised surface that crosses a skeleton once per loop. */
     --skeleton-sheen: oklch(from var(--surface-raised) l c h / 0.6);
     /* List bullets in rendered markdown. */
@@ -538,6 +566,10 @@
       inset 0 1px 6px
         light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.1));
     --selected-shadow: none;
+    /* The effort knob's and Browse's lifted block: a neutral-8 inner edge over shadow-raised's layers (DESIGN.md Effort chip). */
+    --shadow-knob:
+      inset 0 0 0 1px var(--neutral-8), 0 1px 3px var(--shadow-tint),
+      0 1px 1px var(--shadow-tint), inset 0 0 0 1px var(--night-ring);
     /* Caw&Co wordmark: the approved landing's Nunito Variable face. */
     --font-wordmark: "Nunito Variable", ui-rounded, system-ui, sans-serif;
     /* Figtree for UI and transcript prose, 400 and 500 only. */
@@ -578,6 +610,10 @@
     --leading-root: 1.5;
     /* A rendered document's running text (@tailwindcss/typography prose-sm, the project page's docs card): 24/14. */
     --leading-prose-sm: 1.7142857;
+    /* The kit's form fields: a field's label, title and content (components/ui/field, Tailwind's snug). */
+    --leading-snug: 1.375;
+    /* The permission rule tester's preview of what a rule matches (RuleTester, Tailwind's relaxed). */
+    --leading-relaxed: 1.625;
     /* prose-sm: above an h2, in the heading's own ems. */
     --prose-sm-title-before: 1.6;
     /* prose-sm: below an h1 or h2, in the heading's own ems. */
@@ -604,6 +640,8 @@
     --track-display: -0.008em;
     --track-title: -0.01em;
     --track-caps: 0.06em;
+    /* A menu item's keyboard shortcut (the kit's command, dropdown and context menu shortcuts, Tailwind's widest). */
+    --track-widest: 0.1em;
     /* How far under its words a text link's underline stands, when it is drawn (its hover). */
     --underline-offset: 3px;
     /* Role shorthands (font: var(--type-label)). A kpi figure is always .num: the shorthand resets font-variant-numeric. */
@@ -617,6 +655,8 @@
     --type-kpi: 500 var(--text-kpi) / 1 var(--font-body);
     --type-code: 400 var(--text-code) / 1.6 var(--font-mono);
     --type-caps: 500 11px / 1 var(--font-body);
+    /* The 16px Field Rule's floor: no field's text under it on a phone, so iOS Safari never zooms into one. */
+    --text-field-floor: 16px;
     /* Measured off the comps, deliberately not a 4px ladder. Keep the odd values. */
     --space-1: 4px;
     --space-2: 7px;
@@ -703,23 +743,13 @@
     --c-badge-h: 20px;
     /* A stat tile's height. */
     --c-stat-h: 90px;
-    /* One cell of the pairing code's display: a stat well holding one letter at the KPI role in the mono face. Six of them in two groups of three, space-2 between cells and space-5 between groups, stand 286px wide. */
-    --c-otp-cell-w: 40px;
-    /* The pairing code cell's height. */
-    --c-otp-cell-h: 52px;
-    /* The pairing screen's one width: the code's six cells in two groups of three (space-2 between cells, space-5 at the hyphen), and the QR card above them, square, its edges on the cells' edges. Made from the cell's width, so the two never drift apart. */
-    --c-pair-w: calc(
-      6 * var(--c-otp-cell-w) + 4 * var(--space-2) + var(--space-5)
-    );
-    /* Where the pairing screen's column starts: a fixed inset from the screen's top, 12% of its height between space-8 and 160px (108px on a 900px screen). Anchored, not centred, so Caw and the words stay put while the code's places open and fold under them. */
-    --c-pair-top: clamp(var(--space-8), 12dvb, 160px);
     /* A ledger's toolbar zone, holding 32px controls 11px in. */
     --c-toolbar-zone: 55px;
     --c-toolbar-ctl: 32px;
     /* Find, as the glass's card on a desk: wide enough that a row's meta line ("Needs you · cockpit · delegate of Orchestrate cockpit fleet · linux", 12px meta) stands on one line beside a 16px glyph, and narrow enough to leave the page live beside it at 1055px (docs/tom/find-and-mention-chosen.md). */
     --c-find-w: 520px;
-    /* The New Session form as a popover at its trigger (the session strip's "+", a project's Spin off; NewSessionPopover): the narrowest at which the form's own rows hold one line each, measured by probe-kit strip-new-session. Its widest row is the model list's, a model's name with its id beside it ("Opus 5.5 claude-opus-5-5"), which wraps at 564px; the prompt's placeholder is cut at 536px. The composer's chips wrap by design. The centred dialog keeps its 980px and the phone sheet its own. */
-    --c-new-session-pop-w: 568px;
+    /* The New Session form as a popover at its trigger (the session strip's "+", a project's Spin off; NewSessionPopover): the narrowest at which the form's own rows hold one line each, measured by probe-kit strip-new-session. Its widest row is the model list's, a model's name with its id beside it ("Opus 5.5 claude-opus-5-5"), with the chosen one's run settings at its end, which wrap under it at 568px; the prompt's placeholder is cut at 536px. The composer's chips wrap by design. The centred dialog keeps its 980px and the phone sheet its own. */
+    --c-new-session-pop-w: 569px;
     /* A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line ("back in 4h 50m", 82px in meta) stands on one line. */
     --c-panel-w: 380px;
     /* The account sign-in popover on a machine's row (AccountMachines' NsPopover), which the /motion/signin-problem bench mounts SigninPanel in: the open-link button and its hint on one row, the code field and Done on the next. */
@@ -828,8 +858,14 @@
     --c-block-drop-dot: 6px;
     /* The delegate tray's row: a chip, and the step down to the pill. */
     --c-tray-chip: 28px;
+    /* A needs card's peek glyph (NeedsCard): the icon's medium size, its large one under a finger. */
+    --c-peek-glyph: var(--icon-md);
     --c-tray-gap: var(--space-2);
     --c-tray-row: calc(var(--c-tray-chip) + var(--c-tray-gap));
+    /* A working tray chip's narrowest: the floor under its measured width. */
+    --c-tray-chip-min: 120px;
+    /* A working tray chip's widest, past which its words truncate. */
+    --c-tray-chip-max: 224px;
     --icon-sm: 12px;
     --icon-md: 16px;
     --icon-lg: 20px;
@@ -921,6 +957,500 @@
     --row-compact-gap: 6px;
     /* A compact session row's trailing inset: where every row in the rail ends. */
     --row-compact-pad-end: 8px;
+    /* A two-line session row's height, in the home's lists: its two lines at the lead column's 18px and a 4px pad above and below (SessionRow). The "N older" row among them stands at it (OlderRows, the sidebar sub-button's `compact-tall` row). */
+    --row-tall-h: calc(2 * var(--space-5) + 2 * var(--space-1));
+    /* A segmented control's groove round its lifted thumb (DESIGN.md, Segmented: "a recess-deep groove with a 10px radius and 3px padding"): the groove's 10px less the thumb's 8px, plus a pixel of air, so the corners stay concentric. */
+    --c-segmented-pad: 3px;
+    /* A segment's glyph to its label, and its label to its count (Tabs, single toggle groups). */
+    --c-segment-gap: 6px;
+    /* A segment's inline padding (DESIGN.md, Segmented: "Segments are 30px tall with 10px padding"). */
+    --c-segment-pad-x: 10px;
+    /* A fluid tab's height on its track (DESIGN.md, Fluid tabs: "a track of 4px padding and 28px items (36px control)"); a compact track's under a finger. */
+    --c-tab-item: 28px;
+    /* A fluid tab's inline padding at the default size. */
+    --c-tab-px: 12px;
+    /* How far a folder tab's path brings its top corner in from its foot on the leading side (DESIGN.md, Folder tabs, Slopes: the owner's pick). */
+    --c-tab-slope-start: 1px;
+    /* How far a folder tab's path brings its top corner in from its foot on the trailing side (DESIGN.md, Folder tabs, Slopes: the owner's pick). Written with its unit: it is added to lengths in calc() (PaneTabs' cast). */
+    --c-tab-slope-end: 0px;
+    /* Running text's measure (DESIGN.md Body: 60 to 72ch): a note, a hint, a rule's or hook's sentence, a fault's explanation, the expanded plan, a refused write. */
+    --c-measure: 72ch;
+    /* Running text at the short end of DESIGN.md's 60 to 72ch, beside a control that takes the rest of the row. */
+    --c-measure-short: 60ch;
+    /* A meta line's measure under the thing it qualifies: a pending control's failure reason, an editor head's machines line. */
+    --c-measure-meta: 32ch;
+    /* A wrapping command's room before Copy drops under it (CopyBox). */
+    --c-copy-box-line: 20ch;
+    /* A count's box keeps one digit's width, so a lone digit does not collapse it. */
+    --c-count-digit: 1ch;
+    /* The Configure rail's count column: three digits, so the dash and the figure hold one box. */
+    --c-rail-count-min: 3ch;
+    /* A placeholder word's bar: the x-height of the text it stands in. */
+    --c-skeleton-x-height: 1ex;
+    /* Inline code's inline padding in prose (lib/prose.ts); prose-code-pad is its block padding. */
+    --c-code-chip-pad-x: 2px;
+    /* A relative age's placeholder ("3d"): two characters of its type role. */
+    --c-skeleton-age: 2ch;
+    /* A growing textarea's ceiling, past which it scrolls (DESIGN.md Textarea): the decision page's note, the mention field. */
+    --c-textarea-max-h: 200px;
+    /* A short number field: a reserve percentage, a limit (four digits and the field's pad). */
+    --c-number-field-w: 64px;
+    /* The Port field's column beside the SSH target in the connect form. */
+    --c-port-field-w: 6rem;
+    /* A primary action's least width, so its label swapping to a pending one keeps the button's size (Save, the session footer's action). */
+    --c-btn-min-w: 96px;
+    /* A button's icon-to-label gap (DESIGN.md Buttons: "an 8px gap"). */
+    --c-btn-gap: 8px;
+    /* A pending label's outgoing words go soft as they fade (DESIGN.md Buttons, Pending: "a 2px blur where motion is welcome"). */
+    --c-btn-words-blur: 2px;
+    /* The 24 Pointer Rule's floor (DESIGN.md Focus and hit areas): a small control's least hit box under a fine pointer. */
+    --c-pointer-floor: 24px;
+    /* The 44 Touch Rule's floor (DESIGN.md Focus and hit areas): every control's least hit box under a coarse pointer, reached through `touch-hit`. */
+    --c-touch-floor: 44px;
+    /* The screen's margin a popover or a floating card keeps each side (DESIGN.md Breakpoints: "popovers widen to the viewport less 24px"). */
+    --c-screen-margin: 12px;
+    /* A new-session popover's width. */
+    --c-pop-w: 320px;
+    /* A popover's height cap on a desk. */
+    --c-pop-max-h: 440px;
+    /* A popover's height cap on a phone. */
+    --c-pop-max-h-phone: 420px;
+    /* A chip tooltip's measure. */
+    --c-tip-max-w: 320px;
+    /* A thin WebKit scrollbar's thickness in a new-session scroller. */
+    --c-scrollbar-thin: 8px;
+    /* The effort comb's tick pitch: a drawn pattern, not spacing. */
+    --c-comb-pitch: 6px;
+    /* An edge fade at full length at every width, where the kit's phone 16px would show nothing (Files' scrollers, Caw's panel). */
+    --c-edge-fade-len: 40px;
+    /* The house edge fade's length under 640px (kit-edge-fade, kit-edge-fade-block): short enough to read as an edge on a phone's narrow view, not a band across the content. Sits between the ladder's 14 and 18, so it is its own token. */
+    --c-edge-fade-len-phone: 16px;
+    /* A floating surface's row (ui/menu-item): 32px on a fine pointer, 44px on a coarse one (cawco.coarse.tokens.json; DESIGN.md, The 44 Touch Rule). A row height, not spacing, so not space-8. */
+    --c-menu-item-h: 32px;
+    /* The narrowest an icon card stands in its grid (ui/icon-card), the track floor of the auto-fit columns. */
+    --c-icon-card-min: 160px;
+    /* A sheet's height cap (DESIGN.md Drawer: "It is as tall as its content, up to 85vh"). */
+    --c-sheet-max-h: 85vh;
+    /* The peek sheet's height on a touch screen: fixed, so it holds its size from the first frame. */
+    --c-peek-sheet-h: 80dvh;
+    /* The drawer grabber's width (DESIGN.md Drawer: "A 100×6 grabber"). */
+    --c-grabber-w: 100px;
+    /* The drawer grabber's height (DESIGN.md Drawer: "A 100×6 grabber"). */
+    --c-grabber-h: 6px;
+    /* The lightbox's document sheet: a 60rem reading sheet, never wider than the viewport. */
+    --c-lightbox-sheet-w: min(100%, 60rem);
+    /* The lightbox's document sheet's height cap. */
+    --c-lightbox-sheet-max-h: min(86dvh, 100%);
+    /* The tallest an error's whole text grows in its dialog before it scrolls. */
+    --c-report-text-max: 60vh;
+    /* Configure's content measure: a section's body, an editor and its commit row. */
+    --c-config-max-w: 980px;
+    /* The Configure rail's width. */
+    --c-config-rail-w: 232px;
+    /* A section row with a meta line under its label (two lines; c-row-h is one). */
+    --c-row-h-two: 56px;
+    /* The scrolling failure detail under a machine row. */
+    --c-detail-max: 6rem;
+    /* The longest a pre of command or fault output grows before it scrolls. */
+    --c-output-max: 12rem;
+    /* A markdown editor's well, so it never collapses to its toolbar. */
+    --c-editor-well-min: 320px;
+    /* A fetched skill's choice list before it scrolls. */
+    --c-choice-list-max-h: 13rem;
+    /* Account setup's step rail. */
+    --c-setup-rail-w: 184px;
+    /* Account setup's machine-name column, so every machine row's controls start on one x. */
+    --c-setup-machine-name-w: 150px;
+    /* Account setup's pasted-code field's basis, under which it wraps below the link. */
+    --c-setup-code-basis: 140px;
+    /* Account setup's nickname field's widest. */
+    --c-setup-nickname-w: 280px;
+    /* Account setup's name preview card's widest. */
+    --c-setup-preview-w: 360px;
+    /* A drag handle's width: two dot tiles. */
+    --c-drag-dots-w: 10px;
+    /* A drag handle's dot pitch. */
+    --c-drag-dots-tile: 5px;
+    /* A drag handle's dot edge softness. */
+    --c-drag-dots-edge: 1.5px;
+    /* The strategy figure's stage inset (accounts/figure.ts PAD): the build places lanes and captions from it. */
+    --fig-pad: 12px;
+    /* The strategy figure's chip side and bar height (figure.ts CHIP). */
+    --fig-chip: 10px;
+    /* The strategy figure's caption line height (figure.ts CAP_LINE). */
+    --fig-cap-line: 16px;
+    /* The strategy figure's caption distance from the stage's foot (figure.ts CAP_FOOT). */
+    --fig-cap-foot: 8px;
+    /* A refused write's line: its wrap basis beside the Hidden menu. */
+    --c-block-refused-basis: 18rem;
+    /* The composer canvas's top grab strip. */
+    --c-canvas-grab-w: 160px;
+    /* A decision page head's title group: how narrow it goes beside ‹ Decisions before it wraps. */
+    --c-decision-head-what: 14rem;
+    /* The decisions graph's least height. */
+    --c-decision-graph-min-h: 24rem;
+    /* A decision card's width; the hub's graph layout assumes the same box (DecisionGraph CARD). */
+    --c-decision-node-w: 148px;
+    /* A decision card's least height (DecisionGraph CARD.height). */
+    --c-decision-node-h: 56px;
+    /* The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name. */
+    --c-artifact-card-min: 148px;
+    /* The rail width at and above which the Working/Finished header needs no squeeze: measured, the narrowest rail at which both labels stand whole beside three-digit counts at rest. */
+    --c-work-tabs-roomy-w: 280px;
+    /* The most the Working/Finished header's spacing gives back, at the narrowest rail. */
+    --c-work-tabs-squeeze: 33px;
+    /* Caw's panel's list cap. */
+    --c-caw-list-h: 560px;
+    /* The viewport room kept clear above Caw's panel's list on a wide screen. */
+    --c-caw-list-clear: 120px;
+    /* The room kept clear under Caw's panel's list on a phone: the composer's row and the home indicator's gap. */
+    --c-caw-list-clear-phone: 96px;
+    /* The session card hung from Caw's seat (DESIGN.md: "The card is 416px wide"). */
+    --c-lead-card-w: 416px;
+    /* That card's height cap. */
+    --c-lead-card-max-h: 760px;
+    /* A staged move's wait column. */
+    --c-move-wait-col-w: 560px;
+    /* Caw's slot over a move's wait on a desk. */
+    --c-move-wait-caw-h: 128px;
+    /* Caw's slot over a move's wait on a phone. */
+    --c-move-wait-caw-h-phone: 96px;
+    /* An in-flight large file's progress track. */
+    --c-move-wait-file-bar-w: 96px;
+    /* The glass's machines card. */
+    --c-machines-w: 20rem;
+    /* A session tab's rim glow radius (DESIGN.md Session tab status rim). */
+    --tab-rim-glow: 6px;
+    /* How far past a folder tab's top and sides its rim's glow may draw before the fold's clip cuts it: four glow radii. */
+    --tab-rim-glow-room: 24px;
+    /* A finder row's floor, two lines (DESIGN.md Find rows). */
+    --c-find-row-h: 52px;
+    /* A finder row's floor on a phone. */
+    --c-find-row-h-phone: 56px;
+    /* A one-line finder row (Waiting for you, a folded kind). */
+    --c-find-line-h: 40px;
+    /* A phone's find field and one-line row. */
+    --c-find-phone-h: 52px;
+    /* A finder group head and its coverage line. */
+    --c-find-head-h: 28px;
+    /* The skeleton standing for a finder row with its reason. */
+    --c-find-skeleton-tall: 54px;
+    /* A project head's name column: the width it holds before its actions wrap under it. */
+    --c-head-who-basis: 18rem;
+    /* The project details tray's content measure. */
+    --c-project-details-measure: 32rem;
+    /* The project details rows' label column. */
+    --c-project-details-label-w: 6.5rem;
+    /* The machine and connection select column of the details tray's add forms. */
+    --c-project-details-select-w: 10rem;
+    /* The Actions and Runs ledgers' When column. */
+    --c-ledger-when-w: 6rem;
+    /* The When column in a runs ledger under 496px, where Result's floor (c-ledger-title-min) beside When and Outcome at full width no longer fits (build-tokens.ts CONTAINERS table-496px); under 424px the runs are cards. */
+    --c-ledger-when-w-narrow: 4.5rem;
+    /* The Runs ledger's Outcome column. */
+    --c-ledger-outcome-w: 11rem;
+    /* The Outcome column in a runs ledger under 496px, where Result's floor (c-ledger-title-min) beside When and Outcome at full width no longer fits (build-tokens.ts CONTAINERS table-496px); under 424px the runs are cards. */
+    --c-ledger-outcome-w-narrow: 8rem;
+    /* The Runs ledger's Took column. */
+    --c-ledger-took-w: 5rem;
+    /* A ledger's header band: its column heads in caps on surface-band, one line, held at the top while the rows scroll under it (DESIGN.md, Density: "a 32px header band"; ledger-header height). */
+    --c-ledger-band-h: 32px;
+    /* A ledger's row pitch: every row of a ledger, a list or a generated view's table, a name over its meta line or one line of meta (DESIGN.md, Density: "a 44px row pitch"; ledger-row height). */
+    --c-ledger-row-h: 44px;
+    /* A ledger's count column: a count and its noun in meta, "12 attempts" (Usage's project spend: Wakes, Tries). */
+    --c-ledger-count-w: 8rem;
+    /* A ledger's spend column: a month's dollars in tabular meta, "$1,234.56", on the column's end (Usage's project spend: Spent). */
+    --c-ledger-usd-w: 6rem;
+    /* A matrix's wide column, its floor: a tool's name, its count and its Required switch over each machine's cell (Command-line tools), an update's state and its act (Updates). */
+    --c-matrix-col-w: 14rem;
+    /* A ledger title's least width, the column the ledger exists for: about 30 characters of the label role before it truncates. A ledger's lesser columns fold until the title keeps it (the task ledger's container widths in build-tokens.ts CONTAINERS are this plus its column widths). */
+    --c-ledger-title-min: 14rem;
+    /* The side divider's hit width when the split is expanded. */
+    --c-side-grip-w: 6px;
+    /* A side surface's floor (SideSurface SIDE_FLOOR_PX). */
+    --c-side-surface-min: 320px;
+    /* The new-session dialog's widest (DESIGN.md: "up to 980px wide"). */
+    --c-new-session-w: 980px;
+    /* The effort track on a phone (DESIGN.md Effort chip: "38px on a phone"). */
+    --c-effort-track-h-phone: 38px;
+    /* The model list's viewport: fixed, so the section keeps its height while filtering. */
+    --c-model-list-h: 300px;
+    /* The width a model row keeps beside its chips before they drop to their own line. */
+    --c-model-row-basis: 12rem;
+    /* The folder browser's list cap: five 36px rows and their gaps. */
+    --c-folder-list-max-h: 196px;
+    /* The first-prompt editor's grown height, fixed on a phone. */
+    --c-prompt-grown-h: 120px;
+    /* A page that stands as one centred column (the empty fleet, pairing): its width. */
+    --c-page-column-w: 34rem;
+    /* That column's sentence measure. */
+    --c-page-line: 26rem;
+    /* The hover panel's height room when its caller gives none. */
+    --c-hover-panel-room: 320px;
+    /* An unlock outcome's mark box and its icon. */
+    --c-status-mark: 2.25rem;
+    /* A machine inventory entry's words column, under which its Adopt button wraps below. */
+    --c-inventory-text-basis: 240px;
+    /* The slot Caw stands in on the empty fleet (MachinesEmpty CAW_SIZE). */
+    --c-empty-fleet-caw: 80px;
+    /* A generated view's stat tile floor. */
+    --c-stat-min: 10rem;
+    /* A generated table's lead column floor. */
+    --c-view-lead-min: 9rem;
+    /* The Label popover's list of a project's labels before it scrolls. */
+    --c-bulk-labels-max-h: 14rem;
+    /* The tallest a post's picture or video stands under its card. */
+    --c-post-media-max-h: 16rem;
+    /* A task board column's narrowest (TaskBoard, ViewBoard, TaskNode). */
+    --c-board-col-min: 15rem;
+    /* A task board column's widest, and the open Archived column's cap. */
+    --c-board-col-max: 22rem;
+    /* The key column of a task's Fields and Relations, so the two parts' values stand on one line. */
+    --c-task-key-w: 6rem;
+    /* The Filter popover's name column. */
+    --c-filter-label-w: 3.5rem;
+    /* The new-label field in a task's label row. */
+    --c-task-label-field-w: 128px;
+    /* An approved action's argument block before it scrolls. */
+    --c-task-args-max-h: 192px;
+    /* A compact task output's body cap. */
+    --c-task-output-compact-h: 96px;
+    /* A task output image's height cap. */
+    --c-task-output-image-h: 320px;
+    /* A task output video's height cap. */
+    --c-task-output-video-h: 384px;
+    /* The stage control's placeholder while the task reads. */
+    --c-task-stage-skeleton-w: 96px;
+    /* A task relation's name column ("Found in", "Waited on by"). */
+    --c-task-edge-label-w: 96px;
+    /* The link picker's candidate list cap. */
+    --c-task-candidates-max-h: 224px;
+    /* The task ledger's Id column. */
+    --c-task-col-id-w: 104px;
+    /* The task ledger's Stage column. */
+    --c-task-col-stage-w: 192px;
+    /* The task ledger's Labels column. */
+    --c-task-col-labels-w: 224px;
+    /* The task ledger's To-dos column. */
+    --c-task-col-todos-w: 96px;
+    /* The task ledger's Created and Updated columns. */
+    --c-task-col-time-w: 112px;
+    /* The stop tray's status word column: one word and its glyph. */
+    --c-stop-tray-status-w: 13ch;
+    /* The stop tray's trail column (`12s`, `1m`). */
+    --c-stop-tray-trail-w: 3ch;
+    /* The anti-aliased edge of the status dot's cut in a tree mark's tile. */
+    --c-tree-mark-hole-edge: 0.25px;
+    /* A tree mark's count box: two figures. */
+    --c-tree-mark-num-w: 2ch;
+    /* The usage strip's caption line, the second line of its row. */
+    --c-usage-cap-lh: 15px;
+    /* The usage strip's one row of cells: first line, gap, caption. */
+    --c-usage-strip-row: calc(
+      var(--icon-md) + var(--space-1) + var(--c-usage-cap-lh)
+    );
+    /* The usage strip's hit height on the home card. */
+    --c-usage-strip-home-h: 56px;
+    /* The week share's column: as wide as "100%" in the figure face. */
+    --c-usage-pct-w: 4ch;
+    /* A filed task card's least track in a reply. */
+    --c-filed-task-w: 14rem;
+    /* The workflow list's name column floor. */
+    --c-workflow-name-col: 180px;
+    /* The workflow list's last-run and started columns. */
+    --c-workflow-when-col: 110px;
+    /* The workflow list's run count column. */
+    --c-workflow-count-col: 60px;
+    /* The workflow list's actions column. */
+    --c-workflow-actions-col: 70px;
+    /* The workflow list's row floor, the height its loading rows stand at so nothing moves when they swap. */
+    --c-workflow-row-h: 64px;
+    /* The composer's attachments row before it scrolls. */
+    --c-atts-max-h: 180px;
+    /* How far the settle's text clip reaches past a word's box, so ascenders and descenders survive. */
+    --c-compaction-word-bleed: 0.5em;
+    /* A ticking clock's room: seven digit widths hold "59m 59s". */
+    --c-elapsed-w: 7ch;
+    /* The room the folded field's "+N lines" stands in. */
+    --c-composer-more-w: 4.5rem;
+    /* How far the recall roll's clip reaches past the field on the sides it does not cut: past any screen. */
+    --roll-reach: 100vmax;
+    /* The composer's / and @ menu before its list scrolls. */
+    --c-composer-menu-max-h: 320px;
+    /* The send plane's optical centring, up and right: the glyph's mass sits low-left in its box. */
+    --optical-nudge: 0.5px;
+    /* A permission card's field value before it scrolls. */
+    --c-ask-value-max-h: 200px;
+    /* The project offer's line basis, so its buttons wrap under it on a narrow card. */
+    --c-offer-line: 24ch;
+    /* The skeleton holding a suggestion chip's place while an ask is slow. */
+    --c-suggest-shimmer-w: 9rem;
+    /* The hairline's width: a bordered touch-hit host's `--hit-edge`, the hitl card's content column. */
+    --border-width: 1px;
+    /* The room a grouped turn's floated clock keeps at its first line's end, so the wrap holds when the clock shows. */
+    --c-turn-clock-w: 9ch;
+    /* A machine's whole update error unfolded under its cell, before it scrolls. */
+    --c-update-said-h: 10rem;
+    /* History's chart plot height. */
+    --c-usage-plot: 96px;
+    /* A provider limit's bar track in the session details strip. */
+    --c-limit-bar: 64px;
+    /* A Limits tile's least width (its dial, figure and sentence). */
+    --c-usage-tile-min: 15.5rem;
+    /* A project spend stat tile's least width. */
+    --c-stat-tile-min: 9.5rem;
+    /* The usage key's label column, so values line up down a tile and across a row. */
+    --c-rings-key-label-w: 52px;
+    /* The usage key's value column. */
+    --c-rings-key-value-w: 84px;
+    /* The dot that leads an account's name in running words. */
+    --c-mark-dot: 6px;
+    /* The room a Where-it-goes row keeps beside its meter for the figure and its gap. */
+    --c-usage-figure-w: 5.5rem;
+    /* A meter's height on a page: a Where-it-goes row's and a limit bar's at its regular size (DESIGN.md Limit bar: "8px on a page"). */
+    --c-meter-bar-h: 8px;
+    /* A dialog's height cap, its body scrolling inside; a document dialog stands at it (the parent's call: DESIGN.md's Drawer cap, its Dialog naming none). */
+    --c-dialog-max-h: 85dvh;
+    /* What a dialog's header keeps clear at its trailing edge for the kit's Close, 30px and 12px from the corner. */
+    --c-dialog-close-clear: 52px;
+    /* A document dialog's width on a narrow window. */
+    --c-dialog-document-w: 95vw;
+    /* The tallest a tool call's document well grows in the transcript before it scrolls. */
+    --c-tool-well-max-h: 420px;
+    /* The workflow graph canvas's least height. */
+    --c-graph-canvas-min: 300px;
+    /* A connection handle's diameter on the workflow canvas. */
+    --c-graph-handle: 10px;
+    /* The workflow editor's breadcrumb basis. */
+    --c-workflow-crumb: 220px;
+    /* The workflow name field's widest in the header. */
+    --c-workflow-name-max: 300px;
+    /* The save-state readout's width, so its words swap and nothing moves. */
+    --c-workflow-save-w: 24ch;
+    /* The runs list column of the workflow editor's Runs tab. */
+    --c-workflow-runs-w: 300px;
+    /* The template-path completer's tallest list. */
+    --c-completer-max-h: 240px;
+    /* A workflow graph node card's width. */
+    --c-wf-node-w: 260px;
+    /* An inline scroll region on a workflow page (the problems list, the run log). */
+    --c-wf-scroll-max-h: 30dvh;
+    /* The Set-key field's basis beside its buttons. */
+    --c-key-field-basis: 14rem;
+    /* The Set-key field's widest. */
+    --c-key-field-max: 24rem;
+    /* A bench's phone frame width (the probe kit's 390x844 phone). */
+    --c-bench-phone-w: 390px;
+    /* A bench's phone frame height. */
+    --c-bench-phone-h: 844px;
+    /* A bench's controls column. */
+    --c-bench-controls-w: 380px;
+    /* The square Caw bench stage, twice the 160px Caw it holds. */
+    --c-bench-stage: 320px;
+    /* The chosen-hover bench's side-panel well width. */
+    --c-bench-side-w: 360px;
+    /* The chosen-hover bench's side-panel well height. */
+    --c-bench-side-h: 240px;
+    /* The chosen-hover bench's model list and editor width. */
+    --c-bench-field-w: 480px;
+    /* A bench slider's readout ("32px", "100%"), so the figure never jumps. */
+    --c-bench-readout-w: 4ch;
+    /* The side-head bench card's height: a side card's head and one body line. */
+    --c-side-bench-h: 120px;
+    /* The phone's navigation sheet's width (Shell); the desk rail is c-sidebar-w. */
+    --c-rail-sheet-w: 284px;
+    /* The height a run step's opened result scrolls inside (RunSteps). */
+    --c-run-result-max: 240px;
+    /* The session hover card's head at its narrowest, so a short title never narrows the card. */
+    --c-session-hover-head: 240px;
+    /* The room the session hover card reads as its cell's (SessionHover). */
+    --c-session-hover-room: 360px;
+    /* A tree row's age column, as wide as "59m" (SessionRow). */
+    --c-trail-col: 3ch;
+    /* The transcript foot's dissolve at rest (FootFade). */
+    --c-foot-fade: 96px;
+    /* How wide an attached file's thumb may run: its container, up to 16rem (DocThumb). */
+    --c-doc-max: min(100%, 16rem);
+    /* The delegate tray's "+N" chip: two digits and a plus in the chip's label type. */
+    --c-tray-more-w: 52px;
+    /* A made tile's least width in its auto-fill grid (ViewMade). */
+    --c-made-tile-min: 18rem;
+    /* The Canvas view's least height, the floor its graph reads at (ViewCanvas). */
+    --c-canvas-min-h: 280px;
+    /* A pipeline row's stage-name column at its narrowest (ViewPipeline). */
+    --c-pipeline-name-min: 6rem;
+    /* A pipeline row's stage-name column at its widest. */
+    --c-pipeline-name-max: 10rem;
+    /* A pipeline row's stage-kind column at its narrowest. */
+    --c-pipeline-kind-min: 4rem;
+    /* A pipeline row's stage-kind column at its widest. */
+    --c-pipeline-kind-max: 6rem;
+    /* A pipeline row's count column. */
+    --c-pipeline-count-w: 3rem;
+    /* The gap between two cards of the phone's pane deck; equal to GAP in workspace/deck.svelte.ts, which sizes the drag travel. */
+    --c-deck-gap: 12px;
+    /* The new-project page's column. */
+    --c-new-project-w: 72rem;
+    /* The slot that holds Caw at his hero size over the new-project page; equal to CAW_SIZE in project/new/+page.svelte. */
+    --c-caw-hero: 80px;
+    /* The least a context meter's bar draws in the session details strip. */
+    --c-context-bar-min: 48px;
+    /* The most a context meter's bar draws in the session details strip. */
+    --c-context-bar-max: 96px;
+    /* The details card's model list cap: five 44px rows, four gaps and the list's padding, so rows scroll whole. */
+    --c-model-list-max: 232px;
+    /* The phone tab strip's end fade run (PaneTabs). */
+    --c-tab-strip-fade: 16px;
+    /* The tab strip's fade cap while no tab is drawn chosen: wider than any fade, so the min() never caps it. */
+    --c-tab-strip-uncapped: 100vw;
+    /* The session details card's width (DESIGN.md: "the card is 416px wide"); equal to cardWidth()'s 416 in PaneTabs. */
+    --c-details-card-w: 416px;
+    /* The session details card's height cap on a desk. */
+    --c-details-card-max-h: 760px;
+    /* A tab's hanging menu at its narrowest, the kit menu's compact floor. */
+    --c-tab-menu-min: 12rem;
+    /* The table view's new-task form. */
+    --c-new-task-w: 36rem;
+    /* The width a draft view's sentence takes before its Keep and Discard wrap beneath it. */
+    --c-draft-line: 14rem;
+    /* A card's placeholder in the next project's board skeleton. */
+    --c-skeleton-card-h: 54px;
+    /* The flex basis of a marketplace plugin offer's words before its Install button wraps under them (the skills page). */
+    --c-offer-text-basis: 240px;
+    /* A sticky head or column inside a scroller (the tool matrix's pinned heads): over the rows that scroll under it, under all page chrome. */
+    --layer-sticky: 10;
+    /* The hub band's slot under the bar: over the page column it opens above, its shadow on the page. */
+    --layer-band: 20;
+    /* The phone's edge-pull strip (EdgePull): over the page at the screen's edge, so a press there is the pull's; under a canvas stage. */
+    --layer-pull: 30;
+    /* A canvas stage (CanvasStages: the artifact's frame portalled to the body over its slot): over the page and the edge pull, under a docked composer and the bar. */
+    --layer-stage: 40;
+    /* A docked composer, or what stands in its place (Composer's dock, the decision page's and the view bar's docks, the thread pane's no-composer note): over the transcript and its fades. */
+    --layer-dock: 50;
+    /* The top bar floating over a phone's tab row: over the dock and everything in the page under it. */
+    --layer-bar: 60;
+    /* A toolbar fixed over the page (the task board's bulk bar): over the bar and the dock, under the phone's preview sheet. */
+    --layer-toolbar: 70;
+    /* The phone's preview sheet host (SideSheet): over every page layer, under the floating surfaces. */
+    --layer-sheet: 80;
+    /* A canvas stage standing in the phone's preview sheet: just over the sheet it stands in. */
+    --layer-sheet-stage: 90;
+    /* A motion bench laid over the whole shell: over every page layer, under the floating surfaces its own controls open. */
+    --layer-bench: 100;
+    /* The toast layer while the burger's sheet is open: under the sheet's scrim, so a toast waits dimmed and never paints over the open navigation. */
+    --layer-toast-held: 110;
+    /* Every floating surface: the kit's popover, menu, submenu, select, tooltip, dialog, sheet, drawer and their scrims, the details and lead cards, a hover panel, Files' floating panel, the lightbox. They belong in the browser's top layer; bits-ui portals them to the body instead, so they share this one role and the one opened last stands over the one it opened from. */
+    --layer-float: 120;
+    /* A copy in flight between two places on the page (queued words to the field, a chip to its card, a preview closing into its row): over everything it crosses, floating surfaces included. */
+    --layer-flight: 130;
+    /* A motion bench's own switches: over the floating surfaces the bench opens, so they stay pressable while one is open. */
+    --layer-bench-controls: 140;
+    /* The skip link, shown on focus: over the shell and everything in it. */
+    --layer-skip: 150;
+    /* The toast layer: over every surface on the page, a dialog included. */
+    --layer-toast: 160;
+    /* The screen's edge strips (ScreenEdges) Safari takes its bar colour from: over every layer, toasts included, since a strip is the colour of whatever stands on its edge and is never seen as itself. */
+    --layer-screen-edge: 170;
     /* How much of the page's own background the scrim lays over what is under it: its alpha. The screen's edges under an open scrim (ScreenEdges) mix the same share of background into the edge colour, so the strip Safari extends is the scrim's colour over that edge. */
     --scrim-mix: 72%;
     /* A message not yet said in the conversation (sending, queued). */
@@ -945,7 +1475,7 @@
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-    /* Two states trading places where they stand: a folder tab's choice, over dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching. */
+    /* Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching. */
     --ease-crossfade: cubic-bezier(0.42, 0, 0.58, 1);
     /* A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap. */
     --ease-arrive: cubic-bezier(0.2, 0, 0, 1);
@@ -978,6 +1508,8 @@
     --dur-wait-grace: 1000ms;
     --dur-pop: 260ms;
     --dur-panel: 280ms;
+    /* A pane card picked up off the deck: the lift's scale, sixty percent of the panel's beat, derived from it the way the breath is. */
+    --dur-pick-up: calc(var(--dur-panel) * 0.6);
     /* The composer growing up out of its pill: into the recall wheel, or by the one row that says a queued message is being edited. */
     --dur-grow: 320ms;
     /* The grown composer folding back into its pill, shorter than its growth. */
@@ -988,7 +1520,7 @@
     --dur-press-hold: 380ms;
     /* The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. Also a folder tab's choice, on ease-crossfade (the owner's pick, "Slow · 400ms"). */
     --dur-settle: 400ms;
-    /* A disclosure growing open (collapsible-content); it folds shut over dur-exit. */
+    /* A disclosure growing open (collapsible-content); it folds shut over --dur-exit. */
     --dur-reveal: 240ms;
     /* How long a done state stays up. */
     --dur-hold: 1.2s;
@@ -997,7 +1529,7 @@
     --c-500: 500ms;
     --breath: calc(var(--c-500) * 4);
     --press-scale: 0.97;
-    /* How far Caw shrinks as he fades out, from any drawing, over dur-fade on ease-out, and the size a Caw whose status has no drawn enter fades in from, over dur-pop. Material 3, Easing and duration: exit transitions are faster than enters, 200ms. */
+    /* How far Caw shrinks as he fades out, from any drawing, over --dur-fade on ease-out, and the size a Caw whose status has no drawn enter fades in from, over --dur-pop. Material 3, Easing and duration: exit transitions are faster than enters, 200ms. */
     --leave-scale: 0.97;
     --pop-scale: 0.92;
     /* How far each card of a session mark's deck shows below the one in front (SessionMark). */
@@ -1023,38 +1555,140 @@
     --pop-rise: 8px;
     /* How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr. */
     --fold-blur: 2px;
-    /* How far a refused answer's shake swings each way (the pairing code's cells, denied or not matched): transitions-dev Error state shake, on one clock of dur-panel with legs of dur-ghost, dur-ghost, dur-stagger, dur-stagger. */
-    --shake-distance: 6px;
-    /* The shake's last swing before it comes to rest. */
-    --shake-overshoot: 4px;
-    /* A spinning reel's vertical motion streak at its fastest (the pairing code's letters spun into place), decaying to nothing as the reel settles: transitions-dev Spinning counter, an SVG blur along the reel only, since CSS blur() smears sideways too. */
-    --reel-blur: 3px;
-    /* How far words travel as they swap in place (transitions-dev Text states swap): the old leave up by it, the new arrive from below by it, over dur-morph on ease-in-out, soft by fold-blur. */
-    --swap-rise: 4px;
-    /* Degrees a done check turns through as it arrives (transitions-dev Success check): upright from check-turn, rising pop-rise, sharpening from fold-blur, over dur-pop, its stroke drawn after dur-ghost. */
-    --check-turn: 80;
-    /* The share of a pending pairing QR card's edge its lit segment covers, travelling the card's rounded rect once a breath while the code waits to be scanned. */
-    --qr-edge-share: 0.18;
-    /* A pairing QR once a phone has scanned it and the person is checking the letters: the key is still there, stepped back, so the eye goes to the letters. */
-    --qr-dim-opacity: 0.3;
-    /* How strong the light is that rides a waiting pairing QR's edge (or rings out from its head), screened over the key so the dark dots it crosses glint: the key under the scanner's light. */
-    --qr-glint-opacity: 0.35;
-    /* The size a leaving pairing key ends at as it fades: its dots draining away (expired), or the whole card flown up to Caw (approved, that take). */
-    --qr-shrink: 0.3;
-    /* How far the head in a refused pairing key squeezes shut (its height; its width grows by as much) before it shakes. */
-    --qr-squeeze: 0.84;
-    /* How far a pairing QR's head swells: its breath while rings ripple from it, and its gulp as it swallows an approved key. */
-    --qr-pulse-scale: 1.04;
-    /* How far a waiting pairing QR card's ping grows past the card's edge as it fades, once a breath: far enough to read as a ping from across a room. */
-    --qr-ping-scale: 1.1;
-    /* How strong a waiting pairing QR card's ping ring starts, at the card's edge, before it fades as it grows. */
-    --qr-ping-opacity: 0.7;
-    /* Where a done check grows from as it takes a ring's place (TaskRing finished, the pairing scanner's approval), over dur-toggle or dur-exit on ease-out. */
-    --check-scale: 0.6;
     --transition-control:
       background-color var(--dur-control) var(--ease-out),
       border-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out);
+    /* Something stepping back in: its fade, and its visibility back at once (the composer's prompts, slots and controls when an ask lets go). */
+    --transition-fade-show:
+      opacity var(--dur-fade) var(--ease-out), visibility 0s;
+    /* Something stepping aside: its fade, and its visibility gone once the fade is done (the composer's parts under an ask, a drawing, a minimized pill). */
+    --transition-fade-hide:
+      opacity var(--dur-fade) var(--ease-out),
+      visibility 0s linear var(--dur-fade);
+    /* The composer's tray coming back: the exit's beat, its visibility back at once. */
+    --transition-exit-show:
+      opacity var(--dur-exit) var(--ease-out), visibility 0s;
+    /* The composer's tray leaving: the exit's beat, its visibility gone once the fade is done. */
+    --transition-exit-hide:
+      opacity var(--dur-exit) var(--ease-out), visibility 0s var(--dur-exit);
+    /* A part that fades as it slides into place on the drawer curve (the composer's edit row, a question's parts). */
+    --transition-fade-slide:
+      opacity var(--dur-fade) var(--ease-out),
+      translate var(--dur-panel) var(--ease-drawer);
+    /* A chip's fill and ink on the control's beat, and its press scale (transform) on the toggle's (the tree's count, a needs card's chip, a notice row). */
+    --transition-tint-press:
+      background-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out),
+      transform var(--dur-toggle) var(--ease-out);
+    /* transition-control, and the press's transform on the toggle's beat. */
+    --transition-control-press:
+      background-color var(--dur-control) var(--ease-out),
+      border-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out),
+      transform var(--dur-toggle) var(--ease-out);
+    /* transition-control, and a swiped row's translate home on the exit's beat. */
+    --transition-control-slide:
+      background-color var(--dur-control) var(--ease-out),
+      border-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out),
+      translate var(--dur-exit) var(--ease-out);
+    /* transition-control, and a ring drawn as a box-shadow on the same beat. */
+    --transition-control-ring:
+      background-color var(--dur-control) var(--ease-out),
+      border-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out),
+      box-shadow var(--dur-control) var(--ease-out);
+    /* A chip whose fill and ink settle on the panel's beat, its press (transform) on the toggle's (a rollout's state chip). */
+    --transition-chip-settle:
+      background-color var(--dur-panel) var(--ease-out),
+      color var(--dur-panel) var(--ease-out),
+      transform var(--dur-toggle) var(--ease-out);
+    /* A choice card's outline and fill on the fade's beat, its press (transform) on the control's (the account strategy picker). */
+    --transition-pick-card:
+      border-color var(--dur-fade) var(--ease-out),
+      background-color var(--dur-fade) var(--ease-out),
+      transform var(--dur-control) var(--ease-out);
+    /* A frame gliding between cards: its leading edge moves at once, its trailing edge a ghost's beat later, so it stretches then settles (the channel cards). */
+    --transition-frame-end-first:
+      inset-inline-end var(--dur-fade) var(--ease-in-out) 0ms,
+      inset-inline-start var(--dur-fade) var(--ease-in-out) var(--dur-ghost);
+    /* transition-frame-end-first's mirror, for a glide the other way. */
+    --transition-frame-start-first:
+      inset-inline-start var(--dur-fade) var(--ease-in-out) 0ms,
+      inset-inline-end var(--dur-fade) var(--ease-in-out) var(--dur-ghost);
+    /* A side surface sliding in beside the main pane: its fade and travel on ease-out, its room (padding) on the drawer curve. */
+    --transition-split-surface:
+      opacity var(--dur-panel) var(--ease-out),
+      transform var(--dur-panel) var(--ease-out),
+      padding var(--dur-panel) var(--ease-drawer);
+    /* A usage ring's arc drawing to its new length, its stroke and fade on the toggle's beat. */
+    --transition-ring-arc:
+      stroke-dashoffset var(--dur-panel) var(--ease-in-out),
+      stroke var(--dur-toggle) var(--ease-out),
+      opacity var(--dur-toggle) var(--ease-out);
+    /* A rail's selection tip gliding and resizing to its new item, fading on the control's beat. */
+    --transition-rail-tip:
+      transform var(--dur-morph) var(--ease-in-out),
+      width var(--dur-morph) var(--ease-in-out),
+      opacity var(--dur-control) var(--ease-out);
+    /* A panel travelling to its new place on ease-in-out while it fades on ease-out (the new-session location panels). */
+    --transition-panel-travel:
+      transform var(--dur-panel) var(--ease-in-out),
+      opacity var(--dur-panel) var(--ease-out);
+    /* A panel moving and taking its new height on the toggle's beat, fading on the control's (the model list's panel). */
+    --transition-panel-resize:
+      transform var(--dur-toggle) var(--ease-in-out),
+      height var(--dur-toggle) var(--ease-in-out),
+      opacity var(--dur-control) var(--ease-out);
+    /* A suggestion chip: its press on the toggle's beat, its tint and outline on the panel's, its ink on the control's. */
+    --transition-suggest-chip:
+      scale var(--dur-toggle) var(--ease-out),
+      background-color var(--dur-panel) var(--ease-out),
+      border-color var(--dur-panel) var(--ease-out),
+      color var(--dur-control) var(--ease-out);
+    /* A segmented control's thumb gliding and resizing to its tab, fading on the ghost's beat. */
+    --transition-segment:
+      transform var(--dur-toggle) var(--ease-out),
+      width var(--dur-toggle) var(--ease-out),
+      height var(--dur-toggle) var(--ease-out),
+      opacity var(--dur-ghost) var(--ease-out);
+    /* A fold's inner panel fading and cross-blurring out of --fold-blur as it opens and shuts (UpdateCard, MovedLogins, RecordCard; the open state stretches it to the panel's beat). A transitioned filter can hang WebKit; these folds are each driven on WebKit by scripts/probe-kit/specs/web/safari-blurs.ts, so no other element takes this. */
+    --transition-fold-fade:
+      opacity var(--dur-exit) var(--ease-out),
+      filter var(--dur-exit) var(--ease-out);
+    /* A pending button's label and spinner cross-fading and cross-blurring as one replaces the other (the kit's pending-content), where motion is wanted. A transitioned filter can hang WebKit (scripts/probe-kit/specs/web/safari-blurs.ts); no other element takes this. */
+    --transition-morph-fade:
+      opacity var(--dur-morph) var(--ease-out),
+      filter var(--dur-morph) var(--ease-out);
+    /* The connection band (HubBand) going, with less motion: its fade and its visibility on the exit's beat, its tint and ink on the control's. */
+    --transition-band-hide:
+      opacity var(--dur-exit) var(--ease-out), visibility var(--dur-exit),
+      background-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out);
+    /* The connection band (HubBand) coming, with less motion: its fade and its visibility on the panel's beat and the drawer curve, its tint and ink on the control's. */
+    --transition-band-show:
+      opacity var(--dur-panel) var(--ease-drawer), visibility var(--dur-panel),
+      background-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out);
+    /* The connection band (HubBand) going back up under the bar: its travel, fade and visibility on the exit's beat, its tint and ink on the control's. */
+    --transition-band-slide-hide:
+      translate var(--dur-exit) var(--ease-out),
+      opacity var(--dur-exit) var(--ease-out), visibility var(--dur-exit),
+      background-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out);
+    /* The connection band (HubBand) sliding down from under the bar: its travel, fade and visibility on the panel's beat and the drawer curve, its tint and ink on the control's. */
+    --transition-band-slide-show:
+      translate var(--dur-panel) var(--ease-drawer),
+      opacity var(--dur-panel) var(--ease-drawer), visibility var(--dur-panel),
+      background-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out);
+    /* The connection band's row (HubBand) shutting as the band goes back up: its grid row on the exit's beat. */
+    --transition-band-row-shut: grid-template-rows var(--dur-exit)
+      var(--ease-out);
+    /* The connection band's row (HubBand) opening from nothing as the band slides down: its grid row on the panel's beat and the drawer curve. */
+    --transition-band-row-open: grid-template-rows var(--dur-panel)
+      var(--ease-drawer);
   }
 
   :root.dark {
@@ -1068,7 +1702,9 @@
   @media (pointer: coarse) {
     :root {
       --c-tray-chip: 34px;
+      --c-peek-glyph: var(--icon-lg);
       --c-tray-gap: var(--space-3);
+      --c-menu-item-h: 44px;
     }
   }
 

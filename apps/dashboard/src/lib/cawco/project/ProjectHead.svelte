@@ -279,10 +279,19 @@
   }
 </script>
 
-<header data-slot="project-head" class="project-head">
-  <div data-slot="who" class="who">
-    <div data-slot="txt" class="txt">
-      <h1 data-slot="title" class="title">
+<header
+  data-slot="project-head"
+  class="flex flex-wrap items-center gap-x-space-4 gap-y-space-3 pt-space-6 pe-space-6 pb-space-4 ps-space-7 max-desk:pt-space-5 max-desk:pe-space-5 max-desk:pb-space-3 max-desk:ps-space-5"
+>
+  <div
+    data-slot="who"
+    class="flex min-w-0 shrink grow basis-c-head-who-basis items-center gap-space-3"
+  >
+    <div
+      data-slot="txt"
+      class="flex min-w-0 flex-col gap-space-1 has-data-field:flex-auto"
+    >
+      <h1 data-slot="title" class="min-w-0 type-title text-ink-strong">
         {#if draft !== null}
           <!-- svelte-ignore a11y_autofocus -->
           <input
@@ -291,7 +300,7 @@
             aria-label="Project name"
             autocomplete="off"
             autofocus
-            class="name field focus-inset"
+            class="focus-inset -mx-space-1 block w-full max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-border-control bg-surface-raised px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out read-only:text-ink-muted"
             onblur={() => {
               // Left after a refusal, it stays as typed, the reason under
               // it; Enter or Try again sends it.
@@ -317,7 +326,7 @@
         {:else}
           <button
             data-slot="name"
-            class="name press-tint"
+            class="press-tint -mx-space-1 block max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
             onclick={editName}
             title="Rename {project.name}"
             type="button"
@@ -332,23 +341,31 @@
            as its column, with nothing standing after it on its row: its box
            neither grows nor narrows, so there is no size for morph() to
            tween. -->
-      <p class="line mark-line">
+      <p
+        class="mark-line type-label flex min-w-0 items-center gap-space-2 whitespace-nowrap text-ink-muted"
+      >
         {#if words?.kind === "ask"}
-          <a data-slot="ask" class="ask" href="/session/thread:{words.threadId}"
+          <a
+            data-slot="ask"
+            class="min-w-0 overflow-hidden text-ellipsis text-link-ink no-underline hover:underline hover:underline-offset-(--underline-offset)"
+            href="/session/thread:{words.threadId}"
             ><MorphText text={words.text} /></a
           >
           {#if words.more > 0}
-            <span data-num data-slot="more" class="more num">+{words.more}</span
+            <span data-num data-slot="more" class="num text-ink-muted"
+              >+{words.more}</span
             >
           {/if}
         {:else if words}
-          <span class="said"><MorphText text={words.text} /></span>
+          <span class="min-w-0 overflow-hidden text-ellipsis"
+            ><MorphText text={words.text} /></span
+          >
         {:else}
           <!-- The place is a press, as the name is: the project's details
                unfold under the head. -->
           <button
             aria-expanded={details !== null}
-            class="place-press mark-line"
+            class="mark-line -mx-space-1 flex min-w-0 items-center gap-space-2 rounded-xs border-none border-current bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover can-hover:aria-expanded:bg-surface-hover"
             data-box
             data-place-line
             onclick={() => {
@@ -363,13 +380,20 @@
             bind:this={placeLine}
           >
             {#if machine}
-              <OsMark class="os" os={machine.os} />
+              <OsMark class="size-icon-sm flex-none" os={machine.os} />
             {/if}
-            <span class="place"><MorphText text={place} /></span>
+            <span class="min-w-0 overflow-hidden text-ellipsis"
+              ><MorphText text={place} /></span
+            >
           </button>
           {#if checkouts > 1}
+            <!-- Words on the mark line, so the line's recipe trims them to
+                 their x-height and gives the room back as block padding
+                 (app.css .mark-line): only the inline padding is the
+                 button's to take away. `p-0` took the recipe's too, and left
+                 a 7px box round a 15px line of words. -->
             <button
-              class="places"
+              class="flex-none rounded-xs border-none border-current bg-transparent px-0 font-inherit text-ink-muted transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
               data-places-line
               onclick={() => openDetails(true)}
               type="button">· {checkouts} places</button
@@ -379,27 +403,32 @@
       </p>
     </div>
   </div>
-  <div data-slot="acts" class="acts">
+  <div
+    data-slot="acts"
+    class="flex shrink-0 grow-0 basis-auto items-center gap-space-2 phone:max-desk:shrink phone:max-desk:grow phone:max-desk:basis-full max-phone:shrink-0 max-phone:grow-0 max-phone:basis-auto"
+  >
     <!-- He sits at the head's end, by Ask Caw, so the name's start edge is
          the same whether he sits here or stands over the empty board. His
          seat holds its place while he is read; a read the hub refused draws
          no one, so no empty seat stands by Ask Caw. -->
     {#if seated && !(lead.refused !== null && lead.project === null)}
-      <div data-slot="seat" class="seat" transition:slot>
+      <div data-slot="seat" class="flex-none" transition:slot>
         <CawSeat {lead} projectId={project.id} projectName={project.name} />
       </div>
     {/if}
     <!-- New work starts by telling Caw (PRD §5.6): his panel on a new
          thread, the caret in his composer. -->
     <Button
-      class="head-act pressable"
+      layout="wide"
+      press="pressable"
       data-new-session
       onclick={() => lead.newThread()}>Ask Caw</Button
     >
     {#if primary}
       <Button
         aria-haspopup="dialog"
-        class="head-act pressable"
+        layout="wide"
+        press="pressable"
         label="Spin off"
         onclick={(event) => spinOff(event.currentTarget)}
         variant="outline"
@@ -411,7 +440,9 @@
           <Button
             {...props}
             aria-label="More for {project.name}"
+            class="max-desk:ms-auto max-desk:me-(--more-bleed)"
             size="icon"
+            style="--more-bleed: calc((var(--c-btn-h) - var(--icon-md)) / -2)"
             variant="ghost"
             bind:ref={more}
           >
@@ -424,7 +455,7 @@
            doesn't hand it back to `⋯` as it closes. -->
       <DropdownMenu.Content
         align="end"
-        class="w-52"
+        width="regular"
         onCloseAutoFocus={(event) => {
           if (forgetHost.at === forgetAt || spawning.open) {
             event.preventDefault();
@@ -522,8 +553,8 @@
 <!-- Caw's settings, off `⋯`: the project's own, beside its other settings. -->
 {#if touch.current}
   <Drawer.Root bind:open={cawOpen}>
-    <Drawer.Content class="caw-sheet">
-      <Drawer.Title class="sr-only">Caw, lead of {project.name}</Drawer.Title>
+    <Drawer.Content pad="safe-bottom">
+      <Drawer.Title visible={false}>Caw, lead of {project.name}</Drawer.Title>
       <CawPanel {lead} projectId={project.id} projectName={project.name} />
     </Drawer.Content>
   </Drawer.Root>
@@ -532,7 +563,9 @@
     <Popover.Content
       align="end"
       aria-label="Caw, lead of {project.name}"
-      class="caw-settings-pop"
+      class="w-(--settings-w) max-desk:w-(--settings-w-narrow)"
+      pad="inset"
+      style="--settings-w: min(var(--c-panel-w), calc(100vw - var(--space-7))); --settings-w-narrow: min(var(--c-panel-w), calc(100vw - var(--space-3) - env(safe-area-inset-right, 0px)))"
       collisionPadding={12}
       customAnchor={more}
       side="bottom"
@@ -554,209 +587,4 @@
   />
 {/if}
 <!-- A forget asked from `⋯`, under the head, from where its title starts. -->
-<ForgetProjectTray at={forgetAt} class="head-forget max-w-lg" />
-
-<style>
-  /* The head's own leading padding, so the tray starts where its words do;
-     as wide as the dialog it replaces (`max-w-lg`, set where it is drawn). */
-  /* css-scope: the forget tray is drawn by ForgetProjectTray, outside this head's markup; only this head names the class */
-  :global(.head-forget) {
-    --ask-indent: var(--space-7);
-    --fault-indent: var(--space-7);
-  }
-  /* Caw's settings in the glass card's frame (home/CawPanel's
-     `.kit-pop.caw-pop`): the panel's width, its rows 7px in, a narrower cap
-     under 900px. */
-  :global(.kit-pop.caw-settings-pop) {
-    width: min(var(--c-panel-w), calc(100vw - 24px));
-    padding: 7px;
-  }
-  @media (width < 900px) {
-    :global(.kit-pop.caw-settings-pop) {
-      width: min(
-        var(--c-panel-w),
-        calc(100vw - 12px - env(safe-area-inset-right, 0px))
-      );
-    }
-  }
-  :global(.caw-sheet) {
-    padding-block-end: var(--safe-bottom);
-  }
-  .project-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3) var(--space-4);
-    padding: var(--space-6) var(--space-6) var(--space-4) var(--space-7);
-  }
-  .who {
-    display: flex;
-    flex: 1 1 18rem;
-    align-items: center;
-    gap: var(--space-3);
-    min-inline-size: 0;
-  }
-  .seat {
-    flex: none;
-  }
-  .txt {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-inline-size: 0;
-  }
-  /* The name wraps at its spaces only; a word longer than the column ends
-     in an ellipsis, the whole name in its tooltip and read out whole. */
-  .title {
-    min-inline-size: 0;
-    font: var(--type-title);
-    color: var(--ink-strong);
-  }
-  /* The name and the field it becomes are one box: the same type, the same
-     inset (a space-1 pad pulled back by a space-1 margin, so the words stand
-     where the line's do) and a 1px edge, clear at rest, so pressing it moves
-     nothing. Under a pointer the name takes the hover wash. */
-  .name {
-    display: block;
-    max-inline-size: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-inline: calc(var(--space-1) * -1);
-    padding-inline: var(--space-1);
-    border: 1px solid transparent;
-    border-radius: var(--radius-xs);
-    background: none;
-    font: inherit;
-    color: inherit;
-    text-align: start;
-    cursor: text;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) {
-    button.name:hover {
-      background: var(--surface-hover);
-    }
-  }
-  /* Editing, the words' column takes the row's room, so a long name has the
-     field's whole width to be typed in. */
-  .txt:has(.field) {
-    flex: 1 1 auto;
-  }
-  .field {
-    inline-size: 100%;
-    border-color: var(--border-control);
-    background: var(--surface-raised);
-  }
-  .field[readonly] {
-    color: var(--ink-muted);
-  }
-  .line {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    font: var(--type-label);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  .line :global(.os) {
-    inline-size: var(--icon-sm, 14px);
-    block-size: var(--icon-sm, 14px);
-    flex: none;
-  }
-  .place,
-  .said,
-  .ask {
-    min-inline-size: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .ask {
-    color: var(--link-ink);
-    text-decoration: none;
-  }
-  @media (hover: hover) {
-    .ask:hover {
-      text-decoration: underline;
-      text-underline-offset: 3px;
-    }
-  }
-  .more {
-    color: var(--ink-muted);
-  }
-  /* The place is pressed as the name is: the same inset pulled back by its
-     margin, so its words stand where the line's do, and the hover wash. */
-  .place-press {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    margin-inline: calc(var(--space-1) * -1);
-    padding-inline: var(--space-1);
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    font: inherit;
-    color: inherit;
-    text-align: start;
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  /* Words on the mark line, so the line's recipe trims them to their
-     x-height and gives the room back as block padding (app.css
-     .mark-line): only the inline padding is the button's to take away.
-     `padding: 0` took the recipe's too, and left a 7px box round a 15px
-     line of words. */
-  .places {
-    flex: none;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    padding-inline: 0;
-    font: inherit;
-    color: var(--ink-muted);
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) {
-    .place-press:hover,
-    .place-press[aria-expanded="true"],
-    .places:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .acts {
-    display: flex;
-    flex: none;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  @media (width < 900px) {
-    .project-head {
-      padding: var(--space-5) var(--space-5) var(--space-3);
-    }
-    .acts {
-      flex: 1 1 100%;
-    }
-    .acts > :global(:last-child),
-    .acts :global([aria-label^="More for"]) {
-      margin-inline-start: auto;
-    }
-    /* The trailing ghost button's glyph stands on the page's edge, where the
-       filled controls under it end (the field's send): its box reaches past
-       the gutter by the glyph's inset. */
-    .acts :global([aria-label^="More for"]) {
-      margin-inline-end: calc((var(--c-btn-h) - 16px) / -2);
-    }
-  }
-  /* A phone's head carries no button but `⋯`, on the name's row: Ask Caw
-     is the views bar's "+", Spin off is in `⋯`. */
-  @media (max-width: 639px) {
-    .acts {
-      flex: none;
-    }
-    .acts :global(.head-act) {
-      display: none;
-    }
-  }
-</style>
+<ForgetProjectTray at={forgetAt} class="tray-indent-space-7 max-w-128" />

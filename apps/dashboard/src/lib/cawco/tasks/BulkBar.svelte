@@ -44,6 +44,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import {
@@ -125,15 +126,21 @@
   data-floating
   data-slot="bulk"
   aria-label="Selected tasks"
-  class="bulk floating"
+  class="fixed inset-x-space-3 bottom-(--off-bottom) z-(--layer-toolbar) flex min-h-(--min-h) w-fit flex-wrap items-center justify-center gap-space-1 mx-auto border border-border-control rounded-lg bg-surface-raised shadow-overlay py-space-1 pr-space-1 pl-space-3 max-phone:bottom-(--off-bottom-phone)"
   role="toolbar"
+  style:--off-bottom="calc(var(--space-5) + var(--safe-bottom, 0px))"
+  style:--off-bottom-phone={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-2))"}
+  style:--min-h="calc(var(--c-btn-h-sm) + var(--space-2))"
 >
   {#if run}
     <!-- The change in flight, drawn where it was asked for. -->
-    <span class="progress mark-line" role="status">
+    <span
+      class="mark-line inline-flex items-center gap-space-2 pe-space-2 type-label text-ink-strong"
+      role="status"
+    >
       <TaskRing done={run.done} size="sm" total={run.total} />
       {#if run.failed}
-        <span data-slot="failed" class="failed"
+        <span data-slot="failed" class="text-status-fail-ink"
           >{run.verb} stopped at {run.failed.id}: {run.failed.text}</span
         >
       {:else}
@@ -147,7 +154,7 @@
       {/if}
     </span>
     {#if run.failed}
-      <Button class="pressable" onclick={onretry} size="sm" variant="outline"
+      <Button onclick={onretry} press="pressable" size="sm" variant="outline"
         >Try again</Button
       >
       <Button
@@ -158,7 +165,7 @@
       >
     {/if}
   {:else}
-    <span data-slot="count" class="count"
+    <span data-slot="count" class="pe-space-2 type-label text-ink-strong"
       ><span data-slot="num" class="num">{picked.length}</span> selected</span
     >
     <DropdownMenu.Root>
@@ -172,7 +179,7 @@
           >
         {/snippet}
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="start" class="w-auto min-w-40">
+      <DropdownMenu.Content align="start" class="w-auto" min="compact">
         {#each movable as stage (stage.name)}
           <DropdownMenu.Item onSelect={() => onmove(stage.name)}
             >{stageLabel(stage.name)}</DropdownMenu.Item
@@ -188,11 +195,11 @@
           >
         {/snippet}
       </Popover.Trigger>
-      <Popover.Content align="start" class="w-64" side="top">
+      <Popover.Content align="start" side="top" width="narrow">
         <!-- A label typed, as the sheet's label editor takes one, or one the
              project's tasks already carry. -->
         <form
-          class="label-pick"
+          class="flex gap-space-2 p-space-1"
           onsubmit={(event) => {
             event.preventDefault();
             label(typed);
@@ -215,11 +222,16 @@
           >
         </form>
         {#if labels.length > 0}
-          <ul data-slot="known" class="known" aria-label="The project's labels">
+          <ul
+            data-slot="known"
+            class="mx-0 mt-space-1 mb-0 flex max-h-c-bulk-labels-max-h list-none flex-col overflow-y-auto p-0"
+            aria-label="The project's labels"
+          >
             {#each labels as each (each)}
               <li>
                 <button
-                  class="kit-item known-label"
+                  class={menuItemVariants({ class: "w-full text-start" })}
+                  data-menu-item
                   onclick={() => label(each)}
                   type="button"><span>{each}</span></button
                 >
@@ -250,10 +262,10 @@
           >
         {/snippet}
       </Popover.Trigger>
-      <Popover.Content align="end" class="w-80" side="top">
+      <Popover.Content align="end" side="top" width="wide">
         <form
           data-slot="drop"
-          class="drop"
+          class="flex flex-col gap-space-2 p-space-1"
           onsubmit={(event) => {
             event.preventDefault();
             if (reason.trim()) {
@@ -265,7 +277,7 @@
         >
           {#if running.length > 0}
             <!-- What decides it: the work Drop would stop, by name. -->
-            <p class="stops">
+            <p class="type-meta text-status-attn-ink">
               {running.length === 1
                 ? "This one is"
                 : `These ${running.length} are`}
@@ -273,15 +285,20 @@
                 ? "its attempt"
                 : "their attempts"} mid-turn:
             </p>
-            <ul class="reaches">
+            <ul class="m-0 flex list-none flex-col gap-space-1 p-0">
               {#each running as task (task.id)}
-                <li>
-                  <span class="ref-id">{task.id}</span>
-                  <span class="ref-title">{task.title}</span>
+                <li class="flex min-w-0 items-baseline gap-space-2">
+                  <span
+                    class="flex-none type-meta font-(family-name:--font-mono) liga-none text-ink-muted"
+                    >{task.id}</span
+                  >
+                  <span class="min-w-0 truncate type-label text-ink-strong"
+                    >{task.title}</span
+                  >
                   {#if task.attempts[0]}
                     <a
                       data-slot="session"
-                      class="session"
+                      class="ms-auto flex-none type-meta text-link-ink"
                       href="/session/{task.attempts[0].instanceId}"
                       >its session</a
                     >
@@ -290,7 +307,7 @@
               {/each}
             </ul>
           {/if}
-          <label class="drop-label" for="bulk-reason"
+          <label class="type-label text-ink-strong" for="bulk-reason"
             >Why {picked.length === 1 ? "it's" : `these ${picked.length} are`} dropped</label
           >
           <Input
@@ -319,121 +336,3 @@
     >
   {/if}
 </div>
-
-<style>
-  .bulk {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-  /* Centred by its margins between insets, not by a half-width shift: a
-     fixed box set from 50% may only grow into the half beyond it, which
-     wraps the bar to four rows on a phone. */
-  .floating {
-    position: fixed;
-    inset-block-end: calc(var(--space-5) + var(--safe-bottom, 0px));
-    inset-inline: var(--space-3);
-    z-index: 40;
-    flex-wrap: wrap;
-    justify-content: center;
-    inline-size: fit-content;
-    min-block-size: calc(var(--c-btn-h-sm) + var(--space-2));
-    margin-inline: auto;
-    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-overlay);
-  }
-  /* A phone's foot is the project's views bar (ViewBar): the bulk bar
-     floats a step over it, so both stand whole. */
-  @media (max-width: 639px) {
-    .floating {
-      inset-block-end: calc(
-        var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) +
-          var(--space-2)
-      );
-    }
-  }
-  .count,
-  .progress {
-    padding-inline-end: var(--space-2);
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .progress {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .failed {
-    color: var(--status-fail-ink);
-  }
-  .label-pick {
-    display: flex;
-    gap: var(--space-2);
-    padding: var(--space-1);
-  }
-  .known {
-    display: flex;
-    flex-direction: column;
-    max-block-size: 14rem;
-    margin: var(--space-1) 0 0;
-    padding: 0;
-    overflow-y: auto;
-    list-style: none;
-  }
-  .known-label {
-    inline-size: 100%;
-    text-align: start;
-  }
-  .drop {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-1);
-  }
-  .drop-label {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .stops {
-    font: var(--type-meta);
-    color: var(--status-attn-ink);
-  }
-  .reaches {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .reaches li {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .ref-id {
-    flex: none;
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-    color: var(--ink-muted);
-  }
-  .ref-title {
-    min-inline-size: 0;
-    overflow: hidden;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .session {
-    flex: none;
-    margin-inline-start: auto;
-    font: var(--type-meta);
-    color: var(--link-ink);
-  }
-</style>

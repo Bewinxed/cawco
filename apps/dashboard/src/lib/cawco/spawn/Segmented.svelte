@@ -43,98 +43,43 @@
 
 <div
   aria-label={label}
-  class={`segmented ${size} ${className}`}
+  class={[
+    "relative grid grid-cols-(--cols) gap-space-row rounded-md bg-surface-recess-deep p-space-1",
+    className,
+  ]}
   data-segmented-size={size}
   onkeydown={keydown}
   role="radiogroup"
-  style={`--n:${items.length}`}
+  style:--cols="repeat(var(--n), minmax(0, 1fr))"
+  style:--n={items.length}
   tabindex="-1"
 >
   <span
     data-slot="thumb"
     aria-hidden="true"
-    class="thumb"
-    style={`transform:translateX(calc(${index} * (100% + 2px)))`}
+    class="pointer-events-none absolute inset-y-space-1 start-space-1 w-(--thumb-w) translate-x-(--thumb-x) rounded-sm bg-surface-lift shadow-raised motion-safe:transition-[translate] motion-safe:duration-(--dur-pop) motion-safe:ease-in-out"
+    style:--thumb-w={"calc((100% - 2 * var(--space-1) - (var(--n) - 1) * var(--space-row)) / var(--n))"}
+    style:--thumb-x={`calc(${index} * (100% + var(--space-row)))`}
   ></span>
   {#each items as item (item.value)}
     <!-- biome-ignore lint/a11y/useSemanticElements: a designed segmented control with a sliding thumb; native radios cannot render it -->
     <button
       data-slot="tab"
       aria-checked={item.value === value}
-      class="tab press-tint"
+      class={[
+        "press-tint transition-control relative inline-flex min-w-0 items-center justify-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted aria-checked:text-ink-strong [&_svg]:flex-none",
+        size === "md" ? "h-c-btn-h-sm" : "h-c-btn-h-xs max-phone:h-c-btn-h",
+      ]}
       onclick={() => onchange(item.value)}
       role="radio"
       tabindex={item.value === value ? 0 : -1}
       title={item.label}
       type="button"
-      class:on={item.value === value}
     >
       {#if icon}
         {@render icon(item.value, item.value === value)}
       {/if}
-      <span>{item.label}</span>
+      <span class="min-w-0 truncate">{item.label}</span>
     </button>
   {/each}
 </div>
-
-<style>
-  .segmented {
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(var(--n), minmax(0, 1fr));
-    gap: 2px;
-    padding: 3px;
-    background: var(--surface-recess-deep);
-    border-radius: var(--radius-md);
-  }
-  .thumb {
-    position: absolute;
-    top: 3px;
-    bottom: 3px;
-    left: 3px;
-    width: calc((100% - 6px - (var(--n) - 1) * 2px) / var(--n));
-    background: var(--surface-lift);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-raised);
-    transition: transform var(--ns-thumb-ms) var(--ease-in-out);
-    pointer-events: none;
-  }
-  .tab {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    height: 26px;
-    padding: 0 10px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-    color: var(--ink-muted);
-    cursor: pointer;
-    white-space: nowrap;
-    min-width: 0;
-  }
-  .tab span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .md .tab {
-    height: 30px;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-  }
-  .tab.on {
-    color: var(--ink-strong);
-  }
-  .tab :global(svg) {
-    flex: none;
-  }
-  @media (max-width: 640px) {
-    .tab {
-      height: 38px;
-    }
-  }
-</style>

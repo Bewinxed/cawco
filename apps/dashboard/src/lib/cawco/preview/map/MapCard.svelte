@@ -7,6 +7,8 @@
   export interface MapCardData {
     /** The one the map draws live. */
     chosen: boolean;
+    /** Utilities for the card's root, where the surface it stands in sizes it. */
+    class?: string;
     /** Its canvas page's address, drawn live while chosen; null while the pane's own page has not loaded. */
     live: string | null;
     node: CanvasMapNode;
@@ -27,9 +29,17 @@
    * no canvas to draw, so it can't be chosen.
    */
   import { FORMS } from "@cawco/core/stage";
+  import { cn } from "#lib/utils.js";
   import MapThumb from "./MapThumb.svelte";
 
-  let { chosen, live, node, onchoose, role }: MapCardData = $props();
+  let {
+    chosen,
+    class: className,
+    live,
+    node,
+    onchoose,
+    role,
+  }: MapCardData = $props();
 
   const choosable = $derived(node.statesFiles.length > 0);
   const counts = $derived(
@@ -52,13 +62,16 @@
 
 <div
   data-slot="map-card"
-  class="map-card"
+  class={cn(
+    "relative grid w-c-map-node-w gap-space-2 rounded-lg bg-surface-raised p-space-2 shadow-tile data-chosen:inset-ring-1 data-chosen:inset-ring-brand-solid",
+    className
+  )}
   data-chosen={chosen || undefined}
   data-role={role}
 >
   <button
     aria-pressed={chosen}
-    class="choose"
+    class="grid gap-space-row min-w-0 p-space-1 border-none border-current rounded-sm bg-transparent text-start enabled:aria-pressed-false:hover:bg-surface-hover after:absolute after:inset-0 after:z-1 after:rounded-lg"
     disabled={!choosable}
     onclick={() => onchoose(node.file)}
     title={choosable
@@ -66,21 +79,33 @@
       : `${where}: no states file, so nothing to draw live`}
     type="button"
   >
-    <span class="line">
-      <span data-slot="map-name" class="name">{node.name}</span>
+    <span class="flex items-center gap-space-2 min-w-0">
+      <span
+        data-slot="map-name"
+        class="min-w-0 truncate text-ink-strong type-label">{node.name}</span
+      >
       {#if role === "center"}
-        <span class="tag">This canvas</span>
+        <span
+          class="flex-none px-space-2 rounded-pill bg-selected-bg text-selected-ink type-meta"
+          >This canvas</span
+        >
       {/if}
     </span>
-    <span class="file">{shortFile}</span>
-    <span data-slot="map-counts" class="counts">{counts}</span>
+    <span class="min-w-0 truncate text-ink-muted type-meta">{shortFile}</span>
+    <span data-slot="map-counts" class="text-ink-muted type-meta num"
+      >{counts}</span
+    >
   </button>
-  <div class="view" bind:clientWidth={viewWidth}>
+  <div
+    class="relative aspect-16/10 overflow-hidden rounded-md bg-surface-recess"
+    bind:clientWidth={viewWidth}
+  >
     {#if chosen && live}
       <iframe
-        style:block-size={`${LIVE.h}px`}
-        style:inline-size={`${LIVE.w}px`}
-        style:scale={viewWidth / LIVE.w}
+        class="absolute top-0 start-0 w-(--live-w) h-(--live-h) scale-(--live-scale) origin-top-left border-none border-current pointer-events-none bg-surface-well"
+        style:--live-h={`${LIVE.h}px`}
+        style:--live-scale={viewWidth / LIVE.w}
+        style:--live-w={`${LIVE.w}px`}
         inert
         src={live}
         tabindex="-1"
@@ -91,109 +116,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  .map-card {
-    position: relative;
-    display: grid;
-    gap: var(--space-2);
-    inline-size: var(--c-map-node-w);
-    padding: var(--space-2);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  /* The chosen one takes the coral edge, as a chosen chip does. */
-  .map-card[data-chosen] {
-    box-shadow:
-      inset 0 0 0 1px var(--brand-solid),
-      var(--shadow-tile);
-  }
-  .choose {
-    display: grid;
-    gap: var(--space-row);
-    min-inline-size: 0;
-    padding: var(--space-1);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: inherit;
-    text-align: start;
-    cursor: pointer;
-
-    /* The whole card is the button's: a press on its frames chooses it too. */
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: 1;
-      border-radius: var(--radius-lg);
-    }
-    &:disabled {
-      cursor: default;
-    }
-    &:focus-visible {
-      outline: var(--focus-ring-width) solid var(--focus-ring);
-      outline-offset: var(--focus-ring-offset);
-    }
-    @media (hover: hover) {
-      &:not(:disabled, [aria-pressed="true"]):hover {
-        background: var(--surface-hover);
-      }
-    }
-  }
-  .line {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .name,
-  .file {
-    min-inline-size: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .name {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .tag {
-    flex: none;
-    padding-inline: var(--space-2);
-    border-radius: var(--radius-pill);
-    background: var(--selected-bg);
-    color: var(--selected-ink);
-    font: var(--type-meta);
-  }
-  .file,
-  .counts {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .counts {
-    font-variant-numeric: tabular-nums;
-  }
-  .view {
-    position: relative;
-    aspect-ratio: 16 / 10;
-    overflow: hidden;
-    border-radius: var(--radius-md);
-    background: var(--surface-recess);
-
-    & > :global([data-slot="map-thumb"]) {
-      box-sizing: border-box;
-      padding: var(--space-2);
-    }
-  }
-  iframe {
-    position: absolute;
-    inset-block-start: 0;
-    inset-inline-start: 0;
-    border: 0;
-    transform-origin: 0 0;
-    pointer-events: none;
-    background: var(--surface-well);
-  }
-</style>

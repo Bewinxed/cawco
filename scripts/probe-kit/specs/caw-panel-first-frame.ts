@@ -53,7 +53,7 @@ function panelFrames() {
       painted.push({
         line:
           panel.querySelector("[data-caw-line]")?.textContent?.trim() ?? null,
-        off: !!panel.querySelector(".off-word"),
+        off: !!panel.querySelector('[data-slot="off-word"]'),
         composer: !!panel.querySelector('[data-slot="composer-field"]'),
       });
     }

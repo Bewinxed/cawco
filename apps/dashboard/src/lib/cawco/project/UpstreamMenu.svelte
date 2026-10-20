@@ -49,14 +49,14 @@
     <IconShield />
     <span>{UPSTREAM_WORDS.title}</span>
   </DropdownMenu.SubTrigger>
-  <DropdownMenu.SubContent class="w-72">
+  <DropdownMenu.SubContent width="wide">
     <DropdownMenu.RadioGroup onValueChange={choose} {value}>
       <!-- The fleet's answer under it, in meta ink: the row reads as
            "Same as the fleet", never as a second copy of the one below. -->
       <DropdownMenu.RadioItem value="fleet">
-        <span class="inherit" data-box>
+        <span class="flex min-w-0 flex-col" data-box>
           <span>{UPSTREAM_WORDS.inherit}</span>
-          <span class="answer">{fleetWords}</span>
+          <span class="type-meta text-ink-muted">{fleetWords}</span>
         </span>
       </DropdownMenu.RadioItem>
       {#each UPSTREAM_POSTS as answer (answer)}
@@ -67,15 +67,3 @@
     </DropdownMenu.RadioGroup>
   </DropdownMenu.SubContent>
 </DropdownMenu.Sub>
-
-<style>
-  .inherit {
-    display: flex;
-    flex-direction: column;
-    min-inline-size: 0;
-  }
-  .answer {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>

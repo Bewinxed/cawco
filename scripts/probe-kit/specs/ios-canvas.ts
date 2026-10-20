@@ -513,7 +513,7 @@ async function captureCanvas(on: On): Promise<void> {
         waitUntil: "domcontentloaded",
       });
       await page
-        .locator('[data-slot="preview-pane"], .preview-pane')
+        .locator('[data-slot="preview-pane"]')
         .first()
         .waitFor({ timeout: 60_000 });
       await pause(4000);

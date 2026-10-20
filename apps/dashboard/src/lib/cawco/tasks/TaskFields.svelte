@@ -10,6 +10,7 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { IconClose, IconPlus } from "#lib/icons.js";
 
   let {
@@ -65,18 +66,28 @@
   }
 </script>
 
-<section class="part">
-  <h3 class="kit-section-head">Fields</h3>
+<section class="flex flex-col gap-space-2">
+  <h3 class={sectionHeadVariants({ inset: "flush" })}>Fields</h3>
   {#if Object.keys(fields).length > 0}
-    <dl data-slot="grid" class="grid">
+    <!-- The Relations' key column, so the two parts' values stand on one line. -->
+    <dl
+      data-slot="grid"
+      class="m-0 grid grid-cols-(--cols) gap-x-space-2 gap-y-space-1"
+      style:--cols="var(--c-task-key-w) minmax(0, 1fr)"
+    >
       {#each Object.entries(fields) as [key, value] (key)}
-        <dt class="key">{key}</dt>
-        <dd data-slot="value" class="value">
+        <dt class="type-code liga-none wrap-anywhere pt-space-1 text-ink-muted">
+          {key}
+        </dt>
+        <dd
+          data-slot="value"
+          class="group/value m-0 flex min-w-0 items-center gap-space-1"
+        >
           {#if editing === key}
             <input
               data-slot="task-fields-field"
               aria-label={key}
-              class="field"
+              class="h-c-btn-h-sm min-w-0 flex-auto rounded-sm border border-border-control bg-surface-raised px-space-2 type-body text-ink-strong"
               onblur={() => commit(key)}
               onkeydown={(event) => {
                 if (event.key === "Enter") {
@@ -93,7 +104,7 @@
           {:else}
             <button
               data-slot="shown"
-              class="shown press-tint focus-inset"
+              class="press-tint focus-inset min-w-0 flex-auto cursor-text rounded-sm border-none border-current bg-transparent px-space-2 py-space-1 type-body wrap-anywhere text-start text-ink-strong hover:bg-surface-hover"
               onclick={() => {
                 editing = key;
                 draft = said(value);
@@ -104,8 +115,8 @@
             <Button
               data-drop
               aria-label="Remove {key}"
-              class="drop"
               onclick={() => save({ [key]: "" })}
+              reveal="value-hover"
               size="icon-xs"
               variant="ghost"><IconClose /></Button
             >
@@ -114,13 +125,13 @@
       {/each}
     </dl>
   {:else if !adding}
-    <p class="hint">
+    <p class="type-meta text-ink-muted">
       No fields yet. A field is any key the project uses, like priority or due.
     </p>
   {/if}
   {#if adding}
     <form
-      class="new"
+      class="flex flex-wrap items-center gap-space-1"
       onsubmit={(event) => {
         event.preventDefault();
         add();
@@ -129,7 +140,7 @@
       <input
         data-slot="task-fields-field"
         aria-label="Field name"
-        class="field key-in"
+        class="h-c-btn-h-sm min-w-0 shrink grow-0 basis-c-task-key-w rounded-sm border border-border-control bg-surface-raised px-space-2 type-code text-ink-strong"
         placeholder="name"
         bind:value={newKey}
         {@attach (node) => node.focus()}
@@ -137,7 +148,7 @@
       <input
         data-slot="task-fields-field"
         aria-label="Field value"
-        class="field"
+        class="h-c-btn-h-sm min-w-0 flex-auto rounded-sm border border-border-control bg-surface-raised px-space-2 type-body text-ink-strong"
         placeholder="value"
         bind:value={newValue}
       />
@@ -151,108 +162,18 @@
       >
     </form>
   {:else}
+    <!-- Add field's glyph on the heading's edge: the button gives back its
+         padding (`xs`: px-2) and its border (--hit-edge, its width). -->
     <Button
-      class="add self-start text-muted-foreground"
+      class="self-start ms-(--add-edge)"
       onclick={() => {
         adding = true;
       }}
       size="xs"
+      style="--add-edge: calc((var(--spacing) * 2 + var(--hit-edge)) * -1)"
+      tone="muted"
       variant="ghost"><IconPlus /><span>Add field</span></Button
     >
   {/if}
   <RowFault reason={problem} />
 </section>
-
-<style>
-  .part {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .part :global(.kit-section-head) {
-    min-block-size: var(--c-btn-h-xs);
-    margin: 0;
-    padding-inline: 0;
-  }
-  .grid {
-    display: grid;
-    /* The Relations' column, so the two parts' values stand on one line. */
-    grid-template-columns: 6rem minmax(0, 1fr);
-    gap: var(--space-1) var(--space-2);
-    margin: 0;
-  }
-  .key {
-    padding-block-start: var(--space-1);
-    font: var(--type-code);
-    font-variant-ligatures: none;
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-  }
-  .value {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-inline-size: 0;
-    margin: 0;
-  }
-  .shown {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    padding: var(--space-1) var(--space-2);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    font: var(--type-body);
-    color: var(--ink-strong);
-    text-align: start;
-    overflow-wrap: anywhere;
-    cursor: text;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .shown:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .value :global(.drop) {
-    opacity: 0;
-  }
-  .value:hover :global(.drop),
-  .value :global(.drop:focus-visible) {
-    opacity: 1;
-  }
-  @media (pointer: coarse) {
-    .value :global(.drop) {
-      opacity: 1;
-    }
-  }
-  .field {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    block-size: var(--c-btn-h-sm);
-    padding-inline: var(--space-2);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    font: var(--type-body);
-    color: var(--ink-strong);
-  }
-  .new {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1);
-  }
-  .key-in {
-    flex: 0 1 6rem;
-    font: var(--type-code);
-  }
-  /* Add field's glyph on the heading's edge: the button gives back its
-     padding (`xs`: px-2) and its border (--hit-edge, its width). */
-  .part :global(.add) {
-    margin-inline-start: calc((var(--spacing) * 2 + var(--hit-edge)) * -1);
-  }
-  .hint {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>

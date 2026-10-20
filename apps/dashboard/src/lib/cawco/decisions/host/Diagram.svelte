@@ -106,6 +106,7 @@
 </figure>
 
 <style>
+  /* tailwind: this folder is bundled by Bun with no Tailwind build (core decision-host.ts), and Tailwind only generates CSS where it scans the source, so a utility here would draw nothing — https://tailwindcss.com/docs/detecting-classes-in-source-files */
   .diagram {
     min-inline-size: 0;
     --pele-bg: var(--surface-raised);
@@ -131,7 +132,6 @@
     --pele-series-8: var(--border-contrast);
   }
   .draw {
-    display: block;
     min-inline-size: 0;
     overflow-x: auto;
     border-radius: var(--radius-md);
@@ -158,7 +158,6 @@
     border-radius: var(--radius-sm);
     background: var(--surface-page);
     color: var(--ink-strong);
-    cursor: pointer;
     &:focus-visible {
       outline: 2px solid var(--focus-ring);
       outline-offset: 2px;

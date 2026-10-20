@@ -30,7 +30,7 @@
     line,
     current = null,
     flip = true,
-    styleOf,
+    motionOf,
   }: {
     view: TreeView;
     row: BoardRow;
@@ -42,38 +42,42 @@
     current?: string | null;
     /** Its box is reflow's to move (motion/rows); not while a list drives it. */
     flip?: boolean;
-    /** A line's own motion, where the list gives its rows one. */
-    styleOf?: (key: string) => string;
+    /** A line's own motion, as an `animation` value, where the list gives its rows one. */
+    motionOf?: (key: string) => string | undefined;
   } = $props();
 
   /** How a parent's rows open and fold (motion/branch): off each row's mark. */
-  const TREE: BranchOptions = { glyph: ".tree-mark" };
+  const TREE: BranchOptions = { glyph: "[data-tree-mark]" };
 
   const shape = $derived(view.shapeOf(row.id));
+  const motion = $derived(motionOf?.(row.id));
   const older = $derived(view.olderOf(row.id));
   const kids = $derived(
     view.under(rows, row.id).filter((kid) => !older?.tops.has(kid.id))
   );
 </script>
 
-<li
-  data-slot="tree-node"
-  class="tree-node"
-  data-flip={flip ? "box" : undefined}
->
+<li data-tree-node class="relative" data-flip={flip ? "box" : undefined}>
   <div
     data-slot="tree-line"
-    class="tree-line"
+    class="relative"
     data-key={row.id}
-    style={styleOf?.(row.id)}
+    style:animation={motion}
   >
     {#if shape?.parent && shape.depth > 0}
       {@const above = shape.parent}
-      <!-- The parent's column: a click on its rail folds it. -->
+      <!-- The parent's column: a click on its rail folds it, and the
+           pointer's own cursor says so. It reaches from a step left of the
+           rail to the row's own left edge. It draws nothing: a bar that
+           darkened the rail under the pointer read as the line itself
+           reacting, and a nesting line never changes because the pointer is
+           on it. -->
       <button
         aria-hidden="true"
-        class="gutter"
+        class="absolute inset-y-0 left-(--gutter-start) z-1 w-(--gutter-w) p-0 border-none border-current bg-transparent"
         onclick={() => openTrees.set(above, false, view.list)}
+        style:--gutter-start={"calc(var(--nest-x) - var(--nest-pad) - var(--space-2))"}
+        style:--gutter-w="calc(var(--nest-pad) - var(--nest-x) + var(--space-2))"
         tabindex="-1"
         type="button"
       ></button>
@@ -81,16 +85,22 @@
     {@render line(row)}
   </div>
   {#if kids.length > 0}
+    <!-- A delegate under its session (tree.ts): in a list of its own, set in
+         under its parent's glyph and joined to it by the .kit-nest lines
+         (down the rail, round the curve, out along the arm to the child's
+         glyph, over the row's pill), placed as the sidebar's are
+         (motion/branch `nestFrom`), so a tree nests alike in both. -->
     <ul
       data-slot="tree-branch"
-      class="kit-nest tree-branch"
+      data-nest
+      class="kit-nest flex flex-col gap-(--tree-gap) m-0 pt-(--tree-gap) pb-0 ps-(--nest-pad) pe-0 list-none"
       data-flip-anchor
       in:branch={TREE}
       out:branch={TREE}
-      {@attach nestFrom(".tree-mark")}
+      {@attach nestFrom("[data-tree-mark]")}
     >
       {#each kids as kid (kid.id)}
-        <Self {current} {flip} {line} row={kid} {rows} {styleOf} {view} />
+        <Self {current} {flip} {line} {motionOf} row={kid} {rows} {view} />
       {/each}
       {#if older}
         <!-- It arrives with the last row over it, in a change of the list;
@@ -104,7 +114,7 @@
           id={row.id}
           keyOf={(kid) => kid.id}
           list={view.list}
-          style={styleOf?.(kids.at(-1)?.id ?? row.id)}
+          motion={motionOf?.(kids.at(-1)?.id ?? row.id)}
           tall
           trees={view
             .under(view.boxed, row.id)
@@ -115,9 +125,9 @@
               {current}
               {flip}
               {line}
+              {motionOf}
               row={kid}
               rows={view.boxed}
-              {styleOf}
               {view}
             />
           {/snippet}
@@ -126,49 +136,3 @@
     </ul>
   {/if}
 </li>
-
-<style>
-  /* css-scope .session-tree .tree-branch .tree-node .tree-line: the tree's recipe; WorkTabs and HomeRecent draw its container and leaving rows with it */
-  /* A list's trees, and each parent's rows under it: lists of rows,
-     --tree-gap apart, the gap every tree in the app keeps (app.css; the
-     rail's projects list reads the same one). Named for every list that
-     draws this tree, and for a list's own copies of its rows. */
-  :global(.session-tree),
-  :global(.tree-branch) {
-    display: flex;
-    flex-direction: column;
-    gap: var(--tree-gap);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  /* A delegate under its session (tree.ts): in a list of its own, set in
-     under its parent's glyph and joined to it by the .kit-nest lines (down
-     the rail, round the curve, out along the arm to the child's glyph, over
-     the row's pill), placed as the sidebar's are (motion/branch `nestFrom`),
-     so a tree nests alike in both. */
-  :global(.tree-branch) {
-    padding-block-start: var(--tree-gap);
-    padding-inline-start: var(--nest-pad);
-  }
-  :global(.tree-node),
-  :global(.tree-line) {
-    position: relative;
-  }
-  /* A child's parent column: a click on the rail there folds the parent,
-     and the pointer's own cursor says so. It reaches from a step left of
-     the rail to the row's own left edge. It draws nothing: a bar that
-     darkened the rail under the pointer read as the line itself reacting,
-     and a nesting line never changes because the pointer is on it. */
-  .gutter {
-    position: absolute;
-    inset-block: 0;
-    left: calc(var(--nest-x) - var(--nest-pad) - var(--space-2));
-    z-index: 1;
-    inline-size: calc(var(--nest-pad) - var(--nest-x) + var(--space-2));
-    padding: 0;
-    border: 0;
-    background: none;
-    cursor: pointer;
-  }
-</style>

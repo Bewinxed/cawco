@@ -65,9 +65,14 @@
 
 {#if phone.current}
   <Drawer.Root onOpenChange={setOpen} {open}>
-    <Drawer.Content class="caw-float-sheet">
-      <Drawer.Title class="sr-only">Caw, lead of {projectName}</Drawer.Title>
-      <div class="sheet-body">
+    <!-- The kit's bottom sheet as its recipe draws it (ui/drawer): full-bleed
+         and flush on the screen's foot, its top corners rounded, its hairline
+         along the top edge. The panel runs edge to edge inside it, from under
+         the grabber to the foot, which keeps the safe area clear itself
+         (ThreadPane's docked composer). -->
+    <Drawer.Content data-caw-float-sheet height="cap" pad="none">
+      <Drawer.Title visible={false}>Caw, lead of {projectName}</Drawer.Title>
+      <div class="flex min-h-0 flex-auto flex-col overflow-hidden">
         {#key projectId}
           <CawThread {lead} {projectId} {projectName} />
         {/key}
@@ -75,9 +80,13 @@
     </Drawer.Content>
   </Drawer.Root>
 {:else if open}
+  <!-- The card recipe, its content edge to edge and clipped by its radius; it
+       fills the place the page's grid gives it. It comes in as a sheet does,
+       from its own side by --pop-rise as it fades, over --dur-panel on the
+       drawer curve; with less motion it only fades. -->
   <aside
     aria-label="Caw, lead of {projectName}"
-    class="caw-dock"
+    class="grid-area-dock in-data-caw-open:phone:mx-space-5 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@min-[938px]:mt-space-6 in-data-caw-open:@min-[938px]:mr-space-6 in-data-caw-open:@min-[938px]:mb-space-6 in-data-caw-open:@min-[938px]:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile transition-[opacity,translate] duration-(--dur-panel) ease-drawer starting:opacity-0 motion-safe:starting:translate-x-(--pop-rise)"
     data-caw-dock
     {@attach dock}
   >
@@ -86,53 +95,3 @@
     {/key}
   </aside>
 {/if}
-
-<style>
-  /* The card recipe, its content edge to edge and clipped by its radius; it
-     fills the place the page's grid gives it. It comes in as a sheet does,
-     from its own side by --pop-rise as it fades, over --dur-panel on the
-     drawer curve; with less motion it only fades. */
-  .caw-dock {
-    grid-area: dock;
-    display: flex;
-    flex-direction: column;
-    min-block-size: 0;
-    min-inline-size: 0;
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    transition:
-      opacity var(--dur-panel) var(--ease-drawer),
-      translate var(--dur-panel) var(--ease-drawer);
-
-    @starting-style {
-      opacity: 0;
-    }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .caw-dock {
-      @starting-style {
-        translate: var(--pop-rise) 0;
-      }
-    }
-  }
-  /* css-scope .caw-float-sheet: the kit sheet this component opens */
-  /* The kit's bottom sheet as its recipe draws it (ui/drawer): full-bleed
-     and flush on the screen's foot, its top corners rounded, its hairline
-     along the top edge. The panel runs edge to edge inside it, from under
-     the grabber to the foot, which keeps the safe area clear itself
-     (ThreadPane's docked composer). */
-  :global([data-slot="drawer-content"].caw-float-sheet) {
-    --drawer-max-height: 85dvh;
-    block-size: 85dvh;
-    padding: 0;
-  }
-  .sheet-body {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-block-size: 0;
-    overflow: hidden;
-  }
-</style>

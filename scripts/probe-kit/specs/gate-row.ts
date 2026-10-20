@@ -84,9 +84,9 @@ const readRow = (page: Page) =>
       ),
       role: list?.getAttribute("role") ?? null,
       steps: [...(list?.querySelectorAll(":scope > li") ?? [])].map((li) => ({
-        name: words(li.querySelector(".gate-name")),
+        name: words(li.querySelector('[data-slot="gate-name"]')),
         code: words(li.querySelector("code")),
-        facts: words(li.querySelector(".gate-facts")),
+        facts: words(li.querySelector('[data-slot="gate-facts"]')),
       })),
       faults: [
         ...(row?.querySelectorAll('[data-row-fault] [data-slot="reason"]') ??
@@ -262,9 +262,9 @@ async function probe(kit: Kit) {
     };
     const style = (el: Element | null | undefined) =>
       el ? getComputedStyle(el) : null;
-    const name = row?.querySelector(".gate-name");
+    const name = row?.querySelector('[data-slot="gate-name"]');
     const code = row?.querySelector("code");
-    const facts = row?.querySelector(".gate-facts");
+    const facts = row?.querySelector('[data-slot="gate-facts"]');
     return {
       value: left(row?.querySelector('[data-slot="value"]')),
       name: textLeft(name),

@@ -91,20 +91,22 @@
     <DropdownMenu.SubTrigger
       ><IconLayers /><span>Canvas view</span></DropdownMenu.SubTrigger
     >
-    <DropdownMenu.SubContent class="w-52"
+    <DropdownMenu.SubContent width="regular"
       >{@render entries()}</DropdownMenu.SubContent
     >
   </DropdownMenu.Sub>
 {:else}
   <DropdownMenu.Root>
-    <!-- The head's own button, as Inspect beside it: SideSurface's head recipe draws it; the trigger brings touch-hit. -->
+    <!-- The head's own control, as Inspect beside it: the kit's sm ghost. -->
     <DropdownMenu.Trigger
       aria-label="Canvas view"
+      size="icon-sm"
       title="Canvas view: map, scheme, widths, motion, zoom, verify"
+      variant="ghost"
     >
       <IconLayers />
     </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" class="w-52">
+    <DropdownMenu.Content align="end" width="regular">
       {@render entries()}
     </DropdownMenu.Content>
   </DropdownMenu.Root>

@@ -38,10 +38,23 @@
   );
 </script>
 
-<div class="task-node" data-kind={node.task.kind ?? undefined}>
-  <Handle id="flow-in" isConnectable={false} position={ends.in} type="target" />
+<!-- The board's column width, so a card reads the same on both. Waiting on
+     you, the `you` column's wash stands as a margin round the card. -->
+<div
+  data-slot="task-node"
+  class="w-c-board-col-min rounded-md kind-you:bg-brand-wash kind-you:p-space-1"
+  data-kind={node.task.kind ?? undefined}
+>
+  <Handle
+    id="flow-in"
+    class="pointer-events-none size-px min-h-0 min-w-0 border-current border-none bg-transparent"
+    isConnectable={false}
+    position={ends.in}
+    type="target"
+  />
   <Handle
     id="side-in"
+    class="pointer-events-none size-px min-h-0 min-w-0 border-current border-none bg-transparent"
     isConnectable={false}
     position={ends.sideIn}
     type="target"
@@ -55,36 +68,16 @@
   />
   <Handle
     id="flow-out"
+    class="pointer-events-none size-px min-h-0 min-w-0 border-current border-none bg-transparent"
     isConnectable={false}
     position={ends.out}
     type="source"
   />
   <Handle
     id="side-out"
+    class="pointer-events-none size-px min-h-0 min-w-0 border-current border-none bg-transparent"
     isConnectable={false}
     position={ends.sideOut}
     type="source"
   />
 </div>
-
-<style>
-  /* The board's column width, so a card reads the same on both. */
-  .task-node {
-    inline-size: 15rem;
-    border-radius: var(--radius-md);
-  }
-  /* Waiting on you: the `you` column's wash, as a margin round the card. */
-  .task-node[data-kind="you"] {
-    padding: var(--space-1);
-    background: var(--brand-wash);
-  }
-  .task-node :global(.svelte-flow__handle) {
-    inline-size: 1px;
-    block-size: 1px;
-    min-inline-size: 0;
-    min-block-size: 0;
-    border: 0;
-    background: transparent;
-    pointer-events: none;
-  }
-</style>

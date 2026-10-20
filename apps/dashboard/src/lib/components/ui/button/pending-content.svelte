@@ -48,6 +48,7 @@
   import type { SVGAttributes } from "svelte/elements";
   import { CURVE, dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { tickVariants } from "#lib/components/ui/checkbox/checkbox.svelte";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconTick } from "#lib/icons.js";
@@ -181,7 +182,16 @@
   });
 </script>
 
-<span class="icon-swap kit-slot" data-over={Icon === undefined || undefined}>
+<!-- The icon slot: its icon at rest, the spinner while its work runs, the
+     check when it is done, cross-fading in one cell over --dur-morph, the
+     clock its label crosses on. With no icon at rest it stays folded for
+     good (no width and no gap) and draws what it shows over its label's
+     start while the label fades, so its width never changes. -->
+<span
+  data-slot="btn-slot"
+  class="icon-swap w-(--btn-icon) flex-none [--icon-swap-dur:var(--dur-morph)] data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
+  data-over={Icon === undefined || undefined}
+>
   {#if Icon}
     <span data-active={phase === "idle" && !ringShown}
       ><Icon class="size-(--btn-icon)" /></span
@@ -198,14 +208,15 @@
     <span data-active={ringShown}
       ><svg
         aria-hidden="true"
-        class="kit-ring size-(--btn-icon)"
+        class="size-(--btn-icon)"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
       >
         <circle cx="12" cy="12" opacity="0.25" r="9" stroke-width="2.5" />
         <circle
-          class="kit-ring-arc"
+          class="origin-center -rotate-90 transform-view transition-[stroke-dasharray] duration-(--dur-pop) ease-out motion-reduce:transition-off"
+          data-slot="ring-arc"
           cx="12"
           cy="12"
           pathLength="100"
@@ -220,19 +231,26 @@
   {/if}
   <span data-active={phase === "done"}
     ><IconTick
-      class="kit-tick size-(--btn-icon)"
+      data-slot="tick"
+      class={[tickVariants({ clock: "morph" }), "size-(--btn-icon)"]}
       data-on={phase === "done"}
     /></span
   >
   {#if arrivals}
-    <span aria-hidden="true" class="kit-arrivals">{@render arrivals()}</span>
+    <span aria-hidden="true" class="relative size-full pointer-events-none"
+      >{@render arrivals()}</span
+    >
   {/if}
 </span>
 {#if label === undefined}
   <!-- Icon only: nothing to morph. -->
 {:else}
-  <span class="kit-label"
-    ><span class="kit-text" data-covered={covered}
+  <span
+    class="has-data-reason:inline-flex has-data-reason:flex-col has-data-reason:items-box-start"
+    ><span
+      data-slot="label-text"
+      class="transition-[opacity] duration-(--dur-morph) ease-out covered-true:opacity-0"
+      data-covered={covered}
       >{#if swapsLabel && Icon === undefined}
         <!-- No rest icon: its pending wording is never drawn (the spinner
              stands over the label's start instead), so it never stands in
@@ -243,11 +261,16 @@
           >{pendingLabel}</span
         >
       {:else if swapsLabel}
-        <span class="kit-words"
-          ><span aria-hidden={pending || undefined} data-active={!pending}
-            ><MorphText text={label} /></span
-          ><span aria-hidden={!pending || undefined} data-active={pending}
-            >{pendingLabel}</span
+        <!-- The wording that steps out goes soft (DESIGN.md, Buttons: Pending). -->
+        <span class="inline-grid justify-items-start" data-slot="words"
+          ><span
+            aria-hidden={pending || undefined}
+            class="col-start-1 row-start-1 transition-[opacity] duration-(--dur-morph) ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:blur-(--c-btn-words-blur)"
+            data-active={!pending}><MorphText text={label} /></span
+          ><span
+            aria-hidden={!pending || undefined}
+            class="col-start-1 row-start-1 transition-[opacity] duration-(--dur-morph) ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:blur-(--c-btn-words-blur)"
+            data-active={pending}>{pendingLabel}</span
           ></span
         >
       {:else}
@@ -255,80 +278,12 @@
       {/if}</span
     >
     {#if reason}
-      <span class="kit-reason" role="alert" transition:unfold>{reason}</span>
+      <span
+        class="type-meta block max-w-c-measure-meta text-status-fail-ink whitespace-normal wrap-anywhere"
+        data-reason
+        role="alert"
+        transition:unfold>{reason}</span
+      >
     {/if}</span
   >
 {/if}
-
-<style>
-  /* Wound from the top, as a clock is read; each new share eases in. */
-  .kit-ring-arc {
-    transform-box: view-box;
-    transform-origin: center;
-    rotate: -90deg;
-    transition: stroke-dasharray var(--dur-pop) var(--ease-out);
-  }
-  /* With less motion the arc lands at its share at once. */
-  @media (prefers-reduced-motion: reduce) {
-    .kit-ring-arc {
-      transition: none;
-    }
-  }
-  /* What lands in the slot stands over the ring, in the slot's own box. */
-  .kit-arrivals {
-    position: relative;
-    inline-size: 100%;
-    block-size: 100%;
-    pointer-events: none;
-  }
-  /* The words give way to what a label-only button's slot draws over them,
-     on the slot's clock. */
-  .kit-text {
-    transition: opacity var(--dur-morph) var(--ease-out);
-
-    &[data-covered="true"] {
-      opacity: 0;
-    }
-  }
-  /* The label and its pending wording in one cell, read from the start: the
-     cell is as wide as the wider one, and the swap is one opacity and blur
-     transition over --dur-morph on --ease-out, both words on the same
-     clock. With less motion the words still cross-fade, unblurred. */
-  .kit-words {
-    display: inline-grid;
-    justify-items: start;
-
-    > * {
-      grid-area: 1 / 1;
-      transition: opacity var(--dur-morph) var(--ease-out);
-    }
-    > [data-active="false"] {
-      opacity: 0;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      > * {
-        transition:
-          opacity var(--dur-morph) var(--ease-out),
-          filter var(--dur-morph) var(--ease-out);
-      }
-      > [data-active="false"] {
-        filter: blur(2px);
-      }
-    }
-  }
-  /* The reason stands under the label, from where the label starts, in the
-     fail status's ink; it wraps rather than widening the menu past reading. */
-  .kit-label:has(> .kit-reason) {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: start;
-  }
-  .kit-reason {
-    display: block;
-    max-inline-size: 32ch;
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-</style>

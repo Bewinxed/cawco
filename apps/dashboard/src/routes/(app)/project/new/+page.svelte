@@ -38,6 +38,10 @@
   import TemplateCards from "#lib/cawco/project/TemplateCards.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
+  import {
+    chipsVariants,
+    chipVariants,
+  } from "#lib/components/ui/chip/index.js";
   import { goto } from "$app/navigation";
 
   /** Caw's side here, on the page and over a card. */
@@ -164,23 +168,34 @@
   <title>New project &middot; CawCo</title>
 </svelte:head>
 
-<main class="new-project">
+<main
+  class="mx-auto flex w-full max-w-c-new-project-w flex-col items-center gap-space-8 px-space-6 pt-(--pad-top) pb-space-8 max-phone:gap-space-6 max-phone:px-space-4 max-phone:pt-space-7 max-phone:pb-space-6"
+  style:--pad-top="calc(var(--space-8) * 2)"
+>
   <!-- His slot goes with him when he peeks over a card, and comes back
        with him: the hero's height tweens (morph) rather than leaving a band. -->
-  <div data-slot="ask" class="ask" {@attach morph()}>
+  <div
+    data-slot="ask"
+    class="flex w-full flex-col items-center gap-space-4"
+    {@attach morph()}
+  >
     {#if caw === "page"}
+      <!-- His slot holds his height whether or not he is drawn: `c-caw-hero`
+           is `CAW_SIZE`; keep them equal. -->
       <div
         data-slot="caw-80"
-        class="caw-80"
+        class="grid min-h-c-caw-hero place-items-center"
         data-share={made ? `caw:${made}` : undefined}
       >
         <Caw ongone={gone} present={!leaving} size={CAW_SIZE} status="ready" />
       </div>
     {/if}
-    <h1 data-slot="title" class="title">What are we working on?</h1>
+    <h1 data-slot="title" class="type-title text-center text-ink-strong">
+      What are we working on?
+    </h1>
     <div
       data-slot="new-page-field"
-      class="field"
+      class="relative w-full max-w-(--c-new-project-field-w)"
       style:block-size="calc({footHeight}px + var(--space-4))"
     >
       <Composer
@@ -202,11 +217,17 @@
       />
     </div>
     <!-- As wide as the field, so the chips stand on its composer's column. -->
-    <div class="chips-box">
-      <div data-slot="chips" class="chips kit-chips">
+    <div class="relative w-full max-w-(--c-new-project-field-w)">
+      <div
+        data-slot="chips"
+        class={chipsVariants({
+          class: "px-(--chips-px) max-desk:px-space-3",
+        })}
+        style:--chips-px="calc((100% - var(--c-composer-w)) / 2)"
+      >
         {#each STARTERS as text (text)}
           <button
-            class="kit-chip touch-hit"
+            class={chipVariants({ class: "touch-hit" })}
             onclick={() => starter(text)}
             type="button"
           >
@@ -217,7 +238,7 @@
     </div>
   </div>
 
-  <div data-slot="cards" class="cards">
+  <div data-slot="cards" class="w-full">
     <TemplateCards
       action={noMachine
         ? {
@@ -240,60 +261,3 @@
     />
   </div>
 </main>
-
-<style>
-  .new-project {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-8);
-    inline-size: 100%;
-    max-inline-size: 72rem;
-    margin-inline: auto;
-    padding: calc(var(--space-8) * 2) var(--space-6) var(--space-8);
-  }
-  .ask {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-4);
-    inline-size: 100%;
-  }
-  .caw-80 {
-    display: grid;
-    place-items: center;
-    min-block-size: 80px;
-  }
-  .title {
-    font: var(--type-title);
-    color: var(--ink-strong);
-    text-align: center;
-  }
-  /* The session Composer stands on this box's foot (Composer .dock). */
-  .field,
-  .chips-box {
-    position: relative;
-    inline-size: 100%;
-    max-inline-size: var(--c-new-project-field-w);
-  }
-  /* The starters are the kit option chip (.kit-chips / .kit-chip in
-     app.css) under the field, on the composer's own column in it (Composer
-     `.composer`: --c-composer-w, centred; under 900px, --space-3 in
-     from its box), so the chips and the pill share one start edge. */
-  .chips {
-    padding-inline: calc((100% - var(--c-composer-w)) / 2);
-
-    @media (width < 900px) {
-      padding-inline: var(--space-3);
-    }
-  }
-  .cards {
-    inline-size: 100%;
-  }
-  @media (max-width: 639px) {
-    .new-project {
-      gap: var(--space-6);
-      padding: var(--space-7) var(--space-4) var(--space-6);
-    }
-  }
-</style>

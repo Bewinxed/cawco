@@ -870,9 +870,13 @@ const sessionChild = (row: InstanceRow): TrayChild => {
       case "stopped":
       case "discarded":
         return "cancelled";
-      default:
-        return cawco.activityOf(row.id) === "idle" ? "done" : "running";
+      case "moving":
+      case "running":
+      case "sleeping":
+      case "unknown":
+        break;
     }
+    return cawco.activityOf(row.id) === "idle" ? "done" : "running";
   })();
   return {
     id: row.id,
@@ -3538,7 +3542,17 @@ function handleFrame(frame: FramePayload): void {
       break;
     }
 
-    default:
+    case "asleep":
+    case "delegate_event":
+    case "frame":
+    case "held_send":
+    case "recovery_unavailable":
+    case "rejected":
+    case "scratch_worktree":
+    case "send":
+    case "session_address":
+    case "stopped":
+    case "taken_send":
       // Every other FramePayload kind (instances, usage, delegate events,
       // fleet watch's notices, …) is handled above, before this switch is reached.
       break;

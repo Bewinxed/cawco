@@ -38,24 +38,36 @@
       borderRadius: 8,
     })
   );
-  const STYLE: Record<TaskEdgeKind, string> = {
-    after: "stroke: var(--ink-muted); stroke-width: 1.5px",
-    parent: "stroke: var(--nest-ink); stroke-width: var(--nest-line, 1px)",
-    related:
-      "stroke: var(--ink-muted); stroke-width: 2px; stroke-dasharray: 0 6; stroke-linecap: round",
-    found_in:
-      "stroke: var(--ink-subtle); stroke-width: 1px; stroke-dasharray: 6 4",
-  };
-  const style = $derived(
-    edge.kind === "after" && edge.landed
-      ? "stroke: var(--border-control); stroke-width: 1.5px"
-      : STYLE[edge.kind]
-  );
 </script>
 
-<BaseEdge
-  {id}
-  markerEnd={edge.kind === "after" ? `url(#${edge.marker})` : undefined}
-  path={route[0]}
-  {style}
-/>
+<!-- An edge's paint, inline on its path, one kind's own: it replaces Svelte
+     Flow's `--xy-edge-stroke*` defaults, and a change restyles the path
+     alone. -->
+{#if edge.kind === "parent"}
+  <BaseEdge
+    {id}
+    path={route[0]}
+    style="stroke: var(--nest-ink); stroke-width: var(--nest-line, 1px)"
+  />
+{:else if edge.kind === "related"}
+  <BaseEdge
+    {id}
+    path={route[0]}
+    style="stroke: var(--ink-muted); stroke-width: 2px; stroke-dasharray: 0 6; stroke-linecap: round"
+  />
+{:else if edge.kind === "found_in"}
+  <BaseEdge
+    {id}
+    path={route[0]}
+    style="stroke: var(--ink-subtle); stroke-width: 1px; stroke-dasharray: 6 4"
+  />
+{:else}
+  <BaseEdge
+    {id}
+    markerEnd={`url(#${edge.marker})`}
+    path={route[0]}
+    style={edge.landed
+      ? "stroke: var(--border-control); stroke-width: 1.5px"
+      : "stroke: var(--ink-muted); stroke-width: 1.5px"}
+  />
+{/if}

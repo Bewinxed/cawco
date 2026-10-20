@@ -180,13 +180,17 @@
   });
 </script>
 
-<div class="relay" data-relay>
+<div
+  class="group/relay flex flex-col"
+  data-instant={instant || undefined}
+  data-relay
+  style:--relay-gap="var(--space-row)"
+>
   <div
     aria-label="Next 5 hours: {label}"
-    class="bar"
+    class="flex h-space-2 gap-(--relay-gap) overflow-hidden rounded-hair bg-border-control hover-none:h-space-3 coarse:h-space-3 max-phone:h-space-3"
     data-relay-bar
     role="img"
-    class:instant
   >
     {#each segments as seg (seg.key)}
       {#if seg.kind === "band"}
@@ -204,8 +208,9 @@
             <span
               {...props}
               aria-label={tip}
-              class="band"
+              class="min-w-0 shrink basis-0 rounded-hair bg-(--c) transition-[flex-grow] duration-(--dur-panel) ease-out group-data-instant/relay:transition-off data-stale:opacity-(--account-stale-opacity) motion-reduce:transition-off"
               data-relay-band={id}
+              data-stale={seg.ring.state === "stale" || undefined}
               onpointerenter={(event) => {
                 (
                   props.onpointerenter as
@@ -223,142 +228,49 @@
               role="img"
               style:--c={seg.ring.color}
               style:flex-grow={seg.ms}
-              class:stale={seg.ring.state === "stale"}
               in:fade={bandIn()}
               out:bandOut
             ></span>
           {/snippet}
         </Tip>
       {:else}
+        <!-- A span nobody carries is hatched, the groove's paint over the
+             ground's. -->
         <span
           data-stop={seg.key === stopKey || undefined}
           aria-hidden="true"
-          class="blank"
+          class="min-w-0 shrink basis-0 hatched transition-[flex-grow] duration-(--dur-panel) ease-out group-data-instant/relay:transition-off data-stop:border-s data-stop:border-s-ink-strong motion-reduce:transition-off"
           data-relay-stop={seg.key === stopKey ? "" : undefined}
           style:flex-grow={seg.ms}
-          class:stop={seg.key === stopKey}
         ></span>
       {/if}
     {/each}
   </div>
-  <div aria-hidden="true" class="ticks">
+  <div
+    aria-hidden="true"
+    class="relative h-(--ticks-h) type-meta num text-ink-subtle"
+    style:--ticks-h={"calc(var(--space-1) + var(--text-meta) * var(--leading-meta))"}
+  >
     {#each ticks as tick (tick.hour)}
       <!-- mark-line: the tick stands above its hour, not beside it -->
       <span
         data-end={tick.hour === 5 || undefined}
-        class="tick"
+        class="absolute inset-y-0 flex -translate-x-1/2 flex-col items-center transition-[inset-inline-start] duration-(--dur-panel) ease-out group-data-instant/relay:transition-off not-data-end:data-start:translate-none not-data-end:data-start:items-start data-end:-translate-x-full data-end:items-end motion-reduce:transition-off"
+        data-start={tick.hour === 0 || undefined}
         data-tick={tick.hour}
         style:inset-inline-start={tick.at}
-        class:end={tick.hour === 5}
-        class:start={tick.hour === 0}
       >
-        <span data-slot="mark" class="mark" data-tick-mark></span>
-        <span data-slot="relay-label" class="label mono-figure" data-tick-label
-          >{tick.text}</span
+        <span
+          data-slot="mark"
+          class="h-space-1 w-px flex-none bg-ink-subtle"
+          data-tick-mark
+        ></span>
+        <span
+          data-slot="relay-label"
+          class="mono-figure whitespace-nowrap"
+          data-tick-label>{tick.text}</span
         >
       </span>
     {/each}
   </div>
 </div>
-
-<style>
-  .relay {
-    --relay-gap: 2px;
-    display: flex;
-    flex-direction: column;
-  }
-  /* The groove the bands stand in: the empty track a ring is drawn on, so
-     the groove and the gap nobody carries show on the raised surface in
-     both schemes (by night the deep recess all but met it). */
-  .bar {
-    display: flex;
-    gap: var(--relay-gap);
-    block-size: var(--space-2);
-    overflow: hidden;
-    border-radius: var(--radius-hair);
-    background: var(--border-control);
-
-    @media (hover: none), (pointer: coarse), (max-width: 640px) {
-      block-size: var(--space-3);
-    }
-  }
-  .band,
-  .blank {
-    flex-basis: 0;
-    flex-shrink: 1;
-    min-inline-size: 0;
-    transition: flex-grow var(--dur-panel) var(--ease-out);
-  }
-  .band {
-    border-radius: var(--radius-hair);
-    background: var(--c);
-  }
-  .band.stale {
-    opacity: var(--account-stale-opacity);
-  }
-  /* A span nobody carries is hatched, the groove's paint over the ground's,
-     and the first one, the stop, starts on a 1px ink-strong tick, so the bar
-     shows where you're stopped without a word. */
-  .blank {
-    background: repeating-linear-gradient(
-      -45deg,
-      var(--border-control) 0 1px,
-      var(--ring-ground, var(--surface-raised)) 1px var(--space-1)
-    );
-  }
-  .blank.stop {
-    border-inline-start: 1px solid var(--ink-strong);
-  }
-  .instant .band,
-  .instant .blank {
-    transition: none;
-  }
-  /* Under the bar: a hairline at each hour, its label centred on it; "now"
-     starts at the bar's start and "+5h" ends at its end. One meta line
-     under the marks. */
-  .ticks {
-    position: relative;
-    block-size: calc(var(--space-1) + var(--text-meta) * var(--leading-meta));
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-subtle);
-  }
-  .tick {
-    position: absolute;
-    inset-block: 0;
-    translate: -50% 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    transition: inset-inline-start var(--dur-panel) var(--ease-out);
-
-    &.start {
-      translate: none;
-      align-items: flex-start;
-    }
-    &.end {
-      translate: -100% 0;
-      align-items: flex-end;
-    }
-  }
-  .mark {
-    flex: none;
-    inline-size: 1px;
-    block-size: 3px;
-    background: var(--ink-subtle);
-  }
-  .label {
-    margin-block-start: 1px;
-    white-space: nowrap;
-  }
-  .relay:has(.instant) .tick {
-    transition: none;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .band,
-    .blank,
-    .tick {
-      transition: none;
-    }
-  }
-</style>

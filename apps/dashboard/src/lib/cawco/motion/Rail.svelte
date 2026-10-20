@@ -31,7 +31,7 @@
     label,
     class: className = "",
     itemClass = "",
-    itemStyle,
+    stagger,
     item,
     tipExtra,
     labelled = false,
@@ -44,7 +44,8 @@
     label: string;
     class?: string;
     itemClass?: string;
-    itemStyle?: (index: number) => string;
+    /** Each item's entrance delay is this many ms per place (`--delay`, read by `ns-in`). */
+    stagger?: number;
     /** What an item draws: its mark, and whatever else it carries. */
     item: Snippet<[Item, number]>;
     /** Said after the name in the travelling label ("soon"). */
@@ -178,7 +179,7 @@
   data-rail-class={className}
   data-slot="rail"
   aria-label={label}
-  class="rail {className}"
+  class="group/rail relative {className}"
   data-axis={axis}
   onfocusout={() => {
     tip = -1;
@@ -195,7 +196,7 @@
   <span
     data-slot="thumb"
     aria-hidden="true"
-    class="thumb"
+    class="pointer-events-none absolute top-0 left-0 rounded-sm bg-surface-lift shadow-raised motion-safe:data-placed:transition-[transform,width,height] motion-safe:data-placed:duration-(--dur-morph) motion-safe:data-placed:ease-in-out"
     data-placed={placed || undefined}
     style:height={thumbBox ? `${thumbBox.h}px` : undefined}
     style:opacity={thumbBox ? 1 : 0}
@@ -207,7 +208,7 @@
     <button
       aria-checked={entry.id === value}
       aria-label={entry.label}
-      class="rail-item {itemClass}"
+      class="press-tint relative rounded-sm border-none border-current bg-transparent p-0 text-ink-muted transition-[background-color] duration-(--dur-control) ease-out hover:enabled:aria-checked-false:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 aria-checked:text-ink-strong {itemClass}"
       data-rail-item-class={itemClass}
       data-rail-item={entry.id}
       disabled={entry.disabled}
@@ -218,25 +219,31 @@
         }
       }}
       role="radio"
-      style={itemStyle?.(i)}
+      style:--delay={stagger === undefined ? undefined : `${i * stagger}ms`}
       tabindex={entry.id === value ? 0 : -1}
       type="button"
-      class:on={entry.id === value}
     >
       {@render item(entry, i)}
     </button>
   {/each}
   {#if !labelled}
+    <!-- One label for the whole rail: beside a vertical rail, under a
+         horizontal one. -->
     <span
+      data-slot="tip"
       aria-hidden="true"
-      class="tip"
+      class="pointer-events-none absolute top-0 left-0 z-5 flex items-center overflow-hidden rounded-sm bg-ink-strong text-neutral-2 shadow-raised transition-[opacity] duration-(--dur-control) ease-out motion-safe:transition-rail-tip group-axis-x/rail:top-(--tip-off) group-axis-y/rail:left-(--tip-off)"
+      style:--tip-off="calc(100% + var(--space-2))"
       style:height={tipBox ? `${tipBox.h}px` : undefined}
       style:opacity={tip >= 0 ? 1 : 0}
       style:transform={translate(tipBox, axis)}
       style:width="{tipWidth}px"
     >
       {#key shownTip}
-        <span class="tip-text" bind:offsetWidth={tipWidth}
+        <span
+          data-slot="tip-text"
+          class="inline-flex items-center gap-space-2 px-space-3 font-body text-size-meta leading-none font-normal whitespace-nowrap motion-safe:animate-rail-label-in"
+          bind:offsetWidth={tipWidth}
           >{items[shownTip]?.label}
           {#if tipExtra && items[shownTip]}
             {@render tipExtra(items[shownTip])}
@@ -246,88 +253,3 @@
     </span>
   {/if}
 </div>
-
-<style>
-  .rail {
-    position: relative;
-  }
-  .thumb {
-    position: absolute;
-    top: 0;
-    left: 0;
-    background: var(--surface-lift);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-raised);
-    pointer-events: none;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .thumb[data-placed] {
-      transition:
-        transform var(--dur-morph) var(--ease-in-out),
-        width var(--dur-morph) var(--ease-in-out),
-        height var(--dur-morph) var(--ease-in-out);
-    }
-  }
-  .rail-item {
-    position: relative;
-    padding: 0;
-    background: transparent;
-    border: 0;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    color: var(--ink-muted);
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  .rail-item.on {
-    color: var(--ink-strong);
-  }
-  @media (hover: hover) {
-    .rail-item:not(.on):not(:disabled):hover {
-      background: var(--surface-hover);
-    }
-  }
-  .rail-item:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-  }
-  /* One label for the whole rail: beside a vertical rail, under a
-     horizontal one. */
-  .tip {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 5;
-    display: flex;
-    align-items: center;
-    overflow: hidden;
-    background: var(--ink-strong);
-    color: var(--neutral-2, #fff);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-raised);
-    pointer-events: none;
-    transition: opacity var(--dur-control) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        transform var(--dur-morph) var(--ease-in-out),
-        width var(--dur-morph) var(--ease-in-out),
-        opacity var(--dur-control) var(--ease-out);
-    }
-  }
-  .rail[data-axis="y"] > .tip {
-    left: calc(100% + 6px);
-  }
-  .rail[data-axis="x"] > .tip {
-    top: calc(100% + 6px);
-  }
-  .tip-text {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 10px;
-    font: var(--weight-body) var(--text-meta) / 1 var(--font-body);
-    white-space: nowrap;
-    @media (prefers-reduced-motion: no-preference) {
-      animation: rail-label-in var(--dur-exit) var(--ease-out) both;
-    }
-  }
-</style>

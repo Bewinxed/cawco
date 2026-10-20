@@ -12,7 +12,7 @@
    * dissolve into the chosen tab's sheet (HeadFade); at the top there is
    * nothing under the strip and the band is clear.
    *
-   * `?theme=` light | dark; `?at=` the index of the tab chosen first (1).
+   * In the reader's theme; `?at=` the index of the tab chosen first (1).
    * `window.__ht.choose(id)` chooses a tab as a click does; `ids` and
    * `chosen()` say the rest.
    *
@@ -27,7 +27,6 @@
   import type { Message } from "#lib/cawco/types.js";
   import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
   import type { LeafNode } from "#lib/cawco/workspace/workspace.svelte.js";
-  import { theme } from "#lib/theme.svelte.js";
   import { page } from "$app/state";
 
   const ids = [
@@ -185,13 +184,6 @@
     active: ids[first],
   });
 
-  const scheme = $derived(
-    page.url.searchParams.get("theme") === "dark" ? "dark" : "light"
-  );
-  $effect(() => {
-    theme.set(scheme);
-  });
-
   /** Chooses a tab in the bench's group, as a click on it does. */
   function choose(id: string) {
     if (leaf.tabs.includes(id)) {
@@ -206,14 +198,14 @@
    */
   function benchClick(event: MouseEvent) {
     const target = event.target instanceof Element ? event.target : null;
-    const tab = target?.closest<HTMLElement>(".tab");
+    const tab = target?.closest<HTMLElement>('[data-slot="tab"]');
     const id = tab
       ?.querySelector<HTMLElement>("[data-session-tab]")
       ?.getAttribute("data-session-tab");
     if (!(tab && id)) {
       return;
     }
-    if (target?.closest(".tclose")) {
+    if (target?.closest('[data-slot="tclose"]')) {
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -242,15 +234,32 @@
 
 <svelte:head><title>Transcript head proof | CawCo</title></svelte:head>
 
-<!-- Over the shell and anything it draws (a hub banner): one group, its
-     strip on the shelf and its panes under it. -->
+<!-- Over the shell and anything it draws (a hub banner), under what the strip
+     opens: the session card and a tab's menu are portalled to the body on
+     the floating layer (--layer-float, which bits-ui writes onto their
+     wrapper), so the bench stands on the bench layer under it. One group,
+     its strip on the shelf and its panes under it. -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="proof" data-head-tint onclickcapture={benchClick}>
+<div
+  class="@container/leaf fixed inset-0 z-(--layer-bench) flex flex-col bg-surface-shelf pt-space-7 text-ink-strong"
+  data-head-tint
+  onclickcapture={benchClick}
+>
   <PaneTabs {leaf} />
-  <div data-slot="stack" class="stack">
+  <!-- The group's panes (PaneLeaf `.stack`, `.pane`, `.pane-hidden`): every
+       one laid out in the same box, only the chosen one drawn. -->
+  <div
+    data-slot="stack"
+    class="relative flex min-h-0 min-w-0 flex-auto overflow-hidden bg-surface-recess"
+  >
     {#each ids as id (id)}
       {@const shown = leaf.active === id}
-      <div data-slot="slot" class="slot" data-pane={id} class:hidden={!shown}>
+      <div
+        data-slot="slot"
+        class="absolute inset-0 flex data-hidden:pointer-events-none data-hidden:content-visibility-hidden"
+        data-hidden={!shown || undefined}
+        data-pane={id}
+      >
         <SessionPane
           active={shown}
           browsing={null}
@@ -264,44 +273,3 @@
     {/each}
   </div>
 </div>
-
-<style>
-  /* A group as the workspace lays one out (PaneLeaf `.leaf`), over the
-     whole window, a strip's room above it on the shelf. */
-  .proof {
-    position: fixed;
-    inset: 0;
-    z-index: 2147483000;
-    container: leaf / inline-size;
-    display: flex;
-    flex-direction: column;
-    padding-block-start: var(--space-7);
-    background: var(--surface-shelf);
-    color: var(--ink-strong);
-  }
-  /* What the strip opens (the session card, a tab's menu) is portalled to
-     the body and stands over the bench. */
-  :global(body:has([data-head-tint]) [data-bits-floating-content-wrapper]) {
-    z-index: 2147483001 !important;
-  }
-  /* The group's panes (PaneLeaf `.stack`, `.pane`, `.pane-hidden`): every
-     one laid out in the same box, only the chosen one drawn. */
-  .stack {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    min-block-size: 0;
-    min-inline-size: 0;
-    overflow: hidden;
-    background: var(--surface-recess);
-  }
-  .slot {
-    position: absolute;
-    inset: 0;
-    display: flex;
-  }
-  .slot.hidden {
-    content-visibility: hidden;
-    pointer-events: none;
-  }
-</style>

@@ -79,15 +79,20 @@
 </script>
 
 {#snippet mark(status: PlanNode["status"])}
-  <span class="plan-mark" data-status={status}>
+  <span
+    class="flex-none grid place-items-center w-icon-md h-lh"
+    data-slot="plan-mark"
+    data-status={status}
+  >
     {#if status === "completed"}
-      <IconTick class="tick" />
+      <IconTick
+        class="size-icon-md text-status-done-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
+      />
     {:else}
       <span
         data-plan-pane-live={status === "in_progress" || undefined}
         data-slot="dot"
-        class="dot"
-        class:live={status === "in_progress"}
+        class="size-(--status-dot-size) rounded-pill inset-ring inset-ring-ink-subtle data-plan-pane-live:inset-ring-0 data-plan-pane-live:bg-status-live-glyph motion-safe:data-plan-pane-live:animate-breath"
       ></span>
     {/if}
   </span>
@@ -95,16 +100,33 @@
 
 {#snippet tree(nodes: PlanNode[], nested: boolean)}
   <ul
-    class={nested ? "kit-nest rows nested" : "rows"}
-    in:branch={{ glyph: ".plan-mark" }}
+    data-slot="rows"
+    data-nest={nested || undefined}
+    class={nested
+      ? "kit-nest flex flex-col gap-space-1 m-0 list-none pbs-space-1 pbe-0 ps-(--rows-pad-start) pe-0"
+      : "flex flex-col gap-space-1 m-0 p-0 list-none"}
+    style:--rows-pad-start={nested
+      ? "var(--nest-pad, var(--space-5))"
+      : undefined}
+    in:branch={{ glyph: '[data-slot="plan-mark"]' }}
     {@attach reflow()}
-    {@attach nested ? nestFrom(".plan-mark") : undefined}
+    {@attach nested ? nestFrom('[data-slot="plan-mark"]') : undefined}
   >
     {#each nodes as node (node.id)}
       <li data-flip data-status={node.status}>
-        <span data-slot="row" class="row">
+        <span
+          data-slot="row"
+          class="flex items-start gap-space-2 min-w-0 type-label text-ink-strong"
+        >
           {@render mark(node.status)}
-          <span data-slot="text" class="text">{node.text}</span>
+          <span
+            data-slot="text"
+            class={[
+              "min-w-0 wrap-anywhere",
+              node.status === "completed" && "text-ink-muted",
+              node.status === "in_progress" && "font-medium",
+            ]}>{node.text}</span
+          >
         </span>
         {#if node.children.length > 0}
           {@render tree(node.children, true)}
@@ -115,82 +137,3 @@
 {/snippet}
 
 {@render tree(nodes, false)}
-
-<style>
-  .rows {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  /* A sub-step hangs off its parent's mark on the app's nesting line. */
-  .rows.nested {
-    padding-block-start: var(--space-1);
-    padding-inline-start: var(--nest-pad, var(--space-5));
-  }
-  .row {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .text {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-  }
-  li[data-status="completed"] > .row .text {
-    color: var(--ink-muted);
-  }
-  li[data-status="in_progress"] > .row .text {
-    font-weight: var(--weight-strong);
-  }
-  .plan-mark {
-    flex: none;
-    display: grid;
-    place-items: center;
-    inline-size: var(--icon-md);
-    block-size: 1lh;
-  }
-  /* Done: the house tick (Tick.svelte, its 1.5 stroke), drawn along its
-     stroke as it lands. */
-  .plan-mark :global(.tick) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-    color: var(--status-done-glyph);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .plan-mark :global(.tick path) {
-      stroke-dasharray: 20;
-      animation: plan-tick var(--dur-toggle) var(--ease-out) both;
-    }
-  }
-  @keyframes plan-tick {
-    from {
-      stroke-dashoffset: 20;
-    }
-    to {
-      stroke-dashoffset: 0;
-    }
-  }
-  /* To come: an open ring; under way: the live dot, the house's size and
-     ink (TreeMark's): it breathes on the house's breath. */
-  .dot {
-    inline-size: var(--status-dot-size);
-    block-size: var(--status-dot-size);
-    border-radius: 50%;
-    box-shadow: inset 0 0 0 1px var(--ink-subtle);
-  }
-  .dot.live {
-    box-shadow: none;
-    background: var(--status-live-glyph);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .dot.live {
-      animation: breath var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-</style>

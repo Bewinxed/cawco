@@ -14,20 +14,9 @@
 
 <ul
   aria-label={label}
-  class="rows"
-  {@attach highlight({ rows: ".row" })}
+  class="flex list-none flex-col gap-space-row p-0 my-0 -mx-space-2"
+  {@attach highlight({ rows: '[data-slot="row"]' })}
   {@attach reflow()}
 >
   {@render children()}
 </ul>
-
-<style>
-  .rows {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 0 -8px;
-    padding: 0;
-    list-style: none;
-  }
-</style>

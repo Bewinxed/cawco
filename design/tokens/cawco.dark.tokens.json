@@ -512,6 +512,22 @@
         "components": [0.222, 0.006, 70]
       }
     },
+    "opencode-logo-core": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.294117647059, 0.274509803922, 0.274509803922],
+        "hex": "#4b4646"
+      }
+    },
+    "opencode-logo-frame": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.945098039216, 0.925490196078, 0.925490196078],
+        "hex": "#f1ecec"
+      }
+    },
     "surface-band": {
       "$type": "color",
       "$value": {
@@ -549,6 +565,10 @@
     "surface-fill-strong": {
       "$type": "color",
       "$value": "{color.neutral-7}"
+    },
+    "press-fill": {
+      "$type": "color",
+      "$value": "{color.surface-fill}"
     },
     "surface-pressed": {
       "$type": "color",
@@ -1547,6 +1567,43 @@
       "$extensions": {
         "dev.cawco": {
           "css": "oklch(from {color.background} l c h / {effect.scrim-mix})"
+        }
+      }
+    },
+    "surface-recess-clear": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.222, 0.006, 70],
+        "alpha": 0
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.surface-recess} l c h / 0)"
+        }
+      }
+    },
+    "needs-ground": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.3029, 0.000029, 0.034582]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.status-attn-bg} 45%, {color.surface-raised})"
+        }
+      }
+    },
+    "strategy-card-picked": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.2894, 0.026983, 0.024795]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.selected-bg} 45%, {color.surface-raised})"
         }
       }
     }

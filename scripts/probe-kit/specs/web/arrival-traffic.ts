@@ -65,7 +65,7 @@ function recordAnimate(): void {
       window.__played.push({
         element: numbers.get(this) as number,
         slot: this.getAttribute("data-slot"),
-        inTools: !!this.closest(".tools"),
+        inTools: !!this.closest('[data-slot="tools"]'),
         blockSize: frames.some((frame) => "blockSize" in frame),
         opacity: frames.some((frame) => "opacity" in frame),
       });

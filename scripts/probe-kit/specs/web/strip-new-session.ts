@@ -44,7 +44,7 @@ import { MACHINE, type Reply, until } from "../../../scratch-fleet";
 import { Clock } from "../../anim";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
 
-const PLUS = '[data-slot="strip-new"] .tnew';
+const PLUS = '[data-slot="strip-new"] [data-tnew]';
 const POPOVER = "[data-ns-popover]";
 const SHEET = "[data-session-card][data-vaul-drawer]";
 const DIALOG = "[data-session-card]:not([data-vaul-drawer])";
@@ -957,7 +957,7 @@ async function stoppedSession(
 /** Each of the reader's turns on the page, with the controls its actions offer. */
 const turnActions = (page: Page) =>
   page.evaluate(() =>
-    [...document.querySelectorAll(".turn.you")].map(
+    [...document.querySelectorAll('[data-slot="turn"][data-you]')].map(
       (one) =>
         `${(one.querySelector('[data-slot="words"]')?.textContent ?? "").trim().slice(0, 24)}: ${[
           ...one.querySelectorAll("[data-slot='actions'] button"),
@@ -999,11 +999,7 @@ async function forkHereLeg(kit: Kit, base: string, source: string) {
     await page.close();
     return;
   }
-  await fork
-    .locator(
-      "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' turn ')][1]"
-    )
-    .hover();
+  await fork.locator('xpath=ancestor::*[@data-slot="turn"][1]').hover();
   await fork.click();
   const shown = await page
     .waitForSelector(POPOVER, { state: "visible", timeout: 15_000 })
@@ -1105,20 +1101,22 @@ async function reviveLeg(
       (error: Error) => error.message
     );
   await settle(page, 400);
+  // The row's Choose a mode, by its accessible name: a kit Button's text
+  // holds its pending words too ("Choose a modeStarting it…").
+  const chooser = await page
+    .locator('[data-slot="turn"][data-you]', { hasText: revive.words })
+    .getByRole("button", { name: "Choose a mode", exact: true })
+    .first()
+    .boundingBox()
+    .catch(() => null);
   const asked = await page.evaluate(
-    ({ pick, sent, line }) => {
+    ({ pick, sent, line, at }) => {
       const pop = document.querySelector(pick);
       // The message's own row: its words, and what it says under them.
-      const row = [...document.querySelectorAll(".turn.you")].find((one) =>
-        (one.textContent ?? "").includes(sent)
-      );
-      const button = [
-        ...(row?.querySelectorAll<HTMLElement>("[data-slot='action']") ?? []),
-      ].find((one) =>
-        (one.textContent ?? "").trim().startsWith("Choose a mode")
-      );
+      const row = [
+        ...document.querySelectorAll('[data-slot="turn"][data-you]'),
+      ].find((one) => (one.textContent ?? "").includes(sent));
       const box = pop?.getBoundingClientRect();
-      const at = button?.getBoundingClientRect();
       const words = `${row?.textContent ?? ""} ${pop?.textContent ?? ""}`;
       return {
         rows: pop?.querySelectorAll("[data-perm]").length ?? 0,
@@ -1129,8 +1127,8 @@ async function reviveLeg(
           box && at
             ? Math.round(
                 pop?.getAttribute("data-side") === "top"
-                  ? at.top - box.bottom
-                  : box.top - at.bottom
+                  ? at.y - box.bottom
+                  : box.top - (at.y + at.height)
               )
             : null,
         line: words.includes(line),
@@ -1143,7 +1141,7 @@ async function reviveLeg(
         ).trim(),
       };
     },
-    { pick: MODE_PICK, sent: revive.words, line: revive.line }
+    { pick: MODE_PICK, sent: revive.words, line: revive.line, at: chooser }
   );
   // What the hub hands every screen for the session (its board row).
   const listed = (await (
@@ -1246,7 +1244,7 @@ async function keyStartLeg(kit: Kit, base: string, source: string) {
   // The folder read: a press then goes or not at once, never held for it.
   await page.waitForFunction(
     (card) => {
-      const line = document.querySelector(`${card} .reading`);
+      const line = document.querySelector(`${card} [data-slot="reading"]`);
       return line !== null && line.textContent?.trim() !== "Reading…";
     },
     POPOVER,
@@ -1262,7 +1260,7 @@ async function keyStartLeg(kit: Kit, base: string, source: string) {
     spawns: spawns.length,
     open: (await readForm(page, POPOVER)).open,
     said: await page
-      .locator(`${POPOVER} .reading`)
+      .locator(`${POPOVER} [data-slot="reading"]`)
       .textContent()
       .then((text) => text?.trim() ?? ""),
   };

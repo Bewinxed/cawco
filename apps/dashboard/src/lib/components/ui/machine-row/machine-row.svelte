@@ -6,6 +6,7 @@
    * in a rollout popover) belongs to the caller; this is what sits inside it.
    */
   import type { Component, Snippet } from "svelte";
+  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
 
   let {
     icon: Icon,
@@ -28,86 +29,32 @@
   } = $props();
 </script>
 
-<span data-slot="tile" class="tile" style={ink ? "" : `color:${hue}`} class:ink
-  ><Icon /></span
+<span
+  data-slot="tile"
+  class={iconTileVariants()}
+  data-ink={ink || undefined}
+  style:color={ink ? undefined : hue}
+  ><Icon class="size-icon-md flex-none" /></span
 >
-<span data-slot="text" class="text">
-  <span data-slot="name" class="name">{name}</span>
-  <span data-slot="meta" class="meta mark-line"
+<span data-slot="text" class="min-w-0 flex-1">
+  <span data-slot="name" class="type-label block truncate text-ink-strong"
+    >{name}</span
+  >
+  <span
+    data-slot="meta"
+    class="type-meta mark-line flex items-center gap-space-2 text-ink-subtle"
     ><span
       data-slot="dot"
       data-machine-row-away={presence === "away" || undefined}
-      class="dot"
+      class="size-(--status-dot-size) flex-none rounded-pill bg-presence-off data-is-away:bg-presence-away not-data-is-away:data-is-online:bg-presence-online"
       data-box
-      class:away={presence === "away"}
-      class:online={presence === "online"}
-    ></span><span class="line">{meta}</span></span
+      data-is-away={presence === "away" || undefined}
+      data-is-online={presence === "online" || undefined}
+    ></span><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+      >{meta}</span
+    ></span
   >
 </span>
 {#if trailing}
   {@render trailing()}
 {/if}
-
-<style>
-  .tile {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    width: 26px;
-    height: 26px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .tile.ink {
-    background: var(--ink-solid);
-    color: var(--on-ink);
-    box-shadow: none;
-  }
-  .tile :global(svg) {
-    flex: none;
-    width: 16px;
-    height: 16px;
-  }
-  .text {
-    flex: 1;
-    min-width: 0;
-  }
-  .name {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .meta {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-  }
-  /* The status text is its own box: an ellipsis is drawn by the element
-     that overflows, never by the flex row holding it. */
-  .line {
-    min-width: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .dot {
-    flex: none;
-    width: 6px;
-    height: 6px;
-    border-radius: var(--radius-pill);
-    background: var(--neutral-8);
-  }
-  .dot.online {
-    background: var(--hue-green-500);
-  }
-  .dot.away {
-    background: var(--hue-orange-500);
-  }
-</style>

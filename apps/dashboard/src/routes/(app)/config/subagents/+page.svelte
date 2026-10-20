@@ -227,15 +227,18 @@
   {/if}
   {#each Object.entries(unpushable) as [machineId, why] (machineId)}
     {@const machine = machines.find((row) => row.machineId === machineId)}
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       {machine ? machineLabel(machine.hostname) : machineId}
       — {why}.
     </p>
   {/each}
 
-  <div data-slot="group" class="group">
+  <div
+    data-slot="group"
+    class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
+  >
     <SectionHeader hue={HUE} icon={IconLaptop} label="On machines" />
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       The definition files each machine really has, read live off its disk. One
       the fleet does not keep can be adopted into it, and every other machine
       gets it.
@@ -244,14 +247,20 @@
          in any order, and one listed above another would push the rows
          already drawn down the page. -->
     {#if online.length === 0}
-      <p data-slot="note" class="note">No machine is online to ask.</p>
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+        No machine is online to ask.
+      </p>
     {:else if Object.keys(reading).length > 0}
-      <p data-slot="note" class="note busy mark-line" role="status">
-        <Spinner class="size-4 shrink-0" />
+      <p
+        data-slot="note"
+        class="mark-line type-meta flex max-w-c-measure items-center gap-space-2 text-ink-muted"
+        role="status"
+      >
+        <Spinner class="shrink-0" />
         <span>Asking the machines…</span>
       </p>
     {:else if discovered.length === 0}
-      <p data-slot="note" class="note">
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
         No machine has any subagent files yet.
       </p>
     {:else}
@@ -268,14 +277,18 @@
             name={row.name}
           >
             {#snippet tile()}
-              <OsMark class="size-4" os={machine.os} />
+              <OsMark class="size-icon-md" os={machine.os} />
             {/snippet}
             {#snippet trailing()}
               {#if same}
-                <span class="state">Managed · in sync</span>
+                <span class="type-meta whitespace-nowrap text-ink-muted"
+                  >Managed · in sync</span
+                >
               {:else}
                 {#if stored}
-                  <span class="state differs">Managed · differs</span>
+                  <span class="type-meta whitespace-nowrap text-status-attn-ink"
+                    >Managed · differs</span
+                  >
                 {/if}
                 <Button
                   failed={key in adoptFailed}
@@ -298,31 +311,3 @@
     {/if}
   </div>
 </SectionFrame>
-
-<style>
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-top: 18px;
-    border-top: 1px solid var(--border-hairline);
-  }
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .busy {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .state {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  .differs {
-    color: var(--status-attn-ink);
-  }
-</style>

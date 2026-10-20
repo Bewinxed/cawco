@@ -107,21 +107,26 @@
   }
 </script>
 
-<div class="order">
-  <p data-slot="order-list-label" class="label" id="order-label">
+<div class="flex flex-col">
+  <p
+    data-slot="order-list-label"
+    class="type-meta px-space-1 pt-0 pb-space-2 text-ink-muted"
+    id="order-label"
+  >
     {words.order}
   </p>
   <ol
     data-slot="list"
     aria-labelledby="order-label"
-    class="list"
+    class="flex flex-col gap-space-row"
     bind:this={list}
     {@attach reflow()}
   >
     {#each rows as account (account.id)}
       <li
         data-slot="slot"
-        class={["slot", held === account.id && "held"]}
+        data-held={held === account.id || undefined}
+        class="group relative data-held:z-2"
         data-flip={held === account.id ? undefined : ""}
         style:transform={held === account.id
           ? `translateY(${carried}px)`
@@ -135,94 +140,25 @@
             order.length
           )}
           aria-roledescription={words.draggable}
-          class="row"
+          class="type-label relative flex min-h-space-8 w-full cursor-grab touch-none items-center gap-space-3 rounded-sm border-none border-current bg-surface-fill px-space-3 text-start text-ink-row select-none group-data-held:cursor-grabbing group-data-held:bg-surface-lift group-data-held:shadow-md focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) coarse:min-h-c-btn-h-lg"
           data-id={account.id}
           onkeydown={(event) => nudge(event, account.id)}
           onpointerdown={(event) => grab(event, account.id)}
           type="button"
           style:--c={hueVar(account.hue)}
         >
-          <span aria-hidden="true" class="handle"></span>
-          <span data-slot="dot" aria-hidden="true" class="dot"></span>
+          <span
+            aria-hidden="true"
+            class="h-space-4 w-c-drag-dots-w flex-none drag-dots"
+          ></span>
+          <span
+            data-slot="dot"
+            aria-hidden="true"
+            class="size-space-2 flex-none rounded-pill bg-(--c)"
+          ></span>
           <AccountName {account} row />
         </button>
       </li>
     {/each}
   </ol>
 </div>
-
-<style>
-  .order {
-    display: flex;
-    flex-direction: column;
-  }
-  .label {
-    padding: 0 var(--space-1) var(--space-2);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .list {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    width: 100%;
-    min-height: 32px;
-    padding: 0 var(--space-3);
-    border: 0;
-    border-radius: var(--radius-sm);
-    text-align: start;
-    background: var(--surface-fill);
-    font: var(--type-label);
-    color: var(--ink-row);
-    cursor: grab;
-    touch-action: none;
-    user-select: none;
-  }
-  .row:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-inset);
-  }
-  .slot {
-    position: relative;
-  }
-  .slot.held {
-    z-index: 2;
-  }
-  .held .row {
-    background: var(--surface-lift);
-    box-shadow: var(--shadow-md);
-    cursor: grabbing;
-  }
-  .handle {
-    flex: none;
-    width: 10px;
-    height: 14px;
-    background: radial-gradient(
-        circle,
-        var(--ink-subtle) 1px,
-        transparent 1.5px
-      )
-      0 0 / 5px 5px;
-  }
-  .dot {
-    flex: none;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--c);
-  }
-  @media (pointer: coarse) {
-    .row {
-      min-height: var(--c-btn-h-lg);
-    }
-  }
-</style>

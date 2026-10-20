@@ -222,7 +222,9 @@ const whereOf = (result: FindResult): string => {
     case "machine":
       parts.push(result.online ? "online" : "offline");
       break;
-    default:
+    case "project":
+    case "routine":
+    case "thread":
       break;
   }
   return parts.join(" · ");
@@ -238,7 +240,12 @@ const summaryOf = (result: FindResult): string | null => {
       return result.what;
     case "routine":
       return result.lastOutcome;
-    default:
+    case "artifact":
+    case "decision":
+    case "machine":
+    case "project":
+    case "task":
+    case "thread":
       return null;
   }
 };
@@ -293,7 +300,10 @@ const detailOf = (result: FindResult) => {
         enabled: result.enabled,
         next_run: whenOf(result.nextRun),
       };
-    default:
+    case "commit":
+    case "file":
+    case "machine":
+    case "project":
       return {};
   }
 };
@@ -1036,9 +1046,14 @@ export const createFindTool = (deps: FindToolDeps) => {
           title,
           lastOutcome: await redacted(result.lastOutcome),
         };
-      default:
-        return { ...result, title };
+      case "artifact":
+      case "decision":
+      case "machine":
+      case "project":
+      case "task":
+        break;
     }
+    return { ...result, title };
   };
 
   /** A detailed hit's turn either side of its best moment, when its transcript reads in time; with `before`, only those said by then. */

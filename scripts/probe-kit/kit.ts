@@ -11,9 +11,9 @@
  * one without draw the same frame.
  */
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { cp, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { constants, homedir } from "node:os";
+import { join, resolve } from "node:path";
 import {
   type Browser,
   type BrowserContext,
@@ -26,7 +26,14 @@ import {
   webkit,
 } from "playwright-core";
 import { readWithin } from "../../packages/core/src/bounded";
-import { openLockFile, tryLock, unlock } from "../../packages/core/src/flock";
+import { CLAUDE_DIR_NAME } from "../../packages/core/src/claude-dirs";
+import {
+  openLockFile,
+  release,
+  tryLock,
+  tryShare,
+  unlock,
+} from "../../packages/core/src/flock";
 import { type HeavySlot, heavySlot } from "../lib/heavy-run";
 import {
   type Fleet,
@@ -127,6 +134,12 @@ export const COMPOSER = `form[data-slot="cin"] ${COMPOSER_FIELD}`;
 export type Engine = "chromium" | "webkit" | "firefox";
 
 export interface PageOptions {
+  /**
+   * A browser of its own, by name, for a page traced while another page is:
+   * DevTools tracing runs one at a time per browser ("Tracing has already
+   * been started (possibly in another tab)"). Unset, the run's shared one.
+   */
+  browser?: string;
   /** WebKit for a spec that reads Safari's engine, Firefox for Gecko's; Chromium otherwise. */
   engine?: Engine;
   /**
@@ -161,6 +174,16 @@ export interface PageOptions {
    * expects, or the one `PROBE_WEBKIT` names.
    */
   webkit?: string;
+  /**
+   * Chromium only: every tile rastered whole whenever it changes
+   * (`--disable-partial-raster`), on a browser of its own. Partial raster
+   * redraws only what was invalidated into a tile it keeps, so the
+   * antialiasing at those rects' edges follows the order the page changed
+   * in: bench-usage-relay at the desk gave two pictures of one state, 5
+   * pixels apart on Caw's rim, its dumps identical. The surfaces' walk
+   * (walk.ts `passPage`) takes it; a spec timing the raster does not.
+   */
+  wholeRaster?: boolean;
 }
 
 /**
@@ -424,7 +447,11 @@ process.on("exit", () => {
  * spec times one as built.
  */
 const viteBuild = async (): Promise<void> => {
-  const child = Bun.spawn([VITE, "build", "--mode", "bench"], {
+  // `PROBE_BUILD_LOCK` names a lock file builds on this host share
+  // (`flock`): one build at a time across the workspaces that name it.
+  const lock = process.env.PROBE_BUILD_LOCK;
+  const build = [VITE, "build", "--mode", "bench"];
+  const child = Bun.spawn(lock ? ["flock", lock, ...build] : build, {
     cwd: DASHBOARD,
     // This process's own, git's repository variables gone (scratch-fleet.ts
     // `GIT_REPOSITORY_ENV`): the build reads `git rev-parse` for its version.
@@ -444,119 +471,279 @@ const viteBuild = async (): Promise<void> => {
   }
 };
 
-/** The lock every run of this tree builds the dashboard under, and the tree state its build was made from. */
-const BUILD_LOCK = join(ROOT, ".probe", "dashboard-build.lock");
-const BUILD_STAMP = join(ROOT, ".probe", "dashboard-build.stamp");
-/** What `vite preview` serves: SvelteKit's output, there once a build has finished. */
-const BUILD_SERVED = join(DASHBOARD, ".svelte-kit", "output", "client");
-const BUILD_POLL_MS = 250;
+/**
+ * The checkout's built dashboard, which every run in it serves from one
+ * folder (`.svelte-kit/output`, what `vite preview` reads), and the lock the
+ * runs serving it share.
+ *
+ * WHY. A build empties that folder before it writes it again, and each run
+ * built once, so a second run in a checkout rebuilt it under every run still
+ * serving it. On 2026-10-18 two base self-compares started 2 s apart in one
+ * checkout: the second's build took the first's server chunks and fonts away
+ * (`ERR_MODULE_NOT_FOUND …/chunks/sr-only-styles.js`, then an `ENOENT` on a
+ * woff2 nothing handled ended `vite preview`) and every state after was
+ * refused. A surfaces walk beside a style-snapshot's build in the converted
+ * checkout lost nine pages to reloads ("Execution context was destroyed,
+ * most likely because of a navigation"): a build names its chunks anew.
+ *
+ * HOW. A build carries the key of the tree it was built from
+ * (`OUTPUT_STAMP`, `treeKey`). A run whose tree has that key serves the
+ * build as it is, holding the lock shared. A run whose tree differs builds
+ * only once it holds the lock alone, which is once no run serves the old
+ * build. The kernel frees a run's lock when it ends, a SIGKILL included.
+ * `vite dev` reads the sources, not this folder, and holds nothing.
+ */
+const KIT_DIR = join(DASHBOARD, ".svelte-kit");
+const OUTPUT_LOCK = join(KIT_DIR, "probe-output.lock");
+const OUTPUT_STAMP = join(KIT_DIR, "output", "probe-tree.txt");
+/** Between looks at a lock another run holds. */
+const OUTPUT_WAIT_MS = 2000;
+/**
+ * What a build reads, from the root: the dashboard, the workspace packages
+ * it imports, the design tokens and the root's own files (`bun.lock`,
+ * `package.json`); a glob's `*` stops at a `/`.
+ */
+const BUILD_DIRS = ["apps/dashboard", "packages", "design"];
+const BUILD_READS = [...BUILD_DIRS, ":(glob)*"];
+
+/** Git's answer in the checkout, `input` on its stdin. */
+const gitSays = async (args: string[], input?: string): Promise<string> => {
+  const child = Bun.spawn(["git", ...args], {
+    cwd: ROOT,
+    env: process.env,
+    stdin: input === undefined ? "ignore" : new Blob([input]),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [out, err, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  if (code !== 0) {
+    throw new Error(`git ${args.join(" ")} exited ${code}: ${err.trim()}`);
+  }
+  return out;
+};
 
 /**
- * The tree's state as a build reads it: its commit, its changes against it
- * (`git diff HEAD --binary`), and every untracked file's path and bytes. Two
- * runs at one state build the same dashboard.
+ * The tree a build is built from, as one key: what it reads as HEAD has it
+ * (every file's blob there), every change to one since, and every untracked
+ * one's content. Not HEAD itself: a commit to the kit alone made every run
+ * after it wait on every run still serving, for a build nothing it reads
+ * had changed. The build writes HEAD's short hash as its version
+ * (vite.config.ts `BUILD_VERSION`), which a page only compares with the
+ * version the server it came from serves (served-build.svelte.ts), the same
+ * build's, and draws nowhere. The baselines a run writes are not in it, so
+ * an approve never makes the next run's tree another.
  */
-const treeState = async (): Promise<string> => {
-  const git = (...args: string[]) =>
-    Bun.$`git ${args}`.cwd(ROOT).env(process.env).quiet().nothrow();
+const treeKey = async (): Promise<string> => {
   const hash = new Bun.CryptoHasher("sha256");
-  hash.update((await git("rev-parse", "HEAD")).stdout);
-  hash.update((await git("diff", "HEAD", "--binary")).stdout);
+  const [tracked, root] = await Promise.all([
+    gitSays(["ls-tree", "-r", "HEAD", "--", ...BUILD_DIRS]),
+    gitSays(["ls-tree", "HEAD"]),
+  ]);
+  hash.update(tracked);
+  // The root's own files (`bun.lock`, `package.json`), its folders apart.
+  hash.update(
+    root
+      .split("\n")
+      .filter((line) => line.includes(" blob "))
+      .join("\n")
+  );
+  hash.update(
+    await gitSays(["diff", "HEAD", "--binary", "--", ...BUILD_READS])
+  );
   const untracked = (
-    await git("ls-files", "--others", "--exclude-standard", "-z")
-  ).stdout
-    .toString()
+    await gitSays([
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "--",
+      ...BUILD_READS,
+    ])
+  )
     .split("\0")
-    .filter(Boolean)
-    .sort();
-  for (const path of untracked) {
-    hash.update(path);
+    .filter(Boolean);
+  if (untracked.length > 0) {
+    hash.update(untracked.join("\0"));
     hash.update(
-      // biome-ignore lint/performance/noAwaitInLoops: each file's bytes in path order, into one hash.
-      await Bun.file(join(ROOT, path))
-        .bytes()
-        .catch(() => new Uint8Array())
+      await gitSays(["hash-object", "--stdin-paths"], untracked.join("\n"))
     );
   }
   return hash.digest("hex");
 };
 
+const stampSays = (key: string): Promise<boolean> =>
+  Bun.file(OUTPUT_STAMP)
+    .text()
+    .then(
+      (stamp) => stamp === key,
+      () => false
+    );
+
 /**
- * The dashboard built for the tree as it stands, one run of this tree at a
- * time: every `run.ts` builds into the one output (`.svelte-kit/output`,
- * adapter-node's `.build-next`), and two building at once wrote over each
- * other mid-build (a "use client" chunk read half-written). A run takes
- * {@link BUILD_LOCK}, waiting while another holds it, and reuses the build
- * another run finished at this same tree state (the stamp names it);
- * otherwise it builds, its stamp cleared first so a build that fails is
- * never reused, and written once it is whole.
+ * The checkout's build of this tree, built here when it is not, and the
+ * descriptor that holds it shared until the run lets it go (`unlock`).
  */
-const sharedBuild = async (): Promise<void> => {
-  await mkdir(dirname(BUILD_LOCK), { recursive: true });
-  const fd = openLockFile(BUILD_LOCK, true);
+const builtOutput = async (): Promise<number> => {
+  await mkdir(KIT_DIR, { recursive: true });
+  const fd = openLockFile(OUTPUT_LOCK, true);
   try {
-    while (!tryLock(fd)) {
-      // biome-ignore lint/performance/noAwaitInLoops: waiting for another run's build of this tree.
-      await Bun.sleep(BUILD_POLL_MS);
+    const key = await treeKey();
+    let waiting = false;
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: each look follows the last
+      if (tryShare(fd) && (await stampSays(key))) {
+        return fd;
+      }
+      release(fd);
+      if (tryLock(fd)) {
+        try {
+          if (!(await stampSays(key))) {
+            await rm(OUTPUT_STAMP, { force: true });
+            console.log("… building the dashboard");
+            await viteBuild();
+            await writeFile(`${OUTPUT_STAMP}.new`, key);
+            await rename(`${OUTPUT_STAMP}.new`, OUTPUT_STAMP);
+          }
+        } finally {
+          release(fd);
+        }
+        continue;
+      }
+      if (!waiting) {
+        waiting = true;
+        console.log(
+          "… waiting on this checkout's built dashboard: another run is building it, or serves one built from another tree"
+        );
+      }
+      await Bun.sleep(OUTPUT_WAIT_MS);
     }
-    const state = await treeState();
-    const stamp = (await readFile(BUILD_STAMP, "utf8").catch(() => "")).trim();
-    if (stamp === state && existsSync(BUILD_SERVED)) {
-      console.log(
-        "… the dashboard is built at this tree's state already (another run's build), reused"
-      );
-      return;
-    }
-    console.log("… building the dashboard");
-    await rm(BUILD_STAMP, { force: true });
-    await viteBuild();
-    await writeFile(BUILD_STAMP, `${state}\n`);
-  } finally {
+  } catch (error) {
     unlock(fd);
+    throw error;
   }
+};
+
+/** A dashboard server: its address, its process, and its end when its run is done with it. */
+interface Served {
+  base: string;
+  child: Bun.Subprocess;
+  /** Ends it on purpose: an end without this one is a loss (`serve`'s `lost`). */
+  stop: () => void;
+}
+
+/** How many of a lost server's last lines, of each stream, its loss says. */
+const LOST_LINES = 15;
+
+/**
+ * How a server's process ended, a signal by its name: the one it took
+ * itself, or the one its server took under it. `bunx` runs vite as a child
+ * and exits 128 plus the number of the signal that ended it, and a SIGKILL
+ * leaves nothing in the server's own stderr. Bun names the signal, or
+ * gives its number (`signalCode: NodeJS.Signals | number | null`).
+ */
+const signalNamed = (signal: number): string | undefined =>
+  Object.entries(constants.signals).find(([, n]) => n === signal)?.[0];
+const endOf = (
+  code: number | null,
+  signal: Bun.Subprocess["signalCode"]
+): string => {
+  if (typeof signal === "number") {
+    return `signal ${signalNamed(signal) ?? signal}`;
+  }
+  if (signal) {
+    return `signal ${signal}`;
+  }
+  const taken =
+    code !== null && code > 128 ? signalNamed(code - 128) : undefined;
+  return taken ? `exit ${code}: signal ${taken}` : `exit ${code}`;
+};
+
+/** A log's last lines, indented under the line that says them; none when it can't be read. */
+const tailOf = async (file: string): Promise<string> => {
+  const text = await Bun.file(file)
+    .text()
+    .catch(() => "");
+  return text
+    .split("\n")
+    .filter((line) => line.trim())
+    .slice(-LOST_LINES)
+    .join("\n  ");
 };
 
 /**
  * The dashboard served against `hub`: the dev server (`vite dev`), or the
  * built one (`vite preview`, what the runtime specs time: a dev build's own
  * checks would be in every long task). Its address and process.
+ *
+ * What it prints goes to files of its own beside the run's output
+ * (`probe-kit/vite-<how>-<port>.err.log`, `.out.log`), and an end its run did not ask for is
+ * `lost`, with that file's last lines: two style-snapshot approves' servers
+ * stopped a few minutes into their walks, every state after was refused at
+ * `goto`, and each run still read ALL PASS, its server's own words thrown
+ * away.
  */
 async function serve(
   how: "dev" | "preview",
   hub: string,
+  lost: (why: string) => void,
+  env: Record<string, string> = {},
   /** The port to serve on: a fleet's `dashboardPort`, the one its hub names; any free one when unset. */
   at?: number,
   /** The address to serve on: a fleet's hub's (`hub.at`); 127.0.0.1 when unset. */
   host = "127.0.0.1"
-) {
+): Promise<Served> {
   const port = at ?? (await freePort());
+  const logs = join(process.env.TMPDIR ?? join(ROOT, ".probe"), "probe-kit");
+  await mkdir(logs, { recursive: true });
+  const log = join(logs, `vite-${how}-${port}`);
   const child = Bun.spawn(
     [VITE, how, "--host", host, "--port", String(port), "--strictPort"],
     {
       cwd: DASHBOARD,
       env: {
         ...process.env,
+        ...env,
         CAWCO_DEV_HUB_URL: hub,
         CAWCO_HUB_URL: hub,
       },
-      stdout: "ignore",
-      stderr: "ignore",
+      stdout: Bun.file(`${log}.out.log`),
+      stderr: Bun.file(`${log}.err.log`),
     }
   );
+  let stopping = false;
   VITES.add(child);
   child.exited.then(() => VITES.delete(child));
   const base = `http://${host.includes(":") ? `[${host}]` : host}:${port}`;
+  const ended = async (code: number): Promise<void> => {
+    if (stopping) {
+      return;
+    }
+    const err = await tailOf(`${log}.err.log`);
+    const out = await tailOf(`${log}.out.log`);
+    lost(
+      `vite ${how} at ${base} ended (${endOf(code, child.signalCode)}) before its run was done with it; every page after it is refused (${log}.err.log, .out.log):\n  ${err}\n  ${out}`
+    );
+  };
+  child.exited.then(ended).catch(() => undefined);
   await until(
     "the built dashboard answering",
     () => fetch(base).then((r) => r.ok),
     Boolean,
     60_000
   );
-  return { base, child };
+  return {
+    base,
+    child,
+    stop: () => {
+      stopping = true;
+      child.kill();
+    },
+  };
 }
-
-type Served = Promise<{ base: string; child: Bun.Subprocess }>;
-
 /**
  * Where a bench's dashboard reaches its hub: a stand-in that is never one.
  * The benches feed the client's own state. A read is refused (503). The
@@ -609,9 +796,11 @@ export class Run {
   readonly onHost: string[] = [];
   /** Every capture this run that differs from its baseline, in run order. */
   readonly changed: Changed[] = [];
-  private devServer: Served | null = null;
-  private builtServer: Served | null = null;
+  private devServer: Promise<Served> | null = null;
+  private builtServer: Promise<Served> | null = null;
   private built: Promise<void> | null = null;
+  /** The descriptor holding the checkout's build shared while this run serves it. */
+  private output: number | null = null;
   private readonly browsers = new Map<string, Promise<Browser>>();
   private slot: Promise<HeavySlot> | null = null;
 
@@ -621,34 +810,61 @@ export class Run {
     return this.slot;
   }
 
-  /** The dashboard built once per run, the first time a spec needs it, shared with every other run of this tree ({@link sharedBuild}). */
+  /**
+   * The checkout's build of this tree, the first time a spec needs it, held
+   * until the run closes (`builtOutput`).
+   */
   build(): Promise<void> {
     this.built ??= (async () => {
       await this.heavy();
-      await sharedBuild();
+      this.output = await builtOutput();
     })();
     return this.built;
   }
 
-  /** The dashboard served (`serve`), under the run's slot. */
+  /** The dashboard served (`serve`), under the run's slot; a server lost before its run is done fails the run. */
   private async startServer(
     how: "dev" | "preview",
     hub: string,
     port?: number,
     host?: string
-  ): Promise<{ base: string; child: Bun.Subprocess }> {
+  ): Promise<Served> {
     await this.heavy();
-    return serve(how, hub, port, host);
+    return serve(
+      how,
+      hub,
+      (why) => {
+        const line = `FAIL the dashboard server: ${why}`;
+        console.log(line);
+        this.failures += 1;
+        this.failed.push(line.slice(0, 1200));
+      },
+      {},
+      port,
+      host
+    );
   }
 
   browser(
     engine: Engine,
     revision?: string,
     oneProcess = false,
+    own?: string,
+    wholeRaster = false,
     hostRules?: string,
     scrollbars = false
   ): Promise<Browser> {
-    const key = `${revision ? `${engine}-${revision}` : engine}${oneProcess ? "-one-process" : ""}${hostRules ? `-hosts:${hostRules}` : ""}${scrollbars ? "-scrollbars" : ""}`;
+    const key = [
+      engine,
+      revision,
+      oneProcess && "one-process",
+      wholeRaster && "whole-raster",
+      own,
+      hostRules && `hosts:${hostRules}`,
+      scrollbars && "scrollbars",
+    ]
+      .filter(Boolean)
+      .join("-");
     const known = this.browsers.get(key);
     if (known) {
       return known;
@@ -675,6 +891,7 @@ export class Run {
           args: [
             "--no-sandbox",
             "--disable-gpu",
+            ...(wholeRaster ? ["--disable-partial-raster"] : []),
             ...(oneProcess
               ? [
                   "--disable-site-isolation-trials",
@@ -720,6 +937,8 @@ export class Run {
     const offered = new Set<string>();
     const contexts: BrowserContext[] = [];
     const ends: (() => Promise<void>)[] = [];
+    /** The run's failures before this spec: more after it, and it failed. */
+    const failuresBefore = this.failures;
     const out = join(
       process.env.TMPDIR ?? join(ROOT, ".probe"),
       "probe-kit",
@@ -767,7 +986,7 @@ export class Run {
           this.startServer("preview", hub)
         );
         ends.push(async () => {
-          (await served).child.kill();
+          (await served).stop();
         });
         return (await served).base;
       },
@@ -786,15 +1005,23 @@ export class Run {
           respond,
           ...(hub ? { hub } : {}),
         });
-        let served: Promise<{ base: string; child: Bun.Subprocess }> | null =
-          null;
-        let servedDev: Promise<{
-          base: string;
-          child: Bun.Subprocess;
-        }> | null = null;
+        let served: Promise<Served> | null = null;
+        let servedDev: Promise<Served> | null = null;
         ends.push(async () => {
-          (await served)?.child.kill();
-          (await servedDev)?.child.kill();
+          (await served)?.stop();
+          (await servedDev)?.stop();
+          // A spec that failed keeps what says why, which goes with the
+          // fleet: into its output folder, the hub still answering.
+          if (this.failures > failuresBefore) {
+            const kept = join(out, "fleet-on-failure");
+            const said = await fleetEvidence(fleet, kept).then(
+              () => kept,
+              (error) => `${kept} (in part: ${error})`
+            );
+            const line = `FAIL ${spec.name}: the failed run's fleet, its logs and every session's transcript, are in ${said}`;
+            console.log(line);
+            this.failed.push(line);
+          }
           await fleet.close();
           await fleet.clean(failedHere());
         });
@@ -822,6 +1049,8 @@ export class Run {
           options.engine ?? "chromium",
           options.engine === "webkit" ? options.webkit : undefined,
           options.oneProcess,
+          options.browser,
+          options.wholeRaster,
           options.hostRules,
           options.scrollbars
         );
@@ -921,8 +1150,12 @@ export class Run {
       // biome-ignore lint/performance/noAwaitInLoops: one browser at a time
       await (await browser).close().catch(() => undefined);
     }
-    (await this.devServer)?.child.kill();
-    (await this.builtServer)?.child.kill();
+    (await this.devServer)?.stop();
+    (await this.builtServer)?.stop();
+    if (this.output !== null) {
+      unlock(this.output);
+      this.output = null;
+    }
     (await this.slot?.catch(() => undefined))?.release();
     this.slot = null;
   }
@@ -938,7 +1171,176 @@ export type KitFleet = Fleet & {
   devDashboard: () => Promise<string>;
 };
 
-/** Opens `url` and waits for `ready` in the page, fonts loaded. */
+/** What `fleetEvidence` copies of each kind, by where it goes under its folder. */
+const LOG_FILE = /\.(log|err)$/;
+
+/**
+ * A failed run's fleet, kept in `dir` before the fleet goes: its services'
+ * logs (`logs/`, the sandbox's `*.log` and `*.err`: the hub's, every
+ * agent's and sessiond's), every session's transcript as the hub serves it
+ * (`transcripts/<title>-<id>.json`), its work items and artifacts as the
+ * hub holds them, and every Claude Code session log under its HOME, each
+ * account's included (`claude/`). Read while the hub still runs. What
+ * cannot be read is said in `unread.txt`, never left out silently.
+ */
+async function fleetEvidence(fleet: Fleet, dir: string): Promise<void> {
+  const unread: string[] = [];
+  await mkdir(join(dir, "logs"), { recursive: true });
+  for (const name of await readdir(fleet.sandbox)) {
+    if (LOG_FILE.test(name)) {
+      // biome-ignore lint/performance/noAwaitInLoops: a few files, one at a time
+      await cp(join(fleet.sandbox, name), join(dir, "logs", name));
+    }
+  }
+  await mkdir(join(dir, "transcripts"), { recursive: true });
+  const instances = fleet.query<{ id: string; title: string | null }>(
+    "SELECT id, title FROM instances"
+  );
+  for (const { id, title } of instances) {
+    const name = `${(title ?? "untitled").replace(/[^\w-]+/g, "-").slice(0, 60)}-${id.slice(0, 8)}.json`;
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: one session at a time, off a hub that is closing next
+      const response = await fetch(
+        `${fleet.base}/api/instances/${id}/transcript`
+      );
+      await writeFile(join(dir, "transcripts", name), await response.text());
+    } catch (error) {
+      unread.push(`transcript of ${id} (${title}): ${error}`);
+    }
+  }
+  for (const table of ["work_items", "artifacts"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: two tables, one at a time
+    await writeFile(
+      join(dir, `${table}.json`),
+      JSON.stringify(fleet.query(`SELECT * FROM ${table}`), null, 2)
+    );
+  }
+  // Claude Code's own session logs, the first account's and each other's.
+  // `claude/home/…` the HOME's own `.claude`, `claude/cawco/accounts/<id>/…` each account's.
+  const sessionLogs = new Bun.Glob("**/projects/**/*.jsonl");
+  for (const [root, under] of [
+    [join(fleet.home, CLAUDE_DIR_NAME), "home"],
+    [join(fleet.home, ".cawco"), "cawco"],
+  ] as const) {
+    if (!existsSync(root)) {
+      continue;
+    }
+    for (const file of sessionLogs.scanSync({ cwd: root, dot: true })) {
+      const to = join(dir, "claude", under, file);
+      // biome-ignore lint/performance/noAwaitInLoops: one log at a time
+      await mkdir(join(to, ".."), { recursive: true });
+      await cp(join(root, file), to);
+    }
+  }
+  if (unread.length > 0) {
+    await writeFile(join(dir, "unread.txt"), `${unread.join("\n")}\n`);
+  }
+}
+
+/**
+ * In the page: how many elements under `root` (its largest match, else the
+ * body) Svelte has adopted. The dev server tags each with `__svelte_meta`;
+ * a build marks each one it wires with a symbol-keyed cache (its class,
+ * style or attributes, its delegated events: svelte constants.js
+ * `CLASS_CACHE`, …). The server's markup carries neither.
+ */
+export function adopted(root: string): number {
+  let top: Element = document.body;
+  let most = -1;
+  for (const el of document.querySelectorAll(root)) {
+    const n = el.getElementsByTagName("*").length;
+    if (n > most) {
+      most = n;
+      top = el;
+    }
+  }
+  let count = 0;
+  for (const el of [top, ...top.querySelectorAll("*")]) {
+    if ("__svelte_meta" in el || Object.getOwnPropertySymbols(el).length > 0) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+/** The reads in a row, a frame apart, the page's layout boxes and adopted count hold for {@link pageReady}. */
+const STILL_FRAMES = 3;
+/** A frame at 60Hz, ms: what {@link pageReady} waits between reads. */
+const FRAME_MS = 17;
+/** How long {@link pageReady} gives the page to hydrate, let go of its first paint and stand. */
+const READY_WITHIN_MS = 30_000;
+
+/**
+ * In the page, for {@link pageReady}: the step it still waits on, or, with
+ * none left, every element's layout box and the adopted count as one string.
+ */
+function readiness(): { step: string | null; boxes: string } {
+  let count = 0;
+  const parts: number[] = [];
+  for (const el of document.body.querySelectorAll("*")) {
+    if ("__svelte_meta" in el || Object.getOwnPropertySymbols(el).length > 0) {
+      count += 1;
+    }
+    if (el instanceof HTMLElement) {
+      parts.push(el.offsetLeft, el.offsetTop, el.offsetWidth, el.offsetHeight);
+    }
+  }
+  if (count === 0) {
+    return { step: "hydrated", boxes: "" };
+  }
+  if (document.querySelector("[data-first-paint]")) {
+    return { step: "the Shell's first-render release", boxes: "" };
+  }
+  return { step: null, boxes: `${count};${parts.join(",")}` };
+}
+
+/**
+ * Waits until the page draws its own answers, standing: what a read taken
+ * at `load` and two frames saw was the server's first paint (NeedsCaw's head
+ * the cookie's 20px guess where the hydrated page at 390 draws 24px).
+ *
+ * 1. Hydrated: Svelte has adopted some of the page ({@link adopted}).
+ * 2. The Shell's first-render release: no `[data-first-paint]` stands
+ *    (Shell.svelte, first-render.svelte.ts). A page with no Shell has none.
+ * 3. Still: every element's layout box (`offset*`, which a transform does
+ *    not move, so a running breath or spinner is still) and the adopted
+ *    count the same for {@link STILL_FRAMES} reads in a row a frame apart,
+ *    so a part async Svelte hydrates late, or a size a script sets on
+ *    mount, has landed.
+ *
+ * Read from here, a frame's length apart in real time, never on the page's
+ * own frames: the walk's page runs Playwright's paused fake clock, which
+ * holds `requestAnimationFrame` too. The walk calls it once `stand` has run
+ * that clock on, so the Shell's release (a frame and a task after mount)
+ * has come.
+ */
+export async function pageReady(page: Page): Promise<void> {
+  const deadline = Date.now() + READY_WITHIN_MS;
+  let last = "";
+  let held = 0;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: each read is a frame after the last
+    const now = await page.evaluate(readiness);
+    if (now.step === null) {
+      held = now.boxes === last ? held + 1 : 0;
+      last = now.boxes;
+      if (held >= STILL_FRAMES) {
+        return;
+      }
+    } else {
+      held = 0;
+      last = "";
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `${page.url()}: not ready within ${READY_WITHIN_MS / 1000}s: ${now.step ?? `still for ${STILL_FRAMES} frames`}`
+      );
+    }
+    await page.waitForTimeout(FRAME_MS);
+  }
+}
+
+/** Opens `url`, waits for `ready` in the page and fonts loaded, then for the page's own answers, standing ({@link pageReady}). */
 export async function open(
   page: Page,
   url: string,
@@ -952,6 +1354,24 @@ export async function open(
     await page.waitForFunction(ready, null, { timeout });
   }
   await page.evaluate(() => document.fonts.ready);
+  await pageReady(page);
+}
+
+/** A button line of an ARIA snapshot (`- button "Try again"`), its name quoted as JSON. */
+const BUTTON_LINE = /- button "((?:[^"\\]|\\.)*)"/g;
+
+/**
+ * The buttons in `scope` by their accessible names, as the accessibility
+ * tree computes them, in order. A button's words are read here, never off
+ * its text: a kit Button that can be pending keeps its idle and pending
+ * words in one cell (ui/button pending-content), the one not shown
+ * aria-hidden, so its text content holds both ("Try againStarting…").
+ */
+export async function buttonNames(scope: Locator): Promise<string[]> {
+  const aria = await scope.ariaSnapshot();
+  return [...aria.matchAll(BUTTON_LINE)].map(
+    ([, name]) => JSON.parse(`"${name}"`) as string
+  );
 }
 
 /** Waits until every finite animation on the page has landed. */

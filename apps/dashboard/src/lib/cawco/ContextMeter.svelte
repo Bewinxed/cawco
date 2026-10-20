@@ -52,15 +52,9 @@
   });
 
   const _FILL: Record<string, string> = {
-    calm: "bg-muted-foreground/60",
-    warn: "bg-warning",
-    critical: "bg-destructive",
-  };
-
-  const TEXT: Record<string, string> = {
-    calm: "text-muted-foreground",
-    warn: "text-warning",
-    critical: "text-destructive",
+    calm: "bg-ink-muted/60",
+    warn: "bg-warning-9",
+    critical: "bg-error-9",
   };
 
   /** The app's own ramp, by position — the SDK's `color` is not a CSS colour. */
@@ -106,15 +100,15 @@
     aria-label={compacting
       ? "Compacting context"
       : `Context ${shown}% used. Show the breakdown.`}
-    class="mark-line flex h-7 shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-1.5
-           text-label tabular-nums
-           hover:bg-muted
-           transition-[background-color,color] duration-(--dur-control) ease-out
-           {compacting ? 'text-foreground' : TEXT[band]}"
+    class="shrink-0"
+    data-compacting={compacting || undefined}
+    data-critical={band === "critical" || undefined}
+    data-warn={band === "warn" || undefined}
+    look="meter"
     title={meterTitle}
   >
     {#if compacting}
-      <IconCompact class="size-3.5 animate-pulse" />
+      <IconCompact class="size-space-4 animate-pulse" />
       <span>Compacting</span>
     {:else}
       <!-- Glyph and number, no rail. A 28px bar under a text field is too short
@@ -124,7 +118,7 @@
       <IconWindow
         aria-hidden={usage ? "true" : "false"}
         aria-label={usage ? undefined : "Context usage unknown"}
-        class="size-3.5 shrink-0"
+        class="size-space-4 shrink-0"
         role="img"
       />
       <span
@@ -135,45 +129,48 @@
         role="progressbar">{usage ? `${shown}%` : "—"}</span
       >
       {#if recentlyCompacted}
-        <IconCompact class="size-3 text-muted-foreground" />
+        <IconCompact class="size-icon-sm text-ink-muted" />
       {/if}
     {/if}
   </Popover.Trigger>
 
-  <Popover.Content
-    align="end"
-    class="w-72 rounded-[var(--radius-lg)] shadow-lg p-0"
-    side="top"
-  >
+  <Popover.Content align="end" frame="panel" pad="none" side="top">
     <div
       class="mark-line flex items-center gap-2 border-b border-border px-3 py-2.5"
     >
-      <IconWindow class="size-4 text-muted-foreground" />
+      <IconWindow class="size-icon-md text-ink-muted" />
       <span class="text-label font-medium">Context window</span>
       {#if usage}
-        <span class="ml-auto text-label tabular-nums {TEXT[band]}"
-          >{usage.percentage}%</span
+        <span
+          class={[
+            "ml-auto text-label tabular-nums",
+            band === "critical" && "text-error-9",
+            band === "warn" && "text-warning-9",
+            band !== "critical" && band !== "warn" && "text-ink-muted",
+          ]}>{usage.percentage}%</span
         >
       {/if}
     </div>
 
     {#if !usage}
-      <p class="px-3 py-4 text-label text-muted-foreground">
+      <p class="px-3 py-4 text-label text-ink-muted">
         No reading yet. A session has to be running to report what its window
         holds.
       </p>
     {:else}
       <div class="px-3 py-2.5">
-        <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          class="flex h-1.5 w-full overflow-hidden rounded-full bg-neutral-2"
+        >
           {#each usage.categories as category, index (category.name)}
             <span
               class="h-full"
-              style="width: {(category.tokens / usage.totalTokens) *
-                100}%; background-color: {swatch(index)}"
+              style:width="{(category.tokens / usage.totalTokens) * 100}%"
+              style:background-color={swatch(index)}
             ></span>
           {/each}
         </div>
-        <p class="mt-2 text-label tabular-nums text-muted-foreground">
+        <p class="mt-2 text-label tabular-nums text-ink-muted">
           {usage.totalTokens.toLocaleString()}
           of {usage.maxTokens.toLocaleString()} tokens used
         </p>
@@ -181,13 +178,13 @@
 
       <ul class="max-h-56 overflow-y-auto border-t border-border px-3 py-2">
         {#each usage.categories as category, index (category.name)}
-          <li class="flex items-center gap-2 py-1 text-label">
+          <li class="flex items-center gap-2 py-space-1 text-label">
             <span
               class="size-2 shrink-0 rounded-hair"
-              style="background-color: {swatch(index)}"
+              style:background-color={swatch(index)}
             ></span>
             <span class="min-w-0 flex-1 truncate">{category.name}</span>
-            <span class="tabular-nums text-muted-foreground"
+            <span class="tabular-nums text-ink-muted"
               >{compact(category.tokens)}</span
             >
           </li>
@@ -199,13 +196,11 @@
       <p
         class="mark-line flex items-center gap-2 border-t border-border px-3 py-2 text-label"
       >
-        <IconCompact class="size-3.5 animate-pulse" />
+        <IconCompact class="size-space-4 animate-pulse" />
         <span>Compacting now — the session is rewriting its own context.</span>
       </p>
     {:else if compaction}
-      <p
-        class="border-t border-border px-3 py-2 text-label text-muted-foreground"
-      >
+      <p class="border-t border-border px-3 py-2 text-label text-ink-muted">
         {#if compaction.result === "failed"}
           Last compaction failed{compaction.error
             ? `: ${compaction.error}`

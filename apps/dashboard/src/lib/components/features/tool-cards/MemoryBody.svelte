@@ -180,20 +180,31 @@
 </script>
 
 {#snippet well(source: string)}
-  <div data-slot="well" class="well"><ToolProse {source} /></div>
+  <div
+    data-slot="well"
+    class="max-h-c-tool-well-max-h overflow-auto p-space-3 border border-border-hairline rounded-sm bg-surface-recess"
+  >
+    <ToolProse {source} />
+  </div>
 {/snippet}
 
-<div class="memory">
+<!-- Hangs at the row's text column, like the fields well. -->
+<div
+  class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ml-(--x-hang) min-w-0"
+>
   {#if (writes && written !== undefined) || removes}
     {#if before.kind === "loading"}
-      <Skeleton class="h-20 w-full" />
+      <Skeleton class="w-full" height="block" />
     {:else if before.kind === "missing"}
-      <p class="missing" role="alert">
+      <p class="text-size-label text-ink-muted" role="alert">
         The version this {removes ? "removed" : "replaced"} can't be shown:
         {before.why}.
       </p>
     {:else if before.kind === "unchanged"}
-      <p data-slot="memory-body-label" class="label">
+      <p
+        data-slot="memory-body-label"
+        class="text-size-label font-medium text-ink-muted"
+      >
         Saved unchanged: the content matched what was there.
       </p>
     {:else}
@@ -204,32 +215,47 @@
       />
     {/if}
     {#if footer}
-      <span data-slot="foot" class="foot">{footer}</span>
+      <span data-slot="foot" class="type-code text-ink-muted num">{footer}</span
+      >
     {/if}
   {:else if action === "get" && parsed.kind === "doc"}
     {@render well(parsed.content)}
     {#if footer}
-      <span data-slot="foot" class="foot">{footer}</span>
+      <span data-slot="foot" class="type-code text-ink-muted num">{footer}</span
+      >
     {/if}
   {:else if action === "list_docs" && parsed.kind === "docs"}
-    <div class="docs">
+    <div class="flex flex-col gap-space-1">
       {#each parsed.docs as doc (doc.path)}
         <Collapsible.Root>
-          <Collapsible.Trigger data-doc class="doc mark-line">
-            <span data-slot="path" class="path">{doc.path}</span>
-            {#if doc.updatedAt}
-              <span data-slot="meta" class="meta">{day(doc.updatedAt)}</span>
-            {/if}
-            <span data-slot="meta" class="meta">{lines(doc.content)} lines</span
+          <Collapsible.Trigger data-doc class="group w-full" look="head">
+            <span
+              data-slot="path"
+              class="flex-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono) text-ink-strong"
+              >{doc.path}</span
             >
-            <span data-slot="chev" class="chev" data-box
-              ><IconChevronRight /></span
+            {#if doc.updatedAt}
+              <span
+                data-slot="meta"
+                class="flex-none text-size-meta font-normal text-ink-muted num"
+                >{day(doc.updatedAt)}</span
+              >
+            {/if}
+            <span
+              data-slot="meta"
+              class="flex-none text-size-meta font-normal text-ink-muted num"
+              >{lines(doc.content)} lines</span
+            >
+            <span
+              data-slot="chev"
+              class="flex-none grid place-items-center text-ink-muted transition-[rotate] duration-(--dur-control) ease-out motion-reduce:transition-off group-state-open:rotate-90"
+              data-box><IconChevronRight class="size-icon-sm block" /></span
             >
           </Collapsible.Trigger>
           <!-- Folds like the row that holds it: grows open and folds shut
                from the header, which the transcript holds in place. -->
           <Collapsible.Content reveal>
-            <div data-slot="doc-body" class="doc-body">
+            <div data-slot="doc-body" class="pt-space-1 pb-space-2">
               {@render well(doc.content)}
             </div>
           </Collapsible.Content>
@@ -238,99 +264,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  /* Hangs at the row's text column, like the fields well. */
-  .memory {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin: var(--space-2) 0 var(--space-3) var(--x-hang);
-    min-width: 0;
-  }
-  .label {
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-muted);
-  }
-  .well {
-    max-height: 420px;
-    overflow: auto;
-    padding: var(--space-3);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  .missing {
-    font-size: var(--text-label);
-    color: var(--ink-muted);
-  }
-  .foot {
-    font: var(--text-meta) var(--font-mono);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .docs {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-  .docs :global(.doc) {
-    width: 100%;
-    min-height: 26px;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--ink-strong);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    text-align: left;
-    cursor: pointer;
-  }
-  .path {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-family: var(--font-mono);
-  }
-  .meta {
-    flex: 0 0 auto;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .chev {
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    color: var(--ink-muted);
-    transition: transform var(--dur-control) var(--ease-out);
-  }
-  .chev :global(svg) {
-    width: 12px;
-    height: 12px;
-    display: block;
-  }
-  .docs :global(.doc[data-state="open"] .chev) {
-    transform: rotate(90deg);
-  }
-  .doc-body {
-    padding: var(--space-1) 0 var(--space-2);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .chev {
-      transition: none;
-    }
-  }
-  @media (pointer: coarse) {
-    .docs :global(.doc) {
-      min-height: 44px;
-    }
-  }
-</style>

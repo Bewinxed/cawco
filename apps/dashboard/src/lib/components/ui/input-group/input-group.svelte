@@ -25,7 +25,7 @@
     "has-[textarea]:rounded-[var(--radius-md)]",
     "has-data-[align=block-end]:rounded-[var(--radius-md)]",
     "has-data-[align=block-start]:rounded-[var(--radius-md)]",
-    "has-[[data-slot][aria-invalid=true]]:border-destructive",
+    "has-[[data-slot][aria-invalid=true]]:border-error-9",
     "has-[>[data-align=block-end]]:[&>input]:pt-3",
     "has-[>[data-align=inline-end]]:[&>input]:pr-1.5",
     "has-[>[data-align=block-start]]:[&>input]:pb-3",

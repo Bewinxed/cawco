@@ -21,51 +21,23 @@
 
 <svg
   aria-hidden="true"
-  class="week-mark"
+  class="inline-block flex-none align-middle"
   data-week-left={left}
   height="10"
   viewBox="0 0 10 10"
   width="10"
   style:--c={ring.color}
 >
-  <circle class="track" cx="5" cy="5" r="5" />
+  <circle class="fill-border-control" cx="5" cy="5" r="5" />
+  <!-- A sector: a stroke as wide as its circle's diameter fills the disc from the centre out. -->
   <circle
-    class="share"
+    class="fill-none arc-week origin-center -rotate-90 transition-[stroke-dashoffset] duration-(--dur-panel) ease-in-out motion-reduce:transition-off"
     cx="5"
     cy="5"
     pathLength="100"
     r="2.5"
+    stroke-dasharray="100 100"
+    stroke-width="5"
     style:stroke-dashoffset={(100 - shown).toFixed(2)}
   />
 </svg>
-
-<style>
-  .week-mark {
-    display: inline-block;
-    flex: none;
-    vertical-align: middle;
-  }
-  .track {
-    fill: var(--border-control);
-  }
-  /* A sector: a stroke as wide as its circle's diameter, so it fills the
-     disc from the centre out (as Rings draws its disc). */
-  .share {
-    fill: none;
-    stroke: color-mix(
-      in oklch,
-      var(--c),
-      var(--account-week-toward) calc(var(--account-week-mix) * 100%)
-    );
-    stroke-width: 5;
-    stroke-dasharray: 100 100;
-    transform: rotate(-90deg);
-    transform-origin: 5px 5px;
-    transition: stroke-dashoffset var(--dur-panel) var(--ease-in-out);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .share {
-      transition: none;
-    }
-  }
-</style>

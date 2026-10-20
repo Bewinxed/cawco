@@ -158,9 +158,18 @@ export function voiceOfMessage(m: Message): Voice {
       return m.content.trim() ? "acts" : "none";
     case "result.success":
       return "none";
-    default:
-      return RUN_LINES.has(m.type) ? "acts" : "note";
+    case "result.error":
+    case "send.ref":
+    case "tool.handoff":
+    case "tool.progress":
+    case "tool.result":
+    case "tool.use":
+    case "user.delegate_ask":
+    case "user.peer":
+    case "user.rule":
+      break;
   }
+  return RUN_LINES.has(m.type) ? "acts" : "note";
 }
 
 function voiceOf(row: Row): Voice {
@@ -173,9 +182,17 @@ function voiceOf(row: Row): Voice {
     case "compaction":
     case "account":
       return "note";
-    default:
-      // tools, livetool, question, subagent, delegate, thinking, stream, and
-      // a harness task note: all of them the agent's run.
+    // tools, livetool, question, subagent, delegate, thinking, stream, and
+    // a harness task note: all of them the agent's run.
+    case "delegate":
+    case "harness":
+    case "livetool":
+    case "question":
+    case "run":
+    case "stream":
+    case "subagent":
+    case "thinking":
+    case "tools":
       return "acts";
   }
 }
@@ -205,7 +222,7 @@ function voice(v: Voices, row: Row): boolean {
       v.speaker = null;
       v.headed = false;
       return false;
-    default:
+    case "none":
       return false;
   }
 }

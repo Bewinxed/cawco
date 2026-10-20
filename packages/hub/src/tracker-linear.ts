@@ -270,12 +270,22 @@ export const linearRefusal = (
         "unreachable",
         `Linear could not be reached to ${what}: ${said}`
       );
-    default:
-      return new TrackerRefusal(
-        "input",
-        `Linear would not ${what} in ${team}: ${said}`
-      );
+    case LinearErrorType.BootstrapError:
+    case LinearErrorType.GraphqlError:
+    case LinearErrorType.InternalError:
+    case LinearErrorType.InvalidInput:
+    case LinearErrorType.LockTimeout:
+    case LinearErrorType.Other:
+    case LinearErrorType.Unknown:
+    case LinearErrorType.UsageLimitExceeded:
+    case LinearErrorType.UserError:
+    case undefined:
+      break;
   }
+  return new TrackerRefusal(
+    "input",
+    `Linear would not ${what} in ${team}: ${said}`
+  );
 };
 
 /** One team's issues, as the sync asks of a tracker. `asApp`: the connection is a Linear app. */

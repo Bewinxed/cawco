@@ -23,14 +23,9 @@
  * appearance). Transitions are CSS composites with no Apple counterpart (the
  * motion tokens they are built from are emitted) and are not emitted.
  */
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type Color from "colorjs.io";
-import type {
-  Dictionary,
-  PlatformConfig,
-  TransformedToken,
-} from "style-dictionary/types";
+import type { Dictionary, TransformedToken } from "style-dictionary/types";
 import {
   CssEvaluator,
   call,
@@ -54,6 +49,7 @@ const NAMESPACES: Record<string, string> = {
   radius: "Radius",
   size: "Size",
   effect: "Effect",
+  layer: "Layer",
   motion: "Motion",
   shadow: "Shadow",
 };
@@ -146,37 +142,36 @@ function colourTokens(dictionary: Dictionary): TransformedToken[] {
   );
 }
 
-/** Rewrites the asset catalog: one colour set per colour token, Any and Dark. */
-export const colourSetsAction = (view: TokenView) => ({
-  do: (dictionary: Dictionary, platform: PlatformConfig): void => {
-    const tokens = new Tokens(view);
-    const catalog = join(platform.buildPath ?? "", CATALOG);
-    rmSync(catalog, { recursive: true, force: true });
-    mkdirSync(catalog, { recursive: true });
-    writeFileSync(join(catalog, "Contents.json"), json({ info: AUTHOR }));
-    for (const token of colourTokens(dictionary)) {
-      const dir = join(catalog, `${token.name}.colorset`);
-      const path = token.path.join(".");
-      mkdirSync(dir);
-      writeFileSync(
-        join(dir, "Contents.json"),
-        json({
-          colors: [
-            appearance(tokens.colourOf(path, "light", token.name), false),
-            appearance(tokens.colourOf(path, "dark", token.name), true),
-          ],
-          info: AUTHOR,
-        })
-      );
-    }
-  },
-  undo: (_dictionary: Dictionary, platform: PlatformConfig) => {
-    rmSync(join(platform.buildPath ?? "", CATALOG), {
-      recursive: true,
-      force: true,
-    });
-  },
-});
+/** The asset catalog's path under the Apple module, from its build path. */
+export const COLOUR_CATALOG = CATALOG;
+
+/**
+ * The asset catalog's files, by their path inside it: its Contents.json,
+ * and one colour set per colour token, Any and Dark.
+ */
+export function colourSetFiles(
+  view: TokenView,
+  dictionary: Dictionary
+): Map<string, string> {
+  const tokens = new Tokens(view);
+  const files = new Map<string, string>([
+    ["Contents.json", json({ info: AUTHOR })],
+  ]);
+  for (const token of colourTokens(dictionary)) {
+    const path = token.path.join(".");
+    files.set(
+      join(`${token.name}.colorset`, "Contents.json"),
+      json({
+        colors: [
+          appearance(tokens.colourOf(path, "light", token.name), false),
+          appearance(tokens.colourOf(path, "dark", token.name), true),
+        ],
+        info: AUTHOR,
+      })
+    );
+  }
+  return files;
+}
 
 // MARK: - Swift
 

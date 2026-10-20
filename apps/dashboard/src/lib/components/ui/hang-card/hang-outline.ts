@@ -37,26 +37,31 @@ export function outlineLayer(card: HTMLElement): OutlineLayer {
   made += 1;
   const id = `hang-outline-${made}`;
   const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("class", "hang-outline");
+  // Over the page, just over the card, never in the way of a press; the
+  // hang's edge, and the cast's two inks, in the tokens'.
+  svg.setAttribute(
+    "class",
+    "pointer-events-none fixed inset-0 size-full overflow-visible"
+  );
   svg.setAttribute("data-slot", "hang-outline");
   svg.setAttribute("aria-hidden", "true");
   svg.innerHTML = `<defs>
-<linearGradient id="${id}-ink" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="0" y2="1"><stop offset="0" data-slot="rim" class="rim"/><stop offset="1" class="edge"/></linearGradient>
-<clipPath id="${id}-under"><rect x="-100000" y="0" width="200000" height="200000"/></clipPath>
+<linearGradient id="${id}-ink" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="0" y2="1"><stop offset="0" data-slot="rim"/><stop offset="1" class="[stop-color:var(--border-control)]"/></linearGradient>
+<clipPath id="${id}-under"><rect data-slot="under" x="-100000" y="0" width="200000" height="200000"/></clipPath>
 <filter id="${id}-cast" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
-<feGaussianBlur in="SourceAlpha" stdDeviation="24"/><feOffset dy="18" result="far"/><feFlood class="far"/><feComposite in2="far" operator="in" result="farInk"/>
-<feGaussianBlur in="SourceAlpha" stdDeviation="3"/><feOffset dy="2" result="near"/><feFlood class="near"/><feComposite in2="near" operator="in" result="nearInk"/>
+<feGaussianBlur in="SourceAlpha" stdDeviation="24"/><feOffset dy="18" result="far"/><feFlood class="[flood-color:var(--shadow-tint-3)]"/><feComposite in2="far" operator="in" result="farInk"/>
+<feGaussianBlur in="SourceAlpha" stdDeviation="3"/><feOffset dy="2" result="near"/><feFlood class="[flood-color:var(--shadow-tint)]"/><feComposite in2="near" operator="in" result="nearInk"/>
 <feMerge result="both"><feMergeNode in="farInk"/><feMergeNode in="nearInk"/></feMerge>
 <feComposite in="both" in2="SourceAlpha" operator="out"/>
 </filter>
 </defs>
-<path class="cast" filter="url(#${id}-cast)" clip-path="url(#${id}-under)"/>
-<path class="line" fill="none" stroke="url(#${id}-ink)" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+<path data-slot="cast" filter="url(#${id}-cast)" clip-path="url(#${id}-under)"/>
+<path data-slot="line" fill="none" stroke="url(#${id}-ink)" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
   const gradient = svg.querySelector("linearGradient") as SVGElement;
-  const rimStop = svg.querySelector("stop.rim") as SVGElement;
-  const under = svg.querySelector("clipPath rect") as SVGElement;
-  const cast = svg.querySelector("path.cast") as SVGElement;
-  const line = svg.querySelector("path.line") as SVGElement;
+  const rimStop = svg.querySelector('[data-slot="rim"]') as SVGElement;
+  const under = svg.querySelector('[data-slot="under"]') as SVGElement;
+  const cast = svg.querySelector('[data-slot="cast"]') as SVGElement;
+  const line = svg.querySelector('[data-slot="line"]') as SVGElement;
   // Just over the card: at its stack (its own z-index, or its floating
   // wrapper's), later in the page, so over it.
   const stacks = [card, card.parentElement ?? card]

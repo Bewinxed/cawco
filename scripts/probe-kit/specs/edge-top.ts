@@ -47,6 +47,11 @@ import {
 } from "../kit";
 
 const STRIP = '[data-slot="edge-top"]';
+/** Caw's head side, px, as NeedsCaw.svelte `head` draws it: 24 on a phone, 20 in the wide bar's group. */
+const HEAD: Record<Extract<View, "desk" | "phone">, number> = {
+  desk: 20,
+  phone: 24,
+};
 /** The rail's trailing edge at the desk: its hairline's column. */
 const RAIL_X = 229;
 const ROWS = [3, 4];
@@ -74,7 +79,7 @@ const ARC_RADIUS = /A ([\d.]+) /;
 const FIRST_Y = /^M [\d.]+ ([\d.]+)/;
 const TOOLS = '[data-slot="tools"]';
 const MACHINES = `${TOOLS} [data-machines]`;
-const JUMP_SVG = `${TOOLS} .jump > svg`;
+const JUMP_SVG = `${TOOLS} button[data-share="jump"] > svg`;
 
 /** An svg's ink across, viewport px: its shapes' geometry boxes, grown by half a stroke where stroked; null when not drawn. */
 const svgInk = (page: Page, selector: string) =>
@@ -133,7 +138,7 @@ const numberInk = (page: Page) =>
 const faceInk = (page: Page) =>
   page.evaluate(() => {
     const canvas = document.querySelector<HTMLCanvasElement>(
-      "[data-needs-caw] .face[data-box] canvas"
+      "[data-needs-caw] [data-caw-face] canvas"
     );
     const ctx = canvas?.getContext("2d");
     if (!(canvas && ctx && canvas.width > 0)) {
@@ -171,13 +176,21 @@ const glassStyles = (page: Page) =>
       const m = machines ? getComputedStyle(machines) : null;
       const j = jump ? getComputedStyle(jump) : null;
       return {
-        count: caw?.querySelector(".rim")?.getAttribute("data-count") ?? "?",
+        count:
+          caw?.querySelector("[data-slot=rim]")?.getAttribute("data-count") ??
+          "?",
         roundArc:
-          caw?.querySelector(".rim .round .arc")?.getAttribute("d") ?? "",
+          caw
+            ?.querySelector("[data-slot=rim] [data-slot=round] path")
+            ?.getAttribute("d") ?? "",
         standArc:
-          caw?.querySelector(".rim .standing .arc")?.getAttribute("d") ?? "",
+          caw
+            ?.querySelector("[data-slot=rim] [data-slot=standing] path")
+            ?.getAttribute("d") ?? "",
         round:
-          (caw?.querySelector(".rim .round")?.getClientRects().length ?? 0) > 0,
+          (caw
+            ?.querySelector("[data-slot=rim] [data-slot=round]")
+            ?.getClientRects().length ?? 0) > 0,
         pad: m ? [m.paddingInlineStart, m.paddingInlineEnd] : null,
         jump: j
           ? { inline: j.inlineSize, block: j.blockSize, color: j.color }
@@ -218,9 +231,12 @@ const px = (n: number | null) => (n === null ? "none" : n.toFixed(2));
 const glassLeg = async (kit: Kit, page: Page, leg: string, desk: boolean) => {
   await page.waitForFunction(
     () =>
-      document.querySelector("[data-needs-caw] .rim .arc") !== null &&
+      document.querySelector("[data-needs-caw] [data-slot=rim] path") !==
+        null &&
       (document
-        .querySelector<HTMLCanvasElement>("[data-needs-caw] .face canvas")
+        .querySelector<HTMLCanvasElement>(
+          "[data-needs-caw] [data-caw-face] canvas"
+        )
         ?.getContext("2d")
         ?.getImageData(0, 0, 1, 1) ?? null) !== null,
     undefined,
@@ -334,7 +350,11 @@ const differs = (p: Raster, q: Raster): string[] => {
   return found;
 };
 
-type Pane = (view: View, theme: Theme, scale?: number) => Promise<Page>;
+type Pane = (
+  view: keyof typeof HEAD,
+  theme: Theme,
+  scale?: number
+) => Promise<Page>;
 
 /** The strip as WebKit's sampler takes it, with its mask and without. */
 const boxLeg = async (kit: Kit, page: Page, leg: string) => {
@@ -533,6 +553,20 @@ const run = async (kit: Kit) => {
       [[alpha, beta], alpha] as const
     );
     await open(page, `${base}/session/${alpha}`, "[data-session-tab]", 120_000);
+    // As `open` hands the page over, it draws its own answers: Caw's head the
+    // side NeedsCaw sets from the width (`head`, 24 on a phone, 20 in the
+    // wide bar's group), not the server's guess from the cookie.
+    const side = await page.evaluate(() => {
+      const face = document.querySelector<HTMLElement>(
+        "[data-needs-caw] [data-caw-phase]"
+      );
+      return face ? getComputedStyle(face).getPropertyValue("--side") : null;
+    });
+    kit.check(
+      `${view} ${theme}${scale ? ` ${scale}x` : ""}: as open() returns, Caw's head is ${HEAD[view]}px`,
+      side === `${HEAD[view]}px`,
+      `--side ${side ?? "no face"}`
+    );
     // The bar marks the root once it has placed the tabs: hosting them at
     // the desk, floating over the phone's tab row. The strip's colour follows.
     await page.waitForFunction(

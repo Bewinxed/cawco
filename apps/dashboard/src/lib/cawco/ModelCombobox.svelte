@@ -7,7 +7,11 @@
   import { tick } from "svelte";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
-  import { Button, type ButtonSize } from "#lib/components/ui/button/index.js";
+  import {
+    Button,
+    type ButtonProps,
+    type ButtonSize,
+  } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Command from "#lib/components/ui/command/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -27,6 +31,7 @@
     onchoose,
     showDefault = false,
     size = "sm",
+    width,
     class: className = "",
   }: {
     /** The model in force, as the id it is known by. `''` is the SDK's own choice. */
@@ -37,6 +42,8 @@
     /** Whether "Default" is offered — it is, wherever no model at all is a choice. */
     showDefault?: boolean;
     size?: ButtonSize;
+    /** The trigger's width look, passed on to its Button. */
+    width?: ButtonProps["width"];
     class?: string;
   } = $props();
 
@@ -118,13 +125,16 @@
         {...props}
         aria-expanded={open}
         aria-label={unreported ? "Model, not reported yet" : "Model"}
-        class="justify-between gap-2 {className}"
+        align="trigger"
+        class={className}
+        gap="loose"
         role="combobox"
         {size}
         title={unreported
           ? "Read from this session's next turn — it has not said which model answers"
           : value || "The model the harness picks for itself"}
         variant="outline"
+        {width}
       >
         <span
           data-slot="num"
@@ -133,12 +143,12 @@
         >
         <!-- 16px, the control size, so this unfold mark matches the one on
              the disclosure trigger. -->
-        <IconUnfold class="size-4 shrink-0 opacity-50" />
+        <IconUnfold class="size-icon-md shrink-0 opacity-50" />
       </Button>
     {/snippet}
   </Popover.Trigger>
 
-  <Popover.Content align="start" class="w-80 p-0">
+  <Popover.Content align="start" pad="none" width="wide">
     <Command.Root>
       <Command.Input
         placeholder="Search, or type a model id…"
@@ -155,7 +165,7 @@
                 <ProviderLogo model={trimmed} />
                 <span class="flex flex-col" data-box>
                   <span>Use <span class="font-mono">{trimmed}</span></span>
-                  <span class="text-meta text-muted-foreground">
+                  <span class="text-meta text-ink-muted">
                     Sent to the selected harness exactly as typed
                   </span>
                 </span>
@@ -197,7 +207,7 @@
             >
               <span class="flex flex-col" data-box>
                 <span>Default</span>
-                <span class="text-meta text-muted-foreground">
+                <span class="text-meta text-ink-muted">
                   Whatever the selected harness would have picked
                 </span>
               </span>
@@ -214,9 +224,7 @@
               <ProviderLogo model={row.value} />
               <span class="flex flex-col" data-box>
                 <span>{row.displayName}</span>
-                <span class="text-meta text-muted-foreground"
-                  >{row.description}</span
-                >
+                <span class="text-meta text-ink-muted">{row.description}</span>
               </span>
             </Command.Item>
           {/each}
@@ -225,9 +233,9 @@
 
       {#if note}
         <p
-          class="border-t border-foreground/5 px-3 py-2 text-meta {unread
-            ? 'text-error'
-            : 'text-muted-foreground'}"
+          class="border-t border-ink-strong/5 px-3 py-2 text-meta {unread
+            ? 'text-error-9'
+            : 'text-ink-muted'}"
           role={unread ? "alert" : undefined}
         >
           {note}

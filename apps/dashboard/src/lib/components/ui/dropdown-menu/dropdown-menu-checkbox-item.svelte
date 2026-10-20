@@ -1,6 +1,8 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
+  import { tickVariants } from "#lib/components/ui/checkbox/checkbox.svelte";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import { IconMinus, IconTick } from "#lib/icons.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
 
@@ -18,9 +20,11 @@
 
 <DropdownMenuPrimitive.CheckboxItem
   class={cn(
-    "kit-item relative flex cursor-default select-none items-center gap-2.5 pr-8 pl-2.5 text-label outline-hidden data-[disabled]:pointer-events-none data-inset:pl-9.5 data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    menuItemVariants(),
+    "relative flex cursor-default select-none items-center gap-2.5 pr-space-8 pl-2.5 text-label outline-hidden data-[disabled]:pointer-events-none data-inset:pl-9.5 data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     className
   )}
+  data-menu-item
   data-slot="dropdown-menu-checkbox-item"
   bind:checked
   bind:indeterminate
@@ -36,7 +40,7 @@
       {#if indeterminate}
         <IconMinus />
       {:else}
-        <IconTick class="kit-tick" data-on={checked} />
+        <IconTick class={tickVariants({ clock: "menu" })} data-on={checked} />
       {/if}
     </span>
     {@render childrenProp?.()}

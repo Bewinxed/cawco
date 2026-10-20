@@ -62,13 +62,6 @@
   } from "./send-recovery.svelte";
   import Thinking from "./Thinking.svelte";
 
-  /** A token-dressed micro count badge — shadcn Badge, off the stock 4/8/12
-   *  ladder and onto the DESIGN.md scale so it never reads as stock shadcn. */
-  const chipClass =
-    "h-auto rounded-[var(--radius-xs)] border-transparent bg-[var(--surface-recess)] " +
-    "px-[var(--space-2)] py-px text-[length:var(--text-meta)] font-[var(--weight-body)] " +
-    "!text-[color:var(--ink-muted)]";
-
   let {
     message,
     agentName,
@@ -156,9 +149,9 @@
   }
 
   function placeActions(node: HTMLElement): () => void {
-    const turn = node.closest(".turn");
+    const turn = node.closest('[data-slot="turn"]');
     function place(): void {
-      const well = node.closest(".well");
+      const well = node.closest('[data-slot="well"]');
       const inset = Number.parseFloat(
         getComputedStyle(node).getPropertyValue("--space-2")
       );
@@ -184,7 +177,7 @@
     if (!(actionsShown && words)) {
       return;
     }
-    const turn = words.closest(".turn");
+    const turn = words.closest('[data-slot="turn"]');
     function dismiss(event: Event): void {
       if (
         event.type === "scroll" ||
@@ -266,9 +259,9 @@
   let modeOpen = $state(false);
   let modePending = $state(false);
   /** Send edited message: a rewind's picker hangs from it. */
-  let editSend = $state<HTMLButtonElement | null>(null);
+  let editSend = $state<HTMLElement | null>(null);
   /** The row's Choose a mode: a send's picker hangs from it. */
-  let modeButton = $state<HTMLButtonElement | null>(null);
+  let modeButton = $state<HTMLElement | null>(null);
   function askMode(
     what: "send" | "rewind",
     anchor: HTMLElement | null,
@@ -661,7 +654,7 @@
        turn when it starts a run, its words when it joins one. -->
   <Turn
     data-ghost={ghost || waiting || undefined}
-    class={ghost || waiting ? "ghost" : undefined}
+    class="group/turn"
     data-message={message.id}
     {grouped}
     {runsOn}
@@ -681,9 +674,13 @@
       />
     {/if}
     <Well {grouped} {lifted} {runsOn} {@attach openWell}>
+      <!-- Holds the grouped row's clock, floated into the first line.
+           Sending and queued: the words and their header at reduced
+           presence, a note instead of a clock. The well stays at full
+           strength, so the run reads as one surface. -->
       <div
         data-slot="words"
-        class="words"
+        class="flow-root group-data-ghost/turn:opacity-(--ghost-presence) motion-safe:transition-[opacity] motion-safe:duration-(--dur-menu) motion-safe:ease-out"
         bind:this={words}
         {@attach land(() => (grouped ? sent : undefined), {
           ms: dur("--dur-pop"),
@@ -704,16 +701,19 @@
         <!-- Folds to the tag above while its words are in the composer, and
              opens to take them back; the words hide while they fly. -->
         <div
-          class="lift-fold"
           {@attach folds(() => !lifted, {
             ms: dur("--dur-panel"),
             easing: CURVE.drawer,
           })}
         >
+          <!-- The words of a queued message while they are in the composer,
+               and on their way back: the flight is them, so the bubble
+               draws none. -->
           <div
             data-message-row-away={wordsAway || undefined}
             data-lift-words
-            class:away={wordsAway}
+            data-away={wordsAway || undefined}
+            class="data-away:invisible"
             {@attach morph()}
           >
             {#if editing}
@@ -724,47 +724,42 @@
                 bind:ref={editor}
                 bind:value={editContent}
               />
-              <div data-slot="actions" class="actions">
-                <button
+              <div data-slot="actions" class="flex gap-space-2 mt-space-2">
+                <Button
                   data-slot="action"
-                  class="pressable action"
                   disabled={editPending}
                   onclick={cancelEditing}
-                  type="button"
+                  size="xs"
+                  variant="outline"
                 >
                   Cancel edit
-                </button>
-                <button
+                </Button>
+                <Button
                   data-slot="action"
-                  aria-busy={editPending || undefined}
-                  aria-disabled={editPending || undefined}
-                  class="pressable action"
                   disabled={!(canEdit && editContent.trim())}
-                  onclick={whileIdle(
-                    () => editPending || modePending,
-                    submitEdit
-                  )}
-                  type="button"
-                  bind:this={editSend}
-                >
-                  <PendingContent
-                    failed={!!editError}
-                    label="Send edited message"
-                    pending={editPending || modePending}
-                    pendingLabel="Sending…"
-                  />
-                </button>
+                  failed={!!editError}
+                  label="Send edited message"
+                  onclick={submitEdit}
+                  pending={editPending || modePending}
+                  pendingLabel="Sending…"
+                  size="xs"
+                  variant="outline"
+                  bind:ref={editSend}
+                />
               </div>
             {:else}
               <MessageBody source={shownContent} />
               {#if (hasActions || retried) && !wordsAway}
+                <!-- Over the well's top edge at its end; a grouped row's sit
+                     inside the well, on its raised surface, and flip under
+                     the edge when the well's top is off screen. -->
                 <div
                   data-message-row-shown={actionsShown || undefined}
                   data-slot="actions"
-                  class="actions turn-actions"
-                  class:flipped={actionsFlipped}
-                  class:pending={forkPending || retrying}
-                  class:shown={actionsShown}
+                  data-flipped={actionsFlipped || undefined}
+                  data-pending={forkPending || retrying || undefined}
+                  data-shown={actionsShown || undefined}
+                  class="flex gap-space-2 absolute top-0 end-(--pad) z-1 -translate-y-full opacity-0 pointer-events-none transition-[opacity] duration-(--dur-control) ease-out group-data-grouped/turn:top-space-2 group-data-grouped/turn:bg-surface-raised group-data-grouped/turn:rounded-md group-data-grouped/turn:data-flipped:top-0 group-data-grouped/turn:data-flipped:translate-none group-hover/turn:opacity-100 group-hover/turn:pointer-events-auto can-hover:group-focus-within/turn:opacity-100 can-hover:group-focus-within/turn:pointer-events-auto can-hover:data-pending:opacity-100 can-hover:data-pending:pointer-events-auto coarse:data-shown:opacity-100 coarse:data-shown:pointer-events-auto"
                   {@attach placeActions}
                 >
                   {#if canEdit || offered.edit === "queued"}
@@ -783,32 +778,27 @@
                     </Tip>
                   {/if}
                   {#if (recoverable || retried) && !shownRecovery}
-                    <button
+                    <Button
                       data-slot="action"
-                      aria-busy={retrying || undefined}
-                      aria-disabled={retrying || undefined}
-                      class="pressable action"
-                      onclick={whileIdle(() => retrying, tryAgain)}
-                      type="button"
-                    >
-                      <PendingContent
-                        {failed}
-                        label="Send again"
-                        pending={retrying || (retried && !failed)}
-                        pendingLabel="Sending again…"
-                      />
-                    </button>
+                      {failed}
+                      label="Send again"
+                      onclick={tryAgain}
+                      pending={retrying || (retried && !failed)}
+                      pendingLabel="Sending again…"
+                      size="xs"
+                      variant="outline"
+                    />
                   {/if}
                   {#if editable || (retried && heldEdit)}
-                    <button
+                    <Button
                       data-slot="action"
-                      class="pressable action"
                       disabled={retrying}
                       onclick={edit}
-                      type="button"
+                      size="xs"
+                      variant="outline"
                     >
                       Edit
-                    </button>
+                    </Button>
                   {/if}
                   {#if canFork}
                     <Tip label="Fork from here">
@@ -818,7 +808,7 @@
                           aria-busy={forkPending || undefined}
                           aria-disabled={forkPending || undefined}
                           aria-label="Fork from here"
-                          class="[--btn-icon:var(--icon-md)]"
+                          style="--btn-icon: var(--icon-md)"
                           onclick={whileIdle<MouseEvent>(
                             () => forkPending,
                             branch
@@ -839,12 +829,22 @@
               {/if}
             {/if}
             {#if editError}
-              <p data-slot="reason" class="reason" role="alert">{editError}</p>
+              <p
+                data-slot="reason"
+                class="text-size-meta font-normal text-status-fail-ink"
+                role="alert"
+              >
+                {editError}
+              </p>
             {/if}
           </div>
         </div>
         {#if message.metadata?.attachments?.length || message.metadata?.images?.length}
-          <div data-slot="chips" class="chips" data-gallery>
+          <div
+            data-slot="chips"
+            class="flex flex-wrap items-center gap-space-2 mt-space-2"
+            data-gallery
+          >
             {#each message.metadata.attachments ?? [] as att, i (`${att.name}-${i}`)}
               {#if att.kind === "file"}
                 <DocThumb href={att.ref} name={att.name} size={att.size} />
@@ -862,7 +862,7 @@
                 />
               {:else}
                 <!-- A stored transcript can name an image it no longer carries. -->
-                <Badge class={chipClass} variant="secondary"
+                <Badge kind="meta" variant="secondary"
                   ><span>Image {i + 1} · {img.mediaType}</span></Badge
                 >
               {/if}
@@ -876,6 +876,9 @@
              transcript it grows, so its tail is held while it does. Once a
              retry has gone out its contents stay, inert, for the fold to
              close over; a row that never failed renders none of it. -->
+        <!-- The reason + actions unfold on a `grid-template-rows` track
+             rather than `height`, so the animated size is intrinsic content
+             height with no measurement pass. -->
         {#if modeAsk}
           <ModePick
             anchor={modeAsk.anchor}
@@ -891,54 +894,65 @@
         {/if}
         <div
           data-slot="failure"
-          class="failure"
           data-opens
           inert={!open}
-          class:open
+          data-open={open || undefined}
+          style:--fail-delay="calc(var(--dur-control) / 3)"
+          class="grid grid-rows-shut opacity-0 data-open:grid-rows-open data-open:opacity-100 data-open:mt-space-2 motion-safe:transition-[grid-template-rows,opacity,margin-block-start] motion-safe:duration-(--dur-pop) motion-safe:ease-out motion-safe:delay-(--fail-delay)"
         >
-          <div class="failure-inner">
+          <div class="overflow-hidden min-h-0">
             {#if failed || retried}
+              <!-- Being sent again is not a failure: it says so in the meta
+                   ink. -->
               <p
                 data-slot="reason"
-                class="reason"
-                class:going={line === SENDING_AGAIN}
+                data-going={line === SENDING_AGAIN || undefined}
+                class="text-size-meta font-normal text-status-fail-ink data-going:text-ink-muted"
               >
                 {line}
               </p>
               <!-- The way back, right under why (send-recovery.svelte.ts):
                    while what refused it holds, what fixes it; once it no
-                   longer does, Send again. -->
+                   longer does, Send again. Its actions wrap under the reason
+                   rather than run past the well; a link among them is drawn
+                   as its siblings are. -->
               {#if shownRecovery && (shownRecovery.actions.length > 0 || !shownRecovery.holds)}
-                <div data-slot="actions" class="actions recovery">
+                <div
+                  data-slot="actions"
+                  class="flex flex-wrap gap-space-2 mt-space-2 min-w-0"
+                >
                   {#if shownRecovery.holds}
                     {#each shownRecovery.actions as action, i (i)}
                       {#if action.kind === "link"}
-                        <a
+                        <Button
                           data-slot="action"
-                          class="pressable action"
+                          class="max-w-full"
                           href={action.href}
-                          ><span data-slot="message-row-label" class="label"
+                          size="xs"
+                          variant="outline"
+                          width="shrink"
+                          ><span
+                            data-slot="message-row-label"
+                            class="overflow-clip text-ellipsis whitespace-nowrap"
                             >{action.label}</span
-                          ></a
+                          ></Button
                         >
                       {:else if action.kind === "move"}
                         {@const going =
                           !!target && movingTo(target) === action.account.id}
-                        <button
+                        <Button
                           data-slot="action"
-                          aria-busy={going || undefined}
-                          aria-disabled={going || undefined}
-                          class="pressable action mark-line"
-                          onclick={whileIdle(
-                            () => going,
-                            () => moveAndSend(action.account.id)
-                          )}
-                          type="button"
+                          onclick={() => moveAndSend(action.account.id)}
+                          pending={going}
+                          size="xs"
+                          variant="outline"
                         >
+                          <!-- An account's own dot, as its menu draws it
+                               (AccountSubmenu). -->
                           <i
                             data-slot="dot"
                             aria-hidden="true"
-                            class="dot"
+                            class="flex-none size-space-2 rounded-pill bg-(--c)"
                             data-box
                             style:--c={hueVar(action.account.hue)}
                           ></i>
@@ -947,64 +961,43 @@
                             pending={going}
                             pendingLabel={`Moving to ${nameOf(action.account)}…`}
                           />
-                        </button>
+                        </Button>
                       {:else if action.kind === "mode"}
-                        <button
+                        <Button
                           data-slot="action"
-                          aria-busy={modePending || undefined}
-                          aria-disabled={modePending || undefined}
                           aria-expanded={modeOpen}
                           aria-haspopup="dialog"
-                          class="pressable action"
-                          onclick={whileIdle(
-                            () => modePending,
-                            () => askMode("send", modeButton, action)
-                          )}
-                          type="button"
-                          bind:this={modeButton}
-                        >
-                          <PendingContent
-                            label="Choose a mode"
-                            pending={modePending}
-                            pendingLabel="Starting it…"
-                          />
-                        </button>
+                          label="Choose a mode"
+                          onclick={() => askMode("send", modeButton, action)}
+                          pending={modePending}
+                          pendingLabel="Starting it…"
+                          size="xs"
+                          variant="outline"
+                          bind:ref={modeButton}
+                        />
                       {:else}
-                        <button
+                        <Button
                           data-slot="action"
-                          aria-busy={starting || undefined}
-                          aria-disabled={starting || undefined}
-                          class="pressable action mark-line"
-                          onclick={whileIdle(
-                            () => starting,
-                            () => startWith(action)
-                          )}
-                          type="button"
-                        >
-                          <PendingContent
-                            label="Start a new session"
-                            pending={starting}
-                            pendingLabel="Opening…"
-                          />
-                        </button>
+                          label="Start a new session"
+                          onclick={() => startWith(action)}
+                          pending={starting}
+                          pendingLabel="Opening…"
+                          size="xs"
+                          variant="outline"
+                        />
                       {/if}
                     {/each}
                   {:else}
-                    <button
+                    <Button
                       data-slot="action"
-                      aria-busy={retrying || undefined}
-                      aria-disabled={retrying || undefined}
-                      class="pressable action"
-                      onclick={whileIdle(() => retrying, tryAgain)}
-                      type="button"
-                    >
-                      <PendingContent
-                        {failed}
-                        label="Send again"
-                        pending={retrying || (retried && !failed)}
-                        pendingLabel="Sending again…"
-                      />
-                    </button>
+                      {failed}
+                      label="Send again"
+                      onclick={tryAgain}
+                      pending={retrying || (retried && !failed)}
+                      pendingLabel="Sending again…"
+                      size="xs"
+                      variant="outline"
+                    />
                   {/if}
                 </div>
               {/if}
@@ -1036,170 +1029,3 @@
 {:else}
   <SystemLine disclosed={disclosure(message)} {message} />
 {/if}
-
-<style>
-  /* The turn (Turn), its well (Well) and its speaker line (Who) are drawn by
-     the turn/ components; what this row adds to them is below. */
-  /* The words of a queued message while they are in the composer, and on
-     their way back: the flight is them, so the bubble draws none. */
-  .away {
-    visibility: hidden;
-  }
-  /* Holds the grouped row's clock, floated into the first line. */
-  .words {
-    display: flow-root;
-  }
-  /* Sending and queued: the words and their header at reduced presence, a
-     note instead of a clock. The well stays at full strength, so the run
-     reads as one surface. Not colour alone — the note text and the missing
-     clock carry the state too, so it survives grayscale and reduced motion. */
-  /* css-scope: this row's turn (Turn) and its speaker line (Who), the turn/ components it draws around its words */
-  :global(.turn.ghost > .who),
-  :global(.turn.ghost) .words {
-    opacity: var(--ghost-presence);
-  }
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    margin-block-start: var(--space-2);
-  }
-
-  /* The reason + actions unfold on a `grid-template-rows` track rather than
-     `height`, so the animated size is intrinsic content height with no
-     measurement pass. Collapsed to nothing when there is nothing to say —
-     which is every non-failed turn, so this costs nothing on the common path. */
-  .failure {
-    display: grid;
-    grid-template-rows: 0fr;
-    opacity: 0;
-
-    &.open {
-      grid-template-rows: 1fr;
-      opacity: 1;
-      margin-block-start: var(--space-2);
-    }
-  }
-  /* Motion is opt-in. Without it every state above still lands — the note,
-     the reason line — it simply lands at once. */
-  @media (prefers-reduced-motion: no-preference) {
-    /* css-scope: this row's turn (Turn) and its speaker line (Who), the turn/ components it draws around its words */
-    :global(.turn.you > .who),
-    .words {
-      transition: opacity var(--dur-menu) var(--ease-out);
-    }
-    .failure {
-      --fail-delay: calc(var(--dur-control) / 3);
-      transition:
-        grid-template-rows var(--dur-pop) var(--ease-out) var(--fail-delay),
-        opacity var(--dur-pop) var(--ease-out) var(--fail-delay),
-        margin-block-start var(--dur-pop) var(--ease-out) var(--fail-delay);
-    }
-  }
-  .failure-inner {
-    overflow: hidden;
-    min-block-size: 0;
-  }
-  .reason {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--status-fail-ink);
-
-    /* Being sent again is not a failure: it says so in the meta ink. */
-    &.going {
-      color: var(--ink-muted);
-    }
-  }
-  .actions {
-    display: flex;
-    gap: var(--space-2);
-    margin-block-start: var(--space-2);
-  }
-  .turn-actions {
-    position: absolute;
-    inset-block-start: 0;
-    inset-inline-end: var(--pad);
-    z-index: 1;
-    margin-block-start: 0;
-    transform: translateY(-100%);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--dur-control) var(--ease-out);
-  }
-  :global(.turn.grouped) .turn-actions {
-    transform: translateY(calc(var(--space-2) - 100%));
-    background: var(--surface-raised);
-    border-radius: var(--radius-md);
-
-    &.flipped {
-      transform: none;
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    :global(.turn.you:hover) .turn-actions,
-    :global(.turn.you:focus-within) .turn-actions,
-    .turn-actions.pending {
-      opacity: 1;
-      pointer-events: auto;
-    }
-  }
-  @media (pointer: coarse) {
-    .turn-actions.shown {
-      opacity: 1;
-      pointer-events: auto;
-    }
-  }
-  /* Text actions in the chip vocabulary MessageRow already speaks (radius-mark,
-     text-meta, space-2) rather than a new button style — a failed send reads as
-     a sibling of the well it sits in, not a dialog bolted onto it. Raised out
-     of the well like its code spans, edged in the well's own edge. */
-  .action {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--btn-gap);
-    --btn-gap: var(--space-1);
-    --btn-icon: 12px;
-    border-radius: var(--radius-xs);
-    border: 1px solid var(--well-edge);
-    background: var(--surface-raised);
-    padding-block: var(--space-1);
-    padding-inline: var(--space-2);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-
-    &:hover:not(:disabled) {
-      background: var(--surface-hover);
-    }
-    /* The other action, while a retry is out. */
-    &:disabled {
-      opacity: 0.5;
-    }
-  }
-  /* The way back under a refused send: its actions wrap under the reason
-     rather than run past the well. A link among them (the account's
-     sign-in page) is drawn as its siblings are. */
-  .recovery {
-    flex-wrap: wrap;
-    min-width: 0;
-  }
-  a.action {
-    min-width: 0;
-    max-width: 100%;
-    text-decoration: none;
-  }
-  .action .label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* An account's own dot, as its menu draws it (AccountSubmenu). */
-  .action .dot {
-    flex: none;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--c);
-  }
-</style>

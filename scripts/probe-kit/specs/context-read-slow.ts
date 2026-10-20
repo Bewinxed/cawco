@@ -36,7 +36,8 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type KitFleet, open, type Spec } from "../kit";
 
 /** The details' context line: a reading ("Context 2% · 3k/200k"), "Reading…", or why there is none. */
-const CONTEXT = ".session-details-popover .stats .context";
+const CONTEXT =
+  '[data-session-details-popover] [data-slot="stats"] [data-slot="context"]';
 const READING = /^Context \d+% · /;
 const OFFLINE = /may be offline/i;
 /** A turn the mock answers with a long command, for (e)'s withdrawal to wait in. */

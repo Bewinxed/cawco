@@ -69,7 +69,10 @@
 </script>
 
 {#snippet body()}
-  <div class="file-body" data-folder-file={path}>
+  <div
+    class="flex min-h-0 flex-1 flex-col gap-space-2 overflow-y-auto p-space-5 in-data-file-page:border-t in-data-file-page:border-t-border-hairline"
+    data-folder-file={path}
+  >
     {#if problem}
       <!-- Plain, not alarmed (WORDS.md, no alarm inflation): the path
            asked for is not there to show, and the hub says why. -->
@@ -77,89 +80,50 @@
         <AlertDescription>{problem}</AlertDescription>
       </Alert>
     {:else if content === null}
-      <Skeleton class="h-4 w-2/3" />
-      <Skeleton class="h-4 w-1/2" />
+      <Skeleton class="w-2/3" line="body" />
+      <Skeleton class="w-1/2" line="body" />
     {:else if markdown}
       <Markdown source={content} />
     {:else}
-      <pre data-slot="text" class="text">{content}</pre>
+      <pre
+        data-slot="text"
+        class="m-0 font-mono text-size-code wrap-anywhere whitespace-pre-wrap text-ink-strong">{content}</pre>
     {/if}
   </div>
 {/snippet}
 
 {#if page}
-  <section aria-label={path} class="file-page">
-    <header data-slot="page-head" class="page-head">
+  <!-- Its own page under 900px, headed as a task's (TaskPane's page): Back,
+       then the path at the row's end, cut short where it runs long. -->
+  <section
+    aria-label={path}
+    class="flex min-h-0 flex-1 flex-col"
+    data-file-page
+  >
+    <header
+      data-slot="page-head"
+      class="flex flex-none items-center gap-space-2 pt-0 pr-space-5 pb-space-2 pl-space-3"
+    >
       <Button onclick={onclose} size="sm" variant="ghost">
         <IconChevronLeft />
         <span>{backLabel}</span>
       </Button>
-      <bdi data-slot="page-path" class="page-path">{path}</bdi>
+      <bdi
+        data-slot="page-path"
+        class="ms-auto min-w-0 overflow-clip type-meta font-mono liga-none text-ellipsis whitespace-nowrap text-ink-subtle"
+        >{path}</bdi
+      >
     </header>
     {@render body()}
   </section>
 {:else}
   <SideSurface
-    class="folder-file"
+    of="file"
     label="A file of the project's folder"
     {onclose}
     title={path}
+    titleCode
   >
     {@render body()}
   </SideSurface>
 {/if}
-
-<style>
-  /* css-scope: .folder-file is this card's own class (SideSurface `class`).
-     The path in the head is set as its chip sets it, in the mono face. */
-  :global(.folder-file > .side-head .title) {
-    font-family: var(--font-mono);
-    font-size: var(--text-code);
-  }
-  /* Its own page under 900px, headed as a task's (TaskPane `.task-page`):
-     Back, then the path at the row's end, cut short where it runs long. */
-  .file-page {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-block-size: 0;
-  }
-  .page-head {
-    display: flex;
-    flex: none;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 0 var(--space-5) var(--space-2) var(--space-3);
-  }
-  .page-path {
-    min-inline-size: 0;
-    margin-inline-start: auto;
-    overflow: clip;
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-    color: var(--ink-subtle);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .file-body {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-block-size: 0;
-    overflow-y: auto;
-    padding: var(--space-5);
-  }
-  .file-page .file-body {
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .text {
-    margin: 0;
-    font-family: var(--font-mono);
-    font-size: var(--text-code);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    color: var(--ink-strong);
-  }
-</style>

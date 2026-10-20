@@ -13,7 +13,8 @@
    * the card (bridged) keeps it. A fine pointer only; touch has no hover.
    *
    * The card is portalled to the body: the rail isolates its stacking
-   * (kit-highlight), so a card drawn inside it would paint under the panes.
+   * (its highlight, components/ui/highlight), so a card drawn inside it
+   * would paint under the panes.
    */
   import { Portal } from "bits-ui";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -331,7 +332,7 @@
     onpointerenter={hold}
     onpointerleave={release}
     side="right"
-    style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: 360px"
+    style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: var(--c-session-hover-room)"
     watch={watchOf(openId)}
   >
     {#snippet children(id)}
@@ -341,11 +342,15 @@
       {@const runId = runIdOf(id)}
       {@const thread = cawco.threadOf(id)}
       <div data-nest-host>
-        <div data-slot="head" class="head mark-line">
+        <div
+          data-slot="head"
+          class="mark-line mb-space-2 flex min-w-c-session-hover-head items-center gap-space-2"
+        >
           <span
             data-slot="mark"
             aria-hidden="true"
-            class="mark m{markHue(row?.cwd || id)}"
+            class="grid size-c-row-mark flex-none place-items-center rounded-xs bg-(--mark-bg) bg-mark-overlay"
+            style:--mark-bg="var(--mark-{markHue(row?.cwd || id)})"
             data-box
           >
             {#if thread}
@@ -354,18 +359,24 @@
               <Sprite />
             {/if}
           </span>
-          <span data-slot="title" class="title"
+          <span
+            data-slot="title"
+            class="min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap text-size-label font-medium text-ink-strong"
             >{row ? instanceTitle(row) : "Session"}</span
           >
           <span
             aria-label={WORD[tone]}
-            class="state {tone}"
+            class="grid size-icon-md flex-none place-items-center text-ink-muted status-needs:text-status-attn-ink status-done:text-status-done-ink status-failed:text-status-fail-ink"
             data-session-hover-tone={tone}
+            data-status={tone}
             data-box
             role="img"
           >
             {#if tone === "live"}
-              <span data-slot="dot" class="dot"></span>
+              <span
+                data-slot="dot"
+                class="size-space-2 rounded-pill bg-status-live-glyph"
+              ></span>
             {:else if tone === "needs"}
               <IconAsk />
             {:else if tone === "stopping"}
@@ -382,16 +393,18 @@
           {@const newest = cawco.threadMessagesOf(thread.id)?.at(-1)}
           {@const line = newestLine(newest)}
           {#if newest && line}
-            <p class="newest">
-              <span data-slot="who" class="who">{SPEAKER[newest.author]}</span>
-              <span class="said">{line}</span>
+            <p class="flex min-w-0 gap-space-2 text-size-meta text-ink-strong">
+              <span data-slot="who" class="flex-none font-medium"
+                >{SPEAKER[newest.author]}</span
+              >
+              <span class="min-w-0 truncate">{line}</span>
             </p>
           {/if}
         {:else if runId}
           <!-- A workflow run's card: its steps under it, then the live tail of
              the one running, the way a session's card ends on its own. -->
           {@const step = runningStep(id)}
-          <RunSteps glyph=".mark" interactive={false} {runId} />
+          <RunSteps glyph={'[data-slot="mark"]'} interactive={false} {runId} />
           {#if step}
             <DelegateTail instanceId={step} note={null} />
           {:else if tone === "failed"}
@@ -404,105 +417,3 @@
     {/snippet}
   </HoverPanel>
 </Portal>
-
-<style>
-  .head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-block-end: var(--space-2);
-    min-inline-size: 240px;
-  }
-  .title {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .mark {
-    flex: none;
-    inline-size: 17px;
-    block-size: 17px;
-    border-radius: var(--radius-xs);
-    display: grid;
-    place-items: center;
-    background-image: var(--mark-overlay);
-    background-color: var(--mark-1);
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-      color: var(--mark-glyph);
-    }
-  }
-  .mark.m2 {
-    background-color: var(--mark-2);
-  }
-  .mark.m3 {
-    background-color: var(--mark-3);
-  }
-  .mark.m4 {
-    background-color: var(--mark-4);
-  }
-  .mark.m5 {
-    background-color: var(--mark-5);
-  }
-  .mark.m6 {
-    background-color: var(--mark-6);
-  }
-  .mark.m7 {
-    background-color: var(--mark-7);
-  }
-  .mark.m8 {
-    background-color: var(--mark-8);
-  }
-  .newest {
-    display: flex;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    font-size: var(--text-meta);
-    color: var(--ink-strong);
-  }
-  .who {
-    flex: none;
-    font-weight: var(--weight-strong);
-  }
-  .said {
-    min-inline-size: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .state {
-    flex: none;
-    inline-size: 16px;
-    block-size: 16px;
-    display: grid;
-    place-items: center;
-    color: var(--ink-muted);
-
-    & :global(svg) {
-      inline-size: 16px;
-      block-size: 16px;
-    }
-  }
-  .state.needs {
-    color: var(--status-attn-ink);
-  }
-  .state.done {
-    color: var(--status-done-ink);
-  }
-  .state.failed {
-    color: var(--status-fail-ink);
-  }
-  .dot {
-    inline-size: 5px;
-    block-size: 5px;
-    border-radius: 50%;
-    background: var(--status-live-glyph);
-  }
-</style>

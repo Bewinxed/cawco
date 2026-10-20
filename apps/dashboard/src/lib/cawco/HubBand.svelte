@@ -231,9 +231,10 @@
           build:
             "CawCo updated — this page has stopped updating. It reloads when the dashboard serves the new build.",
         }[shown.hold];
-      default:
-        return "";
+      case undefined:
+        break;
     }
+    return "";
   });
 
   /** What the band says, plain: its visible words and its live region's. */
@@ -250,9 +251,13 @@
         return "live";
       case "back":
         return "done";
-      default:
-        return "attn";
+      case "lost":
+      case "older":
+      case "retrying":
+      case undefined:
+        break;
     }
+    return "attn";
   });
 
   const pressable = $derived(
@@ -264,8 +269,18 @@
 
 <!-- Its slot is a row of the page's column under the bar, clipped at the
      bar's foot, so the band is uncovered from under the bar and closes back
-     into it while the row opens and shuts under it. -->
-<div class="band-slot">
+     into it while the row opens and shuts under it: a row shut until the
+     band opens, opening from nothing as the band slides down on the band's
+     own clock, so the band's foot and the page's top move as one edge. The
+     bar's foot is the band's top edge: it travels up under the bar, and its
+     shadow still falls on the page. Under the drawer's line (DRAWER_QUERY)
+     it stands at the top of the screen, over the bar: the same place on
+     every phone screen. -->
+<div
+  data-slot="hub-band-slot"
+  class="pointer-events-none relative z-(--layer-band) grid flex-none grid-rows-shut clip-block-start @container/hub-band data-open:grid-rows-open max-desk:-order-1 motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
+  data-open={band ? "" : undefined}
+>
   <!-- The live region stands from the first markup, so assistive tech has
        it registered before its words change; it says the band's words
        plain, without MorphText's letters (MDN, ARIA live regions: "Establish
@@ -276,10 +291,16 @@
     {band ? said : ""}
   </p>
   {#if browser}
-    <div class="band-row">
+    <!-- The row's one item: it shuts to nothing, the band drawn whole inside
+         it, held up under the bar. -->
+    <div data-slot="hub-band-row" class="min-h-0">
+      <!-- The sentence and its button on one row, the row at least the
+           button's height whether a state has one or not, and two lines tall
+           where a phone wraps the sentence: every state is one height at a
+           width. -->
       <div
         data-slot="hub-band"
-        class="band"
+        class="pointer-events-auto invisible grid auto-rows-band grid-cols-fluid-auto items-center gap-x-space-3 border-b border-b-border-hairline bg-status-attn-bg py-space-2 ps-space-7 pe-space-6 text-size-body font-normal text-status-attn-ink tabular-nums opacity-0 shadow-tile @max-phone/hub-band:auto-rows-band-phone data-open:visible data-open:opacity-100 tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink tone-live:bg-status-live-bg tone-live:text-status-live-ink motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:-translate-y-full motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
         aria-hidden={band ? undefined : "true"}
         data-open={band ? "" : undefined}
         data-tone={tone}
@@ -289,10 +310,19 @@
         <!-- The sentence morphs as a paragraph (`wrap`): its countdown ticks
              each second, and a morph on one line would fold a phone's two
              lines into one clipped line for every tick. The refused address
-             stands inline before it, so that one morphs on its line. -->
-        <p class="words" aria-hidden="true">
+             stands inline before it, so that one morphs on its line. The
+             sentence takes the room, so the countdown ticking in it never
+             moves the button at its end; with no button it takes the row. It
+             wraps balanced, never leaving a word or two on a line of their
+             own, and a long address breaks rather than spilling. -->
+        <p
+          data-slot="sentence"
+          class="m-0 min-w-0 wrap-anywhere text-balance last:col-span-full"
+          aria-hidden="true"
+        >
           {#if shown?.kind === "refused"}
-            {REFUSED} <code>{hubSocketUrl()}</code>{" "}
+            {REFUSED}
+            <code class="font-mono text-size-label">{hubSocketUrl()}</code>{" "}
           {/if}{#key episode}<MorphText
               text={words}
               wrap={shown?.kind !== "refused"}
@@ -314,133 +344,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  /* A row of the page's column, shut until the band opens: the row opens
-     from nothing as the band slides down, on the band's own clock, so the
-     band's foot and the page's top move as one edge. */
-  .band-slot {
-    container: hub-band / inline-size;
-    position: relative;
-    z-index: 10;
-    flex: none;
-    display: grid;
-    grid-template-rows: 0fr;
-    pointer-events: none;
-    /* The bar's foot is the band's top edge: it travels up under the bar,
-       and its shadow still falls on the page. */
-    clip-path: inset(0 -100vw -100vw);
-
-    &:has(> .band-row > [data-open]) {
-      grid-template-rows: 1fr;
-    }
-    /* Under the drawer's line (DRAWER_QUERY), the top of the screen,
-       over the bar: the same place on every phone screen. */
-    @media (width < 900px) {
-      order: -1;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition: grid-template-rows var(--dur-exit) var(--ease-out);
-
-      &:has(> .band-row > [data-open]) {
-        transition: grid-template-rows var(--dur-panel) var(--ease-drawer);
-      }
-    }
-  }
-  /* The row's one item: it shuts to nothing, the band drawn whole inside
-     it, held up under the bar. */
-  .band-row {
-    min-block-size: 0;
-  }
-  /* The sentence and its button on one row, the row at least the button's
-     height whether a state has one or not, and two lines tall where a
-     phone wraps the sentence: every state is one height at a width. */
-  .band {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-auto-rows: minmax(var(--c-btn-h-sm), auto);
-    align-items: center;
-    column-gap: var(--space-3);
-    padding-block: var(--space-2);
-    padding-inline: var(--space-7) var(--space-6);
-    border-block-end: 1px solid var(--border-hairline);
-    box-shadow: var(--shadow-tile);
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    font-variant-numeric: tabular-nums;
-    pointer-events: auto;
-    background: var(--status-attn-bg);
-    color: var(--status-attn-ink);
-    opacity: 0;
-    visibility: hidden;
-    transition:
-      opacity var(--dur-exit) var(--ease-out),
-      visibility var(--dur-exit),
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-
-    @container hub-band (inline-size < 640px) {
-      grid-auto-rows: minmax(max(var(--c-btn-h-sm), 2lh), auto);
-    }
-
-    &[data-open] {
-      opacity: 1;
-      visibility: visible;
-      transition:
-        opacity var(--dur-panel) var(--ease-drawer),
-        visibility var(--dur-panel),
-        background-color var(--dur-control) var(--ease-out),
-        color var(--dur-control) var(--ease-out);
-    }
-    &[data-tone="fail"] {
-      background: var(--status-fail-bg);
-      color: var(--status-fail-ink);
-    }
-    &[data-tone="live"] {
-      background: var(--status-live-bg);
-      color: var(--status-live-ink);
-    }
-    &[data-tone="done"] {
-      background: var(--status-done-bg);
-      color: var(--status-done-ink);
-    }
-
-    @media (prefers-reduced-motion: no-preference) {
-      translate: 0 -100%;
-      transition:
-        translate var(--dur-exit) var(--ease-out),
-        opacity var(--dur-exit) var(--ease-out),
-        visibility var(--dur-exit),
-        background-color var(--dur-control) var(--ease-out),
-        color var(--dur-control) var(--ease-out);
-
-      &[data-open] {
-        translate: 0 0;
-        transition:
-          translate var(--dur-panel) var(--ease-drawer),
-          opacity var(--dur-panel) var(--ease-drawer),
-          visibility var(--dur-panel),
-          background-color var(--dur-control) var(--ease-out),
-          color var(--dur-control) var(--ease-out);
-      }
-    }
-  }
-  /* The sentence takes the room, so the countdown ticking in it never moves
-     the button at its end; with no button it takes the row. It wraps
-     balanced, never leaving a word or two on a line of their own, and a
-     long address breaks rather than spilling. */
-  .words {
-    min-inline-size: 0;
-    margin: 0;
-    overflow-wrap: anywhere;
-    text-wrap: balance;
-
-    &:last-child {
-      grid-column: 1 / -1;
-    }
-  }
-  .words code {
-    font-family: var(--font-mono);
-    font-size: var(--text-label);
-  }
-</style>

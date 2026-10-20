@@ -72,8 +72,8 @@
     };
   }
 
-  /** Skeleton rows while a folder is read: a row's height, a few name widths. */
-  const SKELETON_WIDTHS = ["w-28", "w-40", "w-24"];
+  /** Skeleton rows while a folder is read: a few name widths, as the kit names them. */
+  const SKELETON_WIDTHS = ["label", "title", "name"] as const;
 
   /** Only lives while the panel is open — a directory may have changed by the next visit. */
   const cache = new Map<string, FsEntry[]>();
@@ -177,11 +177,9 @@
   }}
 />
 
-<Collapsible.Root class="flex flex-col" onOpenChange={toggle} {open}>
-  <Collapsible.Trigger
-    class="mark-line flex items-center gap-1.5 self-start text-meta text-muted-foreground transition-colors hover:text-foreground"
-  >
-    <IconFolder class="size-4" />
+<Collapsible.Root onOpenChange={toggle} {open}>
+  <Collapsible.Trigger look="fold">
+    <IconFolder class="size-icon-md" />
     <span>Browse</span>
   </Collapsible.Trigger>
 
@@ -197,9 +195,8 @@
         >
           <IconArrowUp />
         </Button>
-        <span
-          class="truncate font-mono text-meta text-muted-foreground"
-          title={path}>{path}</span
+        <span class="truncate font-mono text-meta text-ink-muted" title={path}
+          >{path}</span
         >
       </div>
 
@@ -209,22 +206,31 @@
             {#if loading}
               <div aria-label="Reading directory" role="status">
                 {#each SKELETON_WIDTHS as width (width)}
-                  <div class="flex h-[30px] items-center gap-[7px] px-[11px]">
-                    <Skeleton class="size-4 shrink-0" />
-                    <Skeleton class="h-3 {width}" />
+                  <div
+                    class="flex h-c-btn-h-sm items-center gap-space-2 px-space-3"
+                  >
+                    <Skeleton cell="glyph" class="shrink-0" />
+                    <Skeleton
+                      height="x-height"
+                      radius="line"
+                      type="label"
+                      {width}
+                    />
                   </div>
                 {/each}
               </div>
             {:else if errorMessage}
               <span
                 data-slot="block"
-                class="block px-2 py-1 text-meta text-destructive"
+                class="block px-2 py-space-1 text-meta text-error-9"
                 >{errorMessage}</span
               >
             {:else}
               {#each dirs as dir (dir.name)}
                 <Button
-                  class="w-full justify-start font-mono text-label font-normal"
+                  class="w-full"
+                  align="row"
+                  face="path"
                   onclick={() => go(join(path, dir.name), 1)}
                   press="tint"
                   size="sm"
@@ -239,7 +245,7 @@
               {:else}
                 <span
                   data-slot="block"
-                  class="block px-2 py-1 text-meta text-muted-foreground"
+                  class="block px-2 py-space-1 text-meta text-ink-muted"
                   >No subdirectories.</span
                 >
               {/each}

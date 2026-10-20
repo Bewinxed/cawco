@@ -35,40 +35,14 @@
   data-runs-on={runsOn || undefined}
   data-grouped={grouped || undefined}
   class={[
-    "turn",
-    you && "you",
-    grouped && "grouped",
-    runsOn && "runs-on",
+    "group/turn",
+    grouped ? "flow-root" : "mt-space-4",
+    grouped && (you ? "mt-0" : "mt-space-2"),
+    you && "relative",
     extra,
   ]}
+  style:--pad={you ? "var(--seam-inset)" : undefined}
   {...rest}
 >
   {@render children()}
 </section>
-
-<style>
-  .turn {
-    margin-block-start: var(--space-4);
-
-    /* A later turn in the same speaker's group sits closer to the one above,
-       and holds its floated clock inside its own box. */
-    &.grouped {
-      display: flow-root;
-      margin-block-start: var(--space-2);
-    }
-  }
-  /* The well's start edge is the reader's mark's edge (--well-x), with no
-     bleed into the gutter; the words sit inside at its padding: --space-3,
-     or --space-2 at the narrow breakpoint. */
-  .turn.you {
-    position: relative;
-    /* The seam's inset (app.css .kit-seam): one value for both. */
-    --pad: var(--seam-inset);
-
-    /* The run's later messages: the row above ends on its own padding and
-       the hairline, so there is no gap of the turn's own. */
-    &.grouped {
-      margin-block-start: 0;
-    }
-  }
-</style>

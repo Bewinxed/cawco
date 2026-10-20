@@ -1,399 +1,114 @@
 /*
- * The new-session dialog's own motion names. Each duration is a root token
- * from app.css under the name the dialog uses for it (the model list's swap
- * timings are motion/list-swap's). Every colour, radius, type role
- * and curve comes from the root tokens. Scoped to `.ns-theme`, which sits on
- * the dialog card, the scrim and every portaled popover.
+ * The new-session dialog's scope and its true utilities, imported by app.css.
+ * `ns-theme` sits on the dialog card, the scrim and every portaled popover
+ * (SessionDetails, the account popovers): the dialog's body face and ink, and
+ * the timings its parts read (each a root token under the name the dialog
+ * uses for it). Every colour, radius, type role and curve comes from the root
+ * tokens. The dialog's looks are kit recipes: its setting chips ui/chip
+ * (`variant: "setting"`), its buttons the kit Button, its icon tiles
+ * ui/icon-tile, its popover surface ui/glide-popover.
+ *
+ * The utilities here sit at zero specificity (their selectors inside
+ * `:where()`), so a component's own utilities still win over them.
  */
-.ns-theme {
-  --ns-check-ms: var(--dur-fade);
-  --ns-prompt-ms: var(--dur-pop);
-  --ns-chip-ms: var(--dur-control);
-  --ns-thumb-ms: var(--dur-pop);
-  --ns-harness-thumb-ms: var(--dur-toggle);
-  --ns-fill-ms: var(--dur-toggle);
-  --ns-row-ms: var(--dur-fade);
+@utility ns-theme {
+  :where(&) {
+    --ns-check-ms: var(--dur-fade);
+    --ns-fill-ms: var(--dur-toggle);
+    --ns-row-ms: var(--dur-fade);
 
-  font: var(--type-body);
-  color: var(--ink-strong);
-}
-
-.ns-theme *,
-.ns-theme *::before,
-.ns-theme *::after {
-  box-sizing: border-box;
-}
-.ns-theme button {
-  font: inherit;
-  color: inherit;
-  transition: var(--transition-control);
-  @media (prefers-reduced-motion: no-preference) {
-    transition:
-      var(--transition-control),
-      transform var(--dur-toggle) var(--ease-out);
+    font: var(--type-body);
+    color: var(--ink-strong);
   }
-}
-/* A button scales on press; a list row, a folder and a segment take
-   .press-tint (app.css) instead and are left out here. */
-@media (prefers-reduced-motion: no-preference) {
-  .ns-theme button:not(.press-tint, :disabled, [aria-busy="true"]):active {
-    transform: scale(var(--press-scale));
+  /* E1: the drawer card (vaul's on a phone) keeps the body role and ink
+     over the kit's own `text-foreground text-label`. */
+  &[data-slot="drawer-content"] {
+    font: var(--type-body);
+    color: var(--ink-strong);
   }
-}
-.ns-theme input,
-.ns-theme [contenteditable] {
-  font-family: var(--font-body);
-}
-.ns-theme input::placeholder {
-  color: var(--ink-subtle);
-}
-.ns-theme .fai-comb {
-  height: 14px;
-  background-image: repeating-linear-gradient(
-    to right,
-    var(--neutral-5) 0 1px,
-    transparent 1px 6px
-  );
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-}
-.ns-theme .fai-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: var(--neutral-5) transparent;
-}
-.ns-theme .fai-scroll::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-.ns-theme .fai-scroll::-webkit-scrollbar-thumb {
-  background: var(--neutral-5);
-  border-radius: var(--radius-pill);
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-.ns-theme .fai-scroll::-webkit-scrollbar-track {
-  background: transparent;
 }
 
-/* Shared icon-tile treatment (§1.10). */
-.ns-theme .ns-tile {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  border-radius: var(--radius-sm);
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-tile);
-  transition:
-    background-color var(--dur-pop) var(--ease-out),
-    color var(--dur-pop) var(--ease-out);
-}
-.ns-theme .ns-tile svg {
-  flex: none;
-}
-.ns-theme .ns-tile.dashed {
-  background: transparent;
-  box-shadow: none;
-  border: 1px dashed var(--neutral-8);
-}
-.ns-theme .ns-tile.ink {
-  background: var(--ink-solid);
-  color: var(--on-ink);
-  box-shadow: none;
+@layer components {
+  /* foreign DOM: bits-ui's floating wrapper (the element bits-ui renders
+     round a popover's content, `data-bits-floating-content-wrapper`) glides
+     with a morphing surface, marked while the surface morphs
+     (NsPopoverGroup `data-ns-morph`). */
+  [data-bits-floating-content-wrapper][data-ns-morph] {
+    @variant motion-safe {
+      transition: transform var(--dur-pop) var(--ease-drawer);
+    }
+  }
 }
 
-/* One-shot entrance for rows/badges (the design's `nsIn`); interruptible
-   transitions are used everywhere the user can retrigger quickly. */
-@keyframes ns-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes ns-check {
-  from {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  to {
-    opacity: 1;
-    transform: none;
+/* The effort comb's ticks: a repeating gradient at the comb's pitch, a
+   drawn pattern Tailwind has no utility for. */
+@utility fai-comb {
+  :where(.ns-theme &) {
+    height: var(--space-4);
+    background-image: repeating-linear-gradient(
+      to right,
+      var(--neutral-5) 0 1px,
+      transparent 1px var(--c-comb-pitch)
+    );
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
   }
 }
-@keyframes ns-panel {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
+
+/* The dialog's thin scrollbars, the standard properties and WebKit's
+   pseudo-elements together. */
+@utility fai-scroll {
+  :where(.ns-theme &) {
+    scrollbar-width: thin;
+    scrollbar-color: var(--neutral-5) transparent;
   }
-  to {
-    opacity: 1;
-    transform: none;
+  :where(.ns-theme &)::-webkit-scrollbar {
+    width: var(--c-scrollbar-thin);
+    height: var(--c-scrollbar-thin);
+  }
+  :where(.ns-theme &)::-webkit-scrollbar-thumb {
+    background: var(--neutral-5);
+    border-radius: var(--radius-pill);
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  :where(.ns-theme &)::-webkit-scrollbar-track {
+    background: transparent;
   }
 }
+
+/* The dialog's one-shot entrances (DESIGN.md, New-session dialog: "Sections
+   fade up 8px in a stagger"; it "enters with `ns-panel`"): the theme's
+   `animate-ns-*` (scripts/build-tokens.ts), read inline because each reads a
+   duration the dialog sets on `.ns-theme`, not on the root. Interruptible
+   transitions are used everywhere the user can retrigger quickly; these run
+   once, as do the popover's open and close (ui/glide-popover,
+   `animate-ns-pop-in` / `-out`). */
+
 /* A row's entrance holds its start through its delay and hands back to the
    row's own style once landed: held with `both`, it kept a disabled row (a
-   harness tab not installed, Rail's 0.45) at full opacity. */
-.ns-theme .ns-in {
-  @media (prefers-reduced-motion: no-preference) {
-    animation: ns-in var(--ns-row-ms) var(--ease-out) backwards;
-    animation-delay: var(--delay, 0ms);
-  }
-}
-.ns-theme .ns-check {
-  @media (prefers-reduced-motion: no-preference) {
-    animation: ns-check var(--ns-check-ms) var(--ease-out) both;
-  }
-}
-.ns-theme .ns-panel {
-  @media (prefers-reduced-motion: no-preference) {
-    animation: ns-panel var(--dur-fade) var(--ease-out) both;
+   harness tab not installed) at full opacity. */
+@utility ns-in {
+  @variant motion-safe {
+    :where(.ns-theme &) {
+      animation: --theme(--animate-ns-in inline);
+      animation-delay: var(--delay, 0ms);
+    }
   }
 }
 
-/* DS Button (§5.1). */
-.ns-theme .ns-btn {
-  --hit-edge: 1px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  --btn-gap: 8px;
-  --btn-icon: 16px;
-  height: 36px;
-  padding: 0 14px;
-  font: var(--weight-strong) var(--text-body) / 1 var(--font-body);
-  letter-spacing: -0.01em;
-  border: 1px solid var(--border-control);
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-  color: var(--ink-strong);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.ns-theme .ns-btn.sm {
-  gap: 7px;
-  --btn-gap: 7px;
-  height: 30px;
-  padding: 0 11px;
-  font-size: var(--text-label);
-  font-weight: var(--weight-strong);
-}
-.ns-theme .ns-btn.primary {
-  background: var(--action-surface);
-  color: var(--on-brand);
-  border-color: transparent;
-}
-/* A disabled button keeps its own colour pair and only fades. */
-.ns-theme .ns-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-@media (hover: hover) {
-  .ns-theme .ns-btn:not(:disabled):hover {
-    background: var(--surface-hover);
-  }
-  .ns-theme .ns-btn.primary:not(:disabled):hover {
-    background: var(--action-surface-hover);
+@utility ns-check {
+  @variant motion-safe {
+    :where(.ns-theme &) {
+      animation: --theme(--animate-ns-check inline);
+    }
   }
 }
 
-/* Chips (§1.8): a setting shown as a small trigger that opens its picker. */
-.ns-theme .ns-chip-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 8px;
-  background: var(--surface-raised);
-  border: 1px solid var(--border-control);
-  border-radius: var(--radius-sm);
-  font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-  color: var(--ink-strong);
-  cursor: pointer;
-  white-space: nowrap;
-  max-width: 100%;
-  transition:
-    background-color var(--ns-chip-ms) var(--ease-out),
-    border-color var(--ns-chip-ms) var(--ease-out),
-    color var(--ns-chip-ms) var(--ease-out);
-  @media (prefers-reduced-motion: no-preference) {
-    transition:
-      background-color var(--ns-chip-ms) var(--ease-out),
-      border-color var(--ns-chip-ms) var(--ease-out),
-      color var(--ns-chip-ms) var(--ease-out),
-      transform var(--dur-toggle) var(--ease-out);
-  }
-}
-.ns-theme .ns-chip-btn > svg {
-  width: 16px;
-  height: 16px;
-  flex: none;
-}
-.ns-theme .ns-chip-btn > svg.chevron {
-  width: 12px;
-  height: 12px;
-  color: var(--ink-subtle);
-}
-.ns-theme .ns-chip-btn .chip-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-@media (hover: hover) {
-  .ns-theme .ns-chip-btn:hover {
-    background: var(--surface-hover);
-  }
-}
-/* A setting that cannot be changed here: still a chip, so it reads as one
-   of the settings beside it, but sunk into the surface (the recess fill and
-   the hairline edge, a step quieter than a control's) with no chevron and
-   no hover. Plain text beside bordered pickers read as a broken control
-   (owner: "the effort popover should have a style when it's not
-   selectable … instead of no borders"). */
-.ns-theme .ns-chip-btn.static {
-  background: var(--surface-recess);
-  border-color: var(--border-hairline);
-  cursor: default;
-}
-@media (hover: hover) {
-  .ns-theme .ns-chip-btn.static:hover {
-    background: var(--surface-recess);
-  }
-}
-/* A button at chip scale, for actions that sit among chips. */
-.ns-theme .ns-btn.xs {
-  gap: 6px;
-  height: 28px;
-  padding: 0 8px;
-  font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-  border-radius: var(--radius-sm);
-}
-
-/* Popover shell (§2.3, §2.5): portaled, origin-aware, interruptible. */
-.ns-theme.ns-pop {
-  z-index: 90;
-  position: relative;
-  width: min(var(--ns-pop-width, 320px), calc(100vw - 32px));
-  max-height: min(440px, var(--bits-popover-content-available-height));
-  overflow: auto;
-  padding: 6px;
-  display: grid;
-  /* Content never outgrows the surface: a wide row shrinks rather than overflows. */
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--ns-pop-gap, 0px);
-  align-content: start;
-  background: var(--surface-raised);
-  border: 1px solid var(--border-control);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-overlay);
-  outline: none;
-  opacity: 1;
-  scale: 1;
-  translate: 0 0;
-  transform-origin: var(--bits-popover-content-transform-origin, top left);
-  transition: opacity var(--dur-pop) var(--ease-drawer);
-  @media (prefers-reduced-motion: no-preference) {
-    transition:
-      opacity var(--dur-pop) var(--ease-drawer),
-      scale var(--dur-pop) var(--ease-drawer),
-      translate var(--dur-pop) var(--ease-drawer);
-  }
-}
-/* Exit: shorter than the entrance, fading and settling back to --pop-scale.
-   bits-ui keeps the content mounted until this animation ends. */
-.ns-theme.ns-pop[data-state="closed"] {
-  @media (prefers-reduced-motion: no-preference) {
-    animation: ns-pop-out var(--dur-exit) var(--ease-out) both;
-  }
-}
-@keyframes ns-pop-out {
-  to {
-    opacity: 0;
-    scale: var(--pop-scale);
-  }
-}
-/* Entrance: rising out of --pop-scale, on the same curve as the glide. A
-   keyframe, not a transition, so it plays on the first frame the content
-   exists; gliding between siblings keeps the content open and never
-   replays it. */
-.ns-theme.ns-pop[data-state="open"] {
-  @media (prefers-reduced-motion: no-preference) {
-    animation: ns-pop-in var(--dur-pop) var(--ease-drawer) both;
-  }
-}
-@keyframes ns-pop-in {
-  from {
-    opacity: 0;
-    scale: var(--pop-scale);
-    translate: 0 calc(-1 * var(--pop-rise));
-  }
-}
-/*
- * A popover group's surface. Its content sits in a measured block so that,
- * while the surface glides between siblings, height eases with position and
- * width instead of snapping. Clipping applies only during the glide, so focus
- * rings at the edges are not cut off at rest.
- */
-/* The permission rows never wrap, so their popover takes the rows' width. */
-.ns-theme.ns-pop:has(.perms.embedded) {
-  width: max-content;
-  max-width: calc(100vw - 32px);
-}
-/* As the surface: a row with a long path shrinks and ellipsises it, never
-   widening the set past the surface (where its trailing check was cut). */
-.ns-panel-set {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--ns-pop-gap, 0px);
-  align-content: start;
-}
-.ns-theme.ns-pop[data-morph] {
-  transition: opacity var(--dur-pop) var(--ease-drawer);
-  @media (prefers-reduced-motion: no-preference) {
-    transition:
-      opacity var(--dur-pop) var(--ease-drawer),
-      scale var(--dur-pop) var(--ease-drawer),
-      translate var(--dur-pop) var(--ease-drawer),
-      width var(--dur-pop) var(--ease-drawer);
-  }
-}
-/* The surface is held at its content's measured height and tweens to the
-   next one, whether it is gliding to a sibling or its own list is
-   filtering; clipped with a margin so focus rings at the edges survive. */
-.ns-pop .ns-morph {
-  overflow: clip;
-  overflow-clip-margin: 4px;
-  @media (prefers-reduced-motion: no-preference) {
-    transition: height var(--dur-pop) var(--ease-drawer);
-  }
-}
-/* Its floating wrapper glides with it, marked while the surface morphs
-   (NsPopoverGroup `data-ns-morph`). */
-@media (prefers-reduced-motion: no-preference) {
-  [data-bits-floating-content-wrapper][data-ns-morph] {
-    transition: transform var(--dur-pop) var(--ease-drawer);
-  }
-}
-/*
- * Small screens get a wider, taller popover — not a takeover. Picking a
- * machine or a project is a detail of the form behind it, and covering the
- * whole viewport to answer it loses the row being edited and reads as a
- * second modal. It stays anchored to its trigger; only the cap changes.
- */
-@media (max-width: 640px) {
-  .ns-theme.ns-pop {
-    width: calc(100vw - 24px);
-    max-height: min(
-      420px,
-      55dvh,
-      var(--bits-popover-content-available-height, 55dvh)
-    );
-  }
-  .ns-theme.ns-pop button {
-    min-height: 44px;
+@utility ns-panel {
+  @variant motion-safe {
+    :where(.ns-theme &) {
+      animation: --theme(--animate-ns-panel inline);
+    }
   }
 }

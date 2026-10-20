@@ -5,18 +5,10 @@
   let { children }: { children: Snippet } = $props();
 </script>
 
-<p data-slot="well" aria-live="polite" class="well">{@render children()}</p>
-
-<style>
-  .well {
-    max-width: 72ch;
-    padding: 12px 14px;
-    border-radius: var(--radius-md);
-    background: var(--surface-recess);
-    font: var(--type-body);
-    color: var(--ink-strong);
-    transition:
-      background-color var(--dur-pop) var(--ease-out),
-      color var(--dur-pop) var(--ease-out);
-  }
-</style>
+<p
+  data-slot="well"
+  aria-live="polite"
+  class="max-w-c-measure py-space-3 px-space-4 rounded-md bg-surface-recess type-body text-ink-strong transition-[background-color,color] duration-(--dur-pop) ease-out"
+>
+  {@render children()}
+</p>

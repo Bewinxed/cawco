@@ -33,22 +33,22 @@
 </script>
 
 <Dialog.Root bind:open={dialogOpen}>
-  <Dialog.Content class="sm:max-w-2xl">
-    <div class="flex flex-col gap-6">
+  <Dialog.Content width="report">
+    <div class="flex flex-col gap-space-7">
       <Dialog.Header>
-        <Dialog.Title class="mark-line flex items-center gap-2">
-          <IconAlert class="size-4 shrink-0 text-destructive" />
+        <Dialog.Title lead="glyph">
+          <IconAlert class="size-icon-md shrink-0 text-error-9" />
           <span>{title}</span>
         </Dialog.Title>
       </Dialog.Header>
 
       <pre
-        class="error-text max-h-[60vh] overflow-auto whitespace-pre-wrap break-words"
+        class="m-0 max-h-c-report-text-max overflow-auto wrap-break-word whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-prose text-ink-strong select-text"
         data-error-text>{message}</pre>
 
       <Dialog.Footer>
         <Button onclick={copy} type="button" variant="outline">
-          <span class="icon-swap" style="--icon-swap-dur: var(--dur-control)">
+          <span class="icon-swap" style:--icon-swap-dur="var(--dur-control)">
             <span data-active={!copied}><IconCopy /></span>
             <span data-active={copied}><IconCheck /></span>
           </span>
@@ -66,18 +66,3 @@
     </div>
   </Dialog.Content>
 </Dialog.Root>
-
-<style>
-  .error-text {
-    margin: 0;
-    padding: var(--space-3);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    line-height: 1.55;
-    user-select: text;
-  }
-</style>

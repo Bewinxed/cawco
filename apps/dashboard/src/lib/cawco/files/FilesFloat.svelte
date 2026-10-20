@@ -15,11 +15,12 @@
    * so Tab goes on from Files into it. Chosen from the keyboard, the focus
    * goes to the panel's name; the panel's own Close closes it and gives the
    * focus back to the artifact's card in Files. It comes and goes as every
-   * floating surface (`kit-pop`'s `data-state`), standing closed for
+   * floating surface (the kit's `floatingSurface`, on `data-state`), standing closed for
    * `--dur-exit` before it leaves the page.
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
+  import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { barGlass } from "../bar-glass.svelte";
   import { cawco } from "../client.svelte";
   import { frameObserver } from "../frame-observer";
@@ -85,7 +86,7 @@
       });
       document
         .querySelector<HTMLElement>(
-          `.files-pop [data-files-card][data-artifact="${CSS.escape(id)}"]`
+          `[data-glass-card-frame="files-pop"] [data-files-card][data-artifact="${CSS.escape(id)}"]`
         )
         ?.focus({ preventScroll: true });
     }
@@ -135,7 +136,9 @@
     // the page in the next frame's callbacks (frameObserver): the float's
     // width is the panel's, whose head and page it lays out again.
     measure();
-    const card = document.querySelector<HTMLElement>(".kit-pop.files-pop");
+    const card = document.querySelector<HTMLElement>(
+      '[data-glass-card][data-glass-card-frame="files-pop"]'
+    );
     const seen = frameObserver(measure);
     if (card) {
       seen.observe(card);
@@ -152,18 +155,27 @@
 </script>
 
 {#if standing && place}
+  <!-- A floating panel: the kit popover (its raised surface, radius, overlay
+       shadow, and its open and close on `data-state`), edge to edge inside,
+       as tall as Caw's panel or the room under the glass less the 11px kept
+       from the screen's foot. Its edge is the row outline's, which holds 3:1
+       against the raised surface and the recess alike, so it stands clear of
+       the page by day too. -->
   <section
     bind:this={node}
     aria-label={standing.name}
-    class="kit-pop files-float"
+    class={floatingSurface({
+      class:
+        "fixed end-(--float-right) top-(--float-top) z-(--layer-float) flex h-(--float-h) w-(--float-w) flex-col overflow-hidden border-border-row-outline p-0 **:slot-side-card:flex-1 **:slot-side-card:rounded-none **:slot-side-card:shadow-none",
+    })}
     data-files-float
     data-side="left"
     data-state={standing.open ? "open" : "closed"}
     inert={!standing.open}
     style:--float-top="{place.top}px"
-    style:inset-block-start="{place.top}px"
-    style:inset-inline-end="{place.right}px"
-    style:inline-size="{place.width}px"
+    style:--float-right="{place.right}px"
+    style:--float-w="{place.width}px"
+    style:--float-h={"min(var(--c-caw-panel-h), calc(100dvh - var(--float-top) - var(--space-3)))"}
     {@attach afterFiles}
   >
     <RegionBoundary region="preview">
@@ -171,30 +183,3 @@
     </RegionBoundary>
   </section>
 {/if}
-
-<style>
-  /* A floating panel: the kit popover (its raised surface, radius, overlay
-     shadow, and its open and close on `data-state`), edge to edge inside,
-     as tall as Caw's panel or the room under the glass less the 11px kept
-     from the screen's foot. Its edge is the row outline's, which holds 3:1
-     against the raised surface and the recess alike, so it stands clear of
-     the page by day too. */
-  .files-float {
-    position: fixed;
-    z-index: 50;
-    display: flex;
-    flex-direction: column;
-    block-size: min(
-      var(--c-caw-panel-h),
-      calc(100dvh - var(--float-top) - var(--space-3))
-    );
-    padding: 0;
-    overflow: hidden;
-    border-color: var(--border-row-outline);
-  }
-  .files-float :global([data-slot="side-card"]) {
-    flex: 1;
-    border-radius: 0;
-    box-shadow: none;
-  }
-</style>

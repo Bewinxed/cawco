@@ -15,6 +15,8 @@
     newNode,
     STARTER_PROGRAM,
   } from "#lib/components/features/workflows/workflow-ui.js";
+  import { Alert } from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -22,7 +24,6 @@
   import { IconWorkflow } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
-  import "#lib/components/features/workflows/workflows.css";
 
   let busy = $state(false);
   let errorMessage = $state("");
@@ -71,52 +72,66 @@
   <DropdownMenu.Root>
     <DropdownMenu.Trigger disabled={!live || busy}>
       {#snippet child({ props })}
-        <button
+        <Button
           {...props}
-          class="wf-btn wf-primary"
           title={live
             ? undefined
             : "Can't create a workflow while the hub is unreachable"}
           type="button"
         >
           New workflow
-        </button>
+        </Button>
       {/snippet}
     </DropdownMenu.Trigger>
-    <DropdownMenu.Content align={inEmptyState ? "start" : "end"} class="w-64">
+    <DropdownMenu.Content align={inEmptyState ? "start" : "end"} width="wide">
+      <!-- The title (the pending content: slot and label) on one line, what it
+           makes on the next, on a row's pitch (the kit's `titled`). -->
       <DropdownMenu.PendingItem
-        class="new-item"
         label="New graph"
+        look="titled"
         pendingLabel="Creating…"
         run={() => create(GRAPH)}
       >
-        <small>Draw the steps; the hub compiles them.</small>
+        <small
+          class="basis-full text-size-meta leading-body font-normal text-ink-muted"
+          >Draw the steps; the hub compiles them.</small
+        >
       </DropdownMenu.PendingItem>
       <DropdownMenu.PendingItem
-        class="new-item"
         label="New program"
+        look="titled"
         pendingLabel="Creating…"
         run={() => create(PROGRAM)}
       >
-        <small>Write the steps as TypeScript.</small>
+        <small
+          class="basis-full text-size-meta leading-body font-normal text-ink-muted"
+          >Write the steps as TypeScript.</small
+        >
       </DropdownMenu.PendingItem>
     </DropdownMenu.Content>
   </DropdownMenu.Root>
 {/snippet}
 
-<div class="wf list-page">
-  <header class="wf-row wf-spread">
+<!-- At 760px and under (`workflow-cards:`) the table becomes cards: each row
+     its name over its age, its actions at the end of the second line. -->
+<div
+  class="relative flex min-w-0 flex-1 flex-col gap-space-6 overflow-y-auto px-space-6 py-space-7 type-body text-ink-strong workflow-cards:px-space-4 workflow-cards:py-space-4"
+  data-slot="list-page"
+>
+  <header class="flex flex-wrap items-center justify-between gap-space-2">
     <div>
-      <h1>Workflows</h1>
-      <p class="wf-muted">Reusable steps across your fleet.</p>
+      <h1 class="mb-space-1 type-title">Workflows</h1>
+      <p class="type-meta text-ink-muted">Reusable steps across your fleet.</p>
     </div>
-    <div class="wf-row">{@render newMenu(false)}</div>
+    <div class="flex flex-wrap items-center gap-space-2">
+      {@render newMenu(false)}
+    </div>
   </header>
   <!-- An outage is said once, by the reconnect banner over the page: a read
        that failed for it adds no line while there are rows to keep showing,
        and a list that was never read says why it is empty. -->
   {#if errorMessage || (workflowState.error && (live || !rows.length))}
-    <p class="wf-error" role="alert">{errorMessage || workflowState.error}</p>
+    <Alert variant="destructive">{errorMessage || workflowState.error}</Alert>
   {/if}
   <!-- Until the first read is in, rows at the height the list's rows take
        stand where it will be; then the two cross-fade (the skeleton leaves
@@ -124,28 +139,63 @@
   {#if loading}
     <table
       aria-label="Loading workflows"
-      class="table"
+      class="block w-full rounded-lg bg-surface-raised p-space-3 shadow-tile"
       role="status"
+      style:--cols={"minmax(var(--c-workflow-name-col), 1fr) var(--c-workflow-when-col) var(--c-workflow-when-col) var(--c-workflow-count-col) var(--c-workflow-actions-col)"}
+      style:--cols-cards="1fr auto"
       out:crossOut
     >
-      <thead>
-        <tr class="heading">
-          <th scope="col">Name</th>
-          <th scope="col">Last run</th>
-          <th scope="col">Started</th>
-          <th scope="col">Runs</th>
-          <th scope="col">Actions</th>
+      <thead class="workflow-cards:block workflow-cards:w-full">
+        <tr
+          class="grid grid-cols-(--cols) items-center gap-space-3 p-space-3 text-left text-size-label font-medium text-ink-muted workflow-cards:hidden"
+          data-slot="heading"
+        >
+          <th class="font-medium" scope="col">Name</th>
+          <th class="font-medium" scope="col">Last run</th>
+          <th class="font-medium" scope="col">Started</th>
+          <th class="font-medium" scope="col">Runs</th>
+          <th class="font-medium" scope="col">Actions</th>
         </tr>
       </thead>
-      <tbody aria-hidden="true">
+      <tbody
+        aria-hidden="true"
+        class="workflow-cards:block workflow-cards:w-full"
+      >
         {#each [0, 1, 2] as index (index)}
-          <tr class="workflow-row">
-            <td data-slot="name" class="name"><Skeleton class="h-4 w-40" /></td>
-            <td><Skeleton class="h-5 w-16" /></td>
-            <td class="age"><Skeleton class="h-4 w-20" /></td>
-            <td data-slot="count" class="count"><Skeleton class="h-4 w-6" /></td
+          <tr
+            class="grid min-h-c-workflow-row-h grid-cols-(--cols) items-center gap-space-3 border-t border-t-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"
+            data-slot="workflow-row"
+          >
+            <td
+              data-slot="name"
+              class="grid min-h-space-7 coarse:min-h-c-btn-h-lg coarse:content-center wrap-anywhere font-medium text-ink-strong workflow-cards:col-1"
+              ><Skeleton
+                height="x-height"
+                radius="line"
+                type="label"
+                width="title"
+              /></td
             >
-            <td><Skeleton class="h-8 w-14" /></td>
+            <td><Skeleton height="badge" width="short" /></td>
+            <td data-slot="age" class="workflow-cards:col-1"
+              ><Skeleton
+                height="x-height"
+                radius="line"
+                type="meta"
+                width="label"
+              /></td
+            >
+            <td data-slot="count" class="num workflow-cards:hidden"
+              ><Skeleton
+                height="x-height"
+                radius="line"
+                type="meta"
+                width="glyph"
+              /></td
+            >
+            <td class="workflow-cards:col-2 workflow-cards:row-2"
+              ><Skeleton height="control" width="word" /></td
+            >
           </tr>
         {/each}
       </tbody>
@@ -165,62 +215,64 @@
       </div>
     {/if}
   {:else}
-    <table aria-label="Workflows" class="table" in:crossIn>
-      <thead>
-        <tr class="heading">
-          <th scope="col">Name</th>
-          <th scope="col">Last run</th>
-          <th scope="col">Started</th>
-          <th scope="col">Runs</th>
-          <th scope="col">Actions</th>
+    <table
+      aria-label="Workflows"
+      class="block w-full rounded-lg bg-surface-raised p-space-3 shadow-tile"
+      style:--cols={"minmax(var(--c-workflow-name-col), 1fr) var(--c-workflow-when-col) var(--c-workflow-when-col) var(--c-workflow-count-col) var(--c-workflow-actions-col)"}
+      style:--cols-cards="1fr auto"
+      in:crossIn
+    >
+      <thead class="workflow-cards:block workflow-cards:w-full">
+        <tr
+          class="grid grid-cols-(--cols) items-center gap-space-3 p-space-3 text-left text-size-label font-medium text-ink-muted workflow-cards:hidden"
+          data-slot="heading"
+        >
+          <th class="font-medium" scope="col">Name</th>
+          <th class="font-medium" scope="col">Last run</th>
+          <th class="font-medium" scope="col">Started</th>
+          <th class="font-medium" scope="col">Runs</th>
+          <th class="font-medium" scope="col">Actions</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody class="workflow-cards:block workflow-cards:w-full">
         {#each rows as { workflow, runs, last } (workflow.id)}
-          <tr class="workflow-row">
+          <tr
+            class="grid min-h-c-workflow-row-h grid-cols-(--cols) items-center gap-space-3 border-t border-t-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"
+            data-slot="workflow-row"
+          >
             <td>
-              <a data-slot="name" class="name" href="/workflows/{workflow.id}"
+              <a
+                data-slot="name"
+                class="grid min-h-space-7 coarse:min-h-c-btn-h-lg coarse:content-center wrap-anywhere font-medium text-ink-strong workflow-cards:col-1"
+                href="/workflows/{workflow.id}"
                 >{workflow.name}
-                <span class="wf-muted">{workflow.description}</span></a
+                <span class="type-meta text-ink-muted"
+                  >{workflow.description}</span
+                ></a
               >
             </td>
             <td>
               {#if last}
                 <WorkflowStatus status={last.status} />
               {:else}
-                <span class="wf-muted">No runs</span>
+                <span class="type-meta text-ink-muted">No runs</span>
               {/if}
             </td>
-            <td class="age wf-muted">
+            <td
+              data-slot="age"
+              class="type-meta text-ink-muted workflow-cards:col-1"
+            >
               {last ? formatDistanceToNow(new Date(last.startedAt)) : "—"}
-              <span class="mobile"
+              <span class="hidden workflow-cards:inline" data-slot="mobile"
                 >{` · ${runs.length} ${runs.length === 1 ? "run" : "runs"}`}</span
               >
             </td>
-            <td data-slot="count" class="count">{runs.length}</td>
-            <td>
-              <button
-                class="wf-btn desktop"
-                disabled={!live}
-                onclick={(event) => {
-                  launch = { workflow, from: event.currentTarget };
-                }}
-                title={live
-                  ? undefined
-                  : "Can't run while the hub is unreachable"}
-                type="button"
-              >
-                Run
-              </button>
-              <details class="mobile">
-                <summary
-                  aria-label="Actions for {workflow.name}"
-                  class="pressable"
-                >
-                  Actions
-                </summary>
-                <button
-                  class="wf-btn"
+            <td data-slot="count" class="num workflow-cards:hidden"
+              >{runs.length}</td
+            >
+            <td class="workflow-cards:col-2 workflow-cards:row-2">
+              <span class="contents workflow-cards:hidden" data-slot="desktop"
+                ><Button
                   disabled={!live}
                   onclick={(event) => {
                     launch = { workflow, from: event.currentTarget };
@@ -229,9 +281,31 @@
                     ? undefined
                     : "Can't run while the hub is unreachable"}
                   type="button"
+                  variant="outline"
                 >
                   Run
-                </button>
+                </Button></span
+              >
+              <details class="hidden workflow-cards:block" data-slot="mobile">
+                <summary
+                  aria-label="Actions for {workflow.name}"
+                  class="pressable workflow-cards:flex workflow-cards:min-h-c-btn-h-lg workflow-cards:items-center"
+                >
+                  Actions
+                </summary>
+                <Button
+                  disabled={!live}
+                  onclick={(event) => {
+                    launch = { workflow, from: event.currentTarget };
+                  }}
+                  title={live
+                    ? undefined
+                    : "Can't run while the hub is unreachable"}
+                  type="button"
+                  variant="outline"
+                >
+                  Run
+                </Button>
               </details>
             </td>
           </tr>
@@ -249,126 +323,3 @@
     workflow={launch.workflow}
   />
 {/if}
-
-<style>
-  .list-page {
-    position: relative;
-    padding: var(--space-7) var(--space-6);
-    overflow-y: auto;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
-  }
-  header h1 {
-    margin-bottom: var(--space-1);
-  }
-  .table {
-    display: block;
-    width: 100%;
-    background: var(--surface-raised);
-    border-radius: var(--radius-lg);
-    padding: var(--space-3);
-    box-shadow: var(--shadow-tile);
-  }
-  .heading,
-  .workflow-row {
-    display: grid;
-    grid-template-columns: minmax(180px, 1fr) 110px 110px 60px 70px;
-    gap: var(--space-3);
-    align-items: center;
-    padding: var(--space-3);
-  }
-  .heading {
-    text-align: left;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-muted);
-  }
-  .workflow-row {
-    border-top: 1px solid var(--border-hairline);
-    min-height: 64px;
-  }
-  th {
-    font-weight: var(--weight-strong);
-  }
-  .name {
-    min-height: 24px;
-    display: grid;
-    color: var(--ink-strong);
-    font-weight: var(--weight-strong);
-    overflow-wrap: anywhere;
-  }
-  .count {
-    font-variant-numeric: tabular-nums;
-  }
-  /* The title (the pending content: slot and label) on one line, what it
-     makes on the next. */
-  :global(.new-item) {
-    flex-wrap: wrap;
-    row-gap: var(--space-1);
-    min-height: 44px;
-    color: var(--ink-strong);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-  }
-  :global(.new-item) small {
-    flex-basis: 100%;
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-  }
-  .mobile {
-    display: none;
-  }
-  /* DESIGN.md: 44px under a coarse pointer at any width. The row is 64px but
-     the link was 24, so a thumb landed on the row and not on the target. */
-  @media (pointer: coarse) {
-    .name {
-      min-height: 44px;
-      align-content: center;
-    }
-  }
-  @media (max-width: 760px) {
-    .heading,
-    .desktop {
-      display: none !important;
-    }
-    span.mobile {
-      display: inline;
-    }
-    details.mobile {
-      display: block;
-    }
-    .count {
-      display: none;
-    }
-    thead,
-    tbody {
-      display: block;
-      width: 100%;
-    }
-    .workflow-row {
-      grid-template-columns: 1fr auto;
-    }
-    .name {
-      grid-column: 1;
-    }
-    .age {
-      grid-column: 1;
-    }
-    .workflow-row > :last-child {
-      grid-column: 2;
-      grid-row: 2;
-    }
-    summary {
-      min-height: 44px;
-      display: flex;
-      align-items: center;
-    }
-    .list-page {
-      padding: var(--space-4);
-    }
-  }
-</style>

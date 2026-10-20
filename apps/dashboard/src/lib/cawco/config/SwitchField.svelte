@@ -20,41 +20,26 @@
   } = $props();
 </script>
 
-<div data-slot="row" class="row">
-  <Switch {disabled} {id} onCheckedChange={onchange} bind:checked />
-  <span class="copy">
-    <label data-slot="switch-field-label" class="label" for={id}>{label}</label>
+<div data-slot="row" class="flex items-start gap-space-3">
+  <Switch
+    align="first-line"
+    {disabled}
+    {id}
+    onCheckedChange={onchange}
+    bind:checked
+  />
+  <span class="flex min-w-0 flex-col gap-space-row">
+    <label
+      data-slot="switch-field-label"
+      class="type-label text-ink-strong"
+      for={id}>{label}</label
+    >
     {#if typeof hint === "string"}
-      <span class="hint">{hint}</span>
+      <span class="type-meta max-w-c-measure text-ink-muted">{hint}</span>
     {:else if hint}
-      <span class="hint">{@render hint()}</span>
+      <span class="type-meta max-w-c-measure text-ink-muted"
+        >{@render hint()}</span
+      >
     {/if}
   </span>
 </div>
-
-<style>
-  .row {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-  }
-  .row :global([data-slot="switch"]) {
-    margin-top: 1px;
-  }
-  .copy {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-  .label {
-    font: var(--type-label);
-    color: var(--ink-strong);
-    cursor: pointer;
-  }
-  .hint {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>

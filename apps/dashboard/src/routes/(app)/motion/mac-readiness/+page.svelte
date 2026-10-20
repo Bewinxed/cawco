@@ -44,9 +44,17 @@
           kind: "checking",
           since: Date.now() - dur("--dur-wait-grace"),
         };
-      default:
-        return { kind: id };
+      case "allow":
+      case "locked":
+      case "no-xcode":
+      case "not-mac":
+      case "offline":
+      case "ready":
+      case "said-no":
+      case "xcode-terms":
+        break;
     }
+    return { kind: id };
   }
 
   const hrefOf = (id: StateId) => {
@@ -97,7 +105,7 @@
 
 <nav
   aria-label="Readiness state"
-  class="bench"
+  class="fixed inset-x-space-2 top-space-2 z-(--layer-bench-controls) flex pointer-events-auto flex-wrap gap-space-1"
   onpointerdown={(event) => event.stopPropagation()}
 >
   {#each STATES as each (each.id)}
@@ -109,16 +117,3 @@
     >
   {/each}
 </nav>
-
-<style>
-  .bench {
-    position: fixed;
-    inset-block-start: var(--space-2);
-    inset-inline: var(--space-2);
-    z-index: 60;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1);
-    pointer-events: auto;
-  }
-</style>

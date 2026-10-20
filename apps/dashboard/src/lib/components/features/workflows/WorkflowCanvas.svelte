@@ -13,7 +13,7 @@
     Panel,
     SvelteFlow,
   } from "@xyflow/svelte";
-  import "@xyflow/svelte/dist/style.css";
+  import "#lib/vendor-css/xyflow.css";
   import { onMount, untrack } from "svelte";
   import { newId } from "#lib/cawco/id.js";
   import { workflowState } from "#lib/cawco/workflow-state.svelte.js";
@@ -173,10 +173,13 @@
       <section
         {...props}
         aria-label="Workflow graph"
-        class="canvas"
+        class="h-full min-h-c-graph-canvas-min min-w-0 bg-surface-recess"
+        data-slot="workflow-canvas"
         oncontextmenu={onNode(props.oncontextmenu)}
         onpointerdown={onNode(props.onpointerdown)}
         style:--hit-scale={zoom}
+        style:--xy-handle-background-color="var(--neutral-8)"
+        style:--xy-handle-border-color="var(--surface-raised)"
       >
         {#if mounted}
           <SvelteFlow
@@ -260,22 +263,3 @@
     >
   </ContextMenu.Content>
 </ContextMenu.Root>
-
-<style>
-  .canvas {
-    height: 100%;
-    min-height: 280px;
-    min-width: 0;
-    background: var(--surface-recess);
-  }
-  .canvas :global(.svelte-flow__handle) {
-    background: var(--neutral-8);
-    border-color: var(--surface-raised);
-    width: 10px;
-    height: 10px;
-  }
-  /* A handle is placed by its transform, so its press is colour, not scale. */
-  .canvas :global(.svelte-flow__handle:active) {
-    background: var(--brand-solid);
-  }
-</style>

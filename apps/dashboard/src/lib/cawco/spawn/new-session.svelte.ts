@@ -32,6 +32,14 @@ export interface SpawnPrefill {
   spinOff?: boolean;
 }
 
+/**
+ * The form's own states its frame's size follows (NewSessionForm): a move's
+ * step standing in for the form (`data-stepped`), the summary and the
+ * carried prompt side by side (`data-pair`). Its frame's morph hears them
+ * (motion/morph `on`), the centred card's and the popover's alike.
+ */
+export const FORM_SIZES = ["data-stepped", "data-pair"] as const;
+
 export const spawning = $state<{
   open: boolean;
   prefill: SpawnPrefill | undefined;

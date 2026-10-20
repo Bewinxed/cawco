@@ -2,6 +2,7 @@
   import { AlertDialog as AlertDialogPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { dialogTrayVariants } from "#lib/components/ui/dialog/dialog-content.svelte";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import {
     cn,
@@ -32,13 +33,15 @@
   // folding shut) tweens to its new height; the tray around it follows. It is
   // centred, so it grows from the middle.
   const resize = morph();
+  const tray = dialogTrayVariants();
 </script>
 
 <AlertDialogPortal {...portalProps}>
   <AlertDialogOverlay {...overlayProps} />
   <AlertDialogPrimitive.Content
     class={cn(
-      "kit-dialog group/alert-dialog-content fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-md",
+      tray.tray(),
+      "group/alert-dialog-content fixed top-1/2 left-1/2 z-(--layer-float) w-full -translate-x-1/2 -translate-y-1/2 outline-none data-[size=default]:max-w-80 data-[size=default]:phone:max-w-112 data-[size=sm]:max-w-80",
       className
     )}
     data-size={size}
@@ -55,7 +58,10 @@
              to it, never pushes past it. -->
         <div
           data-slot="grid"
-          class="kit-dialog-body grid grid-cols-[minmax(0,1fr)] gap-6 text-body text-foreground"
+          class={cn(
+            tray.body(),
+            "grid grid-cols-[minmax(0,1fr)] gap-6 text-body text-ink-strong"
+          )}
           {@attach resize}
         >
           {@render children?.()}

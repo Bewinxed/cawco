@@ -273,7 +273,7 @@
       }}
       open={sideOpen}
     >
-      <Drawer.Content class="side-sheet">
+      <Drawer.Content>
         <RegionBoundary region="side sheet">
           {@render side(true)}
         </RegionBoundary>
@@ -287,7 +287,7 @@
       }}
       open={planAsked}
     >
-      <Drawer.Content class="plan-sheet">
+      <Drawer.Content>
         <RegionBoundary region="plan">
           <PlanPane
             instanceId={planOf}
@@ -312,7 +312,6 @@
   }}
   landKey="preview:{viewId}"
   main={children}
-  mainClass="transcript-pane"
   onescape={(event) => previewPane?.parentEscape(event)}
   open={desktopOpen}
   side={bounded}

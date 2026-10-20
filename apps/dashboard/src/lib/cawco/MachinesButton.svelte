@@ -9,7 +9,7 @@
 <script lang="ts">
   /**
    * The machines, one click away in the wide bar's glass group rather than
-   * always on screen: an item of the group (Shell's `.bar-item`), its glyph
+   * always on screen: an item of the group (Shell's `[data-bar-item]`), its glyph
    * and the number of machines. The number is said once. Machines in
    * trouble (down, behind the hub, a stuck sync) tint the glyph in the
    * status hue, fail when any is down and attention otherwise; which ones
@@ -91,25 +91,19 @@
       aria-expanded={barGlass.open === "machines"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="bar-item machines mark-line touch-hit press-tint"
+      class="group mark-line touch-hit press-tint"
       data-counted={count > 0 || undefined}
       data-tone={tone}
       type="button"
     >
-      <IconServer aria-hidden="true" class="bar-symbol" />
+      <IconServer
+        data-slot="bar-symbol"
+        aria-hidden="true"
+        class="group-tone-attn:text-status-attn-glyph group-tone-fail:text-status-fail-glyph"
+      />
       {#if count > 0}
         <span data-slot="num" class="num">{count}</span>
       {/if}
     </button>
   {/snippet}
 </Tip>
-
-<style>
-  /* Named under `.machines` to outrank Shell's `.tools .bar-symbol` ink. */
-  .machines[data-tone="attn"] :global(.bar-symbol) {
-    color: var(--status-attn-glyph);
-  }
-  .machines[data-tone="fail"] :global(.bar-symbol) {
-    color: var(--status-fail-glyph);
-  }
-</style>

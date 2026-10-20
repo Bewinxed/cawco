@@ -38,7 +38,6 @@
     policies: ToolPolicy[];
   } = $props();
 
-  const CHIP = "h-auto min-h-6 gap-1.5 px-2";
   let written = $state<Record<string, ToolPolicy>>({});
   const policyOf = (spec: ToolSpec): ToolPolicy =>
     written[spec.id] ?? policyFor(policies, spec.id);
@@ -107,18 +106,17 @@
   {@const failed = cellKey(machine.machineId, spec.id) in refused}
 
   {#if shown === "installed"}
-    <span class="flex items-center gap-[var(--space-1)]">
-      <Badge class="{CHIP} text-success" variant="ghost">
-        <IconCheck class="size-4 shrink-0" />
+    <span class="flex items-center gap-space-1">
+      <Badge size="cell" tone="success" variant="ghost">
+        <IconCheck class="size-icon-md shrink-0" />
         <span data-slot="num" class="num font-mono"
           >{toolStatus?.version ?? "—"}</span
         >
       </Badge>
       <span
-        class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 [@media(hover:hover)]:opacity-0"
+        class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 hover-hover:opacity-0"
       >
         <Button
-          class="text-muted-foreground"
           disabled={!online}
           {failed}
           label="Reinstall"
@@ -126,13 +124,14 @@
           {pending}
           pendingLabel="Installing…"
           size="xs"
+          tone="muted"
           variant="ghost"
         />
       </span>
     </span>
   {:else if shown === "installing"}
-    <Badge class="{CHIP} text-muted-foreground" variant="ghost">
-      <Spinner class="size-4 shrink-0" />
+    <Badge size="cell" tone="muted" variant="ghost">
+      <Spinner class="shrink-0" />
       <span>Installing…</span>
     </Badge>
   {:else if shown === "missing"}
@@ -147,7 +146,7 @@
       variant="outline"
     />
   {:else if shown === "failed"}
-    <span class="flex items-center gap-[var(--space-1)]">
+    <span class="flex items-center gap-space-1">
       <Popover.Root>
         <Popover.Trigger>
           {#snippet child({ props })}
@@ -156,10 +155,10 @@
               aria-label="Why {spec.name} did not install on {machineLabel(
                 machine.hostname
               )}"
-              class="{CHIP} cursor-pointer"
+              size="cell"
               variant="destructive"
             >
-              <span class="size-2 shrink-0 rounded-full bg-error" data-box
+              <span class="size-2 shrink-0 rounded-full bg-error-9" data-box
               ></span>
               <span>Failed</span>
             </Badge>
@@ -167,28 +166,27 @@
         </Popover.Trigger>
         <Popover.Content
           align="start"
-          class="w-96 rounded-[var(--radius-lg)] p-0 shadow-xl"
+          frame="panel-high"
+          pad="none"
+          width="widest"
         >
           <header
-            class="flex items-baseline gap-[var(--space-1)] border-b border-border px-[var(--space-3)] py-[var(--space-2)]"
+            class="flex items-baseline gap-space-1 border-b border-border px-space-3 py-space-2"
           >
-            <span class="text-label text-foreground"
+            <span class="text-label text-ink-strong"
               >{spec.name}
               did not install</span
             >
             {#if toolStatus?.method}
-              <span
-                class="ml-auto shrink-0 font-mono text-label text-muted-foreground"
+              <span class="ml-auto shrink-0 font-mono text-label text-ink-muted"
                 >{toolStatus.method}</span
               >
             {/if}
           </header>
           <pre
-            class="max-h-56 overflow-auto px-[var(--space-3)] py-[var(--space-2)] font-mono text-label whitespace-pre-wrap">{toolStatus?.detail ??
+            class="max-h-56 overflow-auto px-space-3 py-space-2 font-mono text-label whitespace-pre-wrap">{toolStatus?.detail ??
               "The machine did not say why."}</pre>
-          <footer
-            class="border-t border-border px-[var(--space-3)] py-[var(--space-2)]"
-          >
+          <footer class="border-t border-border px-space-3 py-space-2">
             <Button
               disabled={!online}
               {failed}
@@ -203,7 +201,6 @@
         </Popover.Content>
       </Popover.Root>
       <Button
-        class="text-muted-foreground"
         disabled={!online}
         {failed}
         label="Retry"
@@ -211,6 +208,7 @@
         {pending}
         pendingLabel="Installing…"
         size="xs"
+        tone="muted"
         variant="ghost"
       />
     </span>
@@ -223,38 +221,33 @@
             aria-label="Why {spec.name} cannot run on {machineLabel(
               machine.hostname
             )}"
-            class="{CHIP} cursor-pointer text-muted-foreground"
+            size="cell"
+            tone="muted"
             variant="ghost"
           >
             <span>Unsupported</span>
           </Badge>
         {/snippet}
       </Popover.Trigger>
-      <Popover.Content
-        align="start"
-        class="w-80 rounded-[var(--radius-lg)] shadow-xl"
-      >
+      <Popover.Content align="start" frame="panel-high" width="wide">
         <p class="font-mono text-label">
           {toolStatus?.detail ?? "no install method for this platform"}
         </p>
       </Popover.Content>
     </Popover.Root>
   {:else}
-    <span class="flex items-center gap-[var(--space-1)]">
+    <span class="flex items-center gap-space-1">
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
-            <Badge
-              {...props}
-              class="{CHIP} text-[var(--ink-subtle)]"
-              variant="ghost"><span>Unknown</span></Badge
+            <Badge {...props} size="cell" tone="subtle" variant="ghost"
+              ><span>Unknown</span></Badge
             >
           {/snippet}
         </Tooltip.Trigger>
         <Tooltip.Content>The daemon has not reported this tool</Tooltip.Content>
       </Tooltip.Root>
       <Button
-        class="text-muted-foreground"
         disabled={!online}
         {failed}
         label="Install"
@@ -262,6 +255,7 @@
         {pending}
         pendingLabel="Installing…"
         size="xs"
+        tone="muted"
         variant="ghost"
       />
     </span>
@@ -293,48 +287,46 @@
     {/snippet}
   </EmptyState>
 {:else}
-  <div class="matrix">
-    <Table.Root class="border-collapse text-left">
+  <!-- The matrix scrolls sideways inside the section; the page never does. -->
+  <div
+    class="overflow-x-auto rounded-md bg-surface-raised inset-ring inset-ring-border-hairline"
+  >
+    <Table.Root>
       <Table.Header>
-        <Table.Row class="align-top">
+        <Table.Row>
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           <Table.Head
-            class="sticky left-0 z-10 h-auto bg-[var(--surface-raised)] px-[var(--space-4)] py-[var(--space-3)] text-meta text-muted-foreground"
-            scope="col">Machine</Table.Head
+            class="z-(--layer-sticky)"
+            scope="col"
+            variant="matrix-corner-pinned">Machine</Table.Head
           >
           <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           {#each catalog as spec (spec.id)}
             {@const policy = policyOf(spec)}
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head
-              class="h-auto min-w-56 border-l border-border px-[var(--space-4)] py-[var(--space-3)] whitespace-normal"
-              scope="col"
-            >
+            <Table.Head scope="col" variant="matrix-column-wide-plain">
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <div class="flex flex-col items-start gap-[var(--space-2)]">
-                <span class="mark-line flex items-center gap-1.5">
-                  <span class="text-label text-foreground">{spec.name}</span>
+              <div class="flex flex-col items-start gap-space-2">
+                <span class="mark-line flex items-center gap-space-2">
+                  <span class="text-label text-ink-strong">{spec.name}</span>
                   <a
                     data-box
                     aria-label="{spec.name} homepage"
-                    class="pointer-hit pressable text-muted-foreground transition-colors hover:text-foreground"
+                    class="pointer-hit pressable text-ink-muted transition-colors hover:text-ink-strong"
                     href={spec.homepage}
                     rel="noreferrer"
                     target="_blank"
                     title={spec.homepage}
                   >
-                    <IconExternal class="size-3" />
+                    <IconExternal class="size-icon-sm" />
                   </a>
                 </span>
-                <span
-                  data-slot="num"
-                  class="num text-meta text-muted-foreground"
+                <span data-slot="num" class="num text-meta text-ink-muted"
                   >{installedOn(spec)}/{machines.length}
                   installed</span
                 >
-                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch is a bits-ui button[role=switch], which the label-click passthrough this markup relies on already recognizes as labelable — swapping to a `for`/id pairing would drop nothing biome can see but would change nothing real either. -->
                 <label
-                  class="flex items-center gap-[var(--space-2)] text-label text-muted-foreground"
+                  class="flex items-center gap-space-2 text-label text-ink-muted"
                 >
                   <Switch
                     checked={policy.required}
@@ -357,39 +349,38 @@
         {#each machines as machine (machine.machineId)}
           {@const os = machineOs(machine.os)}
           {@const online = machine.status === "online"}
-          <Table.Row class={online ? "" : "opacity-50"}>
+          <Table.Row inactive={!online}>
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="sticky left-0 z-10 h-auto bg-[var(--surface-raised)] px-[var(--space-4)] py-[var(--space-2)]"
+              class="z-(--layer-sticky)"
               scope="row"
+              variant="matrix-row-pinned"
             >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <span class="flex items-center gap-[var(--space-2)]">
+              <span class="flex items-center gap-space-2">
                 <OsMark
-                  class="size-4 shrink-0 text-muted-foreground"
+                  class="size-icon-md shrink-0 text-ink-muted"
                   os={machine.os}
                 />
                 <span class="flex min-w-0 flex-col">
-                  <span class="flex items-center gap-[var(--space-2)]">
-                    <span class="truncate text-label text-foreground"
+                  <span class="flex items-center gap-space-2">
+                    <span class="truncate text-label text-ink-strong"
                       >{machineLabel(machine.hostname)}</span
                     >
                     <span
-                      class="size-2 shrink-0 rounded-full {online
-                        ? 'bg-success'
-                        : 'bg-muted-foreground/40'}"
+                      class="size-(--status-dot-size) shrink-0 rounded-pill {online
+                        ? 'bg-presence-online'
+                        : 'bg-presence-off'}"
                     ></span>
                   </span>
-                  <span class="text-label text-muted-foreground"
+                  <span class="text-label text-ink-muted"
                     >{os.label}{online ? "" : " · offline"}</span
                   >
                 </span>
               </span>
             </Table.Head>
             {#each catalog as spec (spec.id)}
-              <Table.Cell
-                class="group/cell border-l border-border px-[var(--space-4)] py-[var(--space-2)] whitespace-normal"
-              >
+              <Table.Cell class="group/cell" variant="matrix">
                 {@render cell(machine, spec, online)}
               </Table.Cell>
             {/each}
@@ -399,13 +390,3 @@
     </Table.Root>
   </div>
 {/if}
-
-<style>
-  /* The matrix scrolls sideways inside the section; the page never does. */
-  .matrix {
-    overflow-x: auto;
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-  }
-</style>

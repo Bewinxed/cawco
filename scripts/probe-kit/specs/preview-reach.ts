@@ -71,7 +71,7 @@ const paneNow = (page: Page, id: string) =>
     return {
       down: words(down),
       // The empty state's line alone, without its buttons' labels.
-      line: words(down?.querySelector(".kit-empty-line")),
+      line: words(down?.querySelector('[data-slot="empty-line"]')),
       ready: !!root?.querySelector('iframe[title="Preview"][data-ready]'),
     };
   }, id);

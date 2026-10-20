@@ -295,7 +295,7 @@ function watchHydration(): void {
     ]
       .map(
         (el) =>
-          `${el.getAttribute("data-slot")}${el.classList.contains("lifted") ? " lifted" : ""} ${Math.round(el.getBoundingClientRect().width)}`
+          `${el.getAttribute("data-slot")}${el.hasAttribute("data-lifted") ? " lifted" : ""} ${Math.round(el.getBoundingClientRect().width)}`
       )
       .join(" + "),
     tools: box(document.querySelector('[data-slot="top"] [data-slot="tools"]')),
@@ -305,7 +305,7 @@ function watchHydration(): void {
         ?.textContent?.trim() ?? "none",
     add: (() => {
       const add = document
-        .querySelector("[data-session-tabs] .tnew")
+        .querySelector("[data-session-tabs] [data-tnew]")
         ?.getBoundingClientRect();
       return add ? Math.round(add.left) : null;
     })(),
@@ -314,7 +314,7 @@ function watchHydration(): void {
       const last = [...(strip?.querySelectorAll("[data-session-tab]") ?? [])]
         .at(-1)
         ?.getBoundingClientRect();
-      const add = strip?.querySelector(".tnew")?.getBoundingClientRect();
+      const add = strip?.querySelector("[data-tnew]")?.getBoundingClientRect();
       return `last tab ends ${last ? Math.round(last.right) : "-"}, + at ${add ? Math.round(add.left) : "-"}`;
     })(),
   });
@@ -573,7 +573,8 @@ async function tryAgain(kit: Kit, step: string, page: Page) {
     return;
   }
   await page
-    .locator(`${FAILED} button`, { hasText: "Try again" })
+    .locator(FAILED)
+    .getByRole("button", { name: "Try again", exact: true })
     .first()
     .click();
   await stripOrFailure(page);

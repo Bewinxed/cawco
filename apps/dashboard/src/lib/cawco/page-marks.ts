@@ -106,7 +106,7 @@ export function mirror(
   };
 }
 
-/** A kit scrim (`.kit-scrim`), open or closing, for the screen's edges (ScreenEdges). */
+/** A kit scrim (`scrimVariants`, ui/dialog/dialog-overlay), open or closing, for the screen's edges (ScreenEdges). */
 export const scrimMark = (node: HTMLElement) =>
   mirror(node, "root", "data-scrim", ["data-state"], ({ dataset }) =>
     dataset.state === "open" || dataset.state === "closed"

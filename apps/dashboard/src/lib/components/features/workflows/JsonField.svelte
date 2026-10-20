@@ -1,5 +1,7 @@
 <script lang="ts">
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { Alert } from "#lib/components/ui/alert/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
 
   let {
     label,
@@ -30,18 +32,22 @@
   }
 </script>
 
-<label
+<label class="flex flex-col gap-space-2 type-label text-ink-muted"
   >{label}
-  <textarea
+  <Textarea
     aria-invalid={!!errorMessage}
-    class="wf-mono"
+    face="mono"
     oninput={(event) => change(event.currentTarget.value)}
-    rows="7"
-    value={JSON.stringify(value, null, 2)}></textarea></label
+    rows={7}
+    text="label"
+    value={JSON.stringify(value, null, 2)}
+  /></label
 >
 {#if errorMessage}
-  <p class="wf-error" role="alert" in:unfold out:unfold>
-    {errorMessage}
-    Changes are not applied until the JSON is valid.
-  </p>
+  <div in:unfold out:unfold>
+    <Alert variant="destructive">
+      {errorMessage}
+      Changes are not applied until the JSON is valid.
+    </Alert>
+  </div>
 {/if}

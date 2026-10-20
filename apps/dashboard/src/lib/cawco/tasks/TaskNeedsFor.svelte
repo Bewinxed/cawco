@@ -72,7 +72,7 @@
 </script>
 
 {#if task}
-  <div class="needs-for">
+  <div data-slot="task-needs-for-needs-for" class="flex flex-col gap-space-3">
     {#if task.kind === "you"}
       <TaskReview
         compact
@@ -91,11 +91,3 @@
     <TaskNeeds onchanged={took} {onopen} {projectId} {task} {tasks} />
   </div>
 {/if}
-
-<style>
-  .needs-for {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-</style>

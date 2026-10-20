@@ -116,14 +116,34 @@
      follows its height, and Caw comes and goes by his own clips. With less
      motion, only the fades run. In the rail the home is one box of the
      rail's own reflow, so what is under it slides as it grows. -->
+<!-- In the rail it is one block of the rail's own scroller, at its full
+     height: the rail scrolls, the home does not shrink into it. Nothing is
+     ruled under it: the rail parts its sections with space alone (the
+     groups' own padding, the footer with no border), and the tabs' rule is
+     the one seam in this block. -->
 <section
   aria-label="Home"
-  class="home {variant}"
+  class={[
+    "flex min-h-0 min-w-0 flex-col",
+    variant === "page" && "flex-auto overflow-y-auto bg-surface-recess",
+    variant === "rail" && "flex-none",
+  ]}
   data-home-variant={variant}
   data-flip={variant === "rail" && !relaying ? "box" : undefined}
-  {@attach reflow()}
+  {@attach reflow({ on: ["data-bare"] })}
 >
-  <div data-slot="top" class="top" class:bare={bare || machinesThere !== null}>
+  <!-- Bare, nothing in it: in the rail, live and read with nothing needing
+       the reader; on the page, the empty fleet, whose block stands where New
+       project's ask does. -->
+  <div
+    data-slot="top"
+    class={[
+      "flex flex-col gap-space-2 data-bare:p-0",
+      variant === "page" && "px-space-5 pt-space-5 pb-space-3",
+      variant === "rail" && "px-space-3 pt-space-2 pb-space-1",
+    ]}
+    data-bare={bare || machinesThere !== null || undefined}
+  >
     <!-- The line every other line on this screen is believed by; live and
          read, it says nothing and takes no room. -->
     <StatusLine />
@@ -131,7 +151,8 @@
       <!-- The phone has no rail: the rail's usage strip stands here (owner
            pick i), on the home's own ground, while a machine is online
            (home `limitsShown`). -->
-      <div class="usage">
+      <!-- The strip's card lines up with the status line's text. -->
+      <div class="-mx-space-2">
         <UsageMeter variant="home" />
       </div>
     {/if}
@@ -141,7 +162,13 @@
        the Working and Finished tabs stand over rows that wait (WorkTabs
        `waiting`), so the tab row is where it will be and the list
        cross-fades in under it; nothing else here is claimed before then. -->
-  <div class="groups">
+  <div
+    class={[
+      "flex flex-col",
+      variant === "page" && "gap-space-5 px-space-5 pt-space-2 pb-space-7",
+      variant === "rail" && "gap-space-3 px-space-2 pt-space-1 pb-space-2",
+    ]}
+  >
     {#if !noFleet}
       <WorkTabs
         {markedElsewhere}
@@ -154,7 +181,9 @@
     {/if}
 
     {#if machinesThere}
-      <div data-slot="machines" class="machines" data-flip>
+      <!-- Anchored as New project's ask is (its page pads --space-7 on a
+           phone): the groups' own top padding and this margin make that. -->
+      <div data-slot="machines" class="mx-0 mt-space-5 mb-space-6" data-flip>
         <MachinesEmpty
           fleet={machinesThere}
           ongone={() => {
@@ -172,7 +201,10 @@
            somewhere, a tab with none says so itself (WorkTabs). He comes in
            by his enter, or by a fade where his status has none, and fades
            out, keeping his place until he has gone. -->
-      <figure class="caw" data-flip>
+      <figure
+        class="mx-0 my-space-4 flex flex-col items-center gap-space-2"
+        data-flip
+      >
         <Caw
           next={["ready", "sleeping"]}
           ongone={() => {
@@ -183,7 +215,7 @@
           status={home.waitingOn.length > 0 ? "ready" : "sleeping"}
         />
         <!-- The line's states share one cell and cross-fade (§8). -->
-        <figcaption>
+        <figcaption class="relative type-body text-center text-ink-muted">
           {#if firstRun}
             {#key cawLine}
               <span in:crossIn out:crossOut>{cawLine}</span>
@@ -201,7 +233,13 @@
   {#if variant === "page" && !noFleet && !machineless}
     <!-- The phone's thumb reaches the bottom; Start session lives there,
          while a machine is online to start one on. -->
-    <div data-slot="dock" class="dock" data-safe-bottom>
+    <div
+      data-slot="dock"
+      class="sticky bottom-0 mt-auto bg-(image:--dock-fade) px-space-5 pt-space-3 pb-(--dock-foot)"
+      data-safe-bottom
+      style:--dock-fade={"linear-gradient(transparent, var(--surface-recess) var(--space-4))"}
+      style:--dock-foot="calc(var(--space-3) + var(--safe-bottom))"
+    >
       <Button class="w-full" onclick={() => newSession()} size="lg">
         <IconPlus />
         <span>Start session</span>
@@ -209,87 +247,3 @@
     </div>
   {/if}
 </section>
-
-<style>
-  .home {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-  }
-  .home.page {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    background: var(--surface-recess);
-  }
-  /* In the rail it is one block of the rail's own scroller, at its full
-     height: the rail scrolls, the home does not shrink into it. Nothing is
-     ruled under it: the rail parts its sections with space alone (the
-     groups' own padding, the footer with no border), and the tabs' rule is
-     the one seam in this block. */
-  .home.rail {
-    flex: none;
-  }
-  .top {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .page .top {
-    padding: var(--space-5) var(--space-5) var(--space-3);
-  }
-  .rail .top {
-    padding: var(--space-2) var(--space-3) var(--space-1);
-  }
-  /* Nothing in it: in the rail, live and read with nothing needing the
-     reader; on the page, the empty fleet, whose block stands where New
-     project's ask does. */
-  .top.bare {
-    padding: 0;
-  }
-  /* The strip's card lines up with the status line's text. */
-  .usage {
-    margin-inline: -8px;
-  }
-  .groups {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-  }
-  .page .groups {
-    padding: var(--space-2) var(--space-5) var(--space-7);
-  }
-  .rail .groups {
-    gap: var(--space-3);
-    padding: var(--space-1) var(--space-2) var(--space-2);
-  }
-  .caw {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-2);
-    margin: var(--space-4) 0;
-  }
-  /* Anchored as New project's ask is (its page pads --space-7 on a phone):
-     the groups' own top padding and this margin make that. */
-  .machines {
-    margin: var(--space-5) 0 var(--space-6);
-  }
-  .caw figcaption {
-    position: relative;
-    font: var(--type-body);
-    color: var(--ink-muted);
-    text-align: center;
-  }
-  .dock {
-    position: sticky;
-    bottom: 0;
-    margin-top: auto;
-    padding: var(--space-3) var(--space-5)
-      calc(var(--space-3) + var(--safe-bottom));
-    background: linear-gradient(
-      transparent,
-      var(--surface-recess) var(--space-4)
-    );
-  }
-</style>

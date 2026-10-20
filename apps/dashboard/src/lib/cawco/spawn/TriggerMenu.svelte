@@ -1,5 +1,6 @@
 <script lang="ts">
   /** The `@` / `/` menu (§2.3): caret-anchored, keyboard-driven, 300px wide. */
+  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import NsPopover from "./NsPopover.svelte";
   import type { MenuItem } from "./ns-types";
 
@@ -29,20 +30,22 @@
   {id}
   {onchange}
   {open}
+  pad="snug"
   rows="[data-fh]"
   trapFocus={false}
   width={300}
 >
   <span
     aria-hidden="true"
-    class="hi"
-    style={`transform:translateY(calc(${index} * 38px));opacity:${items.length ? 1 : 0}`}
+    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-c-btn-h translate-y-(--fill-y) rounded-sm bg-surface-fill opacity-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--dur-control) motion-safe:ease-in-out"
+    data-shown={items.length > 0 || undefined}
+    style:--fill-y={`calc(${index} * (var(--c-btn-h) + var(--space-row)))`}
   ></span>
-  {#each items as item, i (item.key)}
+  {#each items as item (item.key)}
     {@const Icon = item.icon}
     <button
       data-slot="row"
-      class="row press-tint"
+      class="press-tint transition-control relative flex h-c-btn-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start text-ink-strong"
       data-fh="1"
       onmousedown={(event) => {
         event.preventDefault();
@@ -50,77 +53,22 @@
       }}
       tabindex="-1"
       type="button"
-      class:active={i === index}
     >
-      <span data-slot="tile" class="ns-tile tile" style={`color:${item.hue}`}
-        ><Icon /></span
+      <span data-slot="tile" class={iconTileVariants()} style:color={item.hue}
+        ><Icon class="size-icon-md" /></span
       >
-      <span data-slot="trigger-menu-label" class="label">{item.label}</span>
-      <span data-slot="kind" class="kind">{item.kind}</span>
+      <span
+        data-slot="trigger-menu-label"
+        class="type-label min-w-0 flex-1 truncate">{item.label}</span
+      >
+      <span data-slot="kind" class="type-meta whitespace-nowrap text-ink-subtle"
+        >{item.kind}</span
+      >
     </button>
   {/each}
   {#if items.length === 0}
-    <div class="none">No matches</div>
+    <div class="type-meta px-space-2 py-space-3 text-ink-subtle">
+      No matches
+    </div>
   {/if}
 </NsPopover>
-
-<style>
-  :global(#trigger-menu-popover.ns-pop) {
-    padding: 4px;
-  }
-  .hi {
-    position: absolute;
-    left: 4px;
-    right: 4px;
-    top: 4px;
-    height: 36px;
-    background: var(--surface-fill);
-    border-radius: var(--radius-sm);
-    pointer-events: none;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-control) var(--ease-in-out);
-    }
-  }
-  .row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    width: 100%;
-    height: 36px;
-    padding: 0 8px;
-    background: transparent;
-    border: 0;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    text-align: left;
-    color: var(--ink-strong);
-  }
-  .tile {
-    width: 22px;
-    height: 22px;
-    border-radius: var(--radius-xs);
-  }
-  .tile :global(svg) {
-    width: 12px;
-    height: 12px;
-  }
-  .label {
-    flex: 1;
-    min-width: 0;
-    font: var(--weight-strong) var(--text-label) / 1.2 var(--font-body);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .kind {
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-    white-space: nowrap;
-  }
-  .none {
-    padding: 10px 8px;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-  }
-</style>

@@ -267,24 +267,32 @@
       bind:value={serverName}
     />
     {#if serverName !== "" && nameProblem}
-      <p class="problem" in:appear>{nameProblem}</p>
+      <p class="type-meta text-status-fail-ink" in:appear>{nameProblem}</p>
     {:else if server && serverName.trim() !== "" && serverName.trim() !== server.name}
       <!-- Said before Save, where the name is changed: that is its consequence. -->
-      <p data-slot="note" class="note" in:appear>
+      <p
+        data-slot="note"
+        class="type-meta max-w-c-measure text-ink-muted"
+        in:appear
+      >
         {words.renamed(server.name)}
       </p>
     {:else}
-      <p data-slot="note" class="note">
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
         <Coded text={words.callsAs(serverName || "name")} />
       </p>
     {/if}
     {#if failed}
-      <p class="problem" role="alert" in:appear>{failed}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+        {failed}
+      </p>
     {/if}
     {#if server}
       <McpSignIn {server} />
       {#if server.auth?.state === "failed"}
-        <p class="problem" role="alert">{server.auth.detail}</p>
+        <p class="type-meta text-status-fail-ink" role="alert">
+          {server.auth.detail}
+        </p>
       {/if}
     {/if}
   {/snippet}
@@ -307,16 +315,23 @@
          --ease-drawer. -->
     <div
       data-slot="kind"
-      class="kind"
+      class="relative flex flex-col"
       {@attach morph({ ms: dur("--dur-pop") })}
     >
       {#if mode === "bunx"}
-        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
-          <p data-slot="note" class="note">{HOW.bunx}</p>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-space-2"
+          in:crossIn
+          out:crossOut
+        >
+          <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+            {HOW.bunx}
+          </p>
           <Field id="mcp-package" label={words.package}>
             <Input
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="mcp-package"
               oninput={() => {
                 if (!named) {
@@ -331,7 +346,7 @@
           <Field id="mcp-package-args" label={words.packageArgs}>
             <Input
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="mcp-package-args"
               placeholder={words.packageArgsPlaceholder}
               spellcheck="false"
@@ -340,12 +355,19 @@
           </Field>
         </div>
       {:else if mode === "command"}
-        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
-          <p data-slot="note" class="note">{HOW.command}</p>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-space-2"
+          in:crossIn
+          out:crossOut
+        >
+          <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+            {HOW.command}
+          </p>
           <Field id="mcp-command" label={words.command}>
             <Input
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="mcp-command"
               placeholder={words.commandPlaceholder}
               spellcheck="false"
@@ -355,7 +377,7 @@
           <Field hint={words.argsHint} id="mcp-args" label={words.args}>
             <Input
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="mcp-args"
               placeholder={words.argsPlaceholder}
               spellcheck="false"
@@ -364,12 +386,19 @@
           </Field>
         </div>
       {:else}
-        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
-          <p data-slot="note" class="note">{HOW.remote}</p>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-space-2"
+          in:crossIn
+          out:crossOut
+        >
+          <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+            {HOW.remote}
+          </p>
           <Field id="mcp-url" label={words.url}>
             <Input
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="mcp-url"
               placeholder={words.urlPlaceholder}
               spellcheck="false"
@@ -401,10 +430,12 @@
         icon={IconKey}
         label={mode === "remote" ? words.headers : words.environment}
       >
-        <p data-slot="note" class="note"><Coded text={words.expanded} /></p>
+        <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+          <Coded text={words.expanded} />
+        </p>
         <div
           data-slot="kind"
-          class="kind"
+          class="relative flex flex-col"
           {@attach morph({ ms: dur("--dur-pop") })}
         >
           {#if mode === "remote"}
@@ -432,7 +463,9 @@
   {/if}
 
   <EditorSection hue={HUE} icon={IconMapPoint} label={words.where}>
-    <p data-slot="note" class="note">{words.whereNote}</p>
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+      {words.whereNote}
+    </p>
     <div>
       <PickerChip
         label={words.scope}
@@ -451,27 +484,3 @@
     </div>
   </EditorSection>
 </EditorFrame>
-
-<style>
-  /* The kind's box: the set leaving is pinned in it (crossOut) while the
-     one arriving sets its height. */
-  .kind {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-  }
-  .fold {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-</style>

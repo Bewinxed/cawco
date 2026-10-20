@@ -119,7 +119,14 @@ import type { Frame, Locator, Page } from "playwright-core";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { traceMain } from "../frames";
-import { COMPOSER, type Kit, open, type Spec, settle } from "../kit";
+import {
+  buttonNames,
+  COMPOSER,
+  type Kit,
+  open,
+  type Spec,
+  settle,
+} from "../kit";
 import {
   docOf,
   dragFromIcon,
@@ -314,7 +321,7 @@ const pageInComment = (frame: Frame, on: boolean) =>
  */
 const rowsOf = async (on: On) => {
   const button = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[data-slot="comments"]'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
   );
   if ((await button.getAttribute("aria-expanded")) !== "true") {
     await button.click();
@@ -325,7 +332,7 @@ const rowsOf = async (on: On) => {
 };
 const shutList = async (on: On) => {
   const button = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[data-slot="comments"]'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
   );
   if ((await button.getAttribute("aria-expanded")) === "true") {
     await button.click();
@@ -338,7 +345,7 @@ const shutList = async (on: On) => {
 /** The head's Interact: Comment's way back, as the old toggle's second press was. */
 const interactTab = (on: On) =>
   on.page.locator(
-    ":is([data-slot=\"preview-pane\"], [data-side-surface-class~=\"preview-pane\"]) [role='tab'][aria-keyshortcuts='V']"
+    ":is([data-slot=\"preview-pane\"], [data-side-card=\"preview\"]) [role='tab'][aria-keyshortcuts='V']"
   );
 
 /** The overlay's outline over the page, in the frame's viewport. */
@@ -427,7 +434,7 @@ const run = async (kit: Kit) => {
 /** 1. C, a tap, the card at the pin, Esc and Esc. */
 const commentChecks = async (on: On, frame: Frame) => {
   const comment = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.focus();
   await on.page.keyboard.press("c");
@@ -436,7 +443,7 @@ const commentChecks = async (on: On, frame: Frame) => {
   await settle(on.page, 300);
   const edge = await on.page.evaluate(() => {
     const well = document.querySelector(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="side-well"]'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-side-well]'
     );
     const probe = document.createElement("span");
     probe.style.color = "var(--accent)";
@@ -453,6 +460,35 @@ const commentChecks = async (on: On, frame: Frame) => {
     "1: C turns Comment on: its segment chosen (aria-selected), the well's accent edge",
     pressed === "true" && edge.outline === edge.accent,
     `aria-selected ${pressed}; outline ${edge.outline}, accent ${edge.accent}`
+  );
+  // The mode's segments draw their glyphs alone (TabItem `glyphOnly`): the
+  // name is sr-only, still the tab's accessible name.
+  const label = await comment.evaluate((tab) => {
+    const words = tab.querySelector<HTMLElement>(
+      '[data-slot="tab-item-label"]'
+    );
+    const style = words ? getComputedStyle(words) : null;
+    return {
+      position: style?.position ?? null,
+      width: words?.getBoundingClientRect().width ?? null,
+      clip: style?.clipPath ?? null,
+      text: words?.textContent?.trim() ?? null,
+    };
+  });
+  const named = await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="modes"]'
+    )
+    .getByRole("tab", { name: "Comment", exact: true })
+    .count();
+  on.kit.check(
+    "1: the mode's segments draw their glyphs alone: the name sr-only, still the tab's name",
+    label.position === "absolute" &&
+      label.width === 1 &&
+      label.clip === "inset(50%)" &&
+      label.text === "Comment" &&
+      named === 1,
+    JSON.stringify({ label, named })
   );
 
   const b = await screenBox(on, frame, "#para");
@@ -683,7 +719,7 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
   ).catch(() => docOf(frame));
   const sendControls = await on.page
     .locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="send"]'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="send"]'
     )
     .count();
   const words = message?.last ?? "";
@@ -813,7 +849,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
         ?.matches("[data-grouped]"),
       marks: people.filter((entry) =>
         entry.querySelector(
-          '[data-slot="who"] :is([data-slot="dot"], [data-account-dot-dot])[data-u]'
+          '[data-turn-who] :is([data-slot="dot"], [data-account-dot-dot])[data-u]'
         )
       ).length,
       seam: upper && lower ? Math.round(lower.top - upper.bottom) : null,
@@ -823,13 +859,13 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
         : null,
       agentMark: (() => {
         const dot = agent?.querySelector(
-          '[data-slot="who"] :is([data-slot="dot"], [data-account-dot-dot]):is([data-a], [data-slot="a"])'
+          '[data-turn-who] :is([data-slot="dot"], [data-account-dot-dot]):is([data-a], [data-slot="a"])'
         );
         return dot ? getComputedStyle(dot).backgroundColor : null;
       })(),
       agentName:
         agent
-          ?.querySelector('[data-slot="who"] [data-slot="role"]')
+          ?.querySelector('[data-turn-who] [data-slot="role"]')
           ?.textContent?.trim() ?? null,
     };
   });
@@ -1069,7 +1105,7 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
   );
 
   const commentButton = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   const modeBefore = await commentButton.getAttribute("aria-selected");
   await tray.getByRole("button", { name: "Place again" }).click();
@@ -1416,7 +1452,7 @@ const frameChecks = async (on: On) => {
       `inner ${JSON.stringify(standing)}; outer overlay elements ${outerHost}`
     );
     const comment = on.page.locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
     );
     await comment.click();
     await pageInComment(outer, true);
@@ -1492,7 +1528,7 @@ const frameChecks = async (on: On) => {
 
     await on.page
       .locator(
-        ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-label="Reload"]'
+        ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-label="Reload"]'
       )
       .click();
     const reloaded = (await until(
@@ -1636,7 +1672,7 @@ const scaledFrameChecks = async (on: On) => {
     await settle(on.page, 600);
     await on.page
       .locator(
-        ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+        ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
       )
       .click();
     await pageInComment(outer, true);
@@ -1760,7 +1796,7 @@ const scaledFrameChecks = async (on: On) => {
  */
 const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   const comment = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.click();
   await pageInComment(frame, true);
@@ -1839,21 +1875,22 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   )?.[0];
   const card = on.page.locator(`[data-pin-card="${target}"]`);
   // The head holds what acts on the pin (Resolve, ⋯, Close) on its row; the foot holds Reply alone.
-  const parts = await card.evaluate((el) => {
-    const head = el.querySelector('[data-slot="head"]');
-    const named = [...(head?.querySelectorAll("button") ?? [])].map(
-      (button) => button.getAttribute("aria-label") ?? ""
-    );
-    const tops = [...(head?.querySelectorAll("button") ?? [])].map((button) =>
-      Math.round(button.getBoundingClientRect().top)
-    );
-    const foot = [
-      ...el.querySelectorAll(
-        ':is([data-slot="actions"], [data-actions]) button'
-      ),
-    ].map((button) => button.textContent?.trim());
-    return { named, tops, foot };
-  });
+  const parts = {
+    ...(await card.evaluate((el) => {
+      const head = el.querySelector('[data-slot="head"]');
+      const named = [...(head?.querySelectorAll("button") ?? [])].map(
+        (button) => button.getAttribute("aria-label") ?? ""
+      );
+      const tops = [...(head?.querySelectorAll("button") ?? [])].map((button) =>
+        Math.round(button.getBoundingClientRect().top)
+      );
+      return { named, tops };
+    })),
+    // By their accessible names: a kit Button's text holds its pending words too.
+    foot: await buttonNames(
+      card.locator(':is([data-slot="actions"], [data-actions])').first()
+    ).catch(() => [] as string[]),
+  };
   on.kit.check(
     "c: the card's head holds Resolve pin, its ⋯ and Close on one row, and its foot Reply alone",
     parts.named[0] === "Resolve pin" &&
@@ -2053,7 +2090,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
   );
 
   const comment = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.click();
   await pageInComment(frame, true);
@@ -2201,7 +2238,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
 
   await on.page
     .locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-label="Reload"]'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-label="Reload"]'
     )
     .click();
   const reloaded = await loaded(frame);
@@ -2246,7 +2283,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
   ).catch(() => null);
   await on.page
     .locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-label="Reload"]'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-label="Reload"]'
     )
     .click();
   const reordered = await loaded(reloaded);
@@ -2324,7 +2361,7 @@ const inkAt = (frame: Frame) =>
 const dismissChecks = async (on: On) => {
   let frame = await pageFrame(on);
   const comment = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   const cards = () => on.page.locator('[data-slot="pin-card"]').count();
   const pinsNow = async () => (await docOf(frame)).pins as Pins;
@@ -2548,19 +2585,12 @@ const roomChecks = async (on: On) => {
     15_000
   ).catch(() => 0);
   await settle(on.page, 400);
-  const seen = await card.evaluate((el) => {
+  const read = await card.evaluate((el) => {
     const box = (part: Element | null) => {
       const r = part?.getBoundingClientRect();
       return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
     };
     const room = el.querySelector("[data-pin-room]");
-    // By its words, or its name when it is a glyph (the head's Resolve pin).
-    const button = (name: string) =>
-      [...el.querySelectorAll("button")].find(
-        (one) =>
-          one.textContent?.trim() === name ||
-          one.getAttribute("aria-label") === name
-      ) ?? null;
     return {
       card: box(el),
       cardScrolls: el.scrollHeight > el.clientHeight + 1,
@@ -2572,11 +2602,24 @@ const roomChecks = async (on: On) => {
           }
         : null,
       entries: el.querySelectorAll('[data-slot="entry"]').length,
-      resolve: box(button("Resolve pin")),
-      reply: box(button("Reply")),
       field: box(el.querySelector("textarea")),
     };
   });
+  // The head's Resolve pin and the foot's Reply by their accessible names: a
+  // kit Button's text holds its pending words too.
+  const boxOf = async (name: string) => {
+    const r = await card
+      .getByRole("button", { name, exact: true })
+      .first()
+      .boundingBox()
+      .catch(() => null);
+    return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+  };
+  const seen = {
+    ...read,
+    resolve: await boxOf("Resolve pin"),
+    reply: await boxOf("Reply"),
+  };
   const inside = (part: typeof seen.resolve) =>
     !!part &&
     !!seen.card &&
@@ -2710,7 +2753,7 @@ const wordlessChecks = async (on: On) => {
   await settle(on.page, 400);
   await on.page
     .locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
     )
     .click();
   await pageInComment(frame, true);
@@ -2970,7 +3013,7 @@ const insertChecks = async (on: On) => {
   }
   await on.page
     .locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
     )
     .click();
   await pageInComment(frame, true);
@@ -3234,7 +3277,7 @@ const listChecks = async (on: On) => {
   }
   await on.page
     .locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
     )
     .click();
   await pageInComment(frame, true);
@@ -3336,7 +3379,7 @@ const listLeg = async (
   });
   await settle(screen, 300);
   const button = screen.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[data-slot="comments"]'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
   );
   if ((await button.getAttribute("aria-expanded")) !== "true") {
     await button.click();

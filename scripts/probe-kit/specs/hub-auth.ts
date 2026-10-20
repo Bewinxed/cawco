@@ -783,12 +783,12 @@ const spec: Spec = {
       ]);
       const sent = await landed.request().allHeaders();
       const firstPaint = await landed.text();
+      const shell = firstPaint.includes('data-slot="shell"');
+      const pairing = firstPaint.includes('data-slot="pairing"');
       check(
         "(p5b) a top-level navigation from another site renders the app on first paint, not the pairing screen",
-        sent["sec-fetch-site"] === "cross-site" &&
-          firstPaint.includes('class="shell') &&
-          !firstPaint.includes('class="pairing'),
-        `sec-fetch-site ${sent["sec-fetch-site"]}; shell ${firstPaint.includes('class="shell')}; pairing ${firstPaint.includes('class="pairing')}`
+        sent["sec-fetch-site"] === "cross-site" && shell && !pairing,
+        `sec-fetch-site ${sent["sec-fetch-site"]}; shell ${shell}; pairing ${pairing}`
       );
       const posted: { status: number; text: string }[] = [];
       for (const form of ["#via-dashboard", "#via-hub"]) {

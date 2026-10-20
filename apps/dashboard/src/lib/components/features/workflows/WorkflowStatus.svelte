@@ -51,36 +51,15 @@
      `reflow` list (the rail, the board's queue) the chip still pops in and
      out as a whole (motion/rows). -->
 <span
-  class="wf-status mark-line"
+  class="mark-line type-label inline-flex items-center gap-space-1 rounded-pill bg-(color:--chip-bg) px-space-2 py-space-1 whitespace-nowrap text-(color:--chip-ink) transition-[background-color,color] duration-(--dur-panel) ease-out"
   data-flip="pop"
-  style="--chip-bg: var(--status-{tone}-bg); --chip-ink: var(--status-{tone}-ink)"
-  ><span data-slot="glyph" aria-hidden="true" class="glyph" data-box
+  style:--chip-bg="var(--status-{tone}-bg)"
+  style:--chip-ink="var(--status-{tone}-ink)"
+  ><span data-slot="glyph" aria-hidden="true" class="grid" data-box
     >{#key tone}
-      <span transition:crossIn><Glyph class="size-3" /></span>
+      <span class="col-start-1 row-start-1 grid" transition:crossIn
+        ><Glyph class="size-icon-sm" /></span
+      >
     {/key}</span
   ><MorphText text={label} /></span
 >
-
-<style>
-  .wf-status {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    padding: 3px var(--space-2);
-    border-radius: var(--radius-pill);
-    background: var(--chip-bg);
-    color: var(--chip-ink);
-    font: var(--type-label);
-    white-space: nowrap;
-    transition:
-      background-color var(--dur-panel) var(--ease-out),
-      color var(--dur-panel) var(--ease-out);
-  }
-  .glyph {
-    display: grid;
-  }
-  .glyph > :global(*) {
-    grid-area: 1 / 1;
-    display: grid;
-  }
-</style>

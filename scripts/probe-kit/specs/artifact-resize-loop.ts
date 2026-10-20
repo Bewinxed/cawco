@@ -184,14 +184,24 @@ function paintedFrames() {
   /** The drawn top of the composer over `split`'s conversation. */
   const drawnTop = (split: Element): Painted["composerTop"] => {
     const composer = split
-      .closest(".leaf")
-      ?.querySelector<HTMLElement>(":scope > .dock .lift")?.parentElement;
+      .closest('[data-slot="leaf"]')
+      ?.querySelector<HTMLElement>(
+        ':scope > [data-slot="dock"] [data-slot="lift"]'
+      )?.parentElement;
     if (!composer) {
       return "none";
     }
     let top = Number.POSITIVE_INFINITY;
     for (const part of composer.querySelectorAll<HTMLElement>(
-      ":scope > .composer, .ask, .lift .kit-tray-chip, .suggest:has(.track), .progress-slot > *, .perch"
+      // SideSheet's COMPOSER_PARTS, the parts the sheet measures.
+      [
+        ':scope > [data-slot="composer"]',
+        '[data-slot="ask"]',
+        '[data-slot="lift"] [data-tray-chip]',
+        '[data-slot="suggest"]:has([data-slot="track"])',
+        '[data-slot="progress-slot"] > *',
+        '[data-slot="perch"]',
+      ].join(", ")
     )) {
       const box = part.getBoundingClientRect();
       if (
@@ -236,7 +246,7 @@ function paintedFrames() {
       : [];
     const clipped = (inset.length >= 3 ? inset[2] : inset[0]) ?? 0;
     return {
-      splitOpen: split.classList.contains("open"),
+      splitOpen: split.hasAttribute("data-split-open"),
       sheetHost: hostBox ? hostBox.height : null,
       floor: hostBox ? hostBox.bottom - clipped : null,
       composerTop: drawnTop(split),
@@ -377,7 +387,7 @@ const moreStands = (page: Page) =>
   page.evaluate(
     () =>
       !!document.querySelector(
-        '[data-slot="side-card"] .side-head [data-slot="more"]'
+        '[data-slot="side-card"] [data-slot="side-head"] [data-slot="more"]'
       )
   );
 
@@ -398,7 +408,7 @@ const cardState = (page: Page) =>
 
 /** The pane's Comment control, in the head or in More. */
 const COMMENT =
-  ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']';
+  ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']';
 
 /**
  * A pin dropped on the page's heading in Comment mode, and words written in
@@ -687,13 +697,23 @@ declare global {
  * scripts.
  */
 function sheetReader() {
-  const PARTS =
-    ":scope > .composer, .ask, .lift .kit-tray-chip, .suggest:has(.track), .progress-slot > *, .perch";
+  const PARTS = [
+    ':scope > [data-slot="composer"]',
+    '[data-slot="ask"]',
+    '[data-slot="lift"] [data-tray-chip]',
+    '[data-slot="suggest"]:has([data-slot="track"])',
+    '[data-slot="progress-slot"] > *',
+    '[data-slot="perch"]',
+  ].join(", ");
   const drawn = (part: Element) =>
     part.getBoundingClientRect().height > 0 &&
     part.checkVisibility({ opacityProperty: true, visibilityProperty: true });
   const composerOf = () =>
-    [...document.querySelectorAll<HTMLElement>(".leaf > .dock .lift")]
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        '[data-slot="leaf"] > [data-slot="dock"] [data-slot="lift"]'
+      ),
+    ]
       .map((lift) => lift.parentElement)
       .find((dock) => dock?.checkVisibility()) ?? null;
   /**
@@ -747,7 +767,7 @@ function sheetReader() {
       stop: host.getAttribute("data-active-snap"),
       top: sheet ? sheet.getBoundingClientRect().top : null,
       covered: parts.map((part) => ({
-        part: `${part.localName}.${[...part.classList].find((c) => !c.startsWith("svelte-")) ?? ""}`,
+        part: `${part.localName}[${part.dataset.slot ?? ""}]`,
         covered: !!content.contains(hitIn(part.getBoundingClientRect())),
       })),
       pillInView: !!(pill && pillHit && pill.contains(pillHit)),
@@ -1256,7 +1276,11 @@ export const runFiles = async (
         if (document.querySelector('[data-files-float][data-state="open"]')) {
           return "floating";
         }
-        return document.querySelector(".kit-pop.files-pop") ? null : "panel";
+        return document.querySelector(
+          '[data-glass-card][data-glass-card-frame="files-pop"]'
+        )
+          ? null
+          : "panel";
       }),
     Boolean,
     30_000

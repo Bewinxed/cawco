@@ -30,40 +30,46 @@
   /** The machine's whole error, unfolded in place under the cell. */
   let reading = $state(false);
   const refused = $derived(updates.refused.get(machine.machineId));
-  const CHIP = "h-auto min-h-6 gap-1.5 whitespace-normal px-2 py-1 text-start";
 </script>
 
-<div class="cell" {@attach morph()}>
+<div class="overflow-hidden" {@attach morph()}>
   {#key cell.row}
-    <div data-slot="swap" class="swap">
+    <div
+      data-slot="swap"
+      class="flex flex-wrap items-center gap-space-2 type-label motion-safe:animate-cell-swap motion-reduce:animate-cell-fade"
+    >
       {#if cell.plain}
-        <span class="plain">{cell.text}</span>
+        <span class="type-meta text-ink-muted">{cell.text}</span>
       {:else if cell.text}
         {#if cell.icon === "spinner"}
-          <span class="line mark-line">
-            <Spinner class="size-4 shrink-0 text-muted-foreground" />
-            <span data-slot="words" class="words">{cell.text}</span>
+          <span class="mark-line inline-flex items-center gap-space-2">
+            <Spinner class="shrink-0" tone="muted" />
+            <span data-slot="words">{cell.text}</span>
           </span>
         {:else}
-          <Badge class={CHIP} variant={cell.fail ? "destructive" : "ghost"}>
+          <Badge size="cell-tall" variant={cell.fail ? "destructive" : "ghost"}>
             {#if cell.fail}
-              <span class="size-2 shrink-0 rounded-full bg-error" data-box
+              <span
+                class="size-(--status-dot-size) shrink-0 rounded-pill bg-error-9"
+                data-box
               ></span>
             {:else if cell.icon === "clock"}
-              <IconClock class="size-4 shrink-0" />
+              <IconClock class="size-icon-md shrink-0" />
             {:else if cell.icon === "download"}
-              <IconDownload class="size-4 shrink-0" />
+              <IconDownload class="size-icon-md shrink-0" />
             {/if}
             <span>{cell.text}</span>
           </Badge>
         {/if}
         {#if cell.meta}
-          <span data-num data-slot="meta" class="meta num">{cell.meta}</span>
+          <span data-num data-slot="meta" class="num type-meta text-ink-muted"
+            >{cell.meta}</span
+          >
         {/if}
         {#each cell.buttons as button (button)}
           {#if button === "retry"}
             <Button
-              class="text-muted-foreground"
+              tone="muted"
               label="Retry"
               onclick={() => updates.installNow(machine)}
               size="xs"
@@ -72,7 +78,7 @@
           {:else if button === "error"}
             <Button
               aria-expanded={reading}
-              class="text-muted-foreground"
+              tone="muted"
               label={reading ? "Hide the error" : "Read the error"}
               onclick={() => {
                 reading = !reading;
@@ -82,7 +88,7 @@
             />
           {:else if button === "cancel"}
             <Button
-              class="text-muted-foreground"
+              tone="muted"
               label="Cancel"
               onclick={() => updates.cancel(machine)}
               size="xs"
@@ -101,62 +107,10 @@
     </div>
   {/key}
   {#if reading && cell.buttons.includes("error")}
-    <pre class="said" transition:unfold>{machine.binaryUpdate?.error ??
+    <pre
+      class="mt-space-2 max-h-c-update-said-h overflow-auto rounded-xs border border-border-well bg-surface-well p-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong"
+      transition:unfold>{machine.binaryUpdate?.error ??
         "The machine did not say why."}</pre>
   {/if}
   <RowFault again={refused?.again} reason={refused?.reason} />
 </div>
-
-<style>
-  .cell {
-    overflow: hidden;
-  }
-  .swap {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    font: var(--type-label);
-    @media (prefers-reduced-motion: no-preference) {
-      animation: swap-in var(--dur-control) var(--ease-out);
-    }
-    @media (prefers-reduced-motion: reduce) {
-      animation: fade-in var(--dur-control) var(--ease-out);
-    }
-  }
-  .line {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .plain,
-  .meta {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* The machine's own words, in a well under the cell. */
-  .said {
-    max-block-size: 10rem;
-    margin: var(--space-2) 0 0;
-    padding: var(--space-2);
-    overflow: auto;
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-xs);
-    background: var(--surface-well);
-    color: var(--ink-strong);
-    font: var(--type-code);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  @keyframes swap-in {
-    from {
-      opacity: 0;
-      scale: var(--pop-scale);
-    }
-  }
-  @keyframes fade-in {
-    from {
-      opacity: 0;
-    }
-  }
-</style>

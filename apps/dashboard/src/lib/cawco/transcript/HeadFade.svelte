@@ -29,46 +29,26 @@
   import { layerBlur, layerMask, PROGRESSIVE_BLUR } from "./progressive-blur";
 </script>
 
-<div data-slot="head-fade" aria-hidden="true" class="head-fade">
+<div
+  data-slot="head-fade"
+  aria-hidden="true"
+  class="absolute inset-x-0 top-0 z-1 h-c-head-fade pointer-events-none"
+>
+  <!-- Each layer clear while nothing is under it: at rest, and whenever the
+       transcript does not scroll (its timeline is inactive). -->
   {#each PROGRESSIVE_BLUR as layer, k (k)}
+    <!-- The layer's blur and its slice (progressive-blur.ts). -->
     <div
       data-slot="layer"
-      class="layer"
+      class="absolute inset-0 opacity-0 head-fade-scrub"
       style="-webkit-backdrop-filter: {layerBlur(
         layer
       )}; backdrop-filter: {layerBlur(layer)}; mask-image: {layerMask(layer)}"
     ></div>
   {/each}
-  <div data-slot="layer" class="layer tint"></div>
+  <!-- The chosen tab's sheet, over the blur, on the ramp. -->
+  <div
+    data-slot="layer"
+    class="absolute inset-0 opacity-0 bg-tab-sheet mask-(--head-tint-ramp) head-fade-scrub"
+  ></div>
 </div>
-
-<style>
-  .head-fade {
-    position: absolute;
-    inset-inline: 0;
-    inset-block-start: 0;
-    z-index: 1;
-    block-size: var(--c-head-fade);
-    pointer-events: none;
-  }
-  .layer {
-    position: absolute;
-    inset: 0;
-    /* Clear while nothing is under it: at rest, and whenever the transcript
-       does not scroll (its timeline is inactive). */
-    opacity: 0;
-    animation: head-fade linear both;
-    animation-timeline: --transcript-head;
-    animation-range: 0 var(--c-head-fade);
-  }
-  /* The chosen tab's sheet, over the blur, on the ramp. */
-  .tint {
-    background: var(--tab-sheet);
-    mask-image: var(--head-tint-ramp);
-  }
-  @keyframes head-fade {
-    to {
-      opacity: 1;
-    }
-  }
-</style>

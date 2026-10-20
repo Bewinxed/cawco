@@ -20,7 +20,6 @@
   import { modeRefusal, permissionModesFor } from "../permission-modes";
   import NsPopover from "../spawn/NsPopover.svelte";
   import PermissionSection from "../spawn/PermissionSection.svelte";
-  import "../spawn/ns-theme.css";
 
   let {
     id,

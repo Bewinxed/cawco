@@ -1185,9 +1185,10 @@ const verdictOf = (row: LeadCallRow): GateVerdict => {
       return { kind: "deny", message: "The person denied this call." };
     case "ran":
       return { kind: "allow" };
-    default:
-      return { kind: "card" };
+    case "asked":
+      break;
   }
+  return { kind: "card" };
 };
 
 /** What a ran call's note says of how it went. */
@@ -1232,7 +1233,7 @@ const noteFor = (row: LeadCallRow): ThreadNote | undefined => {
           command: what,
         },
       };
-    default:
+    case "asked":
       return;
   }
 };

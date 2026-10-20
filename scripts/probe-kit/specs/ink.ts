@@ -165,7 +165,7 @@ export const mouseLoop = async (desk: Page, box: Rect, ms = 2000) => {
 export const paneMode = async (on: On, frame: Frame, key: "V" | "C" | "D") => {
   await on.page
     .locator(
-      `:is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [role='tab'][aria-keyshortcuts='${key}']`
+      `:is([data-slot="preview-pane"], [data-side-card="preview"]) [role='tab'][aria-keyshortcuts='${key}']`
     )
     .click();
   const want = { V: "", C: "comment", D: "draw" }[key];

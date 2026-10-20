@@ -49,6 +49,7 @@ import {
   motionOk,
   popScale,
 } from "./curves.svelte";
+import { sizingChanges } from "./sizing";
 
 /** Samples for the one piece whose value is not a straight line in the curve. */
 const STEPS = 48;
@@ -1677,7 +1678,11 @@ const canMove = (record: MutationRecord): boolean =>
   record.type !== "childList" ||
   [...record.addedNodes, ...record.removedNodes].some(takesRoom);
 
-export function reflow() {
+/**
+ * `on`: the attributes inside it that carry a state its rows' sizes follow
+ * (motion/sizing): heard as a class turning is, each named by its site.
+ */
+export function reflow({ on = [] }: { on?: readonly string[] } = {}) {
   return (node: HTMLElement) => {
     node.setAttribute("data-reflow", "");
     if (getComputedStyle(node).position === "static") {
@@ -1686,7 +1691,7 @@ export function reflow() {
     // It anchors its own scroll (`#anchor`): the browser's would move every
     // row a second time.
     node.style.overflowAnchor = "none";
-    const watching = watchRendered(node, (on) => state.rendered(on));
+    const watching = watchRendered(node, (shown) => state.rendered(shown));
     const state = new Reflow(node, watching.rendered);
     states.set(node, state);
     const depth = depthOf(node);
@@ -1695,13 +1700,7 @@ export function reflow() {
         heard(state, depth);
       }
     });
-    watcher.observe(node, {
-      subtree: true,
-      childList: true,
-      characterData: true,
-      attributes: true,
-      attributeFilter: ["class", "hidden", "data-state", "open"],
-    });
+    watcher.observe(node, sizingChanges(on));
     // The container's width changed (a window, the rail's width): every place
     // is new, and none of it is a change to animate. Its height alone is its
     // rows' own doing, which the change that made it has placed already:

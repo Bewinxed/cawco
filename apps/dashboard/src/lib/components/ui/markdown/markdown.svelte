@@ -1,3 +1,26 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  export const markdownVariants = tv({
+    variants: {
+      /**
+       * Prose standing in a surface whose type it takes (a release's notes
+       * in a toast, a card or Configure › Updates): the surface's font and
+       * ink, its paragraphs flush, its bullets a grid a row-gap apart with
+       * muted markers, and long words broken anywhere. Only the structure
+       * stays the prose's.
+       */
+      look: {
+        surface:
+          "[&_li]:wrap-anywhere font-inherit text-inherit [&_li]:m-0 [&_li]:p-0 [&_li]:marker:text-ink-muted [&_p]:m-0 [&_ul]:m-0 [&_ul]:grid [&_ul]:list-disc [&_ul]:gap-space-row [&_ul]:ps-space-4",
+      },
+    },
+  });
+
+  export type MarkdownLooks = VariantProps<typeof markdownVariants>;
+</script>
+
 <script lang="ts">
   import { untrack } from "svelte";
   import {
@@ -8,6 +31,7 @@
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
   import { PROSE } from "#lib/prose.js";
+  import { cn } from "#lib/utils.js";
   import { draw, stepping } from "../collapsible/draw";
 
   let {
@@ -15,10 +39,15 @@
     invert = false,
     streaming = false,
     fades = false,
-  }: {
+    look,
+    class: className,
+  }: MarkdownLooks & {
     source: string;
     invert?: boolean;
     streaming?: boolean;
+    /** Its prose root's own utilities, over the house prose (a surface whose
+        type the prose takes, as the release notes' panel). */
+    class?: string;
     /**
      * Fade in what each streamed chunk adds, and the last words a message
      * draws as it settles. Only ever the words a chunk ADDS: the text already
@@ -168,7 +197,7 @@
    * reply again — 2,600 elements styled and laid out inside the frame the
    * answer finished in. A message that streamed keeps the render it
    * streamed in, and settling is its last chunk; the two lay out the same
-   * (see the token spans' styles below).
+   * (the theme's `markdown-tokens` rule lays the token spans out inline).
    */
   const tokens = untrack(() => streaming);
 
@@ -243,17 +272,24 @@
      would switch spans on after mount is not reactive and a paragraph that
      mounted as plain text stayed plain for good. That is what lets a chunk's
      words be told from the ones already on screen. Streamdown's own per-word
-     animation is switched off below, so mounting with spans replays nothing;
+     animation is switched off by the theme's `markdown-tokens` rule (it is
+     written inline, so only an important declaration outranks it), so
+     mounting with spans replays nothing;
      the chunk fade above is the only motion text has. A message that mounts
      settled renders static: plain text nodes, the same layout. -->
-<div data-slot="md" class="md" bind:this={host}>
+<div data-slot="md" class="contents" bind:this={host}>
   <Streamdown
     animation={{
       enabled: tokens,
       animateOnMount: true,
       tokenize: "word",
     }}
-    class="{PROSE} {invert ? 'prose-invert' : ''}"
+    class={cn(
+      PROSE,
+      invert && "prose-invert",
+      markdownVariants({ look }),
+      className
+    )}
     {content}
     controls={{ mermaid: false, table: false }}
     mergeTheme={false}
@@ -268,13 +304,12 @@
 	     `shikiThemes` pins every fence to whichever theme is listed first, and
 	     following the appearance instead means re-tokenizing every block on every
 	     switch, through a second shiki with a second cache. Ours paints each token
-	     with a house code token that carries both appearances. Prose dresses every `pre` and `code` it
-	     contains, so the well opts out of that dressing here; inline code
-	     (`codespan`) keeps it, because it is prose, not a listing. -->
+	     with a house code token that carries both appearances. The well is
+	     `not-prose`, so prose's `pre` and `code` dressing leaves it alone;
+	     inline code (`codespan`) keeps it, because it is prose, not a
+	     listing. -->
     {#snippet code({ token })}
-      <div
-        class="not-prose my-3 [&_code]:bg-transparent! [&_code]:p-0! [&_pre]:border-0! [&_pre]:bg-transparent!"
-      >
+      <div class="not-prose my-3">
         <OutputBlock language={token.lang} text={token.text} />
       </div>
     {/snippet}
@@ -290,23 +325,3 @@
     {/snippet}
   </Streamdown>
 </div>
-
-<style>
-  .md {
-    display: contents;
-
-    /* Streamdown writes its token and block animation inline; the chunk fade
-       in the script is the only motion streamed text has. */
-    & :global([style*="sd-"]) {
-      animation: none !important;
-    }
-    /* Its token spans are inline-block and pre-wrap, which wraps a line
-       differently from the plain text the same words settle into; inline,
-       with the prose's own white-space, the streamed paragraph and the
-       settled one lay out identically. */
-    & :global(span[style*="sd-"]) {
-      display: inline !important;
-      white-space: inherit !important;
-    }
-  }
-</style>

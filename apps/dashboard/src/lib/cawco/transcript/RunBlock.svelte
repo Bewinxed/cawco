@@ -98,13 +98,22 @@
      (`morph` on the rows' clock), so the chat under it never jumps. -->
 <div
   data-slot="rail-row"
-  class="run-block rail-row"
+  data-tx-rail
+  data-run-block
+  class="rail-row"
   data-nest-host
   {@attach morph({ rows: true })}
 >
   {#snippet words()}
-    <span data-slot="name" class="name">{name}</span>
-    <span data-slot="num" class="num progress" {@attach clock.watch}
+    <span
+      data-slot="name"
+      class="flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong transition-[color] duration-(--dur-control) ease-out group-hover/words:text-brand-ink"
+      >{name}</span
+    >
+    <span
+      data-slot="num"
+      class="num flex-none ms-auto text-ink-muted text-size-meta font-normal"
+      {@attach clock.watch}
       >{progress.steps}{#if progress.took}<span role="timer"
           >{progress.steps ? " · " : ""}{progress.took}</span
         >{/if}</span
@@ -112,8 +121,8 @@
   {/snippet}
   <!-- The glyph stands before the link, in its own cell: the steps' line
        leaves its foot outside any control. -->
-  <div data-slot="head" class="head rail-line">
-    <span data-rail-cell data-slot="mark" class="mark rail-cell"
+  <div data-slot="head" class="rail-line text-size-label font-medium">
+    <span data-rail-cell data-slot="mark" class="rail-cell"
       >{#if runId}
         <SessionStatus compact sessionId={runTabId(runId)} />
       {/if}</span
@@ -121,78 +130,31 @@
     {#if runId && !here}
       <a
         data-slot="words"
-        class="words mark-line press-tint"
+        class="group/words mark-line press-tint flex-auto min-w-0 min-h-c-mark coarse:min-h-c-btn-h-lg flex items-center gap-space-2 m-0 rounded-xs text-inherit no-underline"
         data-box
         href={runHref(runId)}>{@render words()}</a
       >
     {:else}
-      <p data-slot="words" class="words mark-line" data-box>
+      <p
+        data-slot="words"
+        class="mark-line flex-auto min-w-0 min-h-c-mark coarse:min-h-c-btn-h-lg flex items-center gap-space-2 m-0 rounded-xs text-inherit no-underline"
+        data-box
+      >
         {@render words()}
       </p>
     {/if}
   </div>
   {#if failure}
-    <p data-slot="failure" class="failure rail-hang">{failure}</p>
+    <p
+      data-slot="failure"
+      class="rail-hang mt-space-1 mb-0 max-w-c-measure text-status-fail-ink text-size-meta font-normal leading-body wrap-anywhere"
+    >
+      {failure}
+    </p>
   {/if}
   <!-- The steps come from the run's detail, read once if it isn't yet
        (RunSteps), whether or not the run's row is still on the board. -->
   {#if runId}
-    <RunSteps glyph=".mark" {more} {runId} />
+    <RunSteps glyph={`[data-slot="mark"]`} {more} {runId} />
   {/if}
 </div>
-
-<style>
-  .head {
-    min-block-size: 26px;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-  }
-  .words {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    min-block-size: 26px;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin: 0;
-    border-radius: var(--radius-xs);
-    color: inherit;
-    text-decoration: none;
-  }
-  .name {
-    flex: 0 1 auto;
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--ink-strong);
-    transition: color var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    a.words:hover .name {
-      color: var(--brand-ink);
-    }
-  }
-  .progress {
-    flex: none;
-    margin-inline-start: auto;
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-  }
-  .failure {
-    margin-block: var(--space-1) 0;
-    max-inline-size: 68ch;
-    color: var(--status-fail-ink);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-    overflow-wrap: anywhere;
-  }
-  @media (pointer: coarse) {
-    .head,
-    .words {
-      min-block-size: 44px;
-    }
-  }
-</style>

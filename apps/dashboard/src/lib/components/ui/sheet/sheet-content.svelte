@@ -1,5 +1,26 @@
 <script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: a sheet whose content pads itself; a sheet that
+      stands only under the drawer line (DESIGN.md, Breakpoints: at 900px
+      "the rail becomes a burger sheet"), gone past it however it was left. */
+  export const sheetContentVariants = tv({
+    variants: {
+      pad: { none: "p-0" },
+      narrow: { true: "desk:hidden" },
+    },
+  });
+
+  export type SheetContentLooks = VariantProps<typeof sheetContentVariants>;
   export type Side = "top" | "right" | "bottom" | "left";
+  /** Where a sheet stands while it is away: out past the edge it comes in from. */
+  const AWAY: Record<Side, string> = {
+    left: "translate3d(-100%, 0, 0)",
+    right: "translate3d(100%, 0, 0)",
+    top: "translate3d(0, -100%, 0)",
+    bottom: "translate3d(0, 100%, 0)",
+  };
 </script>
 
 <script lang="ts">
@@ -27,14 +48,17 @@
     preventOverflowTextSelection = false,
     restoreScrollDelay = 0,
     portalProps,
+    pad,
+    narrow,
     children,
     ...restProps
-  }: WithoutChildrenOrChild<SheetPrimitive.ContentProps> & {
-    portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SheetPortal>>;
-    side?: Side;
-    showCloseButton?: boolean;
-    children: Snippet;
-  } = $props();
+  }: WithoutChildrenOrChild<SheetPrimitive.ContentProps> &
+    SheetContentLooks & {
+      portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SheetPortal>>;
+      side?: Side;
+      showCloseButton?: boolean;
+      children: Snippet;
+    } = $props();
 
   /* A sheet goes back out the edge it came in from under the finger, its
      scrim fading with it (motion/drag.svelte.ts). */
@@ -55,7 +79,7 @@
         ref,
         "root",
         "data-kit-sheet",
-        ["data-side", "data-state", "class"],
+        ["data-side", "data-state", "data-rail-sheet"],
         (sheet) => {
           const { side: at, state } = sheet.dataset;
           if (state !== "open") {
@@ -63,7 +87,7 @@
           }
           return [
             ...(at === "left" || at === "right" ? ["side"] : []),
-            ...(sheet.classList.contains("rail-sheet") ? ["rail"] : []),
+            ...(sheet.hasAttribute("data-rail-sheet") ? ["rail"] : []),
           ];
         }
       );
@@ -73,9 +97,22 @@
 
 <SheetPortal {...portalProps}>
   <SheetOverlay bind:ref={scrim} />
+  <!-- A touch is the browser's to pan only across the axis a sheet leaves by,
+       on every element inside it: the browser reads touch-action from the
+       finger's element up to the nearest scroller, so a scrolling list in the
+       sheet would otherwise claim a sideways drag (motion/drag.svelte.ts).
+       The theme's `sheet-pan` component rule says it, keyed on this
+       element's data-slot and data-side. -->
   <SheetPrimitive.Content
     class={cn(
-      "kit-sheet fixed z-50 flex flex-col bg-[var(--surface-raised)] bg-clip-padding text-foreground text-label shadow-[var(--shadow-drawer)] data-[side=bottom]:inset-x-0 data-[side=top]:inset-x-0 data-[side=left]:inset-y-0 data-[side=right]:inset-y-0 data-[side=top]:top-0 data-[side=right]:right-0 data-[side=bottom]:bottom-0 data-[side=left]:left-0 data-[side=bottom]:h-auto data-[side=left]:h-full data-[side=right]:h-full data-[side=top]:h-auto data-[side=left]:w-3/4 data-[side=right]:w-3/4 data-[side=bottom]:border-t data-[side=left]:border-r data-[side=top]:border-b data-[side=right]:border-l data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm",
+      "fixed side-bottom:inset-x-0 side-top:inset-x-0 side-left:inset-y-0 side-right:inset-y-0 side-top:top-0 side-right:right-0 side-bottom:bottom-0 side-left:left-0 z-(--layer-float) flex side-bottom:h-auto side-left:h-full side-right:h-full side-top:h-auto side-left:w-3/4 side-right:w-3/4 side-left:phone:max-w-96 side-right:phone:max-w-96 flex-col side-bottom:border-t side-left:border-r side-top:border-b side-right:border-l bg-surface-raised bg-clip-padding text-ink-strong text-label shadow-drawer",
+      /* It travels its whole size from the edge it belongs to (`--sheet-away`),
+         over --dur-panel on the drawer curve, and leaves the same way over
+         --dur-exit; the entrance holds no end (no fill), since a drag writes
+         the sheet's transform inline once it has landed. Asked for less
+         motion, it fades in place. */
+      "motion-safe:state-closed:animate-sheet-out motion-safe:state-open:animate-sheet-in motion-reduce:state-closed:animate-sheet-fade-out motion-reduce:state-open:animate-sheet-fade-in",
+      sheetContentVariants({ pad, narrow }),
       className
     )}
     data-side={side}
@@ -88,7 +125,11 @@
     <!-- Drawn through `child`: bits-ui then holds the body's lock only while
          it is open, and clears it at once (floating-presence). -->
     {#snippet child({ props, open })}
-      <div {...props} style:pointer-events={pressable(open)}>
+      <div
+        {...props}
+        style:pointer-events={pressable(open)}
+        style:--sheet-away={AWAY[side]}
+      >
         {@render children?.()}
         {#if showCloseButton}
           <SheetPrimitive.Close data-slot="sheet-close">
@@ -109,72 +150,3 @@
     {/snippet}
   </SheetPrimitive.Content>
 </SheetPortal>
-
-<style>
-  /* bits-ui's element, so global, under the kit's own name: the bare
-     `.sheet` is what PinCard, PlanPane and SideSheet call their own.
-     A sheet travels its whole size from the edge it belongs to, over
-     --dur-panel on the drawer curve, and leaves the same way over
-     --dur-exit. The entrance does not hold its end (no fill): a drag writes
-     the sheet's transform inline once it has landed. */
-  :global(.kit-sheet[data-side="left"]) {
-    --sheet-away: translate3d(-100%, 0, 0);
-  }
-  :global(.kit-sheet[data-side="right"]) {
-    --sheet-away: translate3d(100%, 0, 0);
-  }
-  :global(.kit-sheet[data-side="top"]) {
-    --sheet-away: translate3d(0, -100%, 0);
-  }
-  :global(.kit-sheet[data-side="bottom"]) {
-    --sheet-away: translate3d(0, 100%, 0);
-  }
-  /* A touch is the browser's to pan only across the axis a sheet leaves by,
-     and the rule has to reach every element inside: the browser reads
-     touch-action from the finger's element up to the nearest scroller, so a
-     scrolling list in the sheet would otherwise claim a sideways drag
-     (motion/drag.svelte.ts). */
-  :global(.kit-sheet:is([data-side="left"], [data-side="right"]) *) {
-    touch-action: pan-y;
-  }
-  :global(.kit-sheet:is([data-side="top"], [data-side="bottom"]) *) {
-    touch-action: pan-x;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.kit-sheet[data-state="open"]) {
-      animation: sheet-in var(--dur-panel) var(--ease-drawer);
-    }
-    :global(.kit-sheet[data-state="closed"]) {
-      animation: sheet-out var(--dur-exit) var(--ease-drawer) forwards;
-    }
-  }
-  /* Asked for less motion, it fades in place. */
-  @media (prefers-reduced-motion: reduce) {
-    :global(.kit-sheet[data-state="open"]) {
-      animation: sheet-fade-in var(--dur-control) var(--ease-out);
-    }
-    :global(.kit-sheet[data-state="closed"]) {
-      animation: sheet-fade-out var(--dur-control) var(--ease-out) forwards;
-    }
-  }
-  @keyframes sheet-in {
-    from {
-      transform: var(--sheet-away);
-    }
-  }
-  @keyframes sheet-out {
-    to {
-      transform: var(--sheet-away);
-    }
-  }
-  @keyframes sheet-fade-in {
-    from {
-      opacity: 0;
-    }
-  }
-  @keyframes sheet-fade-out {
-    to {
-      opacity: 0;
-    }
-  }
-</style>

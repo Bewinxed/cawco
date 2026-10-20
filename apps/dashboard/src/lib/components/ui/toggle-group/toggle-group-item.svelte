@@ -1,6 +1,9 @@
 <script lang="ts">
   import { ToggleGroup as ToggleGroupPrimitive } from "bits-ui";
+  import { segmentedVariants } from "#lib/components/ui/tabs/thumb.js";
   import { cn } from "#lib/utils.js";
+
+  const { segment } = segmentedVariants();
 
   let {
     ref = $bindable(null),
@@ -12,7 +15,8 @@
 
 <ToggleGroupPrimitive.Item
   class={cn(
-    "kit-segment press-tint focus-inset touch-hit shrink-0 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    segment(),
+    "press-tint focus-inset touch-hit shrink-0 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     className
   )}
   data-slot="toggle-group-item"

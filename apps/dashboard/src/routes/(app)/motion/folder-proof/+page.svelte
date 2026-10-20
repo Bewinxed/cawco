@@ -13,10 +13,10 @@
    *   rim's stroke, px); `?taper=`, `?subtle=` and `?width=` start them;
    * - the home's Working and Finished (`data-strip="work"`): the real
    *   WorkTabs over twelve working runs and fourteen finished, hosted as
-   *   the shell hosts it, in the rail's 260px column on the desk and across
+   *   the shell hosts it, in the rail's 228px column on the desk and across
    *   the phone's home page under 900px.
    *
-   * `?theme=` light | dark; `?at=` the index of the session tab chosen
+   * In the reader's theme; `?at=` the index of the session tab chosen
    * first (1); `?work=` working | finished. `window.__ft.choose(id)` chooses
    * a session tab and `window.__ft.work.choose(id)` Working or Finished, as
    * a click does; `ids` and `chosen()` on each say the rest.
@@ -200,12 +200,8 @@
   /** The drawer layout, where the home is the phone's page, not the rail's. */
   const phone = new MediaQuery("(width < 900px)");
 
-  const scheme = $derived(
-    page.url.searchParams.get("theme") === "dark" ? "dark" : "light"
-  );
-  $effect(() => {
-    theme.set(scheme);
-  });
+  /** The reader's theme, as the dashboard draws it: the rims' tokens are read again when it changes. */
+  const scheme = $derived(theme.resolved);
 
   /** Chooses a tab in the bench's group, as a click on it does. */
   function choose(id: string) {
@@ -221,14 +217,14 @@
    */
   const benchClick = (group: LeafNode) => (event: MouseEvent) => {
     const target = event.target instanceof Element ? event.target : null;
-    const tab = target?.closest<HTMLElement>(".tab");
+    const tab = target?.closest<HTMLElement>('[data-slot="tab"]');
     const id = tab
       ?.querySelector<HTMLElement>("[data-session-tab]")
       ?.getAttribute("data-session-tab");
     if (!(tab && id)) {
       return;
     }
-    if (target?.closest(".tclose")) {
+    if (target?.closest('[data-slot="tclose"]')) {
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -247,7 +243,11 @@
   /** Chooses Working or Finished as a click on its tab does. */
   function chooseWork(id: string) {
     const at = WORK_IDS.indexOf(id as (typeof WORK_IDS)[number]);
-    workEl?.querySelectorAll<HTMLElement>(".ff-tab > .hit")[at]?.click();
+    workEl
+      ?.querySelectorAll<HTMLElement>(
+        '[data-slot="ff-tab"] > [data-slot="hit"]'
+      )
+      [at]?.click();
   }
 
   onMount(() => {
@@ -286,7 +286,7 @@
      shelf, and the page its chosen tab opens into. -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
-  class="proof"
+  class="fixed inset-0 z-(--layer-bench) flex flex-col bg-surface-recess text-ink-strong"
   data-folder-proof
   bind:this={proofEl}
   style:--tab-rim-mix-subtle={subtle === null
@@ -298,26 +298,29 @@
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div
     data-slot="group"
-    class="group"
+    class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-shelf pt-space-7"
     data-strip="session"
     onclickcapture={benchClick(leaf)}
   >
     <PaneTabs {leaf} />
-    <div class="page"></div>
+    <div class="h-space-7 bg-surface-recess"></div>
   </div>
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div
     data-slot="group"
-    class="group"
+    class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-shelf pt-space-7"
     data-strip="session-idle"
     onclickcapture={benchClick(idleLeaf)}
   >
     <PaneTabs leaf={idleLeaf} />
-    <div class="page"></div>
+    <div class="h-space-7 bg-surface-recess"></div>
   </div>
-  <!-- The rims' tokens, tuned live. -->
-  <div class="dials">
-    <label>
+  <!-- The rims' tokens, tuned live. The bench's own controls, at the foot,
+       clear of every strip. -->
+  <div
+    class="type-label flex flex-wrap gap-x-space-5 gap-y-space-2 border-t border-t-border-hairline bg-surface-raised px-space-5 py-space-3 text-ink-muted"
+  >
+    <label class="flex items-center gap-space-2">
       <span>Taper</span>
       <input
         max="32"
@@ -331,9 +334,11 @@
           }
         }
       />
-      <output>{taper ?? "–"}px</output>
+      <output class="num min-w-c-bench-readout-w text-ink-strong"
+        >{taper ?? "–"}px</output
+      >
     </label>
-    <label>
+    <label class="flex items-center gap-space-2">
       <span>Subtle</span>
       <input
         max="100"
@@ -347,9 +352,11 @@
           }
         }
       />
-      <output>{subtle ?? "–"}%</output>
+      <output class="num min-w-c-bench-readout-w text-ink-strong"
+        >{subtle ?? "–"}%</output
+      >
     </label>
-    <label>
+    <label class="flex items-center gap-space-2">
       <span>Thickness</span>
       <input
         max="4"
@@ -363,13 +370,22 @@
           }
         }
       />
-      <output>{width ?? "–"}px</output>
+      <output class="num min-w-c-bench-readout-w text-ink-strong"
+        >{width ?? "–"}px</output
+      >
     </label>
   </div>
   <!-- The home's Working and Finished as the shell hosts them: in the
        rail's column on the desk, across the phone's home page under a
        finger. -->
-  <div class="home" data-strip="work" bind:this={workEl}>
+  <!-- The rail's column (Shell .rail, Home .rail .groups) on the desk; the
+       phone's home page (Home .page .groups) under 900px. Both stand on
+       surface-recess. -->
+  <div
+    class="min-h-0 w-c-sidebar-w flex-auto overflow-hidden bg-surface-recess px-space-2 pt-space-1 pb-space-2 max-desk:w-full max-desk:px-space-5 max-desk:pt-space-2 max-desk:pb-space-7"
+    data-strip="work"
+    bind:this={workEl}
+  >
     <WorkTabs
       onstart={() => undefined}
       stale={false}
@@ -378,74 +394,3 @@
     />
   </div>
 </div>
-
-<style>
-  .proof {
-    position: fixed;
-    inset: 0;
-    z-index: 2147483000;
-    display: flex;
-    flex-direction: column;
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-  }
-  /* What the strips open (the session card, a tab's menu) is portalled to
-     the body and stands over the bench, so a finger reaches it. bits-ui
-     writes the wrapper's z-index inline, from the surface's own. */
-  :global(body:has([data-folder-proof]) [data-bits-floating-content-wrapper]) {
-    z-index: 2147483001 !important;
-  }
-  /* A group as the workspace lays one out: its strip on the shelf, then
-     the page the chosen tab opens into. */
-  .group {
-    container: leaf / inline-size;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-block-size: 0;
-    padding-block-start: var(--space-7);
-    background: var(--surface-shelf);
-  }
-  .group .page {
-    block-size: var(--space-7);
-    background: var(--surface-recess);
-  }
-  /* The bench's own controls, at the foot, clear of every strip. */
-  .dials {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2) var(--space-5);
-    padding: var(--space-3) var(--space-5);
-    background: var(--surface-raised);
-    border-block-start: 1px solid var(--border-hairline);
-    font: var(--type-label);
-    color: var(--ink-muted);
-
-    & label {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-    }
-    & output {
-      min-inline-size: 4ch;
-      color: var(--ink-strong);
-      font-variant-numeric: tabular-nums;
-    }
-  }
-  /* The rail's column (Shell .rail, Home .rail .groups) on the desk; the
-     phone's home page (Home .page .groups) under 900px. Both stand on
-     surface-recess. */
-  .home {
-    flex: 1 1 auto;
-    min-block-size: 0;
-    inline-size: 260px;
-    padding: var(--space-1) var(--space-2) var(--space-2);
-    overflow: hidden;
-    background: var(--surface-recess);
-
-    @media (width < 900px) {
-      inline-size: 100%;
-      padding: var(--space-2) var(--space-5) var(--space-7);
-    }
-  }
-</style>

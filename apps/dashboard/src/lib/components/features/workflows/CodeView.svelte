@@ -49,7 +49,7 @@
     {
       tag: [tags.keyword, tags.modifier],
       color: "var(--ink-strong)",
-      fontWeight: "500",
+      fontWeight: "var(--weight-strong)",
     },
     {
       tag: [
@@ -106,7 +106,7 @@
       borderInlineEnd: "1px solid var(--border-hairline)",
       paddingInlineEnd: "var(--space-2)",
     },
-    ".cm-lineNumbers .cm-gutterElement": { minWidth: "32px" },
+    ".cm-lineNumbers .cm-gutterElement": { minWidth: "var(--space-8)" },
     ".cm-activeLine": { backgroundColor: "var(--surface-hover)" },
     ".cm-activeLineGutter": {
       backgroundColor: "transparent",
@@ -120,12 +120,12 @@
     ".cm-lintRange-error": {
       backgroundImage: "none",
       textDecoration: "underline wavy var(--status-fail-ink)",
-      textUnderlineOffset: "3px",
+      textUnderlineOffset: "var(--space-1)",
     },
     ".cm-diagnostic": {
       fontFamily: "var(--font-sans)",
       fontSize: "var(--text-label)",
-      borderInlineStart: "3px solid var(--status-fail-ink)",
+      borderInlineStart: "var(--space-1) solid var(--status-fail-ink)",
       backgroundColor: "var(--surface-raised)",
       color: "var(--ink-strong)",
     },
@@ -247,18 +247,9 @@
   });
 </script>
 
-<section aria-label={label} class="code-view" bind:this={host}></section>
-
-<style>
-  .code-view {
-    height: 100%;
-    min-height: 0;
-    background: var(--surface-recess);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-  }
-  .code-view :global(.cm-editor) {
-    height: 100%;
-  }
-</style>
+<section
+  aria-label={label}
+  data-slot="code-view"
+  class="h-full min-h-0 bg-surface-recess border border-border-hairline rounded-sm overflow-hidden"
+  bind:this={host}
+></section>

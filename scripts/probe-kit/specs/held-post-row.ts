@@ -64,7 +64,7 @@ const readRow = (story: string) => {
   };
   const meta = row.querySelector<HTMLElement>('[data-slot="meta"]');
   const asker = row.querySelector<HTMLElement>('[data-slot="asker"]');
-  const mark = row.querySelector('[data-slot="machine"] .mark');
+  const mark = row.querySelector('[data-slot="machine"] > svg');
   return {
     width: Math.round(
       frame.querySelector(".cawco-frame-body")?.getBoundingClientRect().width ??
@@ -73,7 +73,7 @@ const readRow = (story: string) => {
     name: text("name"),
     want: text("want"),
     asker: asker?.textContent?.trim() ?? "",
-    cmd: row.querySelector(".cmd") !== null,
+    cmd: row.querySelector('[data-slot="needs-command"]') !== null,
     approve:
       row.querySelector("[data-approve]")?.getAttribute("aria-label") ?? null,
     askerShrink: asker ? getComputedStyle(asker).flexShrink : "",

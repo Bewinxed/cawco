@@ -8,7 +8,7 @@
    * queued behind files another item owns. Only the client's state is
    * seeded (dev's `__cawcoDebug`).
    *
-   * `?theme=dark` draws it at night; `?case=` (1r, 1f, 3r2f, 5f, 7r13f,
+   * In the reader's theme; `?case=` (1r, 1f, 3r2f, 5f, 7r13f,
    * 20r) seeds running and failed delegates instead of the twelve.
    */
   import type { SessionPulse, WorkItemSummary } from "@cawco/core";
@@ -20,7 +20,6 @@
   import { entered } from "#lib/cawco/transcript/tray.svelte.js";
   import type { Message } from "#lib/cawco/types.js";
   import { composerBindings } from "#lib/cawco/workspace/composer-dock.svelte.js";
-  import { theme } from "#lib/theme.svelte.js";
   import { page } from "$app/state";
 
   const ID = "delegate-tray-bench";
@@ -216,13 +215,6 @@
     entered.set(item.instanceId, "none");
   });
 
-  const scheme = $derived(
-    page.url.searchParams.get("theme") === "dark" ? "dark" : "light"
-  );
-  $effect(() => {
-    theme.set(scheme);
-  });
-
   /** The conversation's binding, lent to the group's composer as PaneLeaf lends it. */
   const lent = $derived(composerBindings.get(ID));
 
@@ -240,10 +232,21 @@
 
 <svelte:head><title>Delegate tray | CawCo</title></svelte:head>
 
-<div class="bench" data-delegate-tray>
-  <div data-slot="leaf" class="leaf">
-    <div data-slot="stack" class="stack">
-      <div data-slot="pane" class="pane">
+<!-- Over the shell: a conversation's group as the workspace lays one out
+     (PaneLeaf `.leaf`, `.stack`, `.dock`), over the whole window. -->
+<div
+  class="fixed inset-0 z-(--layer-bench) flex flex-col text-ink-strong"
+  data-delegate-tray
+>
+  <div
+    data-slot="leaf"
+    class="@container/leaf relative flex min-h-0 min-w-0 flex-auto flex-col overflow-hidden bg-surface-recess"
+  >
+    <div
+      data-slot="stack"
+      class="relative flex min-h-0 min-w-0 flex-auto overflow-hidden"
+    >
+      <div data-slot="pane" class="absolute inset-0 flex">
         <SessionPane
           active
           browsing={null}
@@ -258,8 +261,8 @@
     {#if lent}
       <div
         data-slot="dock"
-        class="dock"
-        style:width="{lent.transcriptShare * 100}%"
+        class="pointer-events-none absolute inset-y-0 start-0 z-1 w-(--transcript-share)"
+        style:--transcript-share="{lent.transcriptShare * 100}%"
       >
         <Composer
           agentName={lent.agentName}
@@ -291,46 +294,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  /* Over the shell: a conversation's group as the workspace lays one out
-     (PaneLeaf `.leaf`, `.stack`, `.dock`), over the whole window. */
-  .bench {
-    position: fixed;
-    inset: 0;
-    z-index: 2147483000;
-    display: flex;
-    flex-direction: column;
-    color: var(--ink-strong);
-  }
-  .leaf {
-    container: leaf / inline-size;
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-    background: var(--surface-recess);
-  }
-  .stack {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    min-height: 0;
-    min-width: 0;
-    overflow: hidden;
-  }
-  .pane {
-    position: absolute;
-    inset: 0;
-    display: flex;
-  }
-  .dock {
-    position: absolute;
-    inset: 0 auto 0 0;
-    z-index: 1;
-    pointer-events: none;
-  }
-</style>

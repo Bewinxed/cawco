@@ -449,9 +449,9 @@ export class Stage {
     set("top", box.top);
     set("width", box.width);
     set("height", box.height);
-    el.classList.toggle(
-      "over-sheet",
-      this.at === "panel" && !!this.slots.panel?.closest(".preview-sheet")
+    el.toggleAttribute(
+      "data-over-sheet",
+      this.at === "panel" && !!this.slots.panel?.closest("[data-preview-sheet]")
     );
   }
 

@@ -36,6 +36,8 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { Toggle } from "#lib/components/ui/toggle/index.js";
   import {
     IconAlert,
     IconChat,
@@ -689,9 +691,11 @@
         return `${ownerMachine} couldn't reach the page's server`;
       case "closed":
         return "This preview is closed";
-      default:
-        return `${ownerMachine} isn't answering`;
+      case "machine":
+      case null:
+        break;
     }
+    return `${ownerMachine} isn't answering`;
   });
   /** Open its session, beside Try again, wherever this pane is not that session's own. */
   const offerSession = $derived(!!owner && (linkSession || ownTab));
@@ -714,7 +718,6 @@
       iframe?.contentWindow?.postMessage(message, paneOrigin);
     }
   }
-
   /*
    * This view's word to the hub that the artifact is on screen at the open
    * frame's revision, or why it could not be: the agent's artifact_create and
@@ -852,9 +855,10 @@
         return "ready";
       case "failed":
         return { failed: docSync.why };
-      default:
-        return readingLong ? "reading" : "quiet";
+      case "reading":
+        break;
     }
+    return readingLong ? "reading" : "quiet";
   });
   /**
    * The head's line under the name (DESIGN.md, Artifact panel): the ask the
@@ -911,9 +915,11 @@
         return sheetWords.waking;
       case "live":
         return connected || served ? null : sheetWords.compiling;
-      default:
-        return null;
+      case "error":
+      case undefined:
+        break;
     }
+    return null;
   });
   const compileErrors = $derived(
     staged?.status === "live" ? staged.errors : []
@@ -939,7 +945,8 @@
         return STAGE_READY_MS;
       case "live":
         return connected || served ? null : STAGE_READY_MS;
-      default:
+      case "error":
+      case undefined:
         return null;
     }
   });
@@ -1808,7 +1815,7 @@
   function closeToRow(pane: HTMLElement, id: string) {
     const row = [
       ...document.querySelectorAll<HTMLElement>(
-        `.preview-tool[data-share="preview:${CSS.escape(instanceId)}"][data-artifact="${CSS.escape(id)}"]`
+        `[data-slot="preview-tool"][data-share="preview:${CSS.escape(instanceId)}"][data-artifact="${CSS.escape(id)}"]`
       ),
     ].at(-1);
     if (!row) {
@@ -1832,7 +1839,7 @@
       background: "var(--surface-raised)",
       boxShadow: "var(--shadow-drawer)",
       pointerEvents: "none",
-      zIndex: "50",
+      zIndex: "var(--layer-flight)",
     });
     document.body.append(stand);
     const done = () => stand.remove();
@@ -2094,18 +2101,18 @@
      (SideSurface `items`, by the head's priority rule). -->
 {#snippet sendBar()}
   <!-- The page's picks the session has not heard; pins and ink go by themselves. -->
-  <button
+  <Button
     data-slot="send"
-    aria-busy={sending || undefined}
-    aria-disabled={sending || undefined}
-    class="send touch-hit"
-    onclick={whileIdle(() => sending, sendPicks)}
+    onclick={sendPicks}
+    pending={sending}
+    size="sm"
     title="Send the page's picks to the session"
-    type="button"
+    variant="ghost"
   >
     <PendingContent icon={IconSend} pending={sending} />
-    <span data-slot="send-label" class="send-label">Send picks</span>
-  </button>
+    <span data-slot="send-label" class="in-form-compact:hidden">Send picks</span
+    >
+  </Button>
 {/snippet}
 {#snippet sendMenu()}
   <DropdownMenu.Item
@@ -2117,17 +2124,15 @@
 {/snippet}
 
 {#snippet createBar()}
-  <button
-    aria-busy={making || undefined}
-    aria-disabled={making || undefined}
+  <Button
     aria-label="New canvas"
-    class="touch-hit"
-    onclick={whileIdle(() => making, newCanvas)}
+    icon={IconPlus}
+    onclick={newCanvas}
+    pending={making}
+    size="icon-sm"
     title="New canvas"
-    type="button"
-  >
-    <PendingContent icon={IconPlus} pending={making} />
-  </button>
+    variant="ghost"
+  />
 {/snippet}
 {#snippet createMenu()}
   <DropdownMenu.Item
@@ -2139,17 +2144,18 @@
 {/snippet}
 
 {#snippet undockBar()}
-  <button
+  <Button
     data-slot="other"
     aria-label="Undock"
-    class="other touch-hit"
+    dimmed={mode !== "interact" && !isCanvas}
     disabled={!stage}
     onclick={() => giveBack(false)}
+    size="icon-sm"
     title="Undock"
-    type="button"
+    variant="ghost"
   >
     <IconUndock />
-  </button>
+  </Button>
 {/snippet}
 {#snippet undockMenu()}
   <DropdownMenu.Item disabled={!stage} onSelect={() => giveBack(false)}>
@@ -2160,14 +2166,16 @@
 {#snippet openBar()}
   {#if artifact}
     <!-- The same artifact, its doc and its tools, in a tab of its own. -->
-    <a
+    <Button
       data-slot="other"
       aria-label="Open in new tab"
-      class="other touch-hit"
+      dimmed={mode !== "interact" && !isCanvas}
       href={`/artifact/${encodeURIComponent(artifact.id)}`}
       rel="noopener"
+      size="icon-sm"
       target="_blank"
-      title="Open in new tab"><IconExternal /></a
+      title="Open in new tab"
+      variant="ghost"><IconExternal /></Button
     >
   {/if}
 {/snippet}
@@ -2201,16 +2209,15 @@
 
 {#snippet inspectBar()}
   <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
-  <button
+  <Toggle
     aria-label={artifactWords.inspect}
-    aria-pressed={inspectOpen}
-    class="inspect touch-hit"
-    onclick={() => showInspector(!inspectOpen)}
+    onPressedChange={(open) => showInspector(open)}
+    pressed={inspectOpen}
+    size="sm"
     title={artifactWords.inspectTitle}
-    type="button"
   >
     <IconTuning />
-  </button>
+  </Toggle>
 {/snippet}
 {#snippet inspectMenu()}
   <DropdownMenu.CheckboxItem
@@ -2223,7 +2230,7 @@
 {#snippet modeBar()}
   <!-- The mode: Interact, Comment, Draw (V, C, D; Esc back to Interact),
        the kit's segmented control, its indicator on the chosen one. -->
-  <div class="modes">
+  <div data-slot="modes">
     <Tabs
       onValueChange={(next) => setMode(previewMode(next) ?? "interact")}
       size="compact"
@@ -2233,6 +2240,7 @@
       <TabsList aria-label="Preview mode">
         <TabItem
           aria-keyshortcuts="V"
+          glyphOnly
           icon={IconInteract}
           label="Interact"
           title="Interact (V): the page gets every click"
@@ -2240,6 +2248,7 @@
         />
         <TabItem
           aria-keyshortcuts="C"
+          glyphOnly
           icon={IconComment}
           label="Comment"
           title="Comment (C): a click pins a comment"
@@ -2247,6 +2256,7 @@
         />
         <TabItem
           aria-keyshortcuts="D"
+          glyphOnly
           icon={IconPen}
           label="Draw"
           title="Draw (D): drag to draw on the page"
@@ -2289,11 +2299,13 @@
   <DropdownMenu.Root>
     <DropdownMenu.Trigger
       aria-label={`Mode: ${MODE_WORDS[mode]}`}
+      size="icon-sm"
       title={`Mode: ${MODE_WORDS[mode]} (V, C, D)`}
+      variant="ghost"
     >
       <Glyph />
     </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" class="w-48">
+    <DropdownMenu.Content align="end" width="compact">
       {@render modeMenu()}
     </DropdownMenu.Content>
   </DropdownMenu.Root>
@@ -2301,47 +2313,52 @@
 
 {#snippet commentsBar()}
   <!-- The Comments panel, floating over the page's top-right; the count is the open pins'. -->
-  <button
+  <Button
     data-slot="comments"
     aria-expanded={listOpen}
     aria-haspopup="dialog"
     aria-label={`Comments${openCount > 0 ? `, ${openCount} open` : ""}${pinsShown ? "" : ", pins hidden"}`}
-    class="comments mark-line touch-hit"
+    expanded="pressed"
     onclick={() => showList(!listOpen)}
+    size="sm"
     title={pinsShown
       ? "Comments (⇧C hides the pins)"
       : "Comments (⇧C shows the pins)"}
-    type="button"
+    variant="ghost"
   >
-    <IconChat /><span class="comments-label">Comments</span>
+    <IconChat /><span class="in-form-compact:hidden" data-slot="comments-label"
+      >Comments</span
+    >
     {#if openCount > 0}
-      <span data-slot="count" class="count">{openCount}</span>
+      <span data-slot="count" class="min-w-c-count-digit">{openCount}</span>
     {/if}
     {#if !pinsShown}
       <!-- ⇧C hid the pins: said where the person looks for them. -->
-      <IconEyeClosed class="pins-hidden" />
+      <IconEyeClosed />
     {/if}
-  </button>
+  </Button>
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item onSelect={() => showList(!listOpen)}>
-    <IconChat /><span>Comments</span>{#if openCount > 0}<span class="menu-count"
-        >{openCount}</span
+    <IconChat /><span>Comments</span>{#if openCount > 0}<span
+        class="ms-auto text-ink-muted num"
+        data-slot="count">{openCount}</span
       >{/if}
   </DropdownMenu.Item>
 {/snippet}
 
 {#snippet reloadBar()}
-  <button
+  <Button
     data-slot="other"
     aria-label="Reload"
-    class="other touch-hit"
+    dimmed={mode !== "interact" && !isCanvas}
     onclick={reloadPage}
+    size="icon-sm"
     title="Reload"
-    type="button"
+    variant="ghost"
   >
     <IconRefresh />
-  </button>
+  </Button>
 {/snippet}
 {#snippet reloadMenu()}
   <DropdownMenu.Item onSelect={reloadPage}>
@@ -2375,7 +2392,10 @@
     <Popover.Content
       data-pin-list-pop
       align="end"
-      class="pin-list-pop"
+      class="w-(--pin-list-w)"
+      gap="none"
+      height="room"
+      pad="inset"
       bind:ref={listPanel}
       customAnchor={listYield?.side === "bottom" ? wellFoot : wellCorner}
       onEscapeKeydown={(event) => {
@@ -2392,7 +2412,7 @@
       onOpenAutoFocus={(event) => event.preventDefault()}
       side={listYield?.side === "bottom" ? "top" : "bottom"}
       sideOffset={GUTTER}
-      style={`--pin-list-room: ${listRoom}px; --pin-list-pane: ${wellBox.w}px`}
+      style={`--pin-list-room: ${listRoom}px; --pin-list-pane: ${wellBox.w}px; --pin-list-w: clamp(var(--c-pin-list-min), calc(var(--pin-list-pane) * var(--c-pin-list-share)), min(var(--c-pin-list-max), calc(var(--pin-list-pane) - var(--space-4)))); --pop-max-h: min(calc(var(--pin-list-room) - var(--space-4)), var(--bits-popover-content-available-height, 100dvh))`}
       trapFocus={false}
     >
       <PinList
@@ -2416,16 +2436,20 @@
     data-slot="preview-pane"
     data-preview-inset
     aria-label={artifact?.name ?? "Preview"}
-    class="preview-pane preview-inset"
+    class="@container flex flex-col flex-1 min-h-0"
     bind:this={section}
   >
-    <div class="inset-well" bind:this={well}>{@render framed()}</div>
+    <div
+      class="relative flex flex-col flex-1 min-h-0 overflow-hidden border border-border-well rounded-sm bg-surface-well"
+      bind:this={well}
+    >
+      {@render framed()}
+    </div>
   </section>
 {:else}
   <SideSurface
-    class={["preview-pane", mode !== "interact" && !isCanvas && `mode-${mode}`]
-      .filter(Boolean)
-      .join(" ")}
+    of="preview"
+    mode={isCanvas ? undefined : mode}
     closeFailed={failure?.again === "close"}
     {closing}
     items={headItems}
@@ -2451,14 +2475,19 @@
     <div
       data-slot="canvas-slot"
       aria-hidden="true"
-      class="canvas-slot"
+      class="absolute inset-0 pointer-events-none"
       bind:this={canvasSlot}
     ></div>
   {:else if unreached}
     <!-- This tab can't reach the preview's own origin: what failed, what
          previews need unless the hub itself answered, and where to switch
          how they are reached. -->
-    <div data-slot="down" class="down" role="alert" transition:appear>
+    <div
+      data-slot="down"
+      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      role="alert"
+      transition:appear
+    >
       <EmptyState icon={IconAlert} title="This preview can't be reached">
         {#snippet line()}
           {unreachedBy?.said}.
@@ -2466,7 +2495,7 @@
           Trying again on its own.
         {/snippet}
         {#snippet action()}
-          <div class="down-actions">
+          <div class="flex flex-wrap items-center gap-space-2">
             <Button
               icon={IconRefresh}
               label="Try again"
@@ -2479,8 +2508,8 @@
               variant="outline"
             />
             <Button
-              class="px-0"
               href="/config/previews"
+              pad="none"
               label="Preview settings"
               size="sm"
               variant="link"
@@ -2496,6 +2525,10 @@
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
       <iframe
         data-ready={!current || loaded || undefined}
+        data-panel-inspector={(inspecting && inspectorLayout === "panel") ||
+          undefined}
+        class="absolute inset-0 scheme-light scheme-dark:scheme-dark bg-(color:--frame-ground) block size-full border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
+        style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
         allow="clipboard-write"
         inert={!current}
         onerror={() => arrived(key)}
@@ -2519,11 +2552,7 @@
         }}
         src={byHost ? entries[key]?.src : `${paneOrigin}${framePlace}`}
         data-scheme={themedFrame ? theme.resolved : undefined}
-        style:width={inspecting && inspectorLayout === "panel"
-          ? "calc(100% - var(--c-sheet-inspector-w))"
-          : undefined}
         title="Preview"
-        class:ready={!current || loaded}
         {@attach (node) => {
           if (key === frameKey) {
             iframe = node;
@@ -2535,17 +2564,24 @@
       data-ready={((loaded || standing !== null) && !stageWaiting) || undefined}
       data-slot="cover"
       aria-hidden={stageWaiting ? undefined : "true"}
-      class="cover"
-      class:ready={(loaded || standing !== null) && !stageWaiting}
+      class="group/cover absolute inset-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-0"
       role={stageWaiting ? "status" : undefined}
     >
-      <span
+      <Skeleton
+        class="w-2/5"
         data-slot="block"
-        class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
-      ></span>
+        line="body"
+        radius="text"
+        reveal="wait-grace"
+      />
       {#if stageWaiting}
         <!-- A sheet's stage on its way: the project's own dev toolchain (Vite, Astro or Nuxt), started or woken by the daemon. -->
-        <p class="cover-state">{stageWaiting}</p>
+        <p
+          class="mt-space-3 mx-0 mb-0 text-ink-muted type-meta animate-wait-grace-in group-data-ready/cover:animation-paused group-data-ready/cover:after:animation-paused"
+          data-slot="cover-state"
+        >
+          {stageWaiting}
+        </p>
       {/if}
     </div>
     {#if canvasView?.map && artifact && isSheet}
@@ -2562,21 +2598,29 @@
     {#if compileErrors.length > 0}
       {@const first = compileErrors[0]}
       <!-- The last good render stays under it, dimmed; the session is told of it on its own. -->
-      <div aria-hidden="true" class="sheet-dim" transition:appear></div>
+      <div
+        aria-hidden="true"
+        class="absolute inset-0 bg-scrim pointer-events-none"
+        transition:appear
+      ></div>
       <div
         data-slot="sheet-error"
-        class="sheet-error"
+        class="absolute inset-x-space-3 bottom-space-3 grid gap-space-2 max-h-3/5 overflow-auto p-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-tile"
         role="alert"
         transition:appear
       >
-        <p class="sheet-error-title">
-          {sheetWords.errorTitle} <code>{errorPlace(first)}</code>
+        <p class="m-0 text-data-bad text-size-body font-medium">
+          {sheetWords.errorTitle}
+          <code class="type-code">{errorPlace(first)}</code>
         </p>
-        <p class="sheet-error-line">{first.message.split("\n")[0]}</p>
+        <p class="m-0 text-ink-muted type-meta">
+          {first.message.split("\n")[0]}
+        </p>
         {#if first.frame}
-          <pre class="sheet-error-frame">{first.frame}</pre>
+          <pre
+            class="m-0 overflow-x-auto p-space-2 rounded-sm bg-surface-recess text-ink-strong type-code">{first.frame}</pre>
         {/if}
-        <p class="sheet-error-next">
+        <p class="m-0 text-ink-muted type-meta">
           {sheetWords.errorNext(compileErrors.length - 1)}
         </p>
       </div>
@@ -2584,7 +2628,12 @@
   {/if}
   {#if staged?.status === "error"}
     <!-- The stage or the server didn't start, or failed its restarts: where the page would be. -->
-    <div data-slot="down" class="down" role="alert" transition:appear>
+    <div
+      data-slot="down"
+      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      role="alert"
+      transition:appear
+    >
       <EmptyState
         icon={IconAlert}
         title={served
@@ -2597,7 +2646,7 @@
             : sheetWords.serverDownLine}
         {/snippet}
         {#snippet action()}
-          <div class="down-actions">
+          <div class="flex flex-wrap items-center gap-space-2">
             <Button
               icon={IconRefresh}
               label={sheetWords.tryAgain}
@@ -2623,7 +2672,11 @@
             {/if}
           </div>
           {#if staged.message && stageDetails}
-            <p id={stageDetailsId} data-slot="details" class="down-details">
+            <p
+              id={stageDetailsId}
+              data-slot="details"
+              class="mt-space-2 text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere"
+            >
               {staged.message}
             </p>
           {/if}
@@ -2635,7 +2688,7 @@
     <!-- On its way past the time its stage is given: never an endless cover. -->
     <div
       data-slot="down"
-      class="down"
+      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
       data-never-drawn
       role="alert"
       transition:appear
@@ -2647,7 +2700,7 @@
           )}
         {/snippet}
         {#snippet action()}
-          <div class="down-actions">
+          <div class="flex flex-wrap items-center gap-space-2">
             <Button
               icon={IconRefresh}
               label={sheetWords.tryAgain}
@@ -2680,7 +2733,11 @@
             {/if}
           </div>
           {#if stageSaid && stageDetails}
-            <p id={stageDetailsId} data-slot="details" class="down-details">
+            <p
+              id={stageDetailsId}
+              data-slot="details"
+              class="mt-space-2 text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere"
+            >
               {stageSaid}
             </p>
           {/if}
@@ -2691,7 +2748,12 @@
   {/if}
   {#if down && staged?.status !== "error" && !neverDrawn}
     <!-- What happened, why and the way back, where the page would be; a stage in error says it above. -->
-    <div data-slot="down" class="down" role="alert" transition:appear>
+    <div
+      data-slot="down"
+      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      role="alert"
+      transition:appear
+    >
       <EmptyState icon={IconAlert} title={downTitle}>
         {#snippet line()}
           {#if down === "workspace"}
@@ -2722,7 +2784,7 @@
           {/if}
         {/snippet}
         {#snippet action()}
-          <div class="down-actions">
+          <div class="flex flex-wrap items-center gap-space-2">
             <Button
               icon={IconRefresh}
               label="Try again"
@@ -2736,8 +2798,8 @@
               <!-- The session that serves the page, as the kit draws a link
                    (Button `link`, as Caw's panel offers its settings). -->
               <Button
-                class="px-0"
                 href={fleet.sessionHref(owner.id)}
+                pad="none"
                 label={`Open ${ownerName}`}
                 size="sm"
                 variant="link"
@@ -2761,7 +2823,8 @@
   <!-- The open pin's card, over the page beside its pin (the frame fills the well). -->
   <div
     data-slot="pin-room"
-    class="pin-room"
+    class="absolute inset-0 pointer-events-none"
+    data-mode={mode !== "interact" && !isCanvas ? mode : undefined}
     bind:this={pinRoom}
     bind:clientHeight={roomH}
     bind:clientWidth={roomW}
@@ -2796,8 +2859,15 @@
     {/if}
   </div>
   {#if failure}
-    <div class="error" role="alert" transition:appear>
-      <p>{failure.message}</p>
+    <div
+      data-slot="failure"
+      class="absolute inset-x-0 bottom-0 flex items-center gap-space-3 px-space-3 py-space-2 bg-surface-raised border-t border-border-hairline"
+      role="alert"
+      transition:appear
+    >
+      <p class="flex-1 min-w-0 m-0 text-data-bad text-size-body font-normal">
+        {failure.message}
+      </p>
       {#if failure.again === "reload"}
         <Button
           label="Try again"
@@ -2820,278 +2890,3 @@
     </div>
   {/if}
 {/snippet}
-
-<style>
-  /* Inset: the host's surface around it; the well is the panel's own
-     (SideSurface `.side-well`): the recess inside its hairline. */
-  /* A size container, as the side card is: what stands in its well keys on
-     the pane's width (the head's narrow line, a canvas's map). */
-  .preview-inset {
-    container-type: inline-size;
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-block-size: 0;
-  }
-  .inset-well {
-    position: relative;
-    flex: 1;
-    min-block-size: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-sm);
-    background: var(--surface-well);
-  }
-  /* The header's controls are the card's (SideSurface); in Comment and
-     Draw the ones that would leave the page wait. */
-  :global(.preview-pane:is(.mode-comment, .mode-draw) .other) {
-    opacity: 0.5;
-  }
-  /* The well is the card's (SideSurface). Comment and Draw turn the well's
-     own border the accent, 2px, inside its box: never a second ring round
-     it. Interact leaves it as the page's own. */
-  :global(.preview-pane .side-well) {
-    outline: var(--focus-ring-width) solid transparent;
-    outline-offset: var(--focus-ring-inset);
-    transition: outline-color var(--dur-control) var(--ease-in-out);
-  }
-  :global(.preview-pane:is(.mode-comment, .mode-draw) .side-well) {
-    outline-color: var(--accent);
-    cursor: crosshair;
-  }
-  /* The mode's segmented control sits among the head's controls at their
-     height, never wrapping its three segments. Its segments are their
-     glyphs, as a canvas tool's toolbar is (Figma, Framer, Miro): each name
-     stays its accessible name and its title, never drawn, so the control
-     keeps one width at every pane width and its indicator never moves as
-     the pane resizes (side-expand: the split slides on one clock). */
-  .modes {
-    display: flex;
-    flex-shrink: 0;
-  }
-  .modes :global(.ff-tab .label) {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  /* Comments: the sm ghost with its glyph, its word and the open count in
-     tabular figures; pressed while its panel is open. */
-  .comments {
-    font-variant-numeric: tabular-nums;
-  }
-  .comments[aria-expanded="true"],
-  .inspect[aria-pressed="true"] {
-    /* The kit Toggle's on state: by day a step past the hover. */
-    background: var(--surface-pressed);
-  }
-  .count,
-  .comments :global(.pins-hidden) {
-    min-width: 1ch;
-    color: var(--ink-muted);
-  }
-  /* The Comments panel: the kit's popover surface, about a fifth of the
-     pane wide, at most the well's height less its gutter, the rows
-     scrolling inside it. */
-  :global(.pin-list-pop) {
-    inline-size: clamp(
-      var(--c-pin-list-min),
-      calc(var(--pin-list-pane) * var(--c-pin-list-share)),
-      min(var(--c-pin-list-max), calc(var(--pin-list-pane) - var(--space-4)))
-    );
-    max-block-size: min(
-      calc(var(--pin-list-room) - var(--space-4)),
-      var(--bits-popover-content-available-height, 100dvh)
-    );
-    padding: var(--space-2);
-    gap: 0;
-  }
-  /* The room the open pin's card stands in: the well's box, letting every
-     press through to the page but the card's own. */
-  .pin-room {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-
-    & > :global(*) {
-      pointer-events: auto;
-    }
-  }
-  /* The replacement's load releases the old paint independently of the overlay.
-     A frame's `prefers-color-scheme` follows its element's `color-scheme`: a
-     page or sheet hears the dashboard's theme (`data-scheme`), a preview
-     the light it always had. */
-  iframe {
-    position: absolute;
-    inset: 0;
-    color-scheme: light;
-    background: Canvas;
-    display: block;
-    width: 100%;
-    height: 100%;
-    border: 0;
-    opacity: 0;
-    transition: opacity var(--dur-control) var(--ease-out);
-
-    &[data-scheme="dark"] {
-      color-scheme: dark;
-    }
-  }
-  iframe.ready {
-    opacity: 1;
-  }
-  /* The canvas's stage (canvas/) stands over the well's whole box. */
-  .canvas-slot {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-  /* Covers the frame until it connects, holding one kit skeleton line. */
-  .cover {
-    position: absolute;
-    inset: 0;
-    padding: var(--space-5);
-    background: var(--surface-recess);
-    pointer-events: none;
-    transition: opacity var(--dur-control) var(--ease-out);
-  }
-  .cover.ready {
-    opacity: 0;
-  }
-  /* Nothing until the wait has lasted the grace (DESIGN.md's Real Wait
-     Rule): then the skeleton line and what the stage is doing fade up. */
-  .cover > * {
-    animation: kit-fade-in 1ms var(--dur-wait-grace) both;
-
-    @media (prefers-reduced-motion: no-preference) {
-      animation-duration: var(--dur-fade);
-      animation-timing-function: var(--ease-out);
-    }
-  }
-  /* What a sheet's stage is doing while its page is on its way, under the cover's line. */
-  .cover-state {
-    margin: var(--space-3) 0 0;
-    color: var(--ink-muted);
-    font: var(--type-meta);
-  }
-  /* A sheet that doesn't compile: its last render dimmed under the scrim,
-     the error's card at the well's foot, as the failure band stands. */
-  .sheet-dim {
-    position: absolute;
-    inset: 0;
-    background: var(--scrim);
-    pointer-events: none;
-  }
-  .sheet-error {
-    position: absolute;
-    inset-inline: var(--space-3);
-    bottom: var(--space-3);
-    display: grid;
-    gap: var(--space-2);
-    max-block-size: 60%;
-    overflow: auto;
-    padding: var(--space-3);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-
-    & p {
-      margin: 0;
-    }
-  }
-  .sheet-error-title {
-    color: var(--data-bad);
-    font-size: var(--text-body);
-    font-weight: var(--weight-strong);
-
-    & code {
-      font: var(--type-code);
-    }
-  }
-  .sheet-error-line,
-  .sheet-error-next {
-    color: var(--ink-muted);
-    font: var(--type-meta);
-  }
-  .sheet-error-frame {
-    margin: 0;
-    overflow-x: auto;
-    padding: var(--space-2);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-    font: var(--type-code);
-  }
-  /* A cover faded away is not loading: its sweep holds still. */
-  .cover.ready :global(*),
-  .cover.ready :global(*::after) {
-    animation-play-state: paused;
-  }
-  /* Nothing serves the page: the kit's empty state stands over the well, on
-     the well's own ground, at the column the page would have started on. */
-  .down {
-    position: absolute;
-    inset: 0;
-    overflow: auto;
-    padding-inline: var(--space-6);
-    background: var(--surface-well);
-  }
-  /* Try again, and beside it the session that serves the page; under it
-     when the pane is too narrow for both. */
-  .down-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  /* What the stage said, word for word, under its Show details: the figure
-     face in muted ink, a long machine path wrapping anywhere. */
-  .down-details {
-    margin: var(--space-2) 0 0;
-    color: var(--ink-muted);
-    font: var(--type-code);
-    font-variant-ligatures: none;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  /* What went wrong, over the foot of the frame, and the one thing to do
-     about it. */
-  .error {
-    position: absolute;
-    inset-inline: 0;
-    bottom: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-2) var(--space-3);
-    background: var(--surface-raised);
-    border-top: 1px solid var(--border-hairline);
-
-    & p {
-      flex: 1;
-      min-width: 0;
-      margin: 0;
-      color: var(--data-bad);
-      font-size: var(--text-body);
-      font-weight: var(--weight-body);
-    }
-  }
-  /* Send picks and Comments in their narrowest form keep their glyphs (and
-     the count) and let their words go: the head's fit decides (side/head.ts,
-     words only on a 640px pane and only where they fit). */
-  :global([data-head-item][data-form="compact"]) .comments-label,
-  :global([data-head-item][data-form="compact"]) .send-label {
-    display: none;
-  }
-  /* Comments in More says its open count at the entry's end. */
-  .menu-count {
-    margin-inline-start: auto;
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-</style>

@@ -604,11 +604,13 @@
 <!-- GitHub: the Project whose Status carries the stages, and each stage's option. -->
 {#snippet projectPick()}
   {#if ghRefused}
-    <p data-slot="note" class="note" data-projects-refused>{ghRefused}</p>
+    <p data-slot="note" class="type-meta text-ink-muted" data-projects-refused>
+      {ghRefused}
+    </p>
   {:else if ghProjects}
     <NativeSelect.Root
       aria-label="GitHub Project"
-      class="bind-project"
+      class="col-span-full w-full"
       size="sm"
       bind:value={
         () => pickProject,
@@ -624,22 +626,27 @@
       {/each}
     </NativeSelect.Root>
     {#if chosenProject && chosenProject.options.length === 0}
-      <p data-slot="note" class="note" data-no-status>
+      <p data-slot="note" class="type-meta text-ink-muted" data-no-status>
         {chosenProject.title} has no single-select field named Status: stages show
         on GitHub only as open and closed.
       </p>
     {:else if chosenProject}
       {@const options = chosenProject.options}
-      <fieldset class="status-map" data-status-map>
-        <legend data-slot="note" class="note">
+      <fieldset
+        class="col-span-full grid min-w-0 grid-cols-(--status-cols) items-center gap-x-space-2 gap-y-space-1 @max-details/details:grid-cols-1"
+        data-status-map
+        style:--status-cols="minmax(0, max-content) minmax(0, 1fr)"
+      >
+        <legend data-slot="note" class="type-meta pb-space-1 text-ink-muted">
           Each stage's Status on {chosenProject.title}
         </legend>
         {#each stageNames as stage, at (stage)}
-          <label class="status-stage" for="{uid}-status-{at}"
-            ><bdi>{stage}</bdi></label
+          <label
+            class="min-w-0 type-label wrap-anywhere text-ink-strong"
+            for="{uid}-status-{at}"><bdi>{stage}</bdi></label
           >
           <NativeSelect.Root
-            class="status-pick"
+            class="w-full"
             id="{uid}-status-{at}"
             size="sm"
             bind:value={
@@ -662,7 +669,7 @@
       </fieldset>
     {/if}
   {:else if !ghFault}
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta text-ink-muted">
       Reading the GitHub Projects {pickConnection} reaches…
     </p>
   {/if}
@@ -670,30 +677,54 @@
 
 <section
   aria-label="Project details"
-  class="details"
+  class="@container/details max-w-(--details-max) min-w-0 pt-space-1 pe-space-6 pb-space-3 ps-space-7 max-desk:max-w-none max-desk:pe-space-5 max-desk:ps-space-5"
   data-project-details={project.id}
+  style:--details-max={"calc(var(--c-project-details-measure) + var(--space-7) + var(--space-6))"}
   transition:unfold
   {@attach escapes}
 >
-  <div data-slot="tile" class="tile">
+  <div
+    data-slot="tile"
+    class="grid gap-space-4 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3 shadow-raised"
+    style:--row-cols="var(--c-project-details-label-w) minmax(0, 1fr)"
+  >
     <!-- Place: where it lives, its places, and adding one. -->
-    <div data-slot="row" class="row" data-detail="place" bind:this={placesRow}>
-      <p data-slot="project-details-label" class="label">Place</p>
-      <div data-slot="value" class="value">
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="place"
+      bind:this={placesRow}
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+      >
+        Place
+      </p>
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
         <!-- mark-line: the machine's mark heads its whole folder, which wraps (the head's line cuts it short): it stands in a mark cell, one line tall, on the first line -->
-        <p class="fact place-fact">
+        <p
+          class="type-label flex min-w-0 items-start gap-space-2 wrap-anywhere text-ink-strong"
+        >
           {#if machine}
-            <span class="mark-cell"><OsMark class="os" os={machine.os} /></span>
+            <span class="mark-cell"
+              ><OsMark class="size-icon-sm flex-none" os={machine.os} /></span
+            >
           {/if}
-          <span class="fact-words" data-place-words>{place}</span>
+          <span class="min-w-0" data-place-words>{place}</span>
         </p>
-        <p data-slot="note" class="note">
+        <p data-slot="note" class="type-meta text-ink-muted">
           Its folder stays where it is; CawCo can't move it.
         </p>
-        <div class="places-head">
+        <div
+          class="flex flex-wrap items-center justify-between gap-space-2 pt-space-1"
+        >
           <button
             aria-expanded={listOpen}
-            class="disclose press-tint mark-line"
+            class="group press-tint mark-line type-label -mx-space-1 inline-flex items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 py-space-row text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
             data-places-toggle
             onclick={() => {
               listOpen = !listOpen;
@@ -703,7 +734,10 @@
             <span data-slot="num" class="num"
               >{checkouts} {checkouts === 1 ? "place" : "places"}</span
             >
-            <IconChevronDown data-chev class="chev" />
+            <IconChevronDown
+              data-chev
+              class="size-icon-sm text-ink-muted transition-[rotate] duration-(--dur-control) ease-out group-aria-expanded:rotate-180"
+            />
           </button>
           {#if !adding}
             <Button
@@ -717,18 +751,28 @@
           {/if}
         </div>
         {#if listOpen}
-          <ul class="place-list" transition:unfold>
+          <ul
+            class="m-0 flex list-none flex-col gap-space-2 px-0 pt-space-1 pb-0"
+            transition:unfold
+          >
             {#each project.places as each (each.id)}
-              <li data-place={each.id}>
-                <div class="place-row">
-                  <div class="place-words">
-                    <span data-slot="host" class="host"
+              <li
+                data-place={each.id}
+                class="flex min-w-0 flex-col gap-space-row"
+              >
+                <div class="flex min-w-0 items-center gap-space-2">
+                  <div class="flex min-w-0 flex-auto flex-col gap-space-row">
+                    <span data-slot="host" class="type-label text-ink-strong"
                       >{each.kind === "hub"
                         ? "The hub"
                         : hostWords(each.machineId)}</span
                     >
-                    <span data-slot="path" class="path" title={each.path}
-                      ><bdi>{each.path}</bdi></span
+                    <!-- The path reads from its end: the folder's tail
+                         stays when it is cut. -->
+                    <span
+                      data-slot="path"
+                      class="dir-rtl type-meta truncate text-start text-ink-muted"
+                      title={each.path}><bdi>{each.path}</bdi></span
                     >
                   </div>
                   {#if each.kind === "checkout" && !each.isPrimary}
@@ -745,12 +789,12 @@
                   {/if}
                 </div>
                 {#if each.isPrimary}
-                  <span class="kept" data-place-kept
+                  <span class="type-meta text-ink-subtle" data-place-kept
                     >Its primary checkout: it can't be removed, and goes when
                     the project does.</span
                   >
                 {:else if each.kind === "hub"}
-                  <span class="kept" data-place-kept
+                  <span class="type-meta text-ink-subtle" data-place-kept
                     >Its folder on the hub: it can't be removed, and goes when
                     the project does.</span
                   >
@@ -769,8 +813,9 @@
         {#if adding}
           <form
             data-slot="add"
-            class="add"
+            class="grid grid-cols-(--add-cols) gap-space-2 pt-space-2 @max-details/details:grid-cols-1"
             data-add-place-form
+            style:--add-cols={"minmax(0, var(--c-project-details-select-w)) minmax(0, 1fr)"}
             onsubmit={(event) => {
               event.preventDefault();
               add();
@@ -779,7 +824,7 @@
           >
             <NativeSelect.Root
               aria-label="Machine"
-              class="add-machine"
+              class="w-full"
               size="sm"
               bind:value={addMachine}
             >
@@ -792,12 +837,13 @@
             <Input
               aria-label="Folder on that machine"
               autocomplete="off"
-              class="add-path h-(--c-btn-h-sm) text-label"
               placeholder="/absolute/path on that machine"
+              size="sm"
               spellcheck="false"
+              text="label"
               bind:value={addPath}
             />
-            <div class="add-acts">
+            <div class="col-span-full flex justify-end gap-space-2">
               <Button
                 label="Cancel"
                 onclick={stopAdd}
@@ -821,14 +867,32 @@
     </div>
 
     <!-- Repository: a fact, with where it comes from. -->
-    <div data-slot="row" class="row" data-detail="repository">
-      <p data-slot="project-details-label" class="label">Repository</p>
-      <div data-slot="value" class="value">
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="repository"
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+      >
+        Repository
+      </p>
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
         {#if project.remote}
-          <p class="fact"><bdi>{project.remote}</bdi></p>
-          <p data-slot="note" class="note">From the folder's remote.</p>
+          <p
+            class="type-label flex min-w-0 items-center gap-space-2 wrap-anywhere text-ink-strong"
+          >
+            <bdi>{project.remote}</bdi>
+          </p>
+          <p data-slot="note" class="type-meta text-ink-muted">
+            From the folder's remote.
+          </p>
         {:else}
-          <p data-slot="note" class="note">
+          <p data-slot="note" class="type-meta text-ink-muted">
             No remote on the folder yet. Add one in the folder and it shows
             here.
           </p>
@@ -838,23 +902,43 @@
 
     <!-- Large files: each origin's own LFS, or where the project declared
          they live, bound to a connection with a key. -->
-    <div data-slot="row" class="row" data-detail="lfs">
-      <p data-slot="project-details-label" class="label">{lfsWords.label}</p>
-      <div data-slot="value" class="value">
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="lfs"
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+      >
+        {lfsWords.label}
+      </p>
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
         {#if project.lfsUrl}
-          <p class="fact" data-lfs-url><bdi>{project.lfsUrl}</bdi></p>
-          <p data-slot="note" class="note">
+          <p
+            class="type-label flex min-w-0 items-center gap-space-2 wrap-anywhere text-ink-strong"
+            data-lfs-url
+          >
+            <bdi>{project.lfsUrl}</bdi>
+          </p>
+          <p data-slot="note" class="type-meta text-ink-muted">
             {lfsWords.declared(project.lfsConnection ?? "")}
             {lfsWords.pinned}
           </p>
         {:else}
-          <p data-slot="note" class="note">{lfsWords.own}</p>
+          <p data-slot="note" class="type-meta text-ink-muted">
+            {lfsWords.own}
+          </p>
         {/if}
         {#if lfsEditing}
           <form
             data-slot="add"
-            class="add"
+            class="grid grid-cols-(--add-cols) gap-space-2 pt-space-2 @max-details/details:grid-cols-1"
             data-lfs-form
+            style:--add-cols={"minmax(0, var(--c-project-details-select-w)) minmax(0, 1fr)"}
             onsubmit={(event) => {
               event.preventDefault();
               saveLfs({ url: lfsUrl.trim(), connection: lfsConnection });
@@ -863,7 +947,7 @@
           >
             <NativeSelect.Root
               aria-label={lfsWords.connection}
-              class="add-machine"
+              class="w-full"
               disabled={lfsKeyed.length === 0}
               size="sm"
               bind:value={lfsConnection}
@@ -877,19 +961,25 @@
             <Input
               aria-label={lfsWords.url}
               autocomplete="off"
-              class="add-path h-(--c-btn-h-sm) text-label"
               placeholder={lfsWords.urlPlaceholder}
+              size="sm"
               spellcheck="false"
+              text="label"
               type="url"
               bind:value={lfsUrl}
             />
             {#if lfsKeyed.length === 0 && lfsListed}
-              <p data-slot="note" class="note lfs-none">
+              <p
+                data-slot="note"
+                class="col-span-full type-meta text-ink-muted"
+              >
                 {lfsWords.noConnections}
-                <a href="/config/connections">{lfsWords.connectionsLink}</a>.
+                <a class="text-link-ink" href="/config/connections"
+                  >{lfsWords.connectionsLink}</a
+                >.
               </p>
             {/if}
-            <div class="add-acts">
+            <div class="col-span-full flex justify-end gap-space-2">
               <Button
                 label={lfsWords.cancel}
                 onclick={stopLfs}
@@ -908,7 +998,7 @@
             </div>
           </form>
         {:else}
-          <div class="lfs-acts">
+          <div class="flex flex-wrap gap-space-2 pt-space-1">
             <Button
               data-lfs-declare
               label={project.lfsUrl ? lfsWords.change : lfsWords.declare}
@@ -938,14 +1028,25 @@
     </div>
 
     <!-- Work lands: the segment asked breathes until the hub answers. -->
-    <div data-slot="row" class="row" data-detail="lands">
-      <p data-slot="project-details-label" class="label" id="{uid}-lands">
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="lands"
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+        id="{uid}-lands"
+      >
         Work lands
       </p>
-      <div data-slot="value" class="value">
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
         <ToggleGroup.Root
           aria-labelledby="{uid}-lands"
-          class="lands"
+          class="max-w-full self-start"
           data-pending={landsAsked === null ? undefined : ""}
           type="single"
           bind:value={
@@ -962,7 +1063,9 @@
             >
           {/each}
         </ToggleGroup.Root>
-        <p data-slot="note" class="note" data-lands-says>{LANDS[lands].says}</p>
+        <p data-slot="note" class="type-meta text-ink-muted" data-lands-says>
+          {LANDS[lands].says}
+        </p>
         <RowFault
           again={() => (landsTried ? setLands(landsTried) : undefined)}
           data-lands-fault
@@ -972,11 +1075,26 @@
     </div>
 
     <!-- Landing checks: what the hub runs before work lands, as gate.md declares it. -->
-    <div data-slot="row" class="row" data-detail="gate" data-gate={gateShown}>
-      <p data-slot="project-details-label" class="label">Landing checks</p>
-      <div data-slot="value" class="value">
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="gate"
+      data-gate={gateShown}
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+      >
+        Landing checks
+      </p>
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
         {#if gateRead.state === "reading"}
-          <p data-slot="note" class="note">Reading gate.md…</p>
+          <p data-slot="note" class="type-meta text-ink-muted">
+            Reading gate.md…
+          </p>
         {:else if gateRead.state === "failed"}
           <RowFault
             again={() => loadGate(project.id)}
@@ -987,32 +1105,49 @@
           {#each gateRead.gate.problems as problem, at (at)}
             <RowFault data-gate-problem reason={problem} />
           {/each}
-          <p data-slot="note" class="note">
+          <p data-slot="note" class="type-meta text-ink-muted">
             Until gate.md is fixed, nothing in this project lands.
           </p>
         {:else if gateRead.gate.kind === "declared" && gateRead.gate.steps.length > 0}
-          <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops list semantics when list styles are removed; an explicit role="list" keeps them (scottohara.me/blog/2019/01/12/lists-and-safari.html) -->
-          <ol class="gate-steps" data-gate-steps role="list">
+          <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops list semantics when list styles are removed; an explicit role="list" keeps them (scottohara.me/blog/2019/01/12/lists-and-safari.html) -->
+          <ol
+            class="m-0 flex list-none flex-col gap-space-2 p-0"
+            data-gate-steps
+            role="list"
+          >
+            <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
             {#each gateRead.gate.steps as each, at (at)}
               {@const facts = stepFacts(each)}
-              <li class="gate-check" data-gate-step>
-                <span class="gate-name">{each.name}</span>
+              <li class="flex min-w-0 flex-col" data-gate-step>
+                <span
+                  data-slot="gate-name"
+                  class="min-w-0 type-label wrap-anywhere text-ink-strong"
+                  >{each.name}</span
+                >
                 {#if each.command !== each.name}
-                  <code class="gate-command">{each.command}</code>
+                  <code
+                    class="min-w-0 type-meta font-mono whitespace-pre-wrap wrap-anywhere text-ink-muted"
+                    >{each.command}</code
+                  >
                 {/if}
                 {#if facts}
-                  <span class="gate-facts">{facts}</span>
+                  <span
+                    data-slot="gate-facts"
+                    class="min-w-0 type-meta wrap-anywhere text-ink-muted"
+                    >{facts}</span
+                  >
                 {/if}
               </li>
             {/each}
           </ol>
         {:else}
-          <p data-slot="note" class="note">
+          <p data-slot="note" class="type-meta text-ink-muted">
             Landed with no checks: this project declares none.
           </p>
         {/if}
         <Button
-          class="gate-edit"
+          class="self-start"
+          pad="none"
           data-gate-edit
           href={folderFileHref(project.id, "gate.md")}
           label="Edit gate.md"
@@ -1023,14 +1158,25 @@
     </div>
 
     <!-- Tasks: where they live; a tracker is picked, then bound with Use. -->
-    <div data-slot="row" class="row" data-detail="tracker">
-      <p data-slot="project-details-label" class="label" id="{uid}-tracker">
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="tracker"
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+        id="{uid}-tracker"
+      >
         Tasks
       </p>
-      <div data-slot="value" class="value">
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
         <ToggleGroup.Root
           aria-labelledby="{uid}-tracker"
-          class="trackers"
+          class="max-w-full self-start"
           data-pending={binding ? "" : undefined}
           type="single"
           bind:value={
@@ -1052,7 +1198,7 @@
           {@const service = picking === "github" ? "GitHub" : "Linear"}
           <form
             data-slot="bind"
-            class="bind"
+            class="grid grid-cols-2 gap-space-2 pt-space-2 @max-details/details:grid-cols-1"
             data-bind-form={picking}
             onsubmit={(event) => {
               event.preventDefault();
@@ -1075,21 +1221,31 @@
             transition:unfold
           >
             {#if usable === null}
-              <p data-slot="note" class="note">
+              <p
+                data-slot="note"
+                class="col-span-full type-meta wrap-anywhere text-ink-muted"
+              >
                 Reading the {service} connections…
               </p>
             {:else if usable.length === 0}
-              <p data-slot="note" class="note" data-no-connection>
+              <p
+                data-slot="note"
+                class="col-span-full type-meta wrap-anywhere text-ink-muted"
+                data-no-connection
+              >
                 No {service} connection a tracker can use yet: {picking ===
                 "github"
                   ? "a GitHub App or a token"
                   : "a Linear app or an API key"}.
-                <a href="/config/connections">Add one in Connections</a>.
+                <a class="text-link-ink" href="/config/connections"
+                  >Add one in Connections</a
+                >.
               </p>
             {:else}
               <NativeSelect.Root
                 aria-label="Connection"
-                class="bind-connection"
+                class="w-full"
+                data-bind-connection
                 size="sm"
                 bind:value={
                   () => pickConnection,
@@ -1108,7 +1264,8 @@
               {#if targets}
                 <NativeSelect.Root
                   aria-label={picking === "github" ? "Repository" : "Team"}
-                  class="bind-target"
+                  class="w-full"
+                  data-bind-target
                   size="sm"
                   bind:value={
                     () => pickTarget,
@@ -1128,12 +1285,15 @@
                   {@render projectPick()}
                 {/if}
               {:else if !targetsFault}
-                <p data-slot="note" class="note">
+                <p
+                  data-slot="note"
+                  class="col-span-full type-meta wrap-anywhere text-ink-muted"
+                >
                   Reading what {pickConnection} reaches…
                 </p>
               {/if}
             {/if}
-            <div class="add-acts">
+            <div class="col-span-full flex justify-end gap-space-2">
               <Button
                 label="Cancel"
                 onclick={() => {
@@ -1164,7 +1324,7 @@
             data-projects-fault
             reason={ghFault}
           />
-          <p data-slot="note" class="note">
+          <p data-slot="note" class="type-meta text-ink-muted">
             New issues there become tasks here, and new tasks become issues.
             Each task's title, description, labels, stage and comments stay one
             with its issue.
@@ -1172,13 +1332,17 @@
         {:else if tracker?.binding}
           {@const bound = tracker.binding}
           <!-- Its repository or team, and Change: another connection or target, its links kept for the same one. -->
-          <div class="bound-head">
-            <p class="fact bound mark-line" data-bound={bound.provider}>
+          <div class="flex min-w-0 items-start justify-between gap-space-2">
+            <p
+              class="mark-line flex min-w-0 items-start gap-space-2 type-label wrap-anywhere text-ink-strong"
+              data-bound={bound.provider}
+            >
               <span class="mark-cell"
-                ><ProviderLogo provider={bound.provider} /></span
+                ><ProviderLogo provider={bound.provider} size="control" /></span
               >
               <a
-                class="bound-target"
+                data-slot="bound-target"
+                class="min-w-0 text-link-ink no-underline wrap-anywhere hover:underline hover:underline-offset-(--underline-offset)"
                 href={bound.targetUrl}
                 rel="noreferrer"
                 target="_blank">{bound.targetName}</a
@@ -1192,13 +1356,22 @@
               variant="ghost"
             />
           </div>
-          <p data-slot="note" class="note" data-tracker-state={bound.state}>
+          <p
+            data-slot="note"
+            class="type-meta text-ink-muted"
+            data-tracker-state={bound.state}
+          >
             Through {bound.connection} · {bound.linked}
             {bound.linked === 1 ? "task" : "tasks"} linked · {syncWords(bound)}
           </p>
           {#if bound.githubProject}
-            <p data-slot="note" class="note" data-github-project>
+            <p
+              data-slot="note"
+              class="type-meta text-ink-muted"
+              data-github-project
+            >
               Stages show on <a
+                class="text-link-ink"
                 href={bound.githubProject.url}
                 rel="noreferrer"
                 target="_blank">{bound.githubProject.title}</a
@@ -1206,7 +1379,11 @@
             </p>
           {/if}
           {#if bound.githubProjectReason}
-            <p data-slot="note" class="note" data-github-project-reason>
+            <p
+              data-slot="note"
+              class="type-meta text-ink-muted"
+              data-github-project-reason
+            >
               {bound.githubProjectReason}
             </p>
           {/if}
@@ -1218,7 +1395,7 @@
             reason={bound.reason}
           />
         {:else if tracker}
-          <p data-slot="note" class="note">
+          <p data-slot="note" class="type-meta text-ink-muted">
             Tasks live in the project's files alone.
           </p>
         {/if}
@@ -1227,9 +1404,21 @@
     </div>
 
     <!-- Caw: his own switch, its ways off with it. -->
-    <div data-slot="row" class="row" data-detail="caw">
-      <p data-slot="project-details-label" class="label">Caw</p>
-      <div data-slot="value" class="value">
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="caw"
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+      >
+        Caw
+      </p>
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1 type-label text-ink-strong"
+      >
         <CawLeadSwitch
           label="Leads this project"
           {lead}
@@ -1240,11 +1429,22 @@
     </div>
 
     <!-- Review before done. -->
-    <div data-slot="row" class="row" data-detail="review">
-      <p data-slot="project-details-label" class="label">Review</p>
-      <div data-slot="value" class="value">
-        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch component renders a native button the label names; Biome can't see through the component boundary -->
-        <label class="switch-line">
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="review"
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+      >
+        Review
+      </p>
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
+        <label class="type-label flex items-center gap-space-2 text-ink-strong">
           <Switch
             data-review-switch
             disabled={reviewAsked !== null}
@@ -1254,7 +1454,7 @@
           />
           <span>Review before done</span>
         </label>
-        <p data-slot="note" class="note">
+        <p data-slot="note" class="type-meta text-ink-muted">
           Only you move a task to done; landed work waits in review.
         </p>
         <RowFault
@@ -1265,7 +1465,7 @@
       </div>
     </div>
 
-    <div data-slot="foot" class="foot">
+    <div data-slot="foot" class="flex justify-end">
       <!-- Each row commits on its own: Done only folds the tray, so it
            stays quiet beside the head's Ask Caw. -->
       <Button
@@ -1278,352 +1478,3 @@
     </div>
   </div>
 </section>
-
-<style>
-  /* Under the head, from where its words start, as the forget tray stands
-     (`.head-forget`): the head's own leading padding, as wide as the
-     dialog it replaces. A phone's head pads by --space-5. */
-  .details {
-    container: details / inline-size;
-    max-inline-size: calc(32rem + var(--space-7) + var(--space-6));
-    min-inline-size: 0;
-    padding-block: var(--space-1) var(--space-3);
-    padding-inline: var(--space-7) var(--space-6);
-  }
-  @media (width < 900px) {
-    .details {
-      max-inline-size: none;
-      padding-inline: var(--space-5);
-    }
-  }
-  .tile {
-    display: grid;
-    gap: var(--space-4);
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-raised);
-  }
-  /* Label beside its value; on a narrow tray, over it. */
-  .row {
-    display: grid;
-    grid-template-columns: 6.5rem minmax(0, 1fr);
-    gap: var(--space-1) var(--space-3);
-    align-items: start;
-  }
-  @container details (width < 30rem) {
-    .row {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  .label {
-    padding-block-start: var(--space-1);
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .value {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-inline-size: 0;
-    padding-block-start: var(--space-1);
-  }
-  .fact {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .fact :global(.os) {
-    flex: none;
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-  }
-  /* The whole folder, wrapping where it must: the head's line above cuts it
-     short, so here it says what the line can't. */
-  .place-fact {
-    align-items: flex-start;
-  }
-  .fact-words {
-    min-inline-size: 0;
-  }
-  .note {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .places-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    padding-block-start: var(--space-1);
-  }
-  .disclose {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    margin-inline: calc(var(--space-1) * -1);
-    padding: 2px var(--space-1);
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) {
-    .disclose:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .disclose :global(.chev) {
-    inline-size: 14px;
-    block-size: 14px;
-    color: var(--ink-muted);
-    transition: rotate var(--dur-control) var(--ease-out);
-  }
-  .disclose[aria-expanded="true"] :global(.chev) {
-    rotate: 180deg;
-  }
-  .place-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin: 0;
-    padding: var(--space-1) 0 0;
-    list-style: none;
-  }
-  .place-list li {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-inline-size: 0;
-  }
-  .place-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .place-words {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: 2px;
-    min-inline-size: 0;
-  }
-  .host {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .path {
-    overflow: hidden;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    direction: rtl;
-    text-align: start;
-  }
-  .kept {
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-  }
-  .add {
-    display: grid;
-    grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
-    gap: var(--space-2);
-    padding-block-start: var(--space-2);
-  }
-  .add :global(.add-machine) {
-    inline-size: 100%;
-  }
-  .lfs-none {
-    grid-column: 1 / -1;
-  }
-  .note a {
-    color: var(--link-ink);
-  }
-  .lfs-acts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    padding-block-start: var(--space-1);
-  }
-  .add-acts {
-    display: flex;
-    grid-column: 1 / -1;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
-  @container details (width < 30rem) {
-    .add {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  .value :global(.kit-segmented.lands),
-  .value :global(.kit-segmented.trackers) {
-    flex-wrap: wrap;
-    align-self: flex-start;
-    max-inline-size: 100%;
-  }
-  /* Asked, not yet answered: the thumb breathes on the live-work loop. */
-  .value :global(.kit-segmented.lands[data-pending] .kit-thumb),
-  .value :global(.kit-segmented.trackers[data-pending] .kit-thumb) {
-    @media (prefers-reduced-motion: no-preference) {
-      animation: breath var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  /* The binding's form: its connection and its repository or team, then Use. */
-  .bind {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: var(--space-2);
-    padding-block-start: var(--space-2);
-  }
-  .bind > .note {
-    grid-column: 1 / -1;
-    overflow-wrap: anywhere;
-  }
-  .bind :global(.bind-connection),
-  .bind :global(.bind-target) {
-    inline-size: 100%;
-  }
-  /* The GitHub Project under the repository, as wide as the form. */
-  .bind :global(.bind-project) {
-    grid-column: 1 / -1;
-    inline-size: 100%;
-  }
-  /* Each stage beside its Status option; on a narrow tray, over it. */
-  .status-map {
-    display: grid;
-    grid-column: 1 / -1;
-    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-    gap: var(--space-1) var(--space-2);
-    align-items: center;
-    min-inline-size: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-  }
-  .status-map > legend {
-    padding: 0 0 var(--space-1);
-  }
-  .status-stage {
-    min-inline-size: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .status-map :global(.status-pick) {
-    inline-size: 100%;
-  }
-  @container details (width < 30rem) {
-    .status-map {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  @container details (width < 30rem) {
-    .bind {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  .note a,
-  .bound-target {
-    color: var(--link-ink);
-  }
-  /* The bound repository or team and its Change, as the places' head stands
-     their count and Add a place. */
-  .bound-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  /* Its mark on the first line of a name that wraps; as the head's flex
-     item it shrinks, so a long unbroken name never pushes Change off. */
-  .bound {
-    align-items: flex-start;
-    min-inline-size: 0;
-  }
-  .bound-target {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    text-decoration: none;
-  }
-  @media (hover: hover) {
-    .bound-target:hover {
-      text-decoration: underline;
-      text-underline-offset: 4px;
-    }
-  }
-  .bound :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-  }
-  /* Landing checks: one entry per step, in gate.md's order; every line
-     wraps, a command or path breaking anywhere rather than overflowing. */
-  .gate-steps {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  /* A step's lines stand on their own line heights: one entry, set apart
-     from the next by the list's gap. */
-  .gate-check {
-    display: flex;
-    flex-direction: column;
-    min-inline-size: 0;
-  }
-  .gate-name {
-    min-inline-size: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .gate-command {
-    min-inline-size: 0;
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-    white-space: pre-wrap;
-  }
-  .gate-facts {
-    min-inline-size: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-  }
-  /* A text link: its words start on the value column with the rest. */
-  .value :global(.gate-edit) {
-    align-self: flex-start;
-    padding-inline: 0;
-  }
-  .switch-line {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    cursor: pointer;
-  }
-  .value :global(.lead-switch) {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .foot {
-    display: flex;
-    justify-content: flex-end;
-  }
-</style>

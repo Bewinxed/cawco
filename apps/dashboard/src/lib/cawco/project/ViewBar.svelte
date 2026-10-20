@@ -2,7 +2,7 @@
   /**
    * The project page's views on a phone (under 640px; the strip holds them
    * wider): one bar docked where a session docks its composer, in the
-   * composer's shell (app.css `.kit-dock-shell`), full width less --space-3
+   * composer's shell (ui/dock-shell), full width less --space-3
    * a side, --space-4 and the safe area above the foot. It arrives with the
    * page and never moves. Left to right:
    *
@@ -19,7 +19,7 @@
    * - Needs you, the page's filter (NeedsYouChip), while something needs you;
    * - Ask Caw (the head's own, which a phone's head has no room for), the
    *   screen's one coral control, on Send's recipe
-   *   (app.css `.kit-send`): it opens Caw's panel on a new thread, the
+   *   (ui/button `sendVariants`): it opens Caw's panel on a new thread, the
    *   caret in his composer (work in a project starts by telling Caw).
    *
    * The pill and "+" press to --press-scale over --dur-toggle.
@@ -27,6 +27,8 @@
   import { type Snippet, untrack } from "svelte";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
+  import { sendVariants } from "#lib/components/ui/button/index.js";
+  import { dockShellVariants } from "#lib/components/ui/dock-shell/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "#lib/components/ui/select/index.js";
@@ -120,8 +122,22 @@
   });
 </script>
 
-<div class="view-dock">
-  <div data-slot="view-bar" class="view-bar kit-dock-shell" bind:this={shell}>
+<!-- Where a session docks its composer (Composer `.dock`): over the page's
+     foot, which the page clears by the bar's reach. -->
+<div
+  class="absolute inset-x-space-3 bottom-(--off-bottom) z-(--layer-dock) phone:hidden"
+  style:--off-bottom="calc(var(--space-4) + var(--safe-bottom))"
+>
+  <div
+    data-slot="view-bar"
+    class={dockShellVariants({
+      class:
+        "group flex items-center gap-space-2 p-c-composer-inset hit-gap-x-space-2 coarse:gap-space-3 coarse:hit-gap-x-space-3",
+    })}
+    data-bar
+    style:--bar-control-radius="calc(var(--radius-lg) - var(--c-composer-inset))"
+    bind:this={shell}
+  >
     <Select.Root
       onValueChange={(value) => {
         if (value) {
@@ -133,17 +149,24 @@
     >
       <Select.Trigger
         aria-label="View: {label}"
-        class="view-pill"
+        class="group-data-bar:shrink group-data-bar:grow-0 group-data-bar:basis-auto"
+        look="in-bar"
         mark="chevron"
+        size="composer"
         bind:ref={pill}
       >
         <MorphText text={label} />
-        <span aria-hidden="true" class="measure" bind:this={measure}></span>
+        <span
+          aria-hidden="true"
+          class="pointer-events-none invisible absolute whitespace-pre"
+          bind:this={measure}
+        ></span>
       </Select.Trigger>
       <Select.Content
         data-view-list
         align="start"
-        class="view-list"
+        class="max-w-(--list-max)"
+        style="--list-max: calc(100vw - 2 * var(--space-3))"
         collisionPadding={8}
         customAnchor={shell}
         side="top"
@@ -156,7 +179,11 @@
               {#if view.draft}
                 <Badge variant="secondary"><span>draft</span></Badge>
               {:else if view.count > 0}
-                <span data-slot="count" class="count">{view.count}</span>
+                <span
+                  data-slot="count"
+                  class="type-meta ms-auto text-ink-muted tabular-nums"
+                  >{view.count}</span
+                >
               {/if}
             {/snippet}
           </Select.Item>
@@ -166,16 +193,16 @@
     {@render tools?.()}
     {#if needs > 0}
       <NeedsYouChip
-        class="touch-hit"
+        class="touch-hit group-data-bar:h-c-composer-field group-data-bar:rounded-(--bar-control-radius)"
         count={needs}
         on={needsOn}
         ontoggle={ontoggleneeds}
       />
     {/if}
-    <span class="spacer"></span>
+    <span class="flex-auto"></span>
     <button
       aria-label="Ask Caw"
-      class="kit-send new-session touch-hit pressable"
+      class={sendVariants({ class: "touch-hit" })}
       onclick={onnewsession}
       type="button"
     >
@@ -183,86 +210,3 @@
     </button>
   </div>
 </div>
-
-<style>
-  /* Where a session docks its composer (Composer `.dock`): over the page's
-     foot, which the page clears by the bar's reach. */
-  .view-dock {
-    position: absolute;
-    inset-inline: var(--space-3);
-    inset-block-end: calc(var(--space-4) + var(--safe-bottom));
-    z-index: 20;
-  }
-  @media (min-width: 640px) {
-    .view-dock {
-      display: none;
-    }
-  }
-  /* The shell's 7px inset all round; its controls at the composer's field
-     height, concentric with it. On a coarse pointer the gap opens to 10px,
-     so each control's touch area reaches 44px before its neighbour's. */
-  .view-bar {
-    --hit-gap-x: var(--space-2);
-    --bar-control-radius: calc(var(--radius-lg) - var(--c-composer-inset));
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--c-composer-inset);
-
-    @media (pointer: coarse) {
-      --hit-gap-x: 10px;
-      gap: 10px;
-    }
-  }
-  .view-bar > :global(.view-pill) {
-    flex: 0 1 auto;
-    min-inline-size: 0;
-    block-size: var(--c-composer-field);
-    border-radius: var(--bar-control-radius);
-    overflow: clip;
-  }
-  /* The word gives way to the chevron while the width runs; a name longer
-     than the bar has room for ends in an ellipsis (the list and the pill's
-     name say it whole). */
-  .view-bar > :global(.view-pill > .mark-text) {
-    position: relative;
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .measure {
-    position: absolute;
-    visibility: hidden;
-    white-space: pre;
-    pointer-events: none;
-  }
-  .view-bar > :global(.needs) {
-    block-size: var(--c-composer-field);
-    border-radius: var(--bar-control-radius);
-  }
-  /* The filter's glyph and count, at the bar's control height. */
-  .view-bar > :global(.filter-trigger) {
-    flex: none;
-    min-inline-size: var(--c-composer-field);
-    inline-size: auto;
-    block-size: var(--c-composer-field);
-    border-radius: var(--bar-control-radius);
-  }
-  .spacer {
-    flex: 1 1 auto;
-  }
-  .new-session {
-    --kit-send-press: var(--dur-toggle);
-  }
-  .count {
-    margin-inline-start: auto;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  /* Its rows stand the bar's width; the item's tick stays at its end. */
-  :global(.kit-pop.view-list) {
-    max-inline-size: calc(100vw - 2 * var(--space-3));
-  }
-</style>
