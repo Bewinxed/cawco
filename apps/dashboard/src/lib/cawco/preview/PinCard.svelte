@@ -450,7 +450,7 @@
     >
       <!-- One sentence and its action in one row; wrapped, the action's words stand under the sentence's. -->
       <p class="m-0 min-w-0 text-ink-muted" role="status">
-        {placing ? "Tap the page where it goes." : `${words.pinElementGone}.`}
+        {placing ? "Tap the page where it goes." : words.pinElementGone}
       </p>
       {#if placing}
         <Button

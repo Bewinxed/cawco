@@ -21,6 +21,7 @@
   import { artifactWords as words } from "@cawco/core";
   import type { Pin } from "@cawco/core/comments";
   import { untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -62,6 +63,9 @@
     /** Its rows' scroll, px, kept by the pane while the panel stands aside. */
     scroll?: number;
   } = $props();
+
+  /** A finger taps the page, a mouse clicks it: the empty line says which. */
+  const coarse = new MediaQuery("(pointer: coarse)");
 
   /** The rows come back where they were read: the panel standing aside and back keeps its scroll. */
   const keepScroll = (read: HTMLElement) => {
@@ -230,7 +234,7 @@
             class="flex flex-col gap-space-1 m-0 px-space-2 py-space-3 text-ink-muted text-size-meta"
           >
             <span class="text-ink-strong type-label">No open comments</span>
-            Choose Comment, then click the page to pin one.
+            {coarse.current ? words.pinsNoneOpenTap : words.pinsNoneOpenClick}
           </p>
         {:else}
           <p

@@ -17,3 +17,5 @@ scripts/probe-kit/surfaces/catalogue.ts
 apps/dashboard/src/lib/cawco/preview/wire.ts
 packages/agent/src/preview-overlay/pins.ts
 scripts/probe-kit/hub-tape.ts
+packages/core/src/words/artifacts.ts
+apps/apple/Packages/CawCoKit/Sources/CawCoCore/Words.generated.swift

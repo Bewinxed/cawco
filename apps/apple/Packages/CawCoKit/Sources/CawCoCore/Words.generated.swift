@@ -1016,8 +1016,14 @@ public enum Words {
             "The comments couldn't be read. \(why)"
         }
 
-        /// A moved pin's last line: what it stood on is gone.
-        public static let pinElementGone = "Its element is gone from the page"
+        /// A gone pin's notice, a sentence of its own: what it stood on is gone.
+        public static let pinElementGone = "Its element is gone from the page."
+
+        /// No open pins yet, how to pin one, by the pointer that will: a mouse clicks…
+        public static let pinsNoneOpenClick = "Choose Comment, then click the page to pin one."
+
+        /// …and a finger taps.
+        public static let pinsNoneOpenTap = "Choose Comment, then tap the page to pin one."
 
         public static let inspect = "Inspect"
 
