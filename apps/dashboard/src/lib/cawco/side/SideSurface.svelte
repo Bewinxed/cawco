@@ -28,6 +28,7 @@
   import { type Snippet, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { drawnBox } from "#lib/cawco/motion/drawn.js";
   // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu (DropdownMenu.Root, .Item, …), as every menu of the app imports it
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
@@ -151,6 +152,14 @@
     more.find((one) => one.count && one.count.n > 0)?.count
   );
 
+  /**
+   * A box's drawn width in its own CSS pixels, the ones its styles and the
+   * head's room (`clientWidth`) are in (motion/drawn.ts): a pane drawn
+   * fitted into a decision page's embed is zoomed, and read as drawn every
+   * control would measure narrower than it lays out.
+   */
+  const widthOf = (el: Element): number => drawnBox(el).width;
+
   /** How far a box's text runs past it (a truncated name's): its own width is that much more. */
   const runsPast = (el: Element): number =>
     Math.max(
@@ -178,7 +187,7 @@
     const kept: number[] = [];
     for (const child of el.children) {
       const one = child as HTMLElement;
-      const { width } = one.getBoundingClientRect();
+      const width = widthOf(one);
       const item = one.dataset.headItem;
       if (item && !one.hidden) {
         widths.set(
@@ -212,9 +221,7 @@
     const pad =
       (Number.parseFloat(style.paddingInlineStart) || 0) +
       (Number.parseFloat(style.paddingInlineEnd) || 0);
-    const own = lead
-      ? lead.getBoundingClientRect().width + runsPast(lead) + pad
-      : 0;
+    const own = lead ? widthOf(lead) + runsPast(lead) + pad : 0;
     return Math.ceil(Math.min(own, NAME_KEEPS + pad));
   }
 

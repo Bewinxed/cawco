@@ -49,6 +49,7 @@ import {
   motionOk,
   popScale,
 } from "./curves.svelte";
+import { drawnBox, viewHeightAt } from "./drawn";
 import { sizingChanges } from "./sizing";
 
 /** Samples for the one piece whose value is not a straight line in the curve. */
@@ -88,7 +89,7 @@ function layoutTop(element: HTMLElement, host: HTMLElement): number {
 
 /** The row as it is drawn, in a table of its own. */
 function copyOf(row: HTMLElement, left: number, top: number): HTMLElement {
-  const { width, height } = row.getBoundingClientRect();
+  const { width, height } = drawnBox(row);
   const table = row.closest("table")?.cloneNode(false) as HTMLElement;
   table.style.width = `${width}px`;
   const tbody = row.parentElement?.cloneNode(false) as HTMLElement;
@@ -143,7 +144,7 @@ function leavingRows(
       below = key;
       continue;
     }
-    const rect = row.getBoundingClientRect();
+    const rect = drawnBox(row);
     if (rect.height === 0) {
       continue;
     }
@@ -327,12 +328,9 @@ export function tableReflow(options: {
       return;
     }
     const rows = [...host.querySelectorAll<HTMLElement>(options.rows)];
-    const base = layer.getBoundingClientRect();
+    const base = drawnBox(layer);
     const tops = new Map(
-      rows.map((row) => [
-        row.dataset.key ?? "",
-        row.getBoundingClientRect().top - base.top,
-      ])
+      rows.map((row) => [row.dataset.key ?? "", drawnBox(row).top - base.top])
     );
     if (!motionOk.current) {
       // Reduced motion: no travel. Arriving rows still fade in.
@@ -778,10 +776,10 @@ const closing = () => ({
  * where it would show and seen by nobody, so it arrives without an entrance.
  */
 function onScreen(element: HTMLElement): boolean {
-  const { top, bottom } = element.getBoundingClientRect();
+  const { top, bottom } = drawnBox(element);
   return (
     bottom > 0 &&
-    top < window.innerHeight &&
+    top < viewHeightAt(element) &&
     element.checkVisibility({ visibilityProperty: true })
   );
 }
@@ -798,11 +796,17 @@ function onScreen(element: HTMLElement): boolean {
  * container's content, so `view` is where that content's top is in the
  * viewport, scroll included (the rail): unscrolled, a row half a rail down
  * was taken for one below the viewport, and jumped where it should have
- * slid.
+ * slid. All of it, and `height`, the viewport's, is in the container's own
+ * pixels (motion/drawn.ts), so a zoomed list reads its rows where they lay out.
  */
-function unseen(view: number, place: Placed, dy: number): boolean {
+function unseen(
+  view: number,
+  place: Placed,
+  dy: number,
+  height: number
+): boolean {
   const top = view + place.cy;
-  const off = (at: number) => at + place.h <= 0 || at >= window.innerHeight;
+  const off = (at: number) => at + place.h <= 0 || at >= height;
   return off(top) && off(top + dy);
 }
 
@@ -1103,9 +1107,7 @@ class Reflow {
 
   #viewTop(): number {
     this.#view ??=
-      this.#node.getBoundingClientRect().top +
-      this.#node.clientTop -
-      this.#scroll;
+      drawnBox(this.#node).top + this.#node.clientTop - this.#scroll;
     return this.#view;
   }
 
@@ -1360,9 +1362,7 @@ class Reflow {
       const hidden = clip ? Number.parseFloat(clip[1]) : 0;
       const sizes = edgeSizes.get(animation);
       const start = animation.startTime;
-      const whole = sizes?.clip
-        ? sizes.to
-        : element.getBoundingClientRect().height;
+      const whole = sizes?.clip ? sizes.to : drawnBox(element).height;
       drawn.set(element, {
         h: whole - hidden,
         // In flight on its batch's clock: carried if it is bound the same way.
@@ -1380,7 +1380,7 @@ class Reflow {
     for (const element of this.#spans.keys()) {
       drawn.set(element, {
         ...drawn.get(element),
-        w: element.getBoundingClientRect().width,
+        w: drawnBox(element).width,
       });
     }
     for (const animation of [
@@ -1414,7 +1414,7 @@ class Reflow {
       was.ref === place.ref &&
       (was.x !== place.x || Math.abs(was.y + shift - place.y) > 0.01);
     if (moved && (Math.abs(x) > 0.5 || Math.abs(y) > 0.5)) {
-      if (unseen(this.#viewTop(), place, y)) {
+      if (unseen(this.#viewTop(), place, y, viewHeightAt(this.#node))) {
         plan.stops.push(element);
       } else {
         plan.slides.push({ element, x, y });
