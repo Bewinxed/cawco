@@ -16968,8 +16968,8 @@
               }
             }
           },
-          "404": {
-            "description": "getApiBinaryUpdatesRelease 404",
+          "409": {
+            "description": "getApiBinaryUpdatesRelease 409",
             "content": {
               "text/plain": {
                 "schema": {
@@ -27202,9 +27202,13 @@
           },
           "signature": {
             "type": "string"
+          },
+          "dbSchemaVersion": {
+            "type": "number"
           }
         },
         "required": [
+          "dbSchemaVersion",
           "manifest",
           "signature"
         ]

@@ -1,9 +1,10 @@
 /**
  * The fleet's update policy and the signed builds the hub hands to machines.
- * Only the hub talks to the release host. It serves two things: its own
- * machine the channel's newest build, and every other machine the build the hub
- * itself is running, so no machine is ever ahead of its hub. Each machine
- * verifies what it is given against the embedded release key.
+ * Only the hub talks to the release host. It offers every machine, its own and
+ * each other, one build: the channel's newest as it last found it (a check
+ * finds it again), so an install asked for after a check takes the build that
+ * check named. Each machine verifies what it is given against the embedded
+ * release key.
  */
 import { Database } from "bun:sqlite";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -238,6 +239,19 @@ export function createBinaryUpdates(options: Options) {
       ? current.release
       : await discover();
 
+  /** The build offered to every machine, signed, with the database's schema; none while the policy record is damaged. */
+  const offer = async () => {
+    if ("damaged" in held) {
+      return;
+    }
+    const found = await newest();
+    return {
+      manifest: found.manifest,
+      signature: found.signature,
+      dbSchemaVersion: databaseSchemaVersion(options.dbPath),
+    } satisfies SignedRelease & { dbSchemaVersion: number };
+  };
+
   /** A new policy, written whole, and every online machine told. */
   const adopt = async (policy: BinaryUpdatePolicy) => {
     current = undefined;
@@ -331,31 +345,18 @@ export function createBinaryUpdates(options: Options) {
       { ...hidden, body: t.Object({ ms: t.Number({ minimum: 0 }) }) },
       ({ body }) => fenceHub(body.ms)
     )
-    // What every machine other than the hub's own applies: the build the hub runs.
-    .get("/api/binary-updates/release", async ({ status }) => {
-      try {
-        const running = await runningRelease();
-        return { manifest: running.manifest, signature: running.signature };
-      } catch (error) {
-        return status(
-          404,
-          error instanceof Error ? error.message : String(error)
-        );
-      }
-    })
-    // What the hub's own machine considers: the channel's newest, and the
-    // database's schema, so it never installs a build older than its data.
-    .get("/api/binary-updates/latest", async ({ status }) => {
-      if ("damaged" in held) {
-        return status(409, refused());
-      }
-      const found = await newest();
-      return {
-        manifest: found.manifest,
-        signature: found.signature,
-        dbSchemaVersion: databaseSchemaVersion(options.dbPath),
-      } satisfies SignedRelease & { dbSchemaVersion: number };
-    })
+    // What every machine considers: the channel's newest, and the database's
+    // schema, so none installs a build older than the hub's data. `release`
+    // answers the same: builds up to nightly 4670 ask it on every machine but
+    // the hub's own, and through it alone can they take this one.
+    .get(
+      "/api/binary-updates/release",
+      async ({ status }) => (await offer()) ?? status(409, refused())
+    )
+    .get(
+      "/api/binary-updates/latest",
+      async ({ status }) => (await offer()) ?? status(409, refused())
+    )
     .get(
       "/api/binary-updates/artifacts/:version/:archive",
       async ({ params, status }) => {

@@ -339,8 +339,9 @@ What follows from that, concretely, and what must stay true:
   this section assumes it is not.
 - **Updates are signed.** A machine installs only a build whose manifest verifies against
   the release key embedded in its binary (`packages/core/src/release-manifest.ts`), whose
-  sequence is above the running one, and — for every machine but the hub's own — that is the
-  build its hub runs (`packages/agent/src/binary-update.ts`). Whoever holds the private
+  sequence is above the running one, and that is the build its hub found on the channel —
+  for every machine but the hub's own, one whose wire protocol overlaps the hub's
+  (`packages/agent/src/binary-update.ts`). Whoever holds the private
   release key can run code on every machine that follows the release channel; keeping that
   key out of the repository (`CAWCO_RELEASE_SIGNING_KEY` in an ignored `.env`) is the
   control. A machine that runs a hub's install script trusts that hub.
