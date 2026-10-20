@@ -513,7 +513,8 @@ function embedRead() {
     tall: Math.round(
       world ? world.getBoundingClientRect().height : document.body.scrollHeight
     ),
-    width: innerWidth,
+    // The embed's own width, from its root's box: what script reads as the viewport answers at a frame (canvas viewport.ts).
+    width: Math.round(document.documentElement.getBoundingClientRect().width),
   };
 }
 

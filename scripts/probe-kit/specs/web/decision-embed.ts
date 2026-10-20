@@ -59,12 +59,16 @@
  *    the embed holding it (the phone's at the card's full width, past 640px
  *    on a desk; the desk's in an option, narrower); its script reads the
  *    same from matchMedia, as it mounts and after.
+ * 9c. A frame is its story's viewport to a floating layer too (canvas
+ *    viewport.ts): a phone's bar with its end-aligned menu open, at a
+ *    card's full width (an 854px window on a desk), has the menu inside
+ *    the 390px frame, shifted in from its start as a phone's window would.
  * 10. No console error.
  *
  *   bun scripts/probe-kit/run.ts web decision-embed
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
-import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import { FOLDER_FILE_LIMIT } from "../../../../packages/hub/src/project-folder";
@@ -90,11 +94,13 @@ const LEDGER = "src/Ledger.stories.js";
 const NOTE = "src/Note.stories.js";
 const SIDE = "src/Side.stories.js";
 const HEAD = "src/Head.stories.js";
+const MENU = "src/Menu.stories.js";
 const SHEET = "src/Sheet.stories.js";
 const BOOK_ID = idOf("ledger-and-note");
 const NOTE_ID = idOf("note-alone");
 const SIDE_ID = idOf("side-card");
 const HEAD_ID = idOf("page-head");
+const MENU_ID = idOf("bar-menu");
 const MONTH_ID = idOf("ledger-month");
 const SHEET_ID = idOf("sheet");
 /** The side card's own widths (its stories' viewports). */
@@ -104,6 +110,33 @@ const WIDE_W = 1400;
 const MONTHS = ["January", "February", "March", "April", "May", "June"];
 /** The house edge fade's length (DESIGN.md, edge-fade.css): an embed's fade is it on every width. */
 const HOUSE_FADE = 40;
+
+/**
+ * Each open menu this embed draws: its frame's left and right and the
+ * menu's, page px, and the window's width. In the embed's page.
+ */
+function readMenus() {
+  return [...document.querySelectorAll<HTMLElement>(".cawco-frame")].flatMap(
+    (frame) => {
+      const body = frame.querySelector(".cawco-frame-body");
+      const menu = frame.querySelector(".menu");
+      if (!(body && menu)) {
+        return [];
+      }
+      const box = body.getBoundingClientRect();
+      const at = menu.getBoundingClientRect();
+      const round = (n: number) => Math.round(n * 10) / 10;
+      return [
+        {
+          story: frame.dataset.cawcoStory ?? "",
+          frame: [round(box.left), round(box.right)],
+          menu: [round(at.left), round(at.right)],
+          window: document.documentElement.getBoundingClientRect().width,
+        },
+      ];
+    }
+  );
+}
 
 /**
  * Each page head this embed draws, as its frame's width says: its layout
@@ -246,6 +279,11 @@ const PREVIEWS: Record<
     shows: ["Phone"],
   },
   "The head on a desk": { files: [HEAD], stories: ["Desk"], shows: ["Desk"] },
+  "The bar's menu on a phone": {
+    files: [MENU],
+    stories: ["Phone"],
+    shows: ["Phone"],
+  },
   "The note": { files: [NOTE], stories: ["Pinned"], shows: ["Pinned"] },
   "January's lines": {
     files: [LEDGER],
@@ -264,7 +302,7 @@ const PREVIEWS: Record<
 const TRIO = ["The side card", "The note", "January's lines"];
 
 const PROGRAM = [
-  `root = Decisions("The spend ledger", [ledger, side, head])`,
+  `root = Decisions("The spend ledger", [ledger, side, head, bar])`,
   `ledger = Decision("ledger", "Where does the pinned note stand?", [under, alone], "The ledger is long; the note is what a person acts on.", [book])`,
   `under = Option("under", "Under the ledger", "The note after every line.", false, [order], "A person scrolls past sixty lines to reach it.")`,
   `alone = Option("alone", "On its own", "The note in a card of its own.", true, [note], "The ledger loses its summary line.")`,
@@ -283,19 +321,22 @@ const PROGRAM = [
   `row = Option("row", "One row everywhere", "Title and tools side by side.", false, [headDesk], "Tools cut short on a phone.")`,
   `headPhone = Preview("${HEAD_ID}", "The head on a phone", ["Phone"])`,
   `headDesk = Preview("${HEAD_ID}", "The head on a desk", ["Desk"])`,
+  `bar = Decision("bar", "Where does the bar's menu open?", [below, aside], "A phone's bar, its menu open, at the card's full width.", [menuPhone])`,
+  `below = Option("below", "Under the ⋯", "End-aligned under it.", true, [], "It covers the first line.")`,
+  `aside = Option("aside", "Beside the bar", "Off to its end.", false, [], "It runs off a phone's edge.")`,
+  `menuPhone = Preview("${MENU_ID}", "The bar's menu on a phone", ["Phone"])`,
 ].join("\n");
 
 /** The fixture copied to scratch and installed once: the project the stage draws. */
 function fixtureRoot(): string {
   mkdirSync(SCRATCH, { recursive: true });
   cpSync(FIXTURE, SCRATCH, { recursive: true });
-  if (!existsSync(join(SCRATCH, "node_modules"))) {
-    const install = Bun.spawnSync(["bun", "install"], { cwd: SCRATCH });
-    if (install.exitCode !== 0) {
-      throw new Error(
-        `bun install in ${SCRATCH} failed: ${install.stderr.toString().slice(0, 400)}`
-      );
-    }
+  // Every run: a dependency the fixture gains reaches a copy installed before it.
+  const install = Bun.spawnSync(["bun", "install"], { cwd: SCRATCH });
+  if (install.exitCode !== 0) {
+    throw new Error(
+      `bun install in ${SCRATCH} failed: ${install.stderr.toString().slice(0, 400)}`
+    );
   }
   return SCRATCH;
 }
@@ -379,6 +420,7 @@ const spec: Spec = {
         [NOTE_ID]: [NOTE],
         [SIDE_ID]: [SIDE],
         [HEAD_ID]: [HEAD],
+        [MENU_ID]: [MENU],
         [MONTH_ID]: [LEDGER],
         [SHEET_ID]: [SHEET],
       },
@@ -569,6 +611,7 @@ const spec: Spec = {
           // One embed at a time, scrolled to: a cross-origin frame off screen draws no frames.
           const fades: Awaited<ReturnType<typeof readFades>> = [];
           const heads: Awaited<ReturnType<typeof readHeads>> = [];
+          const menus: Awaited<ReturnType<typeof readMenus>> = [];
           const grounds: {
             caption: string;
             embed: string;
@@ -579,6 +622,10 @@ const spec: Spec = {
             await handle.scrollIntoViewIfNeeded();
             heads.push(
               ...((await (await handle.contentFrame())?.evaluate(readHeads)) ??
+                [])
+            );
+            menus.push(
+              ...((await (await handle.contentFrame())?.evaluate(readMenus)) ??
                 [])
             );
             // Beside a narrow story the embed shows the surface the page draws its Preview on, not a gutter of its own.
@@ -630,6 +677,17 @@ const spec: Spec = {
             `${leg}: a frame is drawn as its own width says, its CSS and its script alike (${heads.map((one) => `${one.story}: ${one.direction}, matchMedia ${one.mounted} mounting, ${one.asked} now`).join("; ")})`,
             heads.length === 2 && headFaults.length === 0,
             headFaults.join("\n    ")
+          );
+          // A frame is its story's viewport to a floating layer too: the open menu stands inside it, shifted in as the window would shift it.
+          const strayMenus = menus.filter(
+            (one) =>
+              one.menu[0] < one.frame[0] - 0.5 ||
+              one.menu[1] > one.frame[1] + 0.5
+          );
+          kit.check(
+            `${leg}: a menu opened in a frame stands inside it (${menus.map((one) => `${one.story}: the menu ${one.menu.join("–")} in the frame ${one.frame.join("–")}, a ${one.window}px window`).join("; ")})`,
+            menus.length === 1 && strayMenus.length === 0,
+            JSON.stringify(strayMenus)
           );
           const unlike = grounds.filter((one) => one.embed !== one.host);
           kit.check(
