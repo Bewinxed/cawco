@@ -446,7 +446,7 @@
           spend.set(String(row.key), { harness: entry.h, row });
         }
       }
-      return { name: "fleet-sessions.csv", body: sessionsCsv(spend) };
+      return { name: "fleet-sessions.csv", body: await sessionsCsv(spend) };
     }
     const cell = (value: string) => `"${value.replaceAll('"', '""')}"`;
     const head = [

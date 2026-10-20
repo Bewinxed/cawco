@@ -22,13 +22,17 @@
  *     sends the hub for the agent.
  * (e) A send handed to the machine mid-command, then withdrawn: a context
  *     read behind the withdrawal is answered within the dashboard's 15 s.
+ * (f) A session read while shown, then given a turn that moves its reading
+ *     while nothing shows it: Usage's Sessions export writes its current
+ *     reading, never the one this tab took before.
  *
 
  *   bun scripts/probe-kit/run.ts context-read-slow
  */
+import { readFile } from "node:fs/promises";
 import type { Page } from "playwright-core";
 import { signal } from "../../../packages/core/src/signal";
-import { MACHINE, until } from "../../scratch-fleet";
+import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type KitFleet, open, type Spec } from "../kit";
 
 /** The details' context line: a reading ("Context 2% · 3k/200k"), "Reading…", or why there is none. */
@@ -38,6 +42,37 @@ const OFFLINE = /may be offline/i;
 /** A turn the mock answers with a long command, for (e)'s withdrawal to wait in. */
 const SLOW_TOOL = "Run the long command.";
 const SLOW_TOOL_S = 60;
+/** A turn the mock reports as reading this many tokens, so (f)'s session's reading moves. */
+const BIG_TURN = "A turn that fills the window.";
+const BIG_TURN_TOKENS = 150_000;
+/** The figure in a context line ("Context 48% · …"). */
+const PERCENT = /(\d+)%/;
+
+/** Every turn answers "done"; (e)'s runs a long command first, (f)'s reports a full window. */
+const respond = (request: Seen): Reply => {
+  if (request.last.includes(SLOW_TOOL) && !request.afterTool) {
+    return {
+      everyMs: 5,
+      words: [],
+      tool: {
+        name: "Bash",
+        input: {
+          command: `sleep ${SLOW_TOOL_S}`,
+          description: "A long command in the turn",
+          timeout: 600_000,
+        },
+      },
+    };
+  }
+  if (request.last.includes(BIG_TURN)) {
+    return {
+      everyMs: 5,
+      words: ["done"],
+      usage: { prompt: BIG_TURN_TOKENS, completion: 2 },
+    };
+  }
+  return { everyMs: 5, words: ["done"] };
+};
 
 /** The details card of `id` opened on `page`: the tab hovered, then pinned by a press inside it. */
 const openDetails = async (
@@ -116,22 +151,7 @@ const spec: Spec = {
   name: "context-read-slow",
   async run(kit) {
     const { check } = kit;
-    const fleet = await kit.fleet((request) =>
-      request.last.includes(SLOW_TOOL) && !request.afterTool
-        ? {
-            everyMs: 5,
-            words: [],
-            tool: {
-              name: "Bash",
-              input: {
-                command: `sleep ${SLOW_TOOL_S}`,
-                description: "A long command in the turn",
-                timeout: 600_000,
-              },
-            },
-          }
-        : { everyMs: 5, words: ["done"] }
-    );
+    const fleet = await kit.fleet(respond);
     fleet.launch("sessiond");
     await fleet.sessiondUp();
     fleet.launch("hub");
@@ -332,7 +352,7 @@ const spec: Spec = {
     const handed = await until(
       "the send handed to the machine",
       () => fleet.sendRow(queued),
-      (row) => row !== undefined && row.owed === null,
+      (sent) => sent !== undefined && sent.owed === null,
       20_000
     ).catch(() => fleet.sendRow(queued));
     await fleet.post({
@@ -363,6 +383,118 @@ const spec: Spec = {
       "(e) a context read behind a pending withdrawal is answered within 15 s",
       read.ok && tookMs < 15_000,
       `${tookMs} ms, ${JSON.stringify(read)}`
+    );
+
+    // (f) The Sessions export writes each live session's current context:
+    // read once while shown, then moved by a turn while nothing shows it.
+    const moved = others[1] as string;
+    const fourth = await kit.page("desk");
+    await openDetails(fourth, base, moved);
+    const before = (await watch(fourth, 20_000, (line) => READING.test(line)))
+      .at(-1)
+      ?.match(PERCENT)?.[1];
+    // To Usage inside the app, so this tab keeps the reading it took.
+    await fourth.evaluate(() => {
+      const link = document.createElement("a");
+      link.href = "/usage";
+      document.body.append(link);
+      link.click();
+    });
+    const exporter = fourth.getByRole("button", { name: "Export CSV" });
+    await exporter.waitFor({ timeout: 60_000 });
+    // The details card put away: nothing in this tab draws the session now.
+    await fourth.keyboard.press("Escape");
+    const unshown = await fourth
+      .waitForSelector(CONTEXT, { state: "detached", timeout: 10_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (
+      !check(
+        "(f) nothing in the tab draws the session's context before its turn",
+        unshown,
+        "the details card unmounted"
+      )
+    ) {
+      return;
+    }
+    // A range that starts without an account's usage window (the scratch
+    // account reports none), then its list read (WhereItGoes `view`): an
+    // export before it is empty.
+    await fourth.getByRole("tab", { name: "Today" }).click();
+    const listed = await fourth
+      .waitForFunction(
+        () => {
+          const card = document.querySelector(
+            '[data-slot="where-it-goes-card"]'
+          );
+          return Boolean(
+            card?.querySelector('[data-slot="list"]') ||
+            card?.textContent?.includes("Nothing recorded in this range.")
+          );
+        },
+        null,
+        { timeout: 60_000 }
+      )
+      .then(() => true)
+      .catch(() => false);
+    if (
+      !check(
+        "(f) Usage's sessions list is read, so it can be exported",
+        listed,
+        await fourth.evaluate(
+          () =>
+            document
+              .querySelector('[data-slot="where-it-goes-card"]')
+              ?.textContent?.replace(/\s+/g, " ")
+              .trim() ?? "(no card)"
+        )
+      )
+    ) {
+      return;
+    }
+    const sentAt = Date.now();
+    await fleet.send(moved, BIG_TURN);
+    // The turn reached the model, so "at rest" is after it, not before it opened.
+    await until(
+      "the mock answering the turn that fills the window",
+      () =>
+        fleet.seen.find(
+          (seen) => seen.at >= sentAt && seen.last.includes(BIG_TURN)
+        ),
+      Boolean,
+      120_000
+    );
+    await atRest(fleet, moved);
+    const current = await fleet.controlAnswer(
+      "getContextUsage",
+      [],
+      30_000,
+      moved
+    );
+    const now = Math.round(
+      (current.result as { percentage?: number } | undefined)?.percentage ?? -1
+    );
+    const [download] = await Promise.all([
+      fourth.waitForEvent("download", { timeout: 60_000 }),
+      exporter.click(),
+    ]);
+    const csvText = await readFile((await download.path()) as string, "utf8");
+    const row = csvText
+      .split("\n")
+      .find((line) => line.startsWith('"Context reads, unseen 2"'));
+    const exported = row?.split('","')[4] ?? null;
+    kit.note(
+      `(f) shown at ${before}%, then a turn while unshown; its reading now ${now}%; the export's row: ${row ?? `(none) in ${JSON.stringify(csvText)}`}`
+    );
+    check(
+      "(f) the turn moved the session's reading",
+      before !== undefined && Number(before) !== now,
+      `${before}% then ${now}%`
+    );
+    check(
+      "(f) the export's Context is the session's current reading",
+      exported === `${now}%`,
+      `exported ${exported}, current ${now}%`
     );
   },
 };

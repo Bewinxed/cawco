@@ -7962,25 +7962,57 @@ export function showContext(instanceId: string): () => void {
 }
 
 /**
+ * What one context read found: the reading it took, or why it took none
+ * (null when the harness reports no context at all).
+ */
+export type ContextRead =
+  | { kind: "read"; usage: ContextUsage }
+  | { kind: "unread"; why: string | null };
+
+/** The context read in flight for each session, by instance id: a second asker joins it. */
+const contextReads = new Map<string, Promise<ContextRead>>();
+
+/**
  * How full the session's context window is, straight from the SDK — the same
  * reading `/context` shows, so the dock never has to estimate it from token
  * counts it saw go past. A `Query` method, so only a live session can answer;
  * a dead one keeps its last number rather than dropping to zero, which would
- * read as "empty" when it means "nobody asked".
+ * read as "empty" when it means "nobody asked". Answers what this read found,
+ * for an asker that writes the figure down (session-export.ts); one asked
+ * while a read is in flight joins that read.
  */
-export async function refreshContext(
+export function refreshContext(
   instanceId: string,
   machineId: string
-): Promise<void> {
-  const target = session(instanceId);
-  // Not asked of a machine that isn't back: the last reading stands.
-  if (
-    target.contextPending ||
-    !machineConnected(machineId) ||
-    !harnessCan({ machineId, harness: target.harness }, "contextUsage")
-  ) {
-    return;
+): Promise<ContextRead> {
+  const inFlight = contextReads.get(instanceId);
+  if (inFlight) {
+    return inFlight;
   }
+  // Not asked of a machine that isn't back: the last reading stands.
+  if (!machineConnected(machineId)) {
+    return Promise.resolve({
+      kind: "unread",
+      why: machineFaultWords(machineName(machineId), "offline"),
+    });
+  }
+  const target = session(instanceId);
+  if (!harnessCan({ machineId, harness: target.harness }, "contextUsage")) {
+    return Promise.resolve({ kind: "unread", why: null });
+  }
+  const reading = readContext(target, machineId).finally(() =>
+    contextReads.delete(instanceId)
+  );
+  contextReads.set(instanceId, reading);
+  return reading;
+}
+
+/** {@link refreshContext}'s one read, kept on the session as it lands. */
+async function readContext(
+  target: SessionState,
+  machineId: string
+): Promise<ContextRead> {
+  const { instanceId } = target;
   target.contextPending = true;
   const requestId = newId();
   const payload: ControlPayload = {
@@ -8006,7 +8038,7 @@ export async function refreshContext(
           missed: "this session didn't report its context",
           again: "It's asked again when its turn ends.",
         });
-        return;
+        return { kind: "unread", why: target.contextError };
       case "answered":
         break;
       default: {
@@ -8015,7 +8047,7 @@ export async function refreshContext(
       }
     }
     const usage = read.value;
-    target.context = {
+    const context: ContextUsage = {
       totalTokens: usage.totalTokens,
       maxTokens: usage.maxTokens,
       percentage: usage.percentage,
@@ -8024,11 +8056,14 @@ export async function refreshContext(
       categories: usage.categories.filter((row) => row.name !== "Free space"),
       readAt: Date.now(),
     };
+    target.context = context;
     target.contextError = null;
+    return { kind: "read", usage: context };
   } catch (cause) {
     // A session that cannot answer keeps the last reading; the reason is kept
     // beside it so the details can say why rather than "not reported".
     target.contextError = messageOf(cause);
+    return { kind: "unread", why: target.contextError };
   } finally {
     target.contextPending = false;
   }
