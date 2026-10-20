@@ -17,7 +17,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import type {
   CommandResult,
   WorkspaceArchive,
@@ -32,7 +32,9 @@ import type {
 import {
   holdingWords,
   holdsNothing,
+  LOCKFILES,
   WORKSPACE_GIT_TIMEOUT_MS,
+  WORKSPACE_RECUT_INSTALL_MS,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
@@ -96,6 +98,7 @@ import {
   urlOrigin,
   withoutCredential,
 } from "./move";
+import { INSTALLED, installOf, runInstall } from "./project-install";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { runWorkflowCommand } from "./workflow-command";
 import { cloneHolding } from "./workspace-records";
@@ -415,6 +418,9 @@ const readySource = (
  * held it then, tracking the default branch as a first cut does. Something
  * already at that path refuses it, and is left as it is; so does a commit
  * that branch no longer holds, which a cut anywhere else would leave behind.
+ * A cut again installs, inside its new boundary, each project its retired
+ * clone had installed ({@link reinstall}) before it answers, so its delegate
+ * goes on in the folder as it left it.
  */
 export const createWorkspace = async (
   cwd: unknown,
@@ -506,6 +512,9 @@ export const createWorkspace = async (
       await setProject(id, projectId);
     }
     const boundary = await ensureBoundary({ id, path });
+    if (cut?.installed?.length) {
+      await reinstall({ id, path }, cut.installed);
+    }
     return {
       repoRoot,
       path,
@@ -521,6 +530,51 @@ export const createWorkspace = async (
       unlanded: "unmade",
     } satisfies WorkspaceArchive);
     throw error;
+  }
+};
+
+/**
+ * A cut again's installs ({@link WorkspaceCut} `installed`): each folder its
+ * retired clone held an install in, installed inside the new clone's boundary
+ * by its project's own manager's frozen install (project-install.ts), one at a
+ * time, within {@link WORKSPACE_RECUT_INSTALL_MS} for them all. The retire
+ * deleted the clone whole, its dependencies with it, and the delegate's
+ * session goes on in the same folder believing them there: on 2026-10-20
+ * X8's clone retired between two turns, came back with no `node_modules`,
+ * and its next `tsc` failed with ENOENT. A folder that is not one of the
+ * clone's own is refused, and so is an install that fails: the cut again
+ * fails with its words.
+ */
+const reinstall = async (
+  workspace: WorkspaceRef,
+  folders: readonly string[]
+): Promise<void> => {
+  const deadline = Date.now() + WORKSPACE_RECUT_INSTALL_MS;
+  for (const folder of folders) {
+    if (isAbsolute(folder) || folder.split("/").includes("..")) {
+      throw new Error(
+        `workspace ${workspace.id} is not cut again: "${folder}" is no folder of its clone`
+      );
+    }
+    const where = join(workspace.path, folder);
+    // biome-ignore lint/performance/noAwaitInLoops: one install at a time in one boundary
+    const install = await installOf(workspace.path, workspace.path, where);
+    const left = deadline - Date.now();
+    if (left <= 0) {
+      throw new Error(
+        `workspace ${workspace.id} is not cut again: its installs took past ${WORKSPACE_RECUT_INSTALL_MS / 1000}s before ${where} was installed`
+      );
+    }
+    const command = await runInstall(
+      workspace,
+      install,
+      where,
+      `workspace ${workspace.id}'s clone cut again`,
+      left
+    );
+    console.info(
+      `[workspace] ${workspace.id}: cut again, ${folder} installed with \`${command}\` (${install.named}), as its retired clone had it`
+    );
   }
 };
 
@@ -975,7 +1029,7 @@ const holding = async (
  * Where a clone that holds nothing of its own ({@link holding}) is cut again
  * once it is deleted ({@link WorkspaceCut}): its HEAD, on `origin`'s branch
  * `base` when that holds it, else the one most recently committed to among
- * those that do. Git on this host once its boundary is closed
+ * those that do, with the folders it holds an install in ({@link installedIn}). Git on this host once its boundary is closed
  * ({@link closedCloneGit}). Nothing for a folder whose `.git` is gone, nor
  * for a HEAD `landed` reaches: its work went on in the workspace cut from it,
  * which landed it, and is cut again from nowhere here. Any other HEAD no
@@ -1019,7 +1073,51 @@ const headOnOrigin = async (
       `Workspace ${workspace.id} was not archived: its HEAD ${commit.slice(0, 9)} is on no branch of origin, so its clone could not be cut again there, and nothing was deleted.`
     );
   }
-  return { branch, commit };
+  const installed = await installedIn(workspace.path, git);
+  return installed.length > 0
+    ? { branch, commit, installed }
+    : { branch, commit };
+};
+
+/**
+ * The folders of the clone, from its root, that hold a project's install
+ * ({@link WorkspaceCut} `installed`): each folder of a lockfile git tracks
+ * (core `LOCKFILES`) with `node_modules` or Yarn's `.pnp.cjs` beside it.
+ * Read before the clone goes, so its cut again installs them
+ * ({@link reinstall}).
+ */
+const installedIn = async (
+  clone: string,
+  git: ClosedGit
+): Promise<string[]> => {
+  const listed = await git([
+    "ls-files",
+    "-z",
+    "--",
+    ...LOCKFILES.map((name) => `:(glob)**/${name}`),
+  ]);
+  const folders = [
+    ...new Set(
+      listed
+        .split("\0")
+        .filter(Boolean)
+        .map((file) => dirname(file))
+    ),
+  ];
+  const held = await Promise.all(
+    folders.map(async (folder) => {
+      const found = await Promise.all(
+        INSTALLED.map((name) =>
+          lstat(join(clone, folder, name)).then(
+            () => true,
+            () => false
+          )
+        )
+      );
+      return found.some(Boolean) ? [folder] : [];
+    })
+  );
+  return held.flat();
 };
 
 /** A folder's size on disk in bytes (`du -sk`), 0 when it cannot be read. */

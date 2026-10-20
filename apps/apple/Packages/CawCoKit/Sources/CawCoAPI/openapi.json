@@ -51077,6 +51077,13 @@
           },
           "commit": {
             "type": "string"
+          },
+          "installed": {
+            "description": "The folders of the retired clone, from its root (`.` for the root), that\nheld a project's install: a tracked lockfile with `node_modules` or\nYarn's `.pnp.cjs` beside it. The cut again installs each inside its new\nboundary before its delegate goes on, so the session finds the folder as\nit left it (2026-10-20: X8's clone retired between two turns and came\nback with no `node_modules`, and its next `tsc` failed with ENOENT).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [

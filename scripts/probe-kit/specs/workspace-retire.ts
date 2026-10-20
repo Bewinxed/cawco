@@ -30,11 +30,15 @@
  *     ~/.cawco/carries that holds the commit (a bundle listing K's branch, a
  *     patch with its file) and the uncommitted diff (both files), then the
  *     clone is gone and the row archived.
- * (r) M lands and retires; a handoff from its parent waits at the hub while
- *     M's clone is cut again at the same path, at the commit it landed, and
- *     the same session goes on there (same work item, same transcript): its
- *     shell reads that path and M's landed file. It finishes again and its
- *     workspace retires again.
+ * (r) M commits a bun project with a local package that has a bin, installs
+ *     it (`node_modules/.bin/probe-tool`), lands and retires; a handoff from
+ *     its parent waits at the hub while M's clone is cut again at the same
+ *     path, at the commit it landed, and the same session goes on there
+ *     (same work item, same transcript): its shell reads that path and M's
+ *     landed file, and runs `node_modules/.bin/probe-tool`, installed again
+ *     by the cut (agent workspace.ts `reinstall`; on 2026-10-20 X8's clone
+ *     came back with no `node_modules` and its `tsc` failed with ENOENT). It
+ *     finishes again and its workspace retires again.
  * (q) Q commits a file and a package.json whose typecheck sleeps, then
  *     passes; pushes its commit to origin's `probe-keep-Q` (as the conductor
  *     pushed K1's by hand on 2026-10-17), and calls finish_item; its parent
@@ -126,6 +130,14 @@ const RECUT = "PROBE-RECUT-M";
 const RECUT_PWD = /RECUT-PWD=([^\s\\"]+)/;
 const RECUT_FILE = /RECUT-FILE:([^\n\\"]*)/;
 const RECUT_RAN = "RECUT-42";
+/** What M's installed bin prints when it runs, and what M's shell says it printed in the clone cut again. */
+const TOOL_RAN = "PROBE-TOOL-RAN";
+const RECUT_TOOL = /RECUT-TOOL:([^\n\\"]*)/;
+/** M's project: one local package with a bin, which installs with no registry. */
+const M_TOOL =
+  '{"name":"probe-tool","version":"1.0.0","bin":{"probe-tool":"run.sh"}}';
+const M_PROJECT =
+  '{"name":"probe-m","dependencies":{"probe-tool":"file:./tools/probe-tool"}}';
 /** The parent's handoff to Q once its stopped landing's workspace retired, and what Q's shell prints there. */
 const RECUT_Q = "PROBE-RECUT-Q";
 const Q_PWD = /Q-PWD=([^\s\\"]+)/;
@@ -159,7 +171,19 @@ const commitCommand = (tag: string) =>
     `mkdir -p "$TMPDIR/scratch-fleet-left-${tag}" && echo left > "$TMPDIR/scratch-fleet-left-${tag}/file"`,
     `echo 'made by ${tag}' > retire-${tag}.txt`,
     ...(tag === "Q" ? [`printf '%s\\n' '${Q_GATE}' > package.json`] : []),
-    `git add -A retire-${tag}.txt${tag === "Q" ? " package.json" : ""}`,
+    ...(tag === "M"
+      ? [
+          "mkdir -p tools/probe-tool",
+          `printf '%s\\n' '${M_TOOL}' > tools/probe-tool/package.json`,
+          `printf '#!/bin/sh\\necho ${TOOL_RAN}\\n' > tools/probe-tool/run.sh`,
+          "chmod +x tools/probe-tool/run.sh",
+          `printf '%s\\n' '${M_PROJECT}' > package.json`,
+          "printf 'node_modules\\n' > .gitignore",
+          "bun install",
+          "test -x node_modules/.bin/probe-tool",
+        ]
+      : []),
+    `git add -A retire-${tag}.txt${tag === "Q" ? " package.json" : ""}${tag === "M" ? " package.json bun.lock .gitignore tools" : ""}`,
     `${COMMIT} 'Delegate commit ${tag}'`,
     ...(tag === "Q" ? [`git push -q origin HEAD:refs/heads/${Q_KEEP}`] : []),
     `echo DONE-COMMIT-${tag}`,
@@ -248,7 +272,7 @@ const steps: Record<
 > = {};
 
 /** What M's shell read in its clone cut again. */
-const recutSeen: { pwd?: string; file?: string } = {};
+const recutSeen: { pwd?: string; file?: string; tool?: string } = {};
 
 const tool = (name: string, input: object): Reply => ({
   everyMs: 5,
@@ -286,12 +310,13 @@ const recutTurn = (
 ): Reply => {
   if (!request.all.includes(RECUT_RAN)) {
     return tool("Bash", {
-      command: `printf 'RECUT-PWD=%s\\n' "$(pwd)"; printf 'RECUT-FILE:%s\\n' "$(cat retire-M.txt 2>&1)"; echo RECUT-$((40+2))`,
+      command: `printf 'RECUT-PWD=%s\\n' "$(pwd)"; printf 'RECUT-FILE:%s\\n' "$(cat retire-M.txt 2>&1)"; printf 'RECUT-TOOL:%s\\n' "$(./node_modules/.bin/probe-tool 2>&1)"; echo RECUT-$((40+2))`,
       description: "Where am I",
     });
   }
   recutSeen.pwd = RECUT_PWD.exec(request.all)?.[1];
   recutSeen.file = RECUT_FILE.exec(request.all)?.[1];
+  recutSeen.tool = RECUT_TOOL.exec(request.all)?.[1];
   return finishing(
     request,
     {
@@ -692,6 +717,11 @@ const recutPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   check(
     "(r) the same session went on in a clone cut again at the same path: its shell's folder is that path, and it holds M's landed file",
     recutSeen.pwd === wm.path && recutSeen.file === "made by M",
+    JSON.stringify({ seen: recutSeen, path: wm.path })
+  );
+  check(
+    "(r) its installed dependencies came back with it: node_modules/.bin/probe-tool, installed in the retired clone, runs in the clone cut again",
+    recutSeen.tool === TOOL_RAN,
     JSON.stringify({ seen: recutSeen, path: wm.path })
   );
   check(
@@ -1241,6 +1271,7 @@ const spec: Spec = {
     }
     recutSeen.pwd = undefined;
     recutSeen.file = undefined;
+    recutSeen.tool = undefined;
     qSeen.pwd = undefined;
     qSeen.head = undefined;
     qSeen.file = undefined;

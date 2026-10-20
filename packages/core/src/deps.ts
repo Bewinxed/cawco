@@ -3,7 +3,9 @@
  * what the repository's own scripts load before they import anything a
  * dependency provides (scripts/lib/deps.ts); a place's stage clone installs
  * by its project's own manager instead (agent stage-clone.ts `installAt`). A
- * workspace's cut installs nothing: its delegate runs its project's install.
+ * workspace's first cut installs nothing: its delegate runs its project's
+ * install; a cut again installs what its retired clone had installed (agent
+ * workspace.ts `reinstall`).
  * The landing gate installs nothing of its own: a project declares its
  * install as a step of its gate (hub gate-file.ts).
  *
