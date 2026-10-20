@@ -235,6 +235,18 @@ function gridOf(args: { selector: string; grid: number }) {
     }
     return false;
   };
+  /**
+   * A side's border draws: its style is one and it has a width. Tailwind's
+   * preflight sets every element's `border: 0 solid`, so a style alone
+   * names no border: a box with none (an overlay that takes no pointer, as
+   * the thread pane's composer dock) read as painting over all it covers.
+   */
+  const bordered = (style: CSSStyleDeclaration) =>
+    (["top", "right", "bottom", "left"] as const).some(
+      (side) =>
+        style.getPropertyValue(`border-${side}-style`) !== "none" &&
+        Number.parseFloat(style.getPropertyValue(`border-${side}-width`)) > 0
+    );
   /** Draws anything where it stands: a background, a border, a shadow, an image or words, and is neither hidden nor transparent, here or in what holds it. */
   const paints = (el: Element) => {
     if (
@@ -246,7 +258,7 @@ function gridOf(args: { selector: string; grid: number }) {
     return (
       rgba(style.backgroundColor)[3] !== 0 ||
       style.backgroundImage !== "none" ||
-      style.borderStyle !== "none" ||
+      bordered(style) ||
       style.boxShadow !== "none" ||
       el instanceof SVGElement ||
       el instanceof HTMLImageElement ||

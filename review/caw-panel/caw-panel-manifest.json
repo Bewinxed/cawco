@@ -1,0 +1,299 @@
+{
+  "page": "78a326ed-76cd-44b0-90c3-5e3261a17b56",
+  "published": false,
+  "program": "decisions/caw-panel/page.oui",
+  "shots": [
+    ".probe/decision-pages/caw-panel-1440-light-1.png",
+    ".probe/decision-pages/caw-panel-1440-light-2.png",
+    ".probe/decision-pages/caw-panel-1440-light-3.png",
+    ".probe/decision-pages/caw-panel-1440-light-4.png",
+    ".probe/decision-pages/caw-panel-1440-light-5.png",
+    ".probe/decision-pages/caw-panel-1440-dark-1.png",
+    ".probe/decision-pages/caw-panel-1440-dark-2.png",
+    ".probe/decision-pages/caw-panel-1440-dark-3.png",
+    ".probe/decision-pages/caw-panel-1440-dark-4.png",
+    ".probe/decision-pages/caw-panel-1440-dark-5.png",
+    ".probe/decision-pages/caw-panel-390-light-1.png",
+    ".probe/decision-pages/caw-panel-390-light-2.png",
+    ".probe/decision-pages/caw-panel-390-light-3.png",
+    ".probe/decision-pages/caw-panel-390-light-4.png",
+    ".probe/decision-pages/caw-panel-390-dark-1.png",
+    ".probe/decision-pages/caw-panel-390-dark-2.png",
+    ".probe/decision-pages/caw-panel-390-dark-3.png",
+    ".probe/decision-pages/caw-panel-390-dark-4.png"
+  ],
+  "cards": [
+    {
+      "id": "one",
+      "question": "Is Caw's panel one panel, or three?",
+      "options": [
+        {
+          "id": "panel",
+          "label": "One panel",
+          "recommended": true
+        },
+        {
+          "id": "three",
+          "label": "Today's three",
+          "recommended": false
+        }
+      ]
+    },
+    {
+      "id": "composer",
+      "question": "While Caw can't start, does the message box stay?",
+      "options": [
+        {
+          "id": "stays",
+          "label": "It stays",
+          "recommended": true
+        },
+        {
+          "id": "goes",
+          "label": "It goes",
+          "recommended": false
+        }
+      ]
+    },
+    {
+      "id": "title",
+      "question": "What does the top of the panel call the thread?",
+      "options": [
+        {
+          "id": "named",
+          "label": "Caw names it",
+          "recommended": true
+        },
+        {
+          "id": "offscreen",
+          "label": "Your first line, once it's off screen",
+          "recommended": false
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "leg": "program",
+      "ok": true,
+      "assertion": "the hub's check keeps the program",
+      "output": "kept"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "every embed (29 of 29) draws the stories its Preview names",
+      "output": "OnePanel: Desk 300×511; OnePanel: Phone 300×648; TodayThree: BarHead 387×240 + Thread 387×661 + Switch 387×115; ComposerStays: Desk 300×511; ComposerStays: Phone 300×648; ComposerGoes: Desk 299×511; ComposerGoes: Phone 299×648; HeadNamed: DeskStart 300×511; HeadNamed: PhoneStart 300×648; HeadOffscreen: DeskStart 299×511; HeadOffscreen: DeskLater 299×511; States: DeskIdle 300×511; States: PhoneIdle 300×648; States: DeskWorking 300×510; States: PhoneWorking 300×648; States: DeskNeedsYou 300×511; States: PhoneNeedsYou 300×648; States: DeskNoMachine 300×511; States: PhoneNoMachine 300×648; States: DeskBudget 300×511; States: PhoneBudget 300×648; States: DeskOff 300×511; States: PhoneOff 300×648; States: DeskCantRead 300×510; States: PhoneCantRead 300×648; States: DeskNotWoken 300×511; States: PhoneNotWoken 300×648; States: DeskEmpty 300×511; States: PhoneEmpty 300×648"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "every frame stands whole in its card: none scrolls sideways",
+      "output": "One panel · Desk 0.773×; One panel · Phone 0.769×; Today's three · Desk 1× 1× 1×; It stays · Desk 0.773×; It stays · Phone 0.769×; It goes · Desk 0.773×; It goes · Phone 0.769×; Caw names it · Desk, at the thread's start 0.773×; Caw names it · Phone, at the thread's start 0.769×; Your first line · Desk, at the thread's start 0.773×; Your first line · Desk, a few messages on 0.773×; At rest · Desk 0.773×; At rest · Phone 0.769×; Working · Desk 0.773×; Working · Phone 0.769×; Needs you · Desk 0.773×; Needs you · Phone 0.769×; No machine online · Desk 0.773×; No machine online · Phone 0.769×; Budget reached · Desk 0.773×; Budget reached · Phone 0.769×; Off · Desk 0.773×; Off · Phone 0.769×; Thread won't read · Desk 0.773×; Thread won't read · Phone 0.769×; Not woken · Desk 0.773×; Not woken · Phone 0.769×; New thread · Desk 0.773×; New thread · Phone 0.769×"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "each Preview names its stories, its caption saying Desk or Phone",
+      "output": "One panel · Desk; One panel · Phone; Today's three · Desk; It stays · Desk; It stays · Phone; It goes · Desk; It goes · Phone; Caw names it · Desk, at the thread's start; Caw names it · Phone, at the thread's start; Your first line · Desk, at the thread's start; Your first line · Desk, a few messages on; At rest · Desk; At rest · Phone; Working · Desk; Working · Phone; Needs you · Desk; Needs you · Phone; No machine online · Desk; No machine online · Phone; Budget reached · Desk; Budget reached · Phone; Off · Desk; Off · Phone; Thread won't read · Desk; Thread won't read · Phone; Not woken · Desk; Not woken · Phone; New thread · Desk; New thread · Phone"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "each suggestion row on the new thread is as wide as its words, up to the column's width",
+      "output": "row 219 (words 219), list 275, action 275 of column 275; row 155 (words 155), list 275, action 275 of column 275; row 257 (words 257), list 275, action 275 of column 275; row 215 (words 215), list 268, action 268 of column 268; row 152 (words 152), list 268, action 268 of column 268; row 251 (words 251), list 268, action 268 of column 268"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "each frame that scrolls sideways (0) draws the house edge fade where more is hidden",
+      "output": "none scrolls"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "the page never scrolls sideways",
+      "output": "scrollWidth 1440, clientWidth 1440; the page 11523px tall"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "no console errors, the page and its canvases, the hub's reads a hub-less stage can't answer aside",
+      "output": "none; set aside: /api/jev"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "the page's own capture paints every embed (29 of 29)",
+      "output": "One panel · Desk at y 453: 39.5% its commonest colour; One panel · Phone at y 1023: 46.1% its commonest colour; Today's three · Desk at y 453: 44.4% its commonest colour; It stays · Desk at y 2011: 76.5% its commonest colour; It stays · Phone at y 2581: 75.1% its commonest colour; It goes · Desk at y 2011: 84.3% its commonest colour; It goes · Phone at y 2581: 81% its commonest colour; Caw names it · Desk, at the thread's start at y 3605: 44% its commonest colour; Caw names it · Phone, at the thread's start at y 4175: 56.9% its commonest colour; Your first line · Desk, at the thread's start at y 3605: 44% its commonest colour; Your first line · Desk, a few messages on at y 4175: 36.7% its commonest colour; At rest · Desk at y 5117: 38.9% its commonest colour; At rest · Phone at y 5048: 55.3% its commonest colour; Working · Desk at y 5831: 66.2% its commonest colour; Working · Phone at y 5763: 71.9% its commonest colour; Needs you · Desk at y 6545: 51.2% its commonest colour; Needs you · Phone at y 6477: 62.7% its commonest colour; No machine online · Desk at y 7259: 76.4% its commonest colour; No machine online · Phone at y 7191: 81.5% its commonest colour; Budget reached · Desk at y 7974: 65.9% its commonest colour; Budget reached · Phone at y 7905: 74.4% its commonest colour; Off · Desk at y 8688: 34.8% its commonest colour; Off · Phone at y 8619: 55.4% its commonest colour; Thread won't read · Desk at y 9402: 73.3% its commonest colour; Thread won't read · Phone at y 9334: 79.9% its commonest colour; Not woken · Desk at y 10116: 76.1% its commonest colour; Not woken · Phone at y 10048: 82.3% its commonest colour; New thread · Desk at y 10830: 67.2% its commonest colour; New thread · Phone at y 10762: 71.2% its commonest colour"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "the capture is files a delegate can hand over, each under 1 MiB, cut between cards, its whole picture pixel for pixel",
+      "output": "caw-panel-1440-light-1.png 918 KiB, rows 0–1994, caw-panel-1440-light-2.png 1023 KiB, rows 1994–5024, caw-panel-1440-light-3.png 605 KiB, rows 5024–6456, caw-panel-1440-light-4.png 973 KiB, rows 6456–9313, caw-panel-1440-light-5.png 505 KiB, rows 9313–11523"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "every embed (29 of 29) draws the stories its Preview names",
+      "output": "OnePanel: Desk 300×511; OnePanel: Phone 300×648; TodayThree: BarHead 387×240 + Thread 387×661 + Switch 387×115; ComposerStays: Desk 300×511; ComposerStays: Phone 300×648; ComposerGoes: Desk 299×511; ComposerGoes: Phone 299×648; HeadNamed: DeskStart 300×511; HeadNamed: PhoneStart 300×648; HeadOffscreen: DeskStart 299×511; HeadOffscreen: DeskLater 299×511; States: DeskIdle 300×511; States: PhoneIdle 300×648; States: DeskWorking 300×510; States: PhoneWorking 300×648; States: DeskNeedsYou 300×511; States: PhoneNeedsYou 300×648; States: DeskNoMachine 300×511; States: PhoneNoMachine 300×648; States: DeskBudget 300×511; States: PhoneBudget 300×648; States: DeskOff 300×511; States: PhoneOff 300×648; States: DeskCantRead 300×510; States: PhoneCantRead 300×648; States: DeskNotWoken 300×511; States: PhoneNotWoken 300×648; States: DeskEmpty 300×511; States: PhoneEmpty 300×648"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "every frame stands whole in its card: none scrolls sideways",
+      "output": "One panel · Desk 0.773×; One panel · Phone 0.769×; Today's three · Desk 1× 1× 1×; It stays · Desk 0.773×; It stays · Phone 0.769×; It goes · Desk 0.773×; It goes · Phone 0.769×; Caw names it · Desk, at the thread's start 0.773×; Caw names it · Phone, at the thread's start 0.769×; Your first line · Desk, at the thread's start 0.773×; Your first line · Desk, a few messages on 0.773×; At rest · Desk 0.773×; At rest · Phone 0.769×; Working · Desk 0.773×; Working · Phone 0.769×; Needs you · Desk 0.773×; Needs you · Phone 0.769×; No machine online · Desk 0.773×; No machine online · Phone 0.769×; Budget reached · Desk 0.773×; Budget reached · Phone 0.769×; Off · Desk 0.773×; Off · Phone 0.769×; Thread won't read · Desk 0.773×; Thread won't read · Phone 0.769×; Not woken · Desk 0.773×; Not woken · Phone 0.769×; New thread · Desk 0.773×; New thread · Phone 0.769×"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "each Preview names its stories, its caption saying Desk or Phone",
+      "output": "One panel · Desk; One panel · Phone; Today's three · Desk; It stays · Desk; It stays · Phone; It goes · Desk; It goes · Phone; Caw names it · Desk, at the thread's start; Caw names it · Phone, at the thread's start; Your first line · Desk, at the thread's start; Your first line · Desk, a few messages on; At rest · Desk; At rest · Phone; Working · Desk; Working · Phone; Needs you · Desk; Needs you · Phone; No machine online · Desk; No machine online · Phone; Budget reached · Desk; Budget reached · Phone; Off · Desk; Off · Phone; Thread won't read · Desk; Thread won't read · Phone; Not woken · Desk; Not woken · Phone; New thread · Desk; New thread · Phone"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "each suggestion row on the new thread is as wide as its words, up to the column's width",
+      "output": "row 219 (words 219), list 275, action 275 of column 275; row 155 (words 155), list 275, action 275 of column 275; row 257 (words 257), list 275, action 275 of column 275; row 215 (words 215), list 268, action 268 of column 268; row 152 (words 152), list 268, action 268 of column 268; row 251 (words 251), list 268, action 268 of column 268"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "each frame that scrolls sideways (0) draws the house edge fade where more is hidden",
+      "output": "none scrolls"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "the page never scrolls sideways",
+      "output": "scrollWidth 1440, clientWidth 1440; the page 11523px tall"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "no console errors, the page and its canvases, the hub's reads a hub-less stage can't answer aside",
+      "output": "none; set aside: /api/jev"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "the page's own capture paints every embed (29 of 29)",
+      "output": "One panel · Desk at y 453: 41.4% its commonest colour; One panel · Phone at y 1023: 45.1% its commonest colour; Today's three · Desk at y 453: 43.5% its commonest colour; It stays · Desk at y 2011: 76.1% its commonest colour; It stays · Phone at y 2581: 74.8% its commonest colour; It goes · Desk at y 2011: 84.3% its commonest colour; It goes · Phone at y 2581: 80.9% its commonest colour; Caw names it · Desk, at the thread's start at y 3605: 42.7% its commonest colour; Caw names it · Phone, at the thread's start at y 4175: 56.1% its commonest colour; Your first line · Desk, at the thread's start at y 3605: 42.7% its commonest colour; Your first line · Desk, a few messages on at y 4175: 41.2% its commonest colour; At rest · Desk at y 5117: 37.8% its commonest colour; At rest · Phone at y 5048: 54.5% its commonest colour; Working · Desk at y 5831: 65.9% its commonest colour; Working · Phone at y 5763: 71.6% its commonest colour; Needs you · Desk at y 6545: 51.2% its commonest colour; Needs you · Phone at y 6477: 62.7% its commonest colour; No machine online · Desk at y 7259: 76.1% its commonest colour; No machine online · Phone at y 7191: 81.2% its commonest colour; Budget reached · Desk at y 7974: 65.5% its commonest colour; Budget reached · Phone at y 7905: 74.1% its commonest colour; Off · Desk at y 8688: 37% its commonest colour; Off · Phone at y 8619: 54.6% its commonest colour; Thread won't read · Desk at y 9402: 73.3% its commonest colour; Thread won't read · Phone at y 9334: 79.9% its commonest colour; Not woken · Desk at y 10116: 75.8% its commonest colour; Not woken · Phone at y 10048: 82.1% its commonest colour; New thread · Desk at y 10830: 66.9% its commonest colour; New thread · Phone at y 10762: 70.9% its commonest colour"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "the capture is files a delegate can hand over, each under 1 MiB, cut between cards, its whole picture pixel for pixel",
+      "output": "caw-panel-1440-dark-1.png 1016 KiB, rows 0–2564, caw-panel-1440-dark-2.png 888 KiB, rows 2564–5024, caw-panel-1440-dark-3.png 593 KiB, rows 5024–6456, caw-panel-1440-dark-4.png 934 KiB, rows 6456–9313, caw-panel-1440-dark-5.png 489 KiB, rows 9313–11523"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "every embed (29 of 29) draws the stories its Preview names",
+      "output": "OnePanel: Desk 300×511; OnePanel: Phone 300×648; TodayThree: BarHead 310×192 + Thread 310×528 + Switch 310×92; ComposerStays: Desk 300×510; ComposerStays: Phone 300×648; ComposerGoes: Desk 300×510; ComposerGoes: Phone 300×648; HeadNamed: DeskStart 300×511; HeadNamed: PhoneStart 300×648; HeadOffscreen: DeskStart 300×511; HeadOffscreen: DeskLater 300×511; States: DeskIdle 300×511; States: PhoneIdle 300×648; States: DeskWorking 300×511; States: PhoneWorking 300×648; States: DeskNeedsYou 300×511; States: PhoneNeedsYou 300×648; States: DeskNoMachine 300×510; States: PhoneNoMachine 300×648; States: DeskBudget 300×511; States: PhoneBudget 300×648; States: DeskOff 300×511; States: PhoneOff 300×648; States: DeskCantRead 300×511; States: PhoneCantRead 300×648; States: DeskNotWoken 300×511; States: PhoneNotWoken 300×648; States: DeskEmpty 300×511; States: PhoneEmpty 300×648"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "every frame stands whole in its card: none scrolls sideways",
+      "output": "One panel · Desk 0.773×; One panel · Phone 0.769×; Today's three · Desk 0.799× 0.799× 0.799×; It stays · Desk 0.773×; It stays · Phone 0.769×; It goes · Desk 0.773×; It goes · Phone 0.769×; Caw names it · Desk, at the thread's start 0.773×; Caw names it · Phone, at the thread's start 0.769×; Your first line · Desk, at the thread's start 0.773×; Your first line · Desk, a few messages on 0.773×; At rest · Desk 0.773×; At rest · Phone 0.769×; Working · Desk 0.773×; Working · Phone 0.769×; Needs you · Desk 0.773×; Needs you · Phone 0.769×; No machine online · Desk 0.773×; No machine online · Phone 0.769×; Budget reached · Desk 0.773×; Budget reached · Phone 0.769×; Off · Desk 0.773×; Off · Phone 0.769×; Thread won't read · Desk 0.773×; Thread won't read · Phone 0.769×; Not woken · Desk 0.773×; Not woken · Phone 0.769×; New thread · Desk 0.773×; New thread · Phone 0.769×"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "each Preview names its stories, its caption saying Desk or Phone",
+      "output": "One panel · Desk; One panel · Phone; Today's three · Desk; It stays · Desk; It stays · Phone; It goes · Desk; It goes · Phone; Caw names it · Desk, at the thread's start; Caw names it · Phone, at the thread's start; Your first line · Desk, at the thread's start; Your first line · Desk, a few messages on; At rest · Desk; At rest · Phone; Working · Desk; Working · Phone; Needs you · Desk; Needs you · Phone; No machine online · Desk; No machine online · Phone; Budget reached · Desk; Budget reached · Phone; Off · Desk; Off · Phone; Thread won't read · Desk; Thread won't read · Phone; Not woken · Desk; Not woken · Phone; New thread · Desk; New thread · Phone"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "each suggestion row on the new thread is as wide as its words, up to the column's width",
+      "output": "row 219 (words 219), list 275, action 275 of column 275; row 155 (words 155), list 275, action 275 of column 275; row 257 (words 257), list 275, action 275 of column 275; row 215 (words 215), list 268, action 268 of column 268; row 152 (words 152), list 268, action 268 of column 268; row 251 (words 251), list 268, action 268 of column 268"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "each frame that scrolls sideways (0) draws the house edge fade where more is hidden",
+      "output": "none scrolls"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "the page never scrolls sideways",
+      "output": "scrollWidth 390, clientWidth 390; the page 20534px tall"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "no console errors, the page and its canvases, the hub's reads a hub-less stage can't answer aside",
+      "output": "none; set aside: /api/jev"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "the page's own capture paints every embed (29 of 29)",
+      "output": "One panel · Desk at y 555: 36.3% its commonest colour; One panel · Phone at y 1125: 38.3% its commonest colour; Today's three · Desk at y 1940: 41.4% its commonest colour; It stays · Desk at y 3184: 64.1% its commonest colour; It stays · Phone at y 3754: 72.7% its commonest colour; It goes · Desk at y 4565: 71.6% its commonest colour; It goes · Phone at y 5135: 88.5% its commonest colour; Caw names it · Desk, at the thread's start at y 6195: 42.5% its commonest colour; Caw names it · Phone, at the thread's start at y 6766: 57.8% its commonest colour; Your first line · Desk, at the thread's start at y 7597: 44% its commonest colour; Your first line · Desk, a few messages on at y 8167: 40.6% its commonest colour; At rest · Desk at y 8920: 37.7% its commonest colour; At rest · Phone at y 9490: 51.9% its commonest colour; Working · Desk at y 10204: 74% its commonest colour; Working · Phone at y 10774: 72% its commonest colour; Needs you · Desk at y 11489: 42.7% its commonest colour; Needs you · Phone at y 12059: 60.2% its commonest colour; No machine online · Desk at y 12773: 76.5% its commonest colour; No machine online · Phone at y 13343: 72.7% its commonest colour; Budget reached · Desk at y 14057: 65.5% its commonest colour; Budget reached · Phone at y 14628: 73.3% its commonest colour; Off · Desk at y 15342: 44.2% its commonest colour; Off · Phone at y 15912: 48.2% its commonest colour; Thread won't read · Desk at y 16626: 72.8% its commonest colour; Thread won't read · Phone at y 17196: 78.7% its commonest colour; Not woken · Desk at y 17911: 76.1% its commonest colour; Not woken · Phone at y 18481: 77.7% its commonest colour; New thread · Desk at y 19195: 61.2% its commonest colour; New thread · Phone at y 19765: 65.8% its commonest colour"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "the capture is files a delegate can hand over, each under 1 MiB, cut between cards, its whole picture pixel for pixel",
+      "output": "caw-panel-390-light-1.png 1001 KiB, rows 0–4548, caw-panel-390-light-2.png 992 KiB, rows 4548–9473, caw-panel-390-light-3.png 1016 KiB, rows 9473–14611, caw-panel-390-light-4.png 872 KiB, rows 14611–20534"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "every embed (29 of 29) draws the stories its Preview names",
+      "output": "OnePanel: Desk 300×511; OnePanel: Phone 300×648; TodayThree: BarHead 310×192 + Thread 310×528 + Switch 310×92; ComposerStays: Desk 300×510; ComposerStays: Phone 300×648; ComposerGoes: Desk 300×510; ComposerGoes: Phone 300×648; HeadNamed: DeskStart 300×511; HeadNamed: PhoneStart 300×648; HeadOffscreen: DeskStart 300×511; HeadOffscreen: DeskLater 300×511; States: DeskIdle 300×511; States: PhoneIdle 300×648; States: DeskWorking 300×511; States: PhoneWorking 300×648; States: DeskNeedsYou 300×511; States: PhoneNeedsYou 300×648; States: DeskNoMachine 300×510; States: PhoneNoMachine 300×648; States: DeskBudget 300×511; States: PhoneBudget 300×648; States: DeskOff 300×511; States: PhoneOff 300×648; States: DeskCantRead 300×511; States: PhoneCantRead 300×648; States: DeskNotWoken 300×511; States: PhoneNotWoken 300×648; States: DeskEmpty 300×511; States: PhoneEmpty 300×648"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "every frame stands whole in its card: none scrolls sideways",
+      "output": "One panel · Desk 0.773×; One panel · Phone 0.769×; Today's three · Desk 0.799× 0.799× 0.799×; It stays · Desk 0.773×; It stays · Phone 0.769×; It goes · Desk 0.773×; It goes · Phone 0.769×; Caw names it · Desk, at the thread's start 0.773×; Caw names it · Phone, at the thread's start 0.769×; Your first line · Desk, at the thread's start 0.773×; Your first line · Desk, a few messages on 0.773×; At rest · Desk 0.773×; At rest · Phone 0.769×; Working · Desk 0.773×; Working · Phone 0.769×; Needs you · Desk 0.773×; Needs you · Phone 0.769×; No machine online · Desk 0.773×; No machine online · Phone 0.769×; Budget reached · Desk 0.773×; Budget reached · Phone 0.769×; Off · Desk 0.773×; Off · Phone 0.769×; Thread won't read · Desk 0.773×; Thread won't read · Phone 0.769×; Not woken · Desk 0.773×; Not woken · Phone 0.769×; New thread · Desk 0.773×; New thread · Phone 0.769×"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "each Preview names its stories, its caption saying Desk or Phone",
+      "output": "One panel · Desk; One panel · Phone; Today's three · Desk; It stays · Desk; It stays · Phone; It goes · Desk; It goes · Phone; Caw names it · Desk, at the thread's start; Caw names it · Phone, at the thread's start; Your first line · Desk, at the thread's start; Your first line · Desk, a few messages on; At rest · Desk; At rest · Phone; Working · Desk; Working · Phone; Needs you · Desk; Needs you · Phone; No machine online · Desk; No machine online · Phone; Budget reached · Desk; Budget reached · Phone; Off · Desk; Off · Phone; Thread won't read · Desk; Thread won't read · Phone; Not woken · Desk; Not woken · Phone; New thread · Desk; New thread · Phone"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "each suggestion row on the new thread is as wide as its words, up to the column's width",
+      "output": "row 219 (words 219), list 275, action 275 of column 275; row 155 (words 155), list 275, action 275 of column 275; row 257 (words 257), list 275, action 275 of column 275; row 215 (words 215), list 268, action 268 of column 268; row 152 (words 152), list 268, action 268 of column 268; row 251 (words 251), list 268, action 268 of column 268"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "each frame that scrolls sideways (0) draws the house edge fade where more is hidden",
+      "output": "none scrolls"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "the page never scrolls sideways",
+      "output": "scrollWidth 390, clientWidth 390; the page 20534px tall"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "no console errors, the page and its canvases, the hub's reads a hub-less stage can't answer aside",
+      "output": "none; set aside: /api/jev"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "the page's own capture paints every embed (29 of 29)",
+      "output": "One panel · Desk at y 555: 37.5% its commonest colour; One panel · Phone at y 1125: 40.2% its commonest colour; Today's three · Desk at y 1940: 41.1% its commonest colour; It stays · Desk at y 3184: 63.7% its commonest colour; It stays · Phone at y 3754: 72.4% its commonest colour; It goes · Desk at y 4565: 71.5% its commonest colour; It goes · Phone at y 5135: 88.5% its commonest colour; Caw names it · Desk, at the thread's start at y 6195: 41.3% its commonest colour; Caw names it · Phone, at the thread's start at y 6766: 56.7% its commonest colour; Your first line · Desk, at the thread's start at y 7597: 42.7% its commonest colour; Your first line · Desk, a few messages on at y 8167: 39.5% its commonest colour; At rest · Desk at y 8920: 39.3% its commonest colour; At rest · Phone at y 9490: 51% its commonest colour; Working · Desk at y 10204: 73.6% its commonest colour; Working · Phone at y 10774: 71.8% its commonest colour; Needs you · Desk at y 11489: 42.7% its commonest colour; Needs you · Phone at y 12059: 60.2% its commonest colour; No machine online · Desk at y 12773: 76.1% its commonest colour; No machine online · Phone at y 13343: 72.5% its commonest colour; Budget reached · Desk at y 14057: 65.1% its commonest colour; Budget reached · Phone at y 14628: 73% its commonest colour; Off · Desk at y 15342: 42.9% its commonest colour; Off · Phone at y 15912: 47.2% its commonest colour; Thread won't read · Desk at y 16626: 72.8% its commonest colour; Thread won't read · Phone at y 17196: 78.7% its commonest colour; Not woken · Desk at y 17911: 75.8% its commonest colour; Not woken · Phone at y 18481: 77.5% its commonest colour; New thread · Desk at y 19195: 60.9% its commonest colour; New thread · Phone at y 19765: 65.5% its commonest colour"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "the capture is files a delegate can hand over, each under 1 MiB, cut between cards, its whole picture pixel for pixel",
+      "output": "caw-panel-390-dark-1.png 977 KiB, rows 0–4548, caw-panel-390-dark-2.png 969 KiB, rows 4548–9473, caw-panel-390-dark-3.png 970 KiB, rows 9473–14611, caw-panel-390-dark-4.png 838 KiB, rows 14611–20534"
+    }
+  ]
+}
