@@ -15,8 +15,8 @@ export default {
   title: "Pairing",
   component: PairingStop,
   args: { stop: "asking" },
-  // The pairing screen's column (PairingStop, 34rem), held to the page's
-  // width where a decision page embeds it on a phone.
+  // The pairing screen's column (PairingStop, 34rem) at its own width: where
+  // a decision page's embed is narrower, the column is drawn scaled to fit.
   parameters: { viewport: 544 },
 };
 
