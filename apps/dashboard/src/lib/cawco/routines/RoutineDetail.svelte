@@ -4,8 +4,10 @@
   /**
    * A routine opened in place under its row: only what the row does not say
    * (the owner: "why are you repeating this info that is already up
-   * there"). Its name, schedule, last and next run are the row's.
+   * there"). Its name, schedule, last and next run are the row's; the
+   * schedule's strip stands here whole, with its days or hours.
    *
+   * 0. Its schedule as times on a line (ScheduleStrip, labelled).
    * 1. Its instruction, as the markdown it is written in (the messages'
    *    Markdown, at body size), four lines at most until More.
    * 2. Recent runs, the newest five, as a ledger (the routines table's own
@@ -26,7 +28,8 @@
   import ActionsTable from "./ActionsTable.svelte";
   import RunStatus, { type Status } from "./RunStatus.svelte";
   import type { Routine, RoutineRun } from "./routines-api";
-  import { exactOf } from "./schedule";
+  import ScheduleStrip from "./ScheduleStrip.svelte";
+  import { exactOf, scheduleOf } from "./schedule";
 
   let {
     routine,
@@ -36,6 +39,12 @@
     /** What its runs proposed and what came of it. */
     actions?: ApprovedActionView[];
   } = $props();
+
+  /** The strip's now, read as the detail opens. */
+  const now = Date.now();
+  const scheduleWords = $derived(
+    scheduleOf(routine.cron, routine.timeZone, routine.nextSlot).words
+  );
 
   /** The runs shown: the newest five. */
   const SHOWN = 5;
@@ -119,6 +128,16 @@
   class="flex flex-col gap-space-4 px-space-3 pb-space-4 @table-400px/table:ps-(--detail-lead)"
   style:--detail-lead="calc(var(--c-row-lead) + var(--space-3) * 2)"
 >
+  <!-- The schedule drawn whole: the row's strip with its days or hours. -->
+  <div data-slot="schedule-wrap" class="max-w-c-measure pt-space-2">
+    <ScheduleStrip
+      cron={routine.cron}
+      label={scheduleWords}
+      {now}
+      paused={!routine.enabled}
+      zone={routine.timeZone}
+    />
+  </div>
   <div
     data-slot="instruction-wrap"
     class="flex max-w-c-measure flex-col items-start gap-space-1"

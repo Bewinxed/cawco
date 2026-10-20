@@ -8,7 +8,8 @@
    * zoom, tools and dots). The writer revises a page and the graph follows
    * it; the person's drags save their places on release, into each page's
    * artifact. A press on a card opens its page scrolled to it. Fitted to the
-   * canvas once, and again when the cards come or go.
+   * canvas once, and again when the cards come or go, never below the zoom
+   * at which a card's name is 10px: a larger graph is panned.
    */
   import "#lib/vendor-css/xyflow.css";
   import type { DecisionGraph as Graph } from "@cawco/core/decisions";
@@ -54,7 +55,20 @@
   let edges = $state.raw<Edge[]>([]);
   let zoom = $state(1);
   let mounted = $state(false);
+  /**
+   * The least zoom: a card's name (the label role) stays 10px, so the fit,
+   * opening or asked for, goes down only that far and the reader pans past
+   * it (DESIGN.md L602, meta is the floor; 10px the readable floor).
+   */
+  const READABLE_PX = 10;
+  let floor = $state<number>(ZOOM.minZoom);
   onMount(() => {
+    const root = getComputedStyle(document.documentElement);
+    const rem = Number.parseFloat(root.fontSize);
+    const label =
+      Number.parseFloat(root.getPropertyValue("--text-label")) * rem;
+    floor =
+      label > 0 ? Math.min(FIT.maxZoom, READABLE_PX / label) : ZOOM.minZoom;
     mounted = true;
   });
 
@@ -176,8 +190,9 @@
       {edgeTypes}
       elementsSelectable={false}
       fitView
-      fitViewOptions={FIT}
-      {...ZOOM}
+      fitViewOptions={{ ...FIT, minZoom: floor }}
+      maxZoom={ZOOM.maxZoom}
+      minZoom={floor}
       nodesConnectable={false}
       nodesDraggable
       {nodeTypes}

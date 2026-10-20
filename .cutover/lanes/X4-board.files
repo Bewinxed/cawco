@@ -136,3 +136,6 @@ design/tokens/cawco.tokens.json
 packages/core/src/words/routines.ts
 packages/hub/skills/decision-page/kit/tokens.css
 apps/dashboard/src/lib/cawco/usage.ts
+apps/dashboard/src/routes/project/[id]/view/[name]/+page.svelte
+apps/dashboard/src/lib/cawco/usage/bar-place.ts
+apps/dashboard/src/lib/cawco/routines/ScheduleStrip.svelte

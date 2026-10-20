@@ -64,6 +64,9 @@
     runRoutineNow,
     updateRoutine,
   } from "#lib/cawco/routines/routines-api.js";
+  import ScheduleStrip, {
+    scheduleRuns,
+  } from "#lib/cawco/routines/ScheduleStrip.svelte";
   import { exactOf, scheduleOf, whenOf } from "#lib/cawco/routines/schedule.js";
   import { since } from "#lib/cawco/rules.js";
   import { threadHref } from "#lib/cawco/thread-tabs.js";
@@ -218,6 +221,15 @@
       void read();
     }, RUN_READ_MS);
     return () => clearInterval(tick);
+  });
+
+  /** The schedule strips' now: it moves on with the minute. */
+  let now = $state(Date.now());
+  $effect(() => {
+    const minute = setInterval(() => {
+      now = Date.now();
+    }, 60_000);
+    return () => clearInterval(minute);
   });
 
   // --- the three blocks: their counts and what waits on you -----------------------
@@ -763,14 +775,34 @@
                 >{routine.name}</span
               >
             </Collapsible.Trigger>
+            {@const drawn =
+              scheduleRuns(routine.cron, routine.timeZone, now) !== null}
+            {#if drawn}
+              <!-- Its schedule drawn on the line (DESIGN.md, The Show Don't
+                   Tell Rule); the words are the strip's name. -->
+              <span class="block pt-space-1 pb-space-row">
+                <ScheduleStrip
+                  compact
+                  cron={routine.cron}
+                  label={line.words}
+                  {now}
+                  paused={!routine.enabled}
+                  zone={routine.timeZone}
+                />
+              </span>
+            {/if}
             <span
               data-slot="sub"
               class="block truncate type-meta text-ink-muted"
               title={line.title}
             >
-              <span data-slot="sub-words">{line.words}</span>
+              {#if !drawn}
+                <span data-slot="sub-words">{line.words}</span>
+              {/if}
               {#if line.off}
-                <span class="text-status-attn-ink">· {line.off}</span>
+                <span class="text-status-attn-ink"
+                  >{drawn ? line.off : `· ${line.off}`}</span
+                >
               {/if}
               <!-- On a narrow ledger, Last and Next in the same order. -->
               <span
