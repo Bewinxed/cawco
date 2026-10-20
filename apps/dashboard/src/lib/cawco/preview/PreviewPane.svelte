@@ -2410,6 +2410,7 @@
     <Popover.Content
       data-pin-list-pop
       align="end"
+      collisionPadding={GUTTER}
       class="w-(--pin-list-w)"
       gap="none"
       height="room"

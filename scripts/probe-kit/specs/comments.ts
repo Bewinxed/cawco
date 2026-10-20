@@ -3704,28 +3704,30 @@ const panelRead = async (screen: Page) => {
 type PanelCheck = (what: string, ok: boolean, detail: unknown) => void;
 
 /** The panel at rest on Open: its width beside or stacked, its rows, its cut, nothing spilling, its surface and buttons. Answers whether it stacks. */
-const panelRestChecks = async (screen: Page, check: PanelCheck) => {
+const panelRestChecks = async (
+  screen: Page,
+  check: PanelCheck,
+  layout: "stacked" | "beside"
+) => {
   await still(screen);
   const rest = await panelRead(screen);
   const rows = await panelRows(screen);
   const spills = await panelSpills(screen);
-  const w = rest.room?.w ?? 0;
-  const { min, max, share, card: cardMin } = rest.tokens;
-  const beside = Math.min(Math.max(min, w * share), max);
-  const threshold = beside + 8 + cardMin + 16;
-  const stacked = w < threshold;
-  const want = stacked ? w - 16 : beside;
+  const { min } = rest.tokens;
+  const p = rest.pop;
+  const r = rest.room;
+  // Stacked, the panel spans the well less its two gutters; beside, it hangs
+  // at the well's right and leaves the room beside it to the card.
+  const stands =
+    !!(p && r) &&
+    Math.abs(p.x + p.w - (r.x + r.w - 8)) <= 1 &&
+    (layout === "stacked" ? Math.abs(p.x - (r.x + 8)) <= 1 : p.x > r.x + 8 + 1);
   check(
-    `the panel is ${stacked ? "the well less two gutters (stacked)" : "its share of the well between its floor and ceiling (beside)"}: well ${w}, beside threshold ${threshold}`,
-    !!rest.pop && Math.abs(rest.pop.w - want) <= 1,
-    {
-      well: w,
-      threshold,
-      stacked,
-      want,
-      panel: rest.pop?.w,
-      tokens: rest.tokens,
-    }
+    layout === "stacked"
+      ? "stacked: the panel spans the well less its two gutters"
+      : "beside: the panel hangs at the well's right, the room beside it left to the card",
+    stands,
+    { panel: p, well: r }
   );
   check(
     "every row is one button holding none, a gone pin's too",
@@ -3765,7 +3767,6 @@ const panelRestChecks = async (screen: Page, check: PanelCheck) => {
     rest.panelButtons.every((b) => b.kind !== "outline"),
     rest.panelButtons
   );
-  return stacked;
 };
 
 const closeCard = async (screen: Page, wait: number) => {
@@ -4021,7 +4022,13 @@ const rowStateChecks = async (
   );
 };
 
-const panelLeg = async (on: On, screen: Page, frame: Frame, name: string) => {
+const panelLeg = async (
+  on: On,
+  screen: Page,
+  frame: Frame,
+  name: string,
+  layout: "stacked" | "beside"
+) => {
   const check: PanelCheck = (what, ok, detail) =>
     on.kit.check(`k (${name}): ${what}`, ok, JSON.stringify(detail));
   const comments = screen.locator(`${PANE_SEL} button[data-slot="comments"]`);
@@ -4037,7 +4044,8 @@ const panelLeg = async (on: On, screen: Page, frame: Frame, name: string) => {
     .waitFor({ timeout: 15_000 })
     .catch(() => undefined);
   await settle(screen, 600);
-  const stacked = await panelRestChecks(screen, check);
+  await panelRestChecks(screen, check, layout);
+  const stacked = layout === "stacked";
   if (name === "1440 default split") {
     await rowStateChecks(on, screen, list, `${name}, light`);
   }
@@ -4205,14 +4213,15 @@ const panelChecks = async (on: On) => {
     await collapse.click();
     await settle(on.page, 800);
   }
-  await panelLeg(on, on.page, frame, "1440 default split");
+  // The default split's well is under beside's room: the card rises as the foot sheet.
+  await panelLeg(on, on.page, frame, "1440 default split", "stacked");
   const expand = on.page
     .locator(PANE_SEL)
     .getByRole("button", { name: "Expand", exact: true });
   if ((await expand.count()) === 1) {
     await expand.click();
     await settle(on.page, 800);
-    await panelLeg(on, on.page, frame, "1440 expanded");
+    await panelLeg(on, on.page, frame, "1440 expanded", "beside");
     await on.page.keyboard.press("Escape");
     await settle(on.page, 600);
   } else {
@@ -4272,7 +4281,7 @@ const panelChecks = async (on: On) => {
     ).catch(() => null);
     if (shown) {
       await settle(screen, 600);
-      await panelLeg(on, screen, shown, name);
+      await panelLeg(on, screen, shown, name, "stacked");
     } else {
       on.kit.check(
         `k (${name}): the panel page in the pane`,
