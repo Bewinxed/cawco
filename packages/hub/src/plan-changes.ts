@@ -78,8 +78,13 @@ export interface PlanChangesDeps {
   goOnFrom: (row: InstanceRow, opening: string) => Promise<string>;
   lifetime: HubLifetimeShape;
   plans: Plans;
-  /** Whether the send under this uuid failed (its record says so). */
-  sendFailed: (uuid: string) => boolean;
+  /**
+   * Whether the send under this uuid was never read: still pending, or
+   * failed. Asked as a session's conversation is found gone, before its
+   * pending sends are failed (server.ts `settlePending` asks its machine
+   * first), so a pending one counts: it can no longer be read.
+   */
+  sendUnread: (uuid: string) => boolean;
   /** The person's words to a session, through the one send path (`PLAN_ORIGIN`). */
   tell: (instanceId: string, text: string) => PlanTold;
   /** The person's words to a project's Caw (caw.ts `wakeOnce`, by you): undefined once he has them, else why not. */
@@ -363,9 +368,9 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
 
     /**
      * `instanceId` cannot go on: starting it found its conversation gone,
-     * and what it was sent failed. The changes whose message failed so go
-     * on to a new session from it, as a change to a session known to have
-     * ended does.
+     * so what it was sent and never read never will be. The changes whose
+     * message it never read go on to a new session from it, as a change to
+     * a session known to have ended does.
      */
     cannotGoOn(instanceId: string, reason: string): void {
       const key = receiverKey({ kind: "session", instanceId });
@@ -373,7 +378,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
         inOrder(key, async () => {
           const rows = db
             .sentPlanChanges(key)
-            .filter((row) => row.sentUuid && deps.sendFailed(row.sentUuid));
+            .filter((row) => row.sentUuid && deps.sendUnread(row.sentUuid));
           if (rows.length === 0) {
             return;
           }

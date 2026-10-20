@@ -39,6 +39,8 @@ const TODO = "mcp__cawco__todo_write";
 /** OpenCode's Code Mode tool, which runs MCP tools from a script. */
 const CODE_MODE = "execute";
 const MARK = /PROBE-PLAN-(claude|opencode|pi)-[a-z]+/g;
+/** A follower's opening, which carries no mark: it names the session it goes on from. */
+const GOES_ON_FROM = /“Plan (claude|opencode|pi)” \([0-9a-f]{8}\) cannot go on/;
 const PERSON_CHANGED = "The person changed your plan";
 const CARD = "color";
 
@@ -67,11 +69,14 @@ const call = (name: string, input: object): Reply => ({
   tool: { name, input },
 });
 
-/** `todo_write` as the harness offers it: declared, in Code Mode's catalog, or behind a search. */
+/** `todo_write` as the harness offers it: declared (pi under its own name), in Code Mode's catalog, or behind a search. */
 const todoCall = (request: Seen, act: Act): Reply => {
-  if (request.toolNames.includes(TODO)) {
+  const declared = request.toolNames.find((name) =>
+    [TODO, "todo_write", "cawco_todo_write"].includes(name)
+  );
+  if (declared) {
     act.called = true;
-    return call(TODO, act.input);
+    return call(declared, act.input);
   }
   if (request.toolNames.includes(CODE_MODE)) {
     act.called = true;
@@ -95,8 +100,8 @@ const respond = async (request: Seen): Promise<Reply> => {
   if (!request.tools) {
     return text("Probe title");
   }
-  const harness = [...request.all.matchAll(MARK)].at(-1)?.[1] as
-    Harness | undefined;
+  const harness = ([...request.all.matchAll(MARK)].at(-1)?.[1] ??
+    GOES_ON_FROM.exec(request.all)?.[1]) as Harness | undefined;
   if (!harness) {
     return text("ok");
   }

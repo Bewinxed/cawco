@@ -21640,7 +21640,10 @@ export const createServer = (
     goOnFrom,
     lifetime,
     plans,
-    sendFailed: (uuid) => db.sendRecord(uuid)?.state === "failed",
+    sendUnread: (uuid) => {
+      const state = db.sendRecord(uuid)?.state;
+      return state === "pending" || state === "failed";
+    },
     tell: tellPlan,
     wakeCaw: async (projectId, text) => {
       const woke = await caw.wakeOnce(projectId, { by: "you", text });
