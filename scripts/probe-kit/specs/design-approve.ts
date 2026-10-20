@@ -1,10 +1,11 @@
 /**
  * A design task's review and its Approve (design-system plan §2, slice 3;
  * owner, 2026-10-16: "the agent who puts the task should be the one who
- * decides what happens to it after i approve it"). One path: the builder's
- * commits land as any work item's do, Approve is your move out of the
- * review stage, and it is refused, with its line, while the result's
- * design/ is not committed. On a scratch fleet (real hub, agent and
+ * decides what happens to it after i approve it"). One path: design_write
+ * writes design/ into the builder's clone and the builder commits it with
+ * its work (the design-system skill's hand-in), its commits land as any work
+ * item's do, and Approve is your move out of the review stage, reading
+ * design/ in the builder's workspace. On a scratch fleet (real hub, agent and
  * sessiond; Claude Code against the mock model) and the built dashboard at
  * the desk. Its attempts cut workspaces, so it runs where a boundary can
  * start (a `host` check), not inside another one.
@@ -16,9 +17,12 @@
  * mock model, writes design/ with `design_write`.
  *
  * 1. T1 (lands none): the builder writes design/, shows its Foundations
- *    page, hands it in and never commits; the task waits in review.
- *    Approve is refused (409) with the line naming design/ uncommitted in
- *    the builder's workspace, and the task stays in review.
+ *    page and hands it in. Its first finish_item, design/ uncommitted, is
+ *    refused naming design/ (work-items.ts `leftoversIn`: a clone may hold
+ *    nothing outside its commits when its item ends); it commits design/,
+ *    its second ends the item done, and the task waits in review with every
+ *    file design_write wrote committed in the builder's workspace, where
+ *    Approve reads design/ (design-system.ts `approvalRefusal`).
  * 2. Reject with a pin: a pin on T1's Foundations page, then Send back (a
  *    comment and the move back to ready, as the review does). The pin's
  *    words reach the builder's session as one message.
@@ -85,6 +89,17 @@ const T1 = "Harbour system draft PROBE-T1";
 const T2 = "Harbour system PROBE-T2";
 const T3 = "Harbour home screen PROBE-T3";
 const COMMIT = "Design system: Harbour";
+/** T1's commit of its draft, after its first finish_item is refused. */
+const DRAFT = "Design system draft: Harbour";
+/** What design/ holds that no commit has, as Approve reads it (design-system.ts `UNCOMMITTED`). */
+const DESIGN_STATUS = [
+  "git",
+  "status",
+  "--porcelain",
+  "--untracked-files=all",
+  "--",
+  "design",
+];
 /** The two proposals' reasons: the first is denied, the second approved. */
 const WHY_DENIED = "A near-black ink, PROBE-DENIED";
 const WHY_APPROVED = "A softer ink for long reading, PROBE-APPROVED";
@@ -225,11 +240,27 @@ const attempts = new Map<string, Call[]>([
           ],
         }),
       },
+      // Refused while design/ is in no commit: the builder commits it and
+      // hands in again, as the refusal tells it to.
       {
         name: FINISH,
         input: {
           headline: "Drafted the system.",
           summary: "Drafted the system.",
+        },
+      },
+      {
+        name: BASH,
+        input: {
+          command: `git add design && git commit -qm '${DRAFT}'; echo "commit exit $?"; git status --porcelain`,
+          description: "Commit design/",
+        },
+      },
+      {
+        name: FINISH,
+        input: {
+          headline: "Drafted the system.",
+          summary: "Drafted the system, committed.",
         },
       },
     ],
@@ -575,10 +606,6 @@ const respond = (request: Seen): Reply => {
   }
   return next(request, [...request.all.matchAll(TURN)].at(-1)?.[0]);
 };
-
-/** The approval's refusal (hub design-system.ts `uncommittedLine`): its named paths, and how many more. */
-const UNCOMMITTED_LINE =
-  /design\/ isn't committed in the builder's workspace: (.+?)(?: and (\d+) more)?\. Send it back/;
 
 /** The paths a design_write answered it wrote, from among a turn's tool answers. */
 const writtenBy = (said: string[]): string[] => {
@@ -967,27 +994,36 @@ const run = async (kit: Kit) => {
     );
   };
 
-  // ── 1. Approve with design/ uncommitted is refused with its line ─────
+  // ── 1. The draft ends done once design/ is committed where Approve reads it ─
   const t1 = await reviewed("T1", T1, "none");
-  const refused = await approve(t1);
-  const refusal = await refused.text();
   const stays = await read(t1);
+  const t1Said = answers.get(T1) ?? [];
+  const refusedFinish =
+    t1Said.find((one) => one.includes("Not finished:")) ?? "";
+  const [draft] = fleet.query<{ error: string | null; state: string }>(
+    "SELECT state, error FROM work_items WHERE project_id = ? AND task_id = ? ORDER BY created_at DESC",
+    project.id,
+    t1
+  );
+  const draftTree = workspaceOf(t1);
+  const git = async (args: string[]) =>
+    (await Bun.$`git ${args}`.cwd(draftTree).quiet().nothrow()).text().trim();
   // What the builder's design_write wrote (its answer's `written`): every
-  // path the line names is one of them, and its named paths and "N more"
-  // count all of them, as none was committed.
-  const written = writtenBy(answers.get(T1) ?? []);
-  const named = UNCOMMITTED_LINE.exec(refusal);
-  const paths = named?.[1]?.split(", ") ?? [];
-  const more = Number(named?.[2] ?? 0);
+  // path is in the builder's commit, and design/ holds nothing else.
+  const written = writtenBy(t1Said);
+  const committed = (await git(["ls-files", "--", "design"])).split("\n");
+  const uncommitted = await git(DESIGN_STATUS);
+  const draftCommit = await git(["log", "-1", "--format=%s", "--", "design"]);
   kit.check(
-    "1: Approve with design/ uncommitted is refused with its line, naming the builder's uncommitted files, and the task stays in review",
-    refused.status === 409 &&
+    "1: the draft's first finish_item, design/ uncommitted, is refused naming design/; it commits, its second ends the item done, and the task waits in review with every file design_write wrote committed in the builder's workspace, where Approve reads design/",
+    refusedFinish.includes("?? design/") &&
+      draft?.state === "done" &&
+      stays.stage === "review" &&
       written.length > 0 &&
-      paths.length > 0 &&
-      paths.every((path) => written.includes(path)) &&
-      paths.length + more === written.length &&
-      stays.stage === "review",
-    `${refused.status} “${refusal.slice(0, 300)}”; named ${paths.length} + ${more} more of ${written.length} written (${written.join(", ")}); stage ${stays.stage}`
+      written.every((path) => committed.includes(path)) &&
+      uncommitted === "" &&
+      draftCommit === DRAFT,
+    `refused “${refusedFinish.slice(0, 200)}”; item ${draft?.state} “${draft?.error?.slice(0, 120) ?? ""}”; stage ${stays.stage}; ${written.filter((path) => committed.includes(path)).length} of ${written.length} written committed (${written.join(", ")}); design/ uncommitted “${uncommitted}”; last design commit “${draftCommit}”`
   );
 
   // ── 2. Reject with a pin reaches the builder's session as one message ─
