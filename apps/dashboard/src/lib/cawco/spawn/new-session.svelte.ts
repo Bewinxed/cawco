@@ -1,9 +1,13 @@
 /**
- * The New Session dialog: whether it is open, and where it starts. The Shell
- * mounts the one dialog; every opener (the rail's rows, the phone's Start
- * session, a `?spawn=` link) only asks for it, so it is there whichever rail
- * is mounted (the wide screen's, the drawer's) and when neither is, and what
- * is typed in it outlives the place it was opened from.
+ * The New Session form: whether it is open, where it starts, and the trigger
+ * it was opened from. The Shell mounts the one form; every opener (the rail's
+ * rows, the phone's Start session, a `?spawn=` link, the session strip's "+",
+ * a project's Spin off) only asks for it, so it is there whichever rail is
+ * mounted (the wide screen's, the drawer's) and when neither is, and what is
+ * typed in it outlives the place it was opened from. Asked with a trigger,
+ * it opens as a popover at that trigger (NewSessionPopover); without one, as
+ * the centred dialog (NewSessionDialog). Under 640px both are its bottom
+ * sheet.
  */
 import type { SendExtras } from "../client.svelte";
 
@@ -16,18 +20,31 @@ export interface SpawnPrefill {
    * session refused, picked up by a new one.
    */
   prompt?: { text: string; extras: SendExtras };
+  /** It opens as a spin-off (a scratch session), as a project's Spin off asks. */
+  spinOff?: boolean;
 }
 
 export const spawning = $state<{
   open: boolean;
   prefill: SpawnPrefill | undefined;
+  /** The trigger it was opened from, which it hangs from; null for the dialog. */
+  anchor: HTMLElement | null;
 }>({
   open: false,
   prefill: undefined,
+  anchor: null,
 });
 
-/** Opens the New Session dialog, on `prefill`'s machine, folder or project when given. */
-export function newSession(prefill?: SpawnPrefill): void {
+/**
+ * Opens the New Session form, on `prefill`'s machine, folder or project when
+ * given: at `anchor`, the trigger pressed, when there is one; the dialog
+ * otherwise.
+ */
+export function newSession(
+  prefill?: SpawnPrefill,
+  anchor: HTMLElement | null = null
+): void {
   spawning.prefill = prefill;
+  spawning.anchor = anchor;
   spawning.open = true;
 }

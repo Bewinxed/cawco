@@ -202,7 +202,7 @@ apps/dashboard/src/lib/cawco/spawn/LocationChip.svelte
 apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte
 apps/dashboard/src/lib/cawco/spawn/MachinesChip.svelte
 apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte
-apps/dashboard/src/lib/cawco/spawn/NewSessionDialog.svelte
+apps/dashboard/src/lib/cawco/spawn/NewSessionForm.svelte
 apps/dashboard/src/lib/cawco/spawn/PermissionSection.svelte
 apps/dashboard/src/lib/cawco/spawn/ProjectChip.svelte
 apps/dashboard/src/lib/cawco/spawn/PromptEditor.svelte
