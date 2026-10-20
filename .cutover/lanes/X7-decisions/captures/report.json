@@ -1,0 +1,648 @@
+{
+  "1440-light": {
+    "files": [
+      {
+        "path": "/home/bewinxed/.cawco/tmp/ee8458a4/x7-captures/1440-light-open-1.png",
+        "bytes": 897082,
+        "rows": {
+          "from": 0,
+          "to": 4004
+        }
+      },
+      {
+        "path": "/home/bewinxed/.cawco/tmp/ee8458a4/x7-captures/1440-light-open-2.png",
+        "bytes": 852511,
+        "rows": {
+          "from": 4004,
+          "to": 8060
+        }
+      },
+      {
+        "path": "/home/bewinxed/.cawco/tmp/ee8458a4/x7-captures/1440-light-decided-1.png",
+        "bytes": 975437,
+        "rows": {
+          "from": 0,
+          "to": 4691
+        }
+      },
+      {
+        "path": "/home/bewinxed/.cawco/tmp/ee8458a4/x7-captures/1440-light-decided-2.png",
+        "bytes": 630187,
+        "rows": {
+          "from": 4691,
+          "to": 7597
+        }
+      }
+    ],
+    "geometry": {
+      "frame": {
+        "main": {
+          "x": 260,
+          "w": 920,
+          "h": 8060
+        },
+        "view": 1440,
+        "padding": "21px 14px 64px"
+      },
+      "hero": {
+        "h1": "500 20px / 24px \"Figtree Variable\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+        "align": "start",
+        "caw": {
+          "x": 274,
+          "w": 72,
+          "h": 79
+        }
+      },
+      "section": {
+        "font": "500 13px / 16.9px \"Figtree Variable\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+        "color": "oklch(0.495 0.014 74)"
+      },
+      "cards": [
+        {
+          "id": "stack",
+          "x": 274,
+          "w": 892,
+          "h": 512,
+          "radius": "16px",
+          "shadow": "oklch(0.295 0.01 70 / 0.09) 0px 1px 3px 0px, oklch(0.295 0.0"
+        },
+        {
+          "id": "note",
+          "x": 274,
+          "w": 892,
+          "h": 4455,
+          "radius": "16px",
+          "shadow": "oklch(0.295 0.01 70 / 0.09) 0px 1px 3px 0px, oklch(0.295 0.0"
+        },
+        {
+          "id": "path",
+          "x": 274,
+          "w": 892,
+          "h": 1199,
+          "radius": "16px",
+          "shadow": "oklch(0.295 0.01 70 / 0.09) 0px 1px 3px 0px, oklch(0.295 0.0"
+        },
+        {
+          "id": "look",
+          "x": 274,
+          "w": 892,
+          "h": 1175,
+          "radius": "16px",
+          "shadow": "oklch(0.295 0.01 70 / 0.09) 0px 1px 3px 0px, oklch(0.295 0.0"
+        },
+        {
+          "id": "radius",
+          "x": 274,
+          "w": 892,
+          "h": 369,
+          "radius": "16px",
+          "shadow": "oklch(0.295 0.01 70 / 0.09) 0px 1px 3px 0px, oklch(0.295 0.0"
+        }
+      ],
+      "diagrams": [
+        {
+          "caption": "The short path Open as canvas",
+          "panel": {
+            "x": 293,
+            "w": 460,
+            "h": 126
+          },
+          "svg": {
+            "x": 304,
+            "w": 342
+          },
+          "viewBoxW": 342,
+          "scale": 1,
+          "fontMin": 16,
+          "drawnMinPx": 16,
+          "scrolls": false,
+          "svgStyle": "100% 342px"
+        },
+        {
+          "caption": "The long path Open as canvas",
+          "panel": {
+            "x": 764,
+            "w": 383,
+            "h": 894
+          },
+          "svg": {
+            "x": 775,
+            "w": 216
+          },
+          "viewBoxW": 216,
+          "scale": 1,
+          "fontMin": 16,
+          "drawnMinPx": 16,
+          "scrolls": false,
+          "svgStyle": "100% 216px"
+        },
+        {
+          "caption": "Who answers Open as canvas",
+          "panel": {
+            "x": 293,
+            "w": 854,
+            "h": 266
+          },
+          "svg": {
+            "x": 304,
+            "w": 213
+          },
+          "viewBoxW": 213,
+          "scale": 1,
+          "fontMin": 14,
+          "drawnMinPx": 14,
+          "scrolls": false,
+          "svgStyle": "100% 213px"
+        }
+      ],
+      "dials": true,
+      "gone": [
+        "The picture hero.png is not on this page.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "The canvas this card showed is gone."
+      ],
+      "options": [
+        [
+          449,
+          423
+        ],
+        [
+          3910,
+          3936
+        ]
+      ]
+    },
+    "pick": {
+      "scrollBefore": 5298,
+      "before": [
+        {
+          "id": "stack",
+          "decided": true,
+          "top": 166,
+          "h": 49,
+          "picked": [
+            "astro"
+          ],
+          "anims": 0
+        },
+        {
+          "id": "note",
+          "decided": false,
+          "top": 229,
+          "h": 4455,
+          "picked": [],
+          "anims": 0
+        },
+        {
+          "id": "path",
+          "decided": false,
+          "top": 4697,
+          "h": 1199,
+          "picked": [],
+          "anims": 0
+        },
+        {
+          "id": "look",
+          "decided": false,
+          "top": 5911,
+          "h": 1175,
+          "picked": [],
+          "anims": 0
+        },
+        {
+          "id": "radius",
+          "decided": false,
+          "top": 7107,
+          "h": 369,
+          "picked": [],
+          "anims": 0
+        }
+      ],
+      "after1": [
+        {
+          "id": "stack",
+          "decided": true,
+          "top": 166,
+          "h": 49,
+          "picked": [
+            "astro"
+          ],
+          "anims": 0
+        },
+        {
+          "id": "note",
+          "decided": false,
+          "top": 229,
+          "h": 4455,
+          "picked": [],
+          "anims": 0
+        },
+        {
+          "id": "path",
+          "decided": true,
+          "top": 4697,
+          "h": 49,
+          "picked": [
+            "direct"
+          ],
+          "anims": 0
+        },
+        {
+          "id": "look",
+          "decided": false,
+          "top": 4761,
+          "h": 1175,
+          "picked": [],
+          "anims": 0
+        },
+        {
+          "id": "radius",
+          "decided": false,
+          "top": 5957,
+          "h": 369,
+          "picked": [],
+          "anims": 0
+        }
+      ],
+      "after400": [
+        {
+          "id": "stack",
+          "decided": true,
+          "top": 166,
+          "h": 49,
+          "picked": [
+            "astro"
+          ],
+          "anims": 0
+        },
+        {
+          "id": "note",
+          "decided": false,
+          "top": 229,
+          "h": 4455,
+          "picked": [],
+          "anims": 0
+        },
+        {
+          "id": "path",
+          "decided": true,
+          "top": 4697,
+          "h": 49,
+          "picked": [
+            "direct"
+          ],
+          "anims": 0
+        },
+        {
+          "id": "look",
+          "decided": false,
+          "top": 4761,
+          "h": 1175,
+          "picked": [],
+          "anims": 0
+        },
+        {
+          "id": "radius",
+          "decided": false,
+          "top": 5957,
+          "h": 369,
+          "picked": [],
+          "anims": 0
+        }
+      ],
+      "scrollAfter": {
+        "y": 4275,
+        "focus": "<button class=\"dp-change\" type=\"button\">Change</button>"
+      }
+    },
+    "errors": []
+  },
+  "390-dark": {
+    "files": [
+      {
+        "path": "/home/bewinxed/.cawco/tmp/ee8458a4/x7-captures/390-dark-open-1.png",
+        "bytes": 928234,
+        "rows": {
+          "from": 0,
+          "to": 5614
+        }
+      },
+      {
+        "path": "/home/bewinxed/.cawco/tmp/ee8458a4/x7-captures/390-dark-open-2.png",
+        "bytes": 554775,
+        "rows": {
+          "from": 5614,
+          "to": 9124
+        }
+      },
+      {
+        "path": "/home/bewinxed/.cawco/tmp/ee8458a4/x7-captures/390-dark-decided-1.png",
+        "bytes": 1027993,
+        "rows": {
+          "from": 0,
+          "to": 6675
+        }
+      },
+      {
+        "path": "/home/bewinxed/.cawco/tmp/ee8458a4/x7-captures/390-dark-decided-2.png",
+        "bytes": 318997,
+        "rows": {
+          "from": 6675,
+          "to": 8511
+        }
+      }
+    ],
+    "geometry": {
+      "frame": {
+        "main": {
+          "x": 0,
+          "w": 390,
+          "h": 9124
+        },
+        "view": 390,
+        "padding": "21px 14px 64px"
+      },
+      "hero": {
+        "h1": "500 18px / 21.6px \"Figtree Variable\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+        "align": "start",
+        "caw": {
+          "x": 14,
+          "w": 72,
+          "h": 79
+        }
+      },
+      "section": {
+        "font": "500 13px / 16.9px \"Figtree Variable\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+        "color": "oklch(0.778 0.012 78)"
+      },
+      "cards": [
+        {
+          "id": "stack",
+          "x": 14,
+          "w": 362,
+          "h": 690,
+          "radius": "16px",
+          "shadow": "oklch(0.184 0.004 70 / 0.55) 0px 1px 3px 0px, oklch(0.184 0."
+        },
+        {
+          "id": "note",
+          "x": 14,
+          "w": 362,
+          "h": 4686,
+          "radius": "16px",
+          "shadow": "oklch(0.184 0.004 70 / 0.55) 0px 1px 3px 0px, oklch(0.184 0."
+        },
+        {
+          "id": "path",
+          "x": 14,
+          "w": 362,
+          "h": 1662,
+          "radius": "16px",
+          "shadow": "oklch(0.184 0.004 70 / 0.55) 0px 1px 3px 0px, oklch(0.184 0."
+        },
+        {
+          "id": "look",
+          "x": 14,
+          "w": 362,
+          "h": 1218,
+          "radius": "16px",
+          "shadow": "oklch(0.184 0.004 70 / 0.55) 0px 1px 3px 0px, oklch(0.184 0."
+        },
+        {
+          "id": "radius",
+          "x": 14,
+          "w": 362,
+          "h": 460,
+          "radius": "16px",
+          "shadow": "oklch(0.184 0.004 70 / 0.55) 0px 1px 3px 0px, oklch(0.184 0."
+        }
+      ],
+      "diagrams": [
+        {
+          "caption": "The short path Open as canvas",
+          "panel": {
+            "x": 33,
+            "w": 324,
+            "h": 318
+          },
+          "svg": {
+            "x": 44,
+            "w": 106
+          },
+          "viewBoxW": 106,
+          "scale": 1,
+          "fontMin": 16,
+          "drawnMinPx": 16,
+          "scrolls": false,
+          "svgStyle": "100% 106px"
+        },
+        {
+          "caption": "The long path Open as canvas",
+          "panel": {
+            "x": 33,
+            "w": 324,
+            "h": 894
+          },
+          "svg": {
+            "x": 44,
+            "w": 216
+          },
+          "viewBoxW": 216,
+          "scale": 1,
+          "fontMin": 16,
+          "drawnMinPx": 16,
+          "scrolls": false,
+          "svgStyle": "100% 216px"
+        },
+        {
+          "caption": "Who answers Open as canvas",
+          "panel": {
+            "x": 33,
+            "w": 324,
+            "h": 266
+          },
+          "svg": {
+            "x": 44,
+            "w": 213
+          },
+          "viewBoxW": 213,
+          "scale": 1,
+          "fontMin": 14,
+          "drawnMinPx": 14,
+          "scrolls": false,
+          "svgStyle": "100% 213px"
+        }
+      ],
+      "dials": true,
+      "gone": [
+        "The picture hero.png is not on this page.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "The canvas this card showed is gone."
+      ],
+      "options": [
+        [
+          567,
+          669
+        ],
+        [
+          4178,
+          5336
+        ]
+      ]
+    },
+    "pick": {
+      "scrollBefore": 6004,
+      "before": [
+        {
+          "id": "stack",
+          "decided": true,
+          "top": 215,
+          "h": 77,
+          "picked": [
+            "astro"
+          ],
+          "anims": 0
+        },
+        {
+          "id": "note",
+          "decided": false,
+          "top": 306,
+          "h": 4686,
+          "picked": [],
+          "anims": 0
+        },
+        {
+          "id": "path",
+          "decided": false,
+          "top": 5007,
+          "h": 1662,
+          "picked": [],
+          "anims": 0
+        },
+        {
+          "id": "look",
+          "decided": false,
+          "top": 6683,
+          "h": 1218,
+          "picked": [],
+          "anims": 0
+        },
+        {
+          "id": "radius",
+          "decided": false,
+          "top": 7922,
+          "h": 460,
+          "picked": [],
+          "anims": 0
+        }
+      ],
+      "after1": [
+        {
+          "id": "stack",
+          "decided": true,
+          "top": 215,
+          "h": 77,
+          "picked": [
+            "astro"
+          ],
+          "anims": 0
+        },
+        {
+          "id": "note",
+          "decided": false,
+          "top": 306,
+          "h": 4686,
+          "picked": [],
+          "anims": 0
+        },
+        {
+          "id": "path",
+          "decided": true,
+          "top": 5007,
+          "h": 98,
+          "picked": [
+            "direct"
+          ],
+          "anims": 0
+        },
+        {
+          "id": "look",
+          "decided": false,
+          "top": 5119,
+          "h": 1218,
+          "picked": [],
+          "anims": 0
+        },
+        {
+          "id": "radius",
+          "decided": false,
+          "top": 6358,
+          "h": 460,
+          "picked": [],
+          "anims": 0
+        }
+      ],
+      "after400": [
+        {
+          "id": "stack",
+          "decided": true,
+          "top": 215,
+          "h": 77,
+          "picked": [
+            "astro"
+          ],
+          "anims": 0
+        },
+        {
+          "id": "note",
+          "decided": false,
+          "top": 306,
+          "h": 4686,
+          "picked": [],
+          "anims": 0
+        },
+        {
+          "id": "path",
+          "decided": true,
+          "top": 5007,
+          "h": 98,
+          "picked": [
+            "direct"
+          ],
+          "anims": 0
+        },
+        {
+          "id": "look",
+          "decided": false,
+          "top": 5119,
+          "h": 1218,
+          "picked": [],
+          "anims": 0
+        },
+        {
+          "id": "radius",
+          "decided": false,
+          "top": 6358,
+          "h": 460,
+          "picked": [],
+          "anims": 0
+        }
+      ],
+      "scrollAfter": {
+        "y": 4661,
+        "focus": "<button class=\"dp-change\" type=\"button\">Change</button>"
+      }
+    },
+    "errors": []
+  }
+}
