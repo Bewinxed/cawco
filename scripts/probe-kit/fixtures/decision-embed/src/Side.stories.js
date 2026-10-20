@@ -19,3 +19,20 @@ export const Wide = {
   },
   parameters: { viewport: 1400 },
 };
+
+/** The side card at 480px, two of them compared side by side in one card: wider than either column on a desk, so each is scaled to its column, both at one scale when the columns are equal. */
+export const Week = {
+  args: {
+    title: "Spend this week",
+    lines: ["Monday: 4.20 USD", "Tuesday: 3.10 USD", "Wednesday: 5.75 USD"],
+  },
+  parameters: { viewport: 480 },
+};
+
+export const Month = {
+  args: {
+    title: "Spend this month",
+    lines: ["Week one: 31.40 USD", "Week two: 27.90 USD", "Week three: 35.05 USD"],
+  },
+  parameters: { viewport: 480 },
+};

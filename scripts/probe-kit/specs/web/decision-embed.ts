@@ -42,6 +42,9 @@
  * 6b. Recommended stands over its option's label, and at 1440 the options
  *    side by side share their rows (page.css .dp-optcell): every label of a
  *    row starts on one line, Recommended or not, within 0.5px.
+ * 6c. A card's two media compared side by side (the third card's two
+ *    months) draw at one scale, in equal columns; a diagram narrower than
+ *    its panel stands centred in it within 1px, as a narrow embed does.
  * 7. A card's three media stand in one column, each at the card's full
  *    width.
  * 8. The page is as CawCo shows it: no offline notice, Send picks enabled,
@@ -169,7 +172,11 @@ const PREVIEWS: Record<
     shows: [...MONTHS, "Pinned"],
   },
   "The note alone": { files: [NOTE], stories: ["Pinned"], shows: ["Pinned"] },
-  "The side card": { files: [SIDE], stories: [], shows: ["Card", "Wide"] },
+  "The side card": {
+    files: [SIDE],
+    stories: [],
+    shows: ["Card", "Wide", "Week", "Month"],
+  },
   "The note": { files: [NOTE], stories: ["Pinned"], shows: ["Pinned"] },
   "January's lines": {
     files: [LEDGER],
@@ -183,12 +190,22 @@ const PREVIEWS: Record<
     shows: ["March", "January"],
   },
   "The sheet": { files: [SHEET], stories: [], shows: ["Drawer"] },
+  "This week's card": { files: [SIDE], stories: ["Week"], shows: ["Week"] },
+  "This month's card": {
+    files: [SIDE],
+    stories: ["Month"],
+    shows: ["Month"],
+  },
 };
+/** The side card's own width compared (its Week and Month stories): wider than either column on a desk. */
+const PAIR_W = 480;
+/** The third card's two media, compared side by side: one 480px card each, at one scale. */
+const PAIR = ["This week's card", "This month's card"];
 /** The second card's three media, by caption. */
 const TRIO = ["The side card", "The note", "January's lines"];
 
 const PROGRAM = [
-  `root = Decisions("The spend ledger", [ledger, side])`,
+  `root = Decisions("The spend ledger", [ledger, side, lead])`,
   `ledger = Decision("ledger", "Where does the pinned note stand?", [under, alone], "The ledger is long; the note is what a person acts on.", [book])`,
   `under = Option("under", "Under the ledger", "The note after every line.", false, [order], "A person scrolls past sixty lines to reach it.")`,
   `alone = Option("alone", "On its own", "The note in a card of its own.", true, [note], "The ledger loses its summary line.")`,
@@ -202,6 +219,12 @@ const PROGRAM = [
   `month1 = Preview("${MONTH_ID}", "January's lines", ["January"])`,
   `order = Preview("${MONTH_ID}", "March, then January", ["March", "January"])`,
   `sheet = Preview("${SHEET_ID}", "The sheet")`,
+  `lead = Decision("lead", "Which month opens the page?", [feb, apr], "Both months drawn side by side, at one scale.", [febv, aprv])`,
+  `feb = Option("feb", "February first", "The short month opens the page.", true, [flow], "March waits a scroll.")`,
+  `apr = Option("apr", "April first", "The quarter opens the page.", false, [], "February sits under it.")`,
+  `febv = Preview("${SIDE_ID}", "This week's card", ["Week"])`,
+  `aprv = Preview("${SIDE_ID}", "This month's card", ["Month"])`,
+  `flow = Diagram("flowchart TD\\nFebruary --> March", "The order it reads in")`,
 ].join("\n");
 
 /** The fixture copied to scratch and installed once: the project the stage draws. */
@@ -239,7 +262,25 @@ function readPage() {
         };
       }),
     }));
+  // Each diagram's drawing against its panel (Diagram.svelte .draw): its middle on the panel's.
+  const diagrams = [...document.querySelectorAll(".diagram .draw")].map(
+    (draw) => {
+      const panel = draw.getBoundingClientRect();
+      const drawn = draw.querySelector(":scope > svg")?.getBoundingClientRect();
+      return {
+        panel: Math.round(panel.width),
+        w: drawn ? Math.round(drawn.width) : 0,
+        off: drawn
+          ? Math.round(
+              Math.abs(drawn.left - panel.left - (panel.right - drawn.right)) *
+                100
+            ) / 200
+          : 99,
+      };
+    }
+  );
   return {
+    diagrams,
     offline: document.querySelector(".dp-offline")?.textContent?.trim() ?? "",
     send: { h: tall(send), disabled: send?.disabled ?? true },
     note: Math.min(
@@ -466,6 +507,24 @@ const spec: Spec = {
                 : scaled.length === 0),
             fitFaults.join("\n    ")
           );
+          // Two ways compared side by side (page.css .dp-show) stand in equal columns: one month each, drawn at one scale.
+          const pair = frames.filter((f) => PAIR.includes(f.caption));
+          const zooms = [...new Set(pair.map((f) => f.zoom))];
+          kit.check(
+            `${leg}: the two ways compared side by side draw at one scale (${pair.map((f) => `“${f.caption}” ${f.w}px at zoom ${f.zoom}`).join(", ")})`,
+            pair.length === PAIR.length &&
+              zooms.length === 1 &&
+              // Wider than its column on the desk: the scale is what the columns decide.
+              (view === "phone" ||
+                pair.every(
+                  (f) =>
+                    f.zoom < 1 &&
+                    Math.abs(f.w - Math.round(PAIR_W * f.zoom)) <= 1
+                )),
+            JSON.stringify(
+              pair.map((f) => ({ caption: f.caption, zoom: f.zoom }))
+            )
+          );
           const wides = frames.filter((f) => f.story === "Wide");
           const wideFaults = wides.flatMap((f) => {
             const own = Math.round(WIDE_W * f.zoom);
@@ -517,7 +576,7 @@ const spec: Spec = {
           );
           kit.check(
             `${leg}: a frame that scrolls sideways draws the house edge fade where more is hidden, none at either end (${fades.map((f) => `${f.story}, ${f.len}px: ${f.at.map((one) => `${one.place} ${one.start}px|${one.end}px`).join(", ")}`).join("; ")})`,
-            fades.length === wides.length &&
+            fades.length === frames.filter((f) => f.wide).length &&
               fades.length > 0 &&
               fadeFaults.length === 0,
             fadeFaults.join("\n    ")
@@ -548,6 +607,14 @@ const spec: Spec = {
             `${leg}: a card's three media stand in one column, each at the card's full width (${trio ? `${trio.items.map((one) => `${one.w}px at ${one.x}`).join(", ")} in ${trio.show}px` : "no card of three"})`,
             column,
             JSON.stringify(said.trio)
+          );
+          const astrayDiagrams = said.diagrams.filter((one) => one.off > 1);
+          kit.check(
+            `${leg}: a diagram narrower than its panel stands in its middle (${said.diagrams.map((one) => `${one.w}px in ${one.panel}px, ${one.off}px off`).join(", ")})`,
+            said.diagrams.length > 0 &&
+              said.diagrams.some((one) => one.w < one.panel - 2) &&
+              astrayDiagrams.length === 0,
+            JSON.stringify(astrayDiagrams)
           );
           const closed = said.options.filter(
             (one) => one.disabled || one.keycap === 0

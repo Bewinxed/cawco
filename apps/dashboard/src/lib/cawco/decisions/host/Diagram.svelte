@@ -137,6 +137,13 @@
     border-radius: var(--radius-md);
     background: var(--surface-raised);
   }
+  /* Centred narrow, scaled wide, as a component embed (canvas runtime.ts
+     fitToEmbed): a diagram narrower than its panel stands in its middle;
+     a wider one Pele shrinks to the panel (its svg's max-width: 100%). */
+  .draw > :global(svg) {
+    display: block;
+    margin-inline: auto;
+  }
   .foot {
     display: flex;
     flex-wrap: wrap;
