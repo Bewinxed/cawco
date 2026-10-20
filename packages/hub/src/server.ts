@@ -20330,6 +20330,7 @@ export const createServer = (
         routines.itemEnded(item);
         projectStarters.itemEnded(item);
         designVerify.itemEnded(item);
+        watch?.itemEnded(item);
       }),
     command: runOnMachine,
     machinePaused: (machineId) => machinePause.words(machineId),

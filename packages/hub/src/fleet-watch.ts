@@ -49,6 +49,7 @@ import {
   decisionWords,
   type Envelope,
   FLEET_WATCH_LIMITS,
+  FLEET_WATCH_WAITS,
   type FleetWatchNotice,
   type FleetWatchSignal,
   fleetWatchNudge,
@@ -69,6 +70,8 @@ import type { DbShape } from "./db";
 import { askJev, type JevAccess, jevAccess, jevUnanswered } from "./jev";
 import type { HubLifetimeShape } from "./lifetime";
 import { MEANING_THRESHOLD } from "./meaning";
+import { CAWCO_TOOL } from "./web-reads";
+import { isLive } from "./work-items";
 
 /** Triage runs at once, fleet-wide; the rest wait their turn. */
 const TRIAGE_MAX_RUNNING = 2;
@@ -131,6 +134,10 @@ const stable = (value: unknown): string => {
   }
   return value === undefined ? "" : JSON.stringify(value);
 };
+
+/** Whether a call is one of CawCo's designed waits (core `FLEET_WATCH_WAITS`): made again, it is the wait going on. */
+const designedWait = (name: string): boolean =>
+  CAWCO_TOOL.test(name) && FLEET_WATCH_WAITS.has(name.replace(CAWCO_TOOL, ""));
 
 /** A call's identity: its name and its input, the model's own `description` left out. */
 const callKey = (name: string, input: Record<string, unknown>): string => {
@@ -223,6 +230,7 @@ export interface FleetWatchDeps {
     DbShape,
     | "dropWatchNotice"
     | "fleetWatchOn"
+    | "getInstancesByIds"
     | "getJevSettings"
     | "getOpenRouterConnection"
     | "listedInstancesByIds"
@@ -354,6 +362,35 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       publishNotices();
     }
   };
+
+  /**
+   * Whether a notice's session runs no more: its row is gone, it ended, a
+   * continuation took its work on, or the work item it ran is over.
+   */
+  const over = (instanceId: string): boolean => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (
+      !row ||
+      row.continuedInto !== null ||
+      ["stopping", "stopped", "discarded"].includes(row.status)
+    ) {
+      return true;
+    }
+    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+    return !!item && item.instanceId === row.id && !isLive(item.state);
+  };
+
+  // At the hub's start: each stored notice whose session runs no more, or
+  // whose item ended while the hub was not there to hear it, goes.
+  for (const notice of db.watchNotices()) {
+    if (over(notice.instanceId) && db.dropWatchNotice(notice.instanceId)) {
+      log(
+        rowOf(notice.instanceId),
+        notice.instanceId,
+        `its notice (${notice.title}) goes at the hub's start: the session runs no more`
+      );
+    }
+  }
 
   // --- leads -------------------------------------------------------------------
 
@@ -847,16 +884,30 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
         watch.quietTurns = 0;
         closeSignals(id, watch, ["error", "repeat", "quiet"]);
       }
-      const key = callKey(block.name, block.input);
-      if (watch.last?.key === key) {
-        watch.last.count += 1;
-      } else {
-        watch.last = { key, count: 1 };
-        closeSignals(id, watch, ["repeat"]);
-      }
-      if (watch.last.count >= FLEET_WATCH_LIMITS.sameCall) {
-        openSignal(id, watch, "repeat", signalLine("repeat", block.name));
-      }
+      countCall(id, watch, block.name, block.input);
+    }
+  };
+
+  /** One call toward `repeat`: the same call again counts, a different one closes it, a designed wait is neither. */
+  const countCall = (
+    id: string,
+    watch: Watch,
+    name: string,
+    input: Record<string, unknown>
+  ): void => {
+    // A designed wait made again is the wait going on: never a repeat.
+    if (designedWait(name)) {
+      return;
+    }
+    const key = callKey(name, input);
+    if (watch.last?.key === key) {
+      watch.last.count += 1;
+    } else {
+      watch.last = { key, count: 1 };
+      closeSignals(id, watch, ["repeat"]);
+    }
+    if (watch.last.count >= FLEET_WATCH_LIMITS.sameCall) {
+      openSignal(id, watch, "repeat", signalLine("repeat", name));
     }
   };
 
@@ -1017,13 +1068,21 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     /**
      * A session that never runs again (stopped, ended, deleted; never a
      * launch or a restart, which is the same session going on): what was
-     * read of it goes, and a triage run that was it frees its slot. Its
-     * notice stays until you look at it.
+     * read of it goes, a triage run that was it frees its slot, and its
+     * notice goes: there is nothing left to act on.
      */
     forget(id: string): void {
       watches.delete(id);
       ignored.delete(id);
       running.get(id)?.gone();
+      dropNotice(id);
+    },
+
+    /** A work item ended (done, failed or cancelled): its session's notice goes with it. */
+    itemEnded(item: { instanceId: string | null }): void {
+      if (item.instanceId) {
+        dropNotice(item.instanceId);
+      }
     },
 
     /** The open notices, for a dashboard's first frame. */
