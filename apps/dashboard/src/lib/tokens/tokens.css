@@ -362,9 +362,10 @@
       color-mix(in oklch, var(--neutral-8) 85%, var(--neutral-9)),
       color-mix(in oklch, var(--neutral-7) 50%, var(--neutral-8))
     );
-    /* Usage meters (design/usage-tracker.md §1, §8): coral is a window with room, spark yellow one near its limit (70% used, or a run-out under an hour away), crimson one from 90%. Each fill rides a lighter step of its own ramp; every fill/track pair passes the dataviz validator (--ordinal) on each surface it is drawn on, in both themes. */
-    --meter-calm: var(--coral-9);
-    --meter-calm-track: light-dark(oklch(75.5% 0.085 36), oklch(45% 0.085 32));
+    /* Usage meters (DESIGN.md, Limit bar: a fill in the window's state colour): a window with room is the muted ink on the control-edge groove (a quiet reading is a healthy one, and coral is the action's, never data: DESIGN.md The Coral Is Where You Act Rule), spark yellow one near its limit (70% used, or a run-out under an hour away), crimson one from 90%. The calm fill holds about 4.7:1 on its track by day and 5:1 at night. */
+    --meter-calm: var(--neutral-11);
+    /* The calm meter's groove: the ring's empty track (border-control). */
+    --meter-calm-track: var(--border-control);
     --meter-near: light-dark(oklch(62% 0.135 88), oklch(86% 0.14 95));
     --meter-near-track: light-dark(oklch(69.5% 0.095 90), oklch(53% 0.08 92));
     --meter-over: light-dark(oklch(50% 0.17 15), oklch(68% 0.16 15));
@@ -741,6 +742,8 @@
     --c-badge-h: 20px;
     /* A stat tile's height. */
     --c-stat-h: 90px;
+    /* The padding of a stat tile's recessed well (DESIGN.md stat-well). */
+    --c-stat-well-pad: 10px;
     /* A ledger's toolbar zone, holding 32px controls 11px in. */
     --c-toolbar-zone: 55px;
     --c-toolbar-ctl: 32px;

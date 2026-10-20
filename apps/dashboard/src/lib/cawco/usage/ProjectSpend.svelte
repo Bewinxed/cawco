@@ -138,14 +138,15 @@
   const share = $derived(
     cap ? Math.round((cap.spentUsd / cap.usd) * 100) : null
   );
+  /**
+   * The share's threshold, as the tile's data colour says it (DESIGN.md,
+   * Data colour: warn from 70%, bad from 90%), never a status pair.
+   */
   const capTone = $derived.by(() => {
-    if (share === null) {
+    if (share === null || share <= 70) {
       return "neutral" as const;
     }
-    if (share > 90) {
-      return "fail" as const;
-    }
-    return share > 70 ? ("attn" as const) : ("neutral" as const);
+    return share > 90 ? ("bad" as const) : ("caution" as const);
   });
   /**
    * What reaching it does, in a word: the fleet's default, or the project's
@@ -236,8 +237,6 @@
         value={usd(spend.caw.monthUsd)}
       />
       <StatTile
-        data-bad={share !== null && share > 90 ? "" : undefined}
-        data-warn={share !== null && share > 70 ? "" : undefined}
         label="Budget"
         tone={capTone}
         unit={cap ? `this ${cap.period} · ${share}%` : undefined}

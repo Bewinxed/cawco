@@ -163,8 +163,7 @@
             data-task-filter-popover-pick
             aria-label="Label"
             class="shrink grow"
-            measure="share"
-            size="sm">{filter.label ?? "Any label"}</Select.Trigger
+            measure="share">{filter.label ?? "Any label"}</Select.Trigger
           >
           <Select.Content>
             <Select.Item label="Any label" value="any" />
@@ -190,8 +189,7 @@
             data-task-filter-popover-pick
             aria-label="Type"
             class="shrink grow"
-            measure="share"
-            size="sm">{filter.type ?? "Any type"}</Select.Trigger
+            measure="share">{filter.type ?? "Any type"}</Select.Trigger
           >
           <Select.Content>
             <Select.Item label="Any type" value="any" />
@@ -213,8 +211,7 @@
                 data-task-filter-popover-pick
                 aria-label="Field"
                 class="shrink grow"
-                measure="share"
-                size="sm">{key || "Field"}</Select.Trigger
+                measure="share">{key || "Field"}</Select.Trigger
               >
               <Select.Content>
                 {#each fieldKeys as each (each)}
@@ -233,8 +230,7 @@
                 data-task-filter-popover-pick
                 aria-label="Value"
                 class="shrink grow"
-                measure="share"
-                size="sm">{value || "value"}</Select.Trigger
+                measure="share">{value || "value"}</Select.Trigger
               >
               <Select.Content>
                 {#each valuesOf(key) as each (each)}

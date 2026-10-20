@@ -195,11 +195,7 @@
         />
         <span>waiting on you</span>
       {:else if date}
-        <span
-          data-when
-          data-slot="num"
-          class="num font-(family-name:--font-mono) liga-none">{date}</span
-        >
+        <span data-when data-slot="num" class="num">{date}</span>
       {/if}
     </span>
   {/if}

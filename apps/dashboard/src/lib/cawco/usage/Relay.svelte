@@ -18,6 +18,7 @@
   import { fade } from "svelte/transition";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { dur, easeOut, motionOk } from "../motion/curves.svelte";
+  import { barPlace } from "./bar-place";
   import { usage } from "./forecast.svelte";
   import { fmt, HORIZON_MS, type RingAccount } from "./rings";
 
@@ -154,27 +155,17 @@
    * that width plus the k gaps before it. "now" and "+5h" are the bar's ends.
    */
   const ticks = $derived.by(() => {
-    const total = segments.reduce((sum, seg) => sum + seg.ms, 0);
-    const gaps = Math.max(0, segments.length - 1);
+    const lengths = segments.map((seg) => seg.ms);
+    const total = lengths.reduce((sum, ms) => sum + ms, 0);
     return [0, 1, 2, 3, 4, 5].map((hour) => {
       const text = hour === 0 ? "now" : `+${hour}h`;
       if (hour === 0 || hour === 5 || total === 0) {
         return { hour, text, at: hour === 5 ? "100%" : "0%" };
       }
-      const t = (hour / 5) * total;
-      let before = 0;
-      let k = 0;
-      for (const seg of segments) {
-        if (t <= before + seg.ms) {
-          break;
-        }
-        before += seg.ms;
-        k += 1;
-      }
       return {
         hour,
         text,
-        at: `calc((100% - ${gaps} * var(--relay-gap)) * ${(t / total).toFixed(6)} + ${k} * var(--relay-gap))`,
+        at: barPlace((hour / 5) * total, lengths, "var(--relay-gap)"),
       };
     });
   });

@@ -217,6 +217,11 @@ export interface RoutineView {
   /** What the making turn said just before its call, one paragraph; null when it said nothing or a session did not make it. */
   madeWhy: string | null;
   name: string;
+  /**
+   * Its runs ahead, as the scheduler will start them (`nextRunsOf`): the next
+   * week's, at most 288, epoch ms; a paused routine's too.
+   */
+  nextRuns: number[];
   nextSlot: number;
   projectId: string | null;
   prompt: string;
@@ -359,6 +364,37 @@ const cronOf = (expression: string, timeZone: string): Cron.Cron => {
  */
 const newestDue = (cron: Cron.Cron, now: number): Date =>
   Cron.prev(cron, new Date(now + 1000));
+
+/** How far ahead a routine's runs are told: a week, the dashboard's strip. */
+const NEXT_RUNS_SPAN_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * At most this many: one day of a routine that runs every five minutes
+ * (12 an hour × 24), so the strip draws a whole day of any schedule as
+ * fine as that; a finer one (every minute) is told its next 288, the strip
+ * spanning to the last of them. An hourly routine's week (168) is whole.
+ */
+const NEXT_RUNS_MAX = 288;
+
+/**
+ * A routine's runs ahead of `now`, as the scheduler will start them: Effect's
+ * `Cron.sequence` on the same parsed cron and zone the hub runs it by
+ * (`cronOf`), over the next week and at most `NEXT_RUNS_MAX`, epoch ms.
+ */
+export const nextRunsOf = (
+  cron: string,
+  timeZone: string,
+  now: number
+): number[] => {
+  const runs: number[] = [];
+  for (const at of Cron.sequence(cronOf(cron, timeZone), new Date(now))) {
+    const time = at.getTime();
+    if (time >= now + NEXT_RUNS_SPAN_MS || runs.length >= NEXT_RUNS_MAX) {
+      break;
+    }
+    runs.push(time);
+  }
+  return runs;
+};
 
 /** `09:00`, a slot's time in the routine's zone; `test`, `by hand` for the others. */
 export const slotLabel = (slot: string, timeZone: string): string => {
@@ -597,6 +633,7 @@ export const createRoutines = ({
     keep: row.keep,
     expiresAt: ms(row.expiresAt),
     lastSlot: ms(row.lastSlot),
+    nextRuns: nextRunsOf(row.cron, row.timeZone, Date.now()),
     nextSlot: row.nextSlot.getTime(),
     schedule: scheduleOf(row),
     threadId: row.threadId,

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { bucketStart, type LimitWindow } from "@cawco/core";
   /**
-   * Usage (design/usage-tracker.md §3): will it last, first. The Limits block
+   * Usage: will it last, first. The Limits block
    * leads with the window that stops you first and every window under it;
    * then where the spend goes, then its history, both over one range. Nothing
    * is said twice and no row is named by an id.
@@ -53,6 +53,16 @@
       reset: false,
     });
   }
+  /** The page head's one line: what the page answers, for the fleet or the project. */
+  const description = $derived(
+    filtered
+      ? `What ${filtered.name} spends, and the budget its attempts run under.`
+      : "How long your limits last, and where the spend goes."
+  );
+  /** The head's height: the first group 96px under the bar (DESIGN.md, Layout). */
+  const HEAD_ROOM =
+    "calc(var(--c-page-head-h) - var(--space-6) - var(--space-group))";
+
   /** Whether the filtered project's Caw is on, once read. */
   let leadOn = $state<boolean | null>(null);
   $effect(() => {
@@ -170,24 +180,26 @@
   <!-- The page's width, to its gutter: as the project page stands, no cap
        of its own leaving a wider margin on the right than any other page. -->
   <div data-slot="col" class="m-0 flex flex-col gap-space-group">
+    <!-- The page head (DESIGN.md Layout): the title over its one line, the
+         actions centred on the pair, the first group 96px under the bar. -->
     <header
       data-slot="top"
-      class="flex flex-wrap items-center justify-between gap-space-2 max-phone:contents"
+      class="flex min-h-(--head) flex-wrap items-center gap-space-3 max-phone:contents"
+      style:--head={HEAD_ROOM}
     >
-      <!-- The shell's bar already names the page; the heading is for
-           assistive tech only, so the name is not said twice. -->
-      <h1 class="sr-only">Usage</h1>
+      <div
+        data-slot="page-head"
+        class="me-auto flex min-w-0 flex-col gap-space-1"
+      >
+        <h1 class="m-0 type-title text-balance text-ink-strong">Usage</h1>
+        <p class="m-0 type-body text-pretty text-ink-muted">{description}</p>
+      </div>
       <Select.Root
         onValueChange={(value) => filter(value === "all" ? "" : value)}
         type="single"
         value={filtered?.id ?? "all"}
       >
-        <Select.Trigger
-          aria-label="Project"
-          chosen="selected"
-          data-on={filtered ? "" : undefined}
-          size="sm"
-        >
+        <Select.Trigger aria-label="Project">
           {filtered?.name ?? "All projects"}
         </Select.Trigger>
         <Select.Content>

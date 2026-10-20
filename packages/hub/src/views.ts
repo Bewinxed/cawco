@@ -53,7 +53,7 @@ import {
   refused,
   writeFolderFile,
 } from "./project-folder";
-import { slotLabel } from "./routines";
+import { nextRunsOf, slotLabel } from "./routines";
 import type { TaskSummary, Tasks } from "./tasks";
 
 /** A view's name: what its file is called, and the tab it becomes. */
@@ -225,6 +225,7 @@ export const createViews = ({ db, projectName, tasks }: ViewsDeps) => {
         cron: row.cron,
         timeZone: row.timeZone,
         nextSlot: row.nextSlot.getTime(),
+        nextRuns: nextRunsOf(row.cron, row.timeZone, Date.now()),
         lastSlot: row.lastSlot?.getTime() ?? null,
         runs: db.routines.runs(row.id, runs).map((run) => ({
           slot: slotLabel(run.slot, row.timeZone),

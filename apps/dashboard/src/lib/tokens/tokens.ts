@@ -308,6 +308,7 @@ export type TokenSize =
   | "size.c-pill-fs"
   | "size.c-badge-h"
   | "size.c-stat-h"
+  | "size.c-stat-well-pad"
   | "size.c-toolbar-zone"
   | "size.c-toolbar-ctl"
   | "size.c-find-w"

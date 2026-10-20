@@ -553,9 +553,17 @@
 <!-- Caw's settings, off `⋯`: the project's own, beside its other settings. -->
 {#if touch.current}
   <Drawer.Root bind:open={cawOpen}>
-    <Drawer.Content pad="safe-bottom">
-      <Drawer.Title visible={false}>Caw, lead of {project.name}</Drawer.Title>
-      <CawPanel {lead} projectId={project.id} projectName={project.name} />
+    <!-- The recipe's foot: 16px plus the safe area (DESIGN.md, Drawer). -->
+    <Drawer.Content>
+      <Drawer.Header>
+        <Drawer.Title>Caw, lead of {project.name}</Drawer.Title>
+      </Drawer.Header>
+      <CawPanel
+        {lead}
+        projectId={project.id}
+        projectName={project.name}
+        sheet
+      />
     </Drawer.Content>
   </Drawer.Root>
 {:else}
@@ -587,4 +595,11 @@
   />
 {/if}
 <!-- A forget asked from `⋯`, under the head, from where its title starts. -->
-<ForgetProjectTray at={forgetAt} class="tray-indent-space-7 max-w-128" />
+<!-- The tray on the page's gutters: 25px in at the start (18 under the desk
+     line, DESIGN.md L643) and 18 at the end, so it never meets the screen. -->
+<div class="contents" style:--ask-end="var(--space-5)">
+  <ForgetProjectTray
+    at={forgetAt}
+    class="tray-indent-space-7 max-w-128 max-desk:tray-indent-space-5"
+  />
+</div>

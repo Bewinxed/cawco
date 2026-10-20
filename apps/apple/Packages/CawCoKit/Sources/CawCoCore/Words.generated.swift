@@ -1517,6 +1517,15 @@ public enum Words {
 
         public static let noSources = "No event sources yet. Caw connects one when a routine should start on an event, like a merged pull request."
 
+        public static let noSourcesTitle = "No event sources yet"
+
+        public static let noSourcesLine = "Caw connects one when a routine should start on an event, like a merged pull request."
+
+        public static let connectSource = "Ask Caw for an event source"
+
+        /// What the action puts in Caw's composer, unsent.
+        public static let connectSourceAsk = "Connect an event source so a routine can start when something happens, like a merged pull request."
+
         public static let noActions = "Nothing yet. Caw asks you before a routine posts, emails or closes anything, and what you decide is kept here."
 
         public static let noEvents = "No events yet"

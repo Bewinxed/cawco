@@ -3,8 +3,7 @@
    * The board view: one column per stage, in the order stages.md names them,
    * each headed by its stage and its count, with a quiet word for its kind
    * under them. A stage of kind `you` is where tasks wait on a person: its
-   * column takes the brand wash and its name the brand ink, and its head
-   * carries the Needs-you glyph (design §2, Board).
+   * head carries the Needs-you glyph and its kind word the attn ink.
    *
    * Cards drag between columns. While one is in the air the columns it may
    * not go to step back, and the hub has the last word on the drop. Tasks

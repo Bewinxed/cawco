@@ -944,13 +944,6 @@
         }
       }
     },
-    "meter-calm-track": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.45, 0.085, 32]
-      }
-    },
     "meter-near": {
       "$type": "color",
       "$value": {

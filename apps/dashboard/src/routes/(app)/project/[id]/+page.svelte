@@ -1824,8 +1824,9 @@
     {#if !lead.project}
       <Skeleton class="w-full" height="chart" radius="card" width="chart-cap" />
     {:else if canTalk}
-      <!-- While his panel is open the project's starters are in it (CawFloat);
-           put away, they stand here and open it with their words. -->
+      <!-- The project's starters are the empty board's one action (DESIGN.md,
+           The Empty Starts Work Rule), open panel or not: a press puts its
+           words in his composer, opening his panel if it is put away. -->
       <div data-slot="caw-empty" class="w-full max-w-c-starters-w">
         <EmptyState
           actionWidth="fill"
@@ -1853,7 +1854,7 @@
           {/snippet}
           {#snippet action()}
             <!-- A starter opens his panel with its words in his composer. -->
-            {#if starters.length > 0 && !lead.open}
+            {#if starters.length > 0}
               <StarterCards
                 onpick={(text) => lead.ask(text, "board")}
                 {starters}
@@ -1959,9 +1960,7 @@
           <!-- A phone: the folder's file is its own page, with Back to the view. -->
           <div
             data-slot="project-page"
-            class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)"
-            style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
-            style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
+            class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--safe-bottom)"
           >
             {#key openFile}
               <FolderFile
@@ -1977,9 +1976,7 @@
           <!-- A phone: the task is its own page, with Back to the view. -->
           <div
             data-slot="project-page"
-            class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)"
-            style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
-            style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
+            class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--safe-bottom)"
           >
             <TaskPane
               {allowedFrom}
@@ -2004,7 +2001,7 @@
             <div
               data-slot="project-page"
               class={[
-                "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)",
+                "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:scroll-pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)",
                 fadeOn === "page" && "kit-edge-fade-block",
               ]}
               style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
@@ -2172,11 +2169,11 @@
     data-slot="pane"
     aria-busy={cawco.hub === "unreachable" || awaiting || reading}
     class={[
-      "group flex min-h-0 flex-auto flex-col overflow-y-auto pt-0 pe-space-6 pb-space-6 ps-space-7 max-desk:px-space-5 view-board:overflow-hidden view-board:pb-0 view-canvas:overflow-hidden view-canvas:pb-space-5 view-decisions-graph:overflow-hidden view-decisions-graph:pb-space-5 view-decisions-page:overflow-hidden view-decisions-page:pb-0 max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:h-(--pane-h) max-phone:view-canvas:overflow-visible max-phone:view-decisions-graph:h-(--pane-h) max-phone:view-decisions-graph:overflow-visible max-phone:view-decisions-page:h-(--pane-h) max-phone:view-decisions-page:overflow-visible",
+      "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 pe-space-6 pb-space-6 ps-space-7 max-desk:px-space-5 view-board:overflow-hidden view-board:pb-0 view-canvas:overflow-hidden view-canvas:pb-space-5 view-decisions-graph:overflow-hidden view-decisions-graph:pb-space-5 view-decisions-page:overflow-hidden view-decisions-page:pb-0 max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-graph:basis-0 max-phone:view-decisions-graph:min-h-(--pane-min) max-phone:view-decisions-graph:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
       fadeOn === "pane" && "kit-edge-fade-block",
     ]}
     data-view={reading ? "board" : paneView}
-    style:--pane-h="100cqb"
+    style:--pane-min="50cqb"
   >
     {#if reading}
       <!-- The board at its real layout, its columns standing empty: the

@@ -98,7 +98,7 @@
           type="single"
           value={into}
         >
-          <Select.Trigger aria-label="Stage" class="mr-auto" size="sm">
+          <Select.Trigger aria-label="Stage" class="mr-auto">
             {stageLabel(into)}
           </Select.Trigger>
           <Select.Content>
@@ -108,15 +108,13 @@
           </Select.Content>
         </Select.Root>
       {/if}
-      <Button onclick={close} size="sm" type="button" variant="ghost">
-        Cancel
-      </Button>
+      <!-- One control height in the row: the stage's field is 36, so are these. -->
+      <Button onclick={close} type="button" variant="ghost">Cancel</Button>
       <Button
         disabled={!title.trim()}
         label="Add task"
         {pending}
         pendingLabel="Adding…"
-        size="sm"
         type="submit"
       />
     </div>

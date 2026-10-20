@@ -112,7 +112,7 @@
           {@const project = projectOf(row)}
           <div
             data-slot="session"
-            class="type-meta flex justify-between gap-space-4 rounded-sm bg-surface-raised px-space-2 py-space-1 text-ink-row"
+            class="type-meta flex justify-between gap-space-4 py-space-1 text-ink-row"
           >
             <span data-slot="what" class="min-w-0 truncate"
               >{#if project}
@@ -141,15 +141,15 @@
   figure: TileFigure,
   say: Part[]
 )}
+  <!-- An account stands on the card itself, parted from the row above by
+       the hairline: the stat well is the one card-in-card (DESIGN.md, The
+       Frame Recesses Rule). -->
   <div
     data-slot="tile"
-    class="flex min-w-0 flex-col gap-space-3 rounded-md bg-surface-recess p-space-4 transition-[background-color] duration-(--dur-fade) ease-out data-limit:bg-meter-wash-over motion-reduce:transition-off"
+    class="flex min-w-0 flex-col gap-space-3 border-t border-t-border-hairline pt-space-4"
     data-account={ring.id}
     data-limit={ring.state === "limit" || undefined}
     data-tile
-    style:--ring-ground={ring.state === "limit"
-      ? "var(--meter-wash-over)"
-      : undefined}
   >
     <div data-slot="head" class="flex min-w-0 items-center gap-space-2">
       <span
@@ -191,7 +191,7 @@
   data-slot="limits-block-card"
   aria-labelledby="limits-title"
   class="flex flex-col gap-space-5 rounded-lg bg-surface-raised p-space-6 shadow-tile max-phone:p-space-4"
-  style:--ring-ground="var(--surface-recess)"
+  style:--ring-ground="var(--surface-raised)"
 >
   <h2 data-slot="title" class="type-label text-ink-muted" id="limits-title">
     Limits
@@ -201,7 +201,10 @@
     <div class="flex flex-col gap-space-3" data-slot="skeleton-rows">
       <Skeleton height="figure" width="name" />
       <Skeleton class="w-3/4" line="body" />
-      <div data-slot="grid" class="grid grid-cols-usage-tiles gap-space-3">
+      <div
+        data-slot="grid"
+        class="grid grid-cols-usage-tiles gap-x-space-7 gap-y-space-5"
+      >
         {#each [0, 1, 2] as one (one)}
           <Skeleton class="w-full" height="chart" />
         {/each}
@@ -272,7 +275,10 @@
       {/if}
     </div>
     {#if claude}
-      <div data-slot="grid" class="grid grid-cols-usage-tiles gap-space-3">
+      <div
+        data-slot="grid"
+        class="grid grid-cols-usage-tiles gap-x-space-7 gap-y-space-5"
+      >
         {#each claude.accounts as ring, i (ring.id)}
           {@render tile(
             ring,
@@ -320,7 +326,10 @@
         <span data-slot="name">opencode Go</span>
       </div>
       {#if openCode}
-        <div data-slot="grid" class="grid grid-cols-usage-tiles gap-space-3">
+        <div
+          data-slot="grid"
+          class="grid grid-cols-usage-tiles gap-x-space-7 gap-y-space-5"
+        >
           {@render tile(
             openCode,
             0,

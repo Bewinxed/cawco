@@ -98,6 +98,14 @@ export const routinesWords = {
   startersLabel: "Routines to ask Caw for",
   noSources:
     "No event sources yet. Caw connects one when a routine should start on an event, like a merged pull request.",
+  // The empty Event sources block (the Empty recipe: title, line, one action).
+  noSourcesTitle: "No event sources yet",
+  noSourcesLine:
+    "Caw connects one when a routine should start on an event, like a merged pull request.",
+  connectSource: "Ask Caw for an event source",
+  /** What the action puts in Caw's composer, unsent. */
+  connectSourceAsk:
+    "Connect an event source so a routine can start when something happens, like a merged pull request.",
   noActions:
     "Nothing yet. Caw asks you before a routine posts, emails or closes anything, and what you decide is kept here.",
 

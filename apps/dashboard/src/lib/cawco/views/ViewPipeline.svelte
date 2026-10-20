@@ -2,10 +2,11 @@
   /**
    * The pipeline view (design §2): one recessed row per stage, in the
    * stages file's order, with its name, its kind, a bar sized by its share
-   * of the largest stage, and its count. The `you` row takes the brand wash
-   * and a brand bar; done bars take the done pair; dropped stages sit apart
-   * under a dashed hairline, quiet, their bars outlined. Widths ease over
-   * 260ms. No chart library: a bar is a box.
+   * of the largest stage in its groove, and its count. The `you` row says
+   * it with its glyph and its bar in the attn glyph ink (coral is the
+   * action's); done bars take the done pair; dropped stages sit apart
+   * under a hairline, quiet. An empty stage draws its groove alone. Widths
+   * ease over 260ms. No chart library: a bar is a box.
    */
   import {
     KIND_LABEL,
@@ -43,7 +44,7 @@
     <!-- A narrow row: its name and count over the bar's own line. -->
     <div
       data-slot="row"
-      class="group grid min-h-c-btn-h-lg w-full grid-cols-(--row-cols) items-center gap-space-3 rounded-md bg-surface-recess px-space-3 text-start text-ink-strong kind-dropped:text-ink-muted kind-you:bg-brand-wash max-phone:grid-cols-(--row-cols-narrow) max-phone:gap-y-space-1 max-phone:py-space-2 max-phone:grid-areas-(--row-areas)"
+      class="group grid min-h-c-btn-h-lg w-full grid-cols-(--row-cols) items-center gap-space-3 rounded-md bg-surface-recess px-space-3 text-start text-ink-strong kind-dropped:text-ink-muted max-phone:grid-cols-(--row-cols-narrow) max-phone:gap-y-space-1 max-phone:py-space-2 max-phone:grid-areas-(--row-areas)"
       data-kind={stage.kind}
       style:--row-areas={'"name count" "track track"'}
       style:--row-cols={"minmax(var(--c-pipeline-name-min), var(--c-pipeline-name-max)) minmax(var(--c-pipeline-kind-min), var(--c-pipeline-kind-max)) 1fr var(--c-pipeline-count-w)"}
@@ -51,7 +52,7 @@
     >
       <span
         data-slot="name"
-        class="mark-line flex min-w-0 items-center gap-space-1 type-label group-kind-dropped:text-ink-muted group-kind-you:text-brand-ink max-phone:row-(--area) max-phone:col-(--area)"
+        class="mark-line flex min-w-0 items-center gap-space-1 type-label group-kind-dropped:text-ink-muted max-phone:row-(--area) max-phone:col-(--area)"
         style:--area="name"
       >
         {#if stage.kind === "you"}
@@ -66,20 +67,17 @@
           >{stageLabel(stage.name)}</span
         >
       </span>
-      <!-- A stage's kind is a word of stages.md, set as code. -->
-      <span
-        data-slot="kind"
-        class="type-code liga-none text-ink-subtle max-phone:hidden"
+      <span data-slot="kind" class="type-meta text-ink-subtle max-phone:hidden"
         >{KIND_LABEL[stage.kind]}</span
       >
       <span
         data-slot="track"
         aria-hidden="true"
-        class="block h-space-2 rounded-pill max-phone:row-(--area) max-phone:col-(--area)"
+        class="block h-space-2 overflow-clip rounded-pill bg-surface-recess-deep max-phone:row-(--area) max-phone:col-(--area)"
         style:--area="track"
       >
         <span
-          class="block h-full min-w-space-row rounded-pill bg-border-control motion-safe:transition-[inline-size] motion-safe:duration-(--dur-pop) motion-safe:ease-out group-kind-done:bg-status-done-bg group-kind-dropped:bg-transparent group-kind-dropped:outline-1 group-kind-dropped:outline-dashed group-kind-dropped:outline-border-control group-kind-dropped:-outline-offset-1 group-kind-you:bg-brand-solid"
+          class="block h-full rounded-pill bg-border-control motion-safe:transition-[inline-size] motion-safe:duration-(--dur-pop) motion-safe:ease-out group-kind-done:bg-status-done-bg group-kind-you:bg-status-attn-glyph"
           style:inline-size="{(count / most) * 100}%"
         ></span>
       </span>
@@ -101,7 +99,7 @@
   </ol>
   {#if dropped.length > 0}
     <ol
-      class="m-0 flex list-none flex-col gap-space-1 border-t border-t-dashed border-t-border-hairline p-0 pt-space-3"
+      class="m-0 flex list-none flex-col gap-space-1 border-t border-t-border-hairline p-0 pt-space-3"
     >
       {#each dropped as stage (stage.name)}
         {@render row(stage)}

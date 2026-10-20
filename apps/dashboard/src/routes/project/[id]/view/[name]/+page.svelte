@@ -79,12 +79,17 @@
 <!-- Named as the project page's tab names it. -->
 <svelte:head><title>{stageLabel(name)} · CawCo</title></svelte:head>
 
+<!-- The page's inset (DESIGN.md, Layout): 25px on the start and 21px on the
+     end, as the project page and Usage stand; under the desk line 18px a
+     side, as theirs do. Never inside a notch's safe area. -->
 <main
-  class="min-h-dvh bg-surface-recess pt-space-4 pr-(--pad-right) pb-(--pad-bottom) pl-(--pad-left)"
+  class="min-h-dvh bg-surface-recess pt-space-6 pr-(--pad-right) pb-(--pad-bottom) pl-(--pad-left) max-desk:pr-(--pad-right-narrow) max-desk:pl-(--pad-left-narrow)"
   data-view-alone={name}
-  style:--pad-bottom="max(var(--space-4), var(--safe-bottom))"
-  style:--pad-left="max(var(--space-4), env(safe-area-inset-left))"
-  style:--pad-right="max(var(--space-4), env(safe-area-inset-right))"
+  style:--pad-bottom="max(var(--space-6), var(--safe-bottom))"
+  style:--pad-left="max(var(--space-7), env(safe-area-inset-left))"
+  style:--pad-left-narrow="max(var(--space-5), env(safe-area-inset-left))"
+  style:--pad-right="max(var(--space-6), env(safe-area-inset-right))"
+  style:--pad-right-narrow="max(var(--space-5), env(safe-area-inset-right))"
 >
   {#if problem}
     <EmptyState icon={IconAlert} line={problem} title="This view didn't open" />

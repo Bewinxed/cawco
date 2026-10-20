@@ -116,6 +116,11 @@ const routine = z.object({
   cron: z.string(),
   timeZone: z.string(),
   nextSlot: z.number(),
+  nextRuns: z
+    .array(z.number())
+    .describe(
+      "Its runs ahead, as the hub's scheduler will start them: the next week's, at most 288, epoch ms."
+    ),
   lastSlot: z.number().nullable(),
   runs: z.array(run).describe("Its newest runs, newest first."),
 });

@@ -7,6 +7,7 @@
   } from "#lib/cawco/blocks/BlockPage.svelte";
   import { cawco, startThread, threadsOf } from "#lib/cawco/client.svelte.js";
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import {
     failureWords as message,
     THREAD_SEND_UNREACHED,
@@ -63,6 +64,9 @@
     runRoutineNow,
     updateRoutine,
   } from "#lib/cawco/routines/routines-api.js";
+  import ScheduleStrip, {
+    stripOf,
+  } from "#lib/cawco/routines/ScheduleStrip.svelte";
   import { exactOf, scheduleOf, whenOf } from "#lib/cawco/routines/schedule.js";
   import { since } from "#lib/cawco/rules.js";
   import { threadHref } from "#lib/cawco/thread-tabs.js";
@@ -219,6 +223,15 @@
     return () => clearInterval(tick);
   });
 
+  /** The schedule strips' now: it moves on with the minute. */
+  let now = $state(Date.now());
+  $effect(() => {
+    const minute = setInterval(() => {
+      now = Date.now();
+    }, 60_000);
+    return () => clearInterval(minute);
+  });
+
   // --- the three blocks: their counts and what waits on you -----------------------
 
   type Part = "routines" | "sources" | "actions";
@@ -307,6 +320,28 @@
   });
   let deleting = $state<string | null>(null);
   let deletePending = $state(false);
+
+  /**
+   * How many columns the ledger shows: its band's heads still drawn. A row
+   * under a routine (its detail, its ask) spans exactly those, since a
+   * fixed table makes a column of every slot a span reaches, and two folded
+   * columns spanned would share the name's room (Last and Next fold under
+   * the Routines block's measure, table.svelte `measure`).
+   */
+  let span = $state(5);
+  function countColumns(ledger: HTMLElement) {
+    // Its own band's heads only: a routine's detail holds ledgers of its own.
+    const count = () => {
+      const band = ledger.querySelector("table")?.tHead?.rows[0];
+      span = [...(band?.cells ?? [])].filter(
+        (head) => getComputedStyle(head).display !== "none"
+      ).length;
+    };
+    count();
+    const sized = frameObserver(count);
+    sized.observe(ledger);
+    return () => sized.disconnect();
+  }
 
   /** Its newest run is going now: starting, or running (the hub's run state). */
   function going(routine: Routine): boolean {
@@ -616,9 +651,12 @@
      you, after its title. -->
 {#snippet meta(id: Part)}
   {@const said = metaOf(id)}
-  <span data-num data-slot="count" class="num type-meta text-ink-subtle"
-    >{said.count}</span
-  >
+  <!-- Drawn only above 0 (DESIGN.md, The Earned Count Rule). -->
+  {#if said.count > 0}
+    <span data-num data-slot="count" class="num type-meta text-ink-subtle"
+      >{said.count}</span
+    >
+  {/if}
   {#if said.needs > 0}
     <span
       data-slot="needs"
@@ -739,14 +777,33 @@
                 >{routine.name}</span
               >
             </Collapsible.Trigger>
+            {@const drawn = stripOf(routine.nextRuns, now) !== null}
+            {#if drawn}
+              <!-- Its schedule drawn on the line from the hub's own runs
+                   (DESIGN.md, The Show Don't Tell Rule); the words are the
+                   strip's name. -->
+              <span class="block pt-space-1 pb-space-row">
+                <ScheduleStrip
+                  compact
+                  label={line.words}
+                  {now}
+                  paused={!routine.enabled}
+                  runs={routine.nextRuns}
+                />
+              </span>
+            {/if}
             <span
               data-slot="sub"
               class="block truncate type-meta text-ink-muted"
               title={line.title}
             >
-              <span data-slot="sub-words">{line.words}</span>
+              {#if !drawn}
+                <span data-slot="sub-words">{line.words}</span>
+              {/if}
               {#if line.off}
-                <span class="text-status-attn-ink">· {line.off}</span>
+                <span class="text-status-attn-ink"
+                  >{drawn ? line.off : `· ${line.off}`}</span
+                >
               {/if}
               <!-- On a narrow ledger, Last and Next in the same order. -->
               <span
@@ -805,7 +862,7 @@
         </Table.Row>
         {#if deleting === routine.id}
           <tr>
-            <td class="p-0 group-state-open:bg-surface-well" colspan="5">
+            <td class="p-0 group-state-open:bg-surface-well" colspan={span}>
               <fieldset
                 data-slot="row-ask"
                 aria-label={words.removeLabel(routine.name)}
@@ -832,7 +889,7 @@
           </tr>
         {/if}
         <tr>
-          <td class="p-0 group-state-open:bg-surface-well" colspan="5">
+          <td class="p-0 group-state-open:bg-surface-well" colspan={span}>
             <Collapsible.Content fade reveal>
               <RoutineDetail actions={actionsOf(routine)} {routine} />
             </Collapsible.Content>
@@ -907,6 +964,7 @@
       data-slot="ledger"
       style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
       style:--col-menu="calc(var(--c-btn-h-sm) + var(--space-3) * 2)"
+      {@attach countColumns}
     >
       <Table.Root
         data-routines
@@ -951,13 +1009,32 @@
   {/if}
 {/snippet}
 
+{#snippet connectSource()}
+  <Button
+    onclick={() => {
+      if (!empty) {
+        asking = true;
+        askDraft.focusWanted = true;
+      }
+      pick(words.connectSourceAsk);
+    }}
+    size="sm"
+    variant="outline">{words.connectSource}</Button
+  >
+{/snippet}
+
 {#snippet sourcesBody()}
   {#if sourceCount === 0}
-    <p
-      class="m-0 max-w-c-measure p-space-3 type-meta text-pretty text-ink-muted"
-    >
-      {words.noSources}
-    </p>
+    <!-- Its one action puts the ask in Caw's composer, unsent (The Empty
+         Starts Work Rule); with Caw away the line alone says how one comes. -->
+    <div class="px-space-3">
+      <EmptyState
+        action={canTalk ? connectSource : undefined}
+        icon={IconHook}
+        line={words.noSourcesLine}
+        title={words.noSourcesTitle}
+      />
+    </div>
   {:else}
     <div
       data-slot="ledger"
