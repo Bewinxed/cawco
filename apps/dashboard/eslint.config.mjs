@@ -158,6 +158,8 @@ export default defineConfig([
     "src/lib/cawco/preview/PinCard.svelte": ["left", "max-width", "top"],
     "src/lib/cawco/project/CardFace.svelte": ["color"],
     "src/lib/cawco/project/TemplateCards.svelte": ["translate"],
+    "src/lib/cawco/project/preview/CawPanelFixture.svelte": ["block-size"],
+    "src/lib/cawco/project/preview/PhoneTop.svelte": ["min-block-size"],
     "src/lib/cawco/side/SideSheet.svelte": ["height"],
     "src/lib/cawco/spawn/EffortPips.svelte": [
       "left",
@@ -197,6 +199,7 @@ export default defineConfig([
     "src/lib/cawco/spawn/ToolChips.svelte": ["color"],
     "src/lib/cawco/spawn/TriggerMenu.svelte": ["color", "opacity", "transform"],
     "src/lib/cawco/tasks/TaskActivity.svelte": ["block-size"],
+    "src/lib/cawco/tasks/TaskPaneOneUnit.svelte": ["block-size"],
     "src/lib/cawco/transcript/Composer.svelte": [
       "block-size",
       "bottom",
