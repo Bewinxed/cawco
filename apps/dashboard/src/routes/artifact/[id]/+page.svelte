@@ -133,12 +133,7 @@
         aria-hidden="true"
         class="flex-1 rounded-lg bg-surface-recess p-space-5"
       >
-        <Skeleton
-          class="w-5/12"
-          data-slot="block"
-          line="body"
-          radius="text"
-        />
+        <Skeleton class="w-5/12" data-slot="block" line="body" radius="text" />
       </div>
     {/if}
   </div>

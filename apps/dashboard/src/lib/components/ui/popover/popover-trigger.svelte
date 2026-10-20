@@ -27,15 +27,15 @@
       look: {
         chip: chipVariants({ variant: "setting" }),
         state:
-          "mark-line inline-flex h-c-btn-h-xs items-center gap-space-1 rounded-sm bg-surface-recess px-space-2 type-meta whitespace-nowrap text-ink-muted transition-chip-settle not-data-fail:hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink motion-safe:pressed:scale-(--press-scale)",
+          "mark-line type-meta inline-flex h-c-btn-h-xs items-center gap-space-1 whitespace-nowrap rounded-sm bg-surface-recess px-space-2 text-ink-muted transition-chip-settle not-data-fail:hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink motion-safe:pressed:scale-(--press-scale)",
         count:
-          "pressable h-icon-md min-w-icon-md overflow-visible px-space-1 text-ink-row type-meta leading-none num",
+          "pressable type-meta num h-icon-md min-w-icon-md overflow-visible px-space-1 text-ink-row leading-none",
         strip:
           "press-tint flex h-c-btn-h-lg items-center rounded-sm px-space-3 text-start text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
         "strip-home":
           "press-tint flex h-c-usage-strip-home-h items-center rounded-md px-space-4 text-start text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
         meter:
-          "mark-line flex h-c-bar-item items-center gap-space-2 rounded-sm px-space-2 text-label tabular-nums text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover data-warn:not-data-critical:not-data-compacting:text-warning-9 data-critical:not-data-compacting:text-error-9 data-compacting:text-ink-strong",
+          "mark-line flex h-c-bar-item items-center gap-space-2 rounded-sm px-space-2 text-ink-muted text-label tabular-nums transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover data-compacting:text-ink-strong data-critical:not-data-compacting:text-error-9 data-warn:not-data-critical:not-data-compacting:text-warning-9",
       },
     },
   });

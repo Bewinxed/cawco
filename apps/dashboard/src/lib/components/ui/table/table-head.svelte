@@ -13,7 +13,7 @@
          * surface, held at the top while the rows scroll under it
          * (DESIGN.md, Density: "a 32px header band"; ledger-header).
          */
-        band: "sticky top-0 h-c-ledger-band-h bg-surface-band type-label text-ink-muted uppercase tracking-caps",
+        band: "type-label sticky top-0 h-c-ledger-band-h bg-surface-band text-ink-muted uppercase tracking-caps",
         /*
          * A matrix's heads stand on their top edge, so heads of different
          * heights start their names on one line, and take the base's label

@@ -11,5 +11,5 @@ import { tv } from "#lib/utils.js";
  * (`pressable`, The Press Rule).
  */
 export const sendVariants = tv({
-  base: "pressable relative grid size-c-composer-field flex-none place-items-center rounded-[calc(var(--radius-lg)-var(--c-composer-inset))] border-0 bg-action-solid bg-(image:--action-surface) text-on-action can-hover:enabled:hover:bg-action-hover can-hover:enabled:hover:bg-(image:--action-surface-hover) disabled:bg-none disabled:opacity-50 disabled:shadow-none [&_svg]:size-icon-md",
+  base: "pressable bg-(image:--action-surface) can-hover:enabled:hover:bg-(image:--action-surface-hover) relative grid size-c-composer-field flex-none place-items-center rounded-[calc(var(--radius-lg)-var(--c-composer-inset))] border-0 bg-action-solid text-on-action can-hover:enabled:hover:bg-action-hover disabled:bg-none disabled:opacity-50 disabled:shadow-none [&_svg]:size-icon-md",
 });

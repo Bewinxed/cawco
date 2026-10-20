@@ -145,7 +145,9 @@ async function leg(
   );
   kit.note(`${way}: A's nodes kept: ${kept.length}; ${lines.join(" | ")}`);
   const named = await page
-    .locator(`[data-slot="pane"][data-pane="${UNKNOWN}"] [data-slot="empty-title"]`)
+    .locator(
+      `[data-slot="pane"][data-pane="${UNKNOWN}"] [data-slot="empty-title"]`
+    )
     .allTextContents();
   kit.check(
     `${way}: a named state stands in the unknown id's pane`,

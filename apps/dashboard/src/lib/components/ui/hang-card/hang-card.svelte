@@ -39,10 +39,10 @@
    * out unseen.
    */
   export const hangCardVariants = tv({
-    base: "relative border-0 bg-(--hang-surface) [--hang-surface:var(--surface-raised)] [--hang-neck:var(--hang-surface)] [clip-path:inset(0_-120px_-120px_round_0_0_var(--radius-lg)_var(--radius-lg))] data-[flush=end]:rounded-se-none data-[flush=start]:rounded-ss-none data-[rehearsing]:invisible after:pointer-events-none after:absolute after:inset-0 after:z-1 after:rounded-[inherit] after:border after:border-border-control before:pointer-events-none before:absolute before:top-0 before:left-(--gap-from) before:z-2 before:h-px before:w-[calc(var(--gap-to)-var(--gap-from))] before:bg-(--hang-neck) before:[--gap-from:calc(var(--neck-start)-var(--neck-flare-start,0px))] before:[--gap-to:calc(var(--neck-end)+var(--neck-flare-end,0px))] before:[clip-path:var(--neck-cut,none)] data-[flush=end]:before:[--gap-to:calc(var(--neck-end)-1px)] data-[flush=start]:before:[--gap-from:1px]",
+    base: "relative border-0 bg-(--hang-surface) [--hang-neck:var(--hang-surface)] [--hang-surface:var(--surface-raised)] [clip-path:inset(0_-120px_-120px_round_0_0_var(--radius-lg)_var(--radius-lg))] before:pointer-events-none before:absolute before:top-0 before:left-(--gap-from) before:z-2 before:h-px before:w-[calc(var(--gap-to)-var(--gap-from))] before:bg-(--hang-neck) after:pointer-events-none after:absolute after:inset-0 after:z-1 after:rounded-[inherit] after:border after:border-border-control data-[rehearsing]:invisible data-[flush=start]:rounded-ss-none data-[flush=end]:rounded-se-none before:[--gap-from:calc(var(--neck-start)-var(--neck-flare-start,0px))] before:[--gap-to:calc(var(--neck-end)+var(--neck-flare-end,0px))] before:[clip-path:var(--neck-cut,none)] data-[flush=end]:before:[--gap-to:calc(var(--neck-end)-1px)] data-[flush=start]:before:[--gap-from:1px]",
     variants: {
       tab: {
-        true: "shadow-none [clip-path:path('M_0_0_Z')] translate-none will-change-auto before:hidden after:hidden",
+        true: "translate-none shadow-none will-change-auto [clip-path:path('M_0_0_Z')] before:hidden after:hidden",
         false:
           "motion-safe:will-change-[translate] motion-safe:not-data-[shown]:[translate:0_calc(-100%-var(--hang-reach,0px))]",
       },

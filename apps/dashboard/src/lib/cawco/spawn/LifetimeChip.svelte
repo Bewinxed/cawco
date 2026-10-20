@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /**
    * Session lifetime as a composer chip. Choosing between keeping a session
    * and letting it end with its task is a decision worth a look at both
@@ -8,8 +10,6 @@
   import Check from "~icons/solar/check-circle-bold-duotone";
   import Database from "~icons/solar/database-bold-duotone";
   import Fire from "~icons/solar/fire-bold-duotone";
-  import { chipVariants } from "#lib/components/ui/chip/index.js";
-  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import NsPopover from "./NsPopover.svelte";
 
   let {
@@ -79,10 +79,8 @@
       style={`--delay:${index * 35}ms`}
       type="button"
     >
-      <span
-        data-slot="tile"
-        class={iconTileVariants()}
-        style:color={option.hue}><Icon class="size-icon-md" /></span
+      <span data-slot="tile" class={iconTileVariants()} style:color={option.hue}
+        ><Icon class="size-icon-md" /></span
       >
       <span data-slot="text" class="min-w-0 flex-1">
         <span data-slot="name" class="type-label block">{option.name}</span>

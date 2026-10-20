@@ -76,6 +76,25 @@
   "linter": {
     "rules": {
       "style": { "useDefaultSwitchClause": "off" },
+      // A label wrapping a kit control wraps its input: each of these renders
+      // one (ui/input, ui/textarea, ui/checkbox, ui/switch's button,
+      // ui/native-select). The rule
+      // reads no namespaced component, so a select is the barrel's plain
+      // `NativeSelect` (biomejs.dev/linter/rules/no-label-without-control).
+      "a11y": {
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": {
+            "inputComponents": [
+              "Input",
+              "Textarea",
+              "Checkbox",
+              "Switch",
+              "NativeSelect",
+            ],
+          },
+        },
+      },
     },
   },
   "overrides": [

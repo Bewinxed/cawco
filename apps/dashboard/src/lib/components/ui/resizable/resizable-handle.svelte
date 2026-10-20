@@ -15,8 +15,8 @@
     variants: {
       look: {
         split:
-          "duration-(--dur-control) bg-border-hairline transition-[background-color] ease-out hover:bg-border-control data-hidden:hidden data-active:bg-ink-muted data-expanded:after:left-space-1 data-expanded:after:w-c-side-grip-w data-expanded:after:translate-x-0",
-        grid: "motion-safe:duration-(--dur-control) bg-border-hairline not-active-keyboard:not-active-pointer:hover:bg-border-control active-keyboard:bg-ink-muted active-pointer:bg-ink-muted motion-safe:transition-[background-color] motion-safe:ease-out motion-reduce:transition-off",
+          "bg-border-hairline transition-[background-color] duration-(--dur-control) ease-out hover:bg-border-control data-hidden:hidden data-active:bg-ink-muted data-expanded:after:left-space-1 data-expanded:after:w-c-side-grip-w data-expanded:after:translate-x-0",
+        grid: "bg-border-hairline not-active-keyboard:not-active-pointer:hover:bg-border-control active-keyboard:bg-ink-muted active-pointer:bg-ink-muted motion-safe:transition-[background-color] motion-safe:duration-(--dur-control) motion-safe:ease-out motion-reduce:transition-off",
       },
     },
   });

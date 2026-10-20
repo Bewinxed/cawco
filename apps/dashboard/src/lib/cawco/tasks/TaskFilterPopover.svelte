@@ -139,9 +139,7 @@
         <span
           class="mark-line flex items-center gap-space-1 type-meta text-ink-muted"
           role="status"
-          ><Spinner aria-hidden="true" box="small" /><span
-            >Finding…</span
-          ></span
+          ><Spinner aria-hidden="true" box="small" /><span>Finding…</span></span
         >
       {/if}
       <RowFault again={() => find.again()} reason={find.problem} />

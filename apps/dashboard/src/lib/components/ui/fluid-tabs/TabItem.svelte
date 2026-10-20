@@ -294,7 +294,7 @@
     "in-variant-folder:[&:not(:has([data-slot=hit]:last-child))]:pe-(--fold-end-pad)",
     "data-tab-item-selected:text-ink-strong hover-hover:data-ghosted:not-data-tab-item-selected:text-ink-strong",
     "in-variant-folder:data-tab-item-selected:text-ink-muted",
-    "motion-safe:duration-(--dur-ghost) motion-safe:transition-[color] motion-safe:ease-out",
+    "motion-safe:transition-[color] motion-safe:duration-(--dur-ghost) motion-safe:ease-out",
     "in-variant-folder:motion-safe:[transition:color_var(--dur-ghost)_var(--ease-out),--pick_var(--choose-dur)_var(--choose-ease)]",
     "[[data-variant=folder]_[data-ride]_&]:transition-off",
     "hit-pressed:bg-surface-pressed in-variant-folder:hit-pressed:bg-transparent light:hit-pressed:text-ink-strong",

@@ -323,10 +323,7 @@
         {/if}
         {#if hidden.length > 0}
           <DropdownMenu.Root>
-            <DropdownMenu.Trigger
-              size="sm"
-              variant="ghost"
-            >
+            <DropdownMenu.Trigger size="sm" variant="ghost">
               <span
                 >{words.hidden}
                 <span data-slot="num" class="num">{hidden.length}</span></span

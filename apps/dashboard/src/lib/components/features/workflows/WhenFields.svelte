@@ -2,8 +2,7 @@
   import type { WorkflowWhen } from "@cawco/core";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
-  import * as NativeSelect from "#lib/components/ui/native-select/index.js";
+  import { NativeSelect } from "#lib/components/ui/native-select/index.js";
   import JsonField from "./JsonField.svelte";
 
   let {
@@ -16,7 +15,7 @@
 </script>
 
 <label class="flex flex-col gap-space-2 type-label text-ink-muted"
-  >When<NativeSelect.Root
+  >When<NativeSelect
     class="w-full"
     onchange={(event) =>
       onchange(
@@ -28,7 +27,7 @@
   >
     <option value="always">Always</option>
     <option value="condition">Condition</option>
-  </NativeSelect.Root></label
+  </NativeSelect></label
 >
 {#if value}
   <!-- The condition's fields open and fold as one: the rows below slide. -->
@@ -46,7 +45,7 @@
         value={value.path}
       /></label
     ><label class="flex flex-col gap-space-2 type-label text-ink-muted"
-      >Operator<NativeSelect.Root
+      >Operator<NativeSelect
         class="w-full"
         onchange={(event) =>
           value &&
@@ -59,7 +58,7 @@
         {#each ["eq", "neq", "gt", "lt", "contains", "matches", "truthy", "falsy"] as op (op)}
           <option>{op}</option>
         {/each}
-      </NativeSelect.Root></label
+      </NativeSelect></label
     >
     {#if value.op !== "truthy" && value.op !== "falsy"}
       <div

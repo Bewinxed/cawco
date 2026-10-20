@@ -8,10 +8,7 @@
    * text around them.
    */
   import type { Component } from "svelte";
-  import {
-    Badge,
-    type BadgeVariant,
-  } from "#lib/components/ui/badge/index.js";
+  import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Markdown } from "#lib/components/ui/markdown/index.js";
   import { IconBug, IconGraphUp, IconStars } from "#lib/icons.js";
 
@@ -67,12 +64,16 @@
       <Badge
         as="h3"
         data-slot="release-notes-label"
-        class="mt-space-3 mb-space-2 justify-self-box-start first:mt-0"
+        class={[i > 0 && "mt-space-3", "mb-space-2 justify-self-box-start"]}
         variant={known?.variant ?? "default"}
       >
         {#if known}
           {@const Glyph = known.icon}
-          <Glyph data-release-notes-glyph aria-hidden="true" class="flex-none" />
+          <Glyph
+            data-release-notes-glyph
+            aria-hidden="true"
+            class="flex-none"
+          />
         {/if}
         <span>{section.heading}</span>
       </Badge>

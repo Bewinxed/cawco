@@ -318,9 +318,7 @@ async function readHovered(
   const ghostShown = await page.evaluate((other) => {
     const row = document.querySelector(other);
     const list = row?.closest("[data-highlight]");
-    const ghost = list?.querySelector(
-      ':scope > [data-slot="highlight-ghost"]'
-    );
+    const ghost = list?.querySelector(':scope > [data-slot="highlight-ghost"]');
     if (!ghost) {
       return null;
     }

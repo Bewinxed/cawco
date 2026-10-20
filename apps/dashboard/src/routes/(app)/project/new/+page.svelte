@@ -38,7 +38,10 @@
   import TemplateCards from "#lib/cawco/project/TemplateCards.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
-  import { chipsVariants, chipVariants } from "#lib/components/ui/chip/index.js";
+  import {
+    chipsVariants,
+    chipVariants,
+  } from "#lib/components/ui/chip/index.js";
   import { goto } from "$app/navigation";
 
   /** Caw's side here, on the page and over a card. */

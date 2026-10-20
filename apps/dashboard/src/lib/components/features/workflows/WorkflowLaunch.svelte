@@ -15,8 +15,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
-  import * as NativeSelect from "#lib/components/ui/native-select/index.js";
+  import { NativeSelect } from "#lib/components/ui/native-select/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { goto } from "$app/navigation";
 
@@ -164,7 +163,7 @@
               >{input.label}
               {input.required ? " (required)" : ""}
               {#if input.type === "select"}
-                <NativeSelect.Root
+                <NativeSelect
                   class="w-full"
                   id="launch-{input.name}"
                   required={input.required}
@@ -174,7 +173,7 @@
                   {#each input.options ?? [] as option (option)}
                     <option>{option}</option>
                   {/each}
-                </NativeSelect.Root>
+                </NativeSelect>
               {:else if input.type === "path"}
                 <Input
                   id="launch-{input.name}"
@@ -197,7 +196,7 @@
         >
           <h3 class="type-label">Workspace</h3>
           <label class="flex flex-col gap-space-2 type-label text-ink-muted"
-            >Project<NativeSelect.Root
+            >Project<NativeSelect
               class="w-full"
               onchange={(event) => {
                 const project = cawco.project(event.currentTarget.value);
@@ -212,10 +211,10 @@
               {#each cawco.projects.filter( (each) => checkoutOf(each) ) as project (project.id)}
                 <option value={project.id}>{project.name}</option>
               {/each}
-            </NativeSelect.Root></label
+            </NativeSelect></label
           >
           <label class="flex flex-col gap-space-2 type-label text-ink-muted"
-            >Machine<NativeSelect.Root
+            >Machine<NativeSelect
               class="w-full"
               required
               bind:value={machineId}
@@ -230,7 +229,7 @@
                   {machine.status === "online" ? "" : " · offline"}
                 </option>
               {/each}
-            </NativeSelect.Root></label
+            </NativeSelect></label
           >
           <label class="flex flex-col gap-space-2 type-label text-ink-muted"
             >Directory<Input
@@ -252,12 +251,12 @@
           {/if}
         </div>
         <label class="flex flex-col gap-space-2 type-label text-ink-muted"
-          >Supervisor<NativeSelect.Root class="w-full" bind:value={supervisor}>
+          >Supervisor<NativeSelect class="w-full" bind:value={supervisor}>
             <option value="">None</option>
             {#each types as type (type.name)}
               <option value={type.name}>{type.name}</option>
             {/each}
-          </NativeSelect.Root></label
+          </NativeSelect></label
         >
         {#if errorMessage}
           <Alert variant="destructive">{errorMessage}</Alert>

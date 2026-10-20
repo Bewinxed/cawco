@@ -1444,10 +1444,7 @@
         data-slot="value"
         class="flex min-w-0 flex-col gap-space-1 pt-space-1"
       >
-        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch component renders a native button the label names; Biome can't see through the component boundary -->
-        <label
-          class="type-label flex items-center gap-space-2 text-ink-strong"
-        >
+        <label class="type-label flex items-center gap-space-2 text-ink-strong">
           <Switch
             data-review-switch
             disabled={reviewAsked !== null}

@@ -72,7 +72,10 @@
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { chipsVariants, chipVariants } from "#lib/components/ui/chip/index.js";
+  import {
+    chipsVariants,
+    chipVariants,
+  } from "#lib/components/ui/chip/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -729,11 +732,7 @@
             >
           </Table.Cell>
           <Table.Cell {rule} variant="list-opens">
-            <Collapsible.Trigger
-              data-opener
-              class="max-w-full"
-              look="opener"
-            >
+            <Collapsible.Trigger data-opener class="max-w-full" look="opener">
               <span
                 data-slot="name"
                 class="block truncate type-label text-ink-muted group-data-enabled:text-ink-row group-data-enabled:group-state-open:text-ink-strong"
@@ -919,10 +918,7 @@
         <Table.Header>
           <Table.Row variant="band">
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head
-              class="z-2 w-(--col-state)"
-              scope="col"
-              variant="band"
+            <Table.Head class="z-2 w-(--col-state)" scope="col" variant="band"
               ><span class="sr-only">{words.columnState}</span></Table.Head
             >
             <Table.Head class="z-2" scope="col" variant="band"
@@ -941,10 +937,7 @@
               scope="col"
               variant="band">{words.columnNextRun}</Table.Head
             >
-            <Table.Head
-              class="z-2 w-(--col-menu)"
-              scope="col"
-              variant="band"
+            <Table.Head class="z-2 w-(--col-menu)" scope="col" variant="band"
               ><span class="sr-only">{words.columnActions}</span></Table.Head
             >
             <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
@@ -974,10 +967,7 @@
         <Table.Header>
           <Table.Row variant="band">
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head
-              class="z-2 w-(--col-state)"
-              scope="col"
-              variant="band"
+            <Table.Head class="z-2 w-(--col-state)" scope="col" variant="band"
               ><span class="sr-only">{words.columnService}</span></Table.Head
             >
             <Table.Head class="z-2" scope="col" variant="band"

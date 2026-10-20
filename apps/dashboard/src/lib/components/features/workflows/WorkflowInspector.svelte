@@ -18,8 +18,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
-  import * as NativeSelect from "#lib/components/ui/native-select/index.js";
+  import { NativeSelect } from "#lib/components/ui/native-select/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
@@ -217,7 +216,9 @@
       <div class="flex min-w-0 flex-col gap-space-4" in:crossIn out:crossOut>
         {#if node}
           <div class="flex flex-wrap items-center justify-between gap-space-2">
-            <h2 class="type-label">{node.kind === "step" ? "Step" : node.kind} inspector</h2>
+            <h2 class="type-label">
+              {node.kind === "step" ? "Step" : node.kind} inspector
+            </h2>
             <Button onclick={() => onselect()} type="button" variant="outline">
               Settings
             </Button>
@@ -237,9 +238,11 @@
             /></label
           >
           {#if node.kind === "step"}
-            <div class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2">
+            <div
+              class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
+            >
               <label class="flex flex-col gap-space-2 type-label text-ink-muted"
-                >Run on<NativeSelect.Root
+                >Run on<NativeSelect
                   class="w-full"
                   onchange={(event) => preset(event.currentTarget.value)}
                   value={node.delegateType ?? ""}
@@ -248,7 +251,7 @@
                   {#each types as type (type.name)}
                     <option value={type.name}>{type.name}</option>
                   {/each}
-                </NativeSelect.Root></label
+                </NativeSelect></label
               >
               <fieldset>
                 <legend class="mb-space-2 text-size-label font-medium"
@@ -269,7 +272,9 @@
                   value={node.harness}
                 >
                   {#each ["claude", "opencode", "pi"] as harness (harness)}
-                    <ToggleGroup.Item value={harness}>{harness}</ToggleGroup.Item>
+                    <ToggleGroup.Item value={harness}
+                      >{harness}</ToggleGroup.Item
+                    >
                   {/each}
                 </ToggleGroup.Root>
               </fieldset>
@@ -289,7 +294,7 @@
                 </datalist></label
               >
               <label class="flex flex-col gap-space-2 type-label text-ink-muted"
-                >Effort<NativeSelect.Root
+                >Effort<NativeSelect
                   class="w-full"
                   disabled={node.harness === "pi"}
                   onchange={(event) =>
@@ -300,7 +305,7 @@
                   {#each EFFORT_LEVELS as effort (effort)}
                     <option>{effort}</option>
                   {/each}
-                </NativeSelect.Root></label
+                </NativeSelect></label
               >
               <label class="flex flex-col gap-space-2 type-label text-ink-muted"
                 >Skills (comma-separated)<Input
@@ -329,7 +334,9 @@
               onchange={(outputSchema) => patch({ outputSchema })}
               value={node.outputSchema}
             />
-            <div class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1">
+            <div
+              class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1"
+            >
               <label class="flex flex-col gap-space-2 type-label text-ink-muted"
                 >Retries<Input
                   max="5"
@@ -339,7 +346,8 @@
                   type="number"
                   value={node.retries ?? 2}
                 /></label
-              ><label class="flex flex-col gap-space-2 type-label text-ink-muted"
+              ><label
+                class="flex flex-col gap-space-2 type-label text-ink-muted"
                 >Timeout (minutes)<Input
                   min="1"
                   oninput={(event) =>
@@ -354,15 +362,21 @@
           {:else if node.kind === "start"}
             <h3 class="type-label">Inputs</h3>
             {#each node.inputs as entry, index (index)}
-              <div class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2">
-                <div class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1">
-                  <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+              <div
+                class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
+              >
+                <div
+                  class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1"
+                >
+                  <label
+                    class="flex flex-col gap-space-2 type-label text-ink-muted"
                     >Name<Input
                       oninput={(event) =>
                         input(index, { name: event.currentTarget.value })}
                       value={entry.name}
                     /></label
-                  ><label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                  ><label
+                    class="flex flex-col gap-space-2 type-label text-ink-muted"
                     >Label<Input
                       oninput={(event) =>
                         input(index, { label: event.currentTarget.value })}
@@ -370,9 +384,10 @@
                     /></label
                   >
                 </div>
-                <label class="flex flex-col gap-space-2 type-label text-ink-muted"
-                  >Type<NativeSelect.Root
-                  class="w-full"
+                <label
+                  class="flex flex-col gap-space-2 type-label text-ink-muted"
+                  >Type<NativeSelect
+                    class="w-full"
                     onchange={(event) =>
                       input(index, {
                         type: event.currentTarget
@@ -383,10 +398,11 @@
                     <option>text</option>
                     <option>path</option>
                     <option>select</option>
-                  </NativeSelect.Root></label
+                  </NativeSelect></label
                 >
                 {#if entry.type === "select"}
-                  <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                  <label
+                    class="flex flex-col gap-space-2 type-label text-ink-muted"
                     >Options (comma-separated)<Input
                       onchange={(event) =>
                         input(index, {
@@ -396,16 +412,19 @@
                     /></label
                   >
                 {/if}
-                <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                <label
+                  class="flex flex-col gap-space-2 type-label text-ink-muted"
                   >Default<Input
                     oninput={(event) =>
                       input(index, { default: event.currentTarget.value })}
                     value={entry.default ?? ""}
                   /></label
                 >
-                <div class="flex flex-wrap items-center justify-between gap-space-2">
+                <div
+                  class="flex flex-wrap items-center justify-between gap-space-2"
+                >
                   <label
-                  class="flex min-h-c-input-h items-center gap-space-2 type-label text-ink-muted"
+                    class="flex min-h-c-input-h items-center gap-space-2 type-label text-ink-muted"
                     ><Checkbox
                       checked={entry.required}
                       onCheckedChange={(checked) =>
@@ -446,8 +465,12 @@
             </Button>
           {:else if node.kind === "check"}
             {#each node.rules as entry, index (index)}
-              <div class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2">
-                <div class="flex flex-wrap items-center justify-between gap-space-2">
+              <div
+                class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
+              >
+                <div
+                  class="flex flex-wrap items-center justify-between gap-space-2"
+                >
                   <h3 class="type-label">{entry.kind}</h3>
                   <Button
                     variant="outline"
@@ -474,7 +497,8 @@
                     onchange={(cmd) => rule(index, { cmd })}
                     {paths}
                     value={entry.cmd}
-                  /><label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                  /><label
+                    class="flex flex-col gap-space-2 type-label text-ink-muted"
                     >Expected exit code<Input
                       oninput={(event) =>
                         rule(index, {
@@ -492,14 +516,15 @@
                     value={entry.path}
                   />
                   {#if entry.kind === "regex"}
-                    <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                    <label
+                      class="flex flex-col gap-space-2 type-label text-ink-muted"
                       >Pattern<Input
                         oninput={(event) =>
                           rule(index, { pattern: event.currentTarget.value })}
                         value={entry.pattern}
                       /></label
                     ><label
-                  class="flex min-h-c-input-h items-center gap-space-2 type-label text-ink-muted"
+                      class="flex min-h-c-input-h items-center gap-space-2 type-label text-ink-muted"
                       ><Checkbox
                         checked={entry.mustMatch}
                         onCheckedChange={(checked) =>
@@ -507,7 +532,8 @@
                       />Must match</label
                     >
                   {:else if entry.kind === "forbidden-words"}
-                    <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                    <label
+                      class="flex flex-col gap-space-2 type-label text-ink-muted"
                       >Forbidden words (comma-separated)<Input
                         onchange={(event) =>
                           rule(index, {
@@ -521,7 +547,7 @@
               </div>
             {/each}
             <label class="flex flex-col gap-space-2 type-label text-ink-muted"
-              >Add rule<NativeSelect.Root
+              >Add rule<NativeSelect
                 class="w-full"
                 onchange={(event) => {
                   addRule(
@@ -535,15 +561,18 @@
                 {#each ["schema", "regex", "forbidden-words", "file-exists", "command"] as kind (kind)}
                   <option>{kind}</option>
                 {/each}
-              </NativeSelect.Root></label
+              </NativeSelect></label
             >
           {:else if node.kind === "branch"}
             {#each node.cases as entry, index (index)}
-              <div class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2">
+              <div
+                class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
+              >
                 {#if index === node.cases.length - 1}
                   <h3 class="type-label">Else</h3>
                 {:else}
-                  <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                  <label
+                    class="flex flex-col gap-space-2 type-label text-ink-muted"
                     >Port label<Input
                       oninput={(event) =>
                         node?.kind === "branch" &&
@@ -640,8 +669,8 @@
             </Button>
           {:else if node.kind === "workflow"}
             <label class="flex flex-col gap-space-2 type-label text-ink-muted"
-              >Workflow<NativeSelect.Root
-                  class="w-full"
+              >Workflow<NativeSelect
+                class="w-full"
                 onchange={(event) =>
                   patch({ workflowId: event.currentTarget.value, inputs: {} })}
                 value={node.workflowId}
@@ -650,7 +679,7 @@
                 {#each workflows.filter((entry) => entry.id !== workflowId) as entry (entry.id)}
                   <option value={entry.id}>{entry.name}</option>
                 {/each}
-              </NativeSelect.Root></label
+              </NativeSelect></label
             >
             {#if childStart?.kind === "start"}
               {#each childStart.inputs as entry (entry.name)}
@@ -673,7 +702,9 @@
               value={node.question}
             />
             {#each node.options as entry, index (index)}
-              <div class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2">
+              <div
+                class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
+              >
                 <TemplateInput
                   label="Option {index + 1}"
                   onchange={(label) =>
@@ -685,7 +716,8 @@
                     })}
                   {paths}
                   value={entry.label}
-                /><label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                /><label
+                  class="flex flex-col gap-space-2 type-label text-ink-muted"
                   >Description<Input
                     oninput={(event) =>
                       node?.kind === "ask" &&
@@ -728,21 +760,21 @@
             >
               Add option
             </Button><label
-                  class="flex min-h-c-input-h items-center gap-space-2 type-label text-ink-muted"
+              class="flex min-h-c-input-h items-center gap-space-2 type-label text-ink-muted"
               ><Checkbox
                 checked={node.allowOther}
                 onCheckedChange={(checked) => patch({ allowOther: checked })}
               />Allow other</label
             ><label class="flex flex-col gap-space-2 type-label text-ink-muted"
-              >Answered by<NativeSelect.Root
-                  class="w-full"
+              >Answered by<NativeSelect
+                class="w-full"
                 onchange={(event) =>
                   patch({ answeredBy: event.currentTarget.value })}
                 value={node.answeredBy ?? "operator"}
               >
                 <option>operator</option>
                 <option>supervisor</option>
-              </NativeSelect.Root></label
+              </NativeSelect></label
             ><label class="flex flex-col gap-space-2 type-label text-ink-muted"
               >Wait up to (hours, optional)<Input
                 min="1"
@@ -770,9 +802,14 @@
             </p>
             <h3 class="type-label">Questions · asked in one call</h3>
             {#each node.questions as entry, index (index)}
-              <div class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2">
-                <div class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1">
-                  <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+              <div
+                class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
+              >
+                <div
+                  class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1"
+                >
+                  <label
+                    class="flex flex-col gap-space-2 type-label text-ink-muted"
                     >ID<Input
                       face="mono"
                       text="label"
@@ -783,9 +820,10 @@
                         })}
                       value={entry.id}
                     /></label
-                  ><label class="flex flex-col gap-space-2 type-label text-ink-muted"
-                    >Type<NativeSelect.Root
-                  class="w-full"
+                  ><label
+                    class="flex flex-col gap-space-2 type-label text-ink-muted"
+                    >Type<NativeSelect
+                      class="w-full"
                       onchange={(event) =>
                         retype(
                           index,
@@ -796,21 +834,26 @@
                       {#each Object.entries(JEV_TYPE_NAMES) as [type, name] (type)}
                         <option value={type}>{name}</option>
                       {/each}
-                    </NativeSelect.Root></label
+                    </NativeSelect></label
                   >
                 </div>
-                <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                <label
+                  class="flex flex-col gap-space-2 type-label text-ink-muted"
                   >Instructions<Textarea
                     oninput={(event) =>
                       question(index, {
                         ...entry,
                         instructions: event.currentTarget.value,
                       })}
-                    value={entry.instructions} /></label
+                    value={entry.instructions}
+                  /></label
                 >
                 {#if entry.type === "noul"}
-                  <div class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1">
-                    <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                  <div
+                    class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1"
+                  >
+                    <label
+                      class="flex flex-col gap-space-2 type-label text-ink-muted"
                       >Yes means (optional)<Input
                         oninput={(event) =>
                           question(index, {
@@ -822,7 +865,8 @@
                           })}
                         value={entry.criteria?.true ?? ""}
                       /></label
-                    ><label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                    ><label
+                      class="flex flex-col gap-space-2 type-label text-ink-muted"
                       >No means (optional)<Input
                         oninput={(event) =>
                           question(index, {
@@ -838,8 +882,11 @@
                   </div>
                 {:else if entry.type === "choice"}
                   {#each entry.criteria as row, rowIndex (rowIndex)}
-                    <div class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1">
-                      <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                    <div
+                      class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1"
+                    >
+                      <label
+                        class="flex flex-col gap-space-2 type-label text-ink-muted"
                         >Option {rowIndex + 1}
                         <Input
                           oninput={(event) =>
@@ -856,7 +903,8 @@
                             })}
                           value={row.option}
                         /></label
-                      ><label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                      ><label
+                        class="flex flex-col gap-space-2 type-label text-ink-muted"
                         >Meaning<Input
                           oninput={(event) =>
                             question(index, {
@@ -904,9 +952,12 @@
                     Add option
                   </Button>
                 {:else}
-                  <p class="type-meta text-ink-muted">Levels run lowest first.</p>
+                  <p class="type-meta text-ink-muted">
+                    Levels run lowest first.
+                  </p>
                   {#each entry.criteria as level, levelIndex (levelIndex)}
-                    <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                    <label
+                      class="flex flex-col gap-space-2 type-label text-ink-muted"
                       >Level {levelIndex}
                       <Input
                         oninput={(event) =>
@@ -1007,8 +1058,11 @@
             >
           {:else if node.kind === "end"}
             {#each Object.entries(node.outputs) as [name, path], index (index)}
-              <div class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2">
-                <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+              <div
+                class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
+              >
+                <label
+                  class="flex flex-col gap-space-2 type-label text-ink-muted"
                   >Output name<Input
                     onchange={(event) =>
                       node?.kind === "end" &&
@@ -1062,12 +1116,18 @@
             </Button>
           {/if}
           {#if workflowPorts(node).length}
-            <section aria-label="Connections" class="flex min-w-0 flex-col gap-space-4">
+            <section
+              aria-label="Connections"
+              class="flex min-w-0 flex-col gap-space-4"
+            >
               <h3 class="type-label">Connections</h3>
               {#each workflowPorts(node) as port (port)}
-                <div class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2">
-                  <label class="flex flex-col gap-space-2 type-label text-ink-muted"
-                    >Connect {port} to<NativeSelect.Root
+                <div
+                  class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
+                >
+                  <label
+                    class="flex flex-col gap-space-2 type-label text-ink-muted"
+                    >Connect {port} to<NativeSelect
                       class="w-full"
                       onchange={(event) => {
                         connect(port, event.currentTarget.value);
@@ -1079,7 +1139,7 @@
                       {#each graph.nodes.filter((entry) => entry.kind !== "start") as target (target.id)}
                         <option value={target.id}>{target.title}</option>
                       {/each}
-                    </NativeSelect.Root></label
+                    </NativeSelect></label
                   >
                   {#each graph.edges.filter((entry) => entry.from.node === node?.id && entry.from.port === port) as connection (connection.id)}
                     <Button
@@ -1099,9 +1159,7 @@
               {/each}
             </section>
             <details>
-              <summary class="min-h-c-btn-h"
-                >Unwired ports</summary
-              >
+              <summary class="min-h-c-btn-h">Unwired ports</summary>
               {#each workflowPorts(node) as port (port)}
                 <label
                   class="flex min-h-c-input-h items-center gap-space-2 type-label text-ink-muted"
@@ -1123,7 +1181,8 @@
           <label class="flex flex-col gap-space-2 type-label text-ink-muted"
             >Notes<Textarea
               oninput={(event) => patch({ notes: event.currentTarget.value })}
-              value={node.notes ?? ""} /></label
+              value={node.notes ?? ""}
+            /></label
           >
           <Button
             variant="outline"
@@ -1182,7 +1241,8 @@
           <label class="flex flex-col gap-space-2 type-label text-ink-muted"
             >Description<Textarea
               oninput={(event) => ondescription(event.currentTarget.value)}
-              value={description} /></label
+              value={description}
+            /></label
           ><label class="flex flex-col gap-space-2 type-label text-ink-muted"
             >Concurrency<Input
               min="1"
@@ -1193,8 +1253,8 @@
             /></label
           >
           <label class="flex flex-col gap-space-2 type-label text-ink-muted"
-            >Default project<NativeSelect.Root
-                  class="w-full"
+            >Default project<NativeSelect
+              class="w-full"
               onchange={(event) =>
                 settings({
                   defaultProject: event.currentTarget.value || undefined,
@@ -1205,10 +1265,10 @@
               {#each cawco.projects as project (project.id)}
                 <option value={project.id}>{project.name}</option>
               {/each}
-            </NativeSelect.Root></label
+            </NativeSelect></label
           ><label class="flex flex-col gap-space-2 type-label text-ink-muted"
-            >Default machine<NativeSelect.Root
-                  class="w-full"
+            >Default machine<NativeSelect
+              class="w-full"
               onchange={(event) =>
                 settings({
                   defaultMachine: event.currentTarget.value || undefined,
@@ -1219,10 +1279,10 @@
               {#each cawco.machines as machine (machine.machineId)}
                 <option value={machine.machineId}>{machine.hostname}</option>
               {/each}
-            </NativeSelect.Root></label
+            </NativeSelect></label
           ><label class="flex flex-col gap-space-2 type-label text-ink-muted"
-            >Default supervisor<NativeSelect.Root
-                  class="w-full"
+            >Default supervisor<NativeSelect
+              class="w-full"
               onchange={(event) =>
                 settings({
                   defaultSupervisor: event.currentTarget.value
@@ -1238,7 +1298,7 @@
               {#each types as type (type.name)}
                 <option value={type.name}>{type.name}</option>
               {/each}
-            </NativeSelect.Root></label
+            </NativeSelect></label
           >
         {/if}
       </div>

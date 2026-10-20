@@ -61,9 +61,7 @@
       return highlight({
         rows: "[data-menu-item]",
         hovered: "[data-highlighted]",
-      })(
-        ref
-      );
+      })(ref);
     }
   });
 </script>

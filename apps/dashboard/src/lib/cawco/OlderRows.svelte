@@ -233,9 +233,7 @@
               <span data-active={!pending}
                 ><IconHistory class="size-icon-md" /></span
               >
-              <span data-active={pending}
-                ><Spinner role="presentation" /></span
-              >
+              <span data-active={pending}><Spinner role="presentation" /></span>
             </span>
           {/snippet}
         </TreeMark>

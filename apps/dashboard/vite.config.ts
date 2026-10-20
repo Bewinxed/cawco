@@ -268,8 +268,7 @@ const VENDOR_IMPORTED_SHEETS = [
   "@event-calendar/core/src/styles",
   "photoswipe/dist",
 ];
-const pathPattern = (path: string): string =>
-  path.split("/").join("[\\\\/]");
+const pathPattern = (path: string): string => path.split("/").join("[\\\\/]");
 const VENDOR_COMPONENT_STYLE = new RegExp(
   [
     `[\\\\/]node_modules[\\\\/](?:${VENDOR_COMPONENT_SHEETS.map(pathPattern).join("|")})[\\\\/].*\\.svelte\\?.*type=style`,

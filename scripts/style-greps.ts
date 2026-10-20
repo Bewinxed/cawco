@@ -42,7 +42,8 @@ const RULES: { name: string; pattern: string; fixed?: boolean }[] = [
   },
   {
     name: "a pointer cursor is banned: a control keeps the default arrow (Tailwind v4 upgrade guide, Buttons use the default cursor)",
-    pattern: "(^|[^-[:alnum:]])cursor-pointer([^-[:alnum:]]|$)|cursor[[:space:]]*:[[:space:]]*pointer",
+    pattern:
+      "(^|[^-[:alnum:]])cursor-pointer([^-[:alnum:]]|$)|cursor[[:space:]]*:[[:space:]]*pointer",
   },
   {
     name: "a dur-* class is banned: a transition's duration is duration-(--dur-*), which sets --tw-duration for a transition-[…] after it",

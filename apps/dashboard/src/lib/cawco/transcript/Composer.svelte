@@ -90,17 +90,14 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { handOver, reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { departBox } from "#lib/cawco/motion/share.svelte.js";
-  import {
-    Button,
-    sendVariants,
-  } from "#lib/components/ui/button/index.js";
+  import { Button, sendVariants } from "#lib/components/ui/button/index.js";
   import { whileIdle } from "#lib/components/ui/button/pending-content.svelte";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
-  import { dockShellVariants } from "#lib/components/ui/dock-shell/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Command from "#lib/components/ui/command/index.js";
-  import { floatingSurface } from "#lib/components/ui/popover/index.js";
+  import { dockShellVariants } from "#lib/components/ui/dock-shell/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
+  import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconChevronUp, IconSend, IconStop } from "#lib/icons.js";

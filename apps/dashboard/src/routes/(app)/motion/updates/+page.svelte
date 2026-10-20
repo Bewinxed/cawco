@@ -409,11 +409,7 @@
     Updated, in a tab older than the dashboard: Reload says goodbye
   </h1>
   <!-- As the panel has it: the row in a `reflow`, a row under it. -->
-  <div
-    class={panel}
-    data-states="notice-reload"
-    {@attach reflow()}
-  >
+  <div class={panel} data-states="notice-reload" {@attach reflow()}>
     <div data-flip="box">
       <UpdateCard
         alone={false}

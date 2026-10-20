@@ -24,8 +24,8 @@
     base: "rounded-lg border border-border-control bg-surface-raised p-1.5 text-ink-strong shadow-overlay",
     variants: {
       motion: {
-        pop: "[--kit-rise:0_calc(-1*var(--pop-rise))] side-top:[--kit-rise:0_var(--pop-rise)] side-left:[--kit-rise:var(--pop-rise)_0] side-right:[--kit-rise:calc(-1*var(--pop-rise))_0] transition-opacity duration-(--dur-pop) ease-drawer data-closed:opacity-0 data-closed:duration-(--dur-exit) starting:data-open:opacity-0 motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:scale-(--pop-scale) motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:starting:data-open:[translate:var(--kit-rise)]",
-        hang: "motion-reduce:transition-opacity motion-reduce:duration-(--dur-pop) motion-reduce:ease-drawer motion-reduce:data-closed:opacity-0 motion-reduce:data-closed:duration-(--dur-exit) motion-reduce:starting:data-open:opacity-0",
+        pop: "transition-opacity duration-(--dur-pop) ease-drawer [--kit-rise:0_calc(-1*var(--pop-rise))] side-left:[--kit-rise:var(--pop-rise)_0] side-right:[--kit-rise:calc(-1*var(--pop-rise))_0] side-top:[--kit-rise:0_var(--pop-rise)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--dur-exit) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]",
+        hang: "motion-reduce:transition-opacity motion-reduce:duration-(--dur-pop) motion-reduce:ease-drawer motion-reduce:data-closed:opacity-0 motion-reduce:starting:data-open:opacity-0 motion-reduce:data-closed:duration-(--dur-exit)",
       },
     },
     defaultVariants: { motion: "pop" },

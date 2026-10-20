@@ -345,9 +345,7 @@ const NEST = "[data-nest]";
 /** Every list in a group just shown, the group's own included. */
 function measureNestsIn(group: HTMLElement): void {
   measureNests(
-    [group, ...group.querySelectorAll(NEST)].filter((list) =>
-      nests.has(list)
-    )
+    [group, ...group.querySelectorAll(NEST)].filter((list) => nests.has(list))
   );
 }
 
@@ -719,9 +717,7 @@ function nestOfItem(
   li: HTMLLIElement | null
 ): HTMLElement | null {
   const list = li?.parentElement;
-  return list && group.contains(li) && list.matches(NEST)
-    ? list
-    : null;
+  return list && group.contains(li) && list.matches(NEST) ? list : null;
 }
 
 function measure(group: HTMLElement, options: BranchOptions): Shape {

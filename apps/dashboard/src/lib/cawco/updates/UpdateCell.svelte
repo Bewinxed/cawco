@@ -47,10 +47,7 @@
             <span data-slot="words">{cell.text}</span>
           </span>
         {:else}
-          <Badge
-            size="cell-tall"
-            variant={cell.fail ? "destructive" : "ghost"}
-          >
+          <Badge size="cell-tall" variant={cell.fail ? "destructive" : "ghost"}>
             {#if cell.fail}
               <span
                 class="size-(--status-dot-size) shrink-0 rounded-pill bg-error-9"

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   /**
    * Location as a composer chip: where the session works — an existing folder
    * or a repository to clone by its git URL — named on the chip, chosen in
@@ -9,7 +10,6 @@
   import Down from "~icons/solar/alt-arrow-down-linear";
   import FolderGit from "~icons/solar/folder-git-bold-duotone";
   import FolderOpen from "~icons/solar/folder-open-bold-duotone";
-  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import LocationSection from "./LocationSection.svelte";
   import NsPopover from "./NsPopover.svelte";
 

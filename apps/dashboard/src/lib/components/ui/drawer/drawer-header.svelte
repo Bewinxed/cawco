@@ -12,7 +12,7 @@
    */
   export const sheetHeadVariants = tv({
     slots: {
-      head: "flex flex-none items-center justify-between gap-space-2 border-b border-b-transparent pb-space-3 in-data-[slot=drawer-content]:sheet-seam",
+      head: "in-data-[slot=drawer-content]:sheet-seam flex flex-none items-center justify-between gap-space-2 border-b border-b-transparent pb-space-3",
       close:
         "touch-hit inline-flex size-7 flex-none items-center justify-center rounded-sm border border-transparent bg-transparent text-ink-muted transition-control [--hit-edge:1px] hover:bg-surface-hover hover:text-ink-strong [&_svg]:size-icon-md",
     },

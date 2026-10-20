@@ -18,12 +18,12 @@
   export const dropdownMenuTriggerVariants = tv({
     variants: {
       face: {
-        title: "mark-line min-w-0 type-label text-ink-strong",
+        title: "mark-line type-label min-w-0 text-ink-strong",
         count: "mark-line",
       },
       look: {
         attach:
-          "grid size-c-composer-field place-items-center rounded-xs border border-border-control hit-edge-hair bg-surface-raised text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out motion-safe:transition-[background-color,color,scale] hover:bg-surface-hover hover:text-ink-strong motion-safe:pressed:scale-(--press-scale) group-inert/ctrls:not-aria-invalid:border-border-button-outline group-inert/ctrls:shadow-xs",
+          "hit-edge-hair grid size-c-composer-field place-items-center rounded-xs border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:text-ink-strong group-inert/ctrls:not-aria-invalid:border-border-button-outline group-inert/ctrls:shadow-xs motion-safe:pressed:scale-(--press-scale) motion-safe:transition-[background-color,color,scale]",
       },
     },
   });

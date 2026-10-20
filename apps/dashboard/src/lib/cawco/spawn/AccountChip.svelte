@@ -28,6 +28,7 @@
 </script>
 
 <script lang="ts">
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   /**
    * The New session form's account chip, among the chosen model's tool
    * chips after effort and permissions: the account the session will run
@@ -40,7 +41,6 @@
   import AccountName from "../accounts/AccountName.svelte";
   import Rings from "../usage/Rings.svelte";
   import Words from "../usage/Words.svelte";
-  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import NsPopover from "./NsPopover.svelte";
 
   let {

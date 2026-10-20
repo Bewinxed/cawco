@@ -2714,7 +2714,8 @@
 @utility field-underline {
   &:has(:is(input, textarea, [contenteditable]):focus-visible) {
     border-bottom-color: var(--focus-ring);
-    box-shadow: inset 0 calc(-1 * (var(--focus-ring-width) - var(--border-width))) 0
+    box-shadow: inset 0
+      calc(-1 * (var(--focus-ring-width) - var(--border-width))) 0
       var(--focus-ring);
   }
   & :is(input, textarea, [contenteditable]):focus-visible {
@@ -2982,6 +2983,12 @@
       align-items: center;
       min-inline-size: 0;
     }
+    & .ec-event-time {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      font-variant-ligatures: none;
+      margin-inline-end: var(--space-2);
+    }
     /* In the week's grid the chip's place is its time: the title has the
        whole line. The list keeps the time, in its own column. */
     & .ec-time-grid .ec-event.chip .ec-event-time {
@@ -3013,12 +3020,6 @@
       inline-size: auto;
       min-block-size: var(--c-btn-h-lg);
       margin-inline: var(--space-2);
-    }
-    & .ec-event-time {
-      font-family: var(--font-mono);
-      font-variant-numeric: tabular-nums;
-      font-variant-ligatures: none;
-      margin-inline-end: var(--space-2);
     }
   }
 }
@@ -3139,16 +3140,7 @@
    container. */
 @utility mark-line {
   :where(&)
-    > :where(
-      :not(
-        svg,
-        img,
-        .rail-cell,
-        .icon-swap,
-        .mark-cell,
-        [data-box]
-      )
-    ) {
+    > :where(:not(svg, img, .rail-cell, .icon-swap, .mark-cell, [data-box])) {
     @apply mark-text;
   }
 }
@@ -3174,7 +3166,7 @@
     display: inline-grid;
     place-items: center;
   }
-  :where(&) > * {
+  :where(& > *) {
     display: inline-flex;
     grid-area: 1 / 1;
     opacity: calc(1 - var(--swap-away));
@@ -3472,8 +3464,9 @@
      utilities layer they would outrank those. */
   :where(.kit-edge-fade, .kit-edge-fade-block) {
     --fade-len: var(--c-edge-fade-len);
-
-    @variant max-phone {
+  }
+  @variant max-phone {
+    :where(.kit-edge-fade, .kit-edge-fade-block) {
       --fade-len: var(--c-edge-fade-len-phone);
     }
   }

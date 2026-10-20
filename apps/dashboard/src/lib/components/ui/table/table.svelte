@@ -64,23 +64,23 @@
     },
   } as const;
   export type TableStacks = keyof typeof tableCards;
-  type TableCard = {
-    table: string;
+  interface TableCard {
     body: string;
-    header: string;
-    section: string;
-    row: Partial<Record<string, string>>;
     cell: Partial<Record<string, string>>;
-  };
+    header: string;
+    row: Partial<Record<string, string>>;
+    section: string;
+    table: string;
+  }
   /** The card classes of a table's tier for one part; none when it doesn't stack. */
   export const cardOf = (stacks: TableStacks | undefined): TableCard | null =>
     stacks ? tableCards[stacks] : null;
 
   /** What a table's sections read off its root. */
-  export type TableContext = {
+  export interface TableContext {
     /** Where its rows become cards (the root's `stacks`); undefined: never. */
     readonly stacks: TableStacks | undefined;
-  };
+  }
   export const [getTableContext, setTableContext] =
     createContext<TableContext>();
 
@@ -110,8 +110,7 @@
        * cell is a block at that tier, and the fold comes after it.
        */
       /** The task ledger's Labels: from a 1102px ledger, never in the card. */
-      "tasks-labels":
-        "@max-table-1102px/table:hidden @max-phone/table:hidden",
+      "tasks-labels": "@max-table-1102px/table:hidden @max-phone/table:hidden",
       /** The task ledger's Created: from an 878px ledger, never in the card. */
       "tasks-created": "@max-table-878px/table:hidden @max-phone/table:hidden",
       /** The task ledger's To-dos: from a 766px ledger, and in the card. */

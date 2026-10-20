@@ -14,9 +14,10 @@
  * `{#if}`, `{#each}` and `{#key}`) hold a mark and words:
  *  - the words are not bare text or a `{value}` beside the mark: wrap them;
  *  - the row is a mark line: it carries one of the recipe's classes
- *    (`mark-line`, `rail-line`, `kit-chip`, `kit-tray-chip`, `kit-item`,
- *    `kit-section-head`), or it is a kit primitive that draws the recipe in its
- *    own class (PRIMITIVES).
+ *    (`mark-line`, `rail-line`), or a kit recipe whose base draws it
+ *    (`chipVariants`, `menuItemVariants`, `sectionHeadVariants`), or it is a
+ *    kit primitive that draws the recipe in its own class (PRIMITIVES), or a
+ *    kit part given a look that draws it (LOOKS).
  * And on every mark line, each child is one the recipe can tell: words (an
  * element holding text, which it trims), what it leaves alone (an svg, an
  * img, an icon component, the kit's cells), or a box that says so with
@@ -53,9 +54,24 @@ const SVELTE_FILE = /\.svelte$/;
 const ALLOW = /^\s*mark-line:\s*\S/;
 const SPLIT = /[^\w-]+/;
 const CLASS_PREFIX = /^class=/;
-/** The recipe's classes (app.css, the mark line). */
-const RECIPE =
-  /(?:^|[\s"'`{[,])(?:mark-line|rail-line|kit-chip|kit-tray-chip|kit-item|kit-section-head)(?=$|[\s"'`},\]])/;
+/** The recipe's utilities (app.css, the mark line). */
+const RECIPE = /(?:^|[\s"'`{[,])(?:mark-line|rail-line)(?=$|[\s"'`},\]])/;
+/** Kit recipes whose base draws the mark line (ui/chip, ui/menu-item, ui/section-header). */
+const RECIPE_CALL = /\b(?:chipVariants|menuItemVariants|sectionHeadVariants)\(/;
+/**
+ * Kit parts that draw the mark line for some of their looks: the prop and
+ * the values that do (`true`: any value).
+ */
+const LOOKS: Record<string, Record<string, readonly string[] | true>> = {
+  "Collapsible.Trigger": { look: ["head", "note", "fold"] },
+  "Dialog.Title": { lead: ["glyph"] },
+  "DropdownMenu.Trigger": {
+    face: ["title", "count"],
+    size: true,
+    variant: true,
+  },
+  "Popover.Trigger": { look: ["chip", "state", "meter"] },
+};
 /** Kit primitives whose own class draws the recipe. */
 const PRIMITIVES = new Set([
   "Badge",
@@ -92,8 +108,7 @@ const MARK_COMPONENT =
   /^(?:Icon[A-Z]\w*|LiveIcon|Spinner|Sprite|TaskRing|ProviderLogo|Glyph|action\.icon|\w*(?:Mark|Face|Glyph|Avatar|Dot))$/;
 /** Elements the kit and its rows use as a mark's cell. A button's icon slot
     is an `.icon-swap`; a keycap is a Kbd that says `data-box`. */
-const MARK_CLASS =
-  /^(?:rail-cell|icon-swap|mark-cell|dot|mark|glyph|icon|ic)$/;
+const MARK_CLASS = /^(?:rail-cell|icon-swap|mark-cell|dot|mark|glyph|icon|ic)$/;
 /** What the recipe leaves alone by class (app.css). */
 const LEFT_ALONE_CLASS = /^(?:rail-cell|icon-swap|mark-cell)$/;
 /** Components whose root is an svg, which the recipe leaves alone. */
@@ -299,14 +314,50 @@ interface Reading {
   css: string;
   file: string;
   hits: Hit[];
+  /** Components imported from unplugin-icons (`~icons/…`): each renders an svg. */
+  icons: Set<string>;
   source: string;
 }
 
+const ICON_IMPORT = /import\s+(\w+)\s+from\s+["']~icons\//g;
+
 const lineOf = (r: Reading, at: number): number =>
   r.source.slice(0, at).split("\n").length;
+/** The text of an attribute's value as written, or null when it is absent. */
+function attributeText(
+  node: Node,
+  name: string,
+  source: string
+): string | null {
+  const found = (node.attributes ?? []).find(
+    (a) => a.type === "Attribute" && a.name === name
+  );
+  if (!found) {
+    return null;
+  }
+  return source
+    .slice(found.start, found.end)
+    .replace(`${name}=`, "")
+    .replace(/^["'{]|["'}]$/g, "");
+}
+
+/** Whether a kit part is given a look that draws the mark line. */
+function looksLine(node: Node, source: string): boolean {
+  const looks = LOOKS[node.name ?? ""];
+  if (node.type !== "Component" || !looks) {
+    return false;
+  }
+  return Object.entries(looks).some(([prop, values]) => {
+    const value = attributeText(node, prop, source);
+    return value !== null && (values === true || values.includes(value));
+  });
+}
+
 const isLine = (r: Reading, node: Node): boolean =>
   RECIPE.test(` ${classText(node, r.source)} `) ||
-  (node.type === "Component" && PRIMITIVES.has(node.name ?? ""));
+  RECIPE_CALL.test(classText(node, r.source)) ||
+  (node.type === "Component" && PRIMITIVES.has(node.name ?? "")) ||
+  looksLine(node, r.source);
 const hit = (r: Reading, node: Node, what: string): void => {
   r.hits.push({
     file: r.file,
@@ -332,7 +383,9 @@ function checkBeside(r: Reading, node: Node, kids: Node[]): void {
 
 /** Every child of a mark line that the recipe cannot tell apart says data-box. */
 function checkBoxes(r: Reading, kids: Node[]): void {
-  for (const kid of kids.filter((k) => !told(k, r.source))) {
+  for (const kid of kids.filter(
+    (k) => !(told(k, r.source) || r.icons.has(k.name ?? ""))
+  )) {
     hit(r, kid, "a box on a mark line that does not say so: add data-box");
   }
 }
@@ -436,6 +489,7 @@ export function check(file: string, source: string): Hit[] {
     css: STYLE.exec(source)?.[1] ?? "",
     file,
     hits: [],
+    icons: new Set([...source.matchAll(ICON_IMPORT)].map((m) => m[1] ?? "")),
     source,
   };
   const top = ast.fragment.nodes;

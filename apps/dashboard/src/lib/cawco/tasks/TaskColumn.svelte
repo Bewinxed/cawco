@@ -159,8 +159,7 @@
           <span
             data-slot="moving"
             class="mark-line flex items-center gap-space-1 px-space-2 pt-space-1 pb-0 type-meta text-ink-muted"
-            ><Spinner aria-hidden="true" box="small" /><span
-              >Moving…</span
+            ><Spinner aria-hidden="true" box="small" /><span>Moving…</span
             ></span
           >
         {/if}

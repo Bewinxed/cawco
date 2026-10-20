@@ -11,8 +11,8 @@
   import type { Todo } from "#lib/cawco/project-tasks.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { IconPlus } from "#lib/icons.js";
 
   let {

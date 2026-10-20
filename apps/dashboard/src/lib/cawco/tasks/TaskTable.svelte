@@ -308,8 +308,7 @@
         >
           {#each row.getAllCells() as cell (cell.id)}
             <Table.Cell
-              edge={cell.column.id === "created" ||
-              cell.column.id === "updated"
+              edge={cell.column.id === "created" || cell.column.id === "updated"
                 ? "end"
                 : undefined}
               class={[

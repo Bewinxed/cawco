@@ -228,11 +228,7 @@
     <div class="flex flex-col gap-space-1">
       {#each parsed.docs as doc (doc.path)}
         <Collapsible.Root>
-          <Collapsible.Trigger
-            data-doc
-            class="group w-full"
-            look="head"
-          >
+          <Collapsible.Trigger data-doc class="group w-full" look="head">
             <span
               data-slot="path"
               class="flex-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono) text-ink-strong"

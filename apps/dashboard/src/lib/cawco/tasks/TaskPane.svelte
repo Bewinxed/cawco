@@ -37,13 +37,13 @@
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import {
     TabItem,
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "#lib/components/ui/select/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";

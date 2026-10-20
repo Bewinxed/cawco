@@ -105,9 +105,7 @@
 
   const key = $derived(provider ?? providerOf(model) ?? "");
   const Logo = $derived(LOGOS[key]);
-  const classes = $derived(
-    cn(providerLogoVariants({ size, fade }), className)
-  );
+  const classes = $derived(cn(providerLogoVariants({ size, fade }), className));
 
   // A `Record` lookup returns the component or `undefined`; that is the signal
   // the caller's own glyph should keep standing. So the whole body is guarded.

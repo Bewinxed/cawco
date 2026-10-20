@@ -75,7 +75,6 @@
     </div>
   {/if}
 
-  <!-- biome-ignore lint/a11y/noLabelWithoutControl: the `Input` component (shadcn-svelte) renders a native <input> as its only child -->
   <label class="flex flex-col gap-1.5 text-meta text-ink-muted">
     Try it — {info?.filters ?? "the value this event carries"}
     <Input

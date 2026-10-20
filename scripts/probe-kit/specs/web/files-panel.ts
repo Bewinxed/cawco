@@ -399,7 +399,9 @@ const desk = async (
 
   // 2. It floats.
   const floats = await page.evaluate(() => {
-    const pop = document.querySelector<HTMLElement>("[data-glass-card-frame='files-pop']");
+    const pop = document.querySelector<HTMLElement>(
+      "[data-glass-card-frame='files-pop']"
+    );
     let positioned = "";
     for (let at: HTMLElement | null = pop; at; at = at.parentElement) {
       const { position } = getComputedStyle(at);
@@ -898,7 +900,9 @@ const reviewLegs = async (
         !!float &&
         !!document.querySelector("[data-glass-card-frame='files-pop']") &&
         (
-          document.querySelector("[data-glass-card-frame='files-pop']") as Element
+          document.querySelector(
+            "[data-glass-card-frame='files-pop']"
+          ) as Element
         ).compareDocumentPosition(float) === Node.DOCUMENT_POSITION_FOLLOWING,
     };
   });
@@ -934,7 +938,10 @@ const reviewLegs = async (
   await page.keyboard.press("Escape");
   await page.waitForTimeout(600);
   const stillOpen = await page.evaluate(
-    () => !!document.querySelector("[data-glass-card-frame='files-pop'][data-state='open']")
+    () =>
+      !!document.querySelector(
+        "[data-glass-card-frame='files-pop'][data-state='open']"
+      )
   );
   kit.check(
     "18: a picture opened from Files shows in the lightbox, and pressing in it and putting it away leaves Files open",
@@ -1401,7 +1408,9 @@ const roundThree = async (
       paddingEnd: string;
       overflow: string;
     } | null = await page.evaluate(() => {
-      const pop = document.querySelector<HTMLElement>("[data-glass-card-frame='files-pop']");
+      const pop = document.querySelector<HTMLElement>(
+        "[data-glass-card-frame='files-pop']"
+      );
       if (!pop) {
         return null;
       }

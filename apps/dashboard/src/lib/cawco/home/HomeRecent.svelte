@@ -1,7 +1,6 @@
 <script lang="ts">
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   /**
    * Everything else that can be opened — every session no other home list
    * shows, each with its delegates in its tree, and the transcripts stored
@@ -10,6 +9,7 @@
    * Projects, so the projects come straight after what is live.
    */
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { IconChevronRight, IconSearch } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { page } from "$app/state";

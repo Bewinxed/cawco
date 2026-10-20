@@ -11,7 +11,7 @@
    * fades out then.
    */
   export const scrimVariants = tv({
-    base: "bg-scrim backdrop-blur-(--scrim-blur) data-closed:animate-kit-fade-out data-open:animate-scrim-in data-[leaving]:animate-kit-fade-out",
+    base: "bg-scrim backdrop-blur-(--scrim-blur) data-[leaving]:animate-kit-fade-out data-closed:animate-kit-fade-out data-open:animate-scrim-in",
   });
 
   export type ScrimLooks = VariantProps<typeof scrimVariants>;

@@ -6,8 +6,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
-  import * as NativeSelect from "#lib/components/ui/native-select/index.js";
+  import { NativeSelect } from "#lib/components/ui/native-select/index.js";
   import JsonField from "./JsonField.svelte";
 
   let {
@@ -88,7 +87,8 @@
               <div
                 class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1"
               >
-                <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+                <label
+                  class="flex flex-col gap-space-2 type-label text-ink-muted"
                   >Field name<Input
                     onchange={(event) =>
                       update(
@@ -99,8 +99,9 @@
                       )}
                     value={name}
                   /></label
-                ><label class="flex flex-col gap-space-2 type-label text-ink-muted"
-                  >Type<NativeSelect.Root
+                ><label
+                  class="flex flex-col gap-space-2 type-label text-ink-muted"
+                  >Type<NativeSelect
                     class="w-full"
                     onchange={(event) =>
                       update(
@@ -114,10 +115,12 @@
                     {#each ["string", "number", "integer", "boolean", "array", "object"] as type (type)}
                       <option>{type}</option>
                     {/each}
-                  </NativeSelect.Root></label
+                  </NativeSelect></label
                 >
               </div>
-              <div class="flex flex-wrap items-center justify-between gap-space-2">
+              <div
+                class="flex flex-wrap items-center justify-between gap-space-2"
+              >
                 <label
                   class="flex min-h-c-input-h items-center gap-space-2 type-label text-ink-muted"
                   ><Checkbox

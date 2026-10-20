@@ -279,7 +279,6 @@
                   What {projectName} may spend, its Caw and its attempts together.
                   Leave it empty for no limit.
                 </p>
-                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
                 <label
                   data-slot="project-spend-field"
                   class="type-meta flex flex-col gap-space-1 text-ink-muted"
@@ -391,7 +390,6 @@
                   What one attempt at a task may spend before it stops. Leave a
                   field empty for no limit.
                 </p>
-                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
                 <label
                   data-slot="project-spend-field"
                   class="type-meta flex flex-col gap-space-1 text-ink-muted"
@@ -402,7 +400,6 @@
                     bind:value={amount}
                   /></label
                 >
-                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
                 <label
                   data-slot="project-spend-field"
                   class="type-meta flex flex-col gap-space-1 text-ink-muted"
@@ -413,7 +410,6 @@
                     bind:value={turns}
                   /></label
                 >
-                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
                 <label
                   data-slot="project-spend-field"
                   class="type-meta flex flex-col gap-space-1 text-ink-muted"
@@ -644,7 +640,11 @@
           {/if}
           <Table.Body>
             {#if spend.others.monthUsd > 0}
-              <Table.Row data-project-spend-row class="relative" variant="stacks">
+              <Table.Row
+                data-project-spend-row
+                class="relative"
+                variant="stacks"
+              >
                 <Table.Cell
                   variant="ledger-stacks"
                   class="@max-phone/table:col-span-full"
@@ -660,7 +660,8 @@
                   data-num
                   edge="end"
                   variant="ledger-stacks"
-                  class="w-c-ledger-usd-w">{usd(spend.others.monthUsd)}</Table.Cell
+                  class="w-c-ledger-usd-w"
+                  >{usd(spend.others.monthUsd)}</Table.Cell
                 >
                 <Table.Cell
                   data-col-last
@@ -671,7 +672,9 @@
               </Table.Row>
             {/if}
             <Table.Row data-project-spend-row class="relative" variant="stacks">
-              <Table.Cell variant="ledger-stacks" class="@max-phone/table:col-span-full"
+              <Table.Cell
+                variant="ledger-stacks"
+                class="@max-phone/table:col-span-full"
                 ><span
                   data-slot="name"
                   class="type-label block truncate text-ink-row no-underline"

@@ -1053,7 +1053,6 @@
       <ul class="flex flex-col">
         {#each cawco.projects as project (project.id)}
           <li>
-            <!-- biome-ignore lint/a11y/noLabelWithoutControl: the kit Checkbox renders the control the label names -->
             <label
               class={menuItemVariants({
                 class:

@@ -155,7 +155,8 @@ export function fieldBox(
 function copyAt(words: Node, box: WordsBox): HTMLElement {
   const copy = document.createElement("div");
   // Fixed over the page, cut to each end's box (Tailwind scans this file).
-  copy.className = "fixed z-(--layer-flight) overflow-hidden pointer-events-none text-ink-strong";
+  copy.className =
+    "fixed z-(--layer-flight) overflow-hidden pointer-events-none text-ink-strong";
   copy.setAttribute("aria-hidden", "true");
   copy.style.left = `${box.left}px`;
   copy.style.top = `${box.top}px`;

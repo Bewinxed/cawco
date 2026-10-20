@@ -15,9 +15,9 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { IconChevronDown, IconClose, IconLink } from "#lib/icons.js";
 
   let {

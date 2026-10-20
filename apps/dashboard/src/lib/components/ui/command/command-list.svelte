@@ -12,9 +12,10 @@
   // One ghost glides from item to item under the pointer and arrow keys.
   $effect(() => {
     if (ref) {
-      return highlight({ rows: "[data-menu-item]", hovered: "[data-selected]" })(
-        ref
-      );
+      return highlight({
+        rows: "[data-menu-item]",
+        hovered: "[data-selected]",
+      })(ref);
     }
   });
 </script>

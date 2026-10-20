@@ -16,7 +16,10 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { fold } from "#lib/cawco/motion/fold.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
-  import { chipsVariants, chipVariants } from "#lib/components/ui/chip/index.js";
+  import {
+    chipsVariants,
+    chipVariants,
+  } from "#lib/components/ui/chip/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { IconAsk, IconCheck, IconClose } from "#lib/icons.js";
   /**

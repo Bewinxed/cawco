@@ -134,4 +134,3 @@
 <div data-slot="view-calendar">
   <Calendar {options} plugins={[TimeGrid, DayGrid, List]} />
 </div>
-

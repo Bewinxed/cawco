@@ -780,11 +780,7 @@
           <!-- The account the session bills: the group's fourth setting,
                wrapping with the others when the row runs out. -->
           {#if row?.accountId}
-            <AccountSwitch
-              instance={row}
-              readonly={!editable}
-              size="compact"
-            />
+            <AccountSwitch instance={row} readonly={!editable} size="compact" />
           {/if}
         </div>
         <!-- One line is always held for what a change says, so its pending,

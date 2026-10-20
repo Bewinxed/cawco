@@ -233,35 +233,31 @@
           class="ns-in mark-line inline-flex h-c-pill-h items-center gap-space-1 rounded-sm bg-status-live-bg px-space-2 font-body text-size-label leading-none font-medium whitespace-nowrap text-status-live-ink"
           ><span>From project</span></span
         >
-        <Button
-          class="ns-in flex-none max-phone:h-c-row-h"
-          onclick={onoverride}
-          size="sm"
-          style="--delay:40ms"
-          tone="quiet"
-          variant="ghost"
-        >
-          Override
-        </Button>
+        <span class="ns-in flex flex-none" style="--delay:40ms">
+          <Button onclick={onoverride} size="sm" tone="quiet" variant="ghost">
+            Override
+          </Button>
+        </span>
       {:else}
-        <Button
-          aria-expanded={browsing}
-          class="ns-in flex-none max-phone:h-c-row-h"
-          disabled={!machineId}
-          id="session-browse"
-          onclick={toggleBrowse}
-          size="sm"
-          variant="secondary"
-        >
-          {#if browsing}
-            <Up class="size-icon-md flex-none text-ink-muted" /><span
-              >Close</span
-            >
-          {:else}
-            <Search class="size-icon-md flex-none text-ink-muted" />
-            <span>Browse</span>
-          {/if}
-        </Button>
+        <span class="ns-in flex flex-none">
+          <Button
+            aria-expanded={browsing}
+            disabled={!machineId}
+            id="session-browse"
+            onclick={toggleBrowse}
+            size="sm"
+            variant="secondary"
+          >
+            {#if browsing}
+              <Up class="size-icon-md flex-none text-ink-muted" /><span
+                >Close</span
+              >
+            {:else}
+              <Search class="size-icon-md flex-none text-ink-muted" />
+              <span>Browse</span>
+            {/if}
+          </Button>
+        </span>
       {/if}
     </div>
     <div inert={!browsing} {@attach folds(() => browsing, PANEL)}>
@@ -375,7 +371,7 @@
               title={path}>{path}</span
             >
             <Button
-              class="flex-none max-phone:min-h-c-row-h max-phone:w-full"
+              class="flex-none max-phone:w-full"
               onclick={useFolder}
               size="sm"
             >

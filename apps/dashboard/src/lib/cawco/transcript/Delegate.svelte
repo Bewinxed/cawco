@@ -425,11 +425,7 @@
       class="flex items-center gap-space-1"
       style:--hit-gap-x="var(--space-1)"
     >
-      <Collapsible.Trigger
-        data-bhead
-        class="group/bhead flex-auto"
-        look="head"
-      >
+      <Collapsible.Trigger data-bhead class="group/bhead flex-auto" look="head">
         <!-- The mark the delegate tray's chip flies out of, the first time
              this card leaves the view (tray.svelte.ts): the delegate's
              sprite on its hue, filling the glyph cell. -->

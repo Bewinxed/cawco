@@ -33,7 +33,10 @@
   import { onMount, tick, untrack } from "svelte";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { chipsVariants, chipVariants } from "#lib/components/ui/chip/index.js";
+  import {
+    chipsVariants,
+    chipVariants,
+  } from "#lib/components/ui/chip/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import {

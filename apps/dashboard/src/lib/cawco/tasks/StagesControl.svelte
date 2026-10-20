@@ -21,8 +21,8 @@
     type TaskSummary,
   } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";

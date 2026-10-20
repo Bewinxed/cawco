@@ -45,11 +45,7 @@
 </script>
 
 <Popover.Root bind:open={expanded}>
-  <Popover.Trigger
-    data-picker-chip
-    aria-label="{label}: {chosen}"
-    look="chip"
-  >
+  <Popover.Trigger data-picker-chip aria-label="{label}: {chosen}" look="chip">
     <span class="text-ink-muted">{label}</span>
     <span data-slot="num" class="min-w-0 truncate num"
       ><MorphText text={chosen} /></span

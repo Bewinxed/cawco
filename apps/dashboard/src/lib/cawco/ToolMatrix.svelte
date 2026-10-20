@@ -240,11 +240,8 @@
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
-            <Badge
-              {...props}
-              size="cell"
-              tone="subtle"
-              variant="ghost"><span>Unknown</span></Badge
+            <Badge {...props} size="cell" tone="subtle" variant="ghost"
+              ><span>Unknown</span></Badge
             >
           {/snippet}
         </Tooltip.Trigger>
@@ -328,7 +325,6 @@
                   >{installedOn(spec)}/{machines.length}
                   installed</span
                 >
-                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch is a bits-ui button[role=switch], which the label-click passthrough this markup relies on already recognizes as labelable — swapping to a `for`/id pairing would drop nothing biome can see but would change nothing real either. -->
                 <label
                   class="flex items-center gap-space-2 text-label text-ink-muted"
                 >
