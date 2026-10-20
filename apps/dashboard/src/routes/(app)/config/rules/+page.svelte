@@ -20,7 +20,12 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
-  import { IconAlert, IconPlus, IconRules, IconTrash } from "#lib/icons.js";
+  import {
+    IconNeedsYouSection,
+    IconPlus,
+    IconRules,
+    IconTrash,
+  } from "#lib/icons.js";
 
   /**
    * The rules. Each row reads as the sentence the rule is, because a rule is a
@@ -117,7 +122,7 @@
         variant="outline"
         bind:pressed={waitingOnly}
       >
-        <IconAlert />
+        <IconNeedsYouSection />
         <span>Waiting on an answer ({pendingTotal})</span>
       </Toggle>
     {/if}

@@ -126,7 +126,7 @@ export {
 export { default as IconGraphUp } from "~icons/solar/graph-up-bold-duotone";
 /** A person is asked for: the Needs-you glyph (DESIGN.md, Session status). */
 export { default as IconNeedsYou } from "~icons/solar/hand-shake-bold";
-/** Caw's Needs you section head, beside the Notices bell: a section glyph, not a status mark. */
+/** Needs you as a section glyph, not a status mark: Caw's section head beside the Notices bell, and the rules filter for those waiting on an answer. */
 export { default as IconNeedsYouSection } from "~icons/solar/hand-shake-bold-duotone";
 /** A post a task made (`*.post.json`). */
 export { default as IconPost } from "~icons/solar/hashtag-square-bold-duotone";

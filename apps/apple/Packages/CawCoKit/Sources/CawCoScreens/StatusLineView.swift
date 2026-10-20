@@ -26,7 +26,7 @@ final class StatusLineView: UIView {
         case refused, updating, unreachable, updated, connecting, reading, connected
     }
 
-    private let glyph = GlyphView(.warning, size: Size.iconSm, tint: Palette.statusFailInk)
+    private let glyph = GlyphView(.failed, size: Size.iconSm, tint: Palette.statusFailInk)
     private let words = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     private var reconnect: UIButton!
     /// The glyph and the words, one pair.
