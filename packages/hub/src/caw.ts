@@ -83,6 +83,7 @@ import {
   type RelayProvider,
   type SendPayload,
   type SpawnPayload,
+  sessionLink,
   type ThreadAnswer,
   type ThreadEvent,
   type ThreadHearing,
@@ -2776,7 +2777,7 @@ export const createCaw = ({
           `Caw could not be woken for the thread “${into.title}” in ${project.name}. Nothing was handed.`
         );
       }
-      return `Handed to Caw in the thread “${into.title}” (${project.name}).`;
+      return `Handed to Caw in the thread ${sessionLink(into.id, into.title)} (${project.name}).`;
     },
 
     /**

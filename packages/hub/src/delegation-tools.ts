@@ -2,6 +2,7 @@ import {
   IMAGE_GENERATION_DESCRIPTION,
   LANDS_MODES,
   type LandsMode,
+  REFERENCE_GUIDANCE,
 } from "@cawco/core";
 import type { ForgeWrite } from "@cawco/core/upstream-post";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
@@ -1542,8 +1543,9 @@ export function handoffInstructions(
   listable: Listable
 ): string {
   const { names } = listable;
-  const naming =
-    "Name this session with set_title in 3 to 6 plain words once its task is clear; call it again only when the task changes.";
+  // How a session names another in its words (core references.ts): the
+  // dashboard draws the link as that session's chip.
+  const naming = `Name this session with set_title in 3 to 6 plain words once its task is clear; call it again only when the task changes.\n\n${REFERENCE_GUIDANCE}`;
   // Sessions said image generation was unavailable on models without it:
   // the tool is the hub's, on every model, and stays the session's own.
   const images = names.includes("generate_image")
