@@ -12,6 +12,13 @@
  *   split standing shows the preview's sheet, none shows it beside the
  *   conversation, and opening posts and logs no loop.
  *
+ * The project's first thread is its Setup thread: Caw is woken with the
+ * setup event, which names the thread and leaves the person's words in it
+ * for him to read (setup.ts `openingOf`), so a marker there never reaches
+ * the mock model. The thread is opened, Caw's answer in it waited for, and
+ * the marker sent as the person's next message, which wakes him with its
+ * words (caw.ts "You wrote in the thread").
+ *
  * Caw starts in a bounded place of the project's, so this spec's fleet
  * starts a boundary, which no workspace can (README "A spec that delegates
  * runs on the host"): it runs on the host.
@@ -20,7 +27,7 @@
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { MACHINE } from "../../scratch-fleet";
+import { MACHINE, until } from "../../scratch-fleet";
 import type { Spec } from "../kit";
 import {
   DESK_SWEEP,
@@ -46,16 +53,28 @@ const spec: Spec = {
       cwd: src,
       caw: true,
     });
-    let thread = "";
-    const id = await made(kit, "2", "chip-wraps-caw", async () => {
-      thread = (
-        await fleet.api<{ thread: { id: string } }>(
-          `/api/projects/${project.id}/threads`,
-          { body: "PROBE-CALL:2" }
-        )
-      ).thread.id;
-    });
-    if (!(id && thread)) {
+    const thread = (
+      await fleet.api<{ thread: { id: string } }>(
+        `/api/projects/${project.id}/threads`,
+        { body: "Set it up as it comes." }
+      )
+    ).thread.id;
+    await until(
+      "Caw answered in the Setup thread",
+      () =>
+        fleet.query<{ n: number }>(
+          "SELECT count(*) AS n FROM thread_messages WHERE thread_id = ? AND author = 'caw'",
+          thread
+        )[0]?.n ?? 0,
+      (count) => count > 0,
+      180_000
+    );
+    const id = await made(kit, "2", "chip-wraps-caw", () =>
+      fleet.api(`/api/projects/${project.id}/threads/${thread}/messages`, {
+        body: "PROBE-CALL:2",
+      })
+    );
+    if (!id) {
       return;
     }
     // The thread's tab, and its row's link (links.ts `rowHref`).
