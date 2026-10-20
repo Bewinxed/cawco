@@ -183,6 +183,12 @@ export interface LandOptions {
   /** For `grow`: the part of the destination that the source is (a selector inside it). */
   anchor?: string;
   /**
+   * The flight's curve, the drawer's unless the motion it shares a clock
+   * with runs on another (a decision card's page-length fold on
+   * `--ease-crossfade`).
+   */
+  easing?: string;
+  /**
    * `clip` opens the destination out of the source's box instead of scaling
    * it; `grow` also moves it there first (see above).
    */
@@ -235,6 +241,7 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
     mode = "scale",
     uniform = false,
     ms = dur("--dur-panel"),
+    easing = CURVE.drawer,
     anchor,
   } = options;
   if (!from.stays) {
@@ -304,7 +311,7 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
   const animation = node.animate(frames, {
     id: FLIGHT,
     duration: ms,
-    easing: CURVE.drawer,
+    easing,
   });
   animation.finished.then(reveal, reveal);
 }
@@ -354,7 +361,8 @@ export function land(key: () => string | undefined, options: LandOptions = {}) {
 export function closeInto(
   surface: HTMLElement,
   target: HTMLElement,
-  ms = dur("--dur-panel")
+  ms = dur("--dur-panel"),
+  easing: string = CURVE.drawer
 ): Animation | undefined {
   if (!motionOk.current) {
     return;
@@ -374,6 +382,6 @@ export function closeInto(
         opacity: 0,
       },
     ],
-    { duration: ms, easing: CURVE.drawer, fill: "forwards" }
+    { duration: ms, easing, fill: "forwards" }
   );
 }

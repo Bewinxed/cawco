@@ -12,30 +12,41 @@
  *    keycap change over --dur-control on ease-out, read at 0, ½ and 1 of
  *    that clock, landing on `brand-solid` and `chip-chosen-bg` (L905, L540).
  *    The card folds once that colour has landed, never before.
- * 2. The fold: the body's height, margin and opacity and the card's padding
- *    on one clock (one start time, duration and easing: --dur-panel on the
- *    drawer curve, L479, L856), read at 0, ½ and 1: the card from its open
- *    height to its decided line. The page's scroll rides that clock: at 0
- *    where it stood before the press (no jump on the fold's frame), at ½
- *    the fold's own eased progress of the way, at 1 where it lands, with the
- *    next card in view under the decided line.
+ * 2. The fold: the body's height, margin and opacity, the card's padding and
+ *    the chosen option's flight on one clock (one start time, duration and
+ *    easing: --dur-settle on --ease-crossfade, page-length travel by L690),
+ *    read at 0, ½ and 1: the card from its open height to its decided line.
+ *    The page's scroll rides that clock: at 0 where it stood before the
+ *    press (no jump on the fold's frame), at ½ the fold's own eased progress
+ *    of the way, at 1 where it lands, with the next card in view under the
+ *    decided line. Scrubbed frame by frame (1/60s steps, 0 to 1), no frame
+ *    moves the scroll or the card's height more than an eighth of its trip
+ *    (L690: "every other house curve moves more than an eighth in one frame
+ *    there, which reads as a lurch").
  * 3. Change pressed with the fold held at ½ turns it back from the height
- *    drawn there (L489), opening over --dur-panel on the drawer curve, focus
- *    on the pick.
+ *    drawn there (L489), opening over --dur-settle on --ease-crossfade,
+ *    focus on the pick.
  * 4. Played live, a pick folds its card --dur-control after the press (the
  *    chosen colour landing, no other wait), moves the page's scroll only
- *    forward on its way and never by the browser's anchoring; focus lands on
- *    the next open card's first option once the fold lands, past the last
- *    card on the first open one above it, and on Send when none is left.
+ *    forward on its way and never by the browser's anchoring; each painted
+ *    frame's step is read (a ResizeObserver on the card, after layout), with
+ *    the long tasks and long animation frames the page reports; focus lands
+ *    on the next open card's first option once the fold lands, past the
+ *    last card on the first open one above it, and on Send when none is
+ *    left.
  * 5. From the keyboard (L690: "A choice made from the keyboard … is
- *    instant"): Enter on an option lands everything on the next frame, with
- *    no animation under the card: its chosen colour, the card at its decided
- *    line, the scroll where the fold would have taken it and focus on the
- *    next open card's first option. Enter on Change opens it the same way,
- *    focus on the pick.
+ *    instant"): Enter on an option, and Space on another, land everything
+ *    on the next frame, with no animation under the card: its chosen colour,
+ *    the card at its decided line, the scroll where the fold would have
+ *    taken it and focus on the next open card's first option. Enter on
+ *    Change opens it the same way, focus on the pick.
  * 6. Reduced motion: the fold runs opacity alone (no height tween, no
  *    padding run), the scroll stands still while it fades and is placed at
  *    once where it lands, and focus still moves.
+ * 7. A several-pick card (its own page): two options picked, Done by
+ *    pointer flies each chosen option's keycap and label from its own chip
+ *    to its own place in the head on the fold's clock, each source hidden
+ *    while its copy flies.
  *
  *   bun scripts/probe-kit/run.ts web decision-pick
  */
@@ -65,8 +76,23 @@ const PROGRAM = [
   `sharp = Option("sharp", "Sharp", "8px corners.", false, [], "Reads colder.")`,
 ].join("\n");
 
-/** --ease-drawer as the engine writes it. */
-const DRAWER = "cubic-bezier(0.32, 0.72, 0, 1)";
+/** A several-pick card, on a page of its own: its picks fly to the head together. */
+const MANY = "many";
+const MANY_PROGRAM = [
+  `root = Decisions("Reach", [reach, after])`,
+  `reach = Decision("reach", "Where does the launch reach people?", [mail, feed, talk], "Each reaches a different reader.", [], [], true)`,
+  `mail = Option("mail", "The newsletter", "Every subscriber, once.", true, [], "One more thing to write each week.")`,
+  `feed = Option("feed", "The feed", "Readers who follow along.", false, [], "It scrolls past in a day.")`,
+  `talk = Option("talk", "A talk", "The room, live.", false, [], "One evening of preparing.")`,
+  `after = Decision("after", "Who answers replies?", [owner, team], "Replies need a person.")`,
+  `owner = Option("owner", "The owner", "One voice.", true, [], "Slower on busy weeks.")`,
+  `team = Option("team", "The team", "Faster replies.", false, [], "Many voices.")`,
+].join("\n");
+
+/** --ease-crossfade as the engine writes it. */
+const CROSSFADE = "cubic-bezier(0.42, 0, 0.58, 1)";
+/** L690's lurch: the most of its trip one frame may move. */
+const EIGHTH = 0.125;
 /** --ease-out as the engine writes it. */
 const OUT = "cubic-bezier(0.23, 1, 0.32, 1)";
 
@@ -256,22 +282,79 @@ const toOption = async (page: Page, id: string, option: string) => {
   await settle(page, 200);
 };
 
+/** One frame of a live pick, as the page drew it. */
+interface LiveFrame {
+  /** The card's height. */
+  card: number;
+  /** The most the page could scroll then. */
+  most: number;
+  /** The fold's progress on its curve, null before it starts. */
+  p: number | null;
+  scroll: number;
+  /** The frame's time, ms. */
+  t: number;
+}
+
+/** A long task or long animation frame the page reported, and what ran in it. */
+interface LongWork {
+  blocking: number;
+  duration: number;
+  kind: string;
+  scripts: string[];
+  start: number;
+}
+
 /**
  * Picks `option` of card `id` with the page played live, and answers every
- * frame's scroll from the press until the fold lands, and where focus went.
+ * frame from the press until the fold lands (its time, the scroll, the most
+ * the page could scroll, the card's height, the fold's progress), the long
+ * tasks and long animation frames the page reported meanwhile, when the
+ * fold started, and where focus went.
  */
 async function liveFold(page: Page, id: string, option: string) {
   await toOption(page, id, option);
   await page.evaluate((card) => {
-    const seen: number[] = [];
+    const frames: LiveFrame[] = [];
+    const long: LongWork[] = [];
     const held = window as unknown as {
       kitFoldAt?: number;
+      kitFrames?: LiveFrame[];
+      kitLong?: LongWork[];
       kitPressAt?: number;
-      kitScrolls?: number[];
     };
-    held.kitScrolls = seen;
+    held.kitFrames = frames;
+    held.kitLong = long;
     held.kitPressAt = undefined;
     held.kitFoldAt = undefined;
+    const watch = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        const loaf = entry as PerformanceEntry & {
+          blockingDuration?: number;
+          scripts?: {
+            duration: number;
+            invoker: string;
+            sourceFunctionName: string;
+          }[];
+        };
+        long.push({
+          kind: entry.entryType,
+          start: Math.round(entry.startTime),
+          duration: Math.round(entry.duration),
+          blocking: Math.round(loaf.blockingDuration ?? 0),
+          scripts: (loaf.scripts ?? []).map(
+            (s) =>
+              `${s.invoker} ${s.sourceFunctionName} ${Math.round(s.duration)}ms`
+          ),
+        });
+      }
+    });
+    for (const type of ["long-animation-frame", "longtask"]) {
+      try {
+        watch.observe({ type, buffered: false });
+      } catch {
+        // An engine without the entry type reports none.
+      }
+    }
     addEventListener(
       "click",
       () => {
@@ -289,18 +372,29 @@ async function liveFold(page: Page, id: string, option: string) {
     if (root) {
       turn.observe(root, { attributeFilter: ["data-decided"] });
     }
-    const step = () => {
-      seen.push(scrollY);
+    // Each frame as it is painted: a ResizeObserver runs after the frame's
+    // animation callbacks and layout (the ride's scroll written, the fold's
+    // height laid out), every frame the card changes size, and once as it
+    // starts watching (the page at rest).
+    const scroller = document.scrollingElement as Element;
+    const sized = new ResizeObserver(() => {
       const body = root?.querySelector<HTMLElement>(".dp-body");
-      if (
-        root?.hasAttribute("data-decided") &&
-        body?.getAnimations().length === 0
-      ) {
-        return;
-      }
-      requestAnimationFrame(step);
+      const run = body?.getAnimations()[0];
+      frames.push({
+        t: Math.round(Number(document.timeline.currentTime) * 10) / 10,
+        scroll: scroller.scrollTop,
+        most: scroller.scrollHeight - scroller.clientHeight,
+        card: Math.round((root?.getBoundingClientRect().height ?? 0) * 10) / 10,
+        p: run?.effect?.getComputedTiming().progress ?? null,
+      });
+    });
+    if (root) {
+      sized.observe(root);
+    }
+    (window as unknown as { kitStop?: () => void }).kitStop = () => {
+      sized.disconnect();
+      watch.disconnect();
     };
-    requestAnimationFrame(step);
   }, id);
   await page.locator(`#decision-${id} [data-option="${option}"]`).click();
   await page.waitForFunction(
@@ -315,22 +409,70 @@ async function liveFold(page: Page, id: string, option: string) {
     { timeout: 10_000 }
   );
   await settle(page, 200);
-  const { scrolls, foldAfter } = await page.evaluate(() => {
+  const { frames, long, foldAt, pressAt } = await page.evaluate(() => {
     const held = window as unknown as {
       kitFoldAt?: number;
+      kitFrames: LiveFrame[];
+      kitLong: LongWork[];
       kitPressAt?: number;
-      kitScrolls: number[];
+      kitStop: () => void;
     };
+    held.kitStop();
     return {
-      scrolls: held.kitScrolls,
-      foldAfter:
-        held.kitFoldAt !== undefined && held.kitPressAt !== undefined
-          ? Math.round(held.kitFoldAt - held.kitPressAt)
-          : null,
+      frames: held.kitFrames,
+      long: held.kitLong,
+      foldAt: held.kitFoldAt ?? null,
+      pressAt: held.kitPressAt ?? null,
     };
   });
-  return { scrolls, foldAfter, focus: await focusOf(page) };
+  return {
+    scrolls: frames.map((frame) => frame.scroll),
+    frames,
+    long,
+    foldAt: foldAt === null ? null : Math.round(foldAt),
+    pressAt: pressAt === null ? null : Math.round(pressAt),
+    foldAfter:
+      foldAt !== null && pressAt !== null ? Math.round(foldAt - pressAt) : null,
+    focus: await focusOf(page),
+  };
 }
+
+/**
+ * A live pick's frames from the fold's start: each frame's step in the
+ * scroll and the card's height, as a share of each one's whole trip.
+ */
+const stepsOf = (frames: LiveFrame[]) => {
+  const at = frames.findIndex((frame) => frame.p !== null);
+  const from = frames[Math.max(0, at - 1)];
+  const run = at < 0 ? [] : frames.slice(at - 1);
+  const last = frames.at(-1);
+  const scrollTrip = Math.abs((last?.scroll ?? 0) - (from?.scroll ?? 0)) || 1;
+  const cardTrip = Math.abs((last?.card ?? 0) - (from?.card ?? 0)) || 1;
+  const steps = run.slice(1).map((frame, i) => {
+    const was = run[i] as LiveFrame;
+    return {
+      t: Math.round((frame.t - (from?.t ?? 0)) * 10) / 10,
+      scroll: Math.round((frame.scroll - was.scroll) * 10) / 10,
+      scrollShare:
+        Math.round((Math.abs(frame.scroll - was.scroll) / scrollTrip) * 1000) /
+        1000,
+      card: Math.round((frame.card - was.card) * 10) / 10,
+      cardShare:
+        Math.round((Math.abs(frame.card - was.card) / cardTrip) * 1000) / 1000,
+      most: frame.most,
+      p: frame.p === null ? null : Math.round(frame.p * 1000) / 1000,
+    };
+  });
+  return {
+    scrollTrip,
+    cardTrip,
+    steps,
+    worst: Math.max(
+      0,
+      ...steps.map((step) => Math.max(step.scrollShare, step.cardShare))
+    ),
+  };
+};
 
 /** Card `id` on the frame after a key: its runs, its height, the scroll and where the fold's landing would put it, and focus. */
 const nextFrameOf = (page: Page, id: string) =>
@@ -378,6 +520,52 @@ const nextFrameOf = (page: Page, id: string) =>
     id
   );
 
+/**
+ * The held clock scrubbed frame by frame, 0 to 1 in 1/60s steps of its `ms`:
+ * card `id`'s height and the page's scroll at each, and each frame's step as
+ * a share of its whole trip.
+ */
+async function scrubFrames(page: Page, clock: Clock, id: string, ms: number) {
+  const reads: { card: number; scroll: number; t: number }[] = [];
+  const count = Math.ceil(ms / (1000 / 60));
+  for (let k = 0; k <= count; k += 1) {
+    const t = Math.min(ms, (k * 1000) / 60);
+    await clock.seek(t / ms);
+    const read = await foldOf(page, id);
+    reads.push({
+      t: Math.round(t * 10) / 10,
+      card: read.card,
+      scroll: read.scroll,
+    });
+  }
+  const [first] = reads;
+  const last = reads.at(-1);
+  const scrollTrip = Math.abs((last?.scroll ?? 0) - (first?.scroll ?? 0)) || 1;
+  const cardTrip = Math.abs((last?.card ?? 0) - (first?.card ?? 0)) || 1;
+  const steps = reads.slice(1).map((read, i) => {
+    const was = reads[i] as (typeof reads)[number];
+    return {
+      t: read.t,
+      scroll: Math.round((read.scroll - was.scroll) * 10) / 10,
+      scrollShare:
+        Math.round((Math.abs(read.scroll - was.scroll) / scrollTrip) * 1000) /
+        1000,
+      card: Math.round((read.card - was.card) * 10) / 10,
+      cardShare:
+        Math.round((Math.abs(read.card - was.card) / cardTrip) * 1000) / 1000,
+    };
+  });
+  return {
+    scrollTrip,
+    cardTrip,
+    steps,
+    worst: Math.max(
+      0,
+      ...steps.map((step) => Math.max(step.scrollShare, step.cardShare))
+    ),
+  };
+}
+
 /** Whether a run of scroll readings only ever moves one way. */
 const oneWay = (scrolls: number[]) => {
   const steps = scrolls.slice(1).map((y, i) => y - (scrolls[i] ?? y));
@@ -408,7 +596,7 @@ async function leg(
   await settle(page, 600);
   const clock = await Clock.on(page);
   const control = await tokenMs(page, "--dur-control");
-  const panel = await tokenMs(page, "--dur-panel");
+  const settleMs = await tokenMs(page, "--dur-settle");
   const edge = await tokenColour(page, "--brand-solid");
   const keycap = await tokenColour(page, "--chip-chosen-bg");
 
@@ -498,7 +686,7 @@ async function leg(
   const what = (r: (typeof foldRuns)[number]) =>
     `${r.type} ${r.name || "(web)"} start ${r.start} ${r.end}ms ${r.easing}`;
   kit.check(
-    `${label}: the fold is one clock, --dur-panel (${panel}ms) on the drawer curve: the body's height, margin and opacity, the card's padding and the chosen option's flight start together, and the state line leaves its slot from that start over --dur-exit`,
+    `${label}: the fold is one clock, --dur-settle (${settleMs}ms) on --ease-crossfade: the body's height, margin and opacity, the card's padding and the chosen option's flight start together, and the state line leaves its slot from that start over --dur-exit`,
     webs.length === 3 &&
       !!lead &&
       webs.every(
@@ -506,8 +694,8 @@ async function leg(
           run.start !== null &&
           lead.start !== null &&
           Math.abs(run.start - lead.start) <= 0.5 &&
-          Math.abs(run.end - panel) < 1 &&
-          run.easing === DRAWER
+          Math.abs(run.end - settleMs) < 1 &&
+          run.easing === CROSSFADE
       ) &&
       webs.some((run) => run.name === "share-flight") &&
       !!stateFade &&
@@ -571,6 +759,15 @@ async function leg(
     })
   );
 
+  // The pass measure: no frame of the clock carries more than an eighth of
+  // the scroll's trip or the card's height's.
+  const scrubbed = await scrubFrames(page, clock, "path", settleMs);
+  kit.check(
+    `${label}: scrubbed frame by frame (1/60s, 0 to 1), no frame moves the scroll or the card's height more than an eighth of its trip (L690)`,
+    scrubbed.steps.length > 0 && scrubbed.worst <= EIGHTH,
+    JSON.stringify(scrubbed)
+  );
+
   // 4. Change at ½ turns it back from the height drawn there.
   await clock.seek(0.5);
   const drawn = await foldOf(page, "path");
@@ -587,7 +784,7 @@ async function leg(
   await settle(page, 400);
   const backFocus = await focusOf(page);
   kit.check(
-    `${label}: Change at ½ turns the fold back from the height drawn there, open over --dur-panel on the drawer curve, the head's chip closing back into its option on that clock, focus on the pick`,
+    `${label}: Change at ½ turns the fold back from the height drawn there, open over --dur-settle on --ease-crossfade, the head's chip closing back into its option on that clock, focus on the pick`,
     !!back["0"] &&
       !!back["1"] &&
       Math.abs(back["0"].card - drawn.card) < 1.5 &&
@@ -595,8 +792,8 @@ async function leg(
       backRuns.filter(
         (run) =>
           run.type === "WebAnimation" &&
-          Math.abs(run.end - panel) < 1 &&
-          run.easing === DRAWER
+          Math.abs(run.end - settleMs) < 1 &&
+          run.easing === CROSSFADE
       ).length >= 3 &&
       backFocus.card === "path" &&
       backFocus.option === "direct",
@@ -619,7 +816,15 @@ async function leg(
       oneWay(look.scrolls) &&
       look.focus.card === "radius" &&
       look.focus.option === "soft",
-    JSON.stringify(look)
+    JSON.stringify({
+      foldAfter: look.foldAfter,
+      foldAt: look.foldAt,
+      pressAt: look.pressAt,
+      focus: look.focus,
+      long: look.long,
+      live: stepsOf(look.frames),
+      frames: look.frames.slice(0, 40),
+    })
   );
   const radius = await liveFold(page, "radius", "soft");
   kit.check(
@@ -687,7 +892,120 @@ async function keyLeg(
       keyBackFocus.option === "direct",
     JSON.stringify({ open: keyOpen.body, keyBack, keyBackFocus })
   );
+  // Space picks too: the other option, from the reopened card.
+  await keys.locator('#decision-path [data-option="docs"]').focus();
+  await keys.keyboard.press(" ");
+  const spacePick = await nextFrameOf(keys, "path");
+  const spaceFocus = await focusOf(keys);
+  const spaceChips = await keys.evaluate(() =>
+    [
+      ...document.querySelectorAll<HTMLElement>("#decision-path [data-pick]"),
+    ].map((one) => one.dataset.pick ?? "")
+  );
+  kit.check(
+    `${label}: Space on an option lands it on the next frame the same way: no animation under the card, the card at its decided line with that option's chip, the scroll at the fold's landing, focus on the next open card's first option`,
+    spacePick.runs.length === 0 &&
+      spacePick.decided &&
+      spacePick.body < 0.5 &&
+      JSON.stringify(spaceChips) === '["docs"]' &&
+      Math.abs(spacePick.scroll - spacePick.target) <= 1 &&
+      spaceFocus.card === "look" &&
+      spaceFocus.option === "card",
+    JSON.stringify({ spacePick, spaceChips, spaceFocus })
+  );
   await keys.close();
+}
+
+/** 7. A several-pick card: each chosen option flies to its own place in the head. */
+async function manyLeg(
+  kit: Kit,
+  url: string,
+  view: (typeof LEGS)[number]["view"],
+  theme: (typeof LEGS)[number]["theme"],
+  label: string
+) {
+  const page = await kit.page(view, { theme, init: [CAWCO_BRIDGE] });
+  await page.goto(url, { waitUntil: "load" });
+  await page.waitForSelector("#decision-reach", { timeout: 30_000 });
+  await settle(page, 400);
+  const settleMs = await tokenMs(page, "--dur-settle");
+  const picked = ["mail", "feed"] as const;
+  for (const option of picked) {
+    await page.locator(`#decision-reach [data-option="${option}"]`).click();
+    await settle(page, 300);
+  }
+  const sources = Object.fromEntries(
+    await Promise.all(
+      picked.map(
+        async (option) =>
+          [option, (await flightOf(page, "reach", option)).source] as const
+      )
+    )
+  );
+  const clock = await Clock.on(page);
+  const runs = await clock.catchRuns(
+    () => page.locator("#decision-reach .dp-change").click(),
+    "#decision-reach"
+  );
+  const seen: Record<
+    string,
+    Record<string, Awaited<ReturnType<typeof flightOf>>>
+  > = {};
+  for (const at of [0, 0.5, 1]) {
+    await clock.seek(at);
+    for (const option of picked) {
+      seen[option] ??= {};
+      (seen[option] as Record<string, Awaited<ReturnType<typeof flightOf>>>)[
+        String(at)
+      ] = await flightOf(page, "reach", option);
+    }
+  }
+  await clock.release();
+  const webs = runs.filter((run) => run.type === "WebAnimation");
+  const [lead] = webs;
+  const flights = webs.filter((run) => run.name === "share-flight");
+  const oneClock =
+    !!lead &&
+    webs.every(
+      (run) =>
+        run.start !== null &&
+        lead.start !== null &&
+        Math.abs(run.start - lead.start) <= 0.5 &&
+        Math.abs(run.end - settleMs) < 1 &&
+        run.easing === CROSSFADE
+    );
+  const each = picked.map((option) => {
+    const at = seen[option] ?? {};
+    return {
+      option,
+      fromItsRun: near(at["0"]?.copy ?? null, sources[option] ?? null),
+      landed: at["1"]?.transform === "none",
+      hidden: !!at["0"]?.sourceHidden && !!at["0.5"]?.sourceHidden,
+      rest: at["1"]?.copy ?? null,
+    };
+  });
+  const [one, two] = each;
+  kit.check(
+    `${label}: a several-pick card's Done flies each chosen option from its own chip to its own place in the head, on the fold's one clock (--dur-settle on --ease-crossfade), each source hidden while its copy flies`,
+    flights.length === picked.length &&
+      oneClock &&
+      each.every(
+        (option) => option.fromItsRun && option.landed && option.hidden
+      ) &&
+      !!one?.rest &&
+      !!two?.rest &&
+      !near(one.rest, two.rest, 1),
+    JSON.stringify({
+      runs: runs.map(
+        (r) =>
+          `${r.type} ${r.name || "(web)"} start ${r.start} ${r.end}ms ${r.easing}`
+      ),
+      sources,
+      each,
+      seen,
+    })
+  );
+  await page.close();
 }
 
 /** 6. Reduced motion. */
@@ -774,20 +1092,33 @@ async function stillLeg(
 const spec: Spec = {
   name: "decision-pick",
   run: async (kit: Kit) => {
-    let refusal = "";
-    try {
-      checkProgram(PROGRAM);
-    } catch (error) {
-      refusal = (error as Error).message;
+    for (const program of [PROGRAM, MANY_PROGRAM]) {
+      let refusal = "";
+      try {
+        checkProgram(program);
+      } catch (error) {
+        refusal = (error as Error).message;
+      }
+      kit.check(
+        `the hub's check keeps the program (${program.slice(0, 40)}…)`,
+        refusal === "",
+        refusal
+      );
     }
-    kit.check("the hub's check keeps the program", refusal === "", refusal);
-    const stage = await startDecisionStage(new Map([[NAME, PROGRAM]]), {});
+    const stage = await startDecisionStage(
+      new Map([
+        [NAME, PROGRAM],
+        [MANY, MANY_PROGRAM],
+      ]),
+      {}
+    );
     try {
       for (const { view, theme, label } of LEGS) {
         const url = stage.pageUrl(NAME, theme);
         await leg(kit, url, view, theme, label);
         await keyLeg(kit, url, view, theme, label);
         await stillLeg(kit, url, view, theme, label);
+        await manyLeg(kit, stage.pageUrl(MANY, theme), view, theme, label);
       }
     } finally {
       await stage.stop();
