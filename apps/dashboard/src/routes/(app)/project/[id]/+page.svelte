@@ -1797,6 +1797,13 @@
       {blocks}
       {canTalk}
       cawProblem={lead.problem}
+      onform={() => {
+        // A phone's Caw is a sheet over the page's foot: the routine form
+        // the reader opened stands clear of it, his seat brings him back.
+        if (pageScrollsQuery.current) {
+          lead.open = false;
+        }
+      }}
       project={{ id: project.id, name: project.name }}
       starters={routineStarters}
       viewItems={viewItemsOf("routines")}
@@ -2190,6 +2197,10 @@
     class={[
       "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 pe-space-6 pb-space-6 ps-space-7 max-desk:px-space-5 view-board:overflow-hidden view-board:pb-0 view-canvas:overflow-hidden view-canvas:pb-space-5 view-decisions-graph:overflow-hidden view-decisions-graph:pb-space-5 view-decisions-page:overflow-hidden view-decisions-page:pb-0 max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-graph:basis-0 max-phone:view-decisions-graph:min-h-(--pane-min) max-phone:view-decisions-graph:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
       fadeOn === "pane" && "kit-edge-fade-block",
+      // On a phone Caw's panel is a bottom sheet that holds nothing (CawFloat):
+      // while it stands the page keeps its height of room at its foot, so any
+      // part of the view (a form's buttons, a block's head) scrolls clear of it.
+      "max-phone:in-data-caw-open:pb-c-sheet-max-h",
     ]}
     data-view={reading ? "board" : paneView}
     style:--pane-min="50cqb"

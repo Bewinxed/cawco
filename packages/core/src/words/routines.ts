@@ -35,24 +35,51 @@ export const routinesWords = {
     "Read the issues opened since the last run, label each one, and say which need me.",
   needsPrompt: "Say what each run does.",
   whenLabel: "When",
-  whenHint: "Five cron fields: minute, hour, day, month, weekday.",
-  whenPlaceholder: "0 9 * * 1-5",
-  needsWhen: "Give a schedule in five cron fields, like 0 9 * * 1-5.",
+  /** When's choices (routines/when.ts `Repeat`). */
+  repeats: {
+    hour: "Every hour",
+    day: "Every day",
+    weekdays: "Every weekday",
+    week: "Every week",
+    custom: "Custom",
+  },
+  dayLabel: "On",
+  timeLabel: "At",
+  needsTime: "Choose a time of day.",
+  customLabel: "Custom schedule",
+  customPlaceholder: "0 9 * * 1-5",
+  customHint:
+    "Five values: minute, hour, day of the month, month, day of the week. 0 9 * * 1-5 means weekdays at 09:00.",
+  needsCustom:
+    "Write the schedule as five values, like 0 9 * * 1-5 for weekdays at 09:00.",
+  /** A custom schedule the hub can't read: the form's own sentence; the hub's words are for agents. */
+  customUnread:
+    "This schedule can't be read. Write five values separated by spaces, like 0 9 * * 1-5 for weekdays at 09:00, or choose a schedule under When.",
   zoneLabel: "Time zone",
+  zoneUnread: "The hub can't read schedules in this time zone. Choose another.",
+  /** A create refused for its schedule. */
+  scheduleUnread: "Its schedule can't be read.",
   typeLabel: "Delegate type",
   /** No type named: each run's is the hub's pick. */
   typeHubPick: "The hub's pick for each run",
   /** A refused read of the project's types: the hub's pick still stands. */
   typesUnread: (problem: string) =>
     `The project's delegate types couldn't be read: ${problem} Runs take the hub's pick.`,
-  /** Under the schedule: its next run, on your clock. */
-  nextRunAt: (when: string) => `Next run ${when}`,
+  /** Under When: its next run, on your clock. */
+  nextRunAt: (when: string) => `next run ${when}`,
   /** A schedule with no run in the next week. */
-  noRunThisWeek: "No run in the next week",
-  /** Beside Create: what making it does at once. */
-  testRun: "It runs once as soon as it's made, as a test.",
-  createFailed: (problem: string) =>
-    `The routine wasn't created. ${problem} Your words stay here: change them, then create it again.`,
+  noRunThisWeek: "no run in the next week",
+  /** Over Create: what making it does at once. */
+  testRun:
+    "Creating it runs it once straight away, as a test. Its result shows in its row on this page, and the run spends like any delegate run.",
+  /** A refused create, and what to do: try again, or the field to change. */
+  createFailed: (problem: string, fix: string) =>
+    `The routine wasn't created. ${problem} ${fix}`,
+  fixTryAgain: "Everything you wrote is still here; try again.",
+  fixWhen: "Change when it runs, then create it again.",
+  fixType: "Choose another delegate type, then create it again.",
+  fixName: "Change its name, then create it again.",
+  fixPrompt: "Change what each run does, then create it again.",
   /** The Event sources block's badge: events arrive as they happen, or only when polled. */
   relayLive: "Relay live",
   relayOff: "Relay off",

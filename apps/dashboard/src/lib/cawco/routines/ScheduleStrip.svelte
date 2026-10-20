@@ -74,6 +74,14 @@
   } = $props();
 
   const schedule = $derived(stripOf(runs, now));
+  /**
+   * A mark's shift from its time (`--f` of the strip): centred (-50% of
+   * itself), but never past the strip's start (-f of its width) nor its end
+   * ((1 - f) of its width, less itself). Read where it is used, so % is the
+   * mark's own width and cqi the strip's.
+   */
+  const KEEP =
+    "clamp(calc(var(--f) * -100cqi), -50%, calc((1 - var(--f)) * 100cqi - 100%))";
   const place = (at: number, span: number) => barPlace(at, [span], "0px");
   const WEEKDAY = new Intl.DateTimeFormat(undefined, { weekday: "short" });
 
@@ -135,21 +143,31 @@
       {/each}
     </span>
     {#if marks.length > 0}
+      <!-- Each mark centred on its time, held inside the strip: a hairline
+           or label that would cross either edge stands flush with it
+           instead (`--keep`, the strip's own width in cqi), so "now", "+24h"
+           and a weekday near either end never poke past the strip or get
+           cut, at any width. -->
       <span
         aria-hidden="true"
-        class="relative block h-(--marks-h) type-meta num text-ink-subtle"
+        class="@container relative block h-(--marks-h) type-meta num text-ink-subtle"
         style:--marks-h={"calc(var(--space-1) + var(--text-meta) * var(--leading-meta))"}
       >
         {#each marks as mark (mark.at)}
           <!-- mark-line: the hairline stands above its label, not beside it -->
           <span
-            data-end={mark.at >= schedule.span || undefined}
-            class="absolute inset-y-0 start-(--at) flex -translate-x-1/2 flex-col items-center not-data-end:data-start:translate-none not-data-end:data-start:items-start data-end:-translate-x-full data-end:items-end"
-            data-start={mark.at === 0 || undefined}
+            class="absolute inset-y-0 start-(--at) w-0"
             style:--at={place(mark.at, schedule.span)}
+            style:--f={Math.min(1, mark.at / schedule.span)}
+            style:--keep={KEEP}
           >
-            <span class="h-space-1 w-px flex-none bg-ink-subtle"></span>
-            <span class="mono-figure whitespace-nowrap">{mark.text}</span>
+            <span
+              class="absolute top-0 start-0 h-space-1 w-px translate-x-(--keep) bg-ink-subtle"
+            ></span>
+            <span
+              class="absolute bottom-0 start-0 mono-figure whitespace-nowrap translate-x-(--keep)"
+              >{mark.text}</span
+            >
           </span>
         {/each}
       </span>

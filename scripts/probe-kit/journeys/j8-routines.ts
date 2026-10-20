@@ -23,6 +23,10 @@ const ROUTINE = /JOURNEY-ROUTINE (\S+)/;
 const PAUSED = "Paused";
 /** A schedule with no run inside the week: only its test and Run now run it. */
 const CRON = "0 6 1 1 *";
+/** The read-back's words for a schedule that runs this week: its next run. */
+const NEXT_RUN = /· next run /;
+/** Any name: the strip is an image named by the schedule's words. */
+const NAMED = /\S/;
 
 interface Seeded {
   projectId: string;
@@ -99,18 +103,62 @@ async function walk(leg: Leg): Promise<void> {
   );
 
   await leg.step(
-    "Fill the form: a name, what each run does, when, and its time zone",
+    "Fill the form: a name, what each run does, and when: every week on Mondays at 07:30, in London",
     async () => {
       await form.getByLabel("Name").fill(name);
       await form.getByLabel("What each run does").fill(prompt);
-      await form.getByLabel("When").fill(CRON);
+      const exact = { exact: true };
+      await form
+        .getByLabel("When", exact)
+        .selectOption({ label: "Every week" });
+      await form.getByLabel("On", exact).selectOption({ label: "Mondays" });
+      await form.getByLabel("At", exact).fill("07:30");
       await form.getByLabel("Time zone").selectOption(zone);
     },
-    // The hub's own cron reads the schedule back: no run in the week ahead.
+    // The hub reads the schedule back, by its own parser, right under When,
+    // and its week stands on the strip: every day's label inside the strip.
+    async () => {
+      await shows(
+        form.getByText(NEXT_RUN),
+        "the hub's read-back of a weekly schedule, with its next run"
+      );
+      const spilled = await form
+        .getByRole("img", { name: NAMED })
+        .first()
+        .evaluate((strip) => {
+          const box = strip.getBoundingClientRect();
+          return [...strip.querySelectorAll("[aria-hidden] span")]
+            .filter((mark) => mark.textContent?.trim())
+            .map((mark) => {
+              const at = mark.getBoundingClientRect();
+              return {
+                text: mark.textContent,
+                start: at.left - box.left,
+                end: box.right - at.right,
+              };
+            })
+            .filter((mark) => mark.start < -0.5 || mark.end < -0.5);
+        });
+      if (spilled.length > 0) {
+        throw new Error(
+          `the schedule strip's labels stand past its edges: ${JSON.stringify(spilled)}`
+        );
+      }
+    }
+  );
+
+  await leg.step(
+    "Change When to a custom schedule that never runs this week",
+    async () => {
+      await form
+        .getByLabel("When", { exact: true })
+        .selectOption({ label: "Custom" });
+      await form.getByLabel("Custom schedule").fill(CRON);
+    },
     () =>
       shows(
-        form.getByText("No run in the next week"),
-        "the hub's read-back of the schedule"
+        form.getByText("· no run in the next week"),
+        "the hub's read-back of the custom schedule"
       )
   );
 

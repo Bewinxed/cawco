@@ -7,13 +7,17 @@
    * (DESIGN.md, The Open Page Rule), and blocks nothing.
    *
    * Its fields, on Configure's editor parts (Field, Input, Textarea, the
-   * kit NativeSelect): a name, what each run does, when (five cron fields
-   * and the time zone they are read in), and the delegate type. The
-   * schedule is read back by the hub's own cron as it is typed: its runs
-   * drawn on the strip the ledger draws (ScheduleStrip), in words, and its
-   * next run on your clock; a schedule the hub refuses says so in the
-   * hub's words under When. A refused create keeps every word where it was
-   * typed and says why over the commit row.
+   * kit NativeSelect): a name, what each run does, when, and the delegate
+   * type. When is a choice of common schedules, as a calendar's repeat
+   * picker offers them (every hour; every day, every weekday or every week
+   * on a day, at a time), or Custom, its five values typed (when.ts); each
+   * writes the expression the API takes. The hub reads the schedule back as
+   * it changes, by its own parser: the sentence right under When says it
+   * on your clock with its next run, and the strip the ledger draws shows
+   * its week. A custom schedule the hub can't read says so in the form's
+   * own sentence; the hub's words are for agents. A refused create keeps
+   * every word where it was written, and says why and what to do over the
+   * commit row.
    *
    * The hub is a prop (`hub`), and so is the state it opens in (`draft`,
    * `saving`, `failure`), so its states file draws each state with no hub.
@@ -21,7 +25,7 @@
   import { routinesWords as words } from "@cawco/core";
   import { untrack } from "svelte";
   import Field from "#lib/cawco/config/Field.svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
+  import { failureWords, unreachable } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -40,6 +44,15 @@
   } from "./routines-api";
   import ScheduleStrip from "./ScheduleStrip.svelte";
   import { readerZone, scheduleOf, whenOf } from "./schedule";
+  import {
+    choiceOf,
+    expressionOf,
+    FIRST_WHEN,
+    REPEATS,
+    type Repeat,
+    WEEK_DAYS,
+    type When,
+  } from "./when";
 
   let {
     projectId,
@@ -56,7 +69,7 @@
     oncreated: (routine: Routine) => void;
     oncancel: () => void;
     hub?: RoutineFormHub;
-    /** What its fields hold when it opens. */
+    /** What its fields hold when it opens; its `cron` opens as the choice that writes it. */
     draft?: Partial<RoutineDraft>;
     /** It opens with a create going (its states file). */
     saving?: boolean;
@@ -71,24 +84,26 @@
   /** How long typing rests before the schedule is read back. */
   const PREVIEW_SETTLE_MS = 250;
 
-  let draft = $state<RoutineDraft>(
+  let draft = $state(
     untrack(() => ({
-      name: "",
-      prompt: "",
-      cron: "",
-      timeZone: readerZone(),
-      delegateType: null,
-      ...opening,
+      name: opening.name ?? "",
+      prompt: opening.prompt ?? "",
+      timeZone: opening.timeZone ?? readerZone(),
+      delegateType: opening.delegateType ?? null,
     }))
+  );
+  let when = $state<When>(
+    untrack(() => (opening.cron ? choiceOf(opening.cron) : { ...FIRST_WHEN }))
   );
   let saving = $state(untrack(() => openSaving));
   let failure = $state<string | null>(untrack(() => openFailure));
   /** Create was pressed: every blank field says what it needs. */
   let attempted = $state(false);
-  let touched = $state<Record<"name" | "prompt" | "cron", boolean>>({
+  let touched = $state<Record<"name" | "prompt" | "time" | "custom", boolean>>({
     name: false,
     prompt: false,
-    cron: false,
+    time: false,
+    custom: false,
   });
 
   // --- the project's delegate types -------------------------------------------
@@ -121,13 +136,20 @@
 
   // --- the schedule, read back by the hub ---------------------------------------
 
-  /** The hub's read of the schedule as it stands, or why it refused it. */
+  const cron = $derived(expressionOf(when));
+  const custom = $derived(when.repeat === "custom");
+  const timed = $derived(
+    when.repeat === "day" ||
+      when.repeat === "weekdays" ||
+      when.repeat === "week"
+  );
+
+  /** The hub's read of the schedule as it stands, or that it can't read it. */
   let scheduleRead = $state<
     | { key: string; preview: SchedulePreview }
-    | { key: string; problem: string }
+    | { key: string; unread: true }
     | null
   >(null);
-  const cron = $derived(draft.cron.trim());
   const scheduleKey = $derived(`${cron}\u0000${draft.timeZone}`);
   $effect(() => {
     const key = scheduleKey;
@@ -145,8 +167,9 @@
           }
         },
         (error: unknown) => {
+          // A hub that didn't answer read nothing: Create checks it again.
           if (live) {
-            scheduleRead = { key, problem: failureWords(error) };
+            scheduleRead = unreachable(error) ? null : { key, unread: true };
           }
         }
       );
@@ -163,8 +186,9 @@
   const preview = $derived(
     current && "preview" in current ? current.preview : null
   );
+  const unread = $derived(current !== null && "unread" in current);
 
-  /** The read-back: the strip's runs, its words (the ledger's, else the hub's), the next run. */
+  /** The read-back: its words on your clock (the ledger's, else the hub's), its next run, the strip's runs. */
   const readBack = $derived.by(() => {
     if (!preview) {
       return null;
@@ -176,7 +200,9 @@
     const said = scheduleOf(cron, draft.timeZone, next);
     return {
       runs: preview.nextRuns,
-      words: said.raw ? preview.words : said.words,
+      words: said.raw
+        ? preview.words
+        : [said.words, said.local].filter(Boolean).join(" · "),
       next: words.nextRunAt(whenOf(next)),
     };
   });
@@ -198,18 +224,28 @@
       ? words.needsPrompt
       : undefined
   );
-  const cronProblem = $derived.by(() => {
-    if (cron === "") {
-      return shown("cron") ? words.needsWhen : undefined;
+  const timeProblem = $derived(
+    timed && cron === "" && shown("time") ? words.needsTime : undefined
+  );
+  const customProblem = $derived.by((): string | undefined => {
+    if (!custom) {
+      return;
     }
-    return current && "problem" in current ? current.problem : undefined;
+    if (cron === "") {
+      return shown("custom") ? words.needsCustom : undefined;
+    }
+    return unread ? words.customUnread : undefined;
   });
+  /** A common schedule is always readable: a refusal is its zone's. */
+  const zoneProblem = $derived(
+    unread && !custom ? words.zoneUnread : undefined
+  );
   const ready = $derived(
     draft.name.trim() !== "" &&
       draft.name.trim().length <= NAME_MAX &&
       draft.prompt.trim() !== "" &&
       cron !== "" &&
-      !(current && "problem" in current)
+      !unread
   );
 
   /** The zones a schedule may be read in, yours among them. */
@@ -226,8 +262,30 @@
     }
   });
 
-  /** The first field that still needs something, for the focus. */
+  /** The form, for the first field that still needs something. */
   let form = $state<HTMLFormElement | null>(null);
+
+  /** What a refused create says to do: try again, or the field to change. */
+  function refusal(error: unknown): string {
+    if (unreachable(error)) {
+      return words.createFailed(failureWords(error), words.fixTryAgain);
+    }
+    const said = failureWords(error);
+    const lower = said.toLowerCase();
+    if (lower.includes("schedule") || lower.includes("time zone")) {
+      return words.createFailed(words.scheduleUnread, words.fixWhen);
+    }
+    if (lower.includes("delegate type")) {
+      return words.createFailed(said, words.fixType);
+    }
+    if (lower.startsWith("name")) {
+      return words.createFailed(said, words.fixName);
+    }
+    if (lower.startsWith("prompt")) {
+      return words.createFailed(said, words.fixPrompt);
+    }
+    return words.createFailed(said, words.fixTryAgain);
+  }
 
   async function create(event: SubmitEvent) {
     event.preventDefault();
@@ -242,9 +300,9 @@
     saving = true;
     failure = null;
     try {
-      oncreated(await hub.create(projectId, draft));
+      oncreated(await hub.create(projectId, { ...draft, cron }));
     } catch (error) {
-      failure = words.createFailed(failureWords(error));
+      failure = refusal(error);
     } finally {
       saving = false;
     }
@@ -286,32 +344,88 @@
     />
   </Field>
 
-  <!-- When: the cron and the zone it is read in side by side where both
-       hold, stacked under a field group's width; the hub's read-back under
-       both, the strip the ledger draws. The fields' format is said until the
-       hub reads the schedule back, which then says it better. -->
+  <!-- When: its choice, then what that choice asks (the day, the time, or
+       the custom schedule's five values), and the time zone it is read in,
+       two to a row where they hold and one where they don't; right under
+       them, the hub's read-back in words, then its week on the strip. -->
   <div data-slot="when" class="flex min-w-0 flex-col gap-space-2">
     <div class="grid min-w-0 gap-space-3 @field-group:grid-cols-2">
-      <Field
-        hint={readBack ? undefined : words.whenHint}
-        id="routine-cron"
-        label={words.whenLabel}
-        problem={cronProblem}
-      >
-        <Input
-          aria-invalid={cronProblem ? "true" : undefined}
-          autocomplete="off"
-          face="mono"
-          id="routine-cron"
-          onblur={() => {
-            touched.cron = true;
-          }}
-          placeholder={words.whenPlaceholder}
-          spellcheck="false"
-          bind:value={draft.cron}
-        />
+      <Field id="routine-repeat" label={words.whenLabel}>
+        <NativeSelect
+          id="routine-repeat"
+          class="w-full"
+          bind:value={
+            () => when.repeat,
+            (next: Repeat) => {
+              when.repeat = next;
+            }
+          }
+        >
+          {#each REPEATS as repeat (repeat)}
+            <NativeSelectOption value={repeat}
+              >{words.repeats[repeat]}</NativeSelectOption
+            >
+          {/each}
+        </NativeSelect>
       </Field>
-      <Field id="routine-zone" label={words.zoneLabel}>
+      {#if when.repeat === "week"}
+        <Field id="routine-day" label={words.dayLabel}>
+          <NativeSelect
+            id="routine-day"
+            class="w-full"
+            bind:value={
+              () => String(when.day),
+              (next: string) => {
+                when.day = Number(next);
+              }
+            }
+          >
+            {#each WEEK_DAYS as day (day)}
+              <NativeSelectOption value={String(day)}
+                >{words.dayNames[day]}</NativeSelectOption
+              >
+            {/each}
+          </NativeSelect>
+        </Field>
+      {/if}
+      {#if timed}
+        <Field id="routine-time" label={words.timeLabel} problem={timeProblem}>
+          <Input
+            aria-invalid={timeProblem ? "true" : undefined}
+            id="routine-time"
+            onblur={() => {
+              touched.time = true;
+            }}
+            step={60}
+            type="time"
+            bind:value={when.time}
+          />
+        </Field>
+      {/if}
+      {#if custom}
+        <div class="min-w-0 @field-group:col-span-2">
+          <Field
+            hint={words.customHint}
+            id="routine-custom"
+            label={words.customLabel}
+            problem={customProblem}
+          >
+            <Input
+              aria-invalid={customProblem ? "true" : undefined}
+              autocomplete="off"
+              face="mono"
+              id="routine-custom"
+              onblur={() => {
+                touched.custom = true;
+              }}
+              placeholder={words.customPlaceholder}
+              spellcheck="false"
+              bind:value={when.custom}
+            />
+          </Field>
+        </div>
+      {/if}
+      <Field id="routine-zone" label={words.zoneLabel} problem={zoneProblem}>
         <NativeSelect
           id="routine-zone"
           class="w-full"
@@ -323,20 +437,19 @@
         </NativeSelect>
       </Field>
     </div>
-    {#if readBack && cronProblem === undefined}
+    {#if readBack}
       <div
         data-slot="read-back"
-        class="flex min-w-0 flex-col gap-space-1"
+        class="flex min-w-0 flex-col gap-space-2"
         in:unfold
         out:unfold
       >
+        <p class="m-0 type-body text-pretty text-ink-strong">
+          {readBack.words} · <span class="num">{readBack.next}</span>
+        </p>
         {#if readBack.runs.length > 0}
           <ScheduleStrip label={readBack.words} {now} runs={readBack.runs} />
         {/if}
-        <p class="m-0 type-meta text-pretty text-ink-muted">
-          <span class="text-ink-strong">{readBack.words}</span>
-          · <span class="num">{readBack.next}</span>
-        </p>
       </div>
     {/if}
   </div>
@@ -363,31 +476,24 @@
     </NativeSelect>
   </Field>
 
-  {#if failure}
-    <p
-      data-slot="form-failure"
-      class="m-0 max-w-c-measure type-meta text-pretty wrap-anywhere text-status-fail-ink"
-      role="alert"
-      in:unfold
-      out:unfold
-    >
-      {failure}
-    </p>
-  {/if}
-
-  <!-- The commit row: what making it does at once, then Cancel and
-       Create; the sentence takes its own line over the buttons when the
-       three don't fit. -->
-  <div
-    data-slot="commit"
-    class="flex min-w-0 flex-wrap items-center justify-end gap-x-space-3 gap-y-space-2"
-  >
-    <p
-      class="m-0 min-w-0 flex-auto basis-c-measure-short type-meta text-pretty text-ink-muted"
-    >
+  <!-- The commit row: what creating it does at once, in plain words; why
+       a create was refused and what to do; then Cancel and Create. -->
+  <div data-slot="commit" class="flex min-w-0 flex-col gap-space-3">
+    <p class="m-0 max-w-c-measure type-body text-pretty text-ink-row">
       {words.testRun}
     </p>
-    <div class="flex flex-none gap-space-2">
+    {#if failure}
+      <p
+        data-slot="form-failure"
+        class="m-0 max-w-c-measure type-body text-pretty wrap-anywhere text-status-fail-ink"
+        role="alert"
+        in:unfold
+        out:unfold
+      >
+        {failure}
+      </p>
+    {/if}
+    <div class="flex min-w-0 flex-wrap justify-end gap-space-2">
       <Button
         disabled={saving}
         onclick={oncancel}

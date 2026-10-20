@@ -118,7 +118,10 @@
     cawProblem = null,
     blocks,
     viewItems,
+    onform,
   }: {
+    /** The routine form opened: the page clears what would stand over it (a phone's Caw sheet). */
+    onform?: () => void;
     /** The project: its id and its name. */
     project: { id: string; name: string };
     /**
@@ -599,6 +602,11 @@
   let asking = $state(false);
   /** Create routine: the routine form over the ledger, or in the empty state's place. */
   let making = $state(false);
+  function openForm() {
+    making = true;
+    asking = false;
+    onform?.();
+  }
   /** The routine the form made: the ledger shows it open, its test run going. */
   async function made(routine: Routine) {
     making = false;
@@ -719,8 +727,11 @@
       <Button
         aria-expanded={making}
         onclick={() => {
-          making = !making;
-          asking = false;
+          if (making) {
+            making = false;
+          } else {
+            openForm();
+          }
         }}
         size="sm"
         variant="outline">{words.createRoutine}</Button
@@ -1076,9 +1087,7 @@
   <Button
     aria-expanded={making}
     label={words.createRoutine}
-    onclick={() => {
-      making = true;
-    }}
+    onclick={openForm}
     variant="outline"
   />
 {/snippet}

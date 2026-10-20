@@ -1407,13 +1407,45 @@ public enum Words {
 
         public static let whenLabel = "When"
 
-        public static let whenHint = "Five cron fields: minute, hour, day, month, weekday."
+        /// When's choices (routines/when.ts `Repeat`).
+        public enum Repeats {
+            public static let hour = "Every hour"
 
-        public static let whenPlaceholder = "0 9 * * 1-5"
+            public static let day = "Every day"
 
-        public static let needsWhen = "Give a schedule in five cron fields, like 0 9 * * 1-5."
+            public static let weekdays = "Every weekday"
+
+            public static let week = "Every week"
+
+            public static let custom = "Custom"
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["hour": hour, "day": day, "weekdays": weekdays, "week": week, "custom": custom]
+        }
+
+        public static let dayLabel = "On"
+
+        public static let timeLabel = "At"
+
+        public static let needsTime = "Choose a time of day."
+
+        public static let customLabel = "Custom schedule"
+
+        public static let customPlaceholder = "0 9 * * 1-5"
+
+        public static let customHint = "Five values: minute, hour, day of the month, month, day of the week. 0 9 * * 1-5 means weekdays at 09:00."
+
+        public static let needsCustom = "Write the schedule as five values, like 0 9 * * 1-5 for weekdays at 09:00."
+
+        /// A custom schedule the hub can't read: the form's own sentence; the hub's words are for agents.
+        public static let customUnread = "This schedule can't be read. Write five values separated by spaces, like 0 9 * * 1-5 for weekdays at 09:00, or choose a schedule under When."
 
         public static let zoneLabel = "Time zone"
+
+        public static let zoneUnread = "The hub can't read schedules in this time zone. Choose another."
+
+        /// A create refused for its schedule.
+        public static let scheduleUnread = "Its schedule can't be read."
 
         public static let typeLabel = "Delegate type"
 
@@ -1425,20 +1457,31 @@ public enum Words {
             "The project's delegate types couldn't be read: \(problem) Runs take the hub's pick."
         }
 
-        /// Under the schedule: its next run, on your clock.
+        /// Under When: its next run, on your clock.
         public static func nextRunAt(when: String) -> String {
-            "Next run \(when)"
+            "next run \(when)"
         }
 
         /// A schedule with no run in the next week.
-        public static let noRunThisWeek = "No run in the next week"
+        public static let noRunThisWeek = "no run in the next week"
 
-        /// Beside Create: what making it does at once.
-        public static let testRun = "It runs once as soon as it's made, as a test."
+        /// Over Create: what making it does at once.
+        public static let testRun = "Creating it runs it once straight away, as a test. Its result shows in its row on this page, and the run spends like any delegate run."
 
-        public static func createFailed(problem: String) -> String {
-            "The routine wasn't created. \(problem) Your words stay here: change them, then create it again."
+        /// A refused create, and what to do: try again, or the field to change.
+        public static func createFailed(problem: String, fix: String) -> String {
+            "The routine wasn't created. \(problem) \(fix)"
         }
+
+        public static let fixTryAgain = "Everything you wrote is still here; try again."
+
+        public static let fixWhen = "Change when it runs, then create it again."
+
+        public static let fixType = "Choose another delegate type, then create it again."
+
+        public static let fixName = "Change its name, then create it again."
+
+        public static let fixPrompt = "Change what each run does, then create it again."
 
         /// The Event sources block's badge: events arrive as they happen, or only when polled.
         public static let relayLive = "Relay live"
