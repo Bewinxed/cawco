@@ -772,6 +772,115 @@ export const runNarrow = async (
   await page.context().close();
 };
 
+/**
+ * The artifact chosen in Files, at a desk: the session open at `width`, its
+ * panel open (`panel: "open"`: in the split, or the sheet on the composer
+ * in a pane under 900px) or shut first (`"shut"`), the top bar's Files item
+ * pressed and the artifact's card in it chosen. Where the page has room
+ * beside Files for the panel at its least width, the panel floats on Files'
+ * leading side (FilesFloat); where it has none, the pick opens in the
+ * session's own panel and Files goes (FilesFace `pick`). Opening Files,
+ * choosing it, and the page settling after send the hub nothing and log no
+ * loop.
+ */
+export const runFiles = async (
+  kit: Kit,
+  base: string,
+  leg: {
+    artifact: string;
+    name: string;
+    panel: "open" | "shut";
+    session: string;
+    theme: Theme;
+    width: number;
+  }
+) => {
+  const page = await kit.page("desk", {
+    theme: leg.theme,
+    init: [heldBack],
+    scrollbars: true,
+  });
+  await page.setViewportSize({ width: leg.width, height: 900 });
+  const said = heard(page);
+  await open(page, `${base}/session/${leg.session}`, "[data-files-control]");
+  if (leg.panel === "shut") {
+    await page.evaluate(
+      (id) =>
+        fetch(`/api/instances/${encodeURIComponent(id)}/preview`, {
+          method: "DELETE",
+        }),
+      leg.session
+    );
+    await page
+      .locator('[data-slot="side-card"]')
+      .waitFor({ state: "detached", timeout: 30_000 });
+  } else {
+    // Opened beside the session as its agent opens it: a leg before may
+    // have shut it, and the hub keeps it shut.
+    await page.evaluate(
+      ({ id, artifact }) =>
+        fetch(
+          `/api/instances/${encodeURIComponent(id)}/artifacts/${encodeURIComponent(artifact)}/show`,
+          { method: "POST" }
+        ),
+      { id: leg.session, artifact: leg.artifact }
+    );
+    await page
+      .locator(PANEL_FRAME)
+      .first()
+      .contentFrame()
+      .locator("h1")
+      .waitFor({ timeout: 60_000 });
+  }
+  await settle(page);
+  await frames(page);
+  const start = await mark(page, said);
+  await page.locator("[data-files-control]").click();
+  const card = page.locator(
+    `[data-files-card][data-artifact="${leg.artifact}"]`
+  );
+  await card.waitFor({ state: "visible", timeout: 30_000 });
+  await settle(page);
+  await card.click();
+  // Where the pick put the panel: floating beside Files, or in the
+  // session's own panel (the split, or the sheet in a pane under 900px)
+  // with Files gone. Its page drawn there.
+  const where = (await until(
+    "the pick placed",
+    () =>
+      page.evaluate(() => {
+        if (document.querySelector('[data-files-float][data-state="open"]')) {
+          return "floating";
+        }
+        return document.querySelector(".kit-pop.files-pop") ? null : "panel";
+      }),
+    Boolean,
+    30_000
+  )) as "floating" | "panel";
+  await page
+    .locator(
+      where === "floating"
+        ? '[data-files-float] iframe[title="Preview"]'
+        : PANEL_FRAME
+    )
+    .first()
+    .contentFrame()
+    .locator("h1")
+    .waitFor({ timeout: 60_000 });
+  await settle(page);
+  await frames(page);
+  const opened = await mark(page, said);
+  await checkQuiet(
+    kit,
+    page,
+    said,
+    `${leg.name}: choosing the artifact in Files (it opened ${where === "floating" ? "floating beside Files" : "in the session's panel"})`,
+    start,
+    opened
+  );
+  await page.context().close();
+};
+
 /** Asks the session `marker` is sent to, through the mock model, to make a page artifact; answers its id. */
 export const made = async (
   kit: Kit,
@@ -903,7 +1012,27 @@ const run = async (kit: Kit) => {
       theme,
     });
   }
+  for (const width of FILES_WIDTHS) {
+    for (const panel of ["open", "shut"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
+      await runFiles(kit, base, {
+        artifact: id,
+        name: `Files at desk ${width}, the session's panel ${panel}`,
+        panel,
+        session,
+        theme: "light",
+        width,
+      });
+    }
+  }
 };
+
+/** The session's own panel's page: in the split, or the sheet on the composer in a pane under 900px. */
+const PANEL_FRAME =
+  '[data-side-pane] iframe[title="Preview"], [data-preview-sheet] iframe[title="Preview"]';
+
+/** The desk's width, and the band under 1100 where Files and the panel beside it fill the page. */
+const FILES_WIDTHS = [1440, 1100, 1000, 920];
 
 const spec: Spec = { name: "artifact-resize-loop", run };
 export default spec;

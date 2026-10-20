@@ -26,6 +26,7 @@
   import "#lib/components/features/workflows/workflows.css";
   import { untrack } from "svelte";
   import { fetchCanvasMap } from "#lib/cawco/artifact-api.js";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
@@ -75,9 +76,11 @@
     const read = () => {
       narrow = mark.getClientRects().length > 0;
     };
-    const watch = new ResizeObserver(read);
-    watch.observe(mark);
+    // Read now, and a change in the next frame (frameObserver): the list
+    // and the graph trade places on it.
     read();
+    const watch = frameObserver(read);
+    watch.observe(mark);
     return () => watch.disconnect();
   });
   const nodeTypes = { component: MapNode };

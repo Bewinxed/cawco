@@ -69,6 +69,7 @@
     letGo,
     type Stage,
   } from "../canvas/stage.svelte";
+  import { frameObserver } from "../frame-observer";
   import { resolveSessionTitle } from "../links";
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto } from "../motion/share.svelte";
@@ -203,9 +204,13 @@
       return;
     }
     // Its layout width: its entrance scales it, and a scale is not its room.
-    const watch = new ResizeObserver(() => {
+    // Read now, and a change in the next frame (frameObserver): the card
+    // beside it is laid out from it.
+    const read = () => {
       listWidth = panel.offsetWidth;
-    });
+    };
+    read();
+    const watch = frameObserver(read);
     watch.observe(panel);
     return () => {
       watch.disconnect();
@@ -1023,9 +1028,13 @@
     if (!box) {
       return;
     }
-    const watch = new ResizeObserver(() => {
+    // Read now, and a change in the next frame (frameObserver): the
+    // Comments panel is laid out in it.
+    const read = () => {
       wellBox = { w: box.clientWidth, h: box.clientHeight };
-    });
+    };
+    read();
+    const watch = frameObserver(read);
     watch.observe(box);
     return () => watch.disconnect();
   });
@@ -1273,9 +1282,13 @@
     if (!card) {
       return;
     }
-    const watch = new ResizeObserver(() => {
+    // Read now, and a change in the next frame (frameObserver): the panel
+    // stands above it.
+    const read = () => {
       cardHeight = card.offsetHeight;
-    });
+    };
+    read();
+    const watch = frameObserver(read);
     watch.observe(card);
     return () => watch.disconnect();
   });
