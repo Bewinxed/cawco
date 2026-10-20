@@ -5,18 +5,12 @@
    * usage/ProviderLimit), read from staged windows through the same
    * `limitRows` and `firstToStop` the details use. Four limits: calm, early
    * in its window; burning faster than it lasts; at its limit; and out of
-   * date. `?theme=` light | dark.
+   * date. In the reader's theme.
    */
   import type { LimitWindow } from "@cawco/core";
   import LimitBar from "#lib/cawco/usage/LimitBar.svelte";
   import ProviderLimit from "#lib/cawco/usage/ProviderLimit.svelte";
   import { fillState, firstToStop, limitRows } from "#lib/cawco/usage.js";
-  import { theme } from "#lib/theme.svelte.js";
-  import { page } from "$app/state";
-
-  $effect(() => {
-    theme.set(page.url.searchParams.get("theme") === "dark" ? "dark" : "light");
-  });
 
   const HOUR = 3_600_000;
   const now = Date.now();

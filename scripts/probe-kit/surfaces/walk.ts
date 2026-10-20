@@ -22,16 +22,10 @@ import {
   type Tape,
   type TapeHold,
 } from "../hub-tape";
-import {
-  adopted,
-  type Kit,
-  pageReady,
-  ROOT,
-  type Theme,
-  type View,
-} from "../kit";
+import { adopted, type Kit, open, ROOT, type Theme, type View } from "../kit";
 import { actHolds, type State, type Surface, type Width } from "./catalogue";
 import { elementAt, holdStill, installReader, PROPS } from "./read";
+import { type ReadyRead, readyOf } from "./ready";
 import { type Scene, VARIANTS, type Variant } from "./scene";
 
 /** The hub the surfaces read: a scratch fleet's, recorded (`style-snapshot --record`). */
@@ -703,15 +697,40 @@ const scrollsAndBoxes = () => {
   return `${all.length} ${sum.toFixed(3)} ${styles} ${drawn} ${loading.length} ${document.fonts.status} ${scrolls}`;
 };
 
+/** Every element's box and every scroll offset, as one string: where the page lays out. */
+const boxesNow = () => {
+  let sum = 0;
+  let scrolls = `${scrollX},${scrollY}`;
+  const all = document.getElementsByTagName("*");
+  for (const el of all) {
+    const r = el.getBoundingClientRect();
+    sum += r.x * 3 + r.y * 7 + r.width * 11 + r.height * 13;
+    if (el.scrollTop !== 0 || el.scrollLeft !== 0) {
+      scrolls += `;${el.scrollTop},${el.scrollLeft}`;
+    }
+  }
+  return `${all.length} ${sum.toFixed(3)} ${scrolls}`;
+};
+
 /** The window and every scroll container at the top and start: the one offset each is read at. */
-const toTheStart = () => {
+const toTheStart = (inView: string | null) => {
   window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   for (const el of document.getElementsByTagName("*")) {
     if (el.scrollTop !== 0 || el.scrollLeft !== 0) {
       el.scrollTo({ top: 0, left: 0, behavior: "instant" });
     }
   }
+  // A state about what stands past the fold (catalogue `inView`): it, in view.
+  if (inView) {
+    document.querySelector(inView)?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+      behavior: "instant",
+    });
+  }
 };
+/** Each page's state's `inView`, while it walks that state. */
+const inViewOn = new WeakMap<Page, string>();
 
 /**
  * Waits until the page stops changing: fonts and images in, the tape done
@@ -727,7 +746,7 @@ export async function stand(page: Page): Promise<void> {
   await settle(page);
   await trace(page, "settled");
   await stillInPageTime(page);
-  await page.evaluate(toTheStart);
+  await page.evaluate(toTheStart, inViewOn.get(page) ?? null);
   await stillInPageTime(page);
   await holdStill(page);
   await trace(page, "stood");
@@ -758,6 +777,54 @@ async function stillInPageTime(page: Page): Promise<void> {
 /** Each stretch of page time the stillness reads follow, and at most how many. */
 const STILL_STEP_MS = 250;
 const STILL_STRETCHES = 60;
+
+/**
+ * The page time the Shell's first-render release takes from its mount: a
+ * frame, then a task (Shell.svelte `onMount`: requestAnimationFrame, then
+ * setTimeout, then `firstRender.release()`). Until it runs, the page draws
+ * the server's first paint (first-render.svelte.ts), and a read measured it:
+ * NeedsCaw's head at the cookie's 20px. The walk's clock is paused, so it
+ * runs neither until the clock is run on: one frame of Playwright's clock
+ * (16ms) and the task after it.
+ */
+const FIRST_RENDER_MS = 17;
+/** Native frames in a row the page's boxes must read the same before it is ready. */
+const STILL_FRAMES = 3;
+
+/**
+ * The page ready to be read, as each state's route loads: Svelte has
+ * adopted the server's markup (`hydrated`: `__svelte_meta` on the dev
+ * server, Svelte's own caches on a build) and the root layout has mounted
+ * (`kitHydrated`, which a child's mount, the Shell's, comes before); the
+ * Shell's first-render release run (FIRST_RENDER_MS), so the page draws its
+ * own answers and not the server's; then every element's box, inline style
+ * and scroll the same for STILL_FRAMES of the browser's own frames.
+ */
+async function pageReady(page: Page): Promise<void> {
+  await hydrated(page, "body");
+  await page.waitForFunction(() => window.kitHydrated === true);
+  await page.clock.runFor(FIRST_RENDER_MS);
+  let last = "";
+  let still = 0;
+  for (let i = 0; i < STILL_STRETCHES && still < STILL_FRAMES; i += 1) {
+    // A CSS animation runs on the document's own timeline, which the paused
+    // clock does not hold: each is held first (read.ts `still`), so what is
+    // compared is where the page lays out, not where a spinner has turned.
+    // biome-ignore lint/performance/noAwaitInLoops: one native frame at a time
+    await page.evaluate(() => {
+      window.__ssReader?.still();
+      return window.__ssReader?.frames(1);
+    });
+    const now = await page.evaluate(boxesNow);
+    still = now === last ? still + 1 : 0;
+    last = now;
+  }
+  if (still < STILL_FRAMES) {
+    throw new Error(
+      `the page did not hold still for ${STILL_FRAMES} frames after its first render (${STILL_STRETCHES} read)`
+    );
+  }
+}
 
 /** How long the adopted count holds before the page is read as hydrated, and how often it is read. */
 const HYDRATED_HOLD_MS = 1000;
@@ -815,9 +882,22 @@ async function arrive(page: Page): Promise<void> {
   await stand(page);
 }
 
+/** A state whose ready assertion did not hold once its page stood: it is not the state its name says. */
+export class NotReady extends Error {
+  constructor(entry: string, read: string) {
+    super(`${entry} is not its state: ${read}`);
+    this.name = "NotReady";
+  }
+}
+
+/** A state's failure, with the page it failed on (a failed ready assertion leaves it as it stood). */
+export type Failed = (what: string, why: string, page: Page) => unknown;
+
 export interface Visit {
   page: Page;
   pass: Pass;
+  /** Its ready assertion's read, held (ready.ts). */
+  ready: ReadyRead;
   /** What the tape's recording made, by name. */
   scene: Scene;
   state: State;
@@ -837,18 +917,20 @@ async function opened(
   scene: Scene
 ): Promise<void> {
   const route = (state.route ?? surface.route)(scene);
-  // Not kit `open`: its ready step runs in the page's frames, which this
-  // page's paused clock holds until `arrive` runs it on.
-  await page.goto(`${base}${route}`, { waitUntil: "domcontentloaded" });
+  await open(
+    page,
+    `${base}${route}`,
+    () => document.readyState !== "loading",
+    60_000
+  );
   // The dev server built the route's modules for that load: loaded again,
   // the page hydrates on modules already built.
   if (surface.serve === "dev") {
     await page.reload({ waitUntil: "domcontentloaded" });
   }
-  await hydrated(page, "body");
+  await pageReady(page);
   await trace(page, "hydrated");
   await arrive(page);
-  await pageReady(page);
   await trace(page, "arrived");
   const { act } = state;
   if (!act) {
@@ -858,6 +940,49 @@ async function opened(
   await trace(page, "acted");
   if (!state.heldFrame) {
     await hydrated(page, state.root);
+  }
+}
+
+/**
+ * One state on its pass's page: opened on its route, its ready assertion
+ * held (ready.ts), then handed to `visit`. Whatever stops it, its act or
+ * an assertion that does not hold, goes to `failed` with the page as it
+ * stood, and the walk goes on to the next state.
+ */
+async function walkState(
+  on: Omit<Visit, "ready">,
+  base: string,
+  visit: (v: Visit) => Promise<void>,
+  failed: Failed
+): Promise<void> {
+  const { page, pass, scene, state, surface } = on;
+  tracing.set(page, {
+    label: `${surface.name}/${state.name}`,
+    root: state.root,
+  });
+  if (state.inView) {
+    inViewOn.set(page, state.inView);
+  } else {
+    inViewOn.delete(page);
+  }
+  try {
+    await opened(page, base, surface, state, scene);
+    await trace(page, "read");
+    const ready = await readyOf(
+      page,
+      typeof state.ready === "function" ? state.ready(scene) : state.ready,
+      pass.theme
+    );
+    if (!ready.ok) {
+      throw new NotReady(`${surface.name}-${state.name}`, ready.read);
+    }
+    await visit({ ...on, ready });
+  } catch (error) {
+    await failed(
+      `${surface.name}/${state.name} · ${pass.name}`,
+      saidOf(error),
+      page
+    );
   }
 }
 
@@ -873,7 +998,7 @@ export async function walk(
   surfaces: Surface[],
   passes: Pass[],
   visit: (v: Visit) => Promise<void>,
-  failed: (what: string, why: string) => void
+  failed: Failed
 ): Promise<Map<string, number>> {
   const seconds = new Map<string, number>();
   const scene = tape.scene as Scene;
@@ -885,47 +1010,47 @@ export async function walk(
       kit.note(`${surface.name}/${state.name}: host only, not in this tape`);
     }
   }
-  for (const surface of surfaces) {
-    const started = performance.now();
-    // biome-ignore lint/performance/noAwaitInLoops: one surface at a time
-    const base = await servers.base(surface.serve);
-    // A surface's passes side by side, each on its own page and context.
-    await pool(passes, PARALLEL, async (pass) => {
-      const states = surface.states.filter(
-        (s) => !(hostOnly(s) || (s.widths && !s.widths.includes(pass.width)))
-      );
-      if (states.length === 0) {
-        return;
-      }
-      const page = await passPage(kit, pass, tape.at);
-      heldOn.set(page, (request) => servers.holds(request));
-      socketHeldOn.set(page, (url) => servers.holdsSocket(url));
-      await servers.attach(page.context());
-      try {
-        for (const state of states) {
-          const what = `${surface.name}/${state.name} · ${pass.name}`;
-          tracing.set(page, {
-            label: `${surface.name}/${state.name}`,
-            root: state.root,
-          });
-          try {
-            // biome-ignore lint/performance/noAwaitInLoops: one state at a time on the pass's page
-            await opened(page, base, surface, state, scene);
-            await trace(page, "read");
-            await visit({ page, pass, scene, state, surface });
-          } catch (error) {
-            failed(what, saidOf(error));
-          }
+  // Surfaces side by side (`PROBE_SURFACES`, else one at a time): each
+  // state's page is its own context on its own clock, so how many run at
+  // once moves no reading, only the run's length.
+  await pool(
+    surfaces,
+    Number(process.env.PROBE_SURFACES) || 1,
+    async (surface) => {
+      const started = performance.now();
+      const base = await servers.base(surface.serve);
+      // A surface's passes side by side, each on its own page and context.
+      await pool(passes, PARALLEL, async (pass) => {
+        const states = surface.states.filter(
+          (s) => !(hostOnly(s) || (s.widths && !s.widths.includes(pass.width)))
+        );
+        if (states.length === 0) {
+          return;
         }
-      } finally {
-        await page
-          .context()
-          .close()
-          .catch(() => undefined);
-      }
-    });
-    seconds.set(surface.name, (performance.now() - started) / 1000);
-  }
+        const page = await passPage(kit, pass, tape.at);
+        heldOn.set(page, (request) => servers.holds(request));
+        socketHeldOn.set(page, (url) => servers.holdsSocket(url));
+        await servers.attach(page.context());
+        try {
+          for (const state of states) {
+            // biome-ignore lint/performance/noAwaitInLoops: one state at a time on the pass's page
+            await walkState(
+              { page, pass, scene, state, surface },
+              base,
+              visit,
+              failed
+            );
+          }
+        } finally {
+          await page
+            .context()
+            .close()
+            .catch(() => undefined);
+        }
+      });
+      seconds.set(surface.name, (performance.now() - started) / 1000);
+    }
+  );
   return seconds;
 }
 
@@ -960,7 +1085,7 @@ async function walkTape(
   surfaces: Surface[],
   passes: Pass[],
   visit: (v: Visit) => Promise<void>,
-  failed: (what: string, why: string) => void,
+  failed: Failed,
   into: Walked
 ): Promise<void> {
   const tape = await readTape(file);
@@ -1012,7 +1137,7 @@ export async function walkTapes(
   surfaces: Surface[],
   passes: Pass[],
   visit: (v: Visit) => Promise<void>,
-  failed: (what: string, why: string) => void
+  failed: Failed
 ): Promise<Walked> {
   const into: Walked = { misses: [], seconds: new Map() };
   for (const [file, reading] of [

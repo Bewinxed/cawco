@@ -24,6 +24,23 @@ import {
 
 export type Width = "desk" | "tablet" | "phone";
 
+/**
+ * What only a state draws, held once its page stands and before anything is
+ * read or captured (ready.ts): the walk fails the state with its name when
+ * it does not hold, so no read or picture stands under a state's name that
+ * shows another screen. The pass's theme is held on every state beside it.
+ */
+export interface Ready {
+  /** What stands nowhere visible: the state this one would be mistaken for. */
+  not?: string;
+  /** The page's path and query, where the state is a route of its own. */
+  path?: RegExp;
+  /** Its words, where the element alone does not tell this state from its neighbours. */
+  says?: RegExp;
+  /** What stands visible in the viewport on this state alone (its first match, or the first saying `says`). */
+  shows: string;
+}
+
 export interface State {
   /** What opens it, on its route freshly loaded (the walk loads each state's route anew), with the scene's ids. */
   act?: (page: Page, scene: Scene) => Promise<unknown>;
@@ -47,12 +64,20 @@ export interface State {
    */
   hub?: Variant;
   /**
+   * What the state is about where it stands past the fold: the walk reads
+   * every scroller at its start (walk.ts `toTheStart`), then scrolls this
+   * into view (the nearest edge), so the picture holds it.
+   */
+  inView?: string;
+  /**
    * What the walk's own setting writes into the page, not the dashboard: a
    * capture paints it over (Playwright's `mask`), so the picture holds what
    * the dashboard draws alone. Its styles are still read (style-snapshot).
    */
   mask?: (page: Page) => Locator[];
   name: string;
+  /** What only this state draws (`Ready`, with the scene's ids where it names one): the walk holds it before every read and capture. */
+  ready: Ready | ((scene: Scene) => Ready);
   /**
    * What is read: a selector, the largest visible match when several match
    * (the open layer over its own trigger). `body` reads the whole page.
@@ -84,6 +109,78 @@ export interface Surface {
 /** An open layer: a dialog, sheet, drawer, menu or popover standing open. */
 export const LAYER =
   "[role=dialog][data-state=open], [role=menu][data-state=open], [data-slot$='-content'][data-state=open], .kit-pop[data-state=open], .kit-hang[data-state=open]";
+/** A menu standing open: a dropdown's or a context menu's content. */
+const OPEN_MENU = "[role=menu][data-state=open]";
+/** A dialog standing open: a sheet, a drawer, a modal. */
+const OPEN_DIALOG = "[role=dialog][data-state=open]";
+/** A popover standing open. */
+const OPEN_POPOVER = "[data-slot=popover-content][data-state=open]";
+/** The home: the rail's on a desk, the page's under the drawer's width. */
+const HOME = 'section[aria-label="Home"]';
+/** The machines popover (MachinesButton's glass card), and a machine's unlock tile in it. */
+const MACHINES_POPOVER = `${OPEN_POPOVER}[aria-label="Machines"]`;
+const UNLOCK_TILE = `${MACHINES_POPOVER} section[data-slot=unlock]`;
+/** The rail: the desk's aside, or the sheet it is under the drawer's width. */
+const RAIL =
+  "aside:has([data-slot=sidebar-content]), [data-slot=sheet-content][data-state=open]";
+const RAIL_SHOWN = "aside[data-slot=rail], [data-rail-sheet][data-state=open]";
+/**
+ * A project's "N older" row in the rail, its stopped sessions folded under
+ * it: the one branch item that is a fold (a session's row is a `div`).
+ */
+const OLDER_ROW = "button[data-branch-item][aria-expanded]";
+/** The rail's sheet, under the drawer's width. */
+const RAIL_SHEET = "[data-rail-sheet][data-state=open]";
+/** A project's board (its columns), and Caw's composer in his panel. */
+const BOARD = "[data-slot=board]";
+const CAW_COMPOSER = '[aria-label="Message Caw"]';
+/** The words a state is told by, where its element is not enough (each state's `says`). */
+const SIGN_IN_UNFINISHED = /^Sign-in didn't finish/;
+const START_SIGN_IN = /^Start sign-in/;
+const GROWN_DRAFT =
+  /Wrap the chip's label at the badge\.\s*Keep the count whole\.\s*Then measure it on a phone\./;
+const CATCHING_UP_LINE = /^Catching up…$/;
+const STARTS_WITH_MACHINE = /^This session starts once its machine/;
+/** A preview drawn in its frame, the pane's pin list, and the page's where-to-start (MachinesEmpty's title). */
+const PREVIEW_READY = "iframe[data-ready=true]";
+const PIN_LIST = 'section[data-slot=pin-list][aria-label="Comments"]';
+const MACHINES_EMPTY = "h1[data-slot=title]";
+/** Jump's popover (its glass card), the needs panel's, and an ask's peek sheet. */
+const JUMP = `${OPEN_POPOVER}[aria-label="Jump to"]`;
+const NEEDS_PANEL = `${OPEN_POPOVER}[aria-label="Needs you"]`;
+const PEEK_SHEET = "[data-peek-sheet][data-state=open]";
+/** A graph step's settings in the inspector: its harness, one chosen. */
+const STEP_SETTINGS = "fieldset:has(> legend) button[aria-pressed=true]";
+/** A workflow page's tab, chosen. */
+const workflowTab = (value: string) =>
+  `[role=tablist][aria-label="Workflow views"] [role=tab][data-value=${value}][aria-selected=true]`;
+/** A New session chip's popover standing open (NsPopover's), and one by its chip. */
+const NS_POP = "[data-ns-pop][data-state=open]";
+const nsPop = (chip: string) => `${NS_POP}#session-${chip}-popover`;
+/** A project view's pane (`data-view` its view), and a decision page open in it. */
+const VIEW_PANE = "[data-slot=pane][aria-busy=false]";
+const DECISION_PAGE = `${VIEW_PANE}[data-view=decisions-page] [data-slot=decisions][data-mode=page] [data-slot=page-head]`;
+/** A task's sheet (the side card on a desk, the page on a phone), by its id. */
+const taskSheet = (id: string) => `section[aria-label="Task ${id}"]`;
+/** The board's bulk bar, once a card is picked. */
+const BULK_BAR = '[role=toolbar][aria-label="Selected tasks"]';
+
+/** The tab chosen in its strip: the conversation `id` is the one on screen. */
+const chosenTab = (id: string) =>
+  `a[role=tab][aria-selected=true][href="/session/${id}"]`;
+/** `what` on the page whose chosen tab is `id`'s, and that also holds `also`. */
+const on = (id: string, what: string, also?: string) =>
+  `body:has(${chosenTab(id)})${also ? `:has(${also})` : ""} ${what}`;
+/** A turn under way: the composer's Stop. */
+const STOP_AGENT = '[aria-label="Stop the agent"]';
+/** An ask in the conversation: a question or a permission (Prompt.svelte). */
+const HITL = "section[data-slot=hitl]";
+/** A tool row opened (ToolGroup's). */
+const OPEN_TOOL_ROW = "button[data-slot=trow][aria-expanded=true]";
+/** A workflow run's block in its session's transcript (RunBlock). */
+const RUN_BLOCK = "[data-run-block]";
+/** A move's staged wait in its session's pane (MoveWait), its approval asked. */
+const MOVE_WAIT = "[data-slot=wait] [data-slot=move-wait-card]";
 
 /** Presses the first visible button named `name`. */
 const press = (name: string | RegExp) => (page: Page) =>
@@ -187,9 +284,16 @@ const ADD_TASK = /^Add task$/;
 const ARCHIVED_RAIL = /^Archived, /;
 /** A task sheet's Details tab, beside Review. */
 const DETAILS_TAB = /^Details$/;
-/** The chips transcript's Write row, and its change's open control. */
+/**
+ * The chips transcript's Write row, and its change's open control (DiffView's
+ * "Expand diff (full view)", named by its title). `/diff|Open|Expand/i` stood
+ * for it, and on a phone the first visible button that matched was the
+ * bar's "Open navigation": session/diff read the rail's sheet.
+ */
 const WROTE_ROW = /Wrote chip\.css/;
-const OPEN_DIFF = /diff|Open|Expand/i;
+const OPEN_DIFF = /^Expand diff \(full view\)$/;
+/** The diff opened whole (DiffModal's dialog, named for its file). */
+const DIFF_DIALOG = '[role=dialog][data-state=open][aria-label^="Diff: "]';
 /** A workflow's run control. */
 const RUN_WORKFLOW = /^Run|Launch/;
 /** The delegate's card in its parent's transcript: its fold, named for the delegate first. */
@@ -226,10 +330,36 @@ const THREAD_NOTE = "Open phone-notes.txt";
 const MORE_FOR_SKILL = /^More for tray-check$/;
 /** The fleet memory's row menu (RowMenu's "More for ~/.claude/CLAUDE.md"). */
 const MORE_FOR_MEMORY = /^More for .*CLAUDE\.md$/;
+/** A toast standing (svelte-sonner's), and its Undo (configureWords.undo). */
+const TOAST = "[data-sonner-toast]";
+const UNDO = /^Undo$/;
+
+/**
+ * A config row deleted from its row menu: it goes at once, Undo in the
+ * toast (deletes.ts, JOURNEY.md Flow 5: "an undo affordance after the fact
+ * rather than a confirm dialog before it"). The toast closes itself after
+ * its duration of page time, which the walk runs on past the act, so the
+ * act ends on it, as a person's pointer reaching for Undo does: svelte-sonner
+ * holds a toast's timer while the pointer is over it (Toast.svelte's
+ * `expanded`), and an act that ends on a move keeps its pointer.
+ */
+const deletedFrom = (more: RegExp, item: string) => async (page: Page) => {
+  await press(more)(page);
+  await page.getByRole("menuitem", { name: item }).click();
+  const toast = page
+    .locator(TOAST)
+    .filter({ has: page.getByRole("button", { name: UNDO }) })
+    .first();
+  await toast.hover();
+};
 /** What runs in a project, which its forget reads first (client.svelte.ts `projectRunning`). */
 const PROJECT_RUNNING = "**/api/projects/*/running";
 /** {@link PROJECT_RUNNING}'s path. */
 const PROJECT_RUNNING_PATH = /^\/api\/projects\/[^/]+\/running$/;
+/** The fleet's projects, which the page's first read waits on with its machines and sessions (client.svelte.ts `refresh`). */
+const PROJECTS_READ = "**/api/projects";
+/** {@link PROJECTS_READ}'s path. */
+const PROJECTS_READ_PATH = /^\/api\/projects$/;
 /** An artifact's read, which a task's presented page finds its session by (ArtifactStage `findArtifact`). */
 const ARTIFACT_READ = "**/api/artifacts/*";
 /** {@link ARTIFACT_READ}'s path. */
@@ -557,6 +687,22 @@ const openCaw = async (page: Page) => {
 };
 
 /**
+ * Caw's panel put away, wherever it stands, which the project remembers
+ * shut (caw-lead.svelte.ts `open`): on a phone his bottom sheet, which takes
+ * every press, by Escape (`cawSheetAway`); beside the page, his seat pressed.
+ */
+const cawAway = async (page: Page) => {
+  await cawSheetAway(page);
+  if ((await page.locator(CAW_SEAT_OPEN).count()) > 0) {
+    await press(CAW_SEAT)(page);
+  }
+  await page
+    .locator('[data-slot="caw-seat"][aria-expanded="false"]')
+    .first()
+    .waitFor({ state: "attached" });
+};
+
+/**
  * Caw's panel put away where it stands over the page: on a phone it is a
  * bottom sheet (CawFloat's drawer) that takes every press, and Escape puts
  * it away. Beside the page (docked) it covers nothing, and stays.
@@ -786,46 +932,92 @@ const caughtUp = async (page: Page, scene: Scene) => {
 
 /** A socket's address as the page prints it (HubBand's `<code>`). */
 const SOCKET_URL = /^wss?:\/\//;
-const BENCHES: [string, string][] = [
-  ["button-pending", "/motion/button-pending"],
-  ["caw", "/motion/caw"],
-  ["caw-notices", "/motion/caw-notices?fixture=full"],
-  ["chosen-hover", "/motion/chosen-hover"],
-  ["delegate-tray", "/motion/delegate-tray"],
-  ["echo", "/motion/echo"],
-  ["folder-proof", "/motion/folder-proof?at=1&work=working"],
-  ["head-tint", "/motion/head-tint"],
-  ["lift", "/motion/lift"],
-  ["mac-readiness", "/motion/mac-readiness"],
-  ["new-session", "/motion/new-session"],
-  ["overlays", "/motion/overlays"],
-  ["recall", "/motion/recall"],
-  ["seed-tabs", "/motion/seed-tabs"],
-  ["session-limit", "/motion/session-limit"],
-  ["traffic", "/motion/traffic"],
-  ["updates", "/motion/updates"],
-  ["usage-limits", "/motion/usage-limits"],
-  ["usage-relay", "/motion/usage-relay"],
-  ["finder", "/dev/finder"],
+/**
+ * The `/motion/` and `/dev/` benches, each read as it opens. Each draws in
+ * the reader's theme, which the walk's page sets as any page's
+ * (`cawco-theme`): a bench that set its own from a `?theme=` it was never
+ * given drew light under every dark pass. `/motion/seed-tabs` is none: it
+ * draws nothing and sends a preview on to a session (its `?ids=`).
+ */
+/** A bench's own page inside the shell's content (its `main`, under the shell's). */
+const BENCH_MAIN = "main#main-content main";
+/** Each bench: its name, its route, and what only it draws. */
+const BENCHES: [string, string, string][] = [
+  ["button-pending", "/motion/button-pending", "button[data-case=label-cycle]"],
+  ["caw", "/motion/caw", `${BENCH_MAIN} [data-slot=stage]`],
+  [
+    "caw-notices",
+    "/motion/caw-notices?fixture=full",
+    `${BENCH_MAIN} [data-slot=controls]`,
+  ],
+  ["chosen-hover", "/motion/chosen-hover", "[data-bench]"],
+  ["delegate-tray", "/motion/delegate-tray", "[data-delegate-tray]"],
+  ["echo", "/motion/echo", `${BENCH_MAIN} li[data-row]`],
+  [
+    "folder-proof",
+    "/motion/folder-proof?at=1&work=working",
+    "[data-folder-proof]",
+  ],
+  ["head-tint", "/motion/head-tint", "[data-head-tint]"],
+  ["lift", "/motion/lift", `${BENCH_MAIN} section[data-case]`],
+  [
+    "mac-readiness",
+    "/motion/mac-readiness",
+    'nav[aria-label="Readiness state"]',
+  ],
+  ["new-session", "/motion/new-session", `${BENCH_MAIN} h1`],
+  ["overlays", "/motion/overlays", `${BENCH_MAIN} [data-slot=openers]`],
+  ["recall", "/motion/recall", "main#main-content form[data-slot=cin]"],
+  [
+    "session-limit",
+    "/motion/session-limit",
+    "[data-session-limit-bench] [data-case]",
+  ],
+  ["traffic", "/motion/traffic", "main#main-content header h1"],
+  ["updates", "/motion/updates", "[data-slot=updates-page-card]"],
+  ["usage-limits", "/motion/usage-limits", "[data-usage-bench] > *"],
+  [
+    "usage-relay",
+    "/motion/usage-relay",
+    'nav[aria-label="Usage popover bench"]',
+  ],
+  ["finder", "/dev/finder", 'main ol[aria-label="Sent"]'],
 ];
-const CONFIG = [
-  "accounts",
-  "cli-tools",
-  "connections",
-  "delegate-types",
-  "devices",
-  "hooks",
-  "mcp",
-  "memory",
-  "models",
-  "phone",
-  "previews",
-  "rules",
-  "skills",
-  "spend",
-  "subagents",
-  "updates",
+/** The config sections, each with its page's title (SectionFrame's `h1`, sections.ts `label`). */
+const CONFIG: [string, string][] = [
+  ["accounts", "Accounts"],
+  ["cli-tools", "Command-line tools"],
+  ["connections", "Connections"],
+  ["delegate-types", "Delegate types"],
+  ["devices", "Devices"],
+  ["hooks", "Hooks"],
+  ["mcp", "MCP servers"],
+  ["memory", "Memory files"],
+  ["models", "Models CawCo uses"],
+  ["phone", "Phone"],
+  ["previews", "Previews"],
+  ["rules", "Rules"],
+  ["skills", "Skills & plugins"],
+  ["spend", "Spend"],
+  ["subagents", "Subagents"],
+  ["updates", "Updates"],
 ];
+/** A config section's page title, and a section's rows while the fleet is still being read. */
+const SECTION_TITLE = "h1[data-slot=title]";
+const SKELETON = "[data-slot=skeleton]";
+/** An editor's own field, by its accessible name. */
+const field = (name: string) => `[aria-label="${name}"]`;
+/** The page at exactly `path`. */
+const at = (path: string) =>
+  new RegExp(`^${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
+
+/** Each `new` editor's own field, by section. */
+const NEW_FIELD: Record<string, string> = {
+  hooks: field("Hook name"),
+  mcp: field("Server name"),
+  subagents: field("new-subagent definition"),
+  "delegate-types": field("Delegate type name"),
+};
 
 /** A config section's editors: each opens on `new` (its route's own word for a new one), and an account's own pages. */
 const EDITORS: Record<string, State[]> = {
@@ -837,6 +1029,10 @@ const EDITORS: Record<string, State[]> = {
           name: "editor",
           route: () => `/config/${section}/new`,
           root: "body",
+          ready: {
+            shows: NEW_FIELD[section] as string,
+            path: at(`/config/${section}/new`),
+          },
         },
         // The scene's own: the hook saved twice (its previous version), the MCP server.
         ...(section === "hooks"
@@ -845,6 +1041,10 @@ const EDITORS: Record<string, State[]> = {
                 name: "hook",
                 route: (s: Scene) => `/config/hooks/${s.hook}`,
                 root: "body",
+                ready: (s: Scene) => ({
+                  shows: `${field("Hook name")}, [data-delete]`,
+                  path: at(`/config/hooks/${s.hook}`),
+                }),
               },
             ]
           : []),
@@ -856,6 +1056,10 @@ const EDITORS: Record<string, State[]> = {
                 name: "oauth-return",
                 route: () => "/oauth/mcp?code=probe-code&state=probe-state",
                 root: "body",
+                ready: {
+                  shows: "[data-slot=empty]",
+                  says: SIGN_IN_UNFINISHED,
+                },
               },
             ]
           : []),
@@ -863,20 +1067,36 @@ const EDITORS: Record<string, State[]> = {
     ])
   ),
   skills: [
-    { name: "fetch", act: press(FETCH_SKILL), root: "body" },
     {
-      // The adopted skill's Remove everywhere: the ask under its row, and
-      // the machines it reaches.
-      name: "remove-ask",
-      act: async (page) => {
-        await press(MORE_FOR_SKILL)(page);
-        await page.getByRole("menuitem", { name: "Remove everywhere" }).click();
-      },
+      name: "fetch",
+      act: press(FETCH_SKILL),
       root: "body",
+      ready: {
+        shows: `${OPEN_POPOVER} [data-slot=input], ${OPEN_DIALOG} [data-slot=input]`,
+      },
+    },
+    {
+      // The adopted skill's Remove everywhere: gone from the list at once,
+      // Undo in its toast (no ask: deletes.ts).
+      name: "removed",
+      act: deletedFrom(MORE_FOR_SKILL, "Remove everywhere"),
+      root: "body",
+      ready: {
+        shows: TOAST,
+        says: /tray-check[\s\S]*Undo/,
+        not: '[aria-label="More for tray-check"]',
+      },
     },
   ],
   memory: [
-    { name: "new", act: press(NEW_MEMORY), root: "body" },
+    {
+      name: "new",
+      act: press(NEW_MEMORY),
+      root: "body",
+      ready: {
+        shows: `${OPEN_POPOVER} [data-slot=field-field], ${OPEN_DIALOG} [data-slot=field-field]`,
+      },
+    },
     {
       // A filter nothing matches: the page's own line saying so.
       name: "filtered",
@@ -885,24 +1105,42 @@ const EDITORS: Record<string, State[]> = {
           .getByRole("textbox", { name: "Filter memory files" })
           .fill("no-such-file"),
       root: "body",
+      ready: { shows: "p[data-slot=note]", says: /no-such-file/ },
     },
     // The fleet's memory in its editor.
-    { name: "editor", route: () => "/config/memory/CLAUDE.md", root: "body" },
+    {
+      name: "editor",
+      route: () => "/config/memory/CLAUDE.md",
+      root: "body",
+      ready: {
+        shows:
+          '[aria-label^="File: "][aria-label$="/CLAUDE.md"], [data-slot=crepe-host]',
+        path: at("/config/memory/CLAUDE.md"),
+      },
+    },
     {
       // The same, with no machine at all: where it lands, a link to add one.
       name: "editor-no-machine",
       hub: "unregistered",
       route: () => "/config/memory/CLAUDE.md",
       root: "body",
+      ready: {
+        shows: "button[aria-haspopup=dialog]",
+        says: /^No machines yet$/,
+        path: at("/config/memory/CLAUDE.md"),
+      },
     },
     {
-      // The memory's Delete everywhere: the ask under its row.
-      name: "delete-ask",
-      act: async (page) => {
-        await press(MORE_FOR_MEMORY)(page);
-        await page.getByRole("menuitem", { name: "Delete everywhere" }).click();
-      },
+      // The memory's Delete everywhere: its row gone at once, Undo in its
+      // toast (no ask: deletes.ts).
+      name: "deleted",
+      act: deletedFrom(MORE_FOR_MEMORY, "Delete everywhere"),
       root: "body",
+      ready: {
+        shows: TOAST,
+        says: /CLAUDE\.md[\s\S]*Undo/,
+        not: '[aria-label$="CLAUDE.md"][aria-label^="More for"]',
+      },
     },
     {
       // The fleet not read yet: the section's skeleton rows, the hub's
@@ -910,6 +1148,7 @@ const EDITORS: Record<string, State[]> = {
       name: "reading",
       hub: "reading",
       root: "body",
+      ready: { shows: SKELETON },
     },
   ],
   rules: [
@@ -917,24 +1156,47 @@ const EDITORS: Record<string, State[]> = {
       name: "editor",
       route: () => "/config/rules/new",
       root: "body",
+      ready: { shows: field("Rule name"), path: at("/config/rules/new") },
     },
     // The scene's rule: what it has caught.
-    { name: "rule", route: (s) => `/config/rules/${s.rule}`, root: "body" },
-    // `/config` itself: the section list and its first section.
-    { name: "index", route: () => "/config", root: "body" },
+    {
+      name: "rule",
+      route: (s) => `/config/rules/${s.rule}`,
+      root: "body",
+      ready: (s) => ({
+        shows: field("Rule name"),
+        path: at(`/config/rules/${s.rule}`),
+      }),
+    },
   ],
   accounts: [
-    { name: "new", route: () => "/config/accounts/new", root: "body" },
+    {
+      name: "new",
+      route: () => "/config/accounts/new",
+      root: "body",
+      ready: {
+        shows: "ol[aria-label=Steps] li[aria-current=step]",
+        says: /^Provider$/,
+      },
+    },
     {
       name: "account",
       route: (s) => `/config/accounts/${s.account}`,
       root: "body",
+      ready: (s) => ({
+        shows: field("Nickname"),
+        path: at(`/config/accounts/${s.account}`),
+      }),
     },
     {
       // The second account, signed in on the machine.
       name: "second",
       route: (s) => `/config/accounts/${s.second}`,
       root: "body",
+      ready: (s) => ({
+        shows: field("Nickname"),
+        path: at(`/config/accounts/${s.second}`),
+      }),
     },
     {
       // A Claude account signed in nowhere: its Sign in on the machine, the
@@ -943,19 +1205,30 @@ const EDITORS: Record<string, State[]> = {
       route: (s) => `/config/accounts/${s.spare}`,
       act: press(SIGN_IN_ON),
       root: "body",
+      ready: { shows: field("Code from the sign-in page") },
     },
     {
       // A GitHub Copilot account signed in nowhere: its Sign in on the
-      // machine, the device code's start.
+      // machine, the device code's start (its popover and Start sign-in).
       name: "device-sign-in",
       route: (s) => `/config/accounts/${s.copilot}`,
       act: press(SIGN_IN_ON),
       root: "body",
+      ready: (s) => ({
+        shows: `${NS_POP}[id^="signin-"] button`,
+        says: START_SIGN_IN,
+        path: at(`/config/accounts/${s.copilot}`),
+      }),
     },
     {
       name: "routing",
       route: () => "/config/accounts/anthropic/routing",
       root: "body",
+      ready: {
+        shows: "[role=radio][aria-checked=true]",
+        not: '[aria-label$="Arrow keys move it."]',
+        path: at("/config/accounts/anthropic/routing"),
+      },
     },
     {
       // Fill first chosen: its order of the two accounts.
@@ -963,6 +1236,7 @@ const EDITORS: Record<string, State[]> = {
       route: () => "/config/accounts/anthropic/routing",
       act: (page) => page.getByRole("radio", { name: FILL_FIRST }).click(),
       root: "body",
+      ready: { shows: '[aria-label$="place 1 of 3. Arrow keys move it."]' },
     },
     {
       // A new account by API key (a provider the machine's OpenCode runs),
@@ -971,6 +1245,7 @@ const EDITORS: Record<string, State[]> = {
       route: () => "/config/accounts/new",
       act: toKeyStep,
       root: "body",
+      ready: { shows: field("API key") },
     },
     {
       // Its key sent: the account made and the machine holding the key. It
@@ -987,6 +1262,7 @@ const EDITORS: Record<string, State[]> = {
         await page.getByText("Key sent").first().waitFor();
       },
       root: "body",
+      ready: { shows: "span", says: /^Key sent$/ },
     },
   ],
 };
@@ -997,15 +1273,36 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: () => "/",
     states: [
-      { name: "rest", root: "body" },
-      // The fleet not read yet: the home's first line says so (StatusLine),
-      // the hub's answer held back on its tape (scene.ts `HOLDS`).
-      { name: "reading", hub: "reading", root: "body" },
+      {
+        name: "rest",
+        root: "body",
+        ready: { shows: HOME, not: `${HOME} [role=status]` },
+      },
+      // The fleet not read yet: the home's first line says so (StatusLine,
+      // until the home's reads are in: home-state.svelte.ts `ready`). The
+      // hub's own `reading` holds `/api/fleet` (scene.ts `HOLDS`), which only
+      // Configure reads: the home's first read (client.svelte.ts `refresh`:
+      // machines, sessions and projects together) went through, and the
+      // line never stood. Its projects held as well, the home stays reading.
+      // Alone on this hub in its surface, so the hold stays with no other state.
+      {
+        name: "reading",
+        hub: "reading",
+        act: reloadedWith((page) =>
+          neverAnswered(page, PROJECTS_READ, PROJECTS_READ_PATH)
+        ),
+        root: "body",
+        ready: {
+          shows: `${HOME} [role=status]`,
+          says: /^Reading the fleet…$/,
+        },
+      },
       {
         name: "machines",
         widths: ["desk"],
         act: press(/machine/),
         root: LAYER,
+        ready: { shows: MACHINES_POPOVER, not: UNLOCK_TILE },
       },
       {
         // The offline Mac's menu in the machines list: Unlock keychain…, its dialog.
@@ -1013,6 +1310,7 @@ export const SURFACES: Surface[] = [
         widths: ["desk"],
         act: openKeychain,
         root: "body",
+        ready: { shows: `${UNLOCK_TILE} input[aria-label^="Login password"]` },
       },
       {
         // The machines list's Add machine: Connect a machine, on its
@@ -1025,6 +1323,10 @@ export const SURFACES: Surface[] = [
           await page.getByRole("tab", { name: "With one command" }).click();
         },
         root: "body",
+        ready: {
+          shows: `${OPEN_DIALOG} [role=tab][aria-selected=true]`,
+          says: /^With one command$/,
+        },
       },
       // The studio online and its keychain's unlock sent (`studioRouted`,
       // which stays the page's: these come last on this hub).
@@ -1034,6 +1336,10 @@ export const SURFACES: Surface[] = [
         widths: ["desk"],
         act: unlockStudio(),
         root: "body",
+        ready: {
+          shows: `${UNLOCK_TILE} [data-slot=title]`,
+          says: /^Unlocking /,
+        },
       },
       {
         // Answered unlocked, its logins read: the check.
@@ -1041,6 +1347,10 @@ export const SURFACES: Surface[] = [
         widths: ["desk"],
         act: unlockStudio("authenticated"),
         root: "body",
+        ready: {
+          shows: `${UNLOCK_TILE} [role=status]:has([data-tone=ok])`,
+          says: / is unlocked/,
+        },
       },
       {
         // Answered unlocked, its logins still unreadable: the warning.
@@ -1048,6 +1358,10 @@ export const SURFACES: Surface[] = [
         widths: ["desk"],
         act: unlockStudio("unreadable-credentials"),
         root: "body",
+        ready: {
+          shows: `${UNLOCK_TILE} [role=status]:has([data-tone=caution])`,
+          says: / cannot read its logins/,
+        },
       },
       {
         // The hub's socket open and silent on its tape (scene.ts `HOLDS`):
@@ -1055,6 +1369,7 @@ export const SURFACES: Surface[] = [
         name: "connecting",
         hub: "silent",
         root: "body",
+        ready: { shows: "[data-slot=hub-band]" },
         // The band names the page's own address (client.svelte.ts
         // `hubSocketUrl`: `location.host`), the walk's server on a port of
         // its run, so two runs printed two pictures.
@@ -1071,12 +1386,18 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: () => "/",
     states: [
-      { name: "home", widths: ["desk", "phone"], root: TOP_BAR },
+      {
+        name: "home",
+        widths: ["desk", "phone"],
+        root: TOP_BAR,
+        ready: { shows: TOP_BAR, path: /^\/$/ },
+      },
       {
         name: "session",
         widths: ["desk", "phone"],
         route: (s) => `/session/${s.todo}`,
         root: TOP_BAR,
+        ready: { shows: TOP_BAR, path: /^\/session\// },
       },
     ],
   },
@@ -1088,7 +1409,8 @@ export const SURFACES: Surface[] = [
       {
         name: "rest",
         act: openRail,
-        root: "aside:has([data-slot=sidebar-content]), [data-slot=sheet-content][data-state=open]",
+        root: RAIL,
+        ready: { shows: RAIL_SHOWN, not: OPEN_MENU },
       },
       {
         name: "sort",
@@ -1097,6 +1419,10 @@ export const SURFACES: Surface[] = [
           await press(SORT)(page);
         },
         root: LAYER,
+        ready: {
+          shows: `${OPEN_MENU}[data-slot=dropdown-menu-content]`,
+          says: /Last activity/,
+        },
       },
       {
         name: "row-menu",
@@ -1109,6 +1435,7 @@ export const SURFACES: Surface[] = [
         },
         root: LAYER,
         widths: ["desk"],
+        ready: { shows: `${OPEN_MENU}[data-slot=context-menu-content]` },
       },
       {
         // A session row under the pointer: its hover card.
@@ -1117,6 +1444,7 @@ export const SURFACES: Surface[] = [
           page.getByRole("link", { name: IDLE_ROW }).first().hover(),
         root: "body",
         widths: ["desk"],
+        ready: { shows: "[data-nest-host]:has([data-session-hover-tone])" },
       },
       {
         // The same fleet two days on: the project's stopped sessions past
@@ -1124,13 +1452,16 @@ export const SURFACES: Surface[] = [
         // clock stays where it moved).
         name: "older",
         act: async (page) => {
-          const at = await page.evaluate(() => Date.now());
-          await page.clock.setFixedTime(at + LATER);
+          const now = await page.evaluate(() => Date.now());
+          await page.clock.setFixedTime(now + LATER);
           await page.reload({ waitUntil: "domcontentloaded" });
           await page.waitForFunction(() => window.kitHydrated === true);
           await openRail(page);
         },
-        root: "aside:has([data-slot=sidebar-content]), [data-slot=sheet-content][data-state=open]",
+        root: RAIL,
+        // Below the fold at the desk, under the project's six rows.
+        inView: OLDER_ROW,
+        ready: { shows: OLDER_ROW, says: /older$/ },
       },
     ],
   },
@@ -1138,21 +1469,44 @@ export const SURFACES: Surface[] = [
     name: "usage-popover",
     serve: "built",
     route: () => "/",
-    states: [{ name: "open", act: press(/Show every limit/), root: LAYER }],
+    states: [
+      {
+        name: "open",
+        act: press(/Show every limit/),
+        root: LAYER,
+        // The rail's popover on a desk, a bottom sheet on a phone.
+        ready: {
+          shows: `body:has([data-strip-hit][aria-expanded=true]) :is(${OPEN_POPOVER}, [data-slot=drawer-content][data-state=open])`,
+        },
+      },
+    ],
   },
   {
     name: "session",
     serve: "built",
     route: (s) => `/session/${s.chips}`,
     states: [
-      { name: "rest", root: "body" },
+      {
+        name: "rest",
+        root: "body",
+        ready: (s) => ({
+          shows: on(s.chips, `${MAIN} [role=log]`),
+          not: `${LAYER}, [data-slot=trow][aria-expanded=true]`,
+        }),
+      },
       // Turns still going as the walk reads them (scene.ts `SLOW_MS`), read
       // early: one answering a rule's reply (its row above), one still thinking.
-      { name: "live", route: (s) => `/session/${s.todo}`, root: MAIN },
+      {
+        name: "live",
+        route: (s) => `/session/${s.todo}`,
+        root: MAIN,
+        ready: (s) => ({ shows: on(s.todo, STOP_AGENT) }),
+      },
       {
         name: "live-thinking",
         route: (s) => `/session/${s.liveThink}`,
         root: MAIN,
+        ready: (s) => ({ shows: on(s.liveThink, STOP_AGENT) }),
       },
       // A finished turn's thinking, opened: its steps.
       {
@@ -1160,15 +1514,35 @@ export const SURFACES: Surface[] = [
         route: (s) => `/session/${s.think}`,
         act: press(REASONING),
         root: MAIN,
+        ready: (s) => ({
+          shows: on(
+            s.think,
+            "[data-slot=thinking-steps-content][data-state=open]"
+          ),
+        }),
       },
       // Compacted: the divider where the summary starts.
-      { name: "compacted", route: (s) => `/session/${s.compact}`, root: MAIN },
+      {
+        name: "compacted",
+        route: (s) => `/session/${s.compact}`,
+        root: MAIN,
+        ready: (s) => ({
+          shows: on(s.compact, '[aria-label="Compacted, show the summary"]'),
+        }),
+      },
       // The plan's ring pressed: its steps in the side panel.
       {
         name: "plan",
         route: (s) => `/session/${s.planned}`,
         act: press(PLAN_RING),
         root: "body",
+        ready: (s) => ({
+          shows: on(
+            s.planned,
+            "ul[data-slot=rows] li[data-status]",
+            "[data-slot=plan-ring][aria-pressed=true]"
+          ),
+        }),
       },
       {
         name: "tools-open",
@@ -1179,6 +1553,9 @@ export const SURFACES: Surface[] = [
           }
         },
         root: MAIN,
+        ready: (s) => ({
+          shows: on(s.chips, "button[data-slot=trow][aria-expanded=true]"),
+        }),
       },
       {
         name: "composer-grown",
@@ -1191,11 +1568,20 @@ export const SURFACES: Surface[] = [
           await page.keyboard.type("Then measure it on a phone.");
         },
         root: MAIN,
+        ready: (s) => ({
+          // Its three lines in the field: the composer grown to hold them
+          // (`data-grown` is the ask's, not the draft's).
+          shows: on(s.chips, "form[data-slot=cin]"),
+          says: GROWN_DRAFT,
+        }),
       },
       {
+        // The menu itself: LAYER's largest open `-content` stood for it, a
+        // 28px strip of the composer, while the menu was shut.
         name: "attach-menu",
         act: press("Attach or draw"),
-        root: LAYER,
+        root: OPEN_MENU,
+        ready: { shows: OPEN_MENU, says: /Files and photos[\s\S]*Draw/ },
       },
       {
         // An @ in the composer: the mention menu.
@@ -1205,6 +1591,10 @@ export const SURFACES: Surface[] = [
           await page.keyboard.type("@");
         },
         root: "body",
+        ready: {
+          shows:
+            '[role=listbox][aria-label="Name a session, thread or machine"] [role=option]',
+        },
       },
       {
         // Up in an empty composer: the recall wheel over what was sent.
@@ -1214,6 +1604,10 @@ export const SURFACES: Surface[] = [
           await page.keyboard.press("ArrowUp");
         },
         root: "body",
+        ready: {
+          shows:
+            '[role=listbox][aria-label="What you sent here"] [role=option][aria-selected=true]',
+        },
       },
       {
         // The Write card's change opened whole.
@@ -1223,6 +1617,7 @@ export const SURFACES: Surface[] = [
           await press(OPEN_DIFF)(page);
         },
         root: "body",
+        ready: { shows: DIFF_DIALOG, says: /chip\.css/, not: RAIL_SHEET },
       },
       {
         name: "session-card",
@@ -1232,6 +1627,9 @@ export const SURFACES: Surface[] = [
           await page.keyboard.press("ArrowDown");
         },
         root: ".kit-hang[data-state=open]",
+        ready: {
+          shows: '[aria-label="Session details"][data-state=open]',
+        },
       },
       {
         name: "tab-menu",
@@ -1248,17 +1646,38 @@ export const SURFACES: Surface[] = [
           );
         },
         root: LAYER,
+        ready: { shows: `${OPEN_MENU}[data-tab-menu]` },
       },
-      { name: "question", route: (s) => `/session/${s.ask}`, root: MAIN },
+      {
+        name: "question",
+        route: (s) => `/session/${s.ask}`,
+        root: MAIN,
+        ready: (s) => ({
+          shows: on(
+            s.ask,
+            `${HITL}[data-prompt-shown][aria-label^="Question"]`
+          ),
+        }),
+      },
       {
         name: "answered",
         route: (s) => `/session/${s.answered}`,
         root: MAIN,
+        ready: (s) => ({
+          shows: on(s.answered, `${HITL}[data-frame][aria-label^="Question"]`),
+          not: `${HITL}[data-prompt-shown]`,
+        }),
       },
       {
         name: "permission",
         route: (s) => `/session/${s.permission}`,
         root: MAIN,
+        ready: (s) => ({
+          shows: on(
+            s.permission,
+            `${HITL}[data-prompt-shown][aria-label^="Permission request"]`
+          ),
+        }),
       },
       {
         // A move nobody said yes to (the tray project to the second online
@@ -1268,6 +1687,7 @@ export const SURFACES: Surface[] = [
         hub: "moving",
         route: (s) => `/session/${s.moving}`,
         root: MAIN,
+        ready: (s) => ({ shows: on(s.moving, MOVE_WAIT) }),
       },
       {
         // The delegate it started, reported back: its card opened, its transcript inline.
@@ -1276,6 +1696,10 @@ export const SURFACES: Surface[] = [
         act: press(DELEGATE_CARD),
         root: MAIN,
         hostOnly: true,
+        ready: (s) => ({
+          shows: on(s.split, "button[aria-expanded=true]"),
+          says: DELEGATE_CARD,
+        }),
       },
       {
         // CawCo's fleet-memory read, its card opened: the memory it read.
@@ -1283,6 +1707,10 @@ export const SURFACES: Surface[] = [
         route: (s) => `/session/${s.memoryRead}`,
         act: press(MEMORY_ROW),
         root: MAIN,
+        ready: (s) => ({
+          shows: on(s.memoryRead, OPEN_TOOL_ROW),
+          says: MEMORY_ROW,
+        }),
       },
       {
         // A skill the session ran, its card opened: what it was asked.
@@ -1290,12 +1718,17 @@ export const SURFACES: Surface[] = [
         route: (s) => `/session/${s.skillRun}`,
         act: press(SKILL_ROW),
         root: MAIN,
+        ready: (s) => ({
+          shows: on(s.skillRun, OPEN_TOOL_ROW),
+          says: SKILL_ROW,
+        }),
       },
       {
         // The workflow run it started: the RunBlock and its steps.
         name: "run-block",
         route: (s) => `/session/${s.runner}`,
         root: MAIN,
+        ready: (s) => ({ shows: on(s.runner, RUN_BLOCK) }),
       },
       {
         // A note attached in the composer: its chip over the field. Late:
@@ -1311,6 +1744,13 @@ export const SURFACES: Surface[] = [
               buffer: Buffer.from("The badge is cut at 390px.\n"),
             }),
         root: MAIN,
+        // Its chip in the composer's attachments, over the field.
+        ready: (s) => ({
+          shows: on(
+            s.chips,
+            '[data-slot=composer] [data-atts] button[data-slot=doc][aria-label="Open chip-notes.txt"]'
+          ),
+        }),
       },
       {
         // ⌘⇧D in the composer: the canvas, standing over the field.
@@ -1326,6 +1766,7 @@ export const SURFACES: Surface[] = [
         },
         root: "body",
         widths: ["desk"],
+        ready: { shows: "iframe[title='Canvas']" },
       },
       {
         // The hub's socket dropped, and the catch-up read on reconnecting
@@ -1347,6 +1788,7 @@ export const SURFACES: Surface[] = [
           await page.locator("[data-slot=behind]").first().waitFor();
         },
         root: MAIN,
+        ready: (s) => ({ shows: on(s.chips, "[data-slot=behind]") }),
       },
     ],
   },
@@ -1355,7 +1797,11 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: (s) => `/project/${s.project}`,
     states: [
-      { name: "rest", root: "body" },
+      {
+        name: "rest",
+        root: "body",
+        ready: { shows: BOARD, not: CAW_SEAT_OPEN },
+      },
       {
         name: "more-menu",
         act: async (page) => {
@@ -1363,14 +1809,27 @@ export const SURFACES: Surface[] = [
           await press(MORE_FOR_CAWCO)(page);
         },
         root: LAYER,
+        ready: {
+          shows: OPEN_MENU,
+          says: /Project details…[\s\S]*Forget project…/,
+        },
       },
       // Caw's seat: his thread beside the board.
-      { name: "caw", act: openCaw, root: "body" },
+      {
+        name: "caw",
+        act: openCaw,
+        root: "body",
+        ready: { shows: `body:has(${CAW_SEAT_OPEN}) ${CAW_COMPOSER}` },
+      },
       // The note pasted in his thread, opened in the lightbox's document view.
       {
         name: "caw-note",
         act: inCawThread(press(THREAD_NOTE)),
         root: "body",
+        ready: {
+          shows: `${OPEN_DIALOG}:has([data-slot=doc-body])`,
+          says: /phone-notes\.txt/,
+        },
       },
       // The file he wrote in the folder, opened from his message.
       {
@@ -1383,16 +1842,45 @@ export const SURFACES: Surface[] = [
             .click()
         ),
         root: "body",
+        // Beside the board on a desk (a side card), the page on a phone.
+        ready: { shows: '[data-folder-file="notes/tray-brief.md"]' },
       },
       // The ⋯ menu's rows: the project's details, Caw's settings, its stages, and the forget it asks.
-      { name: "details", act: fromMore("Project details…"), root: "body" },
-      { name: "caw-settings", act: fromMore("Caw settings…"), root: "body" },
-      { name: "stages", act: fromMore("Pick stages…"), root: "body" },
-      { name: "forget", act: fromMore("Forget project…"), root: "body" },
+      {
+        name: "details",
+        act: fromMore("Project details…"),
+        root: "body",
+        ready: { shows: 'section[aria-label="Project details"]' },
+      },
+      {
+        name: "caw-settings",
+        act: fromMore("Caw settings…"),
+        root: "body",
+        ready: { shows: "[data-slot=caw-panel] [role=switch]" },
+      },
+      {
+        name: "stages",
+        act: fromMore("Pick stages…"),
+        root: "body",
+        ready: {
+          shows: "[data-slot=lead]",
+          says: /^This project has no stages of its own yet$/,
+        },
+      },
+      {
+        name: "forget",
+        act: fromMore("Forget project…"),
+        root: "body",
+        ready: { shows: "section[data-stop-tray] [data-stop-confirm]" },
+      },
       {
         name: "new",
         route: () => "/project/new",
         root: MAIN,
+        ready: {
+          shows: '[data-placeholder^="A repo, a launch, a brand"]',
+          path: /^\/project\/new$/,
+        },
       },
       {
         // The forget pressed while what runs in the project is still being
@@ -1403,6 +1891,7 @@ export const SURFACES: Surface[] = [
           await fromMore("Forget project…")(page);
         },
         root: "body",
+        ready: { shows: "p[role=status]", says: /^Reading what runs in / },
       },
     ],
   },
@@ -1411,12 +1900,17 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: (s) => `/project/${s.project}`,
     states: [
-      { name: "rest", root: MAIN },
+      {
+        name: "rest",
+        root: MAIN,
+        ready: { shows: BOARD, not: `${BULK_BAR}, ${OPEN_POPOVER}` },
+      },
       {
         name: "filter",
         act: press("Filter"),
         root: LAYER,
         widths: ["desk"],
+        ready: { shows: `${OPEN_POPOVER} input[aria-label="Find a task"]` },
       },
       {
         // A task picked: the bulk bar.
@@ -1429,22 +1923,35 @@ export const SURFACES: Surface[] = [
             .click(),
         root: MAIN,
         widths: ["desk"],
+        ready: { shows: BULK_BAR, not: OPEN_POPOVER },
       },
       // A column's Add task pressed: the new task's form, open in its column.
-      { name: "new-task", act: press(ADD_TASK), root: MAIN },
+      {
+        name: "new-task",
+        act: press(ADD_TASK),
+        root: MAIN,
+        ready: { shows: `${BOARD} input[aria-label="Task title"]` },
+      },
       // The Archived rail open, the bulk bar's two popovers, the stages picker.
-      { name: "archive", act: press(ARCHIVED_RAIL), root: MAIN },
+      {
+        name: "archive",
+        act: press(ARCHIVED_RAIL),
+        root: MAIN,
+        ready: { shows: "[data-rail-open] [data-slot=rail-close]" },
+      },
       {
         name: "drop",
         act: pickThen(BULK_DROP),
         root: LAYER,
         widths: ["desk"],
+        ready: { shows: `${OPEN_POPOVER} form[data-slot=drop]` },
       },
       {
         name: "label",
         act: pickThen(BULK_LABEL),
         root: LAYER,
         widths: ["desk"],
+        ready: { shows: `${OPEN_POPOVER} input[aria-label="Label to add"]` },
       },
       {
         name: "stages",
@@ -1454,6 +1961,11 @@ export const SURFACES: Surface[] = [
         },
         root: LAYER,
         widths: ["desk"],
+        ready: {
+          shows: `${OPEN_POPOVER} [data-slot=lead]`,
+          says: /^This project has no stages of its own yet$/,
+          not: "section[data-ask]",
+        },
       },
       {
         // A set the tasks don't stand in (Outreach's stages are none of
@@ -1471,6 +1983,9 @@ export const SURFACES: Surface[] = [
         },
         root: LAYER,
         widths: ["desk"],
+        ready: {
+          shows: `${OPEN_POPOVER} section[data-ask=outreach] [data-item]`,
+        },
       },
     ],
   },
@@ -1479,18 +1994,28 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: (s) => `/project/${s.project}?task=${s.task}`,
     states: [
-      { name: "open", root: "body" },
+      {
+        name: "open",
+        root: "body",
+        ready: (s) => ({ shows: taskSheet(s.task) }),
+      },
       {
         // In review: its two attempts, the newest's result (the page it presented, the post, the notes).
         name: "review",
         route: (s) => `/project/${s.project}?task=${s.review}`,
         root: "body",
+        ready: (s) => ({
+          shows: `${taskSheet(s.review)} [data-slot=stage] iframe[data-ready=true]`,
+        }),
       },
       {
         // Every part a task's sheet draws: labels, fields, a blocker, to-dos, criteria, notes, an output.
         name: "rich",
         route: (s) => `/project/${s.project}?task=${s.rich}`,
         root: "body",
+        ready: (s) => ({
+          shows: `${taskSheet(s.rich)} section[aria-label^="Review "]`,
+        }),
       },
       {
         // The same task's Details (it opens on Review, since it has an output):
@@ -1504,12 +2029,17 @@ export const SURFACES: Surface[] = [
             .first()
             .click(),
         root: "body",
+        ready: (s) => ({
+          shows: `${taskSheet(s.rich)} [role=tablist][aria-label="Review or details"] [role=tab][aria-selected=true]`,
+          says: DETAILS_TAB,
+        }),
       },
       {
         // Its one attempt failed.
         name: "failed",
         route: (s) => `/project/${s.project}?task=${s.failed}`,
         root: "body",
+        ready: (s) => ({ shows: `${taskSheet(s.failed)} [data-fail=true]` }),
       },
       {
         // In review, its page not found yet: the stage's cover. Last (its route stays).
@@ -1519,6 +2049,10 @@ export const SURFACES: Surface[] = [
           neverAnswered(page, ARTIFACT_READ, ARTIFACT_READ_PATH)
         ),
         root: "body",
+        ready: (s) => ({
+          shows: `${taskSheet(s.review)} [data-slot=stage] [data-slot=cover]`,
+          not: `${taskSheet(s.review)} [data-slot=stage] iframe[data-ready=true]`,
+        }),
       },
     ],
   },
@@ -1531,19 +2065,23 @@ export const SURFACES: Surface[] = [
     // Made is what the tasks handed in (the review task's post and notes,
     // ViewMade drawing each output small); Canvas, the tasks' graph (the
     // scene's edges).
-    states: [
-      "table",
-      "pipeline",
-      "routines",
-      "decisions",
-      "view:week",
-      "made",
-      "canvas",
-    ]
-      .map((view): State => ({
+    // Each view's pane names it (`data-view`), and what only it draws stands in it.
+    states: (
+      [
+        ["table", "table[data-slot=table]"],
+        ["pipeline", "[data-slot=view-pipeline-label]"],
+        ["routines", "section[data-block=routines]"],
+        ["decisions", "[data-slot=decisions][data-mode=list] [data-slot=grid]"],
+        ["view:week", "[data-slot=view-frame]"],
+        ["made", 'ul[aria-label="Made"] li[data-slot=tile]'],
+        ["canvas", "section[data-slot=view-canvas][data-settled=true]"],
+      ] as const
+    )
+      .map(([view, draws]): State => ({
         name: view.replace("view:", ""),
         route: (s) => `/project/${s.project}?view=${view}`,
         root: MAIN,
+        ready: { shows: `${VIEW_PANE}[data-view="${view}"] ${draws}` },
       }))
       .concat(
         {
@@ -1551,6 +2089,10 @@ export const SURFACES: Surface[] = [
           name: "week-page",
           route: (s) => `/project/${s.project}/view/week`,
           root: "body",
+          ready: {
+            shows: "[data-slot=view-frame]",
+            path: /^\/project\/[^/]+\/view\/week$/,
+          },
         },
         {
           // The decision page its session made, still open for picks: the page in its frame.
@@ -1558,6 +2100,7 @@ export const SURFACES: Surface[] = [
           route: (s) =>
             `/project/${s.project}?view=decisions&page=${CHIP_DECISION}`,
           root: MAIN,
+          ready: { shows: DECISION_PAGE },
         }
       ),
   },
@@ -1567,16 +2110,26 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: (s) => `/project/${s.decisions}?view=decisions`,
     states: [
-      { name: "rest", root: MAIN },
+      {
+        name: "rest",
+        root: MAIN,
+        ready: {
+          shows: `${VIEW_PANE}[data-view=decisions] [data-slot=decisions][data-mode=list] [data-slot=grid]`,
+        },
+      },
       {
         name: "page",
         route: (s) => `/project/${s.decisions}?view=decisions&page=pricing`,
         root: MAIN,
+        ready: { shows: DECISION_PAGE, path: /[?&]page=pricing\b/ },
       },
       {
         name: "graph",
         route: (s) => `/project/${s.decisions}?view=decisions&mode=graph`,
         root: MAIN,
+        ready: {
+          shows: `${VIEW_PANE}[data-view=decisions-graph] [data-slot=decisions][data-mode=graph]`,
+        },
       },
     ],
   },
@@ -1587,33 +2140,101 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: (s) => `/project/${s.tray}`,
     states: [
-      { name: "rest", root: "body" },
-      { name: "panel", act: openCaw, root: "body" },
+      {
+        // His panel put away: an empty board opens on him by itself
+        // (caw-lead.svelte.ts `arrive`), so as it opened, rest drew the
+        // panel's own picture at the desk.
+        name: "rest",
+        act: cawAway,
+        root: "body",
+        ready: {
+          shows: '[data-slot="caw-seat"][aria-expanded="false"]',
+          not: CAW_SEAT_OPEN,
+        },
+      },
+      {
+        name: "panel",
+        act: openCaw,
+        root: "body",
+        ready: { shows: CAW_SEAT_OPEN },
+      },
       // No decision page yet: Caw in the view, his starters under him.
       {
         name: "decisions",
         route: (s) => `/project/${s.tray}?view=decisions`,
         root: MAIN,
+        ready: {
+          shows: `${VIEW_PANE}[data-view=decisions] [data-slot=empty] [data-slot=caw-seat]`,
+        },
       },
     ],
   },
-  ...CONFIG.map((section): Surface => ({
+  {
+    // `/config` itself: under the drawer's width the section list is the
+    // page (config/+page.ts); wider, it is Rules' page (a 307 to
+    // /config/rules), which config-rules/rest reads.
+    name: "config",
+    serve: "built",
+    route: () => "/config",
+    states: [
+      {
+        // Opened again, as a phone that has been here before opens it: on
+        // its first visit the server has no `cawco-narrow` from it yet (the
+        // Shell keeps it once it has drawn, prefs.ts), and a probe's
+        // Chromium says no `sec-ch-ua-mobile`, so the server took it for
+        // wide and sent it on to Rules.
+        name: "index",
+        act: async (page) => {
+          await page.goto(new URL("/config", page.url()).href, {
+            waitUntil: "domcontentloaded",
+          });
+          await page.waitForFunction(() => window.kitHydrated === true);
+        },
+        root: "body",
+        widths: ["tablet", "phone"],
+        ready: { shows: "[data-slot=list]", path: /^\/config$/ },
+      },
+    ],
+  },
+  ...CONFIG.map(([section, title]): Surface => ({
     name: `config-${section}`,
     serve: "built",
     route: () => `/config/${section}`,
-    states: [{ name: "rest", root: "body" }, ...(EDITORS[section] ?? [])],
+    states: [
+      {
+        name: "rest",
+        root: "body",
+        ready: {
+          shows: SECTION_TITLE,
+          says: new RegExp(`^${title.replace("&", "\\&")}$`),
+          not: SKELETON,
+          path: at(`/config/${section}`),
+        },
+      },
+      ...(EDITORS[section] ?? []),
+    ],
   })),
   {
     name: "usage",
     serve: "built",
     route: () => "/usage",
     states: [
-      { name: "rest", root: "body" },
+      {
+        name: "rest",
+        root: "body",
+        ready: {
+          shows: "main h1",
+          says: /^Usage$/,
+          not: "[data-project-spend-row]",
+          path: at("/usage"),
+        },
+      },
       // One project's spend.
       {
         name: "project",
         route: (s) => `/usage?project=${s.project}`,
         root: "body",
+        ready: { shows: "[data-project-spend-row]" },
       },
     ],
   },
@@ -1628,25 +2249,53 @@ export const SURFACES: Surface[] = [
         name: "open",
         act: inSheet(),
         root: "[role=dialog][data-state=open]",
+        ready: {
+          shows: `${OPEN_DIALOG} [aria-label="First prompt"]`,
+          not: NS_POP,
+        },
       },
-      { name: "location", act: inSheet(press(LOCATION_CHIP)), root: "body" },
+      {
+        name: "location",
+        act: inSheet(press(LOCATION_CHIP)),
+        root: "body",
+        ready: { shows: `${nsPop("location")} [aria-label="Location source"]` },
+      },
       {
         name: "browse",
         act: inSheet(press(LOCATION_CHIP), browseTo),
         root: "body",
+        ready: {
+          shows: `${nsPop("location")} [data-slot=crumb][aria-current=location]`,
+          says: /^chip-tray$/,
+        },
       },
       {
         name: "used",
         act: inSheet(press(LOCATION_CHIP), browseTo, press("Use this folder")),
         root: "[role=dialog][data-state=open]",
+        ready: {
+          shows: `${OPEN_DIALOG} [aria-label$="/code/chip-tray"][aria-label^="Location: "]`,
+          not: NS_POP,
+        },
       },
-      { name: "effort", act: inSheet(press(EFFORT_CHIP)), root: "body" },
+      {
+        name: "effort",
+        act: inSheet(press(EFFORT_CHIP)),
+        root: "body",
+        ready: { shows: `${nsPop("effort")} [data-slot=track]` },
+      },
       {
         name: "permission",
         act: inSheet(press(PERMISSION_CHIP)),
         root: "body",
+        ready: { shows: `${nsPop("permission")} [data-perm=fullSend]` },
       },
-      { name: "account", act: inSheet(press(ACCOUNT_CHIP)), root: "body" },
+      {
+        name: "account",
+        act: inSheet(press(ACCOUNT_CHIP)),
+        root: "body",
+        ready: { shows: `${NS_POP} [data-account-option=auto]` },
+      },
       {
         // The Machines chip's "Connect a machine…": the pairing panel in the
         // list's place, its install command in the join step's CopyBox. The
@@ -1667,6 +2316,7 @@ export const SURFACES: Surface[] = [
               .click()
         ),
         root: "body",
+        ready: { shows: `${nsPop("machines")} code`, says: /install\.sh/ },
       },
       {
         // The cawco project on the machine with no checkout of it: Move &
@@ -1674,6 +2324,10 @@ export const SURFACES: Surface[] = [
         name: "move",
         act: inSheet(toOtherMachine, press(MOVE_AND_START)),
         root: "[role=dialog][data-state=open]",
+        ready: {
+          shows: `${OPEN_DIALOG} [data-slot=tray]`,
+          says: /^CawCo saves the folder/,
+        },
       },
       {
         name: "insert",
@@ -1682,6 +2336,10 @@ export const SURFACES: Surface[] = [
           await page.keyboard.type("/");
         }),
         root: "body",
+        ready: {
+          shows: `${NS_POP} [data-slot=trigger-menu-label]`,
+          says: /^\/tray-check$/,
+        },
       },
     ],
   },
@@ -1690,7 +2348,12 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: () => "/",
     states: [
-      { name: "open", act: openJump, root: LAYER },
+      {
+        name: "open",
+        act: openJump,
+        root: LAYER,
+        ready: { shows: JUMP, not: `${JUMP} ${FIND_PEEK}` },
+      },
       {
         // A word typed, its results in, then ↓ to a session's row and → on
         // it: its peek in place (Finder: → peeks the active row). All its
@@ -1715,6 +2378,7 @@ export const SURFACES: Surface[] = [
           await page.locator(FIND_PEEK).first().waitFor();
         },
         root: LAYER,
+        ready: { shows: `${JUMP} ${FIND_PEEK}` },
       },
     ],
   },
@@ -1727,6 +2391,7 @@ export const SURFACES: Surface[] = [
         name: "open",
         act: (page) => page.click("[data-needs-caw]"),
         root: LAYER,
+        ready: { shows: NEEDS_PANEL, not: PEEK_SHEET },
       },
       {
         // An ask's Peek on its card, the panel giving way to the peek sheet:
@@ -1743,6 +2408,7 @@ export const SURFACES: Surface[] = [
             .click();
         },
         root: "body",
+        ready: { shows: PEEK_SHEET },
       },
     ],
   },
@@ -1751,16 +2417,32 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: () => "/workflows",
     states: [
-      { name: "rest", root: "body" },
       {
+        name: "rest",
+        root: "body",
+        ready: { shows: "h1", says: /^Workflows$/, path: at("/workflows") },
+      },
+      {
+        // The scene's workflow is a program's (`origin: "code"`): it has no
+        // Editor tab, and opens on Program (WorkflowEditor's `tab`).
         name: "editor",
         route: (s) => `/workflows/${s.workflow}`,
         root: "body",
+        ready: { shows: workflowTab("program"), not: OPEN_DIALOG },
       },
       {
-        name: "program",
-        route: (s) => `/workflows/${s.workflow}?tab=program`,
+        // Its Runs. This was `?tab=program`, which opens it on the Program
+        // tab it opens on anyway: the same screen as editor's.
+        name: "runs",
+        route: (s) => `/workflows/${s.workflow}`,
+        act: (page) =>
+          page
+            .getByRole("tab", { name: "Runs" })
+            .filter({ visible: true })
+            .first()
+            .click(),
         root: "body",
+        ready: { shows: workflowTab("runs") },
       },
       {
         // Run: the launch dialog, opened and not sent.
@@ -1768,15 +2450,30 @@ export const SURFACES: Surface[] = [
         route: (s) => `/workflows/${s.workflow}`,
         act: press(RUN_WORKFLOW),
         root: "body",
+        ready: {
+          shows: `${OPEN_DIALOG} [data-slot=dialog-title]`,
+          says: /^Run /,
+        },
       },
       // A graph workflow: the canvas, its nodes and edges, the inspector.
-      { name: "graph", route: (s) => `/workflows/${s.graph}`, root: "body" },
+      {
+        name: "graph",
+        route: (s) => `/workflows/${s.graph}`,
+        root: "body",
+        ready: {
+          shows: '[aria-label="Fit graph"]',
+          not: `[data-slot=when], ${STEP_SETTINGS}`,
+        },
+      },
       // Its step picked: the inspector's prompt and output schema.
       {
         name: "graph-step",
         route: (s) => `/workflows/${s.graph}`,
         act: pickNode(GRAPH_STEP),
         root: "body",
+        // Its settings in the inspector: what it runs on, its harness first
+        // (its output schema's fields stand past the fold).
+        ready: { shows: STEP_SETTINGS, not: "[data-slot=when]" },
       },
       // Its branch picked: each case's condition.
       {
@@ -1784,9 +2481,17 @@ export const SURFACES: Surface[] = [
         route: (s) => `/workflows/${s.graph}`,
         act: pickNode(GRAPH_BRANCH),
         root: "body",
+        ready: { shows: "[data-slot=when]" },
       },
       // The finished run in its own pane: its steps.
-      { name: "run", route: (s) => `/session/run:${s.run}`, root: "body" },
+      {
+        name: "run",
+        route: (s) => `/session/run:${s.run}`,
+        root: "body",
+        ready: (s) => ({
+          shows: on(`run:${s.run}`, '[role=img][aria-label="Passed"]'),
+        }),
+      },
     ],
   },
   {
@@ -1794,8 +2499,20 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: (s) => `/artifact/${s.artifact}`,
     states: [
-      { name: "rest", root: "body" },
-      { name: "in-session", route: (s) => `/session/${s.art}`, root: "body" },
+      {
+        name: "rest",
+        root: "body",
+        ready: (s) => ({
+          shows: PREVIEW_READY,
+          path: at(`/artifact/${s.artifact}`),
+        }),
+      },
+      {
+        name: "in-session",
+        route: (s) => `/session/${s.art}`,
+        root: "body",
+        ready: (s) => ({ shows: on(s.art, PREVIEW_READY) }),
+      },
       // A pin on the preview, its card open (the desk's pane stands beside the transcript).
       {
         name: "pin",
@@ -1803,6 +2520,7 @@ export const SURFACES: Surface[] = [
         act: dropPin,
         root: "body",
         widths: ["desk"],
+        ready: (s) => ({ shows: on(s.art, '[aria-label="Pin 1"]') }),
       },
       // The pane's Comments panel: its pins' list.
       {
@@ -1811,6 +2529,7 @@ export const SURFACES: Surface[] = [
         act: headControl("comments", "Comments"),
         root: "body",
         widths: ["desk"],
+        ready: (s) => ({ shows: on(s.art, PIN_LIST) }),
       },
       // The page asking for a place: the pane's place picker.
       {
@@ -1819,6 +2538,7 @@ export const SURFACES: Surface[] = [
         act: askPlace,
         root: "body",
         widths: ["desk"],
+        ready: (s) => ({ shows: on(s.art, "form[data-slot=place-pick]") }),
       },
     ],
   },
@@ -1829,7 +2549,14 @@ export const SURFACES: Surface[] = [
     serve: "built",
     tape: "sheet",
     route: (s) => `/artifact/${s.sheet}`,
-    states: [{ name: "inspect", act: inspectSheet, root: "body" }],
+    states: [
+      {
+        name: "inspect",
+        act: inspectSheet,
+        root: "body",
+        ready: { shows: INSPECTOR_ROW },
+      },
+    ],
   },
   {
     // A part of the page that throws while it renders: the tabs, their
@@ -1837,7 +2564,14 @@ export const SURFACES: Surface[] = [
     name: "region-failed",
     serve: "built",
     route: (s) => `/session/${s.chips}`,
-    states: [{ name: "tabs", act: tabsFail, root: "body" }],
+    states: [
+      {
+        name: "tabs",
+        act: tabsFail,
+        root: "body",
+        ready: { shows: "[data-region-failed=tabs]" },
+      },
+    ],
   },
   {
     // A tab switched to with more to draw than it built: "Catching up…"
@@ -1854,6 +2588,10 @@ export const SURFACES: Surface[] = [
         heldFrame: true,
         root: MAIN,
         widths: ["desk"],
+        ready: (s) => ({
+          shows: on(s.permission, "[role=status][aria-busy=true]"),
+          says: CATCHING_UP_LINE,
+        }),
       },
     ],
   },
@@ -1861,7 +2599,13 @@ export const SURFACES: Surface[] = [
     name: "not-found",
     serve: "built",
     route: () => "/no-such-page",
-    states: [{ name: "rest", root: "body" }],
+    states: [
+      {
+        name: "rest",
+        root: "body",
+        ready: { shows: "main p", says: /^Page not found$/ },
+      },
+    ],
   },
   {
     // Suggest while typing on: words for the task the session's skill is made
@@ -1888,6 +2632,9 @@ export const SURFACES: Surface[] = [
             .waitFor({ timeout: SUGGESTED_MS });
         },
         root: MAIN,
+        ready: (s) => ({
+          shows: on(s.skillRun, "[data-slot=suggest] [data-slot=suggest-chip]"),
+        }),
       },
     ],
   },
@@ -1897,15 +2644,39 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: () => "/",
     states: [
-      { name: "rest", hub: "machineless", root: "body" },
+      {
+        // Under the drawer's width, where Home is the page. A desk's `/`
+        // opens the workspace's conversation, its machine gone (MachinesEmpty
+        // stands there only with nothing open): no-machine/session reads it.
+        name: "rest",
+        hub: "machineless",
+        root: "body",
+        widths: ["tablet", "phone"],
+        ready: {
+          shows: MACHINES_EMPTY,
+          says: /^None of your machines are online$/,
+        },
+      },
       // No machine at all, every one removed: where the page says to add one.
-      { name: "none", hub: "unregistered", root: "body" },
+      {
+        name: "none",
+        hub: "unregistered",
+        root: "body",
+        ready: {
+          shows: MACHINES_EMPTY,
+          says: /^Connect a machine to run sessions$/,
+        },
+      },
       // A session on the machine that went away: what its pane can still show.
       {
         name: "session",
         hub: "machineless",
         route: (s) => `/session/${s.chips}`,
         root: MAIN,
+        ready: (s) => ({
+          shows: on(s.chips, "[data-slot=ftitle]"),
+          says: STARTS_WITH_MACHINE,
+        }),
       },
     ],
   },
@@ -1915,7 +2686,12 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: () => "/",
     states: [
-      { name: "rest", hub: "pairing", root: "body" },
+      {
+        name: "rest",
+        hub: "pairing",
+        root: "body",
+        ready: { shows: "main[data-slot=pairing] [data-slot=code]" },
+      },
       {
         // Its pairing asked of a hub it can't reach just then: "Pairing
         // didn't start", and the reason opened whole.
@@ -1928,14 +2704,18 @@ export const SURFACES: Surface[] = [
           await page.getByTitle("Show the whole error").first().click();
         },
         root: "body",
+        ready: {
+          shows: "main[data-slot=pairing] h1[data-slot=title]",
+          says: /^Pairing didn't start$/,
+        },
       },
     ],
   },
-  ...BENCHES.map(([name, path]): Surface => ({
+  ...BENCHES.map(([name, path, draws]): Surface => ({
     name: `bench-${name}`,
     serve: "dev",
     route: () => path,
-    states: [{ name: "rest", root: "body" }],
+    states: [{ name: "rest", root: "body", ready: { shows: draws } }],
   })),
 ];
 
