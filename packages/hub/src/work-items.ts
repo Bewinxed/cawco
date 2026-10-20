@@ -3729,10 +3729,8 @@ export const createWorkItems = ({
    * branch it was on no longer holds. Its boundary is started on the account
    * its latest item's session runs on: its delegate goes on in the same
    * session, on its transcript, in the same folder. Filed active again, one
-   * of its project's places. Each project the old clone had installed is
-   * installed again inside its new boundary before it answers (agent
-   * workspace.ts `reinstall`): its delegate finds the folder as it left it.
-   * One cut at a time per workspace; every caller shares it.
+   * of its project's places. Its installed dependencies are gone with the
+   * old clone. One cut at a time per workspace; every caller shares it.
    * `onCut` runs in the step that files it active, before anything else
    * can settle it: what wakes its session there.
    */

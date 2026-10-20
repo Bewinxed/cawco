@@ -1839,9 +1839,7 @@ export type GitChanges =
  * of `account`, the Claude account the workspace's first session launches
  * on, so that session's spawn hands it over to no new generation. `at`, when
  * given, cuts the branch at that commit instead ({@link WorkspaceCut}): a
- * retired workspace cut again at the same path for its delegate to go on,
- * each project its retired clone had installed installed again inside the
- * new boundary before it answers.
+ * retired workspace cut again at the same path for its delegate to go on.
  * Args `[cwd, workspaceId, projectId | null, account | null, at?]`; answers
  * {@link WorkspaceCheckout}. Machine-scoped; a directory that is not
  * in a git repository is refused, so is one with no `origin` and no project,
@@ -1861,15 +1859,6 @@ export const CONTROL_WORKSPACE_CREATE = "workspaceCreate";
 export interface WorkspaceCut {
   branch: string;
   commit: string;
-  /**
-   * The folders of the retired clone, from its root (`.` for the root), that
-   * held a project's install: a tracked lockfile with `node_modules` or
-   * Yarn's `.pnp.cjs` beside it. The cut again installs each inside its new
-   * boundary before its delegate goes on, so the session finds the folder as
-   * it left it (2026-10-20: X8's clone retired between two turns and came
-   * back with no `node_modules`, and its next `tsc` failed with ENOENT).
-   */
-  installed?: string[];
 }
 
 /**
@@ -2007,22 +1996,12 @@ export const WORKSPACE_GIT_TIMEOUT_MS = 300_000;
 /** How long a new boundary may take to announce readiness. */
 export const WORKSPACE_BOUNDARY_START_TIMEOUT_MS = 15_000;
 /**
- * How long a workspace cut again ({@link WorkspaceCut}) may take to install,
- * inside its new boundary, each project its retired clone had installed
- * (agent workspace.ts `reinstall`). Ours: a warm frozen install links from
- * the workspaces' cache in seconds.
- */
-export const WORKSPACE_RECUT_INSTALL_MS = 180_000;
-/**
- * Git and boundary budgets, the install of a cut again, plus a minute for
- * setup, teardown and control transport. A first cut installs nothing: its
- * delegate runs its project's install inside the workspace when it needs one.
+ * Git and boundary budgets, plus a minute for setup, teardown and control
+ * transport. A cut installs nothing: its delegate runs its project's install
+ * inside the workspace when it needs one.
  */
 export const WORKSPACE_CREATE_TIMEOUT_MS =
-  WORKSPACE_GIT_TIMEOUT_MS +
-  WORKSPACE_BOUNDARY_START_TIMEOUT_MS +
-  WORKSPACE_RECUT_INSTALL_MS +
-  60_000;
+  WORKSPACE_GIT_TIMEOUT_MS + WORKSPACE_BOUNDARY_START_TIMEOUT_MS + 60_000;
 
 /** Where {@link CONTROL_WORKSPACE_CREATE} put a workspace. */
 export interface WorkspaceCheckout {
