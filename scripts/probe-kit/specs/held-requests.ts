@@ -14,11 +14,15 @@
  * - Away past the deadline: asked again, frozen, cut, and kept away; the ask
  *   fails only at its deadline, saying the machine was away and whether it
  *   ran is not known, never "Completion is unknown".
+ * - Asked while away: its link cut first, the machine is asked while it is
+ *   away inside its reconnecting window, and let back 1 s later. The ask is
+ *   held from the moment it is made and answered once the machine is back,
+ *   never "isn't connected".
  *
  *   bun scripts/probe-kit/run.ts held-requests
  */
 import { signal, spawnedPid } from "../../../packages/core/src/signal";
-import { delay } from "../../scratch-fleet";
+import { delay, until } from "../../scratch-fleet";
 import { type Kit, logSince, type Spec } from "../kit";
 import { relay } from "../relay";
 
@@ -106,6 +110,41 @@ const spec: Spec = {
         !failed.includes("Completion is unknown") &&
         after >= READ_DEADLINE_MS - 500,
       `${Math.round(after / 1000)} s; ${failed.slice(0, 400)}`
+    );
+
+    // Asked while away. The machine is back first: its next register ends
+    // the reconnect the last leg left it in.
+    await until(
+      "the second machine is back",
+      async () =>
+        (
+          await fleet.api<{ machineId: string; status: string }[]>(
+            "/api/agents"
+          )
+        ).find((one) => one.machineId === OTHER)?.status === "online" ||
+        undefined,
+      Boolean,
+      60_000
+    );
+    const beforeAway = await hubLog();
+    between.cut();
+    await delay(500);
+    const askedAway = Date.now();
+    const whileAway = inspect().then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error: String(error) })
+    );
+    await delay(1000);
+    between.release();
+    const gotAway = await whileAway;
+    check(
+      "a request made while its machine is away is held from then and answered once the machine is back",
+      gotAway.ok && typeof gotAway.value === "object",
+      `${Math.round((Date.now() - askedAway) / 1000)} s; ${gotAway.ok ? JSON.stringify(gotAway.value).slice(0, 200) : gotAway.error.slice(0, 400)}`
+    );
+    check(
+      "the hub sent the request held from its making on the machine's register",
+      logSince(beforeAway, await hubLog()).includes(RESENT)
     );
     between.stop();
   },

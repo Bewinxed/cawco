@@ -8750,12 +8750,16 @@ export const createServer = (
   };
 
   /**
-   * Asks a machine something and waits for the frame that answers it. A machine
-   * that is not connected and one that will not answer are told apart on
-   * purpose: the first is the fleet's own state (unanswered, reason "dead",
-   * nothing sent), the second is a machine that has something wrong with it
-   * (unanswered, reason "timeout"). An answered frame with `ok: false` is the
-   * machine's refusal.
+   * Asks a machine something and waits for the frame that answers it. A
+   * machine is asked as a send to it is delivered (core handover.ts
+   * `presenceOf`): connected, the request goes now; reconnecting, inside the
+   * window its last link's drop opened, it is held from now and goes on its
+   * next register ({@link resendHeld}), as one in flight when its link
+   * dropped is; offline, it is not sent (unanswered, reason "dead"). Asked
+   * while away, a create's inputs write failed at once with "isn't
+   * connected" while the machine was back 3 s later (2026-10-20). One that
+   * will not answer is unanswered, reason "timeout"; an answered frame with
+   * `ok: false` is the machine's refusal.
    */
   const callAgent = (
     machineId: string,
@@ -8766,7 +8770,7 @@ export const createServer = (
     instanceId?: string
   ): Promise<Bounded<ControlResult>> => {
     const agent = registry.agent(machineId);
-    if (!agent) {
+    if (!agent && machinePresence(machineId).kind !== "reconnecting") {
       return Promise.resolve({ kind: "unanswered", reason: "dead", after: 0 });
     }
 
@@ -8785,7 +8789,10 @@ export const createServer = (
         ...(instanceId && { instanceId }),
         payload,
       } satisfies Envelope<ControlPayload>;
-      sendFrame(agent, frame);
+      // Away: held, with no socket, for its machine's next register.
+      if (agent) {
+        sendFrame(agent, frame);
+      }
       return frame;
     });
   };
