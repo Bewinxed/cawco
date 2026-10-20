@@ -230,11 +230,12 @@
         <Collapsible.Root>
           <Collapsible.Trigger
             data-doc
-            class="group mark-line w-full min-h-(--tx-line) flex items-center gap-space-2 p-0 border-none border-current bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-(--tx-line-touch)"
+            class="group w-full"
+            look="head"
           >
             <span
               data-slot="path"
-              class="flex-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono)"
+              class="flex-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono) text-ink-strong"
               >{doc.path}</span
             >
             {#if doc.updatedAt}

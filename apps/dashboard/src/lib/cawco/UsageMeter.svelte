@@ -1103,8 +1103,9 @@
     <Drawer.Root bind:open>
       <Drawer.Trigger
         aria-label={triggerLabel}
-        class="press-tint touch-hit flex h-c-btn-h-lg group-variant-home/strip:h-c-usage-strip-home-h w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover state-open:bg-surface-hover state-open:ring-ground-surface-hover"
+        class="touch-hit w-full"
         data-strip-hit
+        look={variant === "home" ? "strip-home" : "strip"}
         onkeydown={keyed}
         onpointerdown={pressed}
       >
@@ -1121,8 +1122,9 @@
     <Popover.Root bind:open>
       <Popover.Trigger
         aria-label={triggerLabel}
-        class="press-tint flex h-c-btn-h-lg group-variant-home/strip:h-c-usage-strip-home-h w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover state-open:bg-surface-hover state-open:ring-ground-surface-hover"
+        class="w-full"
         data-strip-hit
+        look={variant === "home" ? "strip-home" : "strip"}
         onkeydown={keyed}
         onpointerdown={pressed}
       >

@@ -324,7 +324,6 @@
         {#if hidden.length > 0}
           <DropdownMenu.Root>
             <DropdownMenu.Trigger
-              class="mark-line touch-hit"
               size="sm"
               variant="ghost"
             >

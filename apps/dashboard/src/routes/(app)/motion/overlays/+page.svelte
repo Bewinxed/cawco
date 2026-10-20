@@ -79,10 +79,11 @@
   <div data-slot="openers" class="relative z-1 flex flex-wrap gap-space-2">
     {#if shows("sheet")}
       <Sheet.Root bind:open={open.sheet}>
-        <Sheet.Trigger
-          class="rounded-sm border border-border-control px-space-3 py-space-2"
-          data-open="sheet">Sheet</Sheet.Trigger
-        >
+        <Sheet.Trigger data-open="sheet">
+          {#snippet child({ props })}
+            <Button {...props} size="sm" variant="outline">Sheet</Button>
+          {/snippet}
+        </Sheet.Trigger>
         <Sheet.Content side="left">
           <Sheet.Header>
             <Sheet.Title>Sheet</Sheet.Title>
@@ -98,10 +99,11 @@
 
     {#if shows("dialog")}
       <Dialog.Root bind:open={open.dialog}>
-        <Dialog.Trigger
-          class="rounded-sm border border-border-control px-space-3 py-space-2"
-          data-open="dialog">Dialog</Dialog.Trigger
-        >
+        <Dialog.Trigger data-open="dialog">
+          {#snippet child({ props })}
+            <Button {...props} size="sm" variant="outline">Dialog</Button>
+          {/snippet}
+        </Dialog.Trigger>
         <Dialog.Content>
           <Dialog.Header>
             <Dialog.Title>Dialog</Dialog.Title>
@@ -115,10 +117,11 @@
 
     {#if shows("alert-dialog")}
       <AlertDialog.Root bind:open={open["alert-dialog"]}>
-        <AlertDialog.Trigger
-          class="rounded-sm border border-border-control px-space-3 py-space-2"
-          data-open="alert-dialog">Alert dialog</AlertDialog.Trigger
-        >
+        <AlertDialog.Trigger data-open="alert-dialog">
+          {#snippet child({ props })}
+            <Button {...props} size="sm" variant="outline">Alert dialog</Button>
+          {/snippet}
+        </AlertDialog.Trigger>
         <AlertDialog.Content>
           <AlertDialog.Header>
             <AlertDialog.Title>Alert dialog</AlertDialog.Title>
@@ -136,10 +139,11 @@
 
     {#if shows("drawer")}
       <Drawer.Root bind:open={open.drawer}>
-        <Drawer.Trigger
-          class="rounded-sm border border-border-control px-space-3 py-space-2"
-          data-open="drawer">Drawer</Drawer.Trigger
-        >
+        <Drawer.Trigger data-open="drawer">
+          {#snippet child({ props })}
+            <Button {...props} size="sm" variant="outline">Drawer</Button>
+          {/snippet}
+        </Drawer.Trigger>
         <Drawer.Content>
           <Drawer.Header>
             <Drawer.Title>Drawer</Drawer.Title>
@@ -155,9 +159,8 @@
 
     {#if shows("dropdown-menu")}
       <DropdownMenu.Root bind:open={open["dropdown-menu"]}>
-        <DropdownMenu.Trigger
-          class="rounded-sm border border-border-control px-space-3 py-space-2"
-          data-open="dropdown-menu">Dropdown menu</DropdownMenu.Trigger
+        <DropdownMenu.Trigger data-open="dropdown-menu" size="sm" variant="outline"
+          >Dropdown menu</DropdownMenu.Trigger
         >
         <DropdownMenu.Content>
           <DropdownMenu.Item
@@ -171,10 +174,11 @@
 
     {#if shows("popover")}
       <Popover.Root bind:open={open.popover}>
-        <Popover.Trigger
-          class="rounded-sm border border-border-control px-space-3 py-space-2"
-          data-open="popover">Popover</Popover.Trigger
-        >
+        <Popover.Trigger data-open="popover">
+          {#snippet child({ props })}
+            <Button {...props} size="sm" variant="outline">Popover</Button>
+          {/snippet}
+        </Popover.Trigger>
         <Popover.Content>
           <Button data-inside="popover" onclick={() => inside("popover")}
             >Press</Button

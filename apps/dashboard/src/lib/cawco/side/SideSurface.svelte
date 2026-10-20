@@ -420,7 +420,7 @@
           aria-label={moreCount
             ? `More, ${moreCount.of} ${moreCount.n} open`
             : "More"}
-          class="mark-line"
+          face="count"
           title="More"
         >
           <IconMore />

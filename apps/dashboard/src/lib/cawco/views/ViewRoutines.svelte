@@ -734,7 +734,8 @@
           <Table.Cell class="h-c-btn-h-lg" {rule} variant="list-opens">
             <Collapsible.Trigger
               data-opener
-              class="focus-inset block max-w-full cursor-pointer border-none border-current bg-transparent p-0 text-start text-inherit after:absolute after:inset-0"
+              class="max-w-full"
+              look="opener"
             >
               <span
                 data-slot="name"

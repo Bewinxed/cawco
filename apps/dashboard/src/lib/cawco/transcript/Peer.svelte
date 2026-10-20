@@ -187,8 +187,9 @@
            while the body is open. -->
       <Collapsible.Trigger
         aria-label="{row.lead} {row.name}"
-        class="group/toggle ms-auto flex-none grid place-items-center p-0 border-none border-current bg-transparent text-ink-muted cursor-pointer press-tint"
+        class="group/toggle ms-auto flex-none"
         data-box
+        look="chevron"
       >
         <span
           data-slot="chev"

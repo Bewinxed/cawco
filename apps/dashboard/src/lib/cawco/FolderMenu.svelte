@@ -81,7 +81,7 @@
 </script>
 
 <ContextMenu.Root bind:open>
-  <ContextMenu.Trigger class="contents">
+  <ContextMenu.Trigger box="none">
     {@render children()}
   </ContextMenu.Trigger>
 
