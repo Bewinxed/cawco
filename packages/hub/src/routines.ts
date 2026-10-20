@@ -432,6 +432,10 @@ const atFixedTimes = (cron: string): boolean => {
   return !(REPEATS.test(minute ?? "*") || REPEATS.test(hour ?? "*"));
 };
 
+/** A cron in words, in its zone: "At 09:00, Monday through Friday (Europe/London)". */
+const scheduleWords = (cron: string, timeZone: string): string =>
+  `${cronstrue.toString(cron, { use24HourTimeFormat: true, verbose: atFixedTimes(cron) })} (${timeZone})`;
+
 /**
  * A routine's schedule as the person reads it: its cron in words
  * (cronstrue, on a 24-hour clock), in its zone, and its next run while it
@@ -443,9 +447,31 @@ export const scheduleOf = (
 ): RoutineSchedule => ({
   cron: routine.cron,
   timeZone: routine.timeZone,
-  words: `${cronstrue.toString(routine.cron, { use24HourTimeFormat: true, verbose: atFixedTimes(routine.cron) })} (${routine.timeZone})`,
+  words: scheduleWords(routine.cron, routine.timeZone),
   nextAt: routine.enabled ? routine.nextSlot.getTime() : null,
 });
+
+/** A schedule read back before it is kept: its runs ahead and its words. */
+export interface SchedulePreview {
+  nextRuns: number[];
+  words: string;
+}
+
+/**
+ * A schedule as a new routine would run it, before it is made (the
+ * dashboard's routine form): parsed as `create` parses it (`cronOf`, refused
+ * in the same words), its runs ahead as `nextRunsOf` tells them.
+ */
+export const schedulePreview = (
+  cron: string,
+  timeZone: string
+): SchedulePreview => {
+  const [expression, zone] = [cron.trim(), timeZone.trim()];
+  return {
+    nextRuns: nextRunsOf(expression, zone, Date.now()),
+    words: scheduleWords(expression, zone),
+  };
+};
 
 /** The start of today in `timeZone`, ms. */
 const dayStart = (timeZone: string, now: number): number =>
@@ -2429,9 +2455,20 @@ const answer = (error: unknown) => {
 
 const TARGET = t.Union([t.Literal("delegate"), t.Literal("lead")]);
 
-/** The dashboard's routes for routines (no view yet: a dashboard pick waits for the owner). */
+/** The dashboard's routes for routines (its Routines view and its routine form). */
 export const routineRoutes = (routines: Routines) =>
   new Elysia()
+    .get(
+      "/api/routines/schedule",
+      { query: t.Object({ cron: t.String(), timeZone: t.String() }) },
+      ({ query }) => {
+        try {
+          return schedulePreview(query.cron, query.timeZone);
+        } catch (error) {
+          return answer(error);
+        }
+      }
+    )
     .get(
       "/api/routines",
       {

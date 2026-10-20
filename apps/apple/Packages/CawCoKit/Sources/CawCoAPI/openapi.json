@@ -11613,6 +11613,91 @@
         }
       }
     },
+    "/api/routines/schedule": {
+      "get": {
+        "parameters": [
+          {
+            "name": "cron",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "timeZone",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiRoutinesSchedule",
+        "responses": {
+          "200": {
+            "description": "getApiRoutinesSchedule 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiRoutinesSchedule 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiRoutinesSchedule 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiRoutinesSchedule 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiRoutinesSchedule 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiRoutinesSchedule 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/routines": {
       "get": {
         "parameters": [
@@ -41524,6 +41609,25 @@
           "action",
           "decidedBy",
           "text"
+        ]
+      },
+      "SchedulePreview": {
+        "description": "A schedule read back before it is kept: its runs ahead and its words.",
+        "type": "object",
+        "properties": {
+          "nextRuns": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "words": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "nextRuns",
+          "words"
         ]
       },
       "RoutineView": {

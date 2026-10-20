@@ -46,7 +46,7 @@ nightly release, not per change.
 | `j5-task-review` | task review | a task needing a Mac waits, never fails, while none is free (apple-gate's protection), then lands through the gate's build on the Mac; approve; send back, and the next attempt is given your words |
 | `j6-decisions` | decisions | picks kept on the hub; I'm done picking sends the page in place and tells its writer |
 | `j7-comments` | previews and comments | a pin on the session's page reaches the session by itself, with the line it was pinned on |
-| `j8-routines` | routines | run now: one more run, its delegate given the instruction; pause: off on the hub, Paused on its row |
+| `j8-routines` | routines | create by hand: the form's schedule read back by the hub, the routine listed as filled, its test run started once; run now: one more run, its delegate given the instruction; pause: off on the hub, Paused on its row |
 | `j9-jump` | Jump | a word of what was said finds the moment; it opens the conversation at the machine's own record of that line, in view |
 | `j10-rules` | 5, rules | a template is live on the next session; an edit's words go out next; delete, then undo |
 | `j11-plugin-update` | plugin update | a running session's hook runs the new version after Fetch again; the hook never fails through the swap, and the plugin is written once (plugin-swap's protection) |

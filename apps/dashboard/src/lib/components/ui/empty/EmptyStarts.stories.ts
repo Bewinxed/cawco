@@ -66,7 +66,7 @@ export const SessionBlankOpenCode = {
 /** A transcript with no messages: ask its own agent about its folder. */
 export const TranscriptEmpty = { args: { site: "transcript-empty" } };
 
-/** A project's Routines with Caw unable to start: what the page is for, then why, over Add machine. */
+/** A project's Routines with Caw unable to start: what the page is for, then why, over Create routine. */
 export const RoutinesCawAway = { args: { site: "routines-caw-away" } };
 
 /** Event sources, none yet: ask Caw for one. */

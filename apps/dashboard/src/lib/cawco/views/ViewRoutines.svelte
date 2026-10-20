@@ -41,7 +41,13 @@
    * With no routine yet it offers to start one (The Empty Starts Work Rule):
    * starters written for the project from what it repeats or waits on over
    * the session Composer to Caw (words alone), whose words open a thread
-   * with him. A starter puts its words in the composer, unsent.
+   * with him. A starter puts its words in the composer, unsent. Where Caw
+   * can't start, the way by hand: Create routine, the routine form
+   * (RoutineForm) in the empty state's place. Where Caw can start, the
+   * block's head offers Create routine beside the empty state; with
+   * routines, it offers both: Ask Caw (the composer over the ledger) and
+   * Create routine (the form over it). A routine made by hand lands in the
+   * ledger open, its test run going.
    *
    * The page is the hub's (routines-api): read on arrival and on every
    * reconnect, again when the project's threads move (a run notes its slot
@@ -57,6 +63,7 @@
     waitsOnYou,
   } from "#lib/cawco/routines/ActionsTable.svelte";
   import RoutineDetail from "#lib/cawco/routines/RoutineDetail.svelte";
+  import RoutineForm from "#lib/cawco/routines/RoutineForm.svelte";
   import RunStatus, { type Status } from "#lib/cawco/routines/RunStatus.svelte";
   import {
     deleteRoutine,
@@ -588,8 +595,17 @@
   function pick(text: string) {
     askDraft.press(text, "routines");
   }
-  /** New routine: the composer over the ledger. */
+  /** Ask Caw: the composer over the ledger. */
   let asking = $state(false);
+  /** Create routine: the routine form over the ledger, or in the empty state's place. */
+  let making = $state(false);
+  /** The routine the form made: the ledger shows it open, its test run going. */
+  async function made(routine: Routine) {
+    making = false;
+    await read();
+    openRoutine(routine.id);
+    bring = routine.id;
+  }
 
   /** Each routine's name by its id: the routine an action's run proposed it in. */
   const routineNames = $derived(
@@ -683,16 +699,33 @@
 
 <!-- What acts on a block, at its head's trailing end. -->
 {#snippet routinesAction()}
-  {#if !empty && canTalk}
-    <Button
-      aria-expanded={asking}
-      onclick={() => {
-        asking = !asking;
-        askDraft.focusWanted = asking;
-      }}
-      size="sm"
-      variant="outline">{words.newRoutine}</Button
-    >
+  <!-- The way by hand stands here wherever the empty state doesn't offer
+       it (an empty block whose Caw can start offers him); Ask Caw beside it
+       once the empty state's composer is gone. -->
+  {#if !empty || canTalk}
+    <span class="flex flex-wrap justify-end gap-space-2">
+      {#if !empty && canTalk}
+        <Button
+          aria-expanded={asking}
+          onclick={() => {
+            asking = !asking;
+            making = false;
+            askDraft.focusWanted = asking;
+          }}
+          size="sm"
+          variant="outline">{words.askCaw}</Button
+        >
+      {/if}
+      <Button
+        aria-expanded={making}
+        onclick={() => {
+          making = !making;
+          asking = false;
+        }}
+        size="sm"
+        variant="outline">{words.createRoutine}</Button
+      >
+    </span>
   {/if}
 {/snippet}
 {#snippet sourcesAction()}
@@ -906,7 +939,10 @@
 {#snippet routinesBody()}
   {#if empty}
     <div data-slot="starters" class="w-full max-w-c-starters-w p-space-3">
-      {#if canTalk}
+      {#if making}
+        <!-- Create routine: the form in the empty state's place. -->
+        {@render routineForm()}
+      {:else if canTalk}
         <EmptyState
           actionWidth="fill"
           icon={IconClock}
@@ -953,8 +989,8 @@
       {:else}
         <!-- Caw makes routines and can't start (The Empty Starts Work
              Rule's second sentence): the line says what the page is for, his
-             reason stands in its own line over the way by hand, a machine
-             for him to start on, as every can't-start empty state has it. -->
+             reason stands in its own line over the way by hand, the routine
+             form in this place, as every can't-start empty state has it. -->
         <EmptyState
           icon={IconClock}
           line={words.emptyWhat(project.name)}
@@ -962,7 +998,7 @@
         >
           {#snippet action()}
             <CantStart
-              byHand={addMachineByHand}
+              byHand={createByHand}
               reason={cawProblem ?? CAW_NO_MACHINE}
             />
           {/snippet}
@@ -971,8 +1007,11 @@
     </div>
   {:else}
     {#if asking}
-      <!-- New routine: the composer stands over the ledger it will land in. -->
+      <!-- Ask Caw: the composer stands over the ledger it will land in. -->
       <div class="p-space-3">{@render askCaw()}</div>
+    {:else if making}
+      <!-- Create routine: the form stands over the ledger it will land in. -->
+      <div class="p-space-3">{@render routineForm()}</div>
     {/if}
     <div
       data-slot="ledger"
@@ -1023,6 +1062,27 @@
   {/if}
 {/snippet}
 
+{#snippet routineForm()}
+  <RoutineForm
+    oncancel={() => {
+      making = false;
+    }}
+    oncreated={made}
+    projectId={project.id}
+  />
+{/snippet}
+
+{#snippet createByHand()}
+  <Button
+    aria-expanded={making}
+    label={words.createRoutine}
+    onclick={() => {
+      making = true;
+    }}
+    variant="outline"
+  />
+{/snippet}
+
 {#snippet addMachineByHand()}
   <Button
     aria-haspopup="dialog"
@@ -1040,6 +1100,7 @@
     onask={() => {
       if (!empty) {
         asking = true;
+        making = false;
         askDraft.focusWanted = true;
       }
       pick(words.connectSourceAsk);

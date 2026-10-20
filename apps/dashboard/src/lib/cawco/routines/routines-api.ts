@@ -183,6 +183,72 @@ export async function readRoutinesPage(
   };
 }
 
+/** What a routine made by hand is: `POST /api/routines`'s fields the form sets. */
+export interface RoutineDraft {
+  cron: string;
+  /** null: each run's type is the hub's pick. */
+  delegateType: string | null;
+  name: string;
+  prompt: string;
+  timeZone: string;
+}
+
+/** A schedule read back by the hub before it is kept (hub routines.ts `SchedulePreview`). */
+export interface SchedulePreview {
+  /** Its runs ahead, as the scheduler would start them, epoch ms. */
+  nextRuns: number[];
+  /** The cron in words, in its zone (cronstrue). */
+  words: string;
+}
+
+/** A delegate type the project's runs may take: its name and what it is for. */
+export interface TypeChoice {
+  description: string;
+  name: string;
+}
+
+/** The hub's routes the routine form asks: a seam its states file fills. */
+export interface RoutineFormHub {
+  create: (projectId: string, draft: RoutineDraft) => Promise<Routine>;
+  preview: (cron: string, timeZone: string) => Promise<SchedulePreview>;
+  types: (projectId: string) => Promise<TypeChoice[]>;
+}
+
+/**
+ * The hub's: a routine made as Caw's are (the same route, files and
+ * budgets), a delegate run each time, run once at once as a test; a
+ * schedule parsed by the hub's own cron (refused in its words); the
+ * project's delegate type catalog.
+ */
+export const routineFormHub: RoutineFormHub = {
+  create: (projectId, draft) =>
+    send(
+      "/api/routines",
+      json("POST", {
+        projectId,
+        target: "delegate",
+        name: draft.name.trim(),
+        prompt: draft.prompt.trim(),
+        cron: draft.cron.trim(),
+        timeZone: draft.timeZone,
+        delegateType: draft.delegateType,
+      })
+    ),
+  preview: (cron, timeZone) =>
+    send(
+      `/api/routines/schedule?${new URLSearchParams({ cron: cron.trim(), timeZone })}`
+    ),
+  types: async (projectId) => {
+    const catalog = await send<{ types: TypeChoice[] }>(
+      `${project(projectId)}/delegate-types`
+    );
+    return catalog.types.map(({ name, description }) => ({
+      name,
+      description,
+    }));
+  },
+};
+
 /** Pauses or resumes a routine, or keeps one past its days: the routine after. */
 export const updateRoutine = (
   routineId: string,

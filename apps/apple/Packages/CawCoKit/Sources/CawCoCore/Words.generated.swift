@@ -1373,8 +1373,67 @@ public enum Words {
             "\(count) waiting on you"
         }
 
-        /// The Routines block's own action: the composer to Caw over the ledger.
+        /// The routine form's name, read out (the app: its composer to Caw).
         public static let newRoutine = "New routine"
+
+        /// The Routines block's way to Caw: the composer over the ledger.
+        public static let askCaw = "Ask Caw"
+
+        /// The Routines block's way by hand: the routine form over the ledger.
+        public static let createRoutine = "Create routine"
+
+        public static let creating = "Creating…"
+
+        public static let nameLabel = "Name"
+
+        public static let namePlaceholder = "Triage new issues"
+
+        public static let needsName = "Name it in 3 to 6 plain words."
+
+        public static func nameTooLong(length: Int, max: Int) -> String {
+            "The name runs \(length) characters. Keep it to \(max)."
+        }
+
+        public static let promptLabel = "What each run does"
+
+        public static let promptPlaceholder = "Read the issues opened since the last run, label each one, and say which need me."
+
+        public static let needsPrompt = "Say what each run does."
+
+        public static let whenLabel = "When"
+
+        public static let whenHint = "Five cron fields: minute, hour, day, month, weekday."
+
+        public static let whenPlaceholder = "0 9 * * 1-5"
+
+        public static let needsWhen = "Give a schedule in five cron fields, like 0 9 * * 1-5."
+
+        public static let zoneLabel = "Time zone"
+
+        public static let typeLabel = "Delegate type"
+
+        /// No type named: each run's is the hub's pick.
+        public static let typeHubPick = "The hub's pick for each run"
+
+        /// A refused read of the project's types: the hub's pick still stands.
+        public static func typesUnread(problem: String) -> String {
+            "The project's delegate types couldn't be read: \(problem) Runs take the hub's pick."
+        }
+
+        /// Under the schedule: its next run, on your clock.
+        public static func nextRunAt(when: String) -> String {
+            "Next run \(when)"
+        }
+
+        /// A schedule with no run in the next week.
+        public static let noRunThisWeek = "No run in the next week"
+
+        /// Beside Create: what making it does at once.
+        public static let testRun = "It runs once as soon as it's made, as a test."
+
+        public static func createFailed(problem: String) -> String {
+            "The routine wasn't created. \(problem) Your words stay here: change them, then create it again."
+        }
 
         /// The Event sources block's badge: events arrive as they happen, or only when polled.
         public static let relayLive = "Relay live"

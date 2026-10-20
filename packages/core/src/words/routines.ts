@@ -16,8 +16,43 @@ export const routinesWords = {
   /** A block's needs-you mark, in words. */
   failing: (count: number) => `${count} failing`,
   waiting: (count: number) => `${count} waiting on you`,
-  /** The Routines block's own action: the composer to Caw over the ledger. */
+  /** The routine form's name, read out (the app: its composer to Caw). */
   newRoutine: "New routine",
+  /** The Routines block's way to Caw: the composer over the ledger. */
+  askCaw: "Ask Caw",
+  /** The Routines block's way by hand: the routine form over the ledger. */
+  createRoutine: "Create routine",
+  creating: "Creating…",
+
+  // The routine form: what POST /api/routines takes, by hand.
+  nameLabel: "Name",
+  namePlaceholder: "Triage new issues",
+  needsName: "Name it in 3 to 6 plain words.",
+  nameTooLong: (length: number, max: number) =>
+    `The name runs ${length} characters. Keep it to ${max}.`,
+  promptLabel: "What each run does",
+  promptPlaceholder:
+    "Read the issues opened since the last run, label each one, and say which need me.",
+  needsPrompt: "Say what each run does.",
+  whenLabel: "When",
+  whenHint: "Five cron fields: minute, hour, day, month, weekday.",
+  whenPlaceholder: "0 9 * * 1-5",
+  needsWhen: "Give a schedule in five cron fields, like 0 9 * * 1-5.",
+  zoneLabel: "Time zone",
+  typeLabel: "Delegate type",
+  /** No type named: each run's is the hub's pick. */
+  typeHubPick: "The hub's pick for each run",
+  /** A refused read of the project's types: the hub's pick still stands. */
+  typesUnread: (problem: string) =>
+    `The project's delegate types couldn't be read: ${problem} Runs take the hub's pick.`,
+  /** Under the schedule: its next run, on your clock. */
+  nextRunAt: (when: string) => `Next run ${when}`,
+  /** A schedule with no run in the next week. */
+  noRunThisWeek: "No run in the next week",
+  /** Beside Create: what making it does at once. */
+  testRun: "It runs once as soon as it's made, as a test.",
+  createFailed: (problem: string) =>
+    `The routine wasn't created. ${problem} Your words stay here: change them, then create it again.`,
   /** The Event sources block's badge: events arrive as they happen, or only when polled. */
   relayLive: "Relay live",
   relayOff: "Relay off",

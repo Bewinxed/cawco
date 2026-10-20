@@ -81,6 +81,10 @@
   <Button aria-haspopup="dialog" label="Add machine" variant="outline" />
 {/snippet}
 
+{#snippet createRoutine()}
+  <Button label={routinesWords.createRoutine} variant="outline" />
+{/snippet}
+
 <div class="w-full min-w-0" data-empty-site={site}>
   {#if site === "hooks" || site === "rules"}
     <EmptyState
@@ -192,7 +196,7 @@
       title={routinesWords.empty}
     >
       {#snippet action()}
-        <CantStart byHand={addMachine} reason={CAW_NO_MACHINE} />
+        <CantStart byHand={createRoutine} reason={CAW_NO_MACHINE} />
       {/snippet}
     </EmptyState>
   {:else if site === "sources"}
