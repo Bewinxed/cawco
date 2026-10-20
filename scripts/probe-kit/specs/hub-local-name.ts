@@ -56,14 +56,23 @@
  *    network (the tailnet's, when there is one) is a 404; nothing else
  *    listens on port 80.
  *
- * 9. macOS only, what decides legs 1 to 4 there: one question for the name
- *    obelisk's hub holds (`cawco.local`), asked of the LAN three ways, and
- *    who answered from another device: the system's own responder
- *    (`dns-sd -G v4`), a Bun dgram socket joined to the LAN address, and a
- *    node one running the same code. macOS gates LAN multicast behind Local
- *    Network privacy ("Receiving an incoming UDP multicast | yes", TN3179),
- *    which it grants to "Command-line tools run from Terminal or over SSH"
- *    but not to a launchd agent.
+ * 9. macOS only, first, the Local Network grant legs 1 to 4 stand on there:
+ *    one question for `cawco.local` (another hub's on the LAN), asked by the
+ *    system's own responder (`dns-sd -G v4`) and by CawCo Agent, and who
+ *    answered from another device. macOS gates LAN multicast behind Local
+ *    Network privacy ("Receiving an incoming UDP multicast | yes"; "The
+ *    exception for launchd daemons doesn't apply to launchd agents", TN3179)
+ *    and has no API that reports the grant ("There's no general API that
+ *    returns whether the current process has local network access"), so it
+ *    is read from what CawCo Agent's socket hears while the system's does.
+ *    Without it, the leg says so in one line and legs 1 to 4 are not run.
+ *
+ * On macOS every hub and every question of legs 1 to 4, 8 and 9 runs as the
+ * product does: the installed release's `CawCo Agent.app` executable
+ * (`cawco hub`; `BUN_BE_BUN=1` for a question, the executable as bun) in a
+ * scratch launchd agent of this user's (probe-kit launch-agent.ts),
+ * attributed to the bundle by `AssociatedBundleIdentifiers`, never the
+ * probe's own process.
  *
  * Legs 5 to 7 run on Linux, legs 8 and 9 on macOS; legs 1 to 4 on both.
  *
@@ -80,11 +89,13 @@ import { networkInterfaces, platform } from "node:os";
 import { join } from "node:path";
 import makeMdns from "multicast-dns";
 import { browseMdns } from "../../../packages/agent/src/discovery";
+import { currentExecutable } from "../../../packages/core/src/binary-installation";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { reachableLinks } from "../../../packages/core/src/reachable-links";
 import { lanInterfaces } from "../../../packages/hub/src/lan-interfaces";
 import { leasePortRange, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
+import { type LaunchAgents, launchAgents, RESULT_MARK } from "../launch-agent";
 import { ACME_NETWORK, podmanRun, startPebble } from "../pebble";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
@@ -829,10 +840,11 @@ const acmeLeg = async (kit: Kit, sandbox: string): Promise<void> => {
 };
 
 /**
- * Leg 9's question, the same code under bun and node (`-e`): one mDNS A
- * question for the name, sent from the LAN address on a socket bound to
- * 5353 beside the system's responder and joined to the group there; every
- * source heard for 4 s, and what refused (the membership, the send).
+ * Leg 9's question, run as CawCo Agent (the bundle's executable as bun,
+ * `-e`): one mDNS A question for the name, sent from the LAN address on a
+ * socket bound to 5353 beside the system's responder and joined to the
+ * group there; every source heard for 4 s, and what refused (the
+ * membership, the send), on its {@link RESULT_MARK} line.
  */
 const ASK_LAN = `const dgram = require("node:dgram");
 const [name, from] = process.argv.slice(-2);
@@ -852,27 +864,8 @@ socket.bind(5353, () => {
   const question = Buffer.concat([Buffer.from([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]), ...labels, Buffer.from([0, 0, 1, 0, 1])]);
   socket.send(question, 5353, "224.0.0.251", (error) => { if (error) refused = "send: " + (error.code || error.message); });
 });
-setTimeout(() => { console.log(JSON.stringify({ refused, heard: [...heard] })); process.exit(0); }, 4000);
+setTimeout(() => { console.log(${JSON.stringify(RESULT_MARK)} + JSON.stringify({ refused, heard: [...heard] })); process.exit(0); }, 4000);
 `;
-
-/** What leg 9's question heard under `runtime`, or why it didn't run. */
-const askedBy = async (
-  runtime: string,
-  name: string,
-  from: string
-): Promise<{ refused: string; heard: string[] }> => {
-  const ran = await Bun.$`${runtime} -e ${ASK_LAN} ${name} ${from}`
-    .nothrow()
-    .quiet();
-  try {
-    return JSON.parse(ran.stdout.toString().trim().split("\n").at(-1) ?? "");
-  } catch {
-    return {
-      refused: `exit ${ran.exitCode}: ${ran.stderr.toString().trim().slice(-300)}`,
-      heard: [],
-    };
-  }
-};
 
 /** What the system's responder answers for `name` within 4 s: `dns-sd -G v4`'s address column. */
 const systemAnswers = async (name: string): Promise<string[]> => {
@@ -889,8 +882,24 @@ const systemAnswers = async (name: string): Promise<string[]> => {
     .map((line) => line.trim().split(SPACES).at(-2) ?? "");
 };
 
-/** Leg 9: who on the LAN answers `cawco.local` here, asked by the system, by Bun and by node. */
-const lanMdnsLeg = async (kit: Kit): Promise<void> => {
+/** The bundle's executable, as bun: what a question run as CawCo Agent needs of its environment. */
+const asBun = (): Record<string, string> => ({
+  BUN_BE_BUN: "1",
+  HOME: process.env.HOME ?? "",
+  PATH: process.env.PATH ?? "",
+  TMPDIR: process.env.TMPDIR ?? "/tmp",
+});
+
+/**
+ * Leg 9: the Local Network grant, read from what CawCo Agent's socket hears
+ * of another device on the LAN while the system's responder hears it. True
+ * when legs 1 to 4 can stand on it.
+ */
+const grantLeg = async (
+  kit: Kit,
+  agents: LaunchAgents,
+  bundle: string
+): Promise<boolean> => {
   const own = await answerable();
   const from = [...own.lan].find((address) => !address.includes(":"));
   const version = (
@@ -898,30 +907,43 @@ const lanMdnsLeg = async (kit: Kit): Promise<void> => {
   ).trim();
   if (!from) {
     kit.check("9: this Mac has a LAN IPv4 address", false, "none");
-    return;
+    return false;
   }
   const mine = new Set(own.holder.keys());
   const others = (addresses: string[]) =>
     addresses.filter((address) => address && !mine.has(address));
   const system = await systemAnswers("cawco.local");
-  kit.check(
-    `9: macOS ${version}: the system's responder hears cawco.local from another device on the LAN`,
-    others(system).length > 0,
-    `answers: ${system.join(", ") || "none"}`
-  );
-  for (const runtime of [process.execPath, Bun.which("node")]) {
-    if (!runtime) {
-      kit.note("9: no node on PATH: its question is not asked");
-      continue;
-    }
-    // biome-ignore lint/performance/noAwaitInLoops: one 5353 socket at a time
-    const asked = await askedBy(runtime, "cawco.local", from);
-    kit.check(
-      `9: ${runtime.includes("node") ? "node" : "bun"}'s dgram socket on ${from} hears mDNS from another device on the LAN`,
-      asked.refused === "" && others(asked.heard).length > 0,
-      `refused: ${asked.refused || "nothing"}; heard from ${asked.heard.join(", ") || "nobody"}`
-    );
+  if (
+    !kit.check(
+      `9: macOS ${version}: the system's responder hears cawco.local from another device on the LAN (a hub there to hear)`,
+      others(system).length > 0,
+      `answers: ${system.join(", ") || "none"}`
+    )
+  ) {
+    return false;
   }
+  const asked = await agents
+    .result<{ refused: string; heard: string[] }>(
+      "ask-lan",
+      [bundle, "-e", ASK_LAN, "cawco.local", from],
+      asBun(),
+      30_000
+    )
+    .catch((error: Error) => ({ refused: error.message, heard: [] }));
+  const heard = others(asked.heard);
+  if (asked.refused === "" && heard.length === 0) {
+    kit.check(
+      "9: CawCo Agent has Local Network access on this Mac",
+      false,
+      `the system's responder hears cawco.local from ${others(system).join(", ")} and CawCo Agent's socket on ${from} hears nobody: macOS has not given CawCo Agent Local Network access. Allow "CawCo Agent" in the alert macOS shows when the hub starts, or in System Settings › Privacy & Security › Local Network, then run this again. (No API reports the grant, TN3179: "There's no general API that returns whether the current process has local network access"; it is read from what the socket hears.)`
+    );
+    return false;
+  }
+  return kit.check(
+    `9: CawCo Agent's socket on ${from} hears mDNS from another device on the LAN (its Local Network grant)`,
+    asked.refused === "" && heard.length > 0,
+    `refused: ${asked.refused || "nothing"}; heard from ${asked.heard.join(", ") || "nobody"}`
+  );
 };
 
 /** An address of this Mac's that is on no shared network (the tailnet's, a VPN's), when it has one. */
@@ -988,17 +1010,196 @@ const macLeg = async (
   );
 };
 
+/** mDNS on, and every interface bound: a loopback hub announces nothing. */
+const ANNOUNCING = { CAWCO_NO_MDNS: "0", HOST: "0.0.0.0" };
+
+/** The hub at `base` once it holds a `.local` name: the name. */
+const heldBy = (base: string) =>
+  until(
+    `${base} holding its .local name`,
+    async () =>
+      ((await fetch(`${base}/health`).then((r) => r.json())) as Health)
+        .localName ?? undefined,
+    (name) => HELD.test(name),
+    60_000
+  );
+
+/** What legs 1 to 4 read of the network, from wherever their questions run. */
+interface Asker {
+  ask: <T>(
+    question: { name: string; type: "A" | "PTR" },
+    type: "A" | "SRV"
+  ) => Promise<T[]>;
+  browse: () => Promise<unknown>;
+}
+
+/** The two hubs legs 1 to 4 stand up: each one's held name and listener. */
+interface Held {
+  base: string;
+  name: string;
+}
+
+/**
+ * Legs 2 to 4 on the two hubs, the next name, each one's answers, service and
+ * Connect a machine rows, and the agent's browse, read by `asker`.
+ */
+const nameChecks = async (
+  kit: Kit,
+  asker: Asker,
+  hubs: [Held, Held]
+): Promise<void> => {
+  const own = await answerable();
+  const reachable = new Set((await reachableLinks()).map((link) => link.name));
+  const [first, next] = hubs;
+  kit.check(
+    "the second hub holds the next name, never the first hub's",
+    next.name !== first.name &&
+      numberOf(next.name) === numberOf(first.name) + 1,
+    `${first.name}, then ${next.name}`
+  );
+  const services = await asker.ask<Srv>(
+    { name: "_cawco._tcp.local", type: "PTR" },
+    "SRV"
+  );
+  for (const { name, base } of hubs) {
+    const port = Number(new URL(base).port);
+    // biome-ignore lint/performance/noAwaitInLoops: one mDNS question at a time
+    const answered = await asker.ask<string>({ name, type: "A" }, "A");
+    const listed = (
+      (await fetch(`${base}/api/join`).then((r) => r.json())) as {
+        addresses: { label: string; url: string }[];
+      }
+    ).addresses;
+    const named = (ips: string[]) =>
+      ips
+        .map((ip) => `${ip} (${own.holder.get(ip) ?? "not this machine's"})`)
+        .join(", ");
+    const foreign = answered.filter((ip) => !own.allowed.has(ip));
+    kit.check(
+      `an mDNS query for ${name} answers with the shared LAN's addresses (${own.shared.join(", ")}) and loopback's alone, never a bridge's or a tunnel's`,
+      answered.some((ip) => own.lan.has(ip)) && foreign.length === 0,
+      `heard ${named(answered) || "nothing"}; not the shared LAN's: ${named(foreign) || "none"}`
+    );
+    // 3. Its service points at the name it holds.
+    kit.check(
+      `the hub on :${port} advertises _cawco._tcp with ${name} as its target`,
+      services.some((srv) => srv.port === port && srv.target === name),
+      JSON.stringify(services)
+    );
+    // 4. Connect a machine offers it.
+    const row = `http://${name}:${port}`;
+    kit.check(
+      `Connect a machine on :${port} lists "On this network · ${row}"`,
+      listed.some(
+        (address) => address.label === "On this network" && address.url === row
+      ),
+      JSON.stringify(listed)
+    );
+    const unreachable = listed.filter(
+      (address) =>
+        !(OWN_ROWS.has(address.label) || reachable.has(address.label))
+    );
+    kit.check(
+      `Connect a machine on :${port} offers no address on a link no other machine reaches (reachable: ${[...reachable].join(", ")})`,
+      unreachable.length === 0,
+      `not reachable: ${unreachable.map((address) => `${address.label} · ${address.url}`).join(", ") || "none"}; listed ${listed.map((address) => address.label).join(", ")}`
+    );
+  }
+  const browsed = (await asker.browse()) as {
+    kind: string;
+    value?: unknown[];
+  };
+  kit.check(
+    "the agent's browse reads a hub's address off the announcements",
+    browsed.kind === "answered" && (browsed.value?.length ?? 0) > 0,
+    JSON.stringify(browsed)
+  );
+};
+
+/** This process's own questions: the probe's, on Linux. */
+const ASK_HERE: Asker = { ask, browse: browseMdns };
+
+/** The flags this file runs a question by as CawCo Agent (macOS legs 1 to 4). */
+const MDNS_ASK = "--mdns-ask";
+const MDNS_BROWSE = "--mdns-browse";
+
+/** Legs 1 to 4 and 8 on macOS: every hub and question as CawCo Agent, once leg 9 finds its grant. */
+const macLegs = async (
+  kit: Kit,
+  fleet: { env: Record<string, string>; sandbox: string }
+): Promise<void> => {
+  const bundle = currentExecutable();
+  if (
+    !kit.check(
+      "macOS: a release's CawCo Agent.app is installed here, to run the hubs and questions as",
+      existsSync(bundle),
+      bundle
+    )
+  ) {
+    return;
+  }
+  const agents = launchAgents(join(fleet.sandbox, "launch-agents"));
+  let asked = 0;
+  const asker: Asker = {
+    ask: <T>(
+      question: { name: string; type: "A" | "PTR" },
+      type: "A" | "SRV"
+    ) => {
+      asked += 1;
+      return agents.result<T[]>(
+        `ask-${asked}`,
+        [
+          bundle,
+          import.meta.path,
+          MDNS_ASK,
+          JSON.stringify({ question, type }),
+        ],
+        asBun(),
+        30_000
+      );
+    },
+    browse: () =>
+      agents.result(
+        "browse",
+        [bundle, import.meta.path, MDNS_BROWSE],
+        asBun(),
+        30_000
+      ),
+  };
+  try {
+    // 9. The Local Network grant everything after it stands on.
+    if (!(await grantLeg(kit, agents, bundle))) {
+      return;
+    }
+    const hubAt = async (n: number): Promise<Held> => {
+      const leased = await ports();
+      await agents.start(`hub-${n}`, [bundle, "hub"], {
+        ...fleet.env,
+        ...leased,
+        ...ANNOUNCING,
+        CAWCO_DB_PATH: join(fleet.sandbox, `mac-hub-${n}.db`),
+      });
+      const base = `http://127.0.0.1:${leased.CAWCO_HUB_PORT}`;
+      return { base, name: await heldBy(base) };
+    };
+    // 1. The first hub holds a name; 2. a second takes the next.
+    const first = await hubAt(1);
+    kit.note(`the first hub (CawCo Agent) holds ${first.name}`);
+    const next = await hubAt(2);
+    await nameChecks(kit, asker, [first, next]);
+    // 8. The wildcard port 80 as a user, the first hub's.
+    await macLeg(kit, first.name, fleet.env.CAWCO_DASHBOARD_PORT);
+  } finally {
+    agents.stopAll();
+  }
+};
+
 const spec: Spec = {
-  host: "legs 5 and 6 make user and network namespaces (unshare), leg 7 runs rootless Podman containers, and legs 1-4 announce on the machine's own interfaces",
+  host: "legs 5 and 6 make user and network namespaces (unshare), leg 7 runs rootless Podman containers, legs 1-4 announce on the machine's own interfaces, and on macOS the hubs run as launchd agents of the installed CawCo Agent.app",
   name: "hub-local-name",
   run: async (kit: Kit) => {
     const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
-    // mDNS on, and every interface bound: a loopback hub announces nothing.
-    const announcing = { CAWCO_NO_MDNS: "0", HOST: "0.0.0.0" };
     const own = await answerable();
-    const reachable = new Set(
-      (await reachableLinks()).map((link) => link.name)
-    );
     kit.check(
       "lan-interfaces.ts picks an interface here that other devices share",
       own.lan.size > 0,
@@ -1006,19 +1207,13 @@ const spec: Spec = {
         ? `${own.shared.join(", ")}: ${[...own.lan].join(", ")}`
         : "none: loopback only, run this on the host"
     );
-
-    const heldBy = (base: string) =>
-      until(
-        `${base} holding its .local name`,
-        async () =>
-          ((await fetch(`${base}/health`).then((r) => r.json())) as Health)
-            .localName ?? undefined,
-        (name) => HELD.test(name),
-        60_000
-      );
+    if (platform() === "darwin") {
+      await macLegs(kit, fleet);
+      return;
+    }
 
     // 1. The first hub holds a name.
-    fleet.launch("hub", [], announcing);
+    fleet.launch("hub", [], ANNOUNCING);
     await fleet.hubUp();
     const first = await heldBy(fleet.base);
     kit.note(`the first hub holds ${first}`);
@@ -1031,87 +1226,17 @@ const spec: Spec = {
       env: {
         ...fleet.env,
         ...second,
-        ...announcing,
+        ...ANNOUNCING,
         CAWCO_DB_PATH: join(fleet.sandbox, "second-hub.db"),
       },
       stdout: "pipe",
       stderr: "pipe",
     });
     try {
-      const next = await heldBy(secondBase);
-      kit.check(
-        "the second hub holds the next name, never the first hub's",
-        next !== first && numberOf(next) === numberOf(first) + 1,
-        `${first}, then ${next}`
-      );
-
-      const services = await ask<Srv>(
-        { name: "_cawco._tcp.local", type: "PTR" },
-        "SRV"
-      );
-      const hubs = await Promise.all(
-        (
-          [
-            [first, fleet.base],
-            [next, secondBase],
-          ] as const
-        ).map(async ([name, base]) => ({
-          name,
-          port: Number(new URL(base).port),
-          answered: await ask<string>({ name, type: "A" }, "A"),
-          listed: (
-            (await fetch(`${base}/api/join`).then((r) => r.json())) as {
-              addresses: { label: string; url: string }[];
-            }
-          ).addresses,
-        }))
-      );
-      for (const { name, port, answered, listed } of hubs) {
-        const named = (ips: string[]) =>
-          ips
-            .map(
-              (ip) => `${ip} (${own.holder.get(ip) ?? "not this machine's"})`
-            )
-            .join(", ");
-        const foreign = answered.filter((ip) => !own.allowed.has(ip));
-        kit.check(
-          `an mDNS query for ${name} answers with the shared LAN's addresses (${own.shared.join(", ")}) and loopback's alone, never a bridge's or a tunnel's`,
-          answered.some((ip) => own.lan.has(ip)) && foreign.length === 0,
-          `heard ${named(answered) || "nothing"}; not the shared LAN's: ${named(foreign) || "none"}`
-        );
-        // 3. Its service points at the name it holds.
-        kit.check(
-          `the hub on :${port} advertises _cawco._tcp with ${name} as its target`,
-          services.some((srv) => srv.port === port && srv.target === name),
-          JSON.stringify(services)
-        );
-        // 4. Connect a machine offers it.
-        const row = `http://${name}:${port}`;
-        kit.check(
-          `Connect a machine on :${port} lists "On this network · ${row}"`,
-          listed.some(
-            (address) =>
-              address.label === "On this network" && address.url === row
-          ),
-          JSON.stringify(listed)
-        );
-        const unreachable = listed.filter(
-          (address) =>
-            !(OWN_ROWS.has(address.label) || reachable.has(address.label))
-        );
-        kit.check(
-          `Connect a machine on :${port} offers no address on a link no other machine reaches (reachable: ${[...reachable].join(", ")})`,
-          unreachable.length === 0,
-          `not reachable: ${unreachable.map((address) => `${address.label} · ${address.url}`).join(", ") || "none"}; listed ${listed.map((address) => address.label).join(", ")}`
-        );
-      }
-
-      const browsed = await browseMdns();
-      kit.check(
-        "the agent's browse reads a hub's address off the announcements",
-        browsed.kind === "answered" && browsed.value.length > 0,
-        JSON.stringify(browsed)
-      );
+      await nameChecks(kit, ASK_HERE, [
+        { base: fleet.base, name: first },
+        { base: secondBase, name: await heldBy(secondBase) },
+      ]);
     } finally {
       other.kill("SIGKILL");
       await other.exited;
@@ -1124,13 +1249,6 @@ const spec: Spec = {
       );
     }
 
-    if (platform() === "darwin") {
-      // 8. The wildcard port 80 as a user, the first hub's.
-      await macLeg(kit, first, fleet.env.CAWCO_DASHBOARD_PORT);
-      // 9. Who answers on the LAN here: the system, Bun, node.
-      await lanMdnsLeg(kit);
-      return;
-    }
     // 5. A device on the LAN hears the LAN's addresses alone, and typing the name opens the dashboard.
     await lanLeg(kit, fleet.env, fleet.sandbox);
     // 6. Where Linux keeps port 80 from the hub: one line, no listener.
@@ -1148,4 +1266,18 @@ if (import.meta.main && process.argv[2] === ASK) {
     throw new Error(`usage: bun ${import.meta.path} ${ASK} <name> <from>`);
   }
   console.log(JSON.stringify(await askFromLan(name, from)));
+}
+
+// A question of legs 1 to 4, run as CawCo Agent (macLegs): its answer on the RESULT_MARK line.
+if (import.meta.main && process.argv[2] === MDNS_ASK) {
+  const { question, type } = JSON.parse(process.argv[3] ?? "{}") as {
+    question: { name: string; type: "A" | "PTR" };
+    type: "A" | "SRV";
+  };
+  console.log(`${RESULT_MARK}${JSON.stringify(await ask(question, type))}`);
+  process.exit(0);
+}
+if (import.meta.main && process.argv[2] === MDNS_BROWSE) {
+  console.log(`${RESULT_MARK}${JSON.stringify(await browseMdns())}`);
+  process.exit(0);
 }

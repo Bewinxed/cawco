@@ -32,6 +32,7 @@
     "./json-stream": "./src/json-stream.ts",
     "./machine-id": "./src/machine-id.ts",
     "./file-hash": "./src/file-hash.ts",
+    "./agent-bundle": "./src/agent-bundle.ts",
     "./binary-installation": "./src/binary-installation.ts",
     "./keepers": "./src/keepers.ts",
     "./launchd": "./src/launchd.ts",

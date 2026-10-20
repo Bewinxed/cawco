@@ -11,6 +11,7 @@ import {
   mcpGatewayPort,
   readEnv,
 } from "@cawco/core";
+import { AGENT_BUNDLE_ID } from "@cawco/core/agent-bundle";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
 import { keeperEndpoint, keeperService } from "@cawco/core/keepers";
@@ -1239,6 +1240,24 @@ ${socket.listens
   .join("\n")}
     </array>`;
 
+/**
+ * The app a job's work is macOS's to attribute to: a release's every job
+ * runs `CawCo Agent.app`'s executable (core agent-bundle.ts) through
+ * launchdProgram's shell, so its privacy grants, Local Network among them,
+ * are the bundle's. TN3179: "If you ship a launchd agent that's not
+ * installed using SMAppService, make macOS aware of the responsible code by
+ * setting the AssociatedBundleIdentifiers property in your launchd property
+ * list". A checkout's jobs run bun and node, which no bundle holds: none.
+ */
+const associatedBundles = (): string =>
+  standalone
+    ? `  <key>AssociatedBundleIdentifiers</key>
+  <array>
+    <string>${xml(AGENT_BUNDLE_ID)}</string>
+  </array>
+`
+    : "";
+
 const plist = (
   spec: ServiceSpec
 ): string => `<?xml version="1.0" encoding="UTF-8"?>
@@ -1247,7 +1266,7 @@ const plist = (
 <dict>${orderingComment(spec)}
   <key>Label</key>
   <string>${xml(label(spec.name))}</string>
-  <key>ProgramArguments</key>
+${associatedBundles()}  <key>ProgramArguments</key>
   <array>
 ${launchdProgram(label(spec.name), spec.command)
   .map((argument) => `    <string>${xml(argument)}</string>`)

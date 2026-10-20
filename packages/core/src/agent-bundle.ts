@@ -110,6 +110,24 @@ const USAGE: readonly (readonly [string, string])[] = [
   ],
 ];
 
+/** The Bonjour service type the hub advertises and the agent browses for (core `CAWCO_MDNS_TYPE`, as Bonjour writes it). */
+export const AGENT_BONJOUR_SERVICES: readonly string[] = ["_cawco._tcp"];
+
+/**
+ * Local Network privacy on macOS 15 and later: the hub's `.local` name and its
+ * `_cawco._tcp` service are multicast on the LAN, and the agent browses for
+ * them, so the bundle the hub's, the agent's and the keeper's launchd jobs
+ * name as theirs (cli service.ts `AssociatedBundleIdentifiers`) holds the
+ * grant. TN3179 (developer.apple.com/documentation/technotes/tn3179-
+ * understanding-local-network-privacy): "Receiving an incoming UDP multicast
+ * | yes", "Sending a UDP multicast | yes"; "The exception for launchd daemons
+ * doesn't apply to launchd agents"; "add the NSLocalNetworkUsageDescription
+ * property to its Info.plist to explain its behavior to the user"; "add a
+ * list of service types to the NSBonjourServices property".
+ */
+export const AGENT_LOCAL_NETWORK_USAGE =
+  "CawCo answers cawco.local on this network and finds your hub here, so your devices on it can open CawCo.";
+
 /**
  * The bundle's Info.plist, byte for byte what every release signs. Nothing in
  * it names a release, so the bundle every build lays down is the same one.
@@ -144,6 +162,12 @@ export const AGENT_INFO_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
 \t<key>NSHumanReadableCopyright</key>
 \t<string>Petra Solutions LLC</string>
 ${USAGE.map(([key, text]) => `\t<key>${key}</key>\n\t<string>${text}</string>`).join("\n")}
+\t<key>NSLocalNetworkUsageDescription</key>
+\t<string>${AGENT_LOCAL_NETWORK_USAGE}</string>
+\t<key>NSBonjourServices</key>
+\t<array>
+${AGENT_BONJOUR_SERVICES.map((type) => `\t\t<string>${type}</string>`).join("\n")}
+\t</array>
 </dict>
 </plist>
 `;
