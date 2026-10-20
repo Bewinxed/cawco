@@ -24,12 +24,22 @@
  * Writes each leg's page in tiles a window tall, each under 1 MiB, to
  * `.probe/decision-pages/caw-panel-{1440,390}-{light,dark}-NN.png`, and
  * `caw-panel-manifest.json` beside them: each card's question and options,
- * and every check above with its output.
+ * and every check above with its output. The run writes them into a
+ * staging folder and swaps them in at its end, replacing only this page's
+ * files: the folder holds every decision page's captures, and the last
+ * run's stand until this one's are whole.
  *
  *   bun scripts/probe-kit/run.ts web caw-panel-capture
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { PNG } from "pngjs";
@@ -46,8 +56,14 @@ import {
 } from "../../decision-embeds";
 import { type Kit, ROOT, SCALE, type Spec, THEMES } from "../../kit";
 
+/** Every decision page's captures: a folder this spec shares with the others. */
 const OUT = join(ROOT, ".probe/decision-pages");
 const NAME = "caw-panel";
+/**
+ * This run's tiles and manifest until it ends: the last run's stay in OUT
+ * meanwhile, and only this page's files there are replaced (publish).
+ */
+const NEXT = join(OUT, `.${NAME}-next`);
 const PROGRAM = readFileSync(
   join(ROOT, "decisions/caw-panel/page.oui"),
   "utf8"
@@ -235,7 +251,7 @@ async function tileCapture(
     const tile = new PNG({ width: whole.width, height: rows });
     PNG.bitblt(whole, tile, 0, top, whole.width, rows, 0, 0);
     const path = join(
-      OUT,
+      NEXT,
       `${NAME}-${leg}-${String(tiles.length + 1).padStart(2, "0")}.png`
     );
     const bytes = PNG.sync.write(tile, { colorType: 2, deflateLevel: 9 });
@@ -254,14 +270,36 @@ async function tileCapture(
       )
       .join(", ")
   );
-  return tiles.map((one) => one.path.slice(ROOT.length + 1));
+  // Where each stands once the run publishes them.
+  return tiles.map((one) =>
+    join(OUT, one.path.split("/").at(-1) as string).slice(ROOT.length + 1)
+  );
+}
+
+/**
+ * This run's files into OUT: this page's files from the last run out
+ * (`caw-panel-*`), this run's in, every other page's captures left as
+ * they are.
+ */
+function publish(): void {
+  for (const old of readdirSync(OUT)) {
+    if (old.startsWith(`${NAME}-`)) {
+      rmSync(join(OUT, old));
+    }
+  }
+  for (const made of readdirSync(NEXT)) {
+    renameSync(join(NEXT, made), join(OUT, made));
+  }
+  rmSync(NEXT, { recursive: true, force: true });
 }
 
 const spec: Spec = {
   name: "caw-panel-capture",
   run: async (kit: Kit) => {
-    rmSync(OUT, { recursive: true, force: true });
-    mkdirSync(OUT, { recursive: true });
+    // Only this page's own: its staging and its frames (OUT holds every page's captures).
+    rmSync(NEXT, { recursive: true, force: true });
+    rmSync(join(OUT, "frames", NAME), { recursive: true, force: true });
+    mkdirSync(NEXT, { recursive: true });
     const checks: {
       leg: string;
       ok: boolean;
@@ -329,7 +367,7 @@ const spec: Spec = {
           const { embeds, undrawn } = await readEmbeds(
             page,
             theme,
-            join(OUT, "frames", `${width}-${theme}`)
+            join(OUT, "frames", NAME, `${width}-${theme}`)
           );
           const faults = [...embeds.flatMap(embedDrawFaults), ...undrawn];
           check(
@@ -368,7 +406,7 @@ const spec: Spec = {
           );
           // The whole page as the owner scrolls it, window by window (decision-embeds.ts
           // `capturePage`: a full-page shot draws a cross-origin embed past the first window blank).
-          const shot = join(OUT, `${NAME}-${width}-${theme}.png`);
+          const shot = join(NEXT, `${NAME}-${width}-${theme}.png`);
           const paints = await capturePage(page, shot);
           const blank = blankEmbeds(paints);
           check(
@@ -392,7 +430,7 @@ const spec: Spec = {
       await stage.stop();
     }
     writeFileSync(
-      join(OUT, `${NAME}-manifest.json`),
+      join(NEXT, `${NAME}-manifest.json`),
       `${JSON.stringify(
         {
           page: "78a326ed-76cd-44b0-90c3-5e3261a17b56",
@@ -406,6 +444,7 @@ const spec: Spec = {
         2
       )}\n`
     );
+    publish();
   },
 };
 
