@@ -205,7 +205,7 @@ Dev server (`CAWCO_DEV_HUB_URL=http://127.0.0.1:59999 bunx vite dev`), one playw
 - stacks (390): table `block`, thead `none`, tbody `block`, row `grid` `16px 21px 30px 223px 14px` centred, cells `block`. UpdateTable (390): table `block`, thead `none`, row `grid` `308px 36px` `center`, Update cell `1 / -1`, `white-space: normal`; Running `nowrap`.
 - matrix heads (UpdateTable 1440): `vertical-align: top` on all three, content height 38.7px; wide head `min-width: 224px`.
 - ui-observer (observer.browser.js) on the scratch probes: horizontal-overflow / text-clipped only on the task title's `truncate` span and the run Result's `truncate` link (intended ellipsis, The Truncate Inside Rule) and the sr-only head; escapes-viewport only from the scratch's fixed 40rem section at 390.
-- Not rendered: ViewRoutines, ProjectSpend, ToolMatrix, ViewTable need the hub's data — routes `/project/<id>` (Routines, Tasks and Usage blocks), `/usage`, `/config/cli-tools`, a project view with a Table block.
+- Not rendered here: ViewRoutines, ToolMatrix, ViewTable need the hub's data (phase 2's render map covers them). ProjectSpend is rendered below (`## ProjectSpend at 390 and 1440`).
 
 ## Design critique (interface-craft) against DESIGN.md
 - fixed: apps/dashboard/src/lib/components/ui/table/table-head.svelte:24-33 matrix column heads were `text-meta` (12px/400) — The Role, Not Size Rule: "column heads … are label"; they take the base's label role
@@ -264,6 +264,25 @@ runs 575px: scrollWidth=575 clientWidth=575 fits=true | when:table-cell 96px | o
 runs 576px: scrollWidth=576 clientWidth=576 fits=true | when:table-cell 96px | outcome:table-cell 176px | took:table-cell 80px | result:table-cell 224px | Result 224px floor-ok=true
 runs 616px: scrollWidth=616 clientWidth=616 fits=true | when:table-cell 96px | outcome:table-cell 176px | took:table-cell 80px | result:table-cell 264px | Result 264px floor-ok=true
 ```
+
+## ProjectSpend at 390 and 1440
+DESIGN.md, Layout, Fleet board: "Under 640px each row becomes a two-line card: the title across the row, then machine · state · age". One playwright-core session, cached chromium_headless_shell-1248, `domcontentloaded`. A scratch route (deleted) mounted ProjectSpend as its page does (`projectId`, `projectName`, `leadOn`). Its one read, `fetch("/api/projects/w1-scratch/spend")` (client.svelte.ts `projectSpend` → project-tasks.ts `send`), was answered by the session's `page.route` with a ProjectSpend fixture: two threads, the unthreaded Caw spend, two attempts, other sessions and the month.
+```
+=== 390x844
+container 354px scrollWidth=354 fits=true | table block
+thead block | band row flex 354x33 bg oklch(0.957 0.009 84) | Caw:block 54px start Wakes:none Spent:none Last:none
+thead block | band row flex 354x33 bg oklch(0.957 0.009 84) | Attempts:block 93px start Tries:none Spent:none Now:none
+tbody block row grid "255px 31px 24px" 354x52 pad 7px 11px border-b 1px | [Thread · Release notes f] block @11,7 332x17 col 1/-1 start | [12 w…] block @11,28 255x16 col auto/auto start | [$8.40] block @277,28 31x16 col auto/auto end | [30m] block @319,28 24x16 col auto/auto end
+tbody block row grid "236px 31px 43px" 354x54 pad 7px 11px border-b 1px | [Fold the ledger's lesser] block @11,7 332x19 col 1/-1 start | [3 at…] block @11,30 236x16 col auto/auto start | [$4.12] block @258,30 31x16 col auto/auto end | [working] block @300,30 43x16 col auto/auto end
+tbody block row grid "272px 38px 0px" 354x52 pad 7px 11px border-b 1px | [This month] block @11,7 332x17 col 1/-1 start | [—] block @11,36 272x0 col auto/auto start | [$31.75] block @294,28 38x16 col auto/auto end | [—] block @343,36 0x0 col auto/auto end
+=== 1440x900
+container 1176px scrollWidth=1176 fits=true | table table
+thead table-header-group | band row table-row 1176x32 bg oklch(0.957 0.009 84) | Caw:table-cell 856px start Wakes:table-cell 128px start Spent:table-cell 96px end Last:table-cell 96px end
+thead table-header-group | band row table-row 1176x32 bg oklch(0.957 0.009 84) | Attempts:table-cell 856px start Tries:table-cell 128px start Spent:table-cell 96px end Now:table-cell 96px end
+tbody table-row-group row table-row "none" 1176x44 | [Thread · Release notes f] table-cell 856x44 start | [12 w…] table-cell 128x44 start | [$8.40] table-cell 96x44 end | [30m] table-cell 96x44 end
+tbody table-row-group row table-row "none" 1176x44 | [This month] table-cell 856x44 start | [—] table-cell 128x44 start | [$31.75] table-cell 96x44 end | [—] table-cell 96x44 end
+```
+At 390 every row is the two-line card: its name across the row (`1 / -1`), then its count, spend and last word, the section bands keeping only their first head. At 1440 it is the ledger: 44px rows, 32px bands, the count column `c-ledger-count-w` (128px), spend `c-ledger-usd-w` and last `c-ledger-when-w` (96px) on the end edge. (Rows the probe read but not quoted here read the same; the full output is in this item's report.)
 
 ## The card at a 390px phone, before and after the container key
 The same probe, at 390×844, on TaskTable (scratch) and UpdateTable (`/motion/updates`), read at f5c4941b7's tree (before) and after; `diff` of the two reads is empty:
