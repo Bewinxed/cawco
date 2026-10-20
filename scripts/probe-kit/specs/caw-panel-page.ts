@@ -48,6 +48,7 @@ import { type Kit, ROOT, type Spec } from "../kit";
 const APP = join(ROOT, "apps/dashboard");
 const DIR = "src/lib/cawco/project/caw-panel";
 const WIDTHS = [390, 680, 1440];
+const SCHEMES = ["light", "dark"] as const;
 
 /** A port nothing holds now. */
 const freePort = async (): Promise<number> => {
@@ -424,9 +425,28 @@ const spec: Spec = {
       let hung = 0;
       const hangs: string[] = [];
       const notDrawn: string[] = [];
-      for (const file of files) {
+      // Each states file at one width and scheme a load: every frame of the
+      // panel draws Caw's seat live (Rive), and a file's every width and
+      // scheme at once stood ~480 players in one page, where the runtime's
+      // heap gave out under load ("Aborted()"); the product draws one.
+      const loads = files.flatMap((file) =>
+        WIDTHS.flatMap((width) =>
+          SCHEMES.map((scheme) => ({ file, width, scheme }))
+        )
+      );
+      /** What each states file's loads found, told once per file. */
+      const told = new Map<
+        string,
+        {
+          frames: number;
+          overlaps: number;
+          seen: Map<string, string[]>;
+          spills: number;
+        }
+      >();
+      for (const { file, width, scheme } of loads) {
         await page.goto(
-          `http://127.0.0.1:${port}/@cawco/canvas?file=${encodeURIComponent(file)}&width=${WIDTHS.join(",")}&scheme=both`,
+          `http://127.0.0.1:${port}/@cawco/canvas?file=${encodeURIComponent(file)}&width=${width}&scheme=${scheme}`,
           { waitUntil: "load" }
         );
         await page
@@ -492,18 +512,28 @@ const spec: Spec = {
         hung += sweep.hung;
         hangs.push(...sweep.hangs.map((one) => `${file} ${one}`));
         notDrawn.push(...sweep.notDrawn.map((one) => `${file} ${one}`));
-        const count = sweep.spills.length + sweep.overlaps.length;
-        total += count;
-        console.log(
-          `  ${file.split("/").at(-1)}: ${sweep.frames} frames, ${sweep.spills.length} spills, ${sweep.overlaps.length} overlaps`
-        );
+        total += sweep.spills.length + sweep.overlaps.length;
+        const so = told.get(file) ?? {
+          frames: 0,
+          overlaps: 0,
+          seen: new Map<string, string[]>(),
+          spills: 0,
+        };
+        so.frames += sweep.frames;
+        so.spills += sweep.spills.length;
+        so.overlaps += sweep.overlaps.length;
         // Each finding once, with every frame it stands in.
-        const seen = new Map<string, string[]>();
         for (const line of [...sweep.spills, ...sweep.overlaps]) {
           const [at, what] = line.split(": ", 2);
-          seen.set(what, [...(seen.get(what) ?? []), at]);
+          so.seen.set(what, [...(so.seen.get(what) ?? []), at]);
         }
-        for (const [what, at] of [...seen].slice(0, 8)) {
+        told.set(file, so);
+      }
+      for (const [file, so] of told) {
+        console.log(
+          `  ${file.split("/").at(-1)}: ${so.frames} frames, ${so.spills} spills, ${so.overlaps} overlaps`
+        );
+        for (const [what, at] of [...so.seen].slice(0, 8)) {
           console.log(`    ${what}  [${at.join(", ")}]`);
         }
       }
