@@ -403,7 +403,7 @@ export const isStale = (row: BoardRow): boolean => row.status === "unknown";
 
 /**
  * A session whose process is gone but whose conversation is not: sleeping, not
- * failed. Exactly the rows {@link ensureAlive} can bring back — dead, with an
+ * failed. Exactly the rows a send wakes (the hub's `wakeForSend`) — dead, with an
  * SDK session to resume from. `sleeping` is the taxonomy's own word for this
  * now (ARCHITECTURE.md's status table) — the hub never reports it any other
  * way, so this reads the status directly rather than inferring it from
@@ -5734,79 +5734,6 @@ function harnessOfSession(instanceId: string): HarnessKind {
   return harness;
 }
 
-/** Revives `instanceId` when its process is dead; `unanswered` when the revive got no answer in time. */
-export async function ensureAlive(
-  instanceId: string,
-  machineId: string
-): Promise<Bounded<void>> {
-  const target = session(instanceId);
-  const row = instanceIndex.byId.get(instanceId);
-  const dead =
-    row &&
-    (row.status === "error" ||
-      row.status === "stopping" ||
-      row.status === "stopped" ||
-      row.status === "sleeping");
-  if (dead) {
-    // The one decision every revive takes (core `relaunchOf`): on its
-    // conversation by the key on record, never a guessed one; fresh when its
-    // harness never began one; not at all when its conversation is gone.
-    const plan = relaunchOf({
-      sessionId: resumeKeyFor(instanceId),
-      lastErrorKind: row.lastErrorKind,
-    });
-    if (plan.kind === "refused") {
-      throw new Error(plan.reason);
-    }
-    const requestId = newId();
-    const payload = await explicit(machineId, {
-      instanceId,
-      cwd: target.cwd,
-      harness: harnessOfSession(instanceId),
-      ...(plan.kind === "resume"
-        ? { resume: { sessionKey: plan.sessionKey } }
-        : {}),
-      scratch: target.scratch ? {} : undefined,
-      // The new process answers the way the old one did: a revive nobody asked
-      // for is not the moment to hand the session back on other settings.
-      //
-      // Falls back to the row, because the store learns these from a running
-      // session and a dead one has told it nothing — a tab opened after the
-      // process died holds `null` for both, and sending nothing is how a
-      // session comes back asking permission for everything.
-      permissionMode: (target.permissionMode ??
-        row?.permissionMode ??
-        undefined) as PermissionMode | undefined,
-      model: target.model ?? row?.model ?? undefined,
-      // No effort: the hub starts it at the one chosen for it, never at the
-      // level it last read back.
-      requestId,
-    });
-    target.relaunching = true;
-    let revived: Bounded<void>;
-    try {
-      revived = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () =>
-        send({ verb: "spawn", machineId, instanceId, requestId, payload })
-      );
-    } finally {
-      target.relaunching = false;
-    }
-    switch (revived.kind) {
-      case "unanswered":
-        return revived;
-      case "answered":
-        // biome-ignore lint/complexity/noVoid: fire-and-forget — the revive already landed, this just resyncs the fleet list
-        void refresh();
-        return revived;
-      default: {
-        const unhandled: never = revived;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
-    }
-  }
-  return { kind: "answered", value: undefined };
-}
-
 /**
  * Stops a running session. Nothing about it changes here until its machine
  * answers: then it is stopped (its turn, tool and parked asks settle), and a
@@ -7953,70 +7880,6 @@ async function readOlderInto(
   }
 }
 
-/**
- * Changes how a live session answers permissions, from now on. Unlike the other
- * instance controls this one is awaited: the view already shows the mode that
- * was asked for, so a machine that refuses has to be able to put it back. One
- * that did not answer in time is `unanswered`: the view goes back to the last
- * mode the machine confirmed, and the mode is never recorded as switched.
- */
-export async function setPermissionMode(
-  instanceId: string,
-  machineId: string,
-  mode: PermissionMode
-): Promise<Bounded<void>> {
-  // Switching a setting on a session whose process died must not fail:
-  // revive it first, then apply.
-  const alive = await ensureAlive(instanceId, machineId);
-  switch (alive.kind) {
-    case "unanswered":
-      return alive;
-    case "answered":
-      break;
-    default: {
-      const unhandled: never = alive;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
-  }
-  const target = session(instanceId);
-  const previous = target.permissionMode;
-  target.permissionMode = mode;
-
-  const requestId = newId();
-  const payload: ControlPayload = {
-    instanceId,
-    requestId,
-    method: "setPermissionMode",
-    args: [mode],
-  };
-  let switched: Bounded<void>;
-  try {
-    switched = await askMachine<void>(
-      machineId,
-      requestId,
-      CONTROL_TIMEOUT_MS,
-      () => send({ verb: "control", machineId, instanceId, requestId, payload })
-    );
-  } catch (error) {
-    target.permissionMode = previous;
-    throw error;
-  }
-  switch (switched.kind) {
-    case "unanswered":
-      target.permissionMode = previous;
-      return switched;
-    case "answered":
-      // Only once the daemon has taken it: a refused switch never reaches the row.
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the daemon already took it, this just persists it
-      void persistSettings(instanceId, { permissionMode: mode });
-      return switched;
-    default: {
-      const unhandled: never = switched;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
-  }
-}
-
 /** How many surfaces in this tab draw each session's context reading now, by instance id. */
 const contextShown = new Map<string, number>();
 
@@ -8312,69 +8175,6 @@ export async function loadMcpServers(
     target.mcp = [];
   } finally {
     target.mcpPending = false;
-  }
-}
-
-/**
- * Points the session at another model from the next turn on. Awaited like the
- * permission mode and for the same reason: the header already shows the choice,
- * so a machine that refuses has to be able to put it back, and one that did
- * not answer in time (`unanswered`) is put back the same way.
- */
-export async function setModel(
-  instanceId: string,
-  machineId: string,
-  model: string
-): Promise<Bounded<void>> {
-  // Switching a setting on a session whose process died must not fail:
-  // revive it first, then apply.
-  const alive = await ensureAlive(instanceId, machineId);
-  switch (alive.kind) {
-    case "unanswered":
-      return alive;
-    case "answered":
-      break;
-    default: {
-      const unhandled: never = alive;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
-  }
-  const target = session(instanceId);
-  const previous = target.model;
-  target.model = model;
-
-  const requestId = newId();
-  const payload: ControlPayload = {
-    instanceId,
-    requestId,
-    method: "setModel",
-    args: [model],
-  };
-  let switched: Bounded<void>;
-  try {
-    switched = await askMachine<void>(
-      machineId,
-      requestId,
-      CONTROL_TIMEOUT_MS,
-      () => send({ verb: "control", machineId, instanceId, requestId, payload })
-    );
-  } catch (error) {
-    target.model = previous;
-    throw error;
-  }
-  switch (switched.kind) {
-    case "unanswered":
-      target.model = previous;
-      return switched;
-    case "answered":
-      // Only once the daemon has taken it: a refused switch never reaches the row.
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the daemon already took it, this just persists it
-      void persistSettings(instanceId, { model });
-      return switched;
-    default: {
-      const unhandled: never = switched;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
   }
 }
 

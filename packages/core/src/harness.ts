@@ -903,14 +903,17 @@ export type SendRefusal =
 
 /**
  * A send or a start that has to start its session again (a wake, a rewind)
- * and finds no permission mode to start it on: its row records none, and
+ * and finds no permission mode it can start it on: its row records none and
  * none was ever chosen for its harness on its machine (the hub's
- * `reviveMode`). Not a refusal to show: the page asks for a mode where the
- * person acted, starts the session again on it, and does what was asked.
+ * `reviveMode`), or the one it would start on is one its machine doesn't
+ * take (`refused`). Not a refusal to show: the page asks for a mode where
+ * the person acted, starts the session again on it, and does what was asked.
  */
 export interface ModeAsk {
   harness: HarnessKind;
   machineId: string;
+  /** The mode it would have started on, which its machine doesn't take; absent when none was named at all. */
+  refused?: PermissionMode;
 }
 
 /**

@@ -2,9 +2,10 @@
   /**
    * The session's own permission picker, asked where the person acted when
    * the session must start again to do what they asked (a send that wakes
-   * it, a rewind) and no mode is named for it: its row records none, and
-   * none was ever chosen for its harness on its machine (core `SendRefusal`
-   * `mode-unchosen`). The rows are the ones the session's details card
+   * it, a rewind) and it has no mode it can start on: its row records none
+   * and none was ever chosen for its harness on its machine, or the one it
+   * names is one its machine doesn't take (core `ModeAsk`). The rows are the
+   * ones the session's details card
    * offers (ToolChips' permission chip: PermissionSection in an NsPopover),
    * for its harness on its machine, those the machine doesn't take disabled
    * with why. The pick goes to `onpick`, which starts the session again on

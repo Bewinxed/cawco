@@ -1210,8 +1210,8 @@ export const lastErrorKindOf = (error: unknown): LastErrorKind | undefined =>
  * said init), so there is nothing to lose; or not at all when its
  * conversation existed and is gone, or a continuation took its work item on
  * ({@link InstanceRow.continuedInto}): two sessions never work one item in
- * one workspace. The one decision for every revive: the dashboard's
- * (`ensureAlive`), the hub's wake for a send, and a relaunch on another
+ * one workspace. The one decision for every revive: a relaunch or rewind
+ * from the dashboard, the hub's wake for a send, and a relaunch on another
  * account at a limit.
  */
 export type Relaunch =
