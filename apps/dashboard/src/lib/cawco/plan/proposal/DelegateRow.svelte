@@ -196,32 +196,6 @@
     min-inline-size: 0;
     container: delegate-row / inline-size;
   }
-  /* A row in a narrow column (under a step in Lanes' columns): the problem
-     takes the row's width beside the tile, the chevron and time under it,
-     and its line and where it stands the row's whole width under those, so
-     a state ("Waiting on you", its act Answer beside or under it) keeps one
-     line. */
-  @container delegate-row (inline-size < 13rem) {
-    .row {
-      grid-template-columns: var(--pv-tile, 18px) minmax(0, 1fr);
-      grid-template-areas:
-        "lead words"
-        ". trail"
-        "under under";
-    }
-    .trail {
-      block-size: auto;
-    }
-    .time {
-      inline-size: auto;
-      text-align: start;
-    }
-    /* The state's glyph gives its width back: the row's tile says the
-       status in its corner, and the words in their state's ink. */
-    .standing .mark-cell {
-      display: none;
-    }
-  }
   .row {
     display: grid;
     grid-template-columns: var(--pv-tile, 18px) minmax(0, 1fr) auto;
@@ -443,5 +417,31 @@
   }
   :global([data-coarse]) .open {
     min-block-size: 44px;
+  }
+  /* A row in a narrow column (under a step in Lanes' columns): the problem
+     takes the row's width beside the tile, the chevron and time under it,
+     and its line and where it stands the row's whole width under those, so
+     a state ("Waiting on you", its act Answer beside or under it) keeps one
+     line. */
+  @container delegate-row (inline-size < 13rem) {
+    .row {
+      grid-template-columns: var(--pv-tile, 18px) minmax(0, 1fr);
+      grid-template-areas:
+        "lead words"
+        ". trail"
+        "under under";
+    }
+    .trail {
+      block-size: auto;
+    }
+    .time {
+      inline-size: auto;
+      text-align: start;
+    }
+    /* The state's glyph gives its width back: the row's tile says the
+       status in its corner, and the words in their state's ink. */
+    .standing .mark-cell {
+      display: none;
+    }
   }
 </style>

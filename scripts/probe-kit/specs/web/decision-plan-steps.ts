@@ -18,8 +18,9 @@
  *    columns.
  * 7. No line crosses a box: every connector, sampled along its length,
  *    stays off every tile, words, badge and time but its own two ends.
- * 8. Nothing is cut: no box clips its words without an ellipsis; and
- *    every row stands at its place when read, no slide held on it.
+ * 8. Nothing is cut: no box clips its words without an ellipsis; every
+ *    row's words have room (64px, some eight characters); and every row
+ *    stands at its place when read, no slide held on it.
  * 9. The pins card shows the to-do that became a task opened to its
  *    description, wearing the task's glyph and id, in sight; and a working
  *    delegate's sweep held at the start, middle and end of one run, in
@@ -164,7 +165,21 @@ function frameFacts() {
         ? [`${row.dataset.row} ${translate} ${runs.join("+")}`]
         : [];
     });
-  return { kinds, bands, badges, sweeps, opened, moving };
+  // Each row's words and the room they stand in, in the drawing's own
+  // pixels: a column squeezed to a few letters breaks every word.
+  const squeezed = [
+    ...document.querySelectorAll<HTMLElement>('[data-slot="words"]'),
+  ]
+    .filter(shown)
+    .flatMap((words) => {
+      const room = words.getBoundingClientRect().width / words.currentCSSZoom;
+      return room < 64
+        ? [
+            `${words.closest("[data-row]")?.getAttribute("data-row")} "${(words.textContent ?? "").trim().slice(0, 30)}" in ${Math.round(room)}px`,
+          ]
+        : [];
+    });
+  return { kinds, bands, badges, sweeps, opened, moving, squeezed };
 }
 
 /**
@@ -409,6 +424,14 @@ function frameChecks(
     `${leg}: no words are cut without an ellipsis, in any drawing`,
     cut.length === 0,
     cut.slice(0, 8).join("\n    ") || "none"
+  );
+  const squeezed = all.flatMap(([key, one]) =>
+    one.squeezed.map((m) => `${key}: ${m}`)
+  );
+  check(
+    `${leg}: every row's words have at least 64px of room, in every drawing (${squeezed.length} squeezed)`,
+    squeezed.length === 0,
+    squeezed.slice(0, 8).join("\n    ") || "none"
   );
   const moving = all.flatMap(([key, one]) =>
     one.moving.map((m) => `${key}: ${m}`)

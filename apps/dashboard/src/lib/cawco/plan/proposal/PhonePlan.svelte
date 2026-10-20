@@ -1,8 +1,10 @@
 <script lang="ts">
   /**
-   * The phone's frame: a 390×844 screen with the plan in the kit's Drawer
-   * (the bottom sheet the composer's ring opens), placed in this screen
-   * rather than the page's viewport. The screen takes a finger's sizes
+   * The phone's frame: the plan in the kit's Drawer (the bottom sheet the
+   * composer's ring opens) on a 390px phone, at the sheet's own height, 85%
+   * of an 844px screen, placed in this frame rather than the page's
+   * viewport. What stands behind the sheet is the conversation, drawn here
+   * as nothing: the frame is the sheet. The screen takes a finger's sizes
    * (`data-coarse`), as a phone draws them.
    */
   import type { Snippet } from "svelte";
@@ -46,7 +48,7 @@
         hosted
         modal={false}
         onOpenAutoFocus={(event) => event.preventDefault()}
-        style="inset-inline:0;bottom:0;max-height:85%"
+        style="inset-inline:0;bottom:0;max-height:100%"
         trapFocus={false}
       >
         <Drawer.Header>
@@ -87,7 +89,8 @@
     position: relative;
     inline-size: 390px;
     max-inline-size: 100%;
-    block-size: 844px;
+    /* The sheet's height on an 844px screen (its 85%). */
+    block-size: 717px;
     overflow: clip;
     /* Fixed descendants (the sheet, its scrim) stand in this screen. */
     contain: layout paint;

@@ -62,20 +62,20 @@ export const Opened = {
   parameters: { viewport: 360 },
 };
 
-/** A working delegate's progress line, its sweep held near the start of its run. */
+/** A working delegate's progress line drawn large, its sweep held near the start of its run. */
 export const SweepStart = {
-  args: { frame: "delegate", held: 0.3 },
+  args: { frame: "delegate", held: 0.3, lineWeight: 10 },
   parameters: { viewport: 360 },
 };
 
 /** The same line, its sweep held halfway along its run. */
 export const SweepMiddle = {
-  args: { frame: "delegate", held: 0.5 },
+  args: { frame: "delegate", held: 0.5, lineWeight: 10 },
   parameters: { viewport: 360 },
 };
 
 /** The same line, its sweep held near the end of its run. */
 export const SweepEnd = {
-  args: { frame: "delegate", held: 0.7 },
+  args: { frame: "delegate", held: 0.7, lineWeight: 10 },
   parameters: { viewport: 360 },
 };
