@@ -123,7 +123,7 @@
 <!-- Where a session docks its composer (Composer `.dock`): over the page's
      foot, which the page clears by the bar's reach. -->
 <div
-  class="absolute inset-x-space-3 bottom-(--off-bottom) z-20 phone:hidden"
+  class="absolute inset-x-space-3 bottom-(--off-bottom) z-(--layer-dock) phone:hidden"
   style:--off-bottom="calc(var(--space-4) + var(--safe-bottom))"
 >
   <div

@@ -1898,7 +1898,7 @@
       customAnchor={detailAnchor}
       data-safe-bottom
       folded={takeFolded}
-      class="z-60 w-(--hang-width)"
+      class="z-(--layer-float) w-(--hang-width)"
       style={cardPlace ? `--hang-width: ${cardPlace.width}px` : undefined}
       tab
       onCloseAutoFocus={(event) => {

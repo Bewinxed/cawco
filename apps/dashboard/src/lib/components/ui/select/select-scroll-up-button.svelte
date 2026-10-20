@@ -12,7 +12,7 @@
 
 <SelectPrimitive.ScrollUpButton
   class={cn(
-    "top-0 z-10 flex w-full cursor-default items-center justify-center bg-[var(--surface-raised)] py-space-1 [&_svg:not([class*='size-'])]:size-icon-md",
+    "top-0 z-1 flex w-full cursor-default items-center justify-center bg-[var(--surface-raised)] py-space-1 [&_svg:not([class*='size-'])]:size-icon-md",
     className
   )}
   data-slot="select-scroll-up-button"

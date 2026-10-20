@@ -46,7 +46,7 @@
 <div
   data-slot="edge-pull"
   aria-hidden="true"
-  class="absolute start-0 end-auto top-c-top-bar-h bottom-0 z-15 w-c-edge-pull touch-pan-y side-right:start-auto side-right:end-0"
+  class="absolute start-0 end-auto top-c-top-bar-h bottom-0 z-(--layer-pull) w-c-edge-pull touch-pan-y side-right:start-auto side-right:end-0"
   data-side={side}
   onpointerdown={press}
 ></div>

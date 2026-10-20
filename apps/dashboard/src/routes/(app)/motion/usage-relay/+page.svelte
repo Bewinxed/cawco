@@ -122,7 +122,7 @@
 {#if !framed}
   <nav
     aria-label="Usage popover bench"
-    class="pointer-events-auto relative z-60 flex flex-wrap justify-end gap-x-space-4 gap-y-space-2 p-space-2"
+    class="pointer-events-auto relative z-(--layer-bench-controls) flex flex-wrap justify-end gap-x-space-4 gap-y-space-2 p-space-2"
     onpointerdown={(event) => event.stopPropagation()}
   >
     {#each SWITCHES as each (each.key)}

@@ -1814,7 +1814,7 @@
     <DrawerContent
       data-session-card
       aria-label="New Session"
-      class="fixed z-81 flex origin-center flex-col"
+      class="fixed flex origin-center flex-col"
       data-ns-dialog
       look="new-session"
       onCloseAutoFocus={(event) => {
@@ -1848,7 +1848,7 @@
            presses through (floating-presence). -->
       <DialogPrimitive.Overlay
         data-slot="session-scrim"
-        class="ns-theme fixed inset-0 z-80 bg-scrim backdrop-blur-(--scrim-blur) motion-safe:data-open:animate-ns-scrim-in motion-safe:data-closed:animate-ns-scrim-out"
+        class="ns-theme fixed inset-0 z-(--layer-float) bg-scrim backdrop-blur-(--scrim-blur) motion-safe:data-open:animate-ns-scrim-in motion-safe:data-closed:animate-ns-scrim-out"
       >
         {#snippet child({ props, open: shown })}
           <div {...props} style:pointer-events={pressable(shown)}></div>
@@ -1857,7 +1857,7 @@
       <DialogPrimitive.Content
         data-session-card
         aria-label="New Session"
-        class="ns-theme fixed z-81 flex origin-center flex-col outline-off inset-0 m-auto h-fit max-h-(--card-max-h) w-(--card-w) rounded-lg bg-surface-recess p-space-2 shadow-modal motion-safe:data-open:animate-ns-card-in motion-safe:data-closed:animate-ns-card-out"
+        class="ns-theme fixed z-(--layer-float) flex origin-center flex-col outline-off inset-0 m-auto h-fit max-h-(--card-max-h) w-(--card-w) rounded-lg bg-surface-recess p-space-2 shadow-modal motion-safe:data-open:animate-ns-card-in motion-safe:data-closed:animate-ns-card-out"
         data-ns-dialog
         onCloseAutoFocus={(event) => {
           event.preventDefault();
@@ -1954,7 +1954,7 @@
     <NsPopoverGroup>
       <section
         data-slot="prompt-sec"
-        class="relative z-30 grid gap-space-2 motion-safe:animate-ns-sec"
+        class="relative z-1 grid gap-space-2 motion-safe:animate-ns-sec"
         style="--delay:0ms"
       >
         <div class="group-data-stepped:hidden">

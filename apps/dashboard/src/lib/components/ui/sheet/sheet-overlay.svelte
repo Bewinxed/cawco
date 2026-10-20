@@ -14,7 +14,7 @@
 <!-- A scrim fading out lets presses through to the page (floating-presence);
      open or closing, it is said on the root for the screen's edges (page-marks). -->
 <SheetPrimitive.Overlay
-  class={cn("kit-scrim fixed inset-0 z-50", className)}
+  class={cn("kit-scrim fixed inset-0 z-(--layer-float)", className)}
   data-slot="sheet-overlay"
   bind:ref
   {...restProps}

@@ -360,7 +360,7 @@
     }
     copy.setAttribute("aria-hidden", "true");
     copy.inert = true;
-    copy.style.cssText = `position:fixed;left:${from.left}px;top:${from.top}px;inline-size:${from.width}px;block-size:${from.height}px;margin:0;z-index:50;pointer-events:none;transform-origin:0 0`;
+    copy.style.cssText = `position:fixed;left:${from.left}px;top:${from.top}px;inline-size:${from.width}px;block-size:${from.height}px;margin:0;z-index:var(--layer-flight);pointer-events:none;transform-origin:0 0`;
     document.body.append(copy);
     chip.style.visibility = "hidden";
     target.style.opacity = "0";

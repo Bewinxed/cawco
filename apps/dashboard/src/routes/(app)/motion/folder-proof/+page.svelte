@@ -290,7 +290,7 @@
      shelf, and the page its chosen tab opens into. -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
-  class="fixed inset-0 z-40 flex flex-col bg-surface-recess text-ink-strong"
+  class="fixed inset-0 z-(--layer-bench) flex flex-col bg-surface-recess text-ink-strong"
   data-folder-proof
   bind:this={proofEl}
   style:--tab-rim-mix-subtle={subtle === null

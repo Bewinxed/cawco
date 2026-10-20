@@ -780,7 +780,7 @@
        its ligatures as the role's shorthand left them. -->
   <div
     data-slot="tip"
-    class="fixed z-60 grid gap-space-row max-w-c-tip-max-w py-space-2 px-space-3 rounded-sm bg-ink-solid text-on-ink type-meta -translate-x-1/2 translate-y-(--tip-shift-y) pointer-events-none animate-kit-tip-fade motion-safe:animate-mention-tip-in"
+    class="fixed z-(--layer-float) grid gap-space-row max-w-c-tip-max-w py-space-2 px-space-3 rounded-sm bg-ink-solid text-on-ink type-meta -translate-x-1/2 translate-y-(--tip-shift-y) pointer-events-none animate-kit-tip-fade motion-safe:animate-mention-tip-in"
     role="tooltip"
     style:left={`${tip.x}px`}
     style:top={`${tip.y}px`}

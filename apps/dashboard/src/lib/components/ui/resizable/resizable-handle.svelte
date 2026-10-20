@@ -60,7 +60,7 @@
 >
   {#if withHandle}
     <div
-      class="h-6 w-space-1 rounded-[var(--radius-pill)] bg-border z-10 flex shrink-0"
+      class="h-6 w-space-1 rounded-[var(--radius-pill)] bg-border z-1 flex shrink-0"
     ></div>
   {/if}
 </PaneResizer>

@@ -18,7 +18,7 @@
 </script>
 
 <DrawerPrimitive.Overlay
-  class={cn("kit-scrim fixed inset-0 z-50", className)}
+  class={cn("kit-scrim fixed inset-0 z-(--layer-float)", className)}
   data-slot="drawer-overlay"
   bind:ref
   {...restProps}

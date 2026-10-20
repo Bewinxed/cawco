@@ -67,7 +67,7 @@
 <DropdownMenuPortal {...portalProps}>
   <DropdownMenuPrimitive.SubContent
     class={cn(
-      "kit-pop relative z-50 max-h-(--bits-menu-content-available-height) w-auto min-w-36 origin-(--bits-menu-content-transform-origin) overflow-y-auto overflow-x-hidden",
+      "kit-pop relative z-(--layer-float) max-h-(--bits-menu-content-available-height) w-auto min-w-36 origin-(--bits-menu-content-transform-origin) overflow-y-auto overflow-x-hidden",
       dropdownMenuSubContentVariants({ width, min }),
       className
     )}

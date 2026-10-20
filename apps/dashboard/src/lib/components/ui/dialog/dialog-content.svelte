@@ -84,7 +84,7 @@
        is open, and clears it at once (floating-presence). -->
   <DialogPrimitive.Content
     class={cn(
-      "kit-dialog fixed top-1/2 left-1/2 z-50 flex max-h-c-dialog-max-h w-full max-w-[calc(100%-2rem)] phone:max-w-112 -translate-x-1/2 -translate-y-1/2 flex-col outline-none",
+      "kit-dialog fixed top-1/2 left-1/2 z-(--layer-float) flex max-h-c-dialog-max-h w-full max-w-[calc(100%-2rem)] phone:max-w-112 -translate-x-1/2 -translate-y-1/2 flex-col outline-none",
       dialogContentVariants({ width, height }),
       className
     )}

@@ -49,6 +49,7 @@ const NAMESPACES: Record<string, string> = {
   radius: "Radius",
   size: "Size",
   effect: "Effect",
+  layer: "Layer",
   motion: "Motion",
   shadow: "Shadow",
 };

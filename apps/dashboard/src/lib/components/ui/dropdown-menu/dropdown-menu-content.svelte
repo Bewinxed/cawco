@@ -63,7 +63,7 @@
   <DropdownMenuPrimitive.Content
     {align}
     class={cn(
-      "kit-pop relative z-50 max-h-(--bits-dropdown-menu-content-available-height) w-(--bits-dropdown-menu-anchor-width) min-w-48 origin-(--bits-dropdown-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
+      "kit-pop relative z-(--layer-float) max-h-(--bits-dropdown-menu-content-available-height) w-(--bits-dropdown-menu-anchor-width) min-w-48 origin-(--bits-dropdown-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
       dropdownMenuContentVariants({ width, min }),
       className
     )}

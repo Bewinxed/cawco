@@ -1813,7 +1813,7 @@
       background: "var(--surface-raised)",
       boxShadow: "var(--shadow-drawer)",
       pointerEvents: "none",
-      zIndex: "50",
+      zIndex: "var(--layer-flight)",
     });
     document.body.append(stand);
     const done = () => stand.remove();

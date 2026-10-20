@@ -1380,8 +1380,40 @@
     --c-skeleton-card-h: 54px;
     /* The flex basis of a marketplace plugin offer's words before its Install button wraps under them (the skills page). */
     --c-offer-text-basis: 240px;
-    /* A motion bench's stack: over the shell (the hub band's z-10), under the kit's floating layer (z-50, a hang card's z-60). Page-level; the layer lane folds it into the layer roles. */
-    --z-bench: 49;
+    /* A sticky head or column inside a scroller (the tool matrix's pinned heads): over the rows that scroll under it, under all page chrome. */
+    --layer-sticky: 10;
+    /* The hub band's slot under the bar: over the page column it opens above, its shadow on the page. */
+    --layer-band: 20;
+    /* The phone's edge-pull strip (EdgePull): over the page at the screen's edge, so a press there is the pull's; under a canvas stage. */
+    --layer-pull: 30;
+    /* A canvas stage (CanvasStages: the artifact's frame portalled to the body over its slot): over the page and the edge pull, under a docked composer and the bar. */
+    --layer-stage: 40;
+    /* A docked composer, or what stands in its place (Composer's dock, the decision page's and the view bar's docks, the thread pane's no-composer note): over the transcript and its fades. */
+    --layer-dock: 50;
+    /* The top bar floating over a phone's tab row: over the dock and everything in the page under it. */
+    --layer-bar: 60;
+    /* A toolbar fixed over the page (the task board's bulk bar): over the bar and the dock, under the phone's preview sheet. */
+    --layer-toolbar: 70;
+    /* The phone's preview sheet host (SideSheet): over every page layer, under the floating surfaces. */
+    --layer-sheet: 80;
+    /* A canvas stage standing in the phone's preview sheet: just over the sheet it stands in. */
+    --layer-sheet-stage: 90;
+    /* A motion bench laid over the whole shell: over every page layer, under the floating surfaces its own controls open. */
+    --layer-bench: 100;
+    /* The toast layer while the burger's sheet is open: under the sheet's scrim, so a toast waits dimmed and never paints over the open navigation. */
+    --layer-toast-held: 110;
+    /* Every floating surface: the kit's popover, menu, submenu, select, tooltip, dialog, sheet, drawer and their scrims, the details and lead cards, a hover panel, Files' floating panel, the lightbox. They belong in the browser's top layer; bits-ui portals them to the body instead, so they share this one role and the one opened last stands over the one it opened from. */
+    --layer-float: 120;
+    /* A copy in flight between two places on the page (queued words to the field, a chip to its card, a preview closing into its row): over everything it crosses, floating surfaces included. */
+    --layer-flight: 130;
+    /* A motion bench's own switches: over the floating surfaces the bench opens, so they stay pressable while one is open. */
+    --layer-bench-controls: 140;
+    /* The skip link, shown on focus: over the shell and everything in it. */
+    --layer-skip: 150;
+    /* The toast layer: over every surface on the page, a dialog included. */
+    --layer-toast: 160;
+    /* The screen's edge strips (ScreenEdges) Safari takes its bar colour from: over every layer, toasts included, since a strip is the colour of whatever stands on its edge and is never seen as itself. */
+    --layer-screen-edge: 170;
     /* How much of the page's own background the scrim lays over what is under it: its alpha. The screen's edges under an open scrim (ScreenEdges) mix the same share of background into the edge colour, so the strip Safari extends is the scrim's colour over that edge. */
     --scrim-mix: 72%;
     /* A message not yet said in the conversation (sending, queued). */

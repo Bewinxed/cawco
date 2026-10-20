@@ -181,15 +181,16 @@
      under it showed through, and its text and buttons read as painted over
      the toast even though the toast was on top and taking the taps. -->
 <div class="contents" bind:this={home}>
-  <!-- A sheet over the viewport, above the app chrome (the highest is the
-       shell's 100), that takes no taps itself; the toasts take their own
-       (`pointer-events-auto` through sonner's `toastOptions.class`).
+  <!-- A sheet over the viewport, above the app chrome and every floating
+       surface (--layer-toast), that takes no taps itself; the toasts take
+       their own (`pointer-events-auto` through sonner's `toastOptions.class`).
        Navigation stays above a toast. While the burger's sheet is open (its
-       scrim and panel stand at 50), the layer goes under the scrim: a toast
+       scrim and panel on --layer-float), the layer goes under the scrim
+       (--layer-toast-held): a toast
        arriving then waits dimmed in the content area, and the sheet that
        covers it on a phone or a narrow tablet is never painted over. -->
   <div
-    class="pointer-events-none fixed inset-0 z-1000 data-under-nav:z-49"
+    class="pointer-events-none fixed inset-0 z-(--layer-toast) data-under-nav:z-(--layer-toast-held)"
     bind:this={layer}
     data-slot="toast-layer"
     data-under-nav={navSheet.open || undefined}

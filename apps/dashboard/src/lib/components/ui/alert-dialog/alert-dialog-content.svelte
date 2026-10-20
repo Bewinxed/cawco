@@ -38,7 +38,7 @@
   <AlertDialogOverlay {...overlayProps} />
   <AlertDialogPrimitive.Content
     class={cn(
-      "kit-dialog group/alert-dialog-content fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none data-[size=default]:max-w-80 data-[size=default]:phone:max-w-112 data-[size=sm]:max-w-80",
+      "kit-dialog group/alert-dialog-content fixed top-1/2 left-1/2 z-(--layer-float) w-full -translate-x-1/2 -translate-y-1/2 outline-none data-[size=default]:max-w-80 data-[size=default]:phone:max-w-112 data-[size=sm]:max-w-80",
       className
     )}
     data-size={size}

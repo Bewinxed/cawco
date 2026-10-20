@@ -1114,7 +1114,7 @@
            the screen's bottom inset off this box itself (--safe-bottom does
            not inherit: data-safe-bottom sets it here). -->
       <div
-        class="absolute inset-x-0 bottom-(--off-bottom) z-20 w-c-composer-w mx-auto"
+        class="absolute inset-x-0 bottom-(--off-bottom) z-(--layer-dock) w-c-composer-w mx-auto"
         data-safe-bottom
         style:--off-bottom="calc(var(--space-4) + var(--safe-bottom))"
         bind:clientHeight={offHeight}
