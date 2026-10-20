@@ -104,6 +104,8 @@ export interface BrowserRecord {
 export interface BrowserHost {
   /** The DevTools address the gate (and nothing else) connects to. */
   devtoolsUrl: (record: BrowserRecord) => string;
+  /** The slots another agent's browsers hold on this host's runtime, running or stopped; none where the host shares nothing. */
+  heldSlots?: () => Promise<ReadonlySet<number>>;
   readonly kind: BrowserHostKind;
   /** Stops it and deletes its profile. */
   remove: (record: BrowserRecord) => Promise<void>;
@@ -291,13 +293,19 @@ export const recordFor = async (
 
 /**
  * `record` with its ports: the lowest slot of BROWSER_PORTS no other record
- * keeps and whose ports are free now, taken and written as it first starts.
+ * keeps, none of `held` (the slots another agent's browsers hold on the same
+ * runtime, running or stopped: their ports and their media network address,
+ * container-host.ts `heldSlots`), and whose ports are free now, taken and
+ * written as it first starts. A kept slot another agent's browser holds is
+ * given up for a free one, so no two browsers on one runtime share ports or
+ * an address.
  */
 export const slotted = async (
-  record: BrowserRecord
+  record: BrowserRecord,
+  held: ReadonlySet<number> = new Set()
 ): Promise<BrowserRecord & { slot: number }> => {
   const { slot: kept } = record;
-  if (kept !== undefined) {
+  if (kept !== undefined && !held.has(kept)) {
     return { ...record, slot: kept };
   }
   await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
@@ -307,7 +315,7 @@ export const slotted = async (
     async () => {
       const taken = new Set((await allBrowsers()).map((one) => one.slot));
       for (let slot = 0; slot < BROWSER_SLOTS; slot += 1) {
-        if (taken.has(slot)) {
+        if (taken.has(slot) || held.has(slot)) {
           continue;
         }
         const ports = Object.values(browserPorts(slot));

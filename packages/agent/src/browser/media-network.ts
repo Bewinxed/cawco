@@ -50,7 +50,10 @@ export const relayMediaAddress = (network: MediaNetwork): string =>
 
 /** The address browser slot `slot` takes on the media network. */
 export const slotAddress = (network: MediaNetwork, slot: number): string =>
-  hostOf(network, FIRST_SLOT_HOST + slot);
+  hostOf(network, slotHost(slot));
+
+/** The last octet browser slot `slot` takes: .10 + s. */
+export const slotHost = (slot: number): number => FIRST_SLOT_HOST + slot;
 
 /** An IPv4 address as a number; undefined for anything else. */
 const ipv4 = (address: string): number | undefined => {

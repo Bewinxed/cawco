@@ -411,7 +411,7 @@ export const startBrowser = (args: BrowserStartArgs): Promise<BrowserRow> => {
     if (relay) {
       record = { ...record, relay };
     }
-    record = await slotted(record);
+    record = await slotted(record, await host.heldSlots?.());
     if (
       record.state === "live" &&
       (await host.running(record)) &&
@@ -770,7 +770,10 @@ const moveIntoContainer = (
     starting.set(key, { state: "starting" });
     told();
     try {
-      let from: BrowserRecord = await slotted(record);
+      let from: BrowserRecord = await slotted(
+        record,
+        await container.heldSlots()
+      );
       if (!(from.state === "live" && (await local.running(from)))) {
         from = await local.start(from, { progress: () => undefined });
       }

@@ -31,7 +31,12 @@
 import { randomBytes } from "node:crypto";
 import { readWithin } from "@cawco/core/bounded";
 import type { BrowserKey, BrowserRelay } from "@cawco/core/browser";
-import { BROWSER_SCREEN, browserSlug } from "@cawco/core/browser";
+import {
+  BROWSER_SCREEN,
+  BROWSER_SLOTS,
+  browserPorts,
+  browserSlug,
+} from "@cawco/core/browser";
 import type { MediaPath } from "@cawco/core/capabilities";
 import { machineId } from "@cawco/core/machine-id";
 import { stunServer } from "@cawco/core/stream-relay";
@@ -47,10 +52,12 @@ import {
 } from "./media-forwarding";
 import {
   ensureMediaNetwork,
+  MEDIA_NETWORK,
   type MediaNetwork,
   onMediaNetwork,
   relayMediaAddress,
   slotAddress,
+  slotHost,
 } from "./media-network";
 import { relayKeyOf, relayUrlsFor } from "./relay-urls";
 import type { Runtime } from "./runtime";
@@ -306,6 +313,49 @@ export class ContainerHost implements BrowserHost {
 
   devtoolsUrl(record: BrowserRecord): string {
     return `http://127.0.0.1:${portsOf(record).devtools}`;
+  }
+
+  /**
+   * The slots another agent's browsers hold on this runtime (two users of a
+   * rootful engine, a scratch fleet beside the machine's own agent), running
+   * or stopped: each read from its container's own settings, its HTTP port's
+   * binding and its address on the media network, so no browser of this
+   * agent is made on a slot whose ports or address another holds.
+   */
+  async heldSlots(): Promise<ReadonlySet<number>> {
+    const owner = await browserOwner();
+    const listed = await this.#docker.listContainers({
+      all: true,
+      filters: { label: [BROWSER_LABEL] },
+    });
+    const others = listed.filter((one) => one.Labels?.[OWNER_LABEL] !== owner);
+    const inspected = await Promise.all(
+      others.map((one) =>
+        this.#docker
+          .getContainer(one.Id)
+          .inspect()
+          .catch((error: unknown) => {
+            absent(error);
+          })
+      )
+    );
+    const held = new Set<number>();
+    for (const one of inspected) {
+      const http = Number(
+        one?.HostConfig.PortBindings?.["8080/tcp"]?.[0]?.HostPort
+      );
+      const address =
+        one?.NetworkSettings.Networks?.[MEDIA_NETWORK]?.IPAMConfig?.IPv4Address;
+      for (let slot = 0; slot < BROWSER_SLOTS; slot += 1) {
+        if (
+          browserPorts(slot).http === http ||
+          address?.endsWith(`.${slotHost(slot)}`)
+        ) {
+          held.add(slot);
+        }
+      }
+    }
+    return held;
   }
 
   async running(record: BrowserRecord): Promise<boolean> {
