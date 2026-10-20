@@ -21,8 +21,10 @@
  * 6. A row of a moment's frames is stills: every frame held, nothing under
  *    it animating.
  * 7. The page's own capture, window by window as CawCo shows it
- *    (decision-embeds.ts `capturePage`), paints every embed. Each capture
- *    goes to .probe/decision-pages/ as tiles under 1 MiB, with a manifest.
+ *    (decision-embeds.ts `capturePage`), paints every embed, and is files a
+ *    delegate can hand over: RGB, each within the hub's 1 MiB (a tall page
+ *    in numbered sections cut between its cards), read back pixel for
+ *    pixel. The captures and their manifest go to .probe/decision-pages/.
  *
  *   bun scripts/probe-kit/run.ts web pairing-page
  */
@@ -31,10 +33,11 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { Page } from "playwright-core";
-import { PNG } from "pngjs";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
+import { FOLDER_FILE_LIMIT } from "../../../../packages/hub/src/project-folder";
 import {
   blankEmbeds,
+  captureFaults,
   capturePage,
   EMBED_FRAME,
   type EmbedPaint,
@@ -45,7 +48,7 @@ import {
 import { type Kit, ROOT, type Spec, THEMES } from "../../kit";
 
 const OUT = join(ROOT, ".probe/pairing-page");
-/** The page's own captures, tiled, and their manifest. */
+/** The page's own captures, in sections, and their manifest. */
 const PAGES = join(ROOT, ".probe/decision-pages");
 /** The published page this program is, as the hub names it (artifact d02dc1de…). */
 const PAGE_ID = "d02dc1de";
@@ -81,53 +84,20 @@ const cards = [...PROGRAM.matchAll(DECISION)].map((m) => {
   };
 });
 
-/** A capture's tile stays under this: what a reviewer's reader opens. */
-const TILE_BYTES = 1024 * 1024;
-
 const key = (stories: readonly string[]) => stories.join(",");
 /** The Previews' story lists, sorted: the page draws them in its own order. */
 const WANTED = previews.map((one) => key(one.stories)).sort();
 
-/** A whole capture's file name, and each tile's after it. */
-const PNG_END = /\.png$/;
 /** A moment's row read as "<at>: <n> held, <n> running": one held nothing or one still running. */
 const NOT_STILL = / 0 held|[1-9]\d* running/;
 
 type Embeds = Awaited<ReturnType<typeof readEmbeds>>["embeds"];
 interface Capture {
   embeds: EmbedPaint[];
+  files: { bytes: number; file: string; rows: { from: number; to: number } }[];
   height: number;
   theme: string;
-  tiles: { bytes: number; file: string }[];
   viewport: { height: number; width: number };
-}
-
-/** One capture cut into tiles under TILE_BYTES, a window at a time, halved where a window is more: the tiles' files. */
-function tiles(file: string, window: number): string[] {
-  const png = PNG.sync.read(readFileSync(file));
-  const written: string[] = [];
-  const cut = (top: number, rows: number): void => {
-    const tile = new PNG({ width: png.width, height: rows });
-    PNG.bitblt(png, tile, 0, top, png.width, rows, 0, 0);
-    const bytes = PNG.sync.write(tile, { colorType: 2 });
-    if (bytes.length > TILE_BYTES && rows > 64) {
-      const half = Math.ceil(rows / 2);
-      cut(top, half);
-      cut(top + half, rows - half);
-      return;
-    }
-    const name = file.replace(
-      PNG_END,
-      `-${String(written.length + 1).padStart(2, "0")}.png`
-    );
-    writeFileSync(name, bytes);
-    written.push(name);
-  };
-  for (let top = 0; top < png.height; top += window) {
-    cut(top, Math.min(window, png.height - top));
-  }
-  rmSync(file);
-  return written;
 }
 
 /** 1: the hub's check, and every lead opening on its recommendation and its reason. */
@@ -277,7 +247,7 @@ async function checkStills(kit: Kit, page: Page, leg: string): Promise<void> {
   );
 }
 
-/** 7: the page's own capture, tiled under 1 MiB, every embed painted in it. */
+/** 7: the page's own capture (decision-embeds.ts `capturePage`): files a delegate can hand over, every embed painted in it. */
 async function capture(
   kit: Kit,
   page: Page,
@@ -289,27 +259,34 @@ async function capture(
     () => document.documentElement.scrollHeight
   );
   kit.note(`${leg}: the page stands ${height}px tall`);
-  const whole = join(PAGES, `pairing-${viewport.width}-${theme}.png`);
-  const paints = await capturePage(page, whole);
-  const blank = blankEmbeds(paints);
-  const scale = await page.evaluate(() => devicePixelRatio);
-  const sizes = tiles(whole, viewport.height * scale).map((file) => ({
-    file: relative(PAGES, file),
-    bytes: readFileSync(file).length,
-  }));
-  kit.check(
-    `${leg}: the page's own capture paints every embed, in ${sizes.length} tiles under 1 MiB (${paints.map((one) => `“${one.embed}” ${Math.round(one.flat * 1000) / 10}%`).join(", ")} its commonest colour)`,
-    paints.length === previews.length &&
-      blank.length === 0 &&
-      sizes.every((one) => one.bytes < TILE_BYTES),
-    [
-      ...blank,
-      ...sizes
-        .filter((one) => one.bytes >= TILE_BYTES)
-        .map((one) => `${one.file}: ${one.bytes} bytes`),
-    ].join("\n    ")
+  const taken = await capturePage(
+    page,
+    join(PAGES, `pairing-${viewport.width}-${theme}.png`)
   );
-  return { theme, viewport, height, tiles: sizes, embeds: paints };
+  const { paints } = taken;
+  const captured = captureFaults(taken);
+  kit.check(
+    `${leg}: the page's capture is files a delegate can hand over, each RGB and at most ${FOLDER_FILE_LIMIT / 1024 / 1024} MiB, its whole picture pixel for pixel (${taken.files.map((f) => `${relative(ROOT, f.path)} ${(f.bytes / 1024).toFixed(0)} KiB, rows ${f.rows.from}–${f.rows.to}`).join(", ")}; ${taken.picture.width}×${taken.picture.height})`,
+    taken.files.length > 0 && captured.length === 0,
+    captured.join("\n    ")
+  );
+  const blank = blankEmbeds(paints);
+  kit.check(
+    `${leg}: the page's own capture paints every embed (${paints.map((one) => `“${one.embed}” ${Math.round(one.flat * 1000) / 10}%`).join(", ")} its commonest colour)`,
+    paints.length === previews.length && blank.length === 0,
+    blank.join("\n    ")
+  );
+  return {
+    theme,
+    viewport,
+    height,
+    files: taken.files.map((f) => ({
+      bytes: f.bytes,
+      file: relative(PAGES, f.path),
+      rows: f.rows,
+    })),
+    embeds: paints,
+  };
 }
 
 /** One leg: the page at a window and scheme, read and captured. */
@@ -348,7 +325,7 @@ async function drawLeg(
   return taken;
 }
 
-/** The manifest beside the tiles: the page, its program and canvas, the commit, each capture. */
+/** The manifest beside the captures: the page, its program and canvas, the commit, each capture. */
 function writeManifest(captures: Capture[]): void {
   const git = (...args: string[]) =>
     Bun.spawnSync(["git", ...args], { cwd: ROOT })
@@ -399,7 +376,7 @@ const spec: Spec = {
     }
     writeManifest(captures);
     kit.note(
-      `captures: ${captures.flatMap((one) => one.tiles.map((tile) => tile.file)).join(", ")}, manifest.json, in ${relative(ROOT, PAGES)}`
+      `captures: ${captures.flatMap((one) => one.files.map((f) => f.file)).join(", ")}, manifest.json, in ${relative(ROOT, PAGES)}`
     );
   },
 };
