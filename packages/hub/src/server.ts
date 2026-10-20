@@ -12320,6 +12320,18 @@ export const createServer = (
   /** What a session's preview origin serves of the hub: its artifacts' documents and pages (preview.ts). */
   const artifactListener: PreviewListenerDeps = {
     originOf: originKeyOf,
+    servedOn: (artifactId, key) => {
+      if (originKeyOf(artifactId) === key) {
+        return true;
+      }
+      // A project's canvas, which its pages' Canvas pieces show inside them.
+      const row = db.artifacts.get(artifactId);
+      return (
+        row?.kind === "canvas" &&
+        row.projectId !== null &&
+        key === projectOrigin(row.projectId)
+      );
+    },
     ownerOf: (artifactId: string) =>
       db.artifacts.get(artifactId)?.instanceId ?? undefined,
     kindOf: (artifactId: string) => db.artifacts.get(artifactId)?.kind,

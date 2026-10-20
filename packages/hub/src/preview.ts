@@ -428,6 +428,12 @@ export interface PreviewListenerDeps {
   /** Where a shown preview of a machine's is served now, its listener started when it has none. */
   reach: (instanceId: string) => Promise<PreviewReach>;
   send: ReturnType<typeof artifactSend>;
+  /**
+   * Whether origin `key` serves an artifact by its id: the origin that
+   * serves it ({@link originOf}), and a project's origin also its
+   * project's canvases, which its pages' Canvas pieces show inside them.
+   */
+  servedOn: (artifactId: string, key: string) => boolean;
   /** An artifact of the session's brought to the front of its panel from a page (`/show`: a decision page's Canvas, Open to draw). */
   showFrom: (
     request: Request,
@@ -452,7 +458,7 @@ const joinArtifact = (
   key: string,
   deps: PreviewListenerDeps
 ): Response | Promise<Response> | undefined => {
-  if (deps.originOf(artifactId) !== key) {
+  if (!deps.servedOn(artifactId, key)) {
     return new Response("This origin serves no such artifact.", {
       status: 404,
     });
@@ -736,7 +742,7 @@ async function artifactById(
   if (canvas) {
     const [, artifactId, rest] = canvas;
     const embed = url.searchParams.get("embed") === "1";
-    return deps.originOf(artifactId) === instanceId &&
+    return deps.servedOn(artifactId, instanceId) &&
       deps.kindOf(artifactId) === "canvas"
       ? serveCanvas(artifactId, rest, deps.state, embed)
       : new Response("This session has no such canvas.", { status: 404 });
@@ -744,7 +750,7 @@ async function artifactById(
   const paged = pathname.match(PAGE_PATH);
   if (paged) {
     const [, artifactId, rest] = paged;
-    return deps.originOf(artifactId) === instanceId &&
+    return deps.servedOn(artifactId, instanceId) &&
       deps.kindOf(artifactId) === "page"
       ? servePage(artifactId, rest, deps, url, `/__cawco/page/${artifactId}/`)
       : new Response("This origin serves no such page.", { status: 404 });
