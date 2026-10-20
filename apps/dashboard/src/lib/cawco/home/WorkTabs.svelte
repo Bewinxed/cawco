@@ -768,18 +768,21 @@
          rail's (`--rail-w`), so the phone's sheet, which is its own width
          whatever the rail was dragged to, is told as it is. The header's own
          spacing gives that room back to the words, each part to its tight
-         step together: the gap to the Delegates switch, a tab's inset, the
-         room before and after a count, the head's trailing pad. Past the
-         tight steps the words give way and the counts and the switch stand
-         (DESIGN.md Typography: "the name gives way first"; the artifact
-         head's narrowest forms): the label ends in its ellipsis. Both
-         labels stand whole beside counts of one or two figures from a 240px
-         rail, three from 250px. -->
+         step together: the gap to the Delegates switch and the head's
+         trailing pad (both to nothing at the full squeeze: the switch's
+         28px box keeps its glyph clear of the tabs and the edge), a tab's
+         inset, the room before and after a count. Past the tight steps the
+         words give way and the counts and the switch stand (DESIGN.md
+         Typography: "the name gives way first"; the artifact head's
+         narrowest forms): the label ends in its ellipsis, the head never
+         overflowing. Measured on this head: whole with a one-figure count
+         from the narrowest rail, 216px (Shell's RAIL_MIN), two figures from
+         227px, three from 240px. -->
     <div
       data-slot="head"
       class="mb-space-1 flex items-end justify-between gap-(--head-gap) border-b border-b-border-hairline pt-space-1 pr-(--head-end) pb-0 pl-0"
-      style:--head-gap="calc(var(--space-2) - var(--tight) * 0.09)"
-      style:--head-end="calc(var(--space-2) - var(--tight) * 0.09)"
+      style:--head-gap="max(0px, calc(var(--space-2) - var(--tight) * 0.2121))"
+      style:--head-end="max(0px, calc(var(--space-2) - var(--tight) * 0.2121))"
       style:--tight={"clamp(0px, calc(var(--c-work-tabs-roomy-w) - 100cqw - var(--space-4)), var(--c-work-tabs-squeeze))"}
       style:--count-start="max(0px, var(--space-1) - var(--tight) * 0.12)"
       style:--count-end="max(0px, var(--space-row) - var(--tight) * 0.06)"
@@ -902,7 +905,7 @@
               data-machine={id}
             >
               <hr
-                class="absolute inset-x-0 top-0 bottom-auto mx-(--seam-inset) h-px border-0 bg-seam opacity-0 transition-[opacity] duration-(--dur-fade) ease-out [[data-slot=group][data-filled]~[data-slot=group][data-filled]>&]:opacity-100"
+                class="absolute inset-x-0 top-0 bottom-auto mx-(--seam-inset) h-px border-0 bg-border-hairline opacity-0 transition-[opacity] duration-(--dur-fade) ease-out [[data-slot=group][data-filled]~[data-slot=group][data-filled]>&]:opacity-100"
               />
               {@render header(
                 entry.group,

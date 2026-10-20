@@ -2970,9 +2970,11 @@
      gone, out of the tab order with them (transition-fade-hide), and come
      back the same way as the ask folds. A minimized question's bar takes
      the tray row: the tray and the plan's ring step aside under it and come
-     back as it goes. On a narrow screen the dock's foot clears the
-     home indicator by the resting gap plus the safe area, and the composer,
-     the tray row and the cards keep the composer's edges. It stays absolute
+     back as it goes. At every width the dock's foot stands 14px above the
+     bottom plus the safe area (DESIGN.md, Composer column: "docked 14px
+     above the bottom plus the safe area"), the room the transcript's foot
+     clears for it; on a narrow screen the composer, the tray row and the
+     cards keep the composer's 11px edges. It stays absolute
      (docked at the bottom of the transcript pane) rather than viewport-fixed,
      so it sits ABOVE the thumb bar instead of overlapping it — the thumb bar
      owns the safe-area inset. -->
@@ -2982,13 +2984,12 @@
   data-drawing={canvasUp || undefined}
   data-minimized={minimized || undefined}
   data-perched={!!perch || undefined}
-  class="group/dock absolute inset-x-0 top-0 bottom-(--dock-foot) max-desk:bottom-(--dock-foot-narrow) z-(--layer-dock) flex flex-col justify-end items-center pointer-events-none"
+  class="group/dock absolute inset-x-0 top-0 bottom-(--dock-foot) z-(--layer-dock) flex flex-col justify-end items-center pointer-events-none"
   data-keeps-draft
   data-safe-bottom
   bind:this={dockEl}
   style:--perch-rise={perch && perchHeight ? `${perchHeight}px` : null}
   style:--dock-foot="calc(var(--space-4) + var(--safe-bottom))"
-  style:--dock-foot-narrow="calc(var(--space-2) + var(--safe-bottom))"
 >
   {#if offered.length > 0}
     <!-- The rest of the dock above the panel, cards stood on its bottom

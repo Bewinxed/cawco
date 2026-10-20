@@ -297,10 +297,13 @@
       <!-- The sentence and its button on one row, the row at least the
            button's height whether a state has one or not, and two lines tall
            where a phone wraps the sentence: every state is one height at a
-           width. -->
+           width. The house alert (DESIGN.md, Alert: "a compact tinted row,
+           never a slab"): its status pair, its corner and padding, no edge,
+           standing on the page's own insets (the composer's 11px margins
+           under the drawer's line). -->
       <div
         data-slot="hub-band"
-        class="pointer-events-auto invisible grid auto-rows-band grid-cols-fluid-auto items-center gap-x-space-3 border-b border-b-border-hairline bg-status-attn-bg py-space-2 ps-space-7 pe-space-6 text-size-body font-normal text-status-attn-ink tabular-nums opacity-0 shadow-tile @max-phone/hub-band:auto-rows-band-phone data-open:visible data-open:opacity-100 tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink tone-live:bg-status-live-bg tone-live:text-status-live-ink motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:-translate-y-full motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
+        class="pointer-events-auto invisible mx-space-3 mt-space-2 grid auto-rows-band grid-cols-fluid-auto items-center gap-x-space-3 rounded-md bg-status-attn-bg px-3 py-2.5 text-size-body font-normal text-status-attn-ink tabular-nums opacity-0 desk:ms-space-7 desk:me-space-6 @max-phone/hub-band:auto-rows-band-phone data-open:visible data-open:opacity-100 tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink tone-live:bg-status-live-bg tone-live:text-status-live-ink motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:-translate-y-full motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
         aria-hidden={band ? undefined : "true"}
         data-open={band ? "" : undefined}
         data-tone={tone}

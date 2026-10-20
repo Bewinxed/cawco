@@ -855,8 +855,6 @@ public enum Size {
     public static let cTipMaxW: Double = 320
     /// A thin WebKit scrollbar's thickness in a new-session scroller.
     public static let cScrollbarThin: Double = 8
-    /// The effort comb's tick pitch: a drawn pattern, not spacing.
-    public static let cCombPitch: Double = 6
     /// An edge fade at full length at every width, where the kit's phone 16px would show nothing (Files' scrollers, Caw's panel).
     public static let cEdgeFadeLen: Double = 40
     /// The house edge fade's length under 640px (kit-edge-fade, kit-edge-fade-block): short enough to read as an edge on a phone's narrow view, not a band across the content. Sits between the ladder's 14 and 18, so it is its own token.

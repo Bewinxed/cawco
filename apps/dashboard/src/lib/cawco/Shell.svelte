@@ -36,7 +36,7 @@
   import { IconChevronLeft, IconSearch, IconSidebar } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import { fieldKeeps } from "#lib/utils/typing.js";
-  import { browser } from "$app/env";
+  import { browser, dev } from "$app/env";
   import { goto, onNavigate } from "$app/navigation";
   import { page } from "$app/state";
   import AddMachineDialog from "./AddMachineDialog.svelte";
@@ -951,8 +951,27 @@
         return (id ? cawco.project(id)?.name : undefined) ?? "Project";
       case "config":
         return "Configure";
+      case "usage":
+        return "Usage";
+      case "workflows":
+        return "Workflows";
+      // The MCP server sign-in's return (its page: "Finishing sign-in").
+      case "oauth":
+        return "MCP sign-in";
+      // The motion benches (`vite dev` and the probe kit's bench build).
+      case "motion":
+        return "Bench";
       default:
-        return section[0].toUpperCase() + section.slice(1);
+        // Every route under the app's layout has its name above, and a path
+        // nothing answers is the route's error ("Not found"). A route added
+        // without one says so at once in dev, never a capitalised slug
+        // ("Oauth"); a shipped bar names nothing rather than guess.
+        if (dev) {
+          throw new Error(
+            `The bar has no name for /${section}: add it to Shell's crumb`
+          );
+        }
+        return "";
     }
   });
 </script>
@@ -978,10 +997,13 @@
        form from (BarGlass `@max-desk/shell`): the bar beside a docked rail
        is narrower than the window, so it could not be. `data-first-paint`
        while it still draws the server's answers (first-render.svelte.ts),
-       until the release a frame after mount. -->
+       until the release a frame after mount; `data-first-render` from that
+       release on, the page drawing its own answers (what the probe kit's
+       page-ready waits for). -->
   <div
     data-slot="shell"
     data-first-paint={firstRender.held || undefined}
+    data-first-render={!firstRender.held || undefined}
     class="@container/shell flex h-dvh w-full bg-surface-recess overflow-hidden"
     style="--sidebar-width: var(--rail-w, {railWidth === null
       ? 'var(--c-sidebar-w)'
@@ -1087,7 +1109,7 @@
         data-slot="top"
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 ps-0 pe-(--top-end) bg-surface-raised border-b border-b-seam coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-(--c-top-bar-h) max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:border-b-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:border-b-none desk:not-portrait:data-hosting:shelf-hairline max-desk:data-floating:border-b-none max-desk:data-floating:bg-transparent"
+        class="group/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 ps-0 pe-(--top-end) bg-surface-raised border-b border-b-border-hairline coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-(--c-top-bar-h) max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:border-b-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:border-b-none desk:not-portrait:data-hosting:shelf-hairline max-desk:data-floating:border-b-none max-desk:data-floating:bg-transparent"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end="env(safe-area-inset-right, 0px)"

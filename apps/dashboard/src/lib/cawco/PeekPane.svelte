@@ -134,6 +134,13 @@
   const activity = $derived(cawco.activityOf(target.viewId));
   /** What was asked of it and is on its way, or did not go (session-acts). */
   const act = $derived(row ? sessionAct(row.id) : undefined);
+  /** The state word's status ink: failed in crimson, needs you in spark's. */
+  const stateTone = $derived.by(() => {
+    if (failed) {
+      return "fail";
+    }
+    return activity === "blocked" ? "attn" : undefined;
+  });
   const stateLabel = $derived.by(() => {
     if (act?.pending) {
       return act.pending;
@@ -393,17 +400,18 @@
       place={row?.cwd || row?.machineId || target.viewId}
       status={sessionStatus(row)}
     />
+    <!-- The state word in its own status ink: failed in crimson, needs you
+         in spark's (DESIGN.md, Tertiary: status). -->
     <span
-      class="shrink-0 {failed || activity === 'blocked'
-        ? 'font-medium text-error-9'
-        : 'text-ink-muted'}">{stateLabel}</span
+      class="shrink-0 text-ink-muted tone-fail:font-medium tone-fail:text-status-fail-ink tone-attn:font-medium tone-attn:text-status-attn-ink"
+      data-tone={stateTone}>{stateLabel}</span
     >
     {#if activity === "working" && tool}
       <span
         class="mark-line flex min-w-0 items-center gap-1.5 text-ink-muted"
         data-box
       >
-        <span class="shrink-0">{tool.name}</span>
+        <span class="shrink-0 font-(family-name:--font-mono)">{tool.name}</span>
         <span class="shrink-0">·</span>
         <span
           class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono)"
@@ -442,8 +450,10 @@
     {@const summary = question
       ? "asked a question"
       : request.presentation.summary}
+    <!-- The house alert (DESIGN.md, Alert: "a compact tinted row, never a
+         slab"), in the needs-you pair, inset on the peek's own margins. -->
     <div
-      class="flex flex-col gap-2 border-t border-border/50 bg-status-attn-bg px-4 py-3"
+      class="mx-4 mb-3 flex flex-col gap-2 rounded-md bg-status-attn-bg px-3 py-2.5 text-status-attn-ink"
     >
       <p class="text-body">{summary}</p>
       {#if !question && request.presentation.command}
@@ -499,8 +509,9 @@
   {/each}
 
   {#if failed}
+    <!-- The failure as the house alert, in the failed pair. -->
     <p
-      class="border-t border-border/50 bg-error-9/10 px-4 py-3 text-meta text-error-9"
+      class="mx-4 mb-3 rounded-md bg-status-fail-bg px-3 py-2.5 text-body text-status-fail-ink"
     >
       {row?.lastError || "Failed without saying why."}
     </p>
@@ -508,7 +519,7 @@
     <!-- A damaged record that does not stop the session (its wake-ups), or
          one whose process still runs: said where its failure would be. -->
     <p
-      class="border-t border-border/50 bg-error-9/10 px-4 py-3 text-meta text-error-9"
+      class="mx-4 mb-3 rounded-md bg-status-fail-bg px-3 py-2.5 text-body text-status-fail-ink"
     >
       {damagedWords(row.damaged)}
     </p>
@@ -556,7 +567,7 @@
         {#each tail as message, index (message.id ?? index)}
           {#if message.type === "tool.use" || message.type === "tool.handoff"}
             <p class="flex items-baseline gap-1.5 text-meta text-ink-muted">
-              <span class="shrink-0"
+              <span class="shrink-0 font-(family-name:--font-mono)"
                 >{message.metadata?.toolName ?? message.content}</span
               >
               {#if glanceOf(message)}

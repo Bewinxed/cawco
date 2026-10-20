@@ -29,12 +29,19 @@
   let {
     region,
     kept,
+    strip = false,
     children,
   }: {
     /** What the part is called in its failure line: "composer", "sidebar". */
     region: string;
     /** What the failure leaves safe, said after it ("Your draft is kept."). */
     kept?: string;
+    /**
+     * It stands in a pane's tab row, which the phone's bar floats over: its
+     * line keeps clear of the bar's two ends as the strip does (fluid-tabs'
+     * phone insets), so it never runs under the burger or Caw's glass.
+     */
+    strip?: boolean;
     children: Snippet;
   } = $props();
 
@@ -47,8 +54,22 @@
   <RegionHeld />
   {@render children()}
   {#snippet failed(_error, reset)}
-    <div class="flex-auto min-w-0 p-space-3" data-region-failed={region}>
-      <Alert variant="warning">
+    <!-- The house alert, compact and tinted (DESIGN.md, Alert): as wide as
+         its words at most, in the failed status's pair (a part that ended
+         badly; spark is needs-you), taking no more of its column than its
+         line. -->
+    <div
+      class="min-w-0 p-space-3 max-desk:data-strip:ps-(--strip-start) max-desk:data-strip:pe-(--strip-end)"
+      data-region-failed={region}
+      data-strip={strip || undefined}
+      style:--strip-start={strip
+        ? "calc(var(--c-bar-phone-edge) + var(--c-bar-toggle-glyph))"
+        : undefined}
+      style:--strip-end={strip
+        ? "calc(var(--c-bar-phone-gap) + var(--c-bar-caw-glass-phone))"
+        : undefined}
+    >
+      <Alert class="w-fit max-w-full" variant="destructive">
         <AlertDescription
           >The {region} stopped after an error. {kept ?? ""} The rest of the page
           still works. Try again to rebuild it.</AlertDescription

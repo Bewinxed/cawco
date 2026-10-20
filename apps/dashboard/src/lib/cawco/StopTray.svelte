@@ -972,6 +972,7 @@
           {pendingLabel}
           {progress}
           size="sm"
+          variant="destructive"
         />
       </div>
     </div>

@@ -1019,8 +1019,6 @@
     --c-tip-max-w: 320px;
     /* A thin WebKit scrollbar's thickness in a new-session scroller. */
     --c-scrollbar-thin: 8px;
-    /* The effort comb's tick pitch: a drawn pattern, not spacing. */
-    --c-comb-pitch: 6px;
     /* An edge fade at full length at every width, where the kit's phone 16px would show nothing (Files' scrollers, Caw's panel). */
     --c-edge-fade-len: 40px;
     /* The house edge fade's length under 640px (kit-edge-fade, kit-edge-fade-block): short enough to read as an edge on a phone's narrow view, not a band across the content. Sits between the ladder's 14 and 18, so it is its own token. */

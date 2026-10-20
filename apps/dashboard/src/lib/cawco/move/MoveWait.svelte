@@ -522,9 +522,13 @@
                 </div>
               {/if}
               {#if row.phase === "asking" && job.ask}
+                <!-- Under a finger its rows open to --space-5, so the Details
+                     fold's 44px area and the answers' under it both stand
+                     whole (DESIGN.md, The 44 Touch Rule: "clusters open their
+                     gap on touch"). -->
                 <div
                   data-slot="move-wait-card"
-                  class="grid gap-space-3 mbs-space-1 p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-stat"
+                  class="grid gap-space-3 coarse:gap-space-5 mbs-space-1 p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-stat"
                   in:unfold
                   out:unfold
                 >

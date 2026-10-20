@@ -80,6 +80,8 @@
   triggerClass={chipVariants({
     variant: "setting",
     tone: picked.length ? undefined : "fail",
+    // Never wider than its row: a long name ends in its ellipsis.
+    class: "min-w-0",
   })}
 >
   {#snippet trigger()}

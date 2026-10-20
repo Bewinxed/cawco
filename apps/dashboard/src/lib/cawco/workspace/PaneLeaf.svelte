@@ -388,7 +388,7 @@
   ></span>
 
   {#if !hosted}
-    <RegionBoundary region="tabs">
+    <RegionBoundary region="tabs" strip>
       <PaneTabs {leaf} travel={swipe.travel} />
     </RegionBoundary>
   {/if}

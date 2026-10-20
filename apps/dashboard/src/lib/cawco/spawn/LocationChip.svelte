@@ -75,6 +75,8 @@
   triggerClass={chipVariants({
     variant: "setting",
     tone: empty ? "muted" : undefined,
+    // Never wider than its row: a long name ends in its ellipsis.
+    class: "min-w-0",
   })}
   width={440}
 >

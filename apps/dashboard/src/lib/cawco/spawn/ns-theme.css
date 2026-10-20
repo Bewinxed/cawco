@@ -40,21 +40,6 @@
   }
 }
 
-/* The effort comb's ticks: a repeating gradient at the comb's pitch, a
-   drawn pattern Tailwind has no utility for. */
-@utility fai-comb {
-  :where(.ns-theme &) {
-    height: var(--space-4);
-    background-image: repeating-linear-gradient(
-      to right,
-      var(--neutral-5) 0 1px,
-      transparent 1px var(--c-comb-pitch)
-    );
-    background-repeat: no-repeat;
-    background-size: 100% 100%;
-  }
-}
-
 /* The dialog's thin scrollbars, the standard properties and WebKit's
    pseudo-elements together. */
 @utility fai-scroll {

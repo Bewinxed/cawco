@@ -34,8 +34,9 @@
   import { untrack } from "svelte";
   import { fade } from "svelte/transition";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { IconError } from "#lib/icons.js";
-  import IconChevron from "~icons/solar/alt-arrow-right-bold-duotone";
+  // The chevron in Solar's linear cut, a glyph and not a mark (DESIGN.md,
+  // The Solar Duotone Rule).
+  import { IconChevronRight as IconChevron, IconError } from "#lib/icons.js";
   import Caw from "../home/Caw.svelte";
   import CawMark from "../home/CawMark.svelte";
   import MessageBody from "../MessageBody.svelte";

@@ -456,7 +456,6 @@ export type TokenSize =
   | "size.c-pop-max-h-phone"
   | "size.c-tip-max-w"
   | "size.c-scrollbar-thin"
-  | "size.c-comb-pitch"
   | "size.c-edge-fade-len"
   | "size.c-edge-fade-len-phone"
   | "size.c-menu-item-h"

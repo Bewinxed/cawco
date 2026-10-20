@@ -93,8 +93,12 @@
         style:--mark-bg="var(--mark-{markHue(seed)})"
         ><Sprite class="size-icon-sm block text-mark-glyph" /></span
       >
+      <!-- A narrow head's squeeze is shared: the type, the title and the
+           model each give way by their own width, so the title (what it
+           does) never shrinks to its first letters while the others stand
+           whole; the status pill stays whole. -->
       <span
-        class="font-(family-name:--font-mono) text-ink-strong text-size-label flex-none overflow-clip text-ellipsis whitespace-nowrap max-w-2/5"
+        class="font-(family-name:--font-mono) text-ink-strong text-size-label flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap max-w-2/5"
         >{branch.subagentType}</span
       >
       <!-- The disclosure affordance: one glyph in currentColor, rotated by
@@ -114,7 +118,7 @@
       {#if model}
         <span
           data-slot="model"
-          class="text-ink-muted text-size-meta font-normal flex-none whitespace-nowrap"
+          class="text-ink-muted text-size-meta font-normal flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
           >{modelLabel(model)}</span
         >
       {/if}

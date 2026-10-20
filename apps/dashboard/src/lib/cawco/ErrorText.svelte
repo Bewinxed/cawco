@@ -25,7 +25,10 @@
   let reading = $state(false);
 </script>
 
-<span class="flex min-w-0" role="alert">
+<!-- As wide as its container at most, wherever it stands (a centred column
+     sizes it to its words): a long error ends in its ellipsis, never
+     widening the page. -->
+<span class="flex min-w-0 max-w-full" role="alert">
   <button
     data-error-text-class={className}
     class={cn(

@@ -5471,14 +5471,6 @@
       },
       "$description": "A thin WebKit scrollbar's thickness in a new-session scroller."
     },
-    "c-comb-pitch": {
-      "$type": "dimension",
-      "$value": {
-        "value": 6,
-        "unit": "px"
-      },
-      "$description": "The effort comb's tick pitch: a drawn pattern, not spacing."
-    },
     "c-edge-fade-len": {
       "$type": "dimension",
       "$value": {

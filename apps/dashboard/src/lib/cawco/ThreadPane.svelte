@@ -1042,7 +1042,7 @@
           bare
           {focused}
           latestInset={writable && foot.stack && !reserved
-            ? `calc(${latestFoot} - max(calc(var(--space-8) * 3), var(--composer-clearance)))`
+            ? latestFoot
             : undefined}
           onshown={(drawn) => {
             shown = drawn;

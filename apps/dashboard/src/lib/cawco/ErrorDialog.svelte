@@ -43,7 +43,7 @@
       </Dialog.Header>
 
       <pre
-        class="m-0 max-h-c-report-text-max overflow-auto wrap-break-word whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-prose text-ink-strong select-text"
+        class="m-0 max-h-c-report-text-max min-w-0 overflow-auto wrap-anywhere whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-prose text-ink-strong select-text"
         data-error-text>{message}</pre>
 
       <Dialog.Footer>
@@ -54,11 +54,14 @@
           </span>
           <span>Copy error</span>
         </Button>
+        <!-- A dismissal, not an action: no coral (DESIGN.md, The Coral Is
+             Where You Act Rule). -->
         <Button
           onclick={() => {
             dialogOpen = false;
           }}
           type="button"
+          variant="outline"
         >
           Close
         </Button>

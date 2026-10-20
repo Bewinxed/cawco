@@ -1718,6 +1718,13 @@
   function back() {
     moveStep = false;
     error = "";
+    // Back, pressed, goes with the step it led out of: the keys go to the
+    // prompt, the form's first field, rather than to the page.
+    tick().then(() => {
+      if (document.activeElement === document.body) {
+        focusPrompt();
+      }
+    });
   }
   /** Esc in step 2 goes back to the form; anywhere else it closes (the frame's dismissal). */
   export function escapeStep(event: KeyboardEvent): void {
@@ -1855,10 +1862,33 @@
   inert={busy}
 >
   <div class="flex min-w-0 items-center gap-space-3">
-    <span
-      class="inline-flex size-space-6 flex-none items-center justify-center rounded-xs bg-ink-solid text-on-ink max-phone:hidden"
-      ><Bolt class="size-icon-sm" /></span
-    >
+    {#if moveStep}
+      <!-- Step 2's way back to the form leads the head, where the form's
+           mark stands; Esc goes back too. Close keeps the trailing edge
+           (DESIGN.md, Dialog and Drawer: the title, then Close). -->
+      <Tip keys="Esc" label="Back">
+        {#snippet children(tip)}
+          <button
+            {...tip}
+            aria-label="Back"
+            class={pressVariants({
+              press: "scale",
+              class: sheetHead.close(),
+            })}
+            data-vaul-no-drag
+            onclick={back}
+            type="button"
+          >
+            <IconChevronLeft />
+          </button>
+        {/snippet}
+      </Tip>
+    {:else}
+      <span
+        class="inline-flex size-space-6 flex-none items-center justify-center rounded-xs bg-ink-solid text-on-ink max-phone:hidden"
+        ><Bolt class="size-icon-sm" /></span
+      >
+    {/if}
     <h2
       data-slot="title"
       class="type-title tracking-title m-0 truncate text-ink-strong"
@@ -1866,31 +1896,17 @@
       <MorphText text={headTitle} />
     </h2>
   </div>
-  <!-- Step 2's way out is back to the form: the × turns into a back
-         chevron in its place, and Esc goes back too. -->
-  <Tip keys="Esc" label={moveStep ? "Back" : "Close"}>
+  <Tip keys={moveStep ? undefined : "Esc"} label="Close">
     {#snippet children(tip)}
       <button
         {...tip}
-        aria-label={moveStep ? "Back" : "Close"}
+        aria-label="Close"
         class={pressVariants({ press: "scale", class: sheetHead.close() })}
         data-vaul-no-drag
-        onclick={moveStep ? back : close}
+        onclick={close}
         type="button"
       >
-        <span class="group grid" data-back={moveStep || undefined}>
-          <span
-            data-slot="glyph"
-            data-close
-            class="col-start-1 row-start-1 grid place-items-center transition-[opacity] duration-(--dur-control) ease-out group-data-back:opacity-0"
-            ><X /></span
-          >
-          <span
-            data-slot="glyph"
-            class="col-start-1 row-start-1 grid place-items-center opacity-0 transition-[opacity] duration-(--dur-control) ease-out group-data-back:opacity-100"
-            ><IconChevronLeft /></span
-          >
-        </span>
+        <X />
       </button>
     {/snippet}
   </Tip>
@@ -1914,9 +1930,12 @@
          the chosen model's effort and permission chips glide between each
          other. -->
   <NsPopoverGroup>
+    <!-- One track as wide as the body (`grid-cols-1`, a minmax(0, 1fr)
+         track), here and in the composer: a chip's long folder never widens
+         the sheet past the screen, its label ends in its ellipsis instead. -->
     <section
       data-slot="prompt-sec"
-      class="relative z-1 grid gap-space-2 motion-safe:animate-ns-sec"
+      class="relative z-1 grid grid-cols-1 gap-space-2 motion-safe:animate-ns-sec"
       style="--delay:0ms"
     >
       <div class="group-data-stepped:hidden">
@@ -1926,10 +1945,9 @@
           label={continueFrom ? "Next step (optional)" : "First prompt"}
         />
       </div>
-      <div class="fai-comb group-data-stepped:hidden"></div>
       <div
         data-slot="composer"
-        class="field-shell relative grid rounded-lg border border-border-control bg-surface-raised shadow-xs transition-control"
+        class="field-shell relative grid grid-cols-1 rounded-lg border border-border-control bg-surface-raised shadow-xs transition-control"
       >
         <div class="contents group-data-stepped:hidden">
           <PromptEditor
@@ -2062,7 +2080,11 @@
         </div>
       {/if}
     </section>
-    <div class="fai-comb mt-space-5 group-data-stepped:hidden"></div>
+    <!-- The prompt and the settings are two regions, parted by the hairline
+         (DESIGN.md, Borders are graded). -->
+    <hr
+      class="mt-space-5 mb-0 mx-0 h-px border-0 bg-border-hairline group-data-stepped:hidden"
+    />
     <div
       data-slot="stack"
       class="mt-space-5 grid gap-space-5 group-data-stepped:hidden"

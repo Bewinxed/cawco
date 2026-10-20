@@ -90,6 +90,8 @@
   triggerClass={chipVariants({
     variant: "setting",
     tone: project ? undefined : "muted",
+    // Never wider than its row: a long name ends in its ellipsis.
+    class: "min-w-0",
   })}
 >
   {#snippet trigger()}

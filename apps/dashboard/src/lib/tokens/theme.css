@@ -418,7 +418,6 @@
   --spacing-c-pop-max-h-phone: var(--c-pop-max-h-phone);
   --spacing-c-tip-max-w: var(--c-tip-max-w);
   --spacing-c-scrollbar-thin: var(--c-scrollbar-thin);
-  --spacing-c-comb-pitch: var(--c-comb-pitch);
   --spacing-c-edge-fade-len: var(--c-edge-fade-len);
   --spacing-c-edge-fade-len-phone: var(--c-edge-fade-len-phone);
   /* Switches with its context: no literal maps to it. */

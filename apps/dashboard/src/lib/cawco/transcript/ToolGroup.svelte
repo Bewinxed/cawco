@@ -339,9 +339,12 @@
                glyph it gives way to share the cell. A failed call carries
                its state on the glyph — the completed row's done/failed cue,
                next to the running row's breathing glyph in the live tool. -->
+          <!-- The tool family's hue (DESIGN.md, Tool rows: "the tool
+               family's hue on its 16px glyph"); a failed call's crimson
+               over it. -->
           <span
             data-slot="glyph"
-            class="col-start-1 row-start-1 grid place-items-center text-ink-muted data-err:text-data-bad"
+            class="col-start-1 row-start-1 grid place-items-center {d.color} data-err:text-data-bad"
             data-err={failed || undefined}
             in:glyphIn
             out:glyphOut
@@ -366,8 +369,11 @@
           >
         {/key}
       </span>
-      <!-- The verb gives way before the row does: on a phone the argument,
-           the fact and the chevron stay inside the row. -->
+      <!-- The verb is what the row is named by: the argument after it gives
+           way first, from no basis of its own (`flex-1`), so it takes only
+           the room the verb leaves and ends in its ellipsis; only a verb
+           wider than the whole row gives way itself. The fact and the
+           chevron stay inside the row. -->
       {#if d.label}
         <span
           class="font-medium text-ink-strong text-size-label flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
@@ -375,7 +381,7 @@
         >
       {/if}
       <span
-        class="font-(family-name:--font-mono) text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-auto"
+        class="font-(family-name:--font-mono) text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-1"
         title={[d.object, d.detail].filter(Boolean).join(" ") || undefined}
       >
         {#if d.object}

@@ -49,23 +49,26 @@
        while the canvas stands, it stands in the grown shape over the field,
        above its surface; while an ask holds the composer it steps aside with
        the rest. -->
-  <!-- Full-bleed scroller: the row scrolls, so on a coarse pointer it takes
-       one step more padding (space-2) into an equal negative margin. The
-       padding is room inside the scroll clip for the remove buttons' touch
-       areas; the margin gives the layout that room back, so nothing moves. -->
+  <!-- Full-bleed scroller: the row scrolls, so it pads into an equal
+       negative margin (DESIGN.md, The 44 Touch Rule), its chips standing
+       --space-1 in as they always have. The padding is room inside the
+       scroll clip for the remove buttons' whole areas, a corner ✕ standing
+       --space-1 past its file's corner: 24px on a fine pointer (the room
+       --space-3 holds), 44px on a coarse one (--space-5); the margin gives
+       the layout that room back, so nothing moves. -->
   <div
     data-atts
-    style:--hit-gap-x="var(--space-2)"
-    style:--hit-gap-y="var(--space-2)"
-    class="flex flex-wrap gap-space-2 max-h-c-atts-max-h overflow-y-auto p-space-1 coarse:p-space-3 coarse:-m-space-2 pointer-events-auto transition-fade-show group-data-drawing/dock:relative group-data-drawing/dock:z-2 group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
+    class="flex flex-wrap gap-space-2 max-h-c-atts-max-h overflow-y-auto p-space-3 -m-space-2 coarse:p-space-5 coarse:-m-space-4 pointer-events-auto transition-fade-show group-data-drawing/dock:relative group-data-drawing/dock:z-2 group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
     transition:unfold
     {@attach reflow()}
   >
     {#if folded}
-      <!-- The canvas, folded: a tap opens it again out of this box. -->
+      <!-- The canvas, folded: a tap opens it again out of this box. Its open
+           and its remove stand --space-2 apart, so their areas stop at the
+           midpoint between them (DESIGN.md, The 44 Touch Rule). -->
       <span
         data-slot="canvas-chip"
-        class="inline-flex items-center gap-space-2 max-w-full py-space-1 pe-space-1 ps-space-2 border border-border-hairline rounded-sm bg-surface-raised shadow-tile text-size-label font-medium text-ink-strong data-canvas-hidden:invisible"
+        class="inline-flex items-center gap-space-2 max-w-full py-space-1 pe-space-1 ps-space-2 border border-border-hairline rounded-sm bg-surface-raised shadow-tile text-size-label font-medium text-ink-strong hit-gap-x-space-2 data-canvas-hidden:invisible"
         data-artifact={folded.id}
         data-canvas-hidden={canvasHidden || undefined}
         data-flip="pop"
@@ -79,7 +82,7 @@
           class={pressVariants({
             press: "scale",
             class:
-              "inline-flex items-center gap-space-2 w-auto min-w-0 h-icon-lg p-0 border-none border-current rounded-xs bg-transparent text-ink-strong flex-none mark-line touch-hit",
+              "inline-flex items-center gap-space-2 w-auto min-w-0 h-icon-lg p-0 border-none border-current rounded-xs bg-transparent text-ink-strong flex-none mark-line touch-hit pointer-hit",
           })}
           onclick={onopencanvas}
           type="button"
@@ -109,7 +112,7 @@
           class={pressVariants({
             press: "scale",
             class:
-              "grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit",
+              "grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit pointer-hit",
           })}
           onclick={onremovecanvas}
           type="button"
@@ -138,7 +141,7 @@
           class={pressVariants({
             press: "scale",
             class:
-              "grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit",
+              "grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit pointer-hit",
           })}
           data-box
           onclick={() => removeImage(i)}
@@ -159,7 +162,7 @@
           class={pressVariants({
             press: "scale",
             class:
-              "absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline hit-edge-hair rounded-xs bg-surface-raised text-ink-muted hover:text-ink-strong touch-hit",
+              "absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline hit-edge-hair rounded-xs bg-surface-raised text-ink-muted hover:text-ink-strong touch-hit pointer-hit",
           })}
           onclick={() => removeText(i)}
           type="button"
@@ -182,7 +185,7 @@
           class={pressVariants({
             press: "scale",
             class:
-              "absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline hit-edge-hair rounded-xs bg-surface-raised text-ink-muted hover:text-ink-strong touch-hit",
+              "absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline hit-edge-hair rounded-xs bg-surface-raised text-ink-muted hover:text-ink-strong touch-hit pointer-hit",
           })}
           onclick={() => removeFile(f.id)}
           type="button"

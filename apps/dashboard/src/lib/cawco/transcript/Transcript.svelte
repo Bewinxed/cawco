@@ -154,7 +154,7 @@
      * that read it, as `parkedHeight` is.
      */
     shelfHeight?: number;
-    /** Where the way back to the tail rests over the foot, when the pane says (a thread). */
+    /** Where the way back to the tail rests, up from the scroller's foot, when the pane says (a thread). */
     latestInset?: string;
   } = $props();
 
@@ -4006,8 +4006,9 @@
                     >{d.label}</span
                   >
                 {/if}
+                <!-- The argument gives way first (ToolGroup's row). -->
                 <span
-                  class="font-(family-name:--font-mono) text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0"
+                  class="font-(family-name:--font-mono) text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-1"
                   >{row.glance.glance}</span
                 >
               </div>
@@ -4054,21 +4055,22 @@
   <!-- Floating above the composer column, at zero height in the flow, so
        nothing here coming or going moves a row: the catch-up, from the switch
        until it has appended, and — scrolled away from the tail — the way back.
-       Where it rests is the pane's to say (`--latest-inset`): a thread keeps
-       the room Caw's rise takes above its composer; elsewhere it stands at
-       the top of the composer's clearance, and over what rises past it
-       (`--parked-room`): never under an ask. A sticky box keeps off a
-       scroller's padding, so it is measured from the scroller's own foot,
-       under the foot room. Over the pane's foot fade (FootFade), which only
-       the rows pass under. A column hung up from the foot: what overflows
-       its zero height goes up, the pills at the bottom and the
-       not-caught-up line over them. -->
+       Where it rests, up from the scroller's foot, is the pane's to say
+       (`--latest-inset`): a thread keeps the room Caw's rise takes above its
+       composer; elsewhere it stands at the top of the composer's clearance
+       (the foot room less the composer's own dock gap, where the last row
+       ends at the tail), and over what rises past it (`--parked-room`):
+       never under an ask. A sticky box's inset is measured from the
+       scrollport's foot, so the foot room is counted once. Over the pane's
+       foot fade (FootFade), which only the rows pass under. A column hung
+       up from the foot: what overflows its zero height goes up, the pills
+       at the bottom and the not-caught-up line over them. -->
   <div
     data-slot="dock"
     class="sticky z-2 bottom-(--dock-bottom) h-0 flex flex-col justify-box-end items-center gap-space-2 pointer-events-none"
     style:--latest-inset={latestInset}
     style:--parked-room="{parkedHeight + shelfHeight}px"
-    style:--dock-bottom={"calc(var(--foot-room) + var(--latest-inset, calc(var(--foot-room) - var(--space-4) + var(--parked-room, 0px))))"}
+    style:--dock-bottom={"var(--latest-inset, calc(var(--foot-room) - var(--space-4) + var(--parked-room, 0px)))"}
   >
     <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->
     {#if behind}

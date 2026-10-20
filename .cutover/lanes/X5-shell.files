@@ -265,3 +265,11 @@ apps/dashboard/src/routes/(app)/+page.svelte
 apps/dashboard/src/routes/(app)/oauth/mcp/+page.svelte
 apps/dashboard/src/routes/(app)/session/[[id]]/+page.server.ts
 apps/dashboard/src/routes/(app)/session/[[id]]/+page.svelte
+design/tokens/cawco.tokens.json
+apps/dashboard/src/lib/tokens/theme.css
+apps/dashboard/src/lib/tokens/tokens.css
+apps/dashboard/src/lib/tokens/tokens.ts
+packages/hub/skills/decision-page/kit/tokens.css
+apps/apple/Packages/CawCoKit/Sources/CawCoDesign/Generated/Tokens.swift
+apps/dashboard/src/lib/components/ui/fluid-tabs/TabsList.svelte
+apps/dashboard/src/lib/components/ui/bar-glass/bar-glass-frame.svelte

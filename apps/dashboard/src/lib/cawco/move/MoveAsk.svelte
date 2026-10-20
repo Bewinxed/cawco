@@ -6,6 +6,7 @@
    * draw it, from the hub's words (core `MoveAsk`).
    */
   import type { MoveAsk } from "@cawco/core";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { IconChevronRight } from "#lib/icons.js";
@@ -24,15 +25,22 @@
     </p>
   {/each}
   <Collapsible.Root bind:open>
-    <Collapsible.Trigger class="justify-self-box-start" look="fold">
-      <span>Details</span>
-      <span
-        data-slot="chev"
-        aria-hidden="true"
-        class="inline-grid motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out data-open:rotate-90"
-        data-open={open || undefined}
-        data-box><IconChevronRight class="size-icon-sm" /></span
-      >
+    <!-- The fold's toggle is the kit Button, the link look in the fold's
+         muted ink, so it carries the house hit area: 44px under a finger
+         (DESIGN.md, The 44 Touch Rule), its drawn size the xs button's. -->
+    <Collapsible.Trigger class="justify-self-box-start">
+      {#snippet child({ props })}
+        <Button {...props} pad="none" size="xs" tone="quiet" variant="link">
+          <span>Details</span>
+          <span
+            data-slot="chev"
+            aria-hidden="true"
+            class="inline-grid motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out data-open:rotate-90"
+            data-open={open || undefined}
+            data-box><IconChevronRight class="size-icon-sm" /></span
+          >
+        </Button>
+      {/snippet}
     </Collapsible.Trigger>
     <Collapsible.Content reveal>
       <pre
