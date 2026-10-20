@@ -42,11 +42,17 @@
  *     was never cut off.
  * l3. Within 15 s of the landing, the `sleep` it left is not alive.
  *
- * Nothing a sweep waits for keeps a delegate's leftover alive: the project's
- * gate takes the machine's one heavy-run slot (`CAWCO_HEAVY_RUNS=1`). A
- * third delegate commits, leaves a `sleep 600.061` holding that slot
- * (scripts/lib/heavy-run.sh), and finishes; its landing gate's step queues
- * for the slot; then its parent interrupts it:
+ * Nothing a sweep waits for keeps a delegate's leftover alive. The fleet's
+ * heavy runs have one slot (`CAWCO_HEAVY_RUNS=1`) and every room reading of
+ * both systems opened, so only the slot decides, and each takes it through
+ * this checkout's own scripts/lib/heavy-run.sh, which resolves its packages
+ * from this checkout's node_modules (a copy in the scratch repository has
+ * none, so Bun has to auto-install them; inside a macOS boundary its
+ * `heavy_run` ended with no slot). A third delegate commits, leaves a
+ * `sleep 600.061` that holds the slot, which the slot's own record names
+ * (`slot-*` under the workspaces' cache, core heavy-run.ts), and finishes;
+ * its landing gate's step queues behind it, its gate ticket there naming it;
+ * then its parent interrupts it:
  *
  * g1. Within 15 s of interrupt_delegate the leftover holding the slot is not
  *     alive.
@@ -55,22 +61,25 @@
  *
  * macOS: what a boundary started before profiles carried membership names
  * ends once its workspace is gone, at the agent's start (agent boundary.ts
- * `endPreTagLeftovers`). The probe starts two such boundaries itself: each a
- * runner (`sleep 600.071`, `600.073`) under a workspace's own profile with
- * its membership rules taken out, and an escaped child (`600.072`,
- * `600.074`), each adopted by launchd. The landing delegate's workspace is
- * then archived, and the agent started again:
+ * `endPreTagLeftovers`). The probe starts two such boundaries itself, each
+ * under a running boundary's own profile (`<HOME>/.cawco/workspaces/<id>/
+ * boundaries/<gen>/boundary.sb`) with its membership rules taken out: a
+ * runner and an escaped child, each adopted by launchd. One is the landing
+ * delegate's (`sleep 600.071`, `600.072`), started while its push is held;
+ * the hub retires that workspace once its work lands. The other is a fourth
+ * delegate's (`600.073`, `600.074`), whose turn stays open on a
+ * `sleep 600.081`, so its workspace stays. Then the agent starts again:
  *
- * p1. Within 90 s of the agent's start, the archived workspace's pair is not
+ * p1. Within 90 s of the agent's start, the retired workspace's pair is not
  *     alive.
- * p2. The pair of the first delegate's workspace, still here, runs on.
+ * p2. The pair of the workspace still here runs on.
  *
  *   bun scripts/probe-kit/run.ts delegate-kill
  */
 import {
   chmod,
-  cp,
   mkdir,
+  readdir,
   readFile,
   rm,
   stat,
@@ -114,29 +123,65 @@ const PUSH_HELD_S = 30;
 /** The ref the landing pushes, as the push's command names it (hub landing.ts `attempt`). */
 const PUSHED_REF = "HEAD:refs/heads/main";
 const GATE_BRIEF = "PROBE-GATE-G";
-/** This checkout: what the project's repository copies its heavy-run gate from. */
-const REPO = join(import.meta.dir, "..", "..", "..");
+const LIVE_BRIEF = "PROBE-LIVE-P";
+/** This checkout's heavy-run, which every heavy run of the gate leg takes its slot through. */
+const HEAVY_RUN = join(
+  import.meta.dir,
+  "..",
+  "..",
+  "..",
+  "scripts",
+  "lib",
+  "heavy-run.sh"
+);
+/** One shell word, whatever it holds. */
+const word = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 /**
- * What a heavy run here takes its slot with: this probe's own bun first on
- * `PATH` (heavy-run.sh runs `bun`, and a probe started as `~/.bun/bin/bun`
- * over ssh has none on its PATH, which its fleet hands on), no slot already
- * held (`CAWCO_HEAVY_RUN_HELD`), one slot and the room's thresholds opened
- * wide, so only the slot decides (core heavy-run.ts `ROOM_ENV`).
+ * What a heavy run of the gate leg takes its slot with (core heavy-run.ts):
+ * this probe's own bun first on `PATH` (heavy-run.sh runs `bun`, and a probe
+ * started as `~/.bun/bin/bun` over ssh has none on its PATH, which its fleet
+ * hands on); no slot already held (`CAWCO_HEAVY_RUN_HELD`, which this probe's
+ * own admission exports); one slot; a peak far under a slot, so the memory
+ * there is never what decides; no disk floor; and every room reading opened,
+ * Linux's (memory and CPU stall, swap left) and the Mac's (CPU busy, swap
+ * read back and swapped out) alike. Only the slot decides.
  */
-const ONE_SLOT = `PATH=${dirname(process.execPath)}:"$PATH" CAWCO_HEAVY_RUN_HELD= CAWCO_HEAVY_RUNS=1 CAWCO_HEAVY_MEMORY_STALL_MAX=100 CAWCO_HEAVY_CPU_STALL_MAX=100 CAWCO_HEAVY_RESERVE_GIB=0`;
+const ONE_SLOT = [
+  `PATH=${word(dirname(process.execPath))}:"$PATH"`,
+  "CAWCO_HEAVY_RUN_HELD=",
+  "CAWCO_HEAVY_RUNS=1",
+  "CAWCO_HEAVY_PEAK_GIB=0.01",
+  "CAWCO_MIN_FREE_GB=0",
+  "CAWCO_HEAVY_RESERVE_GIB=0",
+  "CAWCO_HEAVY_MEMORY_STALL_MAX=101",
+  "CAWCO_HEAVY_CPU_STALL_MAX=101",
+  "CAWCO_HEAVY_SWAP_FREE_MIN_PCT=0",
+  "CAWCO_HEAVY_CPU_BUSY_MAX=101",
+  "CAWCO_HEAVY_SWAPIN_MAX_MIB=1000000000",
+  "CAWCO_HEAVY_SWAP_USED_MAX_PCT=1000000000",
+].join(" ");
+/** The names the gate leg's two heavy runs take their slot under, as each one's record says it. */
+const LEFT_RUN = "probe-left-G";
+const GATE_RUN = "probe-gate-G";
 /** The gate step's log, in its workspace's scratch dir. */
 const STEP_LOG = "probe-gate-steps.log";
 /** The gate's one step: it takes the slot, then says so in its log. */
-const GATE = `---\n${ONE_SLOT} bash -c 'source scripts/lib/heavy-run.sh && heavy_run probe-gate-G && printf "TOOK gate %s\\n" "$(date +%s)" >> "$TMPDIR/${STEP_LOG}"'\n  name: heavy gate step\n---\n`;
+const GATE = `---\n${ONE_SLOT} bash -c 'source "$1" && heavy_run ${GATE_RUN} && printf "TOOK gate %s\\n" "$(date +%s)" >> "$TMPDIR/${STEP_LOG}"' heavy ${word(HEAVY_RUN)}\n  name: heavy gate step\n---\n`;
 /** What the gate delegate leaves running, holding the slot. */
 const SLOT_LEFT = "600.061";
+/** The leftover's own words, in its workspace's scratch dir: why it took no slot, when it took none. */
+const LEFT_ERR = "probe-left.err";
+/** Made by the leftover once it holds the slot, in its workspace's scratch dir. */
+const LEFT_HELD = "probe-left.held";
 /** The host process the first delegate's command signals ({@link hostWitness}). */
 const WITNESS = "600.051";
-/** The pre-tag pairs the probe starts: an archived workspace's, a live one's. */
+/** The pre-tag pairs the probe starts: a retired workspace's, a live one's. */
 const PRE_TAG = {
   gone: { runner: "600.071", child: "600.072" },
   live: { runner: "600.073", child: "600.074" },
 } as const;
+/** What keeps the fourth delegate's turn, and so its workspace, open through the agent's restart. */
+const LIVE_TURN = "600.081";
 
 /** Each leg's markers: the background, foreground and escaped `sleep`'s argument. */
 const markers = (leg: "1" | "2") => ({
@@ -145,7 +190,7 @@ const markers = (leg: "1" | "2") => ({
   escaped: `600.0${leg}3`,
 });
 type Markers = ReturnType<typeof markers>;
-const MARKER = /\bsleep (600\.0[1-7][1-4])\b/;
+const MARKER = /\bsleep (600\.0[1-8][1-4])\b/;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({
@@ -272,16 +317,26 @@ const gating: Record<"committed" | "finished" | "searched", boolean> = {
   searched: false,
 };
 
-/** The gate delegate: commits, leaves a `sleep` holding the heavy-run slot (once it holds it), then finishes. */
+/** What the gate delegate read last: the hub's words to it (a landing handed back, a gate that failed), for a failing leg to say. */
+let gateHeard = "";
+
+/**
+ * The gate delegate: commits, leaves a `sleep` that holds the heavy-run slot,
+ * double-forked into a session of its own, and waits until it holds it (its
+ * own words on stderr when it took none); then finishes. The `sleep`'s
+ * argument goes in as an argument, so only the `sleep` itself, once its shell
+ * holds the slot and execs it, reads as `sleep 600.061`.
+ */
 const gateReply = (request: Seen): Reply => {
+  gateHeard = request.all.slice(-1500);
   if (!gating.committed) {
     gating.committed = true;
-    const holder = `( ${ONE_SLOT} perl -MPOSIX -e 'fork and exit; POSIX::setsid(); exec @ARGV' bash -c 'source scripts/lib/heavy-run.sh && heavy_run probe-left-G && exec sleep ${SLOT_LEFT}' > /dev/null 2>&1 & )`;
-    const held = `for _ in $(seq 300); do pgrep -f '^sleep ${SLOT_LEFT}$' > /dev/null && break; sleep 0.2; done`;
+    const holder = `( ${ONE_SLOT} perl -MPOSIX -e 'fork and exit; POSIX::setsid(); exec @ARGV' bash -c 'source "$1" && heavy_run ${LEFT_RUN} && : > "$TMPDIR/${LEFT_HELD}" && exec sleep "$2"' heavy ${word(HEAVY_RUN)} ${SLOT_LEFT} > /dev/null 2> "$TMPDIR/${LEFT_ERR}" & )`;
+    const held = `for _ in $(seq 600); do [ -e "$TMPDIR/${LEFT_HELD}" ] && break; sleep 0.2; done; [ -e "$TMPDIR/${LEFT_HELD}" ] || { cat "$TMPDIR/${LEFT_ERR}" >&2; exit 1; }`;
     return useTool("Bash", {
       command: `printf 'G\\n' > g.txt && git add g.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate commit G' && ${holder} && ${held}`,
       description: "Commit, and leave a build holding the heavy-run slot",
-      timeout: 120_000,
+      timeout: 180_000,
     });
   }
   if (!gating.finished && request.toolNames.includes(FINISH)) {
@@ -301,6 +356,22 @@ const gateReply = (request: Seen): Reply => {
   return text("done");
 };
 
+/** Whether the fourth delegate has started the command that holds its turn open. */
+let liveStarted = false;
+
+/** The fourth delegate: one foreground `sleep 600.081`, which keeps its turn, its item and so its workspace open. */
+const liveReply = (): Reply => {
+  if (liveStarted) {
+    return text("ok");
+  }
+  liveStarted = true;
+  return useTool("Bash", {
+    command: `sleep ${LIVE_TURN}`,
+    description: "A long command",
+    timeout: 600_000,
+  });
+};
+
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
@@ -313,6 +384,9 @@ const respond = (request: Seen): Reply => {
   }
   if (request.all.includes(GATE_BRIEF)) {
     return gateReply(request);
+  }
+  if (request.all.includes(LIVE_BRIEF)) {
+    return liveReply();
   }
   return request.all.includes(BRIEF) ? delegateReply(request) : text("ok");
 };
@@ -372,11 +446,13 @@ interface Rig {
   itemOf: (
     item: string
   ) => { held_at: number | null; state: string } | undefined;
+  /** Its row now: its state, error and result. */
+  itemRow: (item: string) => ItemRow | undefined;
   mainLog: () => Promise<string[]>;
   workspaceOf: (item: string) => string | undefined;
 }
 
-/** The fleet up, its project made on a repository carrying the heavy-run gate, and its parent session. */
+/** The fleet up, its project made on a repository of one file, and its parent session. */
 const standUp = async (kit: Kit): Promise<Rig> => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
@@ -394,21 +470,7 @@ const standUp = async (kit: Kit): Promise<Rig> => {
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
   );
   const repo = join(fleet.sandbox, "code");
-  // The machine's heavy-run gate, copied from this checkout as CawCo's own
-  // repository carries it, so the gate leg's step and leftover take real slots.
-  await mkdir(join(repo, "scripts", "lib"), { recursive: true });
-  for (const file of ["heavy-run.sh", "heavy-run.ts", "disk-room.sh"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: three small files
-    await cp(
-      join(REPO, "scripts", "lib", file),
-      join(repo, "scripts", "lib", file)
-    );
-  }
-  await cp(
-    join(REPO, "packages", "core", "src"),
-    join(repo, "packages", "core", "src"),
-    { recursive: true }
-  );
+  await mkdir(repo, { recursive: true });
   await Bun.$`git init -q -b main && echo code > README.md && git add -A && git commit -qm 'First commit'`
     .cwd(repo)
     .env({ ...process.env, HOME: home })
@@ -472,6 +534,11 @@ const standUp = async (kit: Kit): Promise<Rig> => {
         "SELECT state, held_at FROM work_items WHERE id = ?",
         item
       )[0],
+    itemRow: (item) =>
+      fleet.query<ItemRow>(
+        "SELECT state, error, result FROM work_items WHERE id = ?",
+        item
+      )[0],
     mainLog: async () =>
       (await Bun.$`git log --format=%s main`.cwd(bare).nothrow().quiet().text())
         .trim()
@@ -484,8 +551,8 @@ const standUp = async (kit: Kit): Promise<Rig> => {
   };
 };
 
-/** i1, f1, i2, i3 and s1, on the first delegate; answers its item. */
-const firstLegs = async (rig: Rig): Promise<string> => {
+/** i1, f1, i2, i3 and s1, on the first delegate. */
+const firstLegs = async (rig: Rig): Promise<void> => {
   const { check, command, fleet } = rig;
   const turnOpen = (id: string) =>
     fleet.instance(id)?.turn_open_at !== null &&
@@ -574,7 +641,6 @@ const firstLegs = async (rig: Rig): Promise<string> => {
     of(afterStop, legTwo).length === 0,
     `${Math.round((Date.now() - stoppedAt) / 1000)} s after: ${said(afterStop)}`
   );
-  return first.workItemId;
 };
 
 /** Whether `path` is there. */
@@ -587,8 +653,77 @@ const there = (path: string): Promise<boolean> =>
 /** The hub's repository's hook that holds every push ({@link PUSH_HELD_S}). */
 const hookOf = (rig: Rig): string => join(rig.bare, "hooks", "pre-receive");
 
-/** l1, l2 and l3, on the landing delegate; answers its item. */
-const landLegs = async (rig: Rig): Promise<string> => {
+/** The membership rules a profile carries (agent boundary-policy.ts `seatbeltProfile`), to take out: what remains is a profile as a boundary before them started under. */
+const MEMBERSHIP_RULES =
+  /^\(deny mach-lookup \(global-name-prefix "dev\.cawco\.boundary\."\)\)\n\(allow mach-lookup\n(?: {2}\(global-name "[^"]*"\)\n)+\)\n/m;
+
+/** A pre-tag pair the probe started under a workspace's profile ({@link startPreTag}). */
+interface PreTag {
+  id: string;
+  /** The workspace's folder. */
+  path: string;
+  /** Whether the membership rules came out of its profile and none of them is left. */
+  stripped: boolean;
+}
+
+/**
+ * macOS: a pre-tag runner and its escaped child (`pair`), each adopted by
+ * launchd, under the profile item `workItem`'s workspace's boundary runs
+ * under now (`<HOME>/.cawco/workspaces/<id>/boundaries/<gen>/boundary.sb`,
+ * its generation named in `boundary.json`), its membership rules taken out;
+ * why not, in words, when that boundary is not there to read. Read while the
+ * boundary runs: a workspace's boundary closes, and its records go, once its
+ * item ends and nothing holds it (hub workspace-retire.ts).
+ */
+const startPreTag = async (
+  rig: Rig,
+  workItem: string,
+  pair: { child: string; runner: string }
+): Promise<PreTag | string> => {
+  const id = rig.workspaceOf(workItem) ?? "";
+  const state = join(rig.home, ".cawco", "workspaces", id);
+  try {
+    const held = JSON.parse(
+      await readFile(join(state, "boundary.json"), "utf8")
+    ) as { gen: string; path: string };
+    const profile = await readFile(
+      join(state, "boundaries", held.gen, "boundary.sb"),
+      "utf8"
+    );
+    const preTag = profile.replace(MEMBERSHIP_RULES, "");
+    const file = join(rig.fleet.sandbox, `pre-tag-${pair.runner}.sb`);
+    await writeFile(file, preTag);
+    Bun.spawn(
+      [
+        "perl",
+        "-MPOSIX",
+        "-e",
+        "fork and exit; POSIX::setsid(); exec @ARGV",
+        "/usr/bin/sandbox-exec",
+        "-f",
+        file,
+        "/bin/bash",
+        "-c",
+        `( perl -MPOSIX -e 'fork and exit; POSIX::setsid(); exec @ARGV' sleep ${pair.child} & ); exec sleep ${pair.runner}`,
+      ],
+      { cwd: held.path, stdio: ["ignore", "ignore", "ignore"] }
+    );
+    return {
+      id,
+      path: held.path,
+      stripped: preTag !== profile && !preTag.includes("dev.cawco.boundary."),
+    };
+  } catch (error) {
+    return `workspace ${id}'s boundary profile could not be read: ${String(error)}`;
+  }
+};
+
+/**
+ * l1, l2 and l3, on the landing delegate. On macOS it also starts the
+ * landing delegate's pre-tag pair while its push is held and its boundary
+ * runs, and answers it (p1).
+ */
+const landLegs = async (rig: Rig): Promise<PreTag | string | undefined> => {
   const { check, fleet } = rig;
   // l1: the hub's repository holds every push in its pre-receive hook.
   const landDir = join(fleet.sandbox, "land");
@@ -623,6 +758,11 @@ const landLegs = async (rig: Rig): Promise<string> => {
     pushing.length > 0 && cut.length === 0 && !takenEarly,
     `the push: ${pushing.join(", ") || "never found"}; gone: ${cut.join(", ") || "none"}; the hub had ${takenEarly ? "already" : "not yet"} taken it; what it left running at the interrupt: ${leftAtInterrupt.join(", ") || "nothing"}`
   );
+  // p1's pair, while the push is still held and the boundary runs.
+  const gone =
+    process.platform === "darwin"
+      ? await startPreTag(rig, landed.workItemId, PRE_TAG.gone)
+      : undefined;
 
   // l2
   const landRow = await rig.itemEnded(landed.workItemId);
@@ -650,77 +790,118 @@ const landLegs = async (rig: Rig): Promise<string> => {
     leftAtInterrupt.length > 0 && !afterLanding.has(LANDED_LEFT),
     `at the interrupt: ${leftAtInterrupt.join(", ") || "nothing"}; ${Math.round((Date.now() - landEndedAt) / 1000)} s after the landing: ${said(afterLanding)}`
   );
-  return landed.workItemId;
+  return gone;
 };
 
-/** The profile each of `items`' workspace's boundary runs under now, read off its generation's dir; why not, when one cannot be read. */
-const readProfiles = (
-  rig: Rig,
-  items: readonly string[]
-): Promise<Profile[] | string> =>
+/** A heavy run's record in the slots' dir (core heavy-run.ts `Written`): who holds a slot, or waits on a gate's ticket. */
+interface HeavyRecord {
+  command: string;
+  gate?: string;
+  pid: number;
+}
+
+/** A slot's file, or a gate's ticket: `slot-<i>`, `gate-<arrival>-<pid>` (core heavy-run.ts). */
+const HEAVY_FILE = /^(slot-\d+|gate-\d{15}-\d+)$/;
+
+/** The fleet's heavy-run slots and gate tickets, each with the record its run wrote, read on the host. */
+const heavyFiles = async (
+  dir: string
+): Promise<{ name: string; record?: HeavyRecord }[]> =>
   Promise.all(
-    items.map(async (workItem) => {
-      const id = rig.workspaceOf(workItem) ?? "";
-      const state = join(rig.home, ".cawco", "workspaces", id);
-      const held = JSON.parse(
-        await readFile(join(state, "boundary.json"), "utf8")
-      ) as { gen: string; path: string };
-      return {
-        id,
-        path: held.path,
-        profile: await readFile(
-          join(state, "boundaries", held.gen, "boundary.sb"),
-          "utf8"
+    (await readdir(dir).catch(() => [] as string[]))
+      .filter((name) => HEAVY_FILE.test(name))
+      .map(async (name) => ({
+        name,
+        record: await readFile(join(dir, name), "utf8").then(
+          (raw) => JSON.parse(raw) as HeavyRecord,
+          () => undefined
         ),
-      };
-    })
-  ).catch((error: unknown) => String(error));
+      }))
+  );
+
+/**
+ * The run named `command` on a `slot` it holds or a `gate` ticket it waits
+ * on, while that run is alive: a slot's record outlives its hold, and a
+ * ticket its holder (core heavy-run.ts), so the run's pid decides.
+ */
+const heavyRun = async (
+  dir: string,
+  kind: "slot" | "gate",
+  command: string
+): Promise<HeavyRecord | undefined> =>
+  (await heavyFiles(dir)).find(
+    ({ name, record }) =>
+      name.startsWith(`${kind}-`) &&
+      record?.command === command &&
+      isAlive(listedPid(record.pid))
+  )?.record;
+
+/** The slots' dir in words, for a failing leg to say. */
+const heavySaid = async (dir: string): Promise<string> =>
+  (await heavyFiles(dir))
+    .map(({ name, record }) =>
+      record
+        ? `${name}: ${record.command} (pid ${record.pid}, ${isAlive(listedPid(record.pid)) ? "alive" : "gone"})`
+        : `${name}: no record`
+    )
+    .join("; ") || "empty";
 
 /** g1, g2 and g3, on the gate delegate. */
 const gateLegs = async (rig: Rig): Promise<void> => {
   const { check } = rig;
+  const g1 =
+    "g1: within 15 s of interrupt_delegate, its leftover holding the heavy-run slot its gate step waits for is not alive";
   await rm(hookOf(rig), { force: true });
-  await mkdir(join(rig.home, ".cawco", "workspace-cache", "heavy-runs"), {
-    recursive: true,
-  });
+  const slots = join(rig.home, ".cawco", "workspace-cache", "heavy-runs");
+  await mkdir(slots, { recursive: true });
   const project = rig.bare.slice(rig.bare.lastIndexOf("/") + 1, -".git".length);
   await declareGate(rig.fleet.base, project, GATE);
   const gated = await rig.delegate(
     "Gate",
     `${GATE_BRIEF}: commit, then finish.`
   );
-  await until(
-    `its ${SLOT_LEFT} holding the heavy-run slot`,
-    alive,
-    (found) => found.has(SLOT_LEFT),
-    300_000
-  );
-  const gWorkspace = await until(
-    "its workspace",
-    () => rig.workspaceOf(gated.workItemId),
+  const gWorkspace =
+    (await until(
+      "its workspace",
+      () => rig.workspaceOf(gated.workItemId),
+      Boolean,
+      120_000
+    )) ?? "";
+  const scratch = join(rig.home, ".cawco", "tmp", gWorkspace.slice(0, 8));
+  const gateLog = () =>
+    readFile(join(scratch, STEP_LOG), "utf8").catch(() => "");
+  const leftSaid = async () =>
+    (await readFile(join(scratch, LEFT_ERR), "utf8").catch(() => "")).trim() ||
+    "nothing";
+  const leftover = await until(
+    `its ${SLOT_LEFT} holding the one heavy-run slot`,
+    () => heavyRun(slots, "slot", LEFT_RUN),
     Boolean,
-    60_000
-  );
-  const stepLog = join(
-    rig.home,
-    ".cawco",
-    "tmp",
-    (gWorkspace ?? "").slice(0, 8),
-    STEP_LOG
-  );
-  const gateLog = () => readFile(stepLog, "utf8").catch(() => "");
-  await until(
-    "its gate step waiting for the slot",
-    async () =>
-      (await commandLines()).some((line) =>
-        line.command.includes("heavy_run probe-gate-G")
-      ),
+    300_000
+  ).catch(() => undefined);
+  if (!leftover) {
+    check(
+      g1,
+      false,
+      `its leftover never held the slot. The slots: ${await heavySaid(slots)}; the leftover said: ${await leftSaid()}; the delegate last read: ${JSON.stringify(gateHeard)}`
+    );
+    return;
+  }
+  const queued = await until(
+    "its gate step queued on the slot",
+    () => heavyRun(slots, "gate", GATE_RUN),
     Boolean,
     600_000
-  );
-  await Bun.sleep(3000);
-  const tookFirst = (await gateLog()).includes("TOOK gate");
-  const holding = (await alive()).get(SLOT_LEFT) ?? [];
+  ).catch(() => undefined);
+  if (!queued) {
+    check(
+      g1,
+      false,
+      `its gate step never queued on the slot. The slots: ${await heavySaid(slots)}; its item: ${JSON.stringify(rig.itemRow(gated.workItemId))}; the delegate last read: ${JSON.stringify(gateHeard)}`
+    );
+    return;
+  }
+  const holding = await heavyRun(slots, "slot", LEFT_RUN);
   const gInterruptedAt = Date.now();
   await rig.command("interrupt", gated.instanceId);
   const afterGate = await until(
@@ -730,9 +911,11 @@ const gateLegs = async (rig: Rig): Promise<void> => {
     15_000
   ).catch(() => alive());
   check(
-    "g1: within 15 s of interrupt_delegate, its leftover holding the heavy-run slot its gate step waits for is not alive",
-    holding.length > 0 && !tookFirst && !afterGate.has(SLOT_LEFT),
-    `holding the slot at the interrupt: ${holding.join(", ") || "nothing"}; the gate step had ${tookFirst ? "already" : "not"} taken it; ${Math.round((Date.now() - gInterruptedAt) / 1000)} s after: ${said(afterGate)}`
+    g1,
+    holding?.pid === leftover.pid &&
+      !isAlive(listedPid(leftover.pid)) &&
+      !afterGate.has(SLOT_LEFT),
+    `the slot was held by ${LEFT_RUN} (pid ${leftover.pid}) ${holding?.pid === leftover.pid ? "at the interrupt" : "until before the interrupt"}, ${GATE_RUN} queued behind it (${queued.gate ?? "no gate named"}, pid ${queued.pid}); ${Math.round((Date.now() - gInterruptedAt) / 1000)} s after: ${said(afterGate)}; the slots: ${await heavySaid(slots)}`
   );
 
   // g2
@@ -745,77 +928,51 @@ const gateLegs = async (rig: Rig): Promise<void> => {
   check(
     "g2: the gate step takes the slot and runs",
     took.includes("TOOK gate"),
-    took.trim() || "its step log is empty"
+    took.trim() || `its step log is empty; the slots: ${await heavySaid(slots)}`
   );
 
-  // g3
-  const gRow = await rig.itemEnded(gated.workItemId).catch(() => undefined);
+  // g3: waited for only once its gate has run; a gate that never ran lands nothing.
+  const gRow = took.includes("TOOK gate")
+    ? await rig.itemEnded(gated.workItemId).catch(() => undefined)
+    : rig.itemRow(gated.workItemId);
   const gMain = await rig.mainLog();
   check(
     "g3: the item lands: done, and the hub's main holds its commit",
     gRow?.state === "done" && gMain.includes("Delegate commit G"),
-    `${gRow?.state ?? "not ended"} ${`${gRow?.error ?? ""}\n${gRow?.result ?? ""}`.slice(0, 1500)}\nmain: ${gMain.join(" | ")}`
+    `${gRow?.state ?? "no row"} ${`${gRow?.error ?? ""}\n${gRow?.result ?? ""}`.slice(0, 1500)}\nmain: ${gMain.join(" | ")}; the delegate last read: ${JSON.stringify(gateHeard)}`
   );
 };
 
-/** A workspace's boundary profile, as the probe read it off its generation's dir. */
-interface Profile {
-  id: string;
-  path: string;
-  profile: string;
-}
-
-/** The membership rules a profile carries (agent boundary-policy.ts `seatbeltProfile`), to take out: what remains is a profile as a boundary before them started under. */
-const MEMBERSHIP_RULES =
-  /^\(deny mach-lookup \(global-name-prefix "dev\.cawco\.boundary\."\)\)\n\(allow mach-lookup\n(?: {2}\(global-name "[^"]*"\)\n)+\)\n/m;
-
 /**
- * p1 and p2: a pre-tag runner and its escaped child under each of two
- * workspaces' profiles, membership rules taken out (`live`, the first
- * delegate's; `gone`, the landing delegate's), each adopted by launchd; the
- * `gone` workspace archived; the agent started again.
+ * p1 and p2: the landing delegate's pre-tag pair (`gone`, started while its
+ * push was held, {@link landLegs}); a fourth delegate whose turn stays open
+ * on a `sleep 600.081`, and a pre-tag pair under its workspace's profile
+ * (`live`); the landing delegate's workspace gone, as the hub retires one
+ * whose work landed (hub workspace-retire.ts), archived here when it has not
+ * yet; then the agent started again.
  */
-const preTagLegs = async (rig: Rig, profiles: readonly Profile[] | string) => {
+const preTagLegs = async (rig: Rig, gone: PreTag | string): Promise<void> => {
   const { check, fleet } = rig;
-  const [live, gone] = typeof profiles === "string" ? [] : profiles;
-  if (!(live && gone)) {
+  const p1 =
+    "p1: within 90 s of the agent's start, what a retired workspace's pre-tag boundary started is not alive";
+  const kept = await rig.delegate("Live", `${LIVE_BRIEF}: run the command.`);
+  const turning = await until(
+    `its ${LIVE_TURN} running`,
+    alive,
+    (found) => found.has(LIVE_TURN),
+    180_000
+  ).catch(() => undefined);
+  const live = turning
+    ? await startPreTag(rig, kept.workItemId, PRE_TAG.live)
+    : `its ${LIVE_TURN} never ran`;
+  if (typeof gone === "string" || typeof live === "string") {
     check(
-      "p1: within 90 s of the agent's start, what an archived workspace's pre-tag boundary started is not alive",
+      p1,
       false,
-      `its workspaces' profiles could not be read: ${String(profiles)}`
+      `the pre-tag boundaries could not be started: ${typeof gone === "string" ? gone : "the retired one's started"}; ${typeof live === "string" ? live : "the live one's started"}`
     );
     return;
   }
-  const stripped = await Promise.all(
-    (
-      [
-        [gone, PRE_TAG.gone],
-        [live, PRE_TAG.live],
-      ] as const
-    ).map(async ([space, pair]) => {
-      const preTag = space.profile.replace(MEMBERSHIP_RULES, "");
-      const file = join(fleet.sandbox, `pre-tag-${pair.runner}.sb`);
-      await writeFile(file, preTag);
-      Bun.spawn(
-        [
-          "perl",
-          "-MPOSIX",
-          "-e",
-          "fork and exit; POSIX::setsid(); exec @ARGV",
-          "/usr/bin/sandbox-exec",
-          "-f",
-          file,
-          "/bin/bash",
-          "-c",
-          `( perl -MPOSIX -e 'fork and exit; POSIX::setsid(); exec @ARGV' sleep ${pair.child} & ); exec sleep ${pair.runner}`,
-        ],
-        { cwd: space.path, stdio: ["ignore", "ignore", "ignore"] }
-      );
-      return (
-        preTag !== space.profile && !preTag.includes("dev.cawco.boundary.")
-      );
-    })
-  );
   const wanted = [
     ...Object.values(PRE_TAG.gone),
     ...Object.values(PRE_TAG.live),
@@ -826,77 +983,68 @@ const preTagLegs = async (rig: Rig, profiles: readonly Profile[] | string) => {
     (found) => wanted.every((mark) => found.has(mark)),
     30_000
   ).catch(() => alive());
-  const pids = wanted.flatMap((mark) => running.get(mark) ?? []);
-  const readsPreTag = pids.every(
-    (pid) =>
-      seatbeltLetsLookUp(pid, "dev.cawco.boundary.") === true &&
-      seatbeltLetsLookUp(pid, "com.apple.SecurityServer") === false
-  );
-  const archive = async (): Promise<{ state: string }> => {
-    try {
-      return await fleet.api<{ state: string }>(
-        `/api/workspaces/${gone.id}/archive`,
-        {}
+  const readsPreTag = wanted
+    .flatMap((mark) => running.get(mark) ?? [])
+    .every(
+      (pid) =>
+        seatbeltLetsLookUp(pid, "dev.cawco.boundary.") === true &&
+        seatbeltLetsLookUp(pid, "com.apple.SecurityServer") === false
+    );
+  const removed = async () => !(await there(gone.path));
+  let how = "retired by the hub";
+  if (
+    !(await until("its workspace retired", removed, Boolean, 180_000).catch(
+      () => false
+    ))
+  ) {
+    const answer = await fleet
+      .api<{ state: string }>(`/api/workspaces/${gone.id}/archive`, {})
+      .then(
+        (archived) => archived.state,
+        (error: unknown) => String(error)
       );
-    } catch (error) {
-      return { state: String(error) };
-    }
-  };
-  const archived = await until(
-    "the landing delegate's workspace archived",
-    archive,
-    (answer) => answer.state === "archived",
-    120_000
-  ).catch(() => archive());
-  const cloneGone = await until(
-    "its clone gone",
-    async () => !(await there(gone.path)),
-    Boolean,
-    60_000
-  ).catch(() => false);
+    how = `archived (${answer})`;
+    await until("its workspace archived", removed, Boolean, 60_000).catch(
+      () => false
+    );
+  }
+  const goneNow = await removed();
   await fleet.stop("agent");
   fleet.launch("agent");
   await fleet.agentUp();
   const startedAt = Date.now();
   const after = await until(
-    "the archived workspace's pair not alive",
+    "the retired workspace's pair not alive",
     alive,
     (found) =>
       !(found.has(PRE_TAG.gone.runner) || found.has(PRE_TAG.gone.child)),
     90_000
   ).catch(() => alive());
   check(
-    "p1: within 90 s of the agent's start, what an archived workspace's pre-tag boundary started is not alive",
-    stripped.every(Boolean) &&
+    p1,
+    gone.stripped &&
+      live.stripped &&
       readsPreTag &&
       wanted.every((mark) => running.has(mark)) &&
-      archived.state === "archived" &&
-      cloneGone &&
+      goneNow &&
       !(after.has(PRE_TAG.gone.runner) || after.has(PRE_TAG.gone.child)),
-    `membership rules taken out of both profiles: ${stripped.every(Boolean)}; started: ${said(running)}; each reads pre-tag: ${readsPreTag}; ${gone.id} ${archived.state}, its clone ${cloneGone ? "gone" : "still there"}; ${Math.round((Date.now() - startedAt) / 1000)} s after the agent's start: ${said(after)}`
+    `membership rules taken out of both profiles: ${gone.stripped && live.stripped}; started: ${said(running)}; each reads pre-tag: ${readsPreTag}; workspace ${gone.id} ${how}, its clone ${goneNow ? "gone" : "still there"}; ${Math.round((Date.now() - startedAt) / 1000)} s after the agent's start: ${said(after)}`
   );
   check(
     "p2: the pre-tag pair of a workspace still here runs on",
     after.has(PRE_TAG.live.runner) && after.has(PRE_TAG.live.child),
-    `${live.id}'s pair after the agent's start: ${said(after)}`
+    `workspace ${live.id}'s pair after the agent's start: ${said(after)}`
   );
 };
 
 const run = async (kit: Kit) => {
   const rig = await standUp(kit);
   try {
-    const first = await firstLegs(rig);
-    const landed = await landLegs(rig);
-    // p: the profiles the first and the landing delegate's boundaries run
-    // under, read now, while both run; macOS alone, where a boundary is a
-    // Seatbelt profile.
-    const profiles =
-      process.platform === "darwin"
-        ? await readProfiles(rig, [first, landed])
-        : undefined;
+    await firstLegs(rig);
+    const gone = await landLegs(rig);
     await gateLegs(rig);
-    if (profiles !== undefined) {
-      await preTagLegs(rig, profiles);
+    if (gone !== undefined) {
+      await preTagLegs(rig, gone);
     }
   } finally {
     // What a failing leg left: the probe's own markers, and nothing else.
