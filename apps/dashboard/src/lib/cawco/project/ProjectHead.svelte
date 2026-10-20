@@ -460,14 +460,14 @@
     <!-- New work starts by telling Caw (PRD §5.6): his panel on a new
          thread, the caret in his composer. -->
     <Button
-      class="max-phone:hidden"
+      layout="wide"
       press="pressable"
       data-new-session
       onclick={() => lead.newThread()}>Ask Caw</Button
     >
     {#if primary}
       <Button
-        class="max-phone:hidden"
+        layout="wide"
         press="pressable"
         data-share="session:new"
         data-share-ttl="8000"

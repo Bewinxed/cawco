@@ -8,6 +8,7 @@
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
   import { PROSE } from "#lib/prose.js";
+  import { cn } from "#lib/utils.js";
   import { draw, stepping } from "../collapsible/draw";
 
   let {
@@ -15,10 +16,14 @@
     invert = false,
     streaming = false,
     fades = false,
+    class: className,
   }: {
     source: string;
     invert?: boolean;
     streaming?: boolean;
+    /** Its prose root's own utilities, over the house prose (a surface whose
+        type the prose takes, as the release notes' panel). */
+    class?: string;
     /**
      * Fade in what each streamed chunk adds, and the last words a message
      * draws as it settles. Only ever the words a chunk ADDS: the text already
@@ -255,7 +260,7 @@
       animateOnMount: true,
       tokenize: "word",
     }}
-    class="{PROSE} {invert ? 'prose-invert' : ''}"
+    class={cn(PROSE, invert && "prose-invert", className)}
     {content}
     controls={{ mermaid: false, table: false }}
     mergeTheme={false}

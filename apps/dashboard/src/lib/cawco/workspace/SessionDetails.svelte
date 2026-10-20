@@ -517,7 +517,7 @@
 </script>
 
 {#snippet modelChip()}
-  <ProviderLogo model={model ?? ""} size={15} />
+  <ProviderLogo model={model ?? ""} size="control" />
   <span data-slot="chip-label"
     >{model
       ? modelName(model, modelInfo?.displayName).name

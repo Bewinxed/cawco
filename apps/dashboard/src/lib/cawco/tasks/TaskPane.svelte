@@ -520,10 +520,7 @@
             class="mark-line m-0 flex min-w-0 items-start gap-space-2 type-meta text-ink-muted"
           >
             <span class="mark-cell"
-              ><ProviderLogo
-                class="size-icon-sm"
-                provider={issue.provider}
-              /></span
+              ><ProviderLogo provider={issue.provider} size="meta" /></span
             >
             {#if issue.url}
               <span data-slot="issue-words" class="min-w-0 wrap-anywhere"

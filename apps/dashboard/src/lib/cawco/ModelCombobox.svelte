@@ -125,7 +125,8 @@
         {...props}
         aria-expanded={open}
         aria-label={unreported ? "Model, not reported yet" : "Model"}
-        class="justify-between {className}"
+        align="trigger"
+        class={className}
         gap="loose"
         role="combobox"
         {size}

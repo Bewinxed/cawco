@@ -4,8 +4,8 @@
 
   /** Its callers' looks, each as they drew it: the mono face for what is
       typed exactly (a path, a command, a key), a text size, the small
-      control height beside an `sm` select or button, tight pads for a short
-      figure, and how wide it may run. */
+      control height beside an `sm` select or button, a number field, and
+      how wide it may run. */
   export const inputVariants = tv({
     variants: {
       face: { mono: "font-mono" },
@@ -13,7 +13,12 @@
       /** `sm`: the 30px small control, level with an `sm` NativeSelect or
           Button in the same row. */
       size: { sm: "h-c-btn-h-sm" },
-      pad: { tight: "px-space-2" },
+      /** A field for a short figure (a share, minutes, thousands of
+          tokens): the number field's width, tight pads, and its figure
+          centred in tabular widths (DESIGN.md, The Tabular Figure Rule). */
+      field: {
+        number: "w-c-number-field-w px-space-2 text-center tabular-nums",
+      },
       measure: {
         shrink: "min-w-0",
         "cap-sm": "max-w-64",
@@ -54,14 +59,14 @@
     face,
     text,
     size,
-    pad,
+    field: kind,
     measure,
     flex,
     "data-slot": dataSlot = "input",
     ...restProps
   }: Props = $props();
   const looks = $derived(
-    inputVariants({ face, text, size, pad, measure, flex })
+    inputVariants({ face, text, size, field: kind, measure, flex })
   );
   /** The field's own look, the same for a file picker and a text field. */
   const field = [

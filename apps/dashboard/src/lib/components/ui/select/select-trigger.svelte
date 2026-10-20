@@ -5,13 +5,22 @@
   /** Its callers' looks, each as they drew it. */
   export const selectTriggerVariants = tv({
     variants: {
+      /** Its height: the input's (DESIGN.md, Inputs and fields: "Select
+          trigger: the input's look"), the 30px small control, or a control
+          standing in a composer shell (DESIGN.md, Composer: 34px). */
+      size: {
+        default: "h-c-input-h",
+        sm: "h-c-btn-h-sm",
+        composer: "h-c-composer-field",
+      },
       /** Sharing a row equally with its siblings, however long its words. */
       measure: { share: "min-w-0 basis-0" },
       tone: { strong: "text-ink-strong" },
       look: {
-        /** In a view's bar: it shrinks, and takes the bar's control corner. */
+        /** In a view's bar: it shrinks, takes the bar's control corner, and
+            clips the name it morphs while its width follows. */
         "in-bar":
-          "group-data-bar:min-w-0 group-data-bar:rounded-(--bar-control-radius)",
+          "group-data-bar:min-w-0 group-data-bar:overflow-clip group-data-bar:rounded-(--bar-control-radius)",
         /** A plain field: the small corner, the control's edge, field pads. */
         field: "rounded-sm border border-border-control px-space-3 py-space-2",
       },
@@ -46,7 +55,6 @@
     ...restProps
   }: WithoutChild<SelectPrimitive.TriggerProps> &
     SelectTriggerLooks & {
-      size?: "sm" | "default";
       /** A trigger stretched wider than a control tints on press instead of
         scaling (app.css, press feedback). */
       press?: "scale" | "tint";
@@ -62,7 +70,7 @@
     press === "scale"
       ? "pressable [transition:var(--transition-control),transform_var(--dur-toggle)_var(--ease-out)]"
       : "press-tint [transition:var(--transition-control)]",
-    "mark-line flex w-fit data-[size=default]:h-9 data-[size=sm]:h-[30px]",
+    "mark-line flex w-fit",
     "items-center justify-between gap-1.5 whitespace-nowrap",
     "border border-[var(--border-control)] [--hit-edge:1px]",
     "bg-[var(--surface-raised)] px-3 text-[var(--ink-strong)]",
@@ -76,7 +84,7 @@
     "dark:aria-invalid:border-error-9/50",
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
-    selectTriggerVariants({ measure, tone, look, chosen }),
+    selectTriggerVariants({ size, measure, tone, look, chosen }),
     className
   )}
   data-size={size}

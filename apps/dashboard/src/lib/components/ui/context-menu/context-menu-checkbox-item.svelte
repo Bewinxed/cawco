@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
+  import { tickVariants } from "#lib/components/ui/checkbox/checkbox.svelte";
   import { IconTick } from "#lib/icons.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
 
@@ -32,7 +33,7 @@
 >
   {#snippet children({ checked })}
     <span class="absolute right-2 pointer-events-none" data-box>
-      <IconTick class="kit-tick" data-on={checked} />
+      <IconTick class={tickVariants({ clock: "menu" })} data-on={checked} />
     </span>
     {@render childrenProp?.()}
   {/snippet}

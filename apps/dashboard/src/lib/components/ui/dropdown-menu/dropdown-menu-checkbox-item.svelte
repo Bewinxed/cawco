@@ -1,6 +1,7 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
+  import { tickVariants } from "#lib/components/ui/checkbox/checkbox.svelte";
   import { IconMinus, IconTick } from "#lib/icons.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
 
@@ -36,7 +37,7 @@
       {#if indeterminate}
         <IconMinus />
       {:else}
-        <IconTick class="kit-tick" data-on={checked} />
+        <IconTick class={tickVariants({ clock: "menu" })} data-on={checked} />
       {/if}
     </span>
     {@render childrenProp?.()}

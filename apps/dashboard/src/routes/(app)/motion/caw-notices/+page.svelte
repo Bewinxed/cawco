@@ -392,7 +392,6 @@
       <div class="type-meta grid gap-space-1 text-ink-muted">
         <span>Fixture</span>
         <ToggleGroup.Root
-          class="flex-wrap"
           onValueChange={(next) => {
             if (next) {
               fixture = next as Fixture;
@@ -412,7 +411,6 @@
       <div class="type-meta grid gap-space-1 text-ink-muted">
         <span>Width</span>
         <ToggleGroup.Root
-          class="flex-wrap"
           onValueChange={(next) => {
             if (next) {
               width = next as Width;

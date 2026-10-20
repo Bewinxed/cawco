@@ -1073,10 +1073,10 @@
       data-pop-foot
     >
       <Button
-        class={sheet ? "h-c-btn-h-lg w-full" : undefined}
+        class={sheet ? "w-full" : undefined}
         href="/usage"
         label="Open usage"
-        size="sm"
+        size={sheet ? "lg" : "sm"}
         variant="outline"
       />
     </div>

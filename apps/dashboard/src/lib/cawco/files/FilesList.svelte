@@ -754,7 +754,10 @@
                    centred in one 28px lead column, so every name starts on
                    one text column; its Show in conversation at the row's
                    end. -->
-              <li class="group/row relative rounded-sm" data-files-row>
+              <li
+                class="group/row relative grid grid-cols-1 rounded-sm *:col-start-1 *:row-start-1"
+                data-files-row
+              >
                 {#if file.open.kind === "file"}
                   {#if file.open.href}
                     <a
@@ -793,12 +796,14 @@
                      under a finger. -->
                 <Button
                   aria-label="Show {file.name} in conversation"
-                  class="absolute end-space-1 top-1/2 -translate-y-1/2 text-ink-muted opacity-0 transition-[opacity] dur-control ease-out group-focus-within/row:opacity-100 group-hover/row:opacity-100 coarse:opacity-100"
+                  class="relative me-space-1 self-center justify-self-end"
                   data-files-show
                   icon={IconChevronRight}
                   onclick={() => onshow(file)}
+                  reveal="row-reach"
                   size="icon-xs"
                   title="Show in conversation"
+                  tone="muted"
                   variant="ghost"
                 />
               </li>

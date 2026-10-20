@@ -1401,9 +1401,10 @@
           bind:value={
             () => reasons.get(item.id) ?? "", (v) => reasons.set(item.id, v)
           }
-          class="flex-auto h-c-btn-h-sm"
+          class="flex-auto"
           measure="shrink"
           placeholder="Why this is no longer owed"
+          size="sm"
         />
         <Button
           disabled={!reason.trim()}
@@ -1678,9 +1679,10 @@
                   >
                     <Input
                       aria-label="Why all {failures.length} are no longer owed"
-                      class="flex-auto h-c-btn-h-sm"
+                      class="flex-auto"
                       measure="shrink"
                       placeholder="Why these are no longer owed"
+                      size="sm"
                       bind:ref={allField}
                       bind:value={allReason}
                     />

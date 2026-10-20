@@ -207,10 +207,11 @@
               ? "reserve-line"
               : undefined}
             aria-invalid={reservePct === undefined ? "true" : undefined}
-            class="num h-c-btn-h-sm w-c-number-field-w flex-none text-center"
-            pad="tight"
+            class="flex-none"
+            field="number"
             id="reserve"
             inputmode="numeric"
+            size="sm"
             bind:value={fields.reserve}
           />
           <span>{words.editor.reserveUnit}</span>

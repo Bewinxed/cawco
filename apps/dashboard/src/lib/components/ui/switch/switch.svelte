@@ -31,7 +31,14 @@
   class={cn(
     "peer group/switch relative inline-flex shrink-0 items-center",
     "rounded-[var(--radius-pill)] border border-transparent",
-    "kit-switch touch-hit pointer-hit",
+    /* Its track's colour turns over --dur-toggle, and it takes the press
+       every compact control takes (DESIGN.md, The Press Rule) where motion
+       is welcome. Its hit area is .pointer-hit's 24px on a pointer device
+       and .touch-hit's 44px on a touch screen; the drawn track and the
+       layout do not change. */
+    "touch-hit pointer-hit",
+    "[transition:background-color_var(--dur-toggle)_var(--ease-out),transform_var(--dur-toggle)_var(--ease-out)]",
+    "motion-safe:active:not-data-[disabled]:[transform:scale(var(--press-scale))]",
     "aria-invalid:border-error-9",
     "data-[size=default]:h-[18.4px] data-[size=sm]:h-[14px]",
     "data-[size=default]:w-[32px] data-[size=sm]:w-[24px]",
@@ -50,7 +57,7 @@
 >
   <SwitchPrimitive.Thumb
     data-switch-block
-    class="rounded-[var(--radius-pill)] bg-surface-page group-data-[size=default]/switch:size-icon-md group-data-[size=sm]/switch:size-icon-sm group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] dark:data-checked:bg-on-action group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-ink-strong kit-switch-thumb pointer-events-none block ring-0 rtl:data-[state=checked]:not-group-data-[size=default]/switch:not-group-data-[size=sm]/switch:translate-x-[calc(-100%)]"
+    class="rounded-[var(--radius-pill)] bg-surface-page group-data-[size=default]/switch:size-icon-md group-data-[size=sm]/switch:size-icon-sm group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] dark:data-checked:bg-on-action group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-ink-strong motion-safe:[transition:translate_var(--dur-toggle)_var(--ease-in-out)] pointer-events-none block ring-0 rtl:data-[state=checked]:not-group-data-[size=default]/switch:not-group-data-[size=sm]/switch:translate-x-[calc(-100%)]"
     data-slot="switch-thumb"
   />
 </SwitchPrimitive.Root>

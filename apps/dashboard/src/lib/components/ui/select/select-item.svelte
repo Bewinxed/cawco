@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Select as SelectPrimitive } from "bits-ui";
+  import { tickVariants } from "#lib/components/ui/checkbox/checkbox.svelte";
   import { IconTick } from "#lib/icons.js";
   import { cn, type WithoutChild } from "#lib/utils.js";
 
@@ -28,7 +29,7 @@
       class="absolute end-2 flex size-icon-md items-center justify-center"
       data-box
     >
-      <IconTick class="kit-tick" data-on={selected} />
+      <IconTick class={tickVariants({ clock: "menu" })} data-on={selected} />
     </span>
     <!-- The mark line the item's own words and marks stand on: a box to the
          item around it. -->

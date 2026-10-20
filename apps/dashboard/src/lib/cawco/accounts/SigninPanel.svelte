@@ -72,9 +72,10 @@
       aria-invalid={flow.problem ? "true" : undefined}
       aria-label={words.codeLabel}
       autocomplete="off"
-      class="h-c-btn-h-sm flex-1"
+      class="flex-1"
       disabled={flow.url === null || flow.phase === "signed-in"}
       placeholder={words.codePlaceholder}
+      size="sm"
       spellcheck="false"
       bind:value={flow.code}
     />

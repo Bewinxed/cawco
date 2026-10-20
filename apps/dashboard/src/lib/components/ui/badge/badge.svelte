@@ -3,7 +3,9 @@
   import { tv } from "#lib/utils.js";
 
   export const badgeVariants = tv({
-    base: "group/badge mark-line inline-flex h-icon-lg w-fit shrink-0 items-center justify-center gap-space-1 overflow-hidden whitespace-nowrap rounded-xs bg-[var(--surface-recess)] px-1.5 text-[var(--ink-strong)] text-label leading-none transition-colors has-data-[icon=inline-end]:pr-space-1 has-data-[icon=inline-start]:pl-space-1 [&>svg]:pointer-events-none [&>svg]:size-icon-sm",
+    /* A badge that opens something (a popover's trigger says so with
+       `aria-haspopup`) takes the pointer's hand. */
+    base: "group/badge mark-line inline-flex h-icon-lg w-fit shrink-0 items-center justify-center gap-space-1 overflow-hidden whitespace-nowrap rounded-xs bg-[var(--surface-recess)] px-1.5 text-[var(--ink-strong)] text-label leading-none transition-colors has-data-[icon=inline-end]:pr-space-1 has-data-[icon=inline-start]:pl-space-1 [&[aria-haspopup]]:cursor-pointer [&>svg]:pointer-events-none [&>svg]:size-icon-sm",
     variants: {
       variant: {
         default: "",
@@ -15,18 +17,31 @@
         attn: "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]",
         done: "bg-[var(--status-done-bg)] text-[var(--status-done-ink)]",
         fail: "bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]",
+        /* A release note's section (DESIGN.md, Update notice: "New in
+           `note-new-*` with stars, Improved in `note-improved-*` with a
+           rising graph, Fixed in `note-fixed-*` with a bug; each ink holds
+           4.5:1 on its fill in both themes"). */
+        "note-new": "bg-note-new-bg text-note-new-ink",
+        "note-improved": "bg-note-improved-bg text-note-improved-ink",
+        "note-fixed": "bg-note-fixed-bg text-note-fixed-ink",
         link: "bg-transparent text-link-ink underline-offset-4 hover:underline",
       },
       /* The looks its callers draw over a variant, each as they drew it. */
       /**
        * A cell's chip: at least 24px tall, wider pads; or with room above and
-       * below for a wrapped line. A tab's count: its numeral at meta size.
+       * below for its words, which wrap and grow it line by line from the
+       * start (an update's long status). A tab's count (DESIGN.md, Work tab
+       * count): its numeral in the meta role and tabular figures, and a press
+       * on it is a press on its tab.
        */
       size: {
         cell: "min-h-6 gap-1.5 px-2",
-        "cell-tall": "min-h-6 gap-1.5 px-2 py-space-1",
-        count: "text-meta",
+        "cell-tall":
+          "h-auto min-h-6 gap-1.5 whitespace-normal px-2 py-space-1 text-start",
+        count: "pointer-events-none text-meta tabular-nums",
       },
+      /** Its figures in tabular widths (DESIGN.md, The Tabular Figure Rule). */
+      figures: { tabular: "tabular-nums" },
       /** Its ink, alone or with its edge in the same ink (an outline badge). */
       tone: {
         success: "text-success-9",
@@ -60,23 +75,32 @@
   let {
     ref = $bindable(null),
     href,
+    as = "span",
     class: className,
     variant = "default",
     size,
     tone,
     gap,
     kind,
+    figures,
     children,
     ...restProps
   }: WithElementRef<HTMLAnchorAttributes> &
     BadgeLooks & {
       variant?: BadgeVariant;
+      /** Its element: a span, or the heading it is when it names a section
+          (a release note's section, DESIGN.md Update notice). A link is an
+          `a` whatever this says. */
+      as?: "span" | "h3";
     } = $props();
 </script>
 
 <svelte:element
-  this={href ? "a" : "span"}
-  class={cn(badgeVariants({ variant, size, tone, gap, kind }), className)}
+  this={href ? "a" : as}
+  class={cn(
+    badgeVariants({ variant, size, tone, gap, kind, figures }),
+    className
+  )}
   data-slot="badge"
   {href}
   bind:this={ref}

@@ -222,8 +222,8 @@
     >
       <Textarea
         aria-invalid={problemFor("description") ? "true" : undefined}
-        class="resize-y"
         id="type-description"
+        resize="block"
         onblur={() => {
           touched.description = true;
         }}

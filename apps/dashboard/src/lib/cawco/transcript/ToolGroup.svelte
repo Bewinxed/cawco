@@ -388,7 +388,7 @@
       <!-- shadcn Badge, dressed on the DESIGN.md scale rather than the stock
            ladder. -->
       {#if d.chip}
-        <Badge class="h-auto flex-none" kind="meta" variant="secondary"
+        <Badge class="flex-none" kind="meta" variant="secondary"
           ><span>{d.chip}</span></Badge
         >
       {/if}

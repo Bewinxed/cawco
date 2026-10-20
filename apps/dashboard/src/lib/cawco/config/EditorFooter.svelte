@@ -123,7 +123,7 @@
     {#if ondelete && deleteLabel}
       <Button
         data-delete
-        class="max-phone:hidden"
+        layout="wide"
         tone="muted"
         disabled={down !== null || saving}
         {failed}

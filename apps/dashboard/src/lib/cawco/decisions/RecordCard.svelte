@@ -16,6 +16,7 @@
   import type { StageKind } from "#lib/cawco/project-tasks.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { IconChevronDown, IconUser } from "#lib/icons.js";
 
   let {
@@ -88,7 +89,7 @@
           class="flex max-w-full min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
         >
           <span data-slot="sel" class="kit-chip kit-chip-chosen cursor-default">
-            <span class="kit-keycap">{option.keycap}</span><span
+            <Kbd data-box look="keycap">{option.keycap}</Kbd><span
               data-slot="record-card-label">{option.label}</span
             >
           </span>
@@ -218,7 +219,7 @@
                   class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
                 >
                   <span class="kit-chip opacity-50">
-                    <span class="kit-keycap">{option.keycap}</span><span
+                    <Kbd data-box look="keycap">{option.keycap}</Kbd><span
                       data-slot="record-card-label">{option.label}</span
                     >
                   </span>

@@ -348,8 +348,8 @@
         {#if draft.matchKind === "meaning"}
           <Textarea
             aria-invalid={shown("pattern") ? "true" : undefined}
-            class="resize-y"
             id="rule-pattern"
+            resize="block"
             onblur={() => {
               touched.pattern = true;
             }}
@@ -430,8 +430,8 @@
       <Field id="rule-reply" label="Reply" problem={shown("reply")}>
         <Textarea
           aria-invalid={shown("reply") ? "true" : undefined}
-          class="resize-y"
           id="rule-reply"
+          resize="block"
           onblur={() => {
             touched.reply = true;
           }}

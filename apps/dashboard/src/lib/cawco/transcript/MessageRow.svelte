@@ -758,7 +758,7 @@
                 />
               {:else}
                 <!-- A stored transcript can name an image it no longer carries. -->
-                <Badge class="h-auto" kind="meta" variant="secondary"
+                <Badge kind="meta" variant="secondary"
                   ><span>Image {i + 1} · {img.mediaType}</span></Badge
                 >
               {/if}

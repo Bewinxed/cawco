@@ -144,9 +144,10 @@
     >
       <Select.Trigger
         aria-label="View: {label}"
-        class="group-data-bar:shrink group-data-bar:grow-0 group-data-bar:basis-auto group-data-bar:overflow-clip group-data-bar:not-size-sm:h-c-composer-field group-data-bar:size-sm:h-c-composer-field"
+        class="group-data-bar:shrink group-data-bar:grow-0 group-data-bar:basis-auto"
         look="in-bar"
         mark="chevron"
+        size="composer"
         bind:ref={pill}
       >
         <MorphText text={label} />
