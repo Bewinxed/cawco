@@ -383,6 +383,7 @@ async function still(kit: Kit, page: Page): Promise<void> {
       fail.boxes === 0 &&
       fail.buttons.some((b) => b?.startsWith("Try again")) &&
       fail.buttons.includes("Show details") &&
+      !fail.buttons.includes("Change hub") &&
       fail.caw === "needs-you"
   );
 }
