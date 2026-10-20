@@ -2464,30 +2464,6 @@
     block-size: var(--icon-sm);
   }
 
-  /* Release notes inside a toast or a card take that surface's type: the
-     prose keeps only its structure. */
-  [data-slot="release-notes"] .prose {
-    font: inherit;
-    color: inherit;
-  }
-  [data-slot="release-notes"] p {
-    margin: 0;
-  }
-  [data-slot="release-notes"] ul {
-    display: grid;
-    gap: var(--space-row);
-    margin: 0;
-    padding-inline-start: var(--space-4);
-    list-style: disc;
-  }
-  [data-slot="release-notes"] li {
-    margin: 0;
-    padding: 0;
-    overflow-wrap: anywhere;
-  }
-  [data-slot="release-notes"] li::marker {
-    color: var(--ink-muted);
-  }
   /* A divider's summary reads in a note's muted ink, not a turn's
      (MessageBody's words). */
   [data-slot="transcript-brief"] {

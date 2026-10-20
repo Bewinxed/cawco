@@ -8,16 +8,20 @@
    * text around them.
    */
   import type { Component } from "svelte";
+  import {
+    Badge,
+    type BadgeVariant,
+  } from "#lib/components/ui/badge/index.js";
   import { Markdown } from "#lib/components/ui/markdown/index.js";
   import { IconBug, IconGraphUp, IconStars } from "#lib/icons.js";
 
   let { source }: { source: string } = $props();
 
   /** The three sections a release writes, by heading. */
-  const TONES: Record<string, { tone: string; icon: Component }> = {
-    New: { tone: "new", icon: IconStars },
-    Improved: { tone: "improved", icon: IconGraphUp },
-    Fixed: { tone: "fixed", icon: IconBug },
+  const TONES: Record<string, { variant: BadgeVariant; icon: Component }> = {
+    New: { variant: "note-new", icon: IconStars },
+    Improved: { variant: "note-improved", icon: IconGraphUp },
+    Fixed: { variant: "note-fixed", icon: IconBug },
   };
 
   const HEADING = /^#{1,6}\s+(.+?)\s*$/;
@@ -58,26 +62,23 @@
   {#each sections as section, i (i)}
     {#if section.heading}
       {@const known = TONES[section.heading]}
-      <!-- A section's name: the badge recipe (DESIGN.md, Badges and state chips),
-           20px at the 5px radius, label role, a 12px glyph, in its hue's ink on
-           that hue's faint fill. -->
-      <h3
+      <!-- A section's name: the kit Badge as its heading, in its note's hue
+           (DESIGN.md, Update notice), a 12px glyph before its words. -->
+      <Badge
+        as="h3"
         data-slot="release-notes-label"
-        class="mt-space-3 mb-space-2 inline-flex h-icon-lg items-center justify-self-box-start gap-space-1 rounded-xs bg-surface-recess px-space-2 type-label text-ink-strong first:mt-0 tone-fixed:bg-note-fixed-bg tone-fixed:text-note-fixed-ink tone-improved:bg-note-improved-bg tone-improved:text-note-improved-ink tone-new:bg-note-new-bg tone-new:text-note-new-ink"
-        data-tone={known?.tone}
+        class="mt-space-3 mb-space-2 justify-self-box-start first:mt-0"
+        variant={known?.variant ?? "default"}
       >
         {#if known}
-          <known.icon
-            data-release-notes-glyph
-            aria-hidden="true"
-            class="size-icon-sm flex-none"
-          />
+          {@const Glyph = known.icon}
+          <Glyph data-release-notes-glyph aria-hidden="true" class="flex-none" />
         {/if}
-        {section.heading}
-      </h3>
+        <span>{section.heading}</span>
+      </Badge>
     {/if}
     {#if section.body}
-      <Markdown source={section.body} />
+      <Markdown look="surface" source={section.body} />
     {/if}
   {/each}
 </div>

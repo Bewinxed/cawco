@@ -30,7 +30,9 @@ const readCycle = (page: Page) =>
     const label = text.querySelector<HTMLElement>(
       '[data-slot="morph-text"]'
     ) as HTMLElement;
-    const slot = press.querySelector<HTMLElement>(".kit-slot") as HTMLElement;
+    const slot = press.querySelector<HTMLElement>(
+      '[data-slot="btn-slot"]'
+    ) as HTMLElement;
     // The cell the slot draws in, not its glyph: the spinner turns, and a
     // turned box reaches past its own corners.
     const active = slot.querySelector<HTMLElement>(
@@ -52,7 +54,9 @@ const readCycle = (page: Page) =>
       labelStart: words.left,
       slotDrawn: active
         ? {
-            kind: active.querySelector(".kit-tick") ? "check" : "spinner",
+            kind: active.querySelector('svg[data-slot="tick"]')
+              ? "check"
+              : "spinner",
             start: active.getBoundingClientRect().left,
           }
         : null,
@@ -215,7 +219,9 @@ async function iconCases(kit: Kit, page: Page) {
       const words = press.querySelector<HTMLElement>(
         '[data-slot="words"] > [data-active="true"]'
       ) as HTMLElement;
-      const slot = press.querySelector<HTMLElement>(".kit-slot") as HTMLElement;
+      const slot = press.querySelector<HTMLElement>(
+        '[data-slot="btn-slot"]'
+      ) as HTMLElement;
       const cell = press.querySelector<HTMLElement>(
         '[data-slot="words"]'
       ) as HTMLElement;

@@ -3,9 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   export const badgeVariants = tv({
-    /* A badge that opens something (a popover's trigger says so with
-       `aria-haspopup`) takes the pointer's hand. */
-    base: "group/badge mark-line inline-flex h-icon-lg w-fit shrink-0 items-center justify-center gap-space-1 overflow-hidden whitespace-nowrap rounded-xs bg-[var(--surface-recess)] px-1.5 text-[var(--ink-strong)] text-label leading-none transition-colors has-data-[icon=inline-end]:pr-space-1 has-data-[icon=inline-start]:pl-space-1 [&[aria-haspopup]]:cursor-pointer [&>svg]:pointer-events-none [&>svg]:size-icon-sm",
+    base: "group/badge mark-line inline-flex h-icon-lg w-fit shrink-0 items-center justify-center gap-space-1 overflow-hidden whitespace-nowrap rounded-xs bg-[var(--surface-recess)] px-space-2 text-[var(--ink-strong)] text-label leading-none transition-colors has-data-[icon=inline-end]:pr-space-1 has-data-[icon=inline-start]:pl-space-1 [&>svg]:pointer-events-none [&>svg]:size-icon-sm",
     variants: {
       variant: {
         default: "",

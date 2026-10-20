@@ -34,11 +34,10 @@ Rules followed:
 | Badge `figures="tabular"` (badge.svelte:44) | a changing count | The Tabular Figure Rule | TaskCard.svelte:238 |
 | Badge `size="count"` gains `tabular-nums pointer-events-none` (badge.svelte:41) | a tab's count: meta numeral, tabular, a press on it is its tab's | Badges, Work tab count: "its numeral in the meta role, in tabular figures" | WorkTabs.svelte:810 |
 | Badge `size="cell-tall"` gains `h-auto whitespace-normal text-start` (badge.svelte:39) | an update cell's chip whose words wrap and grow it | Badges (defensive: content grows) | UpdateCell.svelte:51 |
-| Badge base `[&[aria-haspopup]]:cursor-pointer` (badge.svelte:8) | a badge that opens a popover | (the trigger's state as its attribute) | ToolMatrix.svelte:158, :224 |
-| Badge `variant="note-new" / "note-improved" / "note-fixed"` and `as="h3"` (badge.svelte:24) | a release note's section label | Update notice: "New in `note-new-*` …, Improved in `note-improved-*` …, Fixed in `note-fixed-*`" | none in this list: gap below (ReleaseNotes.svelte) |
+| Badge `variant="note-new" / "note-improved" / "note-fixed"` and `as="h3"` (badge.svelte:22) | a release note's section label | Update notice: "Release notes … name each section with a tinted label on the badge recipe (20px, `radius-xs`, label role, 12px Solar duotone glyph): New in `note-new-*` …; each ink holds 4.5:1 on its fill in both themes" | ReleaseNotes.svelte:67 |
 | ToggleGroup root `flex-wrap` (toggle-group.svelte:34) | every segmented toggle group wraps whole segments onto the next line | defensive-css (a variable row wraps); Segmented | Choice.svelte:24, ProjectDetails.svelte:1049, :1179, connections/+page.svelte:684, motion/caw-notices/+page.svelte:394, :413 |
 | ProviderLogo `size="meta" / "control" / "nav"` (ProviderLogo.svelte:12; default `control`) | the mark's size by where it stands | Icons, Sizes: "12px beside meta text, 16px in controls and rows (the default for any unsized icon), 20px in nav and headers" | ProjectDetails.svelte:1341 (`control`), ActionsTable.svelte:128, ModelSection.svelte:318, :540, SessionDetails.svelte:520 (`control`); TaskPane.svelte:523 (`meta`) |
-| Markdown `class` through cn() (markdown.svelte:19, :263) | the prose root's own utilities | Typography (prose inherits a surface's type) | none in this list: gap below (ReleaseNotes.svelte) |
+| Markdown `look="surface"` (markdown.svelte:14) and `class` through cn() | prose standing in a surface whose type it takes: structure only | Update notice (the notes shown in a toast, a card and Configure › Updates); Typography: Prose | ReleaseNotes.svelte:81 |
 | Checkbox root `pointer-hit` (checkbox.svelte:69) | a 16px control reaches 24px under a fine pointer | The 24 Pointer Rule | every kit Checkbox |
 
 ## Kit swaps
@@ -50,8 +49,10 @@ kit-swap: src/lib/cawco/ModelCombobox.svelte:128 Button align="trigger" (was `ju
 kit-swap: src/lib/cawco/RuleTester.svelte:83 Textarea resize="block" (was `resize-y`) — done
 kit-swap: src/lib/cawco/ToolMatrix.svelte:110 Badge size="cell" (dead `h-auto` removed) — done
 kit-swap: src/lib/cawco/ToolMatrix.svelte:133 Badge size="cell" (dead `h-auto` removed) — done
-kit-swap: src/lib/cawco/ToolMatrix.svelte:158 Badge size="cell", cursor from the base's `aria-haspopup` (was `h-auto cursor-pointer`) — done
-kit-swap: src/lib/cawco/ToolMatrix.svelte:224 Badge size="cell", cursor from the base's `aria-haspopup` (was `h-auto cursor-pointer`) — done
+kit-swap: src/lib/cawco/ToolMatrix.svelte:158 Badge size="cell" (`h-auto cursor-pointer` removed; the cursor is Preflight's default arrow, the parent's decision) — done
+kit-swap: src/lib/cawco/ToolMatrix.svelte:224 Badge size="cell" (`h-auto cursor-pointer` removed, as above) — done
+kit-swap: src/lib/cawco/updates/ReleaseNotes.svelte:67 Badge as="h3" variant="note-new|note-improved|note-fixed" (the hand-built `h3` with `tone-*:bg-note-*`; its words in a span for the mark line) — done
+kit-swap: src/lib/cawco/updates/ReleaseNotes.svelte:81 Markdown look="surface" (app.css's five `[data-slot="release-notes"]` prose rules, deleted) — done
 kit-swap: src/lib/cawco/ToolMatrix.svelte:245 Badge size="cell" (dead `h-auto` removed) — done
 kit-swap: src/lib/cawco/UsageMeter.svelte:1079 Button size="lg" in the sheet (was `sm` + `h-c-btn-h-lg`) — done
 kit-swap: src/lib/cawco/accounts/AccountEditor.svelte:211 Input field="number" size="sm" (was `num h-c-btn-h-sm w-c-number-field-w text-center` + `pad="tight"`) — done
@@ -155,7 +156,6 @@ None. No `@utility`, `@custom-variant` or theme key was added; app.css changed o
 - `[--tick-dur:var(--dur-control)]` → `{ --tick-dur: var(--dur-control); }` (tailwind-merge keeps the later of the base's and the clock's).
 - `data-over:justify-items-start` → `.…[data-over] { justify-items: start; }` (utilities layer over `.icon-swap`'s components-layer `place-items`).
 - `motion-safe:active:not-data-[disabled]:[transform:scale(var(--press-scale))]` → `@media (prefers-reduced-motion: no-preference) { .…:active:not([data-disabled]) { transform: scale(var(--press-scale)); } }`, the deleted rule's selector.
-- `[&[aria-haspopup]]:cursor-pointer` → `.…[aria-haspopup] { cursor: pointer; }`
 - `can-hover:group-hover/row:not-disabled:opacity-100` → `@media (hover: hover) and (pointer: fine) { .…:is(:where(.group\/row):hover *):not(:disabled) { opacity: 100%; } }`
 - `h-c-composer-field` → `height: var(--c-composer-field)`; `size-c-composer-field` → width and height; `h-space-5`, `min-w-space-5`, `w-c-number-field-w`; `max-phone:hidden` → `@media (width < 640px) { display: none }`; `coarse:hidden` → `@media (pointer: coarse) { display: none }`.
 Scratch folder deleted.
@@ -181,7 +181,27 @@ ui-observer (observer.browser.js, the same benches, both servers): `horizontal-o
 
 Checkbox hit area on a fine pointer: no route draws a kit Checkbox without a hub (Configure › Connections and the task pane's to-dos need one), so the probe used an element carrying the Checkbox's hit recipe (`touch-hit pointer-hit size-icon-md border`, `--hit-edge:1px`) on the rendered page's own stylesheet. `matchMedia("(pointer: fine)")` true; box 16×16; `::after` content "" inset −5px on every side (24px from the 14px padding box). `elementsFromPoint` lands on it 4px outside left and top and 3.5px outside right and bottom, and not 5px outside. ui-observer still lists `small-tap-target` there: its rule measures the element's own box only (observer.browser.js:103–105, `const w = round(r.width), h = round(r.height); if (w < 24 || h < 24)`), never a `::after` hit area, so it reports any 16px control whatever its hit area.
 
-Not rendered by any bench: Kbd `keycap` (a question or decision with options: a session's question card, a project's decisions), Switch (Configure pages with a hub), Badge `note-*`/`as` (no user yet), Button `composer` sizes (a decision page), `layout="wide"` (project head and page), Input `field="number"` (an account's editor).
+### What no bench draws: a scratch route (src/routes/dev/w4-scratch, deleted after)
+
+The real kit components with fixture props, one playwright-core session, 1440×900 and 390×844 (the values are the same at both widths except `layout="wide"`):
+
+| Case | Measured | DESIGN.md |
+| --- | --- | --- |
+| Kbd `keycap` in a `.kit-chip` | `<kbd>` 18×18, JetBrains Mono 12px, line-height 12px, ink `oklch(0.295 0.01 70)` on `oklch(0.967 0.008 84)`, radius 5px; the chip stays 90×30 | Code role: keycaps; option chips 30px; the ladder's 18 |
+| Kbd `keycap` in a picked chip (`.kit-chip-chosen`) | fill `oklch(0.55 0.17 33)`, digit `oklch(1 0 0)`; 5.28:1 by day, 5.48:1 at night | Colors, Chosen option: "fills vermillion with a white digit" |
+| Switch off / on / disabled | 32×18.4 each; track `oklch(0.81 0.016 80)` off, `oklch(0.555 0.17 33)` on; thumb 16×16 at `translate: 0px` off, `calc(100% - 2px)` on; disabled opacity 0.5; `transition-property: background-color, transform` 0.16s, thumb `translate` | Disabled: 50%; The Press Rule |
+| Switch press (mouse held 400ms) | off: `transform: matrix(0.97, 0, 0, 0.97, 0, 0)`; disabled: `none` | The Press Rule: "scales to 0.97" (the token `--press-scale`); never when disabled |
+| Badge `note-new` / `note-improved` / `note-fixed` `as="h3"` | `<h3>` 57×20 / 88×20 / 61×20, radius 5px, 13px at 500, padding-inline 7px, glyph 12×12; ink on fill 6.45 / 6.40 / 6.32:1 by day, 8.76 / 8.70 / 8.46:1 at night | Update notice: 20px, `radius-xs`, label role, 12px glyph, each ink 4.5:1 on its fill in both themes |
+| Button `composer` / `icon-composer` | 74×34 radius 5px / 34×34 radius 5px | Composer: "34px … each at the concentric 5px radius" |
+| Button `layout="wide"` | `display: flex` at 1440; `display: none` at 390 | Breakpoints: 640px phone |
+| Input `field="number"` `size="sm"` | 64×30, text-align center, tabular-nums, padding-inline 7px | `c-number-field-w` 64px; `sm` 30px; The Tabular Figure Rule |
+| the real kit Checkbox, fine pointer | `(pointer: fine)` true, box 16×16; `elementsFromPoint` 4px outside left and top, 3.5px outside right and bottom: [true, true, true, true]; 5px outside each side: [false, false, false, false] | The 24 Pointer Rule |
+
+### ReleaseNotes on the benches, start sha vs lane (/motion/updates and /motion/caw-notices, 1440 and 390)
+
+- The section label: EQUAL. 57×20, radius 5px, 13px at 500, `oklch(0.44 0.11 149)` on `oklch(0.95 0.04 149)`, padding-inline 7px, margin-bottom 7px, in both.
+- The prose differs on purpose. At the start sha the reset's components-layer rules lost to the typography plugin's `prose-sm`: line-height 24px, ink `oklch(0.295 0.01 70)` (the prose's own), `ul` padding-inline-start 22px, `li` margin 4px and padding-inline-start 6px, marker at 0.55 alpha. The notes box was 451px tall on updates.
+- In the lane the reset applies whole, as its own comment said ("take that surface's type: the prose keeps only its structure"): line-height 20.3px (the surface's body), the surface's ink, `ul` grid with a 2px row gap and 14px start padding, `li` margin and padding 0, `overflow-wrap: anywhere`, marker `oklch(0.495 0.014 74)` (`ink-muted`). The same box is 338px.
 
 ## Critique (interface-craft, Design Critique, against DESIGN.md)
 
@@ -189,10 +209,17 @@ Not rendered by any bench: Kbd `keycap` (a question or decision with options: a 
 - fixed: the composer's controls were 34px only because DecisionPage overrode a 36px button from outside. The Composer's 34px is now the kit's `composer` size, so the next composer-shell control can't drift.
 - fixed: the Files row's Show button re-centred itself with a translate; it now stands in its row's grid cell, centred by the cell.
 - fixed: the keycap's 17px was off every scale; it now takes the ladder's 18px.
-- gap: the Badge `note-*`/`as="h3"` variants and Markdown's `class` have no user until ReleaseNotes.svelte swaps (below).
+- fixed: the release notes' section label was a hand-built badge; it is the kit Badge in its note hue, as DESIGN.md's Update notice describes it.
+- fixed: the release notes' prose reset lost to the typography plugin, so notes in a toast stood at the prose's 24px leading and indents; they now take the surface's type.
+
+## Round 2 (the parent's six items)
+
+fixed: apps/dashboard/src/lib/cawco/updates/ReleaseNotes.svelte:67 the section label is `<Badge as="h3" variant=…>`, its glyph bound as `Glyph` (the mark-line checker reads it as an svg mark) and its words in a span; :81 is `<Markdown look="surface">`; app.css's five `[data-slot="release-notes"]` rules are deleted (`grep -n release-notes apps/dashboard/src/app.css` prints nothing).
+fixed: scripts/probe-kit/specs/web/button-pending.ts:34, :223 select `[data-slot="btn-slot"]` and :57 `svg[data-slot="tick"]`; scripts/probe-kit/specs/web/browser-ask-card.ts:670 selects `svg[data-slot="tick"]`.
+fixed: apps/dashboard/scripts/mark-line-check.ts:95, :98 drop `kit-keycap|kit-slot`; the comment names their hooks (the slot's `.icon-swap`, a keycap's `data-box`).
+removed: src/lib/components/ui/badge/badge.svelte:6 `[&[aria-haspopup]]:cursor-pointer` — the parent's decision: Tailwind v4 Preflight's default arrow on every control.
+fixed: src/lib/components/ui/badge/badge.svelte:6 the base's inline padding is `px-space-2` (7px), was `px-1.5` (6px) — delta S2, the ladder step (DESIGN.md Layout: "4, 7, 11 …"), the 7px the release notes' label already drew. Every Badge is 2px wider.
 
 ## Gaps
 
-gap: apps/dashboard/src/lib/cawco/updates/ReleaseNotes.svelte:64 the hand-built section label (`h3` with `tone-*:bg-note-*`) should be `<Badge as="h3" variant="note-new|note-improved|note-fixed">`, and :80's prose reset `class` on `<Markdown>` — the file is outside this lane's list. DESIGN.md Update notice.
-gap: scripts/probe-kit/specs/web/button-pending.ts:33, :218 select `.kit-slot` and :55 `.kit-tick`; scripts/probe-kit/specs/web/browser-ask-card.ts:669 selects `.kit-tick` — they should select `[data-slot="btn-slot"]` and `svg[data-slot="tick"]` (a hook is `data-slot`).
-gap: apps/dashboard/scripts/mark-line-check.ts:95, :98 still list `kit-keycap|kit-slot` as box classes; no element carries them now (the keycaps are `data-box`, the slot is `.icon-swap`), so the names are dead there.
+None left in this lane.

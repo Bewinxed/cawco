@@ -1,3 +1,26 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  export const markdownVariants = tv({
+    variants: {
+      /**
+       * Prose standing in a surface whose type it takes (a release's notes
+       * in a toast, a card or Configure › Updates): the surface's font and
+       * ink, its paragraphs flush, its bullets a grid a row-gap apart with
+       * muted markers, and long words broken anywhere. Only the structure
+       * stays the prose's.
+       */
+      look: {
+        surface:
+          "font-inherit text-inherit [&_p]:m-0 [&_ul]:m-0 [&_ul]:grid [&_ul]:list-disc [&_ul]:gap-space-row [&_ul]:ps-space-4 [&_li]:m-0 [&_li]:p-0 [&_li]:wrap-anywhere [&_li]:marker:text-ink-muted",
+      },
+    },
+  });
+
+  export type MarkdownLooks = VariantProps<typeof markdownVariants>;
+</script>
+
 <script lang="ts">
   import { untrack } from "svelte";
   import {
@@ -16,8 +39,9 @@
     invert = false,
     streaming = false,
     fades = false,
+    look,
     class: className,
-  }: {
+  }: MarkdownLooks & {
     source: string;
     invert?: boolean;
     streaming?: boolean;
@@ -260,7 +284,12 @@
       animateOnMount: true,
       tokenize: "word",
     }}
-    class={cn(PROSE, invert && "prose-invert", className)}
+    class={cn(
+      PROSE,
+      invert && "prose-invert",
+      markdownVariants({ look }),
+      className
+    )}
     {content}
     controls={{ mermaid: false, table: false }}
     mergeTheme={false}
