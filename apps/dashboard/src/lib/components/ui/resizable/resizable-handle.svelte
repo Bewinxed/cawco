@@ -6,12 +6,16 @@
       ink, the control's under the pointer and the muted ink while it is
       dragged, its colour easing over --dur-control. A split's side handle
       marks the drag with `data-active`; a pane grid's with paneforge's
-      keyboard or pointer state, and eases only with motion. */
+      keyboard or pointer state, and eases only with motion. A split's
+      handle is gone while its surface is shut (`data-hidden`); while the
+      surface has the whole split (`data-expanded`) the handle stands on the
+      page area's edge, under the sidebar's grip, so its hit area stands
+      just inside the surface instead: a grip's width, a step in. */
   export const resizableHandleVariants = tv({
     variants: {
       look: {
         split:
-          "dur-control bg-border-hairline transition-[background-color] ease-out hover:bg-border-control data-active:bg-ink-muted",
+          "dur-control bg-border-hairline transition-[background-color] ease-out hover:bg-border-control data-hidden:hidden data-active:bg-ink-muted data-expanded:after:left-space-1 data-expanded:after:w-c-side-grip-w data-expanded:after:translate-x-0",
         grid: "motion-safe:dur-control bg-border-hairline not-active-keyboard:not-active-pointer:hover:bg-border-control active-keyboard:bg-ink-muted active-pointer:bg-ink-muted motion-safe:transition-[background-color] motion-safe:ease-out motion-reduce:transition-off",
       },
     },

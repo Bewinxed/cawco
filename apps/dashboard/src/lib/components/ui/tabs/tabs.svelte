@@ -1,3 +1,21 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  export const tabsVariants = tv({
+    base: "group/tabs flex gap-space-2 data-horizontal:flex-col",
+    variants: {
+      layout: {
+        /** Tabs whose chosen pane scrolls on its own (TabsContent's
+            `column`): a column that can shrink below its content. */
+        column: "min-h-0",
+      },
+    },
+  });
+
+  export type TabsLayout = VariantProps<typeof tabsVariants>["layout"];
+</script>
+
 <script lang="ts">
   import { Tabs as TabsPrimitive } from "bits-ui";
   import { cn } from "#lib/utils.js";
@@ -6,12 +24,13 @@
     ref = $bindable(null),
     value = $bindable(""),
     class: className,
+    layout,
     ...restProps
-  }: TabsPrimitive.RootProps = $props();
+  }: TabsPrimitive.RootProps & { layout?: TabsLayout } = $props();
 </script>
 
 <TabsPrimitive.Root
-  class={cn("group/tabs flex gap-2 data-horizontal:flex-col", className)}
+  class={cn(tabsVariants({ layout }), className)}
   data-slot="tabs"
   bind:ref
   bind:value

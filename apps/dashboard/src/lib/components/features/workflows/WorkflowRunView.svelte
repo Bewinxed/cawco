@@ -338,7 +338,7 @@
           <Card.Header>
             <Card.Title>{ask.question}</Card.Title>
           </Card.Header>
-          <Card.Content class="flex flex-col" gap="section">
+          <Card.Content gap="section">
             {#if ask.options.length}
               <!-- Peers the workflow's author wrote, none of them the
                    recommended action: each an outline button, its

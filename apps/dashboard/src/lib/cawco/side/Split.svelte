@@ -361,11 +361,13 @@
          nothing in it takes a press or the keyboard. -->
     <Resizable.Pane
       data-main-pane
-      class="flex min-h-0 min-w-0 motion-safe:group-data-split-sliding/split:transition-[flex-grow] motion-safe:group-data-split-sliding/split:dur-panel motion-safe:group-data-split-sliding/split:ease-in-out motion-safe:group-data-split-sliding/split:group-data-split-opening/split:ease-drawer"
+      data-opening={(sliding && open) || undefined}
+      data-sliding={sliding || undefined}
       collapsedSize={0}
       collapsible
       defaultSize={100 - sideSize}
       inert={expanded}
+      look="split"
       minSize={MAIN_MIN}
     >
       {@render main()}
@@ -377,9 +379,10 @@
          surface instead, past the grip, so the page can be dragged back
          out. -->
     <Resizable.Handle
+      data-expanded={expanded || undefined}
       data-side-divider={open || !open || undefined}
       data-hidden={!open || undefined}
-      class="z-2 group-data-split-expanded/split:after:left-space-1 group-data-split-expanded/split:direction-vertical:after:left-space-1 group-data-split-expanded/split:after:w-c-side-grip-w group-data-split-expanded/split:direction-vertical:after:w-c-side-grip-w group-data-split-expanded/split:after:transform-none data-hidden:hidden"
+      class="z-2"
       look="split"
       onDraggingChange={(dragging) => {
         resizing = dragging;
@@ -393,11 +396,13 @@
       }}
     />
     <Resizable.Pane
+      data-opening={(sliding && open) || undefined}
       data-side-pane
-      class="flex min-h-0 min-w-0 motion-safe:group-data-split-sliding/split:transition-[flex-grow] motion-safe:group-data-split-sliding/split:dur-panel motion-safe:group-data-split-sliding/split:ease-in-out motion-safe:group-data-split-sliding/split:group-data-split-opening/split:ease-drawer"
+      data-sliding={sliding || undefined}
       collapsedSize={0}
       collapsible
       defaultSize={sideSize}
+      look="split"
       maxSize={100}
       minSize={Math.min(SIDE_MAX, sideMin ?? MAIN_MIN)}
       onResize={(size) => {

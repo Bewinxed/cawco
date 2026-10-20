@@ -387,6 +387,13 @@
   --spacing-icon-sm: var(--icon-sm);
   --spacing-icon-md: var(--icon-md);
   --spacing-icon-lg: var(--icon-lg);
+  --spacing-c-segmented-pad: var(--c-segmented-pad);
+  --spacing-c-segment-gap: var(--c-segment-gap);
+  --spacing-c-segment-pad-x: var(--c-segment-pad-x);
+  --spacing-c-tab-item: var(--c-tab-item);
+  --spacing-c-tab-px: var(--c-tab-px);
+  --spacing-c-tab-slope-start: var(--c-tab-slope-start);
+  --spacing-c-tab-slope-end: var(--c-tab-slope-end);
   --spacing-c-measure: var(--c-measure);
   --spacing-c-measure-short: var(--c-measure-short);
   --spacing-c-measure-meta: var(--c-measure-meta);

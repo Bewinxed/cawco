@@ -4,9 +4,30 @@
 
   /** Its callers' looks: a root that draws no well of its own (no
       background, as `background: none` writes it, and no padding), the
-      host's surface showing through. */
+      host's surface showing through.
+      `strip="session"`, a pane's session tabs (PaneTabs): a row standing
+      its tabs on its floor, on the shelf (`surface-shelf`, two steps below
+      the transcript, one below an unchosen tab, so the chosen tab, in the
+      transcript's own surface, reads as the page it opens), padded in to the
+      transcript's start edge, with the size ladder its track and the "+"
+      after it share: a tab's height, its inner pad and its flared foot's
+      room. Its tab controls' touch areas reach past the row's foot, so on a
+      coarse pointer the row stacks above the transcript beneath it. In a
+      narrow leaf it pads in less; on a phone it is the app's only bar: the
+      bar's height, its two ends left to the sidebar toggle and Caw's glass.
+      `strip="hosted"`, the same tabs in a host's row: the same ladder, filling
+      the host's row and drawing nothing of its own. */
   export const tabsVariants = tv({
-    variants: { fill: { none: "background-none p-0" } },
+    variants: {
+      fill: { none: "background-none p-0" },
+      strip: {
+        session:
+          "coarse:relative coarse:z-1 flex min-w-0 flex-none items-end bg-surface-shelf desk:@max-leaf/leaf:ps-space-4 ps-space-7 pe-space-4 pt-space-1 pb-0 [--strip-fade:var(--c-tab-strip-fade)] [--strip-flare:var(--radius-sm)] [--strip-item-rest:var(--space-8)] [--strip-item:var(--strip-item-rest)] [--strip-px:var(--space-3)] [--strip-reach:var(--space-3)] [--strip-uncapped:var(--c-tab-strip-uncapped)] max-desk:min-h-c-top-bar-h max-desk:ps-[calc(var(--c-bar-phone-edge)_+_var(--c-bar-toggle-glyph))] max-desk:pe-[calc(var(--c-bar-phone-gap)_+_var(--c-bar-caw-glass-phone))] max-desk:pt-0 max-desk:[--strip-flare:var(--radius-lg)] max-desk:[--strip-item:var(--c-tab-row-h)]",
+        hosted:
+          "coarse:relative coarse:z-1 flex min-w-0 flex-[1_1_0] items-end self-stretch bg-transparent p-0 [--strip-fade:var(--c-tab-strip-fade)] [--strip-flare:var(--radius-sm)] [--strip-item-rest:var(--space-8)] [--strip-item:var(--strip-item-rest)] [--strip-px:var(--space-3)] [--strip-reach:var(--space-3)] [--strip-uncapped:var(--c-tab-strip-uncapped)]",
+        work: "",
+      },
+    },
   });
 
   export type TabsLooks = VariantProps<typeof tabsVariants>;
@@ -44,6 +65,7 @@
     values,
     boxes,
     fill,
+    strip,
     class: className,
     children,
     ...rest
@@ -87,6 +109,7 @@
     state.selectedIndex = selectedIndex;
     state.size = size;
     state.variant = variant;
+    state.strip = strip;
     state.boxes = boxes ?? {};
     state.travel = travel;
     state.onValueChange = onValueChange;
@@ -105,7 +128,7 @@
 </script>
 
 <div
-  class={cn(tabsVariants({ fill }), className)}
+  class={cn(tabsVariants({ fill, strip }), className)}
   data-size={size}
   data-slot="tabs"
   data-variant={variant}

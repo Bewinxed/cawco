@@ -877,10 +877,7 @@
             </Sidebar.MenuButton>
             {#if count}
               <!-- Centred on its nav row, as Fleet's count stands. -->
-              <Sidebar.MenuBadge
-                class="peer-data-[size=default]/menu-button:top-1/2 -translate-y-1/2"
-                >{count}</Sidebar.MenuBadge
-              >
+              <Sidebar.MenuBadge>{count}</Sidebar.MenuBadge>
             {/if}
           </Sidebar.MenuItem>
         </Sidebar.Menu>
@@ -913,12 +910,7 @@
             <!-- A status count keeps its status pair whatever the row does:
                  the kit's active and hover inks are for a plain count, and
                  on the live fill the active one reads 3.3:1. -->
-            <!-- Centred on its nav row whatever the row's height: the kit's
-                 badge sits a fixed 6px from the top, which centres it on a
-                 32px row only; this takes that rule's place (the class merge
-                 keeps the later of one variant's two `top`s). -->
             <Sidebar.MenuBadge
-              class="peer-data-[size=default]/menu-button:top-1/2 -translate-y-1/2"
               data-blocked={cawco.blockedCount > 0 || undefined}
               data-flip="pop box"
               tone="live"
@@ -1044,11 +1036,7 @@
                   onnew={() => newSession({ projectId: project.id })}
                   {project}
                 >
-                  <Sidebar.MenuButton
-                    class="h-c-btn-h-sm"
-                    isActive={here}
-                    row="list"
-                  >
+                  <Sidebar.MenuButton isActive={here} row="list">
                     {#snippet child({ props })}
                       <!-- The row is the link to the project's page. Its
                            mark says what is running in it, as a session's
@@ -1135,7 +1123,6 @@
                     {#if lists.older.length + lists.recent.length === 0}
                       <Sidebar.MenuSubItem data-flip>
                         <Sidebar.MenuSubButton
-                          class="h-(--row-compact-h)"
                           data-branch-item
                           onclick={() => newSession({ projectId: project.id })}
                           row="compact"
@@ -1193,12 +1180,7 @@
         <Sidebar.MenuItem>
           <Tip label="You">
             {#snippet children(tip)}
-              <Sidebar.MenuButton
-                {...tip}
-                aria-label="You"
-                class="touch-hit size-c-btn-h-sm justify-center overflow-visible"
-                row="avatar"
-              >
+              <Sidebar.MenuButton {...tip} aria-label="You" row="avatar">
                 <!-- No picture of the reader yet: Caw stands in, the brand
                      icon as a round picture. -->
                 <img

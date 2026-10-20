@@ -758,21 +758,29 @@
   >
     <!-- The tabs on no shelf of their own (PaneTabs' hosted bar): the chosen
          sheet is the only mark, the section's seam runs under the row, and
-         the delegates button stands at its end, centred on the tabs. --tight
-         is how far the row is under a 260px rail's: none there and wider,
-         33px at the narrowest rail (227px). Read off the row's own width,
-         not the desktop rail's (`--rail-w`), so the phone's sheet, which is
-         its own width whatever the rail was dragged to, is told as it is.
-         The header's own spacing gives that room back (the gap to the
-         Delegates switch, a tab's inset, the room round a count), so both
-         labels stand whole beside their counts at any width: at 227px
-         "Working" and "Finished" were each cut by a pixel beside two-digit
-         counts. -->
+         the delegates button stands at its end, centred on the tabs, over
+         the row's hairline (DESIGN.md Borders: `border-hairline` separates
+         rows and regions, as the tab shelf's own line does). --tight is
+         how far the row is under the rail at which three-digit counts stand
+         whole at rest (`c-work-tabs-roomy-w`): none there and wider, up to
+         `c-work-tabs-squeeze`. Read off the row's own width, not the desktop
+         rail's (`--rail-w`), so the phone's sheet, which is its own width
+         whatever the rail was dragged to, is told as it is. The header's own
+         spacing gives that room back to the words, each part to its tight
+         step together: the gap to the Delegates switch, a tab's inset, the
+         room before and after a count, the head's trailing pad. Past the
+         tight steps the words give way and the counts and the switch stand
+         (DESIGN.md Typography: "the name gives way first"; the artifact
+         head's narrowest forms): the label ends in its ellipsis. Both
+         labels stand whole beside counts of one or two figures from a 240px
+         rail, three from 250px. -->
     <div
       data-slot="head"
-      class="mb-space-1 flex items-end justify-between gap-(--head-gap) border-b border-b-seam pt-space-1 pr-space-2 pb-0 pl-0"
+      class="mb-space-1 flex items-end justify-between gap-(--head-gap) border-b border-b-border-hairline pt-space-1 pr-(--head-end) pb-0 pl-0"
       style:--head-gap="calc(var(--space-2) - var(--tight) * 0.09)"
+      style:--head-end="calc(var(--space-2) - var(--tight) * 0.09)"
       style:--tight={"clamp(0px, calc(var(--c-work-tabs-roomy-w) - 100cqw - var(--space-4)), var(--c-work-tabs-squeeze))"}
+      style:--count-start="max(0px, var(--space-1) - var(--tight) * 0.12)"
       style:--count-end="max(0px, var(--space-row) - var(--tight) * 0.06)"
     >
       <!-- The session tabs' folder tabs, hosted: no shelf, the chosen
@@ -783,6 +791,7 @@
           .foldBoxes}
         fill="none"
         onValueChange={(id: string) => choose(id as WorkTab)}
+        strip="work"
         value={workTab.current}
         values={TAB_IDS}
         variant="folder"
@@ -804,7 +813,7 @@
                     <Badge
                       data-num
                       data-slot="count"
-                      class="ms-space-1 me-(--count-end)"
+                      class="ms-(--count-start) me-(--count-end)"
                       data-flip="pop"
                       data-tab={tab.id}
                       size="count"

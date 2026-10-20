@@ -212,9 +212,9 @@
            focus) is a jump, so the groups either side tween to it at the
            control tier. -->
       <Resizable.Pane
-        class="flex min-h-0 min-w-0 overflow-hidden motion-safe:[[data-grid-group]:has(>[data-pane-resizer][data-active=keyboard])>&]:transition-[flex-grow] motion-safe:[[data-grid-group]:has(>[data-pane-resizer][data-active=keyboard])>&]:dur-control motion-safe:[[data-grid-group]:has(>[data-pane-resizer][data-active=keyboard])>&]:ease-out"
         data-slot="grid-pane"
         defaultSize={drawn.sizes[i] ?? 100 / drawn.kids.length}
+        look="grid"
         minSize={12}
       >
         <Self nested node={kid} />

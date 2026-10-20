@@ -955,6 +955,22 @@
     --row-compact-gap: 6px;
     /* A compact session row's trailing inset: where every row in the rail ends. */
     --row-compact-pad-end: 8px;
+    /* A two-line session row's height, in the home's lists: its two lines at the lead column's 18px and a 4px pad above and below (SessionRow). The "N older" row among them stands at it (OlderRows, the sidebar sub-button's `compact-tall` row). */
+    --row-tall-h: calc(2 * var(--space-5) + 2 * var(--space-1));
+    /* A segmented control's groove round its lifted thumb (DESIGN.md, Segmented: "a recess-deep groove with a 10px radius and 3px padding"): the groove's 10px less the thumb's 8px, plus a pixel of air, so the corners stay concentric. */
+    --c-segmented-pad: 3px;
+    /* A segment's glyph to its label, and its label to its count (Tabs, single toggle groups). */
+    --c-segment-gap: 6px;
+    /* A segment's inline padding (DESIGN.md, Segmented: "Segments are 30px tall with 10px padding"). */
+    --c-segment-pad-x: 10px;
+    /* A fluid tab's height on its track (DESIGN.md, Fluid tabs: "a track of 4px padding and 28px items (36px control)"); a compact track's under a finger. */
+    --c-tab-item: 28px;
+    /* A fluid tab's inline padding at the default size. */
+    --c-tab-px: 12px;
+    /* How far a folder tab's path brings its top corner in from its foot on the leading side (DESIGN.md, Folder tabs, Slopes: the owner's pick). */
+    --c-tab-slope-start: 1px;
+    /* How far a folder tab's path brings its top corner in from its foot on the trailing side (DESIGN.md, Folder tabs, Slopes: the owner's pick). Written with its unit: it is added to lengths in calc() (PaneTabs' cast). */
+    --c-tab-slope-end: 0px;
     /* Running text's measure (DESIGN.md Body: 60 to 72ch): a note, a hint, a rule's or hook's sentence, a fault's explanation, the expanded plan, a refused write. */
     --c-measure: 72ch;
     /* Running text at the short end of DESIGN.md's 60 to 72ch, beside a control that takes the rest of the row. */
@@ -1071,8 +1087,8 @@
     --c-decision-node-h: 56px;
     /* The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name. */
     --c-artifact-card-min: 148px;
-    /* The rail width at and above which the Working/Finished header needs no squeeze. */
-    --c-work-tabs-roomy-w: 260px;
+    /* The rail width at and above which the Working/Finished header needs no squeeze: measured, the narrowest rail at which both labels stand whole beside three-digit counts at rest. */
+    --c-work-tabs-roomy-w: 280px;
     /* The most the Working/Finished header's spacing gives back, at the narrowest rail. */
     --c-work-tabs-squeeze: 33px;
     /* Caw's panel's list cap. */

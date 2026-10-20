@@ -35,17 +35,16 @@
     SidebarMenuBadgeLooks = $props();
 </script>
 
+<!-- Centred on its row whatever the row's height (a nav row is 40px, 44px
+     under a finger): its item is the row, so the badge stands between the
+     item's top and bottom edges with the free height split above and below. -->
 <div
   data-num
   class={cn(
-    "pointer-events-none absolute right-space-1 flex h-c-badge-h min-w-c-badge-h",
+    "pointer-events-none absolute inset-y-0 end-space-1 my-auto flex h-c-badge-h min-w-c-badge-h",
     "select-none items-center justify-center",
     "rounded-xs px-space-1",
     "num text-meta",
-    "group-data-[collapsible=icon]:hidden",
-    "peer-data-[size=default]/menu-button:top-1.5",
-    "peer-data-[size=lg]/menu-button:top-2.5",
-    "peer-data-[size=sm]/menu-button:top-space-1",
     sidebarMenuBadgeVariants({ tone }),
     className
   )}

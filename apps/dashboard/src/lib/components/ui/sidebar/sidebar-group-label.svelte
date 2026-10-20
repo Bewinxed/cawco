@@ -37,7 +37,7 @@
 
   const mergedProps = $derived({
     class: cn(
-      "focus-inset flex h-space-8 shrink-0 items-center rounded-[var(--radius-sm)] px-3 text-ink-strong/70 text-label transition-[margin,opacity] duration-(--dur-fade) ease-out group-data-[collapsible=icon]:-mt-space-8 group-data-[collapsible=icon]:opacity-0 [&>svg]:size-icon-md [&>svg]:shrink-0",
+      "focus-inset flex h-space-8 shrink-0 items-center rounded-sm px-3 text-ink-strong/70 text-label [&>svg]:size-icon-md [&>svg]:shrink-0",
       sidebarGroupLabelVariants({ pad, end }),
       className
     ),

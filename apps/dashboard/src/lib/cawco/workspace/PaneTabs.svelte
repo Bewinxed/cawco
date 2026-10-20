@@ -1407,9 +1407,9 @@
 <Tabs
   data-session-tabs
   boxes={servedBoxes}
-  data-hosted={hosted || undefined}
   data-strip={leaf.id}
   onValueChange={(id) => workspace.activate(id, leaf.id)}
+  strip={hosted ? "hosted" : "session"}
   {travel}
   value={leaf.active ?? ""}
   values={leaf.tabs}

@@ -91,6 +91,7 @@
               rows: ".icon-card",
               selected: ".icon-card[data-open]",
               axis: "xy",
+              look: "card",
             })}
           >
             {#each JOIN_WAYS as card, index (card.way)}

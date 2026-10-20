@@ -15,7 +15,7 @@
  *  - the words are not bare text or a `{value}` beside the mark: wrap them;
  *  - the row is a mark line: it carries one of the recipe's classes
  *    (`mark-line`, `rail-line`, `kit-chip`, `kit-tray-chip`, `kit-item`,
- *    `kit-segment`), or it is a kit primitive that draws the recipe in its
+ *    `kit-section-head`), or it is a kit primitive that draws the recipe in its
  *    own class (PRIMITIVES).
  * And on every mark line, each child is one the recipe can tell: words (an
  * element holding text, which it trims), what it leaves alone (an svg, an
@@ -55,7 +55,7 @@ const SPLIT = /[^\w-]+/;
 const CLASS_PREFIX = /^class=/;
 /** The recipe's classes (app.css, the mark line). */
 const RECIPE =
-  /(?:^|[\s"'`{[,])(?:mark-line|rail-line|kit-chip|kit-tray-chip|kit-item|kit-segment|kit-section-head)(?=$|[\s"'`},\]])/;
+  /(?:^|[\s"'`{[,])(?:mark-line|rail-line|kit-chip|kit-tray-chip|kit-item|kit-section-head)(?=$|[\s"'`},\]])/;
 /** Kit primitives whose own class draws the recipe. */
 const PRIMITIVES = new Set([
   "Badge",

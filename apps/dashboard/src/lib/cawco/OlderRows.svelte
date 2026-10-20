@@ -202,7 +202,6 @@
        its words stand on its siblings' axes and the nesting line meets its
        mark as it meets theirs. -->
   <Sidebar.MenuSubButton
-    class="h-(--older-h)"
     data-branch-item
     data-tall={tall || undefined}
     row="compact-tall"

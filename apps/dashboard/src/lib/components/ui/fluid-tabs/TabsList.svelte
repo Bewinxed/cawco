@@ -1,3 +1,81 @@
+<script lang="ts" module>
+  import { tv } from "#lib/utils.js";
+
+  /**
+   * The track's recipe (DESIGN.md, Fluid tabs and Folder tabs). Its size
+   * ladder is custom properties every tab reads (TabItem): the pad and the
+   * item add up to the control height, 36px by default and 28px compact, so
+   * the control lines up with the buttons, selects and inputs beside it; a
+   * finger takes one step up the ladder, its shape unchanged. `--shape` is
+   * the corner the overlays and items share, `--sheet` the chosen segment's
+   * surface.
+   *
+   * - `folder`: no well. The items stand on the row's shelf, the chosen one
+   *   a sheet with a rounded top and no bottom flaring out at its foot, so
+   *   the track keeps a flare's room at each end, and neighbours overlap by
+   *   the flare (the leading pad takes the first tab's overlap back). The
+   *   tabs' stacks meet in the track; the outlines bring their top corners
+   *   in by the slopes; a choice travels over `--choose-dur` on
+   *   `--choose-ease`, every part of it together (the owner's "Slow ·
+   *   400ms").
+   * - `scrollable`: hugs its items and gives way, never grows, when its row
+   *   is narrower than they are; the edges fade the tabs past them
+   *   (`kit-edge-fade`), and a chosen tab is brought clear of each fade.
+   * - `strip`: the host's tuning. `session` and `hosted` (PaneTabs, on its
+   *   own shelf or in a host's row; only its own shelf is the phone's bar): a step taller than
+   *   the default in a bar with room, the strip's own pad, the chosen sheet
+   *   in `tab-sheet` (the transcript's head dissolves into it), the hover
+   *   lifting an unchosen tab toward it, and the status rim's stroke (one
+   *   unit under more contrast or less transparency). Scrolling on a coarse
+   *   pointer its transparent padding grows into an equal negative margin,
+   *   so the controls' touch areas sit inside its clip; on a phone's own bar
+   *   the tabs are a row's height, on the bar's floor, the ends fading over
+   *   a short run so a tab slides under the toggle and Caw. `work`
+   *   (WorkTabs): its tabs' pad and the label's gap to its count close up
+   *   as the rail narrows (`--tight`), and a tab after the first starts its
+   *   label past the overlap.
+   */
+  export const tabsListVariants = tv({
+    base: "relative inline-flex flex-none select-none items-center gap-(--gap) rounded-(--radius) bg-(--muted) p-(--pad) [--gap:var(--space-row)] [--icon:var(--icon-md)] [--item:var(--c-tab-item)] [--pad:var(--space-1)] [--px:var(--c-tab-px)] [--radius:var(--radius-sm)] [--shape:calc(var(--radius)_-_var(--pad))] [--sheet:var(--surface-raised)] [--text:var(--text-label)] coarse:[--item:var(--space-8)]",
+    variants: {
+      size: {
+        default: "",
+        compact:
+          "[--item:var(--c-btn-h-xs)] [--pad:var(--space-row)] [--px:var(--c-segment-pad-x)] [--radius:var(--radius-xs)] coarse:[--item:var(--c-tab-item)]",
+      },
+      variant: {
+        segmented: "",
+        folder:
+          "isolate gap-0 rounded-none bg-transparent ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--dur-settle)] [--choose-ease:var(--ease-crossfade)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:var(--c-tab-slope-end)] [--slope-start:var(--c-tab-slope-start)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-[var(--z,var(--z-rest,1))] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap) [&>[data-slot=highlight-ghost]]:hidden",
+      },
+      scrollable: {
+        true: "kit-edge-fade no-scrollbar min-w-0 max-w-full flex-[0_1_auto] overflow-x-auto overflow-y-hidden [--edge-room-end:var(--fade-len)] [--edge-room-start:var(--fade-len)] [&>[data-slot=ff-tab]]:shrink-0",
+      },
+      strip: {
+        session:
+          "[--item:var(--strip-item)] [--px:var(--strip-px)] [--rim-w:var(--tab-rim-width)] [--sheet:var(--tab-sheet)] [--tab-hover:light-dark(var(--surface-recess),var(--surface-hover))] coarse:[--item:var(--strip-item)] reduced-transparency:[--rim-w:1] contrast-more:[--rim-w:1]",
+        hosted:
+          "[--item:var(--strip-item)] [--px:var(--strip-px)] [--rim-w:var(--tab-rim-width)] [--sheet:var(--tab-sheet)] [--tab-hover:light-dark(var(--surface-recess),var(--surface-hover))] coarse:[--item:var(--strip-item)] reduced-transparency:[--rim-w:1] contrast-more:[--rim-w:1]",
+        work: "[--item:var(--space-8)] [--px:calc(var(--space-2)_-_var(--tight)_*_0.09)] [--sheet:light-dark(var(--surface-raised),var(--surface-hover))] [--tab-fill:var(--surface-recess)] [--tab-hover:light-dark(var(--surface-hover),color-mix(in_oklch,var(--surface-fill)_50%,transparent))] coarse:[--item:var(--space-8)] [&_[data-slot=ff-tab]]:[--gap:max(0px,var(--space-row)_-_var(--tight)_*_0.06)] [&_[data-slot=ff-tab]~[data-slot=ff-tab]]:[--px-start:calc(var(--overlap)_+_var(--px))]",
+      },
+    },
+    compoundVariants: [
+      {
+        strip: "session",
+        scrollable: true,
+        class:
+          "max-desk:strip-edge-mask desk:coarse:-mt-(--strip-reach) coarse:-mb-(--strip-reach) desk:coarse:pt-[calc(var(--pad)_+_var(--strip-reach))] coarse:pb-(--strip-reach) max-desk:mt-0 max-desk:pt-[calc(var(--c-top-bar-h)_-_var(--c-tab-row-h))] max-desk:[--edge-room-start:calc(var(--fade-len)_*_1.5)] max-desk:[--fade-len:var(--strip-fade)] max-desk:[--overlap:var(--radius-sm)] max-desk:[--pad:0px] max-desk:[--radius:var(--radius-lg)]",
+      },
+      {
+        strip: "hosted",
+        scrollable: true,
+        class:
+          "coarse:-my-(--strip-reach) coarse:pt-[calc(var(--pad)_+_var(--strip-reach))] coarse:pb-(--strip-reach)",
+      },
+    ],
+  });
+</script>
+
 <script lang="ts">
   /**
    * The segmented control's track. Two overlays travel under the items —
@@ -1110,7 +1188,7 @@
      rank (`--z`, the script; `--z-rest` until the track has ranked it): its
      sheet, rim and everything written on it rise and fall together. The
      track's own layers are not tabs: the highlight's ghost and pills
-     (absolutely placed, app.css .kit-highlight). The hover ghost is the
+     (absolutely placed, components/ui/highlight). The hover ghost is the
      kit's, and folder tabs overlap, each in its own stack, so no one layer
      can glide between a tab's card and its label: in a folder strip the
      ghost stands down and the tab under the pointer lights its own card
@@ -1118,10 +1196,12 @@
 <div
   data-slot="ff-tabs-list"
   class={cn(
-    "ff-tabs-list",
-    "in-variant-folder:[&>:not([data-slot=segment],[data-slot=ring],.kit-ghost,.kit-pill,.kit-pill-trail)]:relative in-variant-folder:[&>:not([data-slot=segment],[data-slot=ring],.kit-ghost,.kit-pill,.kit-pill-trail)]:isolate in-variant-folder:[&>:not([data-slot=segment],[data-slot=ring],.kit-ghost,.kit-pill,.kit-pill-trail)]:z-[var(--z,var(--z-rest,1))] in-variant-folder:[&>:not([data-slot=segment],[data-slot=ring],.kit-ghost,.kit-pill,.kit-pill-trail)]:-ms-(--overlap)",
-    "in-variant-folder:[&>.kit-ghost]:hidden",
-    scrollable && "kit-edge-fade [&>[data-slot=ff-tab]]:shrink-0",
+    tabsListVariants({
+      size: tabs.size,
+      variant: tabs.variant,
+      scrollable,
+      strip: tabs.strip,
+    }),
     className
   )}
   data-overflows={overflows ? "" : undefined}
