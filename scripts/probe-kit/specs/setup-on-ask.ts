@@ -8,9 +8,8 @@
  *
  * - First words open its Setup thread (as they always have); then a second
  *   thread, "chat", is a plain conversation Caw answers.
- * - Then, on each harness Caw runs on (core `CAW_DENIED_TOOLS`: Claude Code
- *   and OpenCode; pi cannot put his calls to the hub's gate, so Caw does not
- *   run there) in turn, Caw moved to it, the person writes in chat: "can you
+ * - Then, on each harness Caw runs on (core `CAW_DENIED_TOOLS`: Claude Code,
+ *   OpenCode and pi) in turn, Caw moved to it, the person writes in chat: "can you
  *   set this project up again? I moved the checkout". The mock stands in for
  *   Caw's understanding of the ask: it calls project_setup with chat's id
  *   and `change: ["place"]`, then follows the steps it answers: the setup

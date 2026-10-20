@@ -1284,6 +1284,7 @@ public enum OpenEnums {
     public enum CawHarness: OpenEnum {
         case claude
         case opencode
+        case pi
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -1291,6 +1292,7 @@ public enum OpenEnums {
             switch rawValue {
             case "claude": self = .claude
             case "opencode": self = .opencode
+            case "pi": self = .pi
             default: self = .unrecognized(rawValue)
             }
         }
@@ -1299,6 +1301,7 @@ public enum OpenEnums {
             switch self {
             case .claude: "claude"
             case .opencode: "opencode"
+            case .pi: "pi"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -1307,7 +1310,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.claude, .opencode]
+        public static let allCases: [Self] = [.claude, .opencode, .pi]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

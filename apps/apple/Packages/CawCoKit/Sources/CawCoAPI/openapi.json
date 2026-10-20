@@ -10036,7 +10036,8 @@
                     "type": "string",
                     "enum": [
                       "claude",
-                      "opencode"
+                      "opencode",
+                      "pi"
                     ]
                   },
                   "model": {
@@ -33260,7 +33261,7 @@
             "description": "How hard the model thinks: the same {@link EffortLevel} scale every other effort control uses."
           },
           "harness": {
-            "$ref": "#/components/schemas/HarnessKind"
+            "$ref": "#/components/schemas/CawHarness"
           },
           "model": {
             "type": "string"
@@ -39611,7 +39612,8 @@
         "type": "string",
         "enum": [
           "claude",
-          "opencode"
+          "opencode",
+          "pi"
         ]
       },
       "CawRunning": {
@@ -43525,7 +43527,7 @@
                     ]
                   },
                   "harness": {
-                    "$ref": "#/components/schemas/HarnessKind"
+                    "$ref": "#/components/schemas/CawHarness"
                   },
                   "model": {
                     "type": "string"
@@ -49885,7 +49887,7 @@
             "type": "string"
           },
           "harness": {
-            "$ref": "#/components/schemas/HarnessKind",
+            "$ref": "#/components/schemas/CawHarness",
             "description": "The harnesses cawco can spawn sessions on. Adding one is a new adapter."
           },
           "machineId": {
@@ -51087,7 +51089,7 @@
             ]
           },
           "movedFrom": {
-            "$ref": "#/components/schemas/HarnessKind",
+            "$ref": "#/components/schemas/CawHarness",
             "description": "The store it was moved from: `~/.claude`, pi's own `auth.json`, OpenCode's own; null when not moved."
           },
           "reason": {

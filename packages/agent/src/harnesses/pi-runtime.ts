@@ -18,7 +18,9 @@ import {
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
   INSTALL_SESSION_CREDENTIAL,
+  LEAD_GATED_TOOLS,
   MESSAGES_READ,
+  piToolsFor,
   pricedRequest,
   usageByModel,
   VERIFY_SESSION_CREDENTIAL,
@@ -54,6 +56,8 @@ import {
   ModelRuntime,
   SessionManager,
   SettingsManager,
+  type ToolCallEvent,
+  type ToolCallEventResult,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { type Boundary, boundaryCommand } from "../boundary";
@@ -77,7 +81,7 @@ import {
   textOf,
   toBlocks,
 } from "./pi-services";
-import { piOpenTurns } from "./pi-sessiond";
+import { type PiGateAsk, piOpenTurns } from "./pi-sessiond";
 
 type BashExec = BashOperations["exec"];
 
@@ -471,6 +475,124 @@ class FleetMcp {
   }
 }
 
+/** Caw's shell and edit tools on pi, by pi's own names (core `LEAD_GATED_TOOLS`). */
+const LEAD_GATED_ON_PI: ReadonlySet<string> = new Set(LEAD_GATED_TOOLS.pi);
+
+/** Why a gated call did not run when its turn was aborted before the hub answered. */
+const INTERRUPTED =
+  "The turn was interrupted before the hub answered this call.";
+
+/**
+ * A project's Caw on pi (`SpawnPayload.lead`): each call of his shell and
+ * edit tools is put to the hub as a permission ask before it runs, and runs
+ * only once the hub's gate allows it (hub lead-gate.ts), as Claude Code's
+ * `ask` rules and OpenCode's put his calls there. pi's own point for it:
+ * "`tool_call` can mutate input or block execution" (pi docs
+ * extensions.md); pi awaits each handler before the call runs
+ * (agent-session.js `_beforeToolCall`), a script's calls included ("Nested
+ * calls go through argument validation and the `tool_call` and `tool_result`
+ * handlers like model-issued calls"), and a handler that fails blocks the
+ * call ("A `tool_call` handler failure blocks the tool as a fail-safe"). It
+ * is the session's last extension, so no other handler changes a call's
+ * input after the hub judged it ("Later `tool_call` handlers see earlier
+ * mutations", types.d.ts `ToolCallEvent`; inline extensions load after the
+ * person's own, resource-loader.js `loadFinalExtensionSet`).
+ */
+class PiLeadGate {
+  readonly #ctx: HarnessContext;
+  /** The asks the hub has not answered, by request: each with its call's answer. */
+  readonly #waiting = new Map<
+    string,
+    {
+      ask: PiGateAsk;
+      settle: (answer: ToolCallEventResult | undefined) => void;
+    }
+  >();
+
+  constructor(ctx: HarnessContext) {
+    this.#ctx = ctx;
+  }
+
+  /** The inline extension: every gated call waits on the hub. */
+  extension(): ExtensionFactory {
+    return (pi) => {
+      pi.on("tool_call", (event, context) => this.#put(event, context.signal));
+    };
+  }
+
+  /**
+   * A call of a gated tool, put to the hub; any other runs as it would. The
+   * call's own id names its transcript row; a call a script made has none
+   * there ("These ids do not appear as tool calls or tool results in the
+   * transcript"). An abort of the turn takes the ask back.
+   */
+  #put(
+    event: ToolCallEvent,
+    signal: AbortSignal | undefined
+  ): Promise<ToolCallEventResult | undefined> | undefined {
+    if (!LEAD_GATED_ON_PI.has(event.toolName)) {
+      return;
+    }
+    if (signal?.aborted) {
+      return Promise.resolve({ block: true, reason: INTERRUPTED });
+    }
+    const ask: PiGateAsk = {
+      requestId: crypto.randomUUID(),
+      toolName: event.toolName,
+      input: event.input,
+      requestKind: "tool",
+      ...(event.parentToolCallId ? {} : { toolUseId: event.toolCallId }),
+    };
+    return new Promise((resolve) => {
+      const interrupted = () =>
+        this.#settle(
+          ask.requestId,
+          { block: true, reason: INTERRUPTED },
+          "cancelled"
+        );
+      signal?.addEventListener("abort", interrupted, { once: true });
+      this.#waiting.set(ask.requestId, {
+        ask,
+        settle: (answer) => {
+          signal?.removeEventListener("abort", interrupted);
+          resolve(answer);
+        },
+      });
+      this.#ctx.permission(ask);
+    });
+  }
+
+  #settle(
+    requestId: string,
+    answer: ToolCallEventResult | undefined,
+    outcome: "answered" | "cancelled"
+  ): void {
+    const waiting = this.#waiting.get(requestId);
+    if (!waiting) {
+      return;
+    }
+    this.#waiting.delete(requestId);
+    waiting.settle(answer);
+    this.#ctx.permissionResolved?.(requestId, outcome);
+  }
+
+  /** The hub's answer: an allowed call runs; a denied one is blocked with the hub's words, which pi hands the model as the call's error. */
+  answer(requestId: string, result: PermissionResult): void {
+    this.#settle(
+      requestId,
+      result.behavior === "allow"
+        ? undefined
+        : { block: true, reason: result.message },
+      "answered"
+    );
+  }
+
+  /** An ask nobody could be shown, taken back: its call does not run. */
+  withdraw(requestId: string, message: string): void {
+    this.#settle(requestId, { block: true, reason: message }, "cancelled");
+  }
+}
+
 /**
  * The HTTP status of the provider's last answer to a session, read off the
  * response itself: {@link fetch} is the fetch every request the session's
@@ -532,6 +654,8 @@ class PiSession implements HarnessSession {
   readonly #runtime: ModelRuntime;
   /** Its shell commands, which a send moves to the background. */
   readonly #shells: PiShells;
+  /** A project's Caw's gate: his shell and edit calls, each put to the hub. */
+  readonly #gate: PiLeadGate | undefined;
   #busy = false;
   readonly #unread: string[] = [];
   #reading: string | undefined;
@@ -604,9 +728,11 @@ class PiSession implements HarnessSession {
     tools: CawcoTools,
     runtime: ModelRuntime,
     shells: PiShells,
-    fleetMcp: FleetMcp
+    fleetMcp: FleetMcp,
+    gate: PiLeadGate | undefined
   ) {
     this.#ctx = ctx;
+    this.#gate = gate;
     this.#session = session;
     this.#credential = credential;
     this.#tools = tools;
@@ -1035,11 +1161,11 @@ class PiSession implements HarnessSession {
         return undefined;
     }
   }
-  resolvePermission(_requestId: string, _result: PermissionResult): void {
-    /* pi has no permissions */
+  resolvePermission(requestId: string, result: PermissionResult): void {
+    this.#gate?.answer(requestId, result);
   }
-  withdrawPermission(_requestId: string, _message: string): void {
-    /* pi has no permissions */
+  withdrawPermission(requestId: string, message: string): void {
+    this.#gate?.withdraw(requestId, message);
   }
   async interrupt(): Promise<void> {
     await this.#session.abort();
@@ -1142,6 +1268,7 @@ export async function startPiHost(
   // `mcp.json` servers, and find the fleet's `deferred` tools when asked.
   const fleetMcp = new FleetMcp(ctx.cwd);
   const door = await ctx.browserDoor?.();
+  const gate = spec.lead ? new PiLeadGate(ctx) : undefined;
   const resourceLoader = new DefaultResourceLoader({
     cwd: ctx.cwd,
     agentDir,
@@ -1151,6 +1278,8 @@ export async function startPiHost(
       createToolSearchExtension(),
       createMcpExtension(),
       fleetMcp.extension((await fleetMcp.read(door)).servers),
+      // Last, so its verdict is on the input the call runs with.
+      ...(gate ? [gate.extension()] : []),
     ],
     agentsFilesOverride: (base) => ({
       agentsFiles: [...base.agentsFiles, ...memory],
@@ -1166,6 +1295,7 @@ export async function startPiHost(
     spec.model && spec.model !== "default"
       ? await resolvePiModel(runtime, spec.model)
       : undefined;
+  const denied = piToolsFor(spec.denyTools ?? []).tools;
   let manager: SessionManager;
   if (spec.resume) {
     const source = await piSessionPath(spec.resume.sessionKey, ctx.cwd);
@@ -1188,6 +1318,11 @@ export async function startPiHost(
     sessionManager: manager,
     settingsManager,
     resourceLoader,
+    // Its denied tools (its delegate type's, a lead's), by pi's own names:
+    // "Whether `--tools` and `--exclude-tools` keep the tool registered"
+    // (agent-session.js `_isAllowedTool`), so an excluded tool is in no list
+    // the model reads, and nothing can activate or call it.
+    ...(denied.length > 0 ? { excludeTools: denied } : {}),
     customTools: [
       sessionBash(ctx.cwd, ctx.boundary, shells),
       ...(ctx.boundary ? boundedFileTools(ctx.cwd, ctx.boundary) : []),
@@ -1204,6 +1339,7 @@ export async function startPiHost(
     tools,
     runtime,
     shells,
-    fleetMcp
+    fleetMcp,
+    gate
   );
 }

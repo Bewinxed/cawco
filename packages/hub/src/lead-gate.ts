@@ -88,6 +88,7 @@ export type GateDecision = GateVerdict | { kind: "withdrawn"; why: string };
 const GATED: ReadonlySet<string> = new Set([
   ...LEAD_GATED_TOOLS.claude,
   ...LEAD_GATED_TOOLS.opencode,
+  ...LEAD_GATED_TOOLS.pi,
 ]);
 
 // --- the shell, read -------------------------------------------------------
@@ -954,7 +955,7 @@ const shellFiles = (command: string): string[] => {
 
 // --- edits -----------------------------------------------------------------
 
-/** The files an edit call names: Claude's `file_path`/`notebook_path`, OpenCode's `filepath` or its resources. */
+/** The files an edit call names: Claude's `file_path`/`notebook_path`, OpenCode's `filepath` or its resources, pi's `path`. */
 const editFiles = (input: Record<string, unknown>): string[] => {
   const named = [
     input.file_path,

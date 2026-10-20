@@ -55,9 +55,22 @@ export type PiHostCommand =
     }
   | { type: "control"; id: string; method: string; args: unknown[] }
   | { type: "snapshot"; id: string }
-  | { type: "stop"; id: string };
+  | { type: "stop"; id: string }
+  /** The hub's answer to one of a lead's gated calls (pi-runtime `PiLeadGate`). */
+  | { type: "permission"; requestId: string; result: PermissionResult }
+  /** One of them taken back, unshown: its call does not run. */
+  | { type: "withdraw"; requestId: string; message: string };
+
+/** One of a lead's calls a pi host put to the hub (pi-runtime `PiLeadGate`), as its agent parks it. */
+export type PiGateAsk = Parameters<HarnessContext["permission"]>[0];
 
 export interface PiHostState {
+  /**
+   * The lead's calls the host put to the hub and holds unanswered: an agent
+   * that attaches raises them again, and one the hub already judged is
+   * answered again by its row (hub lead-gate.ts `decide`).
+   */
+  asks?: PiGateAsk[];
   /**
    * The shell commands a send moved to the background that still run, by
    * task id (pi-runtime `PiShells`): stopping the host ends them. Absent from
@@ -80,7 +93,19 @@ export type PiHostEvent =
   | { type: "session"; sessionId: string }
   | { type: "failed"; error: string }
   | { type: "rejected"; uuid: string; error: string }
-  | { type: "reply"; id: string; value?: unknown; error?: string };
+  | { type: "reply"; id: string; value?: unknown; error?: string }
+  | { type: "permission"; request: PiGateAsk }
+  | {
+      type: "permission_resolved";
+      requestId: string;
+      outcome: "answered" | "cancelled";
+    };
+
+/** What the host says that must reach the session in its order: its frames and its asks. */
+type InOrder = Extract<
+  PiHostEvent,
+  { type: "frame" | "permission" | "permission_resolved" }
+>;
 
 /**
  * A frame about a shell command a pi host moved to the background: its
@@ -154,7 +179,8 @@ export class PiRemoteSession implements HarnessSession {
   #exited = false;
   /** The gate form the host reports it started on ({@link PiHostState.gateForm}). */
   #hostForm: string | undefined;
-  readonly #frames: { seq: number; message: NeutralMessage }[] = [];
+  /** What the host said before the supervisor installed this session, in order. */
+  readonly #early: { seq: number; event: InOrder }[] = [];
   /**
    * The sends the host has been handed and pi has not read, by uuid: from
    * {@link send} (or the host's own list, {@link applyState}) until the
@@ -198,11 +224,13 @@ export class PiRemoteSession implements HarnessSession {
           const event = JSON.parse(line.data) as PiHostEvent;
           switch (event.type) {
             case "frame":
+            case "permission":
+            case "permission_resolved":
               // biome-ignore lint/suspicious/noUnnecessaryConditions: attached() changes this after the supervisor installs the handle
               if (this.#ready) {
-                this.#frame(line.seq, event.message);
+                this.#inOrder(line.seq, event);
               } else {
-                this.#frames.push({ seq: line.seq, message: event.message });
+                this.#early.push({ seq: line.seq, event });
               }
               break;
             case "busy":
@@ -255,6 +283,30 @@ export class PiRemoteSession implements HarnessSession {
       },
       afterSeq
     );
+  }
+
+  /**
+   * A frame, or a lead's ask or its end, in the order the host said them: an
+   * ask after the frame of the call it gates, its end after the ask.
+   */
+  #inOrder(seq: number, event: InOrder): void {
+    switch (event.type) {
+      case "frame":
+        this.#frame(seq, event.message);
+        return;
+      case "permission":
+        this.#ctx.permission(event.request);
+        return;
+      case "permission_resolved":
+        this.#ctx.permissionResolved?.(event.requestId, event.outcome);
+        return;
+      default: {
+        const unhandled: never = event;
+        throw new Error(
+          `unhandled pi host event: ${JSON.stringify(unhandled)}`
+        );
+      }
+    }
   }
 
   #frame(seq: number, message: NeutralMessage): void {
@@ -310,6 +362,11 @@ export class PiRemoteSession implements HarnessSession {
     if (state.sessionId) {
       this.#ctx.session(state.sessionId);
     }
+    // Its calls waiting on the hub, raised again: an agent that restarted
+    // parks none of them, and the supervisor raises each request once.
+    for (const ask of state.asks ?? []) {
+      this.#ctx.permission(ask);
+    }
   }
 
   /**
@@ -335,8 +392,8 @@ export class PiRemoteSession implements HarnessSession {
 
   attached(): void {
     this.#ready = true;
-    for (const frame of this.#frames.splice(0)) {
-      this.#frame(frame.seq, frame.message);
+    for (const { seq, event } of this.#early.splice(0)) {
+      this.#inOrder(seq, event);
     }
     // biome-ignore lint/suspicious/noUnnecessaryConditions: #busy follows the host's busy events and snapshots (#setBusy), which biome's per-method inference does not see
     if (!this.#busy) {
@@ -433,11 +490,23 @@ export class PiRemoteSession implements HarnessSession {
   async interrupt(): Promise<void> {
     await this.control(CONTROL_INTERRUPT, []);
   }
-  resolvePermission(_requestId: string, _result: PermissionResult): void {
-    /* pi has no permissions */
+  /** The hub's answer to a lead's call, to the host that waits on it. */
+  resolvePermission(requestId: string, result: PermissionResult): void {
+    this.#answer({ type: "permission", requestId, result });
   }
-  withdrawPermission(_requestId: string, _message: string): void {
-    /* pi has no permissions */
+  withdrawPermission(requestId: string, message: string): void {
+    this.#answer({ type: "withdraw", requestId, message });
+  }
+  #answer(
+    command: Extract<PiHostCommand, { type: "permission" | "withdraw" }>
+  ): void {
+    // A refused write has been said ({@link write}); the host keeps the ask,
+    // and the next attach raises it again (`PiHostState.asks`).
+    this.write(command).catch((error: unknown) =>
+      console.warn(
+        `[pi] ${this.#ctx.instanceId}: the answer to ${command.requestId} did not reach its host: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
   }
   async stop(): Promise<void> {
     // A host being stopped is not one to relaunch.
