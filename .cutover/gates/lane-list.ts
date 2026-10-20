@@ -22,19 +22,19 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
-export interface LaneList {
-  dashboardSrc: string[];
-  deleted: string[];
+export type LaneList = {
   lane: string;
+  start: string;
+  listFile: string;
   laneFile: string;
   laneText: string;
-  listFile: string;
-  missing: string[];
   present: string[];
+  deleted: string[];
+  missing: string[];
   stale: string[];
-  start: string;
   unlisted: string[];
-}
+  dashboardSrc: string[];
+};
 
 /** Paths changed since `start`: tracked changes against the working tree, and untracked files. */
 function changedSince(start: string): string[] {
@@ -51,9 +51,7 @@ function changedSince(start: string): string[] {
       ]),
     ];
   } catch (error) {
-    console.log(
-      `git could not compare against the start sha ${start}: ${error}`
-    );
+    console.log(`git could not compare against the start sha ${start}: ${error}`);
     process.exit(2);
   }
 }
@@ -66,33 +64,22 @@ export function loadLane(): LaneList {
   }
   const listFile = `.cutover/lanes/${lane}.files`;
   if (!existsSync(listFile)) {
-    console.log(
-      `${listFile} is not in this tree: commit the lane's list there`
-    );
+    console.log(`${listFile} is not in this tree: commit the lane's list there`);
     process.exit(2);
   }
   const lines = readFileSync(listFile, "utf8")
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith("#"));
-  const start = lines
-    .find((line) => line.startsWith("start:"))
-    ?.slice("start:".length)
-    .trim();
+  const start = lines.find((line) => line.startsWith("start:"))?.slice("start:".length).trim();
   if (!start) {
-    console.log(
-      `${listFile} names no start sha: add a \`start: <sha>\` line, the commit the lane was cut from`
-    );
+    console.log(`${listFile} names no start sha: add a \`start: <sha>\` line, the commit the lane was cut from`);
     process.exit(2);
   }
-  const listed = [
-    ...new Set(lines.filter((line) => !line.startsWith("start:"))),
-  ];
+  const listed = [...new Set(lines.filter((line) => !line.startsWith("start:")))];
   const laneFile = `.cutover/lanes/${lane}.md`;
   const laneText = existsSync(laneFile) ? readFileSync(laneFile, "utf8") : "";
-  const declared = new Set(
-    [...laneText.matchAll(/^deleted-file:\s*(\S+)/gm)].map((match) => match[1])
-  );
+  const declared = new Set([...laneText.matchAll(/^deleted-file:\s*(\S+)/gm)].map((match) => match[1]));
   const present = listed.filter((path) => existsSync(path));
   const absent = listed.filter((path) => !existsSync(path));
   const named = new Set(listed);
@@ -106,38 +93,24 @@ export function loadLane(): LaneList {
     deleted: absent.filter((path) => declared.has(path)),
     missing: absent.filter((path) => !declared.has(path)),
     stale: [...declared].filter((path) => existsSync(path)),
-    unlisted: changedSince(start).filter(
-      (path) => !(path.startsWith(".cutover/") || named.has(path))
-    ),
-    dashboardSrc: present.filter((path) =>
-      path.startsWith("apps/dashboard/src/")
-    ),
+    unlisted: changedSince(start).filter((path) => !path.startsWith(".cutover/") && !named.has(path)),
+    dashboardSrc: present.filter((path) => path.startsWith("apps/dashboard/src/")),
   };
 }
 
 /** Prints the list's partition; returns false when the list itself fails the gate. */
 export function reportList(list: LaneList): boolean {
   console.log(
-    `list: ${list.present.length} present (${list.dashboardSrc.length} under apps/dashboard/src) · ${list.deleted.length} deleted (declared) · ${list.missing.length} missing · ${list.stale.length} declared deleted but present · ${list.unlisted.length} changed but unlisted`
+    `list: ${list.present.length} present (${list.dashboardSrc.length} under apps/dashboard/src) · ${list.deleted.length} deleted (declared) · ${list.missing.length} missing · ${list.stale.length} declared deleted but present · ${list.unlisted.length} changed but unlisted`,
   );
   for (const path of list.missing) {
-    console.log(
-      `missing: ${path} — listed, absent, and no \`deleted-file: ${path}\` line in ${list.laneFile}`
-    );
+    console.log(`missing: ${path} — listed, absent, and no \`deleted-file: ${path}\` line in ${list.laneFile}`);
   }
   for (const path of list.stale) {
-    console.log(
-      `stale: ${path} — \`deleted-file:\` in ${list.laneFile}, but the file exists`
-    );
+    console.log(`stale: ${path} — \`deleted-file:\` in ${list.laneFile}, but the file exists`);
   }
   for (const path of list.unlisted) {
-    console.log(
-      `unlisted: ${path} — changed since ${list.start.slice(0, 9)}, not on ${list.listFile}`
-    );
+    console.log(`unlisted: ${path} — changed since ${list.start.slice(0, 9)}, not on ${list.listFile}`);
   }
-  return (
-    list.missing.length === 0 &&
-    list.stale.length === 0 &&
-    list.unlisted.length === 0
-  );
+  return list.missing.length === 0 && list.stale.length === 0 && list.unlisted.length === 0;
 }
