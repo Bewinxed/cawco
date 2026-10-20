@@ -2439,9 +2439,8 @@ const wireRefusal = (
     return {};
   }
   if (refusal.kind === "mode-ask") {
-    return {
-      modeAsk: { machineId: refusal.machineId, harness: refusal.harness },
-    };
+    const { kind: _kind, ...ask } = refusal;
+    return { modeAsk: ask };
   }
   return { refusal };
 };
@@ -4595,24 +4594,6 @@ export const createServer = (
     };
   };
   /**
-   * A wake with no permission mode to run on (its row's, else the person's
-   * last for its harness on its machine, `reviveMode`): the page asks for one
-   * where the send was made, and sends it again on it (core `ModeAsk`).
-   */
-  const wakeModeAsk = (
-    row: ReturnType<typeof db.getInstancesByIds>[number]
-  ): { reason: string; refusal: StoredSendRefusal } | undefined => {
-    const mode = modeOf(
-      row.machineId,
-      row.harness ?? "claude",
-      undefined,
-      reviveMode(row)
-    );
-    return "refusal" in mode && mode.ask
-      ? { reason: mode.refusal, refusal: { kind: "mode-ask", ...mode.ask } }
-      : undefined;
-  };
-  /**
    * Why a session takes no input from `origin` now, or nothing when it does
    * ({@link WorkItems.refusal}). Every sender asks this, by way of
    * {@link deliverSend} or {@link sendRoute}.
@@ -4640,16 +4621,12 @@ export const createServer = (
     }
     // A send to a session whose process is gone wakes it ({@link wakeForSend}),
     // fresh when its harness never began a conversation (core `relaunchOf`);
-    // one whose account can't run on its machine is not woken, and says why.
+    // one that can't be woken is refused before it is taken, saying why
+    // ({@link wakeOf}, the one rule every wake asks).
     if (row && wakesForSend(row)) {
-      const launch = launchAccount(row.machineId, row, sessionName(row));
-      if ("refusal" in launch) {
-        return { reason: launch.refusal, refusal: launch.cause };
-      }
-      // Nor one with no permission mode to wake on: the page asks.
-      const unchosen = wakeModeAsk(row);
-      if (unchosen) {
-        return unchosen;
+      const wake = wakeOf(row.machineId, row, false);
+      if ("refused" in wake) {
+        return wake.refused;
       }
     }
     return row
@@ -4693,7 +4670,9 @@ export const createServer = (
      * runs again (stopped, deleted, archived, nothing to resume), and what it
      * never read fails for `why`.
      */
-    keep: "none" | "all" = "none"
+    keep: "none" | "all" = "none",
+    /** What its failed sends offer back, beside `why` (a wake's refusal, {@link wakeOf}). */
+    refusal?: StoredSendRefusal
   ): void => {
     if (!outlived) {
       // What it had asked the person is asked again if it runs again.
@@ -4741,7 +4720,14 @@ export const createServer = (
           (send.body as SentMessage).origin
         );
       if (keep === "none") {
-        settlePending(instanceId, why, "fail", (send) => !keptAtRest(send));
+        settlePending(
+          instanceId,
+          why,
+          "fail",
+          (send) => !keptAtRest(send),
+          undefined,
+          refusal
+        );
       }
     }
     // A session that never runs again: what fleet watch read of it is over,
@@ -5400,7 +5386,9 @@ export const createServer = (
     why: string,
     unstored: Unstored,
     only: (send: SentMessageRow) => boolean = () => true,
-    decided: () => void = () => undefined
+    decided: () => void = () => undefined,
+    /** What a failed send offers back, beside `why`. */
+    refusal?: StoredSendRefusal
   ): void => {
     // A turn that is over answers nothing it read; one a live process is
     // still running may yet.
@@ -5436,7 +5424,9 @@ export const createServer = (
           }
           let owed = false;
           for (const send of sends) {
-            owed = settleSend(send, read.stored, unstored, read.said) || owed;
+            owed =
+              settleSend(send, read.stored, unstored, read.said, refusal) ||
+              owed;
           }
           if (whole) {
             decided();
@@ -5489,7 +5479,8 @@ export const createServer = (
     send: SentMessageRow,
     stored: Map<string, boolean>,
     unstored: Unstored,
-    why: string
+    why: string,
+    refusal?: StoredSendRefusal
   ): boolean => {
     // Read meanwhile, or thrown away with its session: that stands.
     const now = db.sendRecord(send.uuid);
@@ -5502,7 +5493,7 @@ export const createServer = (
       return false;
     }
     if (unstored === "fail") {
-      failSend(now, why);
+      failSend(now, why, refusal);
       return false;
     }
     const lost =
@@ -6910,7 +6901,17 @@ export const createServer = (
       };
     }
     const unfit = modeRefusal(machineId, harness, mode);
-    return unfit ? { refusal: `${unfit} Nothing was started.` } : { mode };
+    // A mode its machine doesn't take: the page asks for one it does.
+    return unfit
+      ? {
+          refusal: `${unfit} Nothing was started.`,
+          ask: {
+            machineId,
+            harness: harness as HarnessKind,
+            refused: mode as PermissionMode,
+          },
+        }
+      : { mode };
   };
 
   /** Why a spawn that names no permission mode does not start ({@link settleMode}). */
@@ -7028,15 +7029,55 @@ export const createServer = (
    * still running replaces its process, as the machine settles the old one
    * first.
    */
-  /** Why a session cannot be woken now; none when it can. */
-  const wakeRefusal = (
+  /**
+   * Whether `row`'s process can be started again for a wake (a send, a move
+   * to another account): the one rule both the send's gate
+   * ({@link inputRefusal}) and the launch ({@link resumeSpawn}) ask. Its
+   * account must run on its machine, its conversation be there to resume
+   * (core `relaunchOf`), its launch directory known, and a permission mode
+   * its machine takes be named for it (`settleMode`). Refused, it says why,
+   * with what the page offers back: a sign-in or a move (`SendRefusal`), or
+   * a mode to pick (core `ModeAsk`, kept as `mode-ask`).
+   */
+  const wakeOf = (
     machineId: string,
     row: ReturnType<typeof db.getInstancesByIds>[number],
-    plan: Relaunch
-  ): string | undefined =>
-    (plan.kind === "refused" ? plan.reason : undefined) ??
-    launchRefusal(row.id) ??
-    accountStartRefusal(machineId, row, sessionName(row));
+    relaunch: boolean
+  ):
+    | { refused: { reason: string; refusal?: StoredSendRefusal } }
+    | {
+        plan: Relaunch;
+        settled: { payload: SettledSpawn; permissionMode: string | null };
+      } => {
+    const launch = launchAccount(machineId, row, sessionName(row));
+    if ("refusal" in launch) {
+      return { refused: { reason: launch.refusal, refusal: launch.cause } };
+    }
+    const plan = relaunchOf(row);
+    if (plan.kind === "refused") {
+      return { refused: { reason: plan.reason } };
+    }
+    const unlaunched = launchRefusal(row.id);
+    if (unlaunched) {
+      return { refused: { reason: unlaunched } };
+    }
+    const settled = settleMode(
+      machineId,
+      revivePayloadOf(row, plan, relaunch),
+      reviveMode(row)
+    );
+    if ("refusal" in settled) {
+      return {
+        refused: {
+          reason: settled.refusal,
+          ...(settled.ask
+            ? { refusal: { kind: "mode-ask" as const, ...settled.ask } }
+            : {}),
+        },
+      };
+    }
+    return { plan, settled };
+  };
 
   /**
    * A revive's start: on the settings the session last ran with, on its
@@ -7078,24 +7119,22 @@ export const createServer = (
       console.info(`[hub] not launching ${instanceId} again: ${inFlight}`);
       return;
     }
-    // On its conversation, or fresh when its harness never began one.
-    const plan = relaunchOf(row);
-    const refused = wakeRefusal(machineId, row, plan);
-    if (refused) {
-      // Nothing it was sent will be read by a process that does not start.
-      console.warn(`[hub] not waking ${instanceId}: ${refused}`);
-      forgetPending(instanceId, refused);
+    // On its conversation, or fresh when its harness never began one; one
+    // that can't start fails what it was sent, saying why, with what its
+    // row offers back (a mode to pick among them), by the same rule as a
+    // send's gate ({@link wakeOf}).
+    const wake = wakeOf(machineId, row, relaunch);
+    if ("refused" in wake) {
+      forgetPending(
+        instanceId,
+        wake.refused.reason,
+        false,
+        "none",
+        wake.refused.refusal
+      );
       return;
     }
-    const settled = settleMode(
-      machineId,
-      revivePayloadOf(row, plan, relaunch),
-      reviveMode(row)
-    );
-    if ("refusal" in settled) {
-      console.warn(`[hub] not waking ${instanceId}: ${settled.refusal}`);
-      return;
-    }
+    const { plan, settled } = wake;
     const revive = settled.payload;
     // A relaunch replaces the process; what the old one had parked is over.
     // What it was handed and never read its machine hands back once it has
@@ -31665,7 +31704,7 @@ export const createServer = (
               // running. Filed `stopped`, the row is no orphan to restore,
               // no beat promotes it, and the first beat that still lists a
               // process for it ends that process (`endStopped`, in the
-              // heartbeat case). Only a send brings it back (`ensureAlive`).
+              // heartbeat case). Only a send brings it back (`wakeForSend`).
               // Both Stop and Discard wait for the machine's teardown receipt.
               // Persisting intent is not proof that the runner has ended.
               stopFromDashboard(ws, message);

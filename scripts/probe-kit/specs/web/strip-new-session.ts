@@ -30,9 +30,11 @@
  * A fork of a row with no mode opens the form on the fork, never the hub's
  * refusal, and forks once a mode is picked; from Fork from here on a stopped
  * session, at that button.
- * A send to a stopped session that has no mode to wake on (none on its row,
- * none ever chosen for its harness on its machine) opens its permission
- * picker where the message is; a pick relaunches it and the message goes.
+ * A send to a stopped session that has no mode it can wake on (none on its
+ * row and none ever chosen for its harness on its machine; or one its
+ * machine doesn't take) opens its permission picker where the message is,
+ * the row naming why in our words; a pick relaunches it and the message
+ * goes.
  *
  *   bun scripts/probe-kit/run.ts web strip-new-session
  */
@@ -874,15 +876,18 @@ async function forkLeg(
 const MODE_PICK = '[data-ns-pop][aria-label="Permission mode"]';
 /** The composer's field, named by its hint (as journeys/j3-spawn names it). */
 const COMPOSER = /^Message/;
-/** What the person sends to the stopped session. */
-const AFTER_PICK = "After the pick.";
 
 /**
- * A stopped session with two answered turns whose row records no permission
- * mode, on a machine where none was ever chosen for Claude Code: what a
- * revive, a rewind or a fork of it has to ask for.
+ * A stopped session with two answered turns whose row records `mode`: none
+ * (on a machine where none was ever chosen for Claude Code), or one its
+ * machine doesn't take. What a revive, a rewind or a fork of it has to ask
+ * for.
  */
-async function modelessSession(fleet: KitFleet, name: string): Promise<string> {
+async function stoppedSession(
+  fleet: KitFleet,
+  name: string,
+  mode: "dontAsk" | null
+): Promise<string> {
   const project = await fleet.api<{ id: string }>("/api/projects", {
     name,
     machineId: MACHINE,
@@ -902,7 +907,8 @@ async function modelessSession(fleet: KitFleet, name: string): Promise<string> {
     60_000
   );
   fleet.write(
-    "UPDATE instances SET permission_mode = NULL WHERE id = ?",
+    "UPDATE instances SET permission_mode = ? WHERE id = ?",
+    mode,
     source
   );
   fleet.write(
@@ -1020,17 +1026,29 @@ async function forkHereLeg(kit: Kit, base: string, source: string) {
   await page.close();
 }
 
+/** What a revive leg sends, why its wake asks, and what its row says. */
+interface Revive {
+  /** The row's line, the dashboard's own words. */
+  line: string;
+  /** Why it asks, in the check's words. */
+  why: string;
+  /** What the person sends. */
+  words: string;
+}
+
 /**
- * A send to that stopped session, whose wake has no mode to run on: the
- * session's own permission picker opens at the message's Choose a mode,
- * and the hub's refusal is never shown. A pick relaunches the session in
- * place on it, and the message goes.
+ * A send to a stopped session whose wake has no mode it can run on (none,
+ * or one its machine doesn't take): the session's own permission picker
+ * opens at the message's Choose a mode, the row says why in the
+ * dashboard's words, and the hub's refusal is never shown. A pick
+ * relaunches the session in place on it, and the message goes.
  */
 async function reviveLeg(
   kit: Kit,
   base: string,
   fleet: KitFleet,
-  source: string
+  source: string,
+  revive: Revive
 ) {
   const page = await popoverPage(kit, base, source, "light");
   const field = page
@@ -1038,7 +1056,7 @@ async function reviveLeg(
     .filter({ visible: true })
     .first();
   await field.click();
-  await page.keyboard.type(AFTER_PICK);
+  await page.keyboard.type(revive.words);
   await page
     .getByRole("button", { name: "Send message" })
     .filter({ visible: true })
@@ -1052,7 +1070,7 @@ async function reviveLeg(
     );
   await settle(page, 400);
   const asked = await page.evaluate(
-    ({ pick, sent }) => {
+    ({ pick, sent, line }) => {
       const pop = document.querySelector(pick);
       // The message's own row: its words, and what it says under them.
       const row = [...document.querySelectorAll(".turn.you")].find((one) =>
@@ -1079,22 +1097,33 @@ async function reviveLeg(
                   : box.top - at.bottom
               )
             : null,
-        line: words.includes(
-          "Choose a permission mode for this session, and the message goes."
-        ),
-        refusal: words.includes("A permission mode must be chosen"),
+        line: words.includes(line),
+        refusal:
+          words.includes("A permission mode must be chosen") ||
+          words.includes("Nothing was started"),
         failure: words.includes("Couldn't send that message"),
+        said: (
+          row?.querySelector("[data-slot='reason']")?.textContent ?? ""
+        ).trim(),
       };
     },
-    { pick: MODE_PICK, sent: AFTER_PICK }
+    { pick: MODE_PICK, sent: revive.words, line: revive.line }
   );
+  // What the hub hands every screen for the session (its board row).
+  const listed = (await (
+    await fetch(`${fleet.base}/api/instances`)
+  ).json()) as {
+    id: string;
+    permissionMode?: string | null;
+  }[];
+  const board = listed.find((one) => one.id === source)?.permissionMode;
   const [refused] = fleet.query<{ state: string; refusal: string | null }>(
     "SELECT state, refusal FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
     source,
-    `%${AFTER_PICK}%`
+    `%${revive.words}%`
   );
   kit.check(
-    "1440 (fine): a send that has to wake a session with no mode opens its permission picker against the message's Choose a mode; the hub's refusal is never shown",
+    `1440 (fine): a send that has to wake a session ${revive.why} opens its permission picker against the message's Choose a mode, the row saying why in our words; the hub's refusal is never shown`,
     shown === "" &&
       asked.rows > 0 &&
       asked.gap !== null &&
@@ -1103,7 +1132,7 @@ async function reviveLeg(
       !asked.refusal &&
       !asked.failure &&
       refused?.refusal?.includes("mode-ask") === true,
-    JSON.stringify({ shown, ...asked, refused })
+    JSON.stringify({ shown, ...asked, refused, board })
   );
   await page.locator(`${MODE_PICK} [data-perm="${MODE}"]`).click();
   const went = await until(
@@ -1113,7 +1142,7 @@ async function reviveLeg(
         .query<{ state: string }>(
           "SELECT state FROM sent_messages WHERE instance_id = ? AND body LIKE ? AND state != 'failed'",
           source,
-          `%${AFTER_PICK}%`
+          `%${revive.words}%`
         )
         .at(0),
     Boolean,
@@ -1123,13 +1152,15 @@ async function reviveLeg(
     status: string;
     permission_mode: string | null;
   }>("SELECT status, permission_mode FROM instances WHERE id = ?", source);
-  const shownAfter = await page.evaluate(
-    () =>
-      document.body.textContent?.includes("A permission mode must be chosen") ??
-      false
-  );
+  const shownAfter = await page.evaluate(() => {
+    const text = document.body.textContent ?? "";
+    return (
+      text.includes("A permission mode must be chosen") ||
+      text.includes("Nothing was started")
+    );
+  });
   kit.check(
-    `1440 (fine): picking ${MODE} relaunches the session in place on it, and the message goes`,
+    `1440 (fine): ${revive.why}, picking ${MODE} relaunches the session in place on it, and the message goes`,
     after?.permission_mode === MODE &&
       after.status !== "stopped" &&
       went !== undefined &&
@@ -1175,9 +1206,24 @@ const spec: Spec = {
     await depthLeg(kit, base, source, "dark");
     await motionLeg(kit, base, source);
     await forkLeg(kit, base, fleet, rows);
-    const modeless = await modelessSession(fleet, "Revives");
+    const modeless = await stoppedSession(fleet, "Revives", null);
     await forkHereLeg(kit, base, modeless);
-    await reviveLeg(kit, base, fleet, modeless);
+    await reviveLeg(kit, base, fleet, modeless, {
+      why: "with no mode",
+      line: "Choose a permission mode for this session, and the message goes.",
+      words: "After the pick.",
+    });
+    await reviveLeg(
+      kit,
+      base,
+      fleet,
+      await stoppedSession(fleet, "Retired", "dontAsk"),
+      {
+        why: "on a mode its machine no longer takes (dontAsk)",
+        line: "doesn't take dontAsk. Choose a mode it takes, and the message goes.",
+        words: "After another pick.",
+      }
+    );
   },
 };
 

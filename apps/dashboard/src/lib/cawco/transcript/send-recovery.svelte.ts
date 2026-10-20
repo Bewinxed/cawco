@@ -22,6 +22,8 @@ import { nameOf, signinState } from "../accounts/model.svelte";
 import { signedInHere } from "../accounts/switch.svelte";
 import { type BoardRow, cawco } from "../client.svelte";
 import { conversationHref } from "../links";
+import { permissionModeLabel } from "../permission-modes";
+import { speakerName } from "./speaker";
 
 /** One way back, as a row action draws it. */
 export type RecoveryAction =
@@ -180,23 +182,38 @@ export function recoveryOf(
 }
 
 /**
- * A send that has to wake a session with no permission mode to wake on
- * (core `ModeAsk`): the row asks for one with the session's picker, never
- * saying the hub's refusal. Once its row names a mode (a pick here, or the
- * session's own card), it wakes on that, and Send again goes.
+ * A send that has to wake a session with no permission mode it can wake on
+ * (core `ModeAsk`): none named, or one its machine doesn't take (`refused`,
+ * named here in the dashboard's words). The row asks for one with the
+ * session's picker, never saying the hub's refusal. Once its row names
+ * another mode (a pick here, or the session's own card), it wakes on that,
+ * and Send again goes.
  */
 export function modeAskRecovery(ask: ModeAsk, session: BoardRow): SendRecovery {
-  if (session.permissionMode) {
+  if (session.permissionMode && session.permissionMode !== ask.refused) {
     return {
       line: "This session has a permission mode now.",
       holds: false,
       actions: [],
     };
   }
+  const action: RecoveryAction = {
+    kind: "mode",
+    machineId: ask.machineId,
+    harness: ask.harness,
+  };
+  if (ask.refused) {
+    return {
+      line: `${machineOf(ask.machineId)}'s ${speakerName(ask.harness)} doesn't take ${permissionModeLabel(ask.refused)}. Choose a mode it takes, and the message goes.`,
+      holds: true,
+      asks: true,
+      actions: [action],
+    };
+  }
   return {
     line: "Choose a permission mode for this session, and the message goes.",
     holds: true,
     asks: true,
-    actions: [{ kind: "mode", machineId: ask.machineId, harness: ask.harness }],
+    actions: [action],
   };
 }
