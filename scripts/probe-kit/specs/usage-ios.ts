@@ -13,8 +13,9 @@
  *   its dial says when it last reported;
  * - the second email's reading has gone two hours with nothing refreshing it.
  *
- * Ages read from the clock, so the hold pins both every 30 s (the two hours
- * stay "2h 00m" while the captures run), and runs a turn on the personal
+ * Ages read from the clock, so the hold pins both every 5 s: the app keeps
+ * the reading time it fetched at launch, so a launch shows "2h 00m" for the
+ * minute after the pin before it, and runs a turn on the personal
  * plan every 20 min so its reading stays current (one is stale an hour after).
  * The hold takes an iPhone 16 Pro simulator slot (mac-sim.ts) under its own
  * heavy run, building the checkout's simulator app first when it is missing
@@ -56,7 +57,7 @@ const AGED: Partial<Record<Id, number>> = {
   [TEAM]: 3 * HOUR_MS,
   [OTHER]: 2 * HOUR_MS,
 };
-const PIN_EVERY_MS = 30_000;
+const PIN_EVERY_MS = 5000;
 const REFRESH_EVERY_MS = 20 * 60_000;
 const scratch = process.env.TMPDIR ?? "/tmp";
 const NOTE = join(scratch, "usage-ios.json");

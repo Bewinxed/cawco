@@ -1,0 +1,51 @@
+{
+  "what": "Each Claude account's usage reading on the iPhone app beside the web dashboard in the same simulator's Mobile Safari, on the scratch fleet of scripts/probe-kit/specs/usage-ios.ts. Personal plan and Team seat share probe@scratch-fleet.test (orgs Scratch Fleet and Scratch Team); other@scratch-fleet.test is a second email. Team seat: at its 5-hour limit, reading 3 h old. Second email: 2 h with nothing refreshing it. Each session runs on its own account (moving at a limit switched off).",
+  "tree": {
+    "branch": "ws/0cc069c4",
+    "captured on": "origin/main 7a191f066 plus this branch's rig commits",
+    "apps/apple": "6cc6d68225b58a36798ab61c16cf62465bb6c7fb",
+    "fix": "886c20777, with 7422453cb (web nameOf) and 5abbefa25 (hub namedAccount) from main",
+    "since": "The branch was then rebased onto a4a49ce89 for its landing gate. Between the two, nothing changed in the naming, ages or limit lines these screens show (Rings.swift, SessionDetailsController.swift and dashboard usage/accounts untouched). 265d983fc did change the colour of the dials' spent-ring track and the rose account disc, so judge dial colours against main, not these frames."
+  },
+  "device": "iPhone 16 Pro, iOS 18.5 (CawCo slot from template iPhone-16-Pro 22F77 v1), 1206x2622 PNG via simctl io screenshot",
+  "runs": {
+    "app": "usage-ios hold of 2026-10-20 01:27Z (hub 127.0.0.1:58165)",
+    "web": "usage-ios hold of 2026-10-20 03:10Z (dashboard 127.0.0.1:51314), on a freshly made template so Safari carried no earlier run's tabs"
+  },
+  "invariant": [
+    "Shared-email accounts are named \"email (org)\".",
+    "A 2 h-unrefreshed reading says \"Hasn't reported for 2h 00m, so this may be out of date.\"",
+    "An at-limit dial says \"Last reported Xh ago.\"",
+    "A session's limit uses its own account."
+  ],
+  "files": [
+    { "file": "app-home-light.png", "side": "app", "scheme": "light", "screen": "home", "state": "usage strip: \"Claude · 5h+ until no account can start a session · probe (Scratch Fleet) 75% left\"" },
+    { "file": "app-home-dark.png", "side": "app", "scheme": "dark", "screen": "home", "state": "usage strip, as light" },
+    { "file": "app-home-dials-light.png", "side": "app", "scheme": "light", "screen": "home dials (usage sheet)", "state": "probe (Scratch Fleet) 75%/50% left; other 25%/25%, last reading 2h 00m ago; probe (Scratch Team) 5-hour used up, last reading 3h 00m ago" },
+    { "file": "app-home-dials-dark.png", "side": "app", "scheme": "dark", "screen": "home dials (usage sheet)", "state": "as light" },
+    { "file": "app-usage-light.png", "side": "app", "scheme": "light", "screen": "Usage page limits card (top)", "state": "probe@scratch-fleet.test (Scratch Fleet) carrying 1 session; probe@scratch-fleet.test (Scratch Team) \"At its limit. Back in 1h 43m. Last reported 3h 00m ago.\"" },
+    { "file": "app-usage-dark.png", "side": "app", "scheme": "dark", "screen": "Usage page limits card (top)", "state": "Scratch Team \"At its limit. Back in 1h 26m. Last reported 3h 00m ago.\"" },
+    { "file": "app-usage-scrolled-light.png", "side": "app", "scheme": "light", "screen": "Usage page limits card (scrolled)", "state": "other@scratch-fleet.test \"Hasn’t reported for 2h 00m, so this may be out of date.\"" },
+    { "file": "app-usage-scrolled-dark.png", "side": "app", "scheme": "dark", "screen": "Usage page limits card (scrolled)", "state": "as light" },
+    { "file": "app-session-personal-light.png", "side": "app", "scheme": "light", "screen": "session details limit line", "state": "personal session (acct-scratch-fleet): Week · 50% left" },
+    { "file": "app-session-personal-dark.png", "side": "app", "scheme": "dark", "screen": "session details limit line", "state": "as light" },
+    { "file": "app-session-team-light.png", "side": "app", "scheme": "light", "screen": "session details limit line", "state": "Team seat session (acct-usage-team): 5-hour · 0% left" },
+    { "file": "app-session-team-dark.png", "side": "app", "scheme": "dark", "screen": "session details limit line", "state": "as light" },
+    { "file": "app-session-other-light.png", "side": "app", "scheme": "light", "screen": "session details limit line", "state": "second-email session (acct-usage-other): 5-hour · 25% left" },
+    { "file": "app-session-other-dark.png", "side": "app", "scheme": "dark", "screen": "session details limit line", "state": "as light" },
+    { "file": "web-home-light.png", "side": "web", "scheme": "light", "screen": "home", "state": "usage strip: probe (Scratch Fleet) 75% left" },
+    { "file": "web-home-dark.png", "side": "web", "scheme": "dark", "screen": "home", "state": "as light" },
+    { "file": "web-home-dials-light.png", "side": "web", "scheme": "light", "screen": "home dials (Usage limits popover)", "state": "probe (Scratch Fleet), probe (Scratch Team) 1h 27m, other" },
+    { "file": "web-home-dials-dark.png", "side": "web", "scheme": "dark", "screen": "home dials (Usage limits popover)", "state": "as light" },
+    { "file": "web-usage-light.png", "side": "web", "scheme": "light", "screen": "/usage limits card (top)", "state": "Scratch Team \"At its limit. Back in 1h 26m. Last reported 3h 00m ago.\"" },
+    { "file": "web-usage-dark.png", "side": "web", "scheme": "dark", "screen": "/usage limits card (top)", "state": "as light" },
+    { "file": "web-usage-scrolled-light.png", "side": "web", "scheme": "light", "screen": "/usage limits card (scrolled)", "state": "other@scratch-fleet.test \"Hasn't reported for 2h 00m, so this may be out of date.\"" },
+    { "file": "web-usage-scrolled-dark.png", "side": "web", "scheme": "dark", "screen": "/usage limits card (scrolled)", "state": "as light" },
+    { "file": "web-session-personal-light.png", "side": "web", "scheme": "light", "screen": "session details limit line", "state": "account chip probe@scratch-fleet.test (Scratch Fleet); Week 50% left" },
+    { "file": "web-session-personal-dark.png", "side": "web", "scheme": "dark", "screen": "session details limit line", "state": "as light" },
+    { "file": "web-session-team-light.png", "side": "web", "scheme": "light", "screen": "session details limit line", "state": "account chip probe@scratch-fleet.test (Scratch Team); 5-hour 0% left" },
+    { "file": "web-session-team-dark.png", "side": "web", "scheme": "dark", "screen": "session details limit line", "state": "as light" },
+    { "file": "web-session-other-light.png", "side": "web", "scheme": "light", "screen": "session details limit line", "state": "account chip other@scratch-fleet.test; 5-hour 25% left" },
+    { "file": "web-session-other-dark.png", "side": "web", "scheme": "dark", "screen": "session details limit line", "state": "as light" }
+  ]
+}
