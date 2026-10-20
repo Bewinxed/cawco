@@ -32,7 +32,8 @@
  *     works: its option's pick and its range's value are kept, and the
  *     Decisions tab reads its card from the built page.
  * (g) A pick folds its card to one line ("Decided: Astro", Change), its body
- *     and the turned-down option hidden, focus on Change; in light and dark,
+ *     and the turned-down option folded away, focus on the next open card's
+ *     first option, or Send with none left; in light and dark,
  *     Change reopens it with focus on the pick and the hub's picks the same
  *     as before, and Done folds it again. At 390 under a finger Change's hit
  *     area reaches 44px; at 320 a several-pick card of three long unbroken
@@ -205,17 +206,19 @@ embed = Preview("${mockup}", "How it moves")`;
 const foldOf = (frame: Frame, id: string) =>
   frame.evaluate((card) => {
     const root = document.getElementById(`decision-${card}`);
-    const shows = (selector: string) =>
-      !!root?.querySelector<HTMLElement>(selector)?.checkVisibility();
+    // A folded body stands at no height and no opacity (motion/fold), so
+    // what shows is read with its opacity.
+    const seen = (el: Element | null | undefined) =>
+      !!el?.checkVisibility({ opacityProperty: true });
     const active = document.activeElement as HTMLElement | null;
+    const holder = active?.closest<HTMLElement>("[data-cawco-choice]");
     return {
       decided: !!root?.hasAttribute("data-decided"),
       line: root?.querySelector("header .dp-state")?.textContent?.trim() ?? "",
       button: root?.querySelector(".dp-change")?.textContent?.trim() ?? "",
-      // The body lays out as part of the card (display: contents): its options' grid shows it.
-      body: shows(".dp-opts"),
+      body: seen(root?.querySelector(".dp-opts")),
       options: [...(root?.querySelectorAll<HTMLElement>("[data-option]") ?? [])]
-        .filter((one) => one.checkVisibility())
+        .filter(seen)
         .map((one) => one.dataset.option ?? ""),
       marked: [
         ...(root?.querySelectorAll<HTMLElement>("[data-cawco-picked]") ?? []),
@@ -227,6 +230,15 @@ const foldOf = (frame: Frame, id: string) =>
           ? (active.textContent?.trim() ?? "")
           : "",
         inCard: !!(active && root?.contains(active)),
+        // Where a fold the person made sends focus: the next open card's
+        // first option, or Send with none left.
+        onward:
+          !!active &&
+          (active.matches(".dp-send") ||
+            (!!holder &&
+              holder !== root &&
+              !holder.hasAttribute("data-decided") &&
+              holder.querySelector("[data-option]") === active)),
       },
     };
   }, id);
@@ -758,12 +770,12 @@ const marks = async (on: On, frame: Frame) => {
     10_000
   ).catch(() => null);
   kit.check(
-    "(g) a pick folds its card to one line, Decided: Astro and Change, its body and the turned-down option hidden, focus on Change",
+    "(g) a pick folds its card to one line, Decided: Astro and Change, its body and the turned-down option hidden, focus on the next open card's first option or Send",
     !!folded &&
       folded.line === "Decided: Astro" &&
       folded.button === "Change" &&
       folded.options.length === 0 &&
-      folded.focus.button === "Change",
+      folded.focus.onward,
     JSON.stringify(folded)
   );
   kit.check(
@@ -1466,15 +1478,15 @@ const foldLeg = async (on: On, theme: "light" | "dark") => {
   const again = await until(
     `${theme}: the stack card folded by Done`,
     () => foldOf(frame, "stack"),
-    (fold) => fold.decided,
+    (fold) => fold.decided && !fold.body,
     10_000
   ).catch(() => null);
   kit.check(
-    `(g) ${theme}: Done folds it again, focus on Change`,
+    `(g) ${theme}: Done folds it again, focus on the next open card's first option or Send`,
     !!again &&
       again.line === "Decided: Astro" &&
       !again.body &&
-      again.focus.button === "Change",
+      again.focus.onward,
     JSON.stringify(again)
   );
   await shown.close();

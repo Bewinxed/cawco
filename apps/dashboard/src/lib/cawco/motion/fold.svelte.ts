@@ -134,6 +134,25 @@ export function fold(
 }
 
 /**
+ * Stands `node` shut or open at once, with no motion: a state that arrives
+ * rather than one the reader made (a first paint, a pick from elsewhere).
+ * Shut is the end `fold` settles on; open is its natural height.
+ */
+export function landFold(
+  node: HTMLElement,
+  open: boolean,
+  { fade = false, gap = 0 }: Pick<FoldOptions, "fade" | "gap">
+): void {
+  running.get(node)?.cancel();
+  running.delete(node);
+  folding.delete(node);
+  node.style.overflow = open ? "" : "hidden";
+  node.style.height = open ? "" : "0px";
+  node.style.marginBottom = !open && gap ? `${-gap}px` : "";
+  node.style.opacity = !open && fade ? "0" : "";
+}
+
+/**
  * Hold an always-mounted element folded shut or open from a boolean: an
  * attachment (`{@attach folds(() => open, options)}`). The first state lands
  * without motion; every change after it folds.
@@ -146,14 +165,7 @@ export function folds(open: () => boolean, options: FoldOptions) {
       if (first) {
         first = false;
         if (!next) {
-          node.style.overflow = "hidden";
-          node.style.height = "0px";
-          if (options.gap) {
-            node.style.marginBottom = `${-options.gap}px`;
-          }
-          if (options.fade) {
-            node.style.opacity = "0";
-          }
+          landFold(node, false, options);
         }
         return;
       }

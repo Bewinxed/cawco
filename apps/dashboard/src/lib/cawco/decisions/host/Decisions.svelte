@@ -90,6 +90,13 @@
 </main>
 
 <style>
+  /* The page's scroller moves only where a fold rides it (Decision.svelte,
+     motion/scroll-on): the browser's scroll anchoring would jump it as a
+     card folds above the reader's view (the transcript's precedent). */
+  /* css-scope: the decision page's own document root is its scroller; this component is the page */
+  :global(:root) {
+    overflow-anchor: none;
+  }
   /* Caw in the host's theme (the overlay's `data-theme`), else the OS's. */
   .caw-dark {
     display: none;

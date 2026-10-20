@@ -152,16 +152,16 @@ a {
   color: var(--brand-ink);
 }
 /* A picked card folds to its one line: the question, "Decided: <option>"
-   and Change. Its body stays mounted, hidden; open, it lays out as part of
-   the card. */
+   and Change. Its body stays mounted and folds shut (the host's
+   Decision.svelte, motion/fold); open, it lays out on the card's own gap. */
 .dp-card[data-decided] {
   padding-block: var(--space-3);
 }
 .dp-body {
-  display: contents;
-}
-.dp-body[hidden] {
-  display: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-inline-size: 0;
 }
 /* Change (a folded card) and Done (an open one with a pick): a quiet text
    button; under a finger its area reaches 44px (DESIGN.md, The 44 Touch
@@ -320,6 +320,13 @@ a {
   font-size: var(--text-meta);
   font-weight: var(--weight-body);
   line-height: 1;
+  /* The chosen treatment arrives where the option stands, a colour change
+     over --dur-control on ease-out with the chip's edge and fill (and
+     Recommended's fill): a colour fade, so it runs with reduced motion too
+     (DESIGN.md, The Reduced Motion Rule). */
+  transition:
+    background-color var(--dur-control) var(--ease-out),
+    color var(--dur-control) var(--ease-out);
 }
 .dp-opt > span {
   font-size: var(--text-label);
@@ -345,6 +352,7 @@ a {
   font: var(--type-label);
   line-height: 1;
   white-space: nowrap;
+  transition: background-color var(--dur-control) var(--ease-out);
 }
 .dp-opt[data-cawco-picked] .dp-tag {
   background: var(--surface-raised);
@@ -360,9 +368,12 @@ a {
   background: var(--chip-chosen-bg);
   color: var(--chip-chosen-ink);
 }
+/* The Press Rule (DESIGN.md): an option chip stands taller than 44px, so a
+   press tints it to surface-fill and moves nothing. */
+.dp-opt:active {
+  background: var(--surface-fill);
+}
 @media (prefers-reduced-motion: reduce) {
-  .dp-opt,
-  .dp-change,
   .dp-bar i {
     transition: none;
   }
