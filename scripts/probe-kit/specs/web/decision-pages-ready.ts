@@ -1,8 +1,9 @@
 /**
- * The two decision pages waiting for the owner, drawn as he will see them,
+ * The decision pages waiting for the owner, drawn as he will see them,
  * with no hub: the plan grill (.design-foundations/decisions/
- * plan-model-grill/page.oui) and the project screens
- * (.design-foundations/decisions/project-screens/page.oui), drawn by the
+ * plan-model-grill/page.oui), the project screens
+ * (.design-foundations/decisions/project-screens/page.oui) and the graph's
+ * chat picks and links (graph-chat-and-links/page.oui), drawn by the
  * hub's decision host on the dashboard's stage (decision-embeds.ts); each
  * `Preview("@name")` is the component canvas of the states file its
  * folder's README maps it to.
@@ -35,6 +36,9 @@
  *    4.5:1 or more on what they stand on; nothing scrolls sideways; no
  *    console error.
  *
+ * Each block diagram's groups (plan-model-grill's) stand on one left edge.
+ * Each page is captured window by window (decision-embeds.ts
+ * `capturePage`) and no embed's box in that capture is one flat colour.
  * Captures and their manifest go to .probe/decision-pages/ for a reviewer.
  *
  *   bun scripts/probe-kit/run.ts web decision-pages-ready
@@ -51,6 +55,8 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import {
+  blankEmbeds,
+  capturePage,
   EMBED_FRAME,
   embedDrawFaults,
   idOf,
@@ -72,14 +78,22 @@ const FILES: Record<string, string> = {
   removed: "src/lib/cawco/views/preview/PipelineRemovedFixture.stories.ts",
 };
 
+/** Each page, and whether its diagrams are block diagrams whose groups must stand on one left edge. */
 const PAGES = [
   {
     name: "plan-model-grill",
     folder: ".design-foundations/decisions/plan-model-grill",
+    groups: true,
   },
   {
     name: "project-screens",
     folder: ".design-foundations/decisions/project-screens",
+    groups: false,
+  },
+  {
+    name: "graph-chat-and-links",
+    folder: ".design-foundations/decisions/graph-chat-and-links",
+    groups: false,
   },
 ] as const;
 
@@ -812,7 +826,7 @@ const spec: Spec = {
     const stage = await startDecisionStage(
       programs,
       Object.fromEntries(
-        [...sheets].map((key) => [idOf(key), FILES[key] ?? ""])
+        [...sheets].map((key) => [idOf(key), [FILES[key] ?? ""]])
       )
     );
 
@@ -987,17 +1001,20 @@ const spec: Spec = {
               JSON.stringify(said.cards)
             );
             // A diagram whose groups weren't found fails too: an empty read
-            // proves nothing (this page's one diagram has three groups).
-            const staggered = said.groups.filter(
-              (lefts) =>
-                lefts.length === 0 ||
-                Math.max(...lefts) - Math.min(...lefts) > 1
-            );
-            kit.check(
-              `${one.name} ${leg}: each diagram's groups stand on one left edge, within 1px (${said.groups.map((lefts) => lefts.join("/")).join("; ") || "no diagram"})`,
-              staggered.length === 0,
-              JSON.stringify(staggered)
-            );
+            // proves nothing (plan-model-grill's one diagram has three
+            // groups). A page of flowcharts with no groups has none to align.
+            if (one.groups) {
+              const staggered = said.groups.filter(
+                (lefts) =>
+                  lefts.length === 0 ||
+                  Math.max(...lefts) - Math.min(...lefts) > 1
+              );
+              kit.check(
+                `${one.name} ${leg}: each diagram's groups stand on one left edge, within 1px (${said.groups.map((lefts) => lefts.join("/")).join("; ") || "no diagram"})`,
+                staggered.length === 0,
+                JSON.stringify(staggered)
+              );
+            }
             if (said.groups.length > 0) {
               kit.check(
                 `${one.name} ${leg}: every diagram's text reads at 12px or more, the house's smallest text (smallest ${r1(said.diagramText)}px)`,
@@ -1074,11 +1091,16 @@ const spec: Spec = {
               said.sideways <= 0
             );
             const file = `${one.name}-${view === "desk" ? "1440" : "390"}-${theme}.png`;
-            await page.screenshot({
-              path: join(OUT, file),
-              fullPage: true,
-              animations: "disabled",
-            });
+            // The page tiled window by window (decision-embeds.ts
+            // `capturePage`): a full-page shot paints a cross-origin embed
+            // outside the first window blank.
+            const paints = await capturePage(page, join(OUT, file));
+            const blankBoxes = blankEmbeds(paints);
+            kit.check(
+              `${one.name} ${leg}: the page's own capture paints every embed (${paints.map((p) => `“${p.embed}” ${Math.round(p.flat * 1000) / 10}% its commonest colour`).join(", ") || "no embeds"})`,
+              paints.length === (embedded ?? 0) && blankBoxes.length === 0,
+              blankBoxes.join("\n    ")
+            );
             manifest.captures.push({ file, leg, page: one.name });
           }
 
