@@ -109,27 +109,27 @@ export const SweepFrames = {
   }),
 };
 
-/** Caw swallows the code: its own start, middle and end (120, 290 and 450ms in), Caw turning done at dur-panel (280ms). */
+/** Caw swallows the code: its own start, middle and end (120, 260 and 380ms in, the last outer dots still on their way), Caw turning done at dur-panel (280ms). */
 export const SwallowFrames = {
   parameters: { viewport: 920 },
   render: () => ({
     Component: Moments,
     props: {
       act: "swallow",
-      at: [120, 290, 450],
-      caw: ["needs-you", "done", "done"],
+      at: [120, 260, 380],
+      caw: ["needs-you", "needs-you", "done"],
     },
   }),
 };
 
-/** The code flies up to Caw: its own start, middle and end (70, 160 and 250ms in), the end while the card is still there to see. */
+/** The code flies up to Caw: its own start, middle and end (70, 140 and 210ms in), the end while the card is still half there to see. */
 export const FlyFrames = {
   parameters: { viewport: 920 },
   render: () => ({
     Component: Moments,
     props: {
       act: "fly",
-      at: [70, 160, 250],
+      at: [70, 140, 210],
       caw: ["needs-you", "needs-you", "needs-you"],
     },
   }),
