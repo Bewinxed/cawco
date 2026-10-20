@@ -353,7 +353,7 @@
       title={pending ?? hint}
     >
       {#if compact && (pending || renaming !== null)}
-        <Spinner aria-hidden="true" class="size-3.5" />
+        <Spinner aria-hidden="true" />
       {:else}
         <span>{trail}</span>
       {/if}
@@ -790,10 +790,6 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
   }
   /* A row's fault, note and question start where its title does: past the
      row's own padding, its mark and the gap after it. */

@@ -375,9 +375,10 @@
     font-weight: var(--weight-strong);
     line-height: var(--leading-body);
 
+    /* The failure mark fills the rail's 16px cell (DESIGN.md, Sizes). */
     & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
+      inline-size: var(--w-glyph);
+      block-size: var(--w-glyph);
     }
   }
   .reason {

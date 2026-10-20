@@ -122,8 +122,8 @@
   /* Waiting on you: the needs-you glyph, as the Table and the board say it. */
   .name :global(svg) {
     flex: none;
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
     color: var(--status-attn-glyph);
   }
   /* A stage's kind is a word of stages.md, set as code. */

@@ -169,8 +169,8 @@ final class Hairline: UIView {
 final class RunStatusView: UIView {
     enum Status { case done, failed, running, neutral, waiting }
 
-    private let glyph = GlyphView(.passed, size: Size.iconSm, tint: Palette.statusDoneGlyph)
-    private let spinner = KitSpinner(side: Size.iconSm, tint: Palette.statusLiveGlyph)
+    private let glyph = GlyphView(.passed, size: Size.iconMd, tint: Palette.statusDoneGlyph)
+    private let spinner = KitSpinner(side: Size.iconMd, tint: Palette.statusLiveGlyph)
     private let words = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
 
     init() {

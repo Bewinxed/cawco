@@ -1042,7 +1042,7 @@ final class SetupPasteControls: UIStackView, UITextFieldDelegate {
 /// a machine is skipped.
 final class SetupMachineRow: UIStackView {
     private let state = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-    private let stateGlyph = GlyphView(.passed, size: 14, tint: Palette.statusDoneGlyph)
+    private let stateGlyph = GlyphView(.passed, size: Size.iconMd, tint: Palette.statusDoneGlyph)
     private let nameLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
     private var signIn: UIButton?
     private let flow: PasteSignin?

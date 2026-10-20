@@ -165,8 +165,8 @@ public enum Glyph: String, CaseIterable, Sendable {
     case updateAvailable = "download-bold"
     case graphUp = "graph-up-bold-duotone"
     case bug = "bug-bold-duotone"
-    /// StopTray.svelte's `Away`: a session whose machine is away stops when it is back.
-    case away = "cloud-cross-bold-duotone"
+    /// StopTray.svelte's `Away`: a session whose machine is away stops when it is back. A status mark.
+    case away = "cloud-cross-bold"
     /// The preview's Comment (PreviewPane.svelte `IconComment`).
     case comment = "chat-round-dots-bold-duotone"
     /// The preview's Draw (PreviewPane.svelte `IconPen`).
@@ -200,6 +200,19 @@ public enum Glyph: String, CaseIterable, Sendable {
     /// The web's names for glyphs the transcript already carries under its own.
     public static let send = Glyph.toolMessage // plain-2-bold-duotone (IconSend)
     public static let answer = Glyph.check // check-read-bold-duotone (IconCheck)
+
+    /// The status set (apps/dashboard/src/lib/status-marks.ts): the glyphs that say a state, each Solar's
+    /// solid bold cut, never drawn under 16pt (DESIGN.md, Sizes): a Solar mark is 1.5 of 24 units, so at
+    /// 12pt it is 0.75pt on a 1x screen and vanishes; 16pt is the smallest size that reaches one pixel.
+    public var isStatusMark: Bool {
+        switch self {
+        case .attention, .away, .blocked, .failed, .minusCircle, .passed, .pause, .sleeping, .unreachable,
+             .updateAvailable, .updateWaits, .working:
+            true
+        default:
+            false
+        }
+    }
 
     public var image: UIImage {
         guard let image = UIImage(named: rawValue, in: .module, with: nil) else {
@@ -362,7 +375,14 @@ public enum BrandLogo: String, Sendable {
 /// changes: its glyph, its size, its tint as it resolves (a theme, a
 /// contrast, a tint dimmed under a sheet), its scale.
 open class GlyphView: UIImageView {
-    private let side: Double
+    /// The square it is drawn in; set, it is laid out and drawn again.
+    public var side: Double {
+        didSet {
+            guard side != oldValue else { return }
+            invalidateIntrinsicContentSize()
+            paint()
+        }
+    }
     /// The bitmap shown now, by what it was drawn from.
     private var drawn: GlyphBitmaps.Key?
 

@@ -189,10 +189,11 @@
     gap: var(--space-1);
     color: var(--status-fail-ink);
   }
+  /* The failure mark: 16px, in its one-line cell (.mark-cell). */
   .fail :global(svg) {
     flex: none;
-    width: 12px;
-    height: 12px;
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
   }
   .got {
     display: flex;

@@ -278,9 +278,12 @@
     background: var(--status-fail-bg);
     color: var(--status-fail-ink);
   }
+  /* The chip's status mark (failed, done, or the spinner while it rolls
+     out) is 16px (DESIGN.md, Sizes), centred in the 26px chip, which keeps
+     its height; the chip grows 4px wider. */
   :global(.rollout-chip svg) {
-    width: 12px;
-    height: 12px;
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
     flex: none;
   }
   /* One cell for the three glyphs, which cross-fade; with none showing the
@@ -289,7 +292,7 @@
   .glyph {
     display: inline-grid;
     flex: none;
-    width: 12px;
+    width: var(--icon-md);
     @media (prefers-reduced-motion: no-preference) {
       transition:
         width var(--dur-control) var(--ease-out),
@@ -340,9 +343,16 @@
   .mark.fail {
     color: var(--status-fail-ink);
   }
+  /* A machine's status mark and a refusal's failure mark are 16px, inside
+     the 44px line and the meta line's 16.2px box; Sync's glyph is its
+     12px button glyph. */
   .mark :global(svg),
-  .sync :global(svg),
   .note :global(svg) {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+    flex: none;
+  }
+  .sync :global(svg) {
     width: 12px;
     height: 12px;
     flex: none;

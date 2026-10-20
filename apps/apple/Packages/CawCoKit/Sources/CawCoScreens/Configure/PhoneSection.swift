@@ -161,12 +161,12 @@ private final class DeviceRow: UIStackView {
     private let platform = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let last = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     private let quiet = SwitchField(label: "Quiet")
-    private let quietSpinner = KitSpinner(side: 14)
+    private let quietSpinner = KitSpinner(side: Size.iconMd)
     private lazy var remove = KitButton.make("Remove", variant: .ghost, height: .sm) { [weak self] in self?.onRemove?() }
     private lazy var disarm = KitButton.make("Cancel", variant: .ghost, height: .sm) { [weak self] in self?.onDisarm?() }
     private let armedNote = KitLabel(TypeScale.typeMeta, ink: Palette.statusAttnInk, lines: 0)
     private let statusDot = UIView()
-    private let statusSpinner = KitSpinner(side: 12)
+    private let statusSpinner = KitSpinner(side: Size.iconMd)
     private let status = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     private lazy var retry = KitButton.make("Try again", variant: .ghost, height: .xs) { [weak self] in self?.onRetry?() }
     private let statusLine = UIStackView()

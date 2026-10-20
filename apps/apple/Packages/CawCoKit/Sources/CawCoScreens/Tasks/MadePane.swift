@@ -148,7 +148,7 @@ private final class MadeTile: UIView {
     private let number = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted)
     private let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
     private let stage = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-    private let you = GlyphView(.attention, size: Size.iconSm, tint: Palette.statusAttnGlyph)
+    private let you = GlyphView(.attention, size: Size.iconMd, tint: Palette.statusAttnGlyph)
     private let outputs = UIStackView()
     private var views: [String: TaskOutputView] = [:]
     private var taskId = ""

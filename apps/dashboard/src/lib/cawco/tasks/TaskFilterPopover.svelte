@@ -284,10 +284,6 @@
     gap: var(--space-1);
     font: var(--type-meta);
     color: var(--ink-muted);
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
   }
   .eq {
     flex: none;

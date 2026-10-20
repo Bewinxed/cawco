@@ -21,6 +21,7 @@ import {
   type ViteDevServer,
 } from "vite";
 import { publicOrigin } from "./public-origin.js";
+import { STATUS_MARKS } from "./src/lib/status-marks.js";
 
 /**
  * The hub a vite server (`vite dev`, `vite preview`) talks to: the one named in
@@ -354,7 +355,18 @@ export default defineConfig(({ command }) => {
         // is not the dashboard's).
         csrf: { trustedOrigins: ["*"] },
       }),
-      Icons({ compiler: "svelte" }),
+      Icons({
+        compiler: "svelte",
+        // A status mark is never under 16px (src/lib/status-marks.ts): one
+        // left unsized is 16px, not 1.2em of its text, and says what it is.
+        iconCustomizer(collection, icon, props) {
+          if (collection === "solar" && STATUS_MARKS.has(icon)) {
+            props.width = "16";
+            props.height = "16";
+            props["data-status-mark"] = "";
+          }
+        },
+      }),
     ],
     server: {
       port: 3000,

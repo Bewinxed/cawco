@@ -41,7 +41,7 @@ final class TaskCardView: UIControl {
     private let titleLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkRow, lines: 2)
     private let liveFoot = UIStackView()
     private let liveDot = UIView()
-    private let attnGlyph = GlyphView(.attention, size: Size.iconSm, tint: Palette.statusAttnGlyph)
+    private let attnGlyph = GlyphView(.attention, size: Size.iconMd, tint: Palette.statusAttnGlyph)
     private let liveWords = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let foot = UIView()
     private let stack = UIStackView()
@@ -251,7 +251,7 @@ final class TaskCardSlot: UIStackView {
         spacing = Space.space1
         let words = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
         words.text = "Moving…"
-        movingLine.addArrangedSubview(KitSpinner(side: 12))
+        movingLine.addArrangedSubview(KitSpinner(side: Size.iconMd))
         movingLine.addArrangedSubview(words)
         movingLine.spacing = Space.space1
         movingLine.alignment = .center

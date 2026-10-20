@@ -37,10 +37,19 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { PNG } from "pngjs";
+import { STATUS_MARKS } from "../../../apps/dashboard/src/lib/status-marks";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
+import type {
+  Account,
+  AccountSignin,
+  ProviderChoice,
+} from "../../../packages/core/src/accounts";
+import type { InstancesFrame } from "../../../packages/core/src/frames";
+import type { AgentRow, Envelope } from "../../../packages/core/src/index";
+import { WIRE_PROTOCOL } from "../../../packages/core/src/stream";
 import { until } from "../../scratch-fleet";
 import { colours, contrast, dx, dy, px, type Raster, type Rgb } from "../ink";
-import { type Kit, ROOT, type Spec, settle } from "../kit";
+import { type Kit, open, ROOT, type Spec, settle } from "../kit";
 
 const APP = join(ROOT, "apps/dashboard");
 const CARD = "src/lib/cawco/tasks/TaskCard.stories.ts";
@@ -533,9 +542,581 @@ const checkInk = async (
   }
 };
 
+/** Each status mark's drawing (its paths' `d`), by its Solar name. */
+const STATUS_DRAWINGS = (() => {
+  const byName = new Map(
+    [...BY_DRAWING].map(([drawing, name]) => [name, drawing] as const)
+  );
+  return [...STATUS_MARKS].map((name) => byName.get(name) ?? name);
+})();
+
+/** One status mark as drawn, beside its words, in its row. */
+interface Swept {
+  /**
+   * What the mark's middle is held to: its words' x-height middle, or, a
+   * mark with no words beside it (a row's trailing mark, its meaning said in
+   * the row's own lines), its row's middle.
+   */
+  against: "x-height" | "row";
+  h: number;
+  /** The line the mark stands in (its own box's parent): its height, css px. */
+  line: number;
+  name: string;
+  /** The mark's middle less the middle it is held to (`against`), css px. */
+  off: number;
+  /** The row the line stands in: its height, css px. */
+  row: number;
+  /** The `[data-surface]` it stands in, or where its portal came from. */
+  surface: string;
+  w: number;
+  /** The words it was read against. */
+  words: string;
+}
+
+/** A mark as the page reads it, named by its drawing. */
+type Drawn = Omit<Swept, "name"> & { drawing: string };
+
+/**
+ * Every status mark drawn under `rootSel` (shown: not at opacity 0, a box
+ * of its own), each named by its drawing. Its words are the run beside it:
+ * the first element after its cell with words a reader sees (else the
+ * last before it), the cell the mark's own `.mark-cell`, `.rail-cell` or
+ * wordless `[data-box]` tile when it stands in one. Their x-height's middle
+ * is read off a zero-width inline-block 1ex tall set at the words' start:
+ * its bottom stands on their baseline, so its middle is the x-height's.
+ * A mark with no words beside it is read against its row's middle.
+ */
+const sweepIn = (
+  args: [
+    rootSel: string,
+    label: string | null,
+    drawings: string[],
+    rowSel: string | null,
+  ]
+): Drawn[] => {
+  const [rootSel, label, drawings, rowSel] = args;
+  const wanted = new Set(drawings);
+  const shown = (el: Element) => {
+    for (let at: Element | null = el; at; at = at.parentElement) {
+      if (Number(getComputedStyle(at).opacity) === 0) {
+        return false;
+      }
+    }
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+  const readable = (el: Element) =>
+    !el.closest(".sr-only") &&
+    (el.textContent ?? "").trim().length > 0 &&
+    shown(el);
+  const drawingOf = (svg: Element) =>
+    [...svg.querySelectorAll("path")]
+      .map((path) => path.getAttribute("d") ?? "")
+      .join("|");
+  /** The mark's own tile when it stands in one, else the mark. */
+  const cellOf = (svg: Element, root: Element) => {
+    const tile = svg.parentElement?.closest(
+      ".mark-cell, .rail-cell, [data-box]"
+    );
+    return tile && tile !== root && root.contains(tile) && !readable(tile)
+      ? tile
+      : svg;
+  };
+  /** The row: the one `rowSel` names, else the component the bench's surface holds. */
+  const rowOf = (svg: Element, line: Element): Element => {
+    if (rowSel) {
+      return svg.closest(rowSel) ?? line;
+    }
+    const surface = svg.closest("[data-surface]");
+    for (let at: Element | null = svg; at && surface; at = at.parentElement) {
+      if (at.parentElement === surface) {
+        return at;
+      }
+    }
+    return line;
+  };
+  const wordsOf = (cell: Element, line: Element) => {
+    const siblings = [...line.children];
+    const at = siblings.indexOf(cell);
+    return (
+      siblings.slice(at + 1).find(readable) ??
+      siblings.slice(0, at).reverse().find(readable) ??
+      null
+    );
+  };
+  /** The mark's middle less the words' x-height middle. */
+  const offOf = (svg: Element, words: Element) => {
+    const ex = document.createElement("span");
+    ex.style.cssText =
+      "display:inline-block;inline-size:0;block-size:1ex;padding:0;margin:0;border:0";
+    words.prepend(ex);
+    const e = ex.getBoundingClientRect();
+    ex.remove();
+    const m = svg.getBoundingClientRect();
+    return (m.top + m.bottom) / 2 - (e.top + e.bottom) / 2;
+  };
+  const out: Drawn[] = [];
+  for (const root of document.querySelectorAll(rootSel)) {
+    for (const svg of root.querySelectorAll("svg")) {
+      // The kit's spinner is the working mark wherever it stands.
+      const drawing = svg.classList.contains("animate-spin")
+        ? "spinner"
+        : drawingOf(svg);
+      if (!((drawing === "spinner" || wanted.has(drawing)) && shown(svg))) {
+        continue;
+      }
+      const cell = cellOf(svg, root);
+      const line = cell.parentElement ?? cell;
+      const words = wordsOf(cell, line);
+      const row = rowOf(svg, line);
+      const m = svg.getBoundingClientRect();
+      const r = row.getBoundingClientRect();
+      out.push({
+        against: words ? "x-height" : "row",
+        surface:
+          label ??
+          (svg.closest("[data-surface]") as HTMLElement | null)?.dataset
+            .surface ??
+          "page",
+        drawing,
+        // The box as laid out: a spinning mark's rect is its turned box's.
+        w: Number.parseFloat(getComputedStyle(svg).width),
+        h: Number.parseFloat(getComputedStyle(svg).height),
+        off: words
+          ? offOf(svg, words)
+          : (m.top + m.bottom) / 2 - (r.top + r.bottom) / 2,
+        // biome-ignore lint/performance/useTopLevelRegex: this runs in the page (page.evaluate), which has no module scope to hoist it to
+        words: (words?.textContent ?? "").split(/\s+/).join(" ").trim(),
+        line: line.getBoundingClientRect().height,
+        row: r.height,
+      });
+    }
+  }
+  return out;
+};
+
+/** The marks under `rootSel`, named. */
+const sweep = async (
+  page: Page,
+  rootSel: string,
+  label: string | null = null,
+  rowSel: string | null = null
+): Promise<Swept[]> => {
+  const read = await page.evaluate(sweepIn, [
+    rootSel,
+    label,
+    STATUS_DRAWINGS,
+    rowSel,
+  ] as [string, string | null, string[], string | null]);
+  return read.map(({ drawing, ...rest }) => ({
+    ...rest,
+    name:
+      drawing === "spinner"
+        ? "spinner"
+        : (BY_DRAWING.get(drawing) ?? "unknown"),
+  }));
+};
+
+/** The bench's surfaces, each held to 16×16 and its words' x-height. */
+const SURFACES = [
+  "task-card",
+  "task-table",
+  "view-pipeline",
+  "view-made",
+  "moved-login",
+  "run-status",
+  "section-row",
+  "rollout",
+  "update-card",
+  "system-line",
+  "compaction",
+  "device-panel",
+  "signin-panel",
+] as const;
+
+/** The surfaces drawing more than one mark: run-status's five states, section-row's failure and spinner. */
+const EXPECT: Partial<Record<(typeof SURFACES)[number], number>> = {
+  "run-status": 5,
+  "section-row": 2,
+};
+
+/** One surface's marks: a check, and its rows' heights said. */
+const checkSwept = (kit: Kit, where: string, marks: Swept[], expect = 1) => {
+  const each = marks
+    .map(
+      (m) =>
+        `${m.name} ${m.w.toFixed(2)}×${m.h.toFixed(2)}, ${m.against === "row" ? "row middle" : `x-height ("${m.words.slice(0, 28)}")`} ${m.off >= 0 ? "+" : ""}${m.off.toFixed(2)}, line ${m.line.toFixed(2)}, row ${m.row.toFixed(2)}`
+    )
+    .join("; ");
+  kit.check(
+    `7 ${where}: ${marks.length} status mark${marks.length === 1 ? "" : "s"} 16×16, each one's middle on its words' x-height middle (a wordless one's on its row's) within 0.5px: ${each || "none drawn"}`,
+    marks.length >= expect &&
+      marks.every(
+        (m) =>
+          Math.abs(m.w - 16) < 0.01 &&
+          Math.abs(m.h - 16) < 0.01 &&
+          Math.abs(m.off) <= 0.5
+      )
+  );
+};
+
+/**
+ * 8: each transcript rail row's first line is its rail line and nothing
+ * more: no room between the rail line's bottom and what follows it (the
+ * next block's top less its own margin, else the row's bottom). An inline
+ * rail line stood in a line box of the row's, set on its glyph cell's
+ * baseline (the glyph's bottom edge) with the row's strut below it, so the
+ * row's height followed the glyph's size: 2.43px under a 12px glyph, 2px
+ * more once a status mark was 16px. Read on the failed and moved rows' 16px
+ * marks and the hook note's 12px glyph.
+ */
+const checkRailRows = async (kit: Kit, page: Page, theme: string) => {
+  const rows = await page.evaluate(() =>
+    [
+      ...document.querySelectorAll(
+        "[data-surface='system-line'] [data-system-line-rail-row]"
+      ),
+    ].map((row) => {
+      const line = row.querySelector(".rail-line");
+      const r = row.getBoundingClientRect();
+      if (!line) {
+        return { below: Number.NaN, line: 0, row: r.height, title: "" };
+      }
+      // The row's own child the line stands in, and the block after it.
+      let block: Element = line;
+      while (block.parentElement && block.parentElement !== row) {
+        block = block.parentElement;
+      }
+      let next = block.nextElementSibling;
+      while (next && next.getBoundingClientRect().height === 0) {
+        next = next.nextElementSibling;
+      }
+      const l = line.getBoundingClientRect();
+      const end = next
+        ? next.getBoundingClientRect().top -
+          Number.parseFloat(getComputedStyle(next).marginBlockStart)
+        : r.bottom;
+      return {
+        below: end - l.bottom,
+        line: l.height,
+        row: r.height,
+        title: (line.textContent ?? "").trim(),
+      };
+    })
+  );
+  kit.check(
+    `8 (${theme}) system-line: ${rows.length} rail rows, nothing under each one's rail line but what hangs from it: ${rows.map((one) => `"${one.title}" line ${one.line.toFixed(2)}, ${one.below.toFixed(2)} under it, row ${one.row.toFixed(2)}`).join("; ")}`,
+    rows.length === 3 &&
+      rows.every(
+        (one) =>
+          Math.abs(one.below) < 0.01 && Math.abs(one.line - rows[0].line) < 0.01
+      )
+  );
+};
+
+/** 7: every swept surface on the bench, in `theme`. */
+const checkBench = async (kit: Kit, theme: "light" | "dark") => {
+  const bench = await kit.bench();
+  const page = await kit.page("desk", { theme });
+  await open(page, `${bench}/motion/status-marks`, "[data-bench]");
+  await settle(page, 400);
+  const marks = await sweep(page, "[data-surface]");
+  for (const surface of SURFACES) {
+    checkSwept(
+      kit,
+      `(${theme}) ${surface}`,
+      marks.filter((m) => m.surface === surface),
+      EXPECT[surface] ?? 1
+    );
+  }
+  await checkRailRows(kit, page, theme);
+  // The chip's list: each machine's mark, in the popover it opens.
+  await page.locator(".rollout-chip").click();
+  await page.waitForSelector(
+    '[data-slot="popover-content"] [data-slot="mark"] svg'
+  );
+  await settle(page, 400);
+  checkSwept(
+    kit,
+    `(${theme}) rollout's list`,
+    await sweep(
+      page,
+      '[data-slot="popover-content"]',
+      "rollout's list",
+      "[data-slot='machine'] > .line, [data-slot='note'], [data-slot='top']"
+    ),
+    2
+  );
+  await page.close();
+};
+
+/** The hub's two machines, as the board frame carries them: what the account pages read. */
+const MACHINES = [
+  ["m-1", "obelisk"],
+  ["m-2", "gauntlet"],
+].map(([machineId, hostname]) => ({
+  auth: "ok",
+  harnesses: [
+    { harness: "claude", installed: true },
+    { harness: "pi", installed: true },
+  ],
+  hostname,
+  lastSeenAt: null,
+  machineId,
+  os: "linux-x64",
+  pausedUntil: null,
+  pauseStopped: null,
+  status: "online",
+})) as unknown as AgentRow[];
+
+const BOARD: Envelope<InstancesFrame> = {
+  verb: "frames",
+  machineId: "hub",
+  payload: {
+    kind: "instances",
+    agents: MACHINES,
+    continuations: [],
+    formerIds: {},
+    handoffs: {},
+    hubBuild: { startedAt: 0, version: "0.0.0" },
+    instances: [],
+    moves: [],
+    noticesSeen: [],
+    protocol: WIRE_PROTOCOL,
+    pulses: {},
+  },
+};
+
+const AT = Date.UTC(2026, 9, 20, 9, 30);
+
+const accountOf = (
+  id: string,
+  provider: string,
+  kind: Account["kind"],
+  email: string | null
+): Account =>
+  ({
+    atPlanLimit: null,
+    createdAt: AT,
+    email,
+    hue: "blue",
+    id,
+    identity: null,
+    kind,
+    label: null,
+    neverBackup: false,
+    order: 0,
+    provider,
+    reservePct: null,
+  }) as unknown as Account;
+
+const signinOf = (
+  accountId: string,
+  machineId: string,
+  state: AccountSignin["state"]
+): AccountSignin => ({
+  accountId,
+  checkedAt: AT,
+  machineId,
+  movedAt: null,
+  movedFrom: null,
+  reason: null,
+  state,
+});
+
+/** The picker's Claude subscription row, not its Console row. */
+const CLAUDE_ROW = /^Claude$/;
+
+const PROVIDERS: ProviderChoice[] = [
+  {
+    provider: "anthropic",
+    kind: "subscription",
+    name: "Claude",
+    signin: "paste-code",
+    harnesses: ["claude"],
+    limits: true,
+  },
+  {
+    provider: "openai",
+    kind: "api_key",
+    name: "OpenAI",
+    signin: "api-key",
+    harnesses: ["pi"],
+    limits: false,
+  },
+];
+
+/**
+ * The hub as the account pages read it, on `page`: the board's machines over
+ * its socket, and `/api/accounts`. Ada's Claude account is signed in as
+ * someone else on obelisk and as her on gauntlet; the OpenAI key account is
+ * on neither, and obelisk refuses the key sent to it. An account made by the
+ * setup's first sign-in comes back as Ada's does.
+ */
+const hubForAccounts = async (page: Page) => {
+  await page.routeWebSocket(
+    (url) => url.pathname === "/ws/dashboard",
+    (hubSide) => {
+      hubSide.send(JSON.stringify(BOARD));
+    }
+  );
+  let made = false;
+  const theirs = (id: string) => [
+    signinOf(id, "m-1", "mismatch"),
+    signinOf(id, "m-2", "signed-in"),
+  ];
+  const ada = (id: string, email: string | null) =>
+    accountOf(id, "anthropic", "subscription", email);
+  /** Each route the pages ask, by method and path: its answer. */
+  const answers: [
+    test: (method: string, path: string) => boolean,
+    answer: () => unknown,
+  ][] = [
+    [
+      (method, path) => method === "GET" && path === "/api/accounts",
+      () => ({
+        accounts: [
+          ada("acc-1", "ada@tidewater.dev"),
+          accountOf("acc-2", "openai", "api_key", null),
+          ...(made ? [ada("acc-new", "ada@tidewater.dev")] : []),
+        ],
+        bench: [],
+        catalogFaults: [],
+        catalogs: [],
+        readings: [],
+        rebalances: [],
+        routing: [],
+        signins: [...theirs("acc-1"), ...(made ? theirs("acc-new") : [])],
+      }),
+    ],
+    [
+      (method, path) => method === "GET" && path === "/api/accounts/providers",
+      () => PROVIDERS,
+    ],
+    [
+      (method, path) => method === "POST" && path === "/api/accounts",
+      () => {
+        made = true;
+        return ada("acc-new", null);
+      },
+    ],
+    [
+      (method, path) => method === "POST" && path.endsWith("/signin"),
+      () => ({ url: "about:blank#signin" }),
+    ],
+    [
+      (method, path) => method === "POST" && path.endsWith("/key"),
+      () => ({
+        machines: [
+          {
+            machineId: "m-1",
+            error: "obelisk refused it: not a key for OpenAI.",
+          },
+        ],
+      }),
+    ],
+  ];
+  await page.route(
+    (url) => url.pathname.startsWith("/api/accounts"),
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      const found = answers.find(([test]) => test(request.method(), path));
+      await route.fulfill(
+        found
+          ? {
+              contentType: "application/json",
+              body: JSON.stringify(found[1]()),
+            }
+          : { status: 404, body: "" }
+      );
+    }
+  );
+};
+
+/** 7: the account pages' marks, against {@link hubForAccounts}, in `theme`. */
+const checkAccounts = async (kit: Kit, theme: "light" | "dark") => {
+  const bench = await kit.bench();
+  const page = await kit.page("desk", { theme });
+  await hubForAccounts(page);
+
+  // The list: Ada's row says someone else is signed in on obelisk.
+  await open(page, `${bench}/config/accounts`, ".arow .problem svg");
+  await settle(page, 400);
+  checkSwept(
+    kit,
+    `(${theme}) account-list-row`,
+    await sweep(page, ".arow", "account-list-row", ".arow"),
+    1
+  );
+
+  // Ada's machines: obelisk's row says Someone else.
+  await open(page, `${bench}/config/accounts/acc-1`, ".mrow .state svg");
+  await settle(page, 400);
+  checkSwept(
+    kit,
+    `(${theme}) account-machines`,
+    await sweep(page, ".mrow", "account-machines", ".mrow"),
+    1
+  );
+
+  // The key account: obelisk refuses the key sent to it.
+  await open(
+    page,
+    `${bench}/config/accounts/acc-2`,
+    ".mrow button[aria-haspopup]"
+  );
+  await page.locator(".mrow button[aria-haspopup]").first().click();
+  const field = page.locator(
+    '[data-ns-pop] input[placeholder="Paste the key"]'
+  );
+  await field.fill("sk-probe");
+  await field.press("Enter");
+  await page.waitForSelector("[data-ns-pop] .bad svg");
+  await settle(page, 400);
+  checkSwept(
+    kit,
+    `(${theme}) key-panel`,
+    await sweep(page, "[data-ns-pop] .send", "key-panel", ".send"),
+    1
+  );
+
+  // The setup: Claude chosen, obelisk's Sign in made the account; the hub
+  // then says obelisk is someone else's and gauntlet is Ada's.
+  await open(page, `${bench}/config/accounts/new`, "button[data-choice]");
+  await page
+    .locator("button[data-choice]")
+    .filter({ has: page.locator(".plabel", { hasText: CLAUDE_ROW }) })
+    .click();
+  await page
+    .locator(".mrow.paste")
+    .first()
+    .getByRole("button", { name: "Sign in" })
+    .click();
+  await page.waitForSelector(".mrow.paste .st.fail svg");
+  await page.waitForSelector(".mrow.paste .st.ok svg");
+  await settle(page, 600);
+  checkSwept(
+    kit,
+    `(${theme}) account-setup`,
+    await sweep(
+      page,
+      ".mrow.paste, [data-slot='signed-as'], ol.steps",
+      "account-setup",
+      ".mrow, [data-slot='signed-as'], li"
+    ),
+    4
+  );
+  await page.close();
+};
+
 const spec: Spec = {
   name: "status-marks",
   run: async (kit: Kit) => {
+    for (const theme of SCHEMES) {
+      await checkBench(kit, theme);
+      await checkAccounts(kit, theme);
+    }
     const stage = await startStage();
     try {
       for (const scale of [1, 2]) {

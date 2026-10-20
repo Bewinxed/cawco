@@ -145,9 +145,10 @@
   .stage.you {
     color: var(--status-attn-ink);
   }
+  /* The needs-you status mark: 16px, inside the meta line's box. */
   .stage :global(.glyph) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
     color: var(--status-attn-glyph);
   }
   .outputs {

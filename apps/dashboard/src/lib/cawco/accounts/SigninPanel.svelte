@@ -152,9 +152,10 @@
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
   }
+  /* The failure mark: 16px, in its one-line cell (.mark-cell). */
   .fail :global(svg) {
     flex: none;
-    width: 14px;
-    height: 14px;
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
   }
 </style>

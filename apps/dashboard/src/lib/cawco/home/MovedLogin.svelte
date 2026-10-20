@@ -123,8 +123,9 @@
     color: var(--ink-muted);
     white-space: nowrap;
   }
+  /* The passed status mark: 16px, inside the meta line's box. */
   .done :global(svg) {
-    width: 12px;
-    height: 12px;
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
   }
 </style>

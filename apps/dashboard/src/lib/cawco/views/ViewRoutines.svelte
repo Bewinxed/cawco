@@ -1047,9 +1047,10 @@
     display: inline-flex;
     color: var(--status-attn-glyph);
   }
+  /* The needs-you status mark: 16px, inside the meta line's box. */
   .needs :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
   }
 
   /* A ledger: the task table's (TaskTable) band and rows, in its block's

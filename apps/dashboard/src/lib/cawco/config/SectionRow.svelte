@@ -188,7 +188,7 @@
             {:else if note.tone === "fail"}
               <IconError />
             {:else}
-              <IconCheck />
+              <IconCheck data-tick />
             {/if}
           </span>
           <span>{note.text}</span>
@@ -349,10 +349,21 @@
     color: var(--ink-muted);
     overflow-wrap: anywhere;
 
+    /* The cell is a status mark's width whatever it holds, so the words
+       stand still as the tone changes: the failure mark and the spinner
+       (DESIGN.md, Sizes; Spinner) fill it at 16px, and the tick, a local
+       glyph beside meta text, keeps 12px in its middle. */
+    & :global(.mark-cell) {
+      inline-size: var(--icon-md);
+    }
     & :global(svg) {
-      width: 12px;
-      height: 12px;
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
       flex: none;
+    }
+    & :global(svg[data-tick]) {
+      inline-size: 12px;
+      block-size: 12px;
     }
     &[data-tone="fail"] {
       color: var(--status-fail-ink);

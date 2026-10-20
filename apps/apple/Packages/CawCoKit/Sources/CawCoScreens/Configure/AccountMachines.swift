@@ -688,8 +688,8 @@ final class AccountMachineRow: UIStackView {
     var onSignOut: (() -> Void)?
     private let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
     private let state = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-    private let stateGlyph = GlyphView(.failed, size: 12, tint: Palette.statusFailInk)
-    private let spinner = KitSpinner(side: 12)
+    private let stateGlyph = GlyphView(.failed, size: Size.iconMd, tint: Palette.statusFailInk)
+    private let spinner = KitSpinner(side: Size.iconMd)
     private lazy var action = KitButton.make(Words.Accounts.Machines.signIn, variant: .outline, height: .sm) { [weak self] in self?.onAction?() }
     private var menu: UIButton?
     private let trail = UIStackView()

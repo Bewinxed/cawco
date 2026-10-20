@@ -78,10 +78,12 @@
     overflow: clip;
     text-overflow: ellipsis;
   }
+  /* The run's status mark, the spinner while it runs: 16px, inside the meta
+     line's 16.2px box (DESIGN.md, Sizes). */
   .time :global(.status-glyph) {
     flex: none;
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
   }
   [data-status="done"] :global(.status-glyph) {
     color: var(--status-done-glyph);

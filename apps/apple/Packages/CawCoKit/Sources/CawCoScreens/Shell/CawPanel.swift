@@ -1146,7 +1146,7 @@ private final class NoticeGroup: UIView {
             view = words
         case .everywhere:
             words.text = "Signed in everywhere"
-            let tick = UIStackView(arrangedSubviews: [GlyphView(.passed, size: Size.iconSm, tint: Palette.inkMuted), words])
+            let tick = UIStackView(arrangedSubviews: [GlyphView(.passed, size: Size.iconMd, tint: Palette.inkMuted), words])
             tick.spacing = Space.space1
             tick.alignment = .center
             tick.isAccessibilityElement = true

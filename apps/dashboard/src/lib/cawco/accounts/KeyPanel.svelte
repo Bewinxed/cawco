@@ -282,9 +282,10 @@
   .bad {
     color: var(--status-fail-ink);
   }
+  /* The failure mark: 16px, inside the meta line's 16.2px box. */
   .bad :global(svg) {
     flex: none;
-    width: 12px;
-    height: 12px;
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
   }
 </style>

@@ -128,10 +128,12 @@
   .problem[data-broke="true"] {
     color: var(--status-fail-ink);
   }
+  /* The problem's mark, the failure mark or the triangle in one slot:
+     16px, inside the meta line's 16.2px box, so the row stays 56px. */
   .problem :global(svg) {
     flex: none;
-    width: 12px;
-    height: 12px;
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
   }
   .chev {
     grid-area: chev;

@@ -251,7 +251,7 @@ final class RoutinesPane: UIView {
         row.spacing = Space.space1
         row.alignment = .center
         if shown.needs > 0 {
-            let mark = GlyphView(.attention, size: Size.iconSm, tint: Palette.statusAttnGlyph)
+            let mark = GlyphView(.attention, size: Size.iconMd, tint: Palette.statusAttnGlyph)
             mark.isAccessibilityElement = true
             mark.accessibilityLabel = shown.said
             LedgerParts.tip(mark, shown.said)

@@ -113,7 +113,10 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
                       leading: TypeScale.leadingBody, lineBreak: .byWordWrapping)
     }
 
+    /// A status mark (Turn failed, a note that passed) fills the 16pt rail cell (DESIGN.md, Sizes); the other
+    /// glyphs keep 12 in its middle (SystemLine.svelte `.note`).
     private func set(_ glyph: Glyph, title text: String, ink: UIColor = Palette.inkMuted) {
+        cell.glyph.side = glyph.isStatusMark ? Size.txWGlyph : Size.iconSm
         cell.glyph.glyph = glyph
         cell.glyph.tintColor = ink
         title.attributedText = words(text, ink: ink)

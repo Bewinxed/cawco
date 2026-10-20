@@ -26,7 +26,7 @@ final class StatusLineView: UIView {
         case refused, updating, unreachable, updated, connecting, reading, connected
     }
 
-    private let glyph = GlyphView(.failed, size: Size.iconSm, tint: Palette.statusFailInk)
+    private let glyph = GlyphView(.failed, size: Size.iconMd, tint: Palette.statusFailInk)
     private let words = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     private var reconnect: UIButton!
     /// The glyph and the words, one pair.
@@ -171,7 +171,7 @@ final class StatusLineView: UIView {
         let width = bounds.width
         if width > 0 {
             let wordsWidth = words.text == nil ? 0 : words.intrinsicContentSize.width
-            let glyphWidth = glyph.isHidden ? 0 : Size.iconSm + Space.space1
+            let glyphWidth = glyph.isHidden ? 0 : Size.iconMd + Space.space1
             let actionWidth = reconnect.isHidden ? 0 : Space.space2 + reconnect.intrinsicContentSize.width
             let wraps = glyphWidth + wordsWidth + actionWidth > width
             let axis: NSLayoutConstraint.Axis = wraps ? .vertical : .horizontal

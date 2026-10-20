@@ -232,9 +232,7 @@
                  and a status in here was read into the name at rest. -->
             <span class="older-face icon-swap">
               <span data-active={!pending}><IconHistory class="size-4" /></span>
-              <span data-active={pending}
-                ><Spinner class="size-3" role="presentation" /></span
-              >
+              <span data-active={pending}><Spinner role="presentation" /></span>
             </span>
           {/snippet}
         </TreeMark>

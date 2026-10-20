@@ -160,10 +160,6 @@
     padding: var(--space-1) var(--space-2) 0;
     font: var(--type-meta);
     color: var(--ink-muted);
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
   }
   /* A card that can be picked keeps its head's end clear for the tick,
      which stands over it on the head's line. The tick shows under the

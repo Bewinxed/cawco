@@ -289,7 +289,7 @@ final class TaskTableView: UIView {
         let mark = UIStackView(arrangedSubviews: [name])
         mark.spacing = Space.space1
         mark.alignment = .center
-        if task.kind == .you { mark.insertArrangedSubview(GlyphView(.attention, size: Size.iconSm, tint: Palette.statusAttnGlyph), at: 0) }
+        if task.kind == .you { mark.insertArrangedSubview(GlyphView(.attention, size: Size.iconMd, tint: Palette.statusAttnGlyph), at: 0) }
         return mark
     }
 
@@ -454,7 +454,7 @@ private final class PipelineBar: UIView {
         let nameRow = UIStackView(arrangedSubviews: [label])
         nameRow.spacing = Space.space1
         nameRow.alignment = .center
-        if kind == .you { nameRow.insertArrangedSubview(GlyphView(.attention, size: Size.iconSm, tint: Palette.statusAttnGlyph), at: 0) }
+        if kind == .you { nameRow.insertArrangedSubview(GlyphView(.attention, size: Size.iconMd, tint: Palette.statusAttnGlyph), at: 0) }
         let kindLabel = KitLabel(TypeScale.typeCode, ink: Palette.inkSubtle)
         kindLabel.text = TaskWords.kind(kind)
         count.tabular = true

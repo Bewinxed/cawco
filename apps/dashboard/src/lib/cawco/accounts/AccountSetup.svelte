@@ -1165,9 +1165,11 @@
   .st.fail {
     color: var(--status-fail-ink);
   }
+  /* Signed in or someone else's: the status mark at 16px, inside the meta
+     line's 16.2px box; the row's height is its controls'. */
   .st :global(svg) {
-    width: 14px;
-    height: 14px;
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
   }
   .st.ok :global(svg) {
     color: var(--status-done-glyph);

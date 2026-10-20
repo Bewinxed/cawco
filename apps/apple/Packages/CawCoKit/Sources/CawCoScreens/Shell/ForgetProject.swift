@@ -436,8 +436,8 @@ final class ForgetProjectDialog: KitDialogController {
 private final class ForgetRowView: UIView {
     private let mark = SessionMarkView(tile: 20)
     private let title = KitLabel(TypeScale.typeLabel, ink: Palette.foreground)
-    private let glyph = GlyphView(.pause, size: Size.iconSm, tint: Palette.inkMuted)
-    private let spinner = KitSpinner(side: Size.iconSm)
+    private let glyph = GlyphView(.pause, size: Size.iconMd, tint: Palette.inkMuted)
+    private let spinner = KitSpinner(side: Size.iconMd)
     private let word = MorphLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let trail = KitLabel(TypeScale.typeMeta, ink: Palette.inkSubtle)
     private let error = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)

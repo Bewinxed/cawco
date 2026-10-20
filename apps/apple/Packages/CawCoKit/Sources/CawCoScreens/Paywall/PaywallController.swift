@@ -863,7 +863,7 @@ final class SpinnerButton: UIView {
 /// A text link in the meta role (Restore purchase, Terms, Privacy, Later),
 /// with the kit spinner before it while it works.
 final class LinkButton: UIButton {
-    private let spinner = KitSpinner(side: 12)
+    private let spinner = KitSpinner(side: Size.iconMd)
 
     var title: String = "" {
         didSet { paint() }

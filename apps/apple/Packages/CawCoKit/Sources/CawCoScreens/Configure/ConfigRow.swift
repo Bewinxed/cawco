@@ -43,7 +43,8 @@ final class ConfigRow: UIStackView {
     private var menuItems: [UIMenuElement] = []
     private let below = UIStackView()
     private let noteRow = UIStackView()
-    private let noteMark = UIStackView()
+    /// The note's mark in a status mark's width, on the words' first x-height.
+    private let noteMark = UIView()
     private let noteText = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     private let belowSlot = UIStackView()
     private var narrow: Bool?
@@ -156,13 +157,18 @@ final class ConfigRow: UIStackView {
             controls.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -6),
         ]
 
-        // What the last action came to: its mark (a spinner, the warning, the check) and its words.
-        noteMark.setContentHuggingPriority(.required, for: .horizontal)
+        // What the last action came to: its mark (a spinner, the failure mark, the check) and its words. The
+        // mark stands in a status mark's width whatever it is, so the words stand still as the tone changes,
+        // its middle on the first line's x-height (The Mark Line Rule; SectionRow.svelte `.note`).
         noteText.wrap = .pretty
         noteRow.spacing = 6
-        noteRow.alignment = .firstBaseline
+        noteRow.alignment = .top
         noteRow.addArrangedSubview(noteMark)
         noteRow.addArrangedSubview(noteText)
+        NSLayoutConstraint.activate([
+            noteMark.widthAnchor.constraint(equalToConstant: Size.iconMd),
+            noteMark.heightAnchor.constraint(equalTo: noteText.heightAnchor),
+        ])
         noteRow.isHidden = true
         belowSlot.axis = .vertical
         belowSlot.spacing = 6
@@ -298,13 +304,20 @@ final class ConfigRow: UIStackView {
         noteText.text = note.text
         noteText.ink = note.tone == .fail ? Palette.statusFailInk : Palette.inkMuted
         noteRow.accessibilityTraits = note.tone == .fail ? .staticText : .updatesFrequently
+        // The failure mark and the spinner fill the cell at 16pt (DESIGN.md, Sizes; Spinner); the check, a
+        // local glyph beside meta text, keeps 12.
         let mark: UIView = switch note.tone {
-        case .busy: KitSpinner(side: 12)
-        case .fail: GlyphView(.failed, size: 12, tint: Palette.statusFailInk)
+        case .busy: KitSpinner(side: Size.iconMd)
+        case .fail: GlyphView(.failed, size: Size.iconMd, tint: Palette.statusFailInk)
         case .done: GlyphView(.check, size: 12, tint: Palette.inkMuted)
         }
-        noteMark.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        noteMark.addArrangedSubview(mark)
+        noteMark.subviews.forEach { $0.removeFromSuperview() }
+        mark.translatesAutoresizingMaskIntoConstraints = false
+        noteMark.addSubview(mark)
+        NSLayoutConstraint.activate([
+            mark.centerXAnchor.constraint(equalTo: noteMark.centerXAnchor),
+            mark.centerYAnchor.constraint(equalTo: noteText.firstBaselineAnchor, constant: -Double(TypeScale.typeMeta.font.xHeight) / 2),
+        ])
         if note.tone == .fail { UIAccessibility.post(notification: .announcement, argument: note.text) }
     }
 

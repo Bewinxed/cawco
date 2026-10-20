@@ -453,8 +453,20 @@
       block-size: 12px;
       flex: 0 0 auto;
     }
+    /* A status mark (moved, failed) fills the rail's 16px cell (DESIGN.md,
+       Sizes); the other glyphs keep 12px in its middle. */
+    & :global(svg[data-status-mark]) {
+      inline-size: var(--w-glyph);
+      block-size: var(--w-glyph);
+    }
+    /* A rail line is a block of its own, as wide as its words: an inline
+       one would stand in a line box of the row's, set on the baseline of
+       its first item, the glyph cell, whose baseline is its glyph's bottom
+       edge, so the row's height would follow the glyph's size. */
     & :global(.ftrig) {
-      display: inline-flex;
+      display: flex;
+      inline-size: fit-content;
+      max-inline-size: 100%;
       background: none;
       border: 0;
       padding: 0;
@@ -463,13 +475,6 @@
       font-weight: var(--weight-strong);
       cursor: pointer;
       text-align: start;
-    }
-    /* ── The harness fold ────────────────────────────────────────────────
-       A notification the operator never wrote, on the same rail as every
-       other note: the summary, how it went, and the report one click behind
-       them. */
-    & :global(.ftrig.hn) {
-      max-inline-size: 100%;
     }
   }
   .ftitle {
@@ -484,9 +489,10 @@
     color: var(--ink-subtle);
   }
   /* The non-expandable twin: same line, no button, because there is nothing
-     under it to open. */
+     under it to open; a block of its own, as .ftrig is. */
   .hline {
-    display: inline-flex;
+    display: flex;
+    inline-size: fit-content;
     max-inline-size: 100%;
     font-size: var(--text-label);
     font-weight: var(--weight-strong);

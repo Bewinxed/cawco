@@ -178,9 +178,5 @@
     padding-inline: var(--ask-indent, 0) var(--ask-end, 0);
     font: var(--type-meta);
     color: var(--ink-muted);
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
   }
 </style>

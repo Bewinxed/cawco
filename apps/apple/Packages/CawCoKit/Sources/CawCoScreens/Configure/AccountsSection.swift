@@ -182,7 +182,7 @@ final class AccountRow: UIControl {
         problemLabel.text = problem?.text
         let ink = problem?.broke == true ? Palette.statusFailInk : Palette.statusAttnInk
         problemLabel.ink = ink
-        let warn = GlyphView(problem?.broke == true ? .failed : .warning, size: 12, tint: ink)
+        let warn = GlyphView(problem?.broke == true ? .failed : .warning, size: Size.iconMd, tint: ink)
         let line = UIStackView(arrangedSubviews: [warn, problemLabel])
         line.spacing = Space.space1
         line.alignment = .center

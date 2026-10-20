@@ -475,9 +475,10 @@
     min-inline-size: 0;
     color: var(--ink-strong);
   }
+  /* The needs-you status mark: 16px, inside the label's line box. */
   .stage :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
     flex: none;
     color: var(--status-attn-glyph);
   }
