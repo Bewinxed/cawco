@@ -63,9 +63,14 @@
         if (gone) {
           return;
         }
-        made = drawIn(target, String(props.name ?? "Dials"), props.config ?? {}, {
-          theme: scheme.now,
-        });
+        made = drawIn(
+          target,
+          String(props.name ?? "Dials"),
+          props.config ?? {},
+          {
+            theme: scheme.now,
+          }
+        );
         drawn = made;
       })
       .catch((error: unknown) => console.error("[decision-page]", error));

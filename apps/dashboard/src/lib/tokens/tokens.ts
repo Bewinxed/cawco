@@ -494,6 +494,7 @@ export type TokenSize =
   | "size.c-decision-node-w"
   | "size.c-decision-node-h"
   | "size.c-decision-page-w"
+  | "size.c-decision-question-basis"
   | "size.c-decision-meter-w"
   | "size.c-decision-option-min"
   | "size.c-media-max-h"

@@ -277,34 +277,18 @@ export default defineConfig([
     files: [file],
     rules: { "shadcn/no-inline-styles": ["error", { allow }] },
   })),
-  // A decision page's host is not the dashboard: core's decision-host.ts
-  // bundles this folder alone (Bun with bun-plugin-svelte, no Tailwind) into
-  // the page the hub serves, drawn by the decision-page kit's page.css
-  // (packages/hub/skills/decision-page/kit/page.css) and each renderer's own
-  // scoped styles. Its `dp`, `dp-*`, `on` and `solo` classes are page.css's: "Allow
-  // classes supplied by CSS outside the theme's import graph"
-  // (https://github.com/shadcn-ui/lint/blob/main/docs/rules/no-unknown-classes.md).
-  // Its inline values come from the program's props (a meter's share, a
-  // frame's measured height, a Stack's align and justify), and no utility
-  // reaches that bundle to carry them.
-  {
-    files: ["src/lib/cawco/decisions/host/**"],
+  // A decision page's media measure their own box while mounted: Preview's
+  // frame takes the height its page or component canvas says it stands at,
+  // and Canvas's frame the box its drawing's shape gives it in its well
+  // (decisions/host Preview.svelte, Canvas.svelte), so each is written
+  // inline as the standard property, as the files above.
+  ...["Canvas", "Preview"].map((name) => ({
+    files: [`src/lib/cawco/decisions/host/${name}.svelte`],
     rules: {
-      "shadcn/no-unknown-classes": [
-        "error",
-        { allow: ["dp", "dp-*", "on", "solo"] },
-      ],
       "shadcn/no-inline-styles": [
         "error",
-        {
-          allow: [
-            "align-items",
-            "block-size",
-            "inline-size",
-            "justify-content",
-          ],
-        },
+        { allow: ["block-size", "inline-size"] },
       ],
     },
-  },
+  })),
 ]);

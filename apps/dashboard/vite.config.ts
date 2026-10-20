@@ -8,7 +8,7 @@ import {
   PAGE_ORIGIN_HEADER,
 } from "@cawco/core/browser-gate";
 import { CSS_TARGET } from "@cawco/core/css-target";
-import { unlayeredRules } from "@cawco/core/page-css";
+import { unlayeredRules } from "@cawco/core/css-layers";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
@@ -254,7 +254,7 @@ const runningVersion = (): Plugin => ({
  * moved one library to `@import … layer()` and missed that its component
  * imported the same sheet again, unlayered, which silently outranked the
  * house). One unlayered rule fails the build, naming its asset and selector
- * (core page-css.ts `unlayeredRules`, the guard the decision host's sheet
+ * (core css-layers.ts `unlayeredRules`, the guard the decision host's sheet
  * is held to as well).
  */
 const VENDOR_COMPONENT_SHEETS = [

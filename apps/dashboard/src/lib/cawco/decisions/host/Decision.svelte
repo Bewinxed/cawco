@@ -197,9 +197,8 @@
   const shareKey = (option: string) => `decision:${id}:${option}`;
   /** An option's chip in the options: what flies to the head and back. */
   const chipOf = (option: string) =>
-    body?.querySelector<HTMLElement>(
-      `[data-option="${CSS.escape(option)}"]`
-    ) ?? null;
+    body?.querySelector<HTMLElement>(`[data-option="${CSS.escape(option)}"]`) ??
+    null;
 
   let card = $state<HTMLElement>();
   let body = $state<HTMLDivElement>();
@@ -851,11 +850,8 @@
     </OptionGroup>
     <div data-slot="note">
       <div bind:this={noteAdd}>
-        <Button
-          disabled={!bridge()}
-          onclick={askNote}
-          size="sm"
-          variant="ghost">Add {noteFor}</Button
+        <Button disabled={!bridge()} onclick={askNote} size="sm" variant="ghost"
+          >Add {noteFor}</Button
         >
       </div>
       <div bind:this={noteField}>

@@ -431,7 +431,6 @@
   }
 }
 
-
 /* ---- Project identity colour (see lib/cawco/identity.ts). Elements set
    --identity-h inline; this utility fixes lightness and chroma per theme.
    Identity is ink — never a status dot. */
@@ -1516,7 +1515,6 @@
     border-block-end-color: var(--border-hairline);
   }
 }
-
 
 /* ---- Behaviours --------------------------------------------------------
    The behaviours the whole app names, one custom utility each

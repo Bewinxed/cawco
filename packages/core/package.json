@@ -9,7 +9,7 @@
     "./bundle-css-guard": "./src/bundle-css-guard.ts",
     "./bundled": "./src/bundled.ts",
     "./css-target": "./src/css-target.ts",
-    "./page-css": "./src/page-css.ts",
+    "./css-layers": "./src/css-layers.ts",
     "./at-most": "./src/at-most.ts",
     "./bounded": "./src/bounded.ts",
     "./machine-path": "./src/machine-path.ts",

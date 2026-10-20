@@ -25,7 +25,8 @@ import { SveltePlugin } from "bun-plugin-svelte";
 import { agentReact } from "./agent-react";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
-import { compileSheets, pageFiles, unlayeredRules } from "./page-css";
+import { unlayeredRules } from "./css-layers";
+import { compileSheets, pageFiles } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
 
 const HOST_DIR = new URL(
@@ -60,6 +61,9 @@ const rawImports: Bun.BunPlugin = {
   },
 };
 
+/** A compiled component's import of the Svelte runtime: `import 'svelte/…'` or `from 'svelte/…'`, either quote. */
+const SVELTE_IMPORT = /(\bfrom |\bimport )["'](svelte\/[^"']+)["']/g;
+
 /** The core package's own folder: unplugin-icons finds its icon sets (`@iconify-json/*`) from it. */
 const CORE_DIR = new URL("../", import.meta.url).pathname;
 
@@ -86,8 +90,16 @@ async function iconsPlugin(): Promise<Bun.BunPlugin> {
         compiler: (svg: string) => {
           const open = svg.indexOf(">", svg.indexOf("<svg "));
           const component = `<script>const{...p}=$props()</script>${svg.slice(0, open)} {...p}>${svg.slice(open + 1)}`;
-          return compile(component, { generate: "client", dev: false }).js
-            .code;
+          // A plugin's module has no folder to resolve from: its Svelte
+          // imports go to the runtime the host's own components use.
+          return compile(component, {
+            generate: "client",
+            dev: false,
+          }).js.code.replace(
+            SVELTE_IMPORT,
+            (_, lead: string, specifier: string) =>
+              `${lead}"${Bun.resolveSync(specifier, HOST_DIR)}"`
+          );
         },
       },
     })

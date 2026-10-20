@@ -345,10 +345,12 @@ function fixtureRoot(): string {
 function readPage() {
   const tall = (el: Element | null) =>
     el ? Math.round(el.getBoundingClientRect().height) : 0;
-  const send = document.querySelector<HTMLButtonElement>(".dp-send");
-  const options = [...document.querySelectorAll<HTMLButtonElement>(".dp-opt")];
-  const trio = [...document.querySelectorAll(".dp-card")]
-    .map((card) => card.querySelector(".dp-show"))
+  const send = document.querySelector<HTMLButtonElement>("[data-send]");
+  const options = [
+    ...document.querySelectorAll<HTMLButtonElement>("[data-option]"),
+  ];
+  const trio = [...document.querySelectorAll("[data-slot=decision]")]
+    .map((card) => card.querySelector("[data-slot=decision-media]"))
     .filter((show): show is Element => !!show && show.children.length === 3)
     .map((show) => ({
       show: Math.round(show.getBoundingClientRect().width),
@@ -362,21 +364,24 @@ function readPage() {
       }),
     }));
   return {
-    offline: document.querySelector(".dp-offline")?.textContent?.trim() ?? "",
+    offline:
+      document
+        .querySelector("[data-slot=decision-page] [data-slot=alert]")
+        ?.textContent?.trim() ?? "",
     send: { h: tall(send), disabled: send?.disabled ?? true },
     note: Math.min(
-      ...[...document.querySelectorAll(".dp-note textarea")].map(tall)
+      ...[...document.querySelectorAll("[data-slot=note] textarea")].map(tall)
     ),
     options: options.map((one) => {
       const style = getComputedStyle(one);
-      const cap = one.querySelector(".dp-kc")?.getBoundingClientRect();
-      const words = one.querySelector<HTMLElement>("b > :not(.dp-kc)");
+      const cap = one.querySelector("[data-slot=kbd]")?.getBoundingClientRect();
+      const words = one.querySelector<HTMLElement>("[data-slot=option-label]");
       const at = words?.getBoundingClientRect();
-      const card = one.closest(".dp-card");
+      const card = one.closest("[data-slot=decision]");
       return {
         option: one.dataset.option ?? "",
         disabled: one.disabled,
-        keycap: tall(one.querySelector(".dp-kc")),
+        keycap: tall(one.querySelector("[data-slot=kbd]")),
         h: tall(one),
         radius: style.borderTopLeftRadius,
         // The raised surface the card stands on (DESIGN.md: the option chip is raised).
@@ -441,7 +446,9 @@ const spec: Spec = {
             errors.push(error.message.slice(0, 240))
           );
           await page.goto(stage.pageUrl(NAME, theme), { waitUntil: "load" });
-          await page.waitForSelector(".dp-card", { timeout: 30_000 });
+          await page.waitForSelector("[data-slot=decision]", {
+            timeout: 30_000,
+          });
           const count = Object.keys(PREVIEWS).length;
           await page.waitForFunction(
             ({ n, selector }) =>

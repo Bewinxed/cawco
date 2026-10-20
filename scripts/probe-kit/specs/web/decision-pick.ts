@@ -115,9 +115,6 @@ const EIGHTH = 0.125;
 const OUT = "cubic-bezier(0.23, 1, 0.32, 1)";
 /** --ease-drawer as the engine writes it: motion/morph's tween. */
 const DRAWER = "cubic-bezier(0.32, 0.72, 0, 1)";
-/** What the page says once it has sent. */
-const SENT = "Sent. Change anything and send again.";
-
 const LEGS = [
   { view: "desk", theme: "light", label: "1440 light" },
   { view: "phone", theme: "dark", label: "390 dark (coarse)" },
@@ -159,7 +156,7 @@ const chipOf = (page: Page, id: string, option: string) =>
       const chip = document.querySelector<HTMLElement>(
         `#decision-${card} [data-option="${value}"]`
       );
-      const cap = chip?.querySelector(".dp-kc");
+      const cap = chip?.querySelector("[data-slot=kbd]");
       return {
         edge: chip ? getComputedStyle(chip).borderTopColor : "",
         fill: chip ? getComputedStyle(chip).backgroundColor : "",
@@ -173,7 +170,7 @@ const chipOf = (page: Page, id: string, option: string) =>
 const foldOf = (page: Page, id: string) =>
   page.evaluate((card) => {
     const root = document.getElementById(`decision-${card}`);
-    const body = root?.querySelector<HTMLElement>(".dp-body");
+    const body = root?.querySelector<HTMLElement>("[data-slot=decision-body]");
     const run = body?.getAnimations()[0];
     return {
       card: Math.round((root?.getBoundingClientRect().height ?? 0) * 10) / 10,
@@ -296,7 +293,7 @@ const focusOf = (page: Page) =>
         active?.closest<HTMLElement>("[data-cawco-choice]")?.dataset
           .cawcoChoice ?? "",
       option: active?.dataset.option ?? "",
-      send: !!active?.matches(".dp-send"),
+      send: !!active?.matches("[data-send]"),
     };
   });
 
@@ -314,14 +311,14 @@ const toOption = async (page: Page, id: string, option: string) => {
 
 /** Card `id`'s Continue. */
 const continueOf = (page: Page, id: string) =>
-  page.locator(`#decision-${id} .dp-continue`);
+  page.locator(`#decision-${id} [data-continue]`);
 
 /** Brings card `id`'s Continue into the window, as a person scrolls to it. */
 const toContinue = async (page: Page, id: string) => {
   await page.evaluate(
     (card) =>
       document
-        .querySelector(`#decision-${card} .dp-continue`)
+        .querySelector(`#decision-${card} [data-continue]`)
         ?.scrollIntoView({ block: "center" }),
     id
   );
@@ -346,7 +343,8 @@ const pickIn = async (
 /** What the page's one live region says now. */
 const saidOf = (page: Page) =>
   page.evaluate(
-    () => document.querySelector(".dp-said")?.textContent?.trim() ?? ""
+    () =>
+      document.querySelector("[data-slot=page-said]")?.textContent?.trim() ?? ""
   );
 
 /** The options card `id` holds picked, its options that Tab reaches, and whether it shows Continue. */
@@ -363,7 +361,7 @@ const pickedIn = (page: Page, id: string) =>
       stops: options
         .filter((one) => one.tabIndex === 0)
         .map((one) => one.dataset.option ?? ""),
-      next: !!root?.querySelector(".dp-continue"),
+      next: !!root?.querySelector("[data-continue]"),
       decided: !!root?.hasAttribute("data-decided"),
     };
   }, id);
@@ -376,8 +374,8 @@ const pickedIn = (page: Page, id: string) =>
 const footOf = (page: Page, id: string) =>
   page.evaluate((card) => {
     const root = document.getElementById(`decision-${card}`);
-    const body = root?.querySelector<HTMLElement>(".dp-body");
-    const foot = root?.querySelector<HTMLElement>(".dp-foot");
+    const body = root?.querySelector<HTMLElement>("[data-slot=decision-body]");
+    const foot = root?.querySelector<HTMLElement>("[data-slot=decision-foot]");
     const t = (n: number) => Math.round(n * 1000) / 1000;
     if (!(root && body && foot)) {
       return {
@@ -596,7 +594,9 @@ async function liveFold(
     // starts watching (the page at rest).
     const scroller = document.scrollingElement as Element;
     const sized = new ResizeObserver(() => {
-      const body = root?.querySelector<HTMLElement>(".dp-body");
+      const body = root?.querySelector<HTMLElement>(
+        "[data-slot=decision-body]"
+      );
       const run = body?.getAnimations()[0];
       frames.push({
         t: Math.round(Number(document.timeline.currentTime) * 10) / 10,
@@ -620,7 +620,8 @@ async function liveFold(
       const root = document.getElementById(`decision-${card}`);
       return (
         root?.hasAttribute("data-decided") &&
-        root.querySelector(".dp-body")?.getAnimations().length === 0
+        root.querySelector("[data-slot=decision-body]")?.getAnimations()
+          .length === 0
       );
     },
     id,
@@ -725,8 +726,9 @@ const nextFrameOf = (page: Page, id: string) =>
               Math.round((root?.getBoundingClientRect().height ?? 0) * 10) / 10,
             body:
               Math.round(
-                (root?.querySelector(".dp-body")?.getBoundingClientRect()
-                  .height ?? 0) * 10
+                (root
+                  ?.querySelector("[data-slot=decision-body]")
+                  ?.getBoundingClientRect().height ?? 0) * 10
               ) / 10,
             decided: !!root?.hasAttribute("data-decided"),
             edge: chip ? getComputedStyle(chip).borderTopColor : "",
@@ -1084,7 +1086,7 @@ async function changeStep(
   const backRuns = await clock.catchRuns(
     () =>
       page
-        .locator("#decision-path .dp-change")
+        .locator("#decision-path [data-change]")
         .dispatchEvent("click", { detail: 1 }),
     "#decision-path"
   );
@@ -1180,7 +1182,7 @@ async function liveSteps(
     page,
     clock,
     { id: "look", option: "card", view },
-    ".dp-meter"
+    "[data-slot=meter]"
   );
   kit.check(
     `${label}: the count's MorphText (L515) runs on its own clock, --dur-morph (${tokens.morph}ms) on ease-out, its digit rolling (at ½ in its slot) and its box holding the wider of the old and new words at 0, ½ and 1, landing on "2"`,
@@ -1218,7 +1220,7 @@ async function liveSteps(
     page,
     clock,
     { id: "radius", option: "soft", view },
-    ".dp-done"
+    "[data-slot=page-foot]"
   );
   kit.check(
     `${label}: Send's label morphs to what goes on that clock ("Send 2 picks" to "Send 3 picks"), its digit rolling and its box holding the wider words`,
@@ -1399,7 +1401,7 @@ async function keyLeg(
   );
   await keys.keyboard.press("Enter");
   await settle(keys, 100);
-  await keys.locator("#decision-path .dp-change").focus();
+  await keys.locator("#decision-path [data-change]").focus();
   await keys.keyboard.press("Enter");
   const keyBack = await nextFrameOf(keys, "path");
   const keyBackFocus = await focusOf(keys);
@@ -1428,13 +1430,26 @@ async function keyLeg(
   );
   await keys.keyboard.press("Control+Enter");
   await settle(keys, 300);
-  const sent = await keys.evaluate(
-    () => document.querySelector(".dp-done > span")?.textContent?.trim() ?? ""
-  );
+  // Sent, Send runs the kit's pending (DESIGN.md L731, Buttons, Pending):
+  // the spinner, then its check held for --dur-hold, its label still saying
+  // what went; no "Sent." line of words is drawn beside it.
+  const sent = await keys.evaluate(() => {
+    const send = document.querySelector("[data-send]");
+    return {
+      check:
+        send?.querySelector("[data-slot=tick]")?.getAttribute("data-on") ??
+        null,
+      label:
+        send?.querySelector("[data-slot=words]")?.textContent?.trim() ?? "",
+      words: document.querySelector("[data-slot=page-foot]")?.textContent ?? "",
+    };
+  });
   kit.check(
-    `${label}: Ctrl+Enter sends from an option: the page says "${SENT}"`,
-    sent === SENT,
-    sent
+    `${label}: Ctrl+Enter sends from an option: Send's pending ends on its check (L731), its label still "Send 3 picks", and no "Sent." line is drawn`,
+    sent.check === "true" &&
+      sent.label === "Send 3 picks" &&
+      !sent.words.includes("Sent."),
+    JSON.stringify(sent)
   );
   await keys.close();
 }
@@ -1663,7 +1678,9 @@ async function readerLeg(
     () =>
       new Promise<number[]>((done) => {
         const seen: number[] = [];
-        const body = document.querySelector("#decision-path .dp-body");
+        const body = document.querySelector(
+          "#decision-path [data-slot=decision-body]"
+        );
         const step = () => {
           seen.push(scrollY);
           if ((body?.getAnimations().length ?? 0) === 0 && seen.length > 2) {
@@ -1811,7 +1828,9 @@ async function clampLeg(kit: Kit, url: string, label: string) {
       new Promise<{ most: number; scroll: number }[]>((done) => {
         const frames: { most: number; scroll: number }[] = [];
         const root = document.scrollingElement as Element;
-        const body = document.querySelector("#decision-radius .dp-body");
+        const body = document.querySelector(
+          "#decision-radius [data-slot=decision-body]"
+        );
         const step = () => {
           frames.push({
             scroll: root.scrollTop,
@@ -1915,8 +1934,9 @@ async function stillLeg(
   await stillClock.release();
   await still.waitForFunction(
     () =>
-      document.querySelector("#decision-path .dp-body")?.getAnimations()
-        .length === 0,
+      document
+        .querySelector("#decision-path [data-slot=decision-body]")
+        ?.getAnimations().length === 0,
     undefined,
     { timeout: 5000 }
   );
@@ -1950,8 +1970,10 @@ async function stillLeg(
   const headOf = () =>
     still.evaluate(() => {
       const card = document.getElementById("decision-path");
-      const picks = card?.querySelector<HTMLElement>("header .dp-picks");
-      const change = card?.querySelector<HTMLElement>("header .dp-change");
+      const picks = card?.querySelector<HTMLElement>(
+        "header [data-slot=decided]"
+      );
+      const change = card?.querySelector<HTMLElement>("header [data-change]");
       return {
         picks: picks ? Number(getComputedStyle(picks).opacity) : -1,
         change: change ? Number(getComputedStyle(change).opacity) : -1,
@@ -1960,12 +1982,12 @@ async function stillLeg(
     });
   await still.evaluate(() =>
     document
-      .querySelector("#decision-path .dp-change")
+      .querySelector("#decision-path [data-change]")
       ?.scrollIntoView({ block: "center" })
   );
   await settle(still, 200);
   const backRuns = await stillClock.catchRuns(
-    () => pressOn(still.locator("#decision-path .dp-change"), view),
+    () => pressOn(still.locator("#decision-path [data-change]"), view),
     "#decision-path header"
   );
   await stillClock.seek(0.5);
@@ -2022,7 +2044,7 @@ const coralOf = (page: Page) =>
           one.closest<HTMLElement>("[data-cawco-choice]")?.dataset
             .cawcoChoice ?? "";
         return {
-          what: one.classList.contains("dp-send") ? "send" : `${card} continue`,
+          what: one.hasAttribute("data-send") ? "send" : `${card} continue`,
           inView: at.bottom > 0 && at.top < innerHeight && at.height > 0,
         };
       });
@@ -2031,7 +2053,7 @@ const coralOf = (page: Page) =>
 /** Send as drawn: its fill, edge, ink, its highlight's opacity, and whether it is the node marked before. */
 const sendOf = (page: Page) =>
   page.evaluate(() => {
-    const send = document.querySelector<HTMLElement>(".dp-send");
+    const send = document.querySelector<HTMLElement>("[data-send]");
     const marked = (window as unknown as { kitSend?: Element }).kitSend;
     return {
       fill: send ? getComputedStyle(send).backgroundColor : "",
@@ -2094,13 +2116,13 @@ async function coralLeg(
   await toContinue(page, "radius");
   await page.evaluate(() => {
     (window as unknown as { kitSend?: Element | null }).kitSend =
-      document.querySelector(".dp-send");
+      document.querySelector("[data-send]");
   });
   const before = await sendOf(page);
   const clock = await Clock.on(page);
   const runs = await clock.catchRuns(
     () => pressOn(continueOf(page, "radius"), view),
-    ".dp-done"
+    "[data-slot=page-foot]"
   );
   const turn: Record<string, Awaited<ReturnType<typeof sendOf>>> = {};
   for (const at of [0, 0.5, 1]) {
@@ -2111,11 +2133,11 @@ async function coralLeg(
   await look("Continue radius (the last)", "send");
   await page.evaluate(() =>
     document
-      .querySelector("#decision-path .dp-change")
+      .querySelector("#decision-path [data-change]")
       ?.scrollIntoView({ block: "center" })
   );
   await settle(page, 200);
-  await pressOn(page.locator("#decision-path .dp-change"), view);
+  await pressOn(page.locator("#decision-path [data-change]"), view);
   await look("Change path", "path continue");
   await proceed("path");
   await look("Continue path again", "send");

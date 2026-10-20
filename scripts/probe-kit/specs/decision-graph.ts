@@ -24,7 +24,7 @@
  *     its problems say the broken `after`s with their page and card, and
  *     both orphaned picks.
  * (g) The page drawn on its session's origin: the card whose picked option
- *     went stands open, "Not picked", never folded to an empty "Decided:";
+ *     went stands open, its head its question alone, never folded to an empty "Decided:";
  *     a pick on an option it offers folds it to "Decided: Per machine".
  * (d) artifact_delete of a project's page takes its page.oui out of the
  *     folder with it, and the graph draws none of its cards.
@@ -80,12 +80,22 @@ go = Decision("go", "Does the rollout start now?", [ship, hold], "The price is s
 ship = Option("ship", "Ship it", "Goes out this week.", true, [], "Less time to polish.")
 hold = Option("hold", "Hold it", "Waits for the next release.", false, [], "The waitlist waits.")`;
 
-/** A card's head as the page draws it: its state line, and whether it folded. */
+/**
+ * A card's head as the page draws it: its decided line's name ("Decided:
+ * <option>", none while it stands open, when its head is its question
+ * alone), how many things stand in it beside the question, and whether it
+ * folded.
+ */
 const cardHead = (page: Page, id: string) =>
   page.evaluate((card) => {
     const root = document.getElementById(`decision-${card}`);
+    const head = root?.querySelector("header");
     return {
-      line: root?.querySelector("header .dp-state")?.textContent?.trim() ?? "",
+      line:
+        head
+          ?.querySelector("[data-slot=decided]")
+          ?.getAttribute("aria-label") ?? "",
+      beside: head ? head.children.length - 1 : -1,
       decided: !!root?.hasAttribute("data-decided"),
     };
   }, id);
@@ -259,11 +269,11 @@ const run = async (kit: Kit) => {
   await tab.goto(
     `http://${new URL(fleet.base).hostname}:${port}/__cawco/page/${pricing.id}/`
   );
-  await tab.waitForSelector("#decision-shape header .dp-state");
+  await tab.waitForSelector("#decision-shape header h2");
   const goneHead = await cardHead(tab, "shape");
   kit.check(
-    '(g) the card whose picked option went stands open, "Not picked", never folded to an empty "Decided:"',
-    goneHead.line === "Not picked" && !goneHead.decided,
+    '(g) the card whose picked option went stands open, its head its question alone (no "Not picked", no decided line), never folded to an empty "Decided:"',
+    goneHead.line === "" && goneHead.beside === 0 && !goneHead.decided,
     JSON.stringify(goneHead)
   );
   const repicked = await fetch(`${fleet.base}${at(writer)}/${pricing.id}`, {
@@ -281,7 +291,7 @@ const run = async (kit: Kit) => {
   });
   // The page as it is served again: the doc's picks as the hub keeps them now.
   await tab.reload();
-  await tab.waitForSelector("#decision-shape header .dp-state");
+  await tab.waitForSelector("#decision-shape header h2");
   const pickedHead = await cardHead(tab, "shape");
   kit.check(
     '(g) a pick on an option the card offers folds it to "Decided: Per machine"',

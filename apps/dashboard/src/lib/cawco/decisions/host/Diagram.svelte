@@ -91,7 +91,8 @@
           ? Math.min(1, TYPE_FLOOR / smallest)
           : 1;
         const { width, height } = drawing;
-        drawn = svg && width > 0 && height > 0 ? { width, height, least } : null;
+        drawn =
+          svg && width > 0 && height > 0 ? { width, height, least } : null;
       } catch (error) {
         if (!(error instanceof pele.PeleError)) {
           throw error;
@@ -168,11 +169,8 @@
 
 {#snippet open()}
   {#if type && CANVAS_TYPES.has(type)}
-    <Button
-      disabled={opening}
-      onclick={openAsCanvas}
-      size="sm"
-      variant="ghost">Open as canvas</Button
+    <Button disabled={opening} onclick={openAsCanvas} size="sm" variant="ghost"
+      >Open as canvas</Button
     >
   {/if}
 {/snippet}

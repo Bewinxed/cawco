@@ -31,8 +31,7 @@
     stretch: "items-stretch",
   } as const;
   const along = $derived(
-    JUSTIFY[String(justify ?? "start") as keyof typeof JUSTIFY] ??
-      JUSTIFY.start
+    JUSTIFY[String(justify ?? "start") as keyof typeof JUSTIFY] ?? JUSTIFY.start
   );
   const across = $derived(
     ALIGN[String(align ?? "stretch") as keyof typeof ALIGN] ?? ALIGN.stretch

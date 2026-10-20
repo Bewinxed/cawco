@@ -122,7 +122,7 @@ const pickIn = async (tab: Page, option: string): Promise<string> => {
   if (!frame) {
     return "no page frame";
   }
-  const change = frame.locator("#decision-leave .dp-change", {
+  const change = frame.locator("#decision-leave [data-change]", {
     hasText: "Change",
   });
   if ((await change.count()) > 0) {

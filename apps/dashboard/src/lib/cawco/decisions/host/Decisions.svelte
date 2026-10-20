@@ -186,7 +186,9 @@
         width="40"
       />
     </span>
-    <h1 class="type-title mark-text min-w-0 text-balance text-ink-strong wrap-anywhere">
+    <h1
+      class="type-title mark-text min-w-0 text-balance text-ink-strong wrap-anywhere"
+    >
       {String(props.title ?? "")}
     </h1>
   </header>
@@ -206,7 +208,10 @@
     data-safe-bottom
     data-slot="page-foot"
   >
-    <p class="mark-line type-meta num flex items-center gap-space-3 text-ink-muted" data-slot="meter">
+    <p
+      class="mark-line type-meta num flex items-center gap-space-3 text-ink-muted"
+      data-slot="meter"
+    >
       <span><MorphText text={String(count)} /> of {ids.length} picked</span>
       <span
         class="h-space-1 w-c-decision-meter-w overflow-hidden rounded-xs bg-surface-recess-deep"

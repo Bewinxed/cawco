@@ -74,3 +74,8 @@ packages/core/src/decisions-spec.json
 packages/agent/src/preview-overlay/page.ts
 packages/agent/src/canvas-host/host.tsx
 packages/agent/src/canvas-host/scene.ts
+packages/core/src/css-layers.ts
+apps/dashboard/src/lib/cawco/decisions/host/Well.svelte
+apps/dashboard/src/lib/cawco/decisions/host/scheme.svelte.ts
+apps/dashboard/eslint.config.mjs
+scripts/style-residual-check.ts

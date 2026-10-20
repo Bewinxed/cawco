@@ -187,11 +187,16 @@
         title={held.name}
       ></iframe>
     {:else}
-      <div class="relative grid aspect-16/10 w-full place-items-center">
+      <div class="relative w-full">
         {#if !waited}
-          <Skeleton class="absolute inset-0 w-full" height="picture" />
+          <Skeleton class="w-full" height="picture" />
         {/if}
-        <div class="relative grid justify-items-center gap-space-2">
+        <div
+          class={[
+            "grid content-center justify-items-center gap-space-2",
+            waited ? "aspect-16/10" : "absolute inset-0",
+          ]}
+        >
           {#if slow && !waited}
             <img
               alt=""

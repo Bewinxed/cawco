@@ -217,21 +217,21 @@ const foldOf = (frame: Frame, id: string) =>
     return {
       decided: !!root?.hasAttribute("data-decided"),
       // A decided card's line is its chosen options, named "Decided: …" for
-      // a screen reader; an open card's is its state line.
-      line: root?.hasAttribute("data-decided")
-        ? (root.querySelector("header .dp-picks")?.getAttribute("aria-label") ??
-          "")
-        : (root?.querySelector("header .dp-state")?.textContent?.trim() ?? ""),
+      // a screen reader; an open card's head is its question alone.
+      line:
+        root
+          ?.querySelector("header [data-slot=decided]")
+          ?.getAttribute("aria-label") ?? "",
       chips: [
         ...(root?.querySelectorAll<HTMLElement>("header [data-pick]") ?? []),
       ].map((one) => one.dataset.pick ?? ""),
       // Change as it stands: one fading out of an opening card is leaving.
       button:
         root
-          ?.querySelector(".dp-change:not([data-leaving])")
+          ?.querySelector("[data-leaves]:not([data-leaving]) [data-change]")
           ?.textContent?.trim() ?? "",
-      next: !!root?.querySelector(".dp-continue"),
-      body: seen(root?.querySelector(".dp-opts")),
+      next: !!root?.querySelector("[data-continue]"),
+      body: seen(root?.querySelector("[data-slot=options]")),
       options: [...(root?.querySelectorAll<HTMLElement>("[data-option]") ?? [])]
         .filter(seen)
         .map((one) => one.dataset.option ?? ""),
@@ -241,7 +241,7 @@ const foldOf = (frame: Frame, id: string) =>
       height: Math.round(root?.getBoundingClientRect().height ?? 0),
       focus: {
         option: active?.dataset.option ?? "",
-        button: active?.classList.contains("dp-change")
+        button: active?.hasAttribute("data-change")
           ? (active.textContent?.trim() ?? "")
           : "",
         inCard: !!(active && root?.contains(active)),
@@ -249,7 +249,7 @@ const foldOf = (frame: Frame, id: string) =>
         // first option, or Send with none left.
         onward:
           !!active &&
-          (active.matches(".dp-send") ||
+          (active.matches("[data-send]") ||
             (!!holder &&
               holder !== root &&
               !holder.hasAttribute("data-decided") &&
@@ -269,7 +269,7 @@ const inCard = (frame: Frame, selector: string | undefined, id: string) =>
 /** A card folded by a pick opened again with Change, so its media can be reached. */
 const unfold = async (_page: Page, frame: Frame, id: string) => {
   if ((await foldOf(frame, id)).decided) {
-    await pressIn(frame, `#decision-${id} .dp-change >> nth=0`);
+    await pressIn(frame, `#decision-${id} [data-change] >> nth=0`);
   }
 };
 
@@ -296,7 +296,9 @@ const frameWith = async (page: Page, cards: number): Promise<Frame> =>
     `the panel's frame drawing ${cards} cards`,
     async () => {
       const frame = await frameAt(page, FRAME);
-      return (await countIn(frame, "article.dp-card")) === cards ? frame : null;
+      return (await countIn(frame, "article[data-slot=decision]")) === cards
+        ? frame
+        : null;
     },
     Boolean,
     60_000
@@ -703,7 +705,7 @@ const mediaLeg = async (
     JSON.stringify({ faces: media.faces, row: media.row })
   );
   const hero = await frame.evaluate(() => {
-    const head = document.querySelector(".dp-hero");
+    const head = document.querySelector("[data-slot=page-head]");
     return {
       h1: head?.querySelector("h1")?.textContent ?? null,
       after: head?.querySelectorAll("h1 ~ p, h1 ~ * p").length ?? -1,
@@ -789,7 +791,7 @@ const marks = async (on: On, frame: Frame) => {
     !!chosen && !chosen.decided && chosen.body,
     JSON.stringify(chosen)
   );
-  await pressIn(frame, "#decision-stack .dp-continue >> nth=0");
+  await pressIn(frame, "#decision-stack [data-continue] >> nth=0");
   const folded = await until(
     "the stack card folded",
     () => foldOf(frame, "stack"),
@@ -896,13 +898,13 @@ const embedLeg = async (on: On, frame: Frame) => {
       frame.evaluate(() => ({
         clicked:
           document.querySelector<HTMLIFrameElement>(
-            "#decision-host .dp-optmedia iframe"
+            "#decision-host [data-slot=option-media] iframe"
           )?.contentDocument?.body?.dataset.clicked ?? "",
         marked: document
           .querySelector('[data-option="edge"]')
           ?.hasAttribute("data-cawco-picked"),
         inPick: !!document.querySelector(
-          '[data-option="edge"] iframe, [data-option] .dp-optmedia'
+          '[data-option="edge"] iframe, [data-option] [data-slot=option-media]'
         ),
       })),
     (seen) => seen.clicked === "yes",
@@ -921,7 +923,7 @@ const embedLeg = async (on: On, frame: Frame) => {
 };
 
 /** The edge option's live embed, in the panel's frame. */
-const EMBED = "#decision-host .dp-optmedia iframe";
+const EMBED = "#decision-host [data-slot=option-media] iframe";
 
 /** What a page anchor names, as `[frames, selector]`, resolved in the panel's frame: its box in that frame's viewport, whether it stands in a frame, and its class. */
 interface Named {
@@ -1187,7 +1189,7 @@ const insertAhead = async (on: On, first: string) => {
       ?.getBoundingClientRect();
     const astro = document.querySelector('[data-option="astro"]');
     return {
-      first: document.querySelector("article.dp-card")?.id,
+      first: document.querySelector("article[data-slot=decision]")?.id,
       astro: astro?.hasAttribute("data-cawco-picked"),
       pressed: astro?.getAttribute("aria-pressed"),
       stack: stack && { top: stack.top, bottom: stack.bottom },
@@ -1476,7 +1478,7 @@ const foldLeg = async (on: On, theme: "light" | "dark") => {
   ).catch(() => null);
   // The page's media are still loading in: the tap waits for the layout to stand still.
   await settle(shown, 800);
-  await pressIn(frame, "#decision-stack .dp-change >> nth=0");
+  await pressIn(frame, "#decision-stack [data-change] >> nth=0");
   const opened = await until(
     `${theme}: the stack card open again`,
     () => foldOf(frame, "stack"),
@@ -1502,7 +1504,7 @@ const foldLeg = async (on: On, theme: "light" | "dark") => {
     !!before && JSON.stringify(after) === JSON.stringify(before),
     JSON.stringify({ before, after })
   );
-  await pressIn(frame, "#decision-stack .dp-continue >> nth=0");
+  await pressIn(frame, "#decision-stack [data-continue] >> nth=0");
   const again = await until(
     `${theme}: the stack card folded by Continue`,
     () => foldOf(frame, "stack"),
@@ -1562,7 +1564,7 @@ const reachLeg = async (on: On) => {
   const reach = () =>
     frame.evaluate(() => {
       const card = document.getElementById("decision-reach");
-      const change = card?.querySelector<HTMLElement>(".dp-change");
+      const change = card?.querySelector<HTMLElement>("[data-change]");
       const box = change?.getBoundingClientRect();
       const hit = change ? getComputedStyle(change, "::after") : null;
       const px = (value: string | undefined) => Number.parseFloat(value ?? "0");
@@ -1578,8 +1580,9 @@ const reachLeg = async (on: On) => {
           right: cardBox?.right ?? 0,
         },
         line:
-          card?.querySelector("header .dp-picks")?.getAttribute("aria-label") ??
-          "",
+          card
+            ?.querySelector("header [data-slot=decided]")
+            ?.getAttribute("aria-label") ?? "",
         chipsRight: Math.max(
           0,
           ...[...(card?.querySelectorAll("header [data-pick]") ?? [])].map(
@@ -1661,7 +1664,7 @@ const fitLeg = async (on: On, theme: "light" | "dark") => {
       frame.evaluate(
         () =>
           document.querySelector<HTMLIFrameElement>(
-            "#decision-fit .dp-optmedia iframe"
+            "#decision-fit [data-slot=option-media] iframe"
           )?.contentDocument?.body?.textContent ?? ""
       ),
     (words) => words.includes("slides"),
@@ -1673,10 +1676,10 @@ const fitLeg = async (on: On, theme: "light" | "dark") => {
     const root = document.documentElement;
     const cardBox = card?.getBoundingClientRect();
     const embed = card
-      ?.querySelector(".dp-optmedia iframe")
+      ?.querySelector("[data-slot=option-media] iframe")
       ?.getBoundingClientRect();
     const cost = card?.querySelector<HTMLElement>(
-      '[data-option="wide"] .dp-cost'
+      '[data-option-for="wide"][id$="-cost"]'
     );
     const line = cost
       ? Number.parseFloat(getComputedStyle(cost).lineHeight)
@@ -2364,7 +2367,7 @@ const tapLeg = async (on: On) => {
     under?.top === "stages" && !!tapped && !tapped.decided && tapped.body,
     JSON.stringify({ under, tapped, heard })
   );
-  await frame.locator("#decision-tall .dp-continue").tap();
+  await frame.locator("#decision-tall [data-continue]").tap();
   const folded = await until(
     "the tall card folded by Continue",
     () => foldOf(frame, "tall"),
@@ -2383,7 +2386,7 @@ const tapLeg = async (on: On) => {
   // The card opened again by Change keeps its pick, and a tap on the
   // chosen option keeps it (the overlay's pick, preview-overlay pick.ts: a
   // one-pick choice is never let go), for a finger as for a mouse.
-  await frame.locator("#decision-tall .dp-change").tap();
+  await frame.locator("#decision-tall [data-change]").tap();
   await until(
     "the tall card open again",
     () => foldOf(frame, "tall"),
@@ -2411,7 +2414,7 @@ const tapLeg = async (on: On) => {
     (fold) => JSON.stringify(fold.marked) === '["skim"]',
     5000
   ).catch(() => null);
-  await frame.locator("#decision-tall .dp-continue").tap();
+  await frame.locator("#decision-tall [data-continue]").tap();
   const other = await until(
     "the tall card folded again by Continue",
     () => foldOf(frame, "tall"),
