@@ -94,6 +94,8 @@ bun scripts/probe-kit/run.ts web surfaces [--surfaces=a,b] [--approve surfaces] 
 bun scripts/probe-kit/run.ts style-snapshot --coverage                      # style-snapshot-coverage.json
 bun scripts/probe-kit/run.ts style-snapshot --record                        # the hub tape, again (on the host)
 bun scripts/probe-kit/run.ts style-snapshot --record --without-delegate     # in a workspace: no delegate
+bun scripts/probe-kit/surfaces/capture.ts --label=<lane> (<entry>…|--all) [--outline] [--reach]   # a lane's captures, each state asserted
+bun scripts/probe-kit/surfaces/coverage.ts [<entry>…] [--report] [--base=<rev>]   # which entries draw each changed component and module
 ```
 
 The scene's delegate needs a workspace of its own, which only the host can

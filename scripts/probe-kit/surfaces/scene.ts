@@ -860,7 +860,7 @@ const CHIP_FLOW = "flowchart LR\nLabel --> Badge\nBadge --> Row";
  * row of words and a badge, a column of the picture and the diagram, the
  * canvas and the page live.
  */
-const mediaProgram = (canvas: string, page: string): string =>
+const mediaProgram = (canvas: string, page: string, picture: string): string =>
   `${[
     'root = Decisions("Chip media", [section1])',
     'section1 = Section("The chip", [card1])',
@@ -868,7 +868,7 @@ const mediaProgram = (canvas: string, page: string): string =>
     'card1o1 = Option("wrap", "Wrap to two lines", "The label stays whole", true, [], "Gives up one line")',
     `card1o2 = Option("cut", "Cut the label", "One line, an ellipsis", false, [], "Gives up the label's end")`,
     'looks = Row([Text("The chip at 390px", "label"), Badge("measured", "done")], "spaceBetween", "center")',
-    `shots = Column([Image("shots/chip.png", "The chip row at 390px", "As it stands"), Diagram(${JSON.stringify(CHIP_FLOW)}, "What gives way first")])`,
+    `shots = Column([Image(${JSON.stringify(picture)}, "The chip row at 390px", "As it stands"), Diagram(${JSON.stringify(CHIP_FLOW)}, "What gives way first")])`,
   ].join("\n")}\n`;
 
 /** Each marker's plan as its first request found the tools (`settle`). */
@@ -1892,7 +1892,9 @@ export async function seedScene(
   // the decision library has that the three leave out (decisions-library.ts:
   // Text, Badge, Row, Column, Image, Diagram, Canvas, Preview), each by its
   // own decision host part: the picture beside the program, a canvas and a
-  // page the writer made.
+  // page the writer made. The canvas is made empty: a Mermaid one is drawn
+  // by a dashboard showing it (the hub answers 503 while none does), and
+  // the card frames whatever the canvas holds.
   const mediaWriter = decisions.writers.landing as string;
   await mkdir(join(launchPlace, "shots"), { recursive: true });
   await writeFile(
@@ -1901,18 +1903,35 @@ export async function seedScene(
   );
   const sketch = await fleet.api<{ id: string }>(
     `/api/instances/${mediaWriter}/artifacts`,
-    { kind: "canvas", name: "chip-sketch", mermaid: CHIP_FLOW }
+    {
+      kind: "canvas",
+      name: "chip-sketch",
+      does: "draw",
+      ask: "Sketch where the chip's label gives way",
+    }
   );
   const live = await fleet.api<{ id: string }>(
     `/api/instances/${mediaWriter}/artifacts`,
-    { kind: "page", name: "chip-live", html: ARTIFACT_PAGE }
+    {
+      kind: "page",
+      name: "chip-live",
+      does: "judge",
+      ask: "Judge the chip row as it wraps",
+      html: ARTIFACT_PAGE,
+    }
   );
   await fleet.api(`/api/instances/${mediaWriter}/artifacts`, {
     kind: "page",
     name: MEDIA_PAGE,
     does: "pick",
     ask: "Pick how the chip's label gives way",
-    program: mediaProgram(sketch.id, live.id),
+    // Its picture by its absolute path on the machine: a program's relative
+    // file needs `dir`, which a page takes instead of its program.
+    program: mediaProgram(
+      sketch.id,
+      live.id,
+      join(launchPlace, "shots", "chip.png")
+    ),
   });
 
   // The first account's limit reached, last of its work: a session refused
