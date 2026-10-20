@@ -332,9 +332,12 @@
             {@attach (node) => node.select()}
           />
         {:else}
+          <!-- The name bleeds its padding past the title's box (-mx), so its
+               cap is the title's width plus that bleed: capped at the title's
+               width alone, it cut the name 8px short of the room it had. -->
           <button
             data-slot="name"
-            class="press-tint -mx-space-1 block max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
+            class="press-tint -mx-space-1 block max-w-[calc(100%+var(--space-1)*2)] overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
             onclick={editName}
             title="Rename {project.name}"
             type="button"

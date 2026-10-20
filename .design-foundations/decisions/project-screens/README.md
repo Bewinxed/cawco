@@ -19,4 +19,9 @@ Each `Preview("@name")` stands for the component canvas of one states file. To p
 
 Its proof is `bun scripts/probe-kit/run.ts web decision-pages-ready`: the program through the hub's own check, every
 states file drawn on the dashboard's stage, and the page drawn by the hub's decision host with each canvas embedded live.
-Captures and their manifest are in `.probe/decision-pages/`.
+The run writes its captures and manifest to `.probe/decision-pages/`; the ones handed over are copied to
+`.design-foundations/decisions/captures/`.
+
+The head's name is whole at every width: `ProjectHeadNewSession.svelte`'s name button bleeds its padding past the
+title (`-mx-space-1`), so its cap is the title's width plus that bleed. Capped at `max-w-full`, it cut "tidewater" to
+"tidewat…" wherever the name is its column's widest line (the 1440 page's embed and a 1440 desk alike).

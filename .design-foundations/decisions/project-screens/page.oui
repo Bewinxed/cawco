@@ -1,7 +1,6 @@
-root = Decisions("The project page, fixed from your pins", [fixed, pipeline])
+root = Decisions("The project page", [fixed, pipeline])
 
-fixed = Section("Fixed from your pins", [pinit, panefix, cardfix, emptyfix, headfix])
-pinit = Text("If one still looks wrong, pin it.", "body")
+fixed = Section("Fixed from your pins", [panefix, cardfix, emptyfix, headfix])
 
 panefix = Column([panepin, panechange, panereview, panesession])
 panepin = Text("Your pins: “completely rethought as a single unit”, “only yes/no?”, “why are you mentioning working twice?”", "meta")

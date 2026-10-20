@@ -1,1 +1,1 @@
-How your changes to an agent's plan reach it: two choices to make.
+Pick which changes to an idle agent's plan start it working again.

@@ -1,1 +1,1 @@
-Pick one answer on each card, add a note where none fits, then press Send picks.
+Pick one answer, add a note if none fits, then press Send picks.

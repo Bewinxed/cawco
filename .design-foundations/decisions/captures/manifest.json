@@ -1,18 +1,10 @@
 {
-  "ran": "2026-10-20T21:19:23.747Z",
+  "ran": "2026-10-20T21:41:47.145Z",
   "pages": {
     "plan-model-grill": {
       "folder": ".design-foundations/decisions/plan-model-grill",
       "placeholders": {},
       "decisions": [
-        {
-          "id": "list-home",
-          "options": [
-            "cawco",
-            "own"
-          ],
-          "after": []
-        },
         {
           "id": "wake",
           "options": [
@@ -20,9 +12,7 @@
             "every",
             "send"
           ],
-          "after": [
-            "list-home"
-          ]
+          "after": []
         }
       ]
     },
@@ -51,11 +41,11 @@
     {
       "files": [
         {
-          "bytes": 548602,
+          "bytes": 353293,
           "file": "plan-model-grill-1440-light.png",
           "rows": {
             "from": 0,
-            "to": 916
+            "to": 900
           }
         }
       ],
@@ -65,19 +55,19 @@
     {
       "files": [
         {
-          "bytes": 1017207,
+          "bytes": 997171,
           "file": "project-screens-1440-light-1.png",
           "rows": {
             "from": 0,
-            "to": 2993
+            "to": 2954
           }
         },
         {
-          "bytes": 731270,
+          "bytes": 728337,
           "file": "project-screens-1440-light-2.png",
           "rows": {
-            "from": 2993,
-            "to": 5135
+            "from": 2954,
+            "to": 5096
           }
         }
       ],
@@ -87,11 +77,11 @@
     {
       "files": [
         {
-          "bytes": 542514,
+          "bytes": 349434,
           "file": "plan-model-grill-1440-dark.png",
           "rows": {
             "from": 0,
-            "to": 916
+            "to": 900
           }
         }
       ],
@@ -101,19 +91,19 @@
     {
       "files": [
         {
-          "bytes": 1025851,
+          "bytes": 1005009,
           "file": "project-screens-1440-dark-1.png",
           "rows": {
             "from": 0,
-            "to": 2993
+            "to": 2954
           }
         },
         {
-          "bytes": 719458,
+          "bytes": 717114,
           "file": "project-screens-1440-dark-2.png",
           "rows": {
-            "from": 2993,
-            "to": 5135
+            "from": 2954,
+            "to": 5096
           }
         }
       ],
@@ -123,11 +113,11 @@
     {
       "files": [
         {
-          "bytes": 525193,
+          "bytes": 344440,
           "file": "plan-model-grill-390-light.png",
           "rows": {
             "from": 0,
-            "to": 1434
+            "to": 949
           }
         }
       ],
@@ -137,19 +127,19 @@
     {
       "files": [
         {
-          "bytes": 1046885,
+          "bytes": 1039241,
           "file": "project-screens-390-light-1.png",
           "rows": {
             "from": 0,
-            "to": 3910
+            "to": 3871
           }
         },
         {
-          "bytes": 370114,
+          "bytes": 365697,
           "file": "project-screens-390-light-2.png",
           "rows": {
-            "from": 3910,
-            "to": 5095
+            "from": 3871,
+            "to": 5057
           }
         }
       ],
@@ -159,11 +149,11 @@
     {
       "files": [
         {
-          "bytes": 520004,
+          "bytes": 338537,
           "file": "plan-model-grill-390-dark.png",
           "rows": {
             "from": 0,
-            "to": 1434
+            "to": 949
           }
         }
       ],
@@ -173,19 +163,19 @@
     {
       "files": [
         {
-          "bytes": 1045479,
+          "bytes": 1040071,
           "file": "project-screens-390-dark-1.png",
           "rows": {
             "from": 0,
-            "to": 3909
+            "to": 3870
           }
         },
         {
-          "bytes": 363412,
+          "bytes": 359015,
           "file": "project-screens-390-dark-2.png",
           "rows": {
-            "from": 3909,
-            "to": 5095
+            "from": 3870,
+            "to": 5057
           }
         }
       ],
@@ -604,16 +594,8 @@
       "title": "How your changes reach an agent's plan",
       "cards": [
         {
-          "id": "list-home",
-          "question": "Where does every agent keep its plan?",
-          "options": 2,
-          "costs": 2,
-          "recommended": 1,
-          "previews": 0
-        },
-        {
           "id": "wake",
-          "question": "When an agent is waiting, which of your changes start it working again?",
+          "question": "When an agent is idle, which of your changes to its plan start it working again?",
           "options": 3,
           "costs": 3,
           "recommended": 1,
@@ -625,14 +607,6 @@
       "embeds": [],
       "controls": {
         "titles": [
-          {
-            "option": "list-home/cawco",
-            "lines": 1
-          },
-          {
-            "option": "list-home/own",
-            "lines": 1
-          },
           {
             "option": "wake/work",
             "lines": 1
@@ -662,36 +636,12 @@
       "reach": {
         "controls": [
           {
-            "name": "button[radio][option] \"1 CawCo's list, always\"",
-            "w": 167,
-            "h": 30,
-            "touch": true,
-            "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"1 CawCo's list, always\"\t299,268.5\t167x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div[option-cell])"
-          },
-          {
-            "name": "button[radio][option] \"2 Claude Code may keep its own\"",
-            "w": 230,
-            "h": 30,
-            "touch": true,
-            "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"2 Claude Code may keep its own\"\t725.5,268.5\t230x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then div[options])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div[option-cell])"
-          },
-          {
-            "name": "button[button] \"Add a note\"",
-            "w": 87.5,
-            "h": 30,
-            "touch": true,
-            "pointer": true,
-            "line": "ok\tbutton\t\tbutton\t\"Add a note\"\t288,403\t87.5x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then article[decision])"
-          },
-          {
             "name": "button[radio][option] \"1 Changes to the work\"",
             "w": 171,
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"1 Changes to the work\"\t299,589\t171x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div)"
+            "line": "ok\tbutton\tradio\toption\t\"1 Changes to the work\"\t299,266\t171x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div)"
           },
           {
             "name": "button[radio][option] \"2 Every change\"",
@@ -699,7 +649,7 @@
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"2 Every change\"\t583.5,589\t129x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then div[options])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div)"
+            "line": "ok\tbutton\tradio\toption\t\"2 Every change\"\t583.5,266\t129x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then div[options])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div)"
           },
           {
             "name": "button[radio][option] \"3 Only when you press Send\"",
@@ -707,7 +657,15 @@
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"3 Only when you press Send\"\t867.5,589\t203x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then div[options])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div)"
+            "line": "ok\tbutton\tradio\toption\t\"3 Only when you press Send\"\t867.5,266\t203x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then div[options])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div)"
+          },
+          {
+            "name": "button[button] \"Add a note\"",
+            "w": 87.5,
+            "h": 30,
+            "touch": true,
+            "pointer": true,
+            "line": "ok\tbutton\t\tbutton\t\"Add a note\"\t288,468.5\t87.5x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then article[decision])"
           },
           {
             "name": "button[button] \"Send picks Ctrl ↵\"",
@@ -722,7 +680,7 @@
       }
     },
     "project-screens 1440×900 light": {
-      "title": "The project page, fixed from your pins",
+      "title": "The project page",
       "cards": [
         {
           "id": "pipeline",
@@ -770,9 +728,9 @@
               "story": "PhoneReviewAsks",
               "scheme": "light",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-desk/TaskPaneOneUnit-PhoneReviewAsks-light.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-desk/TaskPaneOneUnit-PhoneReviewAsks-light.png",
               "faults": [],
-              "drawn": "209752da16aabdf361c49647e52e78e1",
+              "drawn": "481dc6b7fd47d55422a9c7333f351b3c",
               "hash": "4a5aa8b7664c894ba1d4544412f452f4",
               "label": "Phone · In Review, its agent asking a decision over Approve and Send back.",
               "stats": {
@@ -787,7 +745,7 @@
           "files": [
             "src/lib/cawco/tasks/TaskPaneOneUnit.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=light&by=embed&story=PhoneReviewAsks",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=light&by=embed&story=PhoneReviewAsks",
           "named": [
             "PhoneReviewAsks"
           ],
@@ -831,10 +789,10 @@
               "story": "PhoneWorking",
               "scheme": "light",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-desk/TaskPaneOneUnit-PhoneWorking-light.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-desk/TaskPaneOneUnit-PhoneWorking-light.png",
               "faults": [],
-              "drawn": "a55a6e496ad01fdefb352ce3282f9d4e",
-              "hash": "074e64856288bf945a57c4690eebc1fb",
+              "drawn": "c7e87a1f4501ba2bb0cbd72013af8e42",
+              "hash": "98e913cbf0f7b6ecbb44b0b6d0a76c1e",
               "label": "Phone · Working: the Session tab reads the session in place: its plan, last turns and composer.",
               "stats": {
                 "width": 780,
@@ -848,7 +806,7 @@
           "files": [
             "src/lib/cawco/tasks/TaskPaneOneUnit.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=light&by=embed&story=PhoneWorking",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=light&by=embed&story=PhoneWorking",
           "named": [
             "PhoneWorking"
           ],
@@ -892,7 +850,7 @@
               "story": "Phone",
               "scheme": "light",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-desk/TaskCardStateLine-Phone-light.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-desk/TaskCardStateLine-Phone-light.png",
               "faults": [],
               "drawn": "862a75093fb49e58b1a038c2d3d4376c",
               "hash": "c3f354d6f483abe8e8feaaa55bf41241",
@@ -909,7 +867,7 @@
           "files": [
             "src/lib/cawco/tasks/TaskCardStateLine.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskCardStateLine.stories.ts&scheme=light&by=embed&story=Phone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskCardStateLine.stories.ts&scheme=light&by=embed&story=Phone",
           "named": [
             "Phone"
           ],
@@ -953,9 +911,9 @@
               "story": "BoardPhone",
               "scheme": "light",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-desk/WorkColumnEmpty-BoardPhone-light.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-desk/WorkColumnEmpty-BoardPhone-light.png",
               "faults": [],
-              "drawn": "2d4e896cea61fbde5147852098cc370e",
+              "drawn": "0c8f1867134d25e1da53f6a3e764e30f",
               "hash": "b9ba6ccc14fcba9de5312096d37b0b47",
               "label": "Phone · The empty board: one column of cards, each the tallest's height.",
               "stats": {
@@ -970,7 +928,7 @@
           "files": [
             "src/lib/cawco/project/WorkColumnEmpty.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=light&by=embed&story=BoardPhone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=light&by=embed&story=BoardPhone",
           "named": [
             "BoardPhone"
           ],
@@ -1014,15 +972,15 @@
               "story": "RoutinesPhone",
               "scheme": "light",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-desk/WorkColumnEmpty-RoutinesPhone-light.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-desk/WorkColumnEmpty-RoutinesPhone-light.png",
               "faults": [],
-              "drawn": "e9e3240c890478e16acad71f5b6adf2b",
-              "hash": "8479677a476266a5478d12763c789e29",
+              "drawn": "f79d029897fe7092b348c03e99c11368",
+              "hash": "dae55c01cdee69f6aa340b9f365d7e07",
               "label": "Phone · Routines empty.",
               "stats": {
                 "width": 780,
-                "height": 656,
-                "top": 0.587,
+                "height": 654,
+                "top": 0.589,
                 "matched": "20/22"
               }
             }
@@ -1031,7 +989,7 @@
           "files": [
             "src/lib/cawco/project/WorkColumnEmpty.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=light&by=embed&story=RoutinesPhone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=light&by=embed&story=RoutinesPhone",
           "named": [
             "RoutinesPhone"
           ],
@@ -1075,10 +1033,10 @@
               "story": "PhoneTop",
               "scheme": "light",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-desk/ProjectHeadNewSession-PhoneTop-light.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-desk/ProjectHeadNewSession-PhoneTop-light.png",
               "faults": [],
-              "drawn": "7a5bea1a82d4adac041bfd5af2e63aef",
-              "hash": "35db73c4353b794b96a5e7bfaded33ed",
+              "drawn": "f27b0e88995b62864d2f5c00f7d662f3",
+              "hash": "3049607fd35038663889228a0159838f",
               "label": "Phone · The top of the project as it stands, the bar of views and Ask Caw under the head, its ⋯ open over it: New session first in it.",
               "stats": {
                 "width": 780,
@@ -1092,7 +1050,7 @@
           "files": [
             "src/lib/cawco/project/ProjectHeadNewSession.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FProjectHeadNewSession.stories.ts&scheme=light&by=embed&story=PhoneTop",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FProjectHeadNewSession.stories.ts&scheme=light&by=embed&story=PhoneTop",
           "named": [
             "PhoneTop"
           ],
@@ -1136,7 +1094,7 @@
               "story": "Phone",
               "scheme": "light",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-desk/ViewPipelineRunOrder-Phone-light.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-desk/ViewPipelineRunOrder-Phone-light.png",
               "faults": [],
               "drawn": "ee33e6cade2101bc5cba178afde2aa8a",
               "hash": "bf4362b9cb64506e3d3f06218e745cb8",
@@ -1153,7 +1111,7 @@
           "files": [
             "src/lib/cawco/views/ViewPipelineRunOrder.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fviews%2FViewPipelineRunOrder.stories.ts&scheme=light&by=embed&story=Phone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fviews%2FViewPipelineRunOrder.stories.ts&scheme=light&by=embed&story=Phone",
           "named": [
             "Phone"
           ],
@@ -1204,7 +1162,7 @@
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"1 Show what runs next\"\t299,639.5\t170x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div[option-cell])"
+            "line": "ok\tbutton\tradio\toption\t\"1 Show what runs next\"\t299,786.5\t170x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div[option-cell])"
           },
           {
             "name": "button[radio][option] \"2 Remove the tab\"",
@@ -1212,7 +1170,7 @@
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"2 Remove the tab\"\t725.5,639.5\t142x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then div[options])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div[option-cell])"
+            "line": "ok\tbutton\tradio\toption\t\"2 Remove the tab\"\t725.5,786.5\t142x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then div[options])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div[option-cell])"
           },
           {
             "name": "button[button] \"Add a note\"",
@@ -1220,7 +1178,7 @@
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\t\tbutton\t\"Add a note\"\t288,774.5\t87.5x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then article[decision])"
+            "line": "ok\tbutton\t\tbutton\t\"Add a note\"\t288,775\t87.5x30\t\tno ::after; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then article[decision])"
           }
         ],
         "spills": []
@@ -1636,16 +1594,8 @@
       "title": "How your changes reach an agent's plan",
       "cards": [
         {
-          "id": "list-home",
-          "question": "Where does every agent keep its plan?",
-          "options": 2,
-          "costs": 2,
-          "recommended": 1,
-          "previews": 0
-        },
-        {
           "id": "wake",
-          "question": "When an agent is waiting, which of your changes start it working again?",
+          "question": "When an agent is idle, which of your changes to its plan start it working again?",
           "options": 3,
           "costs": 3,
           "recommended": 1,
@@ -1657,14 +1607,6 @@
       "embeds": [],
       "controls": {
         "titles": [
-          {
-            "option": "list-home/cawco",
-            "lines": 1
-          },
-          {
-            "option": "list-home/own",
-            "lines": 1
-          },
           {
             "option": "wake/work",
             "lines": 1
@@ -1694,36 +1636,12 @@
       "reach": {
         "controls": [
           {
-            "name": "button[radio][option] \"1 CawCo's list, always\"",
-            "w": 167,
-            "h": 30,
-            "touch": true,
-            "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"1 CawCo's list, always\"\t299,268.5\t167x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div[option-cell])"
-          },
-          {
-            "name": "button[radio][option] \"2 Claude Code may keep its own\"",
-            "w": 230,
-            "h": 30,
-            "touch": true,
-            "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"2 Claude Code may keep its own\"\t725.5,268.5\t230x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then div[options])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div[option-cell])"
-          },
-          {
-            "name": "button[button] \"Add a note\"",
-            "w": 87.5,
-            "h": 30,
-            "touch": true,
-            "pointer": true,
-            "line": "ok\tbutton\t\tbutton\t\"Add a note\"\t288,403\t87.5x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then article[decision])"
-          },
-          {
             "name": "button[radio][option] \"1 Changes to the work\"",
             "w": 171,
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"1 Changes to the work\"\t299,589\t171x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div)"
+            "line": "ok\tbutton\tradio\toption\t\"1 Changes to the work\"\t299,266\t171x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div)"
           },
           {
             "name": "button[radio][option] \"2 Every change\"",
@@ -1731,7 +1649,7 @@
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"2 Every change\"\t583.5,589\t129x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then div[options])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div)"
+            "line": "ok\tbutton\tradio\toption\t\"2 Every change\"\t583.5,266\t129x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then div[options])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div)"
           },
           {
             "name": "button[radio][option] \"3 Only when you press Send\"",
@@ -1739,7 +1657,15 @@
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"3 Only when you press Send\"\t867.5,589\t203x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then div[options])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div)"
+            "line": "ok\tbutton\tradio\toption\t\"3 Only when you press Send\"\t867.5,266\t203x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then div[options])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div)"
+          },
+          {
+            "name": "button[button] \"Add a note\"",
+            "w": 87.5,
+            "h": 30,
+            "touch": true,
+            "pointer": true,
+            "line": "ok\tbutton\t\tbutton\t\"Add a note\"\t288,468.5\t87.5x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then article[decision])"
           },
           {
             "name": "button[button] \"Send picks Ctrl ↵\"",
@@ -1754,7 +1680,7 @@
       }
     },
     "project-screens 1440×900 dark": {
-      "title": "The project page, fixed from your pins",
+      "title": "The project page",
       "cards": [
         {
           "id": "pipeline",
@@ -1802,9 +1728,9 @@
               "story": "PhoneReviewAsks",
               "scheme": "dark",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-desk/TaskPaneOneUnit-PhoneReviewAsks-dark.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-desk/TaskPaneOneUnit-PhoneReviewAsks-dark.png",
               "faults": [],
-              "drawn": "c4e224fc0e8a065b82436597b8abd7f8",
+              "drawn": "38855382d965c8673dbf68e345a1976f",
               "hash": "35b9477a7b2186dd48397c74b5ff336f",
               "label": "Phone · In Review, its agent asking a decision over Approve and Send back.",
               "stats": {
@@ -1819,7 +1745,7 @@
           "files": [
             "src/lib/cawco/tasks/TaskPaneOneUnit.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=dark&by=embed&story=PhoneReviewAsks",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=dark&by=embed&story=PhoneReviewAsks",
           "named": [
             "PhoneReviewAsks"
           ],
@@ -1863,10 +1789,10 @@
               "story": "PhoneWorking",
               "scheme": "dark",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-desk/TaskPaneOneUnit-PhoneWorking-dark.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-desk/TaskPaneOneUnit-PhoneWorking-dark.png",
               "faults": [],
-              "drawn": "dc3eca10f1f987f503d7082185526bf6",
-              "hash": "7ab6ee85e9d4bf667f2cf2b035e0e928",
+              "drawn": "62e8ed3a3bb7e894fb0dabb9cecf8af8",
+              "hash": "be9daf090af7353b36363a3c9716e41b",
               "label": "Phone · Working: the Session tab reads the session in place: its plan, last turns and composer.",
               "stats": {
                 "width": 780,
@@ -1880,7 +1806,7 @@
           "files": [
             "src/lib/cawco/tasks/TaskPaneOneUnit.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=dark&by=embed&story=PhoneWorking",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=dark&by=embed&story=PhoneWorking",
           "named": [
             "PhoneWorking"
           ],
@@ -1924,7 +1850,7 @@
               "story": "Phone",
               "scheme": "dark",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-desk/TaskCardStateLine-Phone-dark.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-desk/TaskCardStateLine-Phone-dark.png",
               "faults": [],
               "drawn": "f6c309a29034ea33d23b162ede78678d",
               "hash": "6ae4abe51c6cf20fb55ebc653b523c75",
@@ -1941,7 +1867,7 @@
           "files": [
             "src/lib/cawco/tasks/TaskCardStateLine.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskCardStateLine.stories.ts&scheme=dark&by=embed&story=Phone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskCardStateLine.stories.ts&scheme=dark&by=embed&story=Phone",
           "named": [
             "Phone"
           ],
@@ -1985,9 +1911,9 @@
               "story": "BoardPhone",
               "scheme": "dark",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-desk/WorkColumnEmpty-BoardPhone-dark.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-desk/WorkColumnEmpty-BoardPhone-dark.png",
               "faults": [],
-              "drawn": "d00f3d490d23880cedd6b636dad057fe",
+              "drawn": "40f701d3a1776d7d65c6e1312b3d4722",
               "hash": "351bf6dee74a685673648818c95a3b53",
               "label": "Phone · The empty board: one column of cards, each the tallest's height.",
               "stats": {
@@ -2002,7 +1928,7 @@
           "files": [
             "src/lib/cawco/project/WorkColumnEmpty.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=dark&by=embed&story=BoardPhone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=dark&by=embed&story=BoardPhone",
           "named": [
             "BoardPhone"
           ],
@@ -2046,15 +1972,15 @@
               "story": "RoutinesPhone",
               "scheme": "dark",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-desk/WorkColumnEmpty-RoutinesPhone-dark.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-desk/WorkColumnEmpty-RoutinesPhone-dark.png",
               "faults": [],
-              "drawn": "5f216abcf531cde96ac8d6b0703022c3",
-              "hash": "c5b7892abef1577cc0f4f25cefc1de45",
+              "drawn": "dfa358cbb1f989514cc78d03f9c71ae1",
+              "hash": "c5d560243a6e3ed0ccb64835d4e363dd",
               "label": "Phone · Routines empty.",
               "stats": {
                 "width": 780,
-                "height": 656,
-                "top": 0.574,
+                "height": 654,
+                "top": 0.576,
                 "matched": "20/22"
               }
             }
@@ -2063,7 +1989,7 @@
           "files": [
             "src/lib/cawco/project/WorkColumnEmpty.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=dark&by=embed&story=RoutinesPhone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=dark&by=embed&story=RoutinesPhone",
           "named": [
             "RoutinesPhone"
           ],
@@ -2107,10 +2033,10 @@
               "story": "PhoneTop",
               "scheme": "dark",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-desk/ProjectHeadNewSession-PhoneTop-dark.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-desk/ProjectHeadNewSession-PhoneTop-dark.png",
               "faults": [],
-              "drawn": "4a741469b2ae9b1091487c820b8978d6",
-              "hash": "5149ceb356d86b9e2548c1a96f908480",
+              "drawn": "15979558e6aae57836c346402365a5e5",
+              "hash": "6abd7b8a1c5f9e1c89984b172392c238",
               "label": "Phone · The top of the project as it stands, the bar of views and Ask Caw under the head, its ⋯ open over it: New session first in it.",
               "stats": {
                 "width": 780,
@@ -2124,7 +2050,7 @@
           "files": [
             "src/lib/cawco/project/ProjectHeadNewSession.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FProjectHeadNewSession.stories.ts&scheme=dark&by=embed&story=PhoneTop",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FProjectHeadNewSession.stories.ts&scheme=dark&by=embed&story=PhoneTop",
           "named": [
             "PhoneTop"
           ],
@@ -2168,7 +2094,7 @@
               "story": "Phone",
               "scheme": "dark",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-desk/ViewPipelineRunOrder-Phone-dark.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-desk/ViewPipelineRunOrder-Phone-dark.png",
               "faults": [],
               "drawn": "db7395494fe7b3f93e94a453d6c73f2e",
               "hash": "b0f32547e748574ef7e5418d0f6bc35f",
@@ -2185,7 +2111,7 @@
           "files": [
             "src/lib/cawco/views/ViewPipelineRunOrder.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fviews%2FViewPipelineRunOrder.stories.ts&scheme=dark&by=embed&story=Phone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fviews%2FViewPipelineRunOrder.stories.ts&scheme=dark&by=embed&story=Phone",
           "named": [
             "Phone"
           ],
@@ -2236,7 +2162,7 @@
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"1 Show what runs next\"\t299,639.5\t170x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div[option-cell])"
+            "line": "ok\tbutton\tradio\toption\t\"1 Show what runs next\"\t299,786.5\t170x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div[option-cell])"
           },
           {
             "name": "button[radio][option] \"2 Remove the tab\"",
@@ -2244,7 +2170,7 @@
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"2 Remove the tab\"\t725.5,639.5\t142x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then div[options])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div[option-cell])"
+            "line": "ok\tbutton\tradio\toption\t\"2 Remove the tab\"\t725.5,786.5\t142x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then div[options])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then div[option-cell])"
           },
           {
             "name": "button[button] \"Add a note\"",
@@ -2252,7 +2178,7 @@
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\t\tbutton\t\"Add a note\"\t288,774.5\t87.5x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then article[decision])"
+            "line": "ok\tbutton\t\tbutton\t\"Add a note\"\t288,775\t87.5x30\t\tno ::after; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 0.5 need 0 (then div[decision-body])\tdown reach 0 need 0 (then article[decision])"
           }
         ],
         "spills": []
@@ -2806,16 +2732,8 @@
       "title": "How your changes reach an agent's plan",
       "cards": [
         {
-          "id": "list-home",
-          "question": "Where does every agent keep its plan?",
-          "options": 2,
-          "costs": 2,
-          "recommended": 1,
-          "previews": 0
-        },
-        {
           "id": "wake",
-          "question": "When an agent is waiting, which of your changes start it working again?",
+          "question": "When an agent is idle, which of your changes to its plan start it working again?",
           "options": 3,
           "costs": 3,
           "recommended": 1,
@@ -2827,14 +2745,6 @@
       "embeds": [],
       "controls": {
         "titles": [
-          {
-            "option": "list-home/cawco",
-            "lines": 1
-          },
-          {
-            "option": "list-home/own",
-            "lines": 1
-          },
           {
             "option": "wake/work",
             "lines": 1
@@ -2864,28 +2774,28 @@
       "reach": {
         "controls": [
           {
-            "name": "button[radio][option] \"1 CawCo's list, always\"",
-            "w": 167,
+            "name": "button[radio][option] \"1 Changes to the work\"",
+            "w": 171,
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"1 CawCo's list, always\"\t28,331.5\t167x30\t\t::after 165pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[decision-body])\tdown reach 7 need 7 (then label)"
+            "line": "ok\tbutton\tradio\toption\t\"1 Changes to the work\"\t28,368\t171x30\t\t::after 169pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[decision-body])\tdown reach 7 need 7 (then label)"
           },
           {
-            "name": "button[radio][option] \"2 Claude Code may keep its own\"",
-            "w": 230,
+            "name": "button[radio][option] \"2 Every change\"",
+            "w": 129,
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"2 Claude Code may keep its own\"\t28,459.5\t230x30\t\t::after 228pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[options])\tdown reach 7 need 7 (then label)"
+            "line": "ok\tbutton\tradio\toption\t\"2 Every change\"\t28,536.5\t129x30\t\t::after 127pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[options])\tdown reach 7 need 7 (then label)"
           },
           {
-            "name": "button[button] \"Add a note\"",
-            "w": 87.5,
+            "name": "button[radio][option] \"3 Only when you press Send\"",
+            "w": 203,
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\t\tbutton\t\"Add a note\"\t17,615\t87.5x30\t\t::after 85.7031pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[decision-body])\tdown reach 7 need 7 (then article[decision])"
+            "line": "ok\tbutton\tradio\toption\t\"3 Only when you press Send\"\t28,664.5\t203x30\t\t::after 201pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[options])\tdown reach 7 need 7 (then label)"
           },
           {
             "name": "button[button] \"Send picks\"",
@@ -2896,35 +2806,19 @@
             "line": "ok\tbutton\t\tbutton\t\"Send picks\"\t242.5,789\t133.5x44\t\t::after 131.609pxx44px at 0px,-1px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then footer[page-foot])\tright reach 0 need 0 (then footer[page-foot])\tup reach 0.5 need 0 (then footer[page-foot])\tdown reach 0 need 0 (then footer[page-foot])"
           },
           {
-            "name": "button[radio][option] \"1 Changes to the work\"",
-            "w": 171,
+            "name": "button[button] \"Add a note\"",
+            "w": 87.5,
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"1 Changes to the work\"\t28,431\t171x30\t\t::after 169pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[decision-body])\tdown reach 7 need 7 (then label)"
-          },
-          {
-            "name": "button[radio][option] \"2 Every change\"",
-            "w": 129,
-            "h": 30,
-            "touch": true,
-            "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"2 Every change\"\t28,599.5\t129x30\t\t::after 127pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[options])\tdown reach 7 need 7 (then label)"
-          },
-          {
-            "name": "button[radio][option] \"3 Only when you press Send\"",
-            "w": 203,
-            "h": 30,
-            "touch": true,
-            "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"3 Only when you press Send\"\t28,727.5\t203x30\t\t::after 201pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[options])\tdown reach 7 need 7 (then label)"
+            "line": "ok\tbutton\t\tbutton\t\"Add a note\"\t17,714.5\t87.5x30\t\t::after 85.7031pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[decision-body])\tdown reach 7 need 7 (then article[decision])"
           }
         ],
         "spills": []
       }
     },
     "project-screens 390×844 light": {
-      "title": "The project page, fixed from your pins",
+      "title": "The project page",
       "cards": [
         {
           "id": "pipeline",
@@ -2972,10 +2866,10 @@
               "story": "PhoneReviewAsks",
               "scheme": "light",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-phone/TaskPaneOneUnit-PhoneReviewAsks-light.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-phone/TaskPaneOneUnit-PhoneReviewAsks-light.png",
               "faults": [],
-              "drawn": "3788b8d20dee176a9c735c8d6620b8fc",
-              "hash": "9537a110115a0996f88181936f7bb20b",
+              "drawn": "3d1e569995f5a23dad2b754a928f5fd9",
+              "hash": "351d3703633ab5685061a70984f09fda",
               "label": "Phone · In Review, its agent asking a decision over Approve and Send back.",
               "stats": {
                 "width": 676,
@@ -2989,7 +2883,7 @@
           "files": [
             "src/lib/cawco/tasks/TaskPaneOneUnit.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=light&by=embed&story=PhoneReviewAsks",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=light&by=embed&story=PhoneReviewAsks",
           "named": [
             "PhoneReviewAsks"
           ],
@@ -3033,14 +2927,14 @@
               "story": "PhoneWorking",
               "scheme": "light",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-phone/TaskPaneOneUnit-PhoneWorking-light.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-phone/TaskPaneOneUnit-PhoneWorking-light.png",
               "faults": [],
-              "drawn": "1a235fbb925348dadd784165fb84eb8a",
-              "hash": "9f0f267da5fc26ca4f550330f5bf420a",
+              "drawn": "07d27d3908282d87ba151e648f77b3f3",
+              "hash": "17f0a14666513ee2d3d6337d10a0585e",
               "label": "Phone · Working: the Session tab reads the session in place: its plan, last turns and composer.",
               "stats": {
                 "width": 676,
-                "height": 984,
+                "height": 986,
                 "top": 0.787,
                 "matched": "14/14"
               }
@@ -3050,7 +2944,7 @@
           "files": [
             "src/lib/cawco/tasks/TaskPaneOneUnit.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=light&by=embed&story=PhoneWorking",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=light&by=embed&story=PhoneWorking",
           "named": [
             "PhoneWorking"
           ],
@@ -3094,10 +2988,10 @@
               "story": "Phone",
               "scheme": "light",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-phone/TaskCardStateLine-Phone-light.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-phone/TaskCardStateLine-Phone-light.png",
               "faults": [],
               "drawn": "813c4a745ca596ebcb9f757a9ede2dd8",
-              "hash": "8b2ffc0717db721ac82bfccaf8e90ac8",
+              "hash": "6bd832f92a66543092719cb72dd10204",
               "label": "Phone · Every state in one column.",
               "stats": {
                 "width": 676,
@@ -3111,7 +3005,7 @@
           "files": [
             "src/lib/cawco/tasks/TaskCardStateLine.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskCardStateLine.stories.ts&scheme=light&by=embed&story=Phone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskCardStateLine.stories.ts&scheme=light&by=embed&story=Phone",
           "named": [
             "Phone"
           ],
@@ -3155,10 +3049,10 @@
               "story": "BoardPhone",
               "scheme": "light",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-phone/WorkColumnEmpty-BoardPhone-light.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-phone/WorkColumnEmpty-BoardPhone-light.png",
               "faults": [],
-              "drawn": "2d4e896cea61fbde5147852098cc370e",
-              "hash": "d54153f6f27ebd514f6ca8cb01339772",
+              "drawn": "0c8f1867134d25e1da53f6a3e764e30f",
+              "hash": "fadc69975637f6d3e916c1b4a2d4d511",
               "label": "Phone · The empty board: one column of cards, each the tallest's height.",
               "stats": {
                 "width": 676,
@@ -3172,7 +3066,7 @@
           "files": [
             "src/lib/cawco/project/WorkColumnEmpty.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=light&by=embed&story=BoardPhone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=light&by=embed&story=BoardPhone",
           "named": [
             "BoardPhone"
           ],
@@ -3216,9 +3110,9 @@
               "story": "RoutinesPhone",
               "scheme": "light",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-phone/WorkColumnEmpty-RoutinesPhone-light.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-phone/WorkColumnEmpty-RoutinesPhone-light.png",
               "faults": [],
-              "drawn": "c9e1b8a2231dffcef3b194ea6fd40e4c",
+              "drawn": "dc8ced2f10bfcd68831c986a2b7ded71",
               "hash": "d5c80b89bbcbcd569e6d343f3b3f6c18",
               "label": "Phone · Routines empty.",
               "stats": {
@@ -3233,7 +3127,7 @@
           "files": [
             "src/lib/cawco/project/WorkColumnEmpty.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=light&by=embed&story=RoutinesPhone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=light&by=embed&story=RoutinesPhone",
           "named": [
             "RoutinesPhone"
           ],
@@ -3277,15 +3171,15 @@
               "story": "PhoneTop",
               "scheme": "light",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-phone/ProjectHeadNewSession-PhoneTop-light.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-phone/ProjectHeadNewSession-PhoneTop-light.png",
               "faults": [],
-              "drawn": "58047a33d06ff0ae0c09a7b5894523d6",
-              "hash": "7fed974695079dafc216cdf0fbc197ce",
+              "drawn": "2a67d3a915e5acd12e6d30ee74490072",
+              "hash": "c44b0d0ce7e97ea9c4defa8ed1f226ff",
               "label": "Phone · The top of the project as it stands, the bar of views and Ask Caw under the head, its ⋯ open over it: New session first in it.",
               "stats": {
                 "width": 676,
-                "height": 1082,
-                "top": 0.379,
+                "height": 1080,
+                "top": 0.378,
                 "matched": "10/10"
               }
             }
@@ -3294,7 +3188,7 @@
           "files": [
             "src/lib/cawco/project/ProjectHeadNewSession.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FProjectHeadNewSession.stories.ts&scheme=light&by=embed&story=PhoneTop",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FProjectHeadNewSession.stories.ts&scheme=light&by=embed&story=PhoneTop",
           "named": [
             "PhoneTop"
           ],
@@ -3338,7 +3232,7 @@
               "story": "Phone",
               "scheme": "light",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-phone/ViewPipelineRunOrder-Phone-light.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-phone/ViewPipelineRunOrder-Phone-light.png",
               "faults": [],
               "drawn": "cf3825933eb0b3dc7e31572ae9654b04",
               "hash": "188f30f1b98e8d9b2bd0718839ce6552",
@@ -3355,7 +3249,7 @@
           "files": [
             "src/lib/cawco/views/ViewPipelineRunOrder.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fviews%2FViewPipelineRunOrder.stories.ts&scheme=light&by=embed&story=Phone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fviews%2FViewPipelineRunOrder.stories.ts&scheme=light&by=embed&story=Phone",
           "named": [
             "Phone"
           ],
@@ -3406,7 +3300,7 @@
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"1 Show what runs next\"\t28,442.5\t170x30\t\t::after 168pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[decision-body])\tdown reach 7 need 7 (then label)"
+            "line": "ok\tbutton\tradio\toption\t\"1 Show what runs next\"\t28,411.5\t170x30\t\t::after 168pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[decision-body])\tdown reach 7 need 7 (then label)"
           },
           {
             "name": "button[radio][option] \"2 Remove the tab\"",
@@ -3414,7 +3308,7 @@
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"2 Remove the tab\"\t28,591\t142x30\t\t::after 140pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[options])\tdown reach 7 need 7 (then label)"
+            "line": "ok\tbutton\tradio\toption\t\"2 Remove the tab\"\t28,559.5\t142x30\t\t::after 140pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.62\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[options])\tdown reach 7 need 7 (then label)"
           },
           {
             "name": "button[button] \"Add a note\"",
@@ -3976,16 +3870,8 @@
       "title": "How your changes reach an agent's plan",
       "cards": [
         {
-          "id": "list-home",
-          "question": "Where does every agent keep its plan?",
-          "options": 2,
-          "costs": 2,
-          "recommended": 1,
-          "previews": 0
-        },
-        {
           "id": "wake",
-          "question": "When an agent is waiting, which of your changes start it working again?",
+          "question": "When an agent is idle, which of your changes to its plan start it working again?",
           "options": 3,
           "costs": 3,
           "recommended": 1,
@@ -3997,14 +3883,6 @@
       "embeds": [],
       "controls": {
         "titles": [
-          {
-            "option": "list-home/cawco",
-            "lines": 1
-          },
-          {
-            "option": "list-home/own",
-            "lines": 1
-          },
           {
             "option": "wake/work",
             "lines": 1
@@ -4034,28 +3912,28 @@
       "reach": {
         "controls": [
           {
-            "name": "button[radio][option] \"1 CawCo's list, always\"",
-            "w": 167,
+            "name": "button[radio][option] \"1 Changes to the work\"",
+            "w": 171,
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"1 CawCo's list, always\"\t28,331.5\t167x30\t\t::after 165pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[decision-body])\tdown reach 7 need 7 (then label)"
+            "line": "ok\tbutton\tradio\toption\t\"1 Changes to the work\"\t28,368\t171x30\t\t::after 169pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[decision-body])\tdown reach 7 need 7 (then label)"
           },
           {
-            "name": "button[radio][option] \"2 Claude Code may keep its own\"",
-            "w": 230,
+            "name": "button[radio][option] \"2 Every change\"",
+            "w": 129,
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"2 Claude Code may keep its own\"\t28,459.5\t230x30\t\t::after 228pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[options])\tdown reach 7 need 7 (then label)"
+            "line": "ok\tbutton\tradio\toption\t\"2 Every change\"\t28,536.5\t129x30\t\t::after 127pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[options])\tdown reach 7 need 7 (then label)"
           },
           {
-            "name": "button[button] \"Add a note\"",
-            "w": 87.5,
+            "name": "button[radio][option] \"3 Only when you press Send\"",
+            "w": 203,
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\t\tbutton\t\"Add a note\"\t17,615\t87.5x30\t\t::after 85.7031pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[decision-body])\tdown reach 7 need 7 (then article[decision])"
+            "line": "ok\tbutton\tradio\toption\t\"3 Only when you press Send\"\t28,664.5\t203x30\t\t::after 201pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[options])\tdown reach 7 need 7 (then label)"
           },
           {
             "name": "button[button] \"Send picks\"",
@@ -4066,35 +3944,19 @@
             "line": "ok\tbutton\t\tbutton\t\"Send picks\"\t242.5,789\t133.5x44\t\t::after 131.609pxx44px at 0px,-1px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then footer[page-foot])\tright reach 0 need 0 (then footer[page-foot])\tup reach 0.5 need 0 (then footer[page-foot])\tdown reach 0 need 0 (then footer[page-foot])"
           },
           {
-            "name": "button[radio][option] \"1 Changes to the work\"",
-            "w": 171,
+            "name": "button[button] \"Add a note\"",
+            "w": 87.5,
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"1 Changes to the work\"\t28,431\t171x30\t\t::after 169pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[decision-body])\tdown reach 7 need 7 (then label)"
-          },
-          {
-            "name": "button[radio][option] \"2 Every change\"",
-            "w": 129,
-            "h": 30,
-            "touch": true,
-            "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"2 Every change\"\t28,599.5\t129x30\t\t::after 127pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[options])\tdown reach 7 need 7 (then label)"
-          },
-          {
-            "name": "button[radio][option] \"3 Only when you press Send\"",
-            "w": 203,
-            "h": 30,
-            "touch": true,
-            "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"3 Only when you press Send\"\t28,727.5\t203x30\t\t::after 201pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[options])\tdown reach 7 need 7 (then label)"
+            "line": "ok\tbutton\t\tbutton\t\"Add a note\"\t17,714.5\t87.5x30\t\t::after 85.7031pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[decision-body])\tdown reach 7 need 7 (then article[decision])"
           }
         ],
         "spills": []
       }
     },
     "project-screens 390×844 dark": {
-      "title": "The project page, fixed from your pins",
+      "title": "The project page",
       "cards": [
         {
           "id": "pipeline",
@@ -4142,10 +4004,10 @@
               "story": "PhoneReviewAsks",
               "scheme": "dark",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-phone/TaskPaneOneUnit-PhoneReviewAsks-dark.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-phone/TaskPaneOneUnit-PhoneReviewAsks-dark.png",
               "faults": [],
-              "drawn": "975b713759cdef4916be670187d8c4ab",
-              "hash": "233b28e7607c79a4f367f09405e1af31",
+              "drawn": "97972f0d51d9e04b14879792f491cba7",
+              "hash": "2d5b44a2111be27f87df6aac6e4e2ae0",
               "label": "Phone · In Review, its agent asking a decision over Approve and Send back.",
               "stats": {
                 "width": 676,
@@ -4159,7 +4021,7 @@
           "files": [
             "src/lib/cawco/tasks/TaskPaneOneUnit.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=dark&by=embed&story=PhoneReviewAsks",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=dark&by=embed&story=PhoneReviewAsks",
           "named": [
             "PhoneReviewAsks"
           ],
@@ -4203,15 +4065,15 @@
               "story": "PhoneWorking",
               "scheme": "dark",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-phone/TaskPaneOneUnit-PhoneWorking-dark.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-phone/TaskPaneOneUnit-PhoneWorking-dark.png",
               "faults": [],
-              "drawn": "40a28234bb14077cbe584b8773abf59d",
-              "hash": "75b2ed089351d509183276a6a703a5a7",
+              "drawn": "55571d281a09788f1630d17ee959fb0a",
+              "hash": "98214d0b6a79bc32ecd04f94c6eb80c4",
               "label": "Phone · Working: the Session tab reads the session in place: its plan, last turns and composer.",
               "stats": {
                 "width": 676,
-                "height": 984,
-                "top": 0.549,
+                "height": 986,
+                "top": 0.55,
                 "matched": "14/14"
               }
             }
@@ -4220,7 +4082,7 @@
           "files": [
             "src/lib/cawco/tasks/TaskPaneOneUnit.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=dark&by=embed&story=PhoneWorking",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskPaneOneUnit.stories.ts&scheme=dark&by=embed&story=PhoneWorking",
           "named": [
             "PhoneWorking"
           ],
@@ -4264,10 +4126,10 @@
               "story": "Phone",
               "scheme": "dark",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-phone/TaskCardStateLine-Phone-dark.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-phone/TaskCardStateLine-Phone-dark.png",
               "faults": [],
               "drawn": "72950a9386a26df74afeae643138879b",
-              "hash": "59675c63559009780c0187358626c7b0",
+              "hash": "dc9b857919bbe55ee717615bc7ab1292",
               "label": "Phone · Every state in one column.",
               "stats": {
                 "width": 676,
@@ -4281,7 +4143,7 @@
           "files": [
             "src/lib/cawco/tasks/TaskCardStateLine.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskCardStateLine.stories.ts&scheme=dark&by=embed&story=Phone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Ftasks%2FTaskCardStateLine.stories.ts&scheme=dark&by=embed&story=Phone",
           "named": [
             "Phone"
           ],
@@ -4325,10 +4187,10 @@
               "story": "BoardPhone",
               "scheme": "dark",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-phone/WorkColumnEmpty-BoardPhone-dark.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-phone/WorkColumnEmpty-BoardPhone-dark.png",
               "faults": [],
-              "drawn": "d00f3d490d23880cedd6b636dad057fe",
-              "hash": "6294080aedf5ce2348dda551d2fe6651",
+              "drawn": "40f701d3a1776d7d65c6e1312b3d4722",
+              "hash": "7e3fc270e502ae2209596e7b387ae464",
               "label": "Phone · The empty board: one column of cards, each the tallest's height.",
               "stats": {
                 "width": 676,
@@ -4342,7 +4204,7 @@
           "files": [
             "src/lib/cawco/project/WorkColumnEmpty.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=dark&by=embed&story=BoardPhone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=dark&by=embed&story=BoardPhone",
           "named": [
             "BoardPhone"
           ],
@@ -4386,9 +4248,9 @@
               "story": "RoutinesPhone",
               "scheme": "dark",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-phone/WorkColumnEmpty-RoutinesPhone-dark.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-phone/WorkColumnEmpty-RoutinesPhone-dark.png",
               "faults": [],
-              "drawn": "c2c628f3e1b2e3ebe63a5fba8deec5f6",
+              "drawn": "f6d989e26ff4067d237adeedbc71d8fb",
               "hash": "642085b653394a41c054662fd851071b",
               "label": "Phone · Routines empty.",
               "stats": {
@@ -4403,7 +4265,7 @@
           "files": [
             "src/lib/cawco/project/WorkColumnEmpty.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=dark&by=embed&story=RoutinesPhone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FWorkColumnEmpty.stories.ts&scheme=dark&by=embed&story=RoutinesPhone",
           "named": [
             "RoutinesPhone"
           ],
@@ -4447,15 +4309,15 @@
               "story": "PhoneTop",
               "scheme": "dark",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-phone/ProjectHeadNewSession-PhoneTop-dark.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-phone/ProjectHeadNewSession-PhoneTop-dark.png",
               "faults": [],
-              "drawn": "1733decf80beac3d3e84ccb550bc779e",
-              "hash": "2913bd9ee377a13d57584db065a6f3c0",
+              "drawn": "30b584bc4728a1b0299f371edbc9e9b6",
+              "hash": "e0b096ce780beed72ee441b3ec19030b",
               "label": "Phone · The top of the project as it stands, the bar of views and Ask Caw under the head, its ⋯ open over it: New session first in it.",
               "stats": {
                 "width": 676,
-                "height": 1082,
-                "top": 0.341,
+                "height": 1080,
+                "top": 0.34,
                 "matched": "10/10"
               }
             }
@@ -4464,7 +4326,7 @@
           "files": [
             "src/lib/cawco/project/ProjectHeadNewSession.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FProjectHeadNewSession.stories.ts&scheme=dark&by=embed&story=PhoneTop",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fproject%2FProjectHeadNewSession.stories.ts&scheme=dark&by=embed&story=PhoneTop",
           "named": [
             "PhoneTop"
           ],
@@ -4508,7 +4370,7 @@
               "story": "Phone",
               "scheme": "dark",
               "width": "own",
-              "path": "/home/bewinxed/.worktrees/cockpit-3555f361/.probe/decision-pages/embeds/project-screens-phone/ViewPipelineRunOrder-Phone-dark.png",
+              "path": "/home/bewinxed/.worktrees/cockpit-f57a9b13/.probe/decision-pages/embeds/project-screens-phone/ViewPipelineRunOrder-Phone-dark.png",
               "faults": [],
               "drawn": "22439052bb5384a36ab99b35aa1aa2b1",
               "hash": "95b6749b822e8bd42a0bb02e08cb81b9",
@@ -4525,7 +4387,7 @@
           "files": [
             "src/lib/cawco/views/ViewPipelineRunOrder.stories.ts"
           ],
-          "src": "http://127.0.0.1:32791/@cawco/canvas?file=src%2Flib%2Fcawco%2Fviews%2FViewPipelineRunOrder.stories.ts&scheme=dark&by=embed&story=Phone",
+          "src": "http://127.0.0.1:41429/@cawco/canvas?file=src%2Flib%2Fcawco%2Fviews%2FViewPipelineRunOrder.stories.ts&scheme=dark&by=embed&story=Phone",
           "named": [
             "Phone"
           ],
@@ -4576,7 +4438,7 @@
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"1 Show what runs next\"\t28,442.5\t170x30\t\t::after 168pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[decision-body])\tdown reach 7 need 7 (then label)"
+            "line": "ok\tbutton\tradio\toption\t\"1 Show what runs next\"\t28,411.5\t170x30\t\t::after 168pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[decision-body])\tdown reach 7 need 7 (then label)"
           },
           {
             "name": "button[radio][option] \"2 Remove the tab\"",
@@ -4584,7 +4446,7 @@
             "h": 30,
             "touch": true,
             "pointer": true,
-            "line": "ok\tbutton\tradio\toption\t\"2 Remove the tab\"\t28,591\t142x30\t\t::after 140pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[options])\tdown reach 7 need 7 (then label)"
+            "line": "ok\tbutton\tradio\toption\t\"2 Remove the tab\"\t28,559.5\t142x30\t\t::after 140pxx44px at 0px,-8px pointer-events auto; overflow visible/visible\tcontrast 13.24\tleft reach 0.5 need 0 (then article[decision])\tright reach 0 need 0 (then div)\tup reach 7 need 7 (then div[options])\tdown reach 7 need 7 (then label)"
           },
           {
             "name": "button[button] \"Add a note\"",

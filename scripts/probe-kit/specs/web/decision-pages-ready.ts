@@ -30,8 +30,9 @@
  *    them), every frame inside the embed's width, the embed as tall as
  *    what it draws, and what paints beside a narrower frame the page's own
  *    surface. Each frame it shows is shot where the person sees it
- *    (canvas-shots.ts `shootEmbedded`). The phone head's ⋯ menu stands open
- *    whole inside its story, over none of its words. Every control reaches
+ *    (canvas-shots.ts `shootEmbedded`). The phone head's name stands whole
+ *    and its ⋯ menu stands open whole inside its story, over none of its
+ *    words. Every control reaches
  *    44px under a finger at 390 and 24px under a mouse at 1440, nothing
  *    spills its box (decision-embeds.ts `pageReach`); the cost line, the
  *    count, the note's placeholder, the Recommended badge and an option's
@@ -784,9 +785,17 @@ function menuOf() {
     r
       ? `${Math.round(r.left)},${Math.round(r.top)}–${Math.round(r.right)},${Math.round(r.bottom)}`
       : "none";
+  // The project's name, whole in its button: its words no wider than its box.
+  const name = body?.querySelector<HTMLElement>(
+    '[data-slot="title"] [data-slot="name"]'
+  );
   return {
     boxes: `story ${spot(edge)}, menu ${spot(over)}, window ${innerWidth}×${innerHeight}`,
     askCaw: control('[aria-label="Ask Caw"]'),
+    name: name
+      ? `"${name.innerText.trim()}" ${name.scrollWidth}/${name.clientWidth}px`
+      : "missing",
+    nameWhole: !!name && name.scrollWidth <= name.clientWidth + 0.5,
     covered,
     cut: items
       .filter((item) => !whole(item))
@@ -1137,8 +1146,9 @@ const spec: Spec = {
               : null;
             if (one.name === "project-screens") {
               kit.check(
-                `${one.name} ${leg}: the top of the project on a phone shows its ⋯ open, every item whole to the last (${headMenu?.last}), New session among them, over none of the story's words, with Ask Caw and the bar of views drawn clear of it (${headMenu ? `trigger expanded ${headMenu.expanded}; menus ${headMenu.menus}; whole: ${headMenu.items.join(", ") || "none"}; cut: ${headMenu.cut.join(", ") || "none"}; the menu scrolls ${headMenu.scrolls}px; covering: ${headMenu.covered.join(", ") || "nothing"}; Ask Caw ${headMenu.askCaw}; view pill ${headMenu.views}; ${headMenu.boxes}` : "no head embed"})`,
-                !!headMenu?.items.includes("New session") &&
+                `${one.name} ${leg}: the top of the project on a phone shows its name whole (${headMenu?.name}) and its ⋯ open, every item whole to the last (${headMenu?.last}), New session among them, over none of the story's words, with Ask Caw and the bar of views drawn clear of it (${headMenu ? `trigger expanded ${headMenu.expanded}; menus ${headMenu.menus}; whole: ${headMenu.items.join(", ") || "none"}; cut: ${headMenu.cut.join(", ") || "none"}; the menu scrolls ${headMenu.scrolls}px; covering: ${headMenu.covered.join(", ") || "nothing"}; Ask Caw ${headMenu.askCaw}; view pill ${headMenu.views}; ${headMenu.boxes}` : "no head embed"})`,
+                !!headMenu?.nameWhole &&
+                  headMenu.items.includes("New session") &&
                   headMenu.items.includes(headMenu.last) &&
                   headMenu.cut.length === 0 &&
                   headMenu.scrolls <= 1 &&
