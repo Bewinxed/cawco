@@ -88,6 +88,7 @@
   import Working from "~icons/solar/refresh-circle-bold-duotone";
   import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
   import { cawco, onProjectStop } from "./client.svelte";
+  import { frameObserver } from "./frame-observer";
   import { machineName, span } from "./home/home-state.svelte";
   import { resolveSessionTitle } from "./links";
   import { markHue, sessionSprite } from "./mark";
@@ -288,14 +289,34 @@
   /**
    * In view and in hand as it unfolds: the menu that asked hands focus back
    * to its trigger as it closes, so the focus moves here a frame later.
-   * Escape inside it puts it away and goes no further (a popover it stands
-   * in stays open).
+   * While it stands it keeps itself in view as its own size changes (it
+   * opens on what it is reading and grows to its list, then to each stop as
+   * its machine confirms it), so its foot never rests under what stands
+   * over the page's foot (the scroller's scroll padding). Escape inside it
+   * puts it away and goes no further (a popover it stands in stays open).
    */
   function unfoldHere(node: HTMLElement) {
     const frame = requestAnimationFrame(() => {
-      node.scrollIntoView({ block: "nearest" });
       node.querySelector<HTMLElement>("[data-stop-cancel]")?.focus();
     });
+    // Its size read in the delivery, and the scroll in the next frame
+    // (frame-observer): nothing resizes inside the delivery.
+    let height = -1;
+    let measured = 0;
+    const sized = frameObserver(
+      () => {
+        if (measured !== height && shown) {
+          height = measured;
+          node.scrollIntoView({ block: "nearest" });
+        }
+      },
+      {
+        read: ([entry]) => {
+          measured = entry?.borderBoxSize[0]?.blockSize ?? 0;
+        },
+      }
+    );
+    sized.observe(node);
     const onEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
@@ -305,6 +326,7 @@
     node.addEventListener("keydown", onEscape);
     return () => {
       cancelAnimationFrame(frame);
+      sized.disconnect();
       node.removeEventListener("keydown", onEscape);
     };
   }
