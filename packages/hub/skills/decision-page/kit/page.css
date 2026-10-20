@@ -541,13 +541,19 @@ a {
     transition: none;
   }
   /* Flights do not fly (DESIGN.md L517): the chosen option fades in on the
-     decided line where it stands. */
+     decided line where it stands, and fades there as the card opens. */
   .dp-card:not([data-instant]) .dp-pick {
     transition: opacity var(--dur-fade) var(--ease-out);
 
     @starting-style {
       opacity: 0;
     }
+  }
+  .dp-picks {
+    transition: opacity var(--dur-fade) var(--ease-out);
+  }
+  .dp-picks[data-leaving] {
+    opacity: 0;
   }
 }
 
@@ -580,7 +586,7 @@ a {
   }
 }
 
-/* "Send picks": the one coral action on the page. */
+/* Send: the page's act, coral as Continue is (DESIGN.md, Coral Action). */
 .dp-done {
   display: flex;
   justify-content: flex-end;

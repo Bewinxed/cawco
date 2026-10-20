@@ -1945,6 +1945,52 @@ async function stillLeg(
       stillFocus,
     })
   );
+  // Change, a pointer's, with less motion: the head's chosen option and
+  // Change fade where they stand over --dur-fade, then go; nothing flies.
+  const headOf = () =>
+    still.evaluate(() => {
+      const card = document.getElementById("decision-path");
+      const picks = card?.querySelector<HTMLElement>("header .dp-picks");
+      const change = card?.querySelector<HTMLElement>("header .dp-change");
+      return {
+        picks: picks ? Number(getComputedStyle(picks).opacity) : -1,
+        change: change ? Number(getComputedStyle(change).opacity) : -1,
+        decided: !!card?.hasAttribute("data-decided"),
+      };
+    });
+  await still.evaluate(() =>
+    document
+      .querySelector("#decision-path .dp-change")
+      ?.scrollIntoView({ block: "center" })
+  );
+  await settle(still, 200);
+  const backRuns = await stillClock.catchRuns(
+    () => pressOn(still.locator("#decision-path .dp-change"), view),
+    "#decision-path header"
+  );
+  await stillClock.seek(0.5);
+  const halfway = await headOf();
+  await stillClock.release();
+  await settle(still, 500);
+  const gone = await headOf();
+  kit.check(
+    `${label} reduced motion: Change fades the head's chosen option and Change where they stand over --dur-fade, nothing flying, and they go once faded, the card open`,
+    backRuns.filter(
+      (run) =>
+        run.type === "CSSTransition" &&
+        run.name === "opacity" &&
+        Math.abs(run.end - fade) < 1
+    ).length >= 2 &&
+      backRuns.every((run) => run.type !== "WebAnimation") &&
+      halfway.picks > 0 &&
+      halfway.picks < 1 &&
+      halfway.change > 0 &&
+      halfway.change < 1 &&
+      !halfway.decided &&
+      gone.picks === -1 &&
+      gone.change === -1,
+    JSON.stringify({ runs: backRuns.map(said), halfway, gone })
+  );
   await still.close();
 }
 

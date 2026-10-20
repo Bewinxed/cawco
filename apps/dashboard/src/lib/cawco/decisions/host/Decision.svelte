@@ -43,7 +43,8 @@
   scroll travel (L690: "A choice made from the keyboard … is instant, as
   every keyboard action is"). With reduced motion the body fades and its
   height lands at the end, where the scroll is placed, and the head chip
-  fades in where it stands (L517: "flights do not fly").
+  fades in where it stands, and fades there as Change opens the card
+  (L517: "flights do not fly").
 
   Keys: the card's options are one tab stop, and the arrows move focus
   among them and never pick (WAI-ARIA APG, roving tabindex); Space, or an
@@ -450,6 +451,17 @@
     if (!returning) {
       return;
     }
+    if (!motionOk.current) {
+      // Flights do not fly (DESIGN.md L517): the chosen options and Change
+      // fade where they stand (page.css, `data-leaving`), and go once faded.
+      const fades = leavingParts(box).flatMap((part) =>
+        part.getAnimations({ subtree: true })
+      );
+      Promise.allSettled(fades.map((fade) => fade.finished)).then(() => {
+        returning = false;
+      });
+      return;
+    }
     const flights = [
       ...box.querySelectorAll<HTMLElement>("header [data-pick]"),
     ].flatMap((chip) => {
@@ -614,7 +626,7 @@
   async function reopen(event: MouseEvent) {
     turnedBy(event);
     // A pointer's Change: the head's chips stand on while they fly home.
-    returning = acted === "pointer" && motionOk.current;
+    returning = acted === "pointer";
     open = true;
     await tick();
     body
@@ -671,6 +683,7 @@
         <span
           aria-label={`Decided: ${decidedLine}`}
           class="dp-picks"
+          data-leaving={decided ? undefined : ""}
           role="group"
         >
           {#each chips as chip (chip.id)}
