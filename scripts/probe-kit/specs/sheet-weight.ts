@@ -20,6 +20,9 @@
  *    `[cawco] goto on a sheet does nothing` and the frame stays on the
  *    sheet; it loaded the stage's `cawco:kit/` stubs and no module of
  *    SvelteKit's client runtime (`@sveltejs/kit/src/runtime/client`).
+ * 4b. On the empty states' own states file (EmptyStarts.stories.ts), every
+ *    two-word button label is one text node in one face, and the gap
+ *    between its first two words' text boxes is the same across them.
  *
  * On a scratch fleet, through the session's own MCP tool:
  *
@@ -38,6 +41,17 @@ import { type Kit, ROOT, type Spec } from "../kit";
 const APP = join(ROOT, "apps/dashboard");
 /** The scratch stories' folder, under `src/` (SvelteKit serves only that); gone when the spec ends. */
 const SCRATCH = "src/lib/cawco/probe-sheet-weight";
+/** The empty states' own states file, its buttons read in 4b. */
+const EMPTY_STARTS = "src/lib/components/ui/empty/EmptyStarts.stories.ts";
+/** Its two-word button labels the review read, and their siblings. */
+const SPACED = [
+  "Add machine",
+  "Add server",
+  "Ask Caw for this view",
+  "Remove the filter",
+  "Open Updates",
+  "Ask Claude Code for a hook",
+];
 const FLEET_STORE = "#lib/cawco/client.svelte.js";
 const KIT_CLIENT = "@sveltejs/kit/src/runtime/client";
 const GOTO_SAID = "[cawco] goto on a sheet does nothing";
@@ -242,6 +256,88 @@ const stageChecks = async (kit: Kit) => {
         stubs.length === 2 &&
         kitClient.length === 0,
       `console: ${logged.filter((line) => line.startsWith("[cawco]")).join(" | ") || "nothing"}; at ${loaded.path}, page.url ${loaded.page}; stubs ${stubs.map((url) => url.slice(url.indexOf("cawco:kit/"))).join(", ")}; kit client modules ${kitClient.length} of ${loaded.resources.length}; ${said(goes)}`
+    );
+    // 4b. The empty states' buttons hold one word space: on the real
+    // states file, each two-word label's gap between its words' text boxes
+    // (a Range over each word), at the canvas's scale undone, against the
+    // others', and what the label is in the DOM.
+    await page.goto(
+      `${base}/@cawco/canvas?file=${encodeURIComponent(EMPTY_STARTS)}`,
+      { waitUntil: "load" }
+    );
+    await page.waitForFunction(
+      () =>
+        ((window as unknown as { __cawcoCanvas?: { reports: number } })
+          .__cawcoCanvas?.reports ?? 0) > 0
+    );
+    await page.waitForFunction(
+      (labels) =>
+        labels.every((label) =>
+          [...document.querySelectorAll("button, a")].some(
+            (one) => one.textContent?.trim() === label
+          )
+        ),
+      SPACED,
+      { timeout: 60_000 }
+    );
+    const spaced = await page.evaluate((labels) => {
+      const read = (button: Element) => {
+        const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+        const nodes: Text[] = [];
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (node.textContent?.trim()) {
+            nodes.push(node as Text);
+          }
+        }
+        const [node] = nodes;
+        const text = node?.textContent ?? "";
+        const at = text.indexOf(" ");
+        const box = (start: number, end: number) => {
+          const range = document.createRange();
+          range.setStart(node, start);
+          range.setEnd(node, end);
+          return range.getClientRects()[0];
+        };
+        const first = box(0, at);
+        const second = box(
+          at + 1,
+          text.indexOf(" ", at + 1) > 0
+            ? text.indexOf(" ", at + 1)
+            : text.length
+        );
+        const space = box(at, at + 1);
+        const scale =
+          button.getBoundingClientRect().width /
+          (button as HTMLElement).offsetWidth;
+        const style = getComputedStyle(node.parentElement as Element);
+        return {
+          label: button.textContent?.trim(),
+          textNodes: nodes.length,
+          oneNode: nodes.length === 1 && text.includes(" "),
+          letters: !!button.querySelector('[data-slot="letters"]'),
+          parent: `${node.parentElement?.localName}[${node.parentElement?.getAttribute("data-slot") ?? ""}]`,
+          gap: Number(((second.left - first.right) / scale).toFixed(3)),
+          space: Number((space.width / scale).toFixed(3)),
+          font: `${style.fontFamily.split(",")[0]} ${style.fontWeight} ${style.fontSize}`,
+          spacing: `letter ${style.letterSpacing}, word ${style.wordSpacing}, kern ${style.fontKerning}`,
+          tag: button.localName,
+        };
+      };
+      return labels.map((label) => {
+        const button = [...document.querySelectorAll("button, a")].find(
+          (one) => one.textContent?.trim() === label
+        );
+        return button ? read(button) : { label, missing: true };
+      });
+    }, SPACED);
+    const gaps = spaced.map((one) => ("gap" in one ? one.gap : Number.NaN));
+    const fonts = new Set(spaced.map((one) => ("font" in one ? one.font : "")));
+    kit.check(
+      `4b: every empty state's button holds one word space: each label one text node, no letter spans, one face, and its words' gap the same (${spaced.map((one) => `${one.label} ${"gap" in one ? one.gap : "missing"}px`).join(", ")})`,
+      spaced.every((one) => "oneNode" in one && one.oneNode && !one.letters) &&
+        fonts.size === 1 &&
+        Math.max(...gaps) - Math.min(...gaps) < 0.05,
+      JSON.stringify(spaced)
     );
   } finally {
     stage.kill("SIGTERM");
