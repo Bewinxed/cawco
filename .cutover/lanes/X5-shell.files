@@ -308,3 +308,4 @@ apps/dashboard/src/lib/icons.ts
 packages/hub/src/moves.ts
 scripts/probe-kit/specs/move-settled.ts
 scripts/probe-kit/specs/start-session-nest.ts
+scripts/probe-kit/surfaces/catalogue.ts
