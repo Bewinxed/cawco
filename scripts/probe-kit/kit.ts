@@ -69,6 +69,30 @@ export const VIEWS = {
 } as const;
 export type View = keyof typeof VIEWS;
 
+/**
+ * Chromium's pointer and hover, a desk's: a mouse, which hovers. Unpinned,
+ * Linux Chromium reads them from the host's input devices
+ * (ui/base/pointer/pointer_device_linux.cc: `return {pointer_types ?
+ * pointer_types : POINTER_TYPE_NONE, hover_types};`), so on a machine with no
+ * mouse a desk page matched `(pointer: none)` and `(hover: none)`: no
+ * `.pointer-hit` area (app.css, under `(pointer: fine)`) and no hover style
+ * applied. These are the page's embedder settings; a touch context (`hasTouch`,
+ * `Emulation.setTouchEmulationEnabled`) lays coarse and none over them and
+ * gives them back when touch is off (core/inspector/dev_tools_emulator.cc
+ * `SetTouchEventEmulationEnabled`), so one browser serves both. The values
+ * are blink's mojom enums: PointerType kPointerFineType 4, HoverType
+ * kHoverHoverType 2. `Emulation.setEmulatedMedia` leaves `pointer` and
+ * `hover` as they are (Chromium 156, read in a page).
+ */
+const DESK_POINTER =
+  "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2";
+
+/** What a view's page matches: a desk's mouse, or a touch screen's finger. */
+const POINTER_OF = (touch: boolean) =>
+  touch
+    ? { pointer: "coarse", hover: "none" }
+    : { pointer: "fine", hover: "hover" };
+
 /** Below this, a touch view is a phone (DESIGN.md's 640px breakpoint). */
 const PHONE_MAX_WIDTH = 640;
 /**
@@ -824,6 +848,7 @@ export class Run {
                 ]
               : []),
             ...(hostRules ? [`--host-resolver-rules=${hostRules}`] : []),
+            DESK_POINTER,
           ],
           env,
         }),
@@ -1011,6 +1036,27 @@ export class Run {
           kit.check("the page's renderer runs to the end", false, page.url());
           page.close().catch(() => undefined);
         });
+        // The page stands for its device in what it points with: a desk's
+        // mouse, a touch screen's finger (DESK_POINTER). A leg on a page that
+        // does not fails here, before it measures what the owner never sees.
+        const want = POINTER_OF(v.touch);
+        const missed = await page.evaluate(
+          ({ pointer, hover }) =>
+            [
+              `(pointer: ${pointer})`,
+              `(hover: ${hover})`,
+              `(any-pointer: ${pointer})`,
+              `(any-hover: ${hover})`,
+            ].filter((query) => !matchMedia(query).matches),
+          want
+        );
+        if (missed.length > 0) {
+          kit.check(
+            `${view}: the page points as its device does`,
+            false,
+            `${options.engine ?? "chromium"} does not match ${missed.join(" ")}`
+          );
+        }
         return page;
       },
     };
