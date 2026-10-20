@@ -1,0 +1,627 @@
+{
+  "page": "plan-steps",
+  "cards": [
+    {
+      "question": "How should a plan show its steps?",
+      "why": "Crew first is the stack you asked for: who is working on which step shows first, without reading down the list, and it draws a line only to a step still waiting on another, where Lanes draws every one.",
+      "options": [
+        {
+          "id": "one-list",
+          "text": "1 One list Every step in order; click a step to open its description, and a step that waits says what it waits for. Cost: With several delegates at work it is the longest list, and you read who works on what row by row.",
+          "recommended": false
+        },
+        {
+          "id": "lanes",
+          "text": "2 Lanes Steps that run at the same time sit side by side, with a line to each step that waits for them; the line to a working delegate pulses. Cost: On a phone two columns squeeze the words while most plans need one, and a step opens on a page of its own.",
+          "recommended": false
+        },
+        {
+          "id": "crew-first",
+          "text": "Recommended 3 Crew first Who needs you and who is working come first, each with a progress line that pulses while it moves; the to-dos below show who is on each. Cost: A working delegate shows twice, at the top and on its to-do, and you change its step from the to-do, not from the top.",
+          "recommended": true
+        }
+      ]
+    }
+  ],
+  "embeds": {
+    "1440×900 light": [
+      {
+        "caption": "One list, on the phone and on the desk while it runs",
+        "named": [
+          "Phone",
+          "Live"
+        ],
+        "box": {
+          "w": 832,
+          "h": 1535
+        },
+        "tall": 1535,
+        "frames": [
+          {
+            "story": "Phone",
+            "h": 844,
+            "left": 221,
+            "right": 611,
+            "w": 390,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 1,
+            "state": "drawn",
+            "type": 14,
+            "words": 3373
+          },
+          {
+            "story": "Live",
+            "h": 680,
+            "left": 236,
+            "right": 596,
+            "w": 360,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 1,
+            "state": "drawn",
+            "type": 14,
+            "words": 3381
+          }
+        ]
+      },
+      {
+        "caption": "Lanes, on the phone and on the desk while it runs",
+        "named": [
+          "Phone",
+          "Live"
+        ],
+        "box": {
+          "w": 832,
+          "h": 1535
+        },
+        "tall": 1535,
+        "frames": [
+          {
+            "story": "Phone",
+            "h": 844,
+            "left": 221,
+            "right": 611,
+            "w": 390,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 1,
+            "state": "drawn",
+            "type": 13,
+            "words": 1351
+          },
+          {
+            "story": "Live",
+            "h": 680,
+            "left": 236,
+            "right": 596,
+            "w": 360,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 1,
+            "state": "drawn",
+            "type": 14,
+            "words": 3381
+          }
+        ]
+      },
+      {
+        "caption": "Crew first, on the phone and on the desk while it runs",
+        "named": [
+          "Phone",
+          "Live"
+        ],
+        "box": {
+          "w": 832,
+          "h": 1535
+        },
+        "tall": 1535,
+        "frames": [
+          {
+            "story": "Phone",
+            "h": 844,
+            "left": 221,
+            "right": 611,
+            "w": 390,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 1,
+            "state": "drawn",
+            "type": 13,
+            "words": 1292
+          },
+          {
+            "story": "Live",
+            "h": 680,
+            "left": 236,
+            "right": 596,
+            "w": 360,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 1,
+            "state": "drawn",
+            "type": 14,
+            "words": 4323
+          }
+        ]
+      }
+    ],
+    "1440×900 dark": [
+      {
+        "caption": "One list, on the phone and on the desk while it runs",
+        "named": [
+          "Phone",
+          "Live"
+        ],
+        "box": {
+          "w": 832,
+          "h": 1535
+        },
+        "tall": 1535,
+        "frames": [
+          {
+            "story": "Phone",
+            "h": 844,
+            "left": 221,
+            "right": 611,
+            "w": 390,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 1,
+            "state": "drawn",
+            "type": 14,
+            "words": 3373
+          },
+          {
+            "story": "Live",
+            "h": 680,
+            "left": 236,
+            "right": 596,
+            "w": 360,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 1,
+            "state": "drawn",
+            "type": 14,
+            "words": 3381
+          }
+        ]
+      },
+      {
+        "caption": "Lanes, on the phone and on the desk while it runs",
+        "named": [
+          "Phone",
+          "Live"
+        ],
+        "box": {
+          "w": 832,
+          "h": 1535
+        },
+        "tall": 1535,
+        "frames": [
+          {
+            "story": "Phone",
+            "h": 844,
+            "left": 221,
+            "right": 611,
+            "w": 390,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 1,
+            "state": "drawn",
+            "type": 13,
+            "words": 1351
+          },
+          {
+            "story": "Live",
+            "h": 680,
+            "left": 236,
+            "right": 596,
+            "w": 360,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 1,
+            "state": "drawn",
+            "type": 14,
+            "words": 3381
+          }
+        ]
+      },
+      {
+        "caption": "Crew first, on the phone and on the desk while it runs",
+        "named": [
+          "Phone",
+          "Live"
+        ],
+        "box": {
+          "w": 832,
+          "h": 1535
+        },
+        "tall": 1535,
+        "frames": [
+          {
+            "story": "Phone",
+            "h": 844,
+            "left": 221,
+            "right": 611,
+            "w": 390,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 1,
+            "state": "drawn",
+            "type": 13,
+            "words": 1292
+          },
+          {
+            "story": "Live",
+            "h": 680,
+            "left": 236,
+            "right": 596,
+            "w": 360,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 1,
+            "state": "drawn",
+            "type": 14,
+            "words": 4323
+          }
+        ]
+      }
+    ],
+    "390×844 light": [
+      {
+        "caption": "One list, on the phone and on the desk while it runs",
+        "named": [
+          "Phone",
+          "Live"
+        ],
+        "box": {
+          "w": 302,
+          "h": 1235
+        },
+        "tall": 1235,
+        "frames": [
+          {
+            "story": "Phone",
+            "h": 654,
+            "left": 0,
+            "right": 302,
+            "w": 302,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 0.774,
+            "state": "drawn",
+            "type": 10.8,
+            "words": 3373
+          },
+          {
+            "story": "Live",
+            "h": 570,
+            "left": 0,
+            "right": 302,
+            "w": 302,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 0.839,
+            "state": "drawn",
+            "type": 11.7,
+            "words": 3373
+          }
+        ]
+      },
+      {
+        "caption": "Lanes, on the phone and on the desk while it runs",
+        "named": [
+          "Phone",
+          "Live"
+        ],
+        "box": {
+          "w": 302,
+          "h": 1235
+        },
+        "tall": 1235,
+        "frames": [
+          {
+            "story": "Phone",
+            "h": 654,
+            "left": 0,
+            "right": 302,
+            "w": 302,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 0.774,
+            "state": "drawn",
+            "type": 10.1,
+            "words": 1351
+          },
+          {
+            "story": "Live",
+            "h": 570,
+            "left": 0,
+            "right": 302,
+            "w": 302,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 0.839,
+            "state": "drawn",
+            "type": 11.7,
+            "words": 3381
+          }
+        ]
+      },
+      {
+        "caption": "Crew first, on the phone and on the desk while it runs",
+        "named": [
+          "Phone",
+          "Live"
+        ],
+        "box": {
+          "w": 302,
+          "h": 1235
+        },
+        "tall": 1235,
+        "frames": [
+          {
+            "story": "Phone",
+            "h": 654,
+            "left": 0,
+            "right": 302,
+            "w": 302,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 0.774,
+            "state": "drawn",
+            "type": 10.1,
+            "words": 1292
+          },
+          {
+            "story": "Live",
+            "h": 570,
+            "left": 0,
+            "right": 302,
+            "w": 302,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 0.839,
+            "state": "drawn",
+            "type": 11.7,
+            "words": 4323
+          }
+        ]
+      }
+    ],
+    "390×844 dark": [
+      {
+        "caption": "One list, on the phone and on the desk while it runs",
+        "named": [
+          "Phone",
+          "Live"
+        ],
+        "box": {
+          "w": 302,
+          "h": 1235
+        },
+        "tall": 1235,
+        "frames": [
+          {
+            "story": "Phone",
+            "h": 654,
+            "left": 0,
+            "right": 302,
+            "w": 302,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 0.774,
+            "state": "drawn",
+            "type": 10.8,
+            "words": 3373
+          },
+          {
+            "story": "Live",
+            "h": 570,
+            "left": 0,
+            "right": 302,
+            "w": 302,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 0.839,
+            "state": "drawn",
+            "type": 11.7,
+            "words": 3373
+          }
+        ]
+      },
+      {
+        "caption": "Lanes, on the phone and on the desk while it runs",
+        "named": [
+          "Phone",
+          "Live"
+        ],
+        "box": {
+          "w": 302,
+          "h": 1235
+        },
+        "tall": 1235,
+        "frames": [
+          {
+            "story": "Phone",
+            "h": 654,
+            "left": 0,
+            "right": 302,
+            "w": 302,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 0.774,
+            "state": "drawn",
+            "type": 10.1,
+            "words": 1351
+          },
+          {
+            "story": "Live",
+            "h": 570,
+            "left": 0,
+            "right": 302,
+            "w": 302,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 0.839,
+            "state": "drawn",
+            "type": 11.7,
+            "words": 3381
+          }
+        ]
+      },
+      {
+        "caption": "Crew first, on the phone and on the desk while it runs",
+        "named": [
+          "Phone",
+          "Live"
+        ],
+        "box": {
+          "w": 302,
+          "h": 1235
+        },
+        "tall": 1235,
+        "frames": [
+          {
+            "story": "Phone",
+            "h": 654,
+            "left": 0,
+            "right": 302,
+            "w": 302,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 0.774,
+            "state": "drawn",
+            "type": 10.1,
+            "words": 1292
+          },
+          {
+            "story": "Live",
+            "h": 570,
+            "left": 0,
+            "right": 302,
+            "w": 302,
+            "wide": false,
+            "scrolls": 0,
+            "scrollable": false,
+            "zoom": 0.839,
+            "state": "drawn",
+            "type": 11.7,
+            "words": 4323
+          }
+        ]
+      }
+    ]
+  },
+  "checks": [
+    {
+      "check": "the hub's check keeps the program",
+      "passed": true,
+      "output": "kept"
+    },
+    {
+      "check": "1440×900 light: every embed draws the stories its Preview names (“One list, on the phone and on the desk while it runs” Phone drawn + Live drawn; “Lanes, on the phone and on the desk while it runs” Phone drawn + Live drawn; “Crew first, on the phone and on the desk while it runs” Phone drawn + Live drawn)",
+      "passed": true,
+      "output": "3 of 3 embeds, each its named stories drawn"
+    },
+    {
+      "check": "1440×900 light: no console errors, the page and its canvases",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "1440×900 light: nothing scrolls the page sideways (1440 wide in 1440)",
+      "passed": true,
+      "output": "1440px of content in a 1440px view"
+    },
+    {
+      "check": "1440×900 light: the page's own capture paints every embed (“One list, on the phone and on the desk while it runs” 50.6% its commonest colour, “Lanes, on the phone and on the desk while it runs” 50.5% its commonest colour, “Crew first, on the phone and on the desk while it runs” 50.5% its commonest colour)",
+      "passed": true,
+      "output": "3 of 3 embeds painted"
+    },
+    {
+      "check": "1440×900 dark: every embed draws the stories its Preview names (“One list, on the phone and on the desk while it runs” Phone drawn + Live drawn; “Lanes, on the phone and on the desk while it runs” Phone drawn + Live drawn; “Crew first, on the phone and on the desk while it runs” Phone drawn + Live drawn)",
+      "passed": true,
+      "output": "3 of 3 embeds, each its named stories drawn"
+    },
+    {
+      "check": "1440×900 dark: no console errors, the page and its canvases",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "1440×900 dark: nothing scrolls the page sideways (1440 wide in 1440)",
+      "passed": true,
+      "output": "1440px of content in a 1440px view"
+    },
+    {
+      "check": "1440×900 dark: the page's own capture paints every embed (“One list, on the phone and on the desk while it runs” 52.8% its commonest colour, “Lanes, on the phone and on the desk while it runs” 52.8% its commonest colour, “Crew first, on the phone and on the desk while it runs” 52.7% its commonest colour)",
+      "passed": true,
+      "output": "3 of 3 embeds painted"
+    },
+    {
+      "check": "390×844 light: every embed draws the stories its Preview names (“One list, on the phone and on the desk while it runs” Phone drawn + Live drawn; “Lanes, on the phone and on the desk while it runs” Phone drawn + Live drawn; “Crew first, on the phone and on the desk while it runs” Phone drawn + Live drawn)",
+      "passed": true,
+      "output": "3 of 3 embeds, each its named stories drawn"
+    },
+    {
+      "check": "390×844 light: no console errors, the page and its canvases",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "390×844 light: nothing scrolls the page sideways (390 wide in 390)",
+      "passed": true,
+      "output": "390px of content in a 390px view"
+    },
+    {
+      "check": "390×844 light: the page's own capture paints every embed (“One list, on the phone and on the desk while it runs” 82.2% its commonest colour, “Lanes, on the phone and on the desk while it runs” 82.3% its commonest colour, “Crew first, on the phone and on the desk while it runs” 82.9% its commonest colour)",
+      "passed": true,
+      "output": "3 of 3 embeds painted"
+    },
+    {
+      "check": "390×844 dark: every embed draws the stories its Preview names (“One list, on the phone and on the desk while it runs” Phone drawn + Live drawn; “Lanes, on the phone and on the desk while it runs” Phone drawn + Live drawn; “Crew first, on the phone and on the desk while it runs” Phone drawn + Live drawn)",
+      "passed": true,
+      "output": "3 of 3 embeds, each its named stories drawn"
+    },
+    {
+      "check": "390×844 dark: no console errors, the page and its canvases",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "390×844 dark: nothing scrolls the page sideways (390 wide in 390)",
+      "passed": true,
+      "output": "390px of content in a 390px view"
+    },
+    {
+      "check": "390×844 dark: the page's own capture paints every embed (“One list, on the phone and on the desk while it runs” 81.8% its commonest colour, “Lanes, on the phone and on the desk while it runs” 81.7% its commonest colour, “Crew first, on the phone and on the desk while it runs” 82.4% its commonest colour)",
+      "passed": true,
+      "output": "3 of 3 embeds painted"
+    }
+  ]
+}
