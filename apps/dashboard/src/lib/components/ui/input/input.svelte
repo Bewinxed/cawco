@@ -103,9 +103,13 @@
   ];
   /**
    * A field with suggestions (a `list`, its datalist) shows the house's
-   * sort-vertical glyph where the engine draws its own dropdown arrow, as
-   * a select does (DESIGN.md, Inputs and fields, Select trigger); the
-   * engine's arrow stays under it, unseen, and still opens the list.
+   * sort-vertical glyph at its end, as a select does (DESIGN.md, Inputs and
+   * fields, Select trigger), never an engine's own arrow: Blink's
+   * `::-webkit-calendar-picker-indicator` and WebKit's `::-webkit-list-button`
+   * (WebCore html.css) are left unpainted where they stand (Blink takes an
+   * author `opacity` there but not `display`), so a press on them still
+   * opens the list; Gecko draws none. The field keeps the glyph's room
+   * itself (`pe-space-8`), so typed text stops before it in every engine.
    */
   const suggests = $derived(!!restProps.list);
   /** Its classes: with an area, the caller's placement sizes the area and
@@ -115,7 +119,8 @@
       ? cn(
           own,
           looks.field(),
-          suggests && "[&::-webkit-calendar-picker-indicator]:opacity-0"
+          suggests &&
+            "pe-space-8 [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-list-button]:opacity-0"
         )
       : cn(own, looks.box(), looks.field(), className)
   );
