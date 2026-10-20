@@ -2743,17 +2743,32 @@ export const hashHookMaterial = (hook: {
 const make = async (path: string): Promise<DbShape> => {
   mkdirSync(dirname(path), { recursive: true });
   const db = drizzle(path);
-  // busy_timeout: another process's connection to this file (the CLI's
-  // `cawco pairing off`, a probe's writes, the sqlite3 shell) holds the write
-  // lock for a statement's length. With none, the hub's write failed at once
-  // with "database is locked" (measured in WAL, the mode the workflow
-  // engine's connection sets on this file: 0 ms against a writer in another
-  // process; 330 ms and done with this), and a launch's grant that failed so
-  // left its machine waiting out its 90 s with no answer (workspace-retire,
-  // G, 2026-10-16). 5 s, as the workflow engine's own connection waits
-  // (@effect/sql-sqlite-bun's default) and the transcript index does
-  // (jsonl-parser fts5.ts).
+  // EVERY WRITE WAITS ITS TURN. Another connection to this file (the
+  // workflow engine's, delegate-types.ts's, the CLI's `cawco pairing off`, a
+  // probe's writes, the sqlite3 shell) holds the write lock for a
+  // statement's or a transaction's length, and the hub's write waits it out
+  // rather than failing with "database is locked".
+  // busy_timeout: a write that opens the file's lock waits up to 5 s for it
+  // (0 ms and failed with none, 330 ms and done with it, against a writer in
+  // another process: workspace-retire, G, 2026-10-16). 5 s, as the workflow
+  // engine's own connection waits (@effect/sql-sqlite-bun's default).
   db.$client.run("PRAGMA busy_timeout = 5000");
+  // BEGIN IMMEDIATE: that wait is only for a lock asked for with no read
+  // open. drizzle's bun-sqlite `transaction` is DEFERRED unless told
+  // otherwise (`nativeTx[config.behavior ?? "deferred"]()`), so one that
+  // read first then wrote asked to upgrade its read, and SQLite fails that
+  // at once with SQLITE_BUSY whenever another connection holds the write
+  // lock, never calling the busy handler ("If some other database connection
+  // has already modified the database or is already in the process of
+  // modifying the database, then upgrading to a write transaction is not
+  // possible and the write statement will fail with SQLITE_BUSY",
+  // sqlite.org/lang_transaction.html). A launch's grant (session-identity's
+  // stage: a SELECT, then an upsert) was refused so while a probe wrote a
+  // preview's row (workspace-retire f and p, 2026-10-20). Every transaction
+  // on this connection takes the write lock as it begins, so it waits as a
+  // single write does; a nested one is a savepoint inside it.
+  const deferredTransaction = db.transaction.bind(db);
+  db.transaction = (run) => deferredTransaction(run, { behavior: "immediate" });
   const {
     endRetryAt: _endRetryAt,
     endAttempts: _endAttempts,

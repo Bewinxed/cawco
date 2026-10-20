@@ -7484,11 +7484,29 @@ export const createWorkItems = ({
         return open;
       }
       const { row, item } = open;
+      clearWait(item);
+      if (!request.blocked) {
+        // The task's to-dos first: unticked ones are listed once, to tick or
+        // explain; the next call goes on.
+        const unticked = await untickedText(item);
+        if (unticked) {
+          return unticked;
+        }
+        // Design work in a project with a design system: a verifier session
+        // judges the working tree as it stands, committed or not
+        // (design-verify.ts), and its pass runs this again. Holding ends
+        // nothing, so it comes before the leftovers below.
+        const held = await designHold(item, request);
+        if (held) {
+          return held;
+        }
+      }
+      // The item ends past here, blocked or landed: nothing outside its
+      // commits may be left in its clone.
       const left = await leftoversIn(item);
       if (left) {
         return left;
       }
-      clearWait(item);
 
       if (request.blocked) {
         await lastTurn(item);
@@ -7511,18 +7529,6 @@ export const createWorkItems = ({
           : "Your earlier work stays landed, and the item is done with this block noted: its task goes to review with it, and your parent has the command and the error. End your turn.";
       }
 
-      // The task's to-dos first: unticked ones are listed once, to tick or
-      // explain; the next call runs the landing gate.
-      const unticked = await untickedText(item);
-      if (unticked) {
-        return unticked;
-      }
-      // Design work in a project with a design system: a verifier session
-      // judges it first (design-verify.ts), and its pass runs this again.
-      const held = await designHold(item, request);
-      if (held) {
-        return held;
-      }
       await lastTurn(item);
       update(item.id, { submission: request, landingSince: new Date() });
       return (await settleLanding(item, request)).text;

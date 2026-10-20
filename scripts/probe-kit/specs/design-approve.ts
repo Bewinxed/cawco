@@ -1,10 +1,11 @@
 /**
  * A design task's review and its Approve (design-system plan §2, slice 3;
  * owner, 2026-10-16: "the agent who puts the task should be the one who
- * decides what happens to it after i approve it"). One path: the builder's
- * commits land as any work item's do, Approve is your move out of the
- * review stage, and it is refused, with its line, while the result's
- * design/ is not committed. On a scratch fleet (real hub, agent and
+ * decides what happens to it after i approve it"). One path: design_write
+ * writes design/ into the builder's clone and the builder commits it with
+ * its work (the design-system skill's hand-in), its commits land as any work
+ * item's do, and Approve is your move out of the review stage, reading
+ * design/ in the builder's workspace. On a scratch fleet (real hub, agent and
  * sessiond; Claude Code against the mock model) and the built dashboard at
  * the desk. Its attempts cut workspaces, so it runs where a boundary can
  * start (a `host` check), not inside another one.
@@ -16,9 +17,12 @@
  * mock model, writes design/ with `design_write`.
  *
  * 1. T1 (lands none): the builder writes design/, shows its Foundations
- *    page, hands it in and never commits; the task waits in review.
- *    Approve is refused (409) with the line naming design/ uncommitted in
- *    the builder's workspace, and the task stays in review.
+ *    page and hands it in. Its first finish_item, design/ uncommitted, is
+ *    refused naming design/ (work-items.ts `leftoversIn`: a clone may hold
+ *    nothing outside its commits when its item ends); it commits design/,
+ *    its second ends the item done, and the task waits in review with every
+ *    file design_write wrote committed in the builder's workspace, where
+ *    Approve reads design/ (design-system.ts `approvalRefusal`).
  * 2. Reject with a pin: a pin on T1's Foundations page, then Send back (a
  *    comment and the move back to ready, as the review does). The pin's
  *    words reach the builder's session as one message.
@@ -46,15 +50,21 @@
  *    proposal's why, and the builder is told.
  * 5. The builder hands in a home screen it has not committed: the task stays
  *    in working, a verifier session (its item's parent `verifier:<the
- *    builder's item>`) gets the uncommitted part as a patch in its inputs,
+ *    builder's item>`) gets the uncommitted part as a patch in its inputs
+ *    and runs its brief's set-up (the builder's commit, the patch applied),
  *    and its one finding reaches the builder as one message naming the
  *    element's file:line and selector.
  * 6. The builder fixes it and commits; the next hand-in is checked again,
  *    passes, lands, and the task waits in review, its two rounds a finding
  *    and a pass.
+ * 7. With the builder landed, each verifier's item ended done at its
+ *    verdict and its workspace retired, row archived and clone gone: its
+ *    verdict put its clone back as it was cut (hub design-verify.ts
+ *    `RESTORE`), so neither the patch nor the builder's commits held it.
  *
  *   bun scripts/probe-kit/run.ts design-approve
  */
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Frame } from "playwright-core";
@@ -85,6 +95,17 @@ const T1 = "Harbour system draft PROBE-T1";
 const T2 = "Harbour system PROBE-T2";
 const T3 = "Harbour home screen PROBE-T3";
 const COMMIT = "Design system: Harbour";
+/** T1's commit of its draft, after its first finish_item is refused. */
+const DRAFT = "Design system draft: Harbour";
+/** What design/ holds that no commit has, as Approve reads it (design-system.ts `UNCOMMITTED`). */
+const DESIGN_STATUS = [
+  "git",
+  "status",
+  "--porcelain",
+  "--untracked-files=all",
+  "--",
+  "design",
+];
 /** The two proposals' reasons: the first is denied, the second approved. */
 const WHY_DENIED = "A near-black ink, PROBE-DENIED";
 const WHY_APPROVED = "A softer ink for long reading, PROBE-APPROVED";
@@ -225,11 +246,27 @@ const attempts = new Map<string, Call[]>([
           ],
         }),
       },
+      // Refused while design/ is in no commit: the builder commits it and
+      // hands in again, as the refusal tells it to.
       {
         name: FINISH,
         input: {
           headline: "Drafted the system.",
           summary: "Drafted the system.",
+        },
+      },
+      {
+        name: BASH,
+        input: {
+          command: `git add design && git commit -qm '${DRAFT}'; echo "commit exit $?"; git status --porcelain`,
+          description: "Commit design/",
+        },
+      },
+      {
+        name: FINISH,
+        input: {
+          headline: "Drafted the system.",
+          summary: "Drafted the system, committed.",
         },
       },
     ],
@@ -433,16 +470,20 @@ const t3PhaseOf = (last: string): typeof t3Phase => {
   return "idle";
 };
 
-/** Each verifier round's calls, in order; a verifier session takes the next round when it first asks. */
-const verifierRounds: Call[][] = [
-  [
-    {
-      name: BASH,
-      input: {
-        command: `test -s "$TMPDIR/inputs/design-check.patch" && echo PATCH-HANDED || echo PATCH-MISSING`,
-        description: "Look for the builder's uncommitted work",
-      },
-    },
+/** The set-up a verifier's brief says to run first (hub design-verify.ts `briefOf`): the builder's commit, and its patch when it has one. */
+const SET_UP = /run `(git checkout --detach [0-9a-f]{40}[^`]*)` first/;
+/** The verifier's first call: its brief's set-up as written, then what its clone holds. */
+const setUpCall = (setUp: string): Call => ({
+  name: BASH,
+  input: {
+    command: `${setUp} && { test -s "$TMPDIR/inputs/design-check.patch" && echo PATCH-HANDED || echo PATCH-NONE; } && git status --porcelain`,
+    description: "Set up the builder's work as the brief says",
+  },
+});
+/** Each verifier round's calls, in order, from its brief's set-up; a verifier session takes the next round when it first asks. */
+const verifierRounds: ((setUp: string) => Call[])[] = [
+  (setUp) => [
+    setUpCall(setUp),
     {
       name: VERDICT,
       input: {
@@ -451,7 +492,8 @@ const verifierRounds: Call[][] = [
       },
     },
   ],
-  [
+  (setUp) => [
+    setUpCall(setUp),
     {
       name: VERDICT,
       input: { findings: [], summary: "The home screen draws in the system." },
@@ -544,7 +586,9 @@ const next = (request: Seen, key: string | undefined): Reply => {
 const verifierNext = (request: Seen): Reply => {
   const key = `VERIFIER:${VERIFIER_AT.exec(request.all)?.[1] ?? "?"}`;
   if (!attempts.has(key)) {
-    attempts.set(key, verifierRounds.shift() ?? []);
+    const round = verifierRounds.shift();
+    const setUp = SET_UP.exec(request.all)?.[1] ?? "echo NO-SET-UP-IN-BRIEF";
+    attempts.set(key, round ? round(setUp) : []);
     verifierKeys.push(key);
   }
   return next(request, key);
@@ -575,10 +619,6 @@ const respond = (request: Seen): Reply => {
   }
   return next(request, [...request.all.matchAll(TURN)].at(-1)?.[0]);
 };
-
-/** The approval's refusal (hub design-system.ts `uncommittedLine`): its named paths, and how many more. */
-const UNCOMMITTED_LINE =
-  /design\/ isn't committed in the builder's workspace: (.+?)(?: and (\d+) more)?\. Send it back/;
 
 /** The paths a design_write answered it wrote, from among a turn's tool answers. */
 const writtenBy = (said: string[]): string[] => {
@@ -969,27 +1009,36 @@ const run = async (kit: Kit) => {
     );
   };
 
-  // ── 1. Approve with design/ uncommitted is refused with its line ─────
+  // ── 1. The draft ends done once design/ is committed where Approve reads it ─
   const t1 = await reviewed("T1", T1, "none");
-  const refused = await approve(t1);
-  const refusal = await refused.text();
   const stays = await read(t1);
+  const t1Said = answers.get(T1) ?? [];
+  const refusedFinish =
+    t1Said.find((one) => one.includes("Not finished:")) ?? "";
+  const [draft] = fleet.query<{ error: string | null; state: string }>(
+    "SELECT state, error FROM work_items WHERE project_id = ? AND task_id = ? ORDER BY created_at DESC",
+    project.id,
+    t1
+  );
+  const draftTree = workspaceOf(t1);
+  const git = async (args: string[]) =>
+    (await Bun.$`git ${args}`.cwd(draftTree).quiet().nothrow()).text().trim();
   // What the builder's design_write wrote (its answer's `written`): every
-  // path the line names is one of them, and its named paths and "N more"
-  // count all of them, as none was committed.
-  const written = writtenBy(answers.get(T1) ?? []);
-  const named = UNCOMMITTED_LINE.exec(refusal);
-  const paths = named?.[1]?.split(", ") ?? [];
-  const more = Number(named?.[2] ?? 0);
+  // path is in the builder's commit, and design/ holds nothing else.
+  const written = writtenBy(t1Said);
+  const committed = (await git(["ls-files", "--", "design"])).split("\n");
+  const uncommitted = await git(DESIGN_STATUS);
+  const draftCommit = await git(["log", "-1", "--format=%s", "--", "design"]);
   kit.check(
-    "1: Approve with design/ uncommitted is refused with its line, naming the builder's uncommitted files, and the task stays in review",
-    refused.status === 409 &&
+    "1: the draft's first finish_item, design/ uncommitted, is refused naming design/; it commits, its second ends the item done, and the task waits in review with every file design_write wrote committed in the builder's workspace, where Approve reads design/",
+    refusedFinish.includes("?? design/") &&
+      draft?.state === "done" &&
+      stays.stage === "review" &&
       written.length > 0 &&
-      paths.length > 0 &&
-      paths.every((path) => written.includes(path)) &&
-      paths.length + more === written.length &&
-      stays.stage === "review",
-    `${refused.status} “${refusal.slice(0, 300)}”; named ${paths.length} + ${more} more of ${written.length} written (${written.join(", ")}); stage ${stays.stage}`
+      written.every((path) => committed.includes(path)) &&
+      uncommitted === "" &&
+      draftCommit === DRAFT,
+    `refused “${refusedFinish.slice(0, 200)}”; item ${draft?.state} “${draft?.error?.slice(0, 120) ?? ""}”; stage ${stays.stage}; ${written.filter((path) => committed.includes(path)).length} of ${written.length} written committed (${written.join(", ")}); design/ uncommitted “${uncommitted}”; last design commit “${draftCommit}”`
   );
 
   // ── 2. Reject with a pin reaches the builder's session as one message ─
@@ -1222,7 +1271,7 @@ const run = async (kit: Kit) => {
   const midway = await read(t3);
   const handed = (answers.get(verifierKeys[0] ?? "") ?? []).join(" ");
   kit.check(
-    "5: the uncommitted hand-in stays in working, its verifier (parent verifier:<item>) gets it as a patch, and its tied finding reaches the builder as one message",
+    "5: the uncommitted hand-in stays in working, its verifier (parent verifier:<item>) gets it as a patch and applies it as its brief says, and its tied finding reaches the builder as one message",
     midway.stage === "working" &&
       roundOne.length === 1 &&
       verifiers.every((row) =>
@@ -1230,6 +1279,7 @@ const run = async (kit: Kit) => {
       ) &&
       verifiers.length === 1 &&
       handed.includes("PATCH-HANDED") &&
+      handed.includes("?? screens/") &&
       findingsSent().length === 1,
     `stage ${midway.stage}; rounds ${roundOne.map((row) => row.state).join(", ")}; verifier parents ${verifiers.map((row) => row.parent_instance_id.slice(0, 18)).join(", ")}; verifier saw “${handed.slice(0, 120)}”; ${findingsSent().length} findings message(s)`
   );
@@ -1248,6 +1298,47 @@ const run = async (kit: Kit) => {
     "6: the fixed hand-in is checked again, passes, lands, and its task waits in review",
     landed.stage === "review" && rounds.join(",") === "findings,passed",
     `stage ${landed.stage}; rounds ${rounds.join(", ")}`
+  );
+
+  // ── 7. Each verifier ends done, and its workspace retires holding nothing ─
+  // Its clone sat on the builder's commit with the patch applied; its
+  // verdict puts it back as it was cut (hub design-verify.ts `RESTORE`).
+  const verifierPlaces = () =>
+    fleet.query<{
+      item: string;
+      path: string;
+      state: string;
+      workspace: string;
+    }>(
+      "SELECT i.state AS item, w.id AS workspace, w.state AS state, w.path AS path FROM work_items i JOIN workspaces w ON w.id = i.workspace_id WHERE i.id IN (SELECT verifier_item_id FROM design_checks WHERE task_id = ?)",
+      t3
+    );
+  const gone = (row: { path: string; state: string }) =>
+    row.state === "archived" && !existsSync(row.path);
+  const retired = await until(
+    "T3's verifiers' workspaces retired",
+    verifierPlaces,
+    (rows) => rows.length === 2 && rows.every(gone),
+    240_000
+  ).catch(() => verifierPlaces());
+  const verdicts = verifierKeys.map((key) =>
+    (answers.get(key) ?? []).find((one) => one.includes('"recorded"'))
+  );
+  const workspaceLines = (await fleet.logs("hub"))
+    .split("\n")
+    .filter((line) =>
+      retired.some((row) => line.includes(row.workspace.slice(0, 8)))
+    )
+    .slice(-6);
+  kit.check(
+    "7: after the builder lands, each verifier's item ended done once its verdict was in, and its workspace retired (row archived, clone gone): none held",
+    retired.length === 2 &&
+      retired.every((row) => row.item === "done" && gone(row)) &&
+      verdicts.length === 2 &&
+      verdicts.every(
+        (one) => one !== undefined && !one.includes("Not finished")
+      ),
+    `${retired.map((row) => `${row.workspace.slice(0, 8)} item ${row.item}, workspace ${row.state}, clone ${existsSync(row.path) ? "still there" : "gone"}`).join("; ")}; verdicts ${verdicts.map((one) => `“${(one ?? "(none)").slice(0, 160)}”`).join(", ")}; hub ${workspaceLines.join(" | ")}`
   );
 };
 

@@ -150,8 +150,9 @@ export interface Frees {
 
 export interface DecideInput {
   /**
-   * When its prompt cache lapses on its own account (keep-alive.ts
-   * `promptCacheExpiresAt`): null when it is cold already or nothing says.
+   * When its prompt cache lapses on its own account, as measured (keep-alive.ts
+   * `promptCacheExpiresAt`: its last request plus the TTL its cache was
+   * written with): null when it is cold already or no lifetime was measured.
    */
   cacheExpiresAt: number | null;
   /** The last context size its harness reported; null when none has been. */
@@ -331,7 +332,7 @@ export interface AtLimitPorts {
   accountOf: (row: LimitRow) => string | undefined;
   /** The one ledger every move onto an account is charged against (admission.ts), shared with the wake path. */
   admission: Admission;
-  /** When `row`'s prompt cache lapses on its account; null when it is cold or nothing says (keep-alive.ts `promptCacheExpiresAt`). */
+  /** When `row`'s prompt cache lapses on its account, as measured; null when it is cold or no lifetime was measured (keep-alive.ts `promptCacheExpiresAt`). */
   cacheExpiresAt: (row: LimitRow) => number | null;
   /**
    * Carries out the move a person asked of `row` ({@link handMove}) now,
@@ -1158,7 +1159,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     );
     const expires = ports.cacheExpiresAt(row);
     const cold = ports.admission.check(row, current, false, now).projected;
-    return `waiting for ${from}'s reset${reset === null ? "" : ` at ${clockWords(reset)}`} would re-read it cold too (${usdWords(cold.reReadUsd)}), as its cache ${expires === null || expires <= now ? "is cold already" : `lapses at ${clockWords(expires)}, before that`}`;
+    return `waiting for ${from}'s reset${reset === null ? "" : ` at ${clockWords(reset)}`} would re-read it cold too (${usdWords(cold.reReadUsd)}), as its cache ${expires === null || expires <= now ? "is cold already, or no lifetime of it was measured" : `lapses at ${clockWords(expires)}, before that`}`;
   };
 
   /** Says why `row` waits for its own reset: it comes before its cache lapses, so waiting costs nothing. */

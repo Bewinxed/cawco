@@ -8,6 +8,11 @@
  * model) with two fake accounts in two organizations, A and B, each read
  * with room, every model request saying which account it ran on
  * (`Seen.auth`). Delegates are pinned to A, so B takes one only by a move.
+ * B's room is measured, as a signed-in account's is from its own history:
+ * its 5-hour window at 10%, priced at $2.56 a percent, so every move onto
+ * it is admitted against that room (hub admission.ts), never only alone.
+ * No delegate's cache is measured unless its leg says so: the mock reports
+ * none, so only the policy's wait and the admission decide where it goes.
  * Run it where a workspace boundary can start (not inside another one): an
  * orchestrator in a project (Caw off, so only this spec's sessions take
  * turns) delegates once per leg.
@@ -19,6 +24,12 @@
  * - move: only A is limited. Within {@link MOVE_WITHIN_MS} of A's refusal
  *   it runs on B, the request there carrying its earlier turns (its brief
  *   and its first answer), and its item runs on to done.
+ * - warm: as move, but its brief's answer wrote a 1-hour cache, so its
+ *   cache is measured to outlast A's reset 2 minutes on (hub at-limit.ts
+ *   `decideAtLimit`): waiting costs nothing and a move would re-read it
+ *   cold, so it waits on A though the policy waits for no reset and B has
+ *   room. Its chip says it continues at A's reset and names no move; at
+ *   that reset it carries on on A, never on B, and its item runs to done.
  * - full: A and B are both limited until the same reset. Its tray chip and
  *   the orchestrator's `delegate_list` say it is stopped and continues at
  *   that reset; a person's message sent meanwhile reaches no model before
@@ -76,6 +87,8 @@ const TOKEN: Record<string, string> = {
 /** How long the limited accounts refuse a leg's delegate from its first answer. */
 const LIMIT_MS: Record<Leg, number> = {
   move: 90_000,
+  // Well inside its measured cache's hour: the reset comes first.
+  warm: 120_000,
   full: 75_000,
   continued: 150_000,
   // Well inside the restart bound (30 minutes): the reset comes first.
@@ -94,7 +107,7 @@ const FINISH = "mcp__cawco__finish_item";
 const CONTINUE = "mcp__cawco__continue_session";
 const HANDOFF = "mcp__cawco__handoff";
 
-const LEGS = ["move", "full", "continued", "reset", "carry"] as const;
+const LEGS = ["move", "warm", "full", "continued", "reset", "carry"] as const;
 type Leg = (typeof LEGS)[number];
 
 /** What each leg's delegate has done, as the mock saw it. */
@@ -122,6 +135,7 @@ const played = Object.fromEntries(
 /** Which accounts each leg's delegate is refused on while limited. */
 const LIMITED: Record<Leg, string[]> = {
   move: [ACCOUNT],
+  warm: [ACCOUNT],
   full: [ACCOUNT, B],
   continued: [ACCOUNT],
   reset: [ACCOUNT],
@@ -170,6 +184,12 @@ const NOTE = "PROBE-NOTE-while-stopped";
 const COMMAND_S: Partial<Record<Leg, number>> = { carry: 150, reset: 300 };
 /** What the carry leg's background command says as it ends. */
 const COMMAND_DONE = "PROBE-CARRY-command-done";
+/** The warm leg's brief answer's cache: written for an hour (the mock's `cache` is 1h). */
+const WARM_CACHE = { read: 0, write: 30_000 };
+const HOUR = 3_600_000;
+/** B's 5-hour window as read, and the dollars a percent of it costs, from its seeded history. */
+const B_USED_PCT = 10;
+const B_USD_PER_PCT = 2.56;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({
@@ -245,7 +265,10 @@ const child = (request: Seen, leg: Leg): Reply => {
   if (!state.worked) {
     state.worked = true;
     state.limitedUntil = Date.now() + LIMIT_MS[leg];
-    return text(`Working on it. ${memoryOf(leg)}`);
+    const answer = text(`Working on it. ${memoryOf(leg)}`);
+    // The warm leg's answer writes its cache for an hour, as Claude Code's
+    // requests on a subscription do: the hub measures its lifetime from it.
+    return leg === "warm" ? { ...answer, cache: WARM_CACHE } : answer;
   }
   if (state.finished) {
     return text("ok");
@@ -371,6 +394,43 @@ const furnishB = async (home: string) => {
   );
 };
 
+/**
+ * B's room measured as the hub measures a signed-in account's (forecast.ts
+ * `usdPerPercent`): its 5-hour window read at {@link B_USED_PCT}%, and its
+ * history moving 0% → 10% across $25.60 of its turns, so a percent of it
+ * costs {@link B_USD_PER_PCT}. Each move onto B is then charged its re-read
+ * and next-turn allowance, about 0.2% of the window, under the 50% ceiling
+ * (admission.ts), where an unmeasured B would take one move at a time.
+ */
+const measureB = (fleet: KitFleet): void => {
+  const now = Date.now();
+  const resetsAt = new Date(now + 4 * HOUR).toISOString();
+  fleet.write(
+    "INSERT OR REPLACE INTO account_windows (account_id, kind, scope_label, \"group\", is_active, percent, severity, resets_at) VALUES (?, 'session', '', 'session', 1, ?, 'normal', ?)",
+    B,
+    B_USED_PCT,
+    resetsAt
+  );
+  for (const [percent, at] of [
+    [0, now - 2 * HOUR],
+    [B_USED_PCT, now - HOUR],
+  ] as const) {
+    fleet.write(
+      "INSERT INTO usage_limit_history (account_id, kind, scope_label, percent, severity, resets_at, fetched_at) VALUES (?, 'session', NULL, ?, 'normal', ?, ?)",
+      B,
+      percent,
+      resetsAt,
+      at
+    );
+  }
+  fleet.write(
+    "INSERT INTO turn_usage (instance_id, result_id, model, account_id, input_tokens, cache_read_tokens, cache_write_tokens, cache_write_1h_tokens, output_tokens, cost_usd, keep_alive, at) VALUES ('b-history', 'b-history', 'claude-probe', ?, 0, 0, 0, 0, 0, ?, 0, ?)",
+    B,
+    B_USED_PCT * B_USD_PER_PCT,
+    now - 1.5 * HOUR
+  );
+};
+
 /** The fleet stood up: A and B signed in and read with room, a repository to delegate in, in its project. */
 const standUp = async (kit: Kit): Promise<KitFleet> => {
   const fleet = await kit.fleet(respond);
@@ -404,6 +464,7 @@ const standUp = async (kit: Kit): Promise<KitFleet> => {
       Date.now()
     );
   }
+  measureB(fleet);
   const home = fleet.env.HOME as string;
   await writeFile(
     join(home, ".gitconfig"),
@@ -552,6 +613,81 @@ const moveLeg = async (
   ).catch(() => look.itemState(instance));
   kit.check(
     "move: its item runs on, to done",
+    state === "done",
+    `state ${state}`
+  );
+};
+
+/**
+ * A delegate whose cache was measured written for an hour, A refusing it
+ * with its reset 2 minutes on and B measured with room: the reset comes
+ * before its cache lapses, so it waits on A (at-limit.ts `decideAtLimit`,
+ * "soon") though the policy waits for no reset. Its chip says it continues
+ * at that reset and names no move; past it, it carries on on A, never on B.
+ */
+const warmLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  look: Looks,
+  instance: string
+): Promise<void> => {
+  const reset = played.warm.limitedUntil;
+  const refusedAt = played.warm.refused[0] as number;
+  const chip = await until(
+    "warm: its chip says it continues at A's reset",
+    () => look.chip(instance),
+    (one) => !!one?.stalled?.includes("continues at"),
+    60_000
+  ).catch(() => look.chip(instance));
+  const [hold] = fleet.query<{ carry: string | null; until: number | null }>(
+    "SELECT carry, until FROM limit_holds WHERE instance_id = ?",
+    instance
+  );
+  const [cache] = fleet.query<{
+    cache_ttl: string | null;
+    last_request_at: number | null;
+  }>("SELECT cache_ttl, last_request_at FROM instances WHERE id = ?", instance);
+  const holdUntil = hold?.until ?? Number.NaN;
+  const lapses =
+    cache?.cache_ttl === "1h" && cache.last_request_at !== null
+      ? cache.last_request_at + HOUR
+      : Number.NaN;
+  kit.check(
+    "warm: its cache measured to outlast A's reset, it waits on A for that reset though B has room, and its chip says it continues then and names no move",
+    lapses > reset &&
+      Date.now() < reset &&
+      Math.abs(holdUntil - reset) <= 2000 &&
+      !hold?.carry &&
+      !!chip?.stalled?.startsWith("Stopped at Probe’s limit") &&
+      chip.stalled.includes(`continues at ${clockOf(reset)}`) &&
+      !chip.stalled.includes("moves to"),
+    `stalled ${JSON.stringify(chip?.stalled ?? null)}; hold ${JSON.stringify(hold ?? null)}; cache ${JSON.stringify(cache ?? null)}, lapses ${Number.isNaN(lapses) ? "unmeasured" : `${lapses - reset} ms after the reset`}; A resets at ${clockOf(reset)}, ${reset - Date.now()} ms on`
+  );
+  const onA = await until(
+    "warm: it carries on on A past its reset",
+    () =>
+      look
+        .childSeen("warm", reset)
+        .find((one) => onAccount(one, ACCOUNT) && !one.afterTool),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  const onB = look
+    .childSeen("warm", refusedAt)
+    .filter((one) => onAccount(one, B));
+  kit.check(
+    "warm: at A's reset it carries on on A, never on B",
+    !!onA && onB.length === 0,
+    `${onA ? `first request on A ${onA.at - reset} ms after its reset` : "nothing on A after its reset"}; ${onB.length} request(s) on B; account ${look.accountOf(instance)}`
+  );
+  const state = await until(
+    "warm: its item done",
+    () => look.itemState(instance) ?? undefined,
+    (one) => one === "done",
+    180_000
+  ).catch(() => look.itemState(instance));
+  kit.check(
+    "warm: its item runs on, to done",
     state === "done",
     `state ${state}`
   );
@@ -908,6 +1044,11 @@ const run = async (kit: Kit) => {
   // A free again before the next delegate is placed: pinned to A, it would
   // otherwise start on B.
   await Bun.sleep(Math.max(0, played.move.limitedUntil + 5000 - Date.now()));
+  const warm = await delegated(kit, fleet, orch, "warm");
+  if (warm) {
+    await warmLeg(kit, fleet, look, warm);
+  }
+  await Bun.sleep(Math.max(0, played.warm.limitedUntil + 5000 - Date.now()));
   const full = await delegated(kit, fleet, orch, "full");
   if (full) {
     await fullLeg(kit, fleet, orch, look, full);

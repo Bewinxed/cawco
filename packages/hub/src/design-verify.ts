@@ -35,7 +35,13 @@
  *   No findings is a pass: the hub runs the builder's held `finish_item`
  *   itself, so its landing gate runs, it lands, and its task goes on to review. The
  *   verdict also names the variant that holds to the system best, when the
- *   result offers several. It finishes the verifier's item.
+ *   result offers several. It finishes the verifier's item, its clone put
+ *   back first as it was cut ({@link RESTORE}): its stage serves that clone
+ *   alone (agent stage.ts `treeOf`), so the builder's tree is judged there,
+ *   and a clone left on the builder's commit with its patch applied held the
+ *   verifier's workspace for good once its item ended (work-items.ts
+ *   `leftoversIn`; agent workspace.ts `holding`, whose `origin` refs no
+ *   landing of the builder's ever moves in this clone).
  * - **Ends.** A verifier that ends with no verdict fails its round, and the
  *   builder is told; its next `finish_item` starts another. A builder that
  *   ends while checked stops its verifier. A hub that restarts keeps every
@@ -107,6 +113,24 @@ const SNAPSHOT = [
   `out=""; if [ "$tree" != "$(git rev-parse 'HEAD^{tree}')" ]; then out="$(mktemp -d)/${PATCH}"; git diff --cached --binary HEAD > "$out"; fi`,
   'printf \'%s\\n%s\\n%s\\n\' "$head" "$tree" "$out"',
 ].join("\n");
+
+/**
+ * A verifier's clone put back as it was cut, undoing what its brief's set-up
+ * did and nothing else, inside its boundary: only while HEAD is the judged
+ * commit `head`, the builder's uncommitted part reversed when it is still
+ * applied as handed, then the workspace's own `branch` (cut at its base on
+ * origin) checked out again. A commit or a file of the verifier's own is
+ * left where it is: its workspace holds it, and `finish_item` names it.
+ */
+const RESTORE = (head: string, branch: string): string =>
+  [
+    SAFE_GIT_SHELL,
+    "set -e",
+    `[ "$(git rev-parse HEAD)" = ${quote(head)} ] || exit 0`,
+    `p="$TMPDIR/inputs/${PATCH}"`,
+    'if [ -f "$p" ] && git apply -R --check --binary "$p" 2>/dev/null; then git apply -R --binary "$p"; fi',
+    `git checkout --quiet ${quote(branch)}`,
+  ].join("\n");
 
 /** An artifact a chat asks a round of: what it is, and the workspace its stage runs in. */
 export interface AskedArtifact {
@@ -300,7 +324,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       `## The work\n\nThe builder's work sits on commit ${at.head}, on top of origin/${base}; its objects are in your clone. ${setUp}\n\nThe task:\n\n${task.description.trim() || "(no description)"}\n\nThe builder's hand-in:\n\n${result?.summary.trim() || "(none)"}\n\nWhat it shows:\n\n${artifactsOf(result?.artifacts ?? [], deps.artifact)}`,
       "## The system\n\ndesign/ as the work has it: DESIGN.md (the rules and recipes), tokens.resolver.json and its token files, the generated tokens.css, specimens/, SKILL.md. Load the design-system skill with the Skill tool: its references/css.md holds the CSS practices the work must follow.",
       "## How\n\nRender what the work changed in your own workspace: a component or screen with artifact_create kind component on your stage, read with artifact_read (what was drawn, a state's computed-style delta with state, the moves' animations; render: true draws it in the machine's browser when no panel has); a page with artifact_create kind page. Read the computed styles of the elements it touched, and judge them as a designer against DESIGN.md, the tokens and the CSS practices: a value that is no token, a role used for the wrong job, a rule DESIGN.md states broken, a practice css.md asks for not followed. Nothing that would not block the work: no nits, no suggestions.",
-      "## Your answer\n\nCall design_verdict once. Each finding is a must-fix tied to one element: its file and line, its CSS selector, what is wrong and what the system says instead. No findings is a pass. When the result offers variants, name the one that holds to the system best in `pick`, and why. design_verdict finishes your item: then end your turn.",
+      "## Your answer\n\nCall design_verdict once. Each finding is a must-fix tied to one element: its file and line, its CSS selector, what is wrong and what the system says instead. No findings is a pass. When the result offers variants, name the one that holds to the system best in `pick`, and why. design_verdict puts your clone back as it was cut (the uncommitted part reversed, your own branch checked out again) and finishes your item: then end your turn.",
     ].join("\n\n");
   };
 
@@ -318,7 +342,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       `## The work\n\nIt sits on commit ${at.head}, on top of origin/${base}; its objects are in your clone. ${setUp} Its states files: ${artifact.files.map((file) => `\`${file}\``).join(", ") || "(none named)"}.`,
       "## The system\n\ndesign/ as the work has it: DESIGN.md (the rules and recipes), tokens.resolver.json and its token files, the generated tokens.css, specimens/, SKILL.md. Load the design-system skill with the Skill tool: its references/css.md holds the CSS practices the work must follow.",
       "## How\n\nOpen its states files with artifact_create kind component on your own stage, then read what was drawn with artifact_read: each frame, each forced state's computed-style delta with state, the moves' animations; render: true draws it in the machine's browser. Judge it as a designer against DESIGN.md, the tokens and the CSS practices: a value that is no token, a role used for the wrong job, a rule DESIGN.md states broken, a practice css.md asks for not followed. Nothing that would not block the work: no nits, no suggestions.",
-      "## Your answer\n\nCall design_verdict once. Each finding is a must-fix tied to one element: its file and line, its CSS selector, what is wrong and what the system says instead. No findings is a pass. design_verdict finishes your item: then end your turn.",
+      "## Your answer\n\nCall design_verdict once. Each finding is a must-fix tied to one element: its file and line, its CSS selector, what is wrong and what the system says instead. No findings is a pass. design_verdict puts your clone back as it was cut (the uncommitted part reversed, your own branch checked out again) and finishes your item: then end your turn.",
     ].join("\n\n");
   };
 
@@ -544,6 +568,29 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     return check;
   };
 
+  /**
+   * The verifier's clone put back as it was cut ({@link RESTORE}) before its
+   * item ends. One that could not be is left as it is: its finish_item names
+   * what is left, and its workspace holds it.
+   */
+  const restore = async (
+    actor: InstanceRow,
+    check: DesignCheckRow
+  ): Promise<void> => {
+    const mine = actor.workItemId ? db.workItem(actor.workItemId) : undefined;
+    const [workspace] = mine ? db.workspacesNamed(mine.workspaceId) : [];
+    if (workspace?.state !== "active") {
+      return;
+    }
+    try {
+      await command(workspace, RESTORE(check.head, workspace.branch));
+    } catch (error) {
+      console.warn(
+        `[design-verify] ${short(check.itemId)}: verifier ${short(actor.id)}'s clone was not put back at ${workspace.branch}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+
   /** Must-fixes: said on the task, and to the builder as one message. */
   const findingsVerdict = async (
     check: DesignCheckRow,
@@ -683,6 +730,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       console.log(
         `[design-verify] ${check.taskId}: ${passed ? "passed" : `${verdict.findings.length} findings`}, tree ${check.tree.slice(0, 9)}`
       );
+      await restore(actor, check);
       const finished = await workItems.finishItem(actor.id, {
         headline: passed
           ? "Passed the design system check."
