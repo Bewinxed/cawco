@@ -24,10 +24,22 @@
      * sideways.
      */
     fold: {
-      /** In a ledger narrower than a wide page (1025px, `wide`). */
-      wide: "@max-wide/table:hidden",
-      /** In a ledger narrower than a desk (900px, `desk`). */
-      desk: "@max-desk/table:hidden",
+      /*
+       * The task ledger's lesser columns, in the order they fold: each shows
+       * only once the ledger holds it beside the title's floor
+       * (`c-ledger-title-min`) and the columns already standing; the widths
+       * are summed in build-tokens.ts CONTAINERS. Labels and Created are
+       * the ones its phone card leaves out, so they fold there too; Id and
+       * To-dos stand in the card, so they fold only from 640px.
+       */
+      /** The task ledger's Labels: from a 1102px ledger. */
+      "tasks-labels": "@max-table-1102px/table:hidden",
+      /** The task ledger's Created: from an 878px ledger. */
+      "tasks-created": "@max-table-878px/table:hidden",
+      /** The task ledger's To-dos: from a 766px ledger, and in the phone card. */
+      "tasks-todos": "phone:@max-table-766px/table:hidden",
+      /** The task ledger's Id: from a 670px ledger, and in the phone card. */
+      "tasks-id": "phone:@max-table-670px/table:hidden",
       /**
        * In a ledger narrower than the Routines block's measure
        * (`c-block-routines`, 34rem), whose row then says it in its own line.

@@ -5962,6 +5962,14 @@
       },
       "$description": "A matrix's wide column, its floor: a tool's name, its count and its Required switch over each machine's cell (Command-line tools), an update's state and its act (Updates)."
     },
+    "c-ledger-title-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 14,
+        "unit": "rem"
+      },
+      "$description": "A ledger title's least width, the column the ledger exists for: about 30 characters of the label role before it truncates. A ledger's lesser columns fold until the title keeps it (the task ledger's container widths in build-tokens.ts CONTAINERS are this plus its column widths)."
+    },
     "c-side-grip-w": {
       "$type": "dimension",
       "$value": {

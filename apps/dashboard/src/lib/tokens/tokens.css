@@ -1138,6 +1138,8 @@
     --c-ledger-usd-w: 6rem;
     /* A matrix's wide column, its floor: a tool's name, its count and its Required switch over each machine's cell (Command-line tools), an update's state and its act (Updates). */
     --c-matrix-col-w: 14rem;
+    /* A ledger title's least width, the column the ledger exists for: about 30 characters of the label role before it truncates. A ledger's lesser columns fold until the title keeps it (the task ledger's container widths in build-tokens.ts CONTAINERS are this plus its column widths). */
+    --c-ledger-title-min: 14rem;
     /* The side divider's hit width when the split is expanded. */
     --c-side-grip-w: 6px;
     /* A side surface's floor (SideSurface SIDE_FLOOR_PX). */

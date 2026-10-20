@@ -79,6 +79,19 @@
   });
   const labelled = $derived(tasks.some((task) => task.labels.length > 0));
   const planned = $derived(tasks.some((task) => task.todos.total > 0));
+  /**
+   * The lesser columns, folded in this order (Labels first) so the title
+   * keeps its floor at every ledger width; the rest always stand.
+   */
+  const FOLD: Record<
+    string,
+    "tasks-labels" | "tasks-created" | "tasks-todos" | "tasks-id"
+  > = {
+    labels: "tasks-labels",
+    created: "tasks-created",
+    todos: "tasks-todos",
+    id: "tasks-id",
+  };
   /** Each column's width, its head's and its cells' alike; the title takes the rest. */
   const COL_W: Record<string, string> = {
     pick: "calc(var(--icon-md) + 2 * var(--space-3))",
@@ -207,11 +220,10 @@
   }
 </script>
 
-<!-- From 640px a row ledger that fits its place: Labels folds under 1025px
-     and Created under 900px (the columns the phone card leaves out), so the
-     fixed columns never outgrow it. Under 640px each row is a card: the tick
-     down its start, the title across the card, then id, stage, to-dos and
-     age. -->
+<!-- From 640px a row ledger that fits its place with the title at its floor
+     (c-ledger-title-min): Labels, Created, To-dos, then Id fold as it
+     narrows (FOLD). Under 640px each row is a card: the tick down its start,
+     the title across the card, then id, stage, to-dos and age. -->
 <div
   data-slot="ledger"
   class="group/ledger overflow-hidden rounded-lg bg-surface-raised shadow-tile"
@@ -234,11 +246,7 @@
               aria-sort={sort}
               class="w-(--col-w)"
               data-task-table-col={column.id}
-              fold={column.id === "created"
-                ? "desk"
-                : column.id === "labels"
-                  ? "wide"
-                  : undefined}
+              fold={FOLD[column.id]}
               scope="col"
               variant="band"
               style="--col-w: {COL_W[column.id] ?? ''}"
@@ -314,11 +322,7 @@
                   "max-phone:col-start-4 group-data-pickable/ledger:max-phone:col-start-5",
               ]}
               data-task-table-col={cell.column.id}
-              fold={cell.column.id === "created"
-                ? "desk"
-                : cell.column.id === "labels"
-                  ? "wide"
-                  : undefined}
+              fold={FOLD[cell.column.id]}
               style="--col-w: {COL_W[cell.column.id] ?? ''}"
               variant="ledger-picks-stacks"
             >

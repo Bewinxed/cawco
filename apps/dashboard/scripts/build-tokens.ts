@@ -273,6 +273,19 @@ const CONTAINERS = {
   "table-34rem": "34rem",
   "task-frame": "56rem",
   "table-400px": "400px",
+  // The task ledger's folds: each width is the title's floor
+  // (c-ledger-title-min, 224px) plus the columns standing beside it, so no
+  // column shows until the title can give up its width and keep the floor.
+  // Always shown: the tick (icon-md + 2 × space-3, 38px), Stage
+  // (c-task-col-stage-w, 192px), Updated (c-task-col-time-w, 112px): 566px.
+  // Id (c-task-col-id-w, 104px) from 566 + 104:
+  "table-670px": "670px",
+  // To-dos (c-task-col-todos-w, 96px) from 670 + 96:
+  "table-766px": "766px",
+  // Created (c-task-col-time-w, 112px) from 766 + 112:
+  "table-878px": "878px",
+  // Labels (c-task-col-labels-w, 224px) from 878 + 224:
+  "table-1102px": "1102px",
   "stop-tray": "420px",
   kinds: "480px",
   "decisions-520px": "520px",
