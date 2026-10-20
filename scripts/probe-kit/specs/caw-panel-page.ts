@@ -18,8 +18,10 @@
  * 1b. Every phone frame's panel is the real HangCard, in the frame, its top
  *    on Caw's glass's foot, its trailing side the screen's edge, its
  *    leading side 12px in (DESIGN.md, Caw's panel).
+ * 1c. In a frame cropped to the panel's top, every run of words ends above
+ *    the fade at its cut. A miss counts as a spill.
  * 3. Nothing overlaps: no two runs of words in a frame cross, an ancestor
- *    and its own words aside.
+ *    and its own words aside; words a floating surface covers aren't drawn.
  *
  * The sweep's total is the count of spills and overlaps over every frame;
  * it prints per states file, then the first few of each with where.
@@ -241,6 +243,19 @@ const sweepPage = (file: string): Sweep => {
       }
       if (box.right > bodyBox.right + 1 || box.left < bodyBox.left - 1) {
         out.spills.push(`${where}: ${name(el)} runs past the frame's width`);
+      }
+    }
+    // 1c. A frame cropped to the panel's top (`peek`): every run of words
+    // ends above the fade at its cut, so no line stands cut or faded.
+    const cut = body.querySelector("[data-panel-cut]");
+    if (cut) {
+      const fade = cut.getBoundingClientRect().top;
+      for (const { el, box } of words) {
+        if (box.bottom > fade + 1) {
+          out.spills.push(
+            `${where}: ${name(el)} runs ${Math.round(box.bottom - fade)}px into the crop's fade`
+          );
+        }
       }
     }
     // A floating surface (the kit's popover recipe, a menu drawn open)

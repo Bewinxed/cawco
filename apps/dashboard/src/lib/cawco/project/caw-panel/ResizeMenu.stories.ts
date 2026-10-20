@@ -20,3 +20,9 @@ export const MenuOpen = {
   args: { menu: true, landed: false },
   parameters: { viewport: 404 },
 };
+
+/** Desk: after Wide panel, the panel 560 wide. */
+export const Wide = {
+  args: { landed: false, sized: { w: 560, h: 640 } },
+  parameters: { viewport: 584 },
+};

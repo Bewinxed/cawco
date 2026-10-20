@@ -13,7 +13,9 @@
    * `landed` off: his reply before its tasks land (their arrival is a move).
    * `long` draws each scene stretched: five tasks, 40-word lines, more
    * suggestions, the long reason and the long error. `peek`, `menu` and
-   * `lit` are Panel's: only its top, More open, a grip under the pointer.
+   * `lit` are Panel's: only its top (your question and his whole
+   * reply, the fade below his last line), More open, a grip under the pointer;
+   * `sized` the size it opens at.
    */
   import CawFace from "#lib/cawco/home/CawFace.svelte";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
@@ -65,6 +67,7 @@
     peek = false,
     menu = false,
     lit = false,
+    sized = null,
   }: {
     form: "desk" | "phone";
     scene: "thread" | "cant-read" | "cant-start" | "not-woken" | "empty";
@@ -82,6 +85,7 @@
     peek?: boolean;
     menu?: boolean;
     lit?: boolean;
+    sized?: { w: number; h: number } | null;
   } = $props();
 
   /** The thread on show in each scene; null for a new one. */
@@ -123,6 +127,7 @@
   {peek}
   {pose}
   {resize}
+  {sized}
   {thread}
 >
   {#if scene === "thread"}

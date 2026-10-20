@@ -20,3 +20,9 @@ export const Pointing = {
   args: { lit: true, landed: false },
   parameters: { viewport: 404 },
 };
+
+/** Desk: reopened at the size a drag left it, 480 wide. */
+export const Reopened = {
+  args: { landed: false, sized: { w: 480, h: 640 } },
+  parameters: { viewport: 504 },
+};

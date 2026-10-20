@@ -43,3 +43,9 @@ export const PhoneLong = {
   args: { form: "phone", scene: "cant-start", long: true, open: true },
   parameters: { viewport: "phone" },
 };
+
+/** Phone, a 360-wide screen: the thread couldn't be read, Show details open on the hub's own words. */
+export const PhoneDetails = {
+  args: { form: "phone", scene: "cant-read", open: true },
+  parameters: { viewport: 360 },
+};

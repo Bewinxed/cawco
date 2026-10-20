@@ -27,6 +27,8 @@
    *   frame, not a design length.
    * - `menu`: the head's More menu stands open, drawn in the frame.
    * - `lit`: a resize grip drawn as it is under the pointer.
+   * - `sized`: the size it opens at, as a drag or Wide panel left it (the
+   *   size is kept when it reopens).
    *
    * The phone's screen draws its own edge, so the panel's square trailing
    * side reads as standing on it.
@@ -58,6 +60,7 @@
     peek = false,
     menu = false,
     lit = false,
+    sized = null,
     children,
   }: {
     form: "desk" | "phone";
@@ -72,6 +75,8 @@
     peek?: boolean;
     menu?: boolean;
     lit?: boolean;
+    /** The size it opens at: one a drag or Wide panel gave it, kept when it reopens. */
+    sized?: { w: number; h: number } | null;
     children?: Snippet;
   } = $props();
 
@@ -81,7 +86,8 @@
   /** Caw's glass on the phone's bar: what the panel hangs from. */
   let glass = $state<HTMLElement | null>(null);
   /** The size a drag or Wide panel gave it; null at rest (the tokens). */
-  let size = $state<{ w: number; h: number } | null>(null);
+  // svelte-ignore state_referenced_locally
+  let size = $state<{ w: number; h: number } | null>(sized);
   const REST_W = 380;
   const WIDE_W = 560;
   const wide = $derived(
@@ -160,7 +166,7 @@
     <div
       class={[
         "@container relative inline-full overflow-hidden rounded-lg bg-(--surface-page) after:pointer-events-none after:absolute after:inset-0 after:z-50 after:rounded-lg after:border after:border-(--border-hairline)",
-        peek ? "block-[320px]" : "block-[844px]",
+        peek ? "block-[400px]" : "block-[844px]",
       ]}
       data-panel-form="phone"
     >
@@ -205,7 +211,7 @@
             avoidCollisions={false}
             class={[
               "flex w-[calc(100cqi-var(--c-bar-phone-edge))] flex-col gap-0 overflow-hidden rounded-ee-none p-0 after:border-e-0",
-              peek ? "block-[260px]" : "block-(--c-caw-panel-h)",
+              peek ? "block-[340px]" : "block-(--c-caw-panel-h)",
             ]}
             customAnchor={glass}
             data-panel
@@ -227,7 +233,7 @@
       {#if peek}
         <span
           aria-hidden="true"
-          class="pointer-events-none absolute inset-x-0 inset-be-0 z-60 block-2/5 bg-linear-to-b from-transparent to-(--surface-page)"
+          class="pointer-events-none absolute inset-x-0 inset-be-0 z-60 block-(--space-8) bg-linear-to-b from-transparent to-(--surface-page)"
           data-panel-cut
         ></span>
       {/if}
@@ -240,7 +246,7 @@
       <div
         class={[
           "relative flex inline-(--c-panel-w) max-inline-full shrink-0 flex-col rounded-lg bg-(--surface-raised) shadow-(--shadow-overlay)",
-          peek ? "block-[220px]" : "block-(--c-caw-panel-h)",
+          peek ? "block-[320px]" : "block-(--c-caw-panel-h)",
         ]}
         data-panel
         style:--c-panel-w={size ? `${size.w}px` : undefined}
@@ -267,7 +273,7 @@
       {#if peek}
         <span
           aria-hidden="true"
-          class="pointer-events-none absolute inset-x-0 inset-be-0 z-60 block-2/5 bg-linear-to-b from-transparent to-(--surface-page)"
+          class="pointer-events-none absolute inset-x-0 inset-be-0 z-60 block-(--space-8) bg-linear-to-b from-transparent to-(--surface-page)"
           data-panel-cut
         ></span>
       {/if}

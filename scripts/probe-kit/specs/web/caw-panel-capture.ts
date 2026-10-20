@@ -92,6 +92,13 @@ const DECISION =
 const OPTION =
   /^(\w+) = Option\("([^"]+)", "((?:[^"\\]|\\.)*)"[^\n]*?, (true|false), /;
 const PREVIEW = /^\w+ = Preview\("([0-9a-f-]+)"/;
+/**
+ * The resize card's sizes past the rest one (after Wide panel, 560; reopened
+ * at a dragged size, 480): wider than a phone's card can hold with legible
+ * words, so at 390 they scroll sideways in their frame; at 1440 they stand
+ * whole like every other frame.
+ */
+const WIDER_THAN_A_PHONE = new Set(["Wide", "Reopened"]);
 /** The most a capture tile may weigh: a picture a reader opens whole. */
 const MIB = 1024 * 1024;
 /** A frame's caption names its form after the option's label: "Cards · Desk". */
@@ -136,17 +143,19 @@ function cardsOf(program: string) {
 type Say = (assertion: string, ok: boolean, output: string) => void;
 
 /** Every frame stands whole in its card (none scrolls sideways), and each is its own Preview captioned Desk or Phone. */
-function frameChecks(embeds: Embed[], say: Say): void {
+function frameChecks(embeds: Embed[], say: Say, narrow: boolean): void {
   const wide = embeds.flatMap((e) =>
     e.frames
-      .filter((f) => f.wide)
+      .filter((f) => f.wide && !(narrow && WIDER_THAN_A_PHONE.has(f.story)))
       .map(
         (f) =>
           `“${e.caption}”: ${f.w}px drawn, scrolls ${f.scrolls}px at ${f.zoom}× (its words ${f.type}px)`
       )
   );
   say(
-    "every frame stands whole in its card: none scrolls sideways",
+    narrow
+      ? `every frame stands whole in its card, the desk sizes wider than a phone (${[...WIDER_THAN_A_PHONE].join(", ")}) aside: they scroll sideways, their captions saying their width`
+      : "every frame stands whole in its card: none scrolls sideways",
     wide.length === 0,
     wide.join(" | ") ||
       embeds
@@ -384,7 +393,7 @@ const spec: Spec = {
           );
           const say: Say = (assertion, ok, output) =>
             check(leg, assertion, ok, output);
-          frameChecks(embeds, say);
+          frameChecks(embeds, say, width < 1440);
           await suggestionRows(page, say);
           await page.evaluate(() => window.scrollTo(0, 0));
           const across = await page.evaluate(() => ({
@@ -434,7 +443,7 @@ const spec: Spec = {
       `${JSON.stringify(
         {
           page: "78a326ed-76cd-44b0-90c3-5e3261a17b56",
-          revision: 7,
+          revision: 9,
           program: "decisions/caw-panel/page.oui",
           shots,
           cards: cardsOf(PROGRAM),

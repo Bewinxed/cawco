@@ -316,6 +316,49 @@ function gridOf(args: { selector: string; grid: number }) {
         y < box.bottom + reach
     );
   /**
+   * Every drawn border's line, as a band in the page: its width at the box's
+   * zoom, and a pixel either side, where a hairline's antialiasing at a
+   * fractional zoom (an embed fitting a story to its card) mixes it with
+   * the paint beside it. A point there is not read: its border paints it,
+   * not the box's background, and the pixel beside it is a blend.
+   */
+  const SIDE_NAMES = ["top", "right", "bottom", "left"] as const;
+  const linesBy = [...body.querySelectorAll("*")].flatMap((el) => {
+    const style = getComputedStyle(el);
+    const widths = SIDE_NAMES.map((side) =>
+      style.getPropertyValue(`border-${side}-style`) === "none"
+        ? 0
+        : Number.parseFloat(style.getPropertyValue(`border-${side}-width`)) || 0
+    );
+    if (widths.every((width) => width === 0)) {
+      return [];
+    }
+    const box = el.getBoundingClientRect();
+    const zoom =
+      box.width / ((el as HTMLElement).offsetWidth || box.width || 1);
+    return [{ box, widths: widths.map((width) => width * zoom) }];
+  });
+  const lineAt = (x: number, y: number) =>
+    linesBy.some(({ box, widths: [atTop, atRight, atBottom, atLeft] }) => {
+      const across = x >= box.left - 1 && x <= box.right + 1;
+      const down = y >= box.top - 1 && y <= box.bottom + 1;
+      return (
+        (across && atTop > 0 && y >= box.top - 1 && y <= box.top + atTop + 1) ||
+        (across &&
+          atBottom > 0 &&
+          y >= box.bottom - atBottom - 1 &&
+          y <= box.bottom + 1) ||
+        (down &&
+          atLeft > 0 &&
+          x >= box.left - 1 &&
+          x <= box.left + atLeft + 1) ||
+        (down &&
+          atRight > 0 &&
+          x >= box.right - atRight - 1 &&
+          x <= box.right + 1)
+      );
+    });
+  /**
    * What the canvas's chrome paints (stage-host canvas chrome.ts: one shadow
    * host over the whole page, above everything, that hit-testing passes
    * where its parts don't take the pointer). A point under one is covered.
@@ -723,7 +766,10 @@ function gridOf(args: { selector: string; grid: number }) {
       points.push({
         page,
         rgb:
-          onText(hit) || boxAt(unhit, page.x, page.y) || castAt(page.x, page.y)
+          onText(hit) ||
+          boxAt(unhit, page.x, page.y) ||
+          castAt(page.x, page.y) ||
+          lineAt(page.x, page.y)
             ? null
             : paintedAt(hit, page.x, page.y),
         x,
