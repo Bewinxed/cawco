@@ -133,7 +133,7 @@
   </Button>
 {:else}
   <Button
-    class="justify-start"
+    align="row"
     onclick={() => {
       open = true;
     }}

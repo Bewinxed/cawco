@@ -69,11 +69,12 @@
         <Input
           data-num
           data-field
-          class="num h-c-btn-h-sm w-c-number-field-w flex-none text-center"
-          pad="tight"
+          class="flex-none"
+          field="number"
           id="{id}-wait"
           inputmode="numeric"
           min="0"
+          size="sm"
           oninput={(event) => {
             atLimit.waitMinutes = whole(event.currentTarget.value);
           }}
@@ -89,11 +90,12 @@
         <Input
           data-num
           data-field
-          class="num h-c-btn-h-sm w-c-number-field-w flex-none text-center"
-          pad="tight"
+          class="flex-none"
+          field="number"
           id="{id}-over"
           inputmode="numeric"
           min="0"
+          size="sm"
           oninput={(event) => {
             atLimit.moveWholeUnderK = whole(event.currentTarget.value);
           }}

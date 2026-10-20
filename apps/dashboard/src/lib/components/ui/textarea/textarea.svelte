@@ -15,6 +15,10 @@
         "pin-field": "group-data-sheet/pin:text-(length:--field-fs)",
       },
       height: { tall: "min-h-80" },
+      /** An editor's field the reader may also stretch by its corner (a
+          rule, a hook's command, a sample to test against), on top of
+          growing a line at a time. */
+      resize: { block: "resize-y" },
       fill: { page: "bg-surface-page" },
       look: {
         note: "max-h-c-textarea-max-h min-h-c-composer-field min-w-0 border-transparent bg-transparent px-0 py-space-2 leading-ui shadow-none placeholder-shown:truncate",
@@ -37,6 +41,7 @@
     face,
     text,
     height,
+    resize,
     fill,
     look,
     "data-slot": dataSlot = "textarea",
@@ -55,7 +60,7 @@
     "disabled:cursor-not-allowed disabled:opacity-50",
     "aria-invalid:border-error-9",
     "dark:aria-invalid:border-error-9/50",
-    textareaVariants({ face, text, height, fill, look }),
+    textareaVariants({ face, text, height, resize, fill, look }),
     className
   )}
   data-slot={dataSlot}

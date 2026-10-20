@@ -776,8 +776,11 @@
       >{text}</span
     >
     {#if place && place.of > 1}
-      <Kbd data-num class="peer/place num flex-none ms-auto" data-box
-        >{place.at} of {place.of}</Kbd
+      <Kbd
+        data-num
+        class="peer/place flex-none ms-auto"
+        data-box
+        figures="tabular">{place.at} of {place.of}</Kbd
       >
     {/if}
     {#if questions && onminimize}
@@ -991,7 +994,7 @@
         {#snippet face(digit: number, label: string, description?: string)}
           {#if list}
             <span class="mark-cell"
-              ><span class="kit-keycap">{digit}</span></span
+              ><Kbd data-box look="keycap">{digit}</Kbd></span
             ><span class="block min-w-0"
               ><span
                 data-slot="opt-label"
@@ -1003,7 +1006,7 @@
                 >{/if}</span
             >
           {:else}
-            <span class="kit-keycap">{digit}</span><span
+            <Kbd data-box look="keycap">{digit}</Kbd><span
               data-slot="opt-label"
               class="min-w-0 wrap-anywhere text-pretty">{label}</span
             >

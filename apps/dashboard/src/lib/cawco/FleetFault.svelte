@@ -444,8 +444,8 @@
         {:else if copy.action === "refresh"}
           <Button
             data-num
-            class="num"
             failed={actFailed}
+            figures="tabular"
             icon={IconRefresh}
             label={actionLabel}
             onclick={refresh}

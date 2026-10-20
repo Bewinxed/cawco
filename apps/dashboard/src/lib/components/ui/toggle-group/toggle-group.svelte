@@ -26,9 +26,12 @@
 <!--
 Discriminated Unions + Destructing (required for bindable) do not
 get along, so we shut typescript up by casting `value` to `never`.
+Its segments wrap whole onto the next line where its row is narrower than
+they are, rather than running off a narrow screen; the thumb follows the
+chosen segment wherever it stands.
 -->
 <ToggleGroupPrimitive.Root
-  class={cn("kit-segmented", className)}
+  class={cn("kit-segmented flex-wrap", className)}
   data-slot="toggle-group"
   bind:ref
   bind:value={value as never}

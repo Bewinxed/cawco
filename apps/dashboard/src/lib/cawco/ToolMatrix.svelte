@@ -107,7 +107,7 @@
 
   {#if shown === "installed"}
     <span class="flex items-center gap-space-1">
-      <Badge class="h-auto" size="cell" tone="success" variant="ghost">
+      <Badge size="cell" tone="success" variant="ghost">
         <IconCheck class="size-icon-md shrink-0" />
         <span data-slot="num" class="num font-mono"
           >{toolStatus?.version ?? "—"}</span
@@ -130,7 +130,7 @@
       </span>
     </span>
   {:else if shown === "installing"}
-    <Badge class="h-auto" size="cell" tone="muted" variant="ghost">
+    <Badge size="cell" tone="muted" variant="ghost">
       <Spinner class="shrink-0" />
       <span>Installing…</span>
     </Badge>
@@ -155,7 +155,6 @@
               aria-label="Why {spec.name} did not install on {machineLabel(
                 machine.hostname
               )}"
-              class="h-auto cursor-pointer"
               size="cell"
               variant="destructive"
             >
@@ -222,7 +221,6 @@
             aria-label="Why {spec.name} cannot run on {machineLabel(
               machine.hostname
             )}"
-            class="h-auto cursor-pointer"
             size="cell"
             tone="muted"
             variant="ghost"
@@ -244,7 +242,6 @@
           {#snippet child({ props })}
             <Badge
               {...props}
-              class="h-auto"
               size="cell"
               tone="subtle"
               variant="ghost"><span>Unknown</span></Badge

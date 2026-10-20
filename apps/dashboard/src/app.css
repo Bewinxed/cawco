@@ -451,9 +451,10 @@
      moving layer, and the browser, which cannot tell how far a moving layer
      reaches, put everything drawn after it on layers too: one hidden spinner
      in the rail took the rail's rows and the whole pane with it. The slot is
-     named as one (`.icon-swap`'s child, `.kit-slot`'s): `data-active="false"`
-     alone is also every rail row that is not the open one. */
-  :is(.icon-swap, .kit-slot) > [data-active="false"] * {
+     named as one (`.icon-swap`'s child, a button's icon slot among them):
+     `data-active="false"` alone is also every rail row that is not the open
+     one. */
+  .icon-swap > [data-active="false"] * {
     animation: none;
   }
 
@@ -557,8 +558,9 @@
      What the line holds: its words in elements, never bare text beside the
      mark, because a bare run is an anonymous box no property reaches. What
      is centred as a box is
-     left alone: an svg or img, the kit's cells (.rail-cell, .kit-keycap,
-     .kit-slot, .icon-swap), and anything else that says so with `data-box`: a mark's
+     left alone: an svg or img, the kit's cells (.rail-cell, .icon-swap, a
+     button's icon slot among them), and anything else that says so with
+     `data-box` (a keycap among them): a mark's
      own tile, a chevron's cell, a pill or badge that draws its own edge
      around its words. A run that truncates clips with `overflow: clip`,
      never `hidden` or `auto`: Gecko does not trim a scroll container, so
@@ -581,8 +583,6 @@
         svg,
         img,
         .rail-cell,
-        .kit-keycap,
-        .kit-slot,
         .icon-swap,
         .mark-cell,
         [data-box]
@@ -607,7 +607,7 @@
      the same 30px under every pointer; a finger's 44px comes from
      .touch-hit on the chip, never a taller chip. min-block-size sets the
      30px; the block padding is only the floor a wrapped label keeps from
-     the border, small enough that one line (the 17px keycap or the label
+     the border, small enough that one line (the 18px keycap or the label
      line) never pushes past 30, so a label that wraps inside the chip grows
      it line by line. A pick is the chip's own state by its role: a toggle
      pressed (`aria-pressed`), a radio checked (`aria-checked`, a single-pick
@@ -707,32 +707,6 @@
       &:hover::before {
         background-color: var(--surface-hover);
       }
-    }
-  }
-  .kit-keycap {
-    display: inline-grid;
-    place-items: center;
-    min-inline-size: 17px;
-    block-size: 17px;
-    padding-block: 0;
-    padding-inline: 4px;
-    border-radius: var(--radius-xs);
-    background: var(--surface-recess);
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--ink-strong);
-    line-height: 1;
-    flex: 0 0 auto;
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        background-color var(--dur-control) var(--ease-out),
-        color var(--dur-control) var(--ease-out);
-    }
-    .kit-chip:is([aria-pressed="true"], [aria-checked="true"], .kit-chip-chosen)
-      & {
-      background: var(--chip-chosen-bg);
-      color: var(--chip-chosen-ink);
     }
   }
   /* A row of option chips, wrapping whole chips onto the next line. Under a
@@ -1320,91 +1294,6 @@
      wrapper it draws (`data-hang`). */
   [data-bits-floating-content-wrapper][data-hang] {
     @apply clip-block-start;
-  }
-  /* Switch: a 32×18 track (24×14 small). Its hit area is .pointer-hit's
-     24px on a pointer device and .touch-hit's 44px on a touch screen; the
-     drawn track and the layout do not change. The knob travels --dur-toggle
-     on --ease-in-out, the track's colour turning with it, and the track
-     takes the press every control takes. */
-  .kit-switch {
-    transition:
-      background-color var(--dur-toggle) var(--ease-out),
-      transform var(--dur-toggle) var(--ease-out);
-
-    @media (prefers-reduced-motion: no-preference) {
-      &:active:not([data-disabled]) {
-        transform: scale(var(--press-scale));
-      }
-    }
-  }
-
-  :where(.kit-switch) .kit-switch-thumb {
-    @media (prefers-reduced-motion: no-preference) {
-      transition: translate var(--dur-toggle) var(--ease-in-out);
-    }
-  }
-
-  /* A button's icon slot (Button with `label`): its icon at rest, the
-     spinner while its work runs, the check when it is done, cross-fading in
-     one cell over --dur-morph, the clock its label crosses on. A button with
-     no icon at rest keeps the slot folded for good (no width and no gap) and
-     draws what the slot shows over its label's start while the label fades
-     (PendingContent), so its width never changes. */
-  .kit-slot {
-    flex: none;
-    inline-size: var(--btn-icon);
-    --icon-swap-dur: var(--dur-morph);
-
-    &[data-over] {
-      inline-size: 0;
-      margin-inline-end: calc(-1 * var(--btn-gap));
-      place-items: center start;
-    }
-  }
-
-  /* A tick that draws itself: a checkbox's over 160ms, a menu item's over
-     120ms. The stroke is dashed to the tick's length (Tick.svelte's path
-     measures 19.8 units): one 20-unit dash, then a gap longer than the path,
-     offset so that no dash end (and no round cap) sits on the path until it
-     draws. With reduced motion it fades in whole instead. */
-  .kit-tick {
-    opacity: 0;
-    transition: opacity var(--dur-toggle) var(--ease-out);
-
-    &[data-on="true"] {
-      opacity: 1;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      opacity: 1;
-      transition: none;
-
-      & path {
-        stroke-dasharray: 20 30;
-        stroke-dashoffset: 22;
-        transition: stroke-dashoffset var(--dur-toggle) var(--ease-out);
-      }
-      &[data-on="true"] path {
-        stroke-dashoffset: 0;
-      }
-    }
-  }
-
-  /* In a menu the tick is quicker. */
-  :where(.kit-item) .kit-tick {
-    transition-duration: var(--dur-control);
-
-    & path {
-      transition-duration: var(--dur-control);
-    }
-  }
-  /* In a button's slot, menu item or not, the check draws on the clock the
-     slot and the label cross on. */
-  .kit-slot .kit-tick {
-    transition-duration: var(--dur-morph);
-
-    & path {
-      transition-duration: var(--dur-morph);
-    }
   }
 
   /* A row inside a floating surface. Its highlight is the menu's one
@@ -2153,30 +2042,6 @@
     block-size: var(--icon-sm);
   }
 
-  /* Release notes inside a toast or a card take that surface's type: the
-     prose keeps only its structure. */
-  [data-slot="release-notes"] .prose {
-    font: inherit;
-    color: inherit;
-  }
-  [data-slot="release-notes"] p {
-    margin: 0;
-  }
-  [data-slot="release-notes"] ul {
-    display: grid;
-    gap: var(--space-row);
-    margin: 0;
-    padding-inline-start: var(--space-4);
-    list-style: disc;
-  }
-  [data-slot="release-notes"] li {
-    margin: 0;
-    padding: 0;
-    overflow-wrap: anywhere;
-  }
-  [data-slot="release-notes"] li::marker {
-    color: var(--ink-muted);
-  }
   /* A divider's summary reads in a note's muted ink, not a turn's
      (MessageBody's words). */
   [data-slot="transcript-brief"] {

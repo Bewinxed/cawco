@@ -292,7 +292,7 @@
                of them. A touch screen has no Tab key, so neither hint shows
                there. -->
           {#if i === 0}
-            <Kbd aria-hidden="true" class="coarse:hidden" data-box>Tab</Kbd>
+            <Kbd aria-hidden="true" data-box reach="keyboard">Tab</Kbd>
           {/if}
           <span class="sr-only"
             >— add “{suggestionLine(candidate)}” to the message</span

@@ -618,9 +618,9 @@
           >
             <Textarea
               aria-invalid={shown("script") ? "true" : undefined}
-              class="resize-y"
               face="mono"
               id="hook-script"
+              resize="block"
               onblur={() => {
                 touched.script = true;
               }}
@@ -743,8 +743,8 @@
           <Field id="hook-prompt" label="Prompt" problem={shown("prompt")}>
             <Textarea
               aria-invalid={shown("prompt") ? "true" : undefined}
-              class="resize-y"
               id="hook-prompt"
+              resize="block"
               onblur={() => {
                 touched.prompt = true;
               }}

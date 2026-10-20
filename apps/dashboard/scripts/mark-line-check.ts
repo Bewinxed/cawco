@@ -90,12 +90,12 @@ const BOXES = new Set(["Badge"]);
 /** Components that draw a mark: icons, glyphs, avatars, rings, dots. */
 const MARK_COMPONENT =
   /^(?:Icon[A-Z]\w*|LiveIcon|Spinner|Sprite|TaskRing|ProviderLogo|Glyph|action\.icon|\w*(?:Mark|Face|Glyph|Avatar|Dot))$/;
-/** Elements the kit and its rows use as a mark's cell. */
+/** Elements the kit and its rows use as a mark's cell. A button's icon slot
+    is an `.icon-swap`; a keycap is a Kbd that says `data-box`. */
 const MARK_CLASS =
-  /^(?:rail-cell|kit-keycap|kit-slot|icon-swap|mark-cell|dot|mark|glyph|icon|ic)$/;
+  /^(?:rail-cell|icon-swap|mark-cell|dot|mark|glyph|icon|ic)$/;
 /** What the recipe leaves alone by class (app.css). */
-const LEFT_ALONE_CLASS =
-  /^(?:rail-cell|kit-keycap|kit-slot|icon-swap|mark-cell)$/;
+const LEFT_ALONE_CLASS = /^(?:rail-cell|icon-swap|mark-cell)$/;
 /** Components whose root is an svg, which the recipe leaves alone. */
 const SVG_COMPONENT =
   /^(?:Icon[A-Z]\w*|LiveIcon|Spinner|TaskRing|ProviderLogo|Glyph|Check|action\.icon)$/;

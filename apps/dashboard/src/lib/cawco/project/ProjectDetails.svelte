@@ -837,8 +837,8 @@
             <Input
               aria-label="Folder on that machine"
               autocomplete="off"
-              class="h-c-btn-h-sm"
               placeholder="/absolute/path on that machine"
+              size="sm"
               spellcheck="false"
               text="label"
               bind:value={addPath}
@@ -961,8 +961,8 @@
             <Input
               aria-label={lfsWords.url}
               autocomplete="off"
-              class="h-c-btn-h-sm"
               placeholder={lfsWords.urlPlaceholder}
+              size="sm"
               spellcheck="false"
               text="label"
               type="url"
@@ -1046,7 +1046,7 @@
       >
         <ToggleGroup.Root
           aria-labelledby="{uid}-lands"
-          class="max-w-full flex-wrap self-start"
+          class="max-w-full self-start"
           data-pending={landsAsked === null ? undefined : ""}
           type="single"
           bind:value={
@@ -1176,7 +1176,7 @@
       >
         <ToggleGroup.Root
           aria-labelledby="{uid}-tracker"
-          class="max-w-full flex-wrap self-start"
+          class="max-w-full self-start"
           data-pending={binding ? "" : undefined}
           type="single"
           bind:value={
@@ -1338,10 +1338,7 @@
               data-bound={bound.provider}
             >
               <span class="mark-cell"
-                ><ProviderLogo
-                  class="size-icon-sm"
-                  provider={bound.provider}
-                /></span
+                ><ProviderLogo provider={bound.provider} size="control" /></span
               >
               <a
                 data-slot="bound-target"

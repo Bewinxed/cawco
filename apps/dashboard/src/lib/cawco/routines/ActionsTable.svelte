@@ -119,8 +119,8 @@
           <Table.Cell rule="between" variant="list"
             ><span data-slot="mark" class="grid w-c-row-lead place-items-center"
               ><ProviderLogo
-                class="size-icon-md"
                 provider={action.service.toLowerCase()}
+                size="control"
               /></span
             ></Table.Cell
           >

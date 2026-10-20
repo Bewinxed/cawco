@@ -854,9 +854,9 @@
                     aria-invalid={paste.problem ? "true" : undefined}
                     aria-label={words.codeFor(name)}
                     autocomplete="off"
-                    class="h-c-btn-h-sm"
                     flex="code"
                     measure="shrink"
+                    size="sm"
                     disabled={paste.url === null}
                     onkeydown={(event) => {
                       if (event.key === "Enter") {

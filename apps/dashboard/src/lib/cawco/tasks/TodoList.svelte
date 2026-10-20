@@ -122,7 +122,8 @@
     <Input
       aria-label={under ? `Add a to-do under ${under}` : "Add a to-do"}
       autocomplete="off"
-      class="flex-auto h-c-btn-h-sm"
+      class="flex-auto"
+      size="sm"
       text="label"
       onfocus={() => {
         if (!under) {
@@ -195,7 +196,7 @@
               <Input
                 aria-label="To-do"
                 autocomplete="off"
-                class="h-c-btn-h-sm"
+                size="sm"
                 text="label"
                 disabled={busy}
                 onblur={() => saveEdit(todo)}

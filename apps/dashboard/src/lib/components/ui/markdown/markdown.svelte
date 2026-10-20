@@ -1,3 +1,26 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  export const markdownVariants = tv({
+    variants: {
+      /**
+       * Prose standing in a surface whose type it takes (a release's notes
+       * in a toast, a card or Configure › Updates): the surface's font and
+       * ink, its paragraphs flush, its bullets a grid a row-gap apart with
+       * muted markers, and long words broken anywhere. Only the structure
+       * stays the prose's.
+       */
+      look: {
+        surface:
+          "font-inherit text-inherit [&_p]:m-0 [&_ul]:m-0 [&_ul]:grid [&_ul]:list-disc [&_ul]:gap-space-row [&_ul]:ps-space-4 [&_li]:m-0 [&_li]:p-0 [&_li]:wrap-anywhere [&_li]:marker:text-ink-muted",
+      },
+    },
+  });
+
+  export type MarkdownLooks = VariantProps<typeof markdownVariants>;
+</script>
+
 <script lang="ts">
   import { untrack } from "svelte";
   import {
@@ -8,6 +31,7 @@
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
   import { PROSE } from "#lib/prose.js";
+  import { cn } from "#lib/utils.js";
   import { draw, stepping } from "../collapsible/draw";
 
   let {
@@ -15,10 +39,15 @@
     invert = false,
     streaming = false,
     fades = false,
-  }: {
+    look,
+    class: className,
+  }: MarkdownLooks & {
     source: string;
     invert?: boolean;
     streaming?: boolean;
+    /** Its prose root's own utilities, over the house prose (a surface whose
+        type the prose takes, as the release notes' panel). */
+    class?: string;
     /**
      * Fade in what each streamed chunk adds, and the last words a message
      * draws as it settles. Only ever the words a chunk ADDS: the text already
@@ -255,7 +284,12 @@
       animateOnMount: true,
       tokenize: "word",
     }}
-    class="{PROSE} {invert ? 'prose-invert' : ''}"
+    class={cn(
+      PROSE,
+      invert && "prose-invert",
+      markdownVariants({ look }),
+      className
+    )}
     {content}
     controls={{ mermaid: false, table: false }}
     mergeTheme={false}

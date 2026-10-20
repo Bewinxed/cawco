@@ -48,6 +48,7 @@
   import type { SVGAttributes } from "svelte/elements";
   import { CURVE, dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { tickVariants } from "#lib/components/ui/checkbox/checkbox.svelte";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconTick } from "#lib/icons.js";
@@ -181,7 +182,16 @@
   });
 </script>
 
-<span class="icon-swap kit-slot" data-over={Icon === undefined || undefined}>
+<!-- The icon slot: its icon at rest, the spinner while its work runs, the
+     check when it is done, cross-fading in one cell over --dur-morph, the
+     clock its label crosses on. With no icon at rest it stays folded for
+     good (no width and no gap) and draws what it shows over its label's
+     start while the label fades, so its width never changes. -->
+<span
+  data-slot="btn-slot"
+  class="icon-swap w-(--btn-icon) flex-none [--icon-swap-dur:var(--dur-morph)] data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
+  data-over={Icon === undefined || undefined}
+>
   {#if Icon}
     <span data-active={phase === "idle" && !ringShown}
       ><Icon class="size-(--btn-icon)" /></span
@@ -221,7 +231,8 @@
   {/if}
   <span data-active={phase === "done"}
     ><IconTick
-      class="kit-tick size-(--btn-icon)"
+      data-slot="tick"
+      class={[tickVariants({ clock: "morph" }), "size-(--btn-icon)"]}
       data-on={phase === "done"}
     /></span
   >

@@ -682,7 +682,7 @@
         </p>
         <ToggleGroup.Root
           aria-labelledby="connection-way"
-          class="max-w-full flex-wrap self-start"
+          class="max-w-full self-start"
           type="single"
           bind:value={
             () => addWay?.label ?? "",

@@ -16,6 +16,7 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { fold } from "#lib/cawco/motion/fold.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
+  import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { IconAsk, IconCheck, IconClose } from "#lib/icons.js";
   /**
    * An answered (or dismissed) `AskUserQuestion` as it settled in the transcript
@@ -304,7 +305,7 @@
       {q.question}
     </p>
     <!-- The settled record is the live card's anatomy, inert: the same kit
-         option chips (.kit-chips / .kit-chip / .kit-keycap in app.css), so a
+         option chips (.kit-chips / .kit-chip in app.css, the Kbd keycap), so a
          pick looks picked, not flagged, and the card settles without a jump. -->
     <div
       data-slot="qopts"
@@ -317,7 +318,7 @@
           data-key={shareKey(q.question, opt.label)}
           out:leave
         >
-          <span class="kit-keycap">{i + 1}</span><span>{opt.label}</span>
+          <Kbd data-box look="keycap">{i + 1}</Kbd><span>{opt.label}</span>
         </span>
       {/each}
       {#if answered}
@@ -329,7 +330,7 @@
               ms: dur("--dur-pop"),
             })}
           >
-            <span class="kit-keycap">{q.options.indexOf(opt) + 1}</span><span
+            <Kbd data-box look="keycap">{q.options.indexOf(opt) + 1}</Kbd><span
               >{opt.label}</span
             >
           </span>

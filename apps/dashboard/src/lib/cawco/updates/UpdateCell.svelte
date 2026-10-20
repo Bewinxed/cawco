@@ -30,7 +30,6 @@
   /** The machine's whole error, unfolded in place under the cell. */
   let reading = $state(false);
   const refused = $derived(updates.refused.get(machine.machineId));
-  const CHIP = "h-auto whitespace-normal text-start";
 </script>
 
 <div class="overflow-hidden" {@attach morph()}>
@@ -49,7 +48,6 @@
           </span>
         {:else}
           <Badge
-            class={CHIP}
             size="cell-tall"
             variant={cell.fail ? "destructive" : "ghost"}
           >

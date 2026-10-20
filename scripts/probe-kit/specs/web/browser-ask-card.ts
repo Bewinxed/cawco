@@ -666,7 +666,9 @@ async function taking(
           const button = document.querySelector(
             '[data-slot="ask"] [data-browser-take]'
           );
-          const cell = button?.querySelector(".kit-tick")?.parentElement;
+          const cell = button?.querySelector(
+            'svg[data-slot="tick"]'
+          )?.parentElement;
           if (
             cell?.getAttribute("data-active") === "true" &&
             getComputedStyle(cell).opacity !== "0"

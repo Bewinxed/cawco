@@ -315,11 +315,7 @@
       >
         {#snippet item(tab: (typeof railItems)[number])}
           {#if tab.id === "codex"}
-            <ProviderLogo
-              class="size-icon-md flex-none"
-              provider="openai"
-              size={16}
-            />
+            <ProviderLogo class="flex-none" provider="openai" size="control" />
           {:else}
             <HarnessLogo harness={tab.id as HarnessKind} />
           {/if}
@@ -541,7 +537,7 @@
       class="ns-tile size-c-mark overflow-hidden group-disabled:opacity-50"
     >
       {#if provider}
-        <ProviderLogo class="size-icon-md" model={entry.id} size={16} />
+        <ProviderLogo model={entry.id} size="control" />
       {:else}
         <HarnessLogo harness={listHarness} />
       {/if}

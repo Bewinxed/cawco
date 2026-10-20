@@ -77,10 +77,10 @@
 
   <Textarea
     aria-label="Sample text to test this rule against"
-    class="resize-y"
     face="mono"
     fill="page"
     placeholder="I've fixed the parser. One honest caveat: the error path is still untested."
+    resize="block"
     rows={3}
     spellcheck="false"
     text="label"

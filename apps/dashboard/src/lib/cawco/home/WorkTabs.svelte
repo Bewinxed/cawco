@@ -804,7 +804,7 @@
                     <Badge
                       data-num
                       data-slot="count"
-                      class="num pointer-events-none ms-space-1 me-(--count-end)"
+                      class="ms-space-1 me-(--count-end)"
                       data-flip="pop"
                       data-tab={tab.id}
                       size="count"

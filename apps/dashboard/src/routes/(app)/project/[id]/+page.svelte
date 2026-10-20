@@ -1537,7 +1537,7 @@
       {#if strippedNewTask}
         <Button
           data-wide
-          class="max-phone:hidden"
+          layout="wide"
           press="pressable"
           onclick={() => {
             if (current !== "table") {
@@ -1555,7 +1555,7 @@
       {#if canTalk}
         <Button
           data-wide
-          class="max-phone:hidden"
+          layout="wide"
           press="pressable"
           onclick={(event) => ask(event.currentTarget as HTMLElement)}
           size="sm"

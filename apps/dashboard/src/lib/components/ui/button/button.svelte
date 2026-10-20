@@ -46,10 +46,16 @@
         xs: "h-6 gap-(--btn-gap) px-2 text-label [--btn-gap:4px] [--btn-icon:12px] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
         sm: "h-[30px] gap-(--btn-gap) px-[11px] text-label [--btn-gap:7px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+        /* A control standing in a composer shell (DESIGN.md, Composer:
+           "34px Attach … and Send/Stop … each at the concentric 5px
+           radius"): the default's recipe at the composer field's height. */
+        composer:
+          "h-c-composer-field gap-(--btn-gap) px-space-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         icon: "size-9",
         "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-icon-sm",
         "icon-sm": "size-[30px]",
         "icon-lg": "size-11",
+        "icon-composer": "size-c-composer-field",
       },
       /* The looks its callers draw over a variant, each as they drew it. */
       /** The ink: muted, or muted until the pointer is on it. */
@@ -110,13 +116,24 @@
           "coarse:opacity-100 opacity-0 not-disabled:focus-visible:opacity-100 coarse:disabled:opacity-100 disabled:opacity-0 disabled:focus-visible:opacity-100 group-[:hover]/value:not-disabled:opacity-100 group-[:hover]/value:disabled:opacity-100",
         "row-hover":
           "can-hover:dur-control can-hover:opacity-0 can-hover:transition-[opacity] can-hover:ease-out can-hover:not-disabled:focus-visible:opacity-100 can-hover:disabled:opacity-0 can-hover:disabled:focus-visible:opacity-100 can-hover:group-hover:not-disabled:opacity-100 can-hover:group-hover:disabled:opacity-100",
-        /* In reach whenever its row (the `group`) is under the pointer or
+        /* In reach whenever its row (`group/row`) is under the pointer or
            holds the focus anywhere in it, not only on the button itself
            (Files' Show in conversation, DESIGN.md Files: "shown on the
            row's hover and focus and always under a finger"). */
         "row-reach":
-          "can-hover:dur-control can-hover:opacity-0 can-hover:transition-[opacity] can-hover:ease-out can-hover:group-focus-within:not-disabled:opacity-100 can-hover:group-hover:not-disabled:opacity-100",
+          "can-hover:dur-control can-hover:opacity-0 can-hover:transition-[opacity] can-hover:ease-out can-hover:group-focus-within/row:not-disabled:opacity-100 can-hover:group-hover/row:not-disabled:opacity-100",
       },
+      /** Its words and mark along its width, once it is wider than they
+          are: from the start, as a row of a list does (a directory's row,
+          Add task in a column's foot), or the words at the start and the
+          mark at the end, as a select trigger's (DESIGN.md, Inputs and
+          fields: "Select trigger: the input's look with a sort-vertical
+          glyph"). */
+      align: { row: "justify-start", trigger: "justify-between" },
+      /** Drawn only in the wide layout: under the phone breakpoint (DESIGN.md,
+          Layout, Breakpoints: 640px) the phone reaches the same action
+          elsewhere. */
+      layout: { wide: "max-phone:hidden" },
       /** Open, it draws no fill while the pointer is off it (its words and
           chevron say it is open). */
       expanded: { unfilled: "aria-expanded:unhovered:bg-transparent" },
@@ -220,6 +237,8 @@
     gap,
     pad,
     reveal,
+    align,
+    layout,
     expanded,
     face,
     toggle,
@@ -259,6 +278,8 @@
         gap,
         pad,
         reveal,
+        align,
+        layout,
         expanded,
         face,
         toggle,

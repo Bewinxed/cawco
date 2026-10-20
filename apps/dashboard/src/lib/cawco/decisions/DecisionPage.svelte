@@ -343,7 +343,7 @@
       <Textarea
         data-note
         aria-label={words.noteLabel}
-        class="max-h-c-textarea-max-h min-h-c-composer-field flex-auto"
+        class="flex-auto"
         look="note"
         oninput={() => {
           refusal = null;
@@ -360,12 +360,12 @@
       />
       <Button
         aria-label={words.send}
-        class="size-c-composer-field flex-none"
+        class="flex-none"
         disabled={!note.trim()}
         icon={IconSend}
         pending={sendingNote}
         shape="inset"
-        size="icon"
+        size="icon-composer"
         style="--btn-icon: var(--icon-md)"
         type="submit"
         variant="outline"
@@ -374,13 +374,13 @@
         <span class="flex flex-none overflow-hidden">
           <Button
             data-primary
-            class="h-c-composer-field"
             {failed}
             label={primary.label}
             onclick={() => act(primary.act)}
             pending={acting || shown?.state === "making"}
             pendingLabel={primary.pendingLabel}
             shape="inset"
+            size="composer"
           />
         </span>
       {/if}

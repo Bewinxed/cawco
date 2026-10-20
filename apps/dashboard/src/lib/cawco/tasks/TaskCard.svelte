@@ -235,7 +235,7 @@
         <Badge variant="secondary"><span>{label}</span></Badge>
       {/each}
       {#if task.labels.length > 2}
-        <Badge data-num class="num" variant="secondary"
+        <Badge data-num figures="tabular" variant="secondary"
           ><span>+{task.labels.length - 2}</span></Badge
         >
       {/if}

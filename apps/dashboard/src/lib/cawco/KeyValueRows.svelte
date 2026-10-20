@@ -40,10 +40,11 @@
       <Input
         aria-label="{legend} name"
         autocomplete="off"
-        class="h-space-8 flex-1"
+        class="flex-1"
         face="mono"
         oninput={settle}
         placeholder={keyPlaceholder}
+        size="sm"
         spellcheck="false"
         text="meta"
         bind:value={row.key}
@@ -51,11 +52,12 @@
       <Input
         aria-label="{legend} value"
         autocomplete="off"
-        class="h-space-8 grow-(--value-grow) basis-(--value-basis)"
+        class="grow-(--value-grow) basis-(--value-basis)"
         face="mono"
         style="--value-basis: 0%; --value-grow: 2"
         oninput={settle}
         placeholder={valuePlaceholder}
+        size="sm"
         spellcheck="false"
         text="meta"
         bind:value={row.value}

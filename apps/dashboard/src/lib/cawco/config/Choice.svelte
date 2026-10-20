@@ -21,7 +21,7 @@
 
 <ToggleGroup.Root
   aria-label={label}
-  class="flex-wrap self-start max-w-full"
+  class="self-start max-w-full"
   onValueChange={(next) => {
     if (next) {
       onchange(next);
