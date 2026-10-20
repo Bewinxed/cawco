@@ -29,6 +29,7 @@
   import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
   import { mirror } from "#lib/cawco/page-marks.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { sheetHeadVariants } from "#lib/components/ui/drawer/drawer-header.svelte";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import { IconClose } from "#lib/icons.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
@@ -50,6 +51,8 @@
     portalProps,
     pad,
     narrow,
+    title,
+    titleHidden = false,
     children,
     ...restProps
   }: WithoutChildrenOrChild<SheetPrimitive.ContentProps> &
@@ -57,8 +60,19 @@
       portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SheetPortal>>;
       side?: Side;
       showCloseButton?: boolean;
+      /**
+       * The sheet's name. The kit draws the sheets' one header with it
+       * (DESIGN.md, Drawer: the title in the title role and Close at the
+       * trailing edge), so no sheet stands without a name or a Close.
+       */
+      title?: string;
+      /** The name read out but not drawn, on a sheet whose content names
+          itself on screen; Close still stands at the header's trailing edge. */
+      titleHidden?: boolean;
       children: Snippet;
     } = $props();
+
+  const head = sheetHeadVariants();
 
   /* A sheet goes back out the edge it came in from under the finger, its
      scrim fading with it (motion/drag.svelte.ts). */
@@ -130,8 +144,27 @@
         style:pointer-events={pressable(open)}
         style:--sheet-away={AWAY[side]}
       >
+        {#if title}
+          <div class={cn(head.head(), "px-4 pt-4")} data-slot="sheet-header">
+            <SheetPrimitive.Title
+              class={cn(
+                "min-w-0 text-ink-strong text-title",
+                titleHidden && "sr-only"
+              )}
+              data-slot="sheet-title">{title}</SheetPrimitive.Title
+            >
+            <SheetPrimitive.Close
+              aria-label="Close"
+              class={cn(head.close(), "ms-auto")}
+              data-slot="sheet-close"
+              title="Close"
+            >
+              <IconClose aria-hidden="true" />
+            </SheetPrimitive.Close>
+          </div>
+        {/if}
         {@render children?.()}
-        {#if showCloseButton}
+        {#if showCloseButton && !title}
           <SheetPrimitive.Close data-slot="sheet-close">
             {#snippet child({ props: closeProps })}
               <Button

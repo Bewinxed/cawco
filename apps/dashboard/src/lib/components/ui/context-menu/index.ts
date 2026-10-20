@@ -5,10 +5,6 @@ export {
   default as ContextMenu,
 } from "./context-menu.svelte";
 export {
-  default as CheckboxItem,
-  default as ContextMenuCheckboxItem,
-} from "./context-menu-checkbox-item.svelte";
-export {
   default as Content,
   default as ContextMenuContent,
 } from "./context-menu-content.svelte";
@@ -21,17 +17,9 @@ export {
   default as ContextMenuGroup,
 } from "./context-menu-group.svelte";
 export {
-  default as GroupHeading,
-  default as ContextMenuGroupHeading,
-} from "./context-menu-group-heading.svelte";
-export {
   default as Item,
   default as ContextMenuItem,
 } from "./context-menu-item.svelte";
-export {
-  default as Label,
-  default as ContextMenuLabel,
-} from "./context-menu-label.svelte";
 export {
   default as ContextMenuLazy,
   default as Lazy,

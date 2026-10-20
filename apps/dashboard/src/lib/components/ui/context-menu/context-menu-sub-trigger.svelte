@@ -34,7 +34,7 @@
 <ContextMenuPrimitive.SubTrigger
   class={cn(
     menuItemVariants(),
-    "flex cursor-default select-none items-center px-2.5 text-label outline-hidden data-open:bg-[var(--surface-hover)] data-inset:pl-9.5 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    "flex cursor-default select-none items-center px-2.5 text-label outline-hidden data-open:bg-surface-hover data-inset:pl-9.5 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     contextMenuSubTriggerVariants({ gap }),
     className
   )}

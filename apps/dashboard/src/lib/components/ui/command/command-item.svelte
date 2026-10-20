@@ -25,6 +25,6 @@
 >
   {@render children?.()}
   <IconTick
-    class="ml-auto opacity-0 [[data-slot=command-shortcut]~&]:hidden group-data-[checked=true]/command-item:opacity-100"
+    class="ml-auto opacity-0 group-data-[checked=true]/command-item:opacity-100"
   />
 </CommandPrimitive.Item>

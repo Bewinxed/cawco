@@ -6,11 +6,11 @@
     base: "group/alert relative grid w-full grid-cols-[1fr] gap-0.5 rounded-md px-3 py-2.5 text-left text-body has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2.5 has-data-[slot=alert-action]:gap-x-2.5 [&>:not(svg,[data-slot=alert-action])]:col-start-[-2] *:[svg:not([class*='size-'])]:size-icon-md *:[svg]:row-span-2 *:[svg]:translate-y-0.5 *:[svg]:text-current",
     variants: {
       variant: {
-        default: "bg-[var(--surface-recess)] text-[var(--ink-strong)]",
-        destructive: "bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]",
-        warning: "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]",
-        success: "bg-[var(--status-done-bg)] text-[var(--status-done-ink)]",
-        info: "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]",
+        default: "bg-surface-recess text-ink-strong",
+        destructive: "bg-status-fail-bg text-status-fail-ink",
+        warning: "bg-status-attn-bg text-status-attn-ink",
+        success: "bg-status-done-bg text-status-done-ink",
+        info: "bg-status-live-bg text-status-live-ink",
       },
       /** A notice on a card: the raised surface, the control's edge, the
           card's corner and its tile shadow. */

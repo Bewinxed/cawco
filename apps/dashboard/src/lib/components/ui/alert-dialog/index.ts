@@ -17,10 +17,6 @@ export {
   default as AlertDialogContent,
 } from "./alert-dialog-content.svelte";
 export {
-  default as Description,
-  default as AlertDialogDescription,
-} from "./alert-dialog-description.svelte";
-export {
   default as Footer,
   default as AlertDialogFooter,
 } from "./alert-dialog-footer.svelte";
@@ -28,10 +24,6 @@ export {
   default as Header,
   default as AlertDialogHeader,
 } from "./alert-dialog-header.svelte";
-export {
-  default as Media,
-  default as AlertDialogMedia,
-} from "./alert-dialog-media.svelte";
 export {
   default as Overlay,
   default as AlertDialogOverlay,
