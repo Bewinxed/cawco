@@ -6,6 +6,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { CopyButton } from "#lib/components/ui/copy-button/index.js";
   import DialogRoot from "#lib/components/ui/dialog/dialog.svelte";
+  import { dialogTrayVariants } from "#lib/components/ui/dialog/dialog-content.svelte";
   import DialogOverlay from "#lib/components/ui/dialog/dialog-overlay.svelte";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   /**
@@ -163,6 +164,7 @@
   );
   let sheet = $state<HTMLElement>();
   let leaving = $state(false);
+  const dialogTray = dialogTrayVariants();
 
   /** The JSON as its structure reads; a file that does not parse, as sent. */
   function pretty(content: string): string {
@@ -250,8 +252,14 @@
 {#snippet docView()}
   {#if doc}
     {@const extension = extensionOf(doc.name)}
+    <!-- The kit dialog's recess tray holding its raised body (DESIGN.md,
+         Dialog: concentric 18px and 12px corners), the tray the box the
+         thumb grows into and shrinks back to. -->
     <div
-      class="pointer-events-auto flex w-c-lightbox-sheet-w max-h-c-lightbox-sheet-max-h flex-col rounded-sm border border-border-hairline bg-surface-raised text-ink-strong shadow-tile"
+      class={dialogTray.tray({
+        class:
+          "pointer-events-auto flex w-c-lightbox-sheet-w max-h-c-lightbox-sheet-max-h flex-col",
+      })}
       bind:this={sheet}
       {@attach land(() => doc.share, {
         mode: "grow",
@@ -259,50 +267,56 @@
         ms: dur("--dur-panel"),
       })}
     >
-      <header
-        data-slot="doc-head"
-        class="flex items-center gap-space-1 border-b border-b-border-hairline py-space-2 ps-space-4 pe-space-2"
-      >
-        <DialogPrimitive.Title
-          class="min-w-0 flex-1 truncate text-size-label font-medium"
-          >{doc.name}</DialogPrimitive.Title
-        >
-        <CopyButton
-          aria-label={`Copy ${doc.name}`}
-          class="touch-hit"
-          size="icon"
-          text={doc.content}
-        />
-        <Tip keys="Esc" label="Close document">
-          {#snippet children(tip)}
-            <Button
-              {...tip}
-              aria-label="Close document"
-              class="touch-hit"
-              onclick={dismiss}
-              size="icon"
-              variant="ghost"
-            >
-              <IconClose />
-            </Button>
-          {/snippet}
-        </Tip>
-      </header>
       <div
-        data-slot="doc-body"
-        class="min-h-0 overflow-auto overscroll-contain p-space-4"
+        class={dialogTray.body({
+          class: "flex min-h-0 flex-col gap-space-3 text-ink-strong",
+        })}
       >
-        {#if extension === "md" || extension === "markdown"}
-          <!-- The markdown loads when a document needs it: an artifact's own
+        <header
+          data-slot="doc-head"
+          class="flex items-center gap-space-1 -me-space-2 -mt-space-2"
+        >
+          <DialogPrimitive.Title
+            class="min-w-0 flex-1 truncate text-size-label font-medium"
+            >{doc.name}</DialogPrimitive.Title
+          >
+          <CopyButton
+            aria-label={`Copy ${doc.name}`}
+            class="touch-hit"
+            size="icon"
+            text={doc.content}
+          />
+          <Tip keys="Esc" label="Close document">
+            {#snippet children(tip)}
+              <Button
+                {...tip}
+                aria-label="Close document"
+                class="touch-hit"
+                onclick={dismiss}
+                size="icon"
+                variant="ghost"
+              >
+                <IconClose />
+              </Button>
+            {/snippet}
+          </Tip>
+        </header>
+        <div
+          data-slot="doc-body"
+          class="min-h-0 overflow-auto overscroll-contain"
+        >
+          {#if extension === "md" || extension === "markdown"}
+            <!-- The markdown loads when a document needs it: an artifact's own
                tab mounts the lightbox and seldom opens a document. -->
-          {#await import("../MessageBody.svelte") then { default: Body }}
-            <Body source={doc.content} />
-          {/await}
-        {:else if extension === "json"}
-          <OutputBlock language="json" text={pretty(doc.content)} />
-        {:else}
-          <OutputBlock language={extension} text={doc.content} />
-        {/if}
+            {#await import("../MessageBody.svelte") then { default: Body }}
+              <Body source={doc.content} />
+            {/await}
+          {:else if extension === "json"}
+            <OutputBlock language="json" text={pretty(doc.content)} />
+          {:else}
+            <OutputBlock language={extension} text={doc.content} />
+          {/if}
+        </div>
       </div>
     </div>
   {/if}

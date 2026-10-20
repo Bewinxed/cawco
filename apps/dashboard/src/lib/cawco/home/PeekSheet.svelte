@@ -32,8 +32,13 @@
   });
 </script>
 
+<!-- With a fine pointer the peek stands beside the home and holds nothing
+     (DESIGN.md, The Open Page Rule): no scrim, no focus trap, and a press on
+     the page lands there while the peek waits; Close, Esc or leaving the
+     place put it away. An iPad's touch screen keeps the drawer's recipe. -->
 <Drawer.Root
   direction={touch.current ? "bottom" : "right"}
+  modal={touch.current}
   onOpenChange={(open) => {
     peek.open = open;
   }}
@@ -45,8 +50,15 @@
   <Drawer.Content
     data-peek-sheet
     height="cap"
+    modal={touch.current}
+    onInteractOutside={(event) => {
+      if (!touch.current) {
+        event.preventDefault();
+      }
+    }}
     pad="sheet-safe-bottom"
     style="--drawer-max-height: var(--c-peek-sheet-h)"
+    trapFocus={touch.current}
   >
     <Drawer.Title visible={false}>Peek</Drawer.Title>
     <Drawer.Description visible={false}

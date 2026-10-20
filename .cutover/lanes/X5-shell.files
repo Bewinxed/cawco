@@ -273,3 +273,4 @@ packages/hub/skills/decision-page/kit/tokens.css
 apps/apple/Packages/CawCoKit/Sources/CawCoDesign/Generated/Tokens.swift
 apps/dashboard/src/lib/components/ui/fluid-tabs/TabsList.svelte
 apps/dashboard/src/lib/components/ui/bar-glass/bar-glass-frame.svelte
+scripts/probe-kit/specs/two-pane-perf.ts

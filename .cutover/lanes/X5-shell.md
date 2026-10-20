@@ -37,8 +37,18 @@ Every read is the engine's: the catalogue's entries walked as `surfaces/capture.
 - holds: session-live's Stop glyph: duotone "1/.5" in oklch(1 0 0) on the 34px Stop.
 - holds: meter-calm (X4 changed it to neutral-11 on a border-control groove, L580/L457/L795). The session card's context bar, oklch(0.645 0.175 33) at 1% on this tree, takes the new fill at the merge; the token is untouched here.
 - holds (my call, L916): new-session-used 390: Attach stands apart at the chips row's end by design; at 390 it wraps to its own line, end-aligned ([328,366,34,34]).
+- fixed: the peek with a fine pointer (X2's review 3), L505/L818: `modal={false}` on root and content, no focus trap, a press outside lands on the page (the peek waits). Before: the scrim over the page (drawer-overlay oklch(0.966 0.008 85 / 0.72), blur(2px)). After (caw-panel-peek, 1440, both themes): `aria-modal="false"`, 0 overlays, elementFromPoint(300,300) on the page's transcript (`div[tr]`). An iPad's touch drawer keeps the modal recipe.
+- fixed: the peek's tool names (X2's 2), L610: "AskUserQuestion" font-family "JetBrains Mono Variable", ui-monospace.
+- fixed: the text lightbox (X2's 4), L814: the kit dialog's own tray and body recipe (`dialogTrayVariants`, ui/dialog), its flight from the thumb kept. Before: one 8px-radius raised panel with a hairline and the tile shadow. After (session-attached, a file's thumb pressed): tray radius 18px, surface-recess, 6px padding; body radius 12px, surface-raised, 18px padding; 1440 and 390, both themes.
+- fixed: tool rows on region-failed-tabs 390 (X2's 5): every verb's scroll-client 0 ("Todo write", "List the repository").
+- fixed: the region failure line on a phone (X2's 7): it stands under the bar's row (`pt` the bar's height plus `--space-3`), so it never meets the burger or Caw's glass. Read after the change: see the end of this file.
+- fixed: "Jump to latest" in Caw's docked thread (X2's 8): ThreadPane's composer has its own place there (`reserved`), so the tag rests `--space-2` over the transcript's foot. Before 212px, then 116px over its composer; after 41px (project-caw, 1440 and 390).
+- holds: the empty transcript's action (X2's 9), L840/L844: "Write the first instruction" (the kit outline Button) gives the keys to the session's composer (its pane draft's `focusWanted`), drawn where a composer stands. bench-traffic draws no composer, so its empty state rightly shows none: read there, `buttons: []`. Not read in a session pane: the tape has no session with nothing said.
+- holds: Details and "Don't move" (X2's 10): under a finger the card's rows stand `--space-5` apart, and both areas are whole without overlap: Details hit at +10.5 up and +9.5 down (44px), its press never landing on "Don't move".
+- fixed: the bar's crumb names every route under the app's layout: usage "Usage", workflows "Workflows", oauth "MCP sign-in", motion "Bench" (with session, project, config and the fleet); the capitalised slug is gone, and a route added without a name throws in dev. Read: config-mcp-oauth-return (/oauth/mcp) crumb "MCP sign-in", 1440 and 390.
+- ask (X2's 6, `project/StarterCards.svelte`, not on this list): the starter card in the empty state (caw-on-decisions, 1440: 25,288 177x90) stands raised with the tile shadow on the page; its rows form already takes `border-row-outline`.
 - not mine: status-mark sizes and duotone (session-move-ask's hand-shake, session-plan's step marks, session-run-block's lead mark): cawco/1586c4b7, markup kept.
-- not run: two-pane-perf `restyle-in-view` (phase 2 handed it back; see its own section).
+- two-pane-perf `restyle-in-view` (handed back by phase 2): its own section below.
 
 ## kit-swap
 
@@ -54,7 +64,7 @@ Every read is the engine's: the catalogue's entries walked as `surfaces/capture.
 - ask (sent to X4): `views/ViewPipeline.svelte:104` `border-t-dashed` on the Dropped rule; read `ol "Dropped"` dashed (L688).
 - ask: delete `--seam` after the app hold (iOS `CawCoScreens/HomeCells.swift:126,223` `Palette.seam`, `Shell/TopBar.swift:15`). No web site is left on it but X2's section-header.
 - ask: bench-recall and bench-finder place their own composer outside this list: recall at the page's foot, `cin` [474,850,720,50] in 900 (0px); the finder's mock composer in `main px-space-6` (no `form`), so neither reads the session pane's dock.
-- ask (rule 4, a behaviour change): the peek and the plan drawer hold the page with the scrim (modal); L505 (The Open Page Rule) has nothing break if the reader presses elsewhere. Proposal: open both non-modal, no scrim.
+- ask (rule 4, a behaviour change): the plan drawer at 390 holds the page with the scrim (modal); L505 has nothing break if the reader presses elsewhere. Proposal: open it non-modal, as the peek now is on a fine pointer.
 
 ## corrected
 

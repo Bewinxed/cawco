@@ -40,8 +40,8 @@
  * with the elements they restyled (`workOf`), and its interaction is read
  * off Event Timing (noted). Two panes' passes, each way of switching, are
  * held within `PASS_SHARE` of one pane's in the same run, and a focus switch
- * restyles only what it shows: within `SHOWN_SHARE` of the elements of the
- * shown pane's rows in view, measured in the same switch. Each phase's longest task on the
+ * restyles only what it shows: within `SHOWN_SHARE` of the shown pane's
+ * elements in view, measured in the same switch. Each phase's longest task on the
  * slower CPU is noted against `LONG_TASK_MS`, its longest animation frame
  * by the scripts that filled it, and the hub's messages that took 4ms or
  * more by kind; every number is written to `numbers.json` in the spec's out
@@ -119,10 +119,10 @@ const PASS_SHARE = 1.1;
  * A switch restyles only what it shows: a focus switch's restyled elements
  * (from its input to the frame that shows its pane, every style pass's
  * count added, so an element restyled twice counts twice) within this many
- * times the elements of the shown pane's rows that stand in view, counted
- * the frame after. Its pane was laid out while the focus rested; what is
- * left is what it shows, and the strip and composer it trades inside the
- * tenth over.
+ * times the shown pane's elements that stand in view, counted the frame
+ * after: its rows in the transcript's view, its head, banners and composer
+ * in the pane's box. Its pane was laid out while the focus rested; what is
+ * left is what it shows, and the strip it trades inside the tenth over.
  */
 const SHOWN_SHARE = 1.1;
 /** A box holding this many elements or more is named when a switch changes it. */
@@ -1559,35 +1559,53 @@ async function measure(
               );
             };
             const began = performance.now();
-            // The elements of the shown pane's rows in view, counted the
-            // frame after the one that shows it: its boxes read there, not
-            // inside the switch being counted.
+            // The elements of the shown pane in view, counted the frame after
+            // the one that shows it: its boxes read there, not inside the
+            // switch being counted. The whole pane, not its rows alone: a
+            // pane laid out while hidden is shown by `visibility`, which is
+            // inherited, so showing it restyles its head, banners and
+            // composer as well as its rows (PaneLeaf `data-pane-settling`,
+            // 22836e556: the protection that keeps a warm pane out of reach
+            // of a pointer, the focus and assistive tech). What it shows is
+            // the pane; a row's elements count where the transcript shows
+            // them, anything else where the pane's box does.
+            /** Whether `r` has a box and meets `within`. */
+            const meets = (r: DOMRect, within: DOMRect | undefined) =>
+              within !== undefined &&
+              r.width > 0 &&
+              r.height > 0 &&
+              r.bottom > within.top &&
+              r.top < within.bottom &&
+              r.right > within.left &&
+              r.left < within.right;
+            /** The pane's elements in view: its rows in the transcript's, the rest in its own box. */
+            // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialized into the page whole, so it cannot lean on helpers out here
+            const inView = (box: Element): number => {
+              const scroller = box.querySelector(
+                '[aria-label="Session transcript"]'
+              );
+              const view = scroller?.getBoundingClientRect();
+              const frame = box.getBoundingClientRect();
+              let count = 0;
+              for (const el of box.getElementsByTagName("*")) {
+                const inRows = scroller?.contains(el) === true;
+                if (meets(el.getBoundingClientRect(), inRows ? view : frame)) {
+                  count += 1;
+                }
+              }
+              return count;
+            };
             const onScreen = () => {
               const box = document.querySelector(
                 `[data-slot="pane"][data-pane="${CSS.escape(pane)}"]`
               );
-              const view = box
-                ?.querySelector('[aria-label="Session transcript"]')
-                ?.getBoundingClientRect();
-              const items = box?.querySelector(
-                '[data-slot="listing"] > :first-child'
-              );
-              let count = 0;
-              for (const item of items?.children ?? []) {
-                const r = item.getBoundingClientRect();
-                if (
-                  view &&
-                  r.height > 0 &&
-                  r.bottom > view.top &&
-                  r.top < view.bottom
-                ) {
-                  count += 1 + item.getElementsByTagName("*").length;
-                }
-              }
               const w = window as unknown as {
                 __onScreen?: Record<string, number>;
               };
-              w.__onScreen = { ...w.__onScreen, [shown]: count };
+              w.__onScreen = {
+                ...w.__onScreen,
+                [shown]: box ? inView(box) : 0,
+              };
             };
             const look = () => {
               if (drawn()) {
@@ -2051,7 +2069,7 @@ const spec: Spec = {
         (w, i) => `${w.restyled} restyled against ${onScreen[i] ?? 0} in view`
       );
       kit.check(
-        `${mode} pane(s), focus: each switch restyles within ${SHOWN_SHARE}x the elements of the shown pane's rows in view`,
+        `${mode} pane(s), focus: each switch restyles within ${SHOWN_SHARE}x the shown pane's elements in view`,
         work.length > 0 &&
           work.every(
             (w, i) => w.shown && w.restyled <= (onScreen[i] ?? 0) * SHOWN_SHARE
@@ -2060,7 +2078,7 @@ const spec: Spec = {
       );
     }
     kit.note(
-      `point switches, restyled against the shown pane's rows in view: ${(
+      `point switches, restyled against the shown pane's elements in view: ${(
         ["one", "two"] as Layout[]
       )
         .map(

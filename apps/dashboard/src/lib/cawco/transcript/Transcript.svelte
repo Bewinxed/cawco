@@ -70,6 +70,7 @@
   import CatchUp from "./CatchUp.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
   import { compactionMarkComing } from "./compaction-mark";
+  import { paneDrafts } from "./composer-draft.svelte";
   import Delegate from "./Delegate.svelte";
   import { disclosureAt } from "./disclosure.svelte";
   import Latest from "./Latest.svelte";
@@ -3847,11 +3848,28 @@
          where it stands. The two keys that do anything from the composer
          below. Left-aligned: this surface is a ledger. -->
     <div class="isolate" in:crossIn>
+      <!-- Its one action starts the work (DESIGN.md, The Empty Starts Work
+           Rule): the keys go to this session's composer, where the first
+           instruction is written; with no composer standing, none. -->
       <EmptyState
         icon={IconChat}
         line="Send the first instruction below — / lists this session's commands, @ names a machine or session."
         title="No messages yet"
-      />
+      >
+        {#snippet action()}
+          {@const draft = paneDrafts.get(session.instanceId)}
+          {#if draft}
+            <Button
+              onclick={() => {
+                draft.focusWanted = true;
+              }}
+              variant="outline"
+            >
+              Write the first instruction
+            </Button>
+          {/if}
+        {/snippet}
+      </EmptyState>
     </div>
   {/if}
 

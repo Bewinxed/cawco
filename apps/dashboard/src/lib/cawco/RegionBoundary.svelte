@@ -38,8 +38,8 @@
     kept?: string;
     /**
      * It stands in a pane's tab row, which the phone's bar floats over: its
-     * line keeps clear of the bar's two ends as the strip does (fluid-tabs'
-     * phone insets), so it never runs under the burger or Caw's glass.
+     * line stands under the bar's row, so it never meets the burger or
+     * Caw's glass.
      */
     strip?: boolean;
     children: Snippet;
@@ -59,14 +59,11 @@
          badly; spark is needs-you), taking no more of its column than its
          line. -->
     <div
-      class="min-w-0 p-space-3 max-desk:data-strip:ps-(--strip-start) max-desk:data-strip:pe-(--strip-end)"
+      class="min-w-0 p-space-3 max-desk:data-strip:pt-(--strip-top)"
       data-region-failed={region}
       data-strip={strip || undefined}
-      style:--strip-start={strip
-        ? "calc(var(--c-bar-phone-edge) + var(--c-bar-toggle-glyph))"
-        : undefined}
-      style:--strip-end={strip
-        ? "calc(var(--c-bar-phone-gap) + var(--c-bar-caw-glass-phone))"
+      style:--strip-top={strip
+        ? "calc(var(--c-top-bar-h) + var(--space-3))"
         : undefined}
     >
       <Alert class="w-fit max-w-full" variant="destructive">
