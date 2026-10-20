@@ -7,20 +7,18 @@
   } from "svelte/elements";
   import type { VariantProps } from "tailwind-variants";
   import { cn, tv, type WithElementRef } from "#lib/utils.js";
+  import { pressVariants } from "./press.js";
 
   export const buttonVariants = tv({
     base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-[var(--border-button-outline)] bg-[var(--surface-raised)] bg-clip-padding font-medium text-[var(--ink-strong)] text-body leading-none tracking-[-0.01em] [--hit-edge:1px] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
-      /* The press, by size (app.css, press feedback): a compact button
+      /* The press, by size (./press.ts, The Press Rule): a compact button
          scales; one stretched full width, as a list row or a card's body,
-         tints instead. `pressable` is the house's own compact press
-         (app.css .pressable): it scales, and eases only its transform and
-         shadow, so its colours change at once. */
+         tints instead. `pressable` is the house's own compact press. */
       press: {
-        scale:
-          "[transition:var(--transition-control),transform_var(--dur-toggle)_var(--ease-out)] motion-safe:pressed:not-disabled:not-aria-busy:[transform:scale(var(--press-scale))]",
-        tint: "press-tint [transition:var(--transition-control)]",
-        pressable: "pressable",
+        scale: pressVariants({ press: "scale" }),
+        tint: pressVariants({ press: "tint" }),
+        pressable: pressVariants({ press: "pressable" }),
       },
       variant: {
         default:
@@ -141,12 +139,6 @@
         selected:
           "[transition:background-color_var(--dur-control)_var(--ease-out),color_var(--dur-control)_var(--ease-out)] aria-current-page:bg-selected-bg aria-current-page:bg-clip-border aria-current-page:text-selected-ink aria-current-page:hover:bg-selected-bg aria-current-page:hover:text-selected-ink",
       },
-      /** Inside a surface that sets its own type and ink (the new-session
-          dialog, `ns-theme`): the button takes the surface's font and ink as
-          every button there does, over the kit's own; a variant's hover
-          still draws. Its transition is the press's own (`press`), which is
-          the control's colours and, with motion, the press's transform. */
-      skin: { surface: "font-inherit text-inherit" },
     },
     defaultVariants: {
       variant: "default",
@@ -226,7 +218,6 @@
     figures,
     head,
     current,
-    skin,
     ref = $bindable(null),
     href,
     type = "button",
@@ -265,7 +256,6 @@
         figures,
         head,
         current,
-        skin,
       }),
       className
     )

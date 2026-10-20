@@ -1,5 +1,6 @@
 <script lang="ts">
   /** The `@` / `/` menu (§2.3): caret-anchored, keyboard-driven, 300px wide. */
+  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import NsPopover from "./NsPopover.svelte";
   import type { MenuItem } from "./ns-types";
 
@@ -44,7 +45,7 @@
     {@const Icon = item.icon}
     <button
       data-slot="row"
-      class="press-tint relative flex h-c-btn-h w-full cursor-pointer items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start text-ink-strong"
+      class="press-tint transition-control relative flex h-c-btn-h w-full cursor-pointer items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start text-ink-strong"
       data-fh="1"
       onmousedown={(event) => {
         event.preventDefault();
@@ -53,7 +54,7 @@
       tabindex="-1"
       type="button"
     >
-      <span data-slot="tile" class="ns-tile size-c-mark" style:color={item.hue}
+      <span data-slot="tile" class={iconTileVariants()} style:color={item.hue}
         ><Icon class="size-icon-md" /></span
       >
       <span

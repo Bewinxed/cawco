@@ -1,3 +1,4 @@
+start: 682ede2877621d672bb0b38815e7d56370494dec
 apps/dashboard/src/lib/cawco/spawn/ns-theme.css
 apps/dashboard/src/lib/cawco/decisions/RecordCard.svelte
 apps/dashboard/src/lib/cawco/tasks/TaskLabels.svelte
@@ -83,3 +84,28 @@ design/tokens/cawco.coarse.tokens.json
 apps/dashboard/src/lib/tokens/tokens.ts
 apps/apple/Packages/CawCoKit/Sources/CawCoDesign/Generated/Tokens.swift
 packages/hub/skills/decision-page/kit/tokens.css
+apps/dashboard/src/lib/cawco/accounts/AccountSwitch.svelte
+apps/dashboard/src/lib/cawco/motion/Rail.svelte
+apps/dashboard/src/lib/cawco/spawn/AccountChip.svelte
+apps/dashboard/src/lib/cawco/spawn/LifetimeChip.svelte
+apps/dashboard/src/lib/cawco/spawn/LocationChip.svelte
+apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte
+apps/dashboard/src/lib/cawco/spawn/MachinesChip.svelte
+apps/dashboard/src/lib/cawco/spawn/NsPopover.svelte
+apps/dashboard/src/lib/cawco/spawn/NsPopoverGroup.svelte
+apps/dashboard/src/lib/cawco/spawn/PermissionSection.svelte
+apps/dashboard/src/lib/cawco/spawn/ProjectChip.svelte
+apps/dashboard/src/lib/cawco/spawn/Segmented.svelte
+apps/dashboard/src/lib/cawco/spawn/SessionFooter.svelte
+apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte
+apps/dashboard/src/lib/cawco/spawn/TriggerMenu.svelte
+apps/dashboard/src/lib/cawco/transcript/AttachmentChips.svelte
+apps/dashboard/src/lib/components/ui/collapsible/collapsible-trigger.svelte
+apps/dashboard/src/lib/components/ui/machine-row/machine-row.svelte
+apps/dashboard/src/lib/components/ui/icon-tile/index.ts
+apps/dashboard/src/lib/components/ui/button/press.ts
+apps/dashboard/src/lib/components/ui/glide-popover/index.ts
+apps/dashboard/src/routes/(app)/motion/signin-problem/+page.svelte
+scripts/probe-kit/specs/page-marks.ts
+scripts/probe-kit/specs/web/chosen-hover.ts
+scripts/probe-landing-race.ts

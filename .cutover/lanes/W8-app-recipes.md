@@ -2,62 +2,64 @@
 
 Skills loaded (Skill tool): defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding, emil-design-eng, transitions-dev; before the report: interface-craft (Design Critique), ui-observer.
 
-Base: 682ede2877621d672bb0b38815e7d56370494dec (cawco/cutover-integration). Tailwind 4.3.3 (`@tailwindcss/node` 4.3.3).
+Start: 682ede2877621d672bb0b38815e7d56370494dec (cawco/cutover-integration). Tailwind 4.3.3 (`@tailwindcss/node` 4.3.3). The file list is `.cutover/lanes/W8-app-recipes.files`; the gates are `.cutover/gates/` (origin/cawco-cutover/gates 7f53fb6a7).
 
 better-ui rules followed:
-- Transition only what changes: every recipe names its properties (`transition-[border-color,background-color]` on the option chip, `transition-[color]` / `[color,transform]` on the tray chip and `before:transition-[background-color]` on its layer); nothing is `all`.
-- Hover only on hover-capable pointers: the tray chip's and Send's hover sit under `can-hover:`; the option chip's under Tailwind's `hover:` (`@media (hover: hover)`), which the old rule's bare `:hover` was not.
-- Press scales to the house `--press-scale` and a disabled control never scales: Send takes `pressable`, the tray chip `motion-safe:active:`; the option chip's hover is `enabled:` only, so a disabled chip no longer hovers.
-- Gate motion behind reduced motion: every movement is `motion-safe:`; colour transitions run always.
-- Shadows for elevation, borders for structure: the tray chip keeps its hairline edge under `shadow-tile`, the dock shell its control edge under `shadow-tile`.
+- Press scales to 0.97 and a disabled control never scales; rows tint (DESIGN.md, The Press Rule): one press recipe (ui/button `pressVariants`) is the kit Button's `press` and the press of every compact control the kit draws no part for; rows, crumbs, tabs and segments take `press-tint`.
+- Transition only what changes: every recipe names its properties; nothing is `all`.
+- Hover only on hover-capable pointers: `can-hover:` or Tailwind's `hover:` (`@media (hover: hover)`), never a bare `:hover`.
+- Gate motion behind reduced motion: every scale and slide is `motion-safe:`; colour transitions run always.
+- Shadows for elevation, borders for structure: the tray chip keeps its hairline under `shadow-tile`, the dock shell its control edge under `shadow-tile`.
 
 better-layout rules followed:
-- Hold structure until it breaks; breakpoints come from the content: the icon-card grid is `repeat(auto-fit, minmax(min(100%, c-icon-card-min), 1fr))`, so no viewport breakpoint outside DESIGN.md's 640/900/1024 is left (the old 399px one went).
-- Plan for growth: chips keep `max-w-full` and wrap line by line; chip rows wrap (`flex-wrap`); the card grid's `min(100%, …)` never overflows a narrow grid.
+- Breakpoints come from the content: the icon-card grid is `repeat(auto-fit, minmax(min(100%, c-icon-card-min), 1fr))`; no breakpoint outside DESIGN.md's 640/900/1024 is left.
+- Plan for growth: chips keep `max-w-full`, truncate inside `data-slot="chip-label"` and wrap whole (`flex-wrap`).
 - Logical properties: `ms-auto` for a section head's count, `ps-`/`pe-` on the editor chip.
-- Group with space: chip rows 7px apart, 14px under a finger so each 44px `touch-hit` meets its neighbour's at the midpoint (`coarse:gap-y-space-4 coarse:hit-gap-y-(--space-4)`).
+- Group with space: chip rows 7px apart, 14px under a finger so each 44px `touch-hit` meets its neighbour's at the midpoint.
 
 ## Variant table (variant → role → DESIGN.md line → sites)
 
 | recipe / variant | role | DESIGN.md | sites |
 | --- | --- | --- | --- |
-| `ui/chip` `chipVariants({ variant: "option" })` | an option / choice chip | Permission gate: "A question card answers with option chips (30px, 8px radius, keycap digits). A picked option takes the coral edge (`brand-solid`), a recessed fill and a keycap filled vermillion" | QuestionCard 320, 331; Prompt 863, 1025, 1041; RecordCard 91, 221; ViewRoutines 878; project/new 231; TaskLabels 99 |
-| `ui/chip` `chipVariants({ variant: "tray" })` | a chip on the tray row on the composer | Typography, Label: "chips"; The Press Rule: "a chip … scales to 0.97" | DelegateTray 1198, 1537, 1568; Composer 3065; PlanRing 31 |
-| `ui/chip` `chipsVariants()` | a row of option chips | The 44 Touch Rule: "Where neighbours sit closer, `--hit-gap-x` and `--hit-gap-y` stop each area at the midpoint" | QuestionCard 313; Prompt 858, 1068, 1086; ViewRoutines 868; project/new 219 |
-| `ui/menu-item` `menuItemVariants()` | a row in a floating surface | Shapes: "8px for items inside a surface"; The 44 Touch Rule: "Menu items and nav rows are 44px tall on touch" | kit: context-menu-item 20, -sub-trigger 36, -checkbox-item 24, -radio-item 19; dropdown-menu-item 44, -checkbox-item 22, -radio-item 16, -sub-trigger 20; select-item 19; command-item 17. app: FilesList 762, 779, 791; TaskRelations 152; StagesControl 173; BulkBar 233; FetchSkillPopover 221; PickerChip 90; connections 1059 |
-| `ui/section-header` `sectionHeadVariants({ inset: "list" })` | a list section's head | Layout, Density: "a 32px header band"; Borders are graded: "`border-hairline` separates rows and regions" | HomeRecent 97 |
-| `ui/section-header` `sectionHeadVariants({ inset: "flush" })` | a section head flush with the column it heads | as above | TodoList 160; TaskFields 70; TaskRelations 119; TaskPane 677, 705; TextSection 49; TaskActivity 281 |
-| `ui/dock-shell` `dockShellVariants()` | what docks at a page's foot | Composer, Shell: "a 12px pill in the panel material (composer glass) with a 1px control edge and the tile shadow" | Composer 3367; DecisionPage 340; ViewBar 133 |
-| `ui/button` `sendVariants()` | Send / Stop / Ask Caw | Composer, Controls: "Send/Stop (coral action), each at the concentric 5px radius. They scale to 0.97 on press" | Composer 3648; ViewBar 204 |
-| `ui/icon-card` `iconCardVariants()` / `iconCardsVariants()` | a pickable card led by an icon tile, and its grid | Channel cards (selection frame); The Press Rule ("cards … tint"); The One Ring Rule (inset ring) | MachinesEmpty 94, 105; TemplateCards 151, 168 |
+| ui/chip `variant: "option"` | an option chip | Permission gate: "option chips (30px, 8px radius, keycap digits). A picked option takes the coral edge (`brand-solid`), a recessed fill and a keycap filled vermillion" | QuestionCard 320, 331; Prompt 863, 1025, 1041; RecordCard 91, 221; ViewRoutines 878; project/new 227; TaskLabels 99 |
+| ui/chip `variant: "tray"` | a chip on the composer's tray row | The Press Rule: "a chip … scales to 0.97" | DelegateTray 1198, 1537, 1568; Composer 3065; PlanRing 31 |
+| ui/chip `variant: "setting"` (`size`, `tone`) | a setting chip | New-session dialog: "Setting chips are 30px with an 8px radius, a 16px glyph and a 12px chevron. A setting that cannot be changed where it is shown is the same chip sunk into the surface"; Session card: "one group of equal chips `--space-1` apart"; The Consequential Grant Rule | LifetimeChip 54; MachinesChip 80 (`fail`); ProjectChip 90 (`muted`); LocationChip 75 (`muted`); AccountChip 76; ToolChips 137, 146, 177 (`grant`), 202, 232 (`grant`); AccountSwitch 78, 133; NewSessionDialog 2008 |
+| ui/chip `chipsVariants` | a row of option chips | The 44 Touch Rule (midpoint hit-gaps) | QuestionCard 313; Prompt 858, 1068, 1086; ViewRoutines 868; project/new 220 |
+| ui/menu-item | a row in a floating surface | Shapes: "8px for items inside a surface"; The 44 Touch Rule: "Menu items and nav rows are 44px tall on touch" | kit: context-menu-item 20, -sub-trigger 36, -checkbox-item 24, -radio-item 19; dropdown-menu-item 44, -checkbox-item 22, -radio-item 16, -sub-trigger 20; select-item 19; command-item 17. app: FilesList 762, 779, 791; TaskRelations 152; StagesControl 173; BulkBar 233; FetchSkillPopover 221; PickerChip 90; connections 1058 |
+| ui/section-header `sectionHeadVariants` `list` / `flush` | a list section's head | Borders are graded: "`border-hairline` separates rows and regions" | list: HomeRecent 97. flush: TodoList 160; TaskFields 70; TaskRelations 119; TaskPane 677, 705; TextSection 49; TaskActivity 281 |
+| ui/dock-shell | what docks at a page's foot | Composer, Shell: "a 12px pill in the panel material (composer glass) with a 1px control edge and the tile shadow" | Composer 3367; DecisionPage 340; ViewBar 133 |
+| ui/button `sendVariants` | Send / Stop / Ask Caw | Composer, Controls: "Send/Stop (coral action), each at the concentric 5px radius. They scale to 0.97 on press" | Composer 3648; ViewBar 204 |
+| ui/button `pressVariants({ press: "scale" })` | a compact control with no kit part | The Press Rule | AttachmentChips 79, 109, 138, 159, 182; NewSessionDialog 1916 (the sheet's close) |
+| kit Button (`outline`, `sm`, `secondary`, `ghost tone quiet`, `pending`) | the dialog's buttons | Buttons | SessionFooter 33, 38; ProjectChip 170, 179; MachinesChip 106; LocationSection 236, 247, 377 |
+| ui/icon-tile (`empty`, `data-ink`) | an icon tile | New-session dialog: "Icon tiles are raised 8px squares with the tile shadow, dashed for empty or inverted for chosen"; Identity marks and tiles: "Icon tile" | LifetimeChip 84; TriggerMenu 57; PermissionSection 113; MachinesChip 166 (`empty`); ProjectChip 202, 233 (`empty`); machine-row 34 |
+| ui/glide-popover | the dialog's popover surface | New-session dialog: "Its popovers glide between sibling triggers, morphing width and height over 260ms on the drawer curve"; Breakpoints: "popovers widen to the viewport less 24px" | NsPopover 182; NsPopoverGroup 104; signin-problem bench 37 |
+| ui/icon-card `iconCardVariants` / `iconCardsVariants` | a pickable card led by an icon tile, and its grid | Channel cards; The Press Rule (cards tint); The One Ring Rule | MachinesEmpty 94, 105; TemplateCards 151, 168 |
 
 ## Sheet classes
 
-sheet: kit-chip → kit part (ui/chip `variant: "option"`) — a multi-property look applied by name in 6 components; its pick is the element's state (`aria-pressed`, `aria-checked`, `data-chosen`).
-sheet: kit-chips → kit part (ui/chip `chipsVariants`) — the chip row's layout and hit-gaps, applied by name in 4 components.
-sheet: kit-chip-chosen → state as attribute (`data-chosen`) — "a record of what was picked", a state written as a class.
-sheet: kit-tray-chip → kit part (ui/chip `variant: "tray"`) — a look applied by name in 3 components; SideSheet's script hook moved to `data-tray-chip`.
-sheet: kit-item → kit part (ui/menu-item) — a look applied by name in 10 kit and 7 app files. As a utility it outranked its callers' own utilities (compiled: `.kit-item` sorts after `.min-h-c-artifact-row-h`, so FilesList's 44px row would have taken 32px); as a recipe it merges through tailwind-merge as the components layer lost to them. The highlight's rows hook moved to `data-menu-item`.
-sheet: kit-section-head → kit part (ui/section-header `sectionHeadVariants`) — a look in 8 components; its `> .count` child styles moved onto the counts themselves (`num ms-auto type-meta text-ink-subtle`) and the Button's `head: count` variant (`ms-auto tabular-nums`).
-sheet: kit-edge-fade → one behaviour used across the app (`@utility kit-edge-fade`, same name, users unchanged) — the scroll-driven edge fade; its overridable defaults (the inline mask, `--fade-len`) sit at no weight in `@layer components`, because PaneTabs' phone strip (app.css `[data-session-tabs]… .ff-tabs-list[data-scrollable]`) and `fade-len-*` override them and a utility-layer default would outrank both.
-sheet: kit-edge-fade-block → one behaviour used across the app (`@utility kit-edge-fade-block`) — as above, down the page.
-sheet: kit-send → kit part (ui/button `sendVariants`) — Send's look in 2 components; it carries `pressable`, which already decided its transition at both sites.
-sheet: kit-dock-shell → kit part (ui/dock-shell) — the composer glass shell in 3 components.
-sheet: kit-seam → one user's own utilities (WorkTabs 896: `mx-(--seam-inset) h-px border-0 bg-seam`) — applied by name in one component, so a recipe would be a part with one site.
-sheet: kit-nest → one behaviour used across the app (`@utility kit-nest`, same name, users unchanged) — the nesting line drawn by `::before`/`::after` with the fold's cuts; the fold script (motion/branch) now finds its lists by `data-nest`, never by the utility's name.
-sheet: icon-card → kit part (ui/icon-card `iconCardVariants`) — 2 components; highlight rows hook `data-slot="icon-card"`.
-sheet: icon-cards → kit part (ui/icon-card `iconCardsVariants`) + foreign DOM for the highlight's pill (`[data-slot="icon-cards"] :is(.kit-pill, .kit-pill-trail)`: components/ui/highlight draws those elements into the grid, they carry no class from its markup).
-sheet: mention-glyph → the script's own utilities (MentionField 501: `glyph.className = "inline-grid … [[data-tone=live]>&]:text-status-live-glyph …"`) — MentionField builds the glyph and can give it classes; hook `data-mention-glyph`.
-sheet: ns-chip → the script's own utilities (PromptEditor 155) — PromptEditor builds the chip.
-sheet: ns-chip-icon → the script's own utilities (PromptEditor 158).
-
-ns-theme.css verdicts (this lane's part):
-sheet: ns-in, ns-check, ns-panel → true `@utility` (a one-shot entrance), their keyframes on the theme as `@theme inline { --animate-ns-* }`, read with `--theme(--animate-ns-* inline)`.
-sheet: ns-pop's open/close keyframes → `@theme inline { --animate-ns-pop-in / -out }`.
-sheet: fai-comb, fai-scroll → true `@utility` (a repeating-gradient comb; a scrollbar's paint), CSS features Tailwind has no utility for.
+sheet: kit-chip → kit part (ui/chip `option`) — a multi-property look in 6 components; its pick is the element's state (`aria-pressed`, `aria-checked`, `data-chosen`).
+sheet: kit-chips → kit part (ui/chip `chipsVariants`) — the chip row in 4 components.
+sheet: kit-chip-chosen → state as attribute (`data-chosen`).
+sheet: kit-tray-chip → kit part (ui/chip `tray`) — 3 components; SideSheet's hook moved to `data-tray-chip`.
+sheet: kit-item → kit part (ui/menu-item) — 10 kit and 7 app files. As a utility it outranked its callers (compiled: `.kit-item` sorted after `.min-h-c-artifact-row-h`, so FilesList's 44px rows would have taken 32px); as a recipe it merges through tailwind-merge as the components layer lost to them. The highlight's rows hook moved to `data-menu-item`.
+sheet: kit-section-head → kit part (ui/section-header `sectionHeadVariants`) — 8 components; its `> .count` child styles moved onto the counts (`num ms-auto type-meta text-ink-subtle`) and the Button's `head: count` (`ms-auto tabular-nums`).
+sheet: kit-edge-fade → one behaviour used across the app (`@utility kit-edge-fade`, same name, users unchanged); its overridable defaults (inline mask, `--fade-len`) sit at no weight in `@layer components`, because PaneTabs' phone strip and `fade-len-*` override them.
+sheet: kit-edge-fade-block → one behaviour used across the app (`@utility kit-edge-fade-block`).
+sheet: kit-send → kit part (ui/button `sendVariants`) — 2 components; it carries `pressable`.
+sheet: kit-dock-shell → kit part (ui/dock-shell) — 3 components.
+sheet: kit-seam → its one user's own utilities (WorkTabs 896: `mx-(--seam-inset) h-px border-0 bg-seam`).
+sheet: kit-nest → one behaviour used across the app (`@utility kit-nest`, same name); the fold script (motion/branch `NEST`, line 343) finds its lists by `data-nest`, never by the utility's name.
+sheet: icon-card / icon-cards → kit part (ui/icon-card) + foreign DOM for the highlight's pill (`[data-slot="icon-cards"] :is(.kit-pill, .kit-pill-trail)`: components/ui/highlight draws those elements into the grid).
+sheet: mention-glyph → the script's own utilities (MentionField 501), hook `data-mention-glyph`.
+sheet: ns-chip, ns-chip-icon → the script's own utilities (PromptEditor 155, 158).
+sheet: ns-chip-btn → kit part (ui/chip `setting`, `size`, `tone`); app.css's `session-details-chips` `.ns-chip-btn` host rules deleted (`size: "compact"` replaces them).
+sheet: ns-btn → the kit Button's sizes.
+sheet: ns-tile → kit part (ui/icon-tile), which ui/machine-row now draws too.
+sheet: ns-pop → kit part (ui/glide-popover); ns-panel-set and ns-morph → their one element's own utilities in NsPopoverGroup (170, 178).
+sheet: `.ns-theme button` / `button:active` / `input` / `[contenteditable]` / `input::placeholder` / `.ns-tile svg` / `.ns-chip-btn > svg` (labelled foreign-dom, but the dialog's own DOM) → deleted; each control the rule reached took its own press, transition or placeholder (Kit swaps, Fixed).
+sheet: ns-in, ns-check, ns-panel → true `@utility`, their keyframes on the theme (`@theme inline { --animate-ns-* }`, read with `--theme(--animate-ns-* inline)`); ns-pop's open and close as `--animate-ns-pop-in / -out`.
+sheet: fai-comb, fai-scroll → true `@utility` (a repeating-gradient comb; a scrollbar's paint).
 sheet: ns-theme → true `@utility` (the dialog's timing scope and body face on its roots).
-sheet: `.ns-theme *` box-sizing → removed (see Removed).
-Pending the parent's answer (handoff sent): ns-btn, ns-chip-btn, ns-tile, ns-pop, ns-panel-set, ns-morph and the `.ns-theme button` / `input` / `::placeholder` descendant rules are looks whose consumers are not on this list.
 
 ## Kit swaps
 
@@ -74,14 +76,51 @@ kit-swap: apps/dashboard/src/lib/cawco/decisions/RecordCard.svelte:91 Chip optio
 kit-swap: apps/dashboard/src/lib/cawco/decisions/RecordCard.svelte:221 Chip option — done
 kit-swap: apps/dashboard/src/lib/cawco/views/ViewRoutines.svelte:868 Chip chipsVariants — done
 kit-swap: apps/dashboard/src/lib/cawco/views/ViewRoutines.svelte:878 Chip option — done
-kit-swap: apps/dashboard/src/routes/(app)/project/new/+page.svelte:219 Chip chipsVariants — done
-kit-swap: apps/dashboard/src/routes/(app)/project/new/+page.svelte:231 Chip option — done
+kit-swap: apps/dashboard/src/routes/(app)/project/new/+page.svelte:220 Chip chipsVariants — done
+kit-swap: apps/dashboard/src/routes/(app)/project/new/+page.svelte:227 Chip option — done
 kit-swap: apps/dashboard/src/lib/cawco/tasks/TaskLabels.svelte:99 Chip option — done
 kit-swap: apps/dashboard/src/lib/cawco/transcript/DelegateTray.svelte:1198 Chip tray — done
 kit-swap: apps/dashboard/src/lib/cawco/transcript/DelegateTray.svelte:1537 Chip tray — done
 kit-swap: apps/dashboard/src/lib/cawco/transcript/DelegateTray.svelte:1568 Chip tray — done
 kit-swap: apps/dashboard/src/lib/cawco/transcript/Composer.svelte:3065 Chip tray — done
 kit-swap: apps/dashboard/src/lib/cawco/plan/PlanRing.svelte:31 Chip tray — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/LifetimeChip.svelte:54 Chip setting — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/MachinesChip.svelte:80 Chip setting tone fail — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ProjectChip.svelte:90 Chip setting tone muted — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/LocationChip.svelte:75 Chip setting tone muted — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/AccountChip.svelte:76 Chip setting — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte:137 Chip setting (aria-disabled) — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte:146 Chip setting (static) — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte:177 Chip setting tone grant (static) — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte:202 Chip setting — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte:232 Chip setting tone grant — done
+kit-swap: apps/dashboard/src/lib/cawco/accounts/AccountSwitch.svelte:78 Chip setting — done
+kit-swap: apps/dashboard/src/lib/cawco/accounts/AccountSwitch.svelte:133 Chip setting (static) — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/NewSessionDialog.svelte:2008 Chip setting (static) — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/NewSessionDialog.svelte:1916 Button pressVariants scale (the sheet's close) — done
+kit-swap: apps/dashboard/src/lib/cawco/transcript/AttachmentChips.svelte:79 Button pressVariants scale — done
+kit-swap: apps/dashboard/src/lib/cawco/transcript/AttachmentChips.svelte:109 Button pressVariants scale — done
+kit-swap: apps/dashboard/src/lib/cawco/transcript/AttachmentChips.svelte:138 Button pressVariants scale — done
+kit-swap: apps/dashboard/src/lib/cawco/transcript/AttachmentChips.svelte:159 Button pressVariants scale — done
+kit-swap: apps/dashboard/src/lib/cawco/transcript/AttachmentChips.svelte:182 Button pressVariants scale — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/SessionFooter.svelte:33 Button outline — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/SessionFooter.svelte:38 Button default (label, pending, pendingLabel, failed) — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ProjectChip.svelte:170 Button outline sm — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ProjectChip.svelte:179 Button default sm (label, pending) — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/MachinesChip.svelte:106 Button outline sm — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:236 Button ghost sm tone quiet — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:247 Button secondary sm — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:377 Button default sm — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/LifetimeChip.svelte:84 IconTile — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/TriggerMenu.svelte:57 IconTile — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/PermissionSection.svelte:113 IconTile — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/MachinesChip.svelte:166 IconTile empty — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ProjectChip.svelte:202 IconTile — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ProjectChip.svelte:233 IconTile empty — done
+kit-swap: apps/dashboard/src/lib/components/ui/machine-row/machine-row.svelte:34 IconTile (data-ink) — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/NsPopover.svelte:182 GlidePopover pad — done
+kit-swap: apps/dashboard/src/lib/cawco/spawn/NsPopoverGroup.svelte:104 GlidePopover — done
+kit-swap: apps/dashboard/src/routes/(app)/motion/signin-problem/+page.svelte:37 GlidePopover — done
 kit-swap: apps/dashboard/src/lib/cawco/transcript/Composer.svelte:3367 DockShell — done
 kit-swap: apps/dashboard/src/lib/cawco/decisions/DecisionPage.svelte:340 DockShell — done
 kit-swap: apps/dashboard/src/lib/cawco/project/ViewBar.svelte:133 DockShell — done
@@ -117,93 +156,104 @@ kit-swap: apps/dashboard/src/lib/cawco/tasks/StagesControl.svelte:173 MenuItem �
 kit-swap: apps/dashboard/src/lib/cawco/tasks/BulkBar.svelte:233 MenuItem — done
 kit-swap: apps/dashboard/src/lib/cawco/config/FetchSkillPopover.svelte:221 MenuItem — done
 kit-swap: apps/dashboard/src/lib/cawco/config/PickerChip.svelte:90 MenuItem — done
-kit-swap: apps/dashboard/src/routes/(app)/config/connections/+page.svelte:1059 MenuItem — done
+kit-swap: apps/dashboard/src/routes/(app)/config/connections/+page.svelte:1058 MenuItem — done
+
+For integration (files of W4-controls and W5, not edited here; these classes no longer exist after this lane):
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte:449 `ns-tile size-c-mark` + `data-variant="ink"` → ui/icon-tile `iconTileVariants()` with `data-ink`
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte:541 `ns-tile size-c-mark overflow-hidden group-disabled:opacity-50` → `iconTileVariants({ class: "overflow-hidden group-disabled:opacity-50" })`
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte:383 the raw icon button (`size-space-6 … hover:text-ink-strong`) → `pressVariants({ press: "scale", class: … })` (it pressed by the deleted `.ns-theme button:active` rule)
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte:438 and :496 the `press-tint` rows → add `transition-control` (the deleted `.ns-theme button` rule eased their colours)
+kit-swap: apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte:358 the raw search input → add `placeholder:text-ink-muted` (the deleted `.ns-theme input::placeholder` rule)
+kit-swap: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:709 `triggerClass="ns-chip-btn"` → `triggerClass={chipVariants({ variant: "setting", size: "compact" })}`
+kit-swap: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:750 `data-slot="ns-chip-btn" … class="ns-chip-btn"` (static model chip) → `class={chipVariants({ variant: "setting", size: "compact" })}`, `data-slot` dropped (nothing reads it)
+kit-swap: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:756 `<ToolChips …>` → `size="compact"`
+kit-swap: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:778 `<AccountSwitch …>` → `size="compact"`
+kit-swap: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:872 `ns-btn cursor-pointer max-phone:flex-1` `data-size="xs" data-variant="primary"` → `<Button size="sm" class="max-phone:flex-1">` (DESIGN.md, Buttons: `sm` is 30px; the "chip-scale" 7px inset and 8px radius are no button size)
+kit-swap: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:652 the raw `cwd` text button → its press per The Press Rule (a text link dims to 72%), which the deleted rule's 0.97 scale stood in for
 
 Hooks moved off class names (a hook is an attribute):
-fixed: apps/dashboard/src/lib/cawco/transcript/QuestionCard.svelte:132 `.kit-chip` query → `:scope > span` (the row's children are its chips) and :146 `[data-slot="qopts"] > [data-key=…]`.
-fixed: apps/dashboard/src/lib/cawco/side/SideSheet.svelte:58 `[data-slot="lift"] .kit-tray-chip` → `[data-slot="lift"] [data-tray-chip]`; every tray chip carries `data-tray-chip`.
-fixed: the six kit floating surfaces' highlight `rows: ".kit-item"` → `rows: "[data-menu-item]"` (command-list 15, context-menu-content 31, context-menu-sub-content 60, dropdown-menu-content 53, dropdown-menu-sub-content 57, select-content 32); every row carries `data-menu-item`.
-fixed: apps/dashboard/src/app.css:1239 `:where(.kit-item) .kit-tick` → `:where([data-menu-item]) .kit-tick`.
-fixed: apps/dashboard/src/lib/cawco/motion/branch.svelte.ts `.kit-nest` queries (`closest`, `querySelectorAll`, `classList.contains`) → `[data-nest]` (`NEST`, line 343); every nesting list carries `data-nest` (RunSteps 172, WorkTabs 701, SessionTree 95, Sidebar 740 and 1113, AskItems 73, StopTray 871, PlanTree 104 when nested).
-fixed: apps/dashboard/src/lib/cawco/MachinesEmpty.svelte and TemplateCards.svelte highlight `rows: ".icon-card"` → `[data-slot="icon-card"]`.
-fixed: apps/dashboard/src/lib/cawco/find/MentionField.svelte:257 `.mention-glyph` → `[data-mention-glyph]` (its own attribute, as the chip's `data-mention-chip` is).
-fixed: apps/dashboard/src/app.css:570 the mark-line list drops `.kit-chip`, `.kit-tray-chip`, `.kit-item`, `.kit-section-head`: each recipe carries `mark-line` itself.
+fixed: QuestionCard.svelte:133 `.kit-chip` query → `:scope > span`; :147 `[data-slot="qopts"] > [data-key=…]`.
+fixed: SideSheet.svelte:58 `[data-slot="lift"] .kit-tray-chip` → `[data-tray-chip]`; scripts/probe-landing-race.ts:376 the same.
+fixed: the six kit floating surfaces' highlight `rows: ".kit-item"` → `[data-menu-item]` (command-list, context-menu-content, context-menu-sub-content, dropdown-menu-content, dropdown-menu-sub-content, select-content); app.css `:where(.kit-item) .kit-tick` → `:where([data-menu-item]) .kit-tick`.
+fixed: motion/branch.svelte.ts `.kit-nest` queries → `[data-nest]`; every nesting list carries `data-nest` (RunSteps 172, WorkTabs 701, SessionTree 95, Sidebar 740, 1113, AskItems 73, StopTray 871, PlanTree 104).
+fixed: MachinesEmpty / TemplateCards highlight rows → `[data-slot="icon-card"]`; MentionField:257 → `[data-mention-glyph]`.
+fixed: probe specs chosen-hover.ts and page-marks.ts `.ns-pop` → `[data-ns-pop]` (the surfaces' existing hook).
+fixed: app.css mark-line list drops `.kit-chip`, `.kit-tray-chip`, `.kit-item`, `.kit-section-head`: each recipe carries `mark-line`.
+
+Each control the `.ns-theme button` rule reached now owns its press:
+fixed: LifetimeChip 73, TriggerMenu 48, PermissionSection 104, LocationSection 291, 303, 316, 343, Segmented 70: `press-tint` rows and segments take `transition-control`.
+fixed: AccountChip 101, 119, AccountSwitch 98: listbox rows took the rule's 0.97 scale; rows tint (The Press Rule), so `press-tint transition-control`.
+fixed: Rail 208: harness tabs in a strip took the rule's scale; tabs tint, so `press-tint`.
+fixed: AttachmentChips 79, 109, 138, 159, 182: compact controls; `pressVariants({ press: "scale" })`, the same in the composer and the dialog.
+fixed: transcript/AttachButton: the rule stacked a transform scale on its own `scale` (0.97 × 0.97) in the dialog; gone with the rule, no edit.
+fixed: ProjectChip 136, 151, LocationSection 222, 411: raw inputs take `placeholder:text-ink-muted`.
+fixed: MachinesChip 124, 141, 160 and ProjectChip 196, 225: `dur-toggle` on the base with `motion-safe:transition-[…]` let the later utility reset the duration to the default, so with motion the rows ran at 0.12s; `duration-(--dur-toggle)` sets `--tw-duration`, and they run at 0.16s (rendered: start sha `background-color, transform / 0.12s`, lane `/ 0.16s`). The same in ui/glide-popover and ui/icon-tile (`duration-(--dur-pop)`).
 
 ## Removed
 
-removed: apps/dashboard/src/lib/cawco/tasks/TaskLabels.svelte:99 the add chip's `h-c-badge-h px-space-1 gap-space-row text-ink-muted mark-line inline-flex items-center type-label` — a restyle of the option chip DESIGN.md does not name (Permission gate: "option chips (30px, 8px radius …)"); `h-c-badge-h` was dead already (the chip's 30px min-height won). It takes the chip's default.
-removed: apps/dashboard/src/lib/cawco/decisions/RecordCard.svelte:91 `cursor-default` — dead: a span has the default cursor; the chip's pointer is `enabled:` only.
-removed: apps/dashboard/src/lib/cawco/project/ViewBar.svelte:200 `style:--kit-send-press="var(--dur-toggle)"` — dead: `pressable` (utilities layer) set Send's transition at both sites, so `--kit-send-press` reached nothing.
-removed: Send's disabled `opacity: 0.55` → 50% — DESIGN.md, Buttons: "Disabled: 50% opacity; the colour pair is kept."
-removed: the icon-card grid's `@media (max-width: 639px)` and `(max-width: 399px)` column counts — breakpoints outside DESIGN.md's (Layout: "Breakpoints. 640px … 900px … 1024px"); the grid is content-driven now (at 390px: two 175.5px columns where one 362px column stood).
-removed: apps/dashboard/src/lib/cawco/spawn/ns-theme.css `.ns-theme *, *::before, *::after { box-sizing: border-box }` — a duplicate of Tailwind's Preflight (`*, ::after, ::before, ::backdrop, ::file-selector-button { box-sizing: border-box }`).
-removed: the kit-keycap rule's nested `.kit-chip:is(…) &` (app.css) — the chip recipe paints its keycap (`aria-pressed:[&_.kit-keycap]:bg-chip-chosen-bg` …), so the nested rule matched nothing.
-removed: the option chip's `box-sizing: border-box` and the tray chip's `background: none` / `border: 0` duplicates of Preflight.
+removed: TaskLabels.svelte:99 the add chip's `h-c-badge-h px-space-1 gap-space-row text-ink-muted …` — a restyle of the option chip DESIGN.md does not name; `h-c-badge-h` was already dead (the chip's 30px min-height won).
+removed: RecordCard.svelte:91 `cursor-default` — dead on a span.
+removed: ViewBar.svelte `style:--kit-send-press` — dead: `pressable` set Send's transition at both sites.
+removed: Send's disabled 0.55, ToolChips' unavailable chip 0.55, PermissionSection's and MachinesChip's disabled rows 0.55, AccountChip's 0.6, Rail's 0.45 → 50% — DESIGN.md, Buttons: "Disabled: 50% opacity".
+removed: the icon-card grid's 639px and 399px column counts — breakpoints outside DESIGN.md's; the grid is content-driven.
+removed: ns-theme.css `.ns-theme *` box-sizing — a duplicate of Preflight; `.ns-theme button { font: inherit; color: inherit }` and `.ns-theme input, [contenteditable] { font-family }` — duplicates of Preflight's `button, input, … { font: inherit; color: inherit }` and the scope's own body face.
+removed: ns-theme.css `--ns-prompt-ms`, `--ns-chip-ms`, `--ns-thumb-ms`, `--ns-harness-thumb-ms` — no reader left.
+removed: NsPopover `triggerTone` / `TONES` (the chip's `tone`) and `data-ns-popover-trigger-class` (nothing reads it); `data-slot="ns-chip-btn"` (ToolChips, AccountSwitch, NewSessionDialog) and `data-slot="primary"` on the swapped buttons (nothing reads them).
+removed: ui/button's `skin: surface` and ui/collapsible-trigger's `skin` — written for the `.ns-theme` scope, no caller.
+removed: the kit-keycap rule's nested `.kit-chip:is(…) &` — the chip recipe paints its keycap.
 
 ## Tokens
 
-token: --c-edge-fade-len-phone 16px — the house edge fade's length under 640px; between the ladder's 14 and 18, so its own token.
-token: --c-menu-item-h 32px (44px in cawco.coarse.tokens.json) — a floating surface's row; one token with a coarse mode, so a caller's `min-h-*` replaces it in one tailwind-merge group.
+token: --c-edge-fade-len-phone 16px — the house edge fade under 640px; between the ladder's 14 and 18.
+token: --c-menu-item-h 32px, 44px in cawco.coarse.tokens.json — a floating surface's row.
 token: --c-icon-card-min 160px — an icon card's track floor.
 
 ## Theme additions
 
 theme: utility kit-edge-fade
-```css
-@utility kit-edge-fade {
-  isolation: isolate;
-  animation-name: kit-edge-fade-start, kit-edge-fade-end;
-  animation-duration: auto;
-  animation-timing-function: linear;
-  animation-fill-mode: both;
-  animation-range: 0% 6%, 94% 100%;
-  animation-timeline: scroll(self inline);
-}
-```
-theme: utility kit-edge-fade-block (the same, `mask-image` to bottom with `--fade-inset-end`, `animation-timeline: scroll(self block)`)
-theme: utility kit-nest (the nesting line: `& > li::before/::after`, and `[data-branch-draw]&` / `[data-branch-hold] &` cuts)
-theme: component kit-edge-fade defaults (`:where(.kit-edge-fade, .kit-edge-fade-block) { --fade-len: var(--c-edge-fade-len); @variant max-phone { --fade-len: var(--c-edge-fade-len-phone) } }`, `:where(.kit-edge-fade) { mask-image: … }`)
-theme: component icon-cards pill (`[data-slot="icon-cards"] :is(.kit-pill, .kit-pill-trail) { z-index: 1; box-sizing: border-box; border: 1px solid var(--brand-solid); background: var(--surface-recess) }`)
+theme: utility kit-edge-fade-block
+theme: utility kit-nest
+theme: component kit-edge-fade defaults (`:where(.kit-edge-fade, .kit-edge-fade-block) { --fade-len … }`, `:where(.kit-edge-fade) { mask-image … }`)
+theme: component icon-cards pill (`[data-slot="icon-cards"] :is(.kit-pill, .kit-pill-trail)`)
 theme: animate ns-in, ns-check, ns-panel, ns-pop-in, ns-pop-out (ns-theme.css `@theme inline`)
-
-All in app.css's one block `/* wave 2: W8-app-recipes */` (and ns-theme.css's `@theme inline`).
+All in app.css's block `/* wave 2: W8-app-recipes */` and ns-theme.css.
 
 ## Compiled check
 
 `@tailwindcss/node` 4.3.3, `compile()` over `apps/dashboard/src/app.css`, `build([...])`:
-- `.kit-edge-fade-block { isolation: isolate; mask-image: linear-gradient( to bottom, …` and `.kit-edge-fade { isolation: isolate; animation-name: kit-edge-fade-start, kit-edge-fade-end; …` in the utilities layer; the defaults `:where(.kit-edge-fade, .kit-edge-fade-block) { --fade-len: var(--c-edge-fade-len); @media (width < 640px) { --fade-len: var(--c-edge-fade-len-phone); }` in components. Winner: `.fade-len-c-edge-fade-len { --fade-len: var(--c-edge-fade-len); }` (utilities) over the default at every width, and PaneTabs' strip rule (components, specificity above 0) over the default `:where()` mask: both as before.
-- Sort order: `.kit-nest`, `.kit-edge-fade-block`, `.kit-edge-fade` sort before `.h-auto`, `.min-h-c-artifact-row-h`, `.rounded-sm`, `.fade-len-c-edge-fade-len`, `.transition-control`, so a caller's single utility wins. `.kit-item` sorted after `.min-h-c-artifact-row-h`, which is why it became a recipe instead.
-- `[data-branch-draw]& > li::before, … [data-branch-draw] & > li::after { clip-path: inset(-9999px var(--nest-cut-r) var(--nest-cut-b) -9999px) }` and `[data-branch-hold]& > li::before, … { --nest-cut-b: 9999px }` nest under `.kit-nest`.
-- `:where(.ns-theme .ns-in) { animation: ns-in var(--ns-row-ms) var(--ease-out) backwards; animation-delay: var(--delay, 0ms); }`; `:where(.ns-theme.ns-pop[data-state="open"]) { animation: ns-pop-in var(--dur-pop) var(--ease-drawer) both; }`; `@keyframes ns-in`, `ns-check`, `ns-panel`, `ns-pop-out`, `ns-pop-in`, `kit-edge-fade-start`, `kit-edge-fade-end` all emitted (the inline theme writes each value where it is read, so `--ns-row-ms` resolves on `.ns-theme`, not `:root`).
-- Tray chip: `.before\:bg-\(color\:--tray-chip-fill\)::before { background-color: var(--tray-chip-fill); }`, `.can-hover\:hover\:\[--tray-chip-fill\:var\(--surface-hover\)\]:hover { --tray-chip-fill: var(--surface-hover); }`, `.status-needs\:before\:bg-status-attn-bg[data-status="needs"]::before { background-color: var(--status-attn-bg); }`: the hover moves only the resting fill, so any tint a caller writes on the layer wins whatever the rule order (the old components-layer hover lost to every site utility the same way).
-- `--c-menu-item-h: 32px;` and, under `@media (pointer: coarse)`, `--c-menu-item-h: 44px;`.
+- `.kit-edge-fade-block { isolation: isolate; mask-image: …` and `.kit-edge-fade { … animation-name: kit-edge-fade-start, kit-edge-fade-end; …` (utilities); `:where(.kit-edge-fade, .kit-edge-fade-block) { --fade-len: var(--c-edge-fade-len); @media (width < 640px) { --fade-len: var(--c-edge-fade-len-phone); }` (components). `.fade-len-c-edge-fade-len` (utilities) and PaneTabs' strip rule (components, specificity above 0) win over the defaults, as before.
+- Sort order: `.kit-nest`, `.kit-edge-fade-block`, `.kit-edge-fade` sort before `.h-auto`, `.min-h-c-artifact-row-h`, `.rounded-sm`, `.fade-len-c-edge-fade-len`, `.transition-control`; `.kit-item` sorted after `.min-h-c-artifact-row-h`, which is why it became a recipe.
+- `[data-branch-draw]& > li::before, … { clip-path: inset(-9999px var(--nest-cut-r) var(--nest-cut-b) -9999px) }`, `[data-branch-hold]& > li::before, … { --nest-cut-b: 9999px }` nest under `.kit-nest`.
+- `:where(.ns-theme .ns-in) { animation: ns-in var(--ns-row-ms) var(--ease-out) backwards; animation-delay: var(--delay, 0ms); }`; `@keyframes ns-in, ns-check, ns-panel, ns-pop-out, ns-pop-in, kit-edge-fade-start, kit-edge-fade-end` emitted.
+- `.before\:bg-\(color\:--tray-chip-fill\)::before { background-color: var(--tray-chip-fill) }`, `.can-hover\:hover\:\[--tray-chip-fill\:…\]:hover { --tray-chip-fill: var(--surface-hover) }`: the hover moves only the resting fill, so any tint a caller writes on the layer wins.
+- `--c-menu-item-h: 32px;` and under `@media (pointer: coarse)` `--c-menu-item-h: 44px;`.
+- The house `dur-*` sets only `transition-duration`, and a `transition-[…]` sorting after it (under `motion-safe:`) resets it through `var(--tw-duration, var(--default-transition-duration))`; the recipes pairing a non-default duration use `duration-(--dur-pop)`, which sets `--tw-duration`.
 
 ## Rendered check
 
-`CAWCO_DEV_HUB_URL=http://127.0.0.1:59999 bunx vite dev` (port 5291), one playwright-core session (cached Chromium 1248), `waitUntil: "domcontentloaded"`, 1440×900 and 390×844 (the phone as a coarse pointer: `hasTouch`, `isMobile`). The start sha ran the same way on port 5292 from a scratch checkout of 682ede287; every element's full computed style and `::before` was diffed.
+`CAWCO_DEV_HUB_URL=http://127.0.0.1:59999 bunx vite dev` (5291) and the start sha the same way from a scratch checkout (5292), one playwright-core session (Chromium 1248), `domcontentloaded`, every element's full computed style diffed, and controls pressed (mouse down, read, mouse up).
 
-| element (page) | 1440×900 | 390×844 coarse |
-| --- | --- | --- |
-| tray chip (/motion/delegate-tray, /motion/chosen-hover PlanRing pressed and unpressed) | rect equal [991.9,801,88.1,28]; 28px, r 8px, px 7px, gap 6px; `::before` raised fill, 1px hairline, z −1, tile shadow; pressed `::before` `oklch(0.854 0.014 82)` (surface-pressed) | rect equal, 34px (c-tray-chip's coarse mode) |
-| dock shell (/motion/recall) | rect equal [474,850,720,50]; r 12px, 1px control edge, `blur(20px) saturate(1.6)`, fill at 72% | rect equal [11,794,368,50] |
-| Send, disabled (/motion/recall) | rect equal 34×34, r 5px (12 − 7); opacity 0.55 → 0.5 (DESIGN.md) | same |
-| menu item (/motion/overlays, dropdown opened) | rect equal [570,154,178,32], min-height 32px; the hover ghost lands on the row: ghost rect [570,154,178,32], opacity 1 (the highlight finds rows by `data-menu-item`) | rect equal [25,228,178,44], min-height 44px |
-| option chips row + chip (/project/new) | rect equal; chip 30px, r 8px, px 11px, py 4px, gap 7px, label 13px/500 | rect equal; rows 14px apart (`--hit-gap-y: 14px` where the start computed `calc(7px * 2)`) |
-| icon cards + card (/project/new) | rect equal [279,495,1110,296.1]; six 175.8px columns; card r 10px, padding 25/14/14 | two 175.5px columns where one 362px column stood (the content-driven grid; see Removed) |
+Equal rect and computed style to the start sha (the textual-only differences: `border-0` leaves `border-style: solid` at width 0; one `transition-duration` value repeated where the old shorthand listed one per property; Tailwind's composite `box-shadow` leads with four transparent layers before the same layers, e.g. `oklch(0.295 0.01 70 / 0.07) 0px 1px 2px 0px, oklch(0.295 0.01 70 / 0.035) 0px 0px 0px 1px` at both):
+- 1440×900 and 390×844 (coarse): tray chip, PlanRing pressed and unpressed (pressed `::before` `oklch(0.854 0.014 82)`), dock shell (r 12px, `blur(20px) saturate(1.6)`), Send (34×34, r 5px), menu item (32px; 44px coarse; the hover ghost lands on the row, [570,154,178,32] opacity 1), option chips row and chip (30px, r 8px, px 11px), icon card (r 10px, padding 25/14/14).
+- The dialog (/motion/new-session): the location setting chip, every read property equal, pressed `transform: matrix(0.97, 0, 0, 0.97, 0, 0)` at both; the popover surface `opacity, scale, translate / 0.26s / cubic-bezier(0.32, 0.72, 0, 1)` at both, 440×116; its morph `height / 0.26s / overflow clip / clip-margin 4px` at both; tiles `background-color, color / 0.26s`; the location popover's segment `background-color, border-color, color / 0.12s` (the start sha listed a dead `transform` too), pressed tint `oklch(0.854 0.014 82)` at both; the folder field's placeholder `oklch(0.495 0.014 74)` at both.
+- AttachmentChips' remove: in the dialog `background-color, border-color, color, transform / 0.12s, 0.12s, 0.12s, 0.16s`, pressed `matrix(0.97, 0, 0, 0.97, 0, 0)` at both; in the composer the start sha had `all / 0s` and no press, the lane the same press as the dialog's.
+- Attach in the dialog: pressed start `transform: matrix(0.97…)` with `scale: 0.97` (doubled), lane `transform: none`, `scale: 0.97`.
 
-Differences left on equal rects, each the same rendering: `border-0` leaves `border-style: solid` at width 0 where `border: 0` wrote `none`; a single `transition-duration` where the old rule listed one per property; Tailwind's composite `box-shadow` starts with four transparent layers before the same tile shadow (`oklch(0.295 0.01 70 / 0.07) 0px 1px 2px 0px, oklch(0.295 0.01 70 / 0.035) 0px 0px 0px 1px` at both).
-Not rendered by any bench: /motion/lift (none of its parts mount without a hub), the section heads (task pane, home Recent need a hub), the nesting line (needs a tree), the mention and editor chips (need an editor with a mention), the edge fades (need overflow). Their recipes were proven by the compiled check above; their routes are the task pane (`/project/<id>` with a task open), the home (`/`), the rail, Find (⌘K) and the new-session dialog.
+Differences that are corrections: Send disabled 0.55 → 0.5; icon cards at 390px two 175.5px columns where one 362px stood; Cancel's edge `border-button-outline` (DESIGN.md's outline 3:1) and Browse as DESIGN.md's secondary (10px radius, hairline edge); the sheet's close takes its own muted ink (the deleted rule's `color: inherit` had made it strong in the dialog only); Rail's disabled opacity 0.45 → 0.5; on /motion/chosen-hover the setting chips stand outside `.ns-theme` and were unstyled at the start sha (`border-top-width: 0px`, `font-size: 14px`), and are drawn as setting chips now (30px, r 8px, 13px/500).
+Not rendered without a hub: an enabled Rail item (every harness tab is disabled), Finder's segments, the section heads, the nesting line, the editor chips, the session card's compact chips; their classes are proven by the compiled check.
 
-ui-observer (observer.browser.js, every page above, both sizes): no horizontal overflow (`scrollWidth` equals the viewport on every page); observations: /motion/overlays 1440 `sibling-padding-differs` 1 and `sibling-gaps-differ` 1, both the highlight's own absolutely placed `span.kit-ghost` measured as a row; /motion/delegate-tray 390 `near-miss-alignment` 36, transcript rows marked `not-data-shown:invisible` 1px off the sheet's edge, not this lane's parts; /motion/overlays 390 `near-miss-alignment` 1 (the bits popover at 18px vs its content at 19px).
+ui-observer (observer.browser.js, both sizes): no horizontal overflow on any page (`scrollWidth` equals the viewport); flags: /motion/overlays `sibling-padding-differs` 1 and `sibling-gaps-differ` 1 (the highlight's own absolutely placed `span.kit-ghost`), /motion/delegate-tray at 390 `near-miss-alignment` 36 (transcript rows marked `not-data-shown:invisible`, not this lane's parts).
 
 ## Design critique (interface-craft, against DESIGN.md)
 
-- fixed: the option chip's hover now only reaches an enabled button under a hover-capable pointer: a disabled chip and a record span no longer hover, and a finger's tap no longer leaves a hover fill latched.
-- fixed: the tray chip's hover can no longer paint over a status tint (needs you, failed, pressed): the hover moves the resting fill only, so "selection is not a warning" and the status pair hold at every pointer state.
-- fixed: Send disabled at DESIGN.md's 50%.
-- fixed: the icon-card grid holds its columns by its own width, so the cards never collapse to a single 362px column on a 390px phone while two 175px cards fit.
-- fixed: the "add label" chip is the house option chip now, the same 11px inset and strong ink as every other chip beside the labels, instead of a one-off 4px-inset muted chip.
+- fixed: one Press Rule across the dialog: rows, crumbs, tabs and segments tint and never scale; chips and compact controls scale once, never twice (Attach).
+- fixed: the tray chip's hover can no longer paint over a status tint.
+- fixed: the option chip hovers only as an enabled button under a hover-capable pointer.
+- fixed: every disabled control at DESIGN.md's 50%.
+- fixed: the icon-card grid holds its columns by its own width.
+- fixed: the "add label" chip is the house option chip, not a 4px-inset muted one-off.
+- fixed: the dialog's buttons are the kit's (outline edge at 3:1, the secondary recipe, the pending label and idle guard) instead of a parallel button sheet.
 
 ## Gaps
 
-None left in this lane's files besides the ns-theme.css items pending the parent's answer (Sheet classes, above).
+None left in this lane's files. The ModelSection and SessionDetails lines above are integration's, in W4-controls' and W5's files.

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { HarnessKind, PermissionMode } from "@cawco/core";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /**
    * Permission-mode rows (§1.8, §2.11): sliding fill + mounted check. Every
    * pick of Full Send is asked first, under the rows (AskHere, The Open Page
@@ -100,7 +101,7 @@
       aria-describedby={row.reason
         ? `${uid}-perm-${row.value}-reason`
         : undefined}
-      class="ns-in press-tint relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm border border-transparent bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-checked:text-selected-ink disabled:cursor-not-allowed disabled:opacity-55"
+      class="ns-in press-tint transition-control relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm border border-transparent bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-checked:text-selected-ink disabled:cursor-not-allowed disabled:opacity-50"
       data-fh="1"
       data-perm={row.value}
       disabled={row.disabled}
@@ -109,7 +110,7 @@
       style={`--delay:${i * 35}ms`}
       type="button"
     >
-      <span data-slot="tile" class="ns-tile size-c-mark" style:color={row.hue}
+      <span data-slot="tile" class={iconTileVariants()} style:color={row.hue}
         ><Icon class="size-icon-md" /></span
       >
       <span data-slot="text" class="min-w-0 flex-1">

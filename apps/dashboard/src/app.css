@@ -3931,29 +3931,12 @@
 @utility will-change-opacity {
   will-change: opacity;
 }
-/* The session details card's settings row: the chips NsPopover's trigger,
-   ToolChips and AccountSwitch render sit in it. The card's width holds the
-   longest names whole, the chips' insides drawn in a little; a phone's row
-   (~350px) fits its three chips with their sides drawn in, and a bordered
-   chip's chevron goes, the account chip's staying (the only hint it opens
-   anything). */
+/* The session details card's settings row: the model chip shrinks before the
+   others. The chips themselves are ui/chip `size: "compact"`. */
 @utility session-details-chips {
   & [data-model-chip] {
     flex: 0 1 auto;
     min-width: 0;
-  }
-  & .ns-chip-btn {
-    gap: var(--space-1);
-    height: var(--row-compact-h);
-  }
-  @variant max-phone {
-    & .ns-chip-btn {
-      height: var(--c-btn-h-lg);
-      padding-inline: var(--space-2);
-    }
-    & .ns-chip-btn:not([data-account-chip]) > svg[data-slot="chevron"] {
-      display: none;
-    }
   }
 }
 /* ModelSection's picker in the details card's model popover: no surface of

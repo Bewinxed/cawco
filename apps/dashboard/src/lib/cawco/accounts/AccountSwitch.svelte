@@ -1,4 +1,8 @@
 <script lang="ts">
+  import {
+    type ChipSize,
+    chipVariants,
+  } from "#lib/components/ui/chip/index.js";
   import { IconCheck } from "#lib/icons.js";
   /**
    * A session card's account line: the account the session bills, as its dot
@@ -19,11 +23,17 @@
   let {
     instance,
     readonly,
+    size = "regular",
   }: {
     instance: BoardRow;
     /** The session cannot take changes now (ended, or the hub is away). */
     readonly: boolean;
+    /** The chip's size: the session card's settings group is `compact`. */
+    size?: ChipSize;
   } = $props();
+  const chip = $derived(
+    chipVariants({ variant: "setting", size, class: "min-w-0 max-w-full" })
+  );
 
   let open = $state(false);
   const accounts = $derived(switchable(instance));
@@ -65,7 +75,7 @@
       }}
       {open}
       rows="[data-account-option]"
-      triggerClass="ns-chip-btn max-w-full min-w-0"
+      triggerClass={chip}
       triggerData={{ "data-tool": true, "data-account-chip": true }}
       width={320}
     >
@@ -85,7 +95,7 @@
           <button
             data-slot="option"
             aria-selected={current}
-            class="group mark-line grid min-h-c-btn-h w-full cursor-pointer grid-cols-(--option-cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong coarse:min-h-c-btn-h-lg disabled:cursor-default"
+            class="group press-tint transition-control mark-line grid min-h-c-btn-h w-full cursor-pointer grid-cols-(--option-cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong coarse:min-h-c-btn-h-lg disabled:cursor-default"
             data-account-option={account.id}
             disabled={going}
             onclick={() => pick(account.id)}
@@ -120,13 +130,7 @@
     <!-- Nothing to pick: one account of its provider here, a move in
          flight (the feedback line says so), or a session that takes no
          changes now. -->
-    <span
-      data-tool
-      data-slot="ns-chip-btn"
-      data-account-chip
-      data-variant="static"
-      class="ns-chip-btn max-w-full min-w-0"
-    >
+    <span data-tool data-account-chip data-variant="static" class={chip}>
       <span class="sr-only">Account:</span>
       {@render face()}
     </span>

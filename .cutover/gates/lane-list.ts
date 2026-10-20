@@ -11,21 +11,20 @@
 //   missing   the file is gone and nothing says why: a typo, or a deletion the
 //             lane never declared. Every gate fails on it.
 // A `deleted-file:` line for a file that still exists fails the gates too.
-// The list holds every file the lane changed: a path changed since the wave's
-// start sha (committed, uncommitted or untracked) that the list does not name is
-// `unlisted`, and fails the gates; the lane edits only its list. `.cutover/`
-// (the lanes' record, gates and lists) is no lane's product and is not listed.
+// The list holds every file the lane changed: a path changed since the lane's
+// start sha (its list's `start: <sha>` line; committed, uncommitted or
+// untracked) that the list does not name is `unlisted`, and fails the gates; the
+// lane edits only its list. `.cutover/` (the lanes' record, gates and lists) is
+// no lane's product and is not listed.
 // `dashboardSrc` is the present files under apps/dashboard/src, the scope of the
 // repository's own style checks; the token JSON, DESIGN.md and the like are on
 // a list so the lane may edit them, and no style check reads them.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
-/** Wave 2's start: every lane reset to it. */
-const START = "682ede2877621d672bb0b38815e7d56370494dec";
-
 export type LaneList = {
   lane: string;
+  start: string;
   listFile: string;
   laneFile: string;
   laneText: string;
@@ -37,8 +36,8 @@ export type LaneList = {
   dashboardSrc: string[];
 };
 
-/** Paths changed since START: tracked changes against the working tree, and untracked files. */
-function changedSinceStart(): string[] {
+/** Paths changed since `start`: tracked changes against the working tree, and untracked files. */
+function changedSince(start: string): string[] {
   const names = (args: string[]): string[] =>
     execFileSync("git", args, { encoding: "utf8" })
       .split("\n")
@@ -47,12 +46,12 @@ function changedSinceStart(): string[] {
   try {
     return [
       ...new Set([
-        ...names(["diff", "--name-only", START]),
+        ...names(["diff", "--name-only", start]),
         ...names(["ls-files", "--others", "--exclude-standard"]),
       ]),
     ];
   } catch (error) {
-    console.log(`git could not compare against the start sha ${START}: ${error}`);
+    console.log(`git could not compare against the start sha ${start}: ${error}`);
     process.exit(2);
   }
 }
@@ -68,14 +67,16 @@ export function loadLane(): LaneList {
     console.log(`${listFile} is not in this tree: commit the lane's list there`);
     process.exit(2);
   }
-  const listed = [
-    ...new Set(
-      readFileSync(listFile, "utf8")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line && !line.startsWith("#")),
-    ),
-  ];
+  const lines = readFileSync(listFile, "utf8")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+  const start = lines.find((line) => line.startsWith("start:"))?.slice("start:".length).trim();
+  if (!start) {
+    console.log(`${listFile} names no start sha: add a \`start: <sha>\` line, the commit the lane was cut from`);
+    process.exit(2);
+  }
+  const listed = [...new Set(lines.filter((line) => !line.startsWith("start:")))];
   const laneFile = `.cutover/lanes/${lane}.md`;
   const laneText = existsSync(laneFile) ? readFileSync(laneFile, "utf8") : "";
   const declared = new Set([...laneText.matchAll(/^deleted-file:\s*(\S+)/gm)].map((match) => match[1]));
@@ -84,6 +85,7 @@ export function loadLane(): LaneList {
   const named = new Set(listed);
   return {
     lane,
+    start,
     listFile,
     laneFile,
     laneText,
@@ -91,7 +93,7 @@ export function loadLane(): LaneList {
     deleted: absent.filter((path) => declared.has(path)),
     missing: absent.filter((path) => !declared.has(path)),
     stale: [...declared].filter((path) => existsSync(path)),
-    unlisted: changedSinceStart().filter((path) => !path.startsWith(".cutover/") && !named.has(path)),
+    unlisted: changedSince(start).filter((path) => !path.startsWith(".cutover/") && !named.has(path)),
     dashboardSrc: present.filter((path) => path.startsWith("apps/dashboard/src/")),
   };
 }
@@ -108,7 +110,7 @@ export function reportList(list: LaneList): boolean {
     console.log(`stale: ${path} — \`deleted-file:\` in ${list.laneFile}, but the file exists`);
   }
   for (const path of list.unlisted) {
-    console.log(`unlisted: ${path} — changed since ${START.slice(0, 9)}, not on ${list.listFile}`);
+    console.log(`unlisted: ${path} — changed since ${list.start.slice(0, 9)}, not on ${list.listFile}`);
   }
   return list.missing.length === 0 && list.stale.length === 0 && list.unlisted.length === 0;
 }

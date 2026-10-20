@@ -80,7 +80,7 @@ interface Control {
   recipe: string;
 }
 
-const POP = ".ns-pop";
+const POP = "[data-ns-pop]";
 const SLASH = '[data-probe="slash"] .milkdown-slash-menu';
 
 const CONTROLS: Control[] = [
@@ -89,12 +89,12 @@ const CONTROLS: Control[] = [
     control: "lifetime",
     hover: "ghost",
     recipe: WASH,
-    chosen: '.ns-pop [data-slot="row"][aria-pressed="true"]',
-    other: ".ns-pop [data-slot='row'][aria-pressed='false']",
+    chosen: '[data-ns-pop] [data-slot="row"][aria-pressed="true"]',
+    other: "[data-ns-pop] [data-slot='row'][aria-pressed='false']",
     onWash: {
-      row: '.ns-pop [data-slot="row"][aria-pressed="true"]',
+      row: '[data-ns-pop] [data-slot="row"][aria-pressed="true"]',
       label:
-        '.ns-pop [data-slot="row"][aria-pressed="true"] [data-slot="name"]',
+        '[data-ns-pop] [data-slot="row"][aria-pressed="true"] [data-slot="name"]',
     },
   },
   {
@@ -102,12 +102,12 @@ const CONTROLS: Control[] = [
     control: "project",
     hover: "ghost",
     recipe: WASH,
-    chosen: '.ns-pop [data-slot="row"][aria-pressed="true"]',
-    other: ".ns-pop [data-slot='row'][aria-pressed='false']",
+    chosen: '[data-ns-pop] [data-slot="row"][aria-pressed="true"]',
+    other: "[data-ns-pop] [data-slot='row'][aria-pressed='false']",
     onWash: {
-      row: '.ns-pop [data-slot="row"][aria-pressed="true"]',
+      row: '[data-ns-pop] [data-slot="row"][aria-pressed="true"]',
       label:
-        '.ns-pop [data-slot="row"][aria-pressed="true"] [data-slot="name"]',
+        '[data-ns-pop] [data-slot="row"][aria-pressed="true"] [data-slot="name"]',
     },
   },
   {
@@ -115,12 +115,12 @@ const CONTROLS: Control[] = [
     control: "machines",
     hover: "ghost",
     recipe: WASH,
-    chosen: '.ns-pop [data-slot="row"][aria-pressed="true"]',
-    other: ".ns-pop [data-slot='row'][aria-pressed='false']",
+    chosen: '[data-ns-pop] [data-slot="row"][aria-pressed="true"]',
+    other: "[data-ns-pop] [data-slot='row'][aria-pressed='false']",
     onWash: {
-      row: '.ns-pop [data-slot="row"][aria-pressed="true"]',
+      row: '[data-ns-pop] [data-slot="row"][aria-pressed="true"]',
       label:
-        '.ns-pop [data-slot="row"][aria-pressed="true"] [data-slot="name"]',
+        '[data-ns-pop] [data-slot="row"][aria-pressed="true"] [data-slot="name"]',
     },
   },
   {

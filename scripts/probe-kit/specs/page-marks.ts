@@ -139,7 +139,7 @@ const PAIRS: Pair[] = [
   {
     name: "picker glide",
     on: "wrapper",
-    old: `${WRAPPER}:has(> .ns-pop[data-morph])`,
+    old: `${WRAPPER}:has(> [data-ns-pop][data-morph])`,
     now: `${WRAPPER}[data-ns-morph]`,
     made: true,
   },

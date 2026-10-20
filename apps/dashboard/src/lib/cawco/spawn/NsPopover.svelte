@@ -9,19 +9,16 @@
   import type { Snippet } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
+  import { glidePopoverVariants } from "#lib/components/ui/glide-popover/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import PopoverRoot from "#lib/components/ui/popover/popover.svelte";
+  import { cn } from "#lib/utils.js";
   import {
     type PopoverMember,
     type PopoverWidth,
     popoverGroup,
     popoverWidth,
   } from "./popover-group.svelte";
-
-  const TONES = {
-    muted: "text-ink-muted",
-    fail: "border-status-fail-ink text-status-fail-ink",
-  } as const;
 
   let {
     id,
@@ -40,7 +37,6 @@
     label,
     triggerClass = "",
     triggerData = {},
-    triggerTone,
     haspopup,
     rows,
     ...rest
@@ -81,8 +77,6 @@
      * `data-account-chip` (the account's, which keeps its chevron).
      */
     triggerData?: Partial<Record<`data-${string}`, true>>;
-    /** A trigger that reads off its neighbours: quiet (nothing chosen), or a failing pick. */
-    triggerTone?: keyof typeof TONES;
     /** What the trigger opens, when it is not a dialog. */
     haspopup?: "listbox" | "menu";
     /** The rows the hover ghost glides between (components/ui/highlight). */
@@ -151,8 +145,7 @@
       aria-expanded={open}
       aria-haspopup="dialog"
       aria-label={label}
-      class={["touch-hit", triggerClass, triggerTone && TONES[triggerTone]]}
-      data-ns-popover-trigger-class={triggerClass}
+      class={cn("touch-hit", triggerClass)}
       {...triggerData}
       data-state={open ? "open" : "closed"}
       {id}
@@ -168,8 +161,7 @@
     {#if trigger}
       <PopoverPrimitive.Trigger
         aria-label={label}
-        class={["touch-hit", triggerClass, triggerTone && TONES[triggerTone]]}
-        data-ns-popover-trigger-class={triggerClass}
+        class={cn("touch-hit", triggerClass)}
         {...triggerData}
         {id}
       >
@@ -187,7 +179,7 @@
         data-fit={fit || undefined}
         {align}
         aria-label={rest["aria-label"]}
-        class={["ns-theme ns-pop", pad === "snug" && "p-space-1"]}
+        class={cn("ns-theme", glidePopoverVariants({ pad }))}
         collisionPadding={8}
         customAnchor={anchor}
         id={`${id}-popover`}

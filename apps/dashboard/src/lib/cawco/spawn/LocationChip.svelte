@@ -9,6 +9,7 @@
   import Down from "~icons/solar/alt-arrow-down-linear";
   import FolderGit from "~icons/solar/folder-git-bold-duotone";
   import FolderOpen from "~icons/solar/folder-open-bold-duotone";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import LocationSection from "./LocationSection.svelte";
   import NsPopover from "./NsPopover.svelte";
 
@@ -71,8 +72,10 @@
   {onchange}
   {onclosefocus}
   {open}
-  triggerClass="ns-chip-btn"
-  triggerTone={empty ? "muted" : undefined}
+  triggerClass={chipVariants({
+    variant: "setting",
+    tone: empty ? "muted" : undefined,
+  })}
   width={440}
 >
   {#snippet trigger()}

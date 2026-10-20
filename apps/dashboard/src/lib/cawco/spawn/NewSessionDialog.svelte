@@ -38,6 +38,8 @@
     DrawerContent,
     DrawerTitle,
   } from "#lib/components/ui/drawer/index.js";
+  import { pressVariants } from "#lib/components/ui/button/index.js";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import {
     machineHue,
@@ -1911,7 +1913,10 @@
         <button
           {...tip}
           aria-label={moveStep ? "Back" : "Close"}
-          class="kit-sheet-close touch-hit"
+          class={pressVariants({
+            press: "scale",
+            class: "kit-sheet-close touch-hit",
+          })}
           data-vaul-no-drag
           onclick={moveStep ? back : close}
           type="button"
@@ -1999,9 +2004,8 @@
             />
             {#if sourceProject}
               <span
-                data-slot="ns-chip-btn"
                 data-variant="static"
-                class="ns-chip-btn"
+                class={chipVariants({ variant: "setting" })}
                 title={`The new session starts in ${sourceProject.name}, the project of the session it continues`}
               >
                 <Files class="text-hue-amber-500" />
