@@ -66,6 +66,8 @@ declare global {
 export interface ChromeOptions {
   applyDials: (values: Record<string, unknown>) => void;
   canvas: HTMLElement;
+  /** The house edge fade's sheet, set in the page: a wide embed's frame scrolls under it (runtime.ts `fitToEmbed`). */
+  edgeFade: string;
   /** The house faces' `@font-face` rules, set in the page: a shadow root's own are not heard. */
   faces: string;
   go: (key: string) => void;
@@ -405,7 +407,7 @@ export class Chrome {
     this.#o = options;
     const page = document.createElement("style");
     page.dataset.cawcoCanvas = "";
-    page.textContent = `${options.faces}\n${options.tokens.replaceAll(":root", ".cawco-canvas-page")}\n${PAGE_CSS}`;
+    page.textContent = `${options.faces}\n${options.tokens.replaceAll(":root", ".cawco-canvas-page")}\n${options.edgeFade}\n${PAGE_CSS}`;
     document.head.append(page);
     this.#host = document.createElement("div");
     this.#host.id = "cawco-chrome";
