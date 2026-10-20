@@ -254,8 +254,9 @@ public enum Palette {
     public static let statusIdleGlyph = Palette.named("status-idle-glyph")
     /// The nesting lines' ink (.kit-nest, WorkflowRail): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one.
     public static let nestInk = Palette.named("nest-ink")
-    /// Usage meters (design/usage-tracker.md §1, §8): coral is a window with room, spark yellow one near its limit (70% used, or a run-out under an hour away), crimson one from 90%. Each fill rides a lighter step of its own ramp; every fill/track pair passes the dataviz validator (--ordinal) on each surface it is drawn on, in both themes.
+    /// Usage meters (design/usage-tracker.md §1, §8): a window with room is the muted ink on the control-edge groove (a quiet reading is a healthy one, and coral is the action's, never data: DESIGN.md The Coral Is Where You Act Rule), spark yellow one near its limit (70% used, or a run-out under an hour away), crimson one from 90%. The calm fill holds about 4.7:1 on its track by day and 5:1 at night.
     public static let meterCalm = Palette.named("meter-calm")
+    /// The calm meter's groove: the ring's empty track (border-control).
     public static let meterCalmTrack = Palette.named("meter-calm-track")
     public static let meterNear = Palette.named("meter-near")
     public static let meterNearTrack = Palette.named("meter-near-track")
@@ -576,6 +577,8 @@ public enum Size {
     public static let cBadgeH: Double = 20
     /// A stat tile's height.
     public static let cStatH: Double = 90
+    /// The padding of a stat tile's recessed well (DESIGN.md stat-well).
+    public static let cStatWellPad: Double = 10
     /// A ledger's toolbar zone, holding 32px controls 11px in.
     public static let cToolbarZone: Double = 55
     public static let cToolbarCtl: Double = 32

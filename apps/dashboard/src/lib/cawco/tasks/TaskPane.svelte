@@ -799,7 +799,7 @@
   <section aria-label="Task {taskId}" class="flex flex-1 flex-col min-h-0">
     <header
       data-slot="page-head"
-      class="flex flex-none items-center gap-space-2 pt-0 pe-space-5 pb-space-2 ps-space-3"
+      class="flex flex-none items-center gap-space-2 pt-space-2 pe-space-5 pb-space-2 ps-space-3"
     >
       <Button onclick={onclose} size="sm" variant="ghost">
         <IconChevronLeft />

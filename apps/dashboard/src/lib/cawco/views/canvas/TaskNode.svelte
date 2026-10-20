@@ -38,13 +38,8 @@
   );
 </script>
 
-<!-- The board's column width, so a card reads the same on both. Waiting on
-     you, the `you` column's wash stands as a margin round the card. -->
-<div
-  data-slot="task-node"
-  class="w-c-board-col-min rounded-md kind-you:bg-brand-wash kind-you:p-space-1"
-  data-kind={node.task.kind ?? undefined}
->
+<!-- The board's column width, so a card reads the same on both. -->
+<div data-slot="task-node" class="w-c-board-col-min">
   <Handle
     id="flow-in"
     class="pointer-events-none size-px min-h-0 min-w-0 border-current border-none bg-transparent"

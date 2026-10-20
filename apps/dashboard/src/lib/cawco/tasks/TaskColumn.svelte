@@ -3,8 +3,10 @@
    * One stage's column: its name and count, a quiet word for its kind under
    * them, and its cards in order. The board draws one per stage and takes
    * drops on it (`ondrop`); a view's StageColumn draws the same column with
-   * nothing to drop. A `you` column takes the brand wash, its name the
-   * brand ink, and its head the Needs-you glyph (design §2, Board).
+   * nothing to drop. A `you` column stands on the same band as the rest:
+   * its head carries the Needs-you glyph and its kind word the attn ink,
+   * so the status reads glyph, then word, then hue, and coral stays the
+   * action's (DESIGN.md, The Coral Is Where You Act Rule).
    */
   import type { Snippet } from "svelte";
   import type { Attachment } from "svelte/attachments";
@@ -82,7 +84,7 @@
 <section
   data-slot="column"
   aria-label="{label}, {count} {count === 1 ? 'task' : 'tasks'}"
-  class="group/col flex min-h-0 flex-col max-phone:snap-start gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] duration-(--dur-control) ease-out data-closed:opacity-50 not-kind-you:data-over:bg-surface-hover kind-you:bg-brand-wash inset-ring inset-ring-border-hairline"
+  class="group/col flex min-h-0 flex-col max-phone:snap-start gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] duration-(--dur-control) ease-out data-closed:opacity-50 data-over:bg-surface-hover inset-ring inset-ring-border-hairline"
   data-closed={closed ? "" : undefined}
   data-kind={kind ?? "none"}
   data-over={over ? "" : undefined}
@@ -99,7 +101,7 @@
       {/if}
       <h3
         data-slot="name"
-        class="min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong group-kind-you/col:text-brand-ink"
+        class="min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong"
       >
         {label}
       </h3>
@@ -112,7 +114,7 @@
     </span>
     <span
       data-slot="kind"
-      class="flex-none type-code liga-none whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn-ink"
+      class="flex-none type-meta whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn-ink"
       >{kindWord}</span
     >
   </header>

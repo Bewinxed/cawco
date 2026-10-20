@@ -42,7 +42,7 @@
   {#each made as task (task.id)}
     <li
       data-slot="tile"
-      class="flex min-w-0 flex-col gap-space-2 rounded-lg bg-surface-band p-space-2 inset-ring inset-ring-border-hairline data-open:inset-ring-border-control"
+      class="flex min-w-0 flex-col gap-space-2 rounded-lg bg-surface-raised p-space-2 shadow-tile data-open:inset-ring data-open:inset-ring-border-control"
       data-open={task.id === open || undefined}
     >
       <a

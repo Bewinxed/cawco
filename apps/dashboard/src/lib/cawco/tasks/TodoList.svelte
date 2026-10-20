@@ -114,7 +114,7 @@
 {#snippet addForm(under: string, depth: number)}
   <form
     data-slot="add"
-    class="flex items-center gap-space-2 min-h-c-btn-h-sm ps-(--indent)"
+    class="flex items-center gap-space-2 min-h-c-btn-h ps-(--indent)"
     onsubmit={add}
     style:--depth={depth}
     style:--indent="calc(var(--depth, 0) * var(--space-6))"
@@ -124,7 +124,6 @@
       aria-label={under ? `Add a to-do under ${under}` : "Add a to-do"}
       autocomplete="off"
       class="flex-auto"
-      size="sm"
       text="label"
       onfocus={() => {
         if (!under) {
@@ -148,7 +147,7 @@
     <Button
       aria-label="Add to-do"
       disabled={!(addingUnder === under && addText.trim())}
-      size="icon-sm"
+      size="icon"
       type="submit"
       variant="ghost"
     >

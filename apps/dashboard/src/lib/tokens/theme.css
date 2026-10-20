@@ -320,6 +320,7 @@
   --spacing-c-pill-fs: var(--c-pill-fs);
   --spacing-c-badge-h: var(--c-badge-h);
   --spacing-c-stat-h: var(--c-stat-h);
+  --spacing-c-stat-well-pad: var(--c-stat-well-pad);
   --spacing-c-toolbar-zone: var(--c-toolbar-zone);
   --spacing-c-toolbar-ctl: var(--c-toolbar-ctl);
   --spacing-c-find-w: var(--c-find-w);

@@ -17,7 +17,17 @@
     lead,
     projectId,
     projectName,
-  }: { lead: CawLead; projectId: string; projectName: string } = $props();
+    sheet = false,
+  }: {
+    lead: CawLead;
+    projectId: string;
+    projectName: string;
+    /**
+     * In the touch sheet: the sheet's header names it and the sheet's own
+     * inset holds it, so the panel draws neither.
+     */
+    sheet?: boolean;
+  } = $props();
 
   // A turn begins: his view is read again, so the panel says what it answers
   // (a turn no thread woke works here, not on a thread).
@@ -33,12 +43,15 @@
 
 <div
   data-slot="caw-panel"
-  class="type-label flex w-(--panel-w) flex-col gap-space-2 pt-space-3 pr-space-4 pb-space-4 pl-space-4 text-ink-strong"
+  class="type-label flex w-(--panel-w) flex-col gap-space-2 pt-space-3 pr-space-4 pb-space-4 pl-space-4 text-ink-strong data-sheet:w-full data-sheet:p-0"
+  data-sheet={sheet || undefined}
   style:--panel-w="min(var(--c-panel-w), calc(100vw - 2 * var(--space-5)))"
 >
-  <p data-slot="head" class="type-label font-medium">
-    Caw · lead of {projectName}
-  </p>
+  {#if !sheet}
+    <p data-slot="head" class="type-label font-medium">
+      Caw · lead of {projectName}
+    </p>
+  {/if}
   <div
     data-slot="row"
     class="mark-line flex flex-wrap items-center gap-space-2"

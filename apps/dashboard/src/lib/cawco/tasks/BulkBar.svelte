@@ -110,7 +110,6 @@
   let labelOpen = $state(false);
   /** The label typed in Label's field. */
   let typed = $state("");
-  const labelList = `bulk-labels-${Math.random().toString(36).slice(2, 8)}`;
   /** Puts `text` on every picked task, as the sheet writes a label (`labelOf`). */
   function label(text: string) {
     const next = labelOf(text);
@@ -208,15 +207,9 @@
           <Input
             aria-label="Label to add"
             autocomplete="off"
-            list={labelList}
             placeholder="label"
             bind:value={typed}
           />
-          <datalist id={labelList}>
-            {#each labels as each (each)}
-              <option value={each}></option>
-            {/each}
-          </datalist>
           <Button disabled={!labelOf(typed)} size="sm" type="submit"
             >Label {picked.length}</Button
           >

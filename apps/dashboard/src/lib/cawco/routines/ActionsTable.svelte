@@ -84,11 +84,23 @@
     action.proposerTitle;
 </script>
 
+<!-- Where the ledger no longer holds Action's room beside Status and When
+     (the kit's `narrow` tier, a 424px ledger: a phone), each action is a
+     two-line card (DESIGN.md, Fleet board): the service's mark down its
+     start, the action across the card with when at its end, then its
+     status. -->
 <div
   data-slot="actions-ledger"
+  style:--card-cols="var(--lead-w) minmax(0, 1fr) auto"
   style:--lead-w="calc(var(--c-row-lead) + var(--space-3))"
 >
-  <Table.Root data-actions aria-label={label} layout="ledger" stickyBand>
+  <Table.Root
+    data-actions
+    aria-label={label}
+    layout="ledger"
+    stacks="narrow"
+    stickyBand
+  >
     <Table.Header>
       <Table.Row variant="band">
         <Table.Head class="w-(--lead-w)" variant="band"
@@ -108,15 +120,20 @@
       </Table.Row>
     </Table.Header>
     <Table.Body>
-      {#each actions as action (action.id)}
+      {#each actions as action, index (action.id)}
+        {@const rule = index > 0 ? "top" : undefined}
         {@const said = actionOf(action)}
         {@const from = routineNames ? fromOf(action) : null}
         <Table.Row
           data-actions-table-action
           class="group/row"
           data-status={said.status}
+          variant="stacks"
         >
-          <Table.Cell rule="between" variant="list"
+          <Table.Cell
+            class="@max-table-424px/table:row-span-2 @max-table-424px/table:self-start"
+            {rule}
+            variant="ledger"
             ><span data-slot="mark" class="grid w-c-row-lead place-items-center"
               ><ProviderLogo
                 provider={action.service.toLowerCase()}
@@ -124,7 +141,7 @@
               /></span
             ></Table.Cell
           >
-          <Table.Cell rule="between" variant="list">
+          <Table.Cell {rule} variant="ledger">
             <span
               data-slot="what"
               class="block truncate type-label text-ink-row"
@@ -138,10 +155,20 @@
               >
             {/if}
           </Table.Cell>
-          <Table.Cell data-cell="status" rule="between" variant="list">
+          <Table.Cell
+            class="@max-table-424px/table:col-span-2 @max-table-424px/table:col-start-2 @max-table-424px/table:row-start-2"
+            data-cell="status"
+            {rule}
+            variant="ledger"
+          >
             <RunStatus status={said.status} text={said.word} />
           </Table.Cell>
-          <Table.Cell data-cell="when" rule="between" variant="list">
+          <Table.Cell
+            class="@max-table-424px/table:col-start-3 @max-table-424px/table:row-start-1"
+            data-cell="when"
+            {rule}
+            variant="ledger"
+          >
             {#if said.at !== null}
               <time
                 data-when

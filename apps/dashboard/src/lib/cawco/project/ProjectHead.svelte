@@ -554,8 +554,15 @@
 {#if touch.current}
   <Drawer.Root bind:open={cawOpen}>
     <Drawer.Content pad="safe-bottom">
-      <Drawer.Title visible={false}>Caw, lead of {project.name}</Drawer.Title>
-      <CawPanel {lead} projectId={project.id} projectName={project.name} />
+      <Drawer.Header>
+        <Drawer.Title>Caw, lead of {project.name}</Drawer.Title>
+      </Drawer.Header>
+      <CawPanel
+        {lead}
+        projectId={project.id}
+        projectName={project.name}
+        sheet
+      />
     </Drawer.Content>
   </Drawer.Root>
 {:else}

@@ -7,6 +7,7 @@
   } from "#lib/cawco/blocks/BlockPage.svelte";
   import { cawco, startThread, threadsOf } from "#lib/cawco/client.svelte.js";
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import {
     failureWords as message,
     THREAD_SEND_UNREACHED,
@@ -307,6 +308,26 @@
   });
   let deleting = $state<string | null>(null);
   let deletePending = $state(false);
+
+  /**
+   * How many columns the ledger shows: its band's heads still drawn. A row
+   * under a routine (its detail, its ask) spans exactly those, since a
+   * fixed table makes a column of every slot a span reaches, and two folded
+   * columns spanned would share the name's room (Last and Next fold under
+   * the Routines block's measure, table.svelte `measure`).
+   */
+  let span = $state(5);
+  function countColumns(ledger: HTMLElement) {
+    const count = () => {
+      span = [...ledger.querySelectorAll("thead th")].filter(
+        (head) => getComputedStyle(head).display !== "none"
+      ).length;
+    };
+    count();
+    const sized = frameObserver(count);
+    sized.observe(ledger);
+    return () => sized.disconnect();
+  }
 
   /** Its newest run is going now: starting, or running (the hub's run state). */
   function going(routine: Routine): boolean {
@@ -805,7 +826,7 @@
         </Table.Row>
         {#if deleting === routine.id}
           <tr>
-            <td class="p-0 group-state-open:bg-surface-well" colspan="5">
+            <td class="p-0 group-state-open:bg-surface-well" colspan={span}>
               <fieldset
                 data-slot="row-ask"
                 aria-label={words.removeLabel(routine.name)}
@@ -832,7 +853,7 @@
           </tr>
         {/if}
         <tr>
-          <td class="p-0 group-state-open:bg-surface-well" colspan="5">
+          <td class="p-0 group-state-open:bg-surface-well" colspan={span}>
             <Collapsible.Content fade reveal>
               <RoutineDetail actions={actionsOf(routine)} {routine} />
             </Collapsible.Content>
@@ -907,6 +928,7 @@
       data-slot="ledger"
       style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
       style:--col-menu="calc(var(--c-btn-h-sm) + var(--space-3) * 2)"
+      {@attach countColumns}
     >
       <Table.Root
         data-routines
@@ -951,13 +973,32 @@
   {/if}
 {/snippet}
 
+{#snippet connectSource()}
+  <Button
+    onclick={() => {
+      if (!empty) {
+        asking = true;
+        askDraft.focusWanted = true;
+      }
+      pick(words.connectSourceAsk);
+    }}
+    size="sm"
+    variant="outline">{words.connectSource}</Button
+  >
+{/snippet}
+
 {#snippet sourcesBody()}
   {#if sourceCount === 0}
-    <p
-      class="m-0 max-w-c-measure p-space-3 type-meta text-pretty text-ink-muted"
-    >
-      {words.noSources}
-    </p>
+    <!-- Its one action puts the ask in Caw's composer, unsent (The Empty
+         Starts Work Rule); with Caw away the line alone says how one comes. -->
+    <div class="px-space-3">
+      <EmptyState
+        action={canTalk ? connectSource : undefined}
+        icon={IconHook}
+        line={words.noSourcesLine}
+        title={words.noSourcesTitle}
+      />
+    </div>
   {:else}
     <div
       data-slot="ledger"
