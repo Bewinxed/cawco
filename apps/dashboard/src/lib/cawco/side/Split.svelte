@@ -95,9 +95,23 @@
    * left of the split beside it, so their percentages are of that.
    */
   const DIVIDER = 1;
+  /**
+   * The split's width as the panes are sized from it: the bound width, taken
+   * in the next frame's callbacks. The binding hears it in a ResizeObserver
+   * callback; read there, the floor and the panes' sizes it sets resized the
+   * panes inside that delivery.
+   */
+  let laidWidth = $state(0);
+  $effect(() => {
+    const now = width;
+    const frame = requestAnimationFrame(() => {
+      laidWidth = now;
+    });
+    return () => cancelAnimationFrame(frame);
+  });
   /** The surface's floor (SIDE_FLOOR_PX), as a share of the panes' room; null until measured. */
   const sideMin = $derived(
-    width > DIVIDER ? (SIDE_FLOOR_PX / (width - DIVIDER)) * 100 : null
+    laidWidth > DIVIDER ? (SIDE_FLOOR_PX / (laidWidth - DIVIDER)) * 100 : null
   );
   /** The split can hold the surface at its floor. */
   const fits = $derived(sideMin !== null && sideMin <= SIDE_MAX);

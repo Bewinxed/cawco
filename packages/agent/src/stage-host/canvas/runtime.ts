@@ -20,10 +20,12 @@
 import { readWithin } from "@cawco/core/bounded";
 import {
   type AnimationRead,
+  CANVAS_EMBED_SIZE,
   CANVAS_PLAN_ID,
   type CanvasSpec,
   FORMS,
   type FormName,
+  type FramePictureRead,
   type FrameRender,
   type Interaction,
   type MoveRender,
@@ -246,12 +248,40 @@ export const frameKey = (file: string, story: string, column: Column): string =>
 /** The canvas's state, for the stage's daemon render and the probe kit. */
 export interface CanvasState {
   files: string[];
+  /**
+   * The frame of story `name` (`Story`, or `file:Story` where two states
+   * files name one story alike) in state `interaction`, for its picture:
+   * its key, its section woken when the stage's sweep took it down; or why
+   * there is none, in words.
+   */
+  frameNamed: (
+    name: string,
+    interaction?: Interaction
+  ) => Promise<{ key: string } | { refused: string }>;
   frames: () => { key: string; story: string; interaction: Interaction }[];
   go: (key: string) => void;
+  /**
+   * For a picture of frame `key`: how much wider and taller the window must
+   * be for the canvas to hold it whole at its own size, {0, 0} when it does;
+   * null when no such frame is drawn. On a phone, read after `pose`: a frame
+   * not shown there has no box.
+   */
+  lacks: (key: string) => { h: number; w: number } | null;
   loaded: () => string[];
+  /** Frame `key`'s body as it stands, for its picture; null when no such frame is drawn. */
+  picture: (key: string) => FramePictureRead | null;
   playMove: (file: string, to: string) => Promise<MoveRender | null>;
+  /**
+   * Frame `key` placed for its picture: at its own size (zoom 1) whatever
+   * the window's width, a phone's included, in the middle of the canvas,
+   * at once, and held there as its box or the canvas changes. Answers the
+   * room the window still lacks for it (`lacks`), read once it is shown.
+   */
+  pose: (key: string) => { h: number; w: number } | null;
   report: RenderReport | null;
   reports: number;
+  /** Whether frame `key` is settled: fonts loaded, no finite animation on it, in it or on what holds it still running. */
+  settled: (key: string) => boolean;
   setView: (next: Partial<View>) => void;
   /** Every section drawn once: a stage's render reads the stage's report then. */
   swept: boolean;
@@ -291,6 +321,16 @@ export function boot(options: BootOptions): void {
    * stays the panel's own page's (chrome `asCard`).
    */
   const card = params.get("by") === "map";
+  /**
+   * A decision page's Preview (`by=embed`): a second page of a canvas that
+   * draws only the stories `story` names (every story when it names none),
+   * at rest, one under another in the page's own flow at their own size,
+   * each as wide as its form up to the embed's width, with none of the
+   * canvas's chrome; it never posts, and tells the page holding it how tall
+   * it stands (`cawco:embed-size`), so the frame is as tall as it.
+   */
+  const embed = params.get("by") === "embed";
+  const named = new Set(params.getAll("story"));
   const view = viewOf(params);
   const base = location.pathname.slice(
     0,
@@ -307,6 +347,7 @@ export function boot(options: BootOptions): void {
   let moved: Record<string, [number, number]> = {};
 
   document.documentElement.classList.add("cawco-canvas-page");
+  document.documentElement.classList.toggle("cawco-embed", embed);
   const canvas = document.getElementById("cawco-canvas") as HTMLElement;
   const world = document.createElement("div");
   world.className = "cawco-world";
@@ -558,6 +599,14 @@ export function boot(options: BootOptions): void {
 
   const sectionOf = (file: string) => sections.find((one) => one.file === file);
 
+  /** Whether the page draws story `name`: an embed only the ones it names, any other page every one. */
+  const drawsStory = (name: string): boolean =>
+    named.size === 0 || named.has(name);
+
+  /** The stories a section draws, in its file's order. */
+  const storiesOf = (section: Section): Story[] =>
+    (section.mod?.SHEET.stories ?? []).filter((one) => drawsStory(one.name));
+
   /** The columns a section's stories take, from the view. */
   const slotsOf = (): { scheme: Column["scheme"]; width: WidthSlot }[] => {
     let schemes: Column["scheme"][] = [
@@ -656,7 +705,7 @@ export function boot(options: BootOptions): void {
   /** The grid place of a frame: its story's row, its column's place among the section's columns. */
   function placeFrame(frame: Frame): void {
     const { section } = frame;
-    const stories = section.mod?.SHEET.stories ?? [];
+    const stories = storiesOf(section);
     const row = stories.findIndex((one) => one.name === frame.story.name) + 2;
     const columns = columnsOfSection(section);
     const at =
@@ -804,7 +853,9 @@ export function boot(options: BootOptions): void {
     body.style.backgroundColor = ground.background;
     body.style.color = ground.color;
     const width = widthOf(story, column.width);
-    body.style.width = width === null ? "" : `${width}px`;
+    // An embed's frame is as wide as its form where the embed holds it, else the embed's own width: the component at its own size, never scaled.
+    const across = embed ? `min(${width}px, 100%)` : `${width}px`;
+    body.style.width = width === null ? "" : across;
     for (const states of Object.values(FORCED)) {
       for (const state of states) {
         body.classList.remove(allClass(state));
@@ -870,7 +921,8 @@ export function boot(options: BootOptions): void {
 
   /** Each story's columns, from its rest frame: frames made for each, frames of columns it no longer reaches taken down. */
   async function columnsFor(section: Section): Promise<void> {
-    if (!section.mod) {
+    // An embed shows each story at rest only.
+    if (!section.mod || embed) {
       return;
     }
     await frameTick();
@@ -901,7 +953,7 @@ export function boot(options: BootOptions): void {
 
   /** The section's frames as its stories and columns say: new ones mounted, gone ones taken down. */
   function syncFrames(section: Section): void {
-    const stories = section.mod?.SHEET.stories ?? [];
+    const stories = storiesOf(section);
     const wanted = new Set<string>();
     for (const story of stories) {
       const reached = section.interactions.get(story.name) ?? ["rest"];
@@ -967,13 +1019,32 @@ export function boot(options: BootOptions): void {
     }
     syncFrames(section);
     said(section);
-    quietly(
-      columnsFor(section).then(() => {
-        quietly(probeAll(section));
-        quietly(playAll(section));
-      })
-    );
+    if (embed) {
+      unnamedIn(section);
+    } else {
+      quietly(
+        columnsFor(section).then(() => {
+          quietly(probeAll(section));
+          quietly(playAll(section));
+        })
+      );
+    }
     later();
+  }
+
+  /** An embed's stories its states file doesn't have: said in the section's place, in words. */
+  function unnamedIn(section: Section): void {
+    const have = new Set(section.mod?.SHEET.stories.map((one) => one.name));
+    const missing = [...named].filter((name) => !have.has(name));
+    if (missing.length === 0) {
+      return;
+    }
+    const line = document.createElement("p");
+    line.className = "cawco-section-failed-line cawco-ui";
+    line.setAttribute("role", "alert");
+    line.textContent = `${section.name} has no ${missing.length === 1 ? "story" : "stories"} named ${missing.join(", ")}.`;
+    section.head.after(line);
+    section.standIns = [line];
   }
 
   /** Takes a far section's frames down; its module and its last report stay. */
@@ -1084,7 +1155,9 @@ export function boot(options: BootOptions): void {
   );
   for (const section of sections) {
     near.observe(section.el);
-    if (!sweeping) {
+    // An embed never sleeps a section: its page scrolls it in and out of
+    // view, and nothing would wake it (pump passes a section asleep).
+    if (!(sweeping || embed)) {
       far.observe(section.el);
     }
   }
@@ -1484,7 +1557,7 @@ export function boot(options: BootOptions): void {
       fit();
     }
     try {
-      if (!card) {
+      if (!(card || embed)) {
         await fetch(new URL("rendered", location.href), {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1503,7 +1576,10 @@ export function boot(options: BootOptions): void {
 
   const zoom = { x: 0, y: 0, z: 1 };
   const place = () => {
-    world.style.transform = `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.z})`;
+    // An embed stands in the page's own flow: it never pans or zooms.
+    world.style.transform = embed
+      ? ""
+      : `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.z})`;
     chrome.where();
   };
   const ZOOM_MIN = 0.1;
@@ -1518,6 +1594,10 @@ export function boot(options: BootOptions): void {
   canvas.addEventListener(
     "wheel",
     (event) => {
+      // An embed's wheel scrolls the page holding it.
+      if (embed) {
+        return;
+      }
       event.preventDefault();
       letGo();
       if (event.ctrlKey || event.metaKey) {
@@ -1561,7 +1641,7 @@ export function boot(options: BootOptions): void {
     id: number;
   } | null = null;
   canvas.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0 && event.button !== 1) {
+    if (embed || (event.button !== 0 && event.button !== 1)) {
       return;
     }
     const label = (event.target as Element).closest?.(".cawco-frame-label");
@@ -1683,10 +1763,12 @@ export function boot(options: BootOptions): void {
    * as its box changes (its component mounting, the faces arriving, the
    * scheme re-dressing it), so where it stands never depends on when.
    */
-  let held: { key: string; el: HTMLElement } | null = null;
+  let held: { key: string; el: HTMLElement; own: boolean } | null = null;
+  /** The world's move to the frame `show` last animated to, while it runs. */
+  let flight: Animation | null = null;
   const holding = new ResizeObserver(() => {
     if (held?.el.isConnected) {
-      show(held.key, held.el, false);
+      show(held.key, held.el, false, held.own);
     }
   });
   const letGo = () => {
@@ -1694,13 +1776,33 @@ export function boot(options: BootOptions): void {
     holding.disconnect();
   };
 
-  /** Places the world so frame `el` stands in the middle of the view, from its world box alone: the same at any moment for the same frame and view. */
-  const show = (key: string, el: HTMLElement, animate: boolean) => {
-    const from = world.style.transform;
+  /**
+   * Places the world so frame `el` stands in the middle of the view, from
+   * its world box alone: the same at any moment for the same frame and view.
+   * `ownSize`: at zoom 1 and without its section's head, as its picture is
+   * taken, whatever the window's width.
+   */
+  const show = (
+    key: string,
+    el: HTMLElement,
+    animate: boolean,
+    ownSize = false
+  ) => {
+    // Marked current first: on a phone that is what shows the frame and its
+    // section (chrome.ts PAGE_CSS hides the rest), and so what gives it the
+    // box it is placed by.
+    chrome.current(key);
+    // Where the world stands now, a flight still going included; that
+    // flight ends here, or it would draw its stale end over this placement.
+    const from = getComputedStyle(world).transform;
+    flight?.cancel();
+    flight = null;
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
     const own = worldBox(el);
-    if (chrome.phone()) {
+    if (ownSize) {
+      zoom.z = 1;
+    } else if (chrome.phone()) {
       // One frame at a time, as wide as the screen lets it be, never past its own size.
       zoom.z = Math.max(
         ZOOM_MIN,
@@ -1708,11 +1810,12 @@ export function boot(options: BootOptions): void {
       );
     }
     // On a phone the frame stands alone in its section: it is shown with its section's head, which names its sheet.
-    const headEl = chrome.phone()
-      ? el
-          .closest(".cawco-section")
-          ?.querySelector<HTMLElement>(".cawco-section-head")
-      : null;
+    const headEl =
+      chrome.phone() && !ownSize
+        ? el
+            .closest(".cawco-section")
+            ?.querySelector<HTMLElement>(".cawco-section-head")
+        : null;
     const top = headEl ? Math.min(worldBox(headEl).y, own.y) : own.y;
     const box = { x: own.x, y: top, w: own.w, h: own.y + own.h - top };
     zoom.x = width / 2 - (box.x + box.w / 2) * zoom.z;
@@ -1721,7 +1824,7 @@ export function boot(options: BootOptions): void {
       (box.y + box.h / 2) * zoom.z;
     place();
     if (animate && !media("(prefers-reduced-motion: reduce)").matches) {
-      world.animate(
+      flight = world.animate(
         [{ transform: from }, { transform: world.style.transform }],
         {
           duration: chrome.duration("--dur-panel", 280),
@@ -1729,22 +1832,29 @@ export function boot(options: BootOptions): void {
         }
       );
     }
-    chrome.current(key);
     // On a phone the frame shown changed: its edges are drawn again, to frames now drawn only.
     drawEdges();
   };
 
-  /** Brings a frame to the middle of the view, and holds it there until the person moves the view. */
-  const go = (key: string) => {
-    const el = world.querySelector<HTMLElement>(
-      `[data-cawco-key="${CSS.escape(key)}"]`
-    );
+  /** The drawn frame element of `key`. */
+  const frameEl = (key: string) =>
+    world.querySelector<HTMLElement>(`[data-cawco-key="${CSS.escape(key)}"]`);
+
+  /** Brings a frame to the middle of the view, and holds it there until the person moves the view; `own`: at its own size, for its picture. */
+  const go = (key: string, own = false) => {
+    const el = frameEl(key);
     if (!el) {
       return;
     }
+    // A frame posed for its picture stays posed when it is shown again: the
+    // chrome shows its current frame anew as the window resizes or its
+    // outline is rebuilt (chrome.ts `layout`, `outline`), which on a phone's
+    // width would zoom it to fit under the picture being taken. Only the
+    // person's own pan or zoom (`letGo`), or another frame, ends a pose.
+    const posed = own || (held?.own === true && held.key === key);
     letGo();
-    show(key, el, true);
-    held = { key, el };
+    show(key, el, !posed, posed);
+    held = { key, el, own: posed };
     holding.observe(el);
     // The canvas resizing (a dock taking its room, the pane resized) shows it again too.
     holding.observe(canvas);
@@ -2141,7 +2251,160 @@ export function boot(options: BootOptions): void {
   new ResizeObserver(() => {
     drawEdges();
     later();
+    if (embed) {
+      // The page holding an embed (a decision page's Preview) makes its frame this tall: the frames whole, no inner scroll.
+      window.parent.postMessage(
+        { type: CANVAS_EMBED_SIZE, height: Math.ceil(world.offsetHeight) },
+        "*"
+      );
+    }
   }).observe(world);
+
+  /* --- Pictures: a frame posed, settled and read for its picture --------- */
+
+  /**
+   * How much wider and taller the window must be for the canvas to hold
+   * frame `key` whole at its own size, {0, 0} when it does; null when no
+   * such frame is drawn. Read once the frame is shown: on a phone a frame
+   * not shown has no box.
+   */
+  const lacksFor = (key: string) => {
+    const el = frameEl(key);
+    return el
+      ? {
+          w: Math.max(
+            0,
+            Math.ceil(el.offsetWidth + 2 * WORLD_INSET.x - canvas.clientWidth)
+          ),
+          h: Math.max(
+            0,
+            Math.ceil(el.offsetHeight + 2 * WORLD_INSET.y - canvas.clientHeight)
+          ),
+        }
+      : null;
+  };
+
+  /**
+   * The frame of story `name` (`Story`, or `file:Story` where two states
+   * files name one story alike) in state `interaction`, for its picture:
+   * its key, its section woken first when the stage's sweep took it down
+   * (`sleepSection`); or why there is none, in words.
+   */
+  const frameNamed = async (
+    name: string,
+    interaction: Interaction = "rest"
+  ): Promise<{ key: string } | { refused: string }> => {
+    const [inFile, storyName] = name.includes(":")
+      ? (name.split(LAST_COLON) as [string, string])
+      : [undefined, name];
+    const holders = sections.filter(
+      (one) =>
+        (inFile === undefined || one.file === inFile) &&
+        one.mod?.SHEET.stories.some((each) => each.name === storyName)
+    );
+    const [section] = holders;
+    if (!section) {
+      return {
+        refused: `No states file of this canvas has a story ${name}: ${sections.map((one) => `${one.file} has ${one.mod?.SHEET.stories.map((each) => each.name).join(", ") || "none drawn yet"}`).join("; ")}.`,
+      };
+    }
+    if (holders.length > 1) {
+      return {
+        refused: `${storyName} is a story of ${holders.length} states files here: name one, ${holders.map((one) => `${one.file}:${storyName}`).join(" or ")}.`,
+      };
+    }
+    if (!section.loaded) {
+      await loadSection(section);
+    }
+    if (!section.loaded) {
+      return {
+        refused: `${section.file} did not load: the canvas's report says why.`,
+      };
+    }
+    await columnsFor(section);
+    await frameTick();
+    const frame = [...section.frames.values()].find(
+      (one) =>
+        one.story.name === storyName && one.column.interaction === interaction
+    );
+    return frame
+      ? { key: frame.key }
+      : {
+          refused: `${name} has no ${interaction} frame: its states are ${(section.interactions.get(storyName) ?? ["rest"]).join(", ")}.`,
+        };
+  };
+
+  /** Whether frame `key` is settled: fonts loaded, and no finite animation running on it, in it (its open shadow roots too) or on what holds it (the world's flight to it). */
+  const settledFor = (key: string): boolean => {
+    const el = frameEl(key);
+    if (!el || document.fonts.status !== "loaded") {
+      return false;
+    }
+    const running = document.getAnimations().filter((run) => {
+      const target = (run.effect as KeyframeEffect | null)?.target;
+      return !!target && (target.contains(el) || el.contains(target));
+    });
+    const trees: (Element | ShadowRoot)[] = [el];
+    for (let tree = trees.pop(); tree; tree = trees.pop()) {
+      for (const one of tree.querySelectorAll("*")) {
+        if (one.shadowRoot) {
+          running.push(...one.shadowRoot.getAnimations());
+          trees.push(one.shadowRoot);
+        }
+      }
+    }
+    return !running.some(
+      (run) =>
+        run.playState === "running" &&
+        Number.isFinite(Number(run.effect?.getComputedTiming().endTime ?? 0))
+    );
+  };
+
+  /** Frame `key`'s body as it stands on the page, for its picture: its rect, its own CSS size, the device's scale, whether it stands whole in the canvas, and the view in words. */
+  const pictureOf = (key: string): FramePictureRead | null => {
+    const body = frameEl(key)?.querySelector<HTMLElement>(
+      ":scope > .cawco-frame-body"
+    );
+    if (!body) {
+      return null;
+    }
+    const rect = body.getBoundingClientRect();
+    const room = canvas.getBoundingClientRect();
+    // Its border box as layout sizes it, unrounded (offsetWidth rounds) and
+    // untouched by any transform: what its picture is held to.
+    const style = getComputedStyle(body);
+    const px = (value: string) => Number.parseFloat(value) || 0;
+    const content = style.boxSizing === "border-box";
+    const own = {
+      w:
+        px(style.width) +
+        (content
+          ? 0
+          : px(style.paddingLeft) +
+            px(style.paddingRight) +
+            px(style.borderLeftWidth) +
+            px(style.borderRightWidth)),
+      h:
+        px(style.height) +
+        (content
+          ? 0
+          : px(style.paddingTop) +
+            px(style.paddingBottom) +
+            px(style.borderTopWidth) +
+            px(style.borderBottomWidth)),
+    };
+    return {
+      rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+      own,
+      scale: devicePixelRatio,
+      whole:
+        rect.left >= Math.max(0, room.left) - 0.5 &&
+        rect.top >= Math.max(0, room.top) - 0.5 &&
+        rect.right <= Math.min(innerWidth, room.right) + 0.5 &&
+        rect.bottom <= Math.min(innerHeight, room.bottom) + 0.5,
+      view: `the world at zoom ${zoom.z} in a ${Math.round(room.width)}×${Math.round(room.height)} canvas, a ${innerWidth}×${innerHeight} window${chrome.phone() ? " (a phone's)" : ""}`,
+    };
+  };
 
   const canvasState: CanvasState = {
     files,
@@ -2149,7 +2412,15 @@ export function boot(options: BootOptions): void {
     report: null,
     reports: 0,
     swept: false,
-    go,
+    go: (key) => go(key),
+    pose: (key) => {
+      go(key, true);
+      return lacksFor(key);
+    },
+    lacks: (key) => lacksFor(key),
+    frameNamed,
+    settled: settledFor,
+    picture: pictureOf,
     setView,
     loaded: () => sections.filter((one) => one.loaded).map((one) => one.file),
     frames: () =>
@@ -2165,14 +2436,23 @@ export function boot(options: BootOptions): void {
   };
   // Each section stands in its place until it draws, now every column's rule is defined; its load waits on the observer's first callback.
   for (const section of sections) {
-    standIn(section, plans[section.file]?.stories ?? []);
+    standIn(
+      section,
+      (plans[section.file]?.stories ?? []).filter((one) => drawsStory(one.name))
+    );
   }
   window.__cawcoCanvas = canvasState;
   if (card) {
     chrome.asCard();
   }
-  zoom.x = WORLD_INSET.x;
-  zoom.y = WORLD_INSET.y;
+  if (embed) {
+    chrome.asEmbed();
+    // Its stories load now, not on the observer's first callback: a frame off the page's screen gets no rendering steps until it is scrolled to, and its module is fetched and mounted meanwhile.
+    quietly(pump());
+  } else {
+    zoom.x = WORLD_INSET.x;
+    zoom.y = WORLD_INSET.y;
+  }
   place();
   chrome.layout();
 }

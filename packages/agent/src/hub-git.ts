@@ -53,7 +53,7 @@ import { realpathSync } from "node:fs";
 import { chmod, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
-import { CAWCO_ENV, type WorkspaceRef } from "@cawco/core";
+import type { WorkspaceRef } from "@cawco/core";
 import {
   hubCredentialSocket,
   workspaceDoorDir,
@@ -73,6 +73,7 @@ import {
   normaliseRemote,
 } from "@cawco/core/upstream-guard";
 import type { GitPost, PushedRef } from "@cawco/core/upstream-post";
+import { hubOrigins } from "./git-credential";
 import { upstreamRule } from "./github-door";
 import { hostGh } from "./host-gh";
 import {
@@ -1366,21 +1367,23 @@ export const gitDoorEnv = (
   id: string,
   clone: string
 ): Record<string, string> => {
-  const hub = process.env[CAWCO_ENV.hubUrl];
-  if (!hub) {
+  const origins = hubOrigins();
+  if (origins.length === 0) {
     return {};
   }
-  const url = new URL(hub);
-  url.protocol = url.protocol === "wss:" ? "https:" : "http:";
-  const prefix = `${url.origin}/git/`;
   const origin = originOf(clone);
-  const hubOrigin = origin.startsWith(prefix);
+  const hubOrigin = isHubRemote(origin);
   const outsideOrigin = !hubOrigin && isNetworkRemote(origin);
   return {
     CAWCO_GIT_SOCKET: gitDoorOf(id),
     GIT_SSH_COMMAND: sshRefusalOf(id),
     CAWCO_GIT_PARAMETERS: [
-      [`url.cawco::${prefix}.insteadOf`, prefix],
+      // Every address the hub answers at: a clone's origin names the one
+      // the machine that made it reached the hub by.
+      ...origins.map((each): [string, string] => [
+        `url.cawco::${each}/git/.insteadOf`,
+        `${each}/git/`,
+      ]),
       ...(outsideOrigin ? [[`url.cawco::${origin}.insteadOf`, origin]] : []),
       ["protocol.cawco.allow", "always"],
       // The filters the hub branch's checkout ran with (workspace.ts
@@ -1415,9 +1418,8 @@ export const serveHubCredential = async (): Promise<void> => {
   credentialServer = Bun.serve({
     unix: path,
     fetch: async (request) => {
-      const hub = process.env[CAWCO_ENV.hubUrl];
       const login = hubGitLogin();
-      if (!(hub && login && request.method === "POST")) {
+      if (!(login && request.method === "POST")) {
         return new Response("no hub credential on this machine\n", {
           status: 404,
         });
@@ -1429,9 +1431,15 @@ export const serveHubCredential = async (): Promise<void> => {
           .filter((pair) => pair.length >= 2)
           .map(([name, ...value]) => [name, value.join("=")] as const)
       );
-      const at = new URL(hub);
-      const protocol = at.protocol === "wss:" ? "https" : "http";
-      if (asked.get("protocol") !== protocol || asked.get("host") !== at.host) {
+      // Any address the hub answers at (git-credential.ts `hubOrigins`).
+      const hub = hubOrigins().some((origin) => {
+        const at = new URL(origin);
+        return (
+          asked.get("protocol") === at.protocol.slice(0, -1) &&
+          asked.get("host") === at.host
+        );
+      });
+      if (!hub) {
         return new Response("not the hub\n", { status: 404 });
       }
       return new Response(

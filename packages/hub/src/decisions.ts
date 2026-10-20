@@ -21,12 +21,19 @@
  *   back out, so the page stands as it was.
  * - **The record keeps its tasks**: whenever the project's tasks change, a
  *   record whose cards' tasks moved is written again with them.
- * - **The graph** is derived from the programs on every read: each
+ * - **A page's cards** come from its own file in the folder, the one home
+ *   that outlives its artifact (a session deleted takes its artifacts with
+ *   it): `page.oui`, kept there by every create and revision in a project,
+ *   else the built `index.html`. Each program is read once per hash.
+ * - **The graph** is derived from those programs on every read: each
  *   decision a card, an edge from each decision its `after` names
  *   (`page#card` across pages), a frame per Section. The writer edits the
- *   program (artifact_update's statements); the person's drags are theirs,
- *   kept in each page's artifact state under `graph.places` by card id, so
- *   they outlive revisions; a card with no place is laid out by its depth.
+ *   program (artifact_update's statements); the person's picks and drags
+ *   are theirs, kept in each page's artifact state (drags under
+ *   `graph.places` by card id), so they outlive revisions; a card with no
+ *   place is laid out by its depth. What it cannot draw as written is said
+ *   under it: an `after` naming no decision, a pick a revision orphaned, a
+ *   page whose artifact (and so its picks) is gone.
  */
 import {
   type ChoiceEntry,
@@ -47,13 +54,16 @@ import {
   type DecisionWriter,
   decidedOf,
   type GraphCard,
+  type GraphLinks,
   type GraphPlace,
   graphId,
   logOf,
   PLACES_KEY,
+  pickOf,
   type RecordCard,
 } from "@cawco/core/decisions";
 import { AFTER_REF } from "@cawco/core/decisions-library";
+import { pageHash } from "@cawco/core/preview-proxy";
 import { Elysia, status, t } from "elysia";
 import type { ArtifactRow } from "./db/artifacts";
 import { PROGRAM_FILE, readKept } from "./decision-program";
@@ -307,8 +317,6 @@ interface DecidedTask {
 export interface DecisionsDeps {
   /** The page artifacts of a project, newest first. */
   artifacts: (projectId: string) => ArtifactRow[];
-  /** A page artifact's built HTML, as the hub keeps it; undefined when its file is gone. */
-  builtPage: (artifactId: string) => Promise<string | undefined>;
   /** Broadcasts that a project's decision pages changed. */
   changed: (projectId: string) => void;
   /** Writes and deletes files of the project's folder in one commit, as the operator. */
@@ -332,8 +340,6 @@ export interface DecisionsDeps {
   };
   /** Keeps the person's places of a page's cards on the graph in its artifact's state, by card id. */
   place: (artifactId: string, places: Record<string, GraphPlace>) => void;
-  /** A decision page artifact's program; undefined for an HTML page. */
-  program: (artifactId: string) => string | undefined;
   /** Whether the project is the hub's. */
   projectExists: (projectId: string) => boolean;
   /** The person's Send on a session's artifact (artifacts/service.ts `send`). */
@@ -374,6 +380,9 @@ const programPath = (name: string) => `decisions/${name}/${PROGRAM_FILE}`;
  * and a Section's frame round it.
  */
 const STEP = { x: 220, y: 104 };
+
+/** Programs whose reads are kept, by hash. Our bound: a project's pages and their recent revisions, a few KiB each. */
+const PROGRAM_READS = 512;
 
 /** The person's places of a page's cards, as its state keeps them. */
 const placesIn = (
@@ -444,6 +453,25 @@ interface GraphPage {
   state: Record<string, ChoiceEntry>;
 }
 
+/** The graph id an `after` on page `page` names: `page#card` across pages, a bare id on its own page. */
+const afterId = (page: string, ref: string): string => {
+  const found = AFTER_REF.exec(ref);
+  return found ? graphId(found[1] ?? page, found[2] ?? "") : ref;
+};
+
+/** Why an `after` names nothing on the graph: the page it names has no such decision, or there is no such page. */
+const unlinkedWhy = (
+  pages: Pick<GraphPage, "name">[],
+  from: string,
+  ref: string
+): string => {
+  const at = from.indexOf("#");
+  const page = from.slice(0, at);
+  return pages.some((each) => each.name === page)
+    ? `${ref}: ${page} has no decision ${from.slice(at + 1)}`
+    : `${ref}, which no decision page of this project has`;
+};
+
 /** Every `after` as an edge, from the decision depended on; one naming no decision of the project goes to `problems`. */
 const edgesOf = (
   pages: GraphPage[],
@@ -458,21 +486,40 @@ const edgesOf = (
   for (const page of pages) {
     for (const card of page.cards) {
       for (const ref of card.after) {
-        const found = AFTER_REF.exec(ref);
-        const from = found
-          ? graphId(found[1] ?? page.name, found[2] ?? "")
-          : ref;
+        const from = afterId(page.name, ref);
         if (ids.has(from)) {
           edges.push([from, graphId(page.name, card.id)]);
         } else {
           problems.push(
-            `${page.name}#${card.id} comes after ${ref}, which no decision page of this project has.`
+            `${page.name}#${card.id} comes after ${unlinkedWhy(pages, from, ref)}.`
           );
         }
       }
     }
   }
   return edges;
+};
+
+/**
+ * A page's picks a revision orphaned, said: one on a decision it no longer
+ * asks, and one on an option its card no longer offers. The picks are kept.
+ */
+const orphansOf = (page: GraphPage, problems: string[]): void => {
+  for (const [key, entry] of Object.entries(page.state)) {
+    const card = page.cards.find((each) => each.id === key);
+    if (card) {
+      const { gone } = pickOf(card, entry);
+      if (gone.length > 0) {
+        problems.push(
+          `${page.name}#${key} was picked as ${gone.join(", ")}, which the page no longer offers; the pick is kept.`
+        );
+      }
+    } else if (key !== PLACES_KEY && (entry.options ?? []).length > 0) {
+      problems.push(
+        `${page.name}#${key} was picked, and the page no longer asks it; the pick is kept.`
+      );
+    }
+  }
 };
 
 /** Each card's depth along the edges: one more than the deepest it comes after; a cycle stops at 0. */
@@ -521,7 +568,7 @@ const placedCards = (
         card: card.id,
         page: page.name,
         name: card.question || card.id,
-        picked: (page.state[card.id]?.options ?? []).length > 0,
+        ...pickOf(card, page.state[card.id]),
         x: placed?.x ?? column * STEP.x,
         y: placed?.y ?? row * STEP.y,
       };
@@ -635,27 +682,35 @@ export const createDecisions = (deps: DecisionsDeps) => {
     return "picking";
   };
 
-  /**
-   * A page's title and cards: its program's (the artifact's, else the
-   * folder's page.oui), or an HTML page's read from its built page.
-   */
-  const pageOf = async (
-    projectId: string,
-    name: string,
-    artifact: ArtifactRow | null
-  ): Promise<ReadPage> => {
-    const program =
-      (artifact ? deps.program(artifact.id) : undefined) ??
-      (artifact?.kind === "page" && (await deps.builtPage(artifact.id))
-        ? undefined
-        : await deps.folderText(projectId, programPath(name)));
-    if (program !== undefined) {
-      const { title, cards, sections } = readKept(program);
-      return { title, cards, sections };
+  /** Each program read so far, by its hash (core `pageHash`, the page hash the hub keeps), oldest first. */
+  const programReads = new Map<string, ReadPage>();
+
+  /** A program's title, cards and Sections, parsed once per hash. */
+  const programRead = (program: string): ReadPage => {
+    const hash = pageHash(program);
+    const kept = programReads.get(hash);
+    if (kept) {
+      return kept;
     }
-    const html =
-      (artifact ? await deps.builtPage(artifact.id) : undefined) ??
-      (await deps.folderText(projectId, builtPath(name)));
+    const { title, cards, sections } = readKept(program);
+    const read = { title, cards, sections };
+    programReads.set(hash, read);
+    if (programReads.size > PROGRAM_READS) {
+      programReads.delete(programReads.keys().next().value as string);
+    }
+    return read;
+  };
+
+  /**
+   * A page's title and cards, from its own file in the project's folder:
+   * its program (page.oui), else an HTML page's built index.html.
+   */
+  const pageOf = async (projectId: string, name: string): Promise<ReadPage> => {
+    const program = await deps.folderText(projectId, programPath(name));
+    if (program !== undefined) {
+      return programRead(program);
+    }
+    const html = await deps.folderText(projectId, builtPath(name));
     return html ? await readPage(html) : { title: name, cards: [] };
   };
 
@@ -666,7 +721,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
     artifact: ArtifactRow | null,
     tasks: DecidedTask[]
   ): Promise<{ read: DecisionPageRead; page: ReadPage }> => {
-    const page = await pageOf(projectId, name, artifact);
+    const page = await pageOf(projectId, name);
     const doc: PageArtifact | null = artifact
       ? { row: artifact, ...deps.page(artifact.id) }
       : null;
@@ -679,9 +734,8 @@ export const createDecisions = (deps: DecisionsDeps) => {
       artifactId: artifact?.id ?? null,
       writer: writerOf(artifact),
       cards: page.cards.length,
-      picked: page.cards.filter(
-        (card) => (state[card.id]?.options ?? []).length > 0
-      ).length,
+      picked: page.cards.filter((card) => pickOf(card, state[card.id]).picked)
+        .length,
       notes: page.cards.filter((card) => state[card.id]?.note?.trim()).length,
       decided:
         record?.cards.filter((card) => card.chosen.length > 0).length ?? 0,
@@ -1015,10 +1069,12 @@ export const createDecisions = (deps: DecisionsDeps) => {
 
     /**
      * The graph, derived from the project's pages now: a card per decision
-     * of each page whose artifact the hub holds (a page whose artifact is
-     * gone is named in `problems`), edges from each `after`, a frame per
+     * of each page its folder keeps, edges from each `after`, a frame per
      * Section, each card where the person put it or laid out by its depth.
-     * Null when no decision names another or stands in a Section.
+     * A page whose artifact is gone draws its cards unpicked, said in
+     * `problems` with every `after` naming no decision and every pick a
+     * revision orphaned. Null when no decision names another or stands in
+     * a Section.
      */
     async graph(projectId: string): Promise<DecisionGraph | null> {
       known(projectId);
@@ -1026,24 +1082,25 @@ export const createDecisions = (deps: DecisionsDeps) => {
       const pages: GraphPage[] = [];
       for (const { name, artifact } of await pageNames(projectId)) {
         // biome-ignore lint/performance/noAwaitInLoops: one page's files at a time keeps the folder's reads small
-        const page = await pageOf(projectId, name, artifact);
+        const page = await pageOf(projectId, name);
         if (page.cards.length === 0) {
           continue;
         }
         if (!artifact) {
           problems.push(
-            `decisions/${name}/ has no artifact on this hub, so its decisions are not on the graph; its session can publish it again.`
+            `decisions/${name}/ has no artifact on this hub, so its decisions are drawn unpicked and can't be moved; its session can publish it again.`
           );
-          continue;
         }
-        const { state } = deps.page(artifact.id);
-        pages.push({
+        const state = artifact ? deps.page(artifact.id).state : {};
+        const one: GraphPage = {
           name,
           cards: page.cards,
           sections: page.sections ?? [],
           state,
           places: placesIn(state),
-        });
+        };
+        orphansOf(one, problems);
+        pages.push(one);
       }
       if (
         !pages.some((page) =>
@@ -1062,6 +1119,57 @@ export const createDecisions = (deps: DecisionsDeps) => {
     },
 
     /**
+     * What page `name` drawn with `cards` does to the project's graph, for
+     * its writer: each of its `after`s naming no decision of the project's,
+     * and each of its decisions another page comes after. The other pages
+     * as the folder keeps them.
+     */
+    async linksOf(
+      projectId: string,
+      name: string,
+      cards: DecisionCard[]
+    ): Promise<GraphLinks> {
+      known(projectId);
+      const pages: Pick<GraphPage, "cards" | "name">[] = [{ name, cards }];
+      for (const each of await pageNames(projectId)) {
+        if (each.name !== name) {
+          // biome-ignore lint/performance/noAwaitInLoops: one page's files at a time keeps the folder's reads small
+          const page = await pageOf(projectId, each.name);
+          pages.push({ name: each.name, cards: page.cards });
+        }
+      }
+      const ids = new Set(
+        pages.flatMap((page) =>
+          page.cards.map((card) => graphId(page.name, card.id))
+        )
+      );
+      const unlinked = cards.flatMap((card) =>
+        card.after.flatMap((ref) => {
+          const from = afterId(name, ref);
+          return ids.has(from)
+            ? []
+            : [`${card.id} after ${unlinkedWhy(pages, from, ref)}`];
+        })
+      );
+      const dependents: Record<string, string[]> = {};
+      for (const page of pages.slice(1)) {
+        for (const card of page.cards) {
+          for (const ref of card.after) {
+            const from = afterId(page.name, ref);
+            if (from.startsWith(`${name}#`)) {
+              const id = from.slice(name.length + 1);
+              dependents[id] = [
+                ...(dependents[id] ?? []),
+                graphId(page.name, card.id),
+              ];
+            }
+          }
+        }
+      }
+      return { unlinked, dependents };
+    },
+
+    /**
      * The person's drags: each card named by its graph id takes its new
      * place in its page's artifact state, beside the places it kept.
      */
@@ -1070,8 +1178,9 @@ export const createDecisions = (deps: DecisionsDeps) => {
       places: { id: string; x: number; y: number }[]
     ): Promise<void> {
       known(projectId);
+      const names = await pageNames(projectId);
       const artifacts = new Map(
-        (await pageNames(projectId)).flatMap(({ name, artifact }) =>
+        names.flatMap(({ name, artifact }) =>
           artifact ? [[name, artifact] as const] : []
         )
       );
@@ -1080,6 +1189,16 @@ export const createDecisions = (deps: DecisionsDeps) => {
         const at = place.id.indexOf("#");
         const page = place.id.slice(0, at);
         const card = place.id.slice(at + 1);
+        if (
+          card &&
+          !artifacts.has(page) &&
+          names.some((each) => each.name === page)
+        ) {
+          throw new DecisionRefusal(
+            409,
+            `decisions/${page}/ has no artifact on this hub to keep its places in; its session can publish it again.`
+          );
+        }
         if (at < 1 || !card || !artifacts.has(page)) {
           throw new DecisionRefusal(
             404,

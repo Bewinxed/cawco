@@ -15,6 +15,7 @@ import type {
   CarrySessionOutcome,
   CarrySessionRequest,
   ControlPayload,
+  ControlResultFrame,
   DaemonPermissionRequestFrame,
   Envelope,
   FleetHoldings,
@@ -39,6 +40,7 @@ import type {
   SpawnPayload,
   SpinOffHeld,
   StopPayload,
+  WorkInFlight,
 } from "@cawco/core";
 import {
   ACCOUNT_READ,
@@ -48,15 +50,19 @@ import {
   CAWCO_SCRATCH_TAG,
   CLI_OUTDATED,
   CONTROL_CARRY_SESSIONS,
+  CONTROL_FORGET_CREDENTIALS,
   CONTROL_GIT_CHANGES,
   CONTROL_LIST_SESSIONS,
   CONTROL_MCP_FLEET_HEAL,
   CONTROL_QUERIES,
+  CONTROL_READ_CONTINUATION,
+  CONTROL_READ_SESSION_CONTEXT,
   CONTROL_RESTLESS,
   CONTROL_RUN_COMMAND,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SLEEP,
   CONTROL_SPIN_OFF_HELD,
+  CONTROL_WORK_IN_FLIGHT,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BUNDLE,
@@ -92,6 +98,7 @@ import {
   REPEATED_FAILURE_LIMIT,
   RESOLVE_PERMISSION,
   ROOM_HELD,
+  readContinuation,
   readDelivered,
   readIngested,
   repoPath,
@@ -174,7 +181,8 @@ import {
   stopPreviews,
 } from "./preview";
 import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
-import { rememberCredential } from "./redaction";
+import { forgetRevoked, rememberCredential } from "./redaction";
+import { arrive, keepAnswer } from "./request-record";
 import { fenced } from "./restart";
 import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
 import { stopStages } from "./stage";
@@ -602,10 +610,41 @@ const CATALOG_METHODS = new Set([
   "listSessions",
   "getSessionInfo",
   "getSessionMessages",
+  CONTROL_READ_CONTINUATION,
   "renameSession",
   "tagSession",
   "deleteSession",
 ]);
+
+/**
+ * The catalog controls that only read a stored conversation. Each waits for
+ * a change of the same conversation already on its way (a rename, a tag, a
+ * delete) and for nothing else: never for another read, of it or of any
+ * other session, so a read of a transcript of hundreds of megabytes holds up
+ * no other reader ({@link SessionSupervisor.dispatch}).
+ */
+const CATALOG_READS = new Set([
+  "listSessions",
+  "getSessionInfo",
+  "getSessionMessages",
+  CONTROL_READ_CONTINUATION,
+  CONTROL_READ_SESSION_CONTEXT,
+]);
+
+/** A catalog read that took this long or longer says so in the log, with what it read. */
+const CATALOG_SLOW_MS = 1000;
+
+/** A catalog read that was slow, said in the log with what it read; nothing for a quick one. */
+const catalogRead = (at: number, what: string): void => {
+  const took = Date.now() - at;
+  if (took >= CATALOG_SLOW_MS) {
+    console.info(`[catalog] ${what}, read in ${took} ms`);
+  }
+};
+
+/** The lane a catalog control takes: its conversation's, by its session key; the whole catalog's for a listing. */
+const catalogLane = (method: string, args: unknown[] | undefined): string =>
+  method === "listSessions" ? "catalog:list" : `catalog:${String(args?.[0])}`;
 
 /**
  * The catalog's directory argument, whichever convention carried it: new
@@ -1009,8 +1048,22 @@ export class SessionSupervisor {
    * produced while the hub is away are dropped; the hub replays what a session
    * is still blocked on by calling `control reinitialize` after it reconnects,
    * and a spawn's failure is replayed from here ({@link replaySpawnFailures}).
+   * Every request's answer is kept as it goes, sent or not (request-record.ts),
+   * for the hub that sends the request again once it is back.
    */
-  sink: FrameSink = () => false;
+  get sink(): FrameSink {
+    return this.#answering;
+  }
+  set sink(to: FrameSink) {
+    this.#sinkTo = to;
+  }
+  #sinkTo: FrameSink = () => false;
+  readonly #answering: FrameSink = (frame) => {
+    if (frame.kind === "control_result") {
+      keepAnswer(frame as ControlResultFrame);
+    }
+    return this.#sinkTo(frame);
+  };
   /** Puts an arbitrary envelope on the daemon's hub socket (hand-offs). */
   emit: (envelope: Envelope) => void = () => {
     // replaced once the daemon has a hub connection to emit onto
@@ -1132,6 +1185,24 @@ export class SessionSupervisor {
       }
       return Promise.resolve();
     }
+    // A request the hub sent again, under the id it went under before
+    // (request-record.ts): never run twice.
+    const requestId = (envelope.payload as { requestId?: unknown } | undefined)
+      ?.requestId;
+    if (
+      typeof requestId === "string" &&
+      (envelope.verb === "control" ||
+        envelope.verb === "spawn" ||
+        envelope.verb === "fs")
+    ) {
+      const seen = arrive(requestId);
+      if (seen !== "run") {
+        if (seen !== "running") {
+          this.sink(seen);
+        }
+        return Promise.resolve();
+      }
+    }
     if (control?.method === FLEET_SYNC && control.requestId) {
       this.#fleetSyncsAsked += 1;
       this.#fleetSyncTicket.set(control.requestId, this.#fleetSyncsAsked);
@@ -1166,6 +1237,14 @@ export class SessionSupervisor {
       control?.method === CONTROL_WORKSPACE_AT
     ) {
       key = `workspace:${(control.args?.[0] as { id?: string } | undefined)?.id}`;
+    } else if (
+      control &&
+      !envelope.instanceId &&
+      (CATALOG_METHODS.has(control.method) || CATALOG_READS.has(control.method))
+    ) {
+      // A stored conversation's own lane: its changes keep their order, and
+      // one session's catalog never waits on another's.
+      key = catalogLane(control.method, control.args);
     } else if (control && !envelope.instanceId) {
       // Fleet convergence cannot serialize unrelated machine controls behind
       // its HTTP probes. Mutations of the same kind still retain their order.
@@ -1193,7 +1272,11 @@ export class SessionSupervisor {
     // A question about the session waits for what is already on its way —
     // the spawn that makes the session, a send before it — but nothing waits
     // for its answer: a send behind one sat here until it came back.
-    if (control && CONTROL_QUERIES.has(control.method)) {
+    if (
+      control &&
+      (CONTROL_QUERIES.has(control.method) ||
+        (!envelope.instanceId && CATALOG_READS.has(control.method)))
+    ) {
       // #control sinks its own answer, success or failure.
       return (this.#queues.get(key) ?? Promise.resolve()).then(() =>
         this.#route(envelope)
@@ -5314,6 +5397,10 @@ export class SessionSupervisor {
       if (method === CONTROL_RESTLESS) {
         return await this.#restless(args[0] as string[]);
       }
+      // The hub revoked these credentials: they grant nothing now.
+      if (method === CONTROL_FORGET_CREDENTIALS) {
+        return { forgotten: forgetRevoked(args[0] as string[]) };
+      }
       if (method === CONTROL_CARRY_SESSIONS) {
         return await this.carrySessions(args[0] as CarrySessionRequest[]);
       }
@@ -5383,13 +5470,35 @@ export class SessionSupervisor {
             );
             return info ? titled(info) : info;
           }
-          case "getSessionMessages":
-            return await adapter.getSessionMessages(
+          case "getSessionMessages": {
+            const at = Date.now();
+            const options = args[1] as
+              { tail?: number; whole?: boolean } | undefined;
+            const messages = await adapter.getSessionMessages(
               args[0] as string,
               dirOf(args[1]),
-              (args[1] as { tail?: number } | undefined)?.tail,
-              (args[1] as { whole?: boolean } | undefined)?.whole
+              options?.tail,
+              options?.whole
             );
+            catalogRead(
+              at,
+              `getSessionMessages ${adapter.kind} ${String(args[0]).slice(0, 8)}${options?.whole ? " whole" : ""}${options?.tail ? ` tail ${options.tail}` : ""}: ${messages.length} message(s)`
+            );
+            return messages;
+          }
+          case CONTROL_READ_CONTINUATION: {
+            const at = Date.now();
+            const key = args[0] as string;
+            const [live, whole] = await Promise.all([
+              adapter.getSessionMessages(key, dirOf(args[1])),
+              adapter.getSessionMessages(key, dirOf(args[1]), undefined, true),
+            ]);
+            const read = readContinuation(live, whole);
+            console.info(
+              `[catalog] readContinuation ${adapter.kind} ${key.slice(0, 8)}: ${whole.length} stored message(s), ${read.entries.scope} in its live scope, answered ${JSON.stringify(read).length} characters in ${Date.now() - at} ms`
+            );
+            return read;
+          }
           case "renameSession":
             return await adapter.renameSession(
               args[0] as string,
@@ -5456,11 +5565,32 @@ export class SessionSupervisor {
     if (method === CONTROL_SLEEP) {
       return await this.sleep(instanceId);
     }
+    if (method === CONTROL_WORK_IN_FLIGHT) {
+      return this.#workInFlight(instanceId);
+    }
     const session = this.#session(instanceId);
     if (method === "withdrawSend" && session.harness !== "claude") {
       return "started";
     }
+    // A credential the hub installs in a live session is known before the
+    // process can print it, as a launch's is ({@link #granted}).
+    if (method === INSTALL_SESSION_CREDENTIAL) {
+      rememberCredential(instanceId, String(args[0]));
+    }
     return await session.control(method, args);
+  }
+
+  /**
+   * What `instanceId`'s process holds for later that ending it would lose
+   * ({@link CONTROL_WORK_IN_FLIGHT}): null with no process here, or none held.
+   */
+  #workInFlight(instanceId: string): WorkInFlight | null {
+    const session = this.#sessions.get(instanceId);
+    const later = session?.heldForLater?.() ?? [];
+    if (!session || later.length === 0) {
+      return null;
+    }
+    return { why: waitingWords(later), since: session.heldSince?.() ?? null };
   }
 
   #session(instanceId: string): HarnessSession {

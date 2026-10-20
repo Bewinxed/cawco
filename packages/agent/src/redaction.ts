@@ -5,15 +5,23 @@
  * frame about it. Everything the agent sends the hub goes through
  * {@link outbound} (`daemon.ts` `send`, the one socket exit: live frames,
  * control results with history and catalog reads, resume replays,
- * heartbeats), and every value this agent ever installed or verified is
- * replaced there with {@link REDACTED}. The agent's own log lines go through
- * {@link redactText} too.
+ * heartbeats), and every value this agent installed or verified that may
+ * still grant something is replaced there with {@link REDACTED}. The agent's
+ * own log lines go through {@link redactText} too.
  *
  * The values are kept, owner-only, in {@link sessionIdentityDir} (hidden from
  * every workspace boundary), so a transcript read after an agent restart is
  * still redacted. The harness's own transcript on this machine is left as the
  * harness wrote it.
+ *
+ * WHAT THE STORE HOLDS: every credential that still grants something, live
+ * or not yet confirmed revoked by the hub. A revoked one grants nothing, so
+ * a transcript that shows it leaks nothing, and it leaves the store only on
+ * the hub's word that it is revoked ({@link forgetRevoked}): the register's
+ * ack names those of {@link storedHashes} it no longer honours, and the hub
+ * names each it revokes as it does. Never on a guess or a timer alone.
  */
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Envelope } from "@cawco/core";
@@ -37,8 +45,12 @@ const storeFile = (): string =>
     `redact-${new URL(delegationHubUrl()).host.replaceAll(":", "_")}.json`
   );
 
-/** The store as read, by its path: the hub this agent serves names it. */
-let known: { file: string; values: Set<string> } | undefined;
+/**
+ * The store as read, by its path: the hub this agent serves names it.
+ * `version` counts its changes, so what is built from it knows when to be
+ * built again.
+ */
+let known: { file: string; values: Set<string>; version: number } | undefined;
 /** Each live session's own credential, for the stream carry. */
 const bySession = new Map<string, string>();
 gauge("redaction.sessions", () => bySession.size);
@@ -53,10 +65,25 @@ const loaded = (): Set<string> => {
     } catch {
       values = new Set();
     }
-    known = { file, values };
+    known = { file, values, version: 0 };
   }
   return known.values;
 };
+
+/** The store, as it is now, on disk. */
+const saveStore = (values: Set<string>): void => {
+  if (known) {
+    known.version += 1;
+  }
+  mkdirSync(sessionIdentityDir(), { recursive: true, mode: 0o700 });
+  writeStateFileSync(storeFile(), JSON.stringify([...values]), {
+    mode: 0o600,
+  });
+};
+
+/** A credential's name on the hub, which keeps hashes only (hub session-identity.ts). */
+const hashOf = (credential: string): string =>
+  createHash("sha256").update(credential).digest("hex");
 
 /** A credential this agent installed or verified for `instanceId`. */
 export const rememberCredential = (
@@ -69,20 +96,113 @@ export const rememberCredential = (
     return;
   }
   values.add(credential);
-  const file = storeFile();
-  mkdirSync(sessionIdentityDir(), { recursive: true, mode: 0o700 });
-  writeStateFileSync(file, JSON.stringify([...values]), { mode: 0o600 });
+  saveStore(values);
+};
+
+/** The hub's name for each credential the store holds, for the register to ask about. */
+export const storedHashes = (): string[] => [...loaded()].map(hashOf);
+
+/**
+ * The credentials the hub says it has revoked, out of the store: `hashes`
+ * are the hub's names for them. What the store holds and the hub did not
+ * name stays. How many went.
+ */
+export const forgetRevoked = (hashes: readonly string[]): number => {
+  const revoked = new Set(hashes);
+  const values = loaded();
+  const gone = [...values].filter((value) => revoked.has(hashOf(value)));
+  if (gone.length === 0) {
+    return 0;
+  }
+  for (const value of gone) {
+    values.delete(value);
+  }
+  for (const [instanceId, value] of bySession) {
+    if (gone.includes(value)) {
+      bySession.delete(instanceId);
+    }
+  }
+  saveStore(values);
+  console.info(
+    `[redaction] ${gone.length} credential(s) the hub revoked left the store; ${values.size} still held`
+  );
+  return gone.length;
+};
+
+/**
+ * The store as one pattern, and its longest value: rebuilt when the store
+ * changes or is read afresh. Looking for each credential in turn cost a
+ * 86 MB transcript read 1.0 s on the agent's loop with 200 of them, 10 s
+ * with 2,000 (measured). As a trie, one pattern finds them all in one pass,
+ * 0.13 s with 200, 0.4 s with 2,000.
+ */
+let matcher:
+  | {
+      longest: number;
+      pattern: RegExp | null;
+      values: Set<string>;
+      version: number;
+    }
+  | undefined;
+
+const matcherOf = (values: Set<string>) => {
+  const version = known?.version ?? 0;
+  if (matcher?.values !== values || matcher.version !== version) {
+    const held = [...values].filter(Boolean);
+    matcher = {
+      values,
+      version,
+      longest: held.reduce((most, value) => Math.max(most, value.length), 0),
+      pattern: held.length > 0 ? new RegExp(trieSource(held), "g") : null,
+    };
+  }
+  return matcher;
+};
+
+const escaped = (text: string): string =>
+  text.replace(/[\\^$.*+?()[\]{}|/-]/g, "\\$&");
+
+/**
+ * A pattern's source that matches each of `values` (none empty), as a trie:
+ * the values that begin alike share that beginning, so at each place in a
+ * text the pattern tries one branch per next character, not every value.
+ * Code units, not code points: the pattern has no `u` flag, so a pair cut
+ * between two branches still matches as the text holds it.
+ */
+const trieSource = (values: string[]): string => {
+  if (values.length === 1) {
+    return escaped(values[0] as string);
+  }
+  let ends = false;
+  const byFirst = new Map<string, string[]>();
+  for (const value of values) {
+    if (!value) {
+      ends = true;
+      continue;
+    }
+    const first = value[0] as string;
+    const rest = byFirst.get(first);
+    if (rest) {
+      rest.push(value.slice(1));
+    } else {
+      byFirst.set(first, [value.slice(1)]);
+    }
+  }
+  const branches = [...byFirst].map(
+    ([first, rest]) => `${escaped(first)}${trieSource(rest)}`
+  );
+  const body =
+    branches.length === 1
+      ? (branches[0] as string)
+      : `(?:${branches.join("|")})`;
+  // A value that ends here, where longer ones go on: the longer is tried first.
+  return ends ? `(?:${body})?` : body;
 };
 
 /** `text` with every credential this agent has held replaced. */
 export const redactText = (text: string): string => {
-  let out = text;
-  for (const value of loaded()) {
-    if (out.includes(value)) {
-      out = out.replaceAll(value, REDACTED);
-    }
-  }
-  return out;
+  const { pattern } = matcherOf(loaded());
+  return pattern ? text.replace(pattern, REDACTED) : text;
 };
 
 type DeltaField = "text" | "thinking" | "partial_json";
@@ -180,10 +300,7 @@ const whole = (text: string): OutboundMessage => ({
  * a credential that starts in text already given lies wholly inside it.
  */
 const redactPieces = (source: JsonPieces): JsonPieces => {
-  let longest = 0;
-  for (const value of loaded()) {
-    longest = Math.max(longest, value.length);
-  }
+  const { longest } = matcherOf(loaded());
   const hold = Math.max(0, longest - 1);
   let carry = "";
   let ended = false;

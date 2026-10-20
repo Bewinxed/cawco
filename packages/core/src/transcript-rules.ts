@@ -1852,7 +1852,10 @@ export function applyToolResult(
 ): TranscriptBlock | null {
   // `tool.handoff` is a tool call too — it just renders as a receipt. Matching
   // only `tool.use` left it stuck on "sending…" with the answer never applied.
-  const target = blocks.find(
+  // From the newest back: a result answers a call made shortly before it, and
+  // a search from the oldest made a stored transcript's read quadratic (7.6 s
+  // of the hub's loop for 72,805 entries). A call's id names one block.
+  const target = blocks.findLast(
     (m) =>
       (m.type === "tool.use" || m.type === "tool.handoff") &&
       m.metadata?.toolId === toolId

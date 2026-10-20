@@ -262,7 +262,16 @@
       availableHeight = composerTop - safeTop;
     };
     measure();
-    const observer = new ResizeObserver(measure);
+    let pending = 0;
+    const remeasure = () => {
+      cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(measure);
+    };
+    // A resize is read in the frame after it too: measured in the observer's
+    // callback, the sheet's new height (its host's) resized the pane in it
+    // inside that delivery, at a depth the delivery had passed, and the
+    // browser reported a ResizeObserver loop.
+    const observer = new ResizeObserver(remeasure);
     observer.observe(node);
     // The composer's top moves with its parts (a draft growing the pill)
     // and with what it shows on rows it keeps laid out whether or not they
@@ -273,11 +282,6 @@
     for (const part of composer?.children ?? []) {
       observer.observe(part);
     }
-    let pending = 0;
-    const remeasure = () => {
-      cancelAnimationFrame(pending);
-      pending = requestAnimationFrame(measure);
-    };
     const shows = new MutationObserver(remeasure);
     if (composer) {
       shows.observe(composer, {

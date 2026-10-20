@@ -12,7 +12,7 @@ import { readFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import Docker from "dockerode";
-import { colimaHome } from "./media-forwarding";
+import { colimaHome, colimaProfileOf } from "./media-forwarding";
 
 /** A container runtime that answered. */
 export interface Runtime {
@@ -22,6 +22,14 @@ export interface Runtime {
   /** The socket it answered on. */
   endpoint: string;
   kind: "docker" | "podman";
+  /**
+   * Its engine's host network is this machine's own: a native engine on
+   * Linux. False for an engine in a VM (every Mac runtime; Colima or Docker
+   * Desktop on Linux: "Docker Desktop always runs the Docker Engine in a Linux
+   * utility vm (even on Linux!)", forums.docker.com), whose host network is
+   * the VM's and whose ports reach the machine through the VM's forwarder.
+   */
+  ownNetwork: boolean;
   /** Runs without root: ports under 1024 need the host's leave. */
   rootless: boolean;
   /** The engine's own version. */
@@ -144,7 +152,11 @@ export const probeEndpoint = async (
       refused: code ?? (error instanceof Error ? error.message : String(error)),
     };
   }
-  const [version, info] = await Promise.all([docker.version(), docker.info()]);
+  const [version, info, colima] = await Promise.all([
+    docker.version(),
+    docker.info(),
+    colimaProfileOf(socketPath),
+  ]);
   const podman = version.Components?.some((one) =>
     one.Name.toLowerCase().includes("podman")
   );
@@ -153,6 +165,10 @@ export const probeEndpoint = async (
     : ((info as { SecurityOptions?: string[] }).SecurityOptions ?? []).some(
         (option) => option.includes("name=rootless")
       );
+  const ownNetwork =
+    platform() === "linux" &&
+    !colima &&
+    (info as { OperatingSystem?: string }).OperatingSystem !== "Docker Desktop";
   return {
     runtime: {
       docker: new Docker({ socketPath }),
@@ -160,6 +176,7 @@ export const probeEndpoint = async (
       kind: podman ? "podman" : "docker",
       version: version.Version,
       api: version.ApiVersion,
+      ownNetwork,
       rootless,
     },
   };

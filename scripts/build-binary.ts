@@ -1,9 +1,9 @@
 // biome-ignore-all lint/performance/useTopLevelRegex: these loader filters register once per serial build, never on a request path.
 // biome-ignore-all lint/performance/noAwaitInLoops: filesystem walks and compiler stages are deliberately serialized to bound memory.
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { agentReact } from "../packages/core/src/agent-react";
 import { bundled } from "../packages/core/src/bundled";
@@ -22,6 +22,18 @@ export const TARGETS = [
 const ROOT = resolve(import.meta.dir, "..");
 const requireAgent = createRequire(join(ROOT, "packages/agent/package.json"));
 const requireCore = createRequire(join(ROOT, "packages/core/package.json"));
+
+/**
+ * The packages that read files beside themselves at run time, by import
+ * specifier, each with the runtime tree the binary publishes it as (core
+ * runtime.ts `RUNTIME_TREES`): playwright-core its browsers.json, package.json
+ * and webp wasm from `__dirname`, photon-node its `photon_rs_bg.wasm`.
+ */
+const PUBLISHED_PACKAGES: Record<string, string> = {
+  "playwright-core": "playwright-core",
+  "@silvia-odwyer/photon-node": "photon-node",
+};
+const PUBLISHED_PACKAGE = /^(?:playwright-core|@silvia-odwyer\/photon-node)$/;
 
 export function packageDir(
   name: string,
@@ -173,6 +185,28 @@ export async function buildBinary(options: {
   // A workspace's stage (live components): run by the project's own node or
   // bun inside the workspace's boundary, never by cawco (agent stage.ts).
   await writeFile(join(work, "stage-host.mjs"), await buildStageHost());
+  // The dashboard's server (adapter-node's `build/handler.js`), one file with
+  // its dependencies, published beside its client tree and imported from
+  // there (apps/dashboard serve.js): adapter-node's `dir` is the directory of
+  // its own module, `dirname(fileURLToPath(import.meta.url))`, which a bundle
+  // keeps for run time, so it names the published `dashboard/` tree.
+  const dashboardServer = await bundled("The dashboard's server", {
+    entrypoints: [join(ROOT, "apps/dashboard/build/handler.js")],
+    target: "bun",
+    format: "esm",
+    minify: true,
+    define: { "process.env.NODE_ENV": '"production"' },
+    plugins: [agentReact],
+  });
+  if (dashboardServer.outputs.length !== 1) {
+    throw new Error(
+      `The dashboard's server bundled to ${dashboardServer.outputs.length} files, not one`
+    );
+  }
+  await writeFile(
+    join(work, "dashboard-handler.js"),
+    await dashboardServer.outputs[0].text()
+  );
   const ripgrep = packageDir("@vscode/ripgrep-universal", requireAgent);
   const playwright = packageDir("playwright-core", requireAgent);
   const assets = [
@@ -188,6 +222,7 @@ export async function buildBinary(options: {
       join(ROOT, "apps/dashboard/build/client"),
       "dashboard/client"
     )),
+    ["dashboard/handler.js", join(work, "dashboard-handler.js")],
     ...(await filesUnder(join(typescript, "lib"), "workflow/lib")).filter(
       ([name]) => name.endsWith(".d.ts")
     ),
@@ -225,18 +260,10 @@ export async function buildBinary(options: {
     // A project's browser image's build context, sent to the machine's
     // container runtime as it is (agent browser/image.ts).
     ...(await filesUnder(join(ROOT, "packages/agent/browser"), "browser")),
-    // The files playwright-core's bundled code reads beside itself at run
-    // time, published as its runtime tree (the plugin's coreBundle.js load).
-    ["playwright-core/package.json", join(playwright, "package.json")],
-    ["playwright-core/browsers.json", join(playwright, "browsers.json")],
-    [
-      "playwright-core/lib/webp_codec.wasm",
-      join(playwright, "lib/webp_codec.wasm"),
-    ],
-    ...(await filesUnder(
-      join(playwright, "lib/server"),
-      "playwright-core/lib/server"
-    )),
+    // The packages the binary loads from their own published trees
+    // (PUBLISHED_PACKAGES, core published-package.ts), each whole.
+    ...(await filesUnder(playwright, "playwright-core")),
+    ...(await filesUnder(photon, "photon-node")),
   ] as [string, string][];
   // Each published file's content hash, the manifest a start compares with
   // its runtime folder's marker instead of reading the files (core runtime.ts).
@@ -249,29 +276,60 @@ export async function buildBinary(options: {
     }
   }
   const assetsSource = `${assets.map(([, path], i) => `import a${i} from ${JSON.stringify(path)} with { type: "file" };`).join("\n")}\nexport const binaryAssets = {${assets.map(([key], i) => `${JSON.stringify(key)}:a${i}`).join(",")}};\nexport const publishedHashes = ${JSON.stringify(publishedHashes)};`;
-  const [platform, arch] = options.target.split("-");
-  const tui = packageDir("@earendil-works/pi-tui", requirePi);
-  const clipboard = join(
-    tui,
-    `native/${platform}/prebuilds/${platform}-${arch}/${platform}-platform${platform === "linux" ? "-x11" : ""}.node`
-  );
-  await bundled("The standalone binary", {
-    entrypoints: [
+  // The binary's root: Bun names each embedded entry and asset by its path
+  // below it, and the code inside finds them by those names. Each entry is a
+  // module of one import. Ours keep the names the code spawns them by
+  // (./scripts/binary/*-worker.js); pi's take the names pi's own Bun binary
+  // gives them, which its code spawns (config.js
+  // `resolveCodemodeWorkerSpecifier`: "./src/extensions/codemode/worker.ts";
+  // image-resize.js `resizeImage`: "./src/utils/image-resize-worker.ts").
+  // pi-tui's native helper sits where its `getNativeModuleCandidates` looks
+  // beside the module that loads it (native-module-path.js
+  // `join(moduleDir, nativePath)`): /$bunfs/root/native/….
+  const root = join(work, "root");
+  await rm(root, { recursive: true, force: true });
+  const entries: [string, string][] = [
+    [
+      "cawco.ts",
       join(
         ROOT,
         options.proof
           ? "scripts/binary/proof-entry.ts"
           : "scripts/binary/entry.ts"
       ),
-      join(ROOT, "scripts/binary/workflow-worker.ts"),
-      join(ROOT, "scripts/binary/transcript-worker.ts"),
-      join(ROOT, "scripts/binary/process-table-worker.ts"),
+    ],
+    ...[
+      "workflow-worker.ts",
+      "transcript-worker.ts",
+      "process-table-worker.ts",
+    ].map((name): [string, string] => [
+      `scripts/binary/${name}`,
+      join(ROOT, "scripts/binary", name),
+    ]),
+    [
+      "src/utils/image-resize-worker.ts",
       join(pi, "dist/utils/image-resize-worker.js"),
+    ],
+    [
+      "src/extensions/codemode/worker.ts",
       join(pi, "dist/extensions/codemode/worker.js"),
     ],
+  ];
+  for (const [name, module] of entries) {
+    await mkdir(dirname(join(root, name)), { recursive: true });
+    await writeFile(join(root, name), `import ${JSON.stringify(module)};\n`);
+  }
+  const [platform, arch] = options.target.split("-");
+  const tui = packageDir("@earendil-works/pi-tui", requirePi);
+  const prebuilds = `native/${platform}/prebuilds/${platform}-${arch}`;
+  await cp(join(tui, prebuilds), join(root, prebuilds), { recursive: true });
+  await bundled("The standalone binary", {
+    entrypoints: entries.map(([name]) => join(root, name)),
+    root,
     compile: {
       target: `bun-${options.target}` as Bun.Build.CompileTarget,
       outfile: options.outfile,
+      assets: [join(root, "native")],
       autoloadDotenv: false,
       autoloadBunfig: false,
     },
@@ -282,16 +340,7 @@ export async function buildBinary(options: {
     // unix sockets alone, never SSH. lightningcss and browserslist: the
     // runtime pages' CSS compiler (core page-css.ts), which loads them on a
     // compile only; the binary carries every page prebuilt and compiles none.
-    // chromium-bidi and electron: playwright-core requires them only for
-    // BiDi over CDP and Electron, which nothing here drives, and installs
-    // neither, so from source those requires fail the same way.
-    external: [
-      "cpu-features",
-      "lightningcss",
-      "browserslist",
-      "chromium-bidi",
-      "electron",
-    ],
+    external: ["cpu-features", "lightningcss", "browserslist"],
     define: {
       __CAWCO_RELEASE__: "true",
       __CAWCO_VERSION__: JSON.stringify(options.version),
@@ -325,15 +374,19 @@ export async function buildBinary(options: {
             { filter: /packages\/core\/src\/binary-assets\.ts$/ },
             () => ({ contents: assetsSource, loader: "ts", resolveDir: ROOT })
           );
-          // playwright-core reads package.json, browsers.json and its wasm
-          // from __dirname, which the bundle would fix at this machine's
-          // node_modules: point it at the tree the binary publishes.
+          // A package that reads files beside itself is never bundled, whose
+          // __dirname the bundle would fix at this machine's node_modules:
+          // every import of it is core published-package.ts loading the
+          // tree the binary publishes.
+          build.onResolve({ filter: PUBLISHED_PACKAGE }, ({ path }) => ({
+            path,
+            namespace: "published-package",
+          }));
           build.onLoad(
-            { filter: /playwright-core\/lib\/coreBundle\.js$/ },
-            async ({ path }) => ({
-              contents: `var __dirname=require(${JSON.stringify(join(ROOT, "packages/core/src/runtime.ts"))}).runtimeTree("playwright-core/lib");\n${await Bun.file(path).text()}`,
+            { filter: /.*/, namespace: "published-package" },
+            ({ path }) => ({
+              contents: `module.exports=require(${JSON.stringify(join(ROOT, "packages/core/src/published-package.ts"))}).publishedPackage(${JSON.stringify(PUBLISHED_PACKAGES[path])});`,
               loader: "js",
-              resolveDir: dirname(path),
             })
           );
           // @achingbrain/ssdp (nat-port-mapper's) reads its name and version
@@ -366,58 +419,6 @@ export async function buildBinary(options: {
           build.onResolve({ filter: /^socket-activation$/ }, () => ({
             path: join(ROOT, "scripts/binary/socket-activation.ts"),
           }));
-          build.onLoad(
-            { filter: /apps\/dashboard\/build\/adapter-node\.js$/ },
-            async ({ path }) => ({
-              contents: `import {runtimeTree} from ${JSON.stringify(join(ROOT, "packages/core/src/runtime.ts"))};\n${(await Bun.file(path).text()).replace("export const dir = dirname(fileURLToPath(import.meta.url));", 'export const dir = runtimeTree("dashboard");')}`,
-              loader: "js",
-              resolveDir: dirname(path),
-            })
-          );
-          build.onLoad({ filter: /photon_rs\.js$/ }, async ({ path }) => ({
-            contents: `import wasmPath from ${JSON.stringify(join(photon, "photon_rs_bg.wasm"))} with {type:"file"};\n${(await Bun.file(path).text()).replace("require('path').join(__dirname, 'photon_rs_bg.wasm')", "wasmPath")}`,
-            loader: "js",
-            resolveDir: dirname(path),
-          }));
-          build.onLoad(
-            { filter: /pi-coding-agent\/dist\/utils\/photon\.js$/ },
-            () => ({
-              contents:
-                'let module; export async function loadPhoton(){return module ??= await import("@silvia-odwyer/photon-node");}',
-              loader: "js",
-              resolveDir: pi,
-            })
-          );
-          build.onLoad(
-            { filter: /pi-tui\/dist\/native-platform\.js$/ },
-            () => ({
-              contents: `let helper; function load(){return helper ??= require(${JSON.stringify(clipboard)});} export const getNativePlatformHelper=()=>process.platform==="darwin"?load():undefined; export const getNativeClipboard=()=>process.platform==="linux"?(process.env.DISPLAY?load():undefined):getNativePlatformHelper();`,
-              loader: "js",
-              resolveDir: tui,
-            })
-          );
-          build.onLoad(
-            { filter: /pi-coding-agent\/dist\/utils\/image-resize\.js$/ },
-            async ({ path }) => ({
-              contents: (await Bun.file(path).text()).replace(
-                /export async function resizeImage\([\s\S]*?\n}\n/,
-                `export async function resizeImage(inputBytes,mimeType,options){return resizeImageInWorker(new URL(${JSON.stringify(`./${relative(ROOT, join(pi, "dist/utils/image-resize-worker.js"))}`)},import.meta.url),inputBytes,mimeType,options);}\n`
-              ),
-              loader: "js",
-              resolveDir: dirname(path),
-            })
-          );
-          build.onLoad(
-            { filter: /pi-coding-agent\/dist\/config\.js$/ },
-            async ({ path }) => ({
-              contents: (await Bun.file(path).text()).replace(
-                'return "./src/extensions/codemode/worker.ts";',
-                `return ${JSON.stringify(`/$bunfs/root/${relative(ROOT, join(pi, "dist/extensions/codemode/worker.js"))}`)};`
-              ),
-              loader: "js",
-              resolveDir: dirname(path),
-            })
-          );
           if (options.stubHarness) {
             // The stage 2 proof's builds run the update's timed steps at the
             // pace its machines set (scripts/binary/proof-clock.ts).
@@ -437,6 +438,16 @@ export async function buildBinary(options: {
                 loader: "ts",
               })
             );
+          }
+          if (options.proof) {
+            // proof-runtime.ts `proof-pi` calls pi's and pi-tui's own
+            // exports, which the scripts package does not declare.
+            build.onResolve({ filter: /^cawco:proof-pi$/ }, () => ({
+              path: join(pi, "dist/index.js"),
+            }));
+            build.onResolve({ filter: /^cawco:proof-pi-tui$/ }, () => ({
+              path: join(tui, "dist/index.js"),
+            }));
           }
           if (options.proof || options.stubHarness) {
             build.onLoad(

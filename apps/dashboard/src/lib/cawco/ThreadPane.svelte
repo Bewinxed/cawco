@@ -144,10 +144,26 @@
   setTaskProject(() => projectId);
 
   let paneWidth = $state(0);
+  /**
+   * The pane's width as the layout below reads it: the bound width, taken in
+   * the next frame's callbacks. The binding hears it in a ResizeObserver
+   * callback; read there, a pane crossing 900px swapped the split for the
+   * sheet (and resized Caw's box) inside that delivery, at a depth the
+   * delivery had passed ("ResizeObserver loop completed with undelivered
+   * notifications").
+   */
+  let laidWidth = $state(0);
+  $effect(() => {
+    const width = paneWidth;
+    const frame = requestAnimationFrame(() => {
+      laidWidth = width;
+    });
+    return () => cancelAnimationFrame(frame);
+  });
   const coarse = new MediaQuery("(pointer: coarse)");
   /** Caw's still box on the composer: 56px at a desk, 48px on a phone. */
   const seatSize = $derived(
-    (paneWidth > 0 && paneWidth < 900) || coarse.current ? 48 : 56
+    (laidWidth > 0 && laidWidth < 900) || coarse.current ? 48 : 56
   );
 
   // --- the thread's messages ------------------------------------------------
@@ -332,7 +348,7 @@
   /** The side surface's share of the width, in percent. */
   let sideShare = $state(0);
   /** The side surface is the bottom drawer, a task its own page (layoutPolicy.sideDrawer). */
-  const phone = $derived(layoutPolicy.sideDrawer(paneWidth));
+  const phone = $derived(layoutPolicy.sideDrawer(laidWidth));
 
   /** What Caw plays on the composer: the thread's status, his loop or its still. */
   const seatStatus = $derived(thread?.status ?? "ready");

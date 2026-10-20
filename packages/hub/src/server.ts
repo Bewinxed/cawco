@@ -155,10 +155,13 @@ import {
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_CONTEXT_USAGE,
   CONTROL_FORGET_ACCOUNT,
+  CONTROL_FORGET_CREDENTIALS,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
   CONTROL_GIT_CHANGES,
+  CONTROL_INPUTS_ADMIT,
+  CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
   CONTROL_INTERRUPT,
@@ -175,6 +178,7 @@ import {
   CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_PROBE_ACCOUNT,
+  CONTROL_READ_CONTINUATION,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_READ_HOME_LOGIN,
   CONTROL_READ_SESSION_CONTEXT,
@@ -188,6 +192,7 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SET_PROVIDER_KEY,
   CONTROL_SLEEP,
+  CONTROL_WORK_IN_FLIGHT,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
@@ -198,6 +203,7 @@ import {
   type CommandQueue,
   type CommandQueueFrame,
   type CommandRun,
+  type ContinuationRead,
   CUSTODY_HELD,
   clockWords,
   contextFitRefusal,
@@ -317,6 +323,7 @@ import {
   WIRE_PROTOCOL,
   WITHDRAW_PERMISSION,
   WORKSPACE_CREATE_TIMEOUT_MS,
+  type WorkInFlight,
 } from "@cawco/core";
 import {
   AGENT_RESTARTING,
@@ -464,6 +471,7 @@ import {
   DASHBOARD_PORT,
   DB_PATH,
   GIT_ROOT,
+  HUB_PORT,
   HUB_VERSION,
   LFS_ROOT,
   LOCAL_DASHBOARD_PORT,
@@ -476,15 +484,11 @@ import {
   asksOpening,
   type ContinuationSource,
   type ContinueRequest,
-  extractTranscript,
   finishedAnswer,
   gitSection,
-  liveScope,
   openingMessage,
   type PreparedContinuation,
-  scopeChars,
   summariserPrompt,
-  transcriptModel,
 } from "./continuation";
 import { damagedRecordsOf, peekDamagedRecords } from "./damaged-rows";
 import { dashboardErrorsRoutes } from "./dashboard-errors";
@@ -518,7 +522,11 @@ import {
 import type { LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import type { LimitCompaction } from "./db/at-limit";
-import type { PriorConversation, TrashKind } from "./db/schema";
+import type {
+  ContinuationAsker,
+  PriorConversation,
+  TrashKind,
+} from "./db/schema";
 import { TAG_MARKERS, tagStoredSend } from "./db/tag-markers";
 import { undoable } from "./db/trash";
 import { buildDecisionPage, type PageSources } from "./decision-page";
@@ -1185,6 +1193,8 @@ const strategyChoice = t.Object({
 const UNROUTED_REPLY_LIMIT = 4096;
 /** Workspace controls only the hub sends: a dashboard's control naming one is refused at the relay. */
 const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
+  CONTROL_INPUTS_ADMIT,
+  CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
   CONTROL_WORKSPACE_ARCHIVE,
@@ -1230,27 +1240,13 @@ const WORKSPACE_TIMEOUT_MS = 60_000;
  * hear how it ended, and keeps the table to the few jobs of the moment.
  */
 const CONTINUATION_KEPT_MS = 5 * 60_000;
-/**
- * Who asked for a continuation: a person (the dashboard's "Continue in new
- * session", or the API with no session named), a session's
- * `continue_session`, the at-limit controller, or your comment on a task
- * whose ended attempt's session is cold (jev-tasks.ts, Attach or spawn).
- */
-type ContinuationAsker =
-  | { kind: "person" }
-  | { kind: "session"; id: string }
-  | { kind: "at-limit" }
-  | { kind: "task"; id: string };
 /** Who asked, as a continuation's log line says it. */
 const askerWords = (by: ContinuationAsker): string => {
   if (by.kind === "session") {
     return `session ${by.id} (continue_session)`;
   }
-  if (by.kind === "task") {
-    return `your comment on ${by.id} (attach or spawn)`;
-  }
-  return by.kind === "at-limit"
-    ? "the at-limit controller"
+  return by.kind === "task"
+    ? `your comment on ${by.id} (attach or spawn)`
     : "a person (the dashboard or the API)";
 };
 /** The origin of the hub's word to a sender that its message did not arrive. */
@@ -1258,8 +1254,14 @@ const UNDELIVERED_ORIGIN = "undelivered";
 /** The words a continuation stopped by its Cancel ends with. */
 const CONTINUATION_CANCELLED = "the continuation was cancelled";
 /** What a request a machine was answering gets when its socket closes. */
+/**
+ * What a request to a machine gets when its own deadline passes with the
+ * machine away: held for it all that time, and sent again each time it came
+ * back (server.ts `resendHeld`), it never answered. A machine that is there
+ * at the deadline and silent is unanswered instead.
+ */
 const MACHINE_DISCONNECTED =
-  "The machine disconnected during this request. Completion is unknown; check the output before retrying. No automatic retry was submitted.";
+  "The machine was away when this request's deadline passed: the hub held the request and sent it again each time the machine came back, and no answer came in time, so whether it ran is not known. Check what it does before asking again.";
 
 /**
  * A step that could not finish because its machine went away. Not a failure:
@@ -1518,7 +1520,9 @@ const registerAck = (
   machineCredential: string,
   sessionLimits: SessionLimits,
   upstream: UpstreamRules,
-  hostsHub: boolean
+  hostsHub: boolean,
+  revokedCredentials: string[],
+  gitOrigins: string[]
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
@@ -1526,6 +1530,7 @@ const registerAck = (
     ok: true,
     ingested,
     delivered,
+    gitOrigins,
     hubEpoch: HUB_EPOCH,
     machineCredential,
     sessionLimits,
@@ -1538,6 +1543,7 @@ const registerAck = (
     ...(unknownAccounts ? { unknownAccounts } : {}),
     sessions,
     instances,
+    revokedCredentials,
   },
 });
 
@@ -1829,6 +1835,25 @@ const peekInstances = (payload: unknown): string[] => {
     ? value.filter((id): id is string => typeof id === "string")
     : [];
 };
+
+/**
+ * The credential hashes a registering agent's redaction store holds
+ * (agent daemon.ts `RegisterPayload.credentialHashes`), each a sha256 in hex
+ * as the hub keeps them; none from an agent that sends none.
+ */
+const credentialHashesOf = (payload: unknown): string[] => {
+  if (typeof payload !== "object" || payload === null) {
+    return [];
+  }
+  const value = (payload as { credentialHashes?: unknown }).credentialHashes;
+  return Array.isArray(value)
+    ? value.filter(
+        (hash): hash is string =>
+          typeof hash === "string" && CREDENTIAL_HASH.test(hash)
+      )
+    : [];
+};
+const CREDENTIAL_HASH = /^[0-9a-f]{64}$/;
 
 interface ServingPreview {
   instanceId: string;
@@ -3539,16 +3564,18 @@ export const createServer = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
     machineId: string,
     envelope: Envelope<SpawnPayload>
-  ): void => {
+  ): Envelope | undefined => {
     if (holdingStarts(machineId) && envelope.instanceId) {
       db.oweSpawn(envelope.instanceId, JSON.stringify(envelope), Date.now());
       return;
     }
-    sendFrame(agent, { ...envelope, payload: bounded(envelope.payload) });
+    const frame = { ...envelope, payload: bounded(envelope.payload) };
+    sendFrame(agent, frame);
     // What waited for this start goes right behind it, in the order taken.
     if (envelope.instanceId) {
       releaseOwed({ instanceId: envelope.instanceId });
     }
+    return frame;
   };
 
   /**
@@ -8606,43 +8633,78 @@ export const createServer = (
    */
   const waiting = new Map<string, (frame: ControlResult) => void>();
   /**
-   * Each call to a machine that waits in {@link waiting}: its machine, and the
-   * socket it went out on (none when the machine had none: it goes on the
-   * next one to register, as an owed start does).
+   * Each call to a machine that waits in {@link waiting}: its machine, the
+   * socket it went out on (none while the machine is away: it is held), and
+   * the frame it went out as, sent again under the same id when the machine
+   * is back ({@link resendHeld}).
    */
   const waitingMachines = new Map<
     string,
-    { machineId: string; socketId: string | undefined }
+    {
+      again: Envelope | undefined;
+      machineId: string;
+      socketId: string | undefined;
+    }
   >();
   /** A call to `machineId` now waits on the socket the machine has now. */
   const waitOn = (requestId: string, machineId: string): void => {
     waitingMachines.set(requestId, {
       machineId,
       socketId: registry.agent(machineId)?.id,
+      again: undefined,
     });
   };
   /**
    * A socket stopped being its machine's (registry `onAgentLeft`: a newer
-   * register replaced it, or it closed): every call waiting on it fails now
-   * with MACHINE_DISCONNECTED, so its caller can ask again on the socket the
-   * machine has now, instead of waiting out its timeout. A reply that comes
-   * on the old socket later is refused, as any frame from it is.
+   * register replaced it, or it closed): every call waiting on it is held,
+   * not failed. It is sent again, under the same id, on the machine's next
+   * register ({@link resendHeld}), and the machine runs an id once however
+   * often it comes (agent request-record.ts), so a create, an archive, an
+   * inputs write or a landing gate's step that ran answers with what it did.
+   * Only a call whose own deadline passes with its machine still away fails,
+   * with MACHINE_DISCONNECTED ({@link awaitReply}). A reply that comes on the
+   * old socket later is refused, as any frame from it is.
+   *
+   * Why: every call on a link that dropped failed at once as "Completion is
+   * unknown", whatever had ended the link (a network blip, an agent or hub
+   * restart), and its caller (a delegate's create, a finish_item's landing)
+   * failed with it (2026-10-19).
    */
   registry.onAgentLeft((machineId, socketId) => {
-    for (const [requestId, call] of waitingMachines) {
-      if (
-        call.socketId === socketId ||
-        (call.socketId === undefined && call.machineId === machineId)
-      ) {
-        waiting.get(requestId)?.({
-          kind: "control_result",
-          requestId,
-          ok: false,
-          error: MACHINE_DISCONNECTED,
-        });
+    for (const call of waitingMachines.values()) {
+      if (call.socketId === socketId && call.machineId === machineId) {
+        call.socketId = undefined;
       }
     }
   });
+  /**
+   * The machine registered again: every call held for it goes again, under
+   * its own id, on the socket it has now. Sent once its register is
+   * acknowledged, when it takes requests.
+   */
+  const resendHeld = (machineId: string): void => {
+    const agent = registry.agent(machineId);
+    if (!agent) {
+      return;
+    }
+    let again = 0;
+    for (const call of waitingMachines.values()) {
+      if (
+        call.machineId === machineId &&
+        call.socketId !== agent.id &&
+        call.again
+      ) {
+        call.socketId = agent.id;
+        sendFrame(agent, call.again);
+        again += 1;
+      }
+    }
+    if (again > 0) {
+      console.info(
+        `[hub] ${machineName(machineId)} is back: ${again} request(s) held for it sent again under their own ids`
+      );
+    }
+  };
   /** Who hears a running command's slot waits, by the run id it was sent with. */
   const commandQueues = new Map<string, (queue: CommandQueue | null) => void>();
   const unroutedReplies = new Set<string>();
@@ -8678,6 +8740,15 @@ export const createServer = (
    */
   const locations = new Map<string, SessionLocation | null>();
 
+  /** Sends `frame` on `socket` and gives it back: what {@link awaitReply} sends again. */
+  const sendAnswerable = <T extends Envelope>(
+    socket: HubSocket,
+    frame: T
+  ): T => {
+    sendFrame(socket, frame);
+    return frame;
+  };
+
   /**
    * Asks a machine something and waits for the frame that answers it. A machine
    * that is not connected and one that will not answer are told apart on
@@ -8707,24 +8778,34 @@ export const createServer = (
       ...(harness && { harness }),
       ...(instanceId && { instanceId }),
     };
-    return awaitReply(machineId, requestId, timeoutMs, () =>
-      sendFrame(agent, {
+    return awaitReply(machineId, requestId, timeoutMs, () => {
+      const frame = {
         verb: "control",
         machineId,
         ...(instanceId && { instanceId }),
         payload,
-      } satisfies Envelope<ControlPayload>)
-    );
+      } satisfies Envelope<ControlPayload>;
+      sendFrame(agent, frame);
+      return frame;
+    });
   };
 
-  /** Sends something a machine answers under `requestId`, and waits for that answer. */
-  const awaitReply = (
+  /**
+   * Sends something a machine answers under `requestId`, and waits for that
+   * answer, until `timeoutMs`. `send` sends it and gives the frame it sent:
+   * the one sent again, under the same id, if the link drops before the
+   * answer ({@link resendHeld}). A deadline that passes with the machine
+   * away answers MACHINE_DISCONNECTED; one that passes with it there is
+   * unanswered, a machine that did not answer.
+   */
+  const awaitReply = async (
     machineId: string,
     requestId: string,
     timeoutMs: number,
-    send: () => void
-  ): Promise<Bounded<ControlResult>> =>
-    readWithin(
+    send: () => Envelope | undefined
+  ): Promise<Bounded<ControlResult>> => {
+    let awayAtDeadline = false;
+    const reply = await readWithin(
       timeoutMs,
       (signal) =>
         new Promise<ControlResult>((resolve) => {
@@ -8732,14 +8813,26 @@ export const createServer = (
             waiting.delete(requestId);
             waitingMachines.delete(requestId);
           };
-          signal.addEventListener("abort", forget, { once: true });
+          signal.addEventListener(
+            "abort",
+            () => {
+              awayAtDeadline =
+                waitingMachines.get(requestId)?.socketId === undefined;
+              forget();
+            },
+            { once: true }
+          );
           waitOn(requestId, machineId);
           waiting.set(requestId, (frame) => {
             forget();
             resolve(frame);
           });
           try {
-            send();
+            const sent = send();
+            const call = waitingMachines.get(requestId);
+            if (call && sent) {
+              call.again = sent;
+            }
           } catch (error) {
             // Refused before it went: nothing will answer, so nothing waits.
             forget();
@@ -8747,6 +8840,53 @@ export const createServer = (
           }
         })
     );
+    return reply.kind === "unanswered" &&
+      reply.reason === "timeout" &&
+      awayAtDeadline
+      ? {
+          kind: "answered",
+          value: {
+            kind: "control_result",
+            requestId,
+            ok: false,
+            error: MACHINE_DISCONNECTED,
+          },
+        }
+      : reply;
+  };
+
+  /**
+   * Each credential the hub revokes, named by its hash to every machine
+   * connected ({@link CONTROL_FORGET_CREDENTIALS}): any of them may hold it
+   * (a session moved keeps its old one on the machine it left), and a hash
+   * gives nothing away. A machine that does not hear it now asks again as
+   * it registers (`RegisterAckPayload.revokedCredentials`).
+   */
+  /** How long a machine gets to drop credentials from its store: one small file written. */
+  const FORGET_CREDENTIALS_TIMEOUT_MS = 30_000;
+  db.onCredentialsRevoked((hashes) => {
+    for (const machineId of registry.machineIds()) {
+      detach(
+        callAgent(
+          machineId,
+          CONTROL_FORGET_CREDENTIALS,
+          [hashes],
+          FORGET_CREDENTIALS_TIMEOUT_MS
+        ).then((answer) => {
+          if (answer.kind === "unanswered") {
+            console.warn(
+              `[session-identity] ${silentWords(machineId, answer)}, so it did not hear of ${hashes.length} revoked credential(s); it asks again as it registers`
+            );
+          } else if (!answer.value.ok) {
+            console.warn(
+              `[session-identity] ${machineName(machineId)} refused ${hashes.length} revoked credential(s): ${answer.value.error ?? "no reason given"}`
+            );
+          }
+        }),
+        "revoked credentials"
+      );
+    }
+  });
 
   /**
    * A session's start, waited on as {@link awaitReply} does, and on past
@@ -8759,14 +8899,18 @@ export const createServer = (
     machineId: string,
     instanceId: string,
     requestId: string,
-    send: () => void
+    send: () => Envelope | undefined
   ): Promise<Bounded<ControlResult>> => {
     const sentAt = Date.now();
+    let sent: Envelope | undefined;
     let reply = await awaitReply(
       machineId,
       requestId,
       SPAWN_START_TIMEOUT_MS,
-      send
+      () => {
+        sent = send();
+        return sent;
+      }
     );
     while (
       reply.kind === "unanswered" &&
@@ -8779,7 +8923,7 @@ export const createServer = (
         machineId,
         requestId,
         SPAWN_START_TIMEOUT_MS,
-        () => undefined
+        () => sent
       );
     }
     return reply;
@@ -8871,8 +9015,16 @@ export const createServer = (
   /** What a move ended with a session's process, told to it once it runs on the new account ({@link tellEndedByMove}). */
   const endedByMove = new Map<string, MoveEnded>();
 
-  /** The move of `instanceId` is held by work its process holds for later: tried again, ending it, once its wait is over. */
-  const waitForLater = (instanceId: string, since = Date.now()): void => {
+  /**
+   * The move of `instanceId` is held by work its process holds for later:
+   * tried again, ending it, once its wait is over. Its wait counts from when
+   * it began, as its hold at the limit keeps that across hub restarts
+   * (at-limit.ts `unmoved`).
+   */
+  const waitForLater = (
+    instanceId: string,
+    since = db.atLimit.hold(instanceId)?.carry?.since ?? Date.now()
+  ): void => {
     if (laterWaits.has(instanceId)) {
       return;
     }
@@ -9020,7 +9172,7 @@ export const createServer = (
     }
     if (outcome.state === "live" && outcome.later) {
       return {
-        later: true,
+        later: outcome.why,
         running: true,
         why: `${outcome.why}, and Claude Code doesn't bring that back when it resumes a session on another account`,
       };
@@ -10725,6 +10877,29 @@ export const createServer = (
     decisionsChanged(projectId);
   };
 
+  /** Page `name`'s source kept in its project's folder ({@link keepInFolder}): a program's, else its HTML. */
+  const keepPage = (
+    row: InstanceRow,
+    name: string,
+    page: { html: string; program?: string }
+  ): Promise<PageRefusal | undefined> => {
+    const folder = `decisions/${name}`;
+    return page.program === undefined
+      ? keepInFolder(
+          row,
+          name,
+          { path: `${folder}/index.html`, content: page.html },
+          `${folder}/${PROGRAM_FILE}`
+        )
+      : keepInFolder(
+          row,
+          name,
+          { path: `${folder}/${PROGRAM_FILE}`, content: page.program },
+          `${folder}/index.html`
+        );
+  };
+
+  /** A page built from `from`, its project's folder untouched ({@link keptArtifactPage} keeps it there). */
   const buildArtifactPage = async (
     row: InstanceRow,
     name: string,
@@ -10740,15 +10915,7 @@ export const createServer = (
       const built = await buildProgram(program.text, (file) =>
         programImage(row, file, program)
       );
-      const refused = await keepInFolder(
-        row,
-        name,
-        { path: `${folder}/${PROGRAM_FILE}`, content: built.program },
-        `${folder}/index.html`
-      );
-      return refused
-        ? { status: refused.code, refused: refused.refused }
-        : { html: built.html, program: built };
+      return { html: built.html, program: built };
     }
     if ("program" in from) {
       return { status: 400, refused: "A program is required." };
@@ -10761,15 +10928,29 @@ export const createServer = (
     if ("problem" in built) {
       return { status: 422, refused: built.problem };
     }
-    const refused = await keepInFolder(
-      row,
-      name,
-      { path: `${folder}/index.html`, content: built.html },
-      `${folder}/${PROGRAM_FILE}`
-    );
-    return refused
-      ? { status: refused.code, refused: refused.refused }
-      : { html: built.html };
+    return { html: built.html };
+  };
+
+  /**
+   * A page built (artifacts/service.ts `ArtifactServiceDeps.page`), kept in
+   * its project's folder when `keep`: a maker's next version held for its
+   * parent is kept there when the parent opens it.
+   */
+  const keptArtifactPage = async (
+    row: InstanceRow,
+    name: string,
+    from: PageFrom,
+    keep: boolean
+  ): Promise<BuiltArtifactPage> => {
+    const built = await buildArtifactPage(row, name, from);
+    if ("refused" in built || !keep) {
+      return built;
+    }
+    const refused = await keepPage(row, name, {
+      html: built.html,
+      ...(built.program ? { program: built.program.program } : {}),
+    });
+    return refused ? { status: refused.code, refused: refused.refused } : built;
   };
 
   /**
@@ -10867,6 +11048,21 @@ export const createServer = (
         .map((one) => one.address.toLowerCase()),
     ];
   };
+  /**
+   * Every origin this hub's git remote answers at, one per name it answers
+   * by ({@link hubOwnNames}, a link-local address with its zone left out),
+   * on its own port (RegisterAckPayload.gitOrigins).
+   */
+  const hubGitOrigins = (): string[] => [
+    ...new Set(
+      hubOwnNames()
+        .filter((name) => !name.includes("%"))
+        .map(
+          (name) =>
+            `http://${name.includes(":") ? `[${name}]` : name}:${HUB_PORT}`
+        )
+    ),
+  ];
   /**
    * The domain a page last reached CawCo through (every dashboard reads the
    * journey as it loads): the setup card recommends Set up with it.
@@ -11118,13 +11314,15 @@ export const createServer = (
   const handArtifactUp: ArtifactServiceDeps["handedUp"] = async (
     parent,
     maker,
-    artifact
+    artifact,
+    next
   ) => {
     const text = artifactHandedNotice({
       from: sessionName(maker),
       id: artifact.id,
       kind: artifact.kind,
       name: artifact.name,
+      next: next?.id,
     });
     await artifactInOrder(`${artifact.id}:handed`, () => {
       try {
@@ -11440,8 +11638,8 @@ export const createServer = (
     deliverMarks: (instance, artifact, delivery) =>
       deliverArtifactMarks(instance, artifact, delivery),
     // A delegate's artifact handed to its parent unopened: the parent hears it once.
-    handedUp: (parent, maker, artifact) =>
-      handArtifactUp(parent, maker, artifact),
+    handedUp: (parent, maker, artifact, next) =>
+      handArtifactUp(parent, maker, artifact, next),
     instance: (id) => db.getInstancesByIds([id])[0],
     ended: (instance) =>
       !!inputRefusal(instance.id, { kind: "system", name: ARTIFACT_ORIGIN }),
@@ -11470,7 +11668,13 @@ export const createServer = (
       return { ok: true, revision: opened.frame.revision };
     },
     personShown: (instanceId) => personShown.get(instanceId),
-    page: buildArtifactPage,
+    page: keptArtifactPage,
+    graphLinks: (projectId, name, cards) =>
+      decisions.linksOf(projectId, name, cards),
+    keepPage: async (instance, name, page) => {
+      const refused = await keepPage(instance, name, page);
+      return refused && { status: refused.code, refused: refused.refused };
+    },
     sending: (instance, artifact, state) =>
       applySetupPicks(artifact, instance.projectId, state, {
         fleet: (choices) => setFleetChoices(fleetChoices, choices),
@@ -12743,7 +12947,7 @@ export const createServer = (
     workItemId?: string,
     fallbackMode?: string | null,
     placedAhead?: { accountId?: string }
-  ): void => {
+  ): Envelope | undefined => {
     const agent = registry.agent(machineId);
     if (!agent) {
       throw new Error(machineFault(machineId, "offline"));
@@ -12784,7 +12988,7 @@ export const createServer = (
       ...openedAccount(payload, placed),
       ...forkedFromOf(payload),
     });
-    sendSpawn(agent, machineId, {
+    const sent = sendSpawn(agent, machineId, {
       verb: "spawn",
       machineId,
       instanceId: payload.instanceId,
@@ -12800,6 +13004,7 @@ export const createServer = (
         heard(spawnedBy);
       }
     }
+    return sent;
   };
 
   /**
@@ -12946,7 +13151,7 @@ export const createServer = (
       payload.instanceId,
       requestId,
       () =>
-        sendFrame(agent, {
+        sendAnswerable(agent, {
           verb: "spawn",
           machineId,
           instanceId: payload.instanceId,
@@ -13862,10 +14067,11 @@ export const createServer = (
    */
   const contextTokensOf = async (
     row: KeepAliveRow | undefined,
-    scope: Parameters<typeof scopeChars>[0]
+    /** The characters a model reads of its live scope (core `scopeChars`). */
+    scopeChars: number
   ): Promise<number> => {
     if (!row) {
-      return estimateTokens(scopeChars(scope));
+      return estimateTokens(scopeChars);
     }
     if (row.status === "running" && registry.agent(row.machineId)) {
       return await liveContextTokensOf(row);
@@ -13876,9 +14082,7 @@ export const createServer = (
         `${sessionName(row)}'s context could not be read: ${silentWords(row.machineId, reported)}`
       );
     }
-    return "tokens" in reported
-      ? reported.tokens
-      : estimateTokens(scopeChars(scope));
+    return "tokens" in reported ? reported.tokens : estimateTokens(scopeChars);
   };
 
   /** How many tokens a running session holds right now, as its harness reads it. */
@@ -13890,20 +14094,20 @@ export const createServer = (
       READ_TIMEOUT_MS,
       () => {
         const agent = registry.agent(row.machineId);
-        if (agent) {
-          sendFrame(agent, {
-            verb: "control",
-            machineId: row.machineId,
-            instanceId: row.id,
-            requestId,
-            payload: {
+        return agent
+          ? sendAnswerable(agent, {
+              verb: "control",
+              machineId: row.machineId,
               instanceId: row.id,
               requestId,
-              method: CONTROL_CONTEXT_USAGE,
-              args: [],
-            },
-          } satisfies Envelope<ControlPayload>);
-        }
+              payload: {
+                instanceId: row.id,
+                requestId,
+                method: CONTROL_CONTEXT_USAGE,
+                args: [],
+              },
+            } satisfies Envelope<ControlPayload>)
+          : undefined;
       }
     );
     switch (answer.kind) {
@@ -14022,6 +14226,39 @@ export const createServer = (
   };
 
   /**
+   * A session's continuation inputs, extracted on the machine that stores
+   * its transcript (core `CONTROL_READ_CONTINUATION`): the machine answers
+   * with them alone, never the transcript, which runs to hundreds of
+   * megabytes and could not cross the socket within the bound.
+   */
+  const readContinuationOf = async (
+    where: SessionLocation
+  ): Promise<ContinuationRead> => {
+    const answer = await callAgent(
+      where.machineId,
+      CONTROL_READ_CONTINUATION,
+      [where.sessionId, { dir: where.cwd || undefined }],
+      READ_TIMEOUT_MS,
+      where.harness
+    );
+    switch (answer.kind) {
+      case "unanswered":
+        throw new Error(
+          `${machineName(where.machineId)} could not read session ${where.sessionId}'s transcript: ${silentWords(where.machineId, answer)}`
+        );
+      case "answered":
+        if (!answer.value.ok) {
+          throw new Error(
+            `${machineName(where.machineId)} could not read session ${where.sessionId}'s transcript: ${answer.value.error ?? "it gave no reason"}`
+          );
+        }
+        return answer.value.result as ContinuationRead;
+      default:
+        throw unreachable(answer);
+    }
+  };
+
+  /**
    * A continuation's inputs, read and sized: the source's live context (last
    * compaction summary on), the artifact index over its whole transcript, and
    * the token counts the pickers and the run are both held to. The source is
@@ -14051,33 +14288,29 @@ export const createServer = (
     }
     const where = located.at;
     const since = await sessionStartOf(where);
-    const [live, whole, git] = await Promise.all([
-      readMessages(where, false),
-      readMessages(where, true),
+    const [read, git] = await Promise.all([
+      readContinuationOf(where),
       gitChangesOf(where, since),
     ]);
-    const scope = liveScope(live);
-    // Named by what it was first asked in words — the whole transcript's first
-    // prompt, not the compaction summary its live context starts with, nor a
-    // bare slash command (`/clear`) that names nothing.
-    const first = whole
-      .map(userTurnText)
-      .find(
-        (text) => text && !deriveTitleFromFirstMessage(text).startsWith("/")
-      );
+    const { extracted } = read;
+    // Named by what the person first asked in words — not the compaction
+    // summary its live context starts with, nor a bare slash command
+    // (`/clear`) that names nothing.
+    const first = extracted.asks.find(
+      (text) => !deriveTitleFromFirstMessage(text).startsWith("/")
+    );
     const source: ContinuationSource & { machineId: string } = {
       instanceId: sourceId,
       machineId: where.machineId,
       cwd: where.cwd,
       harness: where.harness,
-      model: row?.model ?? transcriptModel(live) ?? "model not recorded",
+      model: row?.model ?? read.model ?? "model not recorded",
       title:
         row?.title ||
         row?.derivedTitle ||
         (first ? deriveTitleFromFirstMessage(first) : "") ||
         (row ? sessionLabel(row).name : leafOf(where.cwd)),
     };
-    const extracted = extractTranscript(scope, whole);
     extracted.artifacts = `${extracted.artifacts}\n\n${gitSection(git, since)}`;
     const prompt =
       extracted.middle.length && !asksOnly
@@ -14087,14 +14320,14 @@ export const createServer = (
       source,
       extracted,
       prompt,
-      liveContextTokens: await contextTokensOf(row, scope),
+      liveContextTokens: await contextTokensOf(row, read.scopeChars),
       summariseInputTokens: prompt ? estimateTokens(prompt.length) : 0,
       openingTokens: asksOnly
         ? estimateTokens(asksOpening(source, extracted.asks, note).length)
         : estimateTokens(openingMessage(source, "", extracted, note).length) +
           SUMMARY_CAP_TOKENS,
-      compacted: scope[0]?.compactSummary === true,
-      entries: { live: live.length, whole: whole.length, scope: scope.length },
+      compacted: read.compacted,
+      entries: read.entries,
     };
   };
 
@@ -14120,17 +14353,12 @@ export const createServer = (
    */
   const continuationRefusal = async (
     prepared: PreparedContinuation,
-    request: ContinueRequest
+    request: ContinueRequest,
+    askedBy: ContinuationAsker
   ): Promise<string | undefined> => {
-    const itemId = db.getInstancesByIds([prepared.source.instanceId])[0]
-      ?.workItemId;
-    const { cwd: at, machineId: on } = request.target;
-    if (
-      itemId &&
-      ((at && at !== prepared.source.cwd) ||
-        (on && on !== prepared.source.machineId))
-    ) {
-      return `${prepared.source.title} holds work item ${itemId}: its new session takes the item on, so it starts where the item's workspace is, in ${prepared.source.cwd} on ${machineName(prepared.source.machineId)}.`;
+    const misplaced = placeRefusal(prepared, request, askedBy);
+    if (misplaced) {
+      return misplaced;
     }
     if (prepared.prompt) {
       if (!request.summarizer) {
@@ -14159,6 +14387,190 @@ export const createServer = (
       : undefined;
   };
 
+  /**
+   * Where a continuation must start, when it names somewhere else: where
+   * the source's work item's workspace is, and, for one that stays one
+   * session with its source ({@link foldContinued}), where the source ran,
+   * whose conversation is read there.
+   */
+  const placeRefusal = (
+    prepared: PreparedContinuation,
+    request: ContinueRequest,
+    askedBy: ContinuationAsker
+  ): string | undefined => {
+    const { cwd: at, machineId: on } = request.target;
+    if (!(
+      (at && at !== prepared.source.cwd) ||
+      (on && on !== prepared.source.machineId)
+    )) {
+      return;
+    }
+    const where = `in ${prepared.source.cwd} on ${machineName(prepared.source.machineId)}`;
+    const itemId = db.getInstancesByIds([prepared.source.instanceId])[0]
+      ?.workItemId;
+    if (itemId) {
+      return `${prepared.source.title} holds work item ${itemId}: its new session takes the item on, so it starts where the item's workspace is, ${where}.`;
+    }
+    return askedBy.kind === "person"
+      ? undefined
+      : `${prepared.source.title} goes on as the same session, its conversation before read where it ran, so its continuation starts there, ${where}.`;
+  };
+
+  /**
+   * Whether a continuation of `sourceId` ends its source's process: one
+   * anything but the person asked for is folded into one session
+   * ({@link foldContinued}), and a source whose work item goes on is
+   * retired ({@link retireContinued}). A person's Continue of anything else
+   * leaves the source running.
+   */
+  const endsSource = (
+    sourceId: string,
+    askedBy: ContinuationAsker
+  ): boolean => {
+    const [row] = db.getInstancesByIds([sourceId]);
+    return (
+      !!row &&
+      !["stopped", "discarded"].includes(row.status) &&
+      (askedBy.kind !== "person" || !!row.workItemId)
+    );
+  };
+
+  /**
+   * What `instanceId`'s process holds for later that ending it would lose
+   * (core `CONTROL_WORK_IN_FLIGHT`): null when nothing, or when no process of
+   * it runs. Throws when its machine does not answer.
+   */
+  const workInFlightOf = async (
+    instanceId: string
+  ): Promise<WorkInFlight | null> => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!(row && registry.agent(row.machineId))) {
+      return null;
+    }
+    const answer = await callAgent(
+      row.machineId,
+      CONTROL_WORK_IN_FLIGHT,
+      [],
+      READ_TIMEOUT_MS,
+      row.harness,
+      instanceId
+    );
+    switch (answer.kind) {
+      case "unanswered":
+        throw new Error(
+          `${machineName(row.machineId)} could not say what work ${sessionName(row)} has in flight: ${silentWords(row.machineId, answer)}`
+        );
+      case "answered":
+        if (!answer.value.ok) {
+          // No process of it here: nothing in flight to end.
+          return null;
+        }
+        return (answer.value.result as WorkInFlight | null) ?? null;
+      default:
+        throw unreachable(answer);
+    }
+  };
+
+  /**
+   * Waits until `row`'s source holds no work in flight and is between turns,
+   * or until the restart bound from when the job began to wait: true then.
+   * False when a Cancel landed or its machine went away meanwhile.
+   */
+  const untilWorkEnds = async (row: ContinuationRow): Promise<boolean> => {
+    const sourceId = row.sourceInstanceId;
+    const from = row.waiting?.from ?? Date.now();
+    for (;;) {
+      if (cancelledContinuation(row.id) || !registry.agent(machineFor(row))) {
+        return false;
+      }
+      if (waitedOut(from)) {
+        console.info(
+          `[continuation] ${row.prepared.source.title}'s continuation waited ${RESTART_WAIT_CAP_MS / 60_000} minutes for its work in flight; it goes on now, and that work ends with the source's process.`
+        );
+        return true;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one look a beat until the work in flight ends
+      const now = await workInFlightOf(sourceId);
+      const [source] = db.getInstancesByIds([sourceId]);
+      if (!now && (!source || (await sessionIdle(source)))) {
+        return true;
+      }
+      if (now && now.why !== row.waiting?.why) {
+        moveContinuation(row.id, {
+          waiting: { why: now.why, since: now.since, from },
+        });
+      }
+      await lifetime.sleep(WAIT_LOOK_MS);
+    }
+  };
+
+  /**
+   * The work in flight a continuation of `sourceId` must wait for: none when
+   * it leaves the source running ({@link endsSource}) or nothing is held;
+   * a refusal in its machine's words when the machine could not say.
+   */
+  const inFlightFor = async (
+    sourceId: string,
+    asker: ContinuationAsker
+  ): Promise<{ work?: WorkInFlight } | { refusal: string }> => {
+    if (!endsSource(sourceId, asker)) {
+      return {};
+    }
+    try {
+      return { work: (await workInFlightOf(sourceId)) ?? undefined };
+    } catch (error) {
+      return {
+        refusal: error instanceof Error ? error.message : String(error),
+      };
+    }
+  };
+
+  /** How often a waiting job looks again whether its source's work in flight has ended. */
+  const WAIT_LOOK_MS = 5000;
+
+  /**
+   * The `waiting` step: the source's process holds work in flight that
+   * ending it would lose (a background command, a one-time wake-up), so the
+   * job waits, as an account move does (`waitForLater`), until that work
+   * ends and the turn its end starts is over, or until the restart bound
+   * (core `waitedOut`) from when it began to wait, when the work ends with
+   * the process. Then the source is read again, so what that work brought
+   * is in the continuation, and the job goes on: refused, in the fit's own
+   * words, when it no longer fits. The job as it then stands; nothing when a
+   * Cancel landed or its machine went away.
+   */
+  const waitStep = async (
+    row: ContinuationRow
+  ): Promise<ContinuationRow | undefined> => {
+    if (!(await untilWorkEnds(row))) {
+      return undefined;
+    }
+    const sourceId = row.sourceInstanceId;
+    const prepared = await prepareContinuation(
+      sourceId,
+      row.request.note,
+      row.request.asksOnly
+    );
+    const refusal = await continuationRefusal(
+      prepared,
+      row.request,
+      row.askedBy
+    );
+    if (refusal) {
+      throw new Error(refusal);
+    }
+    const summarise = !!prepared.prompt;
+    return moveContinuation(row.id, {
+      prepared,
+      summariserInstanceId:
+        summarise && !row.request.asksOnly
+          ? (row.summariserInstanceId ?? crypto.randomUUID())
+          : null,
+      stage: firstStage(filesFirst(prepared, row.askedBy), summarise),
+      waiting: null,
+    });
+  };
+
   /** The stages nothing more happens after. */
   const SETTLED = new Set<ContinuationJob["stage"]>([
     "started",
@@ -14176,6 +14588,15 @@ export const createServer = (
       : {}),
     stage: row.stage,
     ...(row.error ? { error: row.error } : {}),
+    ...(row.stage === "waiting" && row.waiting
+      ? {
+          waiting: {
+            why: row.waiting.why,
+            since: row.waiting.since,
+            until: row.waiting.from + RESTART_WAIT_CAP_MS,
+          },
+        }
+      : {}),
   });
 
   /** The job table, from its one record: what dashboards are handed. */
@@ -14188,7 +14609,9 @@ export const createServer = (
 
   /** The machine a job needs for its next step. */
   const machineFor = (row: ContinuationRow): string =>
-    row.stage === "filing" || row.stage === "summarising"
+    row.stage === "waiting" ||
+    row.stage === "filing" ||
+    row.stage === "summarising"
       ? row.prepared.source.machineId
       : targetMachineOf(row);
 
@@ -14291,12 +14714,12 @@ export const createServer = (
     prepared: PreparedContinuation,
     request: ContinueRequest,
     /** Who asked for it, as its log line names them. */
-    askedBy: ContinuationAsker
+    askedBy: ContinuationAsker,
+    /** The work in flight its source holds, which ending it would lose: it waits for that first ({@link waitStep}). */
+    inFlight?: WorkInFlight
   ): ContinuationRow => {
     const summarise = !!prepared.prompt;
-    const files =
-      askedBy.kind === "person" &&
-      db.getInstancesByIds([prepared.source.instanceId]).length > 0;
+    const files = filesFirst(prepared, askedBy);
     const row = db.insertContinuation({
       id: crypto.randomUUID(),
       sourceInstanceId: prepared.source.instanceId,
@@ -14308,9 +14731,18 @@ export const createServer = (
       openingUuid: crypto.randomUUID(),
       summary: null,
       openItems: null,
-      stage: files ? "filing" : afterFiling(summarise),
+      stage: inFlight ? "waiting" : firstStage(files, summarise),
       error: null,
+      askedBy,
+      waiting: inFlight
+        ? { why: inFlight.why, since: inFlight.since, from: Date.now() }
+        : null,
     });
+    if (inFlight) {
+      console.info(
+        `[continuation] ${prepared.source.title} holds work in flight its continuation would end (${inFlight.why}), so the job waits for it: it goes on by itself once that ends, or in ${RESTART_WAIT_CAP_MS / 60_000} minutes at the latest, ending it.`
+      );
+    }
     console.info(
       startedWords(prepared, request, askedBy, { files, summarise })
     );
@@ -14319,6 +14751,20 @@ export const createServer = (
     detach(advanceContinuation(row.id), "continuation");
     return row;
   };
+
+  /** Whether a job's source files its open items first: a person's Continue of a session CawCo runs. */
+  const filesFirst = (
+    prepared: PreparedContinuation,
+    askedBy: ContinuationAsker
+  ): boolean =>
+    askedBy.kind === "person" &&
+    db.getInstancesByIds([prepared.source.instanceId]).length > 0;
+
+  /** A job's first step once nothing holds it: its source's filing turn, else what follows that. */
+  const firstStage = (
+    files: boolean,
+    summarise: boolean
+  ): ContinuationJob["stage"] => (files ? "filing" : afterFiling(summarise));
 
   /** The stage after the source's filing turn: the summary when there is one to write, else the start. */
   const afterFiling = (summarise: boolean): ContinuationJob["stage"] =>
@@ -14365,6 +14811,9 @@ export const createServer = (
    */
   const continuationSteps = async (id: string): Promise<void> => {
     let row = db.continuationRow(id);
+    if (row?.stage === "waiting") {
+      row = await waitStep(row);
+    }
     if (row?.stage === "filing") {
       row = await fileStep(row);
     }
@@ -14613,18 +15062,145 @@ export const createServer = (
     // The source never runs again in that workspace.
     if (source?.workItemId) {
       workItems.continuedIn(source.workItemId, row.targetInstanceId);
-      retireContinued(source.id, row.targetInstanceId);
     }
-    adoptChildren(prepared.source.instanceId, row.targetInstanceId);
-    sendOpening(ready);
-    // What was owed to the source goes behind the opening ({@link releaseOne}).
-    releaseOwed({ instanceId: prepared.source.instanceId });
+    if (source && row.askedBy.kind !== "person") {
+      oneSession(ready, source);
+    } else {
+      separateSession(ready, source);
+    }
     return true;
   };
 
   /**
-   * A session whose work item a continuation moved to `to` never runs again
-   * (the item's workspace has one session from here): its row names `to`
+   * The person's own Continue: a separate session. The source of an item
+   * points onward to it ({@link retireContinued}); what the source was owed
+   * goes behind the opening ({@link releaseOne}).
+   */
+  const separateSession = (
+    job: ContinuationRow,
+    source: ReturnType<typeof db.getInstancesByIds>[number] | undefined
+  ): void => {
+    if (source?.workItemId) {
+      retireContinued(source.id, job.targetInstanceId);
+    }
+    adoptChildren(job.prepared.source.instanceId, job.targetInstanceId);
+    sendOpening(job);
+    releaseOwed({ instanceId: job.prepared.source.instanceId });
+  };
+
+  /**
+   * Anything else's continuation: one session with its source
+   * ({@link foldContinued}), its line written before the opening it folds.
+   */
+  const oneSession = (
+    job: ContinuationRow,
+    source: ReturnType<typeof db.getInstancesByIds>[number]
+  ): void => {
+    adoptChildren(source.id, job.targetInstanceId);
+    noteContinued(job, source);
+    sendOpening(job);
+    foldContinued(job, source);
+  };
+
+  /** Who asked for a continuation, as its line's detail names them. */
+  const askerLine = (by: ContinuationAsker): string => {
+    if (by.kind === "task") {
+      return `your comment on ${by.id}`;
+    }
+    if (by.kind === "person") {
+      return "you";
+    }
+    const [asker] = db.getInstancesByIds([by.id]);
+    return asker ? sessionName(asker) : `session ${by.id.slice(0, 8)}`;
+  };
+
+  /**
+   * The line a continuation that stays one session stands on between its
+   * two conversations ({@link foldContinued}): where it went on, from what,
+   * and who asked. Written on the new session before its opening goes, so
+   * the opening folds under it as its brief.
+   */
+  const noteContinued = (
+    job: ContinuationRow,
+    source: ReturnType<typeof db.getInstancesByIds>[number]
+  ): void => {
+    const [target] = db.getInstancesByIds([job.targetInstanceId]);
+    if (!target) {
+      return;
+    }
+    const named = (accountId: string | null | undefined) => {
+      const account = accountId ? db.accounts.get(accountId) : undefined;
+      return account ? namedAccount(account, db.accounts.list()) : null;
+    };
+    const summariser = job.summariserInstanceId
+      ? db.getInstancesByIds([job.summariserInstanceId])[0]
+      : undefined;
+    const asks = !!job.request.asksOnly;
+    noteAtLimit(target, {
+      kind: "continued",
+      from: named(source.accountId),
+      to: named(target.accountId),
+      writtenOn: asks ? null : named(summariser?.accountId),
+      by: askerLine(job.askedBy),
+      asked: true,
+      ...(asks ? { asks: true as const } : {}),
+      tokens: job.prepared.liveContextTokens,
+      preparedAtPct: null,
+    });
+  };
+
+  /**
+   * THE ONE-SESSION RULE: a continuation anything but the person's own
+   * Continue asked for (a session's `continue_session`, a task's comment)
+   * is the session going on in a fresh conversation, never a second
+   * session. Once its opening has gone, the source is folded into the new
+   * session (db `foldContinued`): its id is a former id of it, so a send,
+   * a handoff, a tab or a link that names it reaches the new one
+   * ({@link byIdNow}); its row goes, the new one taking its place, title
+   * and start on the board; its conversation reads before the new one's,
+   * with its line between ({@link noteContinued}). Its at-limit hold, the
+   * resume at its reset, a move owed at its turn's end and its compaction
+   * go, and its process is ended, the wake-ups it scheduled inside it with
+   * it. What it was handed and never read is owed again, and goes with
+   * what it was owed, behind the opening.
+   */
+  const foldContinued = (
+    job: ContinuationRow,
+    source: ReturnType<typeof db.getInstancesByIds>[number]
+  ): void => {
+    const from = source.id;
+    const to = job.targetInstanceId;
+    atLimit.forget(from);
+    relaunchAtTurnEnd.delete(from);
+    stopCompaction(from);
+    for (const send of db.sendsIn(from, ["pending"])) {
+      if (!send.owed && send.envelope) {
+        db.holdSend(send.uuid, send.envelope);
+      }
+    }
+    forgetPending(from, UNREAD.stopped, false, "all");
+    const folded = db.foldContinued(from, to);
+    if (folded && folded.ending.length > 0) {
+      lifecycle.oweEndSession(from, "delete");
+    }
+    console.info(
+      `[continuation] ${sessionName(source)} (${from.slice(0, 8)}) goes on as ${to.slice(0, 8)}, one session, asked by ${askerWords(job.askedBy)}: ${from.slice(0, 8)} is a former id of it from here${folded?.ending.length ? ", its process ended" : ""}.`
+    );
+    const opening = db.sendRecord(job.openingUuid);
+    if (opening) {
+      publishSend(opening);
+    }
+    transcripts.reread(to);
+    publishInstances(source.machineId);
+    publishInstances(targetMachineOf(job));
+    releaseOwed({ instanceId: to });
+  };
+
+  /**
+   * A session whose work item the person's own Continue moved to `to` (a
+   * separate session; anything else's continuation is folded into one,
+   * {@link foldContinued}) never runs again (the item's workspace has one
+   * session from here): its row names `to`
    * ({@link InstanceRow.continuedInto}), so core `relaunchOf` refuses every
    * wake of it (a send's, a revive's, a relaunch on another account) and
    * every send to it goes to `to` ({@link toContinuation}); its at-limit
@@ -15700,6 +16276,9 @@ export const createServer = (
     noticesSeen: noticesSeen.ids(),
     // A damaged record says so, and notices are off until it is reset.
     noticesDamaged: noticesSeen.damaged(),
+    // Every former id, whole: a session folded into its continuation leaves
+    // a tab on its id for the session it is now.
+    formerIds: db.formerIds(),
     // `hubBuild` lets a client tell a hub that is
     // behind from a machine that is. `protocol` is the wire this hub speaks:
     // a page built for an older one reloads itself on its first frame.
@@ -15717,8 +16296,6 @@ export const createServer = (
       kind: "instances",
       instances: rows,
       ...boardExtras(),
-      // Fixed once the hub has folded what an older one split: once per connection.
-      formerIds: db.formerIds(),
       // Seed now-state once per connection; updates have per-session frames.
       pulses: Object.fromEntries(pulses),
     },
@@ -15769,6 +16346,7 @@ export const createServer = (
         "previews",
         "handoffs",
         "continuations",
+        "formerIds",
         "noticesSeen",
         "noticesDamaged",
       ] as const
@@ -15904,6 +16482,7 @@ export const createServer = (
       "previews",
       "handoffs",
       "continuations",
+      "formerIds",
       "noticesSeen",
       "noticesDamaged",
     ] as const) {
@@ -16649,7 +17228,7 @@ export const createServer = (
     const requestId = crypto.randomUUID();
     const payload: FsPayload = { requestId, ...op };
     return awaitReply(machineId, requestId, READ_TIMEOUT_MS, () =>
-      sendFrame(agent, {
+      sendAnswerable(agent, {
         verb: "fs",
         machineId,
         requestId,
@@ -18397,6 +18976,9 @@ export const createServer = (
   ): boolean =>
     at === undefined || where.harness !== "opencode" || entry.type !== "user";
 
+  /** A history read that took this long or longer says so in the log, part by part. */
+  const SLOW_HISTORY_MS = 1000;
+
   /**
    * A session's whole stored transcript, from its machine, with the records of
    * the sends it holds — cut after the entry `at` when given (a rewind, a fork
@@ -18414,12 +18996,14 @@ export const createServer = (
     const prior = held ? db.priorConversations(held.id) : [];
     const { where } = found;
     const row = "row" in found ? found.row : held;
+    const began = Date.now();
     // The conversations it went on from, oldest first, each followed by the
     // line between it and the next: the transcript reads as one.
     const earlier = row ? await priorEntries(row, where, prior) : [];
     if ("fault" in earlier) {
       return earlier;
     }
+    const priorRead = Date.now();
     const current = await currentEntries(
       where,
       at,
@@ -18428,6 +19012,7 @@ export const createServer = (
     if ("fault" in current) {
       return current;
     }
+    const currentRead = Date.now();
     const stored = [...earlier, ...current];
     // Pictures as references to the media store, before a send's record is
     // filled from one of these entries.
@@ -18436,6 +19021,12 @@ export const createServer = (
     const transcript = withoutPings(stored, records);
     if (row) {
       readRowHistory(row, transcript);
+    }
+    const done = Date.now();
+    if (done - began >= SLOW_HISTORY_MS) {
+      console.info(
+        `[transcripts] ${instanceId.slice(0, 8)}'s history: ${earlier.length} entries of ${prior.length} conversation(s) before read in ${priorRead - began} ms, ${current.length} of its own in ${currentRead - priorRead} ms, put together here in ${done - currentRead} ms`
+      );
     }
     return { entries: transcript, records, where };
   };
@@ -19328,6 +19919,8 @@ export const createServer = (
       method === CONTROL_WORKSPACE_DISCARD ||
       method === CONTROL_WORKSPACE_BUNDLE ||
       method === CONTROL_WORKSPACE_AT ||
+      method === CONTROL_INPUTS_ADMIT ||
+      method === CONTROL_INPUTS_COPY ||
       method === CONTROL_INPUTS_READ ||
       method === CONTROL_INPUTS_WRITE ||
       method === CONTROL_PLACE_REPO ||
@@ -19928,10 +20521,10 @@ export const createServer = (
       decisionsChanged(projectId);
     },
     fleetChoicesSet: () => db.getSupervisorConfig().choicesSetAt !== null,
-    relayOffer: () =>
+    relayOffer: (again) =>
       db.streamRelay.read() ||
       db.streamRelay.journey() ||
-      db.streamRelay.askedAt() !== null
+      (db.streamRelay.askedAt() !== null && !again)
         ? null
         : { domain: lastRelayDomain },
     upstreamAnswered: () => db.upstreamPosts() !== null,
@@ -20197,11 +20790,6 @@ export const createServer = (
         .ofProject(projectId)
         .filter((row) => row.kind === "page")
         .toSorted((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()),
-    builtPage: async (artifactId) => {
-      const file = Bun.file(join(ARTIFACTS_ROOT, artifactId, "index.html"));
-      return (await file.exists()) ? await file.text() : undefined;
-    },
-    program: (artifactId) => artifacts.program(artifactId),
     place: (artifactId, places) => {
       try {
         artifacts.keepPlaces(artifactId, places);
@@ -20493,11 +21081,12 @@ export const createServer = (
         },
         note: comment,
       };
-      const refusal = await continuationRefusal(prepared, request);
+      const asker: ContinuationAsker = { kind: "task", id: taskId };
+      const refusal = await continuationRefusal(prepared, request, asker);
       if (refusal) {
         throw new Error(refusal);
       }
-      job = startContinuation(prepared, request, { kind: "task", id: taskId });
+      job = startContinuation(prepared, request, asker);
     } finally {
       release();
     }
@@ -21151,7 +21740,7 @@ export const createServer = (
       // The host's refresh is the session's; the hub only logs how it went.
       detach(
         awaitReply(row.machineId, requestId, 60_000, () =>
-          sendFrame(agent, {
+          sendAnswerable(agent, {
             verb: "control",
             machineId: row.machineId,
             instanceId: row.id,
@@ -21408,7 +21997,7 @@ export const createServer = (
       const credential = identities.mint(instanceId);
       const requestId = crypto.randomUUID();
       const reply = await awaitReply(row.machineId, requestId, 120_000, () =>
-        sendFrame(agent, {
+        sendAnswerable(agent, {
           verb: "control",
           machineId: row.machineId,
           instanceId,
@@ -22650,6 +23239,7 @@ export const createServer = (
       );
     },
     owed: owedTargets,
+    laterSince: (instanceId) => laterWaits.get(instanceId)?.since,
     named: (row) => sessionName(row),
     handMove: (row) => {
       const owed = relaunchAtTurnEnd.get(row.id);
@@ -23795,6 +24385,9 @@ export const createServer = (
           if (!(request.summarizer || request.asksOnly)) {
             return status(400, "summarizer is required unless asksOnly is set");
           }
+          const asker: ContinuationAsker = askedBy
+            ? { kind: "session", id: askedBy }
+            : { kind: "person" };
           let prepared: PreparedContinuation;
           let refusal: string | undefined;
           let release: () => void = () => undefined;
@@ -23805,7 +24398,7 @@ export const createServer = (
               body.note,
               body.asksOnly
             );
-            refusal = await continuationRefusal(prepared, request);
+            refusal = await continuationRefusal(prepared, request, asker);
           } catch (error) {
             release();
             return status(
@@ -23817,17 +24410,27 @@ export const createServer = (
             release();
             return status(409, refusal);
           }
+          // What the source's process holds that ending it would lose: the
+          // job waits for it, and the caller hears so at once.
+          const inFlight = await inFlightFor(params.id, asker);
+          if ("refusal" in inFlight) {
+            release();
+            return status(422, inFlight.refusal);
+          }
           const row = startContinuation(
             prepared,
             request,
-            askedBy ? { kind: "session", id: askedBy } : { kind: "person" }
+            asker,
+            inFlight.work
           );
           // Its record holds the source's workspace from here (work-items.ts `holdOn`).
           release();
+          const job = continuationJob(row);
           return {
             continuationId: row.id,
             targetInstanceId: row.targetInstanceId,
             summariserInstanceId: row.summariserInstanceId,
+            ...(job.waiting ? { waiting: job.waiting } : {}),
           };
         }
       )
@@ -27224,6 +27827,11 @@ export const createServer = (
             reservePct: t.Optional(
               t.Union([t.Integer({ minimum: 0, maximum: 100 }), t.Null()])
             ),
+            // At a plan limit with extra usage on: move its sessions to an
+            // account with plan room, or keep going on its extra usage.
+            atPlanLimit: t.Optional(
+              t.Union([t.Literal("move"), t.Literal("extra-usage")])
+            ),
           }),
         },
         ({ params, body, status }) => {
@@ -28367,9 +28975,16 @@ export const createServer = (
                   db.sessionLimits(),
                   upstreamRules(db),
                   // Its machine id is this hub's own: the same computer.
-                  await isHubMachine(message.machineId)
+                  await isHubMachine(message.machineId),
+                  // Which of the credentials its redaction store holds the
+                  // hub has revoked since: those leave the store.
+                  db.revokedAmong(credentialHashesOf(message.payload)),
+                  hubGitOrigins()
                 )
               );
+              // Behind its ack, which it waits for to take requests: what
+              // was held for it while it was away goes again.
+              resendHeld(message.machineId);
               for (const row of toEnd) {
                 endSession(row.id, "stop", {
                   kind: "hub",
@@ -30356,8 +30971,9 @@ export const createServer = (
           if (claimed) {
             hubAuth.released(claimed, ws.id);
           }
-          // Calls waiting on it fail as it leaves (registry `onAgentLeft`),
-          // here or at the register that replaced it, whichever came first.
+          // Calls waiting on it are held as it leaves (registry
+          // `onAgentLeft`), here or at the register that replaced it,
+          // whichever came first, and go again on its next register.
           const machineId = registry.dropAgent(ws.id);
           if (!machineId) {
             return;

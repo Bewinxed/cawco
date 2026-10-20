@@ -225,6 +225,13 @@ export interface HarnessSession {
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
   heldForLater?(): RestartHold[];
   /**
+   * Since when what {@link heldForLater} counts has run, epoch ms: its oldest
+   * background command's start as this daemon first heard of it. Undefined
+   * when it holds none, or none whose start is known.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
+  heldSince?(): number | undefined;
+  /**
    * What stopping this session's processes now would lose, in words, beyond
    * what the supervisor sees for itself (a running turn, a parked ask): work
    * the runtime holds in its own process. Nothing when it holds nothing.

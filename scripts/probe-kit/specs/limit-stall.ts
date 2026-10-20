@@ -28,11 +28,29 @@
  *   close, so it is held on A until its reset with a person's message
  *   queued for it. The orchestrator's `continue_session` moves its item to
  *   a new session (placed on B), then hands a message to the OLD session.
- *   The invariant (hub server.ts `retireContinued`): the old session never
- *   takes another turn, past A's reset and that handoff; its row names its
- *   continuation, it is stopped and no hold of its is left; the queued
- *   message and the handoff both reach the new session, and the handoff's
- *   answer names it.
+ *   The rule (hub server.ts `foldContinued`): a continuation a session asks
+ *   for stays one session. The old session never takes another turn, past
+ *   A's reset and that handoff; its id is a former id of the new one, the
+ *   board lists the new row alone and no hold of the old is left; the
+ *   queued message, the handoff and a person's message to the old id all
+ *   reach the new session, and the handoff's answer names it; the old id's
+ *   transcript reads the old conversation, one `continued` line, then the
+ *   new one; its page opens the live session.
+ *
+ * - reset: as carry below, but A resets 2 minutes on, before the move's
+ *   restart bound (30 minutes): its chip says it moves to B when its work
+ *   in flight ends, or continues at A's reset, never a bound past that
+ *   reset (hub at-limit.ts `carryStall`). At the reset it carries on on A,
+ *   its command still running (between turns, a session is idle: agent
+ *   `busyNow`), and its chip says nothing more.
+ *
+ * - carry: A refuses it while its brief's command runs in the background,
+ *   which no resume on another account brings back, so its move to B (with
+ *   room) waits for that command (hub at-limit.ts `unmoved`, server.ts
+ *   `waitForLater`). While it waits, its tray chip says it moves to B when
+ *   its work in flight ends, by the restart bound at the latest, never A's
+ *   reset 40 minutes off; once the command ends it moves and runs on B,
+ *   and its chip says nothing more.
  *
  *   bun scripts/probe-kit/run.ts limit-stall
  */
@@ -60,6 +78,11 @@ const LIMIT_MS: Record<Leg, number> = {
   move: 90_000,
   full: 75_000,
   continued: 150_000,
+  // Well inside the restart bound (30 minutes): the reset comes first.
+  reset: 120_000,
+  // Past the restart bound (30 minutes): a reset the move beats, which the
+  // words must never name.
+  carry: 40 * 60_000,
 };
 /** How long past A's reset the continued leg watches for its old session. */
 const PAST_RESET_MS = 45_000;
@@ -71,7 +94,7 @@ const FINISH = "mcp__cawco__finish_item";
 const CONTINUE = "mcp__cawco__continue_session";
 const HANDOFF = "mcp__cawco__handoff";
 
-const LEGS = ["move", "full", "continued"] as const;
+const LEGS = ["move", "full", "continued", "reset", "carry"] as const;
 type Leg = (typeof LEGS)[number];
 
 /** What each leg's delegate has done, as the mock saw it. */
@@ -101,6 +124,8 @@ const LIMITED: Record<Leg, string[]> = {
   move: [ACCOUNT],
   full: [ACCOUNT, B],
   continued: [ACCOUNT],
+  reset: [ACCOUNT],
+  carry: [ACCOUNT],
 };
 let repo = "";
 let projectId = "";
@@ -137,6 +162,14 @@ const briefOf = (leg: Leg) => `PROBE-CHILD-${leg}`;
 const memoryOf = (leg: Leg) => `PROBE-MEMORY-${leg}`;
 /** The person's message to the full leg's delegate while it is stopped. */
 const NOTE = "PROBE-NOTE-while-stopped";
+/**
+ * How long each command leg's background command runs: the carry leg's move
+ * waits for it; the reset leg's outlasts A's reset, so it carries on there
+ * with the command still running.
+ */
+const COMMAND_S: Partial<Record<Leg, number>> = { carry: 150, reset: 300 };
+/** What the carry leg's background command says as it ends. */
+const COMMAND_DONE = "PROBE-CARRY-command-done";
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({
@@ -198,6 +231,16 @@ const child = (request: Seen, leg: Leg): Reply => {
   ) {
     state.refused.push(Date.now());
     return { everyMs: 5, words: [], refuse: { resetsAt: state.limitedUntil } };
+  }
+  // A command leg's brief starts a background command, which no resume on
+  // another account brings back: a move off A waits for it.
+  const seconds = COMMAND_S[leg];
+  if (seconds !== undefined && !state.worked && !request.afterTool) {
+    return useTool("Bash", {
+      command: `sleep ${seconds} && echo ${COMMAND_DONE}`,
+      description: "A long command in the background",
+      run_in_background: true,
+    });
   }
   if (!state.worked) {
     state.worked = true;
@@ -458,10 +501,17 @@ const delegated = async (
     Boolean,
     180_000
   ).catch(() => undefined);
+  // A start its machine held for room never reached a model to be refused.
+  const room = instance
+    ? fleet.query<{ content: string }>(
+        "SELECT content FROM session_lines WHERE instance_id = ? AND kind = 'room'",
+        instance
+      )[0]?.content
+    : undefined;
   kit.check(
     `${leg}: its delegate started on A and answered its brief, then A refused it at its limit`,
     !!instance && !!refused,
-    `delegate ${instance ?? "none"}, refused ${refused ? "yes" : "no"}`
+    `delegate ${instance ?? "none"}, ${played[leg].worked ? "answered its brief" : "never answered its brief"}, refused ${refused ? "yes" : "no"}${room ? `; its start was held: ${room}` : ""}`
   );
   return instance && refused ? instance : undefined;
 };
@@ -643,12 +693,21 @@ const continuedLeg = async (
     !!hold && Date.now() < reset,
     `hold ${JSON.stringify(hold ?? null)}, ${reset - Date.now()} ms before the reset`
   );
+  // The send goes on the dashboard's socket and returns as it leaves; the
+  // hub's record of it is read once the hub has taken it.
   await fleet.send(old, `${HELD_NOTE}: and this`);
-  const [queued] = fleet.query<{ owed: number; state: string }>(
-    "SELECT owed IS NOT NULL AS owed, state FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
-    old,
-    `%${HELD_NOTE}%`
-  );
+  const record = () =>
+    fleet.query<{ owed: number; state: string }>(
+      "SELECT owed IS NOT NULL AS owed, state FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
+      old,
+      `%${HELD_NOTE}%`
+    )[0];
+  const queued = await until(
+    "continued: the hub took the person's message",
+    record,
+    Boolean,
+    20_000
+  ).catch(record);
   kit.check(
     "continued: the person's message to it is queued at the hub while it is held",
     queued?.state === "pending" && queued.owed === 1,
@@ -699,23 +758,32 @@ const continuedLeg = async (
           )
           .join(" | ")
   );
-  const [row] = fleet.query<Record<string, unknown>>(
-    "SELECT * FROM instances WHERE id = ?",
+  const [row] = fleet.query<{ end_intent: string | null; status: string }>(
+    "SELECT status, end_intent FROM instances WHERE id = ?",
     old
   );
   const holds = fleet.query<{ until: number | null }>(
     "SELECT until FROM limit_holds WHERE instance_id = ?",
     old
   );
+  const alias = fleet.query<{ instance_id: string }>(
+    "SELECT instance_id FROM instance_aliases WHERE id = ?",
+    old
+  )[0]?.instance_id;
+  const listed = (await fleet.api<{ id: string }[]>("/api/instances")).filter(
+    (one) => one.id === old || one.id === target
+  );
   kit.check(
-    "continued: the old session's row names its continuation, it is stopped, and no hold of its is left",
-    row?.continued_into === target &&
-      row?.status === "stopped" &&
+    "continued: one session from the move: the old id is a former id of the new one, the board lists the new row alone, the old row is gone or ending, and no hold of its is left",
+    alias === target &&
+      listed.length === 1 &&
+      listed[0]?.id === target &&
+      (!row || row.end_intent === "delete") &&
       holds.length === 0,
     JSON.stringify({
-      status: row?.status,
-      continued_into: row?.continued_into ?? "(no such column)",
-      work_item_id: row?.work_item_id,
+      alias: alias ?? null,
+      listed: listed.map((one) => one.id),
+      row: row ?? null,
       holds,
     })
   );
@@ -740,10 +808,10 @@ const continuedLeg = async (
 };
 
 /**
- * A person writing to the continued session: the hub refuses the send to
- * its id in the words its page says, "Continued in <the new session's
- * title>", and the new session never reads it; its page has no composer,
- * only that line, its title a link to the new session.
+ * A person writing to the old session's id after the move: one session, so
+ * it reaches the new one; its transcript reads the old conversation, the
+ * `continued` line, then the new one; its page opens the live session, its
+ * composer there.
  */
 const personAfter = async (
   kit: Kit,
@@ -751,70 +819,79 @@ const personAfter = async (
   old: string,
   target: string
 ): Promise<void> => {
-  const [named] = fleet.query<{
-    derived_title: string | null;
-    title: string | null;
-  }>("SELECT title, derived_title FROM instances WHERE id = ?", target);
-  const title = named?.title || named?.derived_title || target.slice(0, 8);
-  const words = `Continued in ${title}`;
   await fleet.send(old, `${TYPED_AFTER}: typed on its page`);
-  const typed = await until(
-    "continued: the person's send to the old id settled",
-    () =>
-      fleet.query<{
-        instance_id: string;
-        reason: string | null;
-        state: string;
-      }>(
-        "SELECT instance_id, state, reason FROM sent_messages WHERE body LIKE ?",
-        `%${TYPED_AFTER}%`
-      ),
-    (rows) => rows.some((one) => one.state !== "pending"),
-    20_000
-  ).catch(() =>
+  const sends = () =>
     fleet.query<{ instance_id: string; reason: string | null; state: string }>(
       "SELECT instance_id, state, reason FROM sent_messages WHERE body LIKE ?",
       `%${TYPED_AFTER}%`
-    )
-  );
-  await Bun.sleep(5000);
+    );
+  const typed = await until(
+    "continued: the person's send to the old id read",
+    sends,
+    (rows) => rows.some((one) => one.state !== "pending"),
+    60_000
+  ).catch(sends);
   const read = newSeen(fleet).some((one) => one.all.includes(TYPED_AFTER));
   kit.check(
-    `continued: a person's send to the old session is refused with "${words}", and the new session never reads it`,
+    "continued: a person's send to the old id reaches the new session",
     typed.length === 1 &&
-      typed[0]?.instance_id === old &&
-      typed[0]?.state === "failed" &&
-      typed[0]?.reason === words &&
-      !read,
+      typed[0]?.instance_id === target &&
+      typed[0]?.state === "read" &&
+      read,
     `${JSON.stringify(typed)}; the new session read it: ${read}`
   );
-  const base = await fleet.dashboard();
-  const page = await kit.page("desk");
-  await open(page, `${base}/session/${old}`, '[data-slot="pane"]');
-  const foot = await until(
-    "continued: the old page's line",
-    () =>
-      page.evaluate((next) => {
-        const link = document.querySelector<HTMLAnchorElement>(
-          `a[href="/session/${next}"]`
-        );
-        return {
-          composers: document.querySelectorAll('[data-slot="composer"]').length,
-          line: link?.parentElement?.textContent?.replace(/\s+/g, " ").trim(),
-          link: link?.textContent?.trim(),
-        };
-      }, target),
-    // Its title, not its id: the line as it settles, whatever drew first.
-    (now) => now.link === title,
-    30_000
-  ).catch(() => undefined);
+  const page = await fleet.api<{
+    blocks: {
+      content: string;
+      metadata?: { accountMove?: { kind: string }; continuation?: boolean };
+      type: string;
+    }[];
+  }>(`/api/instances/${old}/transcript?limit=400`);
+  const line = page.blocks.findIndex(
+    (one) =>
+      one.type === "system.account_move" &&
+      one.metadata?.accountMove?.kind === "continued"
+  );
+  const lines = page.blocks.filter(
+    (one) => one.metadata?.accountMove?.kind === "continued"
+  ).length;
+  const brief = page.blocks.findIndex((one) =>
+    one.content.includes(briefOf("continued"))
+  );
   kit.check(
-    `continued: the old session's page has no composer, only "${words}", its title a link to the new session`,
-    !!foot &&
-      foot.composers === 0 &&
-      foot.line?.replace(/\s/g, "") === words.replace(/\s/g, "") &&
-      foot.link === title,
-    JSON.stringify(foot ?? "no link to the new session on the old page")
+    "continued: the old id's transcript reads the old conversation, one continued line, then the opening folded under it",
+    brief >= 0 &&
+      lines === 1 &&
+      line > brief &&
+      page.blocks[line + 1]?.metadata?.continuation === true,
+    JSON.stringify({
+      brief,
+      line,
+      lines,
+      words: page.blocks[line]?.content ?? null,
+    })
+  );
+  const base = await fleet.dashboard();
+  const tab = await kit.page("desk");
+  await open(tab, `${base}/session/${old}`, '[data-slot="pane"]');
+  const look = () =>
+    tab.evaluate(() => ({
+      path: location.pathname,
+      composers: document.querySelectorAll('[data-slot="composer"]').length,
+      continuedIn: document.querySelectorAll(".readonly.continued").length,
+    }));
+  const shown = await until(
+    "continued: the old page opens the live session",
+    look,
+    (it) => it.path === `/session/${target}` && it.composers > 0,
+    30_000
+  ).catch(look);
+  kit.check(
+    "continued: the old session's URL opens the live session, its composer there",
+    shown.path === `/session/${target}` &&
+      shown.composers > 0 &&
+      shown.continuedIn === 0,
+    JSON.stringify(shown)
   );
 };
 
@@ -843,6 +920,155 @@ const run = async (kit: Kit) => {
   if (held) {
     await continuedLeg(kit, fleet, orch, held);
   }
+  // Placed on A again, moving to B at A's limit: B has room.
+  await route(fleet, ACCOUNT, 0);
+  const resetting = await delegated(kit, fleet, orch, "reset");
+  if (resetting) {
+    await resetLeg(kit, fleet, look, resetting);
+  }
+  // A free again before the carry leg's delegate is placed on it.
+  await Bun.sleep(Math.max(0, played.reset.limitedUntil + 5000 - Date.now()));
+  const carrying = await delegated(kit, fleet, orch, "carry");
+  if (carrying) {
+    await carryLeg(kit, fleet, look, carrying);
+  }
+};
+
+/** A moment as the hub's words say it (core accounts.ts `clockWords`). */
+const clockOf = (at: number): string =>
+  new Date(at).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+/**
+ * A delegate refused at A's limit with a command running in the background,
+ * A resetting before the move's bound: while it is held its chip says it
+ * moves to B when that command ends, or continues at A's reset, the instant
+ * its hold names; at that reset it carries on on A, the command still
+ * running, never on B, and its chip says nothing more.
+ */
+const resetLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  look: Looks,
+  instance: string
+): Promise<void> => {
+  const reset = played.reset.limitedUntil;
+  const refusedAt = played.reset.refused[0] as number;
+  const waiting = await until(
+    "reset: its chip says it moves once its work ends, or continues at A's reset",
+    () => look.chip(instance),
+    (one) => !!one?.stalled?.includes("or continues at"),
+    120_000
+  ).catch(() => look.chip(instance));
+  const [hold] = fleet.query<{ carry: string | null; until: number | null }>(
+    "SELECT carry, until FROM limit_holds WHERE instance_id = ?",
+    instance
+  );
+  const holdUntil = hold?.until ?? Number.NaN;
+  kit.check(
+    "reset: while its move waits for its command and A resets first, its chip says it moves to B when that work ends, or continues at the reset its hold names, and names no bound past it",
+    Date.now() < reset &&
+      Math.abs(holdUntil - reset) <= 2000 &&
+      !!waiting?.stalled?.startsWith("Stopped at") &&
+      waiting.stalled.includes("moves to Probe B") &&
+      waiting.stalled.includes("(1 command running)") &&
+      waiting.stalled.includes(`or continues at ${clockOf(holdUntil)}`) &&
+      !waiting.stalled.includes("at the latest"),
+    `stalled ${JSON.stringify(waiting?.stalled ?? null)}; hold ${JSON.stringify(hold ?? null)}; A resets at ${clockOf(reset)}, ${reset - Date.now()} ms on`
+  );
+  const onA = await until(
+    "reset: it carries on on A past its reset",
+    () =>
+      look
+        .childSeen("reset", reset)
+        .find((one) => onAccount(one, ACCOUNT) && !one.afterTool),
+    Boolean,
+    180_000
+  ).catch(() => undefined);
+  const ended = fleet.seen.some(
+    (one) =>
+      one.all.includes(briefOf("reset")) &&
+      one.all.includes(COMMAND_DONE) &&
+      one.at <= (onA?.at ?? Number.POSITIVE_INFINITY)
+  );
+  const onB = look
+    .childSeen("reset", refusedAt)
+    .filter((one) => onAccount(one, B));
+  const after = await until(
+    "reset: its chip says nothing once it carries on",
+    () => look.chip(instance),
+    (one) => !one?.stalled,
+    60_000
+  ).catch(() => look.chip(instance));
+  kit.check(
+    "reset: at A's reset it carries on on A with its command still running, never on B, and its chip no longer says it is stopped",
+    !!onA && !ended && onB.length === 0 && !after?.stalled,
+    `${onA ? `first request on A ${onA.at - reset} ms after its reset` : "nothing on A after its reset"}; the command ended before it: ${ended}; ${onB.length} request(s) on B; chip ${JSON.stringify(after?.stalled ?? null)}, state ${after?.state}; account ${look.accountOf(instance)}`
+  );
+};
+
+/**
+ * A delegate refused at A's limit with a command running in the background:
+ * its move to B waits for that command, as the hub's line says ("It moves to
+ * B when that work ends, or in 30 minutes at the latest"). Its tray chip,
+ * which `delegate_list` reads the same stall for (at-limit.ts `stall`), says
+ * so while it waits, never A's reset the move beats; once the command ends
+ * it moves, runs on B, and its chip says nothing more.
+ */
+const carryLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  look: Looks,
+  instance: string
+): Promise<void> => {
+  const reset = played.carry.limitedUntil;
+  const resetClock = clockOf(reset);
+  const waiting = await until(
+    "carry: its chip says it moves once its work in flight ends",
+    () => look.chip(instance),
+    (one) => !!one?.stalled?.includes("when its work in flight ends"),
+    120_000
+  ).catch(() => look.chip(instance));
+  const [hold] = fleet.query<{ carry: string | null; until: number | null }>(
+    "SELECT carry, until FROM limit_holds WHERE instance_id = ?",
+    instance
+  );
+  const ended = fleet.seen.some(
+    (one) =>
+      one.all.includes(briefOf("carry")) && one.all.includes(COMMAND_DONE)
+  );
+  kit.check(
+    "carry: while its move waits for its command, its chip says it moves to B when that work ends, by the bound at the latest, and never names A's reset",
+    !ended &&
+      !!waiting?.stalled?.startsWith("Stopped at") &&
+      waiting.stalled.includes("moves to Probe B") &&
+      waiting.stalled.includes("(1 command running)") &&
+      waiting.stalled.includes("at the latest") &&
+      !waiting.stalled.includes("continues at") &&
+      !waiting.stalled.includes(resetClock),
+    `stalled ${JSON.stringify(waiting?.stalled ?? null)}; hold ${JSON.stringify(hold ?? null)}; A resets at ${resetClock}; the command ended already: ${ended}`
+  );
+  const refusedAt = played.carry.refused[0] as number;
+  const onB = await until(
+    "carry: it runs on B once its command ends",
+    () => look.childSeen("carry", refusedAt).find((one) => onAccount(one, B)),
+    Boolean,
+    ((COMMAND_S.carry as number) + 240) * 1000
+  ).catch(() => undefined);
+  const after = await until(
+    "carry: its chip says nothing once it moved",
+    () => look.chip(instance),
+    (one) => !one?.stalled,
+    60_000
+  ).catch(() => look.chip(instance));
+  kit.check(
+    "carry: once its command ends it moves to B and runs there, before A's reset, and its chip no longer says it is stopped",
+    !!onB && onB.at < reset && !after?.stalled,
+    `${onB ? `first request on B ${onB.at - refusedAt} ms after A's refusal` : "nothing on B"}; chip ${JSON.stringify(after?.stalled ?? null)}, state ${after?.state}; account ${look.accountOf(instance)}`
+  );
 };
 
 export default {

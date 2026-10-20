@@ -1,10 +1,12 @@
 /**
- * A delegate's inputs (core `CONTROL_INPUTS_READ`, `CONTROL_INPUTS_WRITE`):
- * files its parent names by path on its own machine, which no boundary lets
- * the delegate read where they are (a journal excerpt, a log, a transcript).
- * Read on the parent's machine, refused there in words when one may not
- * leave it, and written into the delegate's `$TMPDIR/inputs/` on its
- * workspace's machine before the brief that names them.
+ * A delegate's inputs (core `CONTROL_INPUTS_ADMIT`, `CONTROL_INPUTS_COPY`,
+ * `CONTROL_INPUTS_READ`, `CONTROL_INPUTS_WRITE`): files its parent names by
+ * path on its own machine, which no boundary lets the delegate read where
+ * they are (a journal excerpt, a log, a transcript). Admitted on the
+ * parent's machine, refused there in words when one may not leave it, and
+ * written into the delegate's `$TMPDIR/inputs/` before the brief that names
+ * them: copied there by this machine when the workspace is on it too, read
+ * here and written by the workspace's machine when it is on another.
  */
 import { lstat, mkdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
@@ -12,6 +14,8 @@ import {
   INPUTS_DIR,
   INPUTS_LIMIT_BYTES,
   type InputFile,
+  type InputNamed,
+  type InputsAdmitted,
   type InputsRead,
 } from "@cawco/core";
 import { workspaceScratchDir } from "@cawco/core/paths";
@@ -71,24 +75,23 @@ const admit = async (
 };
 
 /**
- * {@link CONTROL_INPUTS_READ}: each of `paths` read whole, or the first
- * reason one may not go ({@link admit}), two that would land under one name,
- * or more than {@link INPUTS_LIMIT_BYTES} together. `bound` is the
- * workspace the parent runs in, when it runs in one.
+ * Each of `paths` admitted, or the first reason one may not go ({@link
+ * admit}), two that would land under one name, or more than {@link
+ * INPUTS_LIMIT_BYTES} together. `bound` is the workspace the parent runs in,
+ * when it runs in one. The one place every input is judged: at delegate
+ * time, and again where it is read or copied.
  */
-export const readInputs = async (
+const admitAll = async (
   paths: unknown,
   bound: unknown
-): Promise<InputsRead> => {
+): Promise<Admitted[] | string> => {
   if (!(
     Array.isArray(paths) && paths.every((one) => typeof one === "string")
   )) {
     throw new Error("inputs must be a list of absolute paths");
   }
   if (paths.length > INPUTS_COUNT_LIMIT) {
-    return {
-      refused: `inputs names ${paths.length} files; it stops at ${INPUTS_COUNT_LIMIT}`,
-    };
+    return `inputs names ${paths.length} files; it stops at ${INPUTS_COUNT_LIMIT}`;
   }
   const roots = isWorkspaceRef(bound)
     ? await Promise.all(
@@ -104,53 +107,120 @@ export const readInputs = async (
     // biome-ignore lint/performance/noAwaitInLoops: one input at a time, the first refusal is the answer
     const one = await admit(path, roots);
     if (typeof one === "string") {
-      return { refused: one };
+      return one;
     }
     const twin = named.get(one.name);
     if (twin) {
-      return {
-        refused: `${twin} and ${one.named} would both land as ${one.name} in $TMPDIR/inputs/; copy one to another name`,
-      };
+      return `${twin} and ${one.named} would both land as ${one.name} in $TMPDIR/inputs/; copy one to another name`;
     }
     named.set(one.name, one.named);
     total += (await stat(one.real)).size;
     if (total > INPUTS_LIMIT_BYTES) {
-      return {
-        refused: `the inputs come to more than ${INPUTS_LIMIT_BYTES / MIB} MiB together, the most one delegation carries; hand larger data on through git or a check with machine`,
-      };
+      return `the inputs come to more than ${INPUTS_LIMIT_BYTES / MIB} MiB together, the most one delegation carries; hand larger data on through git or a check with machine`;
     }
     admitted.push(one);
   }
+  return admitted;
+};
+
+const namedOf = ({ name, named, mode }: Admitted): InputNamed => ({
+  name,
+  from: named,
+  mode,
+});
+
+/**
+ * {@link CONTROL_INPUTS_ADMIT}: the inputs `paths` names, admitted
+ * ({@link admitAll}), by name and where each is: none of their bytes.
+ */
+export const admitInputs = async (
+  paths: unknown,
+  bound: unknown
+): Promise<InputsAdmitted> => {
+  const admitted = await admitAll(paths, bound);
+  return typeof admitted === "string"
+    ? { refused: admitted }
+    : { files: admitted.map(namedOf) };
+};
+
+/** {@link CONTROL_INPUTS_READ}: each of `paths` admitted ({@link admitAll}), then read whole. */
+export const readInputs = async (
+  paths: unknown,
+  bound: unknown
+): Promise<InputsRead> => {
+  const admitted = await admitAll(paths, bound);
+  if (typeof admitted === "string") {
+    return { refused: admitted };
+  }
   const files = await Promise.all(
-    admitted.map(
-      async ({ name, named: from, real, mode }): Promise<InputFile> => ({
-        name,
-        from,
-        mode,
-        content: (await readFile(real)).toString("base64"),
-      })
-    )
+    admitted.map(async (one): Promise<InputFile> => ({
+      ...namedOf(one),
+      content: (await readFile(one.real)).toString("base64"),
+    }))
   );
   return { files };
 };
 
 /**
- * {@link CONTROL_INPUTS_WRITE}: each input written into the workspace's
- * scratch dir under {@link INPUTS_DIR}, replacing one of its name, and
- * readable by its owner at least. The workspace writes its scratch dir, so
- * nothing there is followed: a link at `inputs` is taken away, the folder's
- * real path is checked before each file, and each file is written to a new
- * name and renamed over the old one (state-file.ts).
+ * {@link CONTROL_INPUTS_COPY}: each of `paths` admitted ({@link admitAll})
+ * and copied into the workspace `ref`'s inputs, as {@link writeInputs}
+ * writes them, one file read at a time.
+ */
+export const copyInputs = async (
+  paths: unknown,
+  bound: unknown,
+  ref: unknown
+): Promise<InputsAdmitted> => {
+  const admitted = await admitAll(paths, bound);
+  if (typeof admitted === "string") {
+    return { refused: admitted };
+  }
+  await writeInto(
+    ref,
+    admitted.map((one) => ({
+      name: one.name,
+      mode: one.mode,
+      bytes: () => readFile(one.real),
+    }))
+  );
+  return { files: admitted.map(namedOf) };
+};
+
+/**
+ * {@link CONTROL_INPUTS_WRITE}: each input's bytes, read on another machine,
+ * written into the workspace's inputs ({@link writeInto}).
  */
 export const writeInputs = async (
   ref: unknown,
   files: unknown
 ): Promise<void> => {
-  if (!isWorkspaceRef(ref)) {
-    throw new Error("inputs are written into a workspace: { id, path }");
-  }
   if (!Array.isArray(files)) {
     throw new Error("inputs must be a list of files");
+  }
+  await writeInto(
+    ref,
+    (files as InputFile[]).map((file) => ({
+      name: file.name,
+      mode: file.mode,
+      bytes: () => Promise.resolve(Buffer.from(file.content, "base64")),
+    }))
+  );
+};
+
+/**
+ * Each input written into the workspace's scratch dir under {@link
+ * INPUTS_DIR}, replacing one of its name, and readable by its owner at
+ * least. The workspace writes its scratch dir, so nothing there is followed:
+ * a link at `inputs` is taken away, the folder's real path is checked before
+ * each file, and each file is written to a new name and renamed over the old
+ * one (state-file.ts).
+ */
+const writeInto = async (
+  ref: unknown,
+  files: { bytes: () => Promise<Buffer>; mode: number; name: string }[]
+): Promise<void> => {
+  if (!isWorkspaceRef(ref)) {
+    throw new Error("inputs are written into a workspace: { id, path }");
   }
   const scratch = workspaceScratchDir(ref.id);
   const dir = join(scratch, INPUTS_DIR);
@@ -160,7 +230,7 @@ export const writeInputs = async (
   }
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const own = join(await realpath(scratch), INPUTS_DIR);
-  for (const file of files as InputFile[]) {
+  for (const file of files) {
     if (nameProblem(file.name)) {
       throw new Error(`"${file.name}" is not a file name`);
     }
@@ -172,7 +242,7 @@ export const writeInputs = async (
     }
     await writeStateFile(
       join(dir, file.name),
-      Buffer.from(file.content, "base64"),
+      await file.bytes(),
       // biome-ignore lint/suspicious/noBitwiseOperators: its own bits, and its owner's read and write
       { inPlace: true, mode: (file.mode & 0o777) | 0o600 }
     );

@@ -86,8 +86,8 @@ const TASK_WRITE = [
 ] as const;
 
 /**
- * Caw's own: a project's conversations with it, the views it drafts, and
- * its folder on the hub (caw.ts).
+ * Caw's own: a project's conversations with it, the views it drafts, its
+ * folder on the hub, and its Setup's steps (caw.ts).
  */
 export const CAW_TOOLS = [
   "thread_read",
@@ -96,6 +96,7 @@ export const CAW_TOOLS = [
   "view_query",
   "folder_read",
   "folder_write",
+  "project_setup",
 ] as const;
 
 /**

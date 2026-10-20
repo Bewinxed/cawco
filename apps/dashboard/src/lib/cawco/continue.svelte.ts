@@ -113,14 +113,24 @@ export async function startContinuation(
 
 /** A continuation's running stages, as the dialog's Start and the source's rows say them. */
 export const continuationStageWords = {
+  waiting: "Waiting for its work in flight…",
   filing: "Filing its open items…",
   summarising: "Summarising…",
   starting: "Starting…",
 } as const;
 
+/** A continuation still on its way, by its stage. */
+const running = (
+  stage: ContinuationJob["stage"] | undefined
+): stage is keyof typeof continuationStageWords =>
+  stage === "waiting" ||
+  stage === "filing" ||
+  stage === "summarising" ||
+  stage === "starting";
+
 /** What the source's rows say while its continuation runs, by stage. */
 const pendingWords = (stage: ContinuationJob["stage"] | undefined): string =>
-  stage === "filing" || stage === "summarising" || stage === "starting"
+  running(stage)
     ? `Continuing in a new session · ${continuationStageWords[stage]}`
     : "Continuing in a new session…";
 
@@ -166,12 +176,7 @@ function settleDetached(table: ContinuationJob[]): void {
       continue;
     }
     const from = entry.source.instanceId;
-    if (
-      !job ||
-      job.stage === "filing" ||
-      job.stage === "summarising" ||
-      job.stage === "starting"
-    ) {
+    if (!job || running(job.stage)) {
       pendingOn(from, pendingWords(job?.stage), {
         label: "Cancel",
         run: () => cancelContinuation(id),

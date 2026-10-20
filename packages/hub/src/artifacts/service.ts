@@ -13,7 +13,7 @@
  * the burst is delivered as one message carrying them
  * ({@link ArtifactServiceDeps.deliverMarks}).
  */
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import {
   type AgentRow,
@@ -62,7 +62,13 @@ import {
   type SendBody,
   type ThreadEntry,
 } from "@cawco/core/comments";
-import { type GraphPlace, PLACES_KEY } from "@cawco/core/decisions";
+import {
+  type DecisionCard,
+  type GraphLinks,
+  type GraphPlace,
+  PLACES_KEY,
+  pickOf,
+} from "@cawco/core/decisions";
 import {
   excerptOf,
   field,
@@ -399,6 +405,8 @@ export interface ArtifactRead {
     formatted?: string | null;
     lines: { from: number; to: number };
   };
+  /** Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show. */
+  held?: string;
   id: string;
   kind: ArtifactKind;
   missing?: string[];
@@ -410,6 +418,8 @@ export interface ArtifactRead {
   pictureAt?: string | null;
   /** A canvas's latest picture, base64 PNG, when asked (`png: true`); null when it has none yet. */
   png?: string | null;
+  /** A decision page's program as the hub keeps it, on a read without `since`: re-emit a statement from it to revise one. */
+  program?: string;
   /** Keys that changed since `since` and are no longer there. */
   removed?: string[];
   revision: number;
@@ -435,14 +445,34 @@ export interface ArtifactRead {
 }
 
 /**
+ * What a decision page's program leaves broken on the person's picks and
+ * the project's graph, for its writer to put back or tell the person.
+ * Each list only when it has something.
+ */
+export interface GraphBroken {
+  /** Decisions it lacks (taken out, or never written) that another page comes after, with the `page#card`s that do: no edge is drawn for them. */
+  after?: Record<string, string[]>;
+  /** Options taken out that the person picked, by decision: the pick is kept, and its card says the option is gone. */
+  options?: Record<string, string[]>;
+  /** Decisions taken out that the person picked: the pick is kept, on no card. */
+  picked?: string[];
+  /** Its `after`s naming no decision of the project's: no edge is drawn for them. */
+  unlinked?: string[];
+}
+
+/**
  * What a decision page's revision (`statements`) answers: what it changed,
  * not the page. The person's picks are read with `artifact_read`.
  */
 export interface Revised {
+  /** What it left broken on the picks and the graph; absent when nothing. */
+  broken?: GraphBroken;
   /** Its decisions now, by id, in page order. */
   decisions: string[];
   /** Components the library does not have, dropped and never drawn. */
   dropped?: string[];
+  /** Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show. */
+  held?: string;
   id: string;
   /** Decisions the revision added or took out, by id; a removed one's pick is kept. */
   moved: { added: string[]; removed: string[] };
@@ -483,17 +513,21 @@ export interface ArtifactStatus {
   /** The person's changes (picks, notes, drawn elements) since the session last read it. */
   unread: number;
   updatedAt: string;
-  /** Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks, a canvas's changes unread, or handed to it by a delegate and not opened yet). */
+  /** Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet). */
   waitingOn: ("person" | "session")[];
 }
 
 export interface Created {
+  /** What a decision page's program left broken on the picks and the graph; absent when nothing. */
+  broken?: GraphBroken;
   /** A decision page's decisions, by id, in page order. */
   decisions?: string[];
   /** Components a decision page's program names that the library does not have: dropped, never drawn. */
   dropped?: string[];
   /** A component canvas's compile errors, from the modules its states files import. */
   errors?: ReturnType<typeof errorsSaid>;
+  /** Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show. */
+  held?: string;
   /** A component canvas's next reads, one line. */
   hint?: string;
   /** Host mode's `name[:port]` beside `origin`: a bridge for readers before it (core `PreviewAddress`). */
@@ -555,6 +589,10 @@ export const NO_VIEW =
 /** Why a `to: "parent"` create opened nothing: the parent opens it. */
 const HELD =
   "Handed to your parent, not opened: it opens in their panel when they call artifact_show.";
+
+/** Why a maker's change opened nothing: the parent had opened the artifact, so the change waits as its next version ({@link holdNext}). */
+const HELD_NEXT =
+  "Your parent opened it, so this change waits as its next version: their panel keeps the version they opened until they call artifact_show.";
 
 /** The doc meta key of an artifact handed to its parent and not opened since (service `handOver`). */
 const HANDED = "handed";
@@ -963,16 +1001,40 @@ export interface ArtifactServiceDeps {
     path: string | undefined
   ) => Promise<FolderWeight>;
   /**
+   * What decision page `name` drawn with `cards` does to its project's
+   * graph (decisions.ts `linksOf`): its `after`s naming no decision, and
+   * its decisions other pages come after. Said to its writer.
+   */
+  graphLinks: (
+    projectId: string,
+    name: string,
+    cards: DecisionCard[]
+  ) => Promise<GraphLinks>;
+  /**
    * Tells `parent` once that its delegate `maker` handed it `artifact`, not
-   * opened (core `artifactHandedNotice`), on the channel the person's picks
+   * opened, or changed it while its panel shows it, the change held as
+   * `next` (core `artifactHandedNotice`), on the channel the person's picks
    * take (server.ts `handArtifactUp`).
    */
   handedUp: (
     parent: InstanceRow,
     maker: InstanceRow,
-    artifact: ArtifactRow
+    artifact: ArtifactRow,
+    next?: ArtifactRow
   ) => Promise<void>;
   instance: (id: string) => InstanceRow | undefined;
+  /**
+   * Page `name`'s source kept in `instance`'s project folder at
+   * `decisions/<name>/`, as a build with `keep` keeps it: a held next
+   * version's, once its parent opens it. Why not, when the folder refuses.
+   */
+  keepPage: (
+    instance: InstanceRow,
+    name: string,
+    page: { html: string; program?: string }
+  ) => Promise<
+    { refused: string; status: ArtifactRefusal["status"] } | undefined
+  >;
   /**
    * The projects session `instance` leads (their Caw): an ended writer's
    * marks are routed to him, and he answers them in their pins' threads.
@@ -1006,12 +1068,13 @@ export interface ArtifactServiceDeps {
    * A page's HTML built as the decision-page skill builds one: from inline
    * `html`, from `dir`'s page.html on the session's machine, or (neither) from
    * `decisions/<name>/page.html` in the session's project folder; written to
-   * `decisions/<name>/` too when the session is in a project.
+   * `decisions/<name>/` too when the session is in a project and `keep`.
    */
   page: (
     instance: InstanceRow,
     name: string,
-    from: PageFrom
+    from: PageFrom,
+    keep: boolean
   ) => Promise<
     | { html: string; program?: BuiltProgram }
     | { refused: string; status: ArtifactRefusal["status"] }
@@ -1268,6 +1331,67 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return own(instance, id);
   };
 
+  /**
+   * Page `id` of the session's own project, whoever wrote it: a later
+   * session there, or its Caw, reads its program and revises it (a link is
+   * an `after` on the dependent decision, Projects spec §5.8). Undefined for
+   * a page of no project, another project's, or a held next version.
+   */
+  const projectPage = (
+    instance: InstanceRow,
+    id: string
+  ): ArtifactRow | undefined => {
+    const row = db.get(id);
+    return row?.kind === "page" &&
+      row.heldFor === null &&
+      row.projectId !== null &&
+      row.projectId === instance.projectId
+      ? row
+      : undefined;
+  };
+
+  /**
+   * Whether the session's read of `row` counts as its owner's: the owner's
+   * own, and a lead's of his project's pages, always have. Its maker's, and
+   * another session's of the project, leave the owner's unread.
+   */
+  const readsForOwner = (instance: InstanceRow, row: ArtifactRow): boolean =>
+    row.instanceId === instance.id ||
+    (row.madeBy !== instance.id &&
+      (answerable(instance).some((one) => one.id === row.id) ||
+        ledPage(instance, row.id) !== undefined));
+
+  /**
+   * What an `artifact_read` of `id` reads: with no id, the session's
+   * newest; one it made, else one it may read ({@link readable}). Its maker
+   * reads what it changed: the next version held for its parent.
+   */
+  const readTarget = (
+    instance: InstanceRow,
+    id: string | undefined
+  ): ArtifactRow => {
+    const handed = id === undefined ? undefined : db.get(id);
+    let row: ArtifactRow | undefined = handed;
+    if (id === undefined) {
+      [row] = db.ofInstance(instance.id);
+    } else if (handed?.madeBy !== instance.id) {
+      row = readable(instance, id);
+    }
+    if (!row) {
+      throw new ArtifactRefusal(404, "This session has made no artifact yet.");
+    }
+    if (row.instanceId !== instance.id && row.madeBy === instance.id) {
+      return db.heldOf(row.id) ?? row;
+    }
+    return row;
+  };
+
+  /** A decision page's program, for a whole read: a revision re-emits a statement of it. Nothing for any other artifact. */
+  const programRead = (row: ArtifactRow): { program?: string } => {
+    const program = programOf(row);
+    return program === undefined ? {} : { program };
+  };
+
   /** The session's newest artifact the panel can show: a draft canvas still in the composer is not one. */
   const nextNewest = (instance: InstanceRow): ArtifactRow | undefined =>
     db
@@ -1325,6 +1449,115 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     docs.doc(row.id).getMap("meta").get(HANDED) === true;
 
   /**
+   * Whether a maker's change to its parent's artifact `row` is held as its
+   * next version ({@link holdNext}): once the parent (or the person) has
+   * opened it, so it is no longer waiting on the parent as handed, every
+   * change its maker makes waits for the parent's artifact_show, whether the
+   * panel shows it now or the person can open it from the panel's list. Not
+   * the owner's own change, nor a sheet's (its stage serves the workspace's
+   * files live).
+   */
+  const holdsChange = (maker: InstanceRow, row: ArtifactRow): boolean =>
+    row.instanceId !== maker.id &&
+    row.kind !== "component" &&
+    (db.heldOf(row.id) !== undefined || !isHanded(row));
+
+  /**
+   * Where a maker's change to its parent's artifact `row` goes when it
+   * {@link holdsChange}: its next version, a hidden row of its own (`heldFor`)
+   * made from it whole (its doc forked, its files copied), which no list
+   * holds and nothing shows, so what the panel shows stays. One already held
+   * takes every change after. `fresh` when this call made it; null when the
+   * change is not held.
+   */
+  const holdNext = (
+    maker: InstanceRow,
+    row: ArtifactRow
+  ): { fresh: boolean; next: ArtifactRow } | null => {
+    if (!holdsChange(maker, row)) {
+      return null;
+    }
+    const holding = db.heldOf(row.id);
+    if (holding) {
+      return { fresh: false, next: holding };
+    }
+    const now = new Date();
+    const next = db.create({
+      ...row,
+      id: crypto.randomUUID(),
+      heldFor: row.id,
+      madeBy: maker.id,
+      seq: 0,
+      deliveredSeq: 0,
+      readSeq: 0,
+      openedRevision: null,
+      createdAt: now,
+      updatedAt: now,
+      shownAt: null,
+    });
+    const folder = join(deps.root, row.id);
+    if (existsSync(folder)) {
+      cpSync(folder, join(deps.root, next.id), { recursive: true });
+    }
+    docs.fork(row.id, next.id);
+    // Nothing shows it: a canvas's writes are drawn on the headless screen (draw).
+    docs.transact(next.id, "hub", (doc) =>
+      doc.getMap("meta").set(HANDED, true)
+    );
+    return { fresh: true, next };
+  };
+
+  /**
+   * A change held as `held.next`, made by `ready`: the parent hears of it
+   * once, when this change began the hold; a fresh one whose change threw
+   * is let go, so nothing of it reaches them.
+   */
+  const heldOver = async (
+    { maker, owner }: Making,
+    row: ArtifactRow,
+    holding: { fresh: boolean; next: ArtifactRow },
+    ready: (() => Promise<void>) | undefined
+  ): Promise<void> => {
+    try {
+      await ready?.();
+    } catch (error) {
+      if (holding.fresh) {
+        discard(holding.next);
+      }
+      throw error;
+    }
+    if (holding.fresh) {
+      await deps.handedUp(owner, maker, row, holding.next);
+    }
+  };
+
+  /**
+   * An update by artifact `row`'s owner or maker (`change`, given where it
+   * goes): the maker's, while the parent's panel shows it, goes to its next
+   * version ({@link holdNext}); anyone else's to the artifact itself.
+   */
+  const changedBy = async <T>(
+    instance: InstanceRow,
+    row: ArtifactRow,
+    change: (target: ArtifactRow) => Promise<T>
+  ): Promise<T> => {
+    const holding = holdNext(instance, row);
+    const owner = deps.instance(row.instanceId);
+    if (!(holding && owner)) {
+      return await change(row);
+    }
+    let result: T | undefined;
+    await heldOver({ maker: instance, owner }, row, holding, async () => {
+      result = await change(holding.next);
+    });
+    return result as T;
+  };
+
+  /** What an answer names of `row`: its artifact's id, and for a held next version its own as `held`. */
+  const heldId = (row: ArtifactRow): { held?: string; id: string } =>
+    row.heldFor === null ? { id: row.id } : { id: row.heldFor, held: row.id };
+
+  /**
    * A create's show, and what readies the artifact after it (`ready`, a
    * canvas's drawing). The session's own artifact is shown in its panel,
    * then readied there. One handed to its parent ({@link handing}) is
@@ -1332,18 +1565,24 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * it; it is readied unopened, and only then is the parent told, once per
    * hand-off: when it wasn't waiting on them already, or came from another
    * delegate than the one it was waiting from. A `ready` that throws tells
-   * the parent nothing and leaves its mark as it was.
+   * the parent nothing and leaves its mark as it was. A re-create of one the
+   * parent's panel shows is held (`held`, {@link heldOver}).
    */
   const handOver = async (
     making: Making,
     before: ArtifactRow | undefined,
     row: ArtifactRow,
-    ready?: () => Promise<void>
+    ready?: () => Promise<void>,
+    holding?: { fresh: boolean; next: ArtifactRow } | null
   ): ReturnType<typeof show> => {
     if (!handing(making)) {
       const shown = await show(row, "agent");
       await ready?.();
       return shown;
+    }
+    if (holding && before) {
+      await heldOver(making, before, holding, ready);
+      return { opened: false, started: true, why: HELD_NEXT };
     }
     const was = isHanded(row);
     const waiting = was && before?.madeBy === making.maker.id;
@@ -1398,13 +1637,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * Artifact `id`, when the session answers its pins ({@link answerable}),
-   * or when it is a page of a project the session leads, whatever became of
-   * its writer; refused when neither.
+   * or when it is a page of a project the session leads or works in
+   * ({@link projectPage}), whatever became of its writer; refused when
+   * none. A held next version is read by whoever
+   * reads its artifact: the parent reviews what its maker changed.
    */
   const readable = (instance: InstanceRow, id: string): ArtifactRow => {
+    const next = db.get(id);
+    if (next?.heldFor) {
+      readable(instance, next.heldFor);
+      return next;
+    }
     const row =
       answerable(instance).find((one) => one.id === id) ??
-      ledPage(instance, id);
+      ledPage(instance, id) ??
+      projectPage(instance, id);
     if (!row) {
       throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
     }
@@ -1466,15 +1713,67 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * ended, its row taken out (its log, and so its pins and comments, and a
    * panel's shown row with it: schema.ts's cascades), and its files (a
    * page's HTML, a picture). A promoted copy in the project's folder is the
-   * project's and stays.
+   * project's and stays. A next version held for it goes first.
    */
   const discard = (row: ArtifactRow) => {
+    const next = db.heldOf(row.id);
+    if (next) {
+      discard(next);
+    }
     letGoHeadless(row.id);
     docs.drop(row.id);
     db.remove(row.id);
     rmSync(join(deps.root, row.id), { recursive: true, force: true });
     deps.removed?.(row);
     releaseServed(row);
+  };
+
+  /**
+   * The parent opens what its maker changed: artifact `row`'s held next
+   * version merged in (its doc's changes beside the person's since, its
+   * files, its source and revision), then let go. The views on `row` hear
+   * it as they hear any change.
+   */
+  const promote = async (
+    row: ArtifactRow,
+    next: ArtifactRow
+  ): Promise<ArtifactRow> => {
+    const folder = join(deps.root, row.id);
+    const nextFolder = join(deps.root, next.id);
+    const html = join(nextFolder, "index.html");
+    const maker = next.madeBy ? deps.instance(next.madeBy) : undefined;
+    if (row.kind === "page" && maker && existsSync(html)) {
+      // Its project's folder takes it now, as a build that isn't held does; one it refuses opens nothing.
+      const program = join(nextFolder, PROGRAM_FILE);
+      const refused = await deps.keepPage(maker, row.name, {
+        html: readFileSync(html, "utf8"),
+        ...(existsSync(program)
+          ? { program: readFileSync(program, "utf8") }
+          : {}),
+      });
+      if (refused) {
+        throw new ArtifactRefusal(refused.status, refused.refused);
+      }
+    }
+    letGoHeadless(next.id);
+    if (existsSync(nextFolder)) {
+      // A page's files are its revision's alone (writePage).
+      rmSync(join(folder, "files"), { recursive: true, force: true });
+      rmSync(join(folder, PROGRAM_FILE), { force: true });
+      cpSync(nextFolder, folder, { recursive: true, force: true });
+    }
+    docs.merge(next.id, row.id, "agent");
+    const promoted = db.update(row.id, {
+      madeBy: next.madeBy,
+      machineId: next.machineId,
+      source: next.source,
+      revision: next.revision,
+      updatedAt: new Date(),
+    }) as ArtifactRow;
+    discard(next);
+    // A server the next version moved off is let go once nothing shows it.
+    keepServed(promoted, row, undefined);
+    return promoted;
   };
 
   /**
@@ -1820,7 +2119,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const pageBuilt = async (
     instance: InstanceRow,
     input: Pick<ArtifactInput, "name" | "html" | "dir" | "program">,
-    owner: InstanceRow
+    owner: InstanceRow,
+    keep: boolean
   ): Promise<{ html: string; program?: BuiltProgram }> => {
     const given = [input.program, input.html, input.dir].filter(
       (one) => one !== undefined
@@ -1845,7 +2145,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     } else if (input.dir !== undefined) {
       from = { dir: input.dir };
     }
-    const page = await built(instance, input.name, from);
+    const page = await built(instance, input.name, from, keep);
     if (page.program) {
       mediaHeld(owner, page.program);
     }
@@ -1881,15 +2181,89 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /** `deps.page`'s build, its refusal (and a program's) thrown as the artifact's. */
+  /**
+   * What decision page `name` drawn with `cards` leaves broken, for its
+   * writer: the person's picks (artifact `id`'s state, none for a new page)
+   * on a decision or option it no longer has, and in a project the `after`s
+   * naming no decision and the decisions it lacks that other pages come
+   * after. Undefined when nothing is.
+   */
+  const brokenBy = async (
+    page: { id: string | undefined; name: string; projectId: string | null },
+    cards: DecisionCard[]
+  ): Promise<GraphBroken | undefined> => {
+    const state = page.id ? stateOf(docs.doc(page.id)) : {};
+    const has = (id: string) => cards.some((card) => card.id === id);
+    const picked = Object.entries(state)
+      .filter(
+        ([key, entry]) =>
+          key !== PLACES_KEY && !has(key) && (entry.options ?? []).length > 0
+      )
+      .map(([key]) => key);
+    const options = Object.fromEntries(
+      cards.flatMap((card) => {
+        const { gone } = pickOf(card, state[card.id]);
+        return gone.length > 0 ? [[card.id, gone] as const] : [];
+      })
+    );
+    const links = page.projectId
+      ? await deps.graphLinks(page.projectId, page.name, cards)
+      : { unlinked: [], dependents: {} };
+    const after = Object.fromEntries(
+      Object.entries(links.dependents).filter(([id]) => !has(id))
+    );
+    const broken: GraphBroken = {
+      ...(picked.length > 0 ? { picked } : {}),
+      ...(Object.keys(options).length > 0 ? { options } : {}),
+      ...(Object.keys(after).length > 0 ? { after } : {}),
+      ...(links.unlinked.length > 0 ? { unlinked: links.unlinked } : {}),
+    };
+    return Object.keys(broken).length > 0 ? broken : undefined;
+  };
+
+  /**
+   * A create's page built, and what its program leaves broken on the picks
+   * of the page it replaces and on the project's graph. A re-create held
+   * for the parent is kept in its project's folder when they open it.
+   */
+  const createdPage = async (
+    { maker, owner }: Making,
+    input: ArtifactInput
+  ): Promise<{
+    broken: GraphBroken | undefined;
+    html: string;
+    program?: BuiltProgram;
+  }> => {
+    const was = db.byName(owner.id, "page", input.name);
+    const page = await pageBuilt(
+      maker,
+      input,
+      owner,
+      !(was && holdsChange(maker, was))
+    );
+    const broken = page.program
+      ? await brokenBy(
+          { id: was?.id, name: input.name, projectId: owner.projectId ?? null },
+          page.program.read.cards
+        )
+      : undefined;
+    return { ...page, broken };
+  };
+
+  /**
+   * `deps.page`'s build, its refusal (and a program's) thrown as the
+   * artifact's; kept in the project's folder unless it is a held next
+   * version's (`keep` false), which {@link promote} keeps there.
+   */
   const built = async (
     instance: InstanceRow,
     name: string,
-    from: PageFrom
+    from: PageFrom,
+    keep = true
   ): Promise<{ html: string; program?: BuiltProgram }> => {
     let page: Awaited<ReturnType<ArtifactServiceDeps["page"]>>;
     try {
-      page = await deps.page(instance, name, from);
+      page = await deps.page(instance, name, from, keep);
     } catch (error) {
       throw error instanceof ProgramRefusal ? refusedProgram(error) : error;
     }
@@ -2520,6 +2894,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: crypto.randomUUID(),
       instanceId: instance.id,
       madeBy: instance.id,
+      heldFor: null,
       projectId: instance.projectId ?? null,
       kind: "canvas",
       name: free,
@@ -2552,21 +2927,32 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /** The owner's canvas of that name, its maker now `maker` and its ask the input's, or a new one; and what was there. */
+  /**
+   * The owner's canvas of that name, its maker now `maker` and its ask the
+   * input's, or a new one; and what was there. A maker's re-create of one
+   * its parent opened goes to its next version (`holding`, {@link holdNext}).
+   */
   const canvasPlaced = (
     { owner, maker }: Making,
     input: ArtifactInput
-  ): { before: ArtifactRow | undefined; row: ArtifactRow } => {
+  ): {
+    before: ArtifactRow | undefined;
+    holding: ReturnType<typeof holdNext>;
+    row: ArtifactRow;
+  } => {
     const now = new Date();
     const before = db.byName(owner.id, "canvas", input.name);
     const asked = askedOf(input);
+    const holding = before ? holdNext(maker, before) : null;
+    const target = holding?.next ?? before;
     const row =
-      (before &&
-        db.update(before.id, { madeBy: maker.id, ...asked, updatedAt: now })) ??
+      (target &&
+        db.update(target.id, { madeBy: maker.id, ...asked, updatedAt: now })) ??
       db.create({
         id: crypto.randomUUID(),
         instanceId: owner.id,
         madeBy: maker.id,
+        heldFor: null,
         projectId: owner.projectId ?? null,
         kind: "canvas",
         name: input.name,
@@ -2583,7 +2969,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         updatedAt: now,
         shownAt: null,
       });
-    return { before, row };
+    return { before, holding, row };
   };
 
   /** What a canvas's create draws: its elements, its Mermaid, or nothing. */
@@ -2654,7 +3040,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         "A canvas takes elements or mermaid, not both."
       );
     }
-    const { before, row } = canvasPlaced(making, input);
+    const { before, holding, row } = canvasPlaced(making, input);
     stampMeta(row, null);
     const change = drawingOf(input);
     let wrote: string[] | undefined;
@@ -2669,7 +3055,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             ? async () => {
                 wrote = await drawnOn(row, change);
               }
-            : undefined
+            : undefined,
+          holding
         )
       );
     } catch (error) {
@@ -2684,11 +3071,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       false,
       making.owner.id === making.maker.id
     );
+    const said = heldId(row);
     const made = {
-      id: row.id,
+      ...said,
       kind: row.kind,
       name: row.name,
-      route: routeOf(row.id),
+      route: routeOf(said.id),
       ...shown,
       outline,
     };
@@ -3074,6 +3462,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           id: crypto.randomUUID(),
           instanceId: owner.id,
           madeBy: maker.id,
+          heldFor: null,
           projectId: owner.projectId ?? null,
           kind: "component",
           name: input.name,
@@ -3321,14 +3710,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return input.kind === "component" ? createSheet(making, input) : null;
   };
 
-  /** A decision page's choice ids: its program's decisions, or as its HTML declares them; empty for any other page. */
-  const choicesAsked = (row: ArtifactRow): string[] => {
+  /**
+   * A decision page's choices: its program's decisions with their cards,
+   * or the choice ids its HTML declares; empty for any other page.
+   */
+  const choicesAsked = (
+    row: ArtifactRow
+  ): { card?: DecisionCard; id: string }[] => {
     if (row.kind !== "page") {
       return [];
     }
     const program = programOf(row);
     if (program !== undefined) {
-      return readKept(program).cards.map((card) => card.id);
+      return readKept(program).cards.map((card) => ({ id: card.id, card }));
     }
     let html: string;
     try {
@@ -3338,36 +3732,45 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     return [
       ...new Set([...html.matchAll(CHOICE_ATTRIBUTE)].map((match) => match[1])),
-    ];
+    ].map((id) => ({ id }));
   };
 
   /**
    * A page or preview put in the owner's panel: the one of that kind and
    * name it has, its source moved and its revision with it, or a new one;
-   * the maker becomes its maker either way. Answers it, and what was there.
+   * the maker becomes its maker either way. A maker's re-create of one the
+   * parent's panel shows goes to its next version (`held`,
+   * {@link holdNext}). Answers it, and what was there.
    */
   const placed = (
     { owner, maker }: Making,
     input: Pick<ArtifactInput, "kind" | "name" | "does" | "ask">,
     at: { machineId: string | null; source: PreviewSource }
-  ): { before: ArtifactRow | undefined; row: ArtifactRow } => {
+  ): {
+    before: ArtifactRow | undefined;
+    holding: ReturnType<typeof holdNext>;
+    row: ArtifactRow;
+  } => {
     const now = new Date();
     const before = db.byName(owner.id, input.kind, input.name);
     const asked = askedOf(input);
     if (before) {
-      const row = db.update(before.id, {
+      const holding = holdNext(maker, before);
+      const target = holding?.next ?? before;
+      const row = db.update(target.id, {
         ...at,
         ...asked,
         madeBy: maker.id,
-        revision: before.revision + 1,
+        revision: target.revision + 1,
         updatedAt: now,
       }) as ArtifactRow;
-      return { before, row };
+      return { before, holding, row };
     }
     const row = db.create({
       id: crypto.randomUUID(),
       instanceId: owner.id,
       madeBy: maker.id,
+      heldFor: null,
       projectId: owner.projectId ?? null,
       kind: input.kind,
       name: input.name,
@@ -3382,7 +3785,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       updatedAt: now,
       shownAt: null,
     });
-    return { before, row };
+    return { before, holding: null, row };
   };
 
   /**
@@ -3416,6 +3819,112 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return !!owner && statusOf(owner, row).waitingOn.includes("person");
   };
 
+  /** An answer about a held next version, said as its artifact's: that one's id, and the next version's as `held`. */
+  const heldAnswer = <T extends { held?: string; id: string }>(
+    answer: T
+  ): T => {
+    const row = db.get(answer.id);
+    return row?.heldFor ? { ...answer, ...heldId(row) } : answer;
+  };
+
+  /**
+   * New HTML for page `row` (its revision moves and every open view morphs
+   * to it, its state kept), or a JSON Patch (RFC 6902) over its `state`
+   * applied as one transaction; its read after, as `ownersRead` says.
+   */
+  const pageChanged = async (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    change: Exclude<PageChange, { statements: string }>,
+    ownersRead: boolean
+  ): Promise<ArtifactRead> => {
+    if ("html" in change) {
+      takesHtml(row);
+      const { html } = await built(
+        instance,
+        row.name,
+        { html: change.html },
+        row.heldFor === null
+      );
+      const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
+      writePage(moved.id, html);
+      // Every page open on it hears the new revision in the doc and morphs
+      // in place (the overlay); nothing reloads.
+      stampMeta(moved, pageHash(html));
+      return read(moved, undefined, ownersRead);
+    }
+    const doc = docs.doc(row.id);
+    const before = stateOf(doc);
+    const after = structuredClone(before) as Record<string, unknown>;
+    const errors = applyPatch(after, change.patch);
+    const failed = errors.findIndex((error) => error !== null);
+    if (failed !== -1) {
+      throw new ArtifactRefusal(
+        422,
+        `Operation ${failed} of the patch failed: ${errors[failed]?.message ?? "it does not apply"}. Nothing was changed.`
+      );
+    }
+    const next = patchedEntries(
+      before,
+      after,
+      metaOf(doc).pageHash ?? newestHash(before) ?? "0".repeat(64),
+      new Date().toISOString()
+    );
+    const gone = Object.keys(before).filter((key) => !(key in after));
+    docs.transact(row.id, "agent", (live) => {
+      const state = live.getMap("state");
+      for (const [key, entry] of Object.entries(next)) {
+        state.set(key, entry);
+      }
+      for (const key of gone) {
+        state.delete(key);
+      }
+    });
+    return read(db.get(row.id) as ArtifactRow, undefined, ownersRead);
+  };
+
+  /** Decision page `row`'s program `existing` revised as `merged`, built, checked and written; what changed. */
+  const programRevised = async (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    existing: string,
+    merged: ReturnType<typeof mergeProgram>
+  ): Promise<Revised> => {
+    // Said before anything is written: the merged program's cards against the person's picks and the project's pages.
+    const broken = await brokenBy(row, readKept(merged.merged).cards);
+    const dir = docs.doc(row.id).getMap("meta").get("programDir");
+    const page = await built(
+      instance,
+      row.name,
+      {
+        program: merged.merged,
+        dir: typeof dir === "string" ? dir : undefined,
+      },
+      row.heldFor === null
+    );
+    const program = page.program as BuiltProgram;
+    mediaHeld(deps.instance(row.instanceId) ?? instance, program);
+    const before = new Set(readKept(existing).cards.map((card) => card.id));
+    const after = program.read.cards.map((card) => card.id);
+    const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
+    writePage(moved.id, page.html, program);
+    const hash = pageHash(program.program);
+    stampMeta(moved, hash);
+    return {
+      id: moved.id,
+      revision: moved.revision,
+      pageHash: hash,
+      statements: merged.change,
+      decisions: after,
+      moved: {
+        added: after.filter((card) => !before.has(card)),
+        removed: [...before].filter((card) => !after.includes(card)),
+      },
+      ...(program.dropped.length > 0 ? { dropped: program.dropped } : {}),
+      ...(broken ? { broken } : {}),
+    };
+  };
+
   /** One artifact as `artifact_list` answers it, read for `caller`. */
   const statusOf = (caller: InstanceRow, row: ArtifactRow): ArtifactStatus => {
     const doc = docs.doc(row.id);
@@ -3433,7 +3942,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       asked.length > 0
         ? {
             asked: asked.length,
-            made: asked.filter((choice) => choice in state).length,
+            // A program's pick counts while its card still offers every option of it.
+            made: asked.filter(({ card, id }) =>
+              card ? pickOf(card, state[id]).picked : id in state
+            ).length,
             unsent: Object.entries(state).filter(
               ([key, entry]) =>
                 key !== PLACES_KEY && (!sentAt || entry.at > sentAt)
@@ -3443,7 +3955,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const shown = deps.showing(row.instanceId) === row.id;
     const opened = row.openedRevision === row.revision;
     const draft = doc.getMap("meta").get("draft") === true;
-    const handed = doc.getMap("meta").get(HANDED) === true;
+    // Handed up and not opened, or a maker's change held for the parent to open.
+    const handed =
+      doc.getMap("meta").get(HANDED) === true ||
+      db.heldOf(row.id) !== undefined;
     const waitingOn: ArtifactStatus["waitingOn"] = [];
     if (
       !draft &&
@@ -3668,8 +4183,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       let machineId: string | null = null;
       let html: string | null = null;
       let program: BuiltProgram | undefined;
+      let broken: GraphBroken | undefined;
       if (input.kind === "page") {
-        ({ html, program } = await pageBuilt(instance, input, making.owner));
+        ({ html, program, broken } = await createdPage(making, input));
       } else {
         ({ machineId, source } = previewSource(instance, input));
       }
@@ -3687,29 +4203,35 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           source,
         });
       }
-      const { before, row } = placed(making, input, { source, machineId });
+      const { before, holding, row } = placed(making, input, {
+        source,
+        machineId,
+      });
       if (html !== null) {
         writePage(row.id, html, program);
       }
       stampMeta(row, pageHashOf(html, program));
       keepProgramDir(row, program, input.dir);
-      keepServed(row, before, stage);
-      const shown = await handOver(making, before, row);
+      // A held next version leaves the server its artifact shows up until it is opened (promote).
+      keepServed(row, holding ? undefined : before, stage);
+      const shown = await handOver(making, before, row, undefined, holding);
       if (!(shown.started || before) && input.kind === "preview") {
         // A preview nothing could start shows nothing: it is not kept. One
         // whose server did not answer stays in the panel, its failure on it.
         discard(row);
         throw new ArtifactRefusal(503, shown.why);
       }
+      const said = heldId(row);
       return {
-        id: row.id,
+        ...said,
         kind: row.kind,
         name: row.name,
-        route: routeOf(row.id),
+        route: routeOf(said.id),
         ...openedOf(shown),
         ...(stage ? { stage } : {}),
         ...(weight ? { weight } : {}),
         ...programAnswer(program),
+        ...(broken ? { broken } : {}),
       };
     },
 
@@ -3726,60 +4248,23 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       change: Exclude<PageChange, { statements: string }> | CanvasChange
     ): Promise<ArtifactRead> => {
       const instance = sessionOf(instanceId);
-      let row = ownedOrMade(instance, id);
-      const ownersRead = row.instanceId === instance.id;
+      const found = ownedOrMade(instance, id);
+      const ownersRead = found.instanceId === instance.id;
       const forCanvas = !("html" in change || "patch" in change);
-      if (forCanvas !== (row.kind === "canvas")) {
+      if (forCanvas !== (found.kind === "canvas")) {
         throw new ArtifactRefusal(
           409,
-          row.kind === "canvas"
-            ? `${row.name} is a canvas: it takes elements, delete or mermaid.`
-            : `${row.name} is a ${row.kind}: elements, delete and mermaid are for a canvas.`
+          found.kind === "canvas"
+            ? `${found.name} is a canvas: it takes elements, delete or mermaid.`
+            : `${found.name} is a ${found.kind}: elements, delete and mermaid are for a canvas.`
         );
       }
-      if (!("html" in change || "patch" in change)) {
-        return await updateCanvas(row, change, ownersRead);
-      }
-      if ("html" in change) {
-        takesHtml(row);
-        const { html } = await built(instance, row.name, {
-          html: change.html,
-        });
-        row = db.update(row.id, nextRevision(row)) as ArtifactRow;
-        writePage(row.id, html);
-        // Every page open on it hears the new revision in the doc and morphs
-        // in place (the overlay); nothing reloads.
-        stampMeta(row, pageHash(html));
-        return read(row, undefined, ownersRead);
-      }
-      const doc = docs.doc(row.id);
-      const before = stateOf(doc);
-      const after = structuredClone(before) as Record<string, unknown>;
-      const errors = applyPatch(after, change.patch);
-      const failed = errors.findIndex((error) => error !== null);
-      if (failed !== -1) {
-        throw new ArtifactRefusal(
-          422,
-          `Operation ${failed} of the patch failed: ${errors[failed]?.message ?? "it does not apply"}. Nothing was changed.`
-        );
-      }
-      const next = patchedEntries(
-        before,
-        after,
-        metaOf(doc).pageHash ?? newestHash(before) ?? "0".repeat(64),
-        new Date().toISOString()
+      const answer = await changedBy(instance, found, (row) =>
+        "html" in change || "patch" in change
+          ? pageChanged(instance, row, change, ownersRead)
+          : updateCanvas(row, change, ownersRead)
       );
-      const gone = Object.keys(before).filter((key) => !(key in after));
-      docs.transact(row.id, "agent", (live) => {
-        const state = live.getMap("state");
-        for (const [key, entry] of Object.entries(next)) {
-          state.set(key, entry);
-        }
-        for (const key of gone) {
-          state.delete(key);
-        }
-      });
-      return read(db.get(row.id) as ArtifactRow, undefined, ownersRead);
+      return heldAnswer(answer);
     },
 
     /**
@@ -3787,6 +4272,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * name (decision-program.ts `mergeProgram`), built and checked as a
      * create's is, then every open view draws the new program in place, its
      * picks, notes and pins kept by id. Answers what changed, not the page.
+     * Its owner's, its maker's, or any session's of its project
+     * ({@link projectPage}), Caw's included: a later session links its
+     * decisions by revising one statement. Its maker's, while the parent's
+     * panel shows it, waits as its next version ({@link changedBy}); another
+     * session's of the project lands on the page itself, or joins the next
+     * version waiting for the parent, so opening that keeps it. Each merges
+     * into the program of the row it lands on.
      */
     revise: async (
       instanceId: string,
@@ -3794,47 +4286,37 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       statements: string
     ): Promise<Revised> => {
       const instance = sessionOf(instanceId);
-      let row = ownedOrMade(instance, id);
-      const existing = programOf(row);
-      if (existing === undefined) {
+      const asked = db.get(id);
+      const peer =
+        asked &&
+        asked.instanceId !== instance.id &&
+        asked.madeBy !== instance.id
+          ? projectPage(instance, id)
+          : undefined;
+      const found = peer ?? ownedOrMade(instance, id);
+      if (programOf(found) === undefined) {
         throw new ArtifactRefusal(
           409,
-          row.kind === "page"
-            ? `${row.name} is an HTML page: revise it with html.`
-            : `${named(row)} takes no statements: they revise a decision page's program.`
+          found.kind === "page"
+            ? `${found.name} is an HTML page: revise it with html.`
+            : `${named(found)} takes no statements: they revise a decision page's program.`
         );
       }
-      let merged: ReturnType<typeof mergeProgram>;
-      try {
-        merged = mergeProgram(existing, statements);
-      } catch (error) {
-        throw unmerged(error);
-      }
-      const dir = docs.doc(row.id).getMap("meta").get("programDir");
-      const page = await built(instance, row.name, {
-        program: merged.merged,
-        dir: typeof dir === "string" ? dir : undefined,
-      });
-      const program = page.program as BuiltProgram;
-      mediaHeld(deps.instance(row.instanceId) ?? instance, program);
-      const before = new Set(readKept(existing).cards.map((card) => card.id));
-      const after = program.read.cards.map((card) => card.id);
-      row = db.update(row.id, nextRevision(row)) as ArtifactRow;
-      writePage(row.id, page.html, program);
-      const hash = pageHash(program.program);
-      stampMeta(row, hash);
-      return {
-        id: row.id,
-        revision: row.revision,
-        pageHash: hash,
-        statements: merged.change,
-        decisions: after,
-        moved: {
-          added: after.filter((card) => !before.has(card)),
-          removed: [...before].filter((card) => !after.includes(card)),
-        },
-        ...(program.dropped.length > 0 ? { dropped: program.dropped } : {}),
+      const revisedOn = (row: ArtifactRow): Promise<Revised> => {
+        // A next version is made from its artifact whole (holdNext), so it holds a program.
+        const existing = programOf(row) as string;
+        let merged: ReturnType<typeof mergeProgram>;
+        try {
+          merged = mergeProgram(existing, statements);
+        } catch (error) {
+          throw unmerged(error);
+        }
+        return programRevised(instance, row, existing, merged);
       };
+      if (peer) {
+        return heldAnswer(await revisedOn(db.heldOf(peer.id) ?? peer));
+      }
+      return heldAnswer(await changedBy(instance, found, revisedOn));
     },
 
     /**
@@ -3914,28 +4396,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ask: ComponentReadAsk = {}
     ): Promise<ArtifactRead> => {
       const instance = sessionOf(instanceId);
-      const handed = id === undefined ? undefined : db.get(id);
-      let row: ArtifactRow | undefined = handed;
-      if (id === undefined) {
-        [row] = db.ofInstance(instance.id);
-      } else if (handed?.madeBy !== instance.id) {
-        row = readable(instance, id);
-      }
-      if (!row) {
-        throw new ArtifactRefusal(
-          404,
-          "This session has made no artifact yet."
-        );
-      }
-      // Its maker's read leaves its owner's unread; a lead reading his
-      // project's pages has always counted as their read.
-      const ownersRead =
-        row.instanceId === instance.id || row.madeBy !== instance.id;
+      const row = readTarget(instance, id);
+      const ownersRead = readsForOwner(instance, row);
       if (row.kind === "canvas") {
-        return readCanvas(row, since, png, ownersRead);
+        return heldAnswer(readCanvas(row, since, png, ownersRead));
       }
       if (row.kind !== "component") {
-        return read(row, since, ownersRead);
+        return heldAnswer({
+          ...read(row, since, ownersRead),
+          ...(since === undefined ? programRead(row) : {}),
+        });
       }
       const answer = await readSheet(row, since, ownersRead, {
         ...ask,
@@ -4260,7 +4730,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * could not be started. Its owner's to call, or the person's: what they
      * open is what the panel goes back to when the agent takes away
      * something it showed over it. A delegate that handed it up is refused:
-     * its parent's panel changes only when the parent opens it.
+     * its parent's panel changes only when the parent opens it. The owner's
+     * show of one with a held next version (or of that version, by its id)
+     * opens the next version ({@link promote}); the person's shows what the
+     * panel has.
      */
     show: async (
       instanceId: string,
@@ -4268,12 +4741,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       by: PanelHand
     ): Promise<Opened> => {
       const instance = sessionOf(instanceId);
-      const row = ownedOrMade(instance, id);
+      const found = ownedOrMade(instance, id);
+      let row = found.heldFor === null ? found : db.get(found.heldFor);
+      if (!row) {
+        throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
+      }
       if (row.instanceId !== instance.id) {
         throw new ArtifactRefusal(
           409,
           `${named(row)[0]?.toUpperCase()}${named(row).slice(1)} is your parent's: it opens in their panel when they call artifact_show.`
         );
+      }
+      const next = by === "agent" ? db.heldOf(row.id) : undefined;
+      if (next) {
+        row = await promote(row, next);
       }
       const shown = await show(row, by);
       if (!shown.started) {

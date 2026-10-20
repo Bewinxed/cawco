@@ -19,9 +19,11 @@
  *   beside it is the record in words, for sessions to read why.
  * - **Tasks link back** by a field of the project's own on the task file:
  *   `decided: <page>#<card>` ({@link DECIDED_FIELD}).
- * - **The graph**, derived from the programs: every decision a card, an
- *   edge from each decision its `after` names (`page#card` across pages),
- *   a group per `Section`. The person's drags are theirs, not the
+ * - **The graph**, derived from the programs the project's folder keeps
+ *   (`decisions/<name>/page.oui`, which outlives the artifact): every
+ *   decision a card, an edge from each decision its `after` names
+ *   (`page#card` across pages), a group per `Section`. Its picks are the
+ *   artifact's. The person's drags are theirs, not the
  *   writer's: each page's artifact keeps its cards' places in its state
  *   under {@link PLACES_KEY}, so they outlive revisions as picks do.
  */
@@ -139,13 +141,15 @@ export interface DecisionPageRead extends DecisionPageSummary {
 export interface GraphCard {
   /** Its decision's id on its page. */
   card: string;
+  /** Options of its pick that a revision took out, by id: the pick is kept, and the card says they are gone. */
+  gone: string[];
   /** `page#card`: one id across the project's pages. */
   id: string;
   /** Its question. */
   name: string;
   /** The page it is a card of. */
   page: string;
-  /** Picked on its page. */
+  /** Picked on its page, every option picked one it still offers. */
   picked: boolean;
   x: number;
   y: number;
@@ -166,9 +170,33 @@ export interface DecisionGraph {
   /** From the decision depended on to the one that depends on it, by graph id. */
   edges: [string, string][];
   groups: GraphGroup[];
-  /** What could not be drawn, one sentence each: an `after` naming no decision. */
+  /**
+   * What the graph cannot draw as written, one sentence each: an `after`
+   * naming no decision, a pick on a decision or option a revision took out,
+   * a page whose artifact (and so its picks) the hub no longer holds.
+   */
   problems: string[];
 }
+
+/** What a page's program does to the project's graph, said to its writer (artifact_create, artifact_update). */
+export interface GraphLinks {
+  /** Each decision another page comes after, by its id: the `page#card`s that do. */
+  dependents: Record<string, string[]>;
+  /** Its `after`s naming no decision of the project's, as `<decision> after <ref>`. */
+  unlinked: string[];
+}
+
+/** A card's pick as the graph reads it: whether it is picked, and the options of it the card no longer offers. */
+export const pickOf = (
+  card: Pick<DecisionCard, "options">,
+  entry: { options?: string[] } | undefined
+): { gone: string[]; picked: boolean } => {
+  const chosen = entry?.options ?? [];
+  const gone = chosen.filter(
+    (id) => !card.options.some((option) => option.id === id)
+  );
+  return { picked: chosen.length > 0 && gone.length === 0, gone };
+};
 
 /** One card's place on the graph, as the person dragged it. */
 export interface GraphPlace {

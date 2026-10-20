@@ -21,6 +21,7 @@ export * from "./choices";
 export * from "./claude-dirs";
 export * from "./connections";
 export * from "./continuation";
+export * from "./continuation-read";
 // Delegate types: named presets the `delegate` tool's `type` param resolves,
 // so routing is by description instead of a raw model string.
 export * from "./delegate-types";
@@ -1274,14 +1275,29 @@ export interface ContinuationJob {
   inPlace?: true;
   sourceInstanceId: string;
   /**
+   * `waiting`: the source's process holds work in flight ending it would
+   * lose ({@link waiting}), and the job goes on by itself once that ends;
    * `filing`: the source's turn filing its open items (a person's Continue);
    * `starting`: the new session is starting.
    */
   stage:
-    "filing" | "summarising" | "starting" | "started" | "failed" | "cancelled";
+    | "waiting"
+    | "filing"
+    | "summarising"
+    | "starting"
+    | "started"
+    | "failed"
+    | "cancelled";
   /** Absent when the source is short enough that nothing is summarised. */
   summariserInstanceId?: string;
   targetInstanceId: string;
+  /**
+   * While `waiting`: what for, in the machine's words (`waiting for work in
+   * flight to end: 1 command running`), since when it has run (epoch ms;
+   * null when not known), and the latest moment it goes on, ending that
+   * work (core `RESTART_WAIT_CAP_MS` from when it began to wait).
+   */
+  waiting?: { since: number | null; until: number; why: string };
 }
 
 /**

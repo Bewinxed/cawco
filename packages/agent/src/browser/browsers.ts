@@ -830,9 +830,16 @@ const tick = async (): Promise<void> => {
 /**
  * The daemon's part: the runtime and the records read as it starts, every
  * gate served and served again as any record is written (a terminal's
- * `cawco browser start` among them), then a tick every minute.
+ * `cawco browser start` among them), then a tick every minute. Answers its
+ * stop, which the daemon's scope runs as it ends: the records' watch closed
+ * and the tick cleared.
+ *
+ * The watch covers the records' dir alone: a local Chromium writes its
+ * profile under `chromium/` (state.ts `chromiumDir`), so on macOS, where a
+ * dir's watch is an FSEvents stream over its whole tree, fseventsd queues
+ * the daemon nothing of a running browser.
  */
-export const watchBrowsers = async (): Promise<void> => {
+export const watchBrowsers = async (): Promise<() => void> => {
   servingGates = true;
   await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
   // Every kept browser's gate made before the port answers, so a connection
@@ -840,22 +847,33 @@ export const watchBrowsers = async (): Promise<void> => {
   // take-over the daemon restarted in (`gateFor`), never the no-browser 404.
   await gatesNow();
   listenGates();
-  watch(browsersDir(), { recursive: true }, (_event, name) => {
+  const records = watch(browsersDir(), { recursive: true }, (_event, name) => {
     if (name?.endsWith("record.json")) {
       gatesAsWritten();
     }
-  }).unref();
-  const found = await browserRuntime(true);
-  console.info(
-    "missing" in found
-      ? "[browser] no container runtime: browsers run as local Chromium"
-      : `[browser] runtime ${found.kind} ${found.version} (API ${found.api}${found.rootless ? ", rootless" : ""}) at ${found.endpoint}`
-  );
-  await tick();
+  });
+  records.unref();
+  let ticks: ReturnType<typeof setInterval> | undefined;
+  const stop = (): void => {
+    records.close();
+    clearInterval(ticks);
+  };
+  try {
+    const found = await browserRuntime(true);
+    console.info(
+      "missing" in found
+        ? "[browser] no container runtime: browsers run as local Chromium"
+        : `[browser] runtime ${found.kind} ${found.version} (API ${found.api}${found.rootless ? ", rootless" : ""}) at ${found.endpoint}`
+    );
+    await tick();
+  } catch (error) {
+    stop();
+    throw error;
+  }
   // A tick waits on a browser's lock while a start holds it (an image build
   // takes minutes): the next one is skipped rather than stacked behind it.
   let ticking = false;
-  setInterval(() => {
+  ticks = setInterval(() => {
     if (ticking) {
       return;
     }
@@ -867,5 +885,7 @@ export const watchBrowsers = async (): Promise<void> => {
       .finally(() => {
         ticking = false;
       });
-  }, TICK_MS).unref();
+  }, TICK_MS);
+  ticks.unref();
+  return stop;
 };

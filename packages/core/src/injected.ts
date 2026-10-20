@@ -395,13 +395,19 @@ export const artifactSavesNotice = (
  * `create` with `to: "parent"`), readied and not opened: the parent owns it
  * now and opens it in its panel with artifact_show once it has reviewed it.
  * Told once per hand-off: when it starts waiting on the parent, or arrives
- * from another delegate; that delegate's updates while it waits are not told. Sent under
- * the system origin {@link import("./harness").ARTIFACT_ORIGIN}; a transcript
- * draws it as one quiet note.
+ * from another delegate; that delegate's updates while it waits are not told.
+ * With `next`, the delegate changed an artifact the parent had opened: the
+ * change waits as that next version, which artifact_read reads, and the
+ * panel keeps the version opened until the parent's artifact_show opens
+ * it; told once per held version. Sent under the system origin
+ * {@link import("./harness").ARTIFACT_ORIGIN}; a transcript draws it as one
+ * quiet note.
  */
 export interface ArtifactHanded extends ArtifactComments {
   /** The delegate's name, as the rail shows it. */
   from: string;
+  /** The held next version's id, when the delegate changed one the parent had opened. */
+  next?: string | undefined;
 }
 
 export const artifactHandedNotice = ({
@@ -409,17 +415,20 @@ export const artifactHandedNotice = ({
   id,
   kind,
   name,
+  next,
 }: ArtifactHanded): string =>
-  `${markerTag("artifact-handed", { from, id, kind, name })}[CawCo] ${from} handed you the ${kind} "${name}" (artifact ${id}), not opened: artifact_show opens it in your panel.`;
+  next === undefined
+    ? `${markerTag("artifact-handed", { from, id, kind, name })}[CawCo] ${from} handed you the ${kind} "${name}" (artifact ${id}), not opened: artifact_show opens it in your panel.`
+    : `${markerTag("artifact-handed", { from, id, kind, name, next })}[CawCo] ${from} changed the ${kind} "${name}" (artifact ${id}): your panel keeps the version you opened until artifact_show opens the new one, which artifact_read reads as artifact ${next}.`;
 
-/** A handed-up artifact's notice read back into who handed what. */
+/** A handed-up artifact's notice read back into who handed what, and the next version a change waits as. */
 export function parseArtifactHanded(text: string): ArtifactHanded | null {
   const tag = tagOf(text, "artifact-handed");
   if (!tag) {
     return null;
   }
-  const { from = "", id = "", kind = "", name = "" } = tag.fields;
-  return { from, id, kind: kind as ArtifactKind, name };
+  const { from = "", id = "", kind = "", name = "", next } = tag.fields;
+  return { from, id, kind: kind as ArtifactKind, name, next };
 }
 
 /** An artifact's comments notice read back into what it names, and its sections as one text. */
@@ -470,9 +479,13 @@ export interface ArtifactNotice extends ArtifactComments {
  * that origin adds its kind here.
  */
 export const ARTIFACT_NOTICES: readonly {
-  lead: (named: ArtifactComments & { from?: string }) => string;
+  lead: (
+    named: ArtifactComments & { from?: string; next?: string | undefined }
+  ) => string;
   notice: ArtifactNoticeKind;
-  read: (text: string) => (ArtifactComments & { from?: string }) | null;
+  read: (
+    text: string
+  ) => (ArtifactComments & { from?: string; next?: string | undefined }) | null;
 }[] = [
   {
     notice: "responses",
@@ -497,7 +510,8 @@ export const ARTIFACT_NOTICES: readonly {
   {
     notice: "handed",
     read: parseArtifactHanded,
-    lead: ({ from }) => `${from} handed you`,
+    lead: ({ from, next }) =>
+      next === undefined ? `${from} handed you` : `${from} changed`,
   },
 ];
 

@@ -36,6 +36,8 @@ const run = async (kit: Kit): Promise<void> => {
   fleet.launch("agent", [], {
     CAWCO_HEAVY_MEMORY_STALL_MAX: "0",
     CAWCO_HEAVY_SWAP_USED_MAX_PCT: "0",
+    // Read on its own room, not inside the fleet's admission (scratch-fleet.ts).
+    CAWCO_HEAVY_ADMITTED: undefined,
   });
   await fleet.agentUp();
   await fleet.accountSignedIn();

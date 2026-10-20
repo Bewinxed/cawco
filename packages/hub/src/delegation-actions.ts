@@ -322,9 +322,9 @@ function roster(
 }
 
 /**
- * The session a target names by one of its former ids (a session whose
- * continuations at its account's limit the hub folded into one, the hub's
- * `instanceIdOf`): its id now, and the id it was named by. By the full id,
+ * The session a target names by one of its former ids (a session the hub
+ * folded into its continuation, the hub's `instanceIdOf`): its id now, and
+ * the id it was named by. By the full id,
  * or a short id of six or more characters that names only it. Undefined
  * when the target names no former id.
  */
@@ -392,6 +392,31 @@ const continuesWords = (
   return followed.continued
     ? ` (the continuation of ${former}, which never runs again)`
     : ` (once ${former})`;
+};
+
+/** "20:17": a moment as the hub's clock says it. */
+const clockOf = (at: number): string =>
+  new Date(at).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+/**
+ * A continue_session answered while its job waits on its source's work in
+ * flight: what it waits for, for how long that has run, and that it goes on
+ * by itself, by the bound at the latest. Nothing to call again.
+ */
+const waitingAnswer = (
+  source: string,
+  target: string,
+  waiting: { since: number | null; until: number; why: string }
+): string => {
+  const ran =
+    waiting.since === null
+      ? ""
+      : `, running for ${Math.max(1, Math.round((Date.now() - waiting.since) / 60_000))} min`;
+  return `Session ${source} holds work in flight that ending its process would lose (${waiting.why}${ran}), so its continuation waits for it. It goes on by itself in new session ${target} once that work ends, or at ${clockOf(waiting.until)} at the latest, ending it. Nothing to call again.`;
 };
 
 /** An `@` prefix on a target name, optional. */
@@ -1160,10 +1185,11 @@ function resolveDelegate(
 }
 
 /**
- * A handoff's inputs, through the hub (work-items.ts `handInputs`): read on
- * `from`'s machine, copied into the `$TMPDIR/inputs/` of `target`'s work
- * item. Answers each one's name and where it was read; the hub's refusal is
- * thrown in its words.
+ * A handoff's inputs, through the hub (work-items.ts `handInputs`): admitted
+ * on `from`'s machine, copied into the `$TMPDIR/inputs/` of `target`'s work
+ * item (by that machine itself when the item's workspace is on it too).
+ * Answers each one's name and where it was read; the hub's refusal is thrown
+ * in its words.
  */
 async function handInputs(
   authorization: string | undefined,
@@ -1178,7 +1204,7 @@ async function handInputs(
       ...(authorization ? { Authorization: authorization } : {}),
     },
     body: JSON.stringify({ from, instanceId: target, inputs }),
-    // Up to 64 MiB read on one machine and written on another.
+    // Up to 64 MiB copied on one machine, or read on one and written on another.
     timeout: false,
   });
   if (!response.ok) {
@@ -1617,9 +1643,21 @@ export const handoffActions = ({
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    const { continuationId } = (await response.json()) as {
-      continuationId: string;
-    };
+    const { continuationId, targetInstanceId, waiting } =
+      (await response.json()) as {
+        continuationId: string;
+        targetInstanceId: string;
+        waiting?: { since: number | null; until: number; why: string };
+      };
+    // Its source holds work in flight that ending it would lose: the job
+    // waits for that and goes on by itself, which the caller hears now.
+    if (waiting) {
+      return {
+        summariserInstanceId: null,
+        targetInstanceId,
+        text: waitingAnswer(source, targetInstanceId, waiting),
+      };
+    }
     // The hub runs the continuation as its own job; this waits for its report.
     const outcome = await fetch(
       `${hubHttpUrl()}/api/continuations/${encodeURIComponent(continuationId)}/outcome`
@@ -1639,7 +1677,7 @@ export const handoffActions = ({
         `Continued session ${source} in a new ${input.target_harness} session ` +
         `${done.targetInstanceId} on ${input.target_model}. ` +
         openedOnWords(input, done.summariserInstanceId) +
-        "If the source ran a work item, the new session runs it now and the source is stopped for good: it never runs again, and what is sent to it goes to the new session. Otherwise the source was only read. " +
+        `It is the same session from here, under ${done.targetInstanceId}: the source's process is ended, its work item and delegates go on in the new one, and what is sent to the source's id reaches it. ` +
         `The new session opened with:\n\n${done.opening}`,
     };
   },

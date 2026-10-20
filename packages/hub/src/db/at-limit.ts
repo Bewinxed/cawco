@@ -7,6 +7,12 @@ import { limitCompactions, limitEvents, limitHolds } from "./schema";
 export interface LimitHold {
   /** The account at its limit. */
   accountId: string;
+  /**
+   * Its move to account `to` waits for work in flight (`why`, as its machine
+   * said it) since `since`, epoch ms: it moves when that ends, or once
+   * `since` is past the restart bound (core `waitedOut`). Absent otherwise.
+   */
+  carry?: { since: number; to: string; why: string };
   instanceId: string;
   /** When it goes on: the earliest moment an account takes it again; null when none was named. */
   until: number | null;
@@ -65,6 +71,7 @@ const toHold = (row: HoldRow): LimitHold => ({
   instanceId: row.instanceId,
   accountId: row.accountId,
   until: row.until?.getTime() ?? null,
+  ...(row.carry ? { carry: row.carry } : {}),
 });
 
 const toCompaction = (
@@ -96,10 +103,11 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .get();
     return row ? toHold(row) : undefined;
   },
-  putHold: ({ instanceId, accountId, until }) => {
+  putHold: ({ instanceId, accountId, until, carry }) => {
     const values = {
       accountId,
       until: until === null ? null : new Date(until),
+      carry: carry ?? null,
     };
     db.insert(limitHolds)
       .values({ instanceId, ...values })

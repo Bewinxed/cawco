@@ -38,18 +38,18 @@ import {
   type NameFinding,
   portNameOf,
   RELAY_DNS_NAME,
-  RELAY_LOW_PORTS,
   RELAY_MAP,
   RELAY_PROVE,
+  RELAY_RUNTIME,
   type RelayAct,
   type RelayAnswer,
   type RelayCandidate,
   type RelayChoice,
   type RelayJourneyView,
-  type RelayLowPorts,
   type RelayMachine,
   type RelayMapped,
   type RelayProofReport,
+  type RelayRuntimeRead,
   type RelayStep,
   type RelaySummary,
   type RelayTry,
@@ -74,7 +74,6 @@ import type {
 import type { HubLifetimeShape } from "./lifetime";
 import {
   candidateOf,
-  hostsRelay,
   type RelayCall,
   type RelayFleetMachine,
   RelayRefusal,
@@ -162,11 +161,11 @@ interface NameCheck {
   name: string;
 }
 
-/** The machine's last low-ports read, for the machine and the port it was read for; `failed` when the machine refused the read (no runtime, not Linux). */
-interface LowRead {
+/** The machine's last runtime read, for the machine and the port it was read for; `failed` when the machine refused the read (no runtime). */
+interface RuntimeRead {
   lowest: number;
   machineId: string;
-  read: RelayLowPorts | "failed";
+  read: RelayRuntimeRead | "failed";
 }
 
 /** What every step's state is read from, beside what the hub has in hand. */
@@ -187,18 +186,13 @@ interface StepFacts {
 
 const machineStepOf = (
   machine: RelayMachine | null,
-  found: RelayCandidate[],
-  notLinux: string[]
+  found: RelayCandidate[]
 ): StepOf<"machine"> => {
   if (machine) {
     return { step: "machine", state: "done" };
   }
   if (found.length === 0) {
-    return {
-      step: "machine",
-      state: "none",
-      ...(notLinux.length > 0 ? { notLinux } : {}),
-    };
+    return { step: "machine", state: "none" };
   }
   return {
     step: "machine",
@@ -270,25 +264,34 @@ const routerStepOf = (facts: StepFacts, asking: boolean): StepOf<"router"> => {
   return { step: "router", state: journey.router, ...how, ...forwards };
 };
 
-/** The low ports, on a rootless runtime; null where they don't apply (a root runtime, or a machine that refused the read). */
+/**
+ * The runtime's step, where it has a setting the relay depends on (a
+ * rootless engine on Linux, or any VM's: agent relay.ts `runtimeNeed`); null
+ * where none applies, or the machine refused the read (no runtime).
+ */
 const runtimeStepOf = (
   facts: StepFacts,
-  low: LowRead | null
+  last: RuntimeRead | null
 ): StepOf<"runtime"> | null => {
   const { journey, lowest } = facts;
-  const read = low?.machineId === journey.machineId ? low : null;
-  if (read?.read === "failed" || (read && !read.read.rootless)) {
+  const mine = last?.machineId === journey.machineId ? last : null;
+  const read = mine?.read;
+  if (read === "failed" || (read && !read.stepApplies)) {
     return null;
   }
-  const readAllowed = read?.read.allowed === true && read.lowest <= lowest;
-  const kept = journey.lowPorts && (!read || read.lowest <= lowest);
-  if (kept || readAllowed) {
-    return { step: "runtime", state: "done", lowest };
+  const current = !!mine && mine.lowest === lowest;
+  const network = read ? { network: read.network } : {};
+  const holds = !!read && read.need === null && !!mine && mine.lowest <= lowest;
+  const kept = journey.lowPorts && (!mine || mine.lowest <= lowest);
+  if (kept || holds) {
+    return { step: "runtime", state: "done", lowest, ...network };
   }
   return {
     step: "runtime",
-    state: !read || read.lowest !== lowest ? "checking" : "needs",
+    state: current ? "needs" : "checking",
     lowest,
+    ...network,
+    ...(current && read?.need ? { need: read.need } : {}),
   };
 };
 
@@ -431,8 +434,8 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   /** Cloudflare's refusal of the token or the record, in its words. */
   let tokenWhy: string | undefined;
   let routerAsking = false;
-  let lowRead: LowRead | null = null;
-  let lowAsking = false;
+  let runtimeRead: RuntimeRead | null = null;
+  let runtimeAsking = false;
   let certifying = false;
   /** When a certificate's issue last found its machine away. */
   let certAwayAt = 0;
@@ -448,12 +451,10 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     deps.machines().find((one) => one.machineId === machineId)?.name ??
     machineId;
 
-  /** Every machine that can run the relay (`hostsRelay`) where the internet reaches it, the hub's first. */
   const candidates = (): RelayCandidate[] => {
     const hub = deps.hubMachineId();
     return deps
       .machines()
-      .filter(hostsRelay)
       .flatMap((one) => candidateOf(one) ?? [])
       .sort(
         (a, b) => Number(b.machineId === hub) - Number(a.machineId === hub)
@@ -469,13 +470,6 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     candidate: RelayCandidate | undefined;
   } | null => {
     if (!journey.machineId) {
-      return null;
-    }
-    // A pick that can't run the relay (one made before it reported its OS) is no pick.
-    const reported = deps
-      .machines()
-      .find((one) => one.machineId === journey.machineId);
-    if (reported?.capabilities && !hostsRelay(reported)) {
       return null;
     }
     const candidate = found.find((one) => one.machineId === journey.machineId);
@@ -542,7 +536,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     const routerOk = !(
       routerStep?.state === "needs" || routerStep?.state === "asking"
     );
-    const runtimeStep = machine ? runtimeStepOf(facts, lowRead) : null;
+    const runtimeStep = machine ? runtimeStepOf(facts, runtimeRead) : null;
     const runtimeOk = !runtimeStep || runtimeStep.state === "done";
     const { eligibleCert, eligibleStart } = gatesOf(facts, {
       name: nameDone,
@@ -558,14 +552,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     const startDone = startStep.state === "done";
     const proveStep = proveStepOf(startDone, proofs, facts.outside);
     const steps: RelayStep[] = [
-      machineStepOf(
-        machine,
-        found,
-        deps
-          .machines()
-          .filter((one) => !hostsRelay(one) && candidateOf(one))
-          .map((one) => one.name)
-      ),
+      machineStepOf(machine, found),
       nameStep,
       ...(routerStep ? [routerStep] : []),
       ...(runtimeStep ? [runtimeStep] : []),
@@ -696,33 +683,31 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     }
   };
 
-  const readLowPorts = async (
+  const readRuntime = async (
     machineId: string,
     lowest: number
   ): Promise<void> => {
-    lowAsking = true;
+    runtimeAsking = true;
     try {
-      const read = await call(
-        machineId,
-        RELAY_LOW_PORTS,
-        [{ lowest }],
-        READ_MS
-      );
+      const read = await call(machineId, RELAY_RUNTIME, [{ lowest }], READ_MS);
       if (read.kind === "unanswered") {
         return;
       }
       if (!read.value.ok) {
-        lowRead = { machineId, lowest, read: "failed" };
+        runtimeRead = { machineId, lowest, read: "failed" };
         return;
       }
-      const ports = read.value.result as RelayLowPorts;
-      lowRead = { machineId, lowest, read: ports };
+      const runtime = read.value.result as RelayRuntimeRead;
+      runtimeRead = { machineId, lowest, read: runtime };
+      // Kept as whether the runtime holds what the relay needs, so the step
+      // stands ticked across a hub restart until the next read.
+      const holds = runtime.need === null;
       const journey = db.journey();
-      if (journey && journey.lowPorts !== ports.allowed) {
-        db.journeyUpdate({ lowPorts: ports.allowed });
+      if (journey && journey.lowPorts !== holds) {
+        db.journeyUpdate({ lowPorts: holds });
       }
     } finally {
-      lowAsking = false;
+      runtimeAsking = false;
       publish();
     }
   };
@@ -850,16 +835,16 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     );
   };
 
-  /** The low ports read again, while their step stands (or before the first read says whether it applies). */
-  const lowPortsDue = (journey: StoredJourney, computed: Computed): void => {
+  /** The runtime read again, while its step stands (or before the first read says whether it applies). */
+  const runtimeDue = (journey: StoredJourney, computed: Computed): void => {
     const { machineId } = journey;
     const step = computed.steps.find((one) => one.step === "runtime");
     const due =
       step === undefined
-        ? lowRead?.machineId !== machineId
+        ? runtimeRead?.machineId !== machineId
         : step.state !== "done";
-    if (machineId && !lowAsking && due) {
-      readLowPorts(machineId, computed.lowest).catch(() => undefined);
+    if (machineId && !runtimeAsking && due) {
+      readRuntime(machineId, computed.lowest).catch(() => undefined);
     }
   };
 
@@ -925,7 +910,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       db.journeyUpdate({ address: candidate.address, lan: candidate.lan });
     }
     nameDue(journey, computed);
-    lowPortsDue(journey, computed);
+    runtimeDue(journey, computed);
     workDue(journey, computed);
     publish();
   };
@@ -957,7 +942,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       routerHow: null,
       lowPorts: false,
     });
-    lowRead = null;
+    runtimeRead = null;
     nameCheck = null;
   };
 
@@ -1142,7 +1127,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         db.journeyForget();
         nameCheck = null;
         tokenWhy = undefined;
-        lowRead = null;
+        runtimeRead = null;
       } finally {
         removing = false;
       }

@@ -86,12 +86,18 @@ import type { CarrySessionRequest } from "./harness";
  *    machines that could run it and the relay (`candidates`, `relay`); its
  *    changes are POST `/api/stream-relay/act`. A page built for 16 would draw
  *    Settings › Browsers from fields that are gone, so it reloads first.
+ * 18: the stream relay runs on every platform: the journey's machine step no
+ *    longer names machines that can't run it (`notLinux`), and its runtime
+ *    step carries how the relay meets the network (`network`) and the
+ *    setting to change (`need`: a rootless Linux engine's low ports, a VM's
+ *    forwarder, a VM's rootless Podman). A page built for 17 would read the
+ *    runtime step's words from `lowest` alone, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 17;
+export const WIRE_PROTOCOL = 18;
 
 /**
  * What a session's stream carries: the changes each frame made to its
@@ -321,6 +327,18 @@ export interface RegisterAckPayload {
    */
   delivered?: Record<string, DeliveryMark>;
   /**
+   * Every origin the hub's git remote answers at (`http://<name>:<port>`, a
+   * name for each of its hostnames, tailnet names and addresses): a clone
+   * whose `origin` is under any of them, `/git/`, is a repository of this
+   * hub's, whatever address it was made by (agent git-credential.ts
+   * `hubOriginOf`). Each machine reaches the hub by the address it found it
+   * at, and a clone's origin names the address of the machine that made it:
+   * read as an outside remote, another machine's create sent it no
+   * credential, and the hub refused it ("This remote takes a CawCo machine
+   * or session credential", 2026-10-20).
+   */
+  gitOrigins: string[];
+  /**
    * Whether this machine is the hub's own computer: its machine id is the
    * hub's (hub server.ts `isHubMachine`: "an agent registered under it shares
    * the hub's disk"). The agent's loopback carries nothing there (agent
@@ -353,6 +371,14 @@ export interface RegisterAckPayload {
   ok: true;
   /** The ports the hub's preview listeners take (hub config.ts `PREVIEW_PORTS`), served on the agent's loopback beside {@link dashboardPorts}. */
   previewPorts: { first: number; last: number };
+  /**
+   * Of the credentials the register named by hash (agent daemon.ts
+   * `RegisterPayload.credentialHashes`), the ones this hub has revoked, or
+   * never issued: they grant nothing here, so the machine's redaction store
+   * lets them go (agent redaction.ts `forgetRevoked`). Absent from a hub
+   * from before it, and when the register named none.
+   */
+  revokedCredentials?: string[];
   /**
    * The fleet's session limits ({@link import("./index").SessionLimits}), so
    * the first process the machine starts after it connects runs under them.

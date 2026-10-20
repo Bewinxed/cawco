@@ -8,6 +8,7 @@ import {
   accountNameAmong,
   accountsWords,
   clockWords,
+  keepsGoingOnExtraUsage,
   type LimitWindow,
   modelScope,
   type NeutralOrigin,
@@ -16,6 +17,10 @@ import {
   type WaitReason,
   windowWords,
 } from "@cawco/core";
+import {
+  RESTART_WAIT_CAP_MS,
+  WORK_IN_FLIGHT,
+} from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
 import { stoppedByCawOff } from "./caw-own";
 import type { DbShape } from "./db";
@@ -54,6 +59,12 @@ import { isLive } from "./work-items";
  * when moving is free (their cache carries, or is cold) or cheap (under the
  * floor and affordable), and held sessions are looked at again at once.
  *
+ * A turn that ran on its account's extra usage past a plan limit was not
+ * refused: Claude Code answered it on the account's credits. What happens
+ * next is the account's own setting (core `AtPlanLimit`): it keeps going
+ * there, or, by default, moves between turns to an account with plan room,
+ * decided as above, and goes on where it is when none has room.
+ *
  * It also answers a Claude session whose turn died on its account's
  * credential. Refused for good (server.ts `settleRefusal` signed the account
  * out on its machine): the session moves whole the same way, to an account
@@ -77,7 +88,9 @@ export type LimitRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 /**
  * A session stopped at its account's limit, as its tray chip and
  * `delegate_list` say it (core `accountsWords.stalled`): the words, and
- * when it carries on (epoch ms) when it waits for a reset.
+ * when it carries on (epoch ms): the reset it waits for, or, while its move
+ * waits on work in flight, the first moment the hub acts without that work
+ * ending (`carryStall`).
  */
 export interface Stall {
   until?: number;
@@ -97,10 +110,12 @@ export interface Handed {
  * failing. `later`: what it keeps is only work it holds for later (a
  * background task, a one-time wake-up), which the hub waits for up to
  * `RESTART_WAIT_CAP_MS` and then ends with the move (server.ts
- * `moveRowsToAccount`).
+ * `moveRowsToAccount`); that work, in its machine's words ("waiting for
+ * work in flight to end: 1 command running"), where `why` is the line's
+ * whole reason.
  */
 export interface Kept {
-  later?: true;
+  later?: string;
   running: boolean;
   /**
    * The target account's part failed (its conversation couldn't be put in
@@ -157,10 +172,13 @@ const SETTLE_MS = 5000;
 const SETTLE_FOR_MS = 2 * MINUTE_MS;
 /**
  * Why a session leaves its account: its limit refused a turn, or Claude Code
- * refused the account's credential for good. Either way it carries on where
- * it moves to.
+ * refused the account's credential for good (either way it carries on where
+ * it moves to), or a turn of it ran on its account's extra usage past a plan
+ * limit and the account says to move at a plan limit (core `AtPlanLimit`):
+ * that turn was answered, so it moves between turns and waits there for its
+ * next message, and nothing holds it where it is.
  */
-type Cause = "limit" | "refused";
+type Cause = "limit" | "refused" | "credits";
 
 /** Two accounts of one organization share its prompt cache and its thinking. */
 export const sameOrganization = (a: Account, b: Account): boolean =>
@@ -314,6 +332,11 @@ export interface AtLimitPorts {
   handMove: (row: LimitRow) => string | undefined;
   /** Whether `row` is between turns: nothing running and nothing waiting on it. */
   idle: (row: LimitRow) => Promise<boolean>;
+  /**
+   * Since when `instanceId`'s move has waited on work its process holds for
+   * later (server.ts `waitForLater`); undefined when it does not wait so.
+   */
+  laterSince: (instanceId: string) => number | undefined;
   /** Runs the next look and each settling session's timer until the hub closes. */
   lifetime: HubLifetimeShape;
   /** A machine as a sentence names it. */
@@ -595,6 +618,102 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     }
   };
 
+  /**
+   * Why each session on extra usage past its plan limit stays there, as last
+   * logged: said once per reason, not at every turn's end.
+   */
+  const extraUsageSaid = new Map<string, string>();
+
+  /** Logs why `row` stays on `current`'s extra usage, once while the reason holds. */
+  const sayOnExtraUsage = (row: LimitRow, reason: string): void => {
+    if (extraUsageSaid.get(row.id) === reason) {
+      return;
+    }
+    extraUsageSaid.set(row.id, reason);
+    console.info(`[at-limit] ${ports.named(row)} ${reason}`);
+  };
+
+  /**
+   * `row` ran its turn on `current`'s extra usage past a plan limit, and
+   * `current` says to move at a plan limit, but the decision (`why`) keeps it
+   * there: nothing holds it, as its turns are answered there.
+   */
+  const stillOnExtraUsage = (
+    row: LimitRow,
+    current: Account,
+    why: WaitReason | undefined
+  ): void => {
+    const named = accountNameAmong(current, db.accounts.list());
+    const reset = refusedUntil(
+      db.accounts.bench(Date.now()),
+      readingOf(current.id),
+      current.id,
+      row.model,
+      Date.now()
+    );
+    const because: Record<WaitReason, string> = {
+      fork: "a fork stays on the account its origin's cache is on",
+      off: "moving to another account at the limit is switched off",
+      full: "no other account it may run on has plan room for it now",
+      soon: `${named} resets${reset === null ? "" : ` at ${clockWords(reset)}`}, sooner than re-reading its context elsewhere is worth`,
+      work: "its work item carries on here",
+    };
+    sayOnExtraUsage(
+      row,
+      `ran its turn on ${named}'s extra usage, past its plan limit. ${named} says to move to an account with plan room then, but it keeps going on ${named}'s extra usage: ${because[why ?? "full"]}. Each turn's end decides again.`
+    );
+  };
+
+  /**
+   * A turn of `row` ended on its account's extra usage past a plan limit:
+   * the account's last reading says extra usage is in use, and a window that
+   * bears on the session's model is spent (or the account is benched for
+   * it). The account's setting (core `AtPlanLimit`) decides: it keeps going
+   * there, or moves between turns to an account with plan room, as at a
+   * refused turn, except that nothing holds it when none has room. One a
+   * person or a rebalance already moves, one held or being decided, and Caw's
+   * own work with Caw off ({@link stoppedByCawOff}) are left as they are.
+   */
+  const extraUsageTurn = async (instanceId: string): Promise<void> => {
+    const row = rowOf(instanceId);
+    const current = row ? currentOf(row) : undefined;
+    const now = Date.now();
+    const reading = current ? readingOf(current.id) : undefined;
+    if (
+      over(row) ||
+      !(row && current && reading?.overage?.inUse) ||
+      refusedUntil(
+        db.accounts.bench(now),
+        reading,
+        current.id,
+        row.model,
+        now
+      ) === null
+    ) {
+      extraUsageSaid.delete(instanceId);
+      return;
+    }
+    if (keepsGoingOnExtraUsage(current, reading)) {
+      const named = accountNameAmong(current, db.accounts.list());
+      sayOnExtraUsage(
+        row,
+        `ran its turn on ${named}'s extra usage, past its plan limit, and stays there: ${named} says to keep going on extra usage at a plan limit.`
+      );
+      return;
+    }
+    if (
+      ports.handMove(row) ||
+      ports.owed().has(row.id) ||
+      acting.has(row.id) ||
+      settling.has(row.id) ||
+      db.atLimit.hold(row.id) ||
+      stoppedByCawOff(db, row)
+    ) {
+      return;
+    }
+    await act(row, current, "credits");
+  };
+
   /** Whether `row` is the session of a live work item (work-items.ts `isLive`). */
   const liveWork = (row: LimitRow): boolean => {
     const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
@@ -687,10 +806,10 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     now: number,
     cause: Cause
   ): AccountMove => {
-    const full =
-      cause === "limit"
-        ? fullWindow(readingOf(current.id), row.model, now)
-        : undefined;
+    const atLimit = cause !== "refused";
+    const full = atLimit
+      ? fullWindow(readingOf(current.id), row.model, now)
+      : undefined;
     const cost = sameOrg
       ? undefined
       : reReadCost(readForecast(db, target.provider, now), row, target);
@@ -704,16 +823,15 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       ...(cause === "refused" ? { because: { kind: "refused" as const } } : {}),
       tokens: row.contextTokens,
       window: full ? windowWords(full) : null,
-      resetsAt:
-        cause === "limit"
-          ? refusedUntil(
-              db.accounts.bench(now),
-              readingOf(current.id),
-              current.id,
-              row.model,
-              now
-            )
-          : null,
+      resetsAt: atLimit
+        ? refusedUntil(
+            db.accounts.bench(now),
+            readingOf(current.id),
+            current.id,
+            row.model,
+            now
+          )
+        : null,
     };
   };
 
@@ -746,8 +864,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     how: {
       held: boolean;
       refused: boolean;
-      /** Only work its process holds for later kept it ({@link Kept.later}): the hub moves it once that ends, or past its bound. */
-      waits: boolean;
+      /** Only work its process holds for later kept it ({@link Kept.later}), that work: the hub moves it once that ends, or past its bound. */
+      waits: string | undefined;
     }
   ): void => {
     const last = db.atLimit.events([row.id]).at(-1)?.move;
@@ -774,10 +892,16 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (!how.held) {
       return;
     }
+    // Waiting on work in flight: what that work is and since when, so its
+    // stalled words name it ({@link stall}); the line says why it waits.
+    const since = how.waits ? ports.laterSince(row.id) : undefined;
     db.atLimit.putHold({
       instanceId: row.id,
       accountId: current.id,
       until: how.refused ? null : holdUntil(row, current, Date.now()),
+      ...(since === undefined || how.waits === undefined
+        ? {}
+        : { carry: { to: target.id, why: how.waits, since } }),
     });
     ports.changed();
     plan();
@@ -803,10 +927,17 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       ...(decision.compact ? { compact: "filing" as const } : {}),
     };
     const line = crypto.randomUUID();
+    // A turn extra usage answered is over: the session waits there for its
+    // next message, as a move between turns does.
+    const carryOn = {
+      limit: "limit",
+      refused: "signin",
+      credits: false,
+    } as const;
     const kept = await ports.move(
       row,
       target.id,
-      refused ? "signin" : "limit",
+      carryOn[cause],
       decision.compact ? { line, move: moved } : undefined
     );
     if (kept) {
@@ -821,9 +952,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
 
   /**
    * What is done with `row` off `current` for `cause`, never moving it to an
-   * account in `skip`: at its limit, as {@link decideAtLimit} says; its
-   * credential refused, a move whole to {@link refusedTarget}, else a hold
-   * until there is one.
+   * account in `skip`: at its limit, refused or on extra usage, as
+   * {@link decideAtLimit} says; its credential refused, a move whole to
+   * {@link refusedTarget}, else a hold until there is one.
    */
   const decideFor = (
     row: LimitRow,
@@ -832,7 +963,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     cause: Cause,
     skip: ReadonlySet<string>
   ): AtLimitDecision | undefined => {
-    if (cause === "limit") {
+    if (cause !== "refused") {
       return decide(row, current, now, skip);
     }
     const to = refusedTarget(row, current, skip);
@@ -988,7 +1119,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const decision = decideFor(row, current, now, cause, skip);
     if (!decision || decision.action === "wait") {
       settling.delete(row.id);
-      if (decision) {
+      if (cause === "credits") {
+        stillOnExtraUsage(row, current, decision?.why);
+      } else if (decision) {
         hold(row, current, decision);
       } else {
         holdRefused(row, current);
@@ -999,7 +1132,11 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (!target) {
       return undefined;
     }
-    towards.set(row.id, { from: current, to: target });
+    // One on extra usage was answered, not stopped: its chip says nothing,
+    // as at a rebalance's move.
+    if (cause !== "credits") {
+      towards.set(row.id, { from: current, to: target });
+    }
     ports.changed();
     // Only between turns: never inside a tool round, never over a turn
     // someone started since.
@@ -1018,14 +1155,23 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       settling.delete(row.id);
     }
     db.atLimit.dropHold(row.id);
+    if (cause === "credits") {
+      extraUsageSaid.delete(row.id);
+      const accounts = db.accounts.list();
+      const named = accountNameAmong(current, accounts);
+      console.info(
+        `[at-limit] ${ports.named(row)} ran its turn on ${named}'s extra usage, past its plan limit, and ${named} says to move to an account with plan room then, so it moves whole to ${accountNameAmong(target, accounts)} now, between turns. It waits there for its next message.`
+      );
+    }
     const kept = await moveWhole(row, current, target, decision, now, cause);
     if (!kept) {
       return undefined;
     }
     unmoved(row, current, target, kept.why, {
-      held: !kept.target,
+      // One on extra usage goes on there: nothing holds it.
+      held: !kept.target && cause !== "credits",
       refused: cause === "refused",
-      waits: kept.later === true,
+      waits: kept.later,
     });
     return kept.target ? { target, why: kept.why } : undefined;
   };
@@ -1171,6 +1317,45 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /**
+   * A hold whose move waits on work in flight, as its stalled words say it:
+   * where it moves, what it waits for, and the first moment the hub acts
+   * without it, `until`. That is the restart bound from when it began to
+   * wait (core `RESTART_WAIT_CAP_MS`), when the move goes and ends that work
+   * (server.ts `waitForLater`), never the reset the move beats; or the
+   * hold's own `until` when that comes first, when it carries on where it
+   * is ({@link lookAt}).
+   */
+  const carryStall = (
+    from: string,
+    carry: NonNullable<LimitHold["carry"]>,
+    resets: number | null
+  ): Stall => {
+    const to = db.accounts.get(carry.to);
+    const toName = to
+      ? accountNameAmong(to, db.accounts.list())
+      : "another account";
+    const by = carry.since + RESTART_WAIT_CAP_MS;
+    const work = carry.why.startsWith(WORK_IN_FLIGHT)
+      ? carry.why.slice(WORK_IN_FLIGHT.length)
+      : carry.why;
+    if (resets !== null && resets <= by) {
+      return {
+        words: accountsWords.stalled.carryingUntilReset(
+          from,
+          toName,
+          work,
+          clockWords(resets)
+        ),
+        until: resets,
+      };
+    }
+    return {
+      words: accountsWords.stalled.carrying(from, toName, work, clockWords(by)),
+      until: by,
+    };
+  };
+
+  /**
    * Arms the next look: the earliest moment a held session's account frees
    * (its own reset, or another's that comes first), else the recheck, while
    * anything is held or two accounts could balance.
@@ -1200,7 +1385,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   return {
     /**
      * `instanceId` stopped at its account's limit, in words, while it is:
-     * on its way to an account with room (now, or once its turn ends), held
+     * on its way to an account with room (now, or once its turn ends), its
+     * move waiting on work in flight (when that ends, by the restart bound
+     * at the latest, as the hub's line says: {@link carryStall}), held
      * until the earliest reset (`until`, epoch ms; its own account's, or
      * another's that frees first and takes it), or held on a refused sign-in
      * until an account can take it. Undefined while it runs.
@@ -1213,6 +1400,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         const name = from
           ? accountNameAmong(from, db.accounts.list())
           : "its account";
+        if (held.carry) {
+          return carryStall(name, held.carry, held.until);
+        }
         if (held.until === null) {
           return { words: words.signedOut(name) };
         }
@@ -1293,6 +1483,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         settling.delete(instanceId);
       }
       towards.delete(instanceId);
+      extraUsageSaid.delete(instanceId);
       const held = db.atLimit.hold(instanceId);
       db.atLimit.dropHold(instanceId);
       if (held || was) {
@@ -1358,9 +1549,14 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       );
       await act(row, current, "refused");
     },
-    /** A turn of `instanceId` ended as any turn does: the rebalancer may look at it again. */
+    /**
+     * A turn of `instanceId` ended as any turn does: the rebalancer may look
+     * at it again, and one its account's extra usage answered past a plan
+     * limit moves, or stays, as that account says ({@link extraUsageTurn}).
+     */
     turnEnded(instanceId: string): void {
       rebalancer.turnEnded(instanceId);
+      detach(extraUsageTurn(instanceId), "at-limit extra usage");
     },
     /** Looks at every hold now, then rebalances every provider on every machine. */
     look: () => tick().finally(plan),

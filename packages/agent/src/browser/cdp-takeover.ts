@@ -6,7 +6,7 @@
  *
  * Raw CDP (`Page.startScreencast`, `Input.dispatch*`), not Playwright's
  * `page.screencast` and `page.mouse`: the standalone binary keeps
- * playwright-core out of itself (scripts/build-binary.ts `external`), and a
+ * playwright-core out of itself (scripts/build-binary.ts `PUBLISHED_PACKAGES`), and a
  * machine with no container runtime is the one this runs on. The wire is the
  * one Playwright's wrappers speak (spec check C11's branch).
  *

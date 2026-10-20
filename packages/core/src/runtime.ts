@@ -48,6 +48,7 @@ export function embeddedFile(name: string): string {
 const RUNTIME_TREES = new Set([
   "dashboard",
   "drizzle",
+  "photon-node",
   "pi",
   "playwright-core",
   "skills",

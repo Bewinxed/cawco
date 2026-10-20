@@ -41,6 +41,7 @@ import { readWithin } from "../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import { openLockFile, tryLock, unlock } from "../packages/core/src/flock";
 import type { FleetFetchFrame } from "../packages/core/src/frames";
+import { HEAVY_ADMITTED_ENV } from "../packages/core/src/heavy-run";
 import { darwinUserDirs, socketPathProblem } from "../packages/core/src/paths";
 import { forgetSessiondLink } from "../packages/core/src/sessiond";
 import {
@@ -149,6 +150,15 @@ export interface Reply {
    * the request reports no cache use.
    */
   cache?: { read: number; write: number };
+  /**
+   * The answer ran on the account's extra usage past its plan, as Anthropic
+   * answers a subscription whose 5-hour window is spent while its usage
+   * credits are on: the unified status rejected with the overage status
+   * allowed, which Claude Code reads as `isUsingOverage` (2.1.302: `status
+   * === "rejected" && (overageStatus === "allowed" || …)`), the 5-hour window
+   * at its limit until `resetsAt` (epoch ms). Replaces `limits`' headers.
+   */
+  credits?: { resetsAt: number };
   /**
    * The request is refused with this HTTP status and the provider's words, as
    * a provider refuses a credential it does not take (`401`, chat completions
@@ -485,6 +495,27 @@ const limitHeaders = (limits: Reply["limits"]): Record<string, string> => {
       : {}),
   };
 };
+
+/** Anthropic's usage headers for an answer extra usage carried past the plan ({@link Reply.credits}). */
+const creditsHeaders = ({
+  resetsAt,
+}: NonNullable<Reply["credits"]>): Record<string, string> => {
+  const reset = String(Math.ceil(resetsAt / 1000));
+  return {
+    "anthropic-ratelimit-unified-status": "rejected",
+    "anthropic-ratelimit-unified-reset": reset,
+    "anthropic-ratelimit-unified-representative-claim": "five_hour",
+    "anthropic-ratelimit-unified-5h-status": "rejected",
+    "anthropic-ratelimit-unified-5h-utilization": "1.0",
+    "anthropic-ratelimit-unified-5h-reset": reset,
+    "anthropic-ratelimit-unified-overage-status": "allowed",
+    "anthropic-ratelimit-unified-overage-in-use": "true",
+  };
+};
+
+/** The usage headers an Anthropic answer carries: on extra usage, or its account's windows. */
+const answerHeaders = (reply: Reply): Record<string, string> =>
+  reply.credits ? creditsHeaders(reply.credits) : limitHeaders(reply.limits);
 
 /** An SSE stream of `events`, one every `everyMs`, cancelled when the client goes, with `headers` beside its type. */
 const sseStream = (
@@ -1522,7 +1553,7 @@ async function standUp(
             stop_sequence: null,
             usage: { input_tokens: 10, output_tokens: 2 },
           },
-          { headers: limitHeaders(reply.limits) }
+          { headers: answerHeaders(reply) }
         );
       }
       return sseStream(
@@ -1536,7 +1567,7 @@ async function standUp(
               reply.thinking
             ),
         reply.everyMs,
-        chat ? {} : limitHeaders(reply.limits)
+        chat ? {} : answerHeaders(reply)
       );
     },
   });
@@ -1711,6 +1742,13 @@ async function standUp(
     CAWCO_DEBUG: "1",
     CAWCO_MACHINE_ID: MACHINE,
     CAWCO_SESSIOND_ENDPOINT: sessiondSocket,
+    // Its machines run inside the fleet's own heavy-run admission (core
+    // heavy-run.ts `HEAVY_ADMITTED_ENV`, as stage 2's rig machines do): a
+    // session start there waits on no reading of the host's memory, which
+    // the host's other work moves. On 2026-10-19 limit-stall's delegates
+    // sat 3 to 9 minutes each on obelisk's 13 to 63% memory stall (another
+    // workspace's boundary, 106 GB available) and never started.
+    [HEAVY_ADMITTED_ENV]: options.name,
     ANTHROPIC_BASE_URL: mockBase,
     CLAUDE_CODE_TMPDIR: claudeTmp,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",

@@ -640,10 +640,32 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private var accountsProbed = false
     private var configProbed = false
 
-    /// The split's rail, the panes' screens, and whether the width is a phone's.
+    /// The split's rail and the panes' screens.
     var probeRail: SidebarViewController { rail }
     var probePanes: PaneHost { panes }
-    var probeCompact: Bool { compact }
+
+    /// Whether the rail's column stands beside the page: a regular width
+    /// over the rail's breakpoint (`fitRail`), its view in the window.
+    var probeRailBeside: Bool { !compact && displayMode == .oneBesideSecondary && rail.viewIfLoaded?.window != nil }
+
+    /// What decides `probeRailBeside`, as the split holds it.
+    var probeRailState: String {
+        let mode = switch displayMode {
+        case .oneBesideSecondary: "oneBesideSecondary"
+        case .secondaryOnly: "secondaryOnly"
+        case .oneOverSecondary: "oneOverSecondary"
+        default: "\(displayMode.rawValue)"
+        }
+        return "beside: \(probeRailBeside ? "yes" : "no") | width \(view.bounds.width) | size class \(compact ? "compact" : "regular") | display mode \(mode) | rail in window: \(rail.viewIfLoaded?.window != nil ? "yes" : "no")"
+    }
+
+    /// The bar's sidebar toggle, pressed as a finger presses it: under the
+    /// rail's breakpoint it brings the sidebar over the page as the sheet (`toggleRail`).
+    func probePressRailToggle() { railToggle.sendActions(for: .primaryActionTriggered) }
+
+    /// The sidebar's sheet while it is presented, and its putting away.
+    var probeRailSheet: SidebarViewController? { railSheet }
+    func probeCloseRailSheet() { railSheet?.dismiss(animated: true) }
 
     /// The machines card, as the bar's Machines button opens it.
     func probeOpenMachines() {
@@ -1430,11 +1452,15 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// An ask is answered where it was made (SessionPane.svelte `madeIn`): an
     /// open tab on an ask no session stands behind, which a session made (a
     /// memory curator run's proposal), moves to that session in place, whatever
-    /// opened it (a tap on an older push, a restored tab, Jump). Read on every
-    /// change of the tabs and of the hub's asks, so a tab restored before the
-    /// hub's asks were read moves once they are.
+    /// opened it (a tap on an older push, a restored tab, Jump). A tab on a
+    /// former id (a session the hub folded into its continuation) moves to
+    /// the session it is now, as SessionSurface.svelte does. Read on every
+    /// change of the tabs, of the hub's asks and of its former ids, so a tab
+    /// restored before they were read moves once they are.
     private func moveToOrigins() {
-        let moves = workspace.openIds.compactMap { id in hub.askOrigin(id).map { (from: id, to: $0) } }
+        let moves = workspace.openIds.compactMap { id in
+            (hub.askOrigin(id) ?? hub.fleet.formerIds[id]).map { (from: id, to: $0) }
+        }
         guard !moves.isEmpty else { return }
         // After this read: the move changes the tabs it observes.
         DispatchQueue.main.async { [weak self] in

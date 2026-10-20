@@ -3142,9 +3142,11 @@ function handleFrame(frame: FramePayload): void {
     }
     if (frame.kind === "instances") {
       state.moves = frame.moves;
-      if (!equal(state.formerIds, frame.formerIds ?? {})) {
-        state.formerIds = frame.formerIds ?? {};
-      }
+    }
+    // Whole whenever it moved: a session folded into its continuation
+    // leaves its tab on the session it is now (SessionSurface).
+    if (frame.formerIds && !equal(state.formerIds, frame.formerIds)) {
+      state.formerIds = frame.formerIds;
     }
     // The notices acknowledged on any tab or device: one dismissed elsewhere leaves this tab now.
     if (frame.noticesSeen) {
@@ -5159,8 +5161,10 @@ function stopHeartbeat(): void {
  * {@link HEARTBEAT_DEADLINE_MS} after asking, the socket is dropped as dead:
  * the reconnect and its reads follow as for any close. Any message is proof
  * of life, so a large board still arriving in parts is never mistaken for
- * silence. Application messages, not WebSocket pings: no client sends those
- * (`StreamHeartbeat`).
+ * silence. Application messages, not WebSocket pings: no browser sends those
+ * (`StreamHeartbeat`). Both the ask and the hub's answer leave in their
+ * outbox's urgent lane (core wire.ts `laneOf`), so neither waits behind the
+ * board, transcripts or deltas queued on this socket.
  */
 function startHeartbeat(socket: WebSocket): void {
   stopHeartbeat();

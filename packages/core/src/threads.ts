@@ -86,9 +86,10 @@ export interface ThreadSummary {
   lastAt: number;
   projectId: string;
   /**
-   * The project's Setup thread: the one New project opens with your prompt,
-   * where Caw shows the setup page and lists what he wrote. Its replies that
-   * name files offer "Open the board".
+   * A Setup thread of the project: the one New project opens with your
+   * prompt, or one you asked Caw to set the project up in, where he shows
+   * the setup page and lists what he wrote. Its replies that name files
+   * offer "Open the board".
    */
   setup: boolean;
   status: ThreadStatus;

@@ -272,11 +272,24 @@ import type { Tasks } from "./tasks";
  * 157 tokens for the worker, the delegate and the lead (worker 27,572,
  * delegate 9,964, lead 18,201 measured beside `to: "parent"`). Raised
  * deliberately, by that, for each.
+ * 2026-10-19, after the ask: a maker's change to an artifact its parent
+ * opened waits as its next version (artifacts service.ts `holdNext`, the
+ * orchestrator's "nothing changes in front of the owner until the parent
+ * opens it"): the `to` sentence says so and names the answers' `held`, so
+ * a delegate whose update opens nothing knows why. About 28 tokens for the
+ * delegate (9,992 measured beside the ask). Raised deliberately, by that;
+ * the worker and the lead have no parent and do not change.
+ * 2026-10-20: `project_setup` (caw.ts), the owner's "I should be able to
+ * trigger the setup anytime naturally via caw": Setup's steps for the
+ * lead's project, which he follows in any thread the person asks in. One
+ * sentence and two one-line arguments, the parts it asks again an enum.
+ * About 128 tokens for the lead alone (lead 18,338 measured beside the
+ * held change). Raised deliberately, by that.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 27_580,
-  delegate: 9970,
-  lead: 18_210,
+  delegate: 10_000,
+  lead: 18_338,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

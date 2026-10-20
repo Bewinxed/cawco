@@ -5,6 +5,7 @@ import type {
   AccountOverage,
   AccountProvider,
   AtLimit,
+  AtPlanLimit,
   AttemptResult,
   AuthState,
   BlockPage,
@@ -2210,6 +2211,11 @@ export const accounts = sqliteTable(
       .notNull()
       .default(false),
     reservePct: integer("reserve_pct"),
+    /** What its sessions do at a plan limit while its extra usage is on (core `AtPlanLimit`). */
+    atPlanLimit: text("at_plan_limit")
+      .$type<AtPlanLimit>()
+      .notNull()
+      .default("move"),
     /**
      * The identity (core `AccountIdentity`) its first sign-in reported: the
      * email, any case, the organization's name, and its id. Null until then;
@@ -2427,6 +2433,17 @@ export const limitHolds = sqliteTable("limit_holds", {
   /** The account at its limit. */
   accountId: text("account_id").notNull(),
   until: timestamp("until"),
+  /**
+   * Its move to another account waits for work in flight its process holds
+   * for later (at-limit.ts `unmoved`, server.ts `waitForLater`): where it
+   * goes, what it waits for in the machine's words, and since when, the
+   * wait's bound counting from then across hub restarts. Null otherwise.
+   */
+  carry: text("carry", { mode: "json" }).$type<{
+    since: number;
+    to: string;
+    why: string;
+  }>(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -3014,9 +3031,40 @@ export const continuations = sqliteTable("continuations", {
   openItems: text("open_items"),
   stage: text("stage").$type<ContinuationJob["stage"]>().notNull(),
   error: text("error"),
+  /**
+   * Who asked for it. A person's own Continue starts a separate session;
+   * anything else's continuation is folded into one session with its source
+   * once its opening has gone (server.ts `foldContinued`).
+   */
+  askedBy: text("asked_by", { mode: "json" })
+    .$type<ContinuationAsker>()
+    .notNull()
+    .default({ kind: "person" }),
+  /**
+   * While the job waits (`waiting`): the work in flight its source's process
+   * holds, which ending it would lose (core `CONTROL_WORK_IN_FLIGHT`), since
+   * when that has run (null when not known), and since when the job has
+   * waited, the bound counting from then (server.ts `waitStep`).
+   */
+  waiting: text("waiting", { mode: "json" }).$type<{
+    from: number;
+    since: number | null;
+    why: string;
+  }>(),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });
+
+/**
+ * Who asked for a continuation: a person (the dashboard's or the app's
+ * "Continue in new session", or the API with no session named), a session's
+ * `continue_session`, or a comment on a task whose ended attempt's session
+ * is cold (jev-tasks.ts, Attach or spawn).
+ */
+export type ContinuationAsker =
+  | { kind: "person" }
+  | { kind: "session"; id: string }
+  | { kind: "task"; id: string };
 
 /**
  * What kind of line the hub keeps in a session's transcript:
@@ -3105,13 +3153,14 @@ export const instanceConversations = sqliteTable(
 );
 
 /**
- * The ids a session had before the hub folded its continuations into it
- * (migration 0128): a hub before it started a second session for each
- * continuation at an account's limit, and each of those is one session now,
- * under the id of the one that runs (`instanceId`). Anything that names a
- * former id — a link, a tab, a session's memory of its parent — is that
- * session. `folded`: the former row's data has been moved onto it and the
- * row is gone (db `foldFormerSessions`, once).
+ * The ids a session had before the hub folded its continuations into it:
+ * each continuation anything but the person's own Continue asked for
+ * (server.ts `foldContinued`), and those a hub before migration 0128 started
+ * at an account's limit. Each is one session, under the id of the one that
+ * runs (`instanceId`). Anything that names a former id — a link, a tab, a
+ * session's memory of its parent — is that session. `folded`: the former
+ * row's data has been moved onto it and the row is gone, or ends first
+ * (db `foldContinued`, `foldFormerSessions`).
  */
 export const instanceAliases = sqliteTable("instance_aliases", {
   id: text("id").primaryKey(),
@@ -3580,6 +3629,15 @@ export const artifacts = sqliteTable(
     madeBy: text("made_by").references(() => instances.id, {
       onDelete: "set null",
     }),
+    /**
+     * The artifact this row is the next version of: a maker's change to an
+     * artifact that stands in its parent's panel, held here unseen until the
+     * parent's artifact_show merges it in and drops this row (artifacts
+     * service.ts `holdNext`). No list holds it; null for every artifact.
+     */
+    heldFor: text("held_for").references((): AnySQLiteColumn => artifacts.id, {
+      onDelete: "cascade",
+    }),
     /** The session's project when it made it; a page there is also written to `decisions/<name>/`. */
     projectId: text("project_id"),
     kind: text("kind").$type<import("@cawco/core").ArtifactKind>().notNull(),
@@ -3636,11 +3694,11 @@ export const artifacts = sqliteTable(
   },
   (table) => [
     index("artifacts_instance").on(table.instanceId, table.createdAt),
-    uniqueIndex("artifacts_instance_name").on(
-      table.instanceId,
-      table.kind,
-      table.name
-    ),
+    // A held next version shares its artifact's name.
+    uniqueIndex("artifacts_instance_name")
+      .on(table.instanceId, table.kind, table.name)
+      .where(sql`${table.heldFor} is null`),
+    uniqueIndex("artifacts_held_for").on(table.heldFor),
   ]
 );
 
@@ -4096,7 +4154,7 @@ export const projectThreads = sqliteTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     /** The first message's opening words. */
     title: text("title").notNull(),
-    /** The project's Setup thread, opened when New project made it (caw.ts `setup`). */
+    /** A Setup thread of the project: opened when New project made it (caw.ts `setup`), or one the person asked Caw for Setup in (`project_setup`). */
     setup: integer("setup", { mode: "boolean" }).notNull().default(false),
     createdAt: timestamp("created_at").notNull(),
     /** When its newest message was added. */

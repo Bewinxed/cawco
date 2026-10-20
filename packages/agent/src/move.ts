@@ -47,7 +47,7 @@ import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { Subprocess } from "bun";
-import { useHubCredentialHelper } from "./git-credential";
+import { hubOriginOf, useHubCredentialHelper } from "./git-credential";
 import { notAProject, placeSettled, placeTurn } from "./place-repo";
 
 // ── The hub's git remote ───────────────────────────────────────────────────
@@ -86,12 +86,13 @@ const hubOrigin = (): string => {
 export const hubRepo = (projectId: string): string =>
   `${hubOrigin()}/git/${projectId}.git`;
 
-/** Every repository of the hub's git remote is under this: `<hub>/git/`. */
-const hubGitPrefix = (): string => `${hubOrigin()}/git/`;
-
-/** Whether `url` names one of the hub's repositories, as this machine reaches the hub. */
+/**
+ * Whether `url` names one of the hub's repositories, under any address the
+ * hub answers at (git-credential.ts {@link hubOriginOf}), not only the one
+ * this machine reaches it by.
+ */
 export const isHubRemote = (url: string): boolean =>
-  Boolean(process.env[CAWCO_ENV.hubUrl]) && url.startsWith(hubGitPrefix());
+  hubOriginOf(url) !== undefined;
 
 /** This machine's id and credential for the hub's git remote, or undefined before the first register. */
 export const hubGitLogin = ():

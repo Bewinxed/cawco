@@ -45,6 +45,8 @@ import type {
   Envelope,
   HarnessKind,
   InputFile,
+  InputNamed,
+  InputsAdmitted,
   InputsRead,
   InstanceRow,
   LandsMode,
@@ -68,6 +70,8 @@ import type {
 import {
   byPerson,
   CODE_MODE_TOOL,
+  CONTROL_INPUTS_ADMIT,
+  CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
   CONTROL_WORKSPACE_ARCHIVE,
@@ -593,6 +597,22 @@ export const resolveSpawnType = (
   }
   return { harness: request.harness, model: request.model };
 };
+
+/**
+ * A delegation's inputs as admitted on its parent's machine: the paths named,
+ * the parent's own workspace when it runs in one (what they were admitted
+ * against), the machine they are on, and each by name. Their bytes are not
+ * here: the workspace's machine copies or writes them (`handIn`).
+ */
+interface Inputs {
+  bound: WorkspaceRef | null;
+  files: InputNamed[];
+  machineId: string;
+  paths: string[];
+}
+
+/** A delegation that names no inputs. */
+const NO_INPUTS: Inputs = { paths: [], bound: null, machineId: "", files: [] };
 
 /** What `delegate` asks for. */
 /** An item's clone as a brief reads it: its workspace, on its machine (commands in it run inside its boundary). */
@@ -4239,7 +4259,7 @@ export const createWorkItems = ({
     session: InstanceRow,
     parent: Parent,
     request: WorkItemRequest,
-    inputs: InputFile[]
+    inputs: Inputs
   ): WorkItemStart => {
     const item = db.createWorkItem({
       // A queued follow-up's item takes the id its chip stood under.
@@ -4267,7 +4287,7 @@ export const createWorkItems = ({
     published(item);
     const brief = withInputsLine(
       `${handoffMarker(sessionLabel(parent).name, parent.id)}${request.prompt}`,
-      inputs
+      inputs.files
     );
     // The session read how its last item landed; this one is told when it
     // lands otherwise or hands in outputs.
@@ -4306,7 +4326,7 @@ export const createWorkItems = ({
     needle: string,
     request: WorkItemRequest,
     parent: Parent,
-    inputs: InputFile[]
+    inputs: Inputs
   ): WorkItemStart | WorkspaceRow => {
     if (
       request.type ||
@@ -4508,40 +4528,68 @@ export const createWorkItems = ({
   };
 
   /**
-   * The inputs `paths` names, read on `reader`'s machine (agent inputs.ts):
-   * none for none. Refused, in the machine's words, when one may not leave
-   * it; one outside `reader`'s own clone and scratch dir may not, when it
-   * runs inside a boundary ({@link boundOf}).
+   * The inputs `paths` names, admitted on `reader`'s machine (agent
+   * inputs.ts), before anything is cut: none for none. Refused, in the
+   * machine's words, when one may not leave it; one outside `reader`'s own
+   * clone and scratch dir may not, when it runs inside a boundary
+   * ({@link boundOf}). No byte of them is read here: {@link handIn} moves
+   * them once their workspace is known.
    */
   const readInputs = async (
     paths: string[] | undefined,
     reader: Pick<Parent, "id" | "machineId">
-  ): Promise<InputFile[]> => {
+  ): Promise<Inputs> => {
     if (!paths?.length) {
-      return [];
+      return NO_INPUTS;
     }
     const [row] = db.getInstancesByIds([reader.id]);
-    const read = (await call(reader.machineId, CONTROL_INPUTS_READ, [
+    const bound = (row && boundOf(row)) ?? null;
+    const judged = (await call(reader.machineId, CONTROL_INPUTS_ADMIT, [
       paths,
-      (row && boundOf(row)) ?? null,
+      bound,
+    ])) as InputsAdmitted;
+    if ("refused" in judged) {
+      throw new WorkItemRefusal(400, `inputs: ${judged.refused}.`);
+    }
+    return { paths, bound, machineId: reader.machineId, files: judged.files };
+  };
+
+  /**
+   * `inputs` put into `workspace`'s `$TMPDIR/inputs/` on its machine, before
+   * a brief names them, admitted again where they are read. THE ONE DECISION:
+   * on the machine that holds them, that machine copies them itself, and
+   * none of their bytes crosses its link; from another machine, they are
+   * read there and written here, through the hub.
+   */
+  const handIn = async (
+    workspace: WorkspaceRow,
+    inputs: Inputs
+  ): Promise<void> => {
+    if (inputs.files.length === 0) {
+      return;
+    }
+    if (workspace.machineId === inputs.machineId) {
+      const copied = (await call(workspace.machineId, CONTROL_INPUTS_COPY, [
+        inputs.paths,
+        inputs.bound,
+        refOf(workspace),
+      ])) as InputsAdmitted;
+      if ("refused" in copied) {
+        throw new WorkItemRefusal(400, `inputs: ${copied.refused}.`);
+      }
+      return;
+    }
+    const read = (await call(inputs.machineId, CONTROL_INPUTS_READ, [
+      inputs.paths,
+      inputs.bound,
     ])) as InputsRead;
     if ("refused" in read) {
       throw new WorkItemRefusal(400, `inputs: ${read.refused}.`);
     }
-    return read.files;
-  };
-
-  /** `inputs` written into `workspace`'s `$TMPDIR/inputs/` on its machine, before a brief names them. */
-  const handIn = async (
-    workspace: WorkspaceRow,
-    inputs: InputFile[]
-  ): Promise<void> => {
-    if (inputs.length > 0) {
-      await call(workspace.machineId, CONTROL_INPUTS_WRITE, [
-        refOf(workspace),
-        inputs,
-      ]);
-    }
+    await call(workspace.machineId, CONTROL_INPUTS_WRITE, [
+      refOf(workspace),
+      read.files satisfies InputFile[],
+    ]);
   };
 
   /**
@@ -4584,18 +4632,18 @@ export const createWorkItems = ({
     request: WorkItemRequest,
     parent: Parent,
     projectId: string | null,
-    inputs: InputFile[]
+    inputs: Inputs
   ): Promise<WorkItemStart> => {
     if (request.reuse) {
       const again = await reusable(request.reuse, request.reuseOn);
       if (again) {
-        await handIn(again, inputs);
         return spawnIn(
           again,
           settingsOf(request, parent),
           parent,
           await briefedFrom(request, again),
-          inputs
+          inputs,
+          true
         );
       }
       // Its clone is gone, or on a machine the attempt may not run on: the
@@ -4624,7 +4672,7 @@ export const createWorkItems = ({
     request: WorkItemRequest,
     parent: Parent,
     projectId: string | null,
-    inputs: InputFile[]
+    inputs: Inputs
   ): Promise<WorkItemStart> => {
     const source = request.from ? fromSource(request.from, parent) : undefined;
     const machineId = targetMachine(
@@ -4671,14 +4719,14 @@ export const createWorkItems = ({
       });
       placesChanged(machineId, parent.projectId);
     }
-    // In its scratch dir before its session starts.
-    await handIn(workspace, inputs);
+    // In its scratch dir before its session starts ({@link spawnIn}).
     return spawnIn(
       workspace,
       settings,
       parent,
       await briefedFrom(request, workspace),
       inputs,
+      true,
       { instanceId, placement }
     );
   };
@@ -4710,7 +4758,7 @@ export const createWorkItems = ({
     needle: string,
     request: WorkItemRequest,
     parent: Parent,
-    inputs: InputFile[]
+    inputs: Inputs
   ): Promise<WorkItemStart> => {
     const named = namedWorkspace(needle);
     notPaused(named.machineId);
@@ -4718,7 +4766,7 @@ export const createWorkItems = ({
       await recut(named);
     }
     await boundaryUp(needle);
-    if (inputs.length > 0) {
+    if (inputs.files.length > 0) {
       await handIn(claim(needle).workspace, inputs);
     }
     const followed = followUp(needle, request, parent, inputs);
@@ -4726,7 +4774,14 @@ export const createWorkItems = ({
     // a session starts there the way every new delegate's does.
     return "item" in followed
       ? followed
-      : spawnIn(followed, settingsOf(request, parent), parent, request, inputs);
+      : spawnIn(
+          followed,
+          settingsOf(request, parent),
+          parent,
+          request,
+          inputs,
+          false
+        );
   };
 
   /**
@@ -4770,9 +4825,9 @@ export const createWorkItems = ({
   };
 
   /** What the caller's start text adds for inputs copied in: their names. */
-  const inputsSaid = (inputs: InputFile[]): string =>
-    inputs.length > 0
-      ? ` Copied ${counted(inputs.length, "input")} into its $TMPDIR/inputs/: ${inputs.map((input) => input.name).join(", ")}.`
+  const inputsSaid = (inputs: Inputs): string =>
+    inputs.files.length > 0
+      ? ` Copied ${counted(inputs.files.length, "input")} into its $TMPDIR/inputs/: ${inputs.files.map((input) => input.name).join(", ")}.`
       : "";
 
   /** What the caller's start text adds for a group, owned files and a budget. */
@@ -4801,15 +4856,18 @@ export const createWorkItems = ({
 
   /**
    * A new session in `workspace`, running a new item from the request's
-   * brief. `ahead`: its id and account, placed before a new workspace was
-   * cut ({@link ItemPlacement}); absent, it is placed as it spawns.
+   * brief. `handInFirst`: `inputs` are put in before the session starts,
+   * after the item is answered ({@link handIn}); false, they are in already.
+   * `ahead`: its id and account, placed before a new workspace was cut
+   * ({@link ItemPlacement}); absent, it is placed as it spawns.
    */
   const spawnIn = (
     workspace: WorkspaceRow,
     settings: Settings,
     parent: Parent,
     request: WorkItemRequest,
-    inputs: InputFile[],
+    inputs: Inputs,
+    handInFirst: boolean,
     ahead?: { instanceId: string; placement: ItemPlacement }
   ): WorkItemStart => {
     notPaused(workspace.machineId);
@@ -4837,46 +4895,69 @@ export const createWorkItems = ({
     published(item);
     spawnedUnder?.(instanceId, parent.id);
 
-    try {
-      // A fork opens with what it is.
-      const fork = settings.forkOf ? forkLine(workspace) : "";
-      spawn(
-        workspace.machineId,
-        spawnOf(instanceId, item.title, parent, workspace, settings),
-        item.id,
-        // Autonomous by definition: it must never sit waiting on a tool
-        // permission prompt nobody is watching for. Questions still ask.
-        // Its parent caused it: Full Send only when the parent is in it now,
-        // read off its row as it stands after the workspace was cut.
-        unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode),
-        ahead && { accountId: ahead.placement.accountId }
-      );
-      send(
-        messageOf(
-          instanceId,
+    const launch = (): void => {
+      try {
+        // A fork opens with what it is.
+        const fork = settings.forkOf ? forkLine(workspace) : "";
+        spawn(
           workspace.machineId,
-          parent,
-          withWorkspaceLine(
-            withInputsLine(
-              `${handoffMarker(sessionLabel(parent).name, parent.id)}${fork}${request.prompt}`,
-              inputs
-            ),
-            workspace.repoRoot,
-            workspace.base,
-            landingOf(item)
+          spawnOf(instanceId, item.title, parent, workspace, settings),
+          item.id,
+          // Autonomous by definition: it must never sit waiting on a tool
+          // permission prompt nobody is watching for. Questions still ask.
+          // Its parent caused it: Full Send only when the parent is in it now,
+          // read off its row as it stands after the workspace was cut.
+          unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode),
+          ahead && { accountId: ahead.placement.accountId }
+        );
+        send(
+          messageOf(
+            instanceId,
+            workspace.machineId,
+            parent,
+            withWorkspaceLine(
+              withInputsLine(
+                `${handoffMarker(sessionLabel(parent).name, parent.id)}${fork}${request.prompt}`,
+                inputs.files
+              ),
+              workspace.repoRoot,
+              workspace.base,
+              landingOf(item)
+            )
           )
-        )
-      );
-    } catch (error) {
-      // An Error with no message still names its kind: String() gives "TypeError".
-      const message =
-        (error instanceof Error && error.message) || String(error);
-      update(item.id, {
-        state: "failed",
-        error: `Its session did not start: ${message}`,
-        endedAt: new Date(),
-      });
-      throw error;
+        );
+      } catch (error) {
+        // An Error with no message still names its kind: String() gives "TypeError".
+        const message =
+          (error instanceof Error && error.message) || String(error);
+        update(item.id, {
+          state: "failed",
+          error: `Its session did not start: ${message}`,
+          endedAt: new Date(),
+        });
+        throw error;
+      }
+    };
+    if (handInFirst && inputs.files.length > 0) {
+      // The caller is answered now, with its workspace and item: putting the
+      // inputs in waits on nothing the answer says, and behind a conductor's
+      // burst it held the answer past the caller's own deadline (2026-10-20,
+      // link-under-load: "the hub did not answer within 30000 ms" for 10 of
+      // 16 lanes, each clone cut and its inputs still on their way). The
+      // session starts once they are in; inputs that cannot go fail the item
+      // in their words, and its report says so.
+      handIn(workspace, inputs)
+        .then(launch, (error: unknown) => {
+          update(item.id, {
+            state: "failed",
+            error: `Its inputs did not reach its $TMPDIR/inputs/, so its session did not start: ${(error instanceof Error && error.message) || String(error)}`,
+            endedAt: new Date(),
+          });
+        })
+        // A launch that throws has failed its item already.
+        .catch(() => undefined);
+    } else {
+      launch();
     }
 
     return {
@@ -7521,7 +7602,7 @@ export const createWorkItems = ({
         );
       }
       await handIn(workspace, inputs);
-      return inputs.map(({ name, from: read }) => ({ name, from: read }));
+      return inputs.files.map(({ name, from: read }) => ({ name, from: read }));
     },
 
     /** {@link sessionFailed}: a restart cut its turn and nothing can resume it. */

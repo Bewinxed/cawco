@@ -1,4 +1,4 @@
-import { existsSync, watch } from "node:fs";
+import { unwatchFile, watchFile } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { arch, homedir, hostname, networkInterfaces, platform } from "node:os";
 import { dirname, join } from "node:path";
@@ -31,6 +31,8 @@ import {
   CONTROL_CANCEL_COMMAND,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
+  CONTROL_INPUTS_ADMIT,
+  CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
   CONTROL_JOIN_PROVIDER_ACCOUNT,
@@ -120,11 +122,11 @@ import {
 import { writeStateFile } from "@cawco/core/state-file";
 import {
   RELAY_CERTIFY,
-  RELAY_LOW_PORTS,
   RELAY_MAP,
   RELAY_PROVE,
   RELAY_REMOVE,
   RELAY_RENEW,
+  RELAY_RUNTIME,
   RELAY_START,
   RELAY_STOP,
   type RelayCertifyArgs,
@@ -176,7 +178,7 @@ import {
 import { sweepBrowserDoors } from "./browser/door";
 import {
   certifyRelay,
-  relayLowPorts,
+  relayRuntimeRead,
   removeRelay,
   renewRelay,
   setRelaySink,
@@ -200,6 +202,7 @@ import { readConfig, writeConfig } from "./config";
 import { convergeDeniedTools } from "./denied-tools";
 import { rediscoverHub, toWsUrl } from "./discovery";
 import { forgePost } from "./forges/forge";
+import { setHubGitOrigins } from "./git-credential";
 import type { Harness } from "./harness";
 import { harness, harnesses } from "./harnesses";
 import { removeCawcoSessionConfigs } from "./harnesses/opencode";
@@ -208,7 +211,7 @@ import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { serveHubCredential } from "./hub-git";
 import { carryHub, stopCarrying } from "./hub-loopback";
 import { recordJoinedHub, setConnectedHub } from "./hub-proof";
-import { readInputs, writeInputs } from "./inputs";
+import { admitInputs, copyInputs, readInputs, writeInputs } from "./inputs";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
@@ -256,7 +259,12 @@ import {
   readDueProviderAccounts,
   setProviderReadingSink,
 } from "./provider-usage";
-import { outbound, redactConsole } from "./redaction";
+import {
+  forgetRevoked,
+  outbound,
+  redactConsole,
+  storedHashes,
+} from "./redaction";
 import { fenced, setRestartSource } from "./restart";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
@@ -374,7 +382,6 @@ import { damagedRecords, sweepRecords } from "./damaged-records";
 import { onToolsMoved, probeTools } from "./tools";
 import { UsageScanner } from "./usage/scanner";
 import {
-  abandonCommands,
   cancelCommand,
   runWorkflowCommand,
   setCommandQueue,
@@ -392,15 +399,21 @@ import { workspaceRefs } from "./workspace-records";
 const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
 /**
- * How long after a heartbeat the hub's link may stay silent before it is
- * dropped as dead (the hub answers every beat). Our choice: a whole beat's
- * interval, so a hub that is slow under load is not taken for gone.
+ * How long after a ping the hub's link may stay silent before it is dropped
+ * as dead. Our choice: a whole beat's interval, so a hub that is slow under
+ * load is not taken for gone.
  */
 const HUB_SILENT_MS = 15_000;
 const USAGE_INTERVAL = Duration.seconds(60);
 const MEMORY_LOG_INTERVAL = Duration.millis(MEMORY_LOG_INTERVAL_MS);
 /** How often every CawCo account dir's `auth status` is read again. */
 const CLAUDE_LOGIN_CHECK_INTERVAL_MS = 60_000;
+/**
+ * How often each of pi's settings, models and sign-in files is looked at
+ * (a stat) for a change. Ours: a change reaches the hub within this and the
+ * report's one-second settle, as a dir watch's did within the settle alone.
+ */
+const PI_FILE_LOOK_MS = 2000;
 /** How often every provider account's OAuth sign-in is checked for a refresh it needs. */
 const ACCOUNT_REFRESH_INTERVAL = Duration.seconds(60);
 
@@ -808,6 +821,14 @@ export interface RegisterPayload extends MachineIdentity {
    * The cawco this daemon is running (NEW.md §12), as it reported at register.
    */
   build?: BuildInfo;
+  /**
+   * The hub's name (a SHA-256 hex digest) for each credential this agent's
+   * redaction store holds (redaction.ts `storedHashes`): the ack names the
+   * ones the hub has revoked ({@link RegisterAckPayload.revokedCredentials}),
+   * and the store lets them go, so one revoked while this machine was away
+   * goes too.
+   */
+  credentialHashes: string[];
   /** Custody is not attachment: these still need a handle before being listed live. */
   custody: SessionCustody;
   /**
@@ -1075,7 +1096,7 @@ const closeReason = (event: CloseEvent): string =>
 const send = (socket: WebSocket, envelope: Envelope): void => {
   const line = clientLine(socket);
   for (const message of outbound(envelope)) {
-    line.sendPieces(message.pieces, message.chars);
+    line.sendPieces(message.pieces, message.chars, envelope);
   }
 };
 
@@ -1511,6 +1532,7 @@ const attach = (
       instances: supervisor.instanceIds,
       previews: servingPreviews(),
       custody: snapshot.custody,
+      credentialHashes: storedHashes(),
       ...(snapshot.catalog
         ? {
             resumable: snapshot.catalog.map((entry) => entry.sessionId),
@@ -1682,27 +1704,23 @@ const attach = (
         );
       }, 1000);
     };
-    const piFiles = new Set(["settings.json", "models.json", "auth.json"]);
-    // A watch the system refuses (EMFILE: the user's inotify instances are
-    // all held) does not start, and says so: pi's report is still read again
-    // on its own schedule (PI_AUTH_CHECK_INTERVAL_MS, below). Thrown here, it
-    // ended this connection before it could carry a heartbeat (run A,
-    // 2026-10-15: "EMFILE: too many open files, watch '…/.pi/agent'").
-    const piWatch = existsSync(getAgentDir())
-      ? (() => {
-          try {
-            return watch(getAgentDir(), (_event, file) => {
-              if (file && piFiles.has(file)) {
-                reportPiSoon();
-              }
-            });
-          } catch (error) {
-            console.warn(
-              `[pi] ${getAgentDir()} is not watched (${error instanceof Error ? error.message : String(error)}): pi's report is read again every ${PI_AUTH_CHECK_INTERVAL_MS / 1000} s`
-            );
-          }
-        })()
-      : undefined;
+    // pi's three files, each looked at by its stat every PI_FILE_LOOK_MS, not
+    // its dir watched: on macOS a dir's watch is an FSEvents stream over the
+    // whole tree, and pi's `sessions/` under it is written on every turn,
+    // each write queued by fseventsd for this agent. A look sees each file
+    // made, rewritten in place (pi's own `writeFileSync`, auth-storage.js and
+    // settings-manager.js), replaced by an editor's rename or deleted, and
+    // holds no FSEvents stream and no inotify watch (so no EMFILE either).
+    const piFiles = ["settings.json", "models.json", "auth.json"].map((name) =>
+      join(getAgentDir(), name)
+    );
+    for (const file of piFiles) {
+      watchFile(
+        file,
+        { interval: PI_FILE_LOOK_MS, persistent: false },
+        reportPiSoon
+      );
+    }
     // The machine's network changed (an interface's address came or went):
     // its capabilities read again, so the public address its router maps it
     // to (STUN, browser/relay-reach.ts) follows the network it is on.
@@ -1738,7 +1756,9 @@ const attach = (
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         clearTimeout(piSoon);
-        piWatch?.close();
+        for (const file of piFiles) {
+          unwatchFile(file, reportPiSoon);
+        }
         clearInterval(networkWatch);
       })
     );
@@ -1894,7 +1914,7 @@ const attach = (
     }
 
     // pi's own word on its sign-in (pi-auth.ts), read again on a schedule
-    // beside the watch on its agent dir. The initial detect already read it.
+    // beside the looks at its files. The initial detect already read it.
     yield* Effect.forkScoped(
       Effect.repeat(
         Effect.promise(async () => {
@@ -2579,11 +2599,19 @@ const attach = (
           },
           (envelope.payload as RegisterAckPayload).hostsHub
         );
+        // What the hub no longer honours of what the register named leaves
+        // the redaction store: it grants nothing, so nothing it shows leaks.
+        forgetRevoked(
+          (envelope.payload as RegisterAckPayload).revokedCredentials ?? []
+        );
         // This connection's credential for the hub's git remote, in memory only.
         setHubCredential(
           identity.machineId,
           (envelope.payload as RegisterAckPayload).machineCredential
         );
+        // Every address the hub's git remote answers at: a clone made by
+        // another machine names the hub as that machine reached it.
+        setHubGitOrigins((envelope.payload as RegisterAckPayload).gitOrigins);
         // Registered: launches ask on this connection from here, the held
         // spawns below among them, and what went unanswered before goes now.
         launchAsks.connected(askHub);
@@ -2720,11 +2748,57 @@ const attach = (
         onEnvelope(envelope);
       }
     });
-    // When anything last came from the hub: what the heartbeat's deadline reads.
+    // When anything last came from the hub, a frame or a pong: what the
+    // link's deadline reads.
     let lastHeard = Date.now();
     socket.addEventListener("message", (event) => {
       lastHeard = Date.now();
       line.receive(String(event.data));
+    });
+    socket.addEventListener("pong", () => {
+      lastHeard = Date.now();
+    });
+
+    // THE LINK'S DEADLINE. A socket on a network that went away (Wi-Fi, a
+    // laptop that slept) reads open and delivers nothing, for as long as the
+    // system lets it: with nothing heard {@link HUB_SILENT_MS} after a ping,
+    // it is dropped as dead, the reconnect below runs, and the outbox sends
+    // again what the hub did not take.
+    //
+    // A ping, not the heartbeat: the beat is a message, and it was queued in
+    // this socket's outbox behind everything sent before it, and its answer
+    // in the hub's behind everything sent to this machine (the beat now goes
+    // in the outbox's urgent lane, wire.ts `laneOf`, still behind the other
+    // urgent messages and the hub's read of them). While workspaces were
+    // made and landed the queues held more than 15 s of sending, and a live
+    // link was dropped as dead every minute or two (2026-10-19: "hub link
+    // silent 15100 ms after a heartbeat", each request on it failing as
+    // "Completion is unknown"). A ping is a control frame: it waits behind
+    // at most the outbox's high water in the socket's own buffer, never the
+    // queue, and the hub's server answers it as it reads, ahead of every
+    // handler (Bun's client `ping()` and `pong` event,
+    // https://bun.com/docs/runtime/http/websockets).
+    const ping = setInterval(() => {
+      if (socket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      const asked = Date.now();
+      (socket as WebSocket & { ping: () => void }).ping();
+      setTimeout(() => {
+        if (lastHeard >= asked || socket.readyState !== WebSocket.OPEN) {
+          return;
+        }
+        Effect.runFork(
+          Effect.logWarning(
+            `hub link silent ${Date.now() - asked} ms after a ping: dropping it as dead`
+          )
+        );
+        // Not `close()`: its handshake waits on the peer that went silent.
+        (socket as WebSocket & { terminate: () => void }).terminate();
+      }, HUB_SILENT_MS);
+    }, Duration.toMillis(HEARTBEAT_INTERVAL));
+    socket.addEventListener("close", () => clearInterval(ping), {
+      once: true,
     });
 
     yield* Effect.forkScoped(
@@ -2757,25 +2831,6 @@ const attach = (
             machineId: identity.machineId,
             payload: beat,
           });
-          // THE LINK'S DEADLINE. The hub answers every beat. A socket on a
-          // network that went away (Wi-Fi, a laptop that slept) reads open
-          // and delivers nothing, for as long as the system lets it: with
-          // nothing heard {@link HUB_SILENT_MS} after a beat, it is dropped
-          // as dead, the reconnect below runs, and the outbox sends again
-          // what the hub did not take.
-          const asked = Date.now();
-          setTimeout(() => {
-            if (lastHeard >= asked || socket.readyState !== WebSocket.OPEN) {
-              return;
-            }
-            Effect.runFork(
-              Effect.logWarning(
-                `hub link silent ${Date.now() - asked} ms after a heartbeat: dropping it as dead`
-              )
-            );
-            // Not `close()`: its handshake waits on the peer that went silent.
-            (socket as WebSocket & { terminate: () => void }).terminate();
-          }, HUB_SILENT_MS);
         }),
         Schedule.spaced(HEARTBEAT_INTERVAL)
       )
@@ -2840,13 +2895,10 @@ const attach = (
     // probe anyway: a session that cannot answer says so in its own turn,
     // where it is unambiguous and costs nothing to learn.
 
-    // A command the hub ran over this connection answers nobody once it ends,
-    // and the hub runs its landing gate again from the first when it is
-    // back: the commands go with the connection. Sessions are not commands
-    // and stay.
-    return yield* closed(socket, url).pipe(
-      Effect.tapError(() => Effect.sync(abandonCommands))
-    );
+    // A command the hub ran over this connection runs on when it ends: the
+    // hub holds the request and sends it again on the next register, and
+    // its answer, kept as it goes (request-record.ts), answers it then.
+    return yield* closed(socket, url);
   });
 
 /**
@@ -3210,6 +3262,16 @@ export const startDaemon = (rediscover = false) =>
       );
       return Promise.resolve(true);
     });
+    // The records' watch and tick end with the daemon's scope, and one that
+    // is still starting as it ends is stopped the moment it is ready.
+    let unwatchBrowsers: (() => void) | undefined;
+    let browsersEnded = false;
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        browsersEnded = true;
+        unwatchBrowsers?.();
+      })
+    );
     yield* Effect.forkScoped(
       Effect.promise(() =>
         // The take-overs held before a restart are held again first (their
@@ -3221,8 +3283,15 @@ export const startDaemon = (rediscover = false) =>
             console.warn(`[browser] take-overs not restored: ${String(error)}`)
           )
           .then(() => watchBrowsers())
-          .catch((error: unknown) =>
-            console.warn(`[browser] not watched: ${String(error)}`)
+          .then(
+            (stop) => {
+              unwatchBrowsers = stop;
+              if (browsersEnded) {
+                stop();
+              }
+            },
+            (error: unknown) =>
+              console.warn(`[browser] not watched: ${String(error)}`)
           )
       )
     );
@@ -3250,13 +3319,13 @@ export const startDaemon = (rediscover = false) =>
       );
     });
     // The relay's journey (hub relay-journey.ts): its certificate issued, the
-    // low ports read, the router asked, and a binding from here through it.
+    // runtime read, the router asked, and a binding from here through it.
     supervisor.registerDaemonFunction(RELAY_CERTIFY, (args) =>
       certifyRelay(relayCertifyOf(args))
     );
-    supervisor.registerDaemonFunction(RELAY_LOW_PORTS, (args) => {
+    supervisor.registerDaemonFunction(RELAY_RUNTIME, (args) => {
       const lowest = (args as { lowest?: unknown } | null)?.lowest;
-      return relayLowPorts(typeof lowest === "number" ? lowest : 443);
+      return relayRuntimeRead(typeof lowest === "number" ? lowest : 443);
     });
     supervisor.registerDaemonFunction(RELAY_MAP, (args) =>
       mapRelayPorts(relayMapOf(args))
@@ -3351,6 +3420,8 @@ export const startDaemon = (rediscover = false) =>
       )
     );
     // A delegate's inputs: read here for a parent here, written here into a workspace here.
+    supervisor.registerDaemonFunction(CONTROL_INPUTS_ADMIT, admitInputs);
+    supervisor.registerDaemonFunction(CONTROL_INPUTS_COPY, copyInputs);
     supervisor.registerDaemonFunction(CONTROL_INPUTS_READ, readInputs);
     supervisor.registerDaemonFunction(CONTROL_INPUTS_WRITE, writeInputs);
     supervisor.registerDaemonFunction(

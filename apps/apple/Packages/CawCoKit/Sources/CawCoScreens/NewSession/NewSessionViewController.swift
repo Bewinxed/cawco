@@ -665,7 +665,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         case .cancelled:
             job = nil
             busy = false
-        case .filing, .starting, .summarising, .unrecognized:
+        case .filing, .starting, .summarising, .waiting, .unrecognized:
             break
         }
     }
@@ -1192,6 +1192,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         start.setLabel(startLabel)
         let stage = job.flatMap { id in fleet.continuations.first { $0.id == id }?.stage }
         let pending = switch stage {
+        case .waiting: "Waiting for its work in flight…"
         case .filing: "Filing its open items…"
         case .starting: "Starting…"
         default: continuing != nil && !fromAsks ? "Summarising…" : "Starting…"

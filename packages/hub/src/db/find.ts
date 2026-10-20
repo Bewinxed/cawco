@@ -182,6 +182,8 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
           ),
       })
       .from(artifacts)
+      // A held next version is its artifact's, unseen until its parent opens it.
+      .where(isNull(artifacts.heldFor))
       .all(),
   idsByPrefix: (prefix) =>
     ID_PREFIX.test(prefix)

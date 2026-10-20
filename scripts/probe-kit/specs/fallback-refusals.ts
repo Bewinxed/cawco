@@ -204,6 +204,7 @@ process.exit(0);`,
       hue: "blue",
       neverBackup: false,
       reservePct: null,
+      atPlanLimit: "move",
     });
     const spent = (accountId: string, resetsAt: number) => ({
       accountId,

@@ -263,6 +263,24 @@ const PLUGIN_FLAG = "CAWCO_PLUGIN";
 const CONFIG_FLAG = "CAWCO_CONFIG";
 
 /**
+ * What every server is launched with, whatever its account: no self-update
+ * under a pinned fleet, and no file watcher. On macOS OpenCode's watcher
+ * holds FSEvents streams over each session's dir and its `.git`, and over
+ * every dir from the session's up to `/` (read from a server's own
+ * FSEventStreamCreate calls, probe-kit `fsevents-scope`), so fseventsd
+ * queued it every event on the volume; CawCo reads none of the file events
+ * it drives. 2.0.29 reads `fs:{filewatcher:!b(process.env.
+ * OPENCODE_FILEWATCHER_DISABLE??process.env.OPENCODE_DISABLE_FILEWATCHER)}`,
+ * `b(e)` being `e==="1"||e?.toLowerCase()==="true"` (its binary). Its file
+ * index (fff), which its glob and grep tools search, keeps its own stream
+ * over the session's dir.
+ */
+export const SERVER_ENV: Readonly<Record<string, string>> = {
+  OPENCODE_DISABLE_AUTOUPDATE: "1",
+  OPENCODE_DISABLE_FILEWATCHER: "1",
+};
+
+/**
  * How one server is launched: `opencode serve` under the keeper, with its
  * launch config, no self-update under a pinned fleet, the model catalog the
  * agent holds (opencode-models.ts), and its sessions' git reaching the hub's
@@ -283,7 +301,7 @@ const serverLaunch = async (
     args: ["serve", "--hostname=127.0.0.1", "--port=0"],
     env: {
       OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
-      OPENCODE_DISABLE_AUTOUPDATE: "1",
+      ...SERVER_ENV,
       ...catalogLaunchEnv(),
       ...sessionGitEnv(),
       ...env,
@@ -758,32 +776,38 @@ const placeOpencodeMcp = async (
 };
 
 /**
- * OpenCode's `plan` agent under the fleet's "CawCo's to-dos" choice: on,
- * `agents.plan.disabled`; off, taken back only when CawCo set it. Answers
- * whether CawCo holds the setting now, for the sidecar.
+ * OpenCode's `plan` agent under the fleet's "CawCo's to-dos" choice: off in
+ * CawCo's servers' launch config ({@link OpencodeHarness.#launchConfig}),
+ * never in the person's `opencode.json`, so his own `opencode` keeps it.
  */
-const syncPlanAgent = async (
-  todosOn: boolean,
-  ours: boolean
-): Promise<boolean> => {
-  const stored =
-    (await readJson<Record<string, unknown>>(OPENCODE_CONFIG)) ?? {};
-  const agents = recordOf(stored.agents);
-  const { disabled, ...planRest } = recordOf(agents.plan);
-  const holds = disabled === true;
-  if (todosOn ? holds : !(ours && holds)) {
-    return todosOn && ours;
+const PLAN_AGENT_OFF_CONFIG = { agents: { plan: { disabled: true } } } as const;
+
+/**
+ * The `agents.plan.disabled` CawCo once wrote into the person's
+ * `opencode.json` for "CawCo's to-dos" (`ours`, its sidecar says so), taken
+ * back out once, with every other key of his `plan` and `agents` kept. A
+ * write that fails throws, and the sidecar keeps saying so for the next sync.
+ */
+const dropPlanAgentEntry = async (ours: boolean): Promise<void> => {
+  if (!ours) {
+    return;
   }
-  const plan = todosOn ? { ...planRest, disabled: true } : planRest;
+  const stored = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
+  const agents = recordOf(stored?.agents);
+  const { disabled, ...planRest } = recordOf(agents.plan);
+  if (!stored || disabled !== true) {
+    return;
+  }
   const { plan: _plan, ...otherAgents } = agents;
   const nextAgents =
-    Object.keys(plan).length > 0 ? { ...otherAgents, plan } : otherAgents;
+    Object.keys(planRest).length > 0
+      ? { ...otherAgents, plan: planRest }
+      : otherAgents;
   const { agents: _agents, ...rest } = stored;
   await writeOpencodeConfig("fleet sync", {
     ...rest,
     ...(Object.keys(nextAgents).length > 0 ? { agents: nextAgents } : {}),
   });
-  return todosOn;
 };
 
 /**
@@ -1668,14 +1692,19 @@ export class OpencodeHarness implements Harness {
     const fleet = await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP);
     // The catalog too: a server reads it only as it starts.
     const catalog = holdsCatalog() ? await this.#catalogDigest() : "";
+    // The to-dos choice too: a server's plan agent follows it at launch.
+    const { cawcoTodos } = await readSidecar(OPENCODE_SIDECAR);
     const held = [placed, fleet].filter(
       (one): one is NonNullable<typeof one> =>
         !!one && Object.keys(one).length > 0
     );
-    if (held.length === 0 && !catalog) {
+    if (held.length === 0 && !catalog && !cawcoTodos) {
       return configHash(config);
     }
     const hash = createHash("sha256").update(configHash(config));
+    if (cawcoTodos) {
+      hash.update("cawco-todos");
+    }
     if (placed && Object.keys(placed).length > 0) {
       hash.update(canonicalizeJson(placed));
     }
@@ -3617,10 +3646,11 @@ export class OpencodeHarness implements Harness {
   /**
    * What this agent's servers launch with: the fleet's static policy, CawCo's
    * plugin, its own hub's MCP server, and — the machine agent's — the fleet's
-   * MCP servers ({@link OPENCODE_FLEET_MCP}). The launch config is the
-   * highest of a server's config documents but managed settings (core
-   * config.ts `load`: `...content, ...managedSettings`), so a fleet server
-   * wins over a user's own of the same name.
+   * MCP servers ({@link OPENCODE_FLEET_MCP}), and its `plan` agent off under
+   * the fleet's "CawCo's to-dos" ({@link PLAN_AGENT_OFF_CONFIG}). The launch
+   * config is the highest of a server's config documents but managed
+   * settings (core config.ts `load`: `...content, ...managedSettings`), so a
+   * fleet server wins over a user's own of the same name.
    */
   async #launchConfig(): Promise<Record<string, unknown>> {
     // A server starts only on the catalog the agent holds, never on one
@@ -3632,8 +3662,10 @@ export class OpencodeHarness implements Harness {
     const fleet = (await isMachineAgent())
       ? recordOf(await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP))
       : {};
+    const { cawcoTodos } = await readSidecar(OPENCODE_SIDECAR);
     return {
       ...STATIC_POLICY,
+      ...(cawcoTodos ? PLAN_AGENT_OFF_CONFIG : {}),
       mcp: {
         servers: {
           ...fleet,
@@ -5251,10 +5283,7 @@ export class OpencodeHarness implements Harness {
       sidecar.mcp ?? [],
       report.mcp
     );
-    const planAgentDisabled = await syncPlanAgent(
-      config.cawcoTodos,
-      sidecar.planAgentDisabled === true
-    );
+    await dropPlanAgentEntry(sidecar.planAgentDisabled === true);
     // Before the poke below: a placement that changed restarts the server as
     // opencode.json changing does (`#hashConfig`).
     const placed = await placeOpencodeMcp(config.placedMcp);
@@ -5264,9 +5293,11 @@ export class OpencodeHarness implements Harness {
       sidecar.memory,
       report
     );
+    // The to-dos choice before the poke below: a server launches under it
+    // (`#launchConfig`), and a change of it starts a new one (`#hashConfig`).
     await writeJson(OPENCODE_SIDECAR, {
       mcp,
-      ...(planAgentDisabled ? { planAgentDisabled: true } : {}),
+      ...(config.cawcoTodos ? { cawcoTodos: true } : {}),
       ...(memory ? { memory } : {}),
     });
     // Poke the watcher now rather than up to 2 s later.

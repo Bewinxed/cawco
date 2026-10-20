@@ -6,6 +6,7 @@ import {
   accountName,
   accountNameAmong,
   clockWords,
+  keepsGoingOnExtraUsage,
   LIMITED_PROVIDERS,
   modelScope,
   namedAccount,
@@ -711,6 +712,28 @@ export const createRebalancer = (deps: RebalancerDeps) => {
   };
 
   /**
+   * Whether `from`'s plan limit stops nothing: past it, its sessions keep
+   * going on its extra usage (core `keepsGoingOnExtraUsage`), so none is
+   * moved ahead of `stress`. Says so when it does.
+   */
+  const keepsGoing = (
+    forecast: ForecastRead,
+    from: Account,
+    stress: Stress
+  ): boolean => {
+    const reading = db.accounts
+      .readings()
+      .find((one) => one.accountId === from.id);
+    if (!keepsGoingOnExtraUsage(from, reading)) {
+      return false;
+    }
+    console.info(
+      `[rebalance] The sessions on ${accountNameAmong(from, forecast.accounts)} stay there, though its ${windowWords(stress.window)} window is forecast to run out at ${clockWords(stress.runsOutAt)}: past its plan they keep going on its extra usage, as its setting says.`
+    );
+    return true;
+  };
+
+  /**
    * Moves running sessions off `from` while it is forecast to run out,
    * highest share of its burn first, one at a time; stops once it no
    * longer runs out, or a target would. Null when it is not stressed.
@@ -728,7 +751,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       (one) => one.accountId === from.id
     );
     const stress = stressOf(fromForecast, waitMs, now);
-    if (!stress) {
+    if (!stress || keepsGoing(forecast, from, stress)) {
       return null;
     }
     const shares = sessionShares(

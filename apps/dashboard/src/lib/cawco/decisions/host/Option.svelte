@@ -7,7 +7,8 @@
   cell, outside the pick, so a click, a hover or a scroll in it is the
   embed's own and never picks. The pick is named by its label alone (its
   keycap is hidden from the name); its line, cost and Recommended tag are
-  its description.
+  its description. Recommended stands first, over the label, so the line
+  under the label reads as its reason.
 -->
 <script lang="ts">
   import { getContext } from "svelte";
@@ -54,6 +55,9 @@
     disabled={!bridge()}
     type="button"
   >
+    {#if props.recommended === true}<span class="dp-tag" id="{uid}-tag"
+        >Recommended</span
+      >{/if}
     <b id="{uid}-label"
       >{#if keycap > 0}<span aria-hidden="true" class="dp-kc">{keycap}</span
         >{/if}{String(props.label ?? id)}</b
@@ -61,9 +65,6 @@
     {#if props.line}<span id="{uid}-line">{String(props.line)}</span>{/if}
     {#if props.cost}<span class="dp-cost" id="{uid}-cost"
         >Cost: {String(props.cost)}</span
-      >{/if}
-    {#if props.recommended === true}<span class="dp-tag" id="{uid}-tag"
-        >Recommended</span
       >{/if}
   </button>
   {#if media.length > 0}

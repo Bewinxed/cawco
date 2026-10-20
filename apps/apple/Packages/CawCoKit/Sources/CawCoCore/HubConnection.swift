@@ -1555,6 +1555,7 @@ public final class HubConnection {
         case let .instances(board, hubBuild):
             if let hubBuild { fleet.hubBuild = hubBuild }
             fleet.continuations = board.continuations
+            fleet.adopt(formerIds: board.formerIds)
             fleet.moves = board.moves
             // A damaged notices record on the hub: notices stay off, and the
             // empty list beside it is not a record of anything.
@@ -1566,6 +1567,7 @@ public final class HubConnection {
         case let .instancesDelta(delta, hubBuild):
             if let hubBuild { fleet.hubBuild = hubBuild }
             if let continuations = delta.continuations { fleet.continuations = continuations }
+            if let formerIds = delta.formerIds { fleet.adopt(formerIds: formerIds) }
             // The hub sends the ids with every move of the record's damage, so
             // ids with no damage beside them are a whole record (a Reset among them).
             if let seen = delta.noticesSeen { fleet.adopt(noticesDamaged: delta.noticesDamaged, seen: seen) }

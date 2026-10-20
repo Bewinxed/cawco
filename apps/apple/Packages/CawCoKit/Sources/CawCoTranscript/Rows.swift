@@ -196,11 +196,11 @@ nonisolated enum Fold {
                 boundary != nil && brief != nil ? 2 : 1)
     }
 
-    /// rows.ts `continuedAt` (AccountMoveDivider): a `continued` line a hub
-    /// stored before it compacted natively, as the compaction row draws it —
-    /// its "Continued on …" line with the message its fresh conversation
-    /// opened on folded under it as the brief. History only: the hub writes
-    /// none now.
+    /// rows.ts `continuedAt` (AccountMoveDivider): a `continued` line, where a
+    /// session went on in a fresh conversation as one session (hub
+    /// `foldContinued`), as the compaction row draws it — its "Continued on …"
+    /// line with the message its fresh conversation opened on folded under it
+    /// as the brief.
     static func continuation(_ blocks: [Block], at i: Int) -> (row: Row, span: Int)? {
         let line = blocks[i]
         guard line.type == "system.account_move",

@@ -24824,6 +24824,13 @@
                       "integer",
                       "null"
                     ]
+                  },
+                  "atPlanLimit": {
+                    "type": "string",
+                    "enum": [
+                      "move",
+                      "extra-usage"
+                    ]
                   }
                 }
               }
@@ -27918,6 +27925,28 @@
       "postApiInstancesByIdContinue200": {
         "type": "object",
         "properties": {
+          "waiting": {
+            "type": "object",
+            "properties": {
+              "since": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "until": {
+                "type": "number"
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "since",
+              "until",
+              "why"
+            ]
+          },
           "continuationId": {
             "type": "string"
           },
@@ -33773,13 +33802,6 @@
                 "items": {
                   "$ref": "#/components/schemas/RelayChoice"
                 }
-              },
-              "notLinux": {
-                "description": "`none` only: the machines the internet reaches that aren't Linux, so can't run it (hub stream-relay.ts `hostsRelay`).",
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -33893,6 +33915,14 @@
                   80
                 ],
                 "type": "number"
+              },
+              "need": {
+                "$ref": "#/components/schemas/RelayRuntimeNeed",
+                "description": "`needs` only: the setting to change, as the machine's runtime read it."
+              },
+              "network": {
+                "$ref": "#/components/schemas/RelayStepNetwork",
+                "description": "How the relay meets the network there; read before the step stands, absent while checking."
               }
             },
             "required": [
@@ -34047,6 +34077,29 @@
           "machineId",
           "name",
           "online"
+        ]
+      },
+      "RelayRuntimeNeed": {
+        "description": "A setting the runtime must change before the relay can run there, with the sentence and the command that change it.",
+        "type": "object",
+        "properties": {
+          "command": {
+            "description": "The fix, one line for a terminal.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RelayRuntimeNeedKind",
+            "description": "`low-ports`: a rootless engine on Linux, below `ip_unprivileged_port_start`;\n`forwarder`: a VM's port forwarder that carries less than UDP and TCP;\n`rootful`: a VM's rootless engine, which can't publish a port under 1024."
+          },
+          "why": {
+            "description": "What is short and how to change it, in the error formula's words.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command",
+          "kind",
+          "why"
         ]
       },
       "RelaySummary": {
@@ -35958,6 +36011,10 @@
       "Created": {
         "type": "object",
         "properties": {
+          "broken": {
+            "$ref": "#/components/schemas/GraphBroken",
+            "description": "What a decision page's program left broken on the picks and the graph; absent when nothing."
+          },
           "decisions": {
             "description": "A decision page's decisions, by id, in page order.",
             "type": "array",
@@ -36004,6 +36061,10 @@
                 "message"
               ]
             }
+          },
+          "held": {
+            "description": "Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show.",
+            "type": "string"
           },
           "hint": {
             "description": "A component canvas's next reads, one line.",
@@ -36293,6 +36354,34 @@
           "opened",
           "route"
         ]
+      },
+      "GraphBroken": {
+        "description": "What a decision page's program leaves broken on the person's picks and\nthe project's graph, for its writer to put back or tell the person.\nEach list only when it has something.",
+        "type": "object",
+        "properties": {
+          "after": {
+            "type": "object",
+            "description": "Decisions it lacks (taken out, or never written) that another page comes after, with the `page#card`s that do: no edge is drawn for them."
+          },
+          "options": {
+            "type": "object",
+            "description": "Options taken out that the person picked, by decision: the pick is kept, and its card says the option is gone."
+          },
+          "picked": {
+            "description": "Decisions taken out that the person picked: the pick is kept, on no card.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unlinked": {
+            "description": "Its `after`s naming no decision of the project's: no edge is drawn for them.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       },
       "PageError": {
         "description": "Where a page's code threw, 1-based, the file from the toolchain root when it is the project's.",
@@ -36882,7 +36971,7 @@
             "type": "string"
           },
           "waitingOn": {
-            "description": "Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks, a canvas's changes unread, or handed to it by a delegate and not opened yet).",
+            "description": "Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet).",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ArtifactStatusWaitingOn"
@@ -36967,6 +37056,10 @@
               "lines"
             ]
           },
+          "held": {
+            "description": "Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show.",
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -37005,6 +37098,10 @@
               "null",
               "string"
             ]
+          },
+          "program": {
+            "description": "A decision page's program as the hub keeps it, on a read without `since`: re-emit a statement from it to revise one.",
+            "type": "string"
           },
           "removed": {
             "description": "Keys that changed since `since` and are no longer there.",
@@ -37241,6 +37338,10 @@
         "description": "What a decision page's revision (`statements`) answers: what it changed,\nnot the page. The person's picks are read with `artifact_read`.",
         "type": "object",
         "properties": {
+          "broken": {
+            "$ref": "#/components/schemas/GraphBroken",
+            "description": "What it left broken on the picks and the graph; absent when nothing."
+          },
           "decisions": {
             "description": "Its decisions now, by id, in page order.",
             "type": "array",
@@ -37254,6 +37355,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "held": {
+            "description": "Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show.",
+            "type": "string"
           },
           "id": {
             "type": "string"
@@ -38576,7 +38681,7 @@
             }
           },
           "problems": {
-            "description": "What could not be drawn, one sentence each: an `after` naming no decision.",
+            "description": "What the graph cannot draw as written, one sentence each: an `after`\nnaming no decision, a pick on a decision or option a revision took out,\na page whose artifact (and so its picks) the hub no longer holds.",
             "type": "array",
             "items": {
               "type": "string"
@@ -38598,6 +38703,13 @@
             "description": "Its decision's id on its page.",
             "type": "string"
           },
+          "gone": {
+            "description": "Options of its pick that a revision took out, by id: the pick is kept, and the card says they are gone.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "id": {
             "description": "`page#card`: one id across the project's pages.",
             "type": "string"
@@ -38611,7 +38723,7 @@
             "type": "string"
           },
           "picked": {
-            "description": "Picked on its page.",
+            "description": "Picked on its page, every option picked one it still offers.",
             "type": "boolean"
           },
           "x": {
@@ -38623,6 +38735,7 @@
         },
         "required": [
           "card",
+          "gone",
           "id",
           "name",
           "page",
@@ -39060,7 +39173,7 @@
             "type": "string"
           },
           "setup": {
-            "description": "The project's Setup thread: the one New project opens with your prompt,\nwhere Caw shows the setup page and lists what he wrote. Its replies that\nname files offer \"Open the board\".",
+            "description": "A Setup thread of the project: the one New project opens with your\nprompt, or one you asked Caw to set the project up in, where he shows\nthe setup page and lists what he wrote. Its replies that name files\noffer \"Open the board\".",
             "type": "boolean"
           },
           "status": {
@@ -45366,7 +45479,7 @@
           },
           "stage": {
             "$ref": "#/components/schemas/ContinuationJobStage",
-            "description": "`filing`: the source's turn filing its open items (a person's Continue);\n`starting`: the new session is starting."
+            "description": "`waiting`: the source's process holds work in flight ending it would\nlose ({@link waiting}), and the job goes on by itself once that ends;\n`filing`: the source's turn filing its open items (a person's Continue);\n`starting`: the new session is starting."
           },
           "summariserInstanceId": {
             "description": "Absent when the source is short enough that nothing is summarised.",
@@ -45374,6 +45487,29 @@
           },
           "targetInstanceId": {
             "type": "string"
+          },
+          "waiting": {
+            "description": "While `waiting`: what for, in the machine's words (`waiting for work in\nflight to end: 1 command running`), since when it has run (epoch ms;\nnull when not known), and the latest moment it goes on, ending that\nwork (core `RESTART_WAIT_CAP_MS` from when it began to wait).",
+            "type": "object",
+            "properties": {
+              "since": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "until": {
+                "type": "number"
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "since",
+              "until",
+              "why"
+            ]
           }
         },
         "required": [
@@ -46345,7 +46481,7 @@
                 "type": "object",
                 "properties": {
                   "kind": {
-                    "description": "History only, from before the hub compacted natively: the session\nwent on in a fresh conversation of its own, seeded with a summary of\nthe one before, the same session with its account changed (`from`\nto `to`; null on a harness without accounts). Lines a hub stored\nthen still read, between the conversations they divide.",
+                    "description": "The session went on in a fresh conversation of its own, seeded with\na summary of the one before (or the person's own messages alone,\n`asks`), on `to` from `from` (null on a harness without accounts):\na continuation anything but the person's own Continue asked for,\nwhich stays one session (hub `foldContinued`). The line stands\nbetween the two conversations.",
                     "type": "string",
                     "enum": [
                       "continued"
@@ -46358,11 +46494,15 @@
                     "$ref": "#/components/schemas/NamedAccount"
                   },
                   "writtenOn": {
-                    "description": "The account whose summariser wrote the summary it went on from.",
+                    "description": "The account whose summariser wrote the summary it went on from; null when nothing was summarised.",
                     "$ref": "#/components/schemas/NamedAccount"
                   },
+                  "by": {
+                    "description": "Who asked for it, as the line's detail names them: a session by its\nname, or a comment on a task. Absent on a line a hub stored before\ncontinuations stayed one session.",
+                    "type": "string"
+                  },
                   "asked": {
-                    "description": "The session asked for it (`continue_session`), not its account's limit.",
+                    "description": "A session asked for it, not its account's limit: true on every line written now.",
                     "const": true,
                     "type": "boolean"
                   },
@@ -46378,7 +46518,7 @@
                     ]
                   },
                   "preparedAtPct": {
-                    "description": "The window's percent when the summary was written ahead of the limit; null when it was written at the move.",
+                    "description": "Null on every line written now (no summary is written ahead of a\nlimit any more), and never shown. Sent only because the TestFlight\nbuilds 20261015 to 20261018 require it, which the hub's wire check\nholds to (packages/hub/scripts/openapi.ts); it goes in the change\nthat expires them.",
                     "type": [
                       "null",
                       "number"
@@ -50840,6 +50980,10 @@
       "Account": {
         "type": "object",
         "properties": {
+          "atPlanLimit": {
+            "$ref": "#/components/schemas/AtPlanLimit",
+            "description": "What its sessions do at a plan limit while its extra usage is on ({@link AtPlanLimit})."
+          },
           "createdAt": {
             "type": "number"
           },
@@ -50891,6 +51035,7 @@
           }
         },
         "required": [
+          "atPlanLimit",
           "createdAt",
           "email",
           "hue",
@@ -50901,6 +51046,14 @@
           "order",
           "provider",
           "reservePct"
+        ]
+      },
+      "AtPlanLimit": {
+        "description": "What a session on an account does once the account reaches a plan limit\nwhile its extra usage is on (Claude Code's `overageStatus` allowed): moves\nto an account with plan room (`move`, the default), or keeps going on this\naccount's extra usage (`extra-usage`). With extra usage off or refused, the\naccount is at its limit as any other is, whichever it says.",
+        "type": "string",
+        "enum": [
+          "extra-usage",
+          "move"
         ]
       },
       "AccountKind": {
@@ -53908,7 +54061,7 @@
                 "type": "object",
                 "properties": {
                   "kind": {
-                    "description": "History only, from before the hub compacted natively: the session\nwent on in a fresh conversation of its own, seeded with a summary of\nthe one before, the same session with its account changed (`from`\nto `to`; null on a harness without accounts). Lines a hub stored\nthen still read, between the conversations they divide.",
+                    "description": "The session went on in a fresh conversation of its own, seeded with\na summary of the one before (or the person's own messages alone,\n`asks`), on `to` from `from` (null on a harness without accounts):\na continuation anything but the person's own Continue asked for,\nwhich stays one session (hub `foldContinued`). The line stands\nbetween the two conversations.",
                     "type": "string",
                     "enum": [
                       "continued"
@@ -53921,11 +54074,15 @@
                     "$ref": "#/components/schemas/NamedAccount"
                   },
                   "writtenOn": {
-                    "description": "The account whose summariser wrote the summary it went on from.",
+                    "description": "The account whose summariser wrote the summary it went on from; null when nothing was summarised.",
                     "$ref": "#/components/schemas/NamedAccount"
                   },
+                  "by": {
+                    "description": "Who asked for it, as the line's detail names them: a session by its\nname, or a comment on a task. Absent on a line a hub stored before\ncontinuations stayed one session.",
+                    "type": "string"
+                  },
                   "asked": {
-                    "description": "The session asked for it (`continue_session`), not its account's limit.",
+                    "description": "A session asked for it, not its account's limit: true on every line written now.",
                     "const": true,
                     "type": "boolean"
                   },
@@ -53941,7 +54098,7 @@
                     ]
                   },
                   "preparedAtPct": {
-                    "description": "The window's percent when the summary was written ahead of the limit; null when it was written at the move.",
+                    "description": "Null on every line written now (no summary is written ahead of a\nlimit any more), and never shown. Sent only because the TestFlight\nbuilds 20261015 to 20261018 require it, which the hub's wire check\nholds to (packages/hub/scripts/openapi.ts); it goes in the change\nthat expires them.",
                     "type": [
                       "null",
                       "number"
@@ -54992,7 +55149,7 @@
           },
           "formerIds": {
             "type": "object",
-            "description": "The ids sessions had before the hub folded each one's continuations at\nits account's limit into it (migration 0128): former id → its id now. A\ntab or link that names a former id is that session."
+            "description": "The ids sessions had before the hub folded each one's continuations\ninto it (a continuation anything but the person's own Continue asked\nfor, and those of hubs before migration 0128): former id → its id now. A\ntab or link that names a former id is that session."
           },
           "handoffs": {
             "type": "object"
@@ -55403,6 +55560,10 @@
             "items": {
               "$ref": "#/components/schemas/ContinuationJob"
             }
+          },
+          "formerIds": {
+            "type": "object",
+            "description": "Present when it moved: every former id, by its id now ({@link InstancesFrame.formerIds}), whole."
           },
           "handoffs": {
             "type": "object"
@@ -57676,7 +57837,8 @@
           "filing",
           "started",
           "starting",
-          "summarising"
+          "summarising",
+          "waiting"
         ]
       },
       "CreatedBy": {
@@ -58035,6 +58197,14 @@
           "back"
         ]
       },
+      "RelayRuntimeNeedKind": {
+        "type": "string",
+        "enum": [
+          "forwarder",
+          "low-ports",
+          "rootful"
+        ]
+      },
       "RelayStepFinding": {
         "type": "string",
         "enum": [
@@ -58048,6 +58218,13 @@
         "enum": [
           "NAT-PMP",
           "UPnP"
+        ]
+      },
+      "RelayStepNetwork": {
+        "type": "string",
+        "enum": [
+          "host",
+          "published"
         ]
       },
       "RoutineMadeEventBy": {

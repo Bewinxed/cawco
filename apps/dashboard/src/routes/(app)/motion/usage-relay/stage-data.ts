@@ -269,6 +269,7 @@ export function stagedData(
     order: i,
     provider: "anthropic",
     reservePct: null,
+    atPlanLimit: "move",
   }));
   // Each window as the hub forecasts it (forecast.ts windowForecast): a
   // pace only while the account runs sessions, a run-out only with a pace

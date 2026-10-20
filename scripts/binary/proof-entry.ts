@@ -1,3 +1,4 @@
+import "../../packages/core/src/no-huge-pages";
 import { publishRuntime, runtimeTree } from "../../packages/core/src/runtime";
 
 await publishRuntime();

@@ -5,6 +5,7 @@
 // moment it loads. A `cawco hub` holding that could not be stopped while its
 // event loop was busy (nightly 2069, killed by systemd after 90s). The daemon
 // and the harnesses load inside the verbs that run them.
+import "@cawco/core/no-huge-pages";
 import { CONFIG_PATH } from "@cawco/agent/config";
 import { toHttpBase } from "@cawco/agent/discovery";
 import type { AgentRow } from "@cawco/core";

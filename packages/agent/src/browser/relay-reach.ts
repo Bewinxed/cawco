@@ -16,7 +16,7 @@ import { getPublicIP } from "turn-server";
 const STUN_MS = 3000;
 
 /** The address a binding through `url` maps this machine to; undefined when none answered within {@link STUN_MS}. */
-const mappedBy = (url: string): Promise<string | undefined> =>
+export const mappedBy = (url: string): Promise<string | undefined> =>
   new Promise((resolve) => {
     try {
       getPublicIP(url, { timeout: STUN_MS }, (error, address) =>
@@ -35,7 +35,7 @@ const PRIVATE_V4 = /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/;
  * call: the forwards name the address the router knows the machine by, and
  * a home router hands out one of these.
  */
-const lanAddress = (): string | undefined =>
+export const lanAddress = (): string | undefined =>
   Object.values(networkInterfaces())
     .flatMap((addresses) => addresses ?? [])
     .find(

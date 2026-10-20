@@ -226,7 +226,7 @@
       case "router":
         return words.routerDone(step.how);
       case "runtime":
-        return words.runtimeDone;
+        return words.runtimeDone(step);
       case "certificate":
         return words.certificateDone(relayName, step.endsAt ?? Date.now());
       case "start":
@@ -256,7 +256,7 @@
           ? words.routerByHand(proveAt)
           : words.router;
       case "runtime":
-        return words.runtime(step.lowest);
+        return words.runtime(step);
       case "certificate":
         return words.certificate;
       case "start":
@@ -491,9 +491,7 @@
 
 {#snippet machineBody(step: Extract<RelayStep, { step: "machine" }>)}
   {#if step.state === "none"}
-    <p class={NOTE}>
-      {step.notLinux?.length ? words.noneNotLinux(step.notLinux) : words.none}
-    </p>
+    <p class={NOTE}>{words.none}</p>
   {:else}
     <ul
       aria-label={words.machine}
@@ -655,10 +653,10 @@
       </div>
     {/if}
   {:else if step.step === "runtime"}
-    <p class={NOTE}>{words.runtimeNote(machineNow.name)}</p>
+    <p class={NOTE}>{words.runtimeNote(step, machineNow.name)}</p>
     {@render copyable(
       words.commandLabel,
-      words.runtimeCommand(step.lowest),
+      words.runtimeCommand(step),
       words.copyCommand,
       true
     )}

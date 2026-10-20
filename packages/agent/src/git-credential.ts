@@ -69,27 +69,58 @@ const hubOrigin = (): string | undefined => {
   return url.origin;
 };
 
+/** The hub's own git origins, as its last register ack named them (core `RegisterAckPayload.gitOrigins`). */
+let ackOrigins: string[] = [];
+
+/** The register ack's `gitOrigins`: what else the hub's git remote answers at. */
+export const setHubGitOrigins = (origins: unknown): void => {
+  ackOrigins = Array.isArray(origins)
+    ? origins.filter((one): one is string => typeof one === "string")
+    : [];
+};
+
+/**
+ * Every origin of the hub's git remote this agent knows: the one it reaches
+ * the hub by, then each the hub answers at. None while it knows no hub.
+ */
+export const hubOrigins = (): string[] => {
+  const own = hubOrigin();
+  return own ? [...new Set([own, ...ackOrigins])] : [];
+};
+
+/**
+ * The hub origin `url` names one of the hub's repositories under
+ * (`<origin>/git/`), whichever of the hub's addresses made it; undefined for
+ * any other remote. A clone's origin names the hub as the machine that made
+ * it reached the hub, which need not be how this one does.
+ */
+export const hubOriginOf = (url: string): string | undefined =>
+  hubOrigins().find((origin) => url.startsWith(`${origin}/git/`));
+
 /**
  * `cawco git-credential` named in the checkout at `repo`'s own config for
- * the hub's origin (the helper list reset first, so no helper of the
- * machine's is handed the credential to keep), and LFS lock checks off: a
- * plain `git pull` and `git push` there authenticate to the hub, with the
- * session's credential in a session's shell and the machine's elsewhere
- * (hub-git.ts `serveHubCredential`). Only the helper's name is written; no
- * credential is. Nothing while this agent knows no hub.
+ * the hub origin its `origin` remote is under ({@link hubOriginOf}; the one
+ * this agent reaches the hub by, for a remote it is setting up), the helper
+ * list reset first, so no helper of the machine's is handed the credential
+ * to keep, and LFS lock checks off: a plain `git pull` and `git push` there
+ * authenticate to the hub, with the session's credential in a session's
+ * shell and the machine's elsewhere (hub-git.ts `serveHubCredential`). Only
+ * the helper's name is written; no credential is. Nothing while this agent
+ * knows no hub.
  */
 export const useHubCredentialHelper = (repo: string): void => {
-  const origin = hubOrigin();
-  if (!origin) {
-    return;
-  }
-  const remote = `${origin}/git/`;
-  const helper = `!${cawcoCommand("git-credential").map(shellWord).join(" ")}`;
   const config = (...args: string[]) =>
     Bun.spawnSync(safeGitArgv(["-C", repo, "config", "--local", ...args]), {
       env: { ...process.env, ...SAFE_GIT_ENV },
       stderr: "pipe",
     });
+  const named = config("--get", "remote.origin.url").stdout.toString().trim();
+  const origin = hubOriginOf(named) ?? hubOrigin();
+  if (!origin) {
+    return;
+  }
+  const remote = `${origin}/git/`;
+  const helper = `!${cawcoCommand("git-credential").map(shellWord).join(" ")}`;
   const key = `credential.${origin}.helper`;
   // Exit 5 when there is none to unset. The `/git/`-scoped key is what an
   // earlier build wrote: it matched none of git-lfs's requests.
@@ -118,19 +149,20 @@ export const useHubCredentialHelper = (repo: string): void => {
 export const sessionGitEnv = (
   base: Record<string, string | undefined> = process.env
 ): Record<string, string> => {
-  const origin = hubOrigin();
-  if (!origin) {
+  const origins = hubOrigins();
+  if (origins.length === 0) {
     return {};
   }
-  const remote = `${origin}/git/`;
-  const pairs: [string, string][] = [
-    [`credential.${origin}.helper`, ""],
-    [
-      `credential.${origin}.helper`,
-      `!${cawcoCommand("git-credential").map(shellWord).join(" ")}`,
-    ],
-    [`lfs.${remote}.locksverify`, "false"],
-  ];
+  const pairs: [string, string][] = origins.flatMap(
+    (origin): [string, string][] => [
+      [`credential.${origin}.helper`, ""],
+      [
+        `credential.${origin}.helper`,
+        `!${cawcoCommand("git-credential").map(shellWord).join(" ")}`,
+      ],
+      [`lfs.${origin}/git/.locksverify`, "false"],
+    ]
+  );
   const first = Number.parseInt(base.GIT_CONFIG_COUNT ?? "0", 10) || 0;
   const env: Record<string, string> = {
     GIT_CONFIG_COUNT: String(first + pairs.length),

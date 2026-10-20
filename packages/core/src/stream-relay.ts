@@ -22,12 +22,24 @@ import { CAWCO_ENV, readEnv } from "./index";
  * never forwarded and never minted. Its allocations relay through the UDP
  * range. No preview, on the hub or on any agent, ever takes one of these (hub
  * preview.ts, agent hub-loopback.ts).
+ *
+ * The range lies outside every ephemeral range a machine of the fleet hands
+ * out (Linux: "The default values are 32768 and 60999", kernel ip-sysctl;
+ * macOS: `net.inet.ip.portrange.first: 49152`, `last: 65535`), so no
+ * process's outgoing socket ever holds one of its ports: a VM's forwarder
+ * that finds one held binds nothing for it, while coturn inside the VM still
+ * allocates it. It lies below Kubernetes' NodePort range too (30000–32767,
+ * the k3s a VM's runtime may run) and apart from the hub's and the browsers'
+ * ports. Its place is our call; its size is the relay's 249 allocations.
  */
 export const STREAM_RELAY_PORTS = {
   udp: [443, 444],
   tcp: [443, 5349, 5350],
-  relayRange: [49_152, 49_400],
+  relayRange: [24_000, 24_248],
 } as const;
+
+/** The relay range as the person reads it: `24000–24248`. */
+export const RELAY_RANGE_WORDS = `${STREAM_RELAY_PORTS.relayRange[0]}–${STREAM_RELAY_PORTS.relayRange[1]}`;
 
 /** The one port the relay listens on and its URLs name, UDP and TCP, plain and TLS. */
 export const STREAM_RELAY_PORT = 443;
@@ -142,18 +154,42 @@ export interface RelayRenewed {
 }
 
 /**
- * Hub → daemon: whether the machine's container runtime may bind the relay's
- * lowest port now (read from `ip_unprivileged_port_start` on each ask; the
- * hub asks every 2 s while the journey's low-ports step stands).
+ * Hub → daemon: how the machine's container runtime carries the relay, and
+ * what it must change first, read on each ask (the hub asks every 2 s while
+ * the journey's runtime step stands). Answers {@link RelayRuntimeRead}.
  */
-export const RELAY_LOW_PORTS = "relay.low-ports";
-export interface RelayLowPorts {
-  /** The runtime binds any port: a root one, or one whose unprivileged start is low enough. */
-  allowed: boolean;
-  /** The runtime runs rootless: the step applies to this machine. */
-  rootless: boolean;
-  /** `ip_unprivileged_port_start` as read, on a rootless runtime. */
-  start: number | null;
+export const RELAY_RUNTIME = "relay.runtime";
+
+/**
+ * How the relay meets the network on a runtime. `host`: coturn on the host
+ * network, which is the machine's own (a native engine on Linux). `published`:
+ * the runtime's engine runs in a VM (every Mac runtime; Colima or Docker
+ * Desktop on Linux), whose host network nothing outside reaches, so coturn's
+ * ports are published through the VM's port forwarder on every address of
+ * the machine.
+ */
+export type RelayNetwork = "host" | "published";
+
+/** A setting the runtime must change before the relay can run there, with the sentence and the command that change it. */
+export interface RelayRuntimeNeed {
+  /** The fix, one line for a terminal. */
+  command: string;
+  /**
+   * `low-ports`: a rootless engine on Linux, below `ip_unprivileged_port_start`;
+   * `forwarder`: a VM's port forwarder that carries less than UDP and TCP;
+   * `rootful`: a VM's rootless engine, which can't publish a port under 1024.
+   */
+  kind: "low-ports" | "forwarder" | "rootful";
+  /** What is short and how to change it, in the error formula's words. */
+  why: string;
+}
+
+export interface RelayRuntimeRead {
+  /** What must change first; null when the runtime carries the relay as it is. */
+  need: RelayRuntimeNeed | null;
+  network: RelayNetwork;
+  /** The runtime has a setting the relay depends on (a rootless engine on Linux, or any VM's): the journey's runtime step applies. */
+  stepApplies: boolean;
 }
 
 /**
@@ -276,8 +312,6 @@ export type RelayStep =
       /** `needs`: two or more machines could run it, `choices` the ask; `none`: no machine can. */
       state: "done" | "needs" | "none";
       choices?: RelayChoice[];
-      /** `none` only: the machines the internet reaches that aren't Linux, so can't run it (hub stream-relay.ts `hostsRelay`). */
-      notLinux?: string[];
     }
   | {
       step: "name";
@@ -316,6 +350,10 @@ export type RelayStep =
       state: "waiting" | "checking" | "needs" | "done";
       /** The lowest port the relay will ever bind: 443, or 80 with a certificate over HTTP. */
       lowest: 443 | 80;
+      /** `needs` only: the setting to change, as the machine's runtime read it. */
+      need?: RelayRuntimeNeed;
+      /** How the relay meets the network there; read before the step stands, absent while checking. */
+      network?: RelayNetwork;
     }
   | {
       step: "certificate";
@@ -349,6 +387,9 @@ export type RelayStep =
       /** It failed by a refused credential (a 401), not by no answer. */
       refused?: boolean;
     };
+
+/** The runtime step: what the machine's container runtime must let the relay do. */
+export type RuntimeStep = Extract<RelayStep, { step: "runtime" }>;
 
 export type RelayStepKind = RelayStep["step"];
 
@@ -501,7 +542,7 @@ export const relayWhen = (at: number, now = Date.now()): string => {
 
 /** The forwards to make on a router, as one line to copy: the listener and the relay range, TCP 80 for a certificate over HTTP. */
 const forwardsOf = (lan: string, http: boolean): string =>
-  `UDP 443 · TCP 443 · UDP 49152–49400${http ? " · TCP 80" : ""} → ${lan}`;
+  `UDP 443 · TCP 443 · UDP ${RELAY_RANGE_WORDS}${http ? " · TCP 80" : ""} → ${lan}`;
 
 /* ------------------------------------------------------------------ */
 /* Failures                                                             */
@@ -533,8 +574,22 @@ export const lowPortsCommand = (port: number): string => {
  * `command` in code type.
  */
 export const RELAY_FAILURES = {
-  notLinux: (machine: string): RelayFailure => ({
-    why: `${couldNotStart(machine)} it runs on the host network, and on a Mac that is the container runtime's VM, which nothing outside reaches. Run the stream relay on a Linux machine.`,
+  /** The runtime's own setting short (the journey's runtime step names it first). */
+  runtimeNeed: (machine: string, need: RelayRuntimeNeed): RelayFailure => ({
+    why: `${couldNotStart(machine)} ${need.why} Run ${need.command} there once, then start the stream relay again.`,
+    command: need.command,
+  }),
+  /** A VM's forwarder that bound fewer of the relay's ports on every address of the machine than it was published for. */
+  unforwarded: (
+    machine: string,
+    ports: readonly string[],
+    seconds: number
+  ): RelayFailure => ({
+    why: `${couldNotStart(machine)} its container runtime did not forward ${ports.join(", ")} on every address of the machine within ${seconds} s, so nothing outside reaches the stream relay. Check that the runtime forwards ports to the network (OrbStack: Expose ports to LAN on) and that nothing else holds them, then start the stream relay again.`,
+  }),
+  /** The relay published and bound, and no STUN binding answered through the runtime's forwarder. */
+  unanswered: (machine: string, seconds: number): RelayFailure => ({
+    why: `${couldNotStart(machine)} it answered no STUN binding through its container runtime's port forwarder on UDP ${STREAM_RELAY_PORT} within ${seconds} s. Check that the runtime forwards UDP (restart it if it stopped), then start the stream relay again.`,
   }),
   noRuntime: (machine: string, install: string): RelayFailure => ({
     why: `${couldNotStart(machine)} it runs in a container, and this machine has no container runtime. Install one with ${install}, then start the stream relay again.`,
@@ -624,10 +679,7 @@ export const STREAM_RELAY_WORDS = {
   machine: "Pick the machine",
   machineDone: (machine: RelayMachine) =>
     `Runs on ${machine.name} · ${machine.address}${machine.lan ? ", behind a router" : ""}`,
-  none: "No machine of yours is reached from the internet yet. Add one (a small server at a host works), or open UDP and TCP 443 and UDP 49152–49400 on your router to a machine here, then come back.",
-  /** No Linux machine is reached, only `machines` that aren't Linux. */
-  noneNotLinux: (machines: string[]) =>
-    `No machine of yours can run the stream relay: it runs only on Linux, and on ${machines.length === 1 ? machines[0] : `${machines.slice(0, -1).join(", ")} and ${machines.at(-1)}`} it would run inside the container runtime's VM, which nothing outside reaches. Add a Linux machine the internet reaches (a small server at a host works); this step picks it once it reports.`,
+  none: `No machine of yours is reached from the internet yet. Add one (a small server at a host works), or open UDP and TCP 443 and UDP ${RELAY_RANGE_WORDS} on your router to a machine here, then come back.`,
   runHere: "Run the stream relay here",
   behindRouter: "behind a router",
   offline: "offline",
@@ -681,9 +733,9 @@ export const STREAM_RELAY_WORDS = {
   routerRefused:
     "Your router didn't answer UPnP or NAT-PMP. Forward these on it, then come back; the last step proves they're open.",
   routerPartial: (how: RelayMapHow) =>
-    `The router opened UDP and TCP 443 (${how}) but not UDP 49152–49400. Forward that range on the router by hand; the last step proves it.`,
+    `The router opened UDP and TCP 443 (${how}) but not UDP ${RELAY_RANGE_WORDS}. Forward that range on the router by hand; the last step proves it.`,
   forwards: forwardsOf,
-  rangeForward: (lan: string) => `UDP 49152–49400 → ${lan}`,
+  rangeForward: (lan: string) => `UDP ${RELAY_RANGE_WORDS} → ${lan}`,
   forwardsLabel: "The forwards to make",
   copyRecord: "Copy record",
   copyForwards: "Copy forwards",
@@ -697,15 +749,28 @@ export const STREAM_RELAY_WORDS = {
   routerByHand: (proveAt: number) =>
     `Forwarded by hand · proven in step ${proveAt}`,
 
-  runtime: (lowest: 443 | 80) =>
-    lowest === 80
+  /** The runtime step's label while it stands: what the runtime must let the relay do. */
+  runtime: (step: RuntimeStep) => {
+    if (step.need?.kind === "rootful") {
+      return "Run the container runtime as root";
+    }
+    if (step.network === "published" || step.need?.kind === "forwarder") {
+      return "Let the container runtime forward UDP and TCP";
+    }
+    return step.lowest === 80
       ? "Let the container runtime bind 80 and 443"
-      : "Let the container runtime bind 443",
-  runtimeNote: (machine: string) =>
-    `Run it once in a terminal on ${machine}. It holds a reboot and ticks here by itself.`,
-  runtimeCommand: (lowest: 443 | 80) => lowPortsCommand(lowest),
+      : "Let the container runtime bind 443";
+  },
+  /** Above the step's command: what the runtime is short of (a VM's), then how the command runs. */
+  runtimeNote: (step: RuntimeStep, machine: string) =>
+    `${step.need && step.need.kind !== "low-ports" ? `${step.need.why} ` : ""}Run it once in a terminal on ${machine}. It holds a reboot and ticks here by itself.`,
+  runtimeCommand: (step: RuntimeStep) =>
+    step.need?.command ?? lowPortsCommand(step.lowest),
   commandLabel: "The command",
-  runtimeDone: "Low ports allowed for the runtime",
+  runtimeDone: (step: RuntimeStep) =>
+    step.network === "published"
+      ? "The container runtime forwards UDP and TCP"
+      : "Low ports allowed for the runtime",
 
   certificate: "Issue the certificate",
   certificateRunning: (name: string) => `Asking Let's Encrypt for ${name}…`,

@@ -342,8 +342,9 @@ export interface InstancesFrame {
   agents: AgentRow[];
   continuations: ContinuationJob[];
   /**
-   * The ids sessions had before the hub folded each one's continuations at
-   * its account's limit into it (migration 0128): former id → its id now. A
+   * The ids sessions had before the hub folded each one's continuations
+   * into it (a continuation anything but the person's own Continue asked
+   * for, and those of hubs before migration 0128): former id → its id now. A
    * tab or link that names a former id is that session.
    */
   formerIds: Record<string, string>;
@@ -371,6 +372,8 @@ export interface InstancesDeltaFrame {
   /** Changed machines only; omitted when no machine moved. */
   agents?: AgentRow[];
   continuations?: ContinuationJob[];
+  /** Present when it moved: every former id, by its id now ({@link InstancesFrame.formerIds}), whole. */
+  formerIds?: Record<string, string>;
   handoffs?: Record<string, { from: string; at: number }>;
   /** Hub-originated: only changed rows and metadata; pulses travel separately. */
   kind: "instances_delta";

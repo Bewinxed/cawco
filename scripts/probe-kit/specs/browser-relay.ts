@@ -5,17 +5,28 @@
  * from outside it the way a viewer reaches it. The relay listens on one port,
  * 443: plain UDP and TCP always, TLS on the same listener with a name.
  *
- * - coturn pulled, its container `cawco-relay` live on the host network;
+ * - coturn pulled, its container `cawco-relay` live on the host network
+ *   where the runtime's is the machine's own (a native engine on Linux), else
+ *   its ports published through the runtime's VM forwarder (a Mac's runtime,
+ *   Colima or Docker Desktop on Linux) with the forwarder's address let
+ *   through; a runtime short of a setting the relay needs (Colima's ssh
+ *   forwarder, a VM's rootless Podman) refuses the start with the command
+ *   that changes it, and the run stops there;
  * - a STUN binding answered on UDP and TCP 443 (and TLS on 443 with a name)
  *   through the hub's own health check (hub stream-relay.ts `probeRelay`);
  * - a TURN allocation with a credential the hub's `mintCredential` made
  *   succeeds over UDP and TCP 443 (and TLS on 443 with a name), and one whose
  *   username's timestamp has passed is refused 401;
- * - a permission to 10.0.0.5 is refused 403 (`denied-peer-ip`);
+ * - a permission to 10.0.0.5 is refused 403 (`denied-peer-ip`), and one to
+ *   this machine's own address, which its browsers' candidates name, granted
+ *   (`allowed-peer-ip`, agent relay.ts `ownPeers`);
+ * - a TCP relay allocation (RFC 6062) is refused 442 (`no-tcp-relay`);
  * - with `--hostname`: the certificate issued, and TLS on 443 answering with
  *   the Let's Encrypt chain;
- * - the ports coturn binds beside its listener, read from `ss`, each one in
- *   `STREAM_RELAY_PORTS`; without a name nothing listens on TCP 5349;
+ * - on the host network, the ports coturn binds beside its listener, read
+ *   from `ss`, each one in `STREAM_RELAY_PORTS`; without a name nothing
+ *   listens on TCP 5349 (published, the machine binds only what is
+ *   published);
  * - Stop relay keeps the certificate volume; Remove relay takes the
  *   container and then the volume, so nothing of the relay stays.
  *
@@ -64,6 +75,7 @@ import { hostname as machineHostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { connect as tlsConnect } from "node:tls";
 import { connect, getPublicIP } from "turn-server";
+import type { RelayNetworkSettings } from "../../../packages/agent/src/browser/relay";
 import type { Runtime } from "../../../packages/agent/src/browser/runtime";
 import type {
   RelayFailure,
@@ -71,6 +83,7 @@ import type {
 } from "../../../packages/core/src/stream-relay";
 import {
   isStreamRelayPort,
+  RELAY_FAILURES,
   STREAM_RELAY_PORT,
   STREAM_RELAY_PORTS,
 } from "../../../packages/core/src/stream-relay";
@@ -81,6 +94,11 @@ type Docker = Runtime["docker"];
 type Container = ReturnType<Docker["getContainer"]>;
 
 const PROBE_CONTAINER = "cawco-relay-probe";
+/** This spec's own coturn runs, on a rootless Linux engine's host network (`refusedLegs`), with the relay's exception for this machine's own browsers. */
+const hostNetwork = async (relay: Relay): Promise<RelayNetworkSettings> => ({
+  kind: "host",
+  own: await relay.ownPeers(),
+});
 const TURN_MS = 8000;
 /** How long this spec's own coturn has to bind its listener. */
 const BIND_MS = 10_000;
@@ -113,12 +131,19 @@ interface TlsTo {
   servername: string;
 }
 
-/** One TURN exchange: allocate with `user`, then (when asked) a permission to `peer`; what each answered. */
+/** TCP's protocol number, REQUESTED-TRANSPORT's value for a TCP relay (RFC 6062). */
+const TCP_TRANSPORT = 6;
+
+/**
+ * One TURN exchange: allocate with `user` (a UDP relay, or a TCP one when
+ * `relay` asks), then (when asked) a permission to `peer`; what each answered.
+ */
 export const turn = (
   url: string,
   user: { username: string; credential: string },
   peer?: string,
-  tls?: TlsTo
+  tls?: TlsTo,
+  relay?: "tcp"
 ): Promise<{
   allocated: boolean;
   allocateCode?: number;
@@ -184,7 +209,9 @@ export const turn = (
           result.error = said(err);
           finish(connected);
         });
-        connected.allocate();
+        connected.allocate(
+          relay === "tcp" ? { transport: TCP_TRANSPORT } : undefined
+        );
       }
     );
     setTimeout(() => {
@@ -192,6 +219,245 @@ export const turn = (
       finish(socket);
     }, TURN_MS);
   });
+
+/** How long {@link relayHops} sends each leg's datagram again, every {@link RESEND_MS}, before it gives up. */
+const HOPS_MS = 8000;
+const RESEND_MS = 400;
+
+/** `ip:port`, as a peer is written in every line. */
+const hostPort = (peer: { ip: string; port: number }): string =>
+  `${bracketed(peer.ip)}:${peer.port}`;
+
+/**
+ * What each hop of one allocation's data path carried, with the address each
+ * end saw the other at. `out` is the way a viewer's check takes to the
+ * browser: coturn's relay socket sends to `address` (a UDP echo on this
+ * machine) and the echo's answer comes back to the client. `in` is the way
+ * the browser's check takes to the viewer: this machine sends to the relayed
+ * address, the client hears it from the peer coturn saw, and its answer to
+ * that peer comes back. A field left out is a hop that carried nothing.
+ */
+export interface RelayHops {
+  error?: string;
+  in: {
+    /** The answer to that peer, back on this machine, from the address it read. */
+    answeredFrom?: string;
+    /** The peer the client heard this machine's datagram from (published: the forwarder). */
+    heardFrom?: string;
+    /** A permission for that peer, when it was not `address`: granted, or coturn's code. */
+    permission?: number | "granted";
+  };
+  out: {
+    /** The echo's answer, as the client heard it: the peer coturn read it from. */
+    answeredBy?: string;
+    /** Where the echo heard coturn's relay socket from. */
+    heardFrom?: string;
+    /** coturn's answer to the permission for `address`. */
+    permission?: number | "granted";
+  };
+  relayed?: string;
+}
+
+/**
+ * Both ways of one allocation's data path through the relay at `url`, with
+ * `user`'s credential, against `address`, this machine's address (the one the
+ * browser's candidates name): each datagram sent again every
+ * {@link RESEND_MS} until it is answered or {@link HOPS_MS} have passed.
+ */
+export const relayHops = (
+  url: string,
+  user: { username: string; credential: string },
+  address: string
+): Promise<RelayHops> =>
+  new Promise((resolve) => {
+    const hops: RelayHops = { out: {}, in: {} };
+    const echo = createSocket("udp4");
+    const sender = createSocket("udp4");
+    const timers: ReturnType<typeof setInterval>[] = [];
+    let client: ReturnType<typeof connect> | undefined;
+    let relayedPeer: { ip: string; port: number } | undefined;
+    let done = false;
+    const finish = () => {
+      if (done) {
+        return;
+      }
+      done = true;
+      for (const timer of timers) {
+        clearInterval(timer);
+      }
+      for (const one of [echo, sender]) {
+        try {
+          one.close();
+        } catch {
+          // already closed
+        }
+      }
+      try {
+        client?.close();
+      } catch {
+        // already closed
+      }
+      resolve(hops);
+    };
+    const settled = () => {
+      if (hops.out.answeredBy && hops.in.answeredFrom) {
+        finish();
+      }
+    };
+    /** `send` now and every RESEND_MS until `answered` holds. */
+    const repeat = (send: () => void, answered: () => boolean) => {
+      send();
+      const timer = setInterval(
+        () => (answered() ? clearInterval(timer) : send()),
+        RESEND_MS
+      );
+      timers.push(timer);
+    };
+    echo.on("message", (data, from) => {
+      if (data.toString() === "out") {
+        hops.out.heardFrom ??= `${bracketed(from.address)}:${from.port}`;
+        echo.send("out-echo", from.port, from.address);
+      }
+    });
+    sender.on("message", (data, from) => {
+      if (data.toString() === "back") {
+        hops.in.answeredFrom ??= `${bracketed(from.address)}:${from.port}`;
+        settled();
+      }
+    });
+    /** The client's answer to the peer it heard this machine's datagram from. */
+    const answerBack = (peer: { ip: string; port: number }) =>
+      repeat(
+        () => client?.send(peer, Buffer.from("back")),
+        () => !!hops.in.answeredFrom
+      );
+    /** Which permission the next answer is for: `address`'s, then the forwarder's. */
+    let asked: "out" | { ip: string; port: number } | undefined;
+    const permitted = (code: number | "granted") => {
+      if (asked === "out") {
+        hops.out.permission = code;
+        if (code !== "granted") {
+          finish();
+          return;
+        }
+        repeat(
+          () =>
+            client?.send(
+              { ip: address, port: echo.address().port },
+              Buffer.from("out")
+            ),
+          () => !!hops.out.answeredBy
+        );
+        repeat(
+          () =>
+            relayedPeer && sender.send("in", relayedPeer.port, relayedPeer.ip),
+          () => !!hops.in.heardFrom
+        );
+      } else if (asked) {
+        hops.in.permission = code;
+        if (code === "granted") {
+          answerBack(asked);
+        }
+      }
+    };
+    /** A datagram coturn delivered to the client, from the peer it read it from. */
+    const heard = (peer: { ip: string; port: number }, data: Uint8Array) => {
+      const text = Buffer.from(data).toString();
+      if (text === "out-echo") {
+        hops.out.answeredBy ??= hostPort(peer);
+        settled();
+        return;
+      }
+      if (text !== "in" || hops.in.heardFrom) {
+        return;
+      }
+      hops.in.heardFrom = hostPort(peer);
+      // Published, coturn hears this machine from the forwarder's address,
+      // which the client has no permission for yet: as a viewer answering the
+      // browser's check, it asks for one.
+      if (peer.ip === address) {
+        answerBack(peer);
+        return;
+      }
+      asked = peer;
+      client?.createPermission({ ip: peer.ip, port: 0 });
+    };
+    echo.bind(0, "0.0.0.0", () =>
+      sender.bind(0, "0.0.0.0", () => {
+        client = connect(
+          url,
+          {
+            username: user.username,
+            password: user.credential,
+            autoRefresh: false,
+          },
+          (error, connected) => {
+            if (error) {
+              hops.error = said(error);
+              finish();
+              return;
+            }
+            connected.on("allocate:success", (msg) => {
+              relayedPeer = msg.getAttribute(0x00_16) as
+                { ip: string; port: number } | undefined;
+              if (!relayedPeer) {
+                finish();
+                return;
+              }
+              hops.relayed = hostPort(relayedPeer);
+              asked = "out";
+              connected.createPermission({ ip: address, port: 0 });
+            });
+            connected.on("allocate:error", (_msg, err) => {
+              hops.error = `allocation refused ${(err as { code?: number } | undefined)?.code}`;
+              finish();
+            });
+            connected.on("create_permission:success", () =>
+              permitted("granted")
+            );
+            connected.on("create_permission:error", (_msg, err) =>
+              permitted((err as { code?: number } | undefined)?.code ?? 0)
+            );
+            connected.on("data", heard);
+            connected.on("error", (err) => {
+              hops.error = said(err);
+              finish();
+            });
+            connected.allocate();
+          }
+        );
+      })
+    );
+    setTimeout(finish, HOPS_MS);
+  });
+
+/** The first hop of {@link relayHops} that carried nothing, in one sentence; undefined when every hop carried. */
+export const brokenHop = (
+  hops: RelayHops,
+  address: string
+): string | undefined => {
+  if (!hops.relayed) {
+    return `no allocation (${hops.error ?? "no answer"})`;
+  }
+  if (hops.out.permission !== "granted") {
+    return `coturn answered the permission for ${address} with ${hops.out.permission ?? "nothing"}`;
+  }
+  if (!hops.out.heardFrom) {
+    return `coturn's relay socket → ${address}: no datagram reached this machine's UDP echo`;
+  }
+  if (!hops.out.answeredBy) {
+    return `${address} → coturn's relay socket: the echo answered ${hops.out.heardFrom}, and nothing came back to the client`;
+  }
+  if (!hops.in.heardFrom) {
+    return `this machine → the relayed address ${hops.relayed}: nothing reached the client`;
+  }
+  if (hops.in.permission !== undefined && hops.in.permission !== "granted") {
+    return `coturn answered the permission for ${hops.in.heardFrom}, the peer it heard this machine from, with ${hops.in.permission}`;
+  }
+  if (!hops.in.answeredFrom) {
+    return `the client's answer to ${hops.in.heardFrom} never came back to this machine`;
+  }
+};
 
 /** A port the OS hands out on `proto` for port 0, released again; `want` asks for that one instead. */
 const bindPort = (
@@ -461,6 +727,15 @@ const udpChecks = async (
   const stun = await binding(`stun:${on.host}:${on.port}?transport=udp`);
   const udp = await turn(url, fresh, PRIVATE_PEER);
   const expired = await turn(url, lapsed);
+  const { ownPeers } =
+    await import("../../../packages/agent/src/browser/relay");
+  const [own] = await ownPeers();
+  const browser = own ? await turn(url, fresh, own) : undefined;
+  kit.check(
+    `allocation permission to this machine's own ${own ?? "address (none found)"}, which its browsers' candidates name, granted: ${browser?.permissionCode ?? "not asked"}${on.where}`,
+    browser?.permissionCode === "granted",
+    JSON.stringify(browser)
+  );
   kit.check(
     `check 2 · UDP on the listener: STUN binding on udp ${on.port} ${stun}; allocation with a minted credential relayed ${udp.relayed ?? `nothing (${udp.error ?? udp.allocateCode})`}${on.where}`,
     stun.startsWith("up") && udp.allocated,
@@ -494,6 +769,18 @@ const streamChecks = async (
   const plainStun = await binding(`stun:${on.host}:${on.port}?transport=tcp`);
   const plain = await turn(`turn:${on.host}:${on.port}?transport=tcp`, fresh);
   const plainUp = plainStun.startsWith("up") && plain.allocated;
+  const tcpRelay = await turn(
+    `turn:${on.host}:${on.port}?transport=tcp`,
+    fresh,
+    undefined,
+    undefined,
+    "tcp"
+  );
+  kit.check(
+    `a TCP relay allocation refused (no-tcp-relay): ${tcpRelay.allocateCode ?? (tcpRelay.allocated ? "allocated" : tcpRelay.error)}${on.where}`,
+    tcpRelay.allocateCode === 442,
+    JSON.stringify(tcpRelay)
+  );
   if (!on.tls) {
     kit.check(
       `plain TCP on the listener: STUN binding on tcp ${on.port} ${plainStun}; allocation relayed ${plain.relayed ?? `nothing (${plain.error ?? plain.allocateCode})`}${on.where}`,
@@ -537,7 +824,9 @@ const relayLegs = async (
   runtime: Runtime,
   args: RelayStartArgs
 ): Promise<void> => {
-  const before = await listening();
+  // What coturn binds is read with `ss` on the host network alone: published,
+  // its sockets are the VM's, and the machine binds only what is published.
+  const before = runtime.ownNetwork ? await listening() : [];
   // A name's certificate first, its own command (the journey's certificate
   // step), over HTTP on port 80; then the start, on the certificate.
   if (args.hostname) {
@@ -549,15 +838,26 @@ const relayLegs = async (
     );
   }
   const frame = await relay.startRelay(args);
-  const opened = added(before, await listening());
+  const opened = runtime.ownNetwork ? added(before, await listening()) : [];
   const inspected = await runtime.docker
     .getContainer(relay.RELAY_CONTAINER)
     .inspect();
+  const bindings = inspected.HostConfig.PortBindings ?? {};
+  const [first, last] = args.relayRange;
+  const range = Array.from(
+    { length: last - first + 1 },
+    (_, at) => `${first + at}/udp`
+  );
+  const shape = runtime.ownNetwork
+    ? inspected.HostConfig.NetworkMode === "host"
+    : [`${STREAM_RELAY_PORT}/udp`, `${STREAM_RELAY_PORT}/tcp`, ...range].every(
+        (port) => bindings[port]?.[0]?.HostIp === "0.0.0.0"
+      ) && inspected.Config.Cmd.includes("--server-relay");
   kit.check(
-    `${relay.RELAY_IMAGE} pulled; container ${relay.RELAY_CONTAINER} ${frame.state}, network ${inspected.HostConfig.NetworkMode}`,
+    `${relay.RELAY_IMAGE} pulled; container ${relay.RELAY_CONTAINER} ${frame.state}, ${runtime.ownNetwork ? `network ${inspected.HostConfig.NetworkMode}` : `published through ${runtime.endpoint}: ${Object.keys(bindings).length} ports on every address (UDP and TCP ${STREAM_RELAY_PORT}, UDP ${first}–${last}), ${inspected.Config.Cmd.filter((arg) => arg.startsWith("--external-ip") || arg === "--server-relay" || arg.startsWith("--allowed-peer-ip")).join(" ")}`}`,
     frame.state === "live" &&
       inspected.State.Running &&
-      inspected.HostConfig.NetworkMode === "host" &&
+      shape &&
       inspected.Config.Image === relay.RELAY_IMAGE,
     JSON.stringify(frame)
   );
@@ -587,12 +887,14 @@ const relayLegs = async (
       JSON.stringify(frame.ports)
     );
   }
-  bindsCheck(
-    kit,
-    [{ shape: name ? "with a certificate" : "with --no-tls", opened }],
-    STREAM_RELAY_PORT,
-    ""
-  );
+  if (runtime.ownNetwork) {
+    bindsCheck(
+      kit,
+      [{ shape: name ? "with a certificate" : "with --no-tls", opened }],
+      STREAM_RELAY_PORT,
+      ""
+    );
+  }
 };
 
 /** Check 4: what coturn opened beside its listener in each shape, every outside port one `STREAM_RELAY_PORTS` reserves; check 3's 5349 with it. */
@@ -820,7 +1122,9 @@ const refusedLegs = async (
     const withCert = await startProbe(
       docker,
       relay.RELAY_IMAGE,
-      relay.coturnArgs(named, true).map(onPort(standIn)),
+      relay
+        .coturnArgs(named, true, await hostNetwork(relay))
+        .map(onPort(standIn)),
       standIn,
       dir
     );
@@ -854,7 +1158,9 @@ const refusedLegs = async (
     const plain = await startProbe(
       docker,
       relay.RELAY_IMAGE,
-      relay.coturnArgs(args, false).map(onPort(standIn)),
+      relay
+        .coturnArgs(args, false, await hostNetwork(relay))
+        .map(onPort(standIn)),
       standIn
     );
     try {
@@ -908,7 +1214,9 @@ const otherShape = async (
     docker,
     relay.RELAY_IMAGE,
     [
-      ...relay.coturnArgs(named, true).map(onPort(standIn)),
+      ...relay
+        .coturnArgs(named, true, await hostNetwork(relay))
+        .map(onPort(standIn)),
       `--tls-listening-port=${tlsPort}`,
     ],
     standIn,
@@ -1008,7 +1316,7 @@ const relaySpec = async (kit: Kit): Promise<void> => {
     return;
   }
   kit.note(
-    `runtime ${runtime.kind} ${runtime.version} (API ${runtime.api}${runtime.rootless ? ", rootless" : ""}) at ${runtime.endpoint}`
+    `runtime ${runtime.kind} ${runtime.version} (API ${runtime.api}${runtime.rootless ? ", rootless" : ""}${runtime.ownNetwork ? "" : ", in a VM: the relay published"}) at ${runtime.endpoint}`
   );
   const args: RelayStartArgs = {
     secret: randomBytes(32).toString("base64url"),
@@ -1030,9 +1338,28 @@ const relaySpec = async (kit: Kit): Promise<void> => {
   let certified = false;
   try {
     // A name's certificate is issued over HTTP, on port 80.
-    const refusal = await relay.lowPortsRefusal(runtime, name ? 80 : 443);
-    if (refusal) {
-      await refusedLegs(kit, relay, runtime, args, refusal);
+    const lowest = name ? 80 : 443;
+    const { need } = await relay.relayRuntimeRead(lowest);
+    if (need?.kind === "low-ports") {
+      await refusedLegs(
+        kit,
+        relay,
+        runtime,
+        args,
+        RELAY_FAILURES.lowPort(machineHostname(), lowest)
+      );
+    } else if (need) {
+      // A VM runtime short of a setting: the start refuses with its command,
+      // no container made, and the run ends there until it is changed.
+      const thrown = await relay.startRelay(args).then(
+        () => "started",
+        (error: unknown) => said(error)
+      );
+      kit.check(
+        `the runtime needs a setting first (${need.kind}): run \`${need.command}\` on ${machine}, then this spec again ("${thrown}")`,
+        false,
+        need.why
+      );
     } else {
       await relayLegs(kit, relay, runtime, args);
       certified = !!name;

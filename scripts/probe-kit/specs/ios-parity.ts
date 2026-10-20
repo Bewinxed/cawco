@@ -8,8 +8,8 @@
  * against the mock model, a stand-in Cawrier): a project; per device a
  * worker session that notes a fact, then the project's memory curator run,
  * whose turn proposes a knowledge file citing it; a second machine, gone
- * offline. The built app on an iPhone 16 Pro and an iPad Pro 11-inch (M4),
- * iOS 18.5, each in a mac-slot.sh slot of its own, with `-parity-probe`
+ * offline. The built app on an iPhone 16 Pro, an iPad Pro 13-inch (M4) and
+ * an iPad Pro 11-inch (M4), iOS 18.5, each in a mac-slot.sh slot of its own, with `-parity-probe`
  * (ParityProbe.swift), whose log lines are read here:
  *
  * (p) the hub's push for the curator's proposal carries the curator run's
@@ -20,8 +20,11 @@
  * (b) a pane opened on the proposal's own id moves to that session;
  * (c) Approve in that composer answers it: it leaves the hub's pending
  *     asks, the composer and Caw's panel;
- * (r) iPad: the rail's session row carries the session's menu, and Delete
- *     transcript asks under that rail row, pends, and deletes the session;
+ * (r) iPad: the rail that stands, its column beside the page on the 13-inch
+ *     (over the rail's 900pt breakpoint), the sheet the bar's toggle brings
+ *     over the page on the 11-inch (under it): its session row carries the
+ *     session's menu, and Delete transcript asks under that rail row,
+ *     nothing presented over the rail, pends, and deletes the session;
  * (m) the gone machine's keychain unlock opens under its row, the hub's
  *     refusal of the password said in it; the hub's refusal of an install
  *     stands under the same row with Try again; nothing presented;
@@ -53,7 +56,7 @@
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-parity
  *
- * `PROBE_DEVICE=iPhone` (or `iPad`) runs one device. The app is this
+ * `PROBE_DEVICE=iPhone` (or `iPad`, `iPad-11`) runs one device. The app is this
  * checkout's simulator build (`PROBE_IOS_APP` names another).
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: each device's steps are read in order.
@@ -66,15 +69,25 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
-const DEVICES = [
+/** (r)'s rail on each iPad: its column beside the page, or the sheet the bar's toggle brings. */
+type Rail = "column" | "sheet";
+const DEVICES: { rail?: Rail; tag: string; type: string }[] = [
   {
     tag: "iPhone",
-    wide: false,
     type: "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro",
   },
   {
     tag: "iPad",
-    wide: true,
+    // 1032pt wide in portrait, over the rail's 900pt breakpoint (DESIGN.md
+    // "Breakpoints"): its rail's column stands beside the page.
+    rail: "column",
+    type: "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4-8GB",
+  },
+  {
+    tag: "iPad-11",
+    // 834pt, under the breakpoint: the rail is the sheet the bar's toggle
+    // brings over the page, as the web's burger brings it.
+    rail: "sheet",
     type: "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4-8GB",
   },
 ];
@@ -762,7 +775,7 @@ async function run(kit: Kit): Promise<void> {
         `proposal=${ask.instanceId}`,
         `origin=${origin}`,
         `ghost=${GHOST}`,
-        ...(device.wide ? [`del=${worker}`] : []),
+        ...(device.rail ? [`del=${worker}`] : []),
       ].join(",");
       await sh(
         `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -parity-probe -parity-probe-ids ${ids} >/dev/null`
@@ -880,7 +893,37 @@ async function run(kit: Kit): Promise<void> {
         left ? "gone from /api/pending" : "still pending"
       );
 
-      if (device.wide) {
+      const { rail } = device;
+      if (rail === "column") {
+        expect(
+          "r: the rail's column stands beside the page, over the rail's breakpoint",
+          "rail column",
+          worker,
+          "beside: yes",
+          "display mode oneBesideSecondary",
+          "rail in window: yes"
+        );
+      }
+      if (rail === "sheet") {
+        expect(
+          "r: under the rail's breakpoint the column stands aside",
+          "rail column",
+          worker,
+          "beside: no",
+          "size class regular",
+          "display mode secondaryOnly",
+          "rail in window: no"
+        );
+        expect(
+          "r: the bar's toggle brings the rail over the page as its sheet",
+          "rail sheet",
+          worker,
+          "over the page: SidebarViewController"
+        );
+      }
+      if (rail) {
+        const inRail = `rail: ${rail}`;
+        const overRail = "over the rail: none";
         expect(
           "r: the rail's session row carries the session's menu",
           "rail menu",
@@ -890,26 +933,31 @@ async function run(kit: Kit): Promise<void> {
           "Rename…"
         );
         expect(
-          "r: Delete transcript asks under the rail row, in the page",
+          "r: Delete transcript asks under the rail row, in the rail, nothing presented over it",
           "rail delete asked",
           worker,
+          inRail,
           "'Delete this transcript?'",
           "under its rail row: yes",
-          free
+          overRail
         );
         expect(
           "r: it pends in place",
           "rail delete in flight",
           worker,
+          inRail,
           "Deleting…",
-          "under its rail row: yes"
+          "under its rail row: yes",
+          overRail
         );
         expect(
           "r: confirmed, the session is deleted: its rail row and its question go",
           "rail delete answered",
           worker,
+          inRail,
           "question: none on screen",
-          "rail row: gone"
+          "rail row: gone",
+          "hub row: gone"
         );
       }
 

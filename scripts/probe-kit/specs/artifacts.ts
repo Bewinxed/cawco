@@ -86,8 +86,15 @@
  *    picture, and the parent's panel still shows its own page.
  * H9. The delegate's own artifact_show of what it handed up is refused, and
  *    the parent's panel keeps its page.
- * H8. Once the parent opened it, the delegate's next revision is handed
- *    again: not opened, waiting on the parent, the parent told once more.
+ * H8. Once the parent opened it, the delegate's re-create while the
+ *    parent's panel shows it is held as its next version: the panel keeps
+ *    it, it waits on the parent, the parent is told it changed.
+ * H10–H12. The delegate's new HTML for a page the parent's panel shows, and
+ *    its elements for the held canvas, wait as the next version: the
+ *    panel's revision stays, the parent is told once, and the parent's
+ *    artifact_show merges the last version in.
+ * H13. A change to a page the parent opened that the panel no longer shows
+ *    is held all the same.
  * P1–P3. The delegate's `to: "parent"` preview of a folder that isn't there,
  *    and one of a port nothing listens on, are refused, and the parent gets
  *    no artifact and no send of either.
@@ -124,7 +131,14 @@ import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import {
+  type Kit,
+  type KitFleet,
+  open,
+  pressIn,
+  type Spec,
+  settle,
+} from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 /** The design tokens' one source (CLAUDE.md, Design Context). */
@@ -535,7 +549,7 @@ const run = async (kit: Kit) => {
     30_000
   );
   const clickedAt = Date.now();
-  await frame.locator('[data-option="b"]').click();
+  await pressIn(frame, '[data-option="b"]');
   const heard = await until(
     "the pick in artifact_read",
     () => read(id),
@@ -631,7 +645,7 @@ interface Listed {
 }
 
 /**
- * H1–H9: a delegate's `to: "parent"` artifact reaches its parent listed,
+ * H1–H13: a delegate's `to: "parent"` artifact reaches its parent listed,
  * not opened, a canvas drawn all the same; only the parent's own
  * artifact_show puts it in its panel.
  * P1–P3: a `to: "parent"` preview that can't start or doesn't answer is
@@ -846,8 +860,67 @@ const handChecks = async ({
     `show: ${opened.slice(Math.max(0, opened.lastIndexOf("{")), opened.lastIndexOf("{") + 200)}; handed ${JSON.stringify(handedOpened)}; list ${JSON.stringify(after ?? null)}`
   );
 
-  // H8. Its delegate's next revision, while the parent's panel shows it, is
-  // handed again: not opened, waiting on the parent, the parent told again.
+  await heldChecks({
+    kit,
+    fleet,
+    parent,
+    callParent,
+    callDelegate,
+    handedSends,
+    shownOf,
+    canvasId: handedId,
+  });
+  await refusedHandChecks({ kit, fleet, parent, callDelegate });
+};
+
+/** The next version a held change answers (artifacts/service.ts `heldId`). */
+const HELD_ID = /"held":"([0-9a-f-]{36})"/;
+
+/** What the hub reads of an artifact: its revision, page hash and outline (artifacts/service.ts `ArtifactRead`). */
+interface HeldRead {
+  outline?: string;
+  pageHash: string | null;
+  revision: number;
+}
+
+/** A page whose heading names its version. */
+const versionPage = (version: string) =>
+  PAGE.replace("<h1>Pick a hero</h1>", `<h1>Version ${version}</h1>`);
+
+/**
+ * H8, H10–H13: a maker's change to an artifact its parent opened is held
+ * as its next version. The panel's artifact keeps its revision, the
+ * parent is told once ("… changed the …"), the next version reads as what
+ * the maker wrote, and the parent's artifact_show merges it in. A page's new
+ * HTML, a canvas's re-create and its elements; read from the hub
+ * (`/api/instances/:id/artifacts/:artifact`) and the parent's sends.
+ */
+const heldChecks = async ({
+  kit,
+  fleet,
+  parent,
+  callParent,
+  callDelegate,
+  handedSends,
+  shownOf,
+  canvasId,
+}: {
+  callDelegate: (tool: string, input: object) => Promise<string>;
+  callParent: (tool: string, input: object) => Promise<string>;
+  canvasId: string;
+  fleet: KitFleet;
+  handedSends: (id: string) => string[];
+  kit: Kit;
+  parent: string;
+  shownOf: (id: string) => Promise<{ instanceId: string; shown: boolean }>;
+}) => {
+  const readOf = (id: string) =>
+    fleet.api<HeldRead>(`/api/instances/${parent}/artifacts/${id}`);
+  const heldOf = (answer: string) => answer.match(HELD_ID)?.[1];
+  const changedSends = (id: string) =>
+    handedSends(id).filter((text) => text.includes("changed the"));
+
+  // H8. The delegate re-creates the canvas the parent's panel now shows: held.
   const again = await callDelegate(CREATE, {
     kind: "canvas",
     name: "handed-canvas",
@@ -855,24 +928,155 @@ const handChecks = async ({
     ask: "Draw on this canvas",
     to: "parent",
   });
-  const sendsAgain = await until(
-    "the parent's second hand-off send",
-    () => handedSends(handedId),
-    (found) => found.length > 1,
-    30_000
-  ).catch(() => handedSends(handedId));
+  const canvasNext = heldOf(again);
   const relisted = (
     await fleet.api<Listed[]>(`/api/instances/${parent}/artifacts/status`)
-  ).find((one) => one.id === handedId);
+  ).find((one) => one.id === canvasId);
+  const canvasShown = await shownOf(canvasId);
   kit.check(
-    "H8: a re-hand after the parent opened it answers not opened, waits on the parent again, and tells the parent once more",
-    again.includes("Handed to your parent, not opened") &&
+    "H8: the delegate's re-create of the canvas the parent's panel shows is held as its next version: the panel keeps it, it waits on the parent, and the parent is told it changed",
+    !!canvasNext &&
+      again.includes("waits as its next version") &&
+      canvasShown.shown &&
       relisted?.waitingOn.includes("session") === true &&
-      sendsAgain.length === 2,
-    `create: ${again.slice(Math.max(0, again.indexOf('{"id"')), again.indexOf('{"id"') + 300)}; list ${JSON.stringify(relisted ?? null)}; ${sendsAgain.length} send(s)`
+      changedSends(canvasId).length === 1,
+    `create: ${again.slice(Math.max(0, again.indexOf('{"id"')), again.indexOf('{"id"') + 300)}; shown ${canvasShown.shown}; list ${JSON.stringify(relisted ?? null)}; ${changedSends(canvasId).length} change send(s)`
   );
 
-  await refusedHandChecks({ kit, fleet, parent, callDelegate });
+  // H10. A page the parent opened, then the delegate's new HTML twice.
+  const made = await callDelegate(CREATE, {
+    kind: "page",
+    name: "held-page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    html: versionPage("1"),
+    to: "parent",
+  });
+  const pageId = made.match(ANSWERED_ID)?.[1];
+  if (!pageId) {
+    kit.check("H10: the delegate's page is handed up", false, made.slice(-400));
+    return;
+  }
+  await callParent("mcp__cawco__artifact_show", { id: pageId });
+  const shownRead = await readOf(pageId);
+  const first = await callDelegate(UPDATE, {
+    id: pageId,
+    html: versionPage("2"),
+  });
+  const second = await callDelegate(UPDATE, {
+    id: pageId,
+    html: versionPage("3"),
+  });
+  const pageNext = heldOf(first);
+  const sends = await until(
+    "the parent's change send",
+    () => changedSends(pageId),
+    (found) => found.length > 0,
+    30_000
+  ).catch(() => changedSends(pageId));
+  await Bun.sleep(LISTEN_MS);
+  const [heldRead, nextRead, pageShown] = await Promise.all([
+    readOf(pageId),
+    pageNext ? readOf(pageNext) : Promise.resolve(null),
+    shownOf(pageId),
+  ]);
+  kit.check(
+    "H10: the delegate's new HTML for a page the parent's panel shows leaves the panel's page on its revision, waits as one next version, and tells the parent once",
+    !!pageNext &&
+      heldOf(second) === pageNext &&
+      pageShown.shown &&
+      heldRead.revision === shownRead.revision &&
+      heldRead.pageHash === shownRead.pageHash &&
+      nextRead !== null &&
+      nextRead.pageHash !== shownRead.pageHash &&
+      changedSends(pageId).length === 1 &&
+      sends[0]?.includes(
+        `changed the page "held-page" (artifact ${pageId}): your panel keeps the version you opened`
+      ) === true,
+    `shown r${shownRead.revision} ${shownRead.pageHash?.slice(0, 8)}; after r${heldRead.revision} ${heldRead.pageHash?.slice(0, 8)}; next ${pageNext} ${nextRead?.pageHash?.slice(0, 8)}; ${changedSends(pageId).length} change send(s): ${sends[0]?.slice(0, 300) ?? "none"}`
+  );
+
+  // H11. The parent's artifact_show opens the new version.
+  await callParent("mcp__cawco__artifact_show", { id: pageId });
+  const opened = await readOf(pageId);
+  const listed = (
+    await fleet.api<Listed[]>(`/api/instances/${parent}/artifacts/status`)
+  ).find((one) => one.id === pageId);
+  const gone = pageNext
+    ? await fleet
+        .api<unknown>(`/api/instances/${parent}/artifacts/${pageNext}`)
+        .then(
+          () => false,
+          () => true
+        )
+    : false;
+  kit.check(
+    "H11: the parent's artifact_show moves its panel's page to the delegate's last version, and nothing waits after",
+    opened.pageHash === nextRead?.pageHash &&
+      opened.revision > shownRead.revision &&
+      gone &&
+      listed?.shown === true &&
+      !listed.waitingOn.includes("session"),
+    `opened r${opened.revision} ${opened.pageHash?.slice(0, 8)}; next gone ${gone}; list ${JSON.stringify(listed ?? null)}`
+  );
+
+  // H12. Elements for the canvas held in H8: drawn on its next version, merged on show.
+  const drawn = await callDelegate(UPDATE, {
+    id: canvasId,
+    elements: [
+      {
+        type: "rectangle",
+        id: "held-box",
+        x: 0,
+        y: 0,
+        width: 160,
+        height: 60,
+        label: { text: "Held box" },
+      },
+    ],
+  });
+  const [liveCanvas, nextCanvas] = await Promise.all([
+    readOf(canvasId),
+    canvasNext ? readOf(canvasNext) : Promise.resolve(null),
+  ]);
+  await callParent("mcp__cawco__artifact_show", { id: canvasId });
+  const openedCanvas = await readOf(canvasId);
+  kit.check(
+    "H12: the delegate's elements for the held canvas are drawn on its next version, not the panel's, the parent told no more, and its artifact_show merges them in",
+    heldOf(drawn) === canvasNext &&
+      drawn.includes('"wrote":["held-box"') &&
+      liveCanvas.outline?.includes("Held box") === false &&
+      nextCanvas?.outline?.includes("Held box") === true &&
+      changedSends(canvasId).length === 1 &&
+      openedCanvas.outline?.includes("Held box") === true,
+    `update: ${drawn.slice(Math.max(0, drawn.indexOf('{"')), drawn.indexOf('{"') + 300)}; live ${JSON.stringify(liveCanvas.outline)}; next ${JSON.stringify(nextCanvas?.outline)}; opened ${JSON.stringify(openedCanvas.outline)}; ${changedSends(canvasId).length} change send(s)`
+  );
+
+  // H13. The page the parent opened, no longer in front (the canvas is): a
+  // change is held all the same, so the panel's list opens what it opened.
+  const behind = await callDelegate(UPDATE, {
+    id: pageId,
+    html: versionPage("4"),
+  });
+  const behindSends = await until(
+    "the parent's second change send for the page",
+    () => changedSends(pageId),
+    (found) => found.length > 1,
+    30_000
+  ).catch(() => changedSends(pageId));
+  const [behindRead, pageNow] = await Promise.all([
+    readOf(pageId),
+    shownOf(pageId),
+  ]);
+  kit.check(
+    "H13: the delegate's change to the page the parent opened, while the panel shows something else, is held too: its revision stays and the parent is told",
+    !!heldOf(behind) &&
+      !pageNow.shown &&
+      behindRead.pageHash === opened.pageHash &&
+      behindRead.revision === opened.revision &&
+      behindSends.length === 2,
+    `update: ${behind.slice(Math.max(0, behind.indexOf('{"')), behind.indexOf('{"') + 200)}; shown ${pageNow.shown}; r${behindRead.revision} ${behindRead.pageHash?.slice(0, 8)} (opened r${opened.revision} ${opened.pageHash?.slice(0, 8)}); ${behindSends.length} change send(s)`
+  );
 };
 
 /**
@@ -1324,7 +1528,7 @@ const promoteChecks = async ({
   // no pointerdown, with 85 runs going on the page). Clicked once it lands,
   // as check 2 is.
   await settle(page);
-  await frame.locator('[data-option="b"]').click();
+  await pressIn(frame, '[data-option="b"]');
   await until(
     "the pick in the hub's read",
     () => fleet.api<Read>(at),
@@ -1737,7 +1941,7 @@ const fieldChecks = async ({
     Date.now()
   );
   const pickedAt = Date.now();
-  await fieldFrame.locator('input[name="size"][value="m"]').check();
+  await pressIn(fieldFrame, 'input[name="size"][value="m"]');
   await fieldFrame.locator('select[name="tone"]').selectOption("bright");
   const pickedIn = await within2s(
     (answer) =>
@@ -1843,7 +2047,7 @@ const fieldChecks = async ({
     10_000
   ).catch(() => fieldValues(tabFrame));
   const tabPickedAt = Date.now();
-  await tabFrame.locator('[data-option="cool"]').click();
+  await pressIn(tabFrame, '[data-option="cool"]');
   const crossed = await until(
     "the tab's pick in the first page",
     () => fieldFrame.locator('[data-option="cool"][data-cawco-picked]').count(),

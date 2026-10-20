@@ -50,6 +50,7 @@
  * what drawing alone decides. Runtime cadence (long tasks, painted frames)
  * is frames.ts.
  */
+import "../../packages/core/src/no-huge-pages";
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
