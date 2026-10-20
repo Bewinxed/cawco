@@ -220,7 +220,6 @@
       {expired}
       {leaving}
       {now}
-      onchangehub={() => undefined}
       onheld={playing ? held : undefined}
       onstart={start}
       {payload}
