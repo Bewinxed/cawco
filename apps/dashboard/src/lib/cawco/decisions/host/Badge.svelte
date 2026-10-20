@@ -12,5 +12,7 @@
 </script>
 
 <Badge class="self-start" {variant}>
-  <span class="min-w-0 truncate">{String(props.text ?? "")}</span>
+  <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+    >{String(props.text ?? "")}</span
+  >
 </Badge>

@@ -896,7 +896,7 @@
           onclick={(event: MouseEvent) => proceed(pressBy(event))}
           size={coarse.current ? "lg" : "default"}
           variant={page && page.working() !== id ? "outline" : "default"}
-          >Continue<Kbd aria-hidden="true">↵</Kbd></Button
+          >Continue<Kbd aria-hidden="true" data-box>↵</Kbd></Button
         >
       </div>
     {/if}

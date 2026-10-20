@@ -948,10 +948,14 @@ async function pickStep(
   await pressOn(page.locator('#decision-path [data-option="direct"]'), view);
   await settle(page, 400);
   const kept = await pickedIn(page, "path");
+  const keptSaid = await saidOf(page);
   kit.check(
-    `${label}: a press on the chosen option keeps it: still the pick, the card open, Continue standing`,
-    JSON.stringify(kept.picked) === '["direct"]' && !kept.decided && kept.next,
-    JSON.stringify(kept)
+    `${label}: a press on the chosen option keeps it: still the pick, the card open, Continue standing, and the live region says "Kept Straight to sign up"`,
+    JSON.stringify(kept.picked) === '["direct"]' &&
+      !kept.decided &&
+      kept.next &&
+      keptSaid === "Kept Straight to sign up",
+    JSON.stringify({ ...kept, said: keptSaid })
   );
 }
 

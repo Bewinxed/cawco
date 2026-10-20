@@ -20,6 +20,7 @@
   let failed = $state(false);
 </script>
 
+<!-- mark-line: the picture stands over its caption, in a column; it is no mark beside words -->
 <Well caption={props.caption ? String(props.caption) : undefined}>
   {#if src && !failed}
     <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a picture that fails to load says so in words. -->

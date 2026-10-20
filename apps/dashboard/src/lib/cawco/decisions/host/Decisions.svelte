@@ -175,7 +175,7 @@
   data-slot="decision-page"
 >
   <header
-    class="type-title flex min-w-0 items-start gap-space-3 py-space-2"
+    class="mark-line type-title flex min-w-0 items-start gap-space-3 py-space-2"
     data-slot="page-head"
   >
     <span class="mark-cell">
@@ -233,6 +233,7 @@
       variant={opened.size > 0 ? "outline" : "default"}
       ><PendingContent label={sendLabel} pending={sending} /><KbdGroup
         aria-hidden="true"
+        data-box
         ><Kbd reach="keyboard">{modifier}</Kbd><Kbd reach="keyboard">↵</Kbd
         ></KbdGroup
       ></Button

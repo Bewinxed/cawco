@@ -90,10 +90,10 @@
       >
     </OptionGroupItem>
     {#if props.recommended === true}
-      <Badge id="{uid}-tag">Recommended</Badge>
+      <Badge id="{uid}-tag"><span>Recommended</span></Badge>
     {/if}
     {#if props.current === true}
-      <Badge id="{uid}-now">Current</Badge>
+      <Badge id="{uid}-now"><span>Current</span></Badge>
     {/if}
   </div>
   {#if props.line}

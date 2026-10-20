@@ -196,6 +196,7 @@
       {:else}
         <Skeleton class="w-full" height="picture" />
       {/if}
+      <!-- mark-line: Caw stands over the wait's line, in a column; no mark beside words -->
       <div
         class="pointer-events-none absolute inset-0 grid content-center justify-items-center gap-space-2"
       >

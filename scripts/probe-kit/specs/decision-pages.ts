@@ -425,6 +425,17 @@ const mediaIn = (frame: Frame) =>
       canvas: !!canvas?.contentDocument?.querySelector(".excalidraw canvas"),
       preview: preview?.contentDocument?.body?.textContent?.trim() ?? "",
       dials: document.querySelectorAll(".dialkit-root .dialkit-panel").length,
+      // Each DialKit panel stands in its card, in a well (decisions/host
+      // Dials.svelte), and nothing of DialKit's floats over the page.
+      dialsInline: [
+        ...document.querySelectorAll<HTMLElement>(".dialkit-root"),
+      ].every(
+        (root) =>
+          !!root.closest("[data-slot=decision] [data-slot=media]") &&
+          [root, ...root.querySelectorAll<HTMLElement>("*")].every(
+            (el) => getComputedStyle(el).position !== "fixed"
+          )
+      ),
       faces: [...document.fonts]
         .filter((face) => face.status === "loaded")
         .map((face) => face.family),
@@ -828,12 +839,13 @@ const mediaLeg = async (
     })
   );
   kit.check(
-    `(a) ${leg}: three cards, the picture loaded, three diagrams, the canvas live, the mockup live, the DialKit panel up, in the host's theme`,
+    `(a) ${leg}: three cards, the picture loaded, three diagrams, the canvas live, the mockup live, the DialKit panel up in its card's well with nothing fixed over the page, in the host's theme`,
     media.image === 64 &&
       media.diagrams.length === 3 &&
       media.canvas &&
       media.preview.includes("slides") &&
       media.dials === 1 &&
+      media.dialsInline &&
       media.theme === theme,
     JSON.stringify(media)
   );
