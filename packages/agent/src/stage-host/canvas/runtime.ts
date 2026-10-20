@@ -128,7 +128,7 @@ const SWEEP_KEPT = 3;
 /** The quiet after the last change before a report is posted. Ours. */
 const REPORT_QUIET_MS = 200;
 /** The smallest an embed draws a story's words, in px: scaled further, they stop being legible. The owner's call ("if the scale would put body text under ~10px, say so"). */
-const EMBED_TYPE_FLOOR = 10;
+export const EMBED_TYPE_FLOOR = 10;
 
 export type WidthSlot = number | "own";
 

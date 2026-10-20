@@ -24,8 +24,9 @@
  *    its own frame: its pixels painted (not one flat colour), the stories
  *    its Preview names drawn (every story when it names none), each with
  *    words in it, none of the canvas's working chrome seen (band, crumb,
- *    foot, steps, section heads, labels, statuses), its words at 12px or
- *    more as drawn and every frame inside the embed's width, and the embed
+ *    foot, steps, section heads, labels, statuses), its words as drawn at
+ *    the embed's floor or more (canvas runtime.ts `EMBED_TYPE_FLOOR`, the
+ *    least a wide story is scaled to before it scrolls) and every frame inside the embed's width, and the embed
  *    as tall as what it draws. Each frame it shows is shot where the person
  *    sees it (canvas-shots.ts `shootEmbedded`): nothing over it, not one
  *    colour, its pixels its DOM's paint. Each option as
@@ -58,6 +59,7 @@ import {
   blankEmbeds,
   capturePage,
   EMBED_FRAME,
+  EMBED_TYPE_FLOOR,
   embedDrawFaults,
   idOf,
   readEmbeds,
@@ -1040,7 +1042,7 @@ const spec: Spec = {
             );
             const sizeFaults = embeds.flatMap((e) => [
               ...e.frames
-                .filter((f) => f.type < 12)
+                .filter((f) => f.type < EMBED_TYPE_FLOOR)
                 .map((f) => `${e.file}/${f.story}: its words at ${f.type}px`),
               ...e.frames
                 .filter((f) => f.right > e.width + 1)
@@ -1054,7 +1056,7 @@ const spec: Spec = {
             ]);
             const types = embeds.flatMap((e) => e.frames.map((f) => f.type));
             kit.check(
-              `${one.name} ${leg}: every embed at a readable size inside its card (words at ${types.length ? Math.min(...types) : 0}px and up, zoom ${[...new Set(embeds.map((e) => e.scale))].join("/") || "none"}, each embed as tall as what it draws)`,
+              `${one.name} ${leg}: every embed at a readable size inside its card (words at ${types.length ? Math.min(...types) : 0}px and up, the embed's floor ${EMBED_TYPE_FLOOR}px, zoom ${[...new Set(embeds.map((e) => e.scale))].join("/") || "none"}, each embed as tall as what it draws)`,
               sizeFaults.length === 0,
               sizeFaults.join("\n    ")
             );

@@ -16,6 +16,7 @@ import { dirname, join } from "node:path";
 import type { Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { buildStageHost } from "../../packages/agent/src/stage-host/build";
+import { EMBED_TYPE_FLOOR as TYPE_FLOOR } from "../../packages/agent/src/stage-host/canvas/runtime";
 import { decisionHostFile } from "../../packages/core/src/decision-host";
 import {
   DECISION_ASSETS,
@@ -26,18 +27,13 @@ import { until } from "../scratch-fleet";
 import { type ShotRead, shootEmbedded } from "./canvas-shots";
 import { ROOT, settle, type Theme } from "./kit";
 
-declare global {
-  interface Window {
-    /** The component canvas's state (agent stage-host canvas/runtime.ts `CanvasState`), what these specs read. */
-    __cawcoCanvas?: {
-      frames: () => { interaction: string; key: string; story: string }[];
-      go: (key: string) => void;
-      loaded: () => string[];
-      swept: boolean;
-      world: () => { x: number; y: number; z: number };
-    };
-  }
-}
+/**
+ * The least an embed scales a story's words to before it scrolls the story
+ * sideways instead: the floor its words are read against. Importing the
+ * canvas runtime also brings its `window.__cawcoCanvas` (`CanvasState`),
+ * what these specs read.
+ */
+export const EMBED_TYPE_FLOOR = TYPE_FLOOR;
 
 /** The dashboard, whose states files the stage draws. */
 export const APP = join(ROOT, "apps/dashboard");
