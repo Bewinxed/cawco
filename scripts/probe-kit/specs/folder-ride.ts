@@ -7,18 +7,17 @@
  * open as tabs, a real touch drag (CDP `Input.dispatchTouchEvent`) held
  * mid-swipe. Read from the computed style of the strip's tabs.
  *
- * TabItem's `[data-ride] &` sits nested in `[data-variant="folder"] .ff-tab`,
- * and the build keeps the nesting, so it reads as `[data-ride] :is(…)`:
- * each ancestor is matched on its own, and the list's `data-ride`, inside
- * the folder root, matches. A tool that lowers the nesting by joining the
- * selectors (`[data-ride] [data-variant="folder"] .ff-tab`) would lose it;
- * this spec is what says so.
+ * TabItem's ride variant names the list's `data-ride` inside the folder root,
+ * in that order (`[data-variant=folder] [data-ride] &`), so it holds however
+ * a tool lowers the nesting; a rule that joined them the other way round
+ * (`[data-ride] [data-variant="folder"] …`) would lose it, and this spec is
+ * what says so.
  *
  * At the desk (1440×900), a plain switch (the tab's click, no pointer over the
  * strip): the elements each frame of the choice restyled, off a DevTools
  * trace; then the choice back with its `--pick` transitions paused and seeked
  * (the Animation domain) to 0, 0.25, 0.5, 0.75 and 1, each tab's `--pick`, its
- * three readers' (`.fold .sheet`, `.fold .rim`, `.strong`) and what each draws
+ * three readers' (the fold's sheet and rim, the strong name layer) and what each draws
  * from it, and `--hang-rim`. `--pick` reaches only the path to its readers
  * (TabItem), so the readers must read their tab's value at every fraction,
  * and the choice's transitions must share one clock.
@@ -29,7 +28,7 @@ import { traceMain } from "../frames";
 import { COMPOSER, type Kit, open, type Spec, settle } from "../kit";
 
 const TAB = '[data-variant="folder"] [data-slot="ff-tab"]';
-const STACK = '[data-slot="stack"].swipe';
+const STACK = '[data-slot="stack"][data-swipe]';
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -237,9 +236,9 @@ const probe = async (kit: Kit) => {
       const pick = (el: Element | null) =>
         el ? getComputedStyle(el).getPropertyValue("--pick").trim() : "none";
       return [...document.querySelectorAll<HTMLElement>(tab)].map((one) => {
-        const sheet = one.querySelector(".fold .sheet");
-        const rim = one.querySelector(".fold .rim");
-        const strong = one.querySelector(".strong");
+        const sheet = one.querySelector('[data-slot="fold"] [data-ff-sheet]');
+        const rim = one.querySelector('[data-slot="fold"] [data-slot="rim"]');
+        const strong = one.querySelector('[data-slot="text"][data-text]');
         return {
           tab: `${one.textContent?.trim().slice(0, 12)}`,
           pick: pick(one),

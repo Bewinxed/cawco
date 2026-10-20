@@ -2,71 +2,19 @@
   /**
    * Markdown a tool carried — a memory document, a skill's arguments — at the
    * transcript's small scale. Settled text, so it renders static: no stream,
-   * no word reveal. The rules are `:global` for the same reason MessageBody's
-   * are: prose-sm restates its own size on streamdown's root.
+   * no word reveal. Its look is Typography's own modifiers (`prose-p:`,
+   * `prose-ul:`, …) and the theme's `prose-*` variants on this element, which
+   * reach the `.prose` root Markdown renders below it: prose-sm restates its
+   * own size and leading on that root.
    */
   import { Markdown } from "#lib/components/ui/markdown/index.js";
 
   let { source }: { source: string } = $props();
 </script>
 
-<div class="tprose"><Markdown {source} /></div>
-
-<style>
-  .tprose,
-  .tprose :global(.prose) {
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-    color: var(--ink-strong);
-  }
-  /* Every block takes the gap and the first gives it back (the more
-     specific rule below): `* + *` restyled the whole document per block. */
-  .tprose :global(.prose > *) {
-    margin-top: var(--space-2);
-  }
-  .tprose :global(.prose > :first-child) {
-    margin-top: 0;
-  }
-  .tprose :global(.prose > :last-child) {
-    margin-bottom: 0;
-  }
-  .tprose :global(p),
-  .tprose :global(ul),
-  .tprose :global(ol),
-  .tprose :global(blockquote) {
-    margin-block: 0;
-  }
-  /* A list holds only items: every one but the first. */
-  .tprose :global(li:where(:not(:first-child))) {
-    margin-top: var(--space-1);
-  }
-  .tprose :global(ul),
-  .tprose :global(ol) {
-    padding-left: var(--space-5);
-  }
-  .tprose :global(.prose h1),
-  .tprose :global(.prose h2),
-  .tprose :global(.prose h3),
-  .tprose :global(.prose h4),
-  .tprose :global(.prose h5),
-  .tprose :global(.prose h6) {
-    font-size: var(--text-label);
-    line-height: var(--leading-ui);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .tprose :global(.prose > :is(h1, h2, h3, h4):where(:not(:first-child))) {
-    margin-top: var(--space-4);
-  }
-  /* prose wraps inline code in literal backticks; the code face already
-     marks it. */
-  .tprose :global(code::before),
-  .tprose :global(code::after) {
-    content: none;
-  }
-  .tprose :global(code) {
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-  }
-</style>
+<div
+  data-slot="tprose"
+  class="text-size-body font-normal leading-body text-ink-strong prose-root:text-size-body prose-root:font-normal prose-root:leading-body prose-root:text-ink-strong prose-p:my-0 prose-ul:my-0 prose-ol:my-0 prose-blockquote:my-0 prose-ul:ps-space-5 prose-ol:ps-space-5 prose-li:my-0 prose-item:mt-space-1 prose-block:mt-space-2 prose-block:first:mt-0 prose-block:last:mb-0 prose-heading:text-size-label prose-heading:leading-ui prose-heading:font-medium prose-heading:text-ink-strong prose-block-heading:mt-space-4"
+>
+  <Markdown {source} />
+</div>

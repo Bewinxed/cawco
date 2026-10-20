@@ -281,7 +281,10 @@
      by hand: the script is downloaded from it and `join` saves it. An SSH add
      needs none, the hub's own connection carries the machine to it. -->
 {#snippet addressField(id: string)}
-  <div data-slot="add-machine-dialog-field" class="field">
+  <div
+    data-slot="add-machine-dialog-field"
+    class="flex min-w-0 flex-col gap-space-2 text-ink-strong"
+  >
     <Label for={id}>Hub address this machine should use</Label>
     <NativeSelect.Root
       class="w-full"
@@ -296,7 +299,7 @@
         >
       {/each}
     </NativeSelect.Root>
-    <span class="hint">
+    <span class="type-meta text-ink-subtle">
       The machine downloads the install script from here, so it has to be able
       to reach it. The .local name reaches machines on the same network, or on a
       VPN that carries it like ZeroTier; Tailscale and WireGuard don't.
@@ -334,15 +337,20 @@
     {#if hubAuth.waiting.length > 0}
       <!-- This hub requires paired devices: the machine that just connected
            waits here for its Admit (hub hub-auth.ts). -->
-      <ul aria-label="Machines waiting to be admitted" class="waiting">
+      <ul
+        aria-label="Machines waiting to be admitted"
+        class="m-0 flex list-none flex-col gap-space-2 rounded-md bg-surface-recess p-space-3"
+      >
         {#each hubAuth.waiting as machine (machine.machineId)}
-          <li>
-            <span data-slot="who" class="who">
-              <span data-slot="name" class="name"
+          <li class="flex items-center gap-space-3">
+            <span data-slot="who" class="flex min-w-0 flex-auto flex-col">
+              <span
+                data-slot="name"
+                class="type-body text-ink-strong wrap-anywhere"
                 >{machine.hostname ?? machine.machineId} waits to be admitted</span
               >
               {#if machine.address}
-                <span class="hint">{machine.address}</span>
+                <span class="type-meta text-ink-subtle">{machine.address}</span>
               {/if}
             </span>
             <Button
@@ -368,43 +376,62 @@
     {#if tab === "ssh"}
       {#if view === "running" && job}
         {@const steps = stepsOf(job)}
-        <div class="flex flex-col gap-[var(--space-3)]">
-          <p class="text-body text-[var(--ink-muted)]">
+        <div class="flex flex-col gap-space-3">
+          <p class="text-body text-ink-muted">
             {#if signedIn}
               Adding {job.target}. It keeps installing if you close this.
             {:else}
               Signing in to {job.target} over SSH.
             {/if}
           </p>
-          <ol aria-live="polite" class="steps">
+          <ol
+            aria-live="polite"
+            class="m-0 flex list-none flex-col gap-space-2 p-0"
+          >
             {#each steps as step, index (index)}
-              <li class="mark-line" class:current={index === steps.length - 1}>
+              <li
+                class="mark-line flex min-w-0 items-center gap-space-3 type-body text-ink-muted data-current:text-ink-strong"
+                data-current={index === steps.length - 1 || undefined}
+              >
                 {#if index === steps.length - 1}
-                  <Spinner class="size-4" />
+                  <Spinner />
                 {:else}
                   <IconSuccess
                     data-add-machine-dialog-done
                     aria-hidden="true"
-                    class="size-4 done"
+                    class="size-icon-md flex-none text-status-done-ink"
                   />
                 {/if}
-                <span>{step}</span>
+                <span
+                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                  >{step}</span
+                >
               </li>
             {:else}
-              <li class="current mark-line">
-                <Spinner class="size-4" /><span>Connecting over SSH</span>
+              <li
+                class="mark-line flex min-w-0 items-center gap-space-3 type-body text-ink-muted data-current:text-ink-strong"
+                data-current
+              >
+                <Spinner /><span
+                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                  >Connecting over SSH</span
+                >
               </li>
             {/each}
           </ol>
-          <details class="output">
-            <summary class="mark-line">
+          <details class="group">
+            <summary
+              class="mark-line inline-flex list-none items-center gap-space-2 rounded-xs type-label text-ink-muted details-marker:hidden hover:text-ink-strong"
+            >
               <IconChevronRight
                 data-chev
                 aria-hidden="true"
-                class="chev size-4"
+                class="size-icon-md flex-none motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-open:rotate-90"
               /><span>Output</span>
             </summary>
-            <pre {@attach followTail()}>{job.lines.join("\n")}</pre>
+            <pre
+              class="mx-0 mb-0 mt-space-2 max-h-c-output-max overflow-auto border border-border-control rounded-md bg-surface-hover p-space-3 text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong"
+              {@attach followTail()}>{job.lines.join("\n")}</pre>
           </details>
           {#if sshJoin.refused}
             <Alert.Root role="alert" variant="destructive">
@@ -414,16 +441,16 @@
           {/if}
         </div>
       {:else}
-        <form
-          class="flex flex-col gap-[var(--space-4)]"
-          id="ssh-join"
-          onsubmit={start}
-        >
+        <form class="flex flex-col gap-space-4" id="ssh-join" onsubmit={start}>
           <div
             data-slot="grid"
-            class="grid grid-cols-[minmax(0,1fr)_6rem] gap-[var(--space-3)]"
+            class="grid grid-cols-(--grid-cols) gap-space-3"
+            style:--grid-cols="minmax(0, 1fr) var(--c-port-field-w)"
           >
-            <div data-slot="add-machine-dialog-field" class="field">
+            <div
+              data-slot="add-machine-dialog-field"
+              class="flex min-w-0 flex-col gap-space-2 text-ink-strong"
+            >
               <Label for="join-target">SSH target</Label>
               <Input
                 autocapitalize="off"
@@ -434,7 +461,10 @@
                 bind:value={target}
               />
             </div>
-            <div data-slot="add-machine-dialog-field" class="field">
+            <div
+              data-slot="add-machine-dialog-field"
+              class="flex min-w-0 flex-col gap-space-2 text-ink-strong"
+            >
               <Label for="join-port">Port</Label>
               <Input
                 aria-invalid={portValid ? undefined : "true"}
@@ -446,7 +476,7 @@
             </div>
             <div
               data-slot="add-machine-dialog-field"
-              class="field col-span-full"
+              class="col-span-full flex min-w-0 flex-col gap-space-2 text-ink-strong"
             >
               <Label for="join-password">Password (optional)</Label>
               <InputGroup.Root>
@@ -479,7 +509,7 @@
                   </InputGroup.Button>
                 </InputGroup.Addon>
               </InputGroup.Root>
-              <span id="join-password-hint" class="hint">
+              <span id="join-password-hint" class="type-meta text-ink-subtle">
                 Used once to add this hub's key to the machine, and not kept.
                 Leave it empty if the machine already accepts the key.
               </span>
@@ -487,13 +517,16 @@
           </div>
 
           {#if failure}
-            <div class="flex flex-col gap-[var(--space-2)]" role="alert">
+            <div class="flex flex-col gap-space-2" role="alert">
               <Alert.Root variant="destructive">
                 <IconError aria-hidden="true" />
                 <Alert.Description>{failure.text}</Alert.Description>
               </Alert.Root>
               {#if failure.tail.length > 0}
-                <pre class="tail">{failure.tail.join("\n")}</pre>
+                <pre
+                  class="m-0 max-h-c-output-max overflow-auto border border-border-control rounded-md bg-surface-hover p-space-3 text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong">{failure.tail.join(
+                    "\n"
+                  )}</pre>
               {/if}
             </div>
           {:else if sshJoin.refused}
@@ -507,18 +540,20 @@
             </Alert.Root>
           {/if}
 
-          <details class="output" bind:open={keyOpen}>
-            <summary class="mark-line">
+          <details class="group" bind:open={keyOpen}>
+            <summary
+              class="mark-line inline-flex list-none items-center gap-space-2 rounded-xs type-label text-ink-muted details-marker:hidden hover:text-ink-strong"
+            >
               <IconChevronRight
                 data-chev
                 aria-hidden="true"
-                class="chev size-4"
+                class="size-icon-md flex-none motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-open:rotate-90"
               />
               <span>This hub's SSH key</span>
             </summary>
-            <div class="flex flex-col gap-[var(--space-2)] pt-[var(--space-2)]">
+            <div class="flex flex-col gap-space-2 pt-space-2">
               {#if joinInfo.value?.sshPublicKey}
-                <p class="hint">
+                <p class="type-meta text-ink-subtle">
                   The machine has to accept this key: it goes in
                   ~/.ssh/authorized_keys for the user you sign in as.
                 </p>
@@ -527,7 +562,7 @@
                   text={joinInfo.value.sshPublicKey}
                 />
               {:else if joinInfo.value}
-                <p class="hint">
+                <p class="type-meta text-ink-subtle">
                   This hub has no SSH key yet. Create one on
                   {joinInfo.value.hubHostname}
                   with ssh-keygen -t ed25519, then reopen this.
@@ -538,9 +573,9 @@
         </form>
       {/if}
     {:else}
-      <div class="flex flex-col gap-[var(--space-3)]">
+      <div class="flex flex-col gap-space-3">
         {@render addressField("join-address-command")}
-        <p class="text-body text-[var(--ink-muted)]">
+        <p class="text-body text-ink-muted">
           Run this on the machine you want to add. It installs Bun if needed,
           clones CawCo and starts the agent.
         </p>
@@ -559,7 +594,7 @@
     <Button onclick={close} variant="outline">Cancel</Button>
     <Button disabled={!canStart} form="ssh-join" type="submit">
       {#if starting}
-        <Spinner class="size-4" />
+        <Spinner />
       {/if}
       <span
         >{job?.state === "failed" || job?.state === "stopped"
@@ -599,16 +634,18 @@
       <Drawer.Header>
         <Drawer.Title>Connect a machine</Drawer.Title>
       </Drawer.Header>
-      <div class="sheet-body kit-sheet-scroll">
+      <div
+        class="kit-sheet-scroll flex min-h-0 flex-col gap-space-7 overflow-y-auto overscroll-contain"
+      >
         {#if !joined}
-          <Drawer.Description class="text-body text-[var(--ink-muted)]">
+          <Drawer.Description text="body">
             {@render description()}
           </Drawer.Description>
         {/if}
         {@render body()}
       </div>
       {#if !joined}
-        <Drawer.Footer class="flex-col-reverse px-0 pb-0">
+        <Drawer.Footer pad="flush">
           {@render actions()}
         </Drawer.Footer>
       {/if}
@@ -628,7 +665,7 @@
     }
   >
     <!-- Joined, Close is the one act the dialog offers, so it is the one button. -->
-    <Dialog.Content class="sm:max-w-lg" showCloseButton={!joined}>
+    <Dialog.Content showCloseButton={!joined} width="form">
       <Dialog.Header>
         <Dialog.Title>Connect a machine</Dialog.Title>
         {#if !joined}
@@ -640,128 +677,3 @@
     </Dialog.Content>
   </Dialog.Root>
 {/if}
-
-<style>
-  /* The sheet's body keeps the dialog body's rhythm and scrolls under its
-     head (cut on the head's seam) and footer when the install output grows. */
-  .sheet-body {
-    display: flex;
-    flex-direction: column;
-    gap: calc(var(--spacing) * 6);
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 0;
-    color: var(--ink-strong);
-  }
-  .hint {
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-  }
-  /* A machine waiting for its Admit: what it is, then the button. */
-  .waiting {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin: 0;
-    padding: var(--space-3);
-    border-radius: var(--radius-md);
-    background: var(--surface-recess);
-    list-style: none;
-  }
-  .waiting li {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .who {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-width: 0;
-  }
-  .name {
-    font: var(--type-body);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .steps {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .steps li {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    font: var(--type-body);
-    color: var(--ink-muted);
-  }
-  .steps li span {
-    min-width: 0;
-    overflow: clip;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  .steps li.current {
-    color: var(--ink-strong);
-  }
-  .steps :global(.done) {
-    flex: none;
-    color: var(--status-done-ink);
-  }
-  .output summary {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font: var(--type-label);
-    color: var(--ink-muted);
-    cursor: pointer;
-    list-style: none;
-    border-radius: var(--radius-xs);
-  }
-  .output summary::-webkit-details-marker {
-    display: none;
-  }
-  @media (hover: hover) {
-    .output summary:hover {
-      color: var(--ink-strong);
-    }
-  }
-  .output :global(.chev) {
-    flex: none;
-    transition: transform var(--dur-control) var(--ease-out);
-  }
-  .output[open] :global(.chev) {
-    transform: rotate(90deg);
-  }
-  pre {
-    margin: 0;
-    padding: 10px 12px;
-    overflow: auto;
-    font-size: var(--text-meta);
-    line-height: 1.5;
-    color: var(--ink-strong);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    background: var(--surface-hover);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-  }
-  .output pre {
-    max-height: 14rem;
-    margin-top: 8px;
-  }
-  .tail {
-    max-height: 12rem;
-  }
-</style>

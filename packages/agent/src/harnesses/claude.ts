@@ -362,9 +362,11 @@ export const toNeutral = (
           read: [command.command_uuid],
           ...session,
         };
-      default:
-        return null;
+      case "cancelled":
+      case "completed":
+        break;
     }
+    return null;
   }
   if (sdk.type === "result") {
     // The SDK's own usage carries cache_creation/cache_read counts; re-tag them
@@ -3537,9 +3539,11 @@ class ClaudeSession implements HarnessSession {
         }
         return { slot: "again", why };
       }
-      default:
-        return { slot: "off", status: cawco?.status ?? "missing" };
+      case "disabled":
+      case undefined:
+        break;
     }
+    return { slot: "off", status: cawco?.status ?? "missing" };
   }
 
   /**

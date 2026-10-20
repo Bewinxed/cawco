@@ -28,10 +28,8 @@
    * goes to the first session and the house ring shows.
    */
   import { MediaQuery } from "svelte/reactivity";
-  import { badgeVariants } from "#lib/components/ui/badge/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { cn } from "#lib/utils.js";
   import { cawco, type InstanceRow } from "../client.svelte";
   import { instanceTitle, projectOfRow } from "../home/home-state.svelte";
   import { conversationHref } from "../links";
@@ -175,11 +173,10 @@
 <Popover.Root bind:open>
   <Popover.Trigger
     aria-label={label}
-    class={cn(
-      badgeVariants(),
-      "sessions-chip pressable touch-hit overflow-visible"
-    )}
+    badge
+    class="flex-none"
     data-sessions-chip
+    look="count"
     onkeydown={() => {
       byPointer = false;
     }}
@@ -194,38 +191,50 @@
   </Popover.Trigger>
   <Popover.Content
     align="start"
-    class="sessions-flyover w-(--bits-popover-anchor-width) gap-0 overflow-hidden p-0"
+    class="w-(--bits-popover-anchor-width)"
     customAnchor={anchor}
     data-sessions-flyover
+    frame="raised"
+    gap="none"
+    overflow="clip"
     onCloseAutoFocus={keepFocus}
     onOpenAutoFocus={keepFocus}
     onpointerenter={rest}
     onpointerleave={leave}
+    pad="none"
     side="bottom"
     sideOffset={4}
     style={reach > 0 ? `min-block-size: ${reach}px` : undefined}
     trapFocus={!byPointer}
   >
-    <div data-slot="sessions-chip-card" class="card" bind:this={card}>
-      <p data-slot="head" class="head" data-flyover-head>
+    <div data-slot="sessions-chip-card" class="flex flex-col" bind:this={card}>
+      <p
+        data-slot="head"
+        class="px-space-3 pt-space-2 pb-space-1 text-ink-strong type-meta font-medium"
+        data-flyover-head
+      >
         {name}
         · {count === 1 ? "1 session" : `${count} sessions`}
       </p>
-      <ul data-slot="list" aria-label={label} class="list">
+      <ul data-slot="list" aria-label={label} class="flex flex-col">
         {#each sessions as session (session.id)}
           <li>
             <a
               data-slot="item"
-              class="item"
+              class="h-c-nav-h transition-[background-color] duration-(--dur-control) ease-out flex items-center gap-space-2 px-space-3 py-0 text-ink-strong no-underline hover:bg-surface-hover"
               data-session-link={session.id}
               href={conversationHref(session.id, cawco.instanceIndex)}
               onclick={opened}
             >
               <SessionStatus compact sessionId={session.id} />
-              <span data-slot="title" class="title"
+              <span
+                data-slot="title"
+                class="min-w-0 flex-auto truncate type-label"
                 >{instanceTitle(session)}</span
               >
-              <span data-slot="project" class="project"
+              <span
+                data-slot="project"
+                class="type-meta max-w-2/5 min-w-0 flex-initial truncate text-ink-muted"
                 >{projectOfRow(session)}</span
               >
             </a>
@@ -235,79 +244,3 @@
     </div>
   </Popover.Content>
 </Popover.Root>
-
-<style>
-  /* A count: 16px high, at least as wide, the badge's recess and corner. */
-  :global(.sessions-chip) {
-    flex: none;
-    block-size: 16px;
-    min-inline-size: 16px;
-    padding-inline: var(--space-1);
-    font: var(--type-meta);
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-row);
-    cursor: pointer;
-  }
-  /* It lies on the cells under it, so it takes the raised lift, not the
-     overlay's long drop: that one fell across the next names and, at
-     night, made them read as disabled. */
-  :global(.kit-pop.sessions-flyover) {
-    box-shadow: var(--shadow-raised);
-  }
-  /* The card: its head, then its sessions, top-aligned; any band its foot
-     reaches past them stays under them. */
-  .card {
-    display: flex;
-    flex-direction: column;
-  }
-  .head {
-    padding: var(--space-2) var(--space-3) var(--space-1);
-    font: var(--type-meta);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .list {
-    display: flex;
-    flex-direction: column;
-  }
-  /* A session: its status glyph, its title, and its project after it,
-     40px (44px on touch). */
-  .item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    block-size: 40px;
-    padding: 0 var(--space-3);
-    color: var(--ink-strong);
-    text-decoration: none;
-    transition: background-color var(--dur-control) var(--ease-out);
-
-    @media (hover: hover) and (pointer: fine) {
-      &:hover {
-        background: var(--surface-hover);
-      }
-    }
-    @media (hover: none), (pointer: coarse), (max-width: 640px) {
-      block-size: 44px;
-    }
-  }
-  .title {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    font: var(--type-label);
-  }
-  .project {
-    flex: 0 1 auto;
-    min-inline-size: 0;
-    max-inline-size: 40%;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>

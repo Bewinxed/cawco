@@ -199,7 +199,9 @@ const spec: Spec = {
       await open(on, `${base}/config/accounts/new`, "[data-choice]");
       await on
         .locator("[data-choice]")
-        .filter({ has: on.locator(".plabel", { hasText: CLAUDE_ROW }) })
+        .filter({
+          has: on.locator("[data-slot=plabel]", { hasText: CLAUDE_ROW }),
+        })
         .first()
         .click();
       await on
@@ -255,7 +257,7 @@ const spec: Spec = {
       on: typeof page,
       name: string
     ): Promise<string | null> => {
-      const problem = on.locator(".problem[role=alert]");
+      const problem = on.locator("[data-slot=refused][role=alert]");
       for (
         let step = 0;
         step < 8 && new URL(on.url()).pathname.endsWith("/new");
@@ -367,7 +369,7 @@ const spec: Spec = {
           "[data-slot=signed-as]"
         );
         const words = row?.querySelector<HTMLElement>(`[data-slot=${which}]`);
-        const glyph = row?.querySelector(".mark-cell svg");
+        const glyph = row?.querySelector("svg");
         if (!(row && words && glyph)) {
           return null;
         }
@@ -387,7 +389,7 @@ const spec: Spec = {
         const band = ex.getBoundingClientRect();
         ex.remove();
         const mark = glyph.getBoundingClientRect();
-        const step = row.closest<HTMLElement>(".box");
+        const step = row.closest<HTMLElement>('[data-slot="step-box"]');
         return {
           lines,
           offBy:
@@ -457,7 +459,9 @@ const spec: Spec = {
       await open(page, `${base}/config/accounts/new`, "[data-choice]");
       await page
         .locator("[data-choice]")
-        .filter({ has: page.locator(".plabel", { hasText: keyed.name }) })
+        .filter({
+          has: page.locator("[data-slot=plabel]", { hasText: keyed.name }),
+        })
         .first()
         .click();
       await page.getByLabel("API key", { exact: true }).fill(KEY);
@@ -540,7 +544,7 @@ const spec: Spec = {
       .click();
     const dialog = page.getByRole("dialog", { name: "New Session" });
     const title = dialog
-      .locator(".start-notice [data-slot=alert-title]")
+      .locator("[data-slot=start-notice] [data-slot=alert-title]")
       .first();
     const shown = await until(
       "New session's refusal",

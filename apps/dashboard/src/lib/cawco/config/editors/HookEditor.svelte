@@ -482,7 +482,7 @@
     {/if}
     <span
       data-slot="reach"
-      class="reach"
+      class="max-w-c-measure-meta truncate"
       title={reach.map((m) => machineLabel(m.hostname)).join(", ")}
       >{reach.length > 0
         ? reach.map((m) => machineLabel(m.hostname)).join(", ")
@@ -500,9 +500,9 @@
       bind:value={draft.name}
     />
     {#if shown("name")}
-      <p class="problem" in:appear>{wrong.name}</p>
+      <p class="type-meta text-status-fail-ink" in:appear>{wrong.name}</p>
     {:else if duplicate}
-      <p class="problem" in:appear>{duplicate}</p>
+      <p class="type-meta text-status-fail-ink" in:appear>{duplicate}</p>
     {/if}
     <ReadingWell>{hookSentence(draft)}</ReadingWell>
     <SwitchField
@@ -514,12 +514,14 @@
       bind:checked={draft.enabled}
     />
     {#if failed}
-      <p class="problem" role="alert" in:appear>{failed}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+        {failed}
+      </p>
     {/if}
   {/snippet}
 
   <EditorSection hue={HUE} icon={IconClock} label="When it runs">
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       One lifecycle event. The events with a matcher are the ones Claude Code
       lets you narrow further.
     </p>
@@ -539,13 +541,20 @@
       />
     </div>
     {#if shown("event")}
-      <p class="problem" in:appear>{wrong.event}</p>
+      <p class="type-meta text-status-fail-ink" in:appear>{wrong.event}</p>
     {:else if eventInfo}
-      <p data-slot="note" class="note">Runs {eventInfo.blurb}.</p>
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+        Runs {eventInfo.blurb}.
+      </p>
     {/if}
     {#if hookTakesMatcher(draft.event)}
       <!-- The matcher comes and goes with the event: it folds (240 / 160). -->
-      <div data-slot="fold" class="fold" in:unfold out:unfold>
+      <div
+        data-slot="fold"
+        class="flex flex-col gap-space-2"
+        in:unfold
+        out:unfold
+      >
         <Field
           id="hook-matcher"
           label="Matcher — {eventInfo?.filters}"
@@ -558,7 +567,7 @@
           <Input
             aria-invalid={shown("matcher") ? "true" : undefined}
             autocomplete="off"
-            class="font-mono"
+            face="mono"
             id="hook-matcher"
             onblur={() => {
               touched.matcher = true;
@@ -578,7 +587,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconPlay} label="What it runs">
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       CawCo writes this to every machine it applies to and registers it — no
       prompt, no approval, every time the event fires.
     </p>
@@ -590,9 +599,17 @@
     />
     <!-- One handler's fields cross-fade into the next's (--dur-control) in
          one box, whose height follows over --dur-pop on --ease-drawer. -->
-    <div class="handler" {@attach morph({ ms: dur("--dur-pop") })}>
+    <div
+      class="relative flex flex-col"
+      {@attach morph({ ms: dur("--dur-pop") })}
+    >
       {#if draft.handler.type === "command"}
-        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-space-2"
+          in:crossIn
+          out:crossOut
+        >
           <Field
             hint="Written to every machine, at a path CawCo picks — the hook always points at that copy, never at one you keep locally."
             id="hook-script"
@@ -601,8 +618,9 @@
           >
             <Textarea
               aria-invalid={shown("script") ? "true" : undefined}
-              class="resize-y font-mono"
+              face="mono"
               id="hook-script"
+              resize="block"
               onblur={() => {
                 touched.script = true;
               }}
@@ -615,7 +633,7 @@
           <Field id="hook-args" label="Arguments (optional)">
             <Input
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="hook-args"
               placeholder="--flag value"
               spellcheck="false"
@@ -649,7 +667,12 @@
           />
         </div>
       {:else if draft.handler.type === "http"}
-        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-space-2"
+          in:crossIn
+          out:crossOut
+        >
           <Field
             hint="Every machine posts the event's own JSON here — https, or localhost for something running on the same box."
             id="hook-url"
@@ -659,7 +682,7 @@
             <Input
               aria-invalid={shown("url") ? "true" : undefined}
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="hook-url"
               onblur={() => {
                 touched.url = true;
@@ -671,7 +694,12 @@
           </Field>
         </div>
       {:else if draft.handler.type === "mcp_tool"}
-        <div class="pair" in:crossIn out:crossOut>
+        <div
+          data-slot="pair"
+          class="grid gap-x-space-3 gap-y-space-2 phone:grid-cols-2"
+          in:crossIn
+          out:crossOut
+        >
           <Field
             id="hook-server"
             label="MCP server"
@@ -680,7 +708,7 @@
             <Input
               aria-invalid={shown("mcp_server_name") ? "true" : undefined}
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="hook-server"
               onblur={() => {
                 touched.mcp_server_name = true;
@@ -694,7 +722,7 @@
             <Input
               aria-invalid={shown("tool_name") ? "true" : undefined}
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="hook-tool"
               onblur={() => {
                 touched.tool_name = true;
@@ -706,12 +734,17 @@
           </Field>
         </div>
       {:else}
-        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-space-2"
+          in:crossIn
+          out:crossOut
+        >
           <Field id="hook-prompt" label="Prompt" problem={shown("prompt")}>
             <Textarea
               aria-invalid={shown("prompt") ? "true" : undefined}
-              class="resize-y"
               id="hook-prompt"
+              resize="block"
               onblur={() => {
                 touched.prompt = true;
               }}
@@ -721,11 +754,16 @@
             />
           </Field>
           {#if draft.handler.type === "agent"}
-            <div data-slot="fold" class="fold" in:unfold out:unfold>
+            <div
+              data-slot="fold"
+              class="flex flex-col gap-space-2"
+              in:unfold
+              out:unfold
+            >
               <Field id="hook-agent" label="Subagent (optional)">
                 <Input
                   autocomplete="off"
-                  class="font-mono"
+                  face="mono"
                   id="hook-agent"
                   placeholder="Inherits Claude Code's default"
                   spellcheck="false"
@@ -749,7 +787,7 @@
       <Input
         aria-invalid={shown("if") ? "true" : undefined}
         autocomplete="off"
-        class="font-mono"
+        face="mono"
         id="hook-if"
         onblur={() => {
           touched.if = true;
@@ -762,7 +800,10 @@
         value={draft.handler.if ?? ""}
       />
     </Field>
-    <div class="pair">
+    <div
+      data-slot="pair"
+      class="grid gap-x-space-3 gap-y-space-2 phone:grid-cols-2"
+    >
       <Field
         id="hook-timeout"
         label="Timeout, seconds (optional)"
@@ -770,7 +811,7 @@
       >
         <Input
           aria-invalid={shown("timeout") ? "true" : undefined}
-          class="font-mono"
+          face="mono"
           id="hook-timeout"
           min="1"
           oninput={(event) => {
@@ -800,7 +841,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       Every machine in the fleet unless you narrow it to one project.
     </p>
     <div>
@@ -818,20 +859,20 @@
       />
     </div>
     {#if shown("scope")}
-      <p class="problem" in:appear>{wrong.scope}</p>
+      <p class="type-meta text-status-fail-ink" in:appear>{wrong.scope}</p>
     {/if}
   </EditorSection>
 
   {#if id}
     <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
       {#if machines.length === 0}
-        <p data-slot="note" class="note">
+        <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
           <AddMachineLink>No machines yet</AddMachineLink>
           — this lands on the first one that registers.
         </p>
       {:else}
         {#if applied.length > 0}
-          <p data-slot="note" class="note">
+          <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
             In sync on
             {applied.length}
             machine{applied.length === 1 ? "" : "s"}.
@@ -841,7 +882,10 @@
             {/if}
           </p>
         {/if}
-        <ul data-slot="machines" class="machines">
+        <ul
+          data-slot="machines"
+          class="m-0 flex list-none flex-col gap-space-row p-0"
+        >
           {#each machines as machine, index (machine.machineId)}
             {@const item = stateOn(machine)}
             {@const online = machine.status === "online"}
@@ -849,8 +893,13 @@
             {@const drifted = refused && causeOf(item?.detail) === "drifted"}
             {@const comparingThis = comparing === machine.machineId}
             {@const settle = settling[machine.machineId]}
-            <li data-slot="machine" class="machine">
-              <div class="line">
+            <li
+              data-slot="machine"
+              class="flex flex-col gap-space-2 rounded-sm bg-surface-recess px-space-3 py-space-2"
+            >
+              <div
+                class="relative flex flex-wrap items-center gap-x-space-3 gap-y-space-2"
+              >
                 <MachineRow
                   hue={machineHue(index, online)}
                   icon={machineIcon(machine.os)}
@@ -863,7 +912,12 @@
                   presence={online ? "online" : "off"}
                 />
                 {#if drifted}
-                  <span data-slot="acts" class="acts" in:crossIn out:crossOut>
+                  <span
+                    data-slot="acts"
+                    class="flex flex-wrap gap-space-2"
+                    in:crossIn
+                    out:crossOut
+                  >
                     <Button
                       disabled={!online}
                       onclick={() => compare(machine)}
@@ -897,31 +951,49 @@
               </div>
               <RowFault reason={settleFailed[machine.machineId]} />
               {#if refused && item?.detail}
-                <pre class="said" in:unfold out:unfold>{item.detail}</pre>
+                <pre
+                  class="max-h-c-detail-max overflow-auto rounded-sm bg-surface-raised px-space-2 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap"
+                  in:unfold
+                  out:unfold>{item.detail}</pre>
               {/if}
               {#if comparingThis}
                 <!-- The machine's script folds open under its row; reading
                      cross-fades to what was read as the box follows. -->
-                <div data-slot="fold" class="fold" in:unfold out:unfold>
-                  <div class="handler" {@attach morph()}>
+                <div
+                  data-slot="fold"
+                  class="flex flex-col gap-space-2"
+                  in:unfold
+                  out:unfold
+                >
+                  <div class="relative flex flex-col" {@attach morph()}>
                     {#if peeking[machine.machineId]}
                       <p
                         data-slot="note"
-                        class="note busy mark-line"
+                        class="mark-line flex items-center gap-space-2 type-meta max-w-c-measure text-ink-muted"
                         role="status"
                         in:crossIn
                         out:crossOut
                       >
-                        <Spinner class="size-4 shrink-0" /><span
+                        <Spinner class="shrink-0" /><span
                           >Reading this machine's script…</span
                         >
                       </p>
                     {:else if unread[machine.machineId]}
-                      <p class="caution" role="alert" in:crossIn out:crossOut>
+                      <p
+                        class="type-meta text-status-attn-ink"
+                        role="alert"
+                        in:crossIn
+                        out:crossOut
+                      >
                         {unread[machine.machineId]}
                       </p>
                     {:else if copies[machine.machineId] === null}
-                      <p data-slot="note" class="note" in:crossIn out:crossOut>
+                      <p
+                        data-slot="note"
+                        class="type-meta max-w-c-measure text-ink-muted"
+                        in:crossIn
+                        out:crossOut
+                      >
                         This machine has no copy of this script.
                       </p>
                     {:else if copies[machine.machineId] !== undefined}
@@ -958,91 +1030,3 @@
     </EditorSection>
   {/if}
 </EditorFrame>
-
-<style>
-  /* The machines Save writes to, named beside it, one line. */
-  .reach {
-    max-inline-size: 32ch;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-  .caution {
-    font: var(--type-meta);
-    color: var(--status-attn-ink);
-  }
-  .fold {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  /* The handler's fields: the set leaving is pinned in the box (crossOut)
-     while the one arriving sets its height. */
-  .handler {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-  }
-  .pair {
-    display: grid;
-    gap: 8px 12px;
-  }
-  @media (min-width: 640px) {
-    .pair {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
-  .busy {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .machines {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .machine {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  .line {
-    position: relative;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 12px;
-  }
-  .acts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .said {
-    max-height: 6rem;
-    overflow: auto;
-    padding: 6px 8px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-</style>

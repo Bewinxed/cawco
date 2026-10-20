@@ -104,210 +104,114 @@
      above it), the body opens under it on the tool rows' own reveal, and it
      stays however the reader left it. `data-message` on the outer element
      is what the delegate tray's chip flies onto. -->
+<!-- MessageRow's queued presence, for the rows cawco sends; a failed report
+     says so in words and in the one colour the rail allows. -->
 <div
   data-slot="rail-row"
-  class="sysrow rail-row"
+  data-tx-rail
+  class="group/peer rail-row data-waiting:opacity-70"
   data-message={message.id}
-  class:err={row.failed}
-  class:waiting={message.state === "pending"}
+  data-err={row.failed || undefined}
+  data-waiting={message.state === "pending" || undefined}
 >
   <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
-    <p data-slot="peer-label" class="label rail-line">
-      <span data-rail-cell data-slot="glyph" class="glyph rail-cell">
+    <!-- The rail row every other system line uses (app.css `.rail-row`),
+         with the same muted small label; the body hangs at the text column.
+         The line is the disclosure: its trigger's hit area stretches over
+         all of it. -->
+    <p
+      data-slot="peer-label"
+      class="relative min-h-space-7 type-label leading-ui text-ink-muted rail-line"
+    >
+      <span
+        data-rail-cell
+        data-slot="glyph"
+        class="text-brand-ink group-data-err/peer:text-status-fail-ink rail-cell"
+      >
         {#if row.kind === "rule"}
-          <IconRules />
+          <IconRules class="size-icon-md" />
         {:else if row.kind === "ask"}
-          <IconAsk />
+          <IconAsk class="size-icon-md" />
         {:else if row.kind === "report" && row.failed}
-          <IconReportFailed />
+          <IconReportFailed class="size-icon-md" />
         {:else if row.kind === "report"}
-          <IconReport />
+          <IconReport class="size-icon-md" />
         {:else if row.kind === "workflow"}
-          <IconWorkflow />
+          <IconWorkflow class="size-icon-md" />
         {:else}
-          <IconHandoff />
+          <IconHandoff class="size-icon-md" />
         {/if}
       </span>
-      <span data-slot="text" class="text">
+      <!-- `clip` rather than `hidden`, with a margin, so the ellipsis still
+           cuts a long name while the link's padded hit area is not clipped
+           with it. The sender's link stands above the line's stretched
+           trigger, so it stays a link; vertical padding on an inline box
+           grows its hit area to the 24px floor without moving the line. -->
+      <span
+        data-slot="text"
+        class="min-w-0 overflow-clip clip-margin-space-1 text-ellipsis whitespace-nowrap"
+      >
         {row.lead}
         {#if senderId}
           <a
             data-slot="name"
-            class="name"
+            class="text-ink-strong relative z-1 py-space-1 underline decoration-current/35 underline-offset-2 hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--dur-control) can-hover:motion-safe:ease-out"
             href={conversationHref(senderId, cawco.instanceIndex)}>{row.name}</a
           >
         {:else}
-          <span data-slot="name" class="name">{row.name}</span>
+          <span data-slot="name" class="text-ink-strong">{row.name}</span>
         {/if}
       </span>
       {#if message.state === "failed"}
-        <span class="state">not sent</span>
+        <span class="flex-none text-status-fail-ink">not sent</span>
       {:else if row.kind === "report" && row.failed}
-        <span class="state">failed</span>
+        <span class="flex-none text-status-fail-ink">failed</span>
       {:else if message.state === "pending"}
-        <span class="pending">queued</span>
+        <span class="flex-none">queued</span>
       {/if}
+      <!-- Folded, the first line of what it says, quieter than the label and
+           cut to the one line; a report's headline is written to be read
+           whole, so it wraps under the label instead. -->
       {#if !open && headline}
-        <span class="excerpt headline">{headline}</span>
+        <span
+          class="grow shrink basis-0 min-w-0 overflow-clip text-clip whitespace-normal wrap-anywhere font-normal text-ink-muted"
+          >{headline}</span
+        >
       {:else if !open && excerpt}
-        <span class="excerpt">{excerpt}</span>
+        <span
+          class="grow shrink basis-0 min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-normal text-ink-muted"
+          >{excerpt}</span
+        >
       {/if}
+      <!-- Its chevron trails the line, as a tool row's does, and turns down
+           while the body is open. -->
       <Collapsible.Trigger
         aria-label="{row.lead} {row.name}"
-        class="peer-toggle press-tint"
+        class="group/toggle ms-auto flex-none"
         data-box
+        look="chevron"
       >
-        <span data-slot="chev" aria-hidden="true" class="chev"
-          ><IconChevronRight /></span
+        <span
+          data-slot="chev"
+          aria-hidden="true"
+          class="grid place-items-center group-state-open/toggle:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+          ><IconChevronRight class="size-icon-md block" /></span
         >
       </Collapsible.Trigger>
     </p>
     {#if message.state === "failed" && meta.sendFailed}
-      <p data-slot="reason" class="reason rail-hang">{meta.sendFailed}</p>
+      <!-- Why it did not go, in MessageRow's own reason line. -->
+      <p
+        data-slot="reason"
+        class="mt-space-1 mb-0 text-size-meta font-normal text-status-fail-ink rail-hang"
+      >
+        {meta.sendFailed}
+      </p>
     {/if}
     <Collapsible.Content reveal>
-      <div data-slot="body" class="body rail-hang">
+      <div data-slot="body" class="mt-space-2 rail-hang">
         <MessageBody source={message.content} />
       </div>
     </Collapsible.Content>
   </Collapsible.Root>
 </div>
-
-<style>
-  /* The rail row every other system line uses (app.css `.rail-row`), with
-     the same muted small label; the body hangs at the text column. The line
-     is the disclosure: its trigger's hit area stretches over all of it. */
-  .label {
-    position: relative;
-    min-block-size: 26px;
-    margin: 0;
-    font: var(--type-label);
-    line-height: var(--leading-ui);
-    color: var(--ink-muted);
-  }
-  /* Folded, the first line of what it says, quieter than the label and cut
-     to the one line. */
-  .excerpt {
-    flex: 1 1 0;
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  /* A report's headline is written to be read whole: it wraps under the
-     label rather than being cut to the one line. */
-  .excerpt.headline {
-    white-space: normal;
-    overflow-wrap: anywhere;
-    text-overflow: clip;
-  }
-  /* The trigger is a bits-ui element, so it is addressed globally. Its
-     chevron trails the line, as a tool row's does; its ::after is the whole
-     line's hit area, and the focus ring. */
-  .label :global(.peer-toggle) {
-    margin-inline-start: auto;
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--ink-muted);
-    cursor: pointer;
-
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: var(--radius-xs);
-    }
-    &:focus-visible {
-      outline: none;
-    }
-    &:focus-visible::after {
-      outline: var(--focus-ring-width) solid var(--focus-ring);
-      outline-offset: var(--focus-ring-inset);
-    }
-  }
-  .chev {
-    display: grid;
-    place-items: center;
-
-    & :global(svg) {
-      inline-size: 16px;
-      block-size: 16px;
-      display: block;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-control) var(--ease-out);
-    }
-  }
-  :global(.sysrow .peer-toggle[data-state="open"]) .chev {
-    transform: rotate(90deg);
-  }
-  .glyph {
-    color: var(--brand-ink);
-  }
-  .glyph :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  /* `clip` rather than `hidden`, with a margin, so the ellipsis still cuts a
-     long name while the link's padded hit area is not clipped with it. */
-  .text {
-    min-width: 0;
-    overflow: clip;
-    overflow-clip-margin: 4px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .name {
-    color: var(--ink-strong);
-  }
-  /* Vertical padding on an inline box grows the hit area to the 24px floor
-     without moving the line. */
-  /* Above the line's stretched trigger, so the sender stays a link. */
-  a.name {
-    position: relative;
-    z-index: 1;
-    padding-block: 4px;
-    text-decoration: underline;
-    text-decoration-color: color-mix(in oklab, currentColor 35%, transparent);
-    text-underline-offset: 0.2em;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    a.name:hover {
-      color: var(--brand-ink);
-    }
-  }
-  @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-    a.name {
-      transition: color var(--dur-control) var(--ease-out);
-    }
-  }
-  /* A failed report says so in words and in the one colour the rail allows. */
-  .sysrow.err .glyph,
-  .state {
-    color: var(--status-fail-ink);
-  }
-  .state,
-  .pending {
-    flex: 0 0 auto;
-  }
-  /* Why it did not go, in MessageRow's own reason line. */
-  .reason {
-    margin-block: var(--space-1) 0;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--status-fail-ink);
-  }
-  /* MessageRow's queued presence, for the rows cawco sends. */
-  .sysrow.waiting {
-    opacity: 0.7;
-  }
-  .body {
-    margin-top: var(--space-2);
-  }
-</style>

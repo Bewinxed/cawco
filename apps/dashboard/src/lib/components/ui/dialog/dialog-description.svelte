@@ -11,7 +11,7 @@
 
 <DialogPrimitive.Description
   class={cn(
-    "text-label text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+    "text-ink-muted text-label *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-ink-strong",
     className
   )}
   data-slot="dialog-description"

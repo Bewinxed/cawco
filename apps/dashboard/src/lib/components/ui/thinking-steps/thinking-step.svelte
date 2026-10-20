@@ -1,9 +1,34 @@
 <script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
   /**
    * `pending` is not drawn; `ahead` is drawn muted, a step still to come in
    * a column that shows how long it is (a project's move).
    */
   export type StepStatus = "complete" | "active" | "pending" | "ahead";
+
+  /**
+   * The step's glyph cell, a line tall and the transcript's 16px glyph cell
+   * wide. Its ink: the body's by default, or the outcome the step stands for
+   * (a move's steps: done, running, failed, waiting on the person, stopped).
+   */
+  export const thinkingStepIcon = tv({
+    base: "grid h-lh min-h-icon-md w-icon-md place-items-center status-ahead:text-ink-subtle",
+    variants: {
+      ink: {
+        done: "text-status-done-glyph",
+        active: "text-ink-strong",
+        fail: "text-status-fail-glyph",
+        attn: "text-status-attn-glyph",
+        muted: "text-ink-muted",
+      },
+    },
+  });
+
+  export type StepInk = NonNullable<
+    VariantProps<typeof thinkingStepIcon>["ink"]
+  >;
 </script>
 
 <script lang="ts">
@@ -21,6 +46,7 @@
     label = "",
     description,
     status = "complete",
+    ink,
     enters = false,
     fades = false,
     isLast = false,
@@ -33,6 +59,8 @@
     label?: string;
     description?: string;
     status?: StepStatus;
+    /** The glyph's ink: the outcome the step stands for; none, the body's. */
+    ink?: StepInk;
     /**
      * This step is new — it appeared under a block already on screen — and
      * fades in (--dur-menu). Read once, at mount: a step drawn with its block
@@ -81,40 +109,67 @@
 </script>
 
 {#if status !== "pending"}
+  <!-- The icon column is the icon's own width (the transcript's 16px glyph
+       cell); the icon's box is at least that square and a line tall. -->
   <div
-    class="step {className}"
+    class="flex min-w-0 gap-space-2 text-size-body font-normal leading-body size-compact:text-size-meta {className}"
     data-size={size?.() ?? "default"}
     data-slot="thinking-step"
     data-status={status}
     {@attach restOffscreen}
   >
-    <div aria-hidden="true" class="icon-column">
-      <span class="icon"
+    <div
+      aria-hidden="true"
+      class="flex shrink-0 grow-0 basis-icon-md flex-col items-center"
+    >
+      <span
+        data-slot="thinking-step-icon"
+        class={thinkingStepIcon({ ink })}
+        data-status={status}
         >{#key glyph}
-          <span data-slot="glyph" class="glyph" in:glyphFade out:glyphFade
+          <span
+            data-slot="glyph"
+            class="col-start-1 row-start-1 grid place-items-center"
+            in:glyphFade
+            out:glyphFade
             >{#if glyph}
               {@const Glyph = glyph}
-              <Glyph />
+              <Glyph class="size-icon-md" />
             {:else}
-              <span data-slot="dot" class="dot"></span>
+              <span data-slot="dot" class="size-space-1 rounded-pill bg-current"
+              ></span>
             {/if}</span
           >
         {/key}</span
       >
       {#if !isLast}
-        <span class="connector" in:draw></span>
+        <span class="w-px flex-1 bg-border-hairline" in:draw></span>
       {/if}
     </div>
-    <div class="copy" class:enters={entering}>
+    <!-- A new step fades in; an active step's words carry the light: its
+         muted ink, strong at the middle of a band three times the words'
+         width, sliding across them once a breath. -->
+    <div
+      class="flex min-w-0 flex-1 flex-col gap-space-1 pb-space-2 motion-safe:data-enters:animate-thinking-step-in"
+      data-enters={entering || undefined}
+    >
       {#if label}
+        <!-- The label wraps, never truncates: a long word (a branch, a path)
+             breaks where it must, as the description does. -->
         <span
           data-slot="thinking-step-label"
-          class="label"
-          class:shimmer={status === "active"}>{label}</span
+          class="font-normal wrap-anywhere text-ink-strong transition-control status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-transparent motion-safe:data-shimmer:step-shimmer motion-safe:data-shimmer:animate-step-shimmer"
+          data-shimmer={status === "active" || undefined}
+          data-status={status}>{label}</span
         >
       {/if}
       {#if description && markdown}
-        <div data-slot="md" class="description md">
+        <!-- Markdown keeps the plain description's type, and a step is
+             exactly as tall as its text. -->
+        <div
+          data-slot="md"
+          class="markdown-plain wrap-anywhere whitespace-normal"
+        >
           <Markdown
             {fades}
             source={description}
@@ -122,7 +177,9 @@
           />
         </div>
       {:else if description}
-        <span class="description" class:shimmer={!label && status === "active"}
+        <span
+          class="wrap-anywhere whitespace-pre-wrap motion-safe:data-shimmer:text-transparent motion-safe:data-shimmer:step-shimmer motion-safe:data-shimmer:animate-step-shimmer"
+          data-shimmer={(!label && status === "active") || undefined}
           >{description}</span
         >
       {/if}
@@ -130,150 +187,3 @@
     </div>
   </div>
 {/if}
-
-<style>
-  .step {
-    display: flex;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-
-    &[data-size="compact"] {
-      font-size: var(--text-meta);
-      font-weight: var(--weight-body);
-    }
-  }
-  .icon-column {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    flex: 0 0 15px;
-  }
-  .icon {
-    display: grid;
-    place-items: center;
-    inline-size: 16px;
-    block-size: 1lh;
-    min-block-size: 16px;
-
-    & :global(svg) {
-      inline-size: 16px;
-      block-size: 16px;
-    }
-  }
-  /* One cell, so an outgoing glyph and its replacement overlap. */
-  .glyph {
-    grid-area: 1 / 1;
-    display: grid;
-    place-items: center;
-  }
-  .dot {
-    inline-size: var(--space-1);
-    block-size: var(--space-1);
-    border-radius: 50%;
-    background: currentColor;
-  }
-  .connector {
-    inline-size: 1px;
-    flex: 1;
-    background: var(--border-hairline);
-  }
-  .copy {
-    min-inline-size: 0;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding-block-end: var(--space-2);
-  }
-  .label {
-    color: var(--ink-strong);
-    font-weight: var(--weight-body);
-    transition: color var(--dur-control) var(--ease-out);
-  }
-  /* A step still to come: its dot and words in the muted ink. */
-  .step[data-status="ahead"] .label {
-    color: var(--ink-muted);
-  }
-  .step[data-status="ahead"] .icon {
-    color: var(--ink-subtle);
-  }
-  .description {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-
-    /* Markdown keeps the plain description's type: prose-sm restates its own
-       size and colour on streamdown's root, so they are handed back here, and
-       block margins collapse so a step is exactly as tall as its text. */
-    &.md {
-      white-space: normal;
-
-      & :global(.prose) {
-        font-size: inherit;
-        line-height: inherit;
-        color: inherit;
-      }
-      & :global(p),
-      & :global(ul),
-      & :global(ol) {
-        margin-block: 0;
-      }
-      /* Every block takes the gap above it and the first gives it back:
-         `* + *` restyled the whole step per block streamed in. */
-      & :global(.prose > *) {
-        margin-block: var(--space-1) 0;
-      }
-      & :global(.prose > :first-child) {
-        margin-block-start: 0;
-      }
-      & :global(ul),
-      & :global(ol) {
-        padding-inline-start: var(--space-5);
-      }
-      & :global(strong) {
-        color: var(--ink-strong);
-      }
-      /* prose wraps inline code in literal backticks; the code face already
-         marks it. */
-      & :global(code::before),
-      & :global(code::after) {
-        content: none;
-      }
-      & :global(code) {
-        font-family: var(--font-mono);
-      }
-    }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .copy.enters {
-      animation: step-in var(--dur-menu) var(--ease-out) backwards;
-    }
-    .shimmer {
-      color: transparent;
-      background: linear-gradient(
-        90deg,
-        var(--ink-muted) 0% 35%,
-        var(--ink-strong) 50%,
-        var(--ink-muted) 65% 100%
-      );
-      background-size: 300% 100%;
-      background-clip: text;
-      animation: shimmer var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes step-in {
-    from {
-      opacity: 0;
-    }
-  }
-  @keyframes shimmer {
-    from {
-      background-position: 0% 0;
-    }
-    to {
-      background-position: 100% 0;
-    }
-  }
-</style>

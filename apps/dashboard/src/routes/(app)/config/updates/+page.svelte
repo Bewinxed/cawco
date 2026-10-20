@@ -173,7 +173,7 @@
   title={section.label}
 >
   {#if policy}
-    <div data-slot="group" class="group">
+    <div data-slot="group" class="flex flex-col gap-space-2">
       <SectionHeader
         hue="var(--hue-blue-500)"
         icon={IconDownload}
@@ -197,12 +197,12 @@
         current={policy.channel}
         bind:chosen
       />
-      <div class="morph" {@attach morph()}>
+      <div class="overflow-hidden" {@attach morph()}>
         {#key pendingText}
           {#if pendingText}
             <p
               aria-live="polite"
-              class="pending"
+              class="type-meta max-w-c-measure text-ink-muted"
               in:blur={{
                 duration: dur("--dur-panel"),
                 easing: easeOut,
@@ -220,20 +220,23 @@
         {/key}
       </div>
       {#if release && notes}
-        <div data-slot="fold" class="fold">
+        <div data-slot="fold" class="type-label">
           <button
             aria-expanded={foldOpen}
-            class="trigger mark-line"
+            class="group mark-line inline-flex items-center gap-space-1 text-ink-muted"
             onclick={() => {
               foldOpen = !foldOpen;
             }}
             type="button"
           >
-            <IconChevronRight data-chev class="chev" />
+            <IconChevronRight
+              data-chev
+              class="size-icon-sm transition-[rotate] duration-(--dur-control) ease-out group-aria-expanded:rotate-90"
+            />
             <span>What's new in {displayVersion(release.version)}</span>
           </button>
           {#if foldOpen}
-            <div class="notes" transition:unfold>
+            <div class="type-body pt-space-2 text-ink-strong" transition:unfold>
               <ReleaseNotes source={notes.full} />
             </div>
           {/if}
@@ -241,14 +244,17 @@
       {/if}
     </div>
 
-    <div data-slot="group" class="group">
+    <div
+      data-slot="group"
+      class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
+    >
       <SectionHeader
         hue="var(--hue-green-500)"
         icon={IconMonitor}
         label="Machines"
       >
         {#snippet right()}
-          <div data-slot="actions" class="actions">
+          <div data-slot="actions" class="flex items-center gap-space-2">
             {#if waiting.length >= 2}
               <Button
                 label="Install on all {waiting.length}"
@@ -283,51 +289,3 @@
     </div>
   {/if}
 </SectionFrame>
-
-<style>
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .group + .group {
-    padding-top: 18px;
-    border-top: 1px solid var(--border-hairline);
-  }
-  .actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .morph {
-    overflow: hidden;
-  }
-  .pending {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .fold {
-    font: var(--type-label);
-  }
-  .trigger {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    color: var(--ink-muted);
-    cursor: pointer;
-  }
-  .trigger :global(.chev) {
-    width: 12px;
-    height: 12px;
-    transition: rotate var(--dur-control) var(--ease-out);
-  }
-  .trigger[aria-expanded="true"] :global(.chev) {
-    rotate: 90deg;
-  }
-  .notes {
-    padding-top: 6px;
-    font: var(--type-body);
-    color: var(--ink-strong);
-  }
-</style>

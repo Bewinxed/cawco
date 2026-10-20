@@ -442,8 +442,10 @@ const said = (r: Run) =>
  */
 const morphOf = (page: Page, selector: string) =>
   page.evaluate((sel) => {
-    const text = document.querySelector<HTMLElement>(`${sel} .morph-text`);
-    const letters = text?.querySelector<HTMLElement>(".letters");
+    const text = document.querySelector<HTMLElement>(
+      `${sel} [data-slot="morph-text"]`
+    );
+    const letters = text?.querySelector<HTMLElement>('[data-slot="letters"]');
     const face = letters?.querySelector<HTMLElement>("[data-roll] > span");
     return {
       width: Math.round((text?.getBoundingClientRect().width ?? 0) * 10) / 10,

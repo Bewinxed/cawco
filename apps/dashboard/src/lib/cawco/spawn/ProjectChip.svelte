@@ -1,8 +1,8 @@
 <script lang="ts">
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import PendingContent, {
-    whileIdle,
-  } from "#lib/components/ui/button/pending-content.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /** Project chip + popover (§1.4, §2.7): pick, clear, or create a project. */
   import Add from "~icons/solar/add-circle-bold-duotone";
   import Down from "~icons/solar/alt-arrow-down-linear";
@@ -87,13 +87,15 @@
   {onchange}
   {open}
   rows="[data-fh]"
-  triggerClass="ns-chip-btn"
-  triggerStyle={project ? "" : "color:var(--ink-muted)"}
+  triggerClass={chipVariants({
+    variant: "setting",
+    tone: project ? undefined : "muted",
+  })}
 >
   {#snippet trigger()}
-    <Files style="color:var(--hue-amber-500)" />
+    <Files class="text-hue-amber-500" />
     {#key project?.id}
-      <span data-slot="swap" data-chip-label class="chip-label swap"
+      <span data-slot="chip-label" class="ns-in"
         >{project?.name ?? "No project"}</span
       >
     {/key}
@@ -101,7 +103,7 @@
       <!-- biome-ignore lint/a11y/useSemanticElements: the clear control sits inside the chip trigger, which is already a button; buttons cannot nest -->
       <span
         data-slot="clear"
-        class="clear ns-check"
+        class="ns-check relative -mr-space-row inline-flex size-space-5 items-center justify-center rounded-xs text-ink-subtle transition-[background-color,color] duration-(--dur-control) ease-out before:absolute before:-inset-space-1 hover:bg-surface-hover hover:text-ink-strong"
         onclick={(event) => {
           event.stopPropagation();
           onclear();
@@ -115,31 +117,38 @@
         }}
         role="button"
         tabindex="0"
-        title="Clear project"><Clear /></span
+        title="Clear project"><Clear class="size-icon-sm" /></span
       >
     {:else}
-      <Down class="chevron" />
+      <Down data-slot="chevron" />
     {/if}
   {/snippet}
   {#if draft}
-    <div class="ns-panel form">
-      <label data-slot="project-chip-field" class="field field-shell">
-        <Files />
+    <div class="ns-panel grid gap-space-2 p-space-1">
+      <label
+        data-slot="project-chip-field"
+        class="field-shell flex h-c-input-h max-phone:h-c-btn-h-lg items-center gap-space-2 rounded-md border border-border-control bg-surface-raised px-space-3 shadow-xs"
+      >
+        <Files class="size-icon-md flex-none text-ink-subtle" />
         <input
           aria-label="Project name"
           autocapitalize="off"
+          class="type-body min-w-0 flex-1 border-none border-current bg-transparent p-0 text-ink-strong outline-off placeholder:text-ink-muted"
           oninput={(event) => onName(event.currentTarget.value)}
           placeholder="Project name"
           spellcheck="false"
           value={draft.name}
         />
       </label>
-      <label data-slot="project-chip-field" class="field field-shell">
-        <Folder />
+      <label
+        data-slot="project-chip-field"
+        class="field-shell flex h-c-input-h max-phone:h-c-btn-h-lg items-center gap-space-2 rounded-md border border-border-control bg-surface-raised px-space-3 shadow-xs"
+      >
+        <Folder class="size-icon-md flex-none text-ink-subtle" />
         <input
           aria-label="Project path"
           autocapitalize="off"
-          class="mono"
+          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-body leading-body font-normal text-ink-strong outline-off placeholder:text-ink-muted"
           oninput={(event) => {
             if (draft) {
               draft = { ...draft, path: event.currentTarget.value };
@@ -150,33 +159,32 @@
           value={draft.path}
         />
       </label>
-      <div data-slot="actions" class="actions">
-        <span class="error" role="alert">{createError}</span>
-        <button
-          class="ns-btn sm touch-hit"
+      <div
+        data-slot="actions"
+        class="mt-space-row flex items-center justify-end gap-space-2"
+      >
+        <span
+          class="type-meta min-w-0 flex-1 truncate text-status-fail-ink"
+          role="alert">{createError}</span
+        >
+        <Button
           onclick={() => {
             draft = null;
           }}
-          type="button"
+          size="sm"
+          variant="outline"
         >
           Back
-        </button>
-        <button
-          data-slot="primary"
-          aria-busy={creating || undefined}
-          aria-disabled={creating || undefined}
-          class="ns-btn sm primary touch-hit"
+        </Button>
+        <Button
           disabled={!(draft.name.trim() && draft.path.trim())}
-          onclick={whileIdle(() => creating, create)}
-          type="button"
-        >
-          <PendingContent
-            failed={createError !== ""}
-            label="Create"
-            pending={creating}
-            pendingLabel="Creating…"
-          />
-        </button>
+          failed={createError !== ""}
+          label="Create"
+          onclick={create}
+          pending={creating}
+          pendingLabel="Creating…"
+          size="sm"
+        />
       </div>
     </div>
   {:else}
@@ -185,215 +193,47 @@
       <button
         data-slot="row"
         aria-pressed={on}
-        class="row ns-in press-tint"
+        class="ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color] duration-(--dur-toggle) ease-out aria-pressed:bg-selected-bg aria-pressed:text-selected-ink motion-safe:transition-[background-color,transform]"
         data-fh="1"
         onclick={() => onpick(row)}
         style={`--delay:${index * 35}ms`}
         type="button"
-        class:on
       >
-        <span data-slot="tile" class="ns-tile tile" style={`color:${row.hue}`}
-          ><Files /></span
+        <span data-slot="tile" class={iconTileVariants()} style:color={row.hue}
+          ><Files class="size-icon-md" /></span
         >
-        <span data-slot="text" class="text">
-          <span data-slot="name" class="name">{row.name}</span>
-          <span data-slot="meta" class="meta">{row.path}</span>
+        <span data-slot="text" class="min-w-0 flex-1">
+          <span data-slot="name" class="type-label block">{row.name}</span>
+          <span
+            data-slot="meta"
+            class="type-meta block truncate text-ink-subtle in-aria-pressed:text-selected-ink"
+            >{row.path}</span
+          >
         </span>
         {#if on}
-          <Check class="check ns-check" />
+          <Check class="ns-check size-icon-md flex-none text-selected-icon" />
         {/if}
       </button>
     {/each}
-    <div data-slot="divider" class="divider"></div>
+    <div
+      data-slot="divider"
+      class="mx-space-row my-space-1 border-t border-border-hairline"
+    ></div>
     <button
       data-slot="row"
       data-add
-      class="row add ns-in press-tint"
+      class="ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color] duration-(--dur-toggle) ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
       data-fh="1"
       onclick={() => {
         draft = { name: "", path: "" };
       }}
-      style="--delay:110ms"
+      style:--delay={`${projects.length * 35}ms`}
       type="button"
     >
-      <span data-slot="tile" class="ns-tile tile dashed"><Add /></span>
-      <span data-slot="name" class="name">New project…</span>
+      <span data-slot="tile" class={iconTileVariants({ empty: true })}
+        ><Add class="size-icon-md" /></span
+      >
+      <span data-slot="name" class="type-label block">New project…</span>
     </button>
   {/if}
 </NsPopover>
-
-<style>
-  .clear {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    margin-right: -2px;
-    border-radius: var(--radius-xs);
-    color: var(--ink-subtle);
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-  }
-  .clear :global(svg) {
-    width: 12px;
-    height: 12px;
-  }
-  /* A little larger than the mark, never larger than the chip: a 44px target
-     here reached over the label, so clicking the project's name cleared it. */
-  .clear::before {
-    content: "";
-    position: absolute;
-    inset: -4px;
-  }
-  @media (hover: hover) {
-    .clear:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-  }
-  .swap {
-    @media (prefers-reduced-motion: no-preference) {
-      animation: ns-in var(--ns-row-ms) var(--ease-out) both;
-    }
-  }
-  .row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    height: 44px;
-    padding: 6px 8px;
-    background: transparent;
-    border: 0;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    text-align: left;
-    color: var(--ink-strong);
-    transition: background-color var(--dur-toggle) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        background-color var(--dur-toggle) var(--ease-out),
-        transform var(--dur-toggle) var(--ease-out);
-    }
-  }
-  .tile {
-    width: 24px;
-    height: 24px;
-  }
-  .tile :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  .text {
-    flex: 1;
-    min-width: 0;
-  }
-  .name {
-    display: block;
-    font: var(--type-label);
-  }
-  .meta {
-    display: block;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .row :global(svg.check) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    color: var(--ink-strong);
-  }
-  .divider {
-    height: 1px;
-    margin: 4px 2px;
-    background: var(--border-hairline);
-  }
-  .add {
-    height: 40px;
-    color: var(--ink-muted);
-  }
-  @media (hover: hover) {
-    .add:hover {
-      color: var(--ink-strong);
-    }
-  }
-  .form {
-    display: grid;
-    gap: 8px;
-    padding: 4px;
-  }
-  .field {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    height: 36px;
-    padding: 0 10px;
-    background: var(--surface-raised);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-xs);
-  }
-  .field :global(svg) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    color: var(--ink-subtle);
-  }
-  .field input {
-    flex: 1;
-    min-width: 0;
-    border: 0;
-    outline: none;
-    background: transparent;
-    font: var(--weight-body) var(--text-body) / 1.4 var(--font-body);
-    color: var(--ink-strong);
-    padding: 0;
-  }
-  .field input.mono {
-    font-family: var(--font-mono);
-  }
-  .actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 6px;
-    margin-top: 2px;
-  }
-  .error {
-    flex: 1;
-    min-width: 0;
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  @media (max-width: 640px) {
-    .field {
-      height: 44px;
-    }
-    .field input {
-      font-size: 1rem;
-    }
-  }
-  /* The chosen project takes the selected wash, never the hover step. */
-  .row.on {
-    background: var(--selected-bg);
-    color: var(--selected-ink);
-  }
-  /* Its second line too: ink-subtle measures 4.23:1 on the wash by day,
-     selected-ink 4.73:1 (DESIGN.md Colors: Selected). */
-  .row.on .meta {
-    color: var(--selected-ink);
-  }
-  .row.on :global(svg.check) {
-    color: var(--selected-icon);
-  }
-</style>

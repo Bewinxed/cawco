@@ -14,7 +14,7 @@
 
 <ContextMenuPrimitive.GroupHeading
   class={cn(
-    "px-2 py-1.5 font-medium text-foreground text-label data-inset:ps-8",
+    "px-2 py-1.5 font-medium text-ink-strong text-label data-inset:ps-space-8",
     className
   )}
   data-inset={inset}

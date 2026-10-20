@@ -5,6 +5,7 @@
     type EdgeProps,
     getSmoothStepPath,
   } from "@xyflow/svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { IconTrash } from "#lib/icons.js";
 
   let {
@@ -31,87 +32,41 @@
         : {}),
     })
   );
-  const style = $derived(
-    `stroke: var(--neutral-8); stroke-width: ${selected ? 3 : 1.5}px`
-  );
 </script>
 
-<BaseEdge {id} path={route[0]} {style} />
+<!-- The path's paint goes through xyflow's own custom properties: its sheet
+     reads them at rest, selected and on keyboard focus, so the ring colour
+     needs no override. -->
+<BaseEdge
+  {id}
+  path={route[0]}
+  style={`--xy-edge-stroke: var(--neutral-8); --xy-edge-stroke-selected: var(--focus-ring); --xy-edge-stroke-width: calc(var(--c-graph-edge) * ${selected ? 2 : 1})`}
+/>
 <EdgeLabel selectEdgeOnClick transparent x={route[1]} y={route[2]}>
-  <div class="edge-label mark-line nodrag nopan">
+  <div
+    data-slot="edge-label"
+    class="group mark-line nodrag nopan pointer-events-all flex items-center gap-space-1 text-size-label font-medium"
+  >
     {#if data?.label}
-      <span>{String(data.label)}</span>
+      <span class="rounded-sm bg-surface-recess p-space-1 text-ink-strong"
+        >{String(data.label)}</span
+      >
     {/if}
     {#if data?.remove}
-      <button
-        aria-label="Delete edge"
-        class="touch-hit pressable"
+      <Button
         data-box
+        aria-label="Delete edge"
+        icon={IconTrash}
         onclick={() => {
           if (typeof data?.remove === "function") {
             data.remove(id);
           }
         }}
-        type="button"
-        class:visible={selected}
-      >
-        <IconTrash class="size-3" />
-      </button>
+        press="pressable"
+        reveal="row-hover"
+        size="icon-sm"
+        variant="outline"
+      />
     {/if}
   </div>
 </EdgeLabel>
-
-<style>
-  /* Keyboard focus on an edge turns its line the ring colour, over the
-     inline stroke. */
-  :global(.svelte-flow__edge:focus-visible .svelte-flow__edge-path) {
-    stroke: var(--focus-ring) !important;
-  }
-  .edge-label {
-    pointer-events: all;
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-  }
-  span {
-    background: var(--surface-recess);
-    padding: var(--space-1);
-    border-radius: var(--radius-sm);
-    color: var(--ink-strong);
-  }
-  button {
-    display: grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    color: var(--ink-muted);
-    opacity: 0;
-    transition: opacity var(--dur-control) var(--ease-out);
-  }
-  /* Shown, it fades in and grows from the pop scale; hidden again, it
-     shrinks back as it fades. Without motion only the fade runs. */
-  @media (prefers-reduced-motion: no-preference) {
-    button {
-      scale: var(--pop-scale);
-      transition:
-        opacity var(--dur-control) var(--ease-out),
-        scale var(--dur-control) var(--ease-out);
-    }
-  }
-  .edge-label:hover button,
-  button:focus-visible,
-  button.visible {
-    opacity: 1;
-    scale: 1;
-  }
-  @media (pointer: coarse) {
-    button {
-      opacity: 1;
-      scale: 1;
-    }
-  }
-</style>

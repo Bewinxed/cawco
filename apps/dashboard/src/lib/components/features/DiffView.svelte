@@ -113,16 +113,16 @@
   }
 </script>
 
-<div
-  class="rounded-[var(--radius-md)] overflow-hidden border border-border bg-muted"
->
+<div class="rounded-md overflow-hidden border border-border bg-neutral-2">
   <div
-    class="flex items-center justify-between px-3 py-2 bg-card border-b border-border font-mono text-meta text-muted-foreground"
+    class="flex items-center justify-between px-3 py-2 bg-card border-b border-border font-mono text-meta text-ink-muted"
   >
     <span class="break-all flex-1 min-w-0">{filePath}</span>
     <Button
-      class="h-6 w-6 ml-2 shrink-0"
+      class="shrink-0"
       disabled={!drawn || failure !== null}
+      fit="square-24"
+      margin="start-gap"
       onclick={() => {
         showModal = true;
       }}
@@ -130,21 +130,21 @@
       title="Expand diff (full view)"
       variant="ghost"
     >
-      <IconMaximize class="w-3.5 h-3.5" />
+      <IconMaximize class="w-space-4 h-space-4" />
     </Button>
   </div>
 
   <!-- The skeleton and the rows share one cell: the rows lay out under it
        unseen and fade in where it stood. -->
-  <div data-slot="body" class="body" {@attach morph()}>
+  <div data-slot="body" class="relative grid" {@attach morph()}>
     {#if failure}
       <div
-        class="mark-line flex items-center justify-center gap-2 p-8 text-label text-error"
+        class="mark-line row-start-1 col-start-1 min-w-0 flex items-center justify-center gap-2 p-space-8 text-label text-error-9"
         role="alert"
         in:crossIn
         out:crossOut
       >
-        <IconAlert class="w-5 h-5 shrink-0" />
+        <IconAlert class="w-icon-lg h-icon-lg shrink-0" />
         <span>The diff did not draw: {failure}</span>
         <Button data-box onclick={retry} size="sm" variant="outline"
           >Retry</Button
@@ -153,19 +153,24 @@
     {:else}
       {#key attempt}
         <div
-          class="diff-content overflow-auto"
+          class="row-start-1 col-start-1 min-w-0 overflow-auto motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out data-veiled:invisible data-veiled:opacity-0"
           style:max-block-size={cap}
-          class:veiled={!drawn}
+          data-veiled={!drawn || undefined}
           {@attach draw(attempt)}
         ></div>
       {/key}
       {#if !drawn}
         <div
+          class="row-start-1 col-start-1 min-w-0"
           aria-label="Loading diff"
           role="status"
           out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
         >
-          <Skeleton class="w-full rounded-none" style="height: {expected}px" />
+          <Skeleton
+            class="w-full"
+            radius="flush"
+            style="height: {expected}px"
+          />
         </div>
       {/if}
     {/if}
@@ -183,23 +188,3 @@
     }}
   />
 {/if}
-
-<style>
-  .body {
-    position: relative;
-    display: grid;
-  }
-  .body > * {
-    grid-area: 1 / 1;
-    min-width: 0;
-  }
-  .diff-content {
-    @media (prefers-reduced-motion: no-preference) {
-      transition: opacity var(--dur-control) var(--ease-out);
-    }
-  }
-  .diff-content.veiled {
-    visibility: hidden;
-    opacity: 0;
-  }
-</style>

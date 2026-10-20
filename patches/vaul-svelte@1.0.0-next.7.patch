@@ -1,0 +1,18 @@
+diff --git a/dist/components/drawer/drawer-content.svelte b/dist/components/drawer/drawer-content.svelte
+index 16c10a769f5f3cb71c918cd035651f94c3dc1dc9..5469e0ff4b32e77fdd8c2b8d0fd58cbcfba351c7 100644
+--- a/dist/components/drawer/drawer-content.svelte
++++ b/dist/components/drawer/drawer-content.svelte
+@@ -38,7 +38,12 @@
+ 		onFocusOutside: box.with(() => onFocusOutside),
+ 	});
+ 
+-	const snapPointsOffset = $state.snapshot(contentState.ctx.snapPointsOffset);
++	// CawCo's patch (patches/vaul-svelte@1.0.0-next.7.patch): upstream took
++	// `$state.snapshot` of the offsets once, at mount, so a sheet whose
++	// content mounted at one window height kept that height's stops after a
++	// resize (huntabyte/vaul-svelte#129, open; still in 1.0.0-next.7, the
++	// latest release). Derived, the stops follow the window.
++	const snapPointsOffset = $derived(contentState.ctx.snapPointsOffset);
+ 
+ 	const styleProp = $derived(
+ 		snapPointsOffset && snapPointsOffset.length > 0

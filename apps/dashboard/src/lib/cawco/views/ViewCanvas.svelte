@@ -22,8 +22,7 @@
     Panel,
     SvelteFlow,
   } from "@xyflow/svelte";
-  import "@xyflow/svelte/dist/style.css";
-  import "#lib/components/features/workflows/workflows.css";
+  import "#lib/vendor-css/xyflow.css";
   import { onMount, untrack } from "svelte";
   import type { StageKind, TaskSummary } from "#lib/cawco/project-tasks.js";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
@@ -203,13 +202,14 @@
 
 <section
   aria-label="Task graph"
-  class="canvas"
+  class="relative h-full min-h-c-canvas-min-h min-w-0 overflow-hidden rounded-lg bg-surface-recess inset-ring inset-ring-border-hairline"
   data-settled={eased || undefined}
+  data-slot="view-canvas"
   bind:clientHeight={canvasHeight}
   bind:clientWidth={canvasWidth}
 >
   <!-- The arrow every `after` edge ends in, filled from the tokens. -->
-  <svg aria-hidden="true" class="defs">
+  <svg aria-hidden="true" class="absolute h-0 w-0">
     <defs>
       <marker
         id={marker}
@@ -220,7 +220,7 @@
         refY="5"
         viewBox="0 0 10 10"
       >
-        <path class="arrow" d="M0,0 L10,5 L0,10 z" />
+        <path class="fill-ink-muted" d="M0,0 L10,5 L0,10 z" />
       </marker>
     </defs>
   </svg>
@@ -273,37 +273,3 @@
     </SvelteFlow>
   {/if}
 </section>
-
-<style>
-  .canvas {
-    position: relative;
-    block-size: 100%;
-    min-block-size: 280px;
-    min-inline-size: 0;
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    background: var(--surface-recess);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-  }
-  .defs {
-    position: absolute;
-    inline-size: 0;
-    block-size: 0;
-  }
-  .arrow {
-    fill: var(--ink-muted);
-  }
-  /* Once placed, a card that the layout moves eases to its new place
-     (movement on screen); a card new to the canvas fades in where it lands. */
-  @media (prefers-reduced-motion: no-preference) {
-    .canvas[data-settled] :global(.svelte-flow__node) {
-      transition:
-        transform var(--dur-panel) var(--ease-in-out),
-        opacity var(--dur-fade) var(--ease-out);
-
-      @starting-style {
-        opacity: 0;
-      }
-    }
-  }
-</style>

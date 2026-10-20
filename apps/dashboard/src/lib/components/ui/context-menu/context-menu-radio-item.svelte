@@ -1,5 +1,7 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
+  import { radioDot } from "#lib/components/ui/dropdown-menu/dropdown-menu-radio-item.svelte";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import { cn, type WithoutChild } from "#lib/utils.js";
 
   let {
@@ -15,20 +17,22 @@
 
 <ContextMenuPrimitive.RadioItem
   class={cn(
-    "kit-item relative flex cursor-default select-none items-center gap-2 pr-8 pl-2.5 text-label outline-hidden data-disabled:pointer-events-none data-inset:pl-9.5 data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    menuItemVariants(),
+    "relative flex cursor-default select-none items-center gap-2 pr-space-8 pl-2.5 text-label outline-hidden data-disabled:pointer-events-none data-inset:pl-9.5 data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     className
   )}
   data-inset={inset}
+  data-menu-item
   data-slot="context-menu-radio-item"
   bind:ref
   {...restProps}
 >
   {#snippet children({ checked })}
     <span
-      class="absolute right-2 flex size-4 items-center justify-center pointer-events-none"
+      class="absolute right-2 flex size-icon-md items-center justify-center pointer-events-none"
       data-box
     >
-      <span class="kit-dot" data-on={checked}></span>
+      <span class={radioDot} data-on={checked}></span>
     </span>
     {@render childrenProp?.({ checked })}
   {/snippet}

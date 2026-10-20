@@ -36,6 +36,46 @@
 import { untrack } from "svelte";
 import { frameObserver } from "#lib/cawco/frame-observer.js";
 import { watchRendered } from "#lib/utils/rendered.js";
+import { tv } from "#lib/utils.js";
+
+/**
+ * The layers' recipe. Every layer is drawn under the rows (the list
+ * isolates, the layers sit at -1, so a row's text and icons are always above
+ * them) and placed from measured client rects, which are physical: each
+ * anchors to the physical top-left corner the measurements are taken from
+ * and moves by `--hl-x` and `--hl-y`, shown by `--hl-show`.
+ *
+ * - The ghost is the one hover fill. Where nothing hovers (a touch screen:
+ *   a tap fires a synthetic mousemove and no mouseleave, so a ghost would
+ *   park on the last tap as a second selection) there is none, unless the
+ *   rows' own highlight drives it (`data-follow`). It fades in place over
+ *   --dur-control; gliding (`data-glide`), it moves 80ms on --ease-in-out.
+ * - The pill is the selection, the apricot wash its row's selected ink
+ *   stands on; gliding, it moves 120ms on --ease-drawer. The trail is the
+ *   old selection fading where it was (`data-fade`). With less motion a
+ *   selection that moves cross-fades (`data-swap`) over --dur-fade.
+ * - `card`: a grid of icon cards (DESIGN.md, Channel cards), whose pill is
+ *   the channel card's selection frame, 1px brand-solid over the recess at
+ *   the card's own radius, drawn over the card's border and fill and under
+ *   its face (CardFace).
+ */
+export const highlightVariants = tv({
+  slots: {
+    ghost:
+      "pointer-events-none absolute top-0 left-0 -z-1 hidden translate-x-(--hl-x) translate-y-(--hl-y) bg-surface-hover opacity-(--hl-show) [transition:--hl-show_var(--dur-control)_var(--ease-out)] hover-hover:block data-follow:block motion-safe:data-glide:[transition:--hl-x_var(--dur-ghost)_var(--ease-in-out),--hl-y_var(--dur-ghost)_var(--ease-in-out),width_var(--dur-ghost)_var(--ease-in-out),height_var(--dur-ghost)_var(--ease-in-out),--hl-show_var(--dur-control)_var(--ease-out)]",
+    pill: "pointer-events-none absolute top-0 left-0 -z-1 translate-x-(--hl-x) translate-y-(--hl-y) bg-selected-bg opacity-(--hl-show) data-swap:[transition:--hl-show_var(--dur-fade)_var(--ease-out)] motion-safe:data-glide:not-data-swap:[transition:--hl-x_var(--dur-control)_var(--ease-drawer),--hl-y_var(--dur-control)_var(--ease-drawer),width_var(--dur-control)_var(--ease-drawer),height_var(--dur-control)_var(--ease-drawer)]",
+    trail:
+      "pointer-events-none absolute top-0 left-0 -z-1 translate-x-(--hl-x) translate-y-(--hl-y) bg-selected-bg opacity-(--hl-show) data-fade:data-swap:[transition:--hl-show_var(--dur-fade)_var(--ease-out)] data-fade:[transition:--hl-show_var(--dur-control)_var(--ease-out)]",
+  },
+  variants: {
+    look: {
+      card: {
+        pill: "z-1 box-border border border-brand-solid bg-surface-recess",
+        trail: "z-1 box-border border border-brand-solid bg-surface-recess",
+      },
+    },
+  },
+});
 
 type Axis = "x" | "y" | "xy";
 
@@ -86,6 +126,8 @@ export interface HighlightOptions {
    * re-measures. Only rows with a box here are rows.
    */
   laidOut?: () => ReadonlyMap<Element, LaidOut>;
+  /** `card`: a grid of icon cards, its pill the channel card's frame. */
+  look?: "card";
   /** The rows the ghost and the pill stand under. */
   rows: string;
   /** The selected row. */
@@ -100,16 +142,17 @@ interface Box {
   y: number;
 }
 
-const layer = (name: string) => {
+const layer = (slot: string, className: string) => {
   const span = document.createElement("span");
-  span.className = name;
+  span.className = className;
+  span.dataset.slot = slot;
   span.setAttribute("aria-hidden", "true");
   return span;
 };
 
 /**
  * A layer's place and whether it shows are three numbers its style is
- * worked out from (app.css `--hl-x`, `--hl-y`, `--hl-show`), and those are
+ * worked out from (`--hl-x`, `--hl-y`, `--hl-show`, registered in app.css), and those are
  * what glide and fade. With `transform` and `opacity` transitioned
  * themselves, each glide and each fade lifted the layer onto the
  * compositor, and with it every row drawn over it: the rows over the ghost
@@ -128,15 +171,15 @@ const show = (span: HTMLElement, on: boolean) => {
 };
 
 /**
- * Whether a layer glides to its next place, written only when it changes: a
- * class list writes its attribute on every add or remove, changed or not,
- * and a `reflow` around the list hears each write as a change to re-place
- * every row. A list folding open (`unfold`) resizes the container every
- * frame, and each resize set the pill's glide again: a full reflow a frame.
+ * Whether a layer glides to its next place (`data-glide`), written only
+ * when it changes: a `reflow` around the list hears each attribute write as
+ * a change to re-place every row. A list folding open (`unfold`) resizes
+ * the container every frame, and each resize set the pill's glide again: a
+ * full reflow a frame.
  */
 const setGlide = (span: HTMLElement, on: boolean) => {
-  if (span.classList.contains("kit-glide") !== on) {
-    span.classList.toggle("kit-glide", on);
+  if (span.hasAttribute("data-glide") !== on) {
+    span.toggleAttribute("data-glide", on);
   }
 };
 
@@ -210,14 +253,20 @@ export function highlight(options: HighlightOptions) {
       laidOut,
       axis = "y",
       ghost: withGhost = true,
+      look,
     } = options;
-    container.classList.add("kit-highlight");
+    // The list isolates, so the layers at -1 stand under its rows and over
+    // nothing outside it.
+    container.dataset.highlight = "";
+    const ownIsolate = !container.classList.contains("isolate");
+    container.classList.add("isolate");
     if (getComputedStyle(container).position === "static") {
       container.style.position = "relative";
     }
-    const ghost = layer("kit-ghost");
-    const trail = layer("kit-pill-trail");
-    const pill = layer("kit-pill");
+    const looks = highlightVariants({ look });
+    const ghost = layer("highlight-ghost", looks.ghost());
+    const trail = layer("highlight-trail", looks.trail());
+    const pill = layer("highlight-pill", looks.pill());
     // A ghost the rows' own highlight drives (a menu's arrow keys) shows on
     // a touch screen too; a ghost the pointer drives does not.
     if (hovered) {
@@ -459,13 +508,14 @@ export function highlight(options: HighlightOptions) {
     };
     /** Hover becomes selection: the old selection fades where it was. */
     const fadeTrail = (from: Box) => {
-      trail.classList.remove("kit-fade", "kit-swap");
+      trail.removeAttribute("data-fade");
+      trail.removeAttribute("data-swap");
       place(trail, from);
       show(trail, true);
       requestAnimationFrame(() => {
         // With less motion the fade is the whole move: --dur-fade (`swap`).
-        trail.classList.add("kit-fade");
-        trail.classList.toggle("kit-swap", reduced.matches);
+        trail.toggleAttribute("data-fade", true);
+        trail.toggleAttribute("data-swap", reduced.matches);
         show(trail, false);
       });
     };
@@ -478,7 +528,7 @@ export function highlight(options: HighlightOptions) {
         swap(pillBox, box);
         return;
       }
-      pill.classList.remove("kit-swap");
+      pill.removeAttribute("data-swap");
       setGlide(pill, move);
       place(pill, box);
       show(pill, true);
@@ -488,17 +538,19 @@ export function highlight(options: HighlightOptions) {
     const swap = (from: Box, to: Box) => {
       // Both land at once, transitions off: the trail where the selection
       // was, the pill hidden where it is going.
-      trail.classList.remove("kit-fade", "kit-swap");
+      trail.removeAttribute("data-fade");
+      trail.removeAttribute("data-swap");
       place(trail, from);
       show(trail, true);
-      pill.classList.remove("kit-swap");
+      pill.removeAttribute("data-swap");
       setGlide(pill, false);
       place(pill, to);
       show(pill, false);
       // Then the fades, from the frame those were drawn in.
       requestAnimationFrame(() => {
-        trail.classList.add("kit-fade", "kit-swap");
-        pill.classList.add("kit-swap");
+        trail.toggleAttribute("data-fade", true);
+        trail.toggleAttribute("data-swap", true);
+        pill.toggleAttribute("data-swap", true);
         show(trail, false);
         show(pill, true);
       });
@@ -1041,7 +1093,10 @@ export function highlight(options: HighlightOptions) {
       ghost.remove();
       trail.remove();
       pill.remove();
-      container.classList.remove("kit-highlight");
+      delete container.dataset.highlight;
+      if (ownIsolate) {
+        container.classList.remove("isolate");
+      }
     };
   };
 }

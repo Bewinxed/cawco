@@ -17,6 +17,10 @@
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import {
+    iconCardsVariants,
+    iconCardVariants,
+  } from "#lib/components/ui/icon-card/index.js";
   import { barGlass } from "./bar-glass.svelte";
   import Caw from "./home/Caw.svelte";
   import { addMachine, JOIN_WAYS } from "./join/join.svelte";
@@ -43,8 +47,14 @@
   const enter = new ListSwap(true);
 </script>
 
-<div class="machines-empty" class:leaving={!present}>
-  <div data-slot="caw-80" class="caw-80">
+<div
+  class="group mx-auto flex w-full max-w-c-page-column-w flex-col items-center gap-space-4"
+  data-leaving={!present || undefined}
+>
+  <div
+    data-slot="caw-80"
+    class="grid min-h-c-empty-fleet-caw place-items-center"
+  >
     <Caw
       next={["ready", "idle"]}
       {ongone}
@@ -53,30 +63,47 @@
       status={fleet === "none" ? "ready" : "idle"}
     />
   </div>
-  <div data-slot="body" class="body">
+  <!-- The states share this cell: the one leaving is pinned in it (crossOut). -->
+  <div
+    data-slot="body"
+    class="relative w-full transition-[opacity] duration-(--dur-fade) ease-out group-data-leaving:opacity-0"
+  >
     {#key fleet}
       <!-- mark-line: a column; the machine cards stand under the words -->
-      <div data-slot="words" class="words" in:crossIn out:crossOut>
+      <div
+        data-slot="words"
+        class="flex flex-col items-center gap-space-4"
+        in:crossIn
+        out:crossOut
+      >
         {#if fleet === "none"}
-          <h1 data-slot="title" class="title">
+          <h1
+            data-slot="title"
+            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
+          >
             Connect a machine to run sessions
           </h1>
-          <p class="line">
+          <p
+            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
+          >
             Sessions run on your own machines. Install CawCo on one and it joins
             this fleet.
           </p>
           <div
-            class="icon-cards"
+            data-slot="icon-cards"
+            class={iconCardsVariants({ class: "mt-space-4 w-full" })}
             {@attach highlight({
-              rows: ".icon-card",
-              selected: ".icon-card[data-open]",
+              rows: '[data-slot="icon-card"]',
+              selected: '[data-slot="icon-card"][data-open]',
               axis: "xy",
+              look: "card",
             })}
           >
             {#each JOIN_WAYS as card, index (card.way)}
               <button
+                data-slot="icon-card"
                 aria-haspopup="dialog"
-                class="icon-card"
+                class={iconCardVariants()}
                 data-open={addMachine.open && addMachine.way === card.way
                   ? ""
                   : undefined}
@@ -94,10 +121,15 @@
             {/each}
           </div>
         {:else}
-          <h1 data-slot="title" class="title">
+          <h1
+            data-slot="title"
+            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
+          >
             None of your machines are online
           </h1>
-          <p class="line">
+          <p
+            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
+          >
             Sessions run on a machine that is online. See which ones dropped and
             why.
           </p>
@@ -114,55 +146,3 @@
     {/key}
   </div>
 </div>
-
-<style>
-  .machines-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-4);
-    inline-size: 100%;
-    max-inline-size: 34rem;
-    margin-inline: auto;
-  }
-  .caw-80 {
-    display: grid;
-    place-items: center;
-    min-block-size: 80px;
-  }
-  /* The states share this cell: the one leaving is pinned in it (crossOut). */
-  .body {
-    position: relative;
-    inline-size: 100%;
-    transition: opacity var(--dur-fade) var(--ease-out);
-  }
-  .leaving .body {
-    opacity: 0;
-  }
-  .words {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-4);
-  }
-  .title {
-    margin: 0;
-    font: var(--type-title);
-    letter-spacing: var(--track-title);
-    color: var(--ink-strong);
-    text-align: center;
-    text-wrap: balance;
-  }
-  .line {
-    margin: 0;
-    max-inline-size: 26rem;
-    font: var(--type-body);
-    color: var(--ink-muted);
-    text-align: center;
-    text-wrap: pretty;
-  }
-  .icon-cards {
-    inline-size: 100%;
-    margin-block-start: var(--space-4);
-  }
-</style>

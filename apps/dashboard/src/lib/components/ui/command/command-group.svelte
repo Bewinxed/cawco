@@ -15,7 +15,7 @@
 </script>
 
 <CommandPrimitive.Group
-  class={cn("overflow-hidden p-1 text-foreground", className)}
+  class={cn("overflow-hidden p-space-1 text-ink-strong", className)}
   data-slot="command-group"
   value={value ?? heading ?? `----${useId()}`}
   bind:ref
@@ -23,7 +23,7 @@
 >
   {#if heading}
     <CommandPrimitive.GroupHeading
-      class="px-2 py-1.5 text-label text-muted-foreground"
+      class="px-2 py-1.5 text-label text-ink-muted"
     >
       {heading}
     </CommandPrimitive.GroupHeading>

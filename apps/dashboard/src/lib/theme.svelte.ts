@@ -47,7 +47,7 @@ class ThemeState {
     }
   }
 
-  /** The switch in flight: a later one takes `theme-flip` over from it. */
+  /** The switch in flight: a later one takes `data-theme-flip` over from it. */
   #flips = 0;
 
   /**
@@ -75,10 +75,10 @@ class ThemeState {
     const mine = this.#flips;
     const done = () => {
       if (mine === this.#flips) {
-        root.classList.remove("theme-flip");
+        delete root.dataset.themeFlip;
       }
     };
-    root.classList.add("theme-flip");
+    root.dataset.themeFlip = "";
     if (!motionOk.current) {
       flip();
       // The flip's frame is drawn with them off; the one after gets them back.

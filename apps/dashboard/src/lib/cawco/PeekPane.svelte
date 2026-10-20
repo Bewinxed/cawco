@@ -70,7 +70,7 @@
     submitCommand,
     takeOverBrowser,
   } from "./client.svelte";
-  import { identityVar } from "./folder-prefs.svelte";
+  import { folderPrefs } from "./folder-prefs.svelte";
   import { conversationHref } from "./links";
   import { echoBeat } from "./motion/echo.svelte";
   import OsMark from "./OsMark.svelte";
@@ -303,9 +303,9 @@
   }
 </script>
 
-<div data-slot="peek" class="peek flex min-h-0 flex-1 flex-col overflow-hidden">
+<div data-slot="peek" class="flex min-h-0 flex-1 flex-col overflow-hidden">
   <ContextMenu.Root>
-    <ContextMenu.Trigger class="contents">
+    <ContextMenu.Trigger box="none">
       <header class="flex items-start gap-2 px-4 py-3">
         <div class="min-w-0 flex-1">
           <h2
@@ -315,18 +315,18 @@
                  belongs to a project. -->
             {#if cwd}
               <IconFolder
-                class="identity-ink size-4 shrink-0"
-                style={identityVar(cwd)}
+                class="identity-ink size-icon-md shrink-0"
+                style="--identity-h: {folderPrefs.hue(cwd)}"
               />
             {/if}
             <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
               >{target.title}</span
             >
           </h2>
-          <p class="flex items-baseline gap-2 text-meta text-muted-foreground">
+          <p class="flex items-baseline gap-2 text-meta text-ink-muted">
             <span class="mark-line flex shrink-0 items-center gap-1.5">
               {#if machine}
-                <OsMark class="size-3.5" os={machine.os} />
+                <OsMark class="size-space-4" os={machine.os} />
               {/if}
               <span>{host}</span>
             </span>
@@ -334,7 +334,8 @@
               <!-- Truncated from the left, as every path in the app is: the
                    leaf is what tells two checkouts apart. -->
               <span
-                class="min-w-0 truncate font-mono [direction:rtl]"
+                data-slot="cwd"
+                class="dir-rtl min-w-0 truncate font-(family-name:--font-mono)"
                 title={cwd}
               >
                 <bdi>{cwd}</bdi>
@@ -343,8 +344,9 @@
           </p>
         </div>
         <Button
-          class="-mr-1.5 shrink-0"
+          class="shrink-0"
           href={target.href}
+          margin="ghost-end"
           size="sm"
           variant="ghost"
         >
@@ -393,24 +395,24 @@
     />
     <span
       class="shrink-0 {failed || activity === 'blocked'
-        ? 'font-medium text-error'
-        : 'text-muted-foreground'}">{stateLabel}</span
+        ? 'font-medium text-error-9'
+        : 'text-ink-muted'}">{stateLabel}</span
     >
     {#if activity === "working" && tool}
       <span
-        class="mark-line flex min-w-0 items-center gap-1.5 text-muted-foreground"
+        class="mark-line flex min-w-0 items-center gap-1.5 text-ink-muted"
         data-box
       >
         <span class="shrink-0">{tool.name}</span>
         <span class="shrink-0">·</span>
         <span
-          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-mono"
+          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono)"
           >{tool.glance}</span
         >
       </span>
     {/if}
     {#if running}
-      <span class="ml-auto flex shrink-0 items-center gap-1" data-box>
+      <span class="ml-auto flex shrink-0 items-center gap-space-1" data-box>
         <ContextMeter
           compaction={session?.lastCompaction ?? null}
           onrefresh={() => {
@@ -441,14 +443,14 @@
       ? "asked a question"
       : request.presentation.summary}
     <div
-      class="flex flex-col gap-2 border-t border-border/50 bg-[var(--status-attn-bg)] px-4 py-3"
+      class="flex flex-col gap-2 border-t border-border/50 bg-status-attn-bg px-4 py-3"
     >
       <p class="text-body">{summary}</p>
       {#if !question && request.presentation.command}
         <!-- What runs, under why: Approve here is made on the command. -->
         <code
           data-slot="block"
-          class="block truncate whitespace-pre border-l-2 border-[var(--border-hairline)] ps-2 font-mono text-meta text-[var(--ink-muted)]"
+          class="block truncate whitespace-pre border-l-2 border-border-hairline ps-2 font-(family-name:--font-mono) text-meta text-ink-muted"
           >{request.presentation.command.trim().split("\n")[0]}</code
         >
       {/if}
@@ -463,11 +465,14 @@
       {:else}
         <!-- Equal peers at opposite ends, each outlined in its tint
              (DESIGN.md, The Peer Rule's apart form). -->
-        <div data-slot="choice" class="choice">
+        <div
+          data-slot="choice"
+          class="flex items-center justify-between gap-space-8"
+        >
           <Button
             data-deny
+            answer="deny-edge"
             aria-label="Deny {summary}"
-            class="peer deny"
             onclick={() => answer(request, "deny")}
             size="sm"
             variant="secondary"
@@ -477,10 +482,10 @@
           </Button>
           <Button
             data-approve
+            answer="approve-edge"
             aria-label="{request.browserAsk
               ? 'Take over'
               : 'Approve'} {summary}"
-            class="peer approve"
             onclick={() => accept(request)}
             size="sm"
             variant="secondary"
@@ -495,7 +500,7 @@
 
   {#if failed}
     <p
-      class="border-t border-border/50 bg-error/10 px-4 py-3 text-meta text-error"
+      class="border-t border-border/50 bg-error-9/10 px-4 py-3 text-meta text-error-9"
     >
       {row?.lastError || "Failed without saying why."}
     </p>
@@ -503,14 +508,12 @@
     <!-- A damaged record that does not stop the session (its wake-ups), or
          one whose process still runs: said where its failure would be. -->
     <p
-      class="border-t border-border/50 bg-error/10 px-4 py-3 text-meta text-error"
+      class="border-t border-border/50 bg-error-9/10 px-4 py-3 text-meta text-error-9"
     >
       {damagedWords(row.damaged)}
     </p>
   {:else if stale}
-    <p
-      class="border-t border-border/50 px-4 py-3 text-meta text-muted-foreground"
-    >
+    <p class="border-t border-border/50 px-4 py-3 text-meta text-ink-muted">
       {UNKNOWN_HINT}
     </p>
   {/if}
@@ -520,7 +523,7 @@
        its own section rather than pushing the tail off. -->
   {#if progress && progress.total > 0}
     <div class="flex flex-col border-t border-border/50 pb-3">
-      <p class="px-4 pt-3 pb-1 text-label">
+      <p class="px-4 pt-3 pb-space-1 text-label">
         {planWords.plan} · {progress.done} of {progress.total}
       </p>
       <div
@@ -544,7 +547,7 @@
         <p class="text-meta">Reading…</p>
       {:else if session?.readFault && tail.length === 0}
         <!-- A read that failed is not a session with nothing to say. -->
-        <p class="text-meta text-error">
+        <p class="text-meta text-error-9">
           Couldn't read this session: {session.readFault.message}
         </p>
       {:else if tail.length === 0 && !session?.streaming}
@@ -552,15 +555,15 @@
       {:else}
         {#each tail as message, index (message.id ?? index)}
           {#if message.type === "tool.use" || message.type === "tool.handoff"}
-            <p
-              class="flex items-baseline gap-1.5 text-meta text-muted-foreground"
-            >
+            <p class="flex items-baseline gap-1.5 text-meta text-ink-muted">
               <span class="shrink-0"
                 >{message.metadata?.toolName ?? message.content}</span
               >
               {#if glanceOf(message)}
                 <span class="shrink-0">·</span>
-                <span class="truncate font-mono">{glanceOf(message)}</span>
+                <span class="truncate font-(family-name:--font-mono)"
+                  >{glanceOf(message)}</span
+                >
               {/if}
             </p>
           {:else if message.type === "user"}
@@ -568,27 +571,29 @@
           {:else if message.type === "user.peer"}
             <!-- The one voice worth tinting: what the session was asked. -->
             <p
-              class="line-clamp-4 rounded-lg bg-action-solid/10 px-3 py-2 text-body break-words whitespace-pre-wrap"
+              class="line-clamp-4 rounded-lg bg-action-solid/10 px-3 py-2 text-body wrap-break-word whitespace-pre-wrap"
             >
               {message.content}
             </p>
           {:else if message.type === "result.error"}
             <!-- A failed turn's last words are the agent's too: flat. -->
-            <p class="line-clamp-3 text-body break-words text-error">
+            <p class="line-clamp-3 text-body wrap-break-word text-error-9">
               {plainMarkdown(message.content)}
             </p>
           {:else}
             <!-- The agent's words read flat: its markdown, without the syntax. -->
-            <p class="line-clamp-6 text-body break-words whitespace-pre-wrap">
+            <p
+              class="line-clamp-6 text-body wrap-break-word whitespace-pre-wrap"
+            >
               {plainMarkdown(message.content)}
             </p>
           {/if}
         {/each}
         {#if session?.streaming}
-          <p class="text-body break-words whitespace-pre-wrap">
+          <p class="text-body wrap-break-word whitespace-pre-wrap">
             {streamed}
             <span
-              class="inline-block h-4 w-[3px] rounded-xs bg-action-solid/60 align-text-bottom"
+              class="inline-block h-icon-md w-space-1 rounded-xs bg-action-solid/60 align-text-bottom"
             ></span>
           </p>
         {/if}
@@ -596,32 +601,3 @@
     </div>
   {/key}
 </div>
-
-<style>
-  /* The peek's answer row is The Peer Rule's apart form, as the transcript's
-     card is: Deny and Approve at the row's two ends, never less than
-     --space-8 apart, nothing between them. Both keep the one untinted
-     recessed fill, each wears a 1px outline in its tint (Approve the done
-     ink, Deny the fail ink), and both labels and glyphs are in ink-strong,
-     so neither leans. Neither the fill nor the outline changes under the
-     pointer. */
-  .choice {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-8);
-  }
-  .choice > :global(.peer),
-  .choice > :global(.peer:hover) {
-    background-color: var(--surface-recess);
-    color: var(--ink-strong);
-  }
-  .choice > :global(.approve),
-  .choice > :global(.approve:hover) {
-    border-color: var(--status-done-ink);
-  }
-  .choice > :global(.deny),
-  .choice > :global(.deny:hover) {
-    border-color: var(--status-fail-ink);
-  }
-</style>

@@ -82,7 +82,7 @@
   }
 </script>
 
-<div class="files-face" data-files-panel>
+<div class="flex min-h-0 flex-auto flex-col" data-files-panel>
   {#if instanceId}
     {#key instanceId}
       <FilesList
@@ -98,27 +98,3 @@
     {/key}
   {/if}
 </div>
-
-<style>
-  /* css-scope .files-pop: GlassCard names its Files face with it; this face draws that frame */
-  /* Files' frame, as Caw's panel draws his (`.caw-pop`): the panel's
-     width, its rows `--space-2` in from the drawn edge, as tall as what it
-     holds up to his panel's height or the room under the glass, its regions
-     sharing that height (FilesList). */
-  :global(.kit-pop.files-pop) {
-    display: flex;
-    flex-direction: column;
-    inline-size: min(var(--c-panel-w), calc(100vw - 24px));
-    max-block-size: min(
-      var(--c-caw-panel-h),
-      calc(var(--bits-popover-content-available-height, 85dvh) - 2px)
-    );
-    padding: var(--space-2);
-  }
-  .files-face {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-block-size: 0;
-  }
-</style>

@@ -48,6 +48,10 @@
    * Effort and permission as chips that open their pickers on one shared
    * popover surface. Read-only, they are the same chips as plain text.
    */
+  import {
+    type ChipSize,
+    chipVariants,
+  } from "#lib/components/ui/chip/index.js";
   import { IconShield } from "#lib/icons.js";
   import Down from "~icons/solar/alt-arrow-down-linear";
   import Tuning from "~icons/solar/tuning-2-bold-duotone";
@@ -66,6 +70,7 @@
     id = "session",
     closeOnCommit = false,
     readonly = false,
+    size = "regular",
   }: {
     tools: ModelTools;
     /** Prefix for the chips' popover ids. */
@@ -73,6 +78,8 @@
     /** Apply the effort once the level is let go, then close the picker. */
     closeOnCommit?: boolean;
     readonly?: boolean;
+    /** The chips' size: the dialog's, or the session card's `compact` group. */
+    size?: ChipSize;
   } = $props();
   let pop = $state<"effort" | "permission" | null>(null);
   const look = $derived(
@@ -93,6 +100,15 @@
   const effortPicker = $derived(
     !(readonly || effortOff) && tools.efforts.length > 0
   );
+  /** A setting chip at this row's size; Full Send's in the grant's tone. */
+  const chip = $derived(chipVariants({ variant: "setting", size }));
+  const permissionChipClass = $derived(
+    chipVariants({
+      variant: "setting",
+      size,
+      tone: fullSend ? "grant" : undefined,
+    })
+  );
   /** Apply the level now, but keep the picker open while the chip settles on it. */
   const SETTLE_MS = 260;
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -107,8 +123,8 @@
 </script>
 
 {#snippet effortChip()}
-  <Tuning style="color:var(--hue-orange-500)" />
-  <span data-slot="chip-label" class="chip-label level"
+  <Tuning class="text-hue-orange-500" />
+  <span data-slot="chip-label" class="capitalize"
     >{tools.effort ?? "Default"}</span
   >
 {/snippet}
@@ -117,17 +133,17 @@
   {#if effortOff}
     <span
       data-tool
-      data-slot="ns-chip-btn"
       aria-disabled="true"
-      class={["ns-chip-btn tool off", readonly && "static"]}
+      class={chip}
+      data-variant={readonly ? "static" : undefined}
       title={effortOff.reason}
     >
-      <Tuning style="color:var(--hue-orange-500)" />
-      <span data-slot="chip-label" class="chip-label">{effortOff.label}</span>
+      <Tuning class="text-hue-orange-500" />
+      <span data-slot="chip-label">{effortOff.label}</span>
       <span class="sr-only">: {effortOff.reason}</span>
     </span>
   {:else}
-    <span data-tool data-slot="ns-chip-btn" class="ns-chip-btn tool static"
+    <span data-tool data-variant="static" class={chip}
       >{@render effortChip()}</span
     >
   {/if}
@@ -136,29 +152,40 @@
   {#if look}
     {@const Icon = look.icon}
     <Icon style={`color:${look.hue}`} />
-    <span data-slot="chip-label" class="chip-label">{look.name}</span>
+    <span data-slot="chip-label">{look.name}</span>
   {:else}
-    <IconShield style="color:var(--ink-subtle)" />
-    <span data-slot="chip-label" class="chip-label">{UNCHOSEN_MODE}</span>
+    <IconShield class="text-ink-subtle" />
+    <span data-slot="chip-label">{UNCHOSEN_MODE}</span>
   {/if}
 {/snippet}
 
-<!-- Read-only and editable cross-fade in place (motion/curves crossIn/crossOut). -->
-<span class="tool-chips">
+<!-- Read-only and editable cross-fade in place (motion/curves crossIn/crossOut).
+     The chips keep the gap of the row they sit in (gap-inherit). -->
+<span data-slot="tool-chips" class="relative inline-flex flex-none gap-inherit">
   {#if readonly}
-    <span data-slot="swap" class="swap" in:crossIn out:crossOut>
+    <span
+      data-slot="swap"
+      class="inline-flex items-center gap-inherit"
+      in:crossIn
+      out:crossOut
+    >
       {@render effortStatic()}
       {#if tools.modes.length && tools.permission}
         <span
           data-tool
-          data-slot="ns-chip-btn"
-          class={["ns-chip-btn tool static", fullSend && "full-send"]}
+          data-variant="static"
+          class={permissionChipClass}
           title={look?.desc || undefined}>{@render permissionChip()}</span
         >
       {/if}
     </span>
   {:else}
-    <span data-slot="swap" class="swap" in:crossIn out:crossOut>
+    <span
+      data-slot="swap"
+      class="inline-flex items-center gap-inherit"
+      in:crossIn
+      out:crossOut
+    >
       {#if !effortPicker}
         {@render effortStatic()}
       {/if}
@@ -172,14 +199,15 @@
               pop = value ? "effort" : null;
             }}
             open={pop === "effort"}
-            triggerClass="ns-chip-btn tool"
+            triggerClass={chip}
+            triggerData={{ "data-tool": true }}
             width={300}
           >
             {#snippet trigger()}
               {@render effortChip()}
-              <Down class="chevron" />
+              <Down data-slot="chevron" />
             {/snippet}
-            <div class="effort-pop">
+            <div class="p-space-2">
               <EffortPips
                 efforts={tools.efforts}
                 embedded
@@ -201,12 +229,13 @@
               pop = value ? "permission" : null;
             }}
             open={pop === "permission"}
-            triggerClass={`ns-chip-btn tool${fullSend ? " full-send" : ""}`}
+            triggerClass={permissionChipClass}
+            triggerData={{ "data-tool": true }}
             width={340}
           >
             {#snippet trigger()}
               {@render permissionChip()}
-              <Down class="chevron" />
+              <Down data-slot="chevron" />
             {/snippet}
             <PermissionSection
               embedded
@@ -225,51 +254,3 @@
     </span>
   {/if}
 </span>
-
-<style>
-  /* The chips keep the gap of the row they sit in, and never shrink or wrap
-     in it: a row that runs short gives the room up from its other chips. */
-  .tool-chips {
-    position: relative;
-    display: inline-flex;
-    flex: none;
-    gap: inherit;
-  }
-  /* Unavailable: the chip's own look, faded as a disabled control is. */
-  .off {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
-  @media (hover: hover) {
-    .tool-chips .off:hover {
-      background: var(--surface-raised);
-    }
-    .tool-chips .off.static:hover {
-      background: var(--surface-recess);
-    }
-  }
-  .swap {
-    display: inline-flex;
-    align-items: center;
-    gap: inherit;
-  }
-  .level {
-    text-transform: capitalize;
-  }
-  .effort-pop {
-    padding: 8px 6px 6px;
-  }
-  .tool-chips :global(.ns-chip-btn.tool.full-send) {
-    background: var(--status-attn-bg);
-    border-color: var(--status-attn-ink);
-    color: var(--status-attn-ink);
-  }
-  .tool-chips :global(.ns-chip-btn.tool.full-send > svg.chevron) {
-    color: var(--status-attn-ink);
-  }
-  @media (hover: hover) {
-    .tool-chips :global(.ns-chip-btn.tool.full-send:hover) {
-      background: var(--status-attn-bg);
-    }
-  }
-</style>

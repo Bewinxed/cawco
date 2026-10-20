@@ -50,14 +50,7 @@
     {#if caw}
       <CawFace size={14} status={caw} />
     {:else}
-      <Sprite aria-hidden="true" class="session-mark-glyph" />
+      <Sprite aria-hidden="true" class="size-icon-sm" />
     {/if}
   {/snippet}
 </TreeMark>
-
-<style>
-  :global(.session-mark-glyph) {
-    inline-size: 12px;
-    block-size: 12px;
-  }
-</style>

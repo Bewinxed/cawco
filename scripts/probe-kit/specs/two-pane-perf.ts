@@ -495,14 +495,18 @@ const revealAlone = (
       const inside = pane.getElementsByTagName("*").length;
       const last = pane.querySelector<HTMLElement>("*:last-child") ?? pane;
       document.body.getBoundingClientRect();
+      // The state is both a class and an attribute (PaneLeaf): a tree styles
+      // the pane by one or the other, and both go and come back together.
       const at = performance.now();
       pane.classList.remove(name);
+      pane.removeAttribute(`data-${name}`);
       const shown = getComputedStyle(last).visibility;
       const styled = performance.now();
       pane.getBoundingClientRect();
       last.getBoundingClientRect();
       const laid = performance.now();
       pane.classList.add(name);
+      pane.setAttribute(`data-${name}`, "");
       for (const [rule, property, priority] of taken) {
         rule.style.setProperty(property, "inherit", priority);
       }
@@ -600,14 +604,18 @@ const hideAlone = (page: Page): Promise<string> =>
     }
     const inside = pane.getElementsByTagName("*").length;
     document.body.getBoundingClientRect();
+    // The class and the attribute together, as PaneLeaf writes the state
+    // (revealAlone): a tree styles it by one or the other.
     const at = performance.now();
     pane.classList.add("pane-hidden");
+    pane.setAttribute("data-pane-hidden", "");
     const skipped = getComputedStyle(pane).contentVisibility;
     const styled = performance.now();
     pane.getBoundingClientRect();
     document.body.getBoundingClientRect();
     const laid = performance.now();
     pane.classList.remove("pane-hidden");
+    pane.removeAttribute("data-pane-hidden");
     document.body.getBoundingClientRect();
     return `${inside} elements (${skipped}): style ${(styled - at).toFixed(1)}ms, layout ${(laid - styled).toFixed(1)}ms`;
   });
@@ -640,9 +648,12 @@ const composerAlone = (page: Page): Promise<string> =>
     const stack = dock.querySelector<HTMLElement>('[data-slot="stack"]');
     const height = stack?.style.blockSize ?? "";
     const trays = [...dock.querySelectorAll<HTMLElement>('[data-slot="tray"]')];
+    // Put away is a class and an attribute (Composer): a tree styles the
+    // tray by one or the other, and both change together.
     const swap = () => {
       for (const tray of trays) {
         tray.classList.toggle("away");
+        tray.toggleAttribute("data-composer-away");
       }
     };
     return [
@@ -714,22 +725,25 @@ const timeSets = (page: Page): Promise<void> =>
  */
 const LAYOUT_PARTS = [
   ["nothing changed", ""],
-  ["the tab strip taken out", ".session-tabs { display: none !important; }"],
+  [
+    "the tab strip taken out",
+    "[data-session-tabs] { display: none !important; }",
+  ],
   [
     "the strip's layout its own (contain: layout)",
-    ".session-tabs { contain: layout !important; }",
+    "[data-session-tabs] { contain: layout !important; }",
   ],
   [
     "the track's layout its own (contain: layout)",
-    ".session-tabs .ff-tabs-list { contain: layout !important; }",
+    '[data-session-tabs] [data-slot="ff-tabs-list"] { contain: layout !important; }',
   ],
   [
     "the panes' stack's layout its own (contain: layout)",
-    ".stack[data-drop-leaf] { contain: layout !important; }",
+    "[data-drop-leaf] { contain: layout !important; }",
   ],
   [
     "every tab's contents taken out, its box kept",
-    ".session-tabs .ff-tab > * { display: none !important; }",
+    '[data-session-tabs] [data-slot="ff-tab"] > * { display: none !important; }',
   ],
 ] as const;
 async function switchLayoutParts(

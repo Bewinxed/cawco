@@ -12,19 +12,7 @@
 </script>
 
 <svelte:head><title>New session | CawCo</title></svelte:head>
-<main>
-  <h1>New session</h1>
+<main class="p-space-8 text-ink-strong">
+  <h1 class="text-size-title font-medium text-ink-strong">New session</h1>
   <button onclick={open} type="button">New session</button>
 </main>
-
-<style>
-  main {
-    padding: var(--space-8);
-    color: var(--ink-strong);
-  }
-  h1 {
-    font-size: var(--text-title);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-</style>

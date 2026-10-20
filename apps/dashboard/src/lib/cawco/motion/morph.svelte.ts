@@ -11,7 +11,8 @@
  * MutationObserver (nodes in or out, text, a class or `hidden`/`open`/
  * `data-state` turning anywhere inside), whose callback is a microtask
  * after the script that made it, so the new natural size is read and the
- * tween's first frame set before layout: the container is laid out at the
+ * tween's first frame set before layout (a state kept on an attribute of
+ * its own is heard when its caller names it, `on`): the container is laid out at the
  * size it was drawn at, and nothing around it ever sees the new size first.
  * Started from a ResizeObserver callback instead, after layout had already
  * reported the new size to every observer, the tween's first frame resized
@@ -66,6 +67,7 @@
 import { CURVE, dur, ease, motionOk } from "./curves.svelte";
 import { folding, foldStarts, leaving, unfolding } from "./fold.svelte";
 import { heldToTravel } from "./rows.svelte";
+import { sizingChanges } from "./sizing";
 
 interface Size {
   h: number;
@@ -143,15 +145,6 @@ interface Box {
   tween: (from: Size, to: Natural) => void;
 }
 
-/** The content mutations that can change a container's natural size. */
-const CHANGES: MutationObserverInit = {
-  childList: true,
-  characterData: true,
-  subtree: true,
-  attributes: true,
-  attributeFilter: ["class", "hidden", "open", "data-state"],
-};
-
 /** Containers whose content changed since the last measure. */
 const changed = new Set<Box>();
 
@@ -178,6 +171,13 @@ function measure() {
 
 export interface Morph {
   ms?: number;
+  /**
+   * The attributes inside it that carry a state its size follows (on it, or
+   * anywhere within): heard as a class turning is. Each is named, never
+   * every attribute: one that turns on every pointer move (a highlighted
+   * row) would measure the page on each.
+   */
+  on?: readonly string[];
   rows?: boolean;
   /**
    * Read as a tween would start: true while the change should land at once
@@ -187,7 +187,13 @@ export interface Morph {
   width?: boolean;
 }
 
-export function morph({ width = false, ms, rows = false, still }: Morph = {}) {
+export function morph({
+  width = false,
+  ms,
+  on = [],
+  rows = false,
+  still,
+}: Morph = {}) {
   return (node: HTMLElement) => {
     /**
      * The size it was last laid out at, from the ResizeObserver: unknown
@@ -395,7 +401,7 @@ export function morph({ width = false, ms, rows = false, still }: Morph = {}) {
       }
       changed.add(box);
     });
-    content.observe(node, CHANGES);
+    content.observe(node, sizingChanges(on));
     foldStarts.add(foldStarted);
 
     return () => {

@@ -19,7 +19,7 @@
  *     its pair's (`--status-live-*` on Working, `--status-done-*` on
  *     Finished, `--status-fail-*` when anything finished failed), and its
  *     numeral holds 4.5:1 on the ground. Read twice: from the engine (the
- *     page under the tab, the tab's sheet `.fold .sheet` and the count's own
+ *     page under the tab, the tab's sheet (TabItem's `fold` and `sheet` hooks) and the count's own
  *     computed colours, rasterised through a canvas to the sRGB the page
  *     draws), and from the numeral's strongest pixel. The badge against the
  *     sheet beside it is noted, not held to a ratio: the design system's
@@ -84,7 +84,7 @@ function computed(
   return page.evaluate(
     ([selector, name]): Computed | null => {
       const el = document.querySelector(selector);
-      const item = el?.closest(".ff-tab");
+      const item = el?.closest('[data-slot="ff-tab"]');
       if (!(el && item)) {
         return null;
       }
@@ -112,7 +112,7 @@ function computed(
           break;
         }
       }
-      const sheet = item.querySelector(".fold .sheet");
+      const sheet = item.querySelector('[data-slot="fold"] [data-ff-sheet]');
       const layers = [
         under,
         sheet ? getComputedStyle(sheet).fill : "transparent",
@@ -280,7 +280,9 @@ const spec: Spec = {
 
     const hit = (page: Page, tab: string) =>
       page
-        .locator(`.ff-tab:has([data-slot="count"][data-tab="${tab}"]) .hit`)
+        .locator(
+          `[data-slot="ff-tab"]:has([data-slot="count"][data-tab="${tab}"]) [data-slot="hit"]`
+        )
         .first();
     /** Reads `tab`'s count, in pair `pair`, in the state the page stands in. */
     const read = async (
@@ -323,7 +325,7 @@ const spec: Spec = {
     const choose = async (page: Page, tab: string) => {
       await hit(page, tab).click();
       await page.waitForSelector(
-        `.ff-tab.selected [data-slot="count"][data-tab="${tab}"]`
+        `[data-slot="ff-tab"][data-tab-item-selected] [data-slot="count"][data-tab="${tab}"]`
       );
     };
     /** Holds `tab` pressed while `then` reads it, and lets go off the tab. */
@@ -381,11 +383,11 @@ const spec: Spec = {
       await settle(page);
       // The count trails the tab's hit inside its segment (TabItem's `trail`).
       const zero = await page.evaluate(() =>
-        [...document.querySelectorAll(".ff-tab")]
+        [...document.querySelectorAll("[data-ff-tab]")]
           .filter((tab) =>
-            (tab.querySelector(":scope > .hit")?.textContent ?? "").includes(
-              "Finished"
-            )
+            (
+              tab.querySelector(":scope > [data-hit]")?.textContent ?? ""
+            ).includes("Finished")
           )
           .map((tab) => ({
             badges: tab.querySelectorAll('[data-slot="count"]').length,
@@ -487,16 +489,20 @@ const spec: Spec = {
       }, RAIL_MIN);
       await settle(page);
       const fit = await page.evaluate(() =>
-        [...document.querySelectorAll(".work .head")].map((head) => {
+        [
+          ...document.querySelectorAll(
+            'section[aria-label="Sessions"] [data-slot="head"]'
+          ),
+        ].map((head) => {
           const labels = [
             ...head.querySelectorAll(
-              '[data-slot="tab-item-label"] > [data-slot="text"]:not(.strong)'
+              '[data-slot="tab-item-label"] > [data-slot="text"]:not([data-text])'
             ),
           ].map((el) => ({
             text: el.textContent ?? "",
             clipped: el.scrollWidth > el.clientWidth,
           }));
-          const list = head.querySelector(".ff-tabs-list");
+          const list = head.querySelector('[data-slot="ff-tabs-list"]');
           const delegates = head.querySelector("button[aria-label=Delegates]");
           const listEnd = list?.getBoundingClientRect().right ?? 0;
           const switchStart = delegates?.getBoundingClientRect().left ?? 0;

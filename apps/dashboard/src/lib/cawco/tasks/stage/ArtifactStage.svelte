@@ -6,6 +6,7 @@
    * panel first, as the artifact's own tab does (routes/artifact/[id]), and
    * put back should the panel move on to another.
    */
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { findArtifact, showArtifact } from "../../artifact-api";
   import { cawco } from "../../client.svelte";
   import { failureWords as message } from "../../hub-read";
@@ -64,20 +65,11 @@
 {:else if staged && drawn}
   <PreviewPane inset instanceId={staged.instanceId} />
 {:else}
-  <div data-slot="cover" aria-hidden="true" class="cover">
-    <span
-      data-slot="block"
-      class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
-    ></span>
+  <div
+    data-slot="cover"
+    aria-hidden="true"
+    class="flex-1 p-space-5 border border-border-well rounded-sm bg-surface-recess"
+  >
+    <Skeleton class="w-2/5" data-slot="block" line="body" radius="text" />
   </div>
 {/if}
-
-<style>
-  .cover {
-    flex: 1;
-    padding: var(--space-5);
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-</style>

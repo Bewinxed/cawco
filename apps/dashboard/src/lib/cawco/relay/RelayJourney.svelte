@@ -129,9 +129,13 @@
       case "waiting":
       case "by-hand":
         return "waiting";
-      default:
-        return "standing";
+      case "inside":
+      case "needs":
+      case "none":
+      case "refused":
+        break;
     }
+    return "standing";
   }
 
   /** Something stands on the person: a step to act on, or one that failed. */
@@ -226,13 +230,14 @@
         return words.certificateDone(relayName, step.endsAt ?? Date.now());
       case "start":
         return words.startDone(machineNow.name, named);
-      default:
-        return words.proveDone(
-          step.device ?? "",
-          step.at ?? Date.now(),
-          step.ports ?? ""
-        );
+      case "prove":
+        break;
     }
+    return words.proveDone(
+      step.device ?? "",
+      step.at ?? Date.now(),
+      step.ports ?? ""
+    );
   }
 
   /** A step's label: what to do while it stands, what was done once ticked. */
@@ -255,9 +260,10 @@
         return words.certificate;
       case "start":
         return words.start;
-      default:
-        return words.prove;
+      case "prove":
+        break;
     }
+    return words.prove;
   }
 
   /** The name check's finding, in the error formula's words. */
@@ -267,9 +273,11 @@
         return words.nameProxied(step.name, machineNow.address);
       case "elsewhere":
         return words.nameElsewhere(step.name, step.answers ?? "", machineNow);
-      default:
-        return words.nameUnresolved(step.name);
+      case "unresolved":
+      case undefined:
+        break;
     }
+    return words.nameUnresolved(step.name);
   }
 
   /** Seconds since the hub last asked DNS, on the clock's next tick, while the name is checked. */
@@ -310,9 +318,11 @@
         return { said: words.starting, tint: "live" };
       case "failed":
         return { said: words.failed, tint: "fail" };
-      default:
-        return { said: words.stopped, tint: "secondary" };
+      case "stopped":
+      case undefined:
+        break;
     }
+    return { said: words.stopped, tint: "secondary" };
   });
   /** The relay is pulling or starting: Stop waits, said under the buttons. */
   const busy = $derived(
@@ -324,39 +334,37 @@
     text.match(/\([^)]*\)|\S+/g) ?? [text];
 
   /** A step's note: meta, muted; a failure's in the fail ink. */
-  const NOTE =
-    "min-w-0 text-meta text-(--ink-muted) text-pretty [overflow-wrap:anywhere]";
+  const NOTE = "min-w-0 text-meta text-ink-muted text-pretty wrap-anywhere";
   const FAIL =
-    "min-w-0 text-meta text-(--status-fail-ink) text-pretty [overflow-wrap:anywhere]";
+    "min-w-0 text-meta text-status-fail-ink text-pretty wrap-anywhere";
   /** Needs you's meta line (NeedsCard's `.meta`): meta, muted, one line, at every width. */
-  const META =
-    "min-w-0 max-w-full overflow-hidden text-meta text-(--ink-muted) text-ellipsis whitespace-nowrap";
-  /** A step's controls: side by side, each the column's width in a narrow card, `space-2` apart. */
+  const META = "min-w-0 max-w-full truncate text-meta text-ink-muted";
+  /** A step's controls: side by side, each the column's width in a narrow card (one grid column), `space-2` apart. */
   const CONTROLS =
-    "flex min-w-0 flex-wrap items-center gap-(--space-2) @max-md:[&>*]:w-full";
-  /** The words under the title: on the title's edge, on the card's own edge in a narrow card. */
+    "flex min-w-0 flex-wrap items-center gap-space-2 @max-field-group:grid @max-field-group:grid-cols-1";
+  /** The words under the title: on the title's edge (the lead column and `space-3`), on the card's own edge in a narrow card. */
   const UNDER_TITLE =
-    "flex min-w-0 flex-col ps-[calc(--spacing(7)+var(--space-3))] @max-md:ps-0";
+    "flex min-w-0 flex-col ps-(--title-edge) @max-field-group:ps-0";
 </script>
 
 {#snippet stepMark(mark: Mark, n: number)}
   <span class="mark-cell">
     <span
-      class="grid size-(--icon-md) place-items-center text-(--ink-muted)"
+      class="grid size-icon-md place-items-center text-ink-muted"
       data-slot="step-mark"
     >
       {#if mark === "done"}
         <IconSuccess
           aria-hidden="true"
-          class="size-(--icon-md) text-(--status-done-ink)"
+          class="size-icon-md text-status-done-ink"
         />
       {:else if mark === "failed"}
         <IconError
           aria-hidden="true"
-          class="size-(--icon-md) text-(--status-fail-ink)"
+          class="size-icon-md text-status-fail-ink"
         />
       {:else if mark === "working"}
-        <Spinner aria-hidden="true" class="size-(--icon-md)" role="none" />
+        <Spinner aria-hidden="true" role="none" />
       {:else}
         <!-- A step's number, no fill: in the muted ink on the control edge
              while it waits, in the strong ink on the outline button's edge
@@ -364,10 +372,10 @@
         <span
           aria-hidden="true"
           class={[
-            "box-border grid size-full place-items-center rounded-full border bg-transparent text-meta leading-none tabular-nums before:content-[attr(data-n)]",
+            "box-border grid size-full place-items-center rounded-pill border bg-transparent text-meta leading-none num before:content-data-n",
             mark === "standing"
-              ? "border-(--border-button-outline) text-(--ink-strong)"
-              : "border-(--border-control) text-(--ink-muted)",
+              ? "border-border-button-outline text-ink-strong"
+              : "border-border-control text-ink-muted",
           ]}
           data-n={n}
         ></span>
@@ -387,24 +395,25 @@
   copyLabel: string,
   clamp: boolean
 )}
-  <div class="min-w-0 @max-md:hidden" data-box>
+  <div class="min-w-0 @max-field-group:hidden" data-box>
     <CopyBox {label} {text} wrap />
   </div>
-  <div class="hidden min-w-0 flex-col gap-(--space-2) @max-md:flex" data-box>
+  <div
+    class="hidden min-w-0 flex-col gap-space-2 @max-field-group:flex"
+    data-box
+  >
     <!-- The box keeps its edge and padding; the clamp is on the words
          inside it, so a third line is cut at the words' edge, never shown
          in the box's padding. -->
     <code
-      class="block min-w-0 rounded-md border border-(--border-control) bg-(--surface-hover) px-(--space-3) py-(--space-2) font-mono text-meta text-(--ink-strong)"
+      class="block min-w-0 rounded-md border border-border-control bg-surface-hover px-space-3 py-space-2 font-mono text-meta text-ink-strong"
       title={text}
       ><span class={clamp ? "line-clamp-2" : "block"} data-slot="copy-words"
         ><span class="sr-only">{label}:{" "}</span
         >{#each unitsOf(text) as unit, index (index)}{#if index > 0}{" "}{/if}<span
             class={[
               "inline-block max-w-full",
-              unit.startsWith("(")
-                ? "whitespace-nowrap"
-                : "[overflow-wrap:anywhere]",
+              unit.startsWith("(") ? "whitespace-nowrap" : "wrap-anywhere",
             ]}
             data-unit>{unit}</span
           >{/each}</span
@@ -426,22 +435,22 @@
      labels' edge. -->
 {#snippet head(done: boolean)}
   <div
-    class="mark-line flex min-w-0 items-center gap-(--space-3) @max-md:gap-(--space-2)"
+    class="mark-line flex min-w-0 items-center gap-space-3 @max-field-group:gap-space-2"
   >
     <span
-      class="grid w-7 flex-none place-items-center text-(--ink-muted) @max-md:w-(--icon-md)"
+      class="grid w-c-row-lead flex-none place-items-center text-ink-muted @max-field-group:w-icon-md"
       data-box
     >
       {#if done}
         <IconSuccess
           aria-hidden="true"
-          class="size-4 text-(--status-done-ink)"
+          class="size-icon-md text-status-done-ink"
         />
       {:else}
-        <IconMonitor aria-hidden="true" class="size-4" />
+        <IconMonitor aria-hidden="true" class="size-icon-md" />
       {/if}
     </span>
-    <h3 class="min-w-0 text-label text-(--ink-strong) text-balance">
+    <h3 class="min-w-0 text-label text-ink-strong text-balance">
       {words.title}
     </h3>
   </div>
@@ -455,21 +464,20 @@
 
 {#snippet choiceRow(choice: RelayChoice)}
   <li
-    class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-(--space-3) gap-y-(--space-1) py-(--space-2) @max-md:grid-cols-1 [&+&]:border-t [&+&]:border-(--border-hairline)"
+    class="grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-1 py-space-2 not-first:border-t not-first:border-border-hairline @max-field-group:grid-cols-1"
     data-relay-choice={choice.machineId}
   >
-    <div class="flex min-w-0 flex-col gap-(--space-1)">
-      <span
-        class="min-w-0 text-label text-(--ink-strong) [overflow-wrap:anywhere]"
+    <div class="flex min-w-0 flex-col gap-space-1">
+      <span class="min-w-0 text-label text-ink-strong wrap-anywhere"
         >{choice.name}</span
       >
-      <p class="min-w-0 text-meta text-(--ink-muted) [overflow-wrap:anywhere]">
-        <code class="font-mono text-(--ink-strong)">{choice.address}</code
+      <p class="min-w-0 text-meta text-ink-muted wrap-anywhere">
+        <code class="font-mono text-ink-strong">{choice.address}</code
         >{#if choice.lan}{`, ${words.behindRouter}`}{/if}{#if !choice.online}{` · ${words.offline}`}{/if}
       </p>
     </div>
     <Button
-      class="@max-md:w-full"
+      class="@max-field-group:w-full"
       disabled={pending !== null}
       label={words.runHere}
       onclick={() => run({ act: "pick", machineId: choice.machineId })}
@@ -503,7 +511,7 @@
       <Input
         autocapitalize="off"
         autocomplete="off"
-        class="w-full max-w-sm"
+        class="w-full max-w-field-group"
         data-relay-name-field
         id="relay-name"
         inputmode="url"
@@ -569,7 +577,7 @@
       />
     </div>
     {#if step.state !== "checking" && zone && tokenOpen}
-      <div class="flex min-w-0 flex-col gap-(--space-2)" in:unfold out:unfold>
+      <div class="flex min-w-0 flex-col gap-space-2" in:unfold out:unfold>
         <Field
           hint={words.tokenHint(zone)}
           id="relay-token"
@@ -664,7 +672,7 @@
       <p class={FAIL}>
         {#if step.command && step.why?.includes(step.command)}
           {@const at = step.why.indexOf(step.command)}
-          {step.why.slice(0, at)}<code class="font-mono text-(--ink-strong)"
+          {step.why.slice(0, at)}<code class="font-mono text-ink-strong"
             >{step.command}</code
           >{step.why.slice(at + step.command.length)}
         {:else}
@@ -699,7 +707,7 @@
         <!-- A ghost's ink starts inside its box: it hangs back by its edge
              and padding so its first letter stands on the note's edge. -->
         <Button
-          class="-ms-3"
+          class="-ms-space-3"
           disabled={pending !== null}
           label={words.doneForNow}
           onclick={() => act("done-for-now")}
@@ -745,23 +753,28 @@
 {#snippet journey()}
   <section
     aria-label={words.title}
-    class="@container flex min-w-0 max-w-[72ch] flex-col gap-(--space-2) text-body"
+    class="@container flex min-w-0 max-w-c-measure flex-col gap-space-2 text-body"
     data-relay-journey
   >
     {@render head(false)}
-    <div class="{UNDER_TITLE} gap-(--space-3)">
+    <div
+      class="{UNDER_TITLE} gap-space-3"
+      style:--title-edge="calc(var(--c-row-lead) + var(--space-3))"
+    >
       {#if lead}
-        <p class="text-body text-(--ink-strong) text-pretty @max-md:hidden">
+        <p
+          class="text-body text-ink-strong text-pretty @max-field-group:hidden"
+        >
           {domain ? words.leadDomain(domain) : words.leadPlain}
         </p>
         <p
-          class="hidden text-body text-(--ink-strong) text-pretty @max-md:block"
+          class="hidden text-body text-ink-strong text-pretty @max-field-group:block"
         >
           {domain ? words.leadDomainShort(domain) : words.leadPlainShort}
         </p>
       {/if}
       <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
-      <ol class="m-0 grid list-none gap-(--space-3) p-0" role="list">
+      <ol class="m-0 grid list-none gap-space-3 p-0" role="list">
         {#each steps as step, index (step.step)}
           <!-- Only the open step stands on the person; another that will
                ask once it is reached waits in the meantime. -->
@@ -770,7 +783,7 @@
               ? "waiting"
               : markOf(step)}
           <li
-            class="mark-line grid grid-cols-[var(--icon-md)_minmax(0,1fr)] items-start gap-x-(--space-2) gap-y-(--space-1) text-label"
+            class="mark-line grid grid-cols-mark-fluid items-start gap-x-space-2 gap-y-space-1 text-label"
             data-open={index === open || undefined}
             data-state={step.state}
             data-step={step.step}
@@ -778,10 +791,10 @@
             {@render stepMark(mark, index + 1)}
             <span
               class={[
-                "min-w-0 text-label [overflow-wrap:anywhere]",
+                "min-w-0 text-label wrap-anywhere",
                 mark === "done" || mark === "waiting"
-                  ? "text-(--ink-muted)"
-                  : "text-(--ink-strong)",
+                  ? "text-ink-muted"
+                  : "text-ink-strong",
               ]}
               data-slot="step-label"
               >{#if SAID[mark]}<span class="sr-only">{SAID[mark]}{" "}</span
@@ -789,7 +802,7 @@
             >
             {#if index === open && hasBody(step)}
               <div
-                class="col-start-2 flex min-w-0 flex-col gap-(--space-2) @max-md:col-span-2 @max-md:col-start-1"
+                class="col-start-2 flex min-w-0 flex-col gap-space-2 @max-field-group:col-span-2 @max-field-group:col-start-1"
                 data-box
                 data-slot="step-body"
               >
@@ -811,7 +824,7 @@
       {#if later}
         <div class="flex justify-end">
           <Button
-            class="-me-3"
+            class="-me-space-3"
             disabled={pending !== null}
             label={words.later}
             onclick={() => act("later")}
@@ -830,21 +843,21 @@
        running underneath. -->
   <section
     aria-label={words.title}
-    class="@container flex min-w-0 max-w-[60ch] flex-col items-start gap-(--space-3)"
+    class="@container flex min-w-0 max-w-c-measure-short flex-col items-start gap-space-3"
     data-relay-entry
   >
     <p
-      class="text-body text-(--ink-strong) text-pretty [overflow-wrap:anywhere] @max-md:hidden"
+      class="text-body text-ink-strong text-pretty wrap-anywhere @max-field-group:hidden"
     >
       {words.entry(domain)}
     </p>
     <p
-      class="hidden text-body text-(--ink-strong) text-pretty [overflow-wrap:anywhere] @max-md:block"
+      class="hidden text-body text-ink-strong text-pretty wrap-anywhere @max-field-group:block"
     >
       {words.entryShort(domain)}
     </p>
     <Button
-      class="@max-md:w-full"
+      class="@max-field-group:w-full"
       label={words.setUp}
       onclick={() => {
         entered = true;
@@ -858,18 +871,19 @@
   <!-- Settings › Browsers before anyone set it up: why, and Set up. -->
   <section
     aria-label={words.title}
-    class="@container flex min-w-0 max-w-[72ch] flex-col gap-(--space-2)"
+    class="@container flex min-w-0 max-w-c-measure flex-col gap-space-2"
     data-relay-start
   >
     {@render head(false)}
-    <div class="{UNDER_TITLE} items-start gap-(--space-3)">
-      <p
-        class="text-body text-(--ink-strong) text-pretty [overflow-wrap:anywhere]"
-      >
+    <div
+      class="{UNDER_TITLE} items-start gap-space-3"
+      style:--title-edge="calc(var(--c-row-lead) + var(--space-3))"
+    >
+      <p class="text-body text-ink-strong text-pretty wrap-anywhere">
         {domain ? words.leadDomain(domain) : words.leadPlain}
       </p>
       <Button
-        class="@max-md:w-full"
+        class="@max-field-group:w-full"
         data-relay-set-up
         label={words.setUp}
         onclick={() => act("set-up")}
@@ -883,14 +897,15 @@
        it is seen from now on. -->
   <section
     aria-label={words.title}
-    class="@container flex min-w-0 max-w-[72ch] flex-col gap-(--space-2)"
+    class="@container flex min-w-0 max-w-c-measure flex-col gap-space-2"
     data-relay-done
   >
     {@render head(true)}
-    <div class="{UNDER_TITLE} items-start gap-(--space-2)">
-      <p
-        class="text-body text-(--ink-strong) text-pretty [overflow-wrap:anywhere]"
-      >
+    <div
+      class="{UNDER_TITLE} items-start gap-space-2"
+      style:--title-edge="calc(var(--c-row-lead) + var(--space-3))"
+    >
+      <p class="text-body text-ink-strong text-pretty wrap-anywhere">
         {words.doneRow(summary.name ?? summary.machine.address)}
       </p>
       {#if row}
@@ -899,7 +914,7 @@
         </p>
       {/if}
       <Button
-        class="@max-md:w-full"
+        class="@max-field-group:w-full"
         href="/config/browsers"
         label={words.openSettings}
         size="sm"
@@ -916,16 +931,16 @@
        one width. -->
   <section
     aria-label={words.title}
-    class="@container min-w-0 max-w-[72ch]"
+    class="@container min-w-0 max-w-c-measure"
     data-relay-summary
   >
     <div
-      class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-(--space-3) gap-y-(--space-2) @max-md:grid-cols-1"
+      class="grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-2 @max-field-group:grid-cols-1"
     >
-      <div class="flex min-w-0 flex-col gap-(--space-1)">
-        <div class="flex min-w-0 flex-wrap items-center gap-(--space-2)">
+      <div class="flex min-w-0 flex-col gap-space-1">
+        <div class="flex min-w-0 flex-wrap items-center gap-space-2">
           <span
-            class="min-w-0 text-label text-(--ink-strong) [overflow-wrap:anywhere]"
+            class="min-w-0 text-label text-ink-strong wrap-anywhere"
             data-relay-machine>{summary.machine.name}</span
           >
           <Badge data-relay-state variant={badge.tint}
@@ -933,18 +948,18 @@
           >
         </div>
         <p
-          class="min-w-0 text-meta text-(--ink-muted) [overflow-wrap:anywhere]"
+          class="min-w-0 text-meta text-ink-muted wrap-anywhere"
           data-relay-line
         >
-          <code class="font-mono text-(--ink-strong)"
+          <code class="font-mono text-ink-strong"
             >{summary.machine.address}</code
-          >{#if summary.name}{" · "}<code class="font-mono text-(--ink-strong)"
+          >{#if summary.name}{" · "}<code class="font-mono text-ink-strong"
               >{summary.name}</code
             >{/if}
         </p>
       </div>
       <div
-        class="flex flex-wrap items-center gap-(--space-4) @max-md:order-last @max-md:justify-self-start"
+        class="flex flex-wrap items-center gap-space-4 @max-field-group:order-last @max-field-group:justify-self-start"
       >
         {#if summary.state === "stopped" || summary.state === "failed"}
           <Button
@@ -962,7 +977,7 @@
           <Button
             aria-describedby={busy ? "relay-stop-wait" : undefined}
             aria-expanded={asking("relay-stop")}
-            class="@max-md:-ms-3"
+            class="@max-field-group:-ms-space-3"
             data-relay-stop
             disabled={asking("relay-stop") || busy}
             label={words.stop}
@@ -983,7 +998,7 @@
       </div>
       {#if busy}
         <p
-          class="col-span-full text-meta text-(--ink-muted) text-pretty"
+          class="col-span-full text-meta text-ink-muted text-pretty"
           data-relay-wait
           id="relay-stop-wait"
         >
@@ -993,7 +1008,7 @@
       {#if summary.ports.length > 0}
         <ul
           aria-label={words.portsLabel}
-          class="col-span-full m-0 flex min-w-0 list-none flex-wrap gap-(--space-2) p-0"
+          class="col-span-full m-0 flex min-w-0 list-none flex-wrap gap-space-2 p-0"
           data-relay-ports
         >
           {#each summary.ports as port (port.name)}
@@ -1008,10 +1023,10 @@
         </ul>
         {#each summary.ports.filter((port) => port.error) as port (port.name)}
           <p
-            class="col-span-full min-w-0 text-meta text-(--ink-muted) [overflow-wrap:anywhere]"
+            class="col-span-full min-w-0 text-meta text-ink-muted wrap-anywhere"
             data-relay-port-error={port.name}
           >
-            <span class="text-(--ink-strong)">{port.name}:</span>
+            <span class="text-ink-strong">{port.name}:</span>
             {port.error}
           </p>
         {/each}
@@ -1020,8 +1035,8 @@
         <p class="col-span-full {FAIL}" data-relay-why>
           {#if summary.whyCommand && summary.why.includes(summary.whyCommand)}
             {@const at = summary.why.indexOf(summary.whyCommand)}
-            {summary.why.slice(0, at)}<code
-              class="font-mono text-(--ink-strong)">{summary.whyCommand}</code
+            {summary.why.slice(0, at)}<code class="font-mono text-ink-strong"
+              >{summary.whyCommand}</code
             >{summary.why.slice(at + summary.whyCommand.length)}
           {:else}
             {summary.why}
@@ -1029,10 +1044,10 @@
         </p>
       {/if}
       <div
-        class="col-span-full grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-(--space-3) gap-y-(--space-2) @max-md:grid-cols-1 @max-md:justify-items-start"
+        class="col-span-full grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-2 @max-field-group:grid-cols-1 @max-field-group:justify-items-start"
       >
         <p
-          class="min-w-0 text-meta text-(--ink-muted) text-pretty [overflow-wrap:anywhere]"
+          class="min-w-0 text-meta text-ink-muted text-pretty wrap-anywhere"
           data-relay-proven
         >
           {#if summary.endsAt}{words.certificateEnds(
@@ -1051,7 +1066,7 @@
           variant="outline"
         />
         {#if !summary.name}
-          <p class="min-w-0 text-meta text-(--ink-muted) text-pretty">
+          <p class="min-w-0 text-meta text-ink-muted text-pretty">
             {words.noName}
           </p>
           <Button
@@ -1067,7 +1082,7 @@
       </div>
       <!-- Under Stop and Remove in every layout: in a narrow card they move
            last, and the question they ask moves with them. -->
-      <div class="col-span-full min-w-0 @max-md:order-last">
+      <div class="col-span-full min-w-0 @max-field-group:order-last">
         {@render refused()}
         <AskHere {asker} at="relay-stop" />
         <AskHere {asker} at="relay-remove" />

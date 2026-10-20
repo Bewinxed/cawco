@@ -774,8 +774,10 @@ export class Gate {
         }
         return;
       }
-      default:
-        return;
+      // A method off the wire is any string, or none: one this does not
+      // name passes as it came.
+      case undefined:
+        break;
     }
   }
 
@@ -1117,9 +1119,12 @@ class Link {
       case "Browser.getWindowForTarget":
         this.#asked.set(message.id ?? 0, message);
         return false;
-      default:
-        return false;
+      case undefined:
+        break;
     }
+    // A method off the wire is any string, or none: one this does not name
+    // passes as it came.
+    return false;
   }
 
   #mayAttach(info: TargetInfo): boolean {
@@ -1214,8 +1219,10 @@ class Link {
       case "Target.detachedFromTarget":
         this.#detachedFrom(text(params.sessionId), target, data);
         return;
-      default:
-        return;
+      // A method off the wire is any string, or none: one this does not
+      // name passes as it came.
+      case undefined:
+        break;
     }
   }
 
@@ -1324,8 +1331,10 @@ class Link {
           this.#gate.ownWindow(result.windowId, this.workspace);
         }
         return;
-      default:
-        return;
+      // A method off the wire is any string, or none: one this does not
+      // name passes as it came.
+      case undefined:
+        break;
     }
   }
 }

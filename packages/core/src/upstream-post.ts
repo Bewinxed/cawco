@@ -376,7 +376,7 @@ export const describePost = (
         command: `git push ${post.url} ${post.refs.map((ref) => `${ref.force ? "+" : ""}${ref.sha}:${ref.dst}`).join(" ")}`,
       };
       break;
-    default:
+    case "mcp":
       described = mcpDescribed(post);
   }
   const number = numberOf(post);
@@ -411,7 +411,7 @@ const numberOf = (post: UpstreamPost): number | undefined => {
       return MCP_NUMBER_ARGS.map((key) => post.args[key]).find(
         (value): value is number => Number.isInteger(value)
       );
-    default:
+    case "git":
       return undefined;
   }
 };

@@ -85,14 +85,15 @@
 />
 
 <form
+  data-slot="place-pick"
   aria-label={words.title}
-  class="place-pick"
+  class="absolute inset-0 z-1 flex flex-col gap-space-3 overflow-y-auto p-space-5 bg-surface-raised"
   onsubmit={use}
   transition:appear
 >
-  <h2 class="pick-title">{words.title}</h2>
-  <div class="flex flex-col gap-1">
-    <span class="text-label text-muted-foreground" id="place-machine-label"
+  <h2 class="type-title text-ink-strong">{words.title}</h2>
+  <div class="flex flex-col gap-space-1">
+    <span class="text-label text-ink-muted" id="place-machine-label"
       >{words.machine}</span
     >
     <Select.Root
@@ -106,8 +107,9 @@
     >
       <Select.Trigger
         aria-labelledby="place-machine-label"
-        class="w-full text-foreground"
+        class="w-full"
         size="sm"
+        tone="strong"
       >
         {#if machine}
           {words.machineOption(machineLabel(machine.hostname), machine.os)}
@@ -132,13 +134,13 @@
       </Select.Content>
     </Select.Root>
   </div>
-  <div class="flex flex-col gap-1">
-    <label class="text-label text-muted-foreground" for="place-folder"
+  <div class="flex flex-col gap-space-1">
+    <label class="text-label text-ink-muted" for="place-folder"
       >{words.folder}</label
     >
     <Input
       autocomplete="off"
-      class="font-mono"
+      face="mono"
       id="place-folder"
       oninput={() => {
         problem = null;
@@ -159,9 +161,9 @@
       value={path}
     />
   {/if}
-  <div class="flex flex-wrap items-center gap-3 pt-1">
+  <div class="flex flex-wrap items-center gap-3 pt-space-1">
     <Button
-      class="pressable"
+      press="pressable"
       failed={problem !== null}
       label={words.use}
       pending={saving}
@@ -171,28 +173,9 @@
     />
     <Button label={words.cancel} onclick={oncancel} size="sm" variant="ghost" />
     {#if problem}
-      <span class="text-label text-error" role="alert" in:appear>{problem}</span
+      <span class="text-label text-error-9" role="alert" in:appear
+        >{problem}</span
       >
     {/if}
   </div>
 </form>
-
-<style>
-  /* Over the whole well, opaque: the page under it is put by while the
-     person picks, never shown cut through, so it carries its own heading. */
-  .place-pick {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    overflow-y: auto;
-    padding: var(--space-5);
-    background: var(--surface-raised);
-  }
-  .pick-title {
-    font: var(--type-title);
-    color: var(--ink-strong);
-  }
-</style>

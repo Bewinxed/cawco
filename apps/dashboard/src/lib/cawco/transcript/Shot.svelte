@@ -110,6 +110,7 @@
 
 <script lang="ts">
   import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     type LightboxShot,
     lightbox,
@@ -253,16 +254,20 @@
 
 <figure
   data-thumb={size === "thumb" || undefined}
-  class:thumb={size === "thumb"}
+  class="group/shot m-0 w-full max-w-full data-thumb:w-(--tx-shot-thumb)"
 >
   {#if video && failed !== src}
-    <div class="box">
+    <div
+      data-slot="shot-box"
+      class="relative flex items-center justify-start w-full h-(--tx-shot) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--tx-shot-thumb) group-data-thumb/shot:h-(--tx-shot-thumb)"
+    >
       {#if captionsReady}
         <!-- Captions come from the sidecar .vtt when the video has one; a video without one has none to show. svelte-check and Biome read only an unconditional <track>. -->
         <!-- svelte-ignore a11y_media_has_caption -->
         <!-- biome-ignore lint/a11y/useMediaCaption: the <track> is conditional on the sidecar .vtt, which Biome does not read -->
         <video
           aria-label={alt}
+          class="block max-w-full max-h-(--tx-shot) h-full object-contain"
           controls
           onerror={() => {
             failed = src;
@@ -284,30 +289,43 @@
       {/if}
     </div>
   {:else if failed === src}
-    <div class="box missing">
+    <div
+      data-slot="shot-box"
+      class="relative flex flex-col items-start justify-center w-full h-(--tx-shot) p-space-3 border border-border-hairline rounded-sm overflow-hidden bg-surface-recess text-ink-muted text-size-meta font-normal group-data-thumb/shot:w-(--tx-shot-thumb) group-data-thumb/shot:h-(--tx-shot-thumb)"
+    >
       <span>{missing ?? (video ? "Video" : "Image")} not available</span>
       {#if path}
-        <span data-slot="path" class="path">{path}</span>
+        <span
+          data-slot="path"
+          class="font-(family-name:--font-mono) wrap-anywhere">{path}</span
+        >
       {/if}
     </div>
   {:else}
-    <button aria-label={`Open ${alt}`} class="box" onclick={open} type="button">
+    <button
+      data-slot="shot-box"
+      aria-label={`Open ${alt}`}
+      class="relative flex items-center justify-start w-full h-(--tx-shot) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--tx-shot-thumb) group-data-thumb/shot:h-(--tx-shot-thumb)"
+      onclick={open}
+      type="button"
+    >
       <span
-        class="frame"
+        data-sized={intrinsic !== null || undefined}
+        class="group/frame relative flex items-center w-full h-full rounded-sm data-sized:w-(--frame-w) data-sized:h-auto data-sized:aspect-(--frame-ratio)"
+        style:--frame-ratio="var(--w) / var(--h)"
+        style:--frame-w={"min(100%, calc(var(--w) * 1px), calc(var(--tx-shot) * var(--w) / var(--h)))"}
         style:--h={intrinsic?.height}
         style:--w={intrinsic?.width}
-        class:sized={intrinsic !== null}
       >
         {#if loaded !== src}
-          <span
-            aria-hidden="true"
-            class="kit-skeleton absolute inset-0 rounded-[inherit]"
-          ></span>
+          <Skeleton aria-hidden="true" fill="frame" />
         {/if}
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: image load/error lifecycle events; the containing button owns interaction. -->
         <img
           {alt}
-          class={{ cached }}
+          data-cached={cached || undefined}
+          data-loaded={loaded === src || undefined}
+          class="block max-w-full max-h-(--tx-shot) object-contain opacity-0 data-loaded:opacity-100 not-data-cached:transition-[opacity] not-data-cached:duration-(--dur-control) not-data-cached:ease-out group-data-thumb/shot:w-full group-data-thumb/shot:h-full group-data-thumb/shot:object-cover group-data-sized/frame:w-full group-data-sized/frame:h-full"
           data-caption={caption}
           data-path={path}
           data-shot={size}
@@ -323,7 +341,6 @@
           {src}
           width={intrinsic?.width}
           bind:this={image}
-          class:loaded={loaded === src}
           {@attach mounted}
           {@attach sized}
         />
@@ -331,119 +348,18 @@
     </button>
   {/if}
   {#if caption || path}
-    <figcaption>
+    <figcaption
+      class="flex flex-col gap-space-1 mt-space-2 text-size-meta font-normal text-ink-muted"
+    >
       {#if caption}
         <span>{caption}</span>
       {/if}
       {#if path}
-        <span data-slot="path" class="path">{path}</span>
+        <span
+          data-slot="path"
+          class="font-(family-name:--font-mono) wrap-anywhere">{path}</span
+        >
       {/if}
     </figcaption>
   {/if}
 </figure>
-
-<style>
-  .box {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    inline-size: 100%;
-    block-size: 240px;
-    padding: 0;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-    background: transparent;
-    color: var(--ink-muted);
-  }
-  button {
-    cursor: pointer;
-  }
-  /* The picture's box. Unsized, it is the whole card box and the picture
-     fits inside it; sized, it is the picture's own box at contain scale. */
-  .frame {
-    position: relative;
-    display: flex;
-    align-items: center;
-    inline-size: 100%;
-    block-size: 100%;
-    border-radius: inherit;
-
-    &.sized {
-      inline-size: min(
-        100%,
-        calc(var(--w) * 1px),
-        calc(240px * var(--w) / var(--h))
-      );
-      block-size: auto;
-      aspect-ratio: var(--w) / var(--h);
-    }
-  }
-  img {
-    display: block;
-    max-inline-size: 100%;
-    max-block-size: 240px;
-    object-fit: contain;
-    opacity: 0;
-
-    &.loaded {
-      opacity: 1;
-    }
-    &:not(.cached) {
-      transition: opacity var(--dur-control) var(--ease-out);
-    }
-  }
-  video {
-    display: block;
-    max-inline-size: 100%;
-    max-block-size: 240px;
-    block-size: 100%;
-    object-fit: contain;
-  }
-  .sized img {
-    inline-size: 100%;
-    block-size: 100%;
-  }
-  .missing {
-    flex-direction: column;
-    justify-content: center;
-    align-items: flex-start;
-    padding: var(--space-3);
-    background: var(--surface-recess);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-  }
-  .path {
-    font-family: var(--font-mono);
-    overflow-wrap: anywhere;
-  }
-  figcaption {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin-block-start: var(--space-2);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  figure {
-    margin: 0;
-    inline-size: 100%;
-    max-inline-size: 100%;
-
-    &.thumb {
-      inline-size: 48px;
-
-      & .box {
-        inline-size: 48px;
-        block-size: 48px;
-      }
-      & img {
-        inline-size: 100%;
-        block-size: 100%;
-        object-fit: cover;
-      }
-    }
-  }
-</style>

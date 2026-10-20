@@ -29,6 +29,7 @@
   import { Portal } from "bits-ui";
   import { type Component, mount, unmount, untrack } from "svelte";
   import type { ClassValue, HTMLAttributes } from "svelte/elements";
+  import { cn } from "#lib/utils.js";
   import Idle from "~icons/solar/pause-circle-bold-duotone";
   import Machine from "~icons/solar/server-bold-duotone";
   import { CURVE, dur, motionOk } from "../motion/curves.svelte.js";
@@ -253,7 +254,7 @@
       span.dataset.tip = chip.tip;
       span.dataset.tone = row.state.tone;
       span.setAttribute("aria-label", `${chip.label}, ${chip.tip}`);
-      const glyph = span.querySelector(".mention-glyph") as HTMLElement;
+      const glyph = span.querySelector("[data-mention-glyph]") as HTMLElement;
       glyph.replaceChildren();
       const mounted = mount(row.glyph, { target: glyph });
       chips.set(span, () => unmount(mounted));
@@ -485,7 +486,10 @@
   }): HTMLElement {
     const span = document.createElement("span");
     span.className = "mention-chip";
-    span.setAttribute("data-slot", "mention-chip");
+    // Its own attribute, not `data-slot`: the composer hides it under a
+    // state (a flight, an ask), and Chrome keys an attribute selector there
+    // to the attribute's name alone.
+    span.setAttribute("data-mention-chip", "");
     span.contentEditable = "false";
     span.dataset.mention = chip.serialised;
     span.dataset.tip = chip.tip;
@@ -494,7 +498,11 @@
     span.setAttribute("role", "img");
     span.setAttribute("aria-label", `${chip.label}, ${chip.tip}`);
     const glyph = document.createElement("span");
-    glyph.className = "mention-glyph";
+    // The glyph in its chip's status ink (the chip's own `data-tone`), at
+    // the 16px icon size; its hook is its own attribute, as the chip's is.
+    glyph.className =
+      "inline-grid place-items-center text-status-idle-glyph [&_svg]:size-icon-md [[data-tone=live]>&]:text-status-live-glyph [[data-tone=attn]>&]:text-status-attn-glyph [[data-tone=fail]>&]:text-status-fail-glyph";
+    glyph.setAttribute("data-mention-glyph", "");
     glyph.setAttribute("aria-hidden", "true");
     span.append(glyph, document.createTextNode(chip.label));
     const mounted = mount(chip.glyph, { target: glyph });
@@ -734,7 +742,11 @@
   data-editor
   {...rest}
   bind:this={editor}
-  class={["editor", className, { phone, empty }]}
+  data-phone={phone || undefined}
+  class={cn(
+    "type-body wrap-anywhere no-scrollbar relative max-h-c-textarea-max-h min-h-c-composer-field overflow-y-auto whitespace-pre-wrap py-space-2 text-ink-strong leading-ui caret-brand-solid outline-off data-mention-field-empty:before:pointer-events-none data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-subtle data-mention-field-empty:before:content-placeholder",
+    className
+  )}
   aria-activedescendant={mention.open && mention.active
     ? `${menuId}-${mention.active.kind}:${mention.active.id}`
     : rest["aria-activedescendant"]}
@@ -767,112 +779,18 @@
 ></div>
 
 {#if tip}
+  <!-- DESIGN.md, Tooltip: solid ink, never coral; fades and settles from
+       0.96. The handle is the code role's face, size, weight and leading,
+       its ligatures as the role's shorthand left them. -->
   <div
-    class="tip"
+    data-slot="tip"
+    class="fixed z-(--layer-float) grid gap-space-row max-w-c-tip-max-w py-space-2 px-space-3 rounded-sm bg-ink-solid text-on-ink type-meta -translate-x-1/2 translate-y-(--tip-shift-y) pointer-events-none animate-kit-tip-fade motion-safe:animate-mention-tip-in"
+    role="tooltip"
     style:left={`${tip.x}px`}
     style:top={`${tip.y}px`}
-    role="tooltip"
+    style:--tip-shift-y="calc(-100% - var(--space-2))"
   >
-    <span class="tip-facts">{tip.text}</span>
-    <span class="tip-handle">{tip.handle}</span>
+    <span>{tip.text}</span>
+    <span class="type-code opacity-80">{tip.handle}</span>
   </div>
 {/if}
-
-<style>
-  .editor {
-    position: relative;
-    min-block-size: 34px;
-    max-block-size: 200px;
-    overflow-y: auto;
-    padding-block: 7px;
-    font: var(--type-body);
-    font-size: 16px;
-    line-height: 1.25;
-    color: var(--ink-strong);
-    caret-color: var(--brand-solid);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    outline: none;
-    scrollbar-width: none;
-  }
-  /* The hint stands out of the text's flow, so the caret stands at the
-     line's start under it. */
-  .editor.empty::before {
-    content: attr(data-placeholder);
-    position: absolute;
-    color: var(--ink-subtle);
-    pointer-events: none;
-  }
-
-  /* The chip: a recessed badge holding the kind's glyph and the title. */
-  .editor :global(.mention-chip) {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    max-inline-size: 100%;
-    margin-inline: 1px;
-    padding: 0 6px 0 4px;
-    border-radius: var(--radius-xs);
-    background: var(--surface-recess);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-    font: var(--type-label);
-    font-size: 15px;
-    line-height: 22px;
-    color: var(--ink-strong);
-    vertical-align: baseline;
-    white-space: nowrap;
-    cursor: default;
-    user-select: all;
-  }
-  .editor :global(.mention-glyph) {
-    display: inline-grid;
-    place-items: center;
-    color: var(--status-idle-glyph);
-
-    & :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-    }
-  }
-  .editor :global(.mention-chip[data-tone="live"] .mention-glyph) {
-    color: var(--status-live-glyph);
-  }
-  .editor :global(.mention-chip[data-tone="attn"] .mention-glyph) {
-    color: var(--status-attn-glyph);
-  }
-  .editor :global(.mention-chip[data-tone="fail"] .mention-glyph) {
-    color: var(--status-fail-glyph);
-  }
-
-  /* DESIGN.md, Tooltip: solid ink, never coral; fades and settles from 0.96. */
-  .tip {
-    position: fixed;
-    z-index: 60;
-    display: grid;
-    gap: 2px;
-    max-inline-size: 320px;
-    padding: 6px 10px;
-    border-radius: var(--radius-sm);
-    background: var(--ink-solid);
-    color: var(--on-ink);
-    font: var(--type-meta);
-    translate: -50% calc(-100% - 8px);
-    pointer-events: none;
-    animation: kit-tip-fade 140ms var(--ease-out);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .tip {
-      animation: mention-tip-in 140ms var(--ease-out);
-    }
-  }
-  @keyframes mention-tip-in {
-    from {
-      opacity: 0;
-      scale: 0.96;
-    }
-  }
-  .tip-handle {
-    font: var(--type-code);
-    opacity: 0.8;
-  }
-</style>

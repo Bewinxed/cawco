@@ -289,9 +289,9 @@
       bind:value={draft.name}
     />
     {#if shown("name")}
-      <p class="problem" in:appear>{wrong.name}</p>
+      <p class="type-meta text-status-fail-ink" in:appear>{wrong.name}</p>
     {:else if duplicate}
-      <p class="problem" in:appear>{duplicate}</p>
+      <p class="type-meta text-status-fail-ink" in:appear>{duplicate}</p>
     {/if}
     <ReadingWell>{ruleSentence(draft)}</ReadingWell>
     <SwitchField
@@ -303,15 +303,17 @@
       bind:checked={draft.enabled}
     />
     {#if failed}
-      <p class="problem" role="alert" in:appear>{failed}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+        {failed}
+      </p>
     {/if}
   {/snippet}
 
   <EditorSection hue={HUE} icon={IconEye} label="What to watch for">
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       CawCo reads what a session writes, not what you write to it.
     </p>
-    <div data-slot="fold" class="fold">
+    <div data-slot="fold" class="flex flex-col gap-inherit">
       <Choice
         label="Match"
         onchange={(next) => setMatchKind(next as RuleMatchKind)}
@@ -346,8 +348,8 @@
         {#if draft.matchKind === "meaning"}
           <Textarea
             aria-invalid={shown("pattern") ? "true" : undefined}
-            class="resize-y"
             id="rule-pattern"
+            resize="block"
             onblur={() => {
               touched.pattern = true;
             }}
@@ -359,7 +361,7 @@
           <Input
             aria-invalid={shown("pattern") ? "true" : undefined}
             autocomplete="off"
-            class="font-mono"
+            face="mono"
             id="rule-pattern"
             onblur={() => {
               touched.pattern = true;
@@ -375,7 +377,7 @@
       <!-- Text-matching options fold away for a meaning rule rather than popping. -->
       <div
         data-slot="fold"
-        class="fold"
+        class="flex flex-col gap-inherit"
         inert={draft.matchKind === "meaning"}
         {@attach folds(() => draft.matchKind !== "meaning", FOLD)}
       >
@@ -403,14 +405,14 @@
         value={draft.watch}
       />
       {#if draft.watch !== "text" && draft.timing === "turn"}
-        <p class="caution" in:unfold out:unfold>
+        <p class="type-meta text-status-attn-ink" in:unfold out:unfold>
           Reasoning is not kept once a turn is over. To watch thinking, fire on
           the message or the moment instead.
         </p>
       {/if}
       <div
         data-slot="fold"
-        class="fold"
+        class="flex flex-col gap-inherit"
         inert={draft.matchKind === "meaning"}
         {@attach folds(() => draft.matchKind !== "meaning", FOLD)}
       >
@@ -420,16 +422,16 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconPlain} label="What CawCo sends back">
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       The session is told this is CawCo and not you, so it does not answer you
       for something you never said.
     </p>
-    <div data-slot="fold" class="fold">
+    <div data-slot="fold" class="flex flex-col gap-inherit">
       <Field id="rule-reply" label="Reply" problem={shown("reply")}>
         <Textarea
           aria-invalid={shown("reply") ? "true" : undefined}
-          class="resize-y"
           id="rule-reply"
+          resize="block"
           onblur={() => {
             touched.reply = true;
           }}
@@ -462,12 +464,12 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       Everywhere unless you narrow it. Each filter you set has to match for the
       rule to fire. A model matches as a substring, so a family name covers
       every dated build of it.
     </p>
-    <div class="pickers">
+    <div class="flex flex-wrap gap-space-2">
       <PickerChip
         label="Machine"
         onpick={(next) => narrow("machineId", next)}
@@ -516,7 +518,7 @@
     </div>
   </EditorSection>
 
-  <div data-slot="fold" class="fold">
+  <div data-slot="fold" class="flex flex-col gap-inherit">
     <EditorSection hue={HUE} icon={IconPin} label="Making it stick">
       <SwitchField
         id="rule-repeat"
@@ -525,7 +527,11 @@
       >
         {#snippet hint()}
           <!-- The two readings cross-fade in one box, its height following. -->
-          <span data-slot="swap" class="swap" {@attach morph()}>
+          <span
+            data-slot="swap"
+            class="relative flex flex-col"
+            {@attach morph()}
+          >
             {#if draft.repeat}
               <span in:crossIn out:crossOut>
                 The session gets your reply each time it is tripped. It stops
@@ -549,36 +555,3 @@
     </EditorSection>
   {/if}
 </EditorFrame>
-
-<style>
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-  .caution {
-    font: var(--type-meta);
-    color: var(--status-attn-ink);
-  }
-  /* Folds shut to nothing, taking the section's 8px gap with it, then opens
-     back to its content's height (motion/fold.svelte.ts). */
-  .fold {
-    display: flex;
-    flex-direction: column;
-    gap: inherit;
-  }
-  .swap {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-  }
-  .pickers {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-</style>

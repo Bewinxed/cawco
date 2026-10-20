@@ -12,26 +12,13 @@
 
 <div
   data-slot="decision-group"
-  class="decision-group"
+  class="pointer-events-none relative rounded-lg inset-ring inset-ring-border-control"
   style:block-size="{height}px"
   style:inline-size="{width}px"
 >
-  <span data-slot="decision-group-label" class="label">{group.name}</span>
+  <span
+    data-slot="decision-group-label"
+    class="type-label absolute start-space-1 bottom-full mb-space-1 whitespace-nowrap text-ink-muted"
+    >{group.name}</span
+  >
 </div>
-
-<style>
-  .decision-group {
-    position: relative;
-    border-radius: var(--radius-lg);
-    box-shadow: inset 0 0 0 1px var(--border-control);
-    pointer-events: none;
-  }
-  .label {
-    position: absolute;
-    inset-block-end: calc(100% + var(--space-1));
-    inset-inline-start: var(--space-1);
-    font: var(--type-label);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-</style>

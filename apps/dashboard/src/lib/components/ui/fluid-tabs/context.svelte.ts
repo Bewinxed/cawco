@@ -15,6 +15,13 @@ export type TabsSize = "default" | "compact";
 /** A segmented control in a well, or folder tabs standing on a shelf. */
 export type TabsVariant = "segmented" | "folder";
 /**
+ * A host strip the track stands in, by role: `session`, a pane's session
+ * tabs on their own shelf (PaneTabs); `hosted`, the same tabs standing in a
+ * host's row, which draws the shelf; `work`, the home's Working and
+ * Finished tabs (WorkTabs).
+ */
+export type TabsStrip = "session" | "hosted" | "work";
+/**
  * The indicator part-way from the chosen item toward another, by a fraction
  * of the way: a gesture in progress, driving it by hand.
  */
@@ -30,6 +37,7 @@ export class TabsState {
   selectedIndex = $state<number | undefined>(undefined);
   size = $state<TabsSize>("default");
   variant = $state<TabsVariant>("segmented");
+  strip = $state<TabsStrip | undefined>(undefined);
   /** Each folder tab's shape as last measured, by value (fold-memory.ts). */
   boxes = $state.raw<Readonly<Record<string, FoldMeasure>>>({});
   travel = $state<TabsTravel | null>(null);

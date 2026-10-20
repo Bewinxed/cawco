@@ -95,20 +95,26 @@
 
 <div
   data-slot="starter-cards"
-  class="starter-cards"
+  class="group/starters @container w-full"
   data-rows={rows || undefined}
 >
+  <!-- One column in a narrow container; wider, as many columns as fit.
+       Suggestion rows (`rows`): one under the other, each as wide as its
+       words (never past the column), at a row's height rather than a
+       card's. -->
   <ul
     data-slot="cards"
     aria-label={rows ? "Things to ask Caw" : "Starters"}
-    class="cards"
+    class="m-0 grid list-none auto-rows-(--cards-rows) grid-cols-1 gap-space-2 p-0 @details:grid-cols-(--cards-cols) group-data-rows/starters:flex group-data-rows/starters:flex-col group-data-rows/starters:items-start"
+    style:--cards-cols={"repeat(auto-fill, minmax(min(100%, var(--c-starter-w)), 1fr))"}
+    style:--cards-rows="1fr"
   >
     {#each starters as starter (starter.text)}
       {@const Glyph = GLYPHS[starter.glyph]}
-      <li>
+      <li class="group-data-rows/starters:max-w-full">
         <button
           data-slot="starter"
-          class="starter mark-line press-tint"
+          class="mark-line press-tint type-label flex size-full min-h-c-starter-h items-box-start gap-space-2 rounded-lg border-none border-current bg-surface-raised p-space-3 text-start text-pretty text-ink-strong shadow-tile transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover group-data-rows/starters:h-auto group-data-rows/starters:min-h-c-btn-h group-data-rows/starters:w-auto group-data-rows/starters:max-w-full group-data-rows/starters:rounded-md group-data-rows/starters:border group-data-rows/starters:border-solid group-data-rows/starters:border-border-row-outline group-data-rows/starters:px-space-3 group-data-rows/starters:py-space-2 group-data-rows/starters:shadow-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
           onclick={() => onpick(starter.text)}
           type="button"
         >
@@ -116,15 +122,17 @@
             ><Glyph
               data-starter-glyph
               aria-hidden="true"
-              class="starter-glyph"
+              class="size-icon-md flex-none text-ink-strong"
             /></span
           >
-          <span class="starter-words" data-box>
-            <span data-slot="starter-text" class="starter-text"
+          <span class="flex min-w-0 flex-col gap-space-1" data-box>
+            <span data-slot="starter-text" class="wrap-anywhere"
               >{starter.text}</span
             >
             {#if rows && starter.reason}
-              <span data-slot="starter-reason" class="starter-reason"
+              <span
+                data-slot="starter-reason"
+                class="type-meta text-pretty wrap-anywhere text-ink-muted"
                 >{starter.reason}</span
               >
             {/if}
@@ -134,106 +142,3 @@
     {/each}
   </ul>
 </div>
-
-<style>
-  .starter-cards {
-    inline-size: 100%;
-    container-type: inline-size;
-  }
-  .cards {
-    display: grid;
-    /* One column in a narrow container. */
-    grid-template-columns: minmax(0, 1fr);
-    /* Every card the tallest card's height (routines-wireframe §7.5). */
-    grid-auto-rows: 1fr;
-    gap: var(--space-2);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  @container (min-width: 30rem) {
-    .cards {
-      grid-template-columns: repeat(
-        auto-fill,
-        minmax(min(100%, var(--c-starter-w)), 1fr)
-      );
-    }
-  }
-  .starter {
-    display: flex;
-    align-items: start;
-    gap: var(--space-2);
-    inline-size: 100%;
-    block-size: 100%;
-    min-block-size: var(--c-starter-h);
-    padding: var(--space-3);
-    border: 0;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    color: var(--ink-strong);
-    font: var(--type-label);
-    text-align: start;
-    text-wrap: pretty;
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  /* The glyph in the words' own ink, so its duotone's darker layer stands
-     clear of the card. */
-  .starter :global(.starter-glyph) {
-    flex: none;
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-    color: var(--ink-strong);
-  }
-  @media (hover: hover) {
-    .starter:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .starter:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-offset);
-  }
-  .starter-words {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-inline-size: 0;
-  }
-  .starter-text {
-    overflow-wrap: anywhere;
-  }
-  /* Why it is offered: under the words, a step down in size and ink. */
-  .starter-reason {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-    text-wrap: pretty;
-  }
-  /* Suggestion rows: one under the other, each as wide as its words (never
-     past the column), at a row's height rather than a card's. Each is an
-     outline button standing on the thread's recess, so its edge is the one
-     made for that (`border-row-outline`: 3:1 against the recess and the
-     raised fill, by day and at night) in place of the tile's drop, which
-     reads at night as no edge at all. */
-  [data-rows] .cards {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
-  }
-  [data-rows] li {
-    max-inline-size: 100%;
-  }
-  [data-rows] .starter {
-    inline-size: auto;
-    max-inline-size: 100%;
-    block-size: auto;
-    min-block-size: var(--c-btn-h);
-    padding: calc(var(--space-2) - 1px) calc(var(--space-3) - 1px);
-    border: 1px solid var(--border-row-outline);
-    border-radius: var(--radius-md);
-    box-shadow: none;
-  }
-</style>

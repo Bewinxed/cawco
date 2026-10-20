@@ -792,7 +792,7 @@ const claudeModels = async (kit: Kit) => {
   ).catch(() => 0);
   const empty = (
     await dialog
-      .locator(".none")
+      .locator('[data-slot="none"]')
       .allInnerTexts()
       .catch(() => [] as string[])
   ).join(" ");

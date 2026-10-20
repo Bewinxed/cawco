@@ -10,7 +10,7 @@
      `revealstart` / `revealend`). -->
 <CollapsibleContent
   {...rest}
-  class="thinking-content {className}"
+  class={className}
   data-slot="thinking-steps-content"
   fade
   reveal

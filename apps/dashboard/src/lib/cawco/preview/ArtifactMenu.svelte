@@ -210,33 +210,40 @@
       heir === undefined
         ? null
         : list?.querySelector<HTMLElement>(
-            `.artifact-row[data-artifact="${CSS.escape(heir)}"]:not([data-reflow-ghost])`
+            `[data-artifact-row][data-artifact="${CSS.escape(heir)}"]:not([data-reflow-ghost])`
           );
     (next ?? list)?.focus();
   });
 </script>
 
 <DropdownMenu.Root bind:open>
+  <!-- The head's title as a control: the kit's sm ghost in the title face. -->
   <DropdownMenu.Trigger
     data-artifact-trigger
     aria-describedby={line ? lineId : undefined}
-    class="artifact-trigger mark-line"
+    class="max-w-full"
     data-artifact={shown.id}
+    face="title"
+    size="sm"
     title={line || undefined}
+    variant="ghost"
   >
     {@const Glyph = GLYPHS[shown.kind]}
     <Glyph />
-    <span class="artifact-name">{shown.name}</span>
+    <span
+      class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+      data-slot="artifact-name">{shown.name}</span
+    >
     <IconChevronDown />
   </DropdownMenu.Trigger>
   <DropdownMenu.Content
     data-artifact-list
     align="start"
-    class="artifact-list w-64"
+    width="wide"
     bind:ref={list}
   >
     {#if line && lineDropped}
-      <DropdownMenu.Label data-slot="menu-line" class="menu-line"
+      <DropdownMenu.Label data-slot="menu-line" kind="line"
         >{line}</DropdownMenu.Label
       >
     {/if}
@@ -256,9 +263,11 @@
           ]
             .filter(Boolean)
             .join(" ")}
-          class="artifact-row"
+          class="group/artifact"
           data-artifact={artifact.id}
           data-flip
+          marks="current-busy"
+          row="artifact"
           onkeydown={(event: KeyboardEvent) => {
             if (event.key === "Delete" || event.key === "Backspace") {
               event.preventDefault();
@@ -268,16 +277,18 @@
           onSelect={() => choose(artifact)}
         >
           <Glyph />
-          <span class="row-text" data-box>
+          <!-- The name and its promoted tag on one line: the name whole while
+               it fits, the tag giving way first. -->
+          <span class="flex min-w-0 flex-auto gap-inherit" data-box>
             <span
               data-slot="row-name"
-              class="row-name"
+              class="max-w-full flex-none overflow-clip text-ellipsis whitespace-nowrap type-label"
               id={part(artifact.id, "name")}>{artifact.name}</span
             >
             {#if artifact.promoted}
               <span
                 data-slot="row-promoted"
-                class="row-promoted"
+                class="min-w-0 flex-initial overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-size-meta num"
                 id={part(artifact.id, "promoted")}
                 title={artifactWords.promotedTitle(artifact.name)}
                 >{artifactWords.promoted(
@@ -296,14 +307,14 @@
           {#if artifact.createdAt}
             <span
               data-slot="row-age"
-              class="row-age"
+              class="text-ink-muted text-size-meta num"
               id={part(artifact.id, "age")}
               >{formatAgeShort(Date.parse(artifact.createdAt))}</span
             >
           {/if}
           <button
             aria-label={artifactWords.removeNamed(artifact.name)}
-            class="row-remove"
+            class="grid place-items-center -me-space-1 p-space-1 border-none border-current rounded-sm bg-transparent text-ink-muted opacity-0 transition-[opacity,color] duration-(--dur-control) ease-out hover:text-error-9 coarse:opacity-100 group-data-highlighted/artifact:opacity-100"
             data-box
             disabled={removing.has(artifact.id)}
             onclick={(event) => {
@@ -323,95 +334,3 @@
     </div>
   </DropdownMenu.Content>
 </DropdownMenu.Root>
-
-<style>
-  /* The head's first control: the name in the label role, the button
-     recipe the head gives every control (SideSurface). */
-  :global(.artifact-trigger) {
-    min-width: 0;
-    max-width: 100%;
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .artifact-name {
-    min-width: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* Narrow, the line is the menu's first row: plain words, wrapping, never an item. */
-  :global(.artifact-list .menu-line) {
-    color: var(--ink-muted);
-    font: var(--type-meta);
-    overflow-wrap: anywhere;
-    text-wrap: pretty;
-  }
-  :global(.artifact-list .artifact-row) {
-    min-block-size: var(--c-artifact-row-h);
-  }
-  :global(.artifact-list .artifact-row[aria-current="true"]) {
-    color: var(--ink-strong);
-  }
-  /* The name is what a row is chosen by: it keeps its own width, and in a
-     row too narrow for everything the promoted tag gives up its room first
-     (its title and the row's name still say it). */
-  .row-text {
-    display: flex;
-    flex: 1 1 auto;
-    gap: inherit;
-    min-width: 0;
-  }
-  .row-name {
-    flex: 0 0 auto;
-    max-inline-size: 100%;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font: var(--type-label);
-  }
-  .row-promoted,
-  .row-age {
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-variant-numeric: tabular-nums;
-  }
-  .row-promoted {
-    flex: 0 1 auto;
-    min-width: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  :global(.artifact-list .artifact-row[aria-busy="true"]) {
-    opacity: 0.5;
-  }
-  /* Shown on the highlighted row (pointer or arrow keys), always under a
-     finger; red under the pointer, as a destructive item's glyph is. */
-  .row-remove {
-    display: grid;
-    place-items: center;
-    margin-inline-end: calc(-1 * var(--space-1));
-    padding: var(--space-1);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--ink-muted);
-    opacity: 0;
-    transition:
-      opacity var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-  }
-  :global(.artifact-row[data-highlighted]) .row-remove {
-    opacity: 1;
-  }
-  @media (hover: hover) {
-    .row-remove:hover {
-      color: var(--destructive);
-    }
-  }
-  @media (pointer: coarse) {
-    .row-remove {
-      opacity: 1;
-    }
-  }
-</style>

@@ -15,37 +15,27 @@
   } = $props();
 
   const JUSTIFY: Record<string, string> = {
-    start: "flex-start",
-    center: "center",
-    end: "flex-end",
-    spaceBetween: "space-between",
+    start: "justify-start",
+    center: "justify-center",
+    end: "justify-end",
+    spaceBetween: "justify-between",
   };
   const ALIGN: Record<string, string> = {
-    start: "flex-start",
-    center: "center",
-    end: "flex-end",
-    stretch: "stretch",
+    start: "items-start",
+    center: "items-center",
+    end: "items-end",
+    stretch: "items-stretch",
   };
 </script>
 
 <div
   data-layout-row={axis === "row" || undefined}
-  class={axis === "row" ? "layout row" : "layout"}
-  style:align-items={ALIGN[align ?? "stretch"]}
-  style:justify-content={JUSTIFY[justify ?? "start"]}
+  class={[
+    "flex min-w-0 gap-space-3",
+    axis === "row" ? "flex-row flex-wrap" : "flex-col",
+    ALIGN[align ?? "stretch"],
+    JUSTIFY[justify ?? "start"],
+  ]}
 >
   {@render children()}
 </div>
-
-<style>
-  .layout {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    min-inline-size: 0;
-  }
-  .layout.row {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-</style>

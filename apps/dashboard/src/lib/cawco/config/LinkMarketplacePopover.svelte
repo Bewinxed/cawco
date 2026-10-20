@@ -146,17 +146,19 @@
   </Popover.Trigger>
   <Popover.Content
     align="start"
-    class="w-[380px] max-w-[calc(100vw-2rem)] gap-3 p-3"
+    class="w-c-panel-w max-w-(--bits-popover-content-available-width)"
+    gap="form"
+    pad="form"
     bind:ref={surface}
   >
-    <form class="form" onsubmit={link}>
+    <form class="flex flex-col gap-space-3" onsubmit={link}>
       <Field id="market-source" label={words.source} problem={unread}>
         {#snippet hint()}
           <Coded text={words.marketSourceHint} />
         {/snippet}
         <Input
           autocomplete="off"
-          class="font-mono"
+          face="mono"
           id="market-source"
           placeholder={words.marketSourcePlaceholder}
           spellcheck="false"
@@ -179,7 +181,7 @@
         <Input
           aria-invalid={clash ? "true" : undefined}
           autocomplete="off"
-          class="font-mono"
+          face="mono"
           id="market-name"
           placeholder={words.marketNamePlaceholder}
           spellcheck="false"
@@ -187,7 +189,13 @@
         />
       </Field>
       {#if failed}
-        <p class="problem" role="alert" transition:unfold>{failed}</p>
+        <p
+          class="type-meta text-status-fail-ink"
+          role="alert"
+          transition:unfold
+        >
+          {failed}
+        </p>
       {/if}
       <Button
         class="self-end"
@@ -202,15 +210,3 @@
     </form>
   </Popover.Content>
 </Popover.Root>
-
-<style>
-  .form {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-</style>

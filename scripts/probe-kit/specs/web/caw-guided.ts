@@ -287,7 +287,9 @@ const readPanel = (page: Page) =>
     const paneStyle = pane ? getComputedStyle(pane) : null;
     const paneBox = box(pane);
     const before = shell ? getComputedStyle(shell, "::before") : null;
-    const grabber = shell?.querySelector(":scope > div.mx-auto");
+    const grabber = shell?.querySelector(
+      ':scope > [data-slot="drawer-grabber"]'
+    );
     const card = document.querySelector("[data-glass-card-frame]");
     return {
       vw: document.documentElement.clientWidth,
@@ -296,7 +298,7 @@ const readPanel = (page: Page) =>
       shell: box(shell),
       greeting: words(
         panel?.querySelector(
-          '[data-thread-hero] [data-slot="empty"] .kit-empty-title'
+          '[data-thread-hero] [data-slot="empty"] [data-slot="empty-title"]'
         )
       ),
       starters,
@@ -1076,7 +1078,7 @@ const filedTasks = async (kit: Kit, setup: Setup, threadId: string) => {
         .getAnimations()
         .filter((anim) =>
           (anim.effect as KeyframeEffect | null)?.target?.closest?.(
-            ".arrive, [data-tasks-head]"
+            "[data-arrive], [data-tasks-head]"
           )
         ).length,
     };

@@ -194,7 +194,7 @@ function literal(
       return arrayLiteral(at, scope);
     case "ObjectExpression":
       return objectLiteral(at, scope);
-    default:
+    case undefined:
       return;
   }
 }

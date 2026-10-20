@@ -1,3 +1,24 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: an item titled in the strong ink at the label
+      size, whose description wraps under it a step below, the two lines on
+      a row's pitch (DESIGN.md, Layout: "a 44px row pitch"). */
+  export const dropdownMenuPendingItemVariants = tv({
+    variants: {
+      look: {
+        titled:
+          "min-h-c-row-h flex-wrap gap-y-space-1 font-medium text-ink-strong text-size-label",
+      },
+    },
+  });
+
+  export type DropdownMenuPendingItemLooks = VariantProps<
+    typeof dropdownMenuPendingItemVariants
+  >;
+</script>
+
 <script lang="ts">
   /**
    * A menu item that runs something (PendingSelect): its icon slot spins and
@@ -19,8 +40,9 @@
     variant = "default",
     disabled = false,
     class: className,
+    look,
     children,
-  }: {
+  }: DropdownMenuPendingItemLooks & {
     icon?: Component<SVGAttributes<SVGSVGElement>>;
     label: string;
     pendingLabel: string;
@@ -40,7 +62,11 @@
 
 <Item
   aria-busy={select.pending || undefined}
-  class={cn("[--btn-gap:10px] [--btn-icon:16px]", className)}
+  class={cn(
+    "[--btn-gap:10px] [--btn-icon:16px]",
+    dropdownMenuPendingItemVariants({ look }),
+    className
+  )}
   {disabled}
   onSelect={select.select}
   {variant}

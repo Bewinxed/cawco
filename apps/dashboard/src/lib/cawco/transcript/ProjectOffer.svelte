@@ -54,12 +54,6 @@
       pending = null;
     }
   }
-
-  /* The Prompt card's control dress (DESIGN.md tokens): 32px fine, 44 coarse. */
-  const btn =
-    "h-[var(--space-8)] pointer-coarse:h-11 gap-(--btn-gap) " +
-    "[--btn-gap:var(--space-2)] [--btn-icon:12px] " +
-    "rounded-[var(--radius-sm)] px-[var(--space-3)] text-label font-medium";
 </script>
 
 {#if joined && !offer}
@@ -67,25 +61,32 @@
        and a way to put the card away. -->
   <section
     aria-label={offerWords.joinedLabel}
-    class="offer"
+    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-border-control rounded-lg bg-surface-raised p-space-3 shadow-hairline motion-safe:animate-offer-settle"
     data-offer={instanceId}
     role="status"
   >
-    <p class="line mark-line">
-      <IconFolder data-project-offer-glyph aria-hidden="true" class="glyph" />
+    <p
+      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-c-offer-line text-size-body font-normal leading-body text-ink-strong"
+    >
+      <IconFolder
+        data-project-offer-glyph
+        aria-hidden="true"
+        class="size-icon-md flex-none text-ink-muted"
+      />
       <span>{joinedLine}</span>
     </p>
-    <div data-slot="actions" class="actions">
+    <div data-slot="actions" class="flex gap-space-2 ms-auto">
       <Button
-        class={btn}
+        fit="prompt"
         href="/project/{encodeURIComponent(joined.project.id)}"
+        size="sm"
         variant="outline">{offerWords.openProject(joined.project.name)}</Button
       >
       <Button
         aria-label={offerWords.putAway}
-        class={btn}
         icon={IconClose}
         onclick={() => dismissProjectJoin(instanceId)}
+        size="icon-sm"
         variant="ghost"
       />
     </div>
@@ -93,24 +94,31 @@
 {:else if offer}
   <section
     aria-label={offerWords.offerLabel}
-    class="offer"
+    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-border-control rounded-lg bg-surface-raised p-space-3 shadow-hairline motion-safe:animate-offer-settle"
     data-offer={instanceId}
   >
-    <p class="line mark-line">
-      <IconFolder data-project-offer-glyph aria-hidden="true" class="glyph" />
+    <p
+      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-c-offer-line text-size-body font-normal leading-body text-ink-strong"
+    >
+      <IconFolder
+        data-project-offer-glyph
+        aria-hidden="true"
+        class="size-icon-md flex-none text-ink-muted"
+      />
       <span>{offer.line}</span>
     </p>
-    <div data-slot="actions" class="actions">
+    <div data-slot="actions" class="flex gap-space-2 ms-auto">
       <Button
-        class={btn}
+        fit="prompt"
         disabled={pending !== null}
         label={offerWords.notNow}
         onclick={() => answer("dismiss")}
         pending={pending === "dismiss"}
+        size="sm"
         variant="ghost"
       />
       <Button
-        class={btn}
+        fit="prompt"
         disabled={pending !== null}
         failed={!!refused}
         icon={IconFolder}
@@ -118,59 +126,9 @@
         onclick={() => answer("accept")}
         pending={pending === "accept"}
         pendingLabel={offerWords.makingProject}
+        size="sm"
       />
     </div>
-    <RowFault data-project-offer-refused class="refused" reason={refused} />
+    <RowFault data-project-offer-refused class="basis-full" reason={refused} />
   </section>
 {/if}
-
-<style>
-  @keyframes offer-settle {
-    from {
-      opacity: 0;
-      translate: 0 8px;
-    }
-  }
-  .offer {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2) var(--space-3);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    padding: var(--space-3);
-    box-shadow: var(--shadow-hairline, var(--shadow-tile));
-
-    @media (prefers-reduced-motion: no-preference) {
-      animation: offer-settle calc(var(--dur-control) * 2) var(--ease-out)
-        backwards;
-    }
-  }
-  .line {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    flex: 1 1 24ch;
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-    color: var(--ink-strong);
-  }
-  .line :global(.glyph) {
-    inline-size: 16px;
-    block-size: 16px;
-    flex: 0 0 auto;
-    color: var(--ink-muted);
-  }
-  .actions {
-    display: flex;
-    gap: var(--space-2);
-    margin-inline-start: auto;
-  }
-  .offer > :global(.refused) {
-    flex-basis: 100%;
-  }
-</style>

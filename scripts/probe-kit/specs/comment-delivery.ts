@@ -239,7 +239,7 @@ const numbered = (pins: Pins, number: number) =>
 /** The pane's pin list: in the Comments popover hung from the well, opened when shut. */
 const rowsOf = async (page: Page) => {
   const button = page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[data-slot="comments"]'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
   );
   if ((await button.getAttribute("aria-expanded")) !== "true") {
     await button.click();
@@ -256,7 +256,7 @@ const openRow = async (page: Page, number: number) =>
 /** The Comments popover shut, when open. */
 const shutList = async (page: Page) => {
   const button = page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[data-slot="comments"]'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
   );
   if ((await button.getAttribute("aria-expanded")) === "true") {
     await button.click();
@@ -327,7 +327,7 @@ const pinWith = async (
   words: string
 ) => {
   const comment = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.focus();
   await on.page.keyboard.press("c");
@@ -679,7 +679,7 @@ const run = async (kit: Kit) => {
   const sendControls = () =>
     page
       .locator(
-        ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="send"]'
+        ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="send"]'
       )
       .count();
   const atStart = await sendControls();
@@ -692,7 +692,7 @@ const run = async (kit: Kit) => {
   // 2. Three pins, 2 s apart, each tapped and written in.
   const startedAt = Date.now();
   const comment = page.locator(
-    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.focus();
   await page.keyboard.press("c");

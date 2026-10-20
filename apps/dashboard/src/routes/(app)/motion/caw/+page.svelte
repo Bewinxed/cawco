@@ -60,8 +60,10 @@
 
 <svelte:head><title>Caw bench · CawCo</title></svelte:head>
 
-<main>
-  <div data-slot="stage" class="stage">
+<main
+  class="type-body flex min-h-dvh flex-col items-center gap-space-5 bg-surface-recess p-space-7 text-ink-muted"
+>
+  <div data-slot="stage" class="grid size-c-bench-stage place-items-center">
     {#if mounted}
       {#key generation}
         <Caw
@@ -78,7 +80,7 @@
       {/key}
     {/if}
   </div>
-  <div data-slot="controls" class="controls">
+  <div data-slot="controls" class="flex gap-space-2">
     {#each STATUSES as s (s)}
       <button
         onclick={() => (mounted ? bench.change(s) : bench.mount(s))}
@@ -95,27 +97,3 @@
     {/each}
   </ol>
 </main>
-
-<style>
-  main {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-5);
-    padding: var(--space-7);
-    background: var(--surface-recess);
-    color: var(--ink-muted);
-    font: var(--type-body);
-    min-height: 100vh;
-  }
-  .stage {
-    display: grid;
-    place-items: center;
-    width: 320px;
-    height: 320px;
-  }
-  .controls {
-    display: flex;
-    gap: var(--space-2);
-  }
-</style>

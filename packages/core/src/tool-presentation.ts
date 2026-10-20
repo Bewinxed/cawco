@@ -1550,7 +1550,8 @@ export function hasBody(
       return failed
         ? inputFields(input).length > 0 || !!result
         : !blank(input?.[PROSE_FIELD]);
-    default:
+    case "fields":
+    case "image":
       return inputFields(input).length > 0 || !!result;
   }
 }

@@ -438,7 +438,7 @@ const run = async (kit: Kit) => {
 
   // 3a'. The usage popover's short names (rings `shownNames`): the two on
   // one email by their organizations, not by the domain they share.
-  await page.locator('[data-slot="strip"] .strip-hit').first().click();
+  await page.locator('[data-slot="strip"] [data-strip-hit]').first().click();
   const short = await until(
     "every account's cell in the usage popover",
     () =>
@@ -448,7 +448,9 @@ const run = async (kit: Kit) => {
             ids.map((id) => [
               id,
               document
-                .querySelector(`.cell-d[data-account="${id}"] [data-name]`)
+                .querySelector(
+                  `[data-usage-cell][data-account="${id}"] [data-name]`
+                )
                 ?.textContent?.replace(/\s+/g, " ")
                 .trim() ?? null,
             ])
@@ -480,7 +482,7 @@ const run = async (kit: Kit) => {
     .first()
     .hover();
   const shownLimit = await page
-    .waitForSelector(".session-details-popover [data-limit-left]", {
+    .waitForSelector("[data-session-details-popover] [data-limit-left]", {
       timeout: 15_000,
     })
     .then((node) => node.textContent())

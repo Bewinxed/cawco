@@ -18,7 +18,7 @@
 
 <div
   class={cn(
-    "relative -my-2 h-5 text-label group-data-[variant=outline]/field-group:-mb-2",
+    "relative -my-2 h-icon-lg text-label group-data-[variant=outline]/field-group:-mb-2",
     className
   )}
   data-content={hasContent}
@@ -30,7 +30,7 @@
   {#if children}
     <span
       data-field-separator-block
-      class="px-2 text-muted-foreground relative mx-auto block w-fit bg-background"
+      class="px-2 text-ink-muted relative mx-auto block w-fit bg-surface-page"
       data-slot="field-separator-content"
     >
       {@render children()}

@@ -26,6 +26,10 @@ public enum Palette {
     public static let spark = Palette.named("spark")
     public static let paper = Palette.named("paper")
     public static let crowInk = Palette.named("crow-ink")
+    /// OpenCode's published square logo, its inner square: the brand's own colouring per scheme (https://opencode.ai/brand, logo light square and logo dark square), never a house colour.
+    public static let opencodeLogoCore = Palette.named("opencode-logo-core")
+    /// OpenCode's published square logo, its frame: the brand's own colouring per scheme (https://opencode.ai/brand), never a house colour.
+    public static let opencodeLogoFrame = Palette.named("opencode-logo-frame")
     /// Functional hues (Flexoki-derived). Error sits on crimson (hue 15) so failed never reads as the coral action.
     public static let error3 = Palette.named("error-3")
     public static let error9 = Palette.named("error-9")
@@ -113,6 +117,20 @@ public enum Palette {
     public static let surfaceRaised = Palette.named("surface-raised")
     public static let surfaceCard = Palette.named("surface-card")
     public static let surfaceRecess = Palette.named("surface-recess")
+    /// The recess at alpha 0: the far stop of a fade into the recess (the transcript's foot fade, the suggestion row's floor), so the ramp keeps the recess's hue.
+    public static let surfaceRecessClear = Palette.named("surface-recess-clear")
+    /// An alpha mask's opaque stop. A mask reads alpha alone, so its colour never draws.
+    public static let maskOpaque = Palette.named("mask-opaque")
+    /// An alpha mask's stop at 10% (the phone tab strip's end fade).
+    public static let maskOpaqueA10 = Palette.named("mask-opaque-a10")
+    /// An alpha mask's stop at 15% (the phone tab strip's start fade).
+    public static let maskOpaqueA15 = Palette.named("mask-opaque-a15")
+    /// An alpha mask's stop at 50% (the phone tab strip's end fade).
+    public static let maskOpaqueA50 = Palette.named("mask-opaque-a50")
+    /// An alpha mask's stop at 60% (the phone tab strip's start fade).
+    public static let maskOpaqueA60 = Palette.named("mask-opaque-a60")
+    /// An alpha mask's stop at 90% (the phone tab strip's end fade).
+    public static let maskOpaqueA90 = Palette.named("mask-opaque-a90")
     /// A table's header band, one step under the field.
     public static let surfaceBand = Palette.named("surface-band")
     public static let surfaceRecessDeep = Palette.named("surface-recess-deep")
@@ -134,6 +152,8 @@ public enum Palette {
     public static let surfaceFill = Palette.named("surface-fill")
     /// A filled control a step over surface-fill: its hover, and its on state (a parent's child count when its children are open).
     public static let surfaceFillStrong = Palette.named("surface-fill-strong")
+    /// A segment held down (a fluid tab, its trailing controls included): by day the step past the hover ghost, at night surface-fill.
+    public static let pressFill = Palette.named("press-fill")
     /// The kit Toggle's on step, where a pressed or chosen control stands (a chosen canvas tool, a pressed head button, a held tab): by day the surface-fill-strong step, a step past the hover; at night the surface-fill step, so it never reads as hovered.
     public static let surfacePressed = Palette.named("surface-pressed")
     /// Hover on any control or row, the hover ghost under a list's row (highlight), and what rises over a hovered row. By day two steps past the field, so it shows on the field, the recess and a raised surface alike.
@@ -212,6 +232,10 @@ public enum Palette {
     /// Status: four hues and a hueless idle (idle carries no fill). Needs-you is spark yellow, the one status that asks for a person.
     public static let statusLiveBg = Palette.named("status-live-bg")
     public static let statusAttnBg = Palette.named("status-attn-bg")
+    /// A task's needs section (TaskNeeds): the attention tint at a little under half, laid on the raised surface the task stands on.
+    public static let needsGround = Palette.named("needs-ground")
+    /// The picked card among an account's routing strategies (StrategyPicker): the selection's tint at a little under half, laid on the raised surface.
+    public static let strategyCardPicked = Palette.named("strategy-card-picked")
     public static let statusDoneBg = Palette.named("status-done-bg")
     public static let statusFailBg = Palette.named("status-fail-bg")
     public static let statusIdleBg = Palette.named("status-idle-bg")
@@ -249,10 +273,6 @@ public enum Palette {
     public static let presenceOff = Palette.named("presence-off")
     /// Every scrollbar's thumb, inherited from the root.
     public static let scrollbarThumb = Palette.named("scrollbar-thumb")
-    /// A pairing QR's card, in both schemes: the day's neutral-1, never flipped. Drawn light on dark, the code is a reversed QR, which a reader without an inverted pass does not read (ZXing with tryInvert off read nothing from the night card); dark modules on a light field are the symbol ISO/IEC 18004 defines, so the card is the one surface that keeps its day colours at night.
-    public static let qrPaper = Palette.named("qr-paper")
-    /// A pairing QR's modules, in both schemes: the day's neutral-12 on qr-paper.
-    public static let qrInk = Palette.named("qr-ink")
     /// The band of raised surface that crosses a skeleton once per loop.
     public static let skeletonSheen = Palette.named("skeleton-sheen")
     /// List bullets in rendered markdown.
@@ -358,6 +378,8 @@ public enum Shadow {
     /// Inner vermillion ring and soft inner glow on code blocks.
     public static let codeRing: [ShadowLayer] = [ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.7434, 0.3271, 0.2310, 0.2800), dark: P3(0.8285, 0.4329, 0.3286, 0.3200)), inset: true), ShadowLayer(x: 0, y: 1, blur: 6, spread: 0, ink: Ink(light: P3(0.7434, 0.3271, 0.2310, 0.0600), dark: P3(0.8285, 0.4329, 0.3286, 0.1000)), inset: true)]
     public static let selectedShadow: [ShadowLayer] = []
+    /// The effort knob's and Browse's lifted block: a neutral-8 inner edge over shadow-raised's layers (DESIGN.md Effort chip).
+    public static let shadowKnob: [ShadowLayer] = [ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.6824, 0.6604, 0.6225, 1.0000), dark: P3(0.3888, 0.3730, 0.3499, 1.0000)), inset: true), ShadowLayer(x: 0, y: 1, blur: 3, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 1, blur: 1, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
 }
 
 public enum FontFamily {
@@ -404,6 +426,10 @@ public enum TypeScale {
     public static let leadingRoot: Double = 1.5
     /// A rendered document's running text (@tailwindcss/typography prose-sm, the project page's docs card): 24/14.
     public static let leadingProseSm: Double = 1.714286
+    /// The kit's form fields: a field's label, title and content (components/ui/field, Tailwind's snug).
+    public static let leadingSnug: Double = 1.375
+    /// The permission rule tester's preview of what a rule matches (RuleTester, Tailwind's relaxed).
+    public static let leadingRelaxed: Double = 1.625
     /// prose-sm: above an h2, in the heading's own ems.
     public static let proseSmTitleBefore: Double = 1.6
     /// prose-sm: below an h1 or h2, in the heading's own ems.
@@ -433,6 +459,9 @@ public enum TypeScale {
     public static let trackTitle: Double = -0.01
     /// In em: multiply by the font size for points.
     public static let trackCaps: Double = 0.06
+    /// A menu item's keyboard shortcut (the kit's command, dropdown and context menu shortcuts, Tailwind's widest).
+    /// In em: multiply by the font size for points.
+    public static let trackWidest: Double = 0.1
     /// How far under its words a text link's underline stands, when it is drawn (its hover).
     public static let underlineOffset: Double = 3
     /// Role shorthands (font: var(--type-label)). A kpi figure is always .num: the shorthand resets font-variant-numeric.
@@ -446,6 +475,8 @@ public enum TypeScale {
     public static let typeKpi = TypeRole(weight: .medium, size: 20...24, leading: 1, family: FontFamily.fontBody, fluid: .init(base: 17.5392, perViewport: 0.006309))
     public static let typeCode = TypeRole(weight: .regular, size: 12...12, leading: 1.6, family: FontFamily.fontMono)
     public static let typeCaps = TypeRole(weight: .medium, size: 11...11, leading: 1, family: FontFamily.fontBody)
+    /// The 16px Field Rule's floor: no field's text under it on a phone, so iOS Safari never zooms into one.
+    public static let textFieldFloor: Double = 16
 }
 
 public enum Space {
@@ -545,22 +576,13 @@ public enum Size {
     public static let cBadgeH: Double = 20
     /// A stat tile's height.
     public static let cStatH: Double = 90
-    /// One cell of the pairing code's display: a stat well holding one letter at the KPI role in the mono face. Six of them in two groups of three, space-2 between cells and space-5 between groups, stand 286px wide.
-    public static let cOtpCellW: Double = 40
-    /// The pairing code cell's height.
-    public static let cOtpCellH: Double = 52
-    /// The pairing screen's one width: the code's six cells in two groups of three (space-2 between cells, space-5 at the hyphen), and the QR card above them, square, its edges on the cells' edges. Made from the cell's width, so the two never drift apart.
-    public static let cPairW: Double = 286
-    /// Where the pairing screen's column starts: a fixed inset from the screen's top, 12% of its height between space-8 and 160px (108px on a 900px screen). Anchored, not centred, so Caw and the words stay put while the code's places open and fold under them.
-    /// Fluid on the web (clamp); its bounds in points.
-    public static let cPairTop: ClosedRange<Double> = 32...160
     /// A ledger's toolbar zone, holding 32px controls 11px in.
     public static let cToolbarZone: Double = 55
     public static let cToolbarCtl: Double = 32
     /// Find, as the glass's card on a desk: wide enough that a row's meta line ("Needs you · cockpit · delegate of Orchestrate cockpit fleet · linux", 12px meta) stands on one line beside a 16px glyph, and narrow enough to leave the page live beside it at 1055px (docs/tom/find-and-mention-chosen.md).
     public static let cFindW: Double = 520
-    /// The New Session form as a popover at its trigger (the session strip's "+", a project's Spin off; NewSessionPopover): the narrowest at which the form's own rows hold one line each, measured by probe-kit strip-new-session. Its widest row is the model list's, a model's name with its id beside it ("Opus 5.5 claude-opus-5-5"), which wraps at 564px; the prompt's placeholder is cut at 536px. The composer's chips wrap by design. The centred dialog keeps its 980px and the phone sheet its own.
-    public static let cNewSessionPopW: Double = 568
+    /// The New Session form as a popover at its trigger (the session strip's "+", a project's Spin off; NewSessionPopover): the narrowest at which the form's own rows hold one line each, measured by probe-kit strip-new-session. Its widest row is the model list's, a model's name with its id beside it ("Opus 5.5 claude-opus-5-5"), with the chosen one's run settings at its end, which wrap under it at 568px; the prompt's placeholder is cut at 536px. The composer's chips wrap by design. The centred dialog keeps its 980px and the phone sheet its own.
+    public static let cNewSessionPopW: Double = 569
     /// A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line ("back in 4h 50m", 82px in meta) stands on one line.
     public static let cPanelW: Double = 380
     /// The account sign-in popover on a machine's row (AccountMachines' NsPopover), which the /motion/signin-problem bench mounts SigninPanel in: the open-link button and its hint on one row, the code field and Done on the next.
@@ -668,10 +690,18 @@ public enum Size {
     public static let cTrayChip: Double = 28
     /// `cTrayChip` under a coarse pointer (touch).
     public static let cTrayChipCoarse: Double = 34
+    /// A needs card's peek glyph (NeedsCard): the icon's medium size, its large one under a finger.
+    public static let cPeekGlyph: Double = 16
+    /// `cPeekGlyph` under a coarse pointer (touch).
+    public static let cPeekGlyphCoarse: Double = 20
     public static let cTrayGap: Double = 7
     /// `cTrayGap` under a coarse pointer (touch).
     public static let cTrayGapCoarse: Double = 11
     public static let cTrayRow: Double = 35
+    /// A working tray chip's narrowest: the floor under its measured width.
+    public static let cTrayChipMin: Double = 120
+    /// A working tray chip's widest, past which its words truncate.
+    public static let cTrayChipMax: Double = 224
     public static let iconSm: Double = 12
     public static let iconMd: Double = 16
     public static let iconLg: Double = 20
@@ -763,6 +793,507 @@ public enum Size {
     public static let rowCompactGap: Double = 6
     /// A compact session row's trailing inset: where every row in the rail ends.
     public static let rowCompactPadEnd: Double = 8
+    /// A two-line session row's height, in the home's lists: its two lines at the lead column's 18px and a 4px pad above and below (SessionRow). The "N older" row among them stands at it (OlderRows, the sidebar sub-button's `compact-tall` row).
+    public static let rowTallH: Double = 44
+    /// A segmented control's groove round its lifted thumb (DESIGN.md, Segmented: "a recess-deep groove with a 10px radius and 3px padding"): the groove's 10px less the thumb's 8px, plus a pixel of air, so the corners stay concentric.
+    public static let cSegmentedPad: Double = 3
+    /// A segment's glyph to its label, and its label to its count (Tabs, single toggle groups).
+    public static let cSegmentGap: Double = 6
+    /// A segment's inline padding (DESIGN.md, Segmented: "Segments are 30px tall with 10px padding").
+    public static let cSegmentPadX: Double = 10
+    /// A fluid tab's height on its track (DESIGN.md, Fluid tabs: "a track of 4px padding and 28px items (36px control)"); a compact track's under a finger.
+    public static let cTabItem: Double = 28
+    /// A fluid tab's inline padding at the default size.
+    public static let cTabPx: Double = 12
+    /// How far a folder tab's path brings its top corner in from its foot on the leading side (DESIGN.md, Folder tabs, Slopes: the owner's pick).
+    public static let cTabSlopeStart: Double = 1
+    /// How far a folder tab's path brings its top corner in from its foot on the trailing side (DESIGN.md, Folder tabs, Slopes: the owner's pick). Written with its unit: it is added to lengths in calc() (PaneTabs' cast).
+    public static let cTabSlopeEnd: Double = 0
+    /// Running text's measure (DESIGN.md Body: 60 to 72ch): a note, a hint, a rule's or hook's sentence, a fault's explanation, the expanded plan, a refused write.
+    public static let cMeasure: Double = 576
+    /// Running text at the short end of DESIGN.md's 60 to 72ch, beside a control that takes the rest of the row.
+    public static let cMeasureShort: Double = 480
+    /// A meta line's measure under the thing it qualifies: a pending control's failure reason, an editor head's machines line.
+    public static let cMeasureMeta: Double = 256
+    /// A wrapping command's room before Copy drops under it (CopyBox).
+    public static let cCopyBoxLine: Double = 160
+    /// A count's box keeps one digit's width, so a lone digit does not collapse it.
+    public static let cCountDigit: Double = 8
+    /// The Configure rail's count column: three digits, so the dash and the figure hold one box.
+    public static let cRailCountMin: Double = 24
+    /// A placeholder word's bar: the x-height of the text it stands in.
+    public static let cSkeletonXHeight: Double = 8
+    /// Inline code's inline padding in prose (lib/prose.ts); prose-code-pad is its block padding.
+    public static let cCodeChipPadX: Double = 2
+    /// A relative age's placeholder ("3d"): two characters of its type role.
+    public static let cSkeletonAge: Double = 16
+    /// A growing textarea's ceiling, past which it scrolls (DESIGN.md Textarea): the decision page's note, the mention field.
+    public static let cTextareaMaxH: Double = 200
+    /// A short number field: a reserve percentage, a limit (four digits and the field's pad).
+    public static let cNumberFieldW: Double = 64
+    /// The Port field's column beside the SSH target in the connect form.
+    public static let cPortFieldW: Double = 96
+    /// A primary action's least width, so its label swapping to a pending one keeps the button's size (Save, the session footer's action).
+    public static let cBtnMinW: Double = 96
+    /// A button's icon-to-label gap (DESIGN.md Buttons: "an 8px gap").
+    public static let cBtnGap: Double = 8
+    /// A pending label's outgoing words go soft as they fade (DESIGN.md Buttons, Pending: "a 2px blur where motion is welcome").
+    public static let cBtnWordsBlur: Double = 2
+    /// The 24 Pointer Rule's floor (DESIGN.md Focus and hit areas): a small control's least hit box under a fine pointer.
+    public static let cPointerFloor: Double = 24
+    /// The 44 Touch Rule's floor (DESIGN.md Focus and hit areas): every control's least hit box under a coarse pointer, reached through `touch-hit`.
+    public static let cTouchFloor: Double = 44
+    /// The screen's margin a popover or a floating card keeps each side (DESIGN.md Breakpoints: "popovers widen to the viewport less 24px").
+    public static let cScreenMargin: Double = 12
+    /// A new-session popover's width.
+    public static let cPopW: Double = 320
+    /// A popover's height cap on a desk.
+    public static let cPopMaxH: Double = 440
+    /// A popover's height cap on a phone.
+    public static let cPopMaxHPhone: Double = 420
+    /// A chip tooltip's measure.
+    public static let cTipMaxW: Double = 320
+    /// A thin WebKit scrollbar's thickness in a new-session scroller.
+    public static let cScrollbarThin: Double = 8
+    /// The effort comb's tick pitch: a drawn pattern, not spacing.
+    public static let cCombPitch: Double = 6
+    /// An edge fade at full length at every width, where the kit's phone 16px would show nothing (Files' scrollers, Caw's panel).
+    public static let cEdgeFadeLen: Double = 40
+    /// The house edge fade's length under 640px (kit-edge-fade, kit-edge-fade-block): short enough to read as an edge on a phone's narrow view, not a band across the content. Sits between the ladder's 14 and 18, so it is its own token.
+    public static let cEdgeFadeLenPhone: Double = 16
+    /// A floating surface's row (ui/menu-item): 32px on a fine pointer, 44px on a coarse one (cawco.coarse.tokens.json; DESIGN.md, The 44 Touch Rule). A row height, not spacing, so not space-8.
+    public static let cMenuItemH: Double = 32
+    /// `cMenuItemH` under a coarse pointer (touch).
+    public static let cMenuItemHCoarse: Double = 44
+    /// The narrowest an icon card stands in its grid (ui/icon-card), the track floor of the auto-fit columns.
+    public static let cIconCardMin: Double = 160
+    /// A sheet's height cap (DESIGN.md Drawer: "It is as tall as its content, up to 85vh").
+    public static let cSheetMaxH: Double = 717.4
+    /// The peek sheet's height on a touch screen: fixed, so it holds its size from the first frame.
+    public static let cPeekSheetH: Double = 675.2
+    /// The drawer grabber's width (DESIGN.md Drawer: "A 100×6 grabber").
+    public static let cGrabberW: Double = 100
+    /// The drawer grabber's height (DESIGN.md Drawer: "A 100×6 grabber").
+    public static let cGrabberH: Double = 6
+    /// The lightbox's document sheet: a 60rem reading sheet, never wider than the viewport.
+    /// At most this, in points: on the web the least of it and a share of its container (min).
+    public static let cLightboxSheetW: Double = 960
+    /// The lightbox's document sheet's height cap.
+    /// At most this, in points: on the web the least of it and a share of its container (min).
+    public static let cLightboxSheetMaxH: Double = 725.84
+    /// The tallest an error's whole text grows in its dialog before it scrolls.
+    public static let cReportTextMax: Double = 506.4
+    /// Configure's content measure: a section's body, an editor and its commit row.
+    public static let cConfigMaxW: Double = 980
+    /// The Configure rail's width.
+    public static let cConfigRailW: Double = 232
+    /// A section row with a meta line under its label (two lines; c-row-h is one).
+    public static let cRowHTwo: Double = 56
+    /// The scrolling failure detail under a machine row.
+    public static let cDetailMax: Double = 96
+    /// The longest a pre of command or fault output grows before it scrolls.
+    public static let cOutputMax: Double = 192
+    /// A markdown editor's well, so it never collapses to its toolbar.
+    public static let cEditorWellMin: Double = 320
+    /// A fetched skill's choice list before it scrolls.
+    public static let cChoiceListMaxH: Double = 208
+    /// Account setup's step rail.
+    public static let cSetupRailW: Double = 184
+    /// Account setup's machine-name column, so every machine row's controls start on one x.
+    public static let cSetupMachineNameW: Double = 150
+    /// Account setup's pasted-code field's basis, under which it wraps below the link.
+    public static let cSetupCodeBasis: Double = 140
+    /// Account setup's nickname field's widest.
+    public static let cSetupNicknameW: Double = 280
+    /// Account setup's name preview card's widest.
+    public static let cSetupPreviewW: Double = 360
+    /// A drag handle's width: two dot tiles.
+    public static let cDragDotsW: Double = 10
+    /// A drag handle's dot pitch.
+    public static let cDragDotsTile: Double = 5
+    /// A drag handle's dot edge softness.
+    public static let cDragDotsEdge: Double = 1.5
+    /// The strategy figure's stage inset (accounts/figure.ts PAD): the build places lanes and captions from it.
+    public static let figPad: Double = 12
+    /// The strategy figure's chip side and bar height (figure.ts CHIP).
+    public static let figChip: Double = 10
+    /// The strategy figure's caption line height (figure.ts CAP_LINE).
+    public static let figCapLine: Double = 16
+    /// The strategy figure's caption distance from the stage's foot (figure.ts CAP_FOOT).
+    public static let figCapFoot: Double = 8
+    /// A refused write's line: its wrap basis beside the Hidden menu.
+    public static let cBlockRefusedBasis: Double = 288
+    /// The composer canvas's top grab strip.
+    public static let cCanvasGrabW: Double = 160
+    /// A decision page head's title group: how narrow it goes beside ‹ Decisions before it wraps.
+    public static let cDecisionHeadWhat: Double = 224
+    /// The decisions graph's least height.
+    public static let cDecisionGraphMinH: Double = 384
+    /// A decision card's width; the hub's graph layout assumes the same box (DecisionGraph CARD).
+    public static let cDecisionNodeW: Double = 148
+    /// A decision card's least height (DecisionGraph CARD.height).
+    public static let cDecisionNodeH: Double = 56
+    /// The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name.
+    public static let cArtifactCardMin: Double = 148
+    /// The rail width at and above which the Working/Finished header needs no squeeze: measured, the narrowest rail at which both labels stand whole beside three-digit counts at rest.
+    public static let cWorkTabsRoomyW: Double = 280
+    /// The most the Working/Finished header's spacing gives back, at the narrowest rail.
+    public static let cWorkTabsSqueeze: Double = 33
+    /// Caw's panel's list cap.
+    public static let cCawListH: Double = 560
+    /// The viewport room kept clear above Caw's panel's list on a wide screen.
+    public static let cCawListClear: Double = 120
+    /// The room kept clear under Caw's panel's list on a phone: the composer's row and the home indicator's gap.
+    public static let cCawListClearPhone: Double = 96
+    /// The session card hung from Caw's seat (DESIGN.md: "The card is 416px wide").
+    public static let cLeadCardW: Double = 416
+    /// That card's height cap.
+    public static let cLeadCardMaxH: Double = 760
+    /// A staged move's wait column.
+    public static let cMoveWaitColW: Double = 560
+    /// Caw's slot over a move's wait on a desk.
+    public static let cMoveWaitCawH: Double = 128
+    /// Caw's slot over a move's wait on a phone.
+    public static let cMoveWaitCawHPhone: Double = 96
+    /// An in-flight large file's progress track.
+    public static let cMoveWaitFileBarW: Double = 96
+    /// The glass's machines card.
+    public static let cMachinesW: Double = 320
+    /// A session tab's rim glow radius (DESIGN.md Session tab status rim).
+    public static let tabRimGlow: Double = 6
+    /// How far past a folder tab's top and sides its rim's glow may draw before the fold's clip cuts it: four glow radii.
+    public static let tabRimGlowRoom: Double = 24
+    /// A finder row's floor, two lines (DESIGN.md Find rows).
+    public static let cFindRowH: Double = 52
+    /// A finder row's floor on a phone.
+    public static let cFindRowHPhone: Double = 56
+    /// A one-line finder row (Waiting for you, a folded kind).
+    public static let cFindLineH: Double = 40
+    /// A phone's find field and one-line row.
+    public static let cFindPhoneH: Double = 52
+    /// A finder group head and its coverage line.
+    public static let cFindHeadH: Double = 28
+    /// The skeleton standing for a finder row with its reason.
+    public static let cFindSkeletonTall: Double = 54
+    /// A project head's name column: the width it holds before its actions wrap under it.
+    public static let cHeadWhoBasis: Double = 288
+    /// The project details tray's content measure.
+    public static let cProjectDetailsMeasure: Double = 512
+    /// The project details rows' label column.
+    public static let cProjectDetailsLabelW: Double = 104
+    /// The machine and connection select column of the details tray's add forms.
+    public static let cProjectDetailsSelectW: Double = 160
+    /// The Actions and Runs ledgers' When column.
+    public static let cLedgerWhenW: Double = 96
+    /// The When column in a runs ledger under 496px, where Result's floor (c-ledger-title-min) beside When and Outcome at full width no longer fits (build-tokens.ts CONTAINERS table-496px); under 424px the runs are cards.
+    public static let cLedgerWhenWNarrow: Double = 72
+    /// The Runs ledger's Outcome column.
+    public static let cLedgerOutcomeW: Double = 176
+    /// The Outcome column in a runs ledger under 496px, where Result's floor (c-ledger-title-min) beside When and Outcome at full width no longer fits (build-tokens.ts CONTAINERS table-496px); under 424px the runs are cards.
+    public static let cLedgerOutcomeWNarrow: Double = 128
+    /// The Runs ledger's Took column.
+    public static let cLedgerTookW: Double = 80
+    /// A ledger's header band: its column heads in caps on surface-band, one line, held at the top while the rows scroll under it (DESIGN.md, Density: "a 32px header band"; ledger-header height).
+    public static let cLedgerBandH: Double = 32
+    /// A ledger's row pitch: every row of a ledger, a list or a generated view's table, a name over its meta line or one line of meta (DESIGN.md, Density: "a 44px row pitch"; ledger-row height).
+    public static let cLedgerRowH: Double = 44
+    /// A ledger's count column: a count and its noun in meta, "12 attempts" (Usage's project spend: Wakes, Tries).
+    public static let cLedgerCountW: Double = 128
+    /// A ledger's spend column: a month's dollars in tabular meta, "$1,234.56", on the column's end (Usage's project spend: Spent).
+    public static let cLedgerUsdW: Double = 96
+    /// A matrix's wide column, its floor: a tool's name, its count and its Required switch over each machine's cell (Command-line tools), an update's state and its act (Updates).
+    public static let cMatrixColW: Double = 224
+    /// A ledger title's least width, the column the ledger exists for: about 30 characters of the label role before it truncates. A ledger's lesser columns fold until the title keeps it (the task ledger's container widths in build-tokens.ts CONTAINERS are this plus its column widths).
+    public static let cLedgerTitleMin: Double = 224
+    /// The side divider's hit width when the split is expanded.
+    public static let cSideGripW: Double = 6
+    /// A side surface's floor (SideSurface SIDE_FLOOR_PX).
+    public static let cSideSurfaceMin: Double = 320
+    /// The new-session dialog's widest (DESIGN.md: "up to 980px wide").
+    public static let cNewSessionW: Double = 980
+    /// The effort track on a phone (DESIGN.md Effort chip: "38px on a phone").
+    public static let cEffortTrackHPhone: Double = 38
+    /// The model list's viewport: fixed, so the section keeps its height while filtering.
+    public static let cModelListH: Double = 300
+    /// The width a model row keeps beside its chips before they drop to their own line.
+    public static let cModelRowBasis: Double = 192
+    /// The folder browser's list cap: five 36px rows and their gaps.
+    public static let cFolderListMaxH: Double = 196
+    /// The first-prompt editor's grown height, fixed on a phone.
+    public static let cPromptGrownH: Double = 120
+    /// A page that stands as one centred column (the empty fleet, pairing): its width.
+    public static let cPageColumnW: Double = 544
+    /// That column's sentence measure.
+    public static let cPageLine: Double = 416
+    /// The hover panel's height room when its caller gives none.
+    public static let cHoverPanelRoom: Double = 320
+    /// An unlock outcome's mark box and its icon.
+    public static let cStatusMark: Double = 36
+    /// A machine inventory entry's words column, under which its Adopt button wraps below.
+    public static let cInventoryTextBasis: Double = 240
+    /// The slot Caw stands in on the empty fleet (MachinesEmpty CAW_SIZE).
+    public static let cEmptyFleetCaw: Double = 80
+    /// A generated view's stat tile floor.
+    public static let cStatMin: Double = 160
+    /// A generated table's lead column floor.
+    public static let cViewLeadMin: Double = 144
+    /// The Label popover's list of a project's labels before it scrolls.
+    public static let cBulkLabelsMaxH: Double = 224
+    /// The tallest a post's picture or video stands under its card.
+    public static let cPostMediaMaxH: Double = 256
+    /// A task board column's narrowest (TaskBoard, ViewBoard, TaskNode).
+    public static let cBoardColMin: Double = 240
+    /// A task board column's widest, and the open Archived column's cap.
+    public static let cBoardColMax: Double = 352
+    /// The key column of a task's Fields and Relations, so the two parts' values stand on one line.
+    public static let cTaskKeyW: Double = 96
+    /// The Filter popover's name column.
+    public static let cFilterLabelW: Double = 56
+    /// The new-label field in a task's label row.
+    public static let cTaskLabelFieldW: Double = 128
+    /// An approved action's argument block before it scrolls.
+    public static let cTaskArgsMaxH: Double = 192
+    /// A compact task output's body cap.
+    public static let cTaskOutputCompactH: Double = 96
+    /// A task output image's height cap.
+    public static let cTaskOutputImageH: Double = 320
+    /// A task output video's height cap.
+    public static let cTaskOutputVideoH: Double = 384
+    /// The stage control's placeholder while the task reads.
+    public static let cTaskStageSkeletonW: Double = 96
+    /// A task relation's name column ("Found in", "Waited on by").
+    public static let cTaskEdgeLabelW: Double = 96
+    /// The link picker's candidate list cap.
+    public static let cTaskCandidatesMaxH: Double = 224
+    /// The task ledger's Id column.
+    public static let cTaskColIdW: Double = 104
+    /// The task ledger's Stage column.
+    public static let cTaskColStageW: Double = 192
+    /// The task ledger's Labels column.
+    public static let cTaskColLabelsW: Double = 224
+    /// The task ledger's To-dos column.
+    public static let cTaskColTodosW: Double = 96
+    /// The task ledger's Created and Updated columns.
+    public static let cTaskColTimeW: Double = 112
+    /// The stop tray's status word column: one word and its glyph.
+    public static let cStopTrayStatusW: Double = 104
+    /// The stop tray's trail column (`12s`, `1m`).
+    public static let cStopTrayTrailW: Double = 24
+    /// The anti-aliased edge of the status dot's cut in a tree mark's tile.
+    public static let cTreeMarkHoleEdge: Double = 0.25
+    /// A tree mark's count box: two figures.
+    public static let cTreeMarkNumW: Double = 16
+    /// The usage strip's caption line, the second line of its row.
+    public static let cUsageCapLh: Double = 15
+    /// The usage strip's one row of cells: first line, gap, caption.
+    public static let cUsageStripRow: Double = 35
+    /// The usage strip's hit height on the home card.
+    public static let cUsageStripHomeH: Double = 56
+    /// The week share's column: as wide as "100%" in the figure face.
+    public static let cUsagePctW: Double = 32
+    /// A filed task card's least track in a reply.
+    public static let cFiledTaskW: Double = 224
+    /// The workflow list's name column floor.
+    public static let cWorkflowNameCol: Double = 180
+    /// The workflow list's last-run and started columns.
+    public static let cWorkflowWhenCol: Double = 110
+    /// The workflow list's run count column.
+    public static let cWorkflowCountCol: Double = 60
+    /// The workflow list's actions column.
+    public static let cWorkflowActionsCol: Double = 70
+    /// The workflow list's row floor, the height its loading rows stand at so nothing moves when they swap.
+    public static let cWorkflowRowH: Double = 64
+    /// The composer's attachments row before it scrolls.
+    public static let cAttsMaxH: Double = 180
+    /// How far the settle's text clip reaches past a word's box, so ascenders and descenders survive.
+    /// In em: multiply by the font size for points.
+    public static let cCompactionWordBleed: Double = 0.5
+    /// A ticking clock's room: seven digit widths hold "59m 59s".
+    public static let cElapsedW: Double = 56
+    /// The room the folded field's "+N lines" stands in.
+    public static let cComposerMoreW: Double = 72
+    /// How far the recall roll's clip reaches past the field on the sides it does not cut: past any screen.
+    public static let rollReach: Double = 844
+    /// The composer's / and @ menu before its list scrolls.
+    public static let cComposerMenuMaxH: Double = 320
+    /// The send plane's optical centring, up and right: the glyph's mass sits low-left in its box.
+    public static let opticalNudge: Double = 0.5
+    /// A permission card's field value before it scrolls.
+    public static let cAskValueMaxH: Double = 200
+    /// The project offer's line basis, so its buttons wrap under it on a narrow card.
+    public static let cOfferLine: Double = 192
+    /// The skeleton holding a suggestion chip's place while an ask is slow.
+    public static let cSuggestShimmerW: Double = 144
+    /// The hairline's width: a bordered touch-hit host's `--hit-edge`, the hitl card's content column.
+    public static let borderWidth: Double = 1
+    /// The room a grouped turn's floated clock keeps at its first line's end, so the wrap holds when the clock shows.
+    public static let cTurnClockW: Double = 72
+    /// A machine's whole update error unfolded under its cell, before it scrolls.
+    public static let cUpdateSaidH: Double = 160
+    /// History's chart plot height.
+    public static let cUsagePlot: Double = 96
+    /// A provider limit's bar track in the session details strip.
+    public static let cLimitBar: Double = 64
+    /// A Limits tile's least width (its dial, figure and sentence).
+    public static let cUsageTileMin: Double = 248
+    /// A project spend stat tile's least width.
+    public static let cStatTileMin: Double = 152
+    /// The usage key's label column, so values line up down a tile and across a row.
+    public static let cRingsKeyLabelW: Double = 52
+    /// The usage key's value column.
+    public static let cRingsKeyValueW: Double = 84
+    /// The dot that leads an account's name in running words.
+    public static let cMarkDot: Double = 6
+    /// The room a Where-it-goes row keeps beside its meter for the figure and its gap.
+    public static let cUsageFigureW: Double = 88
+    /// A meter's height on a page: a Where-it-goes row's and a limit bar's at its regular size (DESIGN.md Limit bar: "8px on a page").
+    public static let cMeterBarH: Double = 8
+    /// A dialog's height cap, its body scrolling inside; a document dialog stands at it (the parent's call: DESIGN.md's Drawer cap, its Dialog naming none).
+    public static let cDialogMaxH: Double = 717.4
+    /// What a dialog's header keeps clear at its trailing edge for the kit's Close, 30px and 12px from the corner.
+    public static let cDialogCloseClear: Double = 52
+    /// A document dialog's width on a narrow window.
+    public static let cDialogDocumentW: Double = 370.5
+    /// The tallest a tool call's document well grows in the transcript before it scrolls.
+    public static let cToolWellMaxH: Double = 420
+    /// The workflow graph canvas's least height.
+    public static let cGraphCanvasMin: Double = 300
+    /// A connection handle's diameter on the workflow canvas.
+    public static let cGraphHandle: Double = 10
+    /// The workflow editor's breadcrumb basis.
+    public static let cWorkflowCrumb: Double = 220
+    /// The workflow name field's widest in the header.
+    public static let cWorkflowNameMax: Double = 300
+    /// The save-state readout's width, so its words swap and nothing moves.
+    public static let cWorkflowSaveW: Double = 192
+    /// The runs list column of the workflow editor's Runs tab.
+    public static let cWorkflowRunsW: Double = 300
+    /// The template-path completer's tallest list.
+    public static let cCompleterMaxH: Double = 240
+    /// A workflow graph node card's width.
+    public static let cWfNodeW: Double = 260
+    /// An inline scroll region on a workflow page (the problems list, the run log).
+    public static let cWfScrollMaxH: Double = 253.2
+    /// The Set-key field's basis beside its buttons.
+    public static let cKeyFieldBasis: Double = 224
+    /// The Set-key field's widest.
+    public static let cKeyFieldMax: Double = 384
+    /// A bench's phone frame width (the probe kit's 390x844 phone).
+    public static let cBenchPhoneW: Double = 390
+    /// A bench's phone frame height.
+    public static let cBenchPhoneH: Double = 844
+    /// A bench's controls column.
+    public static let cBenchControlsW: Double = 380
+    /// The square Caw bench stage, twice the 160px Caw it holds.
+    public static let cBenchStage: Double = 320
+    /// The chosen-hover bench's side-panel well width.
+    public static let cBenchSideW: Double = 360
+    /// The chosen-hover bench's side-panel well height.
+    public static let cBenchSideH: Double = 240
+    /// The chosen-hover bench's model list and editor width.
+    public static let cBenchFieldW: Double = 480
+    /// A bench slider's readout ("32px", "100%"), so the figure never jumps.
+    public static let cBenchReadoutW: Double = 32
+    /// The side-head bench card's height: a side card's head and one body line.
+    public static let cSideBenchH: Double = 120
+    /// The phone's navigation sheet's width (Shell); the desk rail is c-sidebar-w.
+    public static let cRailSheetW: Double = 284
+    /// The height a run step's opened result scrolls inside (RunSteps).
+    public static let cRunResultMax: Double = 240
+    /// The session hover card's head at its narrowest, so a short title never narrows the card.
+    public static let cSessionHoverHead: Double = 240
+    /// The room the session hover card reads as its cell's (SessionHover).
+    public static let cSessionHoverRoom: Double = 360
+    /// A tree row's age column, as wide as "59m" (SessionRow).
+    public static let cTrailCol: Double = 24
+    /// The transcript foot's dissolve at rest (FootFade).
+    public static let cFootFade: Double = 96
+    /// How wide an attached file's thumb may run: its container, up to 16rem (DocThumb).
+    /// At most this, in points: on the web the least of it and a share of its container (min).
+    public static let cDocMax: Double = 256
+    /// The delegate tray's "+N" chip: two digits and a plus in the chip's label type.
+    public static let cTrayMoreW: Double = 52
+    /// A made tile's least width in its auto-fill grid (ViewMade).
+    public static let cMadeTileMin: Double = 288
+    /// The Canvas view's least height, the floor its graph reads at (ViewCanvas).
+    public static let cCanvasMinH: Double = 280
+    /// A pipeline row's stage-name column at its narrowest (ViewPipeline).
+    public static let cPipelineNameMin: Double = 96
+    /// A pipeline row's stage-name column at its widest.
+    public static let cPipelineNameMax: Double = 160
+    /// A pipeline row's stage-kind column at its narrowest.
+    public static let cPipelineKindMin: Double = 64
+    /// A pipeline row's stage-kind column at its widest.
+    public static let cPipelineKindMax: Double = 96
+    /// A pipeline row's count column.
+    public static let cPipelineCountW: Double = 48
+    /// The gap between two cards of the phone's pane deck; equal to GAP in workspace/deck.svelte.ts, which sizes the drag travel.
+    public static let cDeckGap: Double = 12
+    /// The new-project page's column.
+    public static let cNewProjectW: Double = 1152
+    /// The slot that holds Caw at his hero size over the new-project page; equal to CAW_SIZE in project/new/+page.svelte.
+    public static let cCawHero: Double = 80
+    /// The least a context meter's bar draws in the session details strip.
+    public static let cContextBarMin: Double = 48
+    /// The most a context meter's bar draws in the session details strip.
+    public static let cContextBarMax: Double = 96
+    /// The details card's model list cap: five 44px rows, four gaps and the list's padding, so rows scroll whole.
+    public static let cModelListMax: Double = 232
+    /// The phone tab strip's end fade run (PaneTabs).
+    public static let cTabStripFade: Double = 16
+    /// The tab strip's fade cap while no tab is drawn chosen: wider than any fade, so the min() never caps it.
+    public static let cTabStripUncapped: Double = 390
+    /// The session details card's width (DESIGN.md: "the card is 416px wide"); equal to cardWidth()'s 416 in PaneTabs.
+    public static let cDetailsCardW: Double = 416
+    /// The session details card's height cap on a desk.
+    public static let cDetailsCardMaxH: Double = 760
+    /// A tab's hanging menu at its narrowest, the kit menu's compact floor.
+    public static let cTabMenuMin: Double = 192
+    /// The table view's new-task form.
+    public static let cNewTaskW: Double = 576
+    /// The width a draft view's sentence takes before its Keep and Discard wrap beneath it.
+    public static let cDraftLine: Double = 224
+    /// A card's placeholder in the next project's board skeleton.
+    public static let cSkeletonCardH: Double = 54
+    /// The flex basis of a marketplace plugin offer's words before its Install button wraps under them (the skills page).
+    public static let cOfferTextBasis: Double = 240
+}
+
+public enum Layer {
+    /// A sticky head or column inside a scroller (the tool matrix's pinned heads): over the rows that scroll under it, under all page chrome.
+    public static let layerSticky: Double = 10
+    /// The hub band's slot under the bar: over the page column it opens above, its shadow on the page.
+    public static let layerBand: Double = 20
+    /// The phone's edge-pull strip (EdgePull): over the page at the screen's edge, so a press there is the pull's; under a canvas stage.
+    public static let layerPull: Double = 30
+    /// A canvas stage (CanvasStages: the artifact's frame portalled to the body over its slot): over the page and the edge pull, under a docked composer and the bar.
+    public static let layerStage: Double = 40
+    /// A docked composer, or what stands in its place (Composer's dock, the decision page's and the view bar's docks, the thread pane's no-composer note): over the transcript and its fades.
+    public static let layerDock: Double = 50
+    /// The top bar floating over a phone's tab row: over the dock and everything in the page under it.
+    public static let layerBar: Double = 60
+    /// A toolbar fixed over the page (the task board's bulk bar): over the bar and the dock, under the phone's preview sheet.
+    public static let layerToolbar: Double = 70
+    /// The phone's preview sheet host (SideSheet): over every page layer, under the floating surfaces.
+    public static let layerSheet: Double = 80
+    /// A canvas stage standing in the phone's preview sheet: just over the sheet it stands in.
+    public static let layerSheetStage: Double = 90
+    /// A motion bench laid over the whole shell: over every page layer, under the floating surfaces its own controls open.
+    public static let layerBench: Double = 100
+    /// The toast layer while the burger's sheet is open: under the sheet's scrim, so a toast waits dimmed and never paints over the open navigation.
+    public static let layerToastHeld: Double = 110
+    /// Every floating surface: the kit's popover, menu, submenu, select, tooltip, dialog, sheet, drawer and their scrims, the details and lead cards, a hover panel, Files' floating panel, the lightbox. They belong in the browser's top layer; bits-ui portals them to the body instead, so they share this one role and the one opened last stands over the one it opened from.
+    public static let layerFloat: Double = 120
+    /// A copy in flight between two places on the page (queued words to the field, a chip to its card, a preview closing into its row): over everything it crosses, floating surfaces included.
+    public static let layerFlight: Double = 130
+    /// A motion bench's own switches: over the floating surfaces the bench opens, so they stay pressable while one is open.
+    public static let layerBenchControls: Double = 140
+    /// The skip link, shown on focus: over the shell and everything in it.
+    public static let layerSkip: Double = 150
+    /// The toast layer: over every surface on the page, a dialog included.
+    public static let layerToast: Double = 160
+    /// The screen's edge strips (ScreenEdges) Safari takes its bar colour from: over every layer, toasts included, since a strip is the colour of whatever stands on its edge and is never seen as itself.
+    public static let layerScreenEdge: Double = 170
 }
 
 public enum Effect {
@@ -795,7 +1326,7 @@ public enum Motion {
     public static let easeOut = TimingCurve(x1: 0.23, y1: 1, x2: 0.32, y2: 1)
     public static let easeInOut = TimingCurve(x1: 0.77, y1: 0, x2: 0.175, y2: 1)
     public static let easeDrawer = TimingCurve(x1: 0.32, y1: 0.72, x2: 0, y2: 1)
-    /// Two states trading places where they stand: a folder tab's choice, over dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching.
+    /// Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching.
     public static let easeCrossfade = TimingCurve(x1: 0.42, y1: 0, x2: 0.58, y2: 1)
     /// A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap.
     public static let easeArrive = TimingCurve(x1: 0.2, y1: 0, x2: 0, y2: 1)
@@ -842,6 +1373,9 @@ public enum Motion {
     public static let durPop: TimeInterval = 0.26
     /// In seconds.
     public static let durPanel: TimeInterval = 0.28
+    /// A pane card picked up off the deck: the lift's scale, sixty percent of the panel's beat, derived from it the way the breath is.
+    /// In seconds.
+    public static let durPickUp: TimeInterval = 0.168
     /// The composer growing up out of its pill: into the recall wheel, or by the one row that says a queued message is being edited.
     /// In seconds.
     public static let durGrow: TimeInterval = 0.32
@@ -857,7 +1391,7 @@ public enum Motion {
     /// The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. Also a folder tab's choice, on ease-crossfade (the owner's pick, "Slow · 400ms").
     /// In seconds.
     public static let durSettle: TimeInterval = 0.4
-    /// A disclosure growing open (collapsible-content); it folds shut over dur-exit.
+    /// A disclosure growing open (collapsible-content); it folds shut over --dur-exit.
     /// In seconds.
     public static let durReveal: TimeInterval = 0.24
     /// How long a done state stays up.
@@ -871,7 +1405,7 @@ public enum Motion {
     /// In seconds.
     public static let breath: TimeInterval = 2
     public static let pressScale: Double = 0.97
-    /// How far Caw shrinks as he fades out, from any drawing, over dur-fade on ease-out, and the size a Caw whose status has no drawn enter fades in from, over dur-pop. Material 3, Easing and duration: exit transitions are faster than enters, 200ms.
+    /// How far Caw shrinks as he fades out, from any drawing, over --dur-fade on ease-out, and the size a Caw whose status has no drawn enter fades in from, over --dur-pop. Material 3, Easing and duration: exit transitions are faster than enters, 200ms.
     public static let leaveScale: Double = 0.97
     public static let popScale: Double = 0.92
     /// How far each card of a session mark's deck shows below the one in front (SessionMark).
@@ -900,32 +1434,4 @@ public enum Motion {
     public static let popRise: Double = 8
     /// How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr.
     public static let foldBlur: Double = 2
-    /// How far a refused answer's shake swings each way (the pairing code's cells, denied or not matched): transitions-dev Error state shake, on one clock of dur-panel with legs of dur-ghost, dur-ghost, dur-stagger, dur-stagger.
-    public static let shakeDistance: Double = 6
-    /// The shake's last swing before it comes to rest.
-    public static let shakeOvershoot: Double = 4
-    /// A spinning reel's vertical motion streak at its fastest (the pairing code's letters spun into place), decaying to nothing as the reel settles: transitions-dev Spinning counter, an SVG blur along the reel only, since CSS blur() smears sideways too.
-    public static let reelBlur: Double = 3
-    /// How far words travel as they swap in place (transitions-dev Text states swap): the old leave up by it, the new arrive from below by it, over dur-morph on ease-in-out, soft by fold-blur.
-    public static let swapRise: Double = 4
-    /// Degrees a done check turns through as it arrives (transitions-dev Success check): upright from check-turn, rising pop-rise, sharpening from fold-blur, over dur-pop, its stroke drawn after dur-ghost.
-    public static let checkTurn: Double = 80
-    /// The share of a pending pairing QR card's edge its lit segment covers, travelling the card's rounded rect once a breath while the code waits to be scanned.
-    public static let qrEdgeShare: Double = 0.18
-    /// A pairing QR once a phone has scanned it and the person is checking the letters: the key is still there, stepped back, so the eye goes to the letters.
-    public static let qrDimOpacity: Double = 0.3
-    /// How strong the light is that rides a waiting pairing QR's edge (or rings out from its head), screened over the key so the dark dots it crosses glint: the key under the scanner's light.
-    public static let qrGlintOpacity: Double = 0.35
-    /// The size a leaving pairing key ends at as it fades: its dots draining away (expired), or the whole card flown up to Caw (approved, that take).
-    public static let qrShrink: Double = 0.3
-    /// How far the head in a refused pairing key squeezes shut (its height; its width grows by as much) before it shakes.
-    public static let qrSqueeze: Double = 0.84
-    /// How far a pairing QR's head swells: its breath while rings ripple from it, and its gulp as it swallows an approved key.
-    public static let qrPulseScale: Double = 1.04
-    /// How far a waiting pairing QR card's ping grows past the card's edge as it fades, once a breath: far enough to read as a ping from across a room.
-    public static let qrPingScale: Double = 1.1
-    /// How strong a waiting pairing QR card's ping ring starts, at the card's edge, before it fades as it grows.
-    public static let qrPingOpacity: Double = 0.7
-    /// Where a done check grows from as it takes a ring's place (TaskRing finished, the pairing scanner's approval), over dur-toggle or dur-exit on ease-out.
-    public static let checkScale: Double = 0.6
 }

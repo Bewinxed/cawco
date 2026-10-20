@@ -122,16 +122,18 @@ const readParts = (page: Page): Promise<Reading> =>
   page.evaluate((q) => {
     const css = (el: Element | null | undefined, prop: string) =>
       el ? getComputedStyle(el).getPropertyValue(prop).trim() : "absent";
-    const burger = document.querySelector(".burger");
+    const burger = document.querySelector('[data-slot="burger"]');
     const rail = document.querySelector("aside");
     const composer = document
       .querySelector('form[data-slot="cin"]')
-      ?.closest(".composer");
-    const dock = composer?.closest(".dock");
-    const tr = document.querySelector(".tr");
+      ?.closest('[data-slot="composer"]');
+    const dock = composer?.closest('[data-slot="dock"]');
+    const tr = document.querySelector('[data-slot="tr"]');
     // The stat tile's figure: its type role by its line height's share of
     // its size (--type-title 1.25, --type-kpi 1); the size itself is fluid.
-    const figure = document.querySelector("[data-probe-stat] .st-value");
+    const figure = document.querySelector(
+      "[data-probe-stat] [data-stat-value]"
+    );
     let statType = "absent";
     if (figure) {
       const s = getComputedStyle(figure);
@@ -152,7 +154,10 @@ const readParts = (page: Page): Promise<Reading> =>
         "transcript --x-rail": css(tr, "--x-rail"),
         "transcript padding-inline-start": css(tr, "padding-inline-start"),
         "stat tile value type": statType,
-        "hub band order": css(document.querySelector(".band-slot"), "order"),
+        "hub band order": css(
+          document.querySelector('[data-slot="hub-band-slot"]'),
+          "order"
+        ),
       },
     };
   }, DRAWER_QUERY);
@@ -210,7 +215,7 @@ const snapshot = (page: Page): Promise<Record<string, string>> =>
       // The hub band's sentence carries its retry countdown, ticked by a
       // real interval through MorphText's letters: the paragraph's own box
       // and styles are read, the letters mid-tick are not.
-      if (el.matches(".band-slot p.words")) {
+      if (el.matches('[data-slot="hub-band-slot"] p[data-slot="sentence"]')) {
         return;
       }
       for (const [i, child] of [...el.children].entries()) {
@@ -699,8 +704,9 @@ async function takeAway(
           __cawcoDebug?: { state: { status: string } };
         }
       ).__cawcoDebug?.state.status === "connected" &&
-      document.querySelector(".band-slot > .band-row > :not([data-open])") !==
-        null,
+      document.querySelector(
+        '[data-slot="hub-band-slot"] > [data-slot="hub-band-row"] > :not([data-open])'
+      ) !== null,
     undefined,
     { timeout: 15_000 }
   );

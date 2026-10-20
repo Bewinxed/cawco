@@ -3,19 +3,18 @@
   import { tv } from "#lib/utils.js";
 
   export const toggleVariants = tv({
-    base: "group/toggle mark-line touch-hit inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-sm font-medium text-[var(--ink-strong)] text-label [transition:var(--transition-control),transform_var(--dur-toggle)_var(--ease-out)] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-[var(--surface-pressed)] data-[state=on]:bg-[var(--surface-pressed)] motion-safe:active:not-disabled:[transform:scale(var(--press-scale))] [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/toggle mark-line touch-hit inline-flex items-center justify-center gap-space-1 whitespace-nowrap rounded-sm font-medium text-ink-strong text-label transition-control-press not-aria-pressed:hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-surface-pressed motion-safe:active:not-disabled:[transform:scale(var(--press-scale))] [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       variant: {
         default: "bg-transparent",
-        outline:
-          "border border-[var(--border-control)] bg-transparent [--hit-edge:1px]",
+        outline: "border border-border-control bg-transparent [--hit-edge:1px]",
       },
       size: {
         default:
-          "h-9 min-w-9 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5",
-        xs: "h-6 min-w-6 gap-1.5 px-2 text-meta has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-[30px] min-w-[30px] px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        lg: "h-11 min-w-11 px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+          "h-c-btn-h min-w-c-btn-h px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5",
+        xs: "h-c-btn-h-xs min-w-c-btn-h-xs gap-1.5 px-2 text-meta has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
+        sm: "h-c-btn-h-sm min-w-c-btn-h-sm px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        lg: "h-c-btn-h-lg min-w-c-btn-h-lg px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
       },
     },
     defaultVariants: {

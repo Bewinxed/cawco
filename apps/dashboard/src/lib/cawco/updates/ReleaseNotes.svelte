@@ -8,16 +8,17 @@
    * text around them.
    */
   import type { Component } from "svelte";
+  import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Markdown } from "#lib/components/ui/markdown/index.js";
   import { IconBug, IconGraphUp, IconStars } from "#lib/icons.js";
 
   let { source }: { source: string } = $props();
 
   /** The three sections a release writes, by heading. */
-  const TONES: Record<string, { tone: string; icon: Component }> = {
-    New: { tone: "new", icon: IconStars },
-    Improved: { tone: "improved", icon: IconGraphUp },
-    Fixed: { tone: "fixed", icon: IconBug },
+  const TONES: Record<string, { variant: BadgeVariant; icon: Component }> = {
+    New: { variant: "note-new", icon: IconStars },
+    Improved: { variant: "note-improved", icon: IconGraphUp },
+    Fixed: { variant: "note-fixed", icon: IconBug },
   };
 
   const HEADING = /^#{1,6}\s+(.+?)\s*$/;
@@ -54,90 +55,31 @@
   const sections = $derived(sectionsOf(source));
 </script>
 
-<div class="release-notes">
+<div data-slot="release-notes" class="grid">
   {#each sections as section, i (i)}
     {#if section.heading}
       {@const known = TONES[section.heading]}
-      <h3 data-slot="release-notes-label" class="label" data-tone={known?.tone}>
+      <!-- A section's name: the kit Badge as its heading, in its note's hue
+           (DESIGN.md, Update notice), a 12px glyph before its words. -->
+      <Badge
+        as="h3"
+        data-slot="release-notes-label"
+        class={[i > 0 && "mt-space-3", "mb-space-2 justify-self-box-start"]}
+        variant={known?.variant ?? "default"}
+      >
         {#if known}
-          <known.icon
+          {@const Glyph = known.icon}
+          <Glyph
             data-release-notes-glyph
             aria-hidden="true"
-            class="glyph"
+            class="flex-none"
           />
         {/if}
-        {section.heading}
-      </h3>
+        <span>{section.heading}</span>
+      </Badge>
     {/if}
     {#if section.body}
-      <Markdown source={section.body} />
+      <Markdown look="surface" source={section.body} />
     {/if}
   {/each}
 </div>
-
-<style>
-  .release-notes {
-    display: grid;
-  }
-  /* A section's name: the badge recipe (DESIGN.md, Badges and state chips),
-     20px at the 5px radius, label role, a 12px glyph, in its hue's ink on
-     that hue's faint fill. */
-  .label {
-    justify-self: start;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    block-size: 20px;
-    margin: var(--space-3) 0 var(--space-2);
-    padding-inline: 6px;
-    border-radius: var(--radius-xs);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .label:first-child {
-    margin-top: 0;
-  }
-  .label :global(.glyph) {
-    inline-size: 12px;
-    block-size: 12px;
-    flex: none;
-  }
-  .label[data-tone="new"] {
-    background: var(--note-new-bg);
-    color: var(--note-new-ink);
-  }
-  .label[data-tone="improved"] {
-    background: var(--note-improved-bg);
-    color: var(--note-improved-ink);
-  }
-  .label[data-tone="fixed"] {
-    background: var(--note-fixed-bg);
-    color: var(--note-fixed-ink);
-  }
-  /* Prose's own scale is for a document; notes sit inside a toast or a card
-     and take that surface's type, so the prose here inherits it and keeps
-     only its structure. Every rule sits one class above prose's `:where()`. */
-  .release-notes :global(.prose) {
-    font: inherit;
-    color: inherit;
-  }
-  .release-notes :global(p) {
-    margin: 0;
-  }
-  .release-notes :global(ul) {
-    display: grid;
-    gap: var(--space-row);
-    margin: 0;
-    padding-inline-start: var(--space-4);
-    list-style: disc;
-  }
-  .release-notes :global(li) {
-    margin: 0;
-    padding: 0;
-    overflow-wrap: anywhere;
-  }
-  .release-notes :global(li::marker) {
-    color: var(--ink-muted);
-  }
-</style>

@@ -7,6 +7,7 @@ export {
 export {
   default as Content,
   default as PopoverContent,
+  floatingSurface,
 } from "./popover-content.svelte";
 export {
   default as Description,

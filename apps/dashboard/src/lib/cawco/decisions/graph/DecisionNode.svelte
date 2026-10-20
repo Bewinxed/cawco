@@ -13,7 +13,7 @@
 
 <div
   data-slot="decision-node"
-  class="decision-node"
+  class="group flex w-c-decision-node-w min-h-c-decision-node-h cursor-grab items-center gap-space-2 rounded-lg bg-surface-raised px-space-3 py-space-2 shadow-tile"
   data-picked={node.picked || undefined}
 >
   <Handle
@@ -28,8 +28,15 @@
     position={Position.Top}
     type="target"
   />
-  <span data-slot="name" class="name">{node.name}</span>
-  <span aria-hidden="true" class="node-dot"></span>
+  <span
+    data-slot="name"
+    class="type-label line-clamp-2 min-w-0 flex-auto wrap-anywhere text-ink-strong"
+    >{node.name}</span
+  >
+  <span
+    aria-hidden="true"
+    class="size-icon-sm flex-none rounded-pill border-(length:--c-graph-edge) border-ink-muted group-data-picked:border-status-done-glyph group-data-picked:bg-status-done-glyph"
+  ></span>
   <span class="sr-only">{node.picked ? "Picked" : "Not picked"}</span>
   <Handle
     id="out-right"
@@ -44,50 +51,3 @@
     type="source"
   />
 </div>
-
-<style>
-  .decision-node {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    inline-size: 148px;
-    min-block-size: 56px;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    cursor: grab;
-  }
-  .name {
-    display: -webkit-box;
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .node-dot {
-    flex: none;
-    inline-size: 12px;
-    block-size: 12px;
-    border: 1.5px solid var(--ink-muted);
-    border-radius: 50%;
-  }
-  .decision-node[data-picked] .node-dot {
-    border-color: var(--status-done-glyph);
-    background: var(--status-done-glyph);
-  }
-  .decision-node :global(.svelte-flow__handle) {
-    inline-size: 1px;
-    block-size: 1px;
-    min-inline-size: 0;
-    min-block-size: 0;
-    border: 0;
-    background: transparent;
-    pointer-events: none;
-  }
-</style>

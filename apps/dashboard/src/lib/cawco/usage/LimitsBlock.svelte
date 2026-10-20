@@ -99,30 +99,38 @@
 </script>
 
 {#snippet running(ring: RingAccount)}
-  <div class="running">
+  <div class="flex flex-col gap-space-1">
     {#if ring.sessions.length > 0}
-      <span class="heading"
+      <span class="type-meta font-medium text-ink-muted"
         >Running
-        <span data-slot="count" class="count mono-figure"
+        <span data-slot="count" class="mono-figure ms-space-1"
           >{ring.sessions.length}</span
         ></span
       >
-      <div data-slot="sessions" class="sessions">
+      <div data-slot="sessions" class="flex flex-col gap-space-row">
         {#each ring.sessions as row (row.id)}
           {@const project = projectOf(row)}
-          <div data-slot="session" class="session">
-            <span data-slot="what" class="what"
+          <div
+            data-slot="session"
+            class="type-meta flex justify-between gap-space-4 rounded-sm bg-surface-raised px-space-2 py-space-1 text-ink-row"
+          >
+            <span data-slot="what" class="min-w-0 truncate"
               >{#if project}
-                <span data-slot="project" class="project">{project}</span>
+                <span data-slot="project" class="text-ink-muted">{project}</span
+                >
               {/if}
               {titleOf(row)}</span
             >
-            <span class="tokens mono-figure">{tokens(row)}</span>
+            <span class="mono-figure flex-none text-ink-muted"
+              >{tokens(row)}</span
+            >
           </div>
         {/each}
       </div>
     {:else}
-      <span class="none">No sessions running</span>
+      <span class="type-meta px-0 py-space-row text-ink-muted"
+        >No sessions running</span
+      >
     {/if}
   </div>
 {/snippet}
@@ -135,31 +143,45 @@
 )}
   <div
     data-slot="tile"
-    class="tile"
+    class="flex min-w-0 flex-col gap-space-3 rounded-md bg-surface-recess p-space-4 transition-[background-color] duration-(--dur-fade) ease-out data-limit:bg-meter-wash-over motion-reduce:transition-off"
     data-account={ring.id}
+    data-limit={ring.state === "limit" || undefined}
     data-tile
-    class:limit={ring.state === "limit"}
+    style:--ring-ground={ring.state === "limit"
+      ? "var(--meter-wash-over)"
+      : undefined}
   >
-    <div data-slot="head" class="head">
-      <span data-slot="dot" class="dot" style:--c={ring.color}></span>
+    <div data-slot="head" class="flex min-w-0 items-center gap-space-2">
+      <span
+        data-slot="dot"
+        class="size-space-2 flex-none rounded-pill bg-(color:--c)"
+        style:--c={ring.color}
+      ></span>
       <AccountName account={nameFields(ring)} wrap />
     </div>
-    <div data-slot="mark" class="mark">
+    <div data-slot="mark" class="flex items-center gap-space-4">
       <Rings {index} reveal {ring} size={56} />
-      <span class="figure">
+      <span class="flex min-w-0 flex-col gap-space-row">
         <span
           data-slot="value"
-          class="value"
-          class:muted={ring.state === "limit" || ring.state === "stale"}
+          class="type-title num text-ink-strong data-muted:text-ink-muted"
+          data-muted={ring.state === "limit" || ring.state === "stale"
+            ? true
+            : undefined}
           >{#if figure.back}
-            <span aria-hidden="true" class="back-glyph"><IconRefresh /></span>
+            <!-- mark-line: a mark set in running text, beside the figure's digits -->
+            <span
+              aria-hidden="true"
+              class="me-space-1 inline-grid size-icon-md align-middle text-ink-muted"
+              data-box><IconRefresh class="size-full" /></span
+            >
           {/if}
           <Figure text={figure.figure} /></span
         >
-        <small>{figure.label}</small>
+        <small class="type-meta text-ink-muted">{figure.label}</small>
       </span>
     </div>
-    <p class="say" data-status><Words parts={say} /></p>
+    <p class="m-0 type-body text-ink-row" data-status><Words parts={say} /></p>
     <RingsKey {ring} />
     {@render running(ring)}
   </div>
@@ -168,47 +190,64 @@
 <section
   data-slot="limits-block-card"
   aria-labelledby="limits-title"
-  class="card"
+  class="flex flex-col gap-space-5 rounded-lg bg-surface-raised p-space-6 shadow-tile max-phone:p-space-4"
+  style:--ring-ground="var(--surface-recess)"
 >
-  <h2 data-slot="title" class="title" id="limits-title">Limits</h2>
+  <h2 data-slot="title" class="type-label text-ink-muted" id="limits-title">
+    Limits
+  </h2>
 
   {#if !read}
-    <div class="loading" data-slot="skeleton-rows">
-      <Skeleton class="h-7 w-24" />
-      <Skeleton class="h-4 w-3/4" />
-      <div data-slot="grid" class="grid">
+    <div class="flex flex-col gap-space-3" data-slot="skeleton-rows">
+      <Skeleton height="figure" width="name" />
+      <Skeleton class="w-3/4" line="body" />
+      <div data-slot="grid" class="grid grid-cols-usage-tiles gap-space-3">
         {#each [0, 1, 2] as one (one)}
-          <Skeleton class="h-48 w-full" />
+          <Skeleton class="w-full" height="chart" />
         {/each}
       </div>
     </div>
   {:else}
     {#if lead}
-      <div data-slot="lead" class="lead">
-        <p class="big">
+      <div data-slot="lead" class="flex flex-col gap-space-2">
+        <p class="flex flex-wrap items-baseline gap-space-3">
           <span
             data-slot="num"
-            class="kpi num"
+            class="type-kpi num tracking-title text-ink-strong data-muted:text-ink-muted"
             data-lead-figure
-            class:muted={claude?.stale}
+            data-muted={claude?.stale || undefined}
             >{#if lead.back}
-              <span aria-hidden="true" class="back-glyph"><IconRefresh /></span>
+              <!-- mark-line: a mark set in running text, beside the figure's digits -->
+              <span
+                aria-hidden="true"
+                class="me-space-1 inline-grid size-icon-lg align-middle text-ink-muted"
+                data-box><IconRefresh class="size-full" /></span
+              >
             {/if}
             <Figure text={lead.figure} /></span
           >
-          <span class="of">{lead.of}</span>
+          <span class="type-body text-ink-muted">{lead.of}</span>
         </p>
-        <p data-slot="sentence" class="sentence" data-lead>
+        <p
+          data-slot="sentence"
+          class="type-body max-w-c-measure-short text-ink-row"
+          data-lead
+        >
           <Words parts={lead.say} />
         </p>
       </div>
     {/if}
 
-    <div class="provider mark-line">
-      <span data-slot="glyph" aria-hidden="true" class="glyph" data-box
-        ><ClaudeIcon /></span
+    <div
+      class="mark-line type-label flex items-center gap-space-2 text-ink-strong"
+    >
+      <span
+        data-slot="glyph"
+        aria-hidden="true"
+        class="inline-flex size-icon-md"
+        data-box><ClaudeIcon class="size-full" /></span
       >
-      <span data-slot="name" class="name">Claude</span>
+      <span data-slot="name">Claude</span>
       {#if claude?.delegate}
         {@const why = delegateTip(claude, claude.delegate)}
         <!-- Where new delegates go; why, on a rest or a tap, in placement's
@@ -218,7 +257,7 @@
             <span
               {...props}
               aria-label="Delegates go to {claude.delegate?.name}. {why}"
-              class="right"
+              class="type-meta ms-auto whitespace-nowrap text-ink-muted"
               data-delegates
               role="img"
               ><Words
@@ -233,7 +272,7 @@
       {/if}
     </div>
     {#if claude}
-      <div data-slot="grid" class="grid">
+      <div data-slot="grid" class="grid grid-cols-usage-tiles gap-space-3">
         {#each claude.accounts as ring, i (ring.id)}
           {@render tile(
             ring,
@@ -244,13 +283,17 @@
         {/each}
       </div>
       {#if extraText}
-        <p class="line">
-          <span data-slot="limits-block-label" class="label">Extra usage</span
+        <p class="type-body flex gap-space-3 text-ink-row">
+          <span
+            data-slot="limits-block-label"
+            class="type-label text-ink-strong">Extra usage</span
           >{extraText}
         </p>
       {/if}
     {:else if claudeUnknown}
-      <div class="unknown">
+      <div
+        class="type-body flex flex-wrap items-center gap-space-3 text-ink-muted"
+      >
         <p>{claudeUnknown.reason}</p>
         {#if claudeUnknown.signIn}
           <Button
@@ -265,14 +308,19 @@
     {/if}
 
     {#if openCode || (spend && spend.all > 0)}
-      <div class="provider mark-line">
-        <span data-slot="glyph" aria-hidden="true" class="glyph" data-box
-          ><OpenCodeLogo /></span
+      <div
+        class="mark-line type-label flex items-center gap-space-2 text-ink-strong"
+      >
+        <span
+          data-slot="glyph"
+          aria-hidden="true"
+          class="inline-flex size-icon-md"
+          data-box><OpenCodeLogo class="size-full" /></span
         >
-        <span data-slot="name" class="name">opencode Go</span>
+        <span data-slot="name">opencode Go</span>
       </div>
       {#if openCode}
-        <div data-slot="grid" class="grid">
+        <div data-slot="grid" class="grid grid-cols-usage-tiles gap-space-3">
           {@render tile(
             openCode,
             0,
@@ -282,8 +330,11 @@
         </div>
       {/if}
       {#if spend && spend.all > 0}
-        <p class="line">
-          <span data-slot="limits-block-label" class="label">Spend</span><span
+        <p class="type-body flex gap-space-3 text-ink-row">
+          <span
+            data-slot="limits-block-label"
+            class="type-label text-ink-strong">Spend</span
+          ><span
             ><span class="mono-figure">{money(spend.today)}</span>
             today, <span class="mono-figure">{money(spend.week)}</span>
             this week,
@@ -295,227 +346,3 @@
     {/if}
   {/if}
 </section>
-
-<style>
-  .card {
-    --ring-ground: var(--surface-recess);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    padding: var(--space-6);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .title {
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .loading {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  .lead {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .big {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 10px;
-  }
-  .kpi {
-    font: var(--type-kpi);
-    letter-spacing: -0.02em;
-    color: var(--ink-strong);
-  }
-  /* At its limit the figure says how long until it's back, after the
-     refresh mark the popover's cell uses: Solar duotone, at the figure's
-     cap height, muted. */
-  .back-glyph {
-    display: inline-grid;
-    margin-inline-end: 0.25em;
-    vertical-align: -0.1em;
-    color: var(--ink-muted);
-
-    & :global(svg) {
-      inline-size: 0.8em;
-      block-size: 0.8em;
-    }
-  }
-  .kpi.muted,
-  .value.muted {
-    color: var(--ink-muted);
-  }
-  .of {
-    font: var(--type-body);
-    color: var(--ink-muted);
-  }
-  .sentence {
-    max-inline-size: 60ch;
-    font: var(--type-body);
-    color: var(--ink-row);
-  }
-  .provider {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .glyph {
-    display: inline-flex;
-    inline-size: 16px;
-    block-size: 16px;
-
-    & :global(svg) {
-      inline-size: 100%;
-      block-size: 100%;
-    }
-  }
-  .right {
-    margin-inline-start: auto;
-    white-space: nowrap;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
-    gap: var(--space-3);
-  }
-  /* A tile: its head, its mark and figure, its sentence, its key, its
-     sessions, the groups a step apart. */
-  .tile {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    min-inline-size: 0;
-    padding: var(--space-4);
-    border-radius: var(--radius-md);
-    background: var(--surface-recess);
-    transition: background-color var(--dur-fade) var(--ease-out);
-  }
-  .tile.limit {
-    background: var(--meter-wash-over);
-    --ring-ground: var(--meter-wash-over);
-  }
-  .head {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    min-inline-size: 0;
-  }
-  .dot {
-    flex: none;
-    inline-size: 8px;
-    block-size: 8px;
-    border-radius: 50%;
-    background: var(--c);
-  }
-  .mark {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-  .figure {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    min-inline-size: 0;
-
-    & small {
-      font: var(--type-meta);
-      color: var(--ink-muted);
-    }
-  }
-  .value {
-    font: var(--type-title);
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-strong);
-  }
-  .say {
-    margin: 0;
-    font: var(--type-body);
-    color: var(--ink-row);
-  }
-  .running {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-  .heading {
-    font: var(--type-meta);
-    font-weight: var(--weight-strong);
-    color: var(--ink-muted);
-  }
-  .count {
-    margin-inline-start: var(--space-1);
-  }
-  .sessions {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .session {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--space-4);
-    padding: 5px 8px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    font: var(--type-meta);
-    color: var(--ink-row);
-
-    & .what {
-      min-inline-size: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    & .tokens {
-      flex: none;
-      color: var(--ink-muted);
-    }
-  }
-  .project {
-    color: var(--ink-muted);
-  }
-  .none {
-    padding: 2px 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .line {
-    display: flex;
-    gap: var(--space-3);
-    font: var(--type-body);
-    color: var(--ink-row);
-
-    & .label {
-      font: var(--type-label);
-      color: var(--ink-strong);
-    }
-  }
-  .unknown {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-    font: var(--type-body);
-    color: var(--ink-muted);
-  }
-  @media (max-width: 639px) {
-    .card {
-      padding: var(--space-4);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .tile {
-      transition: none;
-    }
-  }
-</style>

@@ -28,7 +28,7 @@
   });
 </script>
 
-<div class="bench">
+<div class="flex flex-wrap items-box-start gap-space-4 p-space-7">
   <Button
     data-case="label-cycle"
     label="Save"
@@ -49,7 +49,7 @@
     pendingLabel="Saving…"
   />
 </div>
-<div class="bench sites">
+<div class="flex flex-wrap items-box-start gap-space-4 p-space-7">
   <Button
     data-site="lib/cawco/HubBand.svelte:268"
     label="Reconnect now"
@@ -310,13 +310,3 @@
     variant="outline"
   />
 </div>
-
-<style>
-  .bench {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: start;
-    gap: var(--space-4);
-    padding: var(--space-7);
-  }
-</style>

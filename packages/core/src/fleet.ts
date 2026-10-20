@@ -943,6 +943,13 @@ export const mcpFleetState = (status?: {
         state: "pending",
         detail: "The runtime is connecting to this server.",
       };
+    case undefined:
+      return {
+        state: "failed",
+        cause: "unknown",
+        detail: "MCP runtime reported no server.",
+      };
+    // `status` is a plain string, each runtime's own word: any other is a failure.
     default:
       return {
         state: "failed",

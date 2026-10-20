@@ -58,7 +58,12 @@
      * the change that sends this face out also restyles its rail, and the
      * fading reasoning block dropped 14px under the answer coming in.
      */
-    rail: string | null;
+    rail: Rail | null;
+  }
+  /** A rail's gap and head, as the row's custom properties hold them. */
+  interface Rail {
+    gap: string;
+    head: string;
   }
 
   let serial = 0;
@@ -72,12 +77,12 @@
     },
   ]);
 
-  /** The rail the row draws right now, as inline custom properties. */
-  function railNow(live: HTMLElement): string {
+  /** The rail the row draws right now (`--rail-gap`, `--rail-head`). */
+  function railNow(live: HTMLElement): Rail {
     const style = getComputedStyle(live);
     const gap = style.getPropertyValue("--rail-gap").trim();
     const head = style.getPropertyValue("--rail-head").trim();
-    return `--rail-gap: ${gap || "var(--space-4)"}; --rail-head: ${head || "var(--rail)"}`;
+    return { gap: gap || "var(--space-4)", head: head || "var(--rail)" };
   }
   let box = $state<HTMLElement>();
   let tweening = $state(false);
@@ -163,11 +168,12 @@
      clock and the last words and nothing else. -->
 {#snippet body(live: Live | Said, phase: Phase)}
   {#if phase === "answer"}
+    <!-- MessageRow's turn spacing; grouped, MessageRow's grouped turn, so
+         the answer settles without moving. -->
     <section
       data-slot="turn"
       data-grouped={live.grouped || undefined}
-      class="turn"
-      class:grouped={live.grouped}
+      class="mt-space-4 data-grouped:flow-root data-grouped:mt-space-2"
     >
       <Who
         grouped={live.grouped}
@@ -188,8 +194,7 @@
     <section
       data-slot="turn"
       data-grouped={live.grouped || undefined}
-      class="turn"
-      class:grouped={live.grouped}
+      class="mt-space-4 data-grouped:flow-root data-grouped:mt-space-2"
     >
       <Who grouped={live.grouped} live name={agentName} />
       {@render thinking(live)}
@@ -211,69 +216,29 @@
   />
 {/snippet}
 
-<div data-slot="live" class={["live", { tweening }]} bind:this={box}>
+<div
+  data-slot="live"
+  data-tweening={tweening || undefined}
+  class="relative data-tweening:overflow-hidden"
+  bind:this={box}
+>
   {#each faces as face (face.id)}
+    <!-- A face contains its content's top margin (flow-root), so the row's
+         height is the same whichever face draws it — and the same as the
+         settled row it becomes. A leaving face keeps the rail it was drawn
+         with (railNow): its --rail-gap and --rail-head. -->
     <div
+      data-slot="face"
       aria-hidden={face.leaving ? true : undefined}
-      class="face"
+      class="flow-root min-w-0 data-leaving:absolute data-leaving:top-0 data-leaving:inset-x-0 data-leaving:pointer-events-none motion-safe:data-leaving:animate-face-out motion-safe:data-entering:animate-face-in"
+      data-entering={face.entering || undefined}
+      data-leaving={face.leaving !== null || undefined}
       inert={face.leaving !== null}
       onanimationend={(event) => settle(face, event)}
-      style={face.rail}
-      class:entering={face.entering}
-      class:leaving={face.leaving !== null}
+      style:--rail-gap={face.rail?.gap}
+      style:--rail-head={face.rail?.head}
     >
       {@render body(face.leaving ?? row, face.phase)}
     </div>
   {/each}
 </div>
-
-<style>
-  .live {
-    position: relative;
-
-    &.tweening {
-      overflow: hidden;
-    }
-  }
-  /* A face contains its content's top margin, so the row's height is the
-     same whichever face draws it — and the same as the settled row it
-     becomes. */
-  .face {
-    display: flow-root;
-    min-inline-size: 0;
-
-    &.leaving {
-      position: absolute;
-      inset-block-start: 0;
-      inset-inline: 0;
-      pointer-events: none;
-    }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .face.leaving {
-      animation: face-out var(--dur-exit) var(--ease-out) forwards;
-    }
-    .face.entering {
-      animation: face-in var(--dur-menu) var(--ease-out) backwards;
-    }
-  }
-  @keyframes face-out {
-    to {
-      opacity: 0;
-    }
-  }
-  @keyframes face-in {
-    from {
-      opacity: 0;
-    }
-  }
-  .turn {
-    margin-block-start: var(--space-4);
-
-    /* MessageRow's grouped turn, so the answer settles without moving. */
-    &.grouped {
-      display: flow-root;
-      margin-block-start: var(--space-2);
-    }
-  }
-</style>

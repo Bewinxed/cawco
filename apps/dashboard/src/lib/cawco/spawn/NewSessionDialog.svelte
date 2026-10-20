@@ -3,8 +3,7 @@
    * The New Session form's dialog frame: the centred card over its scrim on
    * a desk, the kit drawer's bottom sheet under 640px (DESIGN.md: "the
    * new-session dialog becomes a bottom sheet"). The form inside is
-   * NewSessionForm, whose styles draw this card too (`.session-card`,
-   * `.session-scrim`). A popover at a trigger is the same sheet under 640px
+   * NewSessionForm. A popover at a trigger is the same sheet under 640px
    * (NewSessionPopover), and gives its trigger as `anchor`.
    */
   import { Dialog as DialogPrimitive } from "bits-ui";
@@ -25,7 +24,7 @@
   import type { ContinueSource, SessionDraft } from "../continue.svelte";
   import { morph } from "../motion/morph.svelte";
   import NewSessionForm from "./NewSessionForm.svelte";
-  import type { SpawnPrefill } from "./new-session.svelte";
+  import { FORM_SIZES, type SpawnPrefill } from "./new-session.svelte";
 
   let {
     open,
@@ -70,17 +69,17 @@
     }
   });
   // The phone's sheet (the kit drawer's) says on the body that it is up, for
-  // its scrim's exit (NewSessionForm's styles).
+  // its scrim's exit (spawn/ns-theme.css).
   $effect(() => {
     if (card) {
       return mirror(
         card,
         "body",
         "data-session-sheet",
-        ["data-vaul-drawer", "class"],
+        ["data-vaul-drawer", "data-session-card"],
         (sheet) =>
           sheet.hasAttribute("data-vaul-drawer") &&
-          sheet.classList.contains("session-card")
+          sheet.hasAttribute("data-session-card")
             ? ["up"]
             : []
       );
@@ -92,7 +91,7 @@
    * content, so it takes the same `morph()` here. The sheet on a phone is the
    * kit drawer's and is left to it.
    */
-  const resize = morph();
+  const resize = morph({ on: FORM_SIZES });
   $effect(() => {
     if (card && !mobile.current) {
       return resize(card);
@@ -127,14 +126,15 @@
     <DrawerContent
       data-session-card
       aria-label="New Session"
-      class="session-card ns-theme"
       data-ns-dialog
+      look="new-session"
       onCloseAutoFocus={giveFocusBack}
       onEscapeKeydown={(event) => form?.escapeStep(event)}
       onOpenAutoFocus={takeFocus}
+      style={`--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), var(--space-7)))${open ? "" : "; animation-duration: var(--dur-exit); animation-timing-function: var(--ease-out)"}`}
       bind:ref={card}
     >
-      <DrawerTitle class="sr-only">New session</DrawerTitle>
+      <DrawerTitle visible={false}>New session</DrawerTitle>
       {@render body()}
     </DrawerContent>
   </Drawer>
@@ -144,7 +144,10 @@
       <!-- Drawn through `child`: bits-ui holds the body's lock only while it
            is open and clears it at once, and the leaving card and scrim let
            presses through (floating-presence). -->
-      <DialogPrimitive.Overlay class="session-scrim ns-theme">
+      <DialogPrimitive.Overlay
+        data-slot="session-scrim"
+        class="ns-theme fixed inset-0 z-(--layer-float) bg-scrim backdrop-blur-(--scrim-blur) motion-safe:data-open:animate-ns-scrim-in motion-safe:data-closed:animate-ns-scrim-out"
+      >
         {#snippet child({ props, open: shown })}
           <div {...props} style:pointer-events={pressable(shown)}></div>
         {/snippet}
@@ -152,17 +155,18 @@
       <DialogPrimitive.Content
         data-session-card
         aria-label="New Session"
-        class="session-card ns-theme"
+        class="ns-theme fixed z-(--layer-float) flex origin-center flex-col outline-off inset-0 m-auto h-fit max-h-(--card-max-h) w-(--card-w) rounded-lg bg-surface-recess p-space-2 shadow-modal motion-safe:data-open:animate-ns-card-in motion-safe:data-closed:animate-ns-card-out"
         data-ns-dialog
         onCloseAutoFocus={giveFocusBack}
         onEscapeKeydown={(event) => form?.escapeStep(event)}
         onOpenAutoFocus={takeFocus}
         restoreScrollDelay={0}
+        style="--card-max-h: calc(100dvh - var(--space-8) * 1.5); --card-w: min(var(--c-new-session-w), 100vw - var(--space-8) * 1.5)"
         bind:ref={card}
       >
         {#snippet child({ props, open: shown })}
           <div {...props} style:pointer-events={pressable(shown)}>
-            <DialogTitle class="sr-only">New session</DialogTitle>
+            <DialogTitle visible={false}>New session</DialogTitle>
             {@render body()}
           </div>
         {/snippet}

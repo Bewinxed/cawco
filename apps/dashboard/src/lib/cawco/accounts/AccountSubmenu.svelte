@@ -25,11 +25,11 @@
 {#if accounts.length > 0}
   <ContextMenu.Sub>
     <!-- The kit's sub-trigger is the one menu row without the item's gap. -->
-    <ContextMenu.SubTrigger class="gap-2.5">
-      <IconAccounts class="size-4" />
+    <ContextMenu.SubTrigger gap="item">
+      <IconAccounts class="size-icon-md" />
       <span>Account</span>
     </ContextMenu.SubTrigger>
-    <ContextMenu.SubContent class="min-w-52">
+    <ContextMenu.SubContent min="standard">
       <!-- Its value is the account the session runs on, always: a pick asks
            for the move (moveTo, which leaves the current one alone) and the
            check follows the session once it has moved. -->
@@ -47,11 +47,13 @@
             <i
               data-slot="dot"
               aria-hidden="true"
-              class="dot"
+              class="mx-space-1 size-space-2 flex-none rounded-pill bg-(--c)"
               data-box
               style:--c={hueVar(account.hue)}
             ></i>
-            <span data-slot="name" class="name"
+            <span
+              data-slot="name"
+              class="min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap"
               >{going ? `Moving to ${nameOf(account)}…` : nameOf(account)}</span
             >
           </ContextMenu.RadioItem>
@@ -60,21 +62,3 @@
     </ContextMenu.SubContent>
   </ContextMenu.Sub>
 {/if}
-
-<style>
-  .dot {
-    flex: none;
-    width: 8px;
-    height: 8px;
-    margin-inline: 4px;
-    border-radius: 50%;
-    background: var(--c);
-  }
-  .name {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-</style>

@@ -11,23 +11,10 @@
   );
 </script>
 
-<p data-slot="text" class="text" data-role={role}>{String(props.text ?? "")}</p>
-
-<style>
-  .text {
-    font: var(--type-body);
-    color: var(--ink-strong);
-    text-wrap: pretty;
-  }
-  .text[data-role="title"] {
-    font: var(--type-title);
-    text-wrap: balance;
-  }
-  .text[data-role="label"] {
-    font: var(--type-label);
-  }
-  .text[data-role="meta"] {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>
+<p
+  data-slot="text"
+  class="type-body text-pretty text-ink-strong role-label:type-label role-meta:type-meta role-meta:text-ink-muted role-title:type-title role-title:text-balance"
+  data-role={role}
+>
+  {String(props.text ?? "")}
+</p>

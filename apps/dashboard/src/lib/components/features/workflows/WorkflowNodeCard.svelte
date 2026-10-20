@@ -87,9 +87,17 @@
   });
 </script>
 
+<!-- The selection ring is always drawn, over the card's own border (so the
+     border itself turns the colour, never a second ring round it); choosing a
+     node fades its colour in over --dur-control, and the one let go fades out
+     the same way. Keyboard focus on the node uses the same ring in the focus
+     colour. -->
 <article
+  data-slot="node-card"
   data-workflow-node-card-selected={selected || undefined}
-  class={["wf-node", { map: node.kind === "map", selected }]}
+  class="w-c-wf-node-w rounded-md border border-border-hairline bg-surface-raised text-size-body font-normal text-ink-strong shadow-tile outline-(length:--focus-ring-width) outline-solid outline-transparent outline-offset-(--focus-ring-inset) transition-[outline-color] duration-(--dur-control) ease-out data-is-selected:outline-brand-solid node-focus-visible:outline-focus-ring"
+  data-is-selected={selected || undefined}
+  data-map={node.kind === "map" || undefined}
 >
   {#if node.kind !== "start"}
     <Handle
@@ -99,33 +107,53 @@
       type="target"
     />
   {/if}
-  <header class="mark-line">
-    <span data-slot="glyph" class="glyph" class:filled={modelled} data-box
-      ><Glyph aria-hidden="true" class="size-4" /></span
-    ><strong>{title}</strong>
+  <header class="mark-line flex items-center gap-space-2 px-space-4 py-space-3">
+    <span
+      data-slot="glyph"
+      class="grid size-c-row-lead shrink-0 place-items-center rounded-sm border border-neutral-8 data-filled:border-transparent data-filled:bg-brand-solid data-filled:text-on-brand"
+      data-box
+      data-filled={modelled || undefined}
+      ><Glyph aria-hidden="true" class="size-icon-md" /></span
+    ><strong class="flex-1 font-medium wrap-anywhere text-ink-strong"
+      >{title}</strong
+    >
   </header>
-  <div data-slot="body" class="body">
+  <div data-slot="body" class="grid gap-space-2 px-space-4 pb-space-3">
     {#if node.kind === "step"}
-      <p data-slot="meta" class="meta">
+      <p
+        data-slot="meta"
+        class="text-size-meta font-normal wrap-anywhere text-ink-muted num"
+      >
         {node.harness} · {node.model || "Choose a model"}
       </p>
     {/if}
-    <p class="summary">{summary}</p>
+    <p class="line-clamp-2 wrap-anywhere">{summary}</p>
     {#if node.kind === "map"}
-      <p data-slot="group" class="group">
+      <p
+        data-slot="group"
+        class="rounded-sm border border-dashed border-neutral-8 p-space-3"
+      >
         {node.body.nodes.length} nodes in body
       </p>
     {/if}
     {#if data.problem}
-      <div class="problem">
+      <div class="grid gap-space-1 text-size-body font-normal">
         <WorkflowStatus status="waiting" /><span>{String(data.problem)}</span>
       </div>
     {/if}
   </div>
   {#if ports.length > 1}
-    <div class="ports" bind:this={portsEl}>
+    <div
+      data-slot="ports"
+      class="relative border-t border-t-border-hairline py-space-2"
+      bind:this={portsEl}
+    >
       {#each ports as port (port)}
-        <div class="port" class:near={near === port}>
+        <div
+          data-slot="port"
+          class="group relative px-space-4 py-space-1 text-right text-size-label font-medium fine:data-near:text-ink-strong fine:data-near:xy-handle-brand"
+          data-near={near === port || undefined}
+        >
           {port}
           <Handle
             aria-label="{title}: {port}"
@@ -135,15 +163,22 @@
           />
         </div>
       {/each}
+      <!-- The column's one target: its full height and the half-gap stops
+           above and below, 24px wide on screen at any zoom, centred on the
+           handles. -->
       <div
         aria-hidden="true"
-        class="port-hit nodrag nopan"
+        data-slot="port-hit"
+        class="nodrag nopan hidden fine:absolute fine:inset-y-(--off-block) fine:end-(--off-end) fine:block fine:w-(--hit-w) fine:cursor-crosshair"
         onclick={route}
         onmousedown={route}
         onmouseleave={() => {
           near = null;
         }}
         onmousemove={aim}
+        style:--off-block="calc(var(--space-5) / -2)"
+        style:--off-end="calc(var(--c-pointer-floor) / -2 / var(--hit-scale, 1))"
+        style:--hit-w="calc(var(--c-pointer-floor) / var(--hit-scale, 1))"
       ></div>
     </div>
   {:else if ports[0]}
@@ -156,124 +191,3 @@
     />
   {/if}
 </article>
-
-<style>
-  .wf-node {
-    width: 260px;
-    background: var(--surface-raised);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-tile);
-    color: var(--ink-strong);
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    /* The selection ring is always drawn, over the card's own border (so
-       the border itself turns the colour, never a second ring round it);
-       choosing a node fades its colour in over --dur-control, and the one
-       let go fades out the same way. Keyboard focus on the node uses the
-       same ring in the focus colour. */
-    outline: var(--focus-ring-width) solid transparent;
-    outline-offset: var(--focus-ring-inset);
-    transition: outline-color var(--dur-control) var(--ease-out);
-  }
-  .selected {
-    outline-color: var(--brand-solid);
-  }
-  :global(.svelte-flow__node:focus-visible) .wf-node {
-    outline-color: var(--focus-ring);
-  }
-  header {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-3) var(--space-4);
-  }
-  strong {
-    font-weight: var(--weight-strong);
-    flex: 1;
-    overflow-wrap: anywhere;
-    color: var(--ink-strong);
-  }
-  .glyph {
-    width: 28px;
-    height: 28px;
-    border: 1px solid var(--neutral-8);
-    border-radius: var(--radius-sm);
-    display: grid;
-    place-items: center;
-    flex-shrink: 0;
-  }
-  .filled {
-    background: var(--brand-solid);
-    color: var(--on-brand);
-    border-color: transparent;
-  }
-  .body {
-    padding: 0 var(--space-4) var(--space-3);
-    display: grid;
-    gap: var(--space-2);
-  }
-  .summary {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow-wrap: anywhere;
-  }
-  .meta {
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    overflow-wrap: anywhere;
-    font-variant-numeric: tabular-nums;
-  }
-  .ports {
-    position: relative;
-    padding-block: var(--space-2);
-    border-top: 1px solid var(--border-hairline);
-  }
-  /* The column's one target: its full height and the half-gap stops above
-     and below, 24px wide on screen at any zoom, centred on the handles. */
-  .port-hit {
-    display: none;
-  }
-  @media (pointer: fine) {
-    .port-hit {
-      --hit-gap-y: 17px;
-      display: block;
-      position: absolute;
-      inset-block: calc(var(--hit-gap-y) / -2);
-      inset-inline-end: calc(-12px / var(--hit-scale, 1));
-      inline-size: calc(24px / var(--hit-scale, 1));
-      cursor: crosshair;
-    }
-    .ports .port :global(.svelte-flow__handle) {
-      pointer-events: none;
-    }
-    .port.near :global(.svelte-flow__handle) {
-      background: var(--brand-solid);
-    }
-    .port.near {
-      color: var(--ink-strong);
-    }
-  }
-  .port {
-    position: relative;
-    text-align: right;
-    padding: var(--space-1) var(--space-4);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-  }
-  .problem {
-    display: grid;
-    gap: var(--space-1);
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-  }
-  .group {
-    border: 1px dashed var(--neutral-8);
-    padding: var(--space-3);
-    border-radius: var(--radius-sm);
-  }
-</style>

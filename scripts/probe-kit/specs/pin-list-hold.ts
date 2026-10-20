@@ -38,8 +38,7 @@ import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import { until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
-const PANE =
-  ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"])';
+const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;
 const LIST = '[data-pin-list-pop] [data-slot="pin-list"]';
 type Theme = "light" | "dark";
@@ -86,88 +85,95 @@ interface Drawn {
 }
 
 const drawn = (page: Page): Promise<Drawn> =>
-  page.evaluate(
-    ({ list, pane }) => {
-      const root = document.querySelector(list);
-      const numbers = (selector: string, attribute: string) =>
-        [...(root?.querySelectorAll<HTMLElement>(selector) ?? [])].map((el) =>
-          Number(el.getAttribute(attribute))
-        );
-      const failed = root?.querySelector("[data-pin-list-failed]");
-      /** A CSS colour as sRGB bytes, by a canvas (it takes oklch and color() alike). */
-      const rgba = (css: string) => {
-        const ctx = document.createElement("canvas").getContext("2d");
-        if (!ctx) {
-          return [0, 0, 0, 0];
-        }
-        ctx.fillStyle = css;
-        ctx.fillRect(0, 0, 1, 1);
-        return [...ctx.getImageData(0, 0, 1, 1).data];
-      };
-      const luminance = ([r, g, b]: number[]) => {
-        const lin = (c: number) => {
-          const v = c / 255;
-          return v <= 0.040_45 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-        };
-        return (
-          0.2126 * lin(r ?? 0) + 0.7152 * lin(g ?? 0) + 0.0722 * lin(b ?? 0)
-        );
-      };
-      /** The first solid background from `el` up: the surface it stands on. */
-      const surfaceOf = (el: Element | null | undefined) => {
-        for (let at = el; at; at = at.parentElement) {
-          const bg = rgba(getComputedStyle(at).backgroundColor);
-          if (bg[3] === 255) {
-            return bg;
+  page
+    .evaluate(
+      ({ list, pane }) => {
+        const root = document.querySelector(list);
+        const numbers = (selector: string, attribute: string) =>
+          [...(root?.querySelectorAll<HTMLElement>(selector) ?? [])].map((el) =>
+            Number(el.getAttribute(attribute))
+          );
+        const failed = root?.querySelector("[data-pin-list-failed]");
+        /** A CSS colour as sRGB bytes, by a canvas (it takes oklch and color() alike). */
+        const rgba = (css: string) => {
+          const ctx = document.createElement("canvas").getContext("2d");
+          if (!ctx) {
+            return [0, 0, 0, 0];
           }
-        }
-        return rgba("white");
-      };
-      const reason = failed?.querySelector('[data-slot="reason"]');
-      const surface = surfaceOf(root);
-      const ratio = (a: number[], b: number[]) => {
-        const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-        return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
-      };
-      const skeleton = root?.querySelector(".kit-skeleton");
-      const heightOf = (el: Element | null | undefined) =>
-        el ? Math.round(el.getBoundingClientRect().height * 10) / 10 : null;
-      return {
-        commentsLabel:
-          document
-            .querySelector(`${pane} [data-slot="comments"]`)
-            ?.getAttribute("aria-label") ?? null,
-        count:
-          document.querySelector(`${pane} [data-slot="count"]`)?.textContent ??
-          null,
-        faultContrast: reason
-          ? Math.round(
-              ratio(rgba(getComputedStyle(reason).color), surface) * 100
-            ) / 100
-          : null,
-        skeletonFillApart: skeleton
-          ? rgba(getComputedStyle(skeleton).backgroundColor).join() !==
-            surface.join()
-          : null,
-        skeletonHeights: [
-          ...(root?.querySelectorAll(".skeleton-row") ?? []),
-        ].map((row) => heightOf(row) ?? 0),
-        rowHeight: heightOf(root?.querySelector(".pin-row")),
-        tabs: [...(root?.querySelectorAll('[role="tab"]') ?? [])].map(
-          (tab) => tab.textContent?.trim() ?? ""
-        ),
-        rows: numbers("[data-pin-row]", "data-pin-row"),
-        moved: numbers("[data-moved-row]", "data-moved-row"),
-        empty: !!root?.querySelector('[data-slot="pin-list-empty"]'),
-        reading: !!root?.querySelector('[data-slot="pin-list-reading"]'),
-        failed: reason?.textContent?.replace(/\s+/g, " ").trim() ?? null,
-        tryAgain: [...(failed?.querySelectorAll("button") ?? [])].some(
-          (button) => button.textContent?.trim().startsWith("Try again")
-        ),
-      };
-    },
-    { list: LIST, pane: PANE }
-  );
+          ctx.fillStyle = css;
+          ctx.fillRect(0, 0, 1, 1);
+          return [...ctx.getImageData(0, 0, 1, 1).data];
+        };
+        const luminance = ([r, g, b]: number[]) => {
+          const lin = (c: number) => {
+            const v = c / 255;
+            return v <= 0.040_45 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+          };
+          return (
+            0.2126 * lin(r ?? 0) + 0.7152 * lin(g ?? 0) + 0.0722 * lin(b ?? 0)
+          );
+        };
+        /** The first solid background from `el` up: the surface it stands on. */
+        const surfaceOf = (el: Element | null | undefined) => {
+          for (let at = el; at; at = at.parentElement) {
+            const bg = rgba(getComputedStyle(at).backgroundColor);
+            if (bg[3] === 255) {
+              return bg;
+            }
+          }
+          return rgba("white");
+        };
+        const reason = failed?.querySelector('[data-slot="reason"]');
+        const surface = surfaceOf(root);
+        const ratio = (a: number[], b: number[]) => {
+          const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+          return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
+        };
+        const skeleton = root?.querySelector('[data-slot="skeleton"]');
+        const heightOf = (el: Element | null | undefined) =>
+          el ? Math.round(el.getBoundingClientRect().height * 10) / 10 : null;
+        return {
+          commentsLabel:
+            document
+              .querySelector(`${pane} [data-slot="comments"]`)
+              ?.getAttribute("aria-label") ?? null,
+          count:
+            document.querySelector(`${pane} [data-slot="count"]`)
+              ?.textContent ?? null,
+          faultContrast: reason
+            ? Math.round(
+                ratio(rgba(getComputedStyle(reason).color), surface) * 100
+              ) / 100
+            : null,
+          skeletonFillApart: skeleton
+            ? rgba(getComputedStyle(skeleton).backgroundColor).join() !==
+              surface.join()
+            : null,
+          skeletonHeights: [
+            ...(root?.querySelectorAll('[data-slot="skeleton-row"]') ?? []),
+          ].map((row) => heightOf(row) ?? 0),
+          rowHeight: heightOf(root?.querySelector('[data-slot="pin-row"]')),
+          tabs: [...(root?.querySelectorAll('[role="tab"]') ?? [])].map(
+            (tab) => tab.textContent?.trim() ?? ""
+          ),
+          rows: numbers("[data-pin-row]", "data-pin-row"),
+          moved: numbers("[data-moved-row]", "data-moved-row"),
+          empty: !!root?.querySelector('[data-slot="pin-list-empty"]'),
+          reading: !!root?.querySelector('[data-slot="pin-list-reading"]'),
+          failed: reason?.textContent?.replace(/\s+/g, " ").trim() ?? null,
+        };
+      },
+      { list: LIST, pane: PANE }
+    )
+    .then(async (read) => ({
+      ...read,
+      // By its accessible name: a kit Button's text holds its pending words too.
+      tryAgain:
+        (await page
+          .locator(`${LIST} [data-pin-list-failed]`)
+          .getByRole("button", { name: "Try again", exact: true })
+          .count()) > 0,
+    }));
 
 /** Each moved row's Place again, by pin number. */
 const placeAgain = (page: Page, pin: number) =>
@@ -672,7 +678,7 @@ const rejoined = async (at: At) => {
     30_000
   ).catch(() => drawn(page));
   stand.refuseWrite();
-  const band = page.locator(`${PANE} .error[role="alert"] p`);
+  const band = page.locator(`${PANE} [data-slot="failure"][role="alert"] p`);
   const said = await until(
     "the band saying the hub's reason",
     async () => ((await band.count()) ? await band.textContent() : null),

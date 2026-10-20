@@ -10,6 +10,7 @@
    * artifact. A press on a card opens its page scrolled to it. Fitted to the
    * canvas once, and again when the cards come or go.
    */
+  import "#lib/vendor-css/xyflow.css";
   import type { DecisionGraph as Graph } from "@cawco/core/decisions";
   import {
     Background,
@@ -19,8 +20,6 @@
     Panel,
     SvelteFlow,
   } from "@xyflow/svelte";
-  import "@xyflow/svelte/dist/style.css";
-  import "#lib/components/features/workflows/workflows.css";
   import { onMount, untrack } from "svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
   import { FIT, ZOOM } from "#lib/components/features/flow/fit.js";
@@ -150,8 +149,12 @@
   }
 </script>
 
-<section aria-label="Decision graph" class="graph">
-  <svg aria-hidden="true" class="defs">
+<section
+  aria-label="Decision graph"
+  class="relative min-h-c-decision-graph-min-h min-w-0 flex-auto overflow-hidden rounded-lg bg-surface-recess inset-ring inset-ring-border-hairline"
+  data-slot="decision-graph"
+>
+  <svg aria-hidden="true" class="absolute size-0">
     <defs>
       <marker
         id={marker}
@@ -162,7 +165,7 @@
         refY="5"
         viewBox="0 0 10 10"
       >
-        <path class="arrow" d="M0,0 L10,5 L0,10 z" />
+        <path class="fill-ink-muted" d="M0,0 L10,5 L0,10 z" />
       </marker>
     </defs>
   </svg>
@@ -217,34 +220,3 @@
     </SvelteFlow>
   {/if}
 </section>
-
-<style>
-  .graph {
-    position: relative;
-    flex: 1 1 auto;
-    min-block-size: 24rem;
-    min-inline-size: 0;
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--surface-recess);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-  }
-  .defs {
-    position: absolute;
-    inline-size: 0;
-    block-size: 0;
-  }
-  .arrow {
-    fill: var(--ink-muted);
-  }
-  /* A card new to the graph fades up where it lands. */
-  @media (prefers-reduced-motion: no-preference) {
-    .graph :global(.svelte-flow__node-decision) {
-      transition: opacity var(--dur-fade) var(--ease-out);
-
-      @starting-style {
-        opacity: 0;
-      }
-    }
-  }
-</style>

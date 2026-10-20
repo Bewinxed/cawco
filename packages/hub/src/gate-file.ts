@@ -172,7 +172,7 @@ const applyOption = (
       step.timeoutSec = seconds;
       return;
     }
-    default:
+    case "on-fail":
       if (value !== "stop") {
         return `on-fail: “${value}” under “${step.command}” is not stop (leave it out to run every step).`;
       }

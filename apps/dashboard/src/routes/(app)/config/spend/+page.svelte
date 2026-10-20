@@ -56,8 +56,10 @@
   ready={onCap !== null}
   title={section.label}
 >
-  <div data-slot="group" class="group">
-    <p data-slot="note" class="note">{spendWords.note}</p>
+  <div data-slot="group" class="flex flex-col gap-space-2">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+      {spendWords.note}
+    </p>
     <Field
       hint={means}
       id="spend-on-cap"
@@ -65,8 +67,9 @@
       problem={refused}
     >
       <NativeSelect
-        class="w-full max-w-sm"
+        class="w-full"
         id="spend-on-cap"
+        measure="cap-md"
         onchange={(event) =>
           choose((event.currentTarget as HTMLSelectElement).value as OnCap)}
         value={onCap ?? ""}
@@ -80,16 +83,3 @@
     </Field>
   </div>
 </SectionFrame>
-
-<style>
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>

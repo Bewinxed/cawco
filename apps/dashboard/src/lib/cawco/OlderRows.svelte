@@ -62,7 +62,7 @@
     tall = false,
     flip = true,
     still = false,
-    style,
+    motion,
   }: {
     /** The parent whose older rows these are: a project's id, a session's. */
     id: string;
@@ -85,25 +85,14 @@
     flip?: boolean;
     /** A copy on its way out of a list: the row alone, taking no press. */
     still?: boolean;
-    /** The row's own motion, where the list gives its rows one. */
-    style?: string;
+    /** The row's own motion, as an `animation` value, where the list gives its rows one. */
+    motion?: string;
   } = $props();
 
   /** How the box opens and folds: off each row's mark, as every tree. */
-  const TREE: BranchOptions = { glyph: ".tree-mark" };
+  const TREE: BranchOptions = { glyph: "[data-tree-mark]" };
   /** Older trees drawn a frame once the box's first rows stand. */
   const STEP = 24;
-  /**
-   * The row's measures: the compact session row's own in a tree in the rail,
-   * a two-line row's among the home's, so its lead and its words stand on
-   * its siblings' axes and the nesting line meets its mark as it meets
-   * theirs.
-   */
-  const ROW = $derived(
-    tall
-      ? "h-(--older-h) gap-(--space-2) px-(--space-3)"
-      : "h-(--older-h) gap-(--row-compact-gap) pl-(--row-compact-gap) pr-(--row-compact-pad-end)"
-  );
   /** One row's height, for the row and the box that shows six of them. */
   const height = $derived(
     tall
@@ -211,17 +200,26 @@
   data-flip={flip && !still ? "box" : undefined}
   style="--older-h:{height}"
 >
-  <Sidebar.MenuSubButton class="{ROW} text-muted-foreground" data-branch-item>
+  <!-- The row's measures: the compact session row's own in a tree in the
+       rail, a two-line row's among the home's (`data-tall`), so its lead and
+       its words stand on its siblings' axes and the nesting line meets its
+       mark as it meets theirs. -->
+  <Sidebar.MenuSubButton
+    data-branch-item
+    data-tall={tall || undefined}
+    row="compact-tall"
+    tone="muted"
+  >
     {#snippet child({ props })}
       <!-- Busy from the press until its rows are drawn: the glyph gives way
            to the kit's spinner, as a pending Button's icon does. -->
       <button
         {...props}
-        class="{props.class} mark-line"
+        class={[props.class, "mark-line"]}
         aria-busy={pending || undefined}
         aria-expanded={out}
         onclick={toggle}
-        {style}
+        style:animation={motion}
         type="button"
       >
         <TreeMark
@@ -231,34 +229,48 @@
         >
           {#snippet face()}
             <!-- The glyph and the spinner stacked in one cell (the kit's
-                 icon swap). Out of the button's name: `aria-busy` says it,
-                 and a status in here was read into the name at rest. -->
-            <span class="older-face icon-swap">
-              <span data-active={!pending}><IconHistory class="size-4" /></span>
-              <span data-active={pending}
-                ><Spinner class="size-3" role="presentation" /></span
+                 icon swap, at a control's pace). Out of the button's name:
+                 `aria-busy` says it, and a status in here was read into the
+                 name at rest. -->
+            <span class="icon-swap" style:--icon-swap-dur="var(--dur-control)">
+              <span data-active={!pending}
+                ><IconHistory class="size-icon-md" /></span
               >
+              <span data-active={pending}><Spinner role="presentation" /></span>
             </span>
           {/snippet}
         </TreeMark>
         <span data-slot="num" class="num"
           ><span
-            style="display:inline-grid;inline-size:{String(count).length}ch"
+            class="inline-grid"
+            style:inline-size="{String(count).length}ch"
             ><MorphText text={String(count)} /></span
           >
           older</span
         >
         {#if failed > 0}
-          <span class="older-failed">{failedWords(failed)}</span>
+          <span class="ms-space-1 text-status-fail-ink"
+            >{failedWords(failed)}</span
+          >
         {/if}
       </button>
     {/snippet}
   </Sidebar.MenuSubButton>
   {#if out}
-    <!-- reflow never copies or uncovers what is inside (`data-flip-anchor`). -->
+    <!-- reflow never copies or uncovers what is inside (`data-flip-anchor`).
+         Six rows at most, scrolling in place. The edges fade only while
+         there is more past them: a mask on each edge (scrollEdges sets the
+         attributes). -->
     <ul
-      class="older"
+      data-slot="older-rows-box"
+      class="flex flex-col gap-(--gap) max-h-(--older-max) mt-(--tree-gap) mx-0 mb-0 p-0 overflow-y-auto overscroll-contain scrollbar-thin list-none not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
       data-flip-anchor
+      style:--fade="var(--space-4)"
+      style:--fade-above={"linear-gradient(transparent, var(--mask-opaque) var(--fade))"}
+      style:--fade-below={"linear-gradient(var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
+      style:--fade-both={"linear-gradient(transparent, var(--mask-opaque) var(--fade), var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
+      style:--gap="calc(var(--tree-gap) / 2)"
+      style:--older-max="calc(6 * var(--older-h) + 5 * var(--gap))"
       data-keep-scroll="{list}:{id}"
       bind:this={box}
       in:branch={TREE}
@@ -272,45 +284,3 @@
     </ul>
   {/if}
 </Sidebar.MenuSubItem>
-
-<style>
-  /* The disclosure's face: the history glyph, and the spinner it gives way
-     to while its rows are read (the kit's icon swap, at a control's pace). */
-  .older-face {
-    --icon-swap-dur: var(--dur-control);
-  }
-  .older-failed {
-    margin-inline-start: 0.3em;
-    color: var(--status-fail-ink);
-  }
-  /* Six rows at most, scrolling in place. The edges fade only while there
-     is more past them. */
-  .older {
-    --fade: var(--space-4);
-    --gap: calc(var(--tree-gap) / 2);
-    display: flex;
-    flex-direction: column;
-    gap: var(--gap);
-    max-block-size: calc(6 * var(--older-h) + 5 * var(--gap));
-    margin: var(--tree-gap) 0 0;
-    padding: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-width: thin;
-    list-style: none;
-  }
-  .older[data-more-above] {
-    mask-image: linear-gradient(transparent, #000 var(--fade));
-  }
-  .older[data-more-below] {
-    mask-image: linear-gradient(#000 calc(100% - var(--fade)), transparent);
-  }
-  .older[data-more-above][data-more-below] {
-    mask-image: linear-gradient(
-      transparent,
-      #000 var(--fade),
-      #000 calc(100% - var(--fade)),
-      transparent
-    );
-  }
-</style>

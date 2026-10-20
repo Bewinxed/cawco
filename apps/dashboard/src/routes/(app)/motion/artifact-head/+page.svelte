@@ -111,18 +111,14 @@
   </Tabs>
 {/snippet}
 
-<div data-bench-pane class="pane" style:inline-size={`${width}px`}>
+<div
+  data-bench-pane
+  class="h-dvh w-(--pane-w) bg-surface-recess pt-space-2"
+  style:--pane-w={`${width}px`}
+>
   <PreviewPane
     instanceId={INSTANCE}
     ownTab={own}
     switcher={switched ? switcher : undefined}
   />
 </div>
-
-<style>
-  .pane {
-    block-size: 100dvh;
-    padding-block-start: var(--space-2);
-    background: var(--surface-recess);
-  }
-</style>

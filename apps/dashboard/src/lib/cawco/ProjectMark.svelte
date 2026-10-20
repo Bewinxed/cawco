@@ -39,15 +39,6 @@
   switchLabel="{open ? 'Hide' : 'Show'} {name}'s sessions"
 >
   {#snippet face()}
-    <IconFolder aria-hidden="true" class="project-mark-glyph" />
+    <IconFolder aria-hidden="true" class="size-icon-sm" />
   {/snippet}
 </TreeMark>
-
-<style>
-  /* The 12px glyph on the 18px tile: 3px of inset, a mark rather than a
-     glyph in a box. */
-  :global(.project-mark-glyph) {
-    inline-size: 12px;
-    block-size: 12px;
-  }
-</style>

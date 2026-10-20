@@ -1,6 +1,9 @@
 <script lang="ts">
   import { popOut } from "#lib/cawco/motion/pop.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { floatingSurface } from "#lib/components/ui/popover/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
 
   let {
     label,
@@ -15,7 +18,10 @@
     onchange: (value: string) => void;
     multiline?: boolean;
   } = $props();
-  let field = $state<HTMLTextAreaElement | HTMLInputElement>();
+  let textareaField = $state<HTMLTextAreaElement | null>(null);
+  let inputField = $state<HTMLInputElement | null>(null);
+  /** The one field drawn: the textarea when multiline, else the input. */
+  const field = $derived(multiline ? textareaField : inputField);
   const fieldId = $props.id();
   const closingBraces = /^\}\}/;
   let cursor = $state(0);
@@ -105,39 +111,47 @@
   }
 </script>
 
-<div class="template" bind:this={template}>
-  <label for={fieldId}
+<div class="relative" bind:this={template}>
+  <label
+    class="flex flex-col gap-space-2 type-label text-ink-muted"
+    for={fieldId}
     >{label}
     {#if multiline}
-      <textarea
-        class="wf-mono"
+      <Textarea
+        face="mono"
         id={fieldId}
         onclick={() => {
           cursor = field?.selectionStart ?? 0;
         }}
         oninput={changed}
         onkeydown={key}
-        rows="7"
+        rows={7}
+        text="label"
         {value}
-        bind:this={field}></textarea>
+        bind:ref={textareaField}
+      />
     {:else}
-      <input
-        class="wf-mono"
+      <Input
+        face="mono"
         id={fieldId}
         onclick={() => {
           cursor = field?.selectionStart ?? 0;
         }}
         oninput={changed}
         onkeydown={key}
+        text="label"
         {value}
-        bind:this={field}
+        bind:ref={inputField}
       />
     {/if}
   </label>
   {#if matches.length}
     <div
       aria-label="Template paths"
-      class="completer kit-pop"
+      class={floatingSurface({
+        class:
+          "absolute top-full inset-x-0 max-h-c-completer-max-h overflow-y-auto z-(--layer-float)",
+      })}
       data-state="open"
       role="listbox"
       style:transform-origin={origin}
@@ -146,6 +160,7 @@
     >
       {#each matches as path, index (path)}
         <button
+          class="block w-full text-start p-space-2 wrap-anywhere font-(family-name:--font-mono) text-size-label min-h-c-btn-h max-wide:min-h-c-btn-h-lg"
           aria-selected={active === index}
           onclick={() => choose(path)}
           onmousedown={(event) => {
@@ -163,32 +178,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  .template {
-    position: relative;
-  }
-  .completer {
-    position: absolute;
-    top: 100%;
-    inset-inline: 0;
-    max-height: 240px;
-    overflow-y: auto;
-    z-index: 30;
-  }
-  button {
-    display: block;
-    width: 100%;
-    text-align: left;
-    padding: var(--space-2);
-    overflow-wrap: anywhere;
-    font-family: var(--font-mono);
-    font-size: var(--text-label);
-    min-height: 36px;
-  }
-  @media (max-width: 1023px) {
-    button {
-      min-height: 44px;
-    }
-  }
-</style>

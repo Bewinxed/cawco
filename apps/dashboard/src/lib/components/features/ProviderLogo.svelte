@@ -1,3 +1,26 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its size by where it stands (DESIGN.md, Icons, Sizes: "12px beside meta
+      text, 16px in controls and rows (the default for any unsized icon),
+      20px in nav and headers"), and its callers' look: at 80%. A caller
+      never tints a mark, so no look carries a colour. */
+  export const providerLogoVariants = tv({
+    variants: {
+      size: {
+        meta: "size-icon-sm",
+        control: "size-icon-md",
+        nav: "size-icon-lg",
+      },
+      fade: { dim: "opacity-80" },
+    },
+    defaultVariants: { size: "control" },
+  });
+
+  export type ProviderLogoLooks = VariantProps<typeof providerLogoVariants>;
+</script>
+
 <script lang="ts">
   /**
    * A provider's mark, as a passive glyph: the lab behind a model (next to its
@@ -11,9 +34,10 @@
    */
   import type { Component } from "svelte";
   import { providerOf } from "#lib/cawco/models.svelte.js";
+  import { cn } from "#lib/utils.js";
   /*
    * Every mark here is square, and that is a hard requirement rather than a
-   * coincidence: the caller sizes this with one number, so a mark whose viewBox
+   * coincidence: the caller sizes this with one role, so a mark whose viewBox
    * is wider than it is tall gets letterboxed inside that square and lands
    * shorter than the number asked for. The `logos` set is a brand set, not an
    * icon set, and several of its entries are wordmarks — `logos:nvidia` is
@@ -68,27 +92,20 @@
   let {
     model = "",
     provider,
-    size = 16,
+    size,
     class: className = "",
-    style = "",
-  }: {
+    fade,
+  }: ProviderLogoLooks & {
     /** The model id as known on the wire; the provider is read off its name. */
     model?: string;
     /** The provider named outright, for a mark that stands for no model. */
     provider?: string;
-    /** Edge of the square the mark sits in, in px. Every mark here is square.
-        `null` leaves the size to the caller's own CSS. */
-    size?: number | null;
     class?: string;
-    style?: string;
   } = $props();
 
   const key = $derived(provider ?? providerOf(model) ?? "");
   const Logo = $derived(LOGOS[key]);
-  const sized = $derived(size === null ? {} : { width: size, height: size });
-  const box = $derived(
-    size === null ? "" : `width:${size}px;height:${size}px;`
-  );
+  const classes = $derived(cn(providerLogoVariants({ size, fade }), className));
 
   // A `Record` lookup returns the component or `undefined`; that is the signal
   // the caller's own glyph should keep standing. So the whole body is guarded.
@@ -96,38 +113,16 @@
 
 {#if Logo}
   <!--
-    Sized in CSS, not by `width`/`height` alone. Those are presentation
-    attributes, which sit at the bottom of the cascade and lose to any rule that
-    happens to match — and these marks arrive from `unplugin-icons` already
-    carrying `width="1.2em" height="1.2em"`, which every other icon in the app
-    overrides with a `size-*` class. A caller asking for 9px inside a 16px ring
-    cannot afford to be the one place where that silently resolves to `1.2em`
-    instead. The attributes stay for the intrinsic size before CSS applies.
+    Sized by its role's `size-*` class: these marks arrive from
+    `unplugin-icons` carrying `width="1.2em" height="1.2em"`, presentation
+    attributes at the bottom of the cascade, which the class overrides as it
+    does on every other icon in the app.
   -->
   <Logo
-    data-provider-logo-class={className}
+    data-provider-logo-class={classes}
     aria-hidden="true"
-    class={INK.has(key) ? `${className} provider-ink` : className}
-    style={`${box}${style}`}
-    {...sized}
+    data-slot="provider-logo"
+    data-ink={INK.has(key) || undefined}
+    class={INK.has(key) ? cn(classes, "text-ink-strong") : classes}
   />
 {/if}
-
-<style>
-  /* The ink is the mark's `color`, and its shapes fill with `currentColor`.
-     `--ink-strong` is a `light-dark()` value, and WebKit resolved that
-     function wrongly inside an SVG `fill` (bugs.webkit.org 283489), which
-     left these marks in the light theme's ink on the dark ground. `color`
-     takes the same token the way every line of text does. The descendants
-     too: `github-icon` sets its fill on the path, and a presentation
-     attribute loses to any rule that matches. A caller never tints a mark,
-     so a row that colours its own icons (`.row svg.lead` on the clone field)
-     must not reach this one: the ink is declared over any such rule. */
-  :global(svg.provider-ink) {
-    color: var(--ink-strong) !important;
-  }
-  :global(svg.provider-ink),
-  :global(svg.provider-ink *) {
-    fill: currentColor;
-  }
-</style>

@@ -92,39 +92,21 @@
 <span
   data-slot="mark"
   aria-hidden="true"
-  class="mark"
+  class="caw-mark-face relative inline-block size-(--side) pointer-events-none select-none"
   data-box
+  data-playing={playing || undefined}
   style:--bleed="{CAW_STILL_BLEED}px"
   style:--side="{size}px"
-  class:playing
 >
+  <!-- His face is drawn and ready under the clip, unseen until it lands:
+       `caw-mark-face` hides it while `data-playing`. -->
   <CawFace {size} {status} />
   {#if playing}
-    <canvas {@attach enter}></canvas>
+    <canvas
+      class="absolute inset-(--canvas-inset) size-(--canvas-side)"
+      style:--canvas-inset="calc(var(--bleed) * -1)"
+      style:--canvas-side="calc(var(--side) + 2 * var(--bleed))"
+      {@attach enter}
+    ></canvas>
   {/if}
 </span>
-
-<style>
-  .mark {
-    position: relative;
-    display: inline-block;
-    inline-size: var(--side);
-    block-size: var(--side);
-    pointer-events: none;
-    user-select: none;
-
-    & > :global(.face) {
-      display: block;
-    }
-    /* His face is drawn and ready under the clip, unseen until it lands. */
-    &.playing > :global(.face) {
-      visibility: hidden;
-    }
-  }
-  canvas {
-    position: absolute;
-    inset: calc(var(--bleed) * -1);
-    inline-size: calc(var(--side) + 2 * var(--bleed));
-    block-size: calc(var(--side) + 2 * var(--bleed));
-  }
-</style>

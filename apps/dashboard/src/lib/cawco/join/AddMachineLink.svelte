@@ -11,35 +11,9 @@
 
 <button
   aria-haspopup="dialog"
-  class="add-link"
+  class="inline rounded-xs border-none border-current bg-transparent p-0 text-link-ink underline decoration-transparent underline-offset-(--space-1) transition-[text-decoration-color] duration-(--dur-control) ease-out hover:decoration-current focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-2"
   onclick={() => addMachine.show()}
   type="button"
 >
   {@render children()}
 </button>
-
-<style>
-  .add-link {
-    display: inline;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: var(--link-ink);
-    font: inherit;
-    text-decoration: underline;
-    text-decoration-color: transparent;
-    text-underline-offset: 3px;
-    cursor: pointer;
-    transition: text-decoration-color var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .add-link:hover {
-      text-decoration-color: currentColor;
-    }
-  }
-  .add-link:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: 2px;
-  }
-</style>

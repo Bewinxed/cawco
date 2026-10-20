@@ -4,9 +4,9 @@ This is a literal record of the New Session form's implementation contracts as b
 
 ## 1. Mounting
 
-- The form is one component, `NewSessionForm` (its logic, markup and styles, the frame's `.session-card` and `.session-scrim` included), rendered by two frames the Shell mounts (`new-session.svelte.ts` `spawning`, `newSession`): `NewSessionDialog` for an opener with no trigger and every Continue, and `NewSessionPopover` for one that passes its trigger (`newSession(prefill, anchor)`: the session strip's "+", a project's Spin off, Fork from here). The form takes `open` and `onclose`, with optional `prefill`, `continueFrom`, `restore` and `onexitcontinue`; a frame calls its exported `close()` when dismissed and `escapeStep()` on Esc, and an anchored frame `focusPrompt()` as it opens.
-- `NewSessionDialog`, above 640px, is a bits-ui dialog: `<Dialog onOpenChange={dismissed} {open}>` around a `DialogPortal` holding `DialogPrimitive.Overlay` (the scrim) and raw `DialogPrimitive.Content` (the card). At 640px and below (`mobile = new MediaQuery("(max-width: 640px)")`) it is the kit Drawer (vaul) with the same wiring. `NewSessionPopover`, above 640px, is the kit popover at its trigger, `c-new-session-pop-w` wide (568px: the narrowest the form's own rows hold one line at, probe-kit `strip-new-session`), capped at the room under the trigger; it recesses (`bg-(--surface-recess)`) under the form's raised body, as the dialog's card does. At 640px and below it is `NewSessionDialog`'s sheet.
-- The primitives own focus trapping, dismissal and scroll locking; do not replace them with an in-flow conditional container. Both prevent automatic focus. With no trigger the card takes the focus on open and returns it to `opener` on close (`NewSessionDialog.svelte` `takeFocus`, `giveFocusBack`); from a trigger the prompt takes it and it returns to the trigger. The scrim is fixed at z-index 80 and the card at 81.
+- The form is one component, `NewSessionForm` (its logic and markup; its frames draw the card and the scrim), rendered by two frames the Shell mounts (`new-session.svelte.ts` `spawning`, `newSession`): `NewSessionDialog` for an opener with no trigger and every Continue, and `NewSessionPopover` for one that passes its trigger (`newSession(prefill, anchor)`: the session strip's "+", a project's Spin off, Fork from here). The form takes `open` and `onclose`, with optional `prefill`, `continueFrom`, `restore` and `onexitcontinue`; a frame calls its exported `close()` when dismissed and `escapeStep()` on Esc, and an anchored frame `focusPrompt()` as it opens.
+- `NewSessionDialog`, above 640px, is a bits-ui dialog: `<Dialog onOpenChange={dismissed} {open}>` around a `DialogPortal` holding `DialogPrimitive.Overlay` (the scrim) and raw `DialogPrimitive.Content` (the card). At 640px and below (`mobile = new MediaQuery("(max-width: 640px)")`) it is the kit Drawer (vaul) with the same wiring. `NewSessionPopover`, above 640px, is the kit popover at its trigger, `c-new-session-pop-w` wide (569px: the narrowest the form's own rows hold one line at, probe-kit `strip-new-session`), capped at the room under the trigger (the kit popover's `width="room"` and `height="room"`); it recesses (its `look="new-session"`, `surface-recess`) under the form's raised body, as the dialog's card does. At 640px and below it is `NewSessionDialog`'s sheet.
+- The primitives own focus trapping, dismissal and scroll locking; do not replace them with an in-flow conditional container. Both prevent automatic focus. With no trigger the card takes the focus on open and returns it to `opener` on close (`NewSessionDialog.svelte` `takeFocus`, `giveFocusBack`); from a trigger the prompt takes it and it returns to the trigger. The scrim and the card stand fixed on the float layer (`--layer-float`), the card after the scrim.
 - On desktop the card tweens to its new height whenever its body changes, through `morph()` (`NewSessionDialog.svelte` `resize`); the popover's is the kit popover's own; the phone sheet's height is the kit drawer's.
 - Every chip popover in the form shares one portaled bits-ui surface, `NsPopoverGroup` (Form's `<NsPopoverGroup>`; `NsPopoverGroup.svelte`): opening a sibling glides the surface to the new trigger instead of closing one popover and opening another. `NsPopover` is the trigger and, outside a group, its own portaled popover. Popovers sit at z-index 90 (`ns-theme.css` `.ns-theme.ns-pop`).
 - The dialog's motion was first tuned with DialKit (commit `07a1782a`) on an authoring route. That route and the `dialkit` dependency are gone: `routes/motion/new-session/+page.svelte` only opens the Shell's dialog (`newSession`). The tuned motion lives in CSS and root tokens (§4).
@@ -27,45 +27,23 @@ This is a literal record of the New Session form's implementation contracts as b
 
 ### Desktop geometry
 
-Form's styles fix the dialog's card (`:global(.session-card…)`):
+`NewSessionDialog`'s card (`DialogPrimitive.Content`, `data-session-card`) stands centred and fixed on the float layer, a flex column, its origin centred, with no outline: `inset-0 m-auto h-fit`, `w-(--card-w)` (`min(var(--c-new-session-w), 100vw - 1.5 × --space-8)`: 980px, 48px clear) capped at `max-h-(--card-max-h)` (`100dvh - 1.5 × --space-8`), on `bg-surface-recess` at `rounded-lg`, `p-space-2` in, under `shadow-modal`.
 
-```css
-:global(.session-card:not([data-vaul-drawer])) {
-  inset: 0;
-  margin: auto;
-  width: min(980px, 100vw - 48px);
-  height: fit-content;
-  max-height: calc(100dvh - 48px);
-  background: var(--surface-recess);
-  border-radius: var(--radius-lg);
-  padding: var(--space-2);
-  box-shadow: var(--shadow-modal);
-}
-:global(.session-card) {
-  position: fixed;
-  z-index: 81;
-  display: flex;
-  flex-direction: column;
-  outline: none;
-  transform-origin: center;
-}
-```
-
-- The head and the footer are `flex: none`; the body between them is `flex: 0 1 auto; min-height: 0; overflow: auto`, so a capped card or popover scrolls its body and keeps Close and Start in view (Form `.body`; `SessionFooter.svelte` `.footer`). The body's flex basis must stay `auto`: a zero basis collapsed the card to its padding in WebKit.
+- The head and the footer are `flex: none`; the body between them is `flex: 0 1 auto; min-height: 0; overflow: auto`, so a capped card or popover scrolls its body and keeps Close and Start in view (Form `[data-slot="body"]`; `SessionFooter.svelte`). The body's flex basis must stay `auto`: a zero basis collapsed the card to its padding in WebKit.
 - The body carries the house edge fade, `.kit-edge-fade-block` (Form `[data-slot="body"]`; `app.css` `.kit-edge-fade-block`): while it scrolls, the edge with more behind it fades over `--fade-len`, and a body that fits fades neither. macOS hides overlay scrollbars, so this edge is the capped form's one sign that it scrolls.
-- The model panel is ModelSection's `.picker`. No global rule may style that bare class: Config's PickerChip once did (`:global(.picker)`), and once Config had loaded it the panel came out 32px tall, its rail centred against the list, and pressed to `--press-scale` by any press inside it. PickerChip's trigger is `.picker-chip`.
+- The model panel is ModelSection's `[data-slot="picker"]`. No global rule may style it: Config's PickerChip once styled a bare `.picker`, and once Config had loaded the panel came out 32px tall, its rail centred against the list, and pressed to `--press-scale` by any press inside it.
 - Scrolling the body closes an open popover rather than leaving it detached from its chip (Form `bodyScroll`).
-- The reading line under the composer reserves one line (`min-height: 16px`), never wraps, and ellipsizes, so a message never changes the card's height; it shows a non-breaking space when empty (Form `.reading`). A move's line takes two (`.reading.two`), its height following through `readingMorph`.
+- The reading line under the composer reserves one line (`min-height: 16px`), never wraps, and ellipsizes, so a message never changes the card's height; it shows a non-breaking space when empty (Form's reading line). A move's line takes two (`data-two`), its height following through `readingMorph`.
 - The prompt editor is a contenteditable whose height is 44px at rest and 120px while focused, filled or showing its `@`/`/` menu, eased over `--ns-prompt-ms` (`PromptEditor.svelte`). On phones it is a fixed 120px with no transition.
-- The composer chips are 30px and wrap; on a coarse pointer their rows open to 14px apart so every chip's touch area reaches 44px (Form `.chips`).
-- Start keeps a 96px minimum width and the footer stays right-aligned (`SessionFooter.svelte` `.footer`).
+- The composer chips are 30px and wrap; on a coarse pointer their rows open to 14px apart so every chip's touch area reaches 44px (Form `[data-slot="chips"]`).
+- Start keeps a 96px minimum width and the footer stays right-aligned (`SessionFooter.svelte`).
 
 ### Popover containment
 
 - Popovers are portaled, so opening one never inserts height into the form. The shared surface is anchored below its trigger with `side="bottom"`, `sideOffset={6}` and `collisionPadding={8}` (`NsPopoverGroup.svelte`; `NsPopover.svelte`).
 - The surface caps its width at `min(var(--ns-pop-width, 320px), calc(100vw - 32px))` and its height at `min(440px, var(--bits-popover-content-available-height))`, scrolls inside, and lays its content in one `minmax(0, 1fr)` column so a wide row shrinks rather than overflows (`ns-theme.css` `.ns-theme.ns-pop`). While it glides between triggers its content sits in a measured block whose height tweens, clipped with a 4px margin so focus rings survive (`NsPopoverGroup.svelte`; `ns-theme.css` `.ns-panel-set`).
 - On phones a popover stays anchored to its chip, wider and shorter: `calc(100vw - 24px)` by `min(420px, 55dvh, available height)`, with 44px buttons (`ns-theme.css`, its 640px rule).
-- The model list is part of the form, not a popover: a fixed 300px list that scrolls vertically only, so the swap's 18px sideways slide never flashes a horizontal scrollbar (`ModelSection.svelte` `.list`). Model names and metadata stay on one line and ellipsize.
+- The model list is part of the form, not a popover: a fixed 300px list that scrolls vertically only, so the swap's 18px sideways slide never flashes a horizontal scrollbar (`ModelSection.svelte` `[data-slot="list"]`). Model names and metadata stay on one line and ellipsize.
 
 ### Mobile bottom sheet and keyboard containment
 
@@ -84,11 +62,11 @@ width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resi
 
 Durations, curves and scales are root tokens (`design/tokens/cawco.tokens.json`, built into `lib/tokens/tokens.css`): `--ease-out` `cubic-bezier(0.23, 1, 0.32, 1)`, `--ease-in-out` `cubic-bezier(0.77, 0, 0.175, 1)`, `--ease-drawer` `cubic-bezier(0.32, 0.72, 0, 1)`, `--dur-ghost` 80ms, `--dur-control` 120ms, `--dur-toggle` and `--dur-exit` 160ms, `--dur-morph` 180ms, `--dur-fade` 200ms, `--dur-pop` 260ms, `--dur-panel` 280ms, `--press-scale` 0.97, `--pop-scale` 0.92, `--pop-rise` 8px. The form's own names for them are the `--ns-*-ms` in `ns-theme.css` `.ns-theme`.
 
-- Scrim: z-index 80, `--scrim` with `--scrim-blur` (Form `:global(.session-scrim)`); fades in with `ns-scrim` over `--dur-panel` on `--ease-out` and out with `ns-scrim-out` over `--dur-exit`.
+- Scrim: on the float layer, `bg-scrim` with `--scrim-blur` (`NewSessionDialog.svelte` `data-slot="session-scrim"`); fades in with `ns-scrim` over `--dur-panel` on `--ease-out` and out with `ns-scrim-out` over `--dur-exit`.
 - Card (desktop dialog): enters with `ns-panel`, opacity 0 and `translateY(6px)` to rest, over `--dur-panel` on `--ease-out` (`ns-theme.css` `@keyframes ns-panel`); leaves with `ns-panel-out` to `translateY(6px) scale(var(--press-scale))` and opacity 0 over `--dur-exit` (Form `@keyframes ns-panel-out`).
-- Popover (desktop, from a trigger): the kit popover's own (`app.css` `.kit-pop`, DESIGN.md's popover motion), from the trigger's side `--pop-rise` off and `--pop-scale` small, over `--dur-pop` on `--ease-drawer`, and back over `--dur-exit`, scrubbed by probe-kit `strip-new-session`.
+- Popover (desktop, from a trigger): the kit popover's own (ui/popover's content, DESIGN.md's popover motion), from the trigger's side `--pop-rise` off and `--pop-scale` small, over `--dur-pop` on `--ease-drawer`, and back over `--dur-exit`, scrubbed by probe-kit `strip-new-session`.
 - Card (phones): the kit Drawer's sheet, leaving over `--dur-exit` on `--ease-out` with its scrim instead of vaul's 500ms slide (Form, its 640px rule).
-- Sections arrive with `ns-in` (opacity 0, `translateY(8px)`; `ns-theme.css` `@keyframes ns-in`) over `--dur-pop` on `--ease-out`, delayed by `--delay` (Form `.sec`): the prompt at 0ms, then 60ms and 80ms (each `.sec`'s `--delay`).
+- Sections arrive with `ns-in` (opacity 0, `translateY(8px)`; `ns-theme.css` `@keyframes ns-in`) over `--dur-pop` on `--ease-out`, delayed by `--delay` (Form's sections, `animate-ns-sec`): the prompt at 0ms, then 60ms and 80ms (each section's `--delay`).
 - Leaving for the new session: `exitTo` hands the Start button's place (`data-share="session:new"`, `SessionFooter.svelte`) to the new session's tab and closes the form before navigating, so its exit plays over the page arriving.
 - Popovers: enter with `ns-pop-in` from `--pop-scale` and `--pop-rise` over `--dur-pop` on `--ease-drawer`, leave with `ns-pop-out` to `--pop-scale` over `--dur-exit`, and glide between sibling triggers on `--dur-pop`/`--ease-drawer` (`ns-theme.css` `@keyframes ns-pop-in`, `ns-pop-out`, `.ns-theme.ns-pop`). A retargeted surface fades its new content in over `--dur-morph` after 60ms (`NsPopoverGroup.svelte`).
 - Popover rows enter with `ns-in` over `--ns-row-ms` (`--dur-fade`) at these staggers (each row's `--delay`): harness tabs `i * 30ms` (`ModelSection.svelte`); permission rows `i * 35ms` (`PermissionSection.svelte`); lifetime rows `index * 35ms` (`LifetimeChip.svelte`); project rows `index * 35ms`, then the add row at 110ms (`ProjectChip.svelte`); machine rows `80 + index * 45ms`, then the add row at 140ms (`MachinesChip.svelte`); the location override at 40ms (`LocationSection.svelte`).
@@ -99,7 +77,7 @@ Durations, curves and scales are root tokens (`design/tokens/cawco.tokens.json`,
 
 ### Reduced motion
 
-- Every `ns-*` animation runs only under `prefers-reduced-motion: no-preference`: the card and scrim and the sections (Form's styles), `.ns-in`, `.ns-check` and `.ns-panel` (`ns-theme.css`), the popover entrance, exit and glide (`ns-theme.css`), and the lifetime and project swap marks (`LifetimeChip.svelte`; `ProjectChip.svelte`). The phone sheet's own vaul transitions are cut by `prefers-reduced-motion: reduce` (Form's last rule). The trigger popover runs its fade alone (`app.css` `.kit-pop`).
+- Every `ns-*` animation runs only under `prefers-reduced-motion: no-preference`: the card and scrim and the sections (their `motion-safe:` utilities), `.ns-in`, `.ns-check` and `.ns-panel` (`ns-theme.css`), the popover entrance, exit and glide (`ns-theme.css`), and the lifetime and project swap marks (`LifetimeChip.svelte`; `ProjectChip.svelte`). The phone sheet's own vaul transitions are cut by `prefers-reduced-motion: reduce` (the drawer's `look="new-session"`). The trigger popover runs its fade alone (ui/popover's content).
 - The model swap returns `animation: none` for every row when motion is reduced (`motion/list-swap.svelte.ts`, `rowAnim`/`leaveAnim`), and a retargeted popover's content fade has zero duration (`NsPopoverGroup.svelte`).
 
 ## 5. Submission
@@ -155,14 +133,14 @@ its motion durations (`--ns-*-ms`) stay in `ns-theme.css`.
 
 ## Must-Keep Checklist
 
-- Keep the controlled bits-ui dialog on desktop and the kit Drawer on phones, both dismissing through the form's `close()`, the portal, raw content primitive, focus handling, and the scrim/card z-indexes. `NewSessionDialog.svelte`; Form `.session-card`, `.session-scrim`.
+- Keep the controlled bits-ui dialog on desktop and the kit Drawer on phones, both dismissing through the form's `close()`, the portal, raw content primitive, focus handling, and the scrim and card on the float layer. `NewSessionDialog.svelte` (`data-session-card`, `data-slot="session-scrim"`).
 - Keep the popover at its trigger `c-new-session-pop-w` wide, capped at the room under it, recessed under the raised body, the prompt taking the focus and the trigger getting it back. `NewSessionPopover.svelte`.
 - Keep the `submission` generation increment on close and cleanup, and the current-generation checks after every asynchronous step. Form `submission`, `current`, `close`.
 - Keep the open-reset boundary: restore only harness and permission mode (and a failed continuation's own draft); keep the first prompt in the draft store only until close. Form's `open` effect, `keptDraft`.
 - Keep `cawco-spawn-prefs` and `cawco-models:use` as separate stores, each written only after an actual spawn. `spawnPrefs.svelte.ts` `rememberSpawn`; `modelUse.svelte.ts` `recordModelUse`.
 - Keep empty model and effort omitted from the payload while the effort chip shows the model's default. Form `spawnOne`, `effortShown`.
 - Keep the change to an installed harness whenever the first machine changes. Form's `lastMachine` effect.
-- Keep the `min(980px, 100vw - 48px)` centred card capped at `100dvh - 48px`, the fixed head and footer around a shrinking scrolling body, the one-line reading slot, and the 96px Start. Form `.session-card`, `.body`, `.reading`; `SessionFooter.svelte` `.footer`.
+- Keep the `min(980px, 100vw - 48px)` centred card capped at `100dvh - 48px`, the fixed head and footer around a shrinking scrolling body, the one-line reading slot, and the 96px Start. `NewSessionDialog.svelte`'s card; Form `[data-slot="body"]` and its reading line; `SessionFooter.svelte`.
 - Keep popovers portaled on one shared surface, constrained by collision padding, width and available height, with measured height tweens; keep the model list a fixed 300px vertical scroller. `NsPopoverGroup.svelte`; `ns-theme.css` `.ns-theme.ns-pop`; `ModelSection.svelte` `.list`.
 - Keep the visual-viewport sheet, safe-area padding, 44px coarse-pointer targets, and anchored phone popovers. Form's 640px rule; `ns-theme.css`; `SessionFooter.svelte`.
 - Keep canonical model IDs and names, `[1m] -> " · 1M"`, aliases only for search, and New -> Recent -> All -> Typed ordering. `model-entries.ts`.

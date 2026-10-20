@@ -19,6 +19,10 @@
    * It unfolds and folds on its own `{#if}` (motion/fold, `unfold`): mounted
    * already holding a fault (a list row arriving), it stands still and the
    * list's own motion carries it.
+   *
+   * `indent` and `end`: where its words start and stop, to line up with the
+   * row above (`--fault-indent`, `--fault-end`); a host that sets those for
+   * every row inside it passes neither.
    */
   import { configureWords } from "@cawco/core";
   import type { Snippet } from "svelte";
@@ -36,6 +40,8 @@
     class: className,
     children,
     details,
+    indent,
+    end,
     ...rest
   }: {
     /** Why it did not go; nothing is drawn while it is empty. */
@@ -49,6 +55,10 @@
     class?: string;
     /** A fault that says itself, in place of the reason line. */
     children?: Snippet;
+    /** Its words' inline-start inset: a space token or a calc() of tokens. */
+    indent?: string;
+    /** Its words' inline-end inset: a space token or a calc() of tokens. */
+    end?: string;
     [attribute: `data-${string}`]: unknown;
   } = $props();
 
@@ -88,21 +98,32 @@
   <div
     data-slot="row-fault"
     data-row-fault
-    class={cn("row-fault", className)}
+    class={cn("min-w-0", className)}
+    style:--fault-indent={indent}
+    style:--fault-end={end}
     {...rest}
     transition:unfold
   >
     {#if children}
       {@render children()}
     {:else}
-      <div class="line">
-        <p data-slot="reason" class="reason" role="alert">{said}</p>
+      <div
+        class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 ps-(--fault-indent) pe-(--fault-end) py-space-1"
+      >
+        <p
+          data-slot="reason"
+          class="m-0 min-w-0 flex-initial type-meta text-(--reason-ink) wrap-anywhere"
+          role="alert"
+          style:--reason-ink="var(--fault-ink, var(--status-fail-ink))"
+        >
+          {said}
+        </p>
         {#if details}
           <Button
             data-details
             aria-controls={detailsId}
             aria-expanded={shown}
-            class="again"
+            class="flex-none"
             label={shown ? "Hide details" : "Show details"}
             onclick={() => {
               shown = !shown;
@@ -114,7 +135,7 @@
         {#if again}
           <Button
             data-again
-            class="again"
+            class="flex-none"
             icon={IconRefresh}
             label={againLabel}
             onclick={tryAgain}
@@ -126,54 +147,15 @@
         {/if}
       </div>
       {#if details && shown}
-        <p id={detailsId} data-slot="details" class="details" transition:unfold>
+        <p
+          id={detailsId}
+          data-slot="details"
+          class="m-0 ps-(--fault-indent) pe-(--fault-end) pb-space-1 type-meta font-mono whitespace-pre-wrap wrap-anywhere text-ink-muted"
+          transition:unfold
+        >
           {details}
         </p>
       {/if}
     {/if}
   </div>
 {/if}
-
-<style>
-  /* One line under the row, from where the row's words start (the caller
-     sets --fault-indent to its mark's column): the reason in the fail
-     status's ink (or the caller's --fault-ink, where nothing failed), the
-     way on beside it, wrapping under it when narrow. */
-  .row-fault {
-    min-width: 0;
-  }
-  .line {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    column-gap: var(--space-2);
-    row-gap: var(--space-1);
-    padding-block: var(--space-1);
-    padding-inline: var(--fault-indent, 0) var(--fault-end, 0);
-    min-width: 0;
-  }
-  .reason {
-    flex: 0 1 auto;
-    min-width: 0;
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--fault-ink, var(--status-fail-ink));
-    overflow-wrap: anywhere;
-  }
-  .line > :global(.again) {
-    flex: none;
-  }
-  /* What refused it, word for word: under the line, from where its words
-     start, in the figure face and the muted ink, a long machine path
-     wrapping anywhere rather than running past the row. */
-  .details {
-    margin: 0;
-    padding-inline: var(--fault-indent, 0) var(--fault-end, 0);
-    padding-block-end: var(--space-1);
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    color: var(--ink-muted);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-</style>

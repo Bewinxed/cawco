@@ -17,6 +17,7 @@
     times,
   } from "#lib/cawco/rules.js";
   import { toast } from "#lib/cawco/toasts.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
@@ -195,8 +196,8 @@
         >
           {#snippet badge()}
             {#if row.stats.pending > 0}
-              <span data-slot="num" class="waiting num"
-                >{row.stats.pending} waiting</span
+              <Badge data-slot="num" variant="attn"
+                ><span>{row.stats.pending} waiting</span></Badge
               >
             {/if}
           {/snippet}
@@ -211,14 +212,3 @@
     </RowList>
   {/if}
 </SectionFrame>
-
-<style>
-  .waiting {
-    flex: none;
-    padding: 1px 6px;
-    border-radius: var(--radius-xs);
-    background: var(--status-attn-bg);
-    font: var(--type-label);
-    color: var(--status-attn-ink);
-  }
-</style>

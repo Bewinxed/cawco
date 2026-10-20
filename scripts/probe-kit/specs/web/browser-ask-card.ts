@@ -48,6 +48,7 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply } from "../../../scratch-fleet";
 import {
+  buttonNames,
   COMPOSER,
   type Kit,
   open,
@@ -181,10 +182,6 @@ const measure = () => {
     fills: [takeStyle.backgroundColor, denyStyle.backgroundColor],
     edges: [takeStyle.borderColor, denyStyle.borderColor],
     inks: [takeStyle.color, denyStyle.color],
-    labels: [
-      take.textContent?.replace(/\s+/g, " ").trim() ?? "",
-      deny.textContent?.replace(/\s+/g, " ").trim() ?? "",
-    ],
     originFace: { family: originStyle.fontFamily, size: originStyle.fontSize },
     codeFace,
     sideways:
@@ -365,6 +362,28 @@ const pageWithAsk = async (
  * transitions and animations began on it since {@link countCardRuns}. Null
  * where no card is on the page.
  */
+/** One button's accessible name, its words or its pending words, never both. */
+const nameOf = async (page: Page, selector: string) =>
+  (
+    await buttonNames(page.locator(selector).first()).catch(
+      () => [] as string[]
+    )
+  ).at(0) ?? "";
+
+/** The composer's card as {@link measure} reads it, with Take over's and Deny's accessible names. */
+const readCard = async (page: Page) => {
+  const card = await page.evaluate(measure);
+  return card
+    ? {
+        ...card,
+        labels: [
+          await nameOf(page, '[data-slot="ask"] [data-browser-take]'),
+          await nameOf(page, '[data-slot="ask"] [data-browser-deny]'),
+        ],
+      }
+    : null;
+};
+
 const cardDrawn = () => {
   const card = document.querySelector<HTMLElement>('[data-slot="ask"]');
   if (!card) {
@@ -426,7 +445,7 @@ const cardDrawn = () => {
     ?.getBoundingClientRect();
   const surfaces = [
     ...document.querySelectorAll<HTMLElement>(
-      '[data-slot="grown-halo"], .grown-drop'
+      '[data-slot="grown-halo"], [data-slot="grown-drop"]'
     ),
   ].map((node) => {
     const r = node.getBoundingClientRect();
@@ -502,7 +521,7 @@ async function rest(
   const reason = REASONS[which];
   const { page, sent } = await pageWithAsk(kit, view, id, reason, requestId);
   await cardUp(page, base, id);
-  const card = await page.evaluate(measure);
+  const card = await readCard(page);
   if (!card) {
     kit.check(`${label}: the card is up`, false, "no card");
     await page.close();
@@ -563,7 +582,7 @@ async function rest(
   const field = page.locator(`${CARD} [data-other]`);
   await field.waitFor();
   await settle(page);
-  const after = await page.evaluate(measure);
+  const after = await readCard(page);
   const named = await field.evaluate((node) => ({
     name: node.getAttribute("aria-label"),
     placeholder: node.getAttribute("placeholder"),
@@ -626,7 +645,7 @@ async function taking(
   await cardUp(held.page, base, id);
   await held.page.locator(`${CARD} [data-browser-take]`).click();
   await held.page.waitForTimeout(300);
-  const pending = await held.page.evaluate(measure);
+  const pending = await readCard(held.page);
   const take = held.posted.find((one) => one.url.includes("/takeover"));
   kit.check(
     `${name}: Take over posts /api/browsers/<key>/takeover with the ask's request id and machine, and reads "Taking over…" while it is out`,
@@ -654,7 +673,7 @@ async function taking(
     { take: "refused" }
   );
   await cardUp(refused.page, base, id);
-  const before = await refused.page.evaluate(measure);
+  const before = await readCard(refused.page);
   // Watched from the press through the check's hold: a refused take-over
   // never raises the success check.
   const ticked = refused.page.evaluate(
@@ -666,7 +685,9 @@ async function taking(
           const button = document.querySelector(
             '[data-slot="ask"] [data-browser-take]'
           );
-          const cell = button?.querySelector(".kit-tick")?.parentElement;
+          const cell = button?.querySelector(
+            'svg[data-slot="tick"]'
+          )?.parentElement;
           if (
             cell?.getAttribute("data-active") === "true" &&
             getComputedStyle(cell).opacity !== "0"
@@ -692,7 +713,7 @@ async function taking(
     String(tickSeen)
   );
   await settle(refused.page);
-  const after = await refused.page.evaluate(measure);
+  const after = await readCard(refused.page);
   const words = (await line.textContent())?.trim() ?? "";
   kit.check(
     `${name}: a refused take-over reads "${words}" and the peers do not move`,
@@ -772,7 +793,7 @@ async function needs(
   await approve.waitFor();
   await page.waitForTimeout(600);
   await settle(page);
-  const row = await page.evaluate(() => {
+  const drawnRow = await page.evaluate(() => {
     const take = document.querySelector<HTMLElement>(
       "[data-glass-card-frame] [data-approve]"
     );
@@ -809,8 +830,6 @@ async function needs(
       ? [...origin.querySelectorAll<HTMLElement>("[data-origin-label]")]
       : [];
     return {
-      take: take.textContent?.replace(/\s+/g, " ").trim() ?? "",
-      deny: deny.textContent?.replace(/\s+/g, " ").trim() ?? "",
       meta,
       gap: Math.round((t.left - d.right) * 10) / 10,
       order: d.right <= t.left,
@@ -828,6 +847,14 @@ async function needs(
       ),
     };
   });
+  // Take over's and Deny's words by their accessible names.
+  const row = drawnRow
+    ? {
+        ...drawnRow,
+        take: await nameOf(page, "[data-glass-card-frame] [data-approve]"),
+        deny: await nameOf(page, "[data-glass-card-frame] [data-deny]"),
+      }
+    : null;
   kit.check(
     `${name} Needs you: the row names the site, ${row?.origin}, in code type (${row?.originFamily.split(",")[0]}), each label on one line`,
     row?.origin === ORIGIN &&

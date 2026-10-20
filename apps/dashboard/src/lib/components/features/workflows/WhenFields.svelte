@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { WorkflowWhen } from "@cawco/core";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { NativeSelect } from "#lib/components/ui/native-select/index.js";
   import JsonField from "./JsonField.svelte";
 
   let {
@@ -12,8 +14,9 @@
   } = $props();
 </script>
 
-<label
-  >When<select
+<label class="flex flex-col gap-space-2 type-label text-ink-muted"
+  >When<NativeSelect
+    class="w-full"
     onchange={(event) =>
       onchange(
         event.currentTarget.value === "always"
@@ -24,19 +27,26 @@
   >
     <option value="always">Always</option>
     <option value="condition">Condition</option>
-  </select></label
+  </NativeSelect></label
 >
 {#if value}
   <!-- The condition's fields open and fold as one: the rows below slide. -->
-  <div data-slot="when" class="when" in:unfold out:unfold>
-    <label
-      >Path<input
+  <!-- One item of the column it sits in, spacing its own fields the same. -->
+  <div
+    data-slot="when"
+    class="flex flex-col min-w-0 gap-inherit"
+    in:unfold
+    out:unfold
+  >
+    <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+      >Path<Input
         oninput={(event) =>
           value && onchange({ ...value, path: event.currentTarget.value })}
         value={value.path}
       /></label
-    ><label
-      >Operator<select
+    ><label class="flex flex-col gap-space-2 type-label text-ink-muted"
+      >Operator<NativeSelect
+        class="w-full"
         onchange={(event) =>
           value &&
           onchange({
@@ -48,10 +58,15 @@
         {#each ["eq", "neq", "gt", "lt", "contains", "matches", "truthy", "falsy"] as op (op)}
           <option>{op}</option>
         {/each}
-      </select></label
+      </NativeSelect></label
     >
     {#if value.op !== "truthy" && value.op !== "falsy"}
-      <div data-slot="when" class="when" in:unfold out:unfold>
+      <div
+        data-slot="when"
+        class="flex flex-col min-w-0 gap-inherit"
+        in:unfold
+        out:unfold
+      >
         <JsonField
           label="Compare with (JSON)"
           onchange={(next) => value && onchange({ ...value, value: next })}
@@ -61,13 +76,3 @@
     {/if}
   </div>
 {/if}
-
-<style>
-  /* One item of the column it sits in, spacing its own fields the same. */
-  .when {
-    display: flex;
-    flex-direction: column;
-    gap: inherit;
-    min-width: 0;
-  }
-</style>

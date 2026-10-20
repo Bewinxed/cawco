@@ -59,7 +59,7 @@
     | TailNote;
 
   /** A failed call's glyph ink, the transcript's (ToolGroup `.glyph.err`). */
-  const FAILED_INK = "text-[var(--data-bad)]";
+  const FAILED_INK = "text-data-bad";
 
   /** Rows on screen, the height of the tail; one row's height, in px. */
   const SLOTS = 6;
@@ -148,9 +148,15 @@
               lead: "Hand-off from",
               name: meta.peerName ?? "",
             };
-      default:
-        return null;
+      case "result.success":
+      case "send.ref":
+      case "tool.progress":
+      case "tool.result":
+      case "user.delegate_ask":
+      case "user":
+        break;
     }
+    return null;
   }
 
   const branch = $derived(cawco.session(instanceId));
@@ -312,16 +318,22 @@
   }
 </script>
 
+<!-- As high as its rows, six at most, the top 24px dissolving once it is
+     full: a row leaving at the top fades out through the mask as the stack
+     lifts. The stack stands on the tail's foot and spills over its top, in
+     the flow, so the widest row is the tail's width (the panel sizes to it). -->
 <div
-  class="tail"
+  class="flex flex-col justify-end h-(--tail-h) overflow-hidden text-ink-strong data-full:mask-(--tail-fade)"
   style:--row="{ROW}px"
   style:--slots={slots}
-  class:full={shown.length >= SLOTS}
+  style:--tail-h="calc(var(--row) * var(--slots))"
+  style:--tail-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--row))"}
+  data-full={shown.length >= SLOTS || undefined}
 >
   {#if shown.length}
     <div
       data-slot="column"
-      class="column"
+      class="flex-none flex flex-col"
       bind:this={column}
       in:fade={{ duration: dur("--dur-control"), easing: easeOut }}
     >
@@ -329,34 +341,62 @@
         {@const row = dataOf(key)}
         <div
           data-slot="row"
-          class="row mark-line {row?.kind ?? ''}"
+          class="mark-line flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap kind-ask:text-status-attn-ink kind-asked:text-ink-muted kind-fail:text-status-fail-ink"
           data-delegate-tail-kind={row?.kind}
+          data-kind={row?.kind}
         >
           {#if row?.kind === "tool"}
             {@const Icon = row.icon}
-            <span class="ic {row.color}" class:breathe={row.live} data-box
-              ><Icon /></span
+            <span
+              class="flex-none size-icon-md grid place-items-center {row.color}"
+              data-breathe={row.live || undefined}
+              data-box><Icon class="size-icon-md block" /></span
             >
             {#if row.verb}
-              <span class="verb">{row.verb}</span>
+              <span class="flex-none font-medium">{row.verb}</span>
             {/if}
-            <span class="arg">{row.arg}</span>
+            <span
+              class="flex-initial min-w-0 overflow-clip text-ellipsis font-(family-name:--font-mono) text-ink-muted"
+              >{row.arg}</span
+            >
           {:else if row?.kind === "reason"}
-            <span class="ic" data-box><IconCpu /></span>
-            <span class="verb">Reasoning</span>
+            <span
+              class="flex-none size-icon-md grid place-items-center text-ink-muted"
+              data-box><IconCpu class="size-icon-md block" /></span
+            >
+            <span class="flex-none font-normal text-ink-muted">Reasoning</span>
           {:else if row?.kind === "say"}
-            <span data-slot="text" class="text">{row.text}</span>
+            <span
+              data-slot="text"
+              class="flex-initial min-w-0 overflow-clip text-ellipsis"
+              >{row.text}</span
+            >
           {:else if row?.kind === "stream"}
-            <span data-slot="text" class="text" data-box
-              ><MessageBody source={row.text} streaming /></span
+            <!-- The line being written, one line tall however the message
+                 renders. -->
+            <span
+              data-slot="text"
+              class="flex-initial min-w-0 overflow-clip text-ellipsis"
+              data-box><MessageBody source={row.text} streaming /></span
             >
           {:else if row?.kind === "peer"}
             {@const Icon = row.icon}
-            <span class="ic" data-box><Icon /></span>
-            <span class="verb">{row.lead}</span>
-            <span data-slot="text" class="text">{row.name}</span>
+            <span
+              class="flex-none size-icon-md grid place-items-center text-ink-muted"
+              data-box><Icon class="size-icon-md block" /></span
+            >
+            <span class="flex-none font-normal text-ink-muted">{row.lead}</span>
+            <span
+              data-slot="text"
+              class="flex-initial min-w-0 overflow-clip text-ellipsis"
+              >{row.name}</span
+            >
           {:else if row}
-            <span data-slot="text" class="text">{row.text}</span>
+            <span
+              data-slot="text"
+              class="flex-initial min-w-0 overflow-clip text-ellipsis"
+              >{row.text}</span
+            >
           {/if}
         </div>
       {/each}
@@ -366,104 +406,27 @@
     <div
       data-slot="column"
       aria-label="Loading its transcript"
-      class="column"
+      class="flex-none flex flex-col"
       role="status"
     >
-      {#each [240, 180, 280] as width (width)}
-        <div data-slot="row" class="row">
-          <Skeleton class="h-3" style="inline-size: {width}px" />
-        </div>
-      {/each}
+      <div
+        data-slot="row"
+        class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap"
+      >
+        <Skeleton class="w-2/3" line="meta" />
+      </div>
+      <div
+        data-slot="row"
+        class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap"
+      >
+        <Skeleton class="w-1/2" line="meta" />
+      </div>
+      <div
+        data-slot="row"
+        class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap"
+      >
+        <Skeleton class="w-3/4" line="meta" />
+      </div>
     </div>
   {/if}
 </div>
-
-<style>
-  /* As high as its rows, six at most, the top 24px dissolving once it is
-     full: a row leaving at the top fades out through the mask as the stack
-     lifts. */
-  /* The stack stands on the tail's foot and spills over its top, in the flow,
-     so the widest row is the tail's width (the panel sizes to it). */
-  .tail {
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    block-size: calc(var(--row) * var(--slots));
-    overflow: hidden;
-    margin-inline: calc(var(--space-2) * -1);
-    color: var(--ink-strong);
-  }
-  .tail.full {
-    mask-image: linear-gradient(to bottom, transparent, #000 24px);
-  }
-  .column {
-    flex: none;
-    display: flex;
-    flex-direction: column;
-  }
-  .row {
-    flex: none;
-    block-size: var(--row);
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding-inline: var(--space-2);
-    min-inline-size: 0;
-    font-size: var(--text-meta);
-    white-space: nowrap;
-  }
-  .ic {
-    flex: none;
-    inline-size: 16px;
-    block-size: 16px;
-    display: grid;
-    place-items: center;
-
-    & :global(svg) {
-      inline-size: 16px;
-      block-size: 16px;
-      display: block;
-    }
-  }
-  .reason .ic,
-  .peer .ic {
-    color: var(--ink-muted);
-  }
-  .verb {
-    flex: none;
-    font-weight: var(--weight-strong);
-  }
-  .reason .verb,
-  .peer .verb {
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  .arg,
-  .text {
-    flex: 0 1 auto;
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-  }
-  .arg {
-    font-family: var(--font-mono);
-    color: var(--ink-muted);
-  }
-  /* The line being written, one line tall however the message renders. */
-  .stream .text :global(*) {
-    display: inline;
-    margin: 0;
-    padding: 0;
-    font-size: inherit;
-    line-height: inherit;
-  }
-  .ask {
-    color: var(--status-attn-ink);
-  }
-  .asked {
-    color: var(--ink-muted);
-  }
-  .fail {
-    color: var(--status-fail-ink);
-  }
-</style>

@@ -192,7 +192,7 @@ const capturesOf = (page: Page) =>
 const shownThumb = (page: Page) =>
   page.evaluate(async () => {
     const box = document.querySelector<HTMLElement>(
-      '.preview-tool [data-slot="page-thumb"]'
+      '[data-slot="preview-tool"] [data-slot="page-thumb"]'
     );
     const img = box?.querySelector("img");
     if (!(box && img)) {
@@ -377,7 +377,10 @@ const run = async (kit: Kit) => {
     });
     await until(
       "the card's thumbnail",
-      () => desk.locator('.preview-tool [data-slot="page-thumb"] img').count(),
+      () =>
+        desk
+          .locator('[data-slot="preview-tool"] [data-slot="page-thumb"] img')
+          .count(),
       (n) => n > 0,
       60_000
     );

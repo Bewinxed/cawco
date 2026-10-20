@@ -8,6 +8,7 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Markdown } from "#lib/components/ui/markdown/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
 
   let {
@@ -44,14 +45,14 @@
   }
 </script>
 
-<section class="part">
-  <h3 class="kit-section-head">
+<section class="flex flex-col gap-space-2">
+  <h3 class={sectionHeadVariants({ inset: "flush" })}>
     <span>{heading}</span>
     {#if draft === null}
       <Button
         data-text-section-count
         data-box
-        class="count"
+        head="count"
         onclick={() => {
           draft = text;
         }}
@@ -61,10 +62,11 @@
     {/if}
   </h3>
   {#if draft !== null}
-    <div class="editing">
+    <div class="flex flex-col gap-space-2">
       <Textarea
         aria-label={heading}
-        class="font-mono text-label"
+        face="mono"
+        text="label"
         onkeydown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation();
@@ -79,9 +81,9 @@
         bind:value={draft}
       />
       {#if problem}
-        <p class="problem" role="alert">{problem}</p>
+        <p class="type-meta text-error-11" role="alert">{problem}</p>
       {/if}
-      <div data-slot="actions" class="actions">
+      <div data-slot="actions" class="flex justify-end gap-space-1">
         <Button
           onclick={() => {
             draft = null;
@@ -106,37 +108,8 @@
       <Markdown source={text} />
     </div>
   {:else}
-    <p data-slot="text-section-empty" class="empty">{empty}</p>
+    <p data-slot="text-section-empty" class="type-body text-ink-subtle">
+      {empty}
+    </p>
   {/if}
 </section>
-
-<style>
-  .part {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .part :global(.kit-section-head) {
-    min-block-size: var(--c-btn-h-xs);
-    margin: 0;
-    padding-inline: 0;
-  }
-  .editing {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-1);
-  }
-  .empty {
-    font: var(--type-body);
-    color: var(--ink-subtle);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--error-11);
-  }
-</style>

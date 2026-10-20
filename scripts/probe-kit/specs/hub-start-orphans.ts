@@ -43,17 +43,30 @@ const GONE_PROJECT = "a0a0a0a0-dead-4000-8000-000000000000";
 /** A session id no session holds: what a gone session's shown preview still named. */
 const GONE_SESSION = "b0b0b0b0-dead-4000-8000-000000000000";
 
-/** The artifacts' project key migration's journal `when`, when this tree has it (main before it does not). */
-const cleanupWhen = (): number | undefined => {
+const DRIZZLE = join(import.meta.dir, "../../../packages/hub/drizzle");
+
+/**
+ * The artifacts' project key migration's own statements, when this tree has
+ * it (main before it does not). Run again by hand over what an older hub
+ * left: the migrator runs only what is newer than the newest migration it
+ * recorded, so with a later one recorded (0280) dropping this one's row no
+ * longer runs it, and running the later ones again fails (0280 drops a
+ * column already gone).
+ */
+const cleanupStatements = (): string[] | undefined => {
   const journal = JSON.parse(
-    readFileSync(
-      join(import.meta.dir, "../../../packages/hub/drizzle/meta/_journal.json"),
-      "utf8"
-    )
-  ) as { entries: { tag: string; when: number }[] };
-  return journal.entries.find((entry) =>
-    entry.tag.endsWith("_artifacts_project_key")
-  )?.when;
+    readFileSync(join(DRIZZLE, "meta/_journal.json"), "utf8")
+  ) as { entries: { tag: string }[] };
+  const entry = journal.entries.find((one) =>
+    one.tag.endsWith("_artifacts_project_key")
+  );
+  if (!entry) {
+    return;
+  }
+  return readFileSync(join(DRIZZLE, `${entry.tag}.sql`), "utf8")
+    .split("--> statement-breakpoint")
+    .map((statement) => statement.trim())
+    .filter(Boolean);
 };
 
 const run = async (kit: Kit) => {
@@ -133,9 +146,9 @@ const run = async (kit: Kit) => {
     GONE_SESSION,
     kept.id
   );
-  const when = cleanupWhen();
-  if (when !== undefined) {
-    fleet.write("DELETE FROM __drizzle_migrations WHERE created_at = ?", when);
+  const cleanup = cleanupStatements();
+  if (cleanup) {
+    fleet.script(cleanup);
   }
   fleet.launch("hub");
   const started = await fleet.hubUp().then(

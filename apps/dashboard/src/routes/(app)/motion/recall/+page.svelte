@@ -56,8 +56,9 @@
   <title>Recall wheel · CawCo</title>
 </svelte:head>
 
-<div class="bench">
-  <div data-slot="dock" class="dock">
+<!-- The composer at the page's foot, as a conversation's stands. -->
+<div class="flex h-full min-h-full flex-col justify-end">
+  <div data-slot="dock" class="relative">
     <Composer
       {draft}
       onstop={() => undefined}
@@ -66,17 +67,3 @@
     />
   </div>
 </div>
-
-<style>
-  /* The composer at the page's foot, as a conversation's stands. */
-  .bench {
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    block-size: 100%;
-    min-block-size: 100%;
-  }
-  .dock {
-    position: relative;
-  }
-</style>

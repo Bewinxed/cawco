@@ -979,9 +979,10 @@ const stopperWords = (by: EndedBy): string => {
       return by.name;
     case "hub":
       return `the hub (${by.why})`;
-    default:
-      return `a ${by.signal} from outside CawCo`;
+    case "outside":
+      break;
   }
+  return `a ${by.signal} from outside CawCo`;
 };
 
 /**

@@ -414,9 +414,10 @@ export const createTailnetHttps = ({
           name: reading.name,
           dashboard: `https://${reading.name}:${dashboardPort}`,
         };
-      default:
-        return state;
+      case "unread":
+        break;
     }
+    return state;
   };
 
   const check = async (): Promise<void> => {

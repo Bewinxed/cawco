@@ -340,7 +340,11 @@ export function controlOf(
       return "number";
     case "slot":
       return "slot";
-    default:
-      return "code";
+    case "array":
+    case "function":
+    case "object":
+    case "other":
+      break;
   }
+  return "code";
 }

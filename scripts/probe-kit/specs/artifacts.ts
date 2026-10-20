@@ -1292,8 +1292,7 @@ const askChecks = async ({
 /** The ask the head legs' page opens with, and the round after it. */
 const ASK = "Judge the six pairing states: pin anything that reads wrong";
 const ASK_AGAIN = "Round two: judge the denied state";
-const PANE =
-  ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"])';
+const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 
 /** The head's line as it shows: its subtitle under the name, or the menu's first row; the head's height and the title control's title. */
 const lineOf = async (on: Page) => {
@@ -1698,7 +1697,7 @@ const rootTheme = (frame: Frame) =>
 const headLine = (page: Page) =>
   page.evaluate(() => {
     const head = document.querySelector(
-      '[data-side-surface-class~="preview-pane"] [data-slot="side-head"]'
+      '[data-side-card="preview"] [data-slot="side-head"]'
     );
     const panel = head?.closest('[data-slot="side-card"]');
     return {
@@ -2092,7 +2091,7 @@ const fieldChecks = async ({
   const failed = shownPosts.find((post) => post.artifact === deadId);
   const band = await page
     .locator(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="down"][role=alert]'
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="down"][role=alert]'
     )
     .textContent({ timeout: 5000 })
     .catch(() => null);

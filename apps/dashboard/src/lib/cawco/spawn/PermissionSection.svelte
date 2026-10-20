@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { HarnessKind, PermissionMode } from "@cawco/core";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /**
    * Permission-mode rows (§1.8, §2.11): sliding fill + mounted check. Every
    * pick of Full Send is asked first, under the rows (AskHere, The Open Page
@@ -75,8 +76,10 @@
 </script>
 
 <div
+  data-slot="perms"
   aria-label="Permission mode"
-  class={["perms", { embedded }]}
+  class="group relative grid gap-space-row rounded-md border border-border-control bg-surface-raised p-space-1 shadow-xs data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0 data-embedded:shadow-none"
+  data-embedded={embedded || undefined}
   role="radiogroup"
   tabindex="-1"
   {@attach highlight({ rows: "[data-fh]" })}
@@ -84,8 +87,9 @@
   <span
     data-slot="fill"
     aria-hidden="true"
-    class="fill"
-    style={`transform:translateY(calc(${index} * (var(--row-h) + 2px)));opacity:${rows.some((row) => row.value === value) ? 1 : 0}`}
+    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-c-row-h translate-y-(--fill-y) rounded-sm bg-selected-bg opacity-0 group-data-embedded:inset-x-0 group-data-embedded:top-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--dur-toggle) motion-safe:ease-in-out"
+    data-shown={rows.some((row) => row.value === value) || undefined}
+    style:--fill-y={`calc(${index} * (var(--c-row-h) + var(--space-row)))`}
   ></span>
   {#each rows as row, i (row.value)}
     {@const Icon = row.icon}
@@ -97,7 +101,7 @@
       aria-describedby={row.reason
         ? `${uid}-perm-${row.value}-reason`
         : undefined}
-      class="row ns-in press-tint"
+      class="ns-in press-tint transition-control relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm border border-transparent bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-checked:text-selected-ink disabled:cursor-not-allowed disabled:opacity-50"
       data-fh="1"
       data-perm={row.value}
       disabled={row.disabled}
@@ -106,18 +110,21 @@
       style={`--delay:${i * 35}ms`}
       type="button"
     >
-      <span data-slot="tile" class="ns-tile tile" style={`color:${row.hue}`}
-        ><Icon /></span
+      <span data-slot="tile" class={iconTileVariants()} style:color={row.hue}
+        ><Icon class="size-icon-md" /></span
       >
-      <span data-slot="text" class="text">
-        <span data-slot="name" class="name">{row.name}</span>
-        <span class="desc">{row.desc}</span>
+      <span data-slot="text" class="min-w-0 flex-1">
+        <span data-slot="name" class="type-label block">{row.name}</span>
+        <span
+          class="type-meta block truncate text-ink-subtle in-aria-checked:text-selected-ink"
+          >{row.desc}</span
+        >
       </span>
       <!-- Every row keeps the check's slot, so the rows share one width
            whichever mode is chosen. -->
-      <span aria-hidden="true" class="check-slot">
+      <span aria-hidden="true" class="grid size-icon-md flex-none">
         {#if on}
-          <Check class="check ns-check" />
+          <Check class="ns-check size-icon-md text-selected-icon" />
         {/if}
       </span>
       {#if row.reason}
@@ -131,109 +138,3 @@
 <!-- Full Send's question, under the rows: they place their fill by index,
      so it stands after them, not between. -->
 <AskHere asker={asks} at="fullSend" />
-
-<style>
-  .perms {
-    /* One row's height: the rows and the fill that slides under them. */
-    --row-h: 44px;
-    position: relative;
-    display: grid;
-    gap: 2px;
-    padding: 4px;
-    background: var(--surface-raised);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-xs);
-  }
-  .perms.embedded {
-    padding: 0;
-    border: 0;
-    box-shadow: none;
-    background: transparent;
-  }
-  .fill {
-    position: absolute;
-    left: 4px;
-    right: 4px;
-    top: 4px;
-    height: var(--row-h);
-    /* The chosen mode's selected wash, apart from the hover ghost. */
-    background: var(--selected-bg);
-    border-radius: var(--radius-sm);
-    pointer-events: none;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-toggle) var(--ease-in-out);
-    }
-  }
-  .embedded .fill {
-    inset-inline: 0;
-    top: 0;
-  }
-  .row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    height: var(--row-h);
-    padding: 6px 8px;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    text-align: left;
-    color: var(--ink-strong);
-  }
-  .row:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
-  .tile {
-    width: 26px;
-    height: 26px;
-  }
-  .tile :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  .text {
-    flex: 1;
-    min-width: 0;
-  }
-  .name {
-    display: block;
-    font: var(--type-label);
-  }
-  .desc {
-    display: block;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .check-slot {
-    display: grid;
-    flex: none;
-    width: 16px;
-    height: 16px;
-  }
-  .row :global(svg.check) {
-    width: 16px;
-    height: 16px;
-    color: var(--ink-strong);
-  }
-  /* The chosen mode's ink and icon, paired with the wash its fill draws. */
-  .row[aria-checked="true"] {
-    color: var(--selected-ink);
-
-    /* Its second line too: ink-subtle measures 4.23:1 on the wash by day,
-       selected-ink 4.73:1 (DESIGN.md Colors: Selected). */
-    & .desc {
-      color: var(--selected-ink);
-    }
-    & :global(svg.check) {
-      color: var(--selected-icon);
-    }
-  }
-</style>

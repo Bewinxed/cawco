@@ -12,6 +12,7 @@
    * (`--operator=name` stays whole), and the box grows; where the box is too
    * narrow for both, Copy stands under the command.
    */
+  import { Button } from "#lib/components/ui/button/index.js";
   import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
   import Documents from "~icons/solar/documents-bold-duotone";
 
@@ -33,99 +34,40 @@
   });
 </script>
 
-<div class="box" data-wrap={wrap || undefined}>
+<div
+  class="flex h-c-btn-h min-w-0 items-center gap-space-2 rounded-md border border-border-control bg-surface-hover pe-space-1 ps-space-3 data-wrap:h-auto data-wrap:min-h-c-btn-h data-wrap:flex-wrap data-wrap:gap-y-space-1 data-wrap:py-space-1"
+  data-wrap={wrap || undefined}
+>
   <span class="sr-only">{label}:</span>
   {#if wrap}
-    <code title={text}
+    <!-- Read whole: a word breaks between words, never inside one, unless
+         it alone is wider than the line. -->
+    <code
+      class="min-w-0 grow basis-c-copy-box-line overflow-hidden text-meta text-ellipsis whitespace-normal text-ink-strong"
+      title={text}
       >{#each words as word, index (index)}{#if index > 0}{" "}{/if}<span
-          class="word">{word}</span
+          data-slot="word"
+          class="inline-block max-w-full wrap-anywhere">{word}</span
         >{/each}</code
     >
   {:else}
-    <code title={text}>{text}</code>
+    <code class="min-w-0 flex-1 truncate text-meta text-ink-strong" title={text}
+      >{text}</code
+    >
   {/if}
-  <button
-    class="copy pressable touch-hit"
+  <Button
+    class="flex-none in-data-wrap:ms-auto"
     onclick={() => clipboard.copy(text)}
+    press="pressable"
+    size="xs"
     type="button"
+    variant="outline"
   >
-    <Documents aria-hidden="true" />
+    <Documents
+      aria-hidden="true"
+      class="size-icon-sm text-ink-muted"
+      data-box
+    />
     <span aria-live="polite">{said}</span>
-  </button>
+  </Button>
 </div>
-
-<style>
-  .box {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    height: 36px;
-    padding: 0 5px 0 10px;
-    background: var(--surface-hover);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-  }
-  code {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    font-size: var(--text-meta);
-    line-height: 1.4;
-    color: var(--ink-strong);
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  .copy {
-    --hit-edge: 1px;
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: 5px;
-    height: 26px;
-    padding: 0 8px;
-    background: var(--surface-raised);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    white-space: nowrap;
-    cursor: pointer;
-    transition: var(--transition-control);
-  }
-  .copy :global(svg) {
-    width: 13px;
-    height: 13px;
-    color: var(--ink-muted);
-  }
-  @media (hover: hover) {
-    .copy:hover {
-      background: var(--surface-hover);
-    }
-  }
-  /* Read whole: the box keeps its height for one line and grows for more,
-     the Copy button centred on whatever it holds. The command keeps room
-     for 20 characters a line (`--operator=` and a name, whole); narrower
-     than that and Copy, Copy wraps under the command at the box's end. */
-  .box[data-wrap] {
-    flex-wrap: wrap;
-    row-gap: var(--space-1);
-    height: auto;
-    min-height: var(--c-btn-h);
-    padding-block: var(--space-1);
-  }
-  .box[data-wrap] code {
-    flex: 1 1 20ch;
-    white-space: normal;
-  }
-  .box[data-wrap] .copy {
-    margin-inline-start: auto;
-  }
-  /* A word breaks between words, never inside one, unless it alone is
-     wider than the line. */
-  .word {
-    display: inline-block;
-    max-inline-size: 100%;
-    overflow-wrap: anywhere;
-  }
-</style>

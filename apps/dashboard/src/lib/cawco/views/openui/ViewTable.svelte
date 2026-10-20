@@ -53,27 +53,36 @@
   }
 </script>
 
-<div data-slot="ledger" class="ledger">
-  <Table.Root ghostRows="tbody tr" scrollClass="kit-edge-fade">
+<div
+  data-slot="ledger"
+  class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+>
+  <Table.Root fadeEdges ghostRows="tbody tr">
     <Table.Header>
       {#each table.getHeaderGroups() as group (group.id)}
-        <Table.Row class="band border-0">
+        <Table.Row variant="band">
           {#each group.headers as header (header.id)}
-            <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head scope="col">{header.column.columnDef.header}</Table.Head
+            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+            <Table.Head scope="col" variant="band"
+              >{header.column.columnDef.header}</Table.Head
             >
+            <!-- biome-ignore-end lint/a11y/noHeaderScope: the head above -->
           {/each}
         </Table.Row>
       {/each}
     </Table.Header>
     <Table.Body>
       {#each table.getRowModel().rows as row (row.id)}
-        <Table.Row data-view-table-row class="row">
+        <Table.Row data-view-table-row class="relative">
           {#each row.getAllCells() as cell, i (cell.id)}
-            <Table.Cell>
+            <Table.Cell
+              class={i === 0 ? "min-w-c-view-lead-min" : undefined}
+              variant={i === 0 ? "view-lead" : "view"}
+            >
               {#if i === 0}
                 <a
-                  class="cell-link"
+                  data-slot="cell-link"
+                  class="type-label text-ink-row no-underline after:absolute after:inset-0"
                   href={view.hrefOf(row.original.id)}
                   onclick={(event) => open(event, row.original.id)}
                   >{String(cell.getValue())}</a
@@ -88,56 +97,3 @@
     </Table.Body>
   </Table.Root>
 </div>
-
-<style>
-  .ledger {
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .ledger :global(tr.band) {
-    background: var(--surface-band);
-  }
-  /* The task's title wraps, so the ledger fits a phone; every other column
-     keeps its words on one line. A table still wider than its place scrolls
-     sideways in its container (Table.Root), its far edge fading while there
-     is more to see (.kit-edge-fade). */
-  .ledger :global(th),
-  .ledger :global(td) {
-    white-space: nowrap;
-  }
-  .ledger :global(tr.row td:first-child) {
-    white-space: normal;
-    min-inline-size: 9rem;
-    padding-block: var(--space-2);
-  }
-  .ledger :global(tr.band th) {
-    block-size: var(--c-toolbar-ctl);
-    padding-inline: var(--space-3);
-    font: var(--type-label);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--ink-muted);
-  }
-  .ledger :global(tr.row td) {
-    block-size: var(--c-btn-h-lg);
-    padding-inline: var(--space-3);
-    border-block-end: 1px solid var(--border-hairline);
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .ledger :global(tr.row) {
-    position: relative;
-  }
-  .cell-link {
-    font: var(--type-label);
-    color: var(--ink-row);
-    text-decoration: none;
-  }
-  .cell-link::after {
-    position: absolute;
-    inset: 0;
-    content: "";
-  }
-</style>

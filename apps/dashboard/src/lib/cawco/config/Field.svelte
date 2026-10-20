@@ -30,57 +30,41 @@
   } = $props();
 </script>
 
-<div data-slot="field-field" class="field">
-  <label data-field-label class="label" for={id}>{label}</label>
+<div data-slot="field-field" class="flex flex-col gap-space-2 min-w-0">
+  <label data-field-label class="type-meta text-ink-muted" for={id}
+    >{label}</label
+  >
   {@render children()}
   {#if problem || warn || hint}
-    <div class="line" in:unfold out:unfold {@attach morph()}>
+    <div class="relative flex flex-col" in:unfold out:unfold {@attach morph()}>
       {#if problem}
-        <span class="error" in:crossIn out:crossOut>{problem}</span>
+        <span
+          data-slot="field-problem"
+          class="max-w-c-measure type-meta text-status-fail-ink"
+          in:crossIn
+          out:crossOut>{problem}</span
+        >
       {:else if warn}
-        <span class="warn" in:crossIn out:crossOut>{@render warn()}</span>
+        <span
+          class="max-w-c-measure type-meta text-status-attn-ink"
+          in:crossIn
+          out:crossOut>{@render warn()}</span
+        >
       {:else if typeof hint === "string"}
-        <span class="hint" in:crossIn out:crossOut>{hint}</span>
+        <span
+          data-slot="hint"
+          class="max-w-c-measure type-meta text-pretty text-ink-muted"
+          in:crossIn
+          out:crossOut>{hint}</span
+        >
       {:else if hint}
-        <span class="hint" in:crossIn out:crossOut>{@render hint()}</span>
+        <span
+          data-slot="hint"
+          class="max-w-c-measure type-meta text-pretty text-ink-muted"
+          in:crossIn
+          out:crossOut>{@render hint()}</span
+        >
       {/if}
     </div>
   {/if}
 </div>
-
-<style>
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 0;
-  }
-  .label {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* The one box the messages take turns in: the one leaving is pinned in
-     it (crossOut) while the one arriving sets its height. */
-  .line {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-  }
-  .hint,
-  .error,
-  .warn {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* A hint is read whole: no word left alone on its last line. */
-  .hint {
-    text-wrap: pretty;
-  }
-  .error {
-    color: var(--status-fail-ink);
-  }
-  .warn {
-    color: var(--status-attn-ink);
-  }
-</style>

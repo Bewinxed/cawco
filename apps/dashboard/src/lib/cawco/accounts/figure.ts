@@ -262,6 +262,39 @@ const CLOCKS = [resets(265), resets(70), resets(290), resets(185)];
 const FILLS = [0.2, 0.3, 0.15, 0.25];
 
 /**
+ * The figure's parts, as utilities (Tailwind scans this file). Every part is
+ * placed by its own inline geometry from the stage's top-left; the caption
+ * alone stands on the stage's foot, across its padding. A lane's colour is
+ * `--c`, set inline on the lane.
+ */
+const AT = "absolute left-0 top-0";
+const META = "type-meta leading-(--space-4) whitespace-nowrap";
+const STRIP = `${AT} h-(--fig-chip) rounded-hair`;
+const PART = {
+  root: "absolute inset-0",
+  layer: AT,
+  label: `${AT} flex items-center gap-space-2 h-space-4 ${META} font-medium text-ink-row`,
+  dot: "flex-none size-space-2 rounded-pill bg-(--c)",
+  name: "min-w-0 overflow-hidden text-ellipsis",
+  pin: "size-icon-sm text-ink-muted",
+  clock: `${AT} px-space-1 rounded-xs ${META} tabular-nums text-right text-ink-muted`,
+  clockWash: `${AT} rounded-xs bg-(--c)/26 opacity-0`,
+  blocked: `${AT} ${META} font-medium text-right text-data-bad opacity-0`,
+  bar: `${STRIP} bg-surface-fill`,
+  headroom: `${STRIP} bg-(--c)/42 opacity-0`,
+  fill: `${STRIP} bg-(--c) origin-left`,
+  ghost: `${STRIP} border border-dashed border-(--c) bg-(--c)/22 opacity-0`,
+  pulse: STRIP,
+  chip: `${AT} size-(--fig-chip) rounded-hair bg-(--c) ring-2 ring-surface-recess`,
+  /** A fork is its parent's chip drawn hollow: the same lane, no extra mark. */
+  fork: `${AT} size-(--fig-chip) rounded-hair bg-surface-recess inset-ring-2 inset-ring-(--c) ring-2 ring-surface-recess`,
+  tag: `${AT} px-space-1 rounded-xs bg-surface-fill type-caps leading-(--space-4) tabular-nums text-ink-row whitespace-nowrap`,
+  /** A caption wraps where the stage is narrow; the stage grows to hold it. */
+  caption:
+    "absolute inset-x-(--fig-pad) bottom-(--fig-cap-foot) type-meta leading-(--fig-cap-line) text-ink-row text-pretty",
+};
+
+/**
  * The figure's geometry, px. Lanes stand on a fixed pitch from the top: a
  * lane's label row, then its dock row centred `ROW` below the lane's top,
  * then room under the dock (a fork's link; on the at-the-limit board, the
@@ -324,7 +357,7 @@ function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
   const probe = document.createElement("i");
   probe.style.display = "none";
   const root = document.createElement("div");
-  root.className = "dg";
+  root.className = PART.root;
   root.setAttribute("aria-hidden", "true");
   stage.replaceChildren(root, probe);
   /** A colour token resolved, for keyframes that cannot hold a variable. */
@@ -353,7 +386,7 @@ function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
     slot(i, SLOTS - 1 - Math.min(k, SLOTS - 1));
   const el = (cls: string, css = "", parent: Element = root): HTMLElement => {
     const e = document.createElement("div");
-    e.className = `e ${cls}`.trim();
+    e.className = cls;
     if (css) {
       e.style.cssText = css;
     }
@@ -361,44 +394,45 @@ function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
     return e;
   };
   /** The layer that fades through at the seam. */
-  const dy = el("dy", "inset:0;width:100%;height:100%");
+  const dy = el(PART.layer, "inset:0;width:100%;height:100%");
   const L: LaneParts[] = lanes.map((ln, i) => {
     const c = `--c:${ln.lane.color};`;
     const y = y0(i);
-    const g = el("lane", `${c}inset:0;width:100%;height:100%`);
-    const lb = el("ln-lbl", `left:${left}px;top:${y}px`, g);
+    const g = el(PART.layer, `${c}inset:0;width:100%;height:100%`);
+    const lb = el(PART.label, `left:${left}px;top:${y}px`, g);
     lb.append(
-      Object.assign(document.createElement("span"), { className: "dot" })
+      Object.assign(document.createElement("span"), { className: PART.dot })
     );
     lb.append(
       Object.assign(document.createElement("span"), {
         textContent: ln.lane.name,
-        className: "nm",
+        className: PART.name,
       })
     );
     if (ln.pin) {
       const svg = document.createElementNS(SVG, "svg");
       svg.setAttribute("viewBox", "0 0 24 24");
+      svg.setAttribute("class", PART.pin);
       svg.innerHTML = PIN;
       lb.append(svg);
     }
     const cw = el(
-      "clkw",
+      PART.clockWash,
       `${c}right:${pad - 5}px;left:auto;top:${y}px;height:14px;width:0`,
       g
     );
-    const ck = el("clk", `right:${pad - 5}px;left:auto;top:${y}px`, g);
+    const ck = el(PART.clock, `right:${pad - 5}px;left:auto;top:${y}px`, g);
     ck.textContent = typeof ln.clock === "function" ? ln.clock(0) : ln.clock;
-    const bk = el("blk", `right:${pad}px;left:auto;top:${y}px`, g);
+    const bk = el(PART.blocked, `right:${pad}px;left:auto;top:${y}px`, g);
     bk.textContent = ln.blkText ?? words.blocked;
     // A blocked lane dims its bar, never its words.
-    const bg = el("bars", "inset:0;width:100%;height:100%", g);
+    const bg = el(PART.layer, "inset:0;width:100%;height:100%", g);
     const bar = `left:${barX}px;top:${y + ROW - CHIP / 2}px;width:${barW}px`;
-    el("bar", bar, bg);
-    const hr = el("hr", c + bar, bg);
-    const gh = el("gh", c + bar, bg);
-    const fl = el("fl", `${c}${bar};transform:scaleX(${ln.fill})`, bg);
-    const pu = el("pu", c + bar, bg);
+    el(PART.bar, bar, bg);
+    const hr = el(PART.headroom, c + bar, bg);
+    const gh = el(PART.ghost, c + bar, bg);
+    const fl = el(PART.fill, `${c}${bar};transform:scaleX(${ln.fill})`, bg);
+    const pu = el(PART.pulse, c + bar, bg);
     const parts: LaneParts = {
       i,
       lb,
@@ -494,8 +528,8 @@ function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
       const lead = `M ${e.x} ${e.y} L ${turn} ${e.y}`;
       const d = `${lead} C ${left} ${e.y}, ${turn} ${s.y}, ${left} ${s.y} L ${s.x} ${s.y}`;
       const c = el(
-        "chip",
-        `--c:${ln.c};offset-path:path('${d}');offset-distance:100%`,
+        PART.chip,
+        `--c:${ln.c};offset-path:path('${d}');offset-distance:100%;offset-rotate:0deg;offset-anchor:50% 50%`,
         dy
       );
       tl.tr(c, "opacity", "0").to(t, "1", 0.3, "ease-out");
@@ -521,7 +555,7 @@ function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
       ln.n += 1;
       const at = (scale: number) =>
         `translate(${s.x - CHIP / 2}px,${s.y - CHIP / 2}px) scale(${scale})`;
-      const c = el("chip child", `--c:${ln.c};transform:${at(1)}`, dy);
+      const c = el(PART.fork, `--c:${ln.c};transform:${at(1)}`, dy);
       tl.tr(c, "opacity", "0").to(t, "1", 0.2, "ease-out");
       tl.tr(c, "transform", at(0.6)).to(t, at(1), 0.35, mk);
       return { el: c, lane: par.lane, pos: s };
@@ -540,7 +574,8 @@ function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
     },
     /** A caption fades in at a and out at b; b = 99 holds it to the seam. */
     cap(a: number, b: number, text: string) {
-      const c = el("cap", "", dy);
+      const c = el(PART.caption, "", dy);
+      c.dataset.slot = "figure-cap";
       c.textContent = text;
       const t = tl.tr(c, "opacity", "0").to(a, "1", 0.3, "ease-out");
       if (b < 99) {
@@ -766,13 +801,13 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
         const last = qi === scenes.length - 1;
         const capEnd = last ? 99 : t1 - 0.1;
         const branch = branchOf(q);
-        const wrap = F.el("", "left:0;top:0;width:0;height:0", F.dy);
+        const wrap = F.el(PART.layer, "width:0;height:0", F.dy);
         const ch = F.el(
-          "chip",
+          PART.chip,
           `--c:${Wa.color};transform:${at(s0.x - 5, s0.y - 5)}`,
           wrap
         );
-        const tg = F.el("tag", `transform:${at(s0.x - 8, s0.y + 8)}`, wrap);
+        const tg = F.el(PART.tag, `transform:${at(s0.x - 8, s0.y + 8)}`, wrap);
         tg.textContent = words.tokens(q.tok);
         // Each branch's pieces show for its window; the last branch is the
         // still frame, so it stays.
@@ -829,7 +864,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
           "ease-out"
         );
         const tg2 = F.el(
-          "tag",
+          PART.tag,
           `transform:${at(s0.x - 8, s0.y + 8 + dyY)}`,
           wrap
         );
@@ -870,7 +905,9 @@ export function buildFigure(stage: HTMLElement, spec: FigureSpec): Timeline {
   const F = BOARDS[spec.board](stage, spec);
   // As tall as its lanes and its longest caption, which wraps rather than
   // being cut where the stage is narrow.
-  const caps = [...stage.querySelectorAll<HTMLElement>(".cap")];
+  const caps = [
+    ...stage.querySelectorAll<HTMLElement>('[data-slot="figure-cap"]'),
+  ];
   const tallest = Math.max(0, ...caps.map((cap) => cap.scrollHeight));
   stage.style.height = `${figureHeight(spec.board, spec.lanes.length, Math.ceil(tallest / CAP_LINE))}px`;
   F.tl.rest();

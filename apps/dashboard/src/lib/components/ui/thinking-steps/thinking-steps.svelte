@@ -28,7 +28,7 @@
 
 <Collapsible.Root
   {...rest}
-  class="thinking-steps {className}"
+  class="min-w-0 max-w-full font-family-inherit text-size-body font-normal leading-body text-ink-muted size-compact:text-size-meta {className}"
   data-size={resolvedSize}
   data-slot="thinking-steps"
   bind:open={
@@ -41,19 +41,3 @@
     }
   }
 />
-
-<style>
-  :global(.thinking-steps) {
-    min-width: 0;
-    max-width: 100%;
-    font-family: inherit;
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-    color: var(--ink-muted);
-  }
-  :global(.thinking-steps[data-size="compact"]) {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-  }
-</style>

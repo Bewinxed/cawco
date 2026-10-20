@@ -85,7 +85,6 @@
   import SessionHover from "./SessionHover.svelte";
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { sameRow } from "./same-row";
-  import { NAV_BADGE } from "./sidebar-rows";
   import { newSession } from "./spawn/new-session.svelte";
   import { stored } from "./storage";
   import { inLists, isThreadTab } from "./thread-tabs";
@@ -167,43 +166,16 @@
   /** The rail itself: its session rows open the session card (SessionHover). */
   let railEl = $state<HTMLElement>();
 
-  /**
-   * The rail's steps, named once. Every size here comes from app.css's scale
-   * (`--text-body` 15px for the nav step, `--text-label` 13.5px for list rows,
-   * `--text-label` 12.5px for section labels) rather than Tailwind's own, which
-   * runs a step and a half smaller at every level and is how a rail of `text-meta`
-   * rows ends up unreadable.
-   *
-   * Heights are the same two the rail always had: the nav band is tall because
-   * six destinations can afford to be, and a LIST row is 30px because a rail of
-   * 40px rows is a rail that fits eight things.
-   */
-  const NAV_ROW = "h-[var(--c-nav-h)] gap-2.5 px-2.5 text-body";
-  /** A project's row: it ends where a session's does (`pr-2`), so the
-   *  counts at the trailing edge stand in one column down the rail. */
-  const LIST_ROW = "h-[30px] gap-2.5 pl-2.5 pr-2 py-0";
-  /**
-   * A row under a project that is no session ("N older", "No sessions"):
-   * the compact session row's own measures (SessionRow), so its lead and its
-   * words stand on the sessions' axes.
-   */
-  const SUB_ROW =
-    "h-(--row-compact-h) gap-(--row-compact-gap) pl-(--row-compact-gap) pr-(--row-compact-pad-end)";
   /** How a tree's rows open and fold (motion/branch): off each row's mark. */
-  const TREE: BranchOptions = { glyph: ".tree-mark" };
+  const TREE: BranchOptions = { glyph: "[data-tree-mark]" };
   /**
    * What stands in a row's lead slot under a project: a tree mark (a
    * session's, the "N older" row's), or the glyph of a row that is neither
    * ("No sessions"). The rail's arm ends there.
    */
-  const LEAD = ".tree-mark, .row-lead";
+  const LEAD = '[data-tree-mark], [data-slot="sidebar-row-lead"]';
   /** A project's rows: each hangs off the project's own mark. */
   const LEAD_TREE: BranchOptions = { glyph: LEAD };
-  /** The height the loading rows stand at: a list row's. */
-  const LIST_ROW_H = "h-[30px]";
-  /** `Sidebar.Group`'s own `p-2` plus `Sidebar.Content`'s `gap-2` stacked to
-   *  24px of nothing between every section; the label already separates them. */
-  const GROUP = "px-2 py-1";
 
   /**
    * How far the fleet's first read has come: 1 workflow runs, 2 machines and
@@ -233,13 +205,6 @@
       stage = next;
     }
   });
-  const GROUP_LABEL = "px-2.5";
-  /** A label carrying a control (the sort, the delegates toggle): on a coarse
-   *  pointer it takes a 44px row, so the control's touch area stays inside
-   *  it, clear of the session row below. */
-  const CONTROL_LABEL = "pr-1 pointer-coarse:h-11";
-  /** 2px, not 4: these are rows of one list, not six unrelated buttons. */
-  const MENU = "gap-0.5";
   /**
    * Every row in the rail shares one hover ghost that glides from row to row
    * across the groups; the nav and each session list carry their own
@@ -259,9 +224,9 @@
    * varies; the column does not, which is the only reason every label in the
    * rail starts at the same x (10px of row padding + 18 + 10 of gap = 38px).
    */
-  const SLOT = "inline-flex size-[18px] shrink-0 items-center justify-center";
+  const SLOT = "inline-flex size-space-5 shrink-0 items-center justify-center";
   /** A line glyph in the slot: 16px, 1px of air. */
-  const SLOT_GLYPH = "size-4";
+  const SLOT_GLYPH = "size-icon-md";
 
   /* ---- projects ------------------------------------------------------- */
 
@@ -675,17 +640,18 @@
   const fleetCount = $derived(cawco.blockedCount || cawco.runningRows.length);
 </script>
 
-{#snippet pending(rows: number, height: string)}
+{#snippet pending(rows: number)}
   <!-- Rows where the next groups will stand, while their read is out, at the
-       height of the rows that replace them. Each stage has its own, gone when
-       that stage's groups arrive, so nothing drawn is ever pushed down. -->
-  <Sidebar.Group aria-busy="true" aria-label="Loading" class={GROUP} data-flip>
-    <div class="flex h-8 items-center {GROUP_LABEL}">
-      <Skeleton class="h-3 w-20" />
+       height of the rows that replace them (a list row's). Each stage has
+       its own, gone when that stage's groups arrive, so nothing drawn is
+       ever pushed down. -->
+  <Sidebar.Group aria-busy="true" aria-label="Loading" data-flip pad="rail">
+    <div class="flex h-space-8 items-center px-space-3">
+      <Skeleton height="x-height" radius="line" type="label" width="label" />
     </div>
-    <div class="flex flex-col gap-0.5">
+    <div class="flex flex-col gap-space-row">
       {#each Array.from({ length: rows }, (_, row) => row) as row (row)}
-        <Skeleton class="{height} w-full" />
+        <Skeleton class="w-full" height="control-sm" />
       {/each}
     </div>
   </Sidebar.Group>
@@ -771,11 +737,12 @@
            folds back into it the same way (motion/branch). reflow never
            copies or uncovers what is inside (`data-flip-anchor`). -->
       <ul
+        data-nest
         class="kit-nest flex min-w-0 flex-col gap-(--tree-gap) pt-(--tree-gap) pl-(--nest-pad)"
         data-flip-anchor
         in:branch={TREE}
         out:branch={TREE}
-        {@attach nestFrom(".tree-mark")}
+        {@attach nestFrom("[data-tree-mark]")}
       >
         {#each node.recent as child (child.row.id)}
           {@render subRow(child, list)}
@@ -794,7 +761,7 @@
 {/snippet}
 
 <div
-  class="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-sidebar text-sidebar-foreground"
+  class="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-surface-page text-ink-strong"
   bind:this={railEl}
   {@attach highlight({ rows: ROWS })}
 >
@@ -804,10 +771,10 @@
     <!-- The wordmark, and in the header's corner what is started from
          anywhere: a session (⇧⌘N). Jump lives on the tab row (Shell), beside
          the conversations it jumps between. -->
-    <div class="brand-row flex items-center gap-1">
-      <Sidebar.Menu aria-label="Workspace" class="min-w-0 flex-1">
+    <div data-slot="sidebar-brand-row" class="flex items-center gap-space-1">
+      <Sidebar.Menu aria-label="Workspace" class="flex-1">
         <Sidebar.MenuItem>
-          <Sidebar.MenuButton class={NAV_ROW} isActive={false}>
+          <Sidebar.MenuButton isActive={false} row="nav">
             {#snippet child({ props })}
               <a
                 href="/session"
@@ -815,19 +782,25 @@
                 class="{props.class} mark-line no-underline"
               >
                 <!-- The app's own icon (the crow on spark), in the lead
-                     column every row's mark stands in. -->
+                     column every row's mark stands in: the column's 18px
+                     tile, on the tile's radius. Its edge is drawn inside it
+                     (a negative offset), so the box stays 18px and the icon
+                     keeps its shape on the rail in either theme. -->
                 <img
                   alt=""
-                  class="brand-icon"
+                  class="flex-none size-space-5 rounded-xs outline outline-image-outline -outline-offset-1"
                   height="18"
                   src={cawcoIcon}
                   width="18"
                 />
                 <!-- The wordmark is the logotype, set as a lockup with the
-                     icon in its own box (its face is Nunito, not a label's). -->
+                     icon in its own box (its face is Nunito, not a label's),
+                     a body line tall. -->
                 <span
-                  class="brand-wordmark min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-foreground"
-                  data-box>Caw&amp;Co</span
+                  class="inline-flex items-center h-(--wordmark-h) font-wordmark text-size-body font-(--weight-wordmark) tracking-wordmark leading-kpi min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
+                  data-box
+                  style:--wordmark-h={"calc(var(--text-body) * var(--leading-body))"}
+                  >Caw&amp;Co</span
                 >
               </a>
             {/snippet}
@@ -836,14 +809,16 @@
       </Sidebar.Menu>
       <Tip keys="⇧⌘N" label="Start session">
         {#snippet children(tip)}
+          <!-- The header's corner action: an icon button on the nav row's
+               height. -->
           <button
             {...tip}
             aria-label="Start session"
-            class="head-action focus-inset touch-hit"
+            class="focus-inset touch-hit inline-grid flex-none place-items-center size-c-nav-h border-none border-current rounded-sm bg-transparent text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
             onclick={() => newSession()}
             type="button"
           >
-            <IconPlus />
+            <IconPlus class="size-space-5" />
           </button>
         {/snippet}
       </Tip>
@@ -856,21 +831,24 @@
        session starting, a count moving. Every group, row, count and status
        mark is `data-flip`, so it arrives and leaves in place and what it moves
        slides instead of jumping (motion/rows `reflow`). -->
-  <Sidebar.Content class="gap-0 py-1" {@attach reflow()} {@attach scroller}>
+  <Sidebar.Content pad="rail" {@attach reflow()} {@attach scroller}>
     {#if sheet && onsearch}
       <!-- The phone's search: the Jump palette's field, which opens Jump
-           hanging from the bar's glass. -->
-      <div class="px-2 pb-1">
+           hanging from the bar's glass, standing where the sheet starts; a
+           press closes the sheet and opens the palette. -->
+      <div class="px-space-2 pb-space-1">
         <button
           data-slot="search"
           aria-haspopup="dialog"
-          class="search mark-line press-tint focus-inset"
+          class="mark-line press-tint focus-inset flex items-center gap-space-2 w-full min-h-c-btn-h-lg px-space-3 border border-border-control rounded-sm bg-surface-raised type-body text-ink-muted text-start cursor-text"
           data-share="jump"
           onclick={() => onsearch()}
           type="button"
         >
-          <IconSearch />
-          <span>Search sessions, projects, machines</span>
+          <IconSearch class="flex-none size-icon-md" />
+          <span class="overflow-clip text-ellipsis whitespace-nowrap"
+            >Search sessions, projects, machines</span
+          >
         </button>
       </div>
     {/if}
@@ -879,10 +857,10 @@
       <!-- The conversation on screen's Files, where the phone keeps the
            bar's other items: one row under the search, its count on the
            row's badge as Fleet's stands. Its drawer is Shell's. -->
-      <Sidebar.Group class={GROUP}>
-        <Sidebar.Menu aria-label="This conversation" class={MENU}>
+      <Sidebar.Group pad="rail">
+        <Sidebar.Menu aria-label="This conversation" gap="tight">
           <Sidebar.MenuItem>
-            <Sidebar.MenuButton class={NAV_ROW} isActive={false}>
+            <Sidebar.MenuButton isActive={false} row="nav">
               {#snippet child({ props })}
                 <button
                   {...props}
@@ -899,7 +877,8 @@
               {/snippet}
             </Sidebar.MenuButton>
             {#if count}
-              <Sidebar.MenuBadge class={NAV_BADGE}>{count}</Sidebar.MenuBadge>
+              <!-- Centred on its nav row, as Fleet's count stands. -->
+              <Sidebar.MenuBadge>{count}</Sidebar.MenuBadge>
             {/if}
           </Sidebar.MenuItem>
         </Sidebar.Menu>
@@ -911,14 +890,14 @@
          projects; with no session open the session surface draws its own
          page of it too. -->
     <!-- The app's places, first: one compact block, no heading over it. -->
-    <Sidebar.Group class={GROUP}>
-      <Sidebar.Menu aria-label="Places" class={MENU} {@attach highlight(PILL)}>
+    <Sidebar.Group pad="rail">
+      <Sidebar.Menu aria-label="Places" gap="tight" {@attach highlight(PILL)}>
         <Sidebar.MenuItem>
           <!-- The board is the place while it is on screen; with a
                conversation open, its row is the one selection. -->
           <Sidebar.MenuButton
-            class={NAV_ROW}
             isActive={path.startsWith("/session") && activeSession === null}
+            row="nav"
           >
             {#snippet child({ props })}
               <a href="/session" {...props} class="{props.class} mark-line">
@@ -933,13 +912,9 @@
                  the kit's active and hover inks are for a plain count, and
                  on the live fill the active one reads 3.3:1. -->
             <Sidebar.MenuBadge
-              class={[
-                NAV_BADGE,
-                cawco.blockedCount > 0
-                  ? "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]!"
-                  : "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]!",
-              ].join(" ")}
+              data-blocked={cawco.blockedCount > 0 || undefined}
               data-flip="pop box"
+              tone="live"
             >
               <MorphText text={String(fleetCount)} />
             </Sidebar.MenuBadge>
@@ -948,8 +923,8 @@
 
         <Sidebar.MenuItem>
           <Sidebar.MenuButton
-            class={NAV_ROW}
             isActive={path.startsWith("/workflows")}
+            row="nav"
           >
             {#snippet child({ props })}
               <a href="/workflows" {...props} class="{props.class} mark-line"
@@ -972,13 +947,13 @@
     {#if stage >= 3}
       <!-- Projects. Its working sessions echo in turn, top to bottom
            (motion/echo). -->
-      <Sidebar.Group class={GROUP} data-flip {@attach echoBeat()}>
-        <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
+      <Sidebar.Group data-flip pad="rail" {@attach echoBeat()}>
+        <Sidebar.GroupLabel end="action" pad="rail">
           <span>Projects</span>
           <!-- The sort lives here rather than once per list because it governs all
            of them at once: a rail whose projects were ordered by recency and
            whose "Not running" was ordered by name would be two rails. -->
-          <div class="-mr-1 ml-auto flex items-center gap-0.5">
+          <div class="-me-space-1 ms-auto flex items-center gap-space-row">
             <DropdownMenu.Root>
               <DropdownMenu.Trigger>
                 {#snippet child({ props })}
@@ -995,7 +970,7 @@
                   </Button>
                 {/snippet}
               </DropdownMenu.Trigger>
-              <DropdownMenu.Content align="start" class="w-44">
+              <DropdownMenu.Content align="start" width="compact">
                 <DropdownMenu.Group>
                   <DropdownMenu.GroupHeading
                     >Sort sessions by</DropdownMenu.GroupHeading
@@ -1022,7 +997,7 @@
                 <Button
                   {...tip}
                   aria-label="New project"
-                  class="-mr-1"
+                  class="-me-space-1"
                   href="/project/new"
                   size="icon-sm"
                   variant="ghost"
@@ -1034,14 +1009,14 @@
           </div>
         </Sidebar.GroupLabel>
         {#if orderedProjects.length === 0}
-          <p class="px-2.5 text-meta text-muted-foreground" data-flip>
+          <p class="px-space-3 text-meta text-ink-muted" data-flip>
             {cawco.machines.length === 0
               ? sidebarWords.noProjectsNoMachines
               : sidebarWords.noProjects}
           </p>
         {:else}
           <Sidebar.Menu
-            class={MENU}
+            gap="tight"
             {@attach highlight(PILL)}
             {@attach holdWhileInside("rail:")}
           >
@@ -1062,7 +1037,7 @@
                   onnew={() => newSession({ projectId: project.id })}
                   {project}
                 >
-                  <Sidebar.MenuButton class={LIST_ROW} isActive={here}>
+                  <Sidebar.MenuButton isActive={here} row="list">
                     {#snippet child({ props })}
                       <!-- The row is the link to the project's page. Its
                            mark says what is running in it, as a session's
@@ -1070,13 +1045,14 @@
                            its sessions, as a session's mark folds its
                            delegates; its press never reaches the link. Under
                            a finger the switch reaches sideways to the name,
-                           the row's own gap (LIST_ROW's), as a session
+                           the row's own gap (`row="list"`), as a session
                            row's does. -->
                       <a
                         {href}
                         {...props}
                         aria-current={here ? "page" : undefined}
-                        class="{props.class} mark-line [--mark-hit-gap:--spacing(2.5)]"
+                        class="{props.class} mark-line"
+                        style:--mark-hit-gap="var(--space-3)"
                       >
                         <ProjectMark
                           count={runningCount}
@@ -1098,10 +1074,16 @@
                   </Sidebar.MenuButton>
                 </FolderMenu>
                 <!-- A forget asked from this row's menu, under it. -->
-                <ForgetProjectTray
-                  at={forgetAtRail(project.id)}
-                  class="rail-forget"
-                />
+                <div
+                  data-slot="sidebar-forget"
+                  class="contents"
+                  style:--ask-indent="var(--space-1)"
+                  style:--ask-end="var(--space-1)"
+                  style:--fault-indent="var(--space-2)"
+                  style:--fault-end="var(--space-2)"
+                >
+                  <ForgetProjectTray at={forgetAtRail(project.id)} />
+                </div>
 
                 <!-- Its sessions hang under it the way a session's delegates
                      hang under theirs: on a rail that leaves the project's
@@ -1116,13 +1098,14 @@
                     (row) => row.id === activeSession
                   )}
                   <ul
+                    data-nest
                     class="kit-nest flex min-w-0 flex-col gap-(--tree-gap) pt-(--tree-gap) pl-(--nest-pad)"
                     data-flip-anchor
                     data-sidebar="menu-sub"
                     data-slot="sidebar-menu-sub"
                     in:branch={LEAD_TREE}
                     out:branch={LEAD_TREE}
-                    {@attach nestFrom(".tree-mark", LEAD)}
+                    {@attach nestFrom("[data-tree-mark]", LEAD)}
                   >
                     {#each branches(lists.recent, `rail:${project.id}:recent`) as node (node.row.id)}
                       {@render subRow(node, "projects")}
@@ -1142,12 +1125,15 @@
                     {#if lists.older.length + lists.recent.length === 0}
                       <Sidebar.MenuSubItem data-flip>
                         <Sidebar.MenuSubButton
-                          class="{SUB_ROW} text-muted-foreground"
                           data-branch-item
                           onclick={() => newSession({ projectId: project.id })}
+                          row="compact"
+                          tone="muted"
                         >
-                          <span class="{SLOT} row-lead" data-box
-                            ><IconPlus class="size-3" /></span
+                          <span
+                            data-slot="sidebar-row-lead"
+                            class={SLOT}
+                            data-box><IconPlus class="size-icon-sm" /></span
                           >
                           <span>No sessions — start one</span>
                         </Sidebar.MenuSubButton>
@@ -1161,7 +1147,7 @@
         {/if}
       </Sidebar.Group>
     {:else}
-      {@render pending(6, LIST_ROW_H)}
+      {@render pending(6)}
     {/if}
     {#if !narrow}
       <!-- Everything else that can be opened, after the projects. -->
@@ -1170,10 +1156,10 @@
     {#if sheet}
       <!-- The machines, where a phone keeps them: each with its status and
            its menu (a long press), then Add machine. -->
-      <Sidebar.Group class={GROUP} data-flip>
-        <Sidebar.GroupLabel class={GROUP_LABEL}>
+      <Sidebar.Group data-flip pad="rail">
+        <Sidebar.GroupLabel pad="rail">
           Machines
-          <span class="machines-count">{machinesOnline()} online</span>
+          <span class="ms-auto num">{machinesOnline()} online</span>
         </Sidebar.GroupLabel>
         <MachinesList />
       </Sidebar.Group>
@@ -1191,20 +1177,17 @@
     <!-- One row at every rail width: the product holds no name for the
          reader (a single operator, called "you"), so the user chip is its
          avatar alone and says "You" in its tooltip. -->
-    <div class="flex items-center gap-1" data-flip>
+    <div class="flex items-center gap-space-1" data-flip>
       <Sidebar.Menu aria-label="User" class="w-auto">
         <Sidebar.MenuItem>
           <Tip label="You">
             {#snippet children(tip)}
-              <Sidebar.MenuButton
-                {...tip}
-                aria-label="You"
-                class="touch-hit size-[30px] justify-center overflow-visible p-0"
-              >
-                <!-- No picture of the reader yet: Caw stands in. -->
+              <Sidebar.MenuButton {...tip} aria-label="You" row="avatar">
+                <!-- No picture of the reader yet: Caw stands in, the brand
+                     icon as a round picture. -->
                 <img
                   alt=""
-                  class="brand-icon avatar"
+                  class="flex-none size-space-5 rounded-pill outline outline-image-outline -outline-offset-1"
                   height="18"
                   src={cawcoIcon}
                   width="18"
@@ -1215,19 +1198,23 @@
         </Sidebar.MenuItem>
       </Sidebar.Menu>
       <!-- Configure, the theme and sound: the settings in the corner. -->
-      <div class="ms-auto flex items-center gap-1">
+      <div
+        data-slot="sidebar-settings"
+        class="ms-auto flex items-center gap-space-1"
+      >
         <Tip label="Configure">
           {#snippet children(tip)}
             <Button
               {...tip}
               aria-current={configuring ? "page" : undefined}
               aria-label="Configure"
-              class="rail-configure"
+              current="selected"
+              data-rail-configure
               href={configureHref}
               size="icon-sm"
               variant="ghost"
             >
-              <IconSettings class="size-4" />
+              <IconSettings class="size-icon-md" />
             </Button>
           {/snippet}
         </Tip>
@@ -1241,107 +1228,3 @@
 </div>
 
 <!-- end flex column wrapper -->
-
-<style>
-  /* A forget's tray and its fault under a folder row, set in by the rail's
-     row padding so they sit inside the rail's column. */
-  :global(.rail-forget) {
-    --ask-indent: var(--space-1);
-    --ask-end: var(--space-1);
-    --fault-indent: var(--space-2);
-    --fault-end: var(--space-2);
-  }
-  .brand-wordmark {
-    display: inline-flex;
-    align-items: center;
-    block-size: calc(var(--text-body) * var(--leading-body));
-    font-family: var(--font-wordmark);
-    font-size: var(--text-body);
-    font-weight: var(--weight-wordmark);
-    letter-spacing: var(--track-wordmark);
-    line-height: var(--leading-kpi);
-  }
-
-  /* The brand row's icon: the lead column's 18px tile, on the tile's radius.
-     Its edge is drawn inside it (a negative offset), so the box stays 18px
-     and the icon keeps its shape on the rail in either theme. */
-  .brand-icon {
-    flex: none;
-    inline-size: 18px;
-    block-size: 18px;
-    border-radius: var(--radius-xs);
-    outline: 1px solid var(--image-outline);
-    outline-offset: -1px;
-  }
-  /* The same picture as the reader's placeholder: a round one. */
-  .brand-icon.avatar {
-    border-radius: var(--radius-pill);
-  }
-  /* The phone's search: Jump's field, standing where the sheet starts; a
-     press closes the sheet and opens the palette, hanging from the bar's
-     glass. */
-  .search {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    inline-size: 100%;
-    min-block-size: 44px;
-    padding-inline: var(--space-3);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    font: var(--type-body);
-    color: var(--ink-muted);
-    text-align: start;
-    cursor: text;
-  }
-  .search :global(svg) {
-    flex: none;
-    inline-size: 16px;
-    block-size: 16px;
-  }
-  .search span {
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .machines-count {
-    margin-inline-start: auto;
-    font-variant-numeric: tabular-nums;
-  }
-  /* The header's corner actions: icon buttons on the nav row's height. */
-  .head-action {
-    display: inline-grid;
-    flex: none;
-    place-items: center;
-    inline-size: var(--c-nav-h);
-    block-size: var(--c-nav-h);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--ink-muted);
-    cursor: pointer;
-    transition: var(--transition-control);
-  }
-  .head-action :global(svg) {
-    inline-size: 18px;
-    block-size: 18px;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .head-action:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-  }
-  /* Configure, while a /config page is open: the selected tint, crossing
-     over --dur-control like every control's colour. */
-  :global(.rail-configure[aria-current="page"]) {
-    background: var(--selected-bg);
-    color: var(--selected-ink);
-  }
-  :global(.rail-configure) {
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-  }
-</style>

@@ -21,20 +21,29 @@
    *   </ContextMenu.Lazy>
    */
   import type { Snippet } from "svelte";
-  import { cn } from "#lib/utils.js";
+  import { cn, tv } from "#lib/utils.js";
   import ContextMenu from "./context-menu.svelte";
   import LazyProps from "./context-menu-lazy-props.svelte";
   import ContextMenuTrigger from "./context-menu-trigger.svelte";
 
   type TriggerProps = Record<string, unknown>;
 
+  /** Its trigger's looks: a wrapper round a row that draws no box of its
+      own (`box: "none"`), so the row lays out in its list as it would bare. */
+  const lazyTriggerVariants = tv({
+    variants: { box: { none: "contents" } },
+  });
+
   let {
     class: className,
+    box,
     trigger,
     children,
   }: {
     /** The trigger's own classes, beside the kit's. */
     class?: string;
+    /** The trigger draws no box of its own: its row lays out as it would bare. */
+    box?: "none";
     /** The element the menu opens from, spreading these props. */
     trigger: Snippet<[TriggerProps]>;
     /** The menu: its Content, built with the rest. */
@@ -66,8 +75,9 @@
    * that building the menu changes no attribute a list's reflow listens for
    * (motion/rows).
    */
+  const own = $derived(cn(lazyTriggerVariants({ box }), className));
   const rest = $derived<TriggerProps>({
-    class: cn("cn-context-menu-trigger select-none", className),
+    class: cn("select-none", own),
     "data-slot": "context-menu-trigger",
     "data-state": "closed",
     "data-context-menu-trigger": "",
@@ -80,7 +90,7 @@
 {@render trigger(live ? stops(live()) : rest)}
 {#if asked}
   <ContextMenu>
-    <ContextMenuTrigger class={className}>
+    <ContextMenuTrigger class={own}>
       {#snippet child({ props })}
         <LazyProps
           {props}

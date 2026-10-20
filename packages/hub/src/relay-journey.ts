@@ -367,15 +367,17 @@ const startStepOf = (
         state: "failed",
         why: STREAM_RELAY_WORDS.stoppedStep,
       };
-    default:
-      return {
-        step: "start",
-        state: "running",
-        progress: pulled
-          ? STREAM_RELAY_WORDS.pulling(pulled.done, pulled.total)
-          : STREAM_RELAY_WORDS.starting,
-      };
+    case "pulling":
+    case "starting":
+      break;
   }
+  return {
+    step: "start",
+    state: "running",
+    progress: pulled
+      ? STREAM_RELAY_WORDS.pulling(pulled.done, pulled.total)
+      : STREAM_RELAY_WORDS.starting,
+  };
 };
 
 /** The proof: from outside it ticks; the latest that answered nothing stands as a failure; one from inside asks for one from outside. */

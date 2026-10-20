@@ -150,7 +150,7 @@
 
 <main class="dp">
   <header class="dp-hero">
-    <span class="caw">
+    <span data-slot="caw">
       <img alt="Caw" class="caw-light" height="72" src={cawLight} width="72" />
       <img alt="" class="caw-dark" height="72" src={cawDark} width="72" />
     </span>
@@ -187,6 +187,7 @@
 </main>
 
 <style>
+  /* tailwind: this file is bundled by Bun for the decision host page, which loads only the kit's page.css and tokens.css and has no Tailwind compiler, so a utility class here would have no CSS behind it — https://tailwindcss.com/docs/installation */
   /* The page's scroller moves only where a fold rides it (Decision.svelte,
      motion/scroll-on): the browser's scroll anchoring would jump it as a
      card folds above the reader's view (the transcript's precedent). */

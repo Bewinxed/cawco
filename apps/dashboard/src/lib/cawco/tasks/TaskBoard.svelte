@@ -143,8 +143,16 @@
   <NewTaskForm {oncreate} stage={newIn ?? ""} bind:open={adding} />
 {/snippet}
 
-<div class="board-wrap" data-rail-open={railed && railOpen ? "" : undefined}>
-  <div data-slot="board" class="board kit-edge-fade">
+<div
+  class="group flex h-full min-h-0 gap-space-3 max-phone:h-auto"
+  data-rail-open={railed && railOpen ? "" : undefined}
+>
+  <div
+    data-slot="board"
+    class="kit-edge-fade grid h-full min-h-0 min-w-0 flex-auto auto-cols-(--cols) grid-flow-col gap-space-3 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-space-3 max-phone:h-auto max-phone:auto-cols-(--cols-phone) max-phone:snap-x max-phone:snap-mandatory max-phone:group-data-rail-open:hidden"
+    style:--cols="minmax(var(--c-board-col-min), var(--c-board-col-max))"
+    style:--cols-phone="calc(100% - var(--space-8))"
+  >
     {#each stages as stage (stage.name)}
       {@render column(
         stage.name,
@@ -159,7 +167,11 @@
   </div>
   {#if railed}
     {#if railOpen}
-      <div data-slot="rail-open" class="rail-open">
+      <div
+        data-slot="rail-open"
+        class="mb-space-3 flex min-h-0 w-(--w) flex-none flex-col gap-space-1 max-phone:w-full"
+        style:--w="min(var(--c-board-col-max), 80%)"
+      >
         <TaskColumn
           archived
           cards={archived}
@@ -173,7 +185,7 @@
         <button
           data-slot="rail-close"
           bind:this={foldButton}
-          class="rail-close press-tint"
+          class="press-tint min-h-c-btn-h-sm rounded-sm border-none border-current bg-transparent p-space-1 type-meta text-ink-muted coarse:min-h-c-btn-h-lg"
           onclick={() => setRail(false)}
           type="button"
         >
@@ -188,118 +200,18 @@
         aria-label="Archived, {archived.length} {archived.length === 1
           ? 'task'
           : 'tasks'}. Open it."
-        class="archive-rail press-tint"
+        class="press-tint mb-space-3 flex w-c-btn-h-lg flex-none flex-col items-center gap-space-2 rounded-lg border-none border-current bg-surface-band px-0 py-space-3 text-ink-muted inset-ring inset-ring-border-hairline"
         onclick={() => setRail(true)}
         type="button"
       >
-        <IconArchive aria-hidden="true" />
-        <span class="rail-name">Archived</span>
-        <span data-slot="num" class="rail-count num">{archived.length}</span>
+        <IconArchive aria-hidden="true" class="size-icon-md" />
+        <span data-slot="rail-name" class="type-label writing-vertical-rl"
+          >Archived</span
+        >
+        <span data-slot="num" class="num type-meta text-ink-subtle"
+          >{archived.length}</span
+        >
       </button>
     {/if}
   {/if}
 </div>
-
-<style>
-  .board-wrap {
-    display: flex;
-    gap: var(--space-3);
-    block-size: 100%;
-    min-block-size: 0;
-  }
-  .board {
-    display: grid;
-    flex: 1 1 auto;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(15rem, 22rem);
-    gap: var(--space-3);
-    min-inline-size: 0;
-    block-size: 100%;
-    min-block-size: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding-block-end: var(--space-3);
-    overscroll-behavior-x: contain;
-  }
-  /* The rail folded narrow at the board's trailing edge; open, it is a
-     column like the others, quieter. Both stand on the board's floor (its
-     scroll room under the columns). */
-  .archive-rail,
-  .rail-open {
-    flex: none;
-    margin-block-end: var(--space-3);
-  }
-  .archive-rail {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-2);
-    inline-size: var(--c-btn-h-lg);
-    padding: var(--space-3) 0;
-    border: 0;
-    border-radius: var(--radius-lg);
-    background: var(--surface-band);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-    color: var(--ink-muted);
-    cursor: pointer;
-  }
-  .archive-rail :global(svg) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-  .rail-name {
-    font: var(--type-label);
-    writing-mode: vertical-rl;
-  }
-  .rail-count {
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-  }
-  .rail-open {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    inline-size: min(22rem, 80%);
-    min-block-size: 0;
-  }
-  .rail-close {
-    min-block-size: var(--c-btn-h-sm);
-    padding: var(--space-1);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    cursor: pointer;
-  }
-  /* A phone shows one column and the edge of the next, and a swipe settles
-     on a column. The page is the one scroller there (the project page), so
-     the columns stand at their natural height and scroll with it. */
-  @media (max-width: 639px) {
-    .board-wrap,
-    .board {
-      block-size: auto;
-    }
-    .board {
-      grid-auto-columns: calc(100% - var(--space-8));
-      scroll-snap-type: x mandatory;
-    }
-    .board > :global(.column) {
-      scroll-snap-align: start;
-    }
-    /* Open, the rail is the phone's one column: the board steps aside
-       until it folds. */
-    [data-rail-open] > .board {
-      display: none;
-    }
-    [data-rail-open] > .rail-open {
-      inline-size: 100%;
-    }
-  }
-  /* Under a finger, Fold the archive is a full touch target. */
-  @media (pointer: coarse) {
-    .rail-close {
-      min-block-size: var(--c-btn-h-lg);
-    }
-  }
-</style>

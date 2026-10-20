@@ -79,6 +79,29 @@
   });
   const labelled = $derived(tasks.some((task) => task.labels.length > 0));
   const planned = $derived(tasks.some((task) => task.todos.total > 0));
+  /**
+   * The lesser columns, folded in this order (Labels first) so the title
+   * keeps its floor at every ledger width; the rest always stand.
+   */
+  const FOLD: Record<
+    string,
+    "tasks-labels" | "tasks-created" | "tasks-todos" | "tasks-id"
+  > = {
+    labels: "tasks-labels",
+    created: "tasks-created",
+    todos: "tasks-todos",
+    id: "tasks-id",
+  };
+  /** Each column's width, its head's and its cells' alike; the title takes the rest. */
+  const COL_W: Record<string, string> = {
+    pick: "calc(var(--icon-md) + 2 * var(--space-3))",
+    id: "var(--c-task-col-id-w)",
+    stage: "var(--c-task-col-stage-w)",
+    labels: "var(--c-task-col-labels-w)",
+    todos: "var(--c-task-col-todos-w)",
+    created: "var(--c-task-col-time-w)",
+    updated: "var(--c-task-col-time-w)",
+  };
   /** A column the ledger holds in its own order. */
   const fixed = { enableSorting: false } as const;
   /** A time column: sorted by its ms epoch, newest first on the first pick. */
@@ -197,21 +220,36 @@
   }
 </script>
 
-<div data-slot="ledger" class="ledger" data-pickable={onpick ? "" : undefined}>
-  <Table.Root data-tasks class="tasks table-fixed" ghostRows="tbody tr">
+<!-- From 640px a row ledger that fits its place with the title at its floor
+     (c-ledger-title-min): Labels, Created, To-dos, then Id fold as it
+     narrows (FOLD). Under 640px each row is a card: the tick down its start,
+     the title across the card, then id, stage, to-dos and age. -->
+<div
+  data-slot="ledger"
+  class="group/ledger overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+  data-pickable={onpick ? "" : undefined}
+  style:--card-cols={onpick ? "auto auto auto 1fr auto" : "auto auto 1fr auto"}
+>
+  <Table.Root data-tasks ghostRows="tbody tr" layout="ledger" stacks="phone">
     <Table.Header>
       {#each table.getHeaderGroups() as group (group.id)}
-        <Table.Row class="band border-0">
+        <Table.Row variant="band">
           {#each group.headers as header (header.id)}
             {@const column = header.column}
             {@const sorted = column.getIsSorted()}
             {@const sort = ariaSort(sorted)}
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
+              edge={column.id === "created" || column.id === "updated"
+                ? "end"
+                : undefined}
               aria-sort={sort}
-              class="col-{column.id}"
+              class="w-(--col-w)"
               data-task-table-col={column.id}
+              fold={FOLD[column.id]}
               scope="col"
+              variant="band"
+              style="--col-w: {COL_W[column.id] ?? ''}"
             >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: the tag above -->
               {#if column.id === "pick"}
@@ -223,7 +261,7 @@
                     ? "Untick every task shown"
                     : "Pick every task shown"}
                   checked={count > 0 && count === ids.length}
-                  class="pick"
+                  class="relative z-1"
                   indeterminate={count > 0 && count < ids.length}
                   onclick={(event: MouseEvent) => {
                     event.preventDefault();
@@ -232,15 +270,21 @@
                 />
               {:else if column.getCanSort()}
                 <button
-                  class="sort mark-line press-tint focus-inset"
+                  class="inline-flex items-center gap-space-1 -me-space-1 p-space-1 rounded-sm type-label tracking-caps uppercase text-ink-muted mark-line press-tint focus-inset"
                   onclick={column.getToggleSortingHandler()}
                   type="button"
                 >
                   <span>{column.columnDef.header}</span>
                   {#if sorted === "desc"}
-                    <IconChevronDown aria-hidden="true" />
+                    <IconChevronDown
+                      aria-hidden="true"
+                      class="size-icon-sm flex-none"
+                    />
                   {:else if sorted === "asc"}
-                    <IconChevronUp aria-hidden="true" />
+                    <IconChevronUp
+                      aria-hidden="true"
+                      class="size-icon-sm flex-none"
+                    />
                   {/if}
                 </button>
               {:else}
@@ -257,21 +301,36 @@
         {@const on = picked?.(task.id) ?? false}
         <Table.Row
           data-task-table-row
-          class="row"
+          class="group/row relative"
           data-picked={on || undefined}
           data-task={task.id}
+          variant="picks-stacks"
         >
           {#each row.getAllCells() as cell (cell.id)}
             <Table.Cell
-              class="col-{cell.column.id}"
+              edge={cell.column.id === "created" || cell.column.id === "updated"
+                ? "end"
+                : undefined}
+              class={[
+                "w-(--col-w)",
+                cell.column.id === "pick" &&
+                  "@max-phone/table:row-start-1 @max-phone/table:row-span-2 @max-phone/table:col-start-1",
+                cell.column.id === "title" &&
+                  "@max-phone/table:row-start-1 @max-phone/table:col-span-full group-data-pickable/ledger:@max-phone/table:col-start-2 group-data-pickable/ledger:@max-phone/table:-col-end-1",
+                cell.column.id === "updated" &&
+                  "@max-phone/table:col-start-4 group-data-pickable/ledger:@max-phone/table:col-start-5",
+              ]}
               data-task-table-col={cell.column.id}
+              fold={FOLD[cell.column.id]}
+              style="--col-w: {COL_W[cell.column.id] ?? ''}"
+              variant="ledger-picks-stacks"
             >
               {#if cell.column.id === "pick"}
                 <Checkbox
                   data-task-table-pick
                   aria-label="Pick {task.id} {task.title}"
                   checked={on}
-                  class="pick"
+                  class="relative z-1"
                   onclick={(event: MouseEvent) => {
                     event.preventDefault();
                     onpick?.(
@@ -282,36 +341,45 @@
                   }}
                 />
               {:else if cell.column.id === "id"}
-                <span data-slot="id" class="id">{task.id}</span>
+                <span data-slot="id" class="type-code liga-none text-ink-subtle"
+                  >{task.id}</span
+                >
               {:else if cell.column.id === "title"}
                 <a
                   data-slot="title"
-                  class="title focus-inset"
+                  class="flex items-baseline gap-space-2 min-w-0 text-inherit no-underline after:absolute after:inset-0 focus-inset"
                   href={hrefOf(task.id)}
                   onclick={(event) => open(event, task.id)}
                 >
-                  <span data-slot="name" class="name">{task.title}</span>
+                  <span
+                    data-slot="name"
+                    class="min-w-0 type-label text-ink-row truncate"
+                    >{task.title}</span
+                  >
                 </a>
               {:else if cell.column.id === "stage"}
                 <span
                   data-slot="stage"
-                  class="stage mark-line"
+                  class="inline-flex items-center gap-space-1 min-w-0 text-ink-strong mark-line"
                   data-kind={task.kind ?? "none"}
                 >
                   {#if task.kind === "you"}
-                    <IconNeedsYou aria-hidden="true" />
+                    <IconNeedsYou
+                      aria-hidden="true"
+                      class="size-icon-sm flex-none text-status-attn-glyph"
+                    />
                   {/if}
-                  <span class="stage-name">{stageLabel(task.stage)}</span>
+                  <span class="type-label">{stageLabel(task.stage)}</span>
                 </span>
               {:else if cell.column.id === "labels"}
-                <span class="labels">
+                <span class="flex gap-space-1 overflow-hidden">
                   {#each task.labels as label (label)}
                     <Badge variant="secondary"><span>{label}</span></Badge>
                   {/each}
                 </span>
               {:else if cell.column.id === "todos"}
                 {#if task.todos.total > 0}
-                  <span class="todos mark-line">
+                  <span class="inline-flex items-center gap-space-1 mark-line">
                     <TaskRing
                       done={task.todos.done}
                       size="sm"
@@ -342,217 +410,3 @@
     </Table.Body>
   </Table.Root>
 </div>
-
-<style>
-  .ledger {
-    container-type: inline-size;
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .ledger :global(table.tasks) {
-    border-collapse: separate;
-    border-spacing: 0;
-  }
-  /* The ledger's header band: column heads, one step under the field. */
-  .ledger :global(tr.band) {
-    background: var(--surface-band);
-  }
-  .ledger :global(tr.band th) {
-    block-size: var(--c-toolbar-ctl);
-    padding-inline: var(--space-3);
-    font: var(--type-label);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--ink-muted);
-  }
-  .ledger :global(tr.row) {
-    border-block-end: 0;
-  }
-  .ledger :global(tr.row td) {
-    block-size: var(--c-btn-h-lg);
-    padding-block: 0;
-    padding-inline: var(--space-3);
-    border-block-end: 1px solid var(--border-hairline);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .ledger :global(tr.row:last-child td) {
-    border-block-end: 0;
-  }
-  /* The tick's column: the tick and the cell's inset either side. */
-  .ledger :global(.col-pick) {
-    inline-size: calc(1rem + 2 * var(--space-3));
-  }
-  /* Over the row's link (the title's box spans the row), so a press on the
-     tick ticks it. */
-  .ledger :global(.pick) {
-    position: relative;
-    z-index: 1;
-  }
-  /* A picked row takes the selected wash, as a picked card does. */
-  .ledger :global(tr.row[data-picked] td) {
-    background: var(--selected-bg);
-  }
-  .ledger :global(.col-id) {
-    inline-size: 6.5rem;
-  }
-  .ledger :global(.col-stage) {
-    inline-size: 12rem;
-  }
-  .ledger :global(.col-labels) {
-    inline-size: 14rem;
-  }
-  .ledger :global(.col-todos) {
-    inline-size: 6rem;
-  }
-  .ledger :global(.col-created),
-  .ledger :global(.col-updated) {
-    inline-size: 7rem;
-    text-align: end;
-  }
-  /* A ledger under the rail breakpoint's width keeps its room for the title:
-     Updated stays, Created goes. */
-  @container (width < 900px) {
-    .ledger :global(tr.band th.col-created),
-    .ledger :global(tr.row td.col-created) {
-      display: none;
-    }
-  }
-  /* A sortable head: the head's own words, pressable, its arrow after them. */
-  .sort {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    margin-inline-end: calc(var(--space-1) * -1);
-    padding: var(--space-1);
-    border-radius: var(--radius-sm);
-    font: inherit;
-    letter-spacing: inherit;
-    text-transform: inherit;
-    color: inherit;
-  }
-  .sort :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-    flex: none;
-  }
-  /* The whole row is the task's link: its title's box reaches every cell. */
-  .ledger :global(tr.row) {
-    position: relative;
-  }
-  .title {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    color: inherit;
-    text-decoration: none;
-  }
-  .title::after {
-    position: absolute;
-    inset: 0;
-    content: "";
-  }
-  .id {
-    font: var(--type-code);
-    font-variant-ligatures: none;
-    color: var(--ink-subtle);
-  }
-  .name {
-    min-inline-size: 0;
-    overflow: hidden;
-    font: var(--type-label);
-    color: var(--ink-row);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .stage {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-inline-size: 0;
-    color: var(--ink-strong);
-  }
-  .stage :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-    flex: none;
-    color: var(--status-attn-glyph);
-  }
-  .stage-name {
-    font: var(--type-label);
-  }
-  .labels {
-    display: flex;
-    gap: var(--space-1);
-    overflow: hidden;
-  }
-  .todos {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-
-  @media (max-width: 639px) {
-    .ledger :global(table.tasks thead) {
-      display: none;
-    }
-    .ledger :global(table.tasks),
-    .ledger :global(table.tasks tbody) {
-      display: block;
-    }
-    .ledger :global(tr.row) {
-      display: grid;
-      grid-template-columns: auto auto 1fr auto;
-      align-items: center;
-      gap: var(--space-1) var(--space-2);
-      padding: var(--space-2) var(--space-3);
-      border-block-end: 1px solid var(--border-hairline);
-    }
-    .ledger :global(tr.row:last-child) {
-      border-block-end: 0;
-    }
-    .ledger :global(tr.row td) {
-      display: block;
-      inline-size: auto;
-      min-inline-size: 0;
-      block-size: auto;
-      padding: 0;
-      border: 0;
-    }
-    /* The title on its own line first; id, stage, to-dos and updated under it. */
-    .ledger :global(tr.row td.col-title) {
-      grid-row: 1;
-      grid-column: 1 / -1;
-    }
-    .ledger :global(tr.row td.col-labels) {
-      display: none;
-    }
-    .ledger :global(tr.row td.col-updated) {
-      grid-column: 4;
-    }
-    /* Pickable, the row's tick leads both its lines: the title beside it,
-       id · stage · to-dos · updated under the title. */
-    .ledger[data-pickable] :global(tr.row) {
-      grid-template-columns: auto auto auto 1fr auto;
-    }
-    .ledger[data-pickable] :global(tr.row td.col-pick) {
-      grid-row: 1 / span 2;
-      grid-column: 1;
-    }
-    .ledger[data-pickable] :global(tr.row td.col-title) {
-      grid-column: 2 / -1;
-    }
-    .ledger[data-pickable] :global(tr.row td.col-updated) {
-      grid-column: 5;
-    }
-    .ledger[data-pickable] :global(tr.row[data-picked]) {
-      background: var(--selected-bg);
-    }
-    .ledger[data-pickable] :global(tr.row[data-picked] td) {
-      background: none;
-    }
-  }
-</style>

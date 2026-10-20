@@ -13,15 +13,11 @@
 
 <!-- Reading leaves the same way it came: one fade. -->
 {#if home.status === "reading"}
-  <div class="status" role="status" out:crossOut>Reading the fleet…</div>
+  <div
+    class="flex min-h-c-row-lead items-center type-meta text-ink-muted"
+    role="status"
+    out:crossOut
+  >
+    Reading the fleet…
+  </div>
 {/if}
-
-<style>
-  .status {
-    display: flex;
-    align-items: center;
-    min-block-size: 28px;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>

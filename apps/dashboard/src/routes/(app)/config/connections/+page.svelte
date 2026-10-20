@@ -116,6 +116,7 @@
   import { Input } from "#lib/components/ui/input/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -511,7 +512,7 @@
         .querySelectorAll<HTMLElement>(
           'ul[aria-label="Connections"] > [data-row-name]'
         )
-        [at]?.querySelector<HTMLElement>(".controls") ?? null;
+        [at]?.querySelector<HTMLElement>('[data-slot="controls"]') ?? null;
     choosing = row;
   }
   async function toggle(row: ConnectionView, project: string, on: boolean) {
@@ -544,7 +545,7 @@
         />
       {/snippet}
     </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" class="w-auto min-w-44">
+    <DropdownMenu.Content align="end" class="w-auto" min="regular">
       {#each SERVICES as service (service.service)}
         <DropdownMenu.Item onSelect={() => startAdding(service)}>
           <ProviderLogo provider={service.service} />
@@ -631,9 +632,14 @@
       "privateKey"
     )}
   {:else}
-    <p data-slot="callback" class="callback">
+    <p
+      data-slot="callback"
+      class="flex min-w-0 max-w-c-measure flex-col gap-space-1 type-meta text-ink-muted"
+    >
       <span>{words.callbackLine}</span>
-      <code class="callback-url">{callbackUrl}</code>
+      <code class="min-w-0 font-mono wrap-anywhere text-ink-strong select-all"
+        >{callbackUrl}</code
+      >
     </p>
     <Field hint={words.clientIdHint} id="{at}-client-id" label={words.clientId}>
       <Input
@@ -660,20 +666,24 @@
   <form
     data-slot="add"
     aria-label={words.signInService(service.label)}
-    class="add"
+    class="mb-space-4 flex max-w-c-measure flex-col gap-space-3 rounded-md bg-surface-recess p-space-4"
     onsubmit={add}
     transition:unfold
   >
-    <p class="add-head mark-line">
-      <ProviderLogo provider={service.service} />
+    <p
+      class="mark-line type-label flex items-center gap-space-2 text-ink-strong"
+    >
+      <ProviderLogo class="flex-none" provider={service.service} />
       <span>{words.signInService(service.label)}</span>
     </p>
     {#if service.ways.length > 1}
-      <div data-slot="way" class="way">
-        <p class="way-label" id="connection-way">{words.signsInWith}</p>
+      <div data-slot="way" class="flex min-w-0 flex-col gap-space-1">
+        <p class="type-meta text-ink-muted" id="connection-way">
+          {words.signsInWith}
+        </p>
         <ToggleGroup.Root
           aria-labelledby="connection-way"
-          class="ways"
+          class="max-w-full self-start"
           type="single"
           bind:value={
             () => addWay?.label ?? "",
@@ -688,7 +698,12 @@
           {/each}
         </ToggleGroup.Root>
         {#if addWay}
-          <p class="way-says" data-way-says>{addWay.says}</p>
+          <p
+            class="max-w-c-measure type-meta text-pretty text-ink-muted"
+            data-way-says
+          >
+            {addWay.says}
+          </p>
         {/if}
       </div>
     {/if}
@@ -749,9 +764,15 @@
       {@render appFields(service.service, addApp, "connection")}
     {/if}
     {#if addProblem}
-      <p class="add-problem" role="alert" transition:unfold>{addProblem}</p>
+      <p
+        class="type-meta wrap-anywhere text-status-fail-ink"
+        role="alert"
+        transition:unfold
+      >
+        {addProblem}
+      </p>
     {/if}
-    <div class="buttons">
+    <div class="flex justify-end gap-space-2">
       <Button
         disabled={addPending}
         label={words.cancel}
@@ -760,7 +781,7 @@
         variant="ghost"
       />
       <Button
-        class="pressable"
+        press="pressable"
         label={words.signIn}
         pending={addPending}
         pendingLabel={words.signingIn}
@@ -791,18 +812,33 @@
     <!-- The Empty Starts Work Rule, its by-hand branch: a sign-in is the
          service asking you, so Caw can't start it. The line says so, and
          each card signs in to one service, its row then saying how it goes. -->
-    <div data-slot="connections-page-empty" class="empty">
-      <p data-slot="empty-line" class="empty-line">{words.emptyLine}</p>
-      <ul data-slot="cards" aria-label={words.servicesLabel} class="cards">
+    <div
+      data-slot="connections-page-empty"
+      class="@container flex flex-col gap-space-3"
+    >
+      <p
+        data-slot="empty-line"
+        class="type-body max-w-c-measure text-pretty text-ink-muted"
+      >
+        {words.emptyLine}
+      </p>
+      <!-- The starter cards' recipe (StarterCards.svelte): raised, the tile
+           shadow, every card one height, one column when narrow. -->
+      <ul
+        data-slot="cards"
+        aria-label={words.servicesLabel}
+        class="grid auto-rows-fr grid-cols-1 gap-space-2 @details:grid-cols-(--cards-cols)"
+        style:--cards-cols={"repeat(auto-fill, minmax(min(100%, var(--c-starter-w)), 1fr))"}
+      >
         {#each SERVICES as service (service.service)}
           <li>
             <button
               data-slot="connections-page-card"
-              class="card mark-line press-tint"
+              class="mark-line press-tint type-label flex size-full min-h-c-starter-h items-center gap-space-2 rounded-lg border-none border-current bg-surface-raised p-space-3 text-start text-ink-strong shadow-tile transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
               onclick={() => startAdding(service)}
               type="button"
             >
-              <ProviderLogo provider={service.service} />
+              <ProviderLogo class="flex-none" provider={service.service} />
               <span>{words.signInService(service.label)}</span>
             </button>
           </li>
@@ -860,7 +896,7 @@
               <form
                 data-slot="row-app"
                 aria-label={words.appOf(labelOf(row))}
-                class="row-app"
+                class="flex min-w-0 max-w-c-measure flex-col gap-space-3 py-space-2"
                 onsubmit={(event) => {
                   event.preventDefault();
                   saveApp(row);
@@ -872,9 +908,9 @@
                   rowApp,
                   `app-${row.name}`
                 )}
-                <div class="buttons">
+                <div class="flex justify-end gap-space-2">
                   <Button
-                    class="pressable"
+                    press="pressable"
                     disabled={appPending}
                     label={words.cancel}
                     onclick={() => {
@@ -885,7 +921,7 @@
                     variant="ghost"
                   />
                   <Button
-                    class="pressable"
+                    press="pressable"
                     label={words.saveApp}
                     pending={appPending}
                     pendingLabel={words.saving}
@@ -899,7 +935,7 @@
               <form
                 data-slot="row-ask"
                 aria-label={words.key(labelOf(row))}
-                class="row-ask"
+                class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-strong"
                 onsubmit={(event) => {
                   event.preventDefault();
                   saveKey(row);
@@ -909,14 +945,15 @@
                 <Input
                   aria-label={words.rowKey(labelOf(row), row.account)}
                   autocomplete="off"
-                  class="key"
+                  class="max-w-c-key-field-max grow basis-c-key-field-basis"
+                  measure="shrink"
                   required
                   type="password"
                   {@attach focusOnOpen}
                   bind:value={key}
                 />
                 <Button
-                  class="pressable"
+                  press="pressable"
                   label={words.saveKey}
                   pending={keyPending}
                   pendingLabel={words.saving}
@@ -924,7 +961,7 @@
                   type="submit"
                 />
                 <Button
-                  class="pressable"
+                  press="pressable"
                   label={words.cancel}
                   onclick={() => {
                     keying = null;
@@ -943,7 +980,7 @@
           {/snippet}
           {#snippet trailing()}
             {#if shown.chips.length > 0}
-              <span class="projects">
+              <span class="inline-flex flex-wrap items-center gap-space-1">
                 <span class="sr-only">{words.projectsMayUse}</span>
                 {#each shown.chips as chip (chip)}
                   <Badge variant="secondary"><span>{chip}</span></Badge>
@@ -959,7 +996,7 @@
             {/if}
             {#if row.state !== "signed-in" && needsApp(row) && appFor !== row.name}
               <Button
-                class="pressable"
+                press="pressable"
                 label={words.setAppNow}
                 onclick={() => {
                   rowApp = emptyApp();
@@ -970,7 +1007,7 @@
               />
             {:else if row.state !== "signed-in" && signsIn(row)}
               <Button
-                class="pressable"
+                press="pressable"
                 label={words.signIn}
                 onclick={() => signIn(row)}
                 pending={signing[row.name] ?? false}
@@ -980,7 +1017,7 @@
               />
             {:else if row.state !== "signed-in" && takesKey(row) && keying !== row.name}
               <Button
-                class="pressable"
+                press="pressable"
                 label={words.setKey}
                 onclick={() => {
                   key = "";
@@ -1007,15 +1044,22 @@
     }
   }
 >
-  <Popover.Content align="end" class="w-64" customAnchor={chooseAnchor}>
+  <Popover.Content align="end" customAnchor={chooseAnchor} width="narrow">
     {#if choosing}
       {@const row = choosing}
-      <p class="pick-head">{words.projectsFor(labelOf(row))}</p>
-      <ul class="checklist">
+      <p class="type-label px-space-2 pt-space-2 pb-space-1 text-ink-strong">
+        {words.projectsFor(labelOf(row))}
+      </p>
+      <ul class="flex flex-col">
         {#each cawco.projects as project (project.id)}
           <li>
-            <!-- biome-ignore lint/a11y/noLabelWithoutControl: the kit Checkbox renders the control the label names -->
-            <label class="kit-item check">
+            <label
+              class={menuItemVariants({
+                class:
+                  "type-label flex w-full items-center gap-space-2 px-space-2 text-ink-strong",
+              })}
+              data-menu-item
+            >
               <Checkbox
                 data-box
                 bind:checked={
@@ -1031,192 +1075,3 @@
     {/if}
   </Popover.Content>
 </Popover.Root>
-
-<style>
-  .projects {
-    display: inline-flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1);
-  }
-  .row-ask {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-2);
-    min-inline-size: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    font: var(--type-meta);
-    color: var(--ink-strong);
-  }
-  .row-ask :global(.key) {
-    flex: 1 1 14rem;
-    min-inline-size: 0;
-    max-inline-size: 24rem;
-  }
-  .add {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    max-inline-size: 72ch;
-    margin-block-end: var(--space-4);
-    padding: var(--space-4);
-    border-radius: var(--radius-md);
-    background: var(--surface-recess);
-  }
-  .add-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .add-head :global(svg),
-  .card :global(svg) {
-    flex: none;
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-  .add-problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-    overflow-wrap: anywhere;
-  }
-  /* Which way it signs in: the segmented pick, as the project's details
-     draw one, and what the way is for under it. */
-  .way {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-inline-size: 0;
-  }
-  .way-label {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .way :global(.kit-segmented) {
-    flex-wrap: wrap;
-    align-self: flex-start;
-    max-inline-size: 100%;
-  }
-  .way-says {
-    max-inline-size: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-wrap: pretty;
-  }
-  /* The URL a Linear app's settings must list, whole and selected at a press. */
-  .callback {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-inline-size: 0;
-    max-inline-size: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .callback-url {
-    min-inline-size: 0;
-    font-family: var(--font-mono);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-    user-select: all;
-  }
-  /* An app's registration under its row: the add form's fields, its own buttons. */
-  .row-app {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    min-inline-size: 0;
-    max-inline-size: 72ch;
-    margin: 0;
-    padding-block: var(--space-2);
-  }
-  .buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
-  .empty {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    container-type: inline-size;
-  }
-  .empty-line {
-    max-inline-size: 72ch;
-    font: var(--type-body);
-    color: var(--ink-muted);
-    text-wrap: pretty;
-  }
-  /* The starter cards' recipe (StarterCards.svelte): raised, the tile
-     shadow, every card one height, one column when narrow. */
-  .cards {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    grid-auto-rows: 1fr;
-    gap: var(--space-2);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  @container (min-width: 30rem) {
-    .cards {
-      grid-template-columns: repeat(
-        auto-fill,
-        minmax(min(100%, var(--c-starter-w)), 1fr)
-      );
-    }
-  }
-  .card {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    inline-size: 100%;
-    block-size: 100%;
-    min-block-size: var(--c-starter-h);
-    padding: var(--space-3);
-    border: 0;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    color: var(--ink-strong);
-    font: var(--type-label);
-    text-align: start;
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) {
-    .card:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .card:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-offset);
-  }
-  .pick-head {
-    padding: var(--space-2) var(--space-2) var(--space-1);
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .checklist {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .check {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    inline-size: 100%;
-    padding-inline: var(--space-2);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    cursor: pointer;
-  }
-</style>

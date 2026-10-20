@@ -37,22 +37,19 @@
     {/snippet}
   </EmptyState>
 {:else}
-  <div class="matrix">
-    <Table.Root class="updates border-collapse text-left">
+  <div
+    class="overflow-x-auto rounded-md bg-surface-raised inset-ring inset-ring-border-hairline"
+  >
+    <!-- Under 640px each row is a card: the machine and what it runs, then
+         the update across the card. -->
+    <Table.Root stacks="phone" style="--card-cols: minmax(0, 1fr) auto">
       <Table.Header>
-        <Table.Row class="align-top">
+        <Table.Row>
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-          <Table.Head
-            class="h-auto px-[var(--space-4)] py-[var(--space-3)] text-meta text-muted-foreground"
-            scope="col">Machine</Table.Head
-          >
-          <Table.Head
-            class="h-auto border-l border-border px-[var(--space-4)] py-[var(--space-3)] text-meta text-muted-foreground"
-            scope="col">Running</Table.Head
-          >
-          <Table.Head
-            class="h-auto min-w-56 border-l border-border px-[var(--space-4)] py-[var(--space-3)] text-meta text-muted-foreground"
-            scope="col">Update</Table.Head
+          <Table.Head scope="col" variant="matrix-corner">Machine</Table.Head>
+          <Table.Head scope="col" variant="matrix-column">Running</Table.Head>
+          <Table.Head scope="col" variant="matrix-column-wide"
+            >Update</Table.Head
           >
           <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
         </Table.Row>
@@ -61,42 +58,42 @@
         {#each machines as machine (machine.machineId)}
           {@const os = machineOs(machine.os)}
           {@const online = isOnline(machine)}
-          <Table.Row class={online ? "" : "opacity-50"}>
+          <Table.Row inactive={!online} variant="stacks-ruled">
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               data-update-table-machine
-              class="machine h-auto bg-[var(--surface-raised)] px-[var(--space-4)] py-[var(--space-2)]"
               scope="row"
+              variant="matrix-row"
             >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <span class="flex items-center gap-[var(--space-2)]">
+              <span class="flex items-center gap-space-2">
                 <OsMark
-                  class="size-4 shrink-0 text-muted-foreground"
+                  class="size-icon-md shrink-0 text-ink-muted"
                   os={machine.os}
                 />
                 <span class="flex min-w-0 flex-col">
-                  <span class="flex items-center gap-[var(--space-2)]">
-                    <span class="truncate text-label text-foreground"
+                  <span class="flex items-center gap-space-2">
+                    <span class="truncate text-label text-ink-strong"
                       >{machineLabel(machine.hostname)}</span
                     >
                     <span
-                      class="size-2 shrink-0 rounded-full {online
-                        ? 'bg-success'
-                        : 'bg-muted-foreground/40'}"
+                      class="size-(--status-dot-size) shrink-0 rounded-pill {online
+                        ? 'bg-presence-online'
+                        : 'bg-presence-off'}"
                     ></span>
                   </span>
-                  <span class="text-label text-muted-foreground"
+                  <span class="text-label text-ink-muted"
                     >{os.label}{online ? "" : " · offline"}</span
                   >
                 </span>
               </span>
             </Table.Head>
-            <Table.Cell
-              class="running border-l border-border px-[var(--space-4)] py-[var(--space-2)]"
-            >
-              <span class="version mark-line">
+            <Table.Cell variant="matrix-stacks">
+              <span
+                class="mark-line inline-flex items-center gap-space-1 type-label"
+              >
                 {#if isCurrent(machine)}
-                  <IconCheck class="size-4 shrink-0 text-success" />
+                  <IconCheck class="size-icon-md shrink-0 text-success-9" />
                 {/if}
                 <code data-slot="num" class="num font-mono"
                   >{runningOf(machine)}</code
@@ -104,7 +101,8 @@
               </span>
             </Table.Cell>
             <Table.Cell
-              class="update border-l border-border px-[var(--space-4)] py-[var(--space-2)] whitespace-normal"
+              class="@max-phone/table:col-span-full"
+              variant="matrix-stacks-under"
             >
               <UpdateCell {machine} {policy} />
             </Table.Cell>
@@ -114,45 +112,3 @@
     </Table.Root>
   </div>
 {/if}
-
-<style>
-  .matrix {
-    overflow-x: auto;
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-  }
-  .version {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    font: var(--type-label);
-  }
-  /* The board's two-line card: name, presence and version, then the cell. */
-  @media (max-width: 639px) {
-    .matrix :global(table.updates thead) {
-      display: none;
-    }
-    .matrix :global(table.updates),
-    .matrix :global(table.updates tbody) {
-      display: block;
-    }
-    .matrix :global(table.updates tr) {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-      border-bottom: 1px solid var(--border-hairline);
-    }
-    .matrix :global(table.updates tr:last-child) {
-      border-bottom: 0;
-    }
-    .matrix :global(table.updates .update) {
-      grid-column: 1 / -1;
-      border-left: 0;
-      padding-top: 0;
-    }
-    .matrix :global(table.updates .running) {
-      border-left: 0;
-    }
-  }
-</style>

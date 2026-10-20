@@ -182,6 +182,7 @@
 </figure>
 
 <style>
+  /* tailwind: this folder is bundled by Bun with no Tailwind build (core decision-host.ts), and Tailwind only generates CSS where it scans the source, so a utility here would draw nothing — https://tailwindcss.com/docs/detecting-classes-in-source-files */
   .media {
     min-inline-size: 0;
   }
@@ -196,7 +197,6 @@
   }
   .screen {
     aspect-ratio: 16 / 10;
-    max-block-size: 80vb;
   }
   /* A component canvas that said its height: as tall as its frames; the page scrolls past it. */
   .drawn {

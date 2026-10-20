@@ -9,55 +9,20 @@
   }: { value: AccountHue; label?: string } = $props();
 </script>
 
-<div aria-label={label} class="swatches" role="radiogroup">
+<div aria-label={label} class="flex flex-wrap gap-space-3" role="radiogroup">
   {#each accountsWords.swatches as swatch (swatch.hue)}
     <!-- biome-ignore lint/a11y/useSemanticElements: a colour swatch ringed when chosen; a native radio cannot draw it -->
     <button
       aria-checked={value === swatch.hue}
       aria-label={swatch.name}
-      class="swatch touch-hit"
+      class="touch-hit size-space-7 rounded-sm border-none border-current bg-(--c) transition-[box-shadow,scale] duration-(--dur-control) ease-out focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--space-1) aria-checked:shadow-(--swatch-on) motion-safe:active:scale-(--press-scale)"
       onclick={() => {
         value = swatch.hue;
       }}
       role="radio"
       type="button"
       style:--c={hueVar(swatch.hue)}
+      style:--swatch-on={"0 0 0 var(--focus-ring-width) var(--swatch-ground, var(--surface-raised)), 0 0 0 var(--space-1) var(--c)"}
     ></button>
   {/each}
 </div>
-
-<style>
-  .swatches {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-3);
-  }
-  .swatch {
-    width: 26px;
-    height: 26px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: var(--c);
-    cursor: pointer;
-    transition: box-shadow var(--dur-control) var(--ease-out);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .swatch {
-      transition:
-        box-shadow var(--dur-control) var(--ease-out),
-        transform var(--dur-control) var(--ease-out);
-    }
-    .swatch:active {
-      transform: scale(var(--press-scale));
-    }
-  }
-  .swatch[aria-checked="true"] {
-    box-shadow:
-      0 0 0 2px var(--swatch-ground, var(--surface-raised)),
-      0 0 0 4px var(--c);
-  }
-  .swatch:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: 5px;
-  }
-</style>

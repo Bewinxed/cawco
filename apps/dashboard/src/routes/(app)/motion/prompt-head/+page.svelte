@@ -25,12 +25,6 @@
   };
 </script>
 
-<main class="bench">
+<main class="p-space-3">
   <Prompt onanswer={() => null} place={{ at: 2, of: 3 }} {request} shown />
 </main>
-
-<style>
-  .bench {
-    padding: var(--space-3);
-  }
-</style>

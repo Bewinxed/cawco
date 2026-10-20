@@ -146,11 +146,21 @@ const run = async (kit: Kit) => {
     kindOf: () => undefined,
     state: () => "",
   } as unknown as Deps;
+  // The ports the hub keeps, as its db does: host mode finds an origin by
+  // the label of one it keeps (preview.ts `sessionOfHost`). Every origin
+  // here is a session the hub holds.
+  const kept = new Map<string, number>();
   const db = {
     settings: () => ({ mode: "port", pattern: null }),
-    ports: () => [],
-    keepPort: () => undefined,
-    dropPort: () => undefined,
+    ownerHeld: () => true,
+    ports: () => [...kept].map(([key, port]) => ({ key, port })),
+    keepPort: (key: string, port: number) => {
+      kept.set(key, port);
+      return true;
+    },
+    dropPort: (key: string) => {
+      kept.delete(key);
+    },
     setSettings: () => undefined,
   } as unknown as Db;
   // No tailnet here: no TLS twins, no tailnet origin.

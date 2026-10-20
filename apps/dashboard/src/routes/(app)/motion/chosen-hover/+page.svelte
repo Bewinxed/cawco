@@ -81,6 +81,7 @@
   });
   const pins: Pin[] = [pin("pin-1", 1), pin("pin-2", 2)];
   const noop = () => undefined;
+
   let markdown = $state("");
 
   // The model list's catalogue: one machine reporting two Claude models.
@@ -121,8 +122,11 @@
 </script>
 
 <svelte:head><title>Chosen and hover | CawCo</title></svelte:head>
-<main data-bench>
-  <section data-probe="lifetime">
+<main
+  data-bench
+  class="flex flex-wrap items-start gap-space-6 p-space-8 text-ink-strong"
+>
+  <section class="min-w-0" data-probe="lifetime">
     <LifetimeChip
       ephemeral={false}
       onchange={noop}
@@ -130,7 +134,7 @@
       open={control === "lifetime"}
     />
   </section>
-  <section data-probe="project">
+  <section class="min-w-0" data-probe="project">
     <ProjectChip
       home="/home/me"
       onchange={noop}
@@ -142,7 +146,7 @@
       {projects}
     />
   </section>
-  <section data-probe="machines">
+  <section class="min-w-0" data-probe="machines">
     <MachinesChip
       {machines}
       onchange={noop}
@@ -151,7 +155,7 @@
       selected={["m1"]}
     />
   </section>
-  <section data-probe="permission">
+  <section class="min-w-0" data-probe="permission">
     <PermissionSection
       harness="claude"
       modes={[
@@ -162,28 +166,26 @@
       value="default"
     />
   </section>
-  <section class="side" data-probe="side">
+  <section class="h-c-bench-side-h w-c-bench-side-w min-w-0" data-probe="side">
     <SideSurface label="Preview" onclose={noop} title="Preview">
       {#snippet actions()}
-        <button aria-label="Inspect" aria-pressed="true" type="button"
-          ><IconEye /></button
+        <Toggle aria-label="Inspect" pressed={true} size="sm"
+          ><IconEye /></Toggle
         >
-        <button aria-label="Draw" aria-pressed="false" type="button"
-          ><IconPen /></button
-        >
+        <Toggle aria-label="Draw" pressed={false} size="sm"><IconPen /></Toggle>
       {/snippet}
       <p>Well</p>
     </SideSurface>
   </section>
-  <section data-probe="toggle">
+  <section class="min-w-0" data-probe="toggle">
     <Toggle aria-label="Bold" pressed={true}>B</Toggle>
     <Toggle aria-label="Italic" pressed={false}>I</Toggle>
   </section>
-  <section data-probe="plan-ring">
+  <section class="min-w-0" data-probe="plan-ring">
     <PlanRing done={1} onopen={noop} open={true} total={3} />
     <PlanRing done={1} onopen={noop} open={false} total={3} />
   </section>
-  <section class="model" data-probe="model">
+  <section class="w-c-bench-field-w min-w-0" data-probe="model">
     <ModelSection
       harness="claude"
       installed={["claude"]}
@@ -194,10 +196,10 @@
       onmodel={noop}
     />
   </section>
-  <section class="editor" data-probe="slash">
+  <section class="w-c-bench-field-w min-w-0" data-probe="slash">
     <MarkdownEditor bind:value={markdown} label="Notes" />
   </section>
-  <section data-probe="pins">
+  <section class="min-w-0" data-probe="pins">
     <PinList
       focused="pin-1"
       hold="ready"
@@ -210,29 +212,7 @@
       placing={null}
     />
   </section>
-  <section data-probe="files">
+  <section class="min-w-0" data-probe="files">
     <FolderFiles files={["notes.md", "plan.md"]} projectId="p1" />
   </section>
 </main>
-
-<style>
-  main {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-6);
-    align-items: start;
-    padding: var(--space-8);
-    color: var(--ink-strong);
-  }
-  section {
-    min-inline-size: 0;
-  }
-  .model,
-  .editor {
-    inline-size: 480px;
-  }
-  .side {
-    inline-size: 360px;
-    block-size: 240px;
-  }
-</style>

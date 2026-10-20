@@ -146,7 +146,7 @@
     AlertDescription,
   } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
-  import { Button, buttonVariants } from "#lib/components/ui/button/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -1479,7 +1479,15 @@
      bar on a wide screen (`inBar`, bar-strip), as the page's own row under
      the head on a phone. -->
 {#snippet strip(inBar: boolean)}
-  <div data-slot="strip" class="strip" class:in-bar={inBar}>
+  <div
+    data-slot="strip"
+    class={[
+      "flex min-w-0 items-center gap-space-3 pt-0",
+      inBar
+        ? "grow shrink basis-0 self-stretch pe-space-3 pb-0 ps-space-7"
+        : "pe-space-6 pb-space-4 ps-space-7 max-desk:px-space-5",
+    ]}
+  >
     <Tabs onValueChange={choose} value={current}>
       <TabsList aria-label="Views" scrollable>
         {#each tabs as each (each.value)}
@@ -1490,11 +1498,16 @@
           >
             {#snippet trail()}
               {#if each.draft}
-                <Badge class="draft-badge" variant="secondary"
+                <!-- The tag stands after the view's name, never over it. -->
+                <Badge class="ms-space-1" variant="secondary"
                   ><span>draft</span></Badge
                 >
               {:else if each.value === "decisions" && decisions.waiting > 0}
-                <span data-slot="tab-num" class="tab-num"
+                <!-- The Decisions tab's trail: the pages still waiting for
+                     picks, as Needs you's number. -->
+                <span
+                  data-slot="tab-num"
+                  class="ms-space-1 type-meta num text-ink-muted"
                   >{decisions.waiting}</span
                 >
               {/if}
@@ -1509,11 +1522,13 @@
       <span
         data-wide={needsYou.length === 0 || undefined}
         aria-hidden="true"
-        class="rule"
-        class:wide={needsYou.length === 0}
+        class={[
+          "h-c-btn-h-sm w-px flex-none bg-border-hairline",
+          needsYou.length === 0 && "max-phone:hidden",
+        ]}
       ></span>
     {/if}
-    <div class="trail">
+    <div class="flex flex-none items-center gap-space-2">
       <!-- Filter, on the views of the tasks: whole in the bar; on a phone,
            where the row has no room for it, its glyph and count stand while
            a filter does, and the head's ⋯ opens it. -->
@@ -1538,7 +1553,8 @@
       {#if strippedNewTask}
         <Button
           data-wide
-          class="wide pressable"
+          layout="wide"
+          press="pressable"
           onclick={() => {
             if (current !== "table") {
               choose("board");
@@ -1555,7 +1571,8 @@
       {#if canTalk}
         <Button
           data-wide
-          class="wide pressable"
+          layout="wide"
+          press="pressable"
           onclick={(event) => ask(event.currentTarget as HTMLElement)}
           size="sm"
           variant="ghost"
@@ -1614,9 +1631,11 @@
   />
 {/snippet}
 {#snippet tableBody(_block: string)}
-  <div class="table-wrap">
+  <div class="flex flex-col gap-space-3">
     {#if adding}
-      <div class="table-new">
+      <div
+        class="max-w-c-new-task-w rounded-lg bg-surface-raised p-space-3 shadow-tile"
+      >
         <NewTaskForm
           oncreate={create}
           stage={newIn ?? ""}
@@ -1645,7 +1664,9 @@
 {/snippet}
 <!-- A task view's block counts the tasks it shows. -->
 {#snippet taskCount()}
-  <span data-slot="num" class="block-count num">{shownTasks.length}</span>
+  <span data-slot="num" class="type-meta num text-ink-subtle"
+    >{shownTasks.length}</span
+  >
 {/snippet}
 <!-- A kept view placed on a page, drawn as its tab draws it. -->
 {#snippet viewBody(block: string)}
@@ -1664,15 +1685,19 @@
   {#if value.startsWith("view:")}
     {@const view = views.find((each) => `view:${each.name}` === value)}
     {#if view}
-      <div class="view-pane">
+      <div class="flex flex-col gap-space-3">
         {#if view.draft}
           <!-- The tab already says `draft`; the bar says what it is and
                offers the two answers, kept together on one row. -->
-          <div class="draft-bar" out:crossOut>
-            <span class="draft-line"
+          <div
+            class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2 rounded-lg bg-surface-band px-space-3 py-space-2 inset-ring inset-ring-border-hairline"
+            out:crossOut
+          >
+            <span
+              class="type-label min-w-0 shrink grow basis-c-draft-line text-ink-strong"
               >{viewsWords.drafted(viewLabel(view.name))}</span
             >
-            <div class="draft-acts">
+            <div class="flex flex-none gap-space-2">
               <Button
                 label={viewsWords.keep}
                 onclick={() => keep(view.name)}
@@ -1693,29 +1718,37 @@
           </div>
         {:else}
           <!-- A kept view's head: its ⋯ places it on a page, as a block. -->
-          <div data-slot="view-head" class="view-head mark-line">
-            <span aria-hidden="true" class="view-glyph" data-box
-              ><IconArtifactSheet /></span
+          <div
+            data-slot="view-head"
+            class="mark-line flex min-h-c-btn-h-sm items-center gap-space-2 px-space-1"
+          >
+            <span
+              aria-hidden="true"
+              class="grid flex-none place-items-center text-ink-muted"
+              data-box><IconArtifactSheet class="size-icon-md" /></span
             >
-            <h2 class="view-title">{viewLabel(view.name)}</h2>
+            <h2
+              class="type-label m-0 min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
+            >
+              {viewLabel(view.name)}
+            </h2>
             <span data-box>
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger
                   aria-label="More for {viewLabel(view.name)}"
-                  class="{buttonVariants({
-                    variant: 'ghost',
-                    size: 'icon-sm',
-                  })} touch-hit"
+                  class="touch-hit"
+                  size="icon-sm"
+                  variant="ghost"
                 >
                   <IconMore />
                 </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="end" class="w-auto min-w-48">
+                <DropdownMenu.Content align="end" class="w-auto">
                   <DropdownMenu.Sub>
                     <DropdownMenu.SubTrigger>
                       <IconLayers />
                       <span>{blocksWords.placeOnPage}</span>
                     </DropdownMenu.SubTrigger>
-                    <DropdownMenu.SubContent class="w-auto min-w-40">
+                    <DropdownMenu.SubContent class="w-auto" min="compact">
                       {#each BLOCK_PAGES as target (target)}
                         <DropdownMenu.Item
                           onSelect={() => placeView(view.name, target)}
@@ -1737,7 +1770,7 @@
         />
       </div>
     {:else}
-      <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
+      <Skeleton class="w-full" height="board" radius="card" />
     {/if}
   {:else if value === "routines" && project}
     <!-- The routines, the strip's fourth tab: a page of blocks. -->
@@ -1769,7 +1802,7 @@
       {taskOf}
     />
   {:else if !list}
-    <div class="state">
+    <div class="max-w-c-measure">
       <EmptyState
         icon={IconToolTodo}
         line={unread ??
@@ -1789,12 +1822,16 @@
     </div>
   {:else if empty && !adding}
     {#if !lead.project}
-      <Skeleton class="h-48 w-full max-w-xl rounded-[var(--radius-lg)]" />
+      <Skeleton class="w-full" height="chart" radius="card" width="chart-cap" />
     {:else if canTalk}
       <!-- While his panel is open the project's starters are in it (CawFloat);
            put away, they stand here and open it with their words. -->
-      <div data-slot="caw-empty" class="state caw-empty">
-        <EmptyState line={cawLine} title="Nothing on the board yet">
+      <div data-slot="caw-empty" class="w-full max-w-c-starters-w">
+        <EmptyState
+          actionWidth="fill"
+          line={cawLine}
+          title="Nothing on the board yet"
+        >
           {#snippet mark()}
             <!-- He stands here instead of sitting in the head, and is the
                  same seat at 80: a press opens his panel beside the page
@@ -1802,7 +1839,7 @@
                  or not. -->
             <div
               data-slot="caw-80"
-              class="caw-80"
+              class="mb-space-3 grid justify-items-start"
               data-share="caw:{projectId}"
               out:sitDown|global
             >
@@ -1826,14 +1863,14 @@
         </EmptyState>
       </div>
     {:else}
-      <div class="state">
+      <div class="max-w-c-measure">
         <EmptyState
           icon={IconToolTodo}
           line="Add a task by hand while Caw can’t start."
           title="Nothing on the board yet"
         >
           {#snippet action()}
-            <div class="first">
+            <div class="flex flex-wrap items-start gap-space-2">
               <NewTaskForm
                 oncreate={create}
                 primary
@@ -1882,13 +1919,13 @@
       tasks={shownTasks}
     />
   {:else}
-    <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
+    <Skeleton class="w-full" height="board" radius="card" />
   {/if}
 {/snippet}
 
 {#if !project}
-  <div class="flex flex-1 items-center justify-center p-6">
-    <p class="text-body text-muted-foreground">
+  <div class="flex flex-1 items-center justify-center p-space-7">
+    <p class="text-body text-ink-muted">
       No such project. It may have been removed; pick another from the rail.
     </p>
   </div>
@@ -1897,12 +1934,35 @@
        where it has the room for both, under it where it has not; the page
        yields the panel its room, so it never covers a column or the head.
        On a phone the panel is the bottom sheet, and the page keeps it all. -->
-  <div class="caw-host">
-    <div class="caw-docked" data-caw-open={docked || undefined}>
-      <div class="caw-page">
+  <!-- The side column (`@project-dock`, the panel and the page at their
+       narrowest) stands from the width where both fit: the panel with its
+       end margin, the pane's inline padding and two board columns with the
+       gap between. -->
+  <div class="@container flex h-full min-h-0 min-w-0 flex-1 flex-col">
+    <!-- Open where the page has no room beside it: a row of its own under
+         the page, at most half the height (from 640px; a phone's panel is
+         the bottom sheet). With room for the board beside it: a column of
+         its own at the page's end, a conversation's width. -->
+    <div
+      class="grid min-h-0 flex-1 grid-areas-(--docked-areas) grid-cols-(--docked-cols) grid-rows-(--docked-rows) phone:data-caw-open:grid-areas-(--docked-areas-row) phone:data-caw-open:grid-rows-(--docked-rows-row) @project-dock:data-caw-open:grid-areas-(--docked-areas-side) @project-dock:data-caw-open:grid-cols-(--docked-cols-side) @project-dock:data-caw-open:grid-rows-(--docked-rows)"
+      data-caw-open={docked || undefined}
+      style:--docked-areas={'"page"'}
+      style:--docked-areas-row={'"page" "dock"'}
+      style:--docked-areas-side={'"page dock"'}
+      style:--docked-cols="minmax(0, 1fr)"
+      style:--docked-cols-side={"minmax(0, 1fr) calc(var(--c-panel-w) + var(--space-6))"}
+      style:--docked-rows="minmax(0, 1fr)"
+      style:--docked-rows-row="minmax(0, 1fr) min(var(--c-caw-panel-h), 50%)"
+    >
+      <div class="grid-area-page flex min-h-0 min-w-0 flex-col">
         {#if phone && openFile}
           <!-- A phone: the folder's file is its own page, with Back to the view. -->
-          <div data-slot="project-page" class="project-page task-only">
+          <div
+            data-slot="project-page"
+            class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)"
+            style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
+            style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
+          >
             {#key openFile}
               <FolderFile
                 backLabel={project.name}
@@ -1915,7 +1975,12 @@
           </div>
         {:else if phone && openTask && stages}
           <!-- A phone: the task is its own page, with Back to the view. -->
-          <div data-slot="project-page" class="project-page task-only">
+          <div
+            data-slot="project-page"
+            class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)"
+            style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
+            style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
+          >
             <TaskPane
               {allowedFrom}
               backLabel={project.name}
@@ -1932,13 +1997,18 @@
           </div>
         {:else}
           <!-- The frame the phone's views bar docks in, over the page's foot. -->
-          <div class="project-frame">
+          <div class="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
+            <!-- A phone: the page is the one scroller, so iOS never chains two. The
+           foot's edge fade ends at the bar's top edge, a step of air under
+           the reach. -->
             <div
               data-slot="project-page"
               class={[
-                "project-page",
+                "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)",
                 fadeOn === "page" && "kit-edge-fade-block",
               ]}
+              style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
+              style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
             >
               <ProjectHead
                 {lead}
@@ -1963,24 +2033,40 @@
               />
 
               {#if lead.problem}
-                <Alert data-id-page-notice class="notice" variant="warning">
+                <Alert
+                  data-id-page-notice
+                  class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                  variant="warning"
+                >
                   <AlertDescription>{lead.problem}</AlertDescription>
                 </Alert>
               {/if}
               {#if stages && stages.problems.length > 0}
-                <Alert data-id-page-notice class="notice" variant="warning">
+                <Alert
+                  data-id-page-notice
+                  class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                  variant="warning"
+                >
                   <AlertDescription>{unreadStages}</AlertDescription>
                 </Alert>
               {/if}
               {#if list && list.problems.length > 0}
-                <Alert data-id-page-notice class="notice" variant="warning">
+                <Alert
+                  data-id-page-notice
+                  class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                  variant="warning"
+                >
                   <AlertDescription>{list.problems.join(" ")}</AlertDescription>
                 </Alert>
               {/if}
               {#if unread && !paneSaysUnread}
                 <!-- The tasks stand, but the stages or the views didn't come: said
-               once, here, with its Retry. -->
-                <Alert data-id-page-notice class="notice" variant="warning">
+                 once, here, with its Retry. -->
+                <Alert
+                  data-id-page-notice
+                  class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                  variant="warning"
+                >
                   <AlertDescription>{unread}</AlertDescription>
                   <AlertAction>
                     <Button
@@ -1997,7 +2083,9 @@
 
               {#if !hosted}
                 <!-- Under the head from 640px; a phone's views are its bar's. -->
-                <div class="under-head">{@render strip(false)}</div>
+                <div class="contents max-phone:hidden">
+                  {@render strip(false)}
+                </div>
               {/if}
 
               {#if phone}
@@ -2013,7 +2101,6 @@
                     expanded: `cawco.task.expanded.${projectId}`,
                   }}
                   main={viewPane}
-                  mainClass="view-pane-side"
                   open={!!openFile || (!!openTask && !!stages)}
                   side={sideCard}
                 />
@@ -2038,6 +2125,7 @@
                     <TaskFilterPopover
                       compact
                       {filter}
+                      look="in-bar"
                       {find}
                       onchange={setFilter}
                       tasks={[...tasks, ...archived]}
@@ -2083,31 +2171,47 @@
   <div
     data-slot="pane"
     aria-busy={cawco.hub === "unreachable" || awaiting || reading}
-    class={["pane", fadeOn === "pane" && "kit-edge-fade-block"]}
+    class={[
+      "group flex min-h-0 flex-auto flex-col overflow-y-auto pt-0 pe-space-6 pb-space-6 ps-space-7 max-desk:px-space-5 view-board:overflow-hidden view-board:pb-0 view-canvas:overflow-hidden view-canvas:pb-space-5 view-decisions-graph:overflow-hidden view-decisions-graph:pb-space-5 view-decisions-page:overflow-hidden view-decisions-page:pb-0 max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:h-(--pane-h) max-phone:view-canvas:overflow-visible max-phone:view-decisions-graph:h-(--pane-h) max-phone:view-decisions-graph:overflow-visible max-phone:view-decisions-page:h-(--pane-h) max-phone:view-decisions-page:overflow-visible",
+      fadeOn === "pane" && "kit-edge-fade-block",
+    ]}
     data-view={reading ? "board" : paneView}
+    style:--pane-h="100cqb"
   >
     {#if reading}
       <!-- The board at its real layout, its columns standing empty: the
              next project's read cross-fades in over it. -->
-      <div aria-hidden="true" class="board-skeleton" out:crossOut>
+      <div
+        aria-hidden="true"
+        class="grid auto-cols-(--skeleton-col) grid-flow-col gap-space-3 overflow-hidden max-phone:auto-cols-(--skeleton-col-phone)"
+        style:--skeleton-col={"minmax(var(--c-board-col-min), var(--c-board-col-max))"}
+        style:--skeleton-col-phone="calc(100% - var(--space-8))"
+        out:crossOut
+      >
         {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
-          <div class="skeleton-column">
-            <Skeleton class="h-3.5 w-3/5" />
-            <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
-            <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
+          <div
+            class="flex flex-col gap-space-2 rounded-lg bg-surface-band p-space-2 inset-ring inset-ring-border-hairline"
+          >
+            <Skeleton class="w-3/5" line="label" />
+            <Skeleton class="w-full" height="card" radius="chip" />
+            <Skeleton class="w-full" height="card" radius="chip" />
           </div>
         {/each}
       </div>
     {:else}
-      <div data-slot="swap" class="swap" in:crossIn>
+      <div
+        data-slot="swap"
+        class="relative flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto"
+        in:crossIn
+      >
         {#key shown}
           <div
-            class="current"
-            style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
+            class="flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto"
+            style:animation={swap.rowAnim(0, ListSwap.leaveEnd(0))}
             out:leave
           >
             {#if shown === "awaiting"}
-              <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
+              <Skeleton class="w-full" height="board" radius="card" />
             {:else}
               {@render pane(shown)}
             {/if}
@@ -2120,14 +2224,20 @@
 
 {#if project}
   <Popover.Root bind:open={askOpen}>
+    <!-- The ask is the session Composer floating under the menu: the
+         composer is the surface (its pill, edge and shadow), so the popover
+         draws none of its own (`bare`), and its box is as tall as what the
+         Composer stands (Composer's dock stands on its foot). -->
     <Popover.Content
       align="end"
-      class="view-ask-pop"
+      bare
+      class="w-(--ask-w)"
       customAnchor={askAnchor}
       side="bottom"
+      style="--ask-w: min(var(--c-panel-w), calc(100vw - 2 * var(--c-screen-margin)))"
     >
       <div
-        class="view-ask"
+        class="relative w-full"
         style:block-size="calc({viewFoot}px + var(--space-4))"
       >
         <Composer
@@ -2170,380 +2280,3 @@
     bind:open={stagesOpen}
   />
 {/if}
-
-<style>
-  /* The page and Caw's panel (CawFloat): the host is the container the
-     panel's place is chosen by, so the rail's width counts. */
-  .caw-host {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    block-size: 100%;
-    min-block-size: 0;
-    min-inline-size: 0;
-    container-type: inline-size;
-  }
-  .caw-docked {
-    display: grid;
-    flex: 1;
-    grid-template: "page" minmax(0, 1fr) / minmax(0, 1fr);
-    min-block-size: 0;
-  }
-  .caw-page {
-    grid-area: page;
-    display: flex;
-    flex-direction: column;
-    min-block-size: 0;
-    min-inline-size: 0;
-  }
-  /* Open where the page has no room beside it: a row of its own under the
-     page, the column's width, at most half the height, inside the page's
-     own inline padding and --space-6 over the foot, as a desk's stands. A
-     phone's panel is the bottom sheet, which takes no room of the page. */
-  @media (min-width: 640px) {
-    .caw-docked[data-caw-open] {
-      grid-template:
-        "page" minmax(0, 1fr)
-        "dock" min(var(--c-caw-panel-h), 50%)
-        / minmax(0, 1fr);
-    }
-    .caw-docked[data-caw-open] :global(.caw-dock) {
-      margin: 0 var(--space-5) var(--space-6);
-    }
-  }
-  /* Room for the board beside it: a column of its own at the page's end,
-     a conversation's width, from the head's top to --space-6 over the
-     foot, the page's own end padding between the two. The room is the
-     panel and the page at their narrowest, 938px, summed from the tokens
-     because a container query takes no var(): --c-panel-w (380px) and its
-     end margin, --space-6 (21px); the pane's inline padding, --space-7 and
-     --space-6 (25px, 21px); two of the board's columns at their narrowest
-     (TaskBoard `minmax(15rem, 22rem)`, 240px each) and the --space-3 (11px)
-     between. */
-  @container (min-width: 938px) {
-    .caw-docked[data-caw-open] {
-      grid-template:
-        "page dock" minmax(0, 1fr)
-        / minmax(0, 1fr) calc(var(--c-panel-w) + var(--space-6));
-    }
-    .caw-docked[data-caw-open] :global(.caw-dock) {
-      margin: var(--space-6) var(--space-6) var(--space-6) 0;
-    }
-  }
-  /* What the page stands in: the box a phone's views bar docks at the foot of. */
-  .project-frame {
-    position: relative;
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    block-size: 100%;
-    min-block-size: 0;
-    /* A flex item's automatic minimum is its content's min-content width:
-       without this the frame grows to the board's columns past its pane. */
-    min-inline-size: 0;
-  }
-  .under-head {
-    display: contents;
-  }
-  .project-page {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    block-size: 100%;
-    min-block-size: 0;
-    overflow: hidden;
-  }
-  .project-page :global(.notice) {
-    inline-size: auto;
-    margin: 0 var(--space-6) var(--space-3) var(--space-7);
-  }
-  .strip {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    min-inline-size: 0;
-    padding: 0 var(--space-6) var(--space-4) var(--space-7);
-  }
-  /* In the bar the strip takes the crumb's place: its leading inset (the
-     page's own edge, so the tabs stand over the head's name) and, past the
-     bar's gap, its --space-3 clear of the glass group. */
-  .strip.in-bar {
-    flex: 1 1 0;
-    align-self: stretch;
-    padding: 0 var(--space-3) 0 var(--space-7);
-  }
-  .strip > :global([data-slot="tabs"]) {
-    display: flex;
-    flex: 0 1 auto;
-    min-inline-size: 0;
-  }
-  /* The tag stands after the view's name, never over it. */
-  .strip :global(.draft-badge) {
-    margin-inline-start: var(--space-1);
-  }
-  .rule {
-    flex: none;
-    inline-size: 1px;
-    block-size: var(--c-btn-h-sm);
-    background: var(--border-hairline);
-  }
-  .trail {
-    display: flex;
-    flex: none;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .pane {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-block-size: 0;
-    padding: 0 var(--space-6) 0 var(--space-7);
-    overflow-y: auto;
-  }
-  /* The board, the canvas, a decision page and the decisions' graph fill the
-     pane and scroll (or pan) inside. A decision page runs to the pane's foot,
-     under its docked composer. */
-  .pane:is(
-    [data-view="board"],
-    [data-view="canvas"],
-    [data-view="decisions-page"],
-    [data-view="decisions-graph"]
-  ) {
-    overflow: hidden;
-  }
-  .pane:not(
-    [data-view="board"],
-    [data-view="canvas"],
-    [data-view="decisions-page"]
-  ) {
-    padding-block-end: var(--space-6);
-  }
-  .swap {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    min-block-size: 0;
-  }
-  /* The board while the next project's is read: its grid, empty columns. */
-  .board-skeleton {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(15rem, 22rem);
-    gap: var(--space-3);
-    overflow: hidden;
-  }
-  .skeleton-column {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-2);
-    border-radius: var(--radius-lg);
-    background: var(--surface-band);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-  }
-  @media (max-width: 639px) {
-    .board-skeleton {
-      grid-auto-columns: calc(100% - var(--space-8));
-    }
-  }
-  .current {
-    display: flex;
-    flex-direction: column;
-    min-block-size: 0;
-  }
-  .pane:is(
-      [data-view="board"],
-      [data-view="canvas"],
-      [data-view="decisions-page"],
-      [data-view="decisions-graph"]
-    )
-    :is(.swap, .current) {
-    flex: 1 1 auto;
-  }
-  .pane:is([data-view="canvas"], [data-view="decisions-graph"]) {
-    padding-block-end: var(--space-5);
-  }
-  /* The Decisions tab's trail: the pages still waiting for picks, as Needs
-     you's number. */
-  .strip :global(.tab-num) {
-    margin-inline-start: var(--space-1);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .view-pane {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  /* A kept view's head on its tab: its glyph, its title, its ⋯ (the block
-     frame's head, Block.svelte, without the drag). */
-  .view-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: var(--c-btn-h-sm);
-    padding-inline: var(--space-1);
-  }
-  .view-glyph {
-    display: grid;
-    flex: none;
-    place-items: center;
-    color: var(--ink-muted);
-  }
-  .view-glyph :global(svg) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-  .view-title {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    margin: 0;
-    overflow: clip;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .block-count {
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-  }
-  .draft-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2) var(--space-3);
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-lg);
-    background: var(--surface-band);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-  }
-  .draft-line {
-    flex: 1 1 14rem;
-    min-inline-size: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .draft-acts {
-    display: flex;
-    flex: none;
-    gap: var(--space-2);
-  }
-  .state {
-    max-inline-size: 72ch;
-  }
-  /* As wide as four starters across, so a desk shows them in one row; from
-     the board's start edge, as its columns would stand. */
-  .caw-empty {
-    inline-size: 100%;
-    max-inline-size: var(--c-starters-w);
-  }
-  .caw-empty :global(.kit-empty-action) {
-    align-self: stretch;
-  }
-  /* css-scope .view-ask-pop: the kit popover the ask stands in */
-  /* The ask is the session Composer floating under the menu: the composer
-     is the surface (its pill, edge and shadow), so the popover draws none
-     of its own, and its box is as tall as what the Composer stands
-     (Composer .dock stands on its foot). */
-  :global(.kit-pop.view-ask-pop) {
-    inline-size: min(var(--c-panel-w), calc(100vw - 2 * var(--space-3)));
-    padding: 0;
-    border: 0;
-    background: none;
-    box-shadow: none;
-  }
-  .view-ask {
-    position: relative;
-    inline-size: 100%;
-  }
-  .caw-80 {
-    display: grid;
-    justify-items: start;
-    margin-block-end: var(--space-3);
-  }
-  .first {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: var(--space-2);
-  }
-  .table-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  .table-new {
-    max-inline-size: 36rem;
-    padding: var(--space-3);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  @media (width < 900px) {
-    .strip,
-    .pane {
-      padding-inline: var(--space-5);
-    }
-    .project-page :global(.notice) {
-      margin-inline: var(--space-5);
-    }
-  }
-  /* New task and Ask Caw for a view move into the head's ⋯ on a phone. */
-  @media (max-width: 639px) {
-    .trail :global(.wide),
-    .rule.wide {
-      display: none;
-    }
-  }
-  /* A phone: the page is the one scroller, so iOS never chains two. The
-     head scrolls away with the view; the views are the bar's (ViewBar), so
-     no strip stands under the head; the pane gives up its own scroll and
-     the board's columns stand at their natural height (TaskBoard). The
-     page's foot clears the bar by its reach: the bar, its inset from the
-     foot and a step of air. A view that fills its pane (the canvas, a
-     decision page, the decisions' graph) stands the scroller's height less
-     that reach, whole once the head has gone. */
-  @media (max-width: 639px) {
-    .project-page {
-      --bar-reach: calc(
-        var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) +
-          var(--space-3)
-      );
-      /* The foot's edge fade ends at the bar's top edge, a step of air
-         under the reach. */
-      --fade-inset-end: calc(var(--bar-reach) - var(--space-3));
-      container-type: size;
-      overflow-x: hidden;
-      overflow-y: auto;
-      overscroll-behavior-y: contain;
-      padding-block-end: var(--bar-reach);
-    }
-    .project-page > :global(*) {
-      flex-shrink: 0;
-    }
-    .under-head {
-      display: none;
-    }
-    .pane,
-    .pane:is(
-      [data-view="board"],
-      [data-view="canvas"],
-      [data-view="decisions-page"],
-      [data-view="decisions-graph"]
-    ) {
-      flex: 1 0 auto;
-      overflow: visible;
-    }
-    .pane:is(
-      [data-view="canvas"],
-      [data-view="decisions-page"],
-      [data-view="decisions-graph"]
-    ) {
-      /* The page's content box: its height less the foot it pads. */
-      block-size: 100cqb;
-    }
-  }
-</style>

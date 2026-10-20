@@ -8,8 +8,9 @@
  *
  * The forms it reads: oklch, hex, rgb, `transparent`, `color-mix(in <space>,
  * …)`, relative `oklch(from … )` with `calc()`, `light-dark()`, a flat
- * `linear-gradient()`, and lengths, durations and numbers with `calc()`,
- * `clamp()` and `min()`. References (`{group.name}`) are followed under the
+ * `linear-gradient()`, and lengths (`ch`, `ex` and the viewport units
+ * included, see `unit`), durations and numbers with `calc()`, `clamp()` and
+ * `min()`. References (`{group.name}`) are followed under the
  * context being read: a context's own CSS for a token when it has one, else
  * the token's base CSS.
  */
@@ -84,7 +85,18 @@ export function call(s: string): { name: string; args: string } | undefined {
   return { name: m[1], args: m[2] };
 }
 
-/** Base units: px for lengths (rem at 16), seconds for time, % as a fraction. */
+/**
+ * The viewport a viewport-relative length is read at: the phone the probe
+ * kit and the Apple app draw at (scripts/probe-kit/kit.ts `phone`, 390×844).
+ * A sheet's `85vh` cap is a size on that phone, which is what the Apple
+ * platform's constant means; the dashboard writes the CSS as it is.
+ */
+const REFERENCE_VIEWPORT = { inline: 390, block: 844 };
+
+/**
+ * Base units: px for lengths (rem at 16, viewport lengths on the reference
+ * phone), seconds for time, % as a fraction.
+ */
 function unit(n: number, u: string, where: string): number {
   switch (u) {
     case "":
@@ -94,6 +106,41 @@ function unit(n: number, u: string, where: string): number {
       return n;
     case "rem":
       return n * REM;
+    // A text measure's static reading: CSS Values 4 §6.1.1, "In the cases
+    // where it is impossible or impractical to determine the measure of the
+    // '0' glyph, it must be assumed to be 0.5em wide", and the x-height "a
+    // value of 0.5em" (https://www.w3.org/TR/css-values-4/#font-relative-lengths).
+    case "ch":
+    case "ex":
+      return n * REM * 0.5;
+    case "vw":
+    case "svw":
+    case "lvw":
+    case "dvw":
+    case "vi":
+      return (n / 100) * REFERENCE_VIEWPORT.inline;
+    case "vh":
+    case "svh":
+    case "lvh":
+    case "dvh":
+    case "vb":
+      return (n / 100) * REFERENCE_VIEWPORT.block;
+    case "vmin":
+    case "svmin":
+    case "lvmin":
+    case "dvmin":
+      return (
+        (n / 100) *
+        Math.min(REFERENCE_VIEWPORT.inline, REFERENCE_VIEWPORT.block)
+      );
+    case "vmax":
+    case "svmax":
+    case "lvmax":
+    case "dvmax":
+      return (
+        (n / 100) *
+        Math.max(REFERENCE_VIEWPORT.inline, REFERENCE_VIEWPORT.block)
+      );
     case "ms":
       return n / 1000;
     case "%":

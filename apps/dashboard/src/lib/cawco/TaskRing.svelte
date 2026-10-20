@@ -54,13 +54,16 @@
 {#if total > 0 || indeterminate}
   <svg
     aria-hidden="true"
-    class="task-ring shrink-0"
+    class="shrink-0"
     height={box}
     {style}
     viewBox="0 0 {box} {box}"
     width={box}
   >
-    <g data-shown={!finished}>
+    <g
+      class="transform-fill origin-center transition-[opacity,scale] duration-(--dur-exit) ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:duration-(--dur-control) motion-reduce:shown-false:scale-100"
+      data-shown={!finished}
+    >
       <circle
         class="stroke-border"
         cx={box / 2}
@@ -69,8 +72,9 @@
         r={radius}
         stroke-width={stroke}
       />
+      <!-- Wound from the top, as a clock is read. -->
       <circle
-        class="arc"
+        class="transform-view origin-center -rotate-90 transition-[stroke-dasharray] duration-(--dur-pop) ease-out motion-reduce:duration-(--dur-control)"
         cx={box / 2}
         cy={box / 2}
         fill="none"
@@ -81,7 +85,10 @@
         stroke-width={stroke}
       />
     </g>
-    <g class="text-success" data-shown={finished}>
+    <g
+      class="transform-fill origin-center text-success-9 transition-[opacity,scale] duration-(--dur-exit) ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:duration-(--dur-control) motion-reduce:shown-false:scale-100"
+      data-shown={finished}
+    >
       <polyline
         fill="none"
         points="{box * 0.28},{box * 0.53} {box * 0.43},{box * 0.69} {box *
@@ -94,39 +101,3 @@
     </g>
   </svg>
 {/if}
-
-<style>
-  /* Wound from the top, as a clock is read. */
-  .task-ring .arc {
-    transform-box: view-box;
-    transform-origin: center;
-    rotate: -90deg;
-    transition: stroke-dasharray var(--dur-pop) var(--ease-out);
-  }
-
-  .task-ring g {
-    transform-box: fill-box;
-    transform-origin: center;
-    transition:
-      opacity var(--dur-exit) var(--ease-out),
-      scale var(--dur-exit) var(--ease-out);
-  }
-
-  .task-ring g[data-shown="false"] {
-    opacity: 0;
-    scale: 0.6;
-  }
-
-  /* Clamped, never zeroed, and the travel goes — the swap still reads as one
-     thing becoming another rather than two frames. */
-  @media (prefers-reduced-motion: reduce) {
-    .task-ring .arc,
-    .task-ring g {
-      transition-duration: var(--dur-control);
-    }
-
-    .task-ring g[data-shown="false"] {
-      scale: 1;
-    }
-  }
-</style>

@@ -22,9 +22,11 @@
       size="icon-sm"
       variant="ghost"
     >
-      <span class="icon-swap size-4">
-        <span data-active={sound.on}><IconSound class="size-4" /></span>
-        <span data-active={!sound.on}><IconSoundOff class="size-4" /></span>
+      <span class="icon-swap size-icon-md">
+        <span data-active={sound.on}><IconSound class="size-icon-md" /></span>
+        <span data-active={!sound.on}
+          ><IconSoundOff class="size-icon-md" /></span
+        >
       </span>
     </Button>
   {/snippet}

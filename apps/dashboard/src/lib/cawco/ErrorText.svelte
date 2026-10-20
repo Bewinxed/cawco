@@ -29,7 +29,7 @@
   <button
     data-error-text-class={className}
     class={cn(
-      "min-w-0 cursor-pointer truncate text-start underline-offset-2 hover:underline",
+      "min-w-0 truncate text-start underline-offset-2 hover:underline",
       className
     )}
     onclick={() => {

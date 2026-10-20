@@ -23,8 +23,7 @@ import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
-const PANE =
-  ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"])';
+const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 
 const pageOf = (heading: string) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${heading}</title></head><body><h1>${heading}</h1></body></html>`;
@@ -181,7 +180,7 @@ const leg = async (
   await settle(page);
   // A closed artifact's card reads as pressable: drawn whole, never faded as a disabled control is.
   const cards = await page
-    .locator(".preview-tool")
+    .locator('[data-slot="preview-tool"]')
     .evaluateAll((nodes) =>
       nodes.map((node) => getComputedStyle(node).opacity)
     );
@@ -194,7 +193,7 @@ const leg = async (
   /** Presses `id`'s tool row; what the panel and the hub show after. */
   const press = async (id: string, heading: string) => {
     const row = page.locator(
-      `.preview-tool[data-artifact="${id}"] button.artifact-open`
+      `[data-slot="preview-tool"][data-artifact="${id}"] button[data-slot="artifact-open"]`
     );
     const rows = await row.count();
     if (rows !== 1) {

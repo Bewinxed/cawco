@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /**
    * Session lifetime as a composer chip. Choosing between keeping a session
    * and letting it end with its task is a decision worth a look at both
@@ -49,18 +51,18 @@
   {onchange}
   {open}
   rows="[data-fh]"
-  triggerClass="ns-chip-btn"
+  triggerClass={chipVariants({ variant: "setting" })}
   width={300}
 >
   {#snippet trigger()}
     {@const Icon = current.icon}
     {#key current.name}
-      <span data-slot="swap" class="swap">
-        <Icon style={`color:${current.hue}`} />
-        <span data-slot="chip-label" class="chip-label">{current.name}</span>
+      <span data-slot="swap" class="ns-in inline-flex items-center gap-space-2">
+        <Icon class="size-icon-md flex-none" style={`color:${current.hue}`} />
+        <span data-slot="chip-label">{current.name}</span>
       </span>
     {/key}
-    <Down class="chevron" />
+    <Down data-slot="chevron" />
   {/snippet}
   {#each OPTIONS as option, index (option.name)}
     {@const Icon = option.icon}
@@ -68,7 +70,7 @@
     <button
       data-slot="row"
       aria-pressed={on}
-      class="row ns-in press-tint"
+      class="ns-in press-tint transition-control relative flex min-h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
       data-fh="1"
       onclick={() => {
         onlifetime(option.ephemeral);
@@ -76,90 +78,21 @@
       }}
       style={`--delay:${index * 35}ms`}
       type="button"
-      class:on
     >
-      <span data-slot="tile" class="ns-tile tile" style={`color:${option.hue}`}
-        ><Icon /></span
+      <span data-slot="tile" class={iconTileVariants()} style:color={option.hue}
+        ><Icon class="size-icon-md" /></span
       >
-      <span data-slot="text" class="text">
-        <span data-slot="name" class="name">{option.name}</span>
-        <span data-slot="meta" class="meta">{option.desc}</span>
+      <span data-slot="text" class="min-w-0 flex-1">
+        <span data-slot="name" class="type-label block">{option.name}</span>
+        <span
+          data-slot="meta"
+          class="type-meta block text-pretty text-ink-subtle in-aria-pressed:text-selected-ink"
+          >{option.desc}</span
+        >
       </span>
       {#if on}
-        <Check class="check ns-check" />
+        <Check class="ns-check size-icon-md flex-none text-selected-icon" />
       {/if}
     </button>
   {/each}
 </NsPopover>
-
-<style>
-  .swap {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    @media (prefers-reduced-motion: no-preference) {
-      animation: ns-in var(--ns-row-ms) var(--ease-out) both;
-    }
-  }
-  .swap :global(svg) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-  }
-  .row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    min-height: 48px;
-    padding: 6px 8px;
-    background: transparent;
-    border: 0;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    text-align: left;
-    color: var(--ink-strong);
-  }
-  .tile {
-    width: 26px;
-    height: 26px;
-  }
-  .tile :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  .text {
-    flex: 1;
-    min-width: 0;
-  }
-  .name {
-    display: block;
-    font: var(--type-label);
-  }
-  .meta {
-    display: block;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-    text-wrap: pretty;
-  }
-  .row :global(svg.check) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    color: var(--ink-strong);
-  }
-  /* The chosen option takes the selected wash, never the hover step. */
-  .row.on {
-    background: var(--selected-bg);
-    color: var(--selected-ink);
-  }
-  /* Its second line too: ink-subtle measures 4.23:1 on the wash by day,
-     selected-ink 4.73:1 (DESIGN.md Colors: Selected). */
-  .row.on .meta {
-    color: var(--selected-ink);
-  }
-  .row.on :global(svg.check) {
-    color: var(--selected-icon);
-  }
-</style>

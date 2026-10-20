@@ -12,14 +12,17 @@
   // One ghost glides from item to item under the pointer and arrow keys.
   $effect(() => {
     if (ref) {
-      return highlight({ rows: ".kit-item", hovered: "[data-selected]" })(ref);
+      return highlight({
+        rows: "[data-menu-item]",
+        hovered: "[data-selected]",
+      })(ref);
     }
   });
 </script>
 
 <CommandPrimitive.List
   class={cn(
-    "no-scrollbar max-h-72 scroll-py-1 overflow-y-auto overflow-x-hidden outline-none",
+    "no-scrollbar max-h-72 scroll-py-space-1 overflow-y-auto overflow-x-hidden outline-none",
     className
   )}
   data-slot="command-list"

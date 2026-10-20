@@ -1,6 +1,8 @@
 <script lang="ts">
   import { useSvelteFlow } from "@xyflow/svelte";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Toggle } from "#lib/components/ui/toggle/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconMaximize, IconMinus, IconPlus, IconReset } from "#lib/icons.js";
 
@@ -70,96 +72,92 @@
     }
   }}
 />
-<div data-slot="tools" class="tools wf">
+<div
+  data-slot="tools"
+  class="flex items-center gap-space-1 rounded-lg bg-surface-raised p-space-1 text-ink-strong shadow-tile"
+>
   {#if onpan}
-    <button aria-pressed={pan} class="wf-btn" onclick={onpan} type="button">
+    <Toggle
+      onPressedChange={() => onpan?.()}
+      pressed={pan}
+      type="button"
+      variant="outline"
+    >
       {pan ? "Pan" : "Select"}
-    </button>
+    </Toggle>
   {/if}
   <Tip label="Zoom out">
     {#snippet children(tip)}
-      <button
+      <Button
         {...tip}
         aria-label="Zoom out"
-        class="wf-btn"
         onclick={() => zoomBy(zoomOut)}
+        size="icon"
         type="button"
+        variant="outline"
       >
-        <IconMinus class="size-4" />
-      </button>
+        <IconMinus class="size-icon-md" />
+      </Button>
     {/snippet}
-  </Tip><span>{Math.round(zoom * 100)}%</span><Tip label="Zoom in">
+  </Tip><span class="min-w-space-8 text-center type-meta num"
+    >{Math.round(zoom * 100)}%</span
+  ><Tip label="Zoom in">
     {#snippet children(tip)}
-      <button
+      <Button
         {...tip}
         aria-label="Zoom in"
-        class="wf-btn"
         onclick={() => zoomBy(zoomIn)}
+        size="icon"
         type="button"
+        variant="outline"
       >
-        <IconPlus class="size-4" />
-      </button>
+        <IconPlus class="size-icon-md" />
+      </Button>
     {/snippet}
   </Tip>
   <Tip keys="F" label="Fit graph">
     {#snippet children(tip)}
-      <button
+      <Button
         {...tip}
         aria-label="Fit graph"
-        class="wf-btn"
         onclick={fit}
+        size="icon"
         type="button"
+        variant="outline"
       >
-        <IconMaximize class="size-4" />
-      </button>
+        <IconMaximize class="size-icon-md" />
+      </Button>
     {/snippet}
   </Tip>
   {#if undo || redo}
     <Tip label="Undo">
       {#snippet children(tip)}
-        <button
+        <Button
           {...tip}
           aria-label="Undo"
-          class="wf-btn"
           disabled={!canUndo}
           onclick={undo}
+          size="icon"
           type="button"
+          variant="outline"
         >
-          <IconReset class="size-4" />
-        </button>
+          <IconReset class="size-icon-md" />
+        </Button>
       {/snippet}
     </Tip><Tip label="Redo">
       {#snippet children(tip)}
-        <button
+        <Button
           {...tip}
           aria-label="Redo"
-          class="wf-btn"
           disabled={!canRedo}
           onclick={redo}
+          size="icon"
           type="button"
+          variant="outline"
         >
-          <IconReset class="size-4 rotate-180" />
-        </button>
+          <IconReset class="size-icon-md rotate-180" />
+        </Button>
       {/snippet}
     </Tip>
   {/if}
 </div>
-
-<style>
-  .tools {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    padding: var(--space-1);
-    background: var(--surface-raised);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-tile);
-  }
-  span {
-    min-width: 40px;
-    text-align: center;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    font-variant-numeric: tabular-nums;
-  }
-</style>

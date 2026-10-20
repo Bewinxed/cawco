@@ -3,14 +3,15 @@
    * The sign-in popover's content with a stopped sign-in, no hub: the
    * daemon's sentence, then the CLI's last screen lines, as
    * packages/agent/src/login.ts words it, one of them 240 characters. It
-   * stands on the popover's own surface (ns-theme's `.ns-pop`) at the
+   * stands on the popover's own surface (ui/glide-popover) at the
    * sign-in popover's width token, `--c-signin-pop-w`, with AccountMachines'
    * panel padding inside, so it is as wide as the real popover at every
    * screen width.
    */
   import SigninPanel from "#lib/cawco/accounts/SigninPanel.svelte";
   import { SigninFlow } from "#lib/cawco/accounts/signin.svelte.js";
-  import "#lib/cawco/spawn/ns-theme.css";
+  import { glidePopoverVariants } from "#lib/components/ui/glide-popover/index.js";
+  import { cn } from "#lib/utils.js";
 
   const LONG =
     `${"Error: the OAuth exchange with console.anthropic.com returned 400 invalid_grant for the pasted authorization code; ".repeat(3)}`.slice(
@@ -33,11 +34,11 @@
 </script>
 
 <div
-  class="ns-theme ns-pop mx-auto my-(--space-5)"
+  class={cn("ns-theme", glidePopoverVariants({ class: "mx-auto my-space-5" }))}
   data-bench
   style="--ns-pop-width: var(--c-signin-pop-w)"
 >
-  <div class="p-(--space-2)">
+  <div class="p-space-2">
     <SigninPanel expected={null} {flow} machine="bench" online />
   </div>
 </div>

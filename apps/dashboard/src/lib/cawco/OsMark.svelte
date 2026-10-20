@@ -38,13 +38,13 @@
 {#if shape === "unknown"}
   <IconServer
     data-os-mark-class={className}
-    class={cn("size-4 shrink-0", className)}
+    class={cn("size-icon-md shrink-0", className)}
   />
 {:else}
   <svg
     data-os-mark-class={className}
     aria-hidden="true"
-    class={cn("size-4 shrink-0", className)}
+    class={cn("size-icon-md shrink-0", className)}
     fill="currentColor"
     viewBox="0 0 16 16"
   >

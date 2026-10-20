@@ -18,6 +18,7 @@
 <p class="text" data-role={role}>{String(props.text ?? "")}</p>
 
 <style>
+  /* tailwind: this folder is bundled by Bun with no Tailwind build (core decision-host.ts), and Tailwind only generates CSS where it scans the source, so a utility here would draw nothing — https://tailwindcss.com/docs/detecting-classes-in-source-files */
   .text {
     font: var(--type-body);
     color: var(--ink-strong);

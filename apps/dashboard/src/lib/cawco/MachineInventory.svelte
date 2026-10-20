@@ -93,46 +93,56 @@
   }
 </script>
 
-<div class="inventory">
+<div
+  class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
+>
   <SectionHeader
     hue="var(--hue-amber-500)"
     icon={IconLaptop}
     label={words.onEachMachine}
   />
-  <p data-slot="note" class="note">{words.inventoryNote}</p>
+  <p data-slot="note" class="max-w-c-measure type-meta text-ink-muted">
+    {words.inventoryNote}
+  </p>
 
   <!-- Each machine keeps its row whether it is up or not: a machine that
        drops for a moment says "Offline" in the same place, so nothing under
        the list moves. It opens only while it is up; open, it can still close. -->
   {#if machines.length === 0}
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="max-w-c-measure type-meta text-ink-muted">
       <AddMachineLink>{words.noMachines}</AddMachineLink>{words.noMachinesAfter}
     </p>
   {:else}
-    <ul data-slot="machines" class="machines">
+    <ul data-slot="machines" class="-mx-space-2 flex flex-col gap-space-row">
       {#each machines as machine (machine.machineId)}
         {@const inspection = found[machine.machineId]}
         {@const rows =
           kind === "mcp" ? (inspection?.mcp ?? []) : (inspection?.skills ?? [])}
-        <li data-slot="machine" class="machine">
+        <li data-slot="machine" class="flex flex-col gap-space-2">
           <button
             data-slot="head"
             aria-expanded={open[machine.machineId] === true}
-            class="head mark-line focus-inset press-tint"
+            class="mark-line focus-inset press-tint flex min-h-c-row-h items-center gap-space-2 rounded-sm px-space-2 py-space-2 text-start transition-control hover:enabled:bg-surface-hover"
             disabled={machine.status !== "online" && !open[machine.machineId]}
             onclick={() => expand(machine)}
             type="button"
           >
             {#if open[machine.machineId]}
-              <IconChevronDown />
+              <IconChevronDown class="size-icon-md flex-none text-ink-muted" />
             {:else}
-              <IconChevronRight />
+              <IconChevronRight class="size-icon-md flex-none text-ink-muted" />
             {/if}
-            <OsMark class="size-4 shrink-0" os={machine.os} />
-            <span data-slot="host" class="host"
+            <OsMark
+              class="size-icon-md flex-none text-ink-muted"
+              os={machine.os}
+            />
+            <span data-slot="host" class="type-label text-ink-strong"
               >{machineLabel(machine.hostname)}</span
             >
-            <span data-slot="note" class="note">
+            <span
+              data-slot="note"
+              class="max-w-c-measure type-meta text-ink-muted"
+            >
               {#if open[machine.machineId]}
                 {words.hide}
               {:else if machine.status === "online"}
@@ -144,25 +154,42 @@
           </button>
           {#if open[machine.machineId]}
             {#if reading[machine.machineId]}
-              <p data-slot="note" class="note busy mark-line" role="status">
-                <Spinner class="size-4 shrink-0" /><span>{words.asking}</span>
+              <p
+                data-slot="note"
+                class="mark-line flex max-w-c-measure items-center gap-space-2 type-meta text-ink-muted"
+                role="status"
+              >
+                <Spinner class="shrink-0" /><span>{words.asking}</span>
               </p>
             {:else if unread[machine.machineId]}
               <Alert variant="warning">
                 <AlertDescription>{unread[machine.machineId]}</AlertDescription>
               </Alert>
             {:else if rows.length === 0}
-              <p data-slot="note" class="note">
+              <p
+                data-slot="note"
+                class="max-w-c-measure type-meta text-ink-muted"
+              >
                 {kind === "mcp" ? words.noMcpAtAll : words.noSkillsAtAll}
               </p>
             {:else}
-              <ul class="found">
+              <ul class="mx-space-2 mb-space-2 flex flex-col gap-space-row">
                 {#each rows as row ("path" in row ? row.path : `${row.scope}:${row.name}`)}
                   {@const key = keyOf(machine.machineId, row.scope, row.name)}
-                  <li data-slot="entry" class="entry">
-                    <span data-slot="text" class="text">
-                      <span class="line">
-                        <span data-slot="name" class="name">{row.name}</span>
+                  <li
+                    data-slot="entry"
+                    class="flex flex-wrap items-center gap-space-2 rounded-sm bg-surface-recess px-space-3 py-space-2"
+                  >
+                    <span
+                      data-slot="text"
+                      class="flex min-w-0 grow basis-c-inventory-text-basis flex-col gap-space-row"
+                    >
+                      <span class="flex flex-wrap items-center gap-space-2">
+                        <span
+                          data-slot="name"
+                          class="font-(family-name:--font-mono) text-size-meta text-ink-strong"
+                          >{row.name}</span
+                        >
                         <Badge variant="outline"><span>{row.scope}</span></Badge
                         >
                         {#if row.managed}
@@ -178,7 +205,9 @@
                         {/if}
                       </span>
                       {#if "description" in row && row.description}
-                        <span data-slot="note" class="note clamp"
+                        <span
+                          data-slot="note"
+                          class="line-clamp-2 max-w-c-measure type-meta text-ink-muted"
                           >{row.description}</span
                         >
                       {/if}
@@ -197,11 +226,13 @@
                         variant="outline"
                       />
                     {:else if taken.includes(row.name) && !row.managed}
-                      <span data-slot="note" class="note"
+                      <span
+                        data-slot="note"
+                        class="max-w-c-measure type-meta text-ink-muted"
                         >{words.inTheFleet}</span
                       >
                     {/if}
-                    <RowFault class="adopt-fault" reason={adoptFailed[key]} />
+                    <RowFault class="basis-full" reason={adoptFailed[key]} />
                   </li>
                 {/each}
               </ul>
@@ -212,104 +243,3 @@
     </ul>
   {/if}
 </div>
-
-<style>
-  .inventory {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-top: 18px;
-    border-top: 1px solid var(--border-hairline);
-  }
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .busy {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .machines,
-  .found {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .machines {
-    margin: 0 -8px;
-  }
-  .machine {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 44px;
-    padding: 6px 8px;
-    border-radius: var(--radius-sm);
-    text-align: left;
-    transition: var(--transition-control);
-  }
-  .head:hover:not(:disabled) {
-    background: var(--surface-hover);
-  }
-  .head :global(svg) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    color: var(--ink-muted);
-  }
-  .host {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .found {
-    margin: 0 8px 6px;
-  }
-  .entry {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  /* A refused adopt, on a line of its own under the entry's words. */
-  .entry > :global(.adopt-fault) {
-    flex-basis: 100%;
-  }
-  .text {
-    display: flex;
-    flex: 1 1 240px;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-  .line {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-  }
-  .name {
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--ink-strong);
-  }
-  .clamp {
-    display: -webkit-box;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-  }
-</style>

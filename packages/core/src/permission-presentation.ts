@@ -1272,9 +1272,10 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return change.review
         ? "Review every task before done: only you close one"
         : "Stop reviewing before done: the lead and sessions close finished tasks";
-    default:
-      return LANDS_WORDS[change.lands];
+    case "set_lands":
+      break;
   }
+  return LANDS_WORDS[change.lands];
 };
 
 const MB = 1024 * 1024;

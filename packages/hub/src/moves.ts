@@ -1376,11 +1376,14 @@ export const createMoves = (deps: MovesDeps) => {
           ? `The clone and ${sizeWords(fetched)} of large files on ${target} are kept.`
           : `The clone on ${target} is kept.`;
       }
-      default:
-        return state.lfs
-          ? `The clone and its large files on ${target} are kept.`
-          : `The clone on ${target} is kept.`;
+      case "cancelled":
+      case "start":
+      case "started":
+        break;
     }
+    return state.lfs
+      ? `The clone and its large files on ${target} are kept.`
+      : `The clone on ${target} is kept.`;
   };
 
   /**

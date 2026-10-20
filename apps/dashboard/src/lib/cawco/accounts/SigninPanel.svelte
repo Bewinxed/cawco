@@ -30,11 +30,11 @@
   const codeId = $props.id();
 </script>
 
-<div class="panel">
+<div data-slot="panel" class="flex flex-col gap-space-3">
   {#if !online}
-    <p class="line">{words.offline(machine)}</p>
+    <p class="type-meta text-ink-muted">{words.offline(machine)}</p>
   {/if}
-  <div data-slot="row" class="row">
+  <div data-slot="row" class="flex min-w-0 items-center gap-space-2">
     {#if flow.url}
       <Button
         href={flow.url}
@@ -57,11 +57,11 @@
         variant="outline"
       />
     {/if}
-    <span class="line">{words.thenPaste}</span>
+    <span class="type-meta text-ink-muted">{words.thenPaste}</span>
   </div>
   <form
     data-slot="row"
-    class="row"
+    class="flex min-w-0 items-center gap-space-2"
     onsubmit={(event) => {
       event.preventDefault();
       flow.done();
@@ -72,9 +72,10 @@
       aria-invalid={flow.problem ? "true" : undefined}
       aria-label={words.codeLabel}
       autocomplete="off"
-      class="h-[30px] flex-1"
+      class="flex-1"
       disabled={flow.url === null || flow.phase === "signed-in"}
       placeholder={words.codePlaceholder}
+      size="sm"
       spellcheck="false"
       bind:value={flow.code}
     />
@@ -91,7 +92,8 @@
   {#if flow.problem}
     <!-- The daemon's sentence, then the CLI's screen lines, each its own line. -->
     <p
-      class="error"
+      data-slot="error"
+      class="type-meta flex items-start gap-space-2 text-status-fail-ink whitespace-pre-line wrap-anywhere"
       data-signin-problem
       id="{codeId}-problem"
       role="alert"
@@ -100,61 +102,30 @@
       {flow.problem}
     </p>
   {:else if flow.phase === "signed-in"}
-    <p class="got" role="status">
+    <p
+      data-slot="got"
+      class="type-meta flex items-start gap-space-2 text-ink-muted"
+      role="status"
+    >
       <Check />
       <span
         >{words.signedInAs}
-        <b>{flow.email ?? expected ?? words.theAccount}</b></span
+        <b class="font-medium text-ink-strong"
+          >{flow.email ?? expected ?? words.theAccount}</b
+        ></span
       >
     </p>
   {:else if flow.phase === "mismatch"}
-    <p class="warn mark-line" role="alert" in:appear>
-      <span class="mark-cell"><IconWarningTriangle /></span>
+    <p
+      data-slot="warn"
+      class="mark-line type-meta flex items-start gap-space-2 text-status-attn-ink"
+      role="alert"
+      in:appear
+    >
+      <span class="mark-cell"
+        ><IconWarningTriangle class="size-icon-md flex-none" /></span
+      >
       <span>{words.mismatch(machine, flow.email, expected)}</span>
     </p>
   {/if}
 </div>
-
-<style>
-  .panel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  .row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-width: 0;
-  }
-  .line {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .error,
-  .got,
-  .warn {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .error {
-    color: var(--status-fail-ink);
-    white-space: pre-line;
-    overflow-wrap: anywhere;
-  }
-  .warn {
-    color: var(--status-attn-ink);
-  }
-  .got b {
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .warn :global(svg) {
-    flex: none;
-    width: 14px;
-    height: 14px;
-  }
-</style>

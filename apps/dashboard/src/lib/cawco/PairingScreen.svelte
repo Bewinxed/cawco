@@ -34,115 +34,108 @@
   );
 </script>
 
-<main data-slot="pairing" class="pairing">
-  <div data-slot="caw-80" class="caw-80">
+<main
+  data-slot="pairing"
+  class="flex min-h-dvh flex-col items-center justify-center gap-space-4 bg-surface-page px-space-5 py-space-8"
+>
+  <div
+    data-slot="caw-80"
+    class="grid min-h-(--caw-size) place-items-center"
+    style:--caw-size="{CAW_SIZE}px"
+  >
     <Caw next={["ready", "idle"]} size={CAW_SIZE} status="idle" />
   </div>
-  <div data-slot="body" class="body">
+  <div data-slot="body" class="relative w-full max-w-c-page-column-w">
     {#key stage.kind}
-      <div data-slot="words" class="words" in:crossIn out:crossOut>
+      <div
+        data-slot="words"
+        class="flex flex-col items-center gap-space-4"
+        in:crossIn
+        out:crossOut
+      >
         {#if stage.kind === "waiting"}
-          <h1 data-slot="title" class="title">Pair this browser</h1>
-          <p class="line">
+          <h1
+            data-slot="title"
+            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
+          >
+            Pair this browser
+          </h1>
+          <p
+            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
+          >
             This hub requires paired devices. Approve this code on a paired
             device, in Needs you or Configure › Devices.
           </p>
-          <p data-num data-slot="code" class="code num">
+          <p
+            data-num
+            data-slot="code"
+            class="num m-0 rounded-well bg-surface-recess px-space-5 py-space-3 type-kpi font-(family-name:--font-mono) text-ink-stat select-all"
+          >
             <span class="sr-only">Pairing code </span>{stage.userCode}
           </p>
-          <p data-num data-slot="meta" class="meta num">
+          <p
+            data-num
+            data-slot="meta"
+            class="num m-0 type-meta text-center text-ink-muted"
+          >
             Waiting for approval… The code expires {left < 60_000
               ? "in under a minute"
               : `in ${Math.ceil(left / 60_000)} min`}.
           </p>
         {:else if stage.kind === "denied"}
-          <h1 data-slot="title" class="title">Pairing was denied</h1>
-          <p class="line">
+          <h1
+            data-slot="title"
+            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
+          >
+            Pairing was denied
+          </h1>
+          <p
+            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
+          >
             A paired device denied this browser. If that was a mistake, start
             again and approve the new code.
           </p>
           <Button onclick={startPairing}>Start pairing</Button>
         {:else if stage.kind === "expired"}
-          <h1 data-slot="title" class="title">The code expired</h1>
-          <p class="line">
+          <h1
+            data-slot="title"
+            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
+          >
+            The code expired
+          </h1>
+          <p
+            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
+          >
             Nobody approved it within 10 minutes. Start again for a new code.
           </p>
           <Button onclick={startPairing}>Start pairing</Button>
         {:else if stage.kind === "failed"}
-          <h1 data-slot="title" class="title">Pairing didn't start</h1>
+          <h1
+            data-slot="title"
+            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
+          >
+            Pairing didn't start
+          </h1>
           <ErrorText
             message={stage.message}
             title="The hub refused to start pairing"
           />
           <Button onclick={startPairing}>Start pairing</Button>
         {:else}
-          <h1 data-slot="title" class="title">Pair this browser</h1>
-          <p aria-live="polite" class="line">Asking the hub for a code…</p>
+          <h1
+            data-slot="title"
+            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
+          >
+            Pair this browser
+          </h1>
+          <p
+            aria-live="polite"
+            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
+          >
+            Asking the hub for a code…
+          </p>
         {/if}
       </div>
     {/key}
   </div>
 </main>
-
-<style>
-  .pairing {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-4);
-    min-block-size: 100dvh;
-    padding: var(--space-8) var(--space-5);
-    background: var(--background);
-  }
-  .caw-80 {
-    display: grid;
-    place-items: center;
-    min-block-size: 80px;
-  }
-  /* The stages share this cell: the one leaving is pinned in it (crossOut). */
-  .body {
-    position: relative;
-    inline-size: 100%;
-    max-inline-size: 34rem;
-  }
-  .words {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-4);
-  }
-  .title {
-    margin: 0;
-    font: var(--type-title);
-    letter-spacing: var(--track-title);
-    color: var(--ink-strong);
-    text-align: center;
-    text-wrap: balance;
-  }
-  .line {
-    margin: 0;
-    max-inline-size: 26rem;
-    font: var(--type-body);
-    color: var(--ink-muted);
-    text-align: center;
-    text-wrap: pretty;
-  }
-  /* The stat well's recipe (DESIGN.md `stat-well`): the one figure here. */
-  .code {
-    margin: 0;
-    padding: var(--space-3) var(--space-5);
-    border-radius: var(--radius-well);
-    background: var(--surface-recess);
-    font: var(--type-kpi);
-    font-family: var(--font-mono);
-    color: var(--ink-stat);
-    user-select: all;
-  }
-  .meta {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-align: center;
-  }
-</style>

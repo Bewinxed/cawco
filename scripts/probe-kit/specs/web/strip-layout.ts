@@ -14,28 +14,32 @@ import { type Kit, open, type Spec, settle } from "../../kit";
 
 const ROUTE = "/motion/folder-proof?at=1&work=working";
 const STRIP = '[data-strip="session"]';
+/** TabItem's box, its hit and its label (fluid-tabs/TabItem.svelte's hooks). */
+const TAB = '[data-slot="ff-tab"]';
+const HIT = '[data-slot="hit"]';
+const LABEL = '[data-slot="tab-item-label"]';
 const VARIANTS = [
   ["nothing changed", ""],
   [
     "every tab's contents out",
-    `${STRIP} .ff-tab > * { display: none !important; }`,
+    `${STRIP} ${TAB} > * { display: none !important; }`,
   ],
   [
     "the sheets out",
-    `${STRIP} .ff-tab > svg.fold { display: none !important; }`,
+    `${STRIP} ${TAB} > svg[data-slot="fold"] { display: none !important; }`,
   ],
-  ["the links out", `${STRIP} .ff-tab > .hit { display: none !important; }`],
+  ["the links out", `${STRIP} ${TAB} > ${HIT} { display: none !important; }`],
   [
     "the trails out",
-    `${STRIP} .ff-tab > :not(.hit, svg) { display: none !important; }`,
+    `${STRIP} ${TAB} > :not(${HIT}, svg) { display: none !important; }`,
   ],
   [
     "the labels' text out",
-    `${STRIP} .ff-tab .label { display: none !important; }`,
+    `${STRIP} ${TAB} ${LABEL} { display: none !important; }`,
   ],
   [
     "the leads out",
-    `${STRIP} .ff-tab > .hit > :not(.label) { display: none !important; }`,
+    `${STRIP} ${TAB} > ${HIT} > :not(${LABEL}) { display: none !important; }`,
   ],
 ] as const;
 const READS = 6;
@@ -72,7 +76,7 @@ async function read(kit: Kit): Promise<void> {
   const page = await kit.page("desk", { theme: "light" });
   await open(
     page,
-    `${await kit.bench()}${ROUTE}&theme=light`,
+    `${await kit.bench()}${ROUTE}`,
     `${STRIP} [data-slot="tab"][data-chosen]`,
     120_000
   );

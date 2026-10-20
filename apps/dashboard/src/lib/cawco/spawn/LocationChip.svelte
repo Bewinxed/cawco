@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   /**
    * Location as a composer chip: where the session works — an existing folder
    * or a repository to clone by its git URL — named on the chip, chosen in
@@ -71,23 +72,25 @@
   {onchange}
   {onclosefocus}
   {open}
-  triggerClass="ns-chip-btn"
-  triggerStyle={empty ? "color:var(--ink-muted)" : ""}
+  triggerClass={chipVariants({
+    variant: "setting",
+    tone: empty ? "muted" : undefined,
+  })}
   width={440}
 >
   {#snippet trigger()}
     {#if mode === "repo"}
-      <FolderGit style="color:var(--hue-amber-500)" />
+      <FolderGit class="text-hue-amber-500" />
     {:else}
-      <FolderOpen style="color:var(--hue-amber-500)" />
+      <FolderOpen class="text-hue-amber-500" />
     {/if}
     <span
       data-slot="chip-label"
-      class="chip-label"
-      title={mode === "repo" ? repo : dir}
-      class:mono={!empty}>{label}</span
+      class="data-mono:font-(family-name:--font-mono)"
+      data-mono={!empty || undefined}
+      title={mode === "repo" ? repo : dir}>{label}</span
     >
-    <Down class="chevron" />
+    <Down data-slot="chevron" />
   {/snippet}
   <LocationSection
     {dir}
@@ -106,9 +109,3 @@
     {repo}
   />
 </NsPopover>
-
-<style>
-  .mono {
-    font-family: var(--font-mono);
-  }
-</style>

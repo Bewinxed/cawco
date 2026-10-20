@@ -84,7 +84,7 @@
     </Button>
   {/snippet}
 
-  <div data-slot="group" class="group">
+  <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={section.hue} icon={section.icon} label={words.fleet} />
     {#if types.length === 0}
       <EmptyState
@@ -121,7 +121,10 @@
   </div>
 
   {#each projects as entry (entry.project.id)}
-    <div data-slot="group" class="group">
+    <div
+      data-slot="group"
+      class="flex flex-col gap-space-2 border-t border-border-hairline pt-space-5"
+    >
       <SectionHeader
         hue={section.hue}
         icon={IconFolder}
@@ -156,15 +159,3 @@
     </div>
   {/each}
 </SectionFrame>
-
-<style>
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .group + .group {
-    padding-top: 18px;
-    border-top: 1px solid var(--border-hairline);
-  }
-</style>

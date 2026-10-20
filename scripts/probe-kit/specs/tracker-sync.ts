@@ -1157,9 +1157,11 @@ const legs = async (
   const saidNow = () =>
     notes.evaluate(
       (selector) =>
-        [...document.querySelectorAll(`${selector} .said`)].map((one) =>
-          one.textContent?.trim()
-        ),
+        [
+          ...document.querySelectorAll(
+            `${selector} [data-slot="comment-text"]`
+          ),
+        ].map((one) => one.textContent?.trim()),
       COMMENT
     );
   await open(notes, `${base}/project/${plain}?task=${noted.id}`, COMMENT);
@@ -1170,7 +1172,9 @@ const legs = async (
     notes.evaluate((selector) => {
       const line = [...document.querySelectorAll(selector)].find(
         (one) =>
-          one.querySelector(".said")?.textContent?.trim() === "Third note."
+          one
+            .querySelector('[data-slot="comment-text"]')
+            ?.textContent?.trim() === "Third note."
       );
       if (line) {
         (line as Element & { kept?: true }).kept = true;
@@ -1180,7 +1184,9 @@ const legs = async (
     notes.evaluate((selector) => {
       const line = [...document.querySelectorAll(selector)].find(
         (one) =>
-          one.querySelector(".said")?.textContent?.trim() === "Third note."
+          one
+            .querySelector('[data-slot="comment-text"]')
+            ?.textContent?.trim() === "Third note."
       );
       return Boolean((line as (Element & { kept?: true }) | undefined)?.kept);
     }, COMMENT);
@@ -1188,7 +1194,11 @@ const legs = async (
     notes
       .waitForFunction(
         ({ selector, words, heading }) =>
-          [...document.querySelectorAll(`${selector} .said`)]
+          [
+            ...document.querySelectorAll(
+              `${selector} [data-slot="comment-text"]`
+            ),
+          ]
             .map((one) => one.textContent?.trim())
             .join("|") === words &&
           document.querySelector("[data-task-pane] h2")?.textContent?.trim() ===
@@ -1300,7 +1310,9 @@ const legs = async (
       picked: [...(tracker?.querySelectorAll("[data-state='on']") ?? [])].map(
         (item) => item.textContent?.trim()
       ),
-      target: tracker?.querySelector(".bound-target")?.textContent?.trim(),
+      target: tracker
+        ?.querySelector('[data-slot="bound-target"]')
+        ?.textContent?.trim(),
       state: tracker
         ?.querySelector("[data-tracker-state]")
         ?.textContent?.replace(/\s+/g, " ")
@@ -1328,15 +1340,18 @@ const legs = async (
   );
   await desk.locator("[data-change-tracker]").click();
   // An option is never visible to the engine: in the page is what counts.
-  await desk.waitForSelector('[data-bind-form="github"] .bind-target option', {
-    state: "attached",
-  });
+  await desk.waitForSelector(
+    '[data-bind-form="github"] select[data-bind-target] option',
+    {
+      state: "attached",
+    }
+  );
   const preset = await desk.evaluate(() => ({
     connection: document.querySelector<HTMLSelectElement>(
-      '[data-bind-form="github"] .bind-connection select'
+      '[data-bind-form="github"] select[data-bind-connection]'
     )?.value,
     target: document.querySelector<HTMLSelectElement>(
-      '[data-bind-form="github"] .bind-target select'
+      '[data-bind-form="github"] select[data-bind-target]'
     )?.value,
   }));
   check(
@@ -1371,17 +1386,23 @@ const legs = async (
     .filter({ hasText: "Linear" })
     .first()
     .click();
-  await desk.waitForSelector('[data-bind-form="linear"] .bind-target option', {
-    state: "attached",
-  });
+  await desk.waitForSelector(
+    '[data-bind-form="linear"] select[data-bind-target] option',
+    {
+      state: "attached",
+    }
+  );
   await desk.selectOption(
-    '[data-bind-form="linear"] .bind-connection select',
+    '[data-bind-form="linear"] select[data-bind-connection]',
     "linear-key"
   );
   // Use stays off while the key's teams read: the click waits for them.
-  await desk.waitForSelector('[data-bind-form="linear"] .bind-target option', {
-    state: "attached",
-  });
+  await desk.waitForSelector(
+    '[data-bind-form="linear"] select[data-bind-target] option',
+    {
+      state: "attached",
+    }
+  );
   await desk.getByRole("button", { name: "Use Linear" }).click();
   await desk.waitForSelector('[data-detail="tracker"] [data-bound="linear"]');
   const viaUi = (
@@ -1438,8 +1459,9 @@ const legs = async (
   const form = await desk.evaluate(() => {
     const at = document.querySelector('[data-bind-form="github"]');
     return {
-      project: at?.querySelector<HTMLSelectElement>(".bind-project select")
-        ?.value,
+      project: at?.querySelector<HTMLSelectElement>(
+        'select[aria-label="GitHub Project"]'
+      )?.value,
       map: Object.fromEntries(
         [...(at?.querySelectorAll("[data-status-map] label") ?? [])].map(
           (label) => [
@@ -1565,7 +1587,7 @@ const readIssueLine = (page: Page) =>
     const fault = issue.querySelector("[data-issue-fault]");
     return {
       words: issue
-        .querySelector(".issue-words")
+        .querySelector('[data-slot="issue-words"]')
         ?.textContent?.replace(/\s+/g, " ")
         .trim(),
       href: issue.querySelector("a")?.getAttribute("href") ?? null,
@@ -1573,7 +1595,7 @@ const readIssueLine = (page: Page) =>
       // The label shown: the button stacks its pending one beside it, hidden.
       again:
         fault
-          ?.querySelector('button .kit-words > [data-active="true"]')
+          ?.querySelector('button [data-slot="words"] > [data-active="true"]')
           ?.textContent?.replace(/\s+/g, " ")
           .trim() ?? null,
       inside: Boolean(

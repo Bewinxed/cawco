@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * The first-prompt editor (§1.4, §2.3): a contenteditable that grows from
-   * 44px to 120px, detects `@` / `/` at the caret and inserts chips. The prompt
+   * `c-row-h` to `c-prompt-grown-h`, detects `@` / `/` at the caret and inserts chips. The prompt
    * that is sent is the editor's text with chips serialised as `@name`/`/name`.
    * A `lead` chip opens the editor and serialises to nothing; deleting it calls
    * `onleadremove`.
@@ -47,11 +47,11 @@
   let menuIdx = $state(0);
   const items = $derived(menu ? menuItems(menu.type, menu.query) : []);
   const promptEmpty = $derived(!(value || lead));
-  const promptH = $derived(promptFocus || value || menu ? 120 : 44);
+  const grown = $derived(Boolean(promptFocus || value || menu));
   /**
    * The menu stands on the caret where the caret is now, measured each time
    * the popover places itself. Measured once, as the trigger was typed, a
-   * `/` typed while the editor was still growing to 120px (the dialog
+   * `/` typed while the editor was still growing to its grown height (the dialog
    * re-centring 38px up as it did) left the menu 38px under the caret for
    * good. The editor is the anchor's `contextElement`: floating-ui's
    * autoUpdate observes it for size and movement, and its scrolling
@@ -150,9 +150,12 @@
     chip.contentEditable = "false";
     chip.dataset.chip = item.key;
     chip.dataset.serial = item.serial;
-    chip.className = "ns-chip";
+    // A reference on the prompt's line: one line box tall less its 1px
+    // margin each side, so a line holding chips keeps the prompt's leading.
+    chip.className =
+      "m-px inline-flex h-[calc(var(--prompt-lh)-2px)] items-center gap-space-1 rounded-sm border border-border-control bg-surface-fill ps-space-1 pe-space-2 align-top font-body text-label leading-none font-medium whitespace-nowrap text-ink-strong select-all";
     const mark = document.createElement("span");
-    mark.className = "ns-chip-icon";
+    mark.className = "inline-flex *:[svg]:size-icon-sm";
     mark.style.color = item.hue ?? "";
     chip.append(mark);
     chips.set(chip, mount(item.icon, { target: mark, props: item.props }));
@@ -325,13 +328,18 @@
   });
 </script>
 
-<div class="editor-wrap" data-keeps-draft>
+<div
+  data-slot="editor-wrap"
+  class="relative prompt-fs-(--text-body) max-phone:prompt-fs-(--text-field-floor) coarse:prompt-fs-(--text-field-floor)"
+  data-keeps-draft
+  style:--prompt-lh="calc(var(--prompt-fs) * var(--leading-prose))"
+>
   <!-- biome-ignore lint/a11y/useSemanticElements: a contenteditable is the only element that can hold inline chips; textarea cannot -->
   <div
     data-slot="editor"
     aria-label="First prompt"
     aria-multiline="true"
-    class="editor fai-scroll"
+    class="fai-scroll h-c-row-h data-grown:h-c-prompt-grown-h max-phone:h-c-prompt-grown-h w-full overflow-auto rounded-t-lg bg-transparent px-space-4 pt-space-3 pb-space-2 font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong outline-off max-phone:overscroll-contain motion-safe:phone:transition-[height] motion-safe:phone:duration-(--dur-pop) motion-safe:phone:ease-in-out"
     contenteditable="true"
     id="session-prompt"
     onblur={() => {
@@ -347,14 +355,17 @@
     onkeyup={caret}
     onpaste={paste}
     role="textbox"
-    style={`--prompt-height:${promptH}px`}
+    data-grown={grown || undefined}
     tabindex="0"
     bind:this={element}
   ></div>
   {#if promptEmpty}
-    <span aria-hidden="true" class="placeholder"
+    <span
+      aria-hidden="true"
+      class="pointer-events-none absolute inset-x-space-4 top-space-3 truncate font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal text-ink-subtle"
       >What should the agent do first?
-      <span class="hint">@ machine or project · / skills and plugins</span
+      <span class="text-ink-subtle max-phone:hidden"
+        >@ machine or project · / skills and plugins</span
       ></span
     >
   {/if}
@@ -372,99 +383,3 @@
     open={menu !== null}
   />
 </div>
-
-<style>
-  .editor-wrap {
-    position: relative;
-    /* The prompt's type, defined once: the text, the placeholder and the chips
-       (which size themselves to the line) all read the same two values. */
-    --prompt-fs: var(--text-body);
-    --prompt-lh: calc(var(--prompt-fs) * 1.55);
-  }
-  .editor {
-    width: 100%;
-    height: var(--prompt-height);
-    padding: 12px 16px 6px;
-    overflow: auto;
-    outline: none;
-    background: transparent;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    font: var(--weight-body) var(--prompt-fs) / var(--prompt-lh)
-      var(--font-body);
-    color: var(--ink-strong);
-    white-space: pre-wrap;
-    word-break: break-word;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: height var(--ns-prompt-ms) var(--ease-in-out);
-    }
-  }
-  .placeholder {
-    position: absolute;
-    left: 16px;
-    top: 12px;
-    right: 16px;
-    font: var(--weight-body) var(--prompt-fs) / var(--prompt-lh)
-      var(--font-body);
-    color: var(--ink-subtle);
-    pointer-events: none;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .hint {
-    color: var(--ink-subtle);
-  }
-  /* A chip is centred on its line by construction, not tuned to a baseline.
-     It is the line minus 1px of margin above and below, pinned to the line's
-     top: the margin box is exactly one line tall, so the chip never grows the
-     line box and its centre is the line's centre, which is also the centre of
-     the text's content area (half-leading is symmetric). Nothing depends on the
-     chip's own font, the icon's size or the prompt's size, so it holds at the
-     desktop 14px, the mobile 16px and any font the token stack resolves to.
-     (Flex alignment inside the chip centres the icon and the label together;
-     a flex chip's own baseline is never consulted because it is top-aligned.) */
-  .editor :global(.ns-chip) {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    vertical-align: top;
-    block-size: calc(var(--prompt-lh) - 2px);
-    margin: 1px;
-    padding-inline: 5px 7px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-fill);
-    border: 1px solid var(--border-control);
-    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-    color: var(--ink-strong);
-    white-space: nowrap;
-    user-select: all;
-  }
-  .editor :global(.ns-chip-icon) {
-    display: inline-flex;
-  }
-  /* The harness logo sizes itself (16px); every other icon is a bare svg. */
-  .editor :global(.ns-chip-icon > svg) {
-    inline-size: 12px;
-    block-size: 12px;
-  }
-  /* iOS Safari zooms into a field whose text is under 16px and stays zoomed
-     after the keyboard goes; app.css holds every input, textarea and select
-     to that floor under this same condition, and the prompt is the one
-     field that is none of those. */
-  @media (max-width: 640px), (pointer: coarse) {
-    .editor-wrap {
-      --prompt-fs: 1rem;
-    }
-  }
-  @media (max-width: 640px) {
-    .editor {
-      height: 120px;
-      overscroll-behavior: contain;
-      transition: none;
-    }
-    /* The hint would only ellipsise at this width; the question survives whole. */
-    .hint {
-      display: none;
-    }
-  }
-</style>

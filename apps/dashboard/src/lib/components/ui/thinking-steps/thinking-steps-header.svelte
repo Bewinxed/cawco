@@ -14,9 +14,14 @@
   } = $props();
 </script>
 
+<!-- A transcript rail line's height. A finger's 44px target is the house
+     touch area reaching past it (The 44 Touch Rule), never a taller header:
+     the live header turns enabled as its first words land, and a header that
+     grew then would drop its re-centred label under the reader. A disabled
+     header has no target. -->
 <Collapsible.Trigger
   {...rest}
-  class="thinking-header mark-line press-tint {className}"
+  class="group/header mark-line press-tint touch-hit m-0 flex min-h-(--tx-line) max-w-full items-center gap-space-2 rounded-xs border-none border-current bg-transparent p-0 font-inherit text-start text-inherit enabled:hover:text-ink-strong disabled:after:content-none {className}"
   data-slot="thinking-steps-header"
 >
   {#if children}
@@ -24,69 +29,10 @@
   {:else}
     <span>Thinking</span>
   {/if}
-  <span aria-hidden="true" class="chevron" data-box><IconChevronRight /></span>
+  <span
+    aria-hidden="true"
+    class="grid flex-none motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-state-open/header:rotate-90 group-disabled/header:invisible"
+    data-box><IconChevronRight class="size-icon-sm" /></span
+  >
   {@render after?.()}
 </Collapsible.Trigger>
-
-<style>
-  /* css-scope .thinking-header: the kit header's own root, on bits-ui's element; Thinking tunes it under its own root */
-  :global(.thinking-header) {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: 26px;
-    max-inline-size: 100%;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    font: inherit;
-    color: inherit;
-    text-align: start;
-    cursor: pointer;
-
-    &:disabled {
-      cursor: default;
-    }
-    &:hover:not(:disabled) {
-      color: var(--ink-strong);
-    }
-
-    /* A 44px target for a finger, without the header growing to it: the
-       live header turns enabled as its first words land, and a header that
-       grew then dropped its re-centred label 9px under the reader. The
-       target reaches past the header instead of the header being taller. */
-    @media (pointer: coarse) {
-      &:not(:disabled) {
-        position: relative;
-
-        &::before {
-          content: "";
-          position: absolute;
-          inset-block: -9px;
-          inset-inline: 0;
-        }
-      }
-    }
-  }
-  .chevron {
-    display: grid;
-    flex: 0 0 auto;
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-control) var(--ease-out);
-    }
-  }
-  :global(.thinking-header[data-state="open"]) .chevron {
-    transform: rotate(90deg);
-  }
-  :global(.thinking-header:disabled) .chevron {
-    visibility: hidden;
-  }
-</style>

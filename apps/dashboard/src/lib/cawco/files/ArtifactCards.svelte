@@ -158,11 +158,16 @@
   };
 </script>
 
+<!-- A card's least width: a thumbnail that still reads, and a name of a
+     dozen characters beside its glyph. The gutter is the rows' edges, so a
+     card's picture lines up with the head's glyph. -->
 <div
   bind:this={box}
-  class="cards"
+  class="relative grid auto-rows-line grid-flow-dense grid-cols-(--lane-tracks) items-box-start gap-x-space-2 px-(--gutter) pb-space-6"
   data-files-cards
-  style:--lanes={count}
+  style:--card-min="var(--c-artifact-card-min)"
+  style:--gutter={"calc((var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2) - var(--space-1))"}
+  style:--lane-tracks="repeat({count}, minmax(0, 1fr))"
   {@attach highlight({
     rows: "[data-files-card]",
     selected: '[data-files-card][aria-current="true"]',
@@ -175,60 +180,79 @@
     {#each Array.from({ length: ghosts }, (_, i) => i) as i (i)}
       <div
         aria-hidden="true"
-        class="card ghost"
+        class="col-start-(--lane) row-end-(--span) grid min-w-0 cursor-default gap-space-1 rounded-lg px-space-1 pt-space-1 pb-space-2"
         data-files-ghost
-        style:grid-column={(i % count) + 1}
-        style:grid-row-end="span {Math.ceil(
-          columnWidth * PANE + WORDS_PX + gap
-        )}"
+        style:--lane={(i % count) + 1}
+        style:--span="span {Math.ceil(columnWidth * PANE + WORDS_PX + gap)}"
       >
-        <Skeleton class="ghost-well" />
-        <Skeleton class="ghost-name" />
+        <Skeleton class="w-full" height="picture" radius="chip" />
+        <Skeleton class="my-space-2 w-3/5" line="label" radius="text" />
       </div>
     {/each}
   {/if}
   {#each placed as { card, lane, span } (card.artifact.id)}
     {@const artifact = card.artifact}
     {@const Glyph = GLYPHS[artifact.kind]}
-    <!-- mark-line: the picture stands over the words; the caption is the card's mark line -->
+    <!-- mark-line: the picture stands over the words; the caption is the card's mark line.
+         The card: the thumbnail and its words on one surface, a space-1 inset
+         so the hover ghost and the pill frame the picture; its corner the
+         picture's plus that inset (The Concentric Rule). -->
     <button
       aria-current={artifact.id === chosen || undefined}
-      class="card"
+      class="col-start-(--lane) row-end-(--span) grid min-w-0 gap-space-1 rounded-lg border-none border-current bg-transparent px-space-1 pt-space-1 pb-space-2 text-start text-ink-strong focus-inset"
       data-artifact={artifact.id}
       data-files-card
-      style:grid-column={lane + 1}
-      style:grid-row-end="span {span}"
+      style:--lane={lane + 1}
+      style:--span="span {span}"
       {@attach measured}
       onclick={() => onpick(artifact)}
       title={artifact.name}
       type="button"
     >
+      <!-- The picture in a well (DESIGN.md, Surfaces: `surface-well` with
+           `border-well`, "a content well inside a raised card"): the well's
+           ground while it loads, and its edge drawn over the picture, so a
+           pale page keeps an edge on the cream card by day. -->
       <span
-        class="well"
+        class="relative grid aspect-(--shape) place-items-center overflow-clip rounded-sm bg-surface-well after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:border after:border-border-well"
         data-files-thumb={pictured(artifact) ? "picture" : "glyph"}
-        style:aspect-ratio="1 / {shape(artifact)}"
+        style:--shape="1 / {shape(artifact)}"
       >
         {#if artifact.thumbnail && pictured(artifact)}
           <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a picture that fails to load stands as its kind's glyph. -->
           <img
             alt=""
+            class="block size-full max-w-none object-cover object-top"
             decoding="async"
             loading="lazy"
             onerror={() => broken.add(artifact.id)}
             src={thumbnailUrl(artifact.id, artifact.thumbnail, theme.resolved)}
           />
         {:else}
-          <Glyph aria-hidden="true" class="well-glyph" />
+          <Glyph aria-hidden="true" class="size-icon-lg text-ink-subtle" />
         {/if}
       </span>
-      <span class="caption mark-line">
-        <Glyph aria-hidden="true" class="glyph" />
-        <span class="name">{artifact.name}</span>
+      <span
+        class="mark-line flex min-w-0 items-center gap-space-1 px-space-row"
+      >
+        <Glyph
+          aria-hidden="true"
+          class="size-icon-md flex-none text-ink-muted"
+        />
+        <span
+          data-slot="name"
+          class="type-label min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap"
+          >{artifact.name}</span
+        >
       </span>
-      <span class="meta">
-        <span class="num">{formatAgeShort(Date.parse(artifact.createdAt))}</span
+      <!-- Its words apart by the gap, never by spaces a flex row would drop. -->
+      <span
+        class="type-meta flex min-w-0 gap-space-1 px-space-row whitespace-nowrap text-ink-muted"
+      >
+        <span class="num flex-none"
+          >{formatAgeShort(Date.parse(artifact.createdAt))}</span
         >{#if artifact.promoted}<span aria-hidden="true">·</span><span
-            class="promoted"
+            class="min-w-0 truncate"
             title={artifactWords.promotedTitle(artifact.name)}
             >{artifactWords.promoted(
               artifact.promoted.commit.slice(0, 7)
@@ -236,8 +260,13 @@
           >{/if}
       </span>
       {#if card.within}
-        <span class="within" data-files-within
+        <!-- The page's words round the hit: two lines at most, the hit in
+             strong ink as the finder marks it (FindRow `.reason`). -->
+        <span
+          class="type-meta line-clamp-2 wrap-anywhere px-space-row text-ink-subtle"
+          data-files-within
           >“{#each card.within as part, j (j)}{#if part.matched}<mark
+                class="bg-transparent font-medium text-ink-strong"
                 >{part.text}</mark
               >{:else}{part.text}{/if}{/each}”</span
         >
@@ -245,151 +274,3 @@
     </button>
   {/each}
 </div>
-
-<style>
-  /* A card's least width: a thumbnail that still reads, and a name of a
-     dozen characters beside its glyph. */
-  .cards {
-    --card-min: 148px;
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(var(--lanes), minmax(0, 1fr));
-    grid-auto-rows: 1px;
-    grid-auto-flow: dense;
-    column-gap: var(--space-2);
-    align-items: start;
-  }
-  /* The card: the thumbnail and its words on one surface, a space-1 inset
-     so the hover ghost and the pill frame the picture; its corner the
-     picture's plus that inset (The Concentric Rule). */
-  .card {
-    display: grid;
-    gap: var(--space-1);
-    min-inline-size: 0;
-    padding: var(--space-1) var(--space-1) var(--space-2);
-    border: 0;
-    border-radius: calc(var(--radius-sm) + var(--space-1));
-    background: none;
-    color: var(--ink-strong);
-    text-align: start;
-    cursor: pointer;
-
-    /* Inside its scroller the ring stands within its own edge. */
-    &:focus-visible {
-      outline-offset: var(--focus-ring-inset);
-    }
-  }
-  /* A card as it will stand while the list is read: the pane's well and a
-     caption line. */
-  .ghost {
-    cursor: default;
-
-    & :global(.ghost-well) {
-      inline-size: 100%;
-      aspect-ratio: 16 / 10;
-      border-radius: var(--radius-sm);
-    }
-    & :global(.ghost-name) {
-      inline-size: 60%;
-      block-size: 1ex;
-      margin-block: var(--space-2);
-      border-radius: var(--radius-hair);
-    }
-  }
-  /* The picture in a well (DESIGN.md, Surfaces: `surface-well` with
-     `border-well`, "a content well inside a raised card"): the well's ground
-     while it loads, and its edge drawn over the picture, so a pale page
-     keeps an edge on the cream card by day. */
-  .well {
-    position: relative;
-    display: grid;
-    place-items: center;
-    overflow: clip;
-    border-radius: var(--radius-sm);
-    background: var(--surface-well);
-
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border: 1px solid var(--border-well);
-      border-radius: inherit;
-      pointer-events: none;
-    }
-    & img {
-      display: block;
-      inline-size: 100%;
-      block-size: 100%;
-      max-inline-size: none;
-      object-fit: cover;
-      object-position: top;
-    }
-    & :global(.well-glyph) {
-      inline-size: var(--icon-lg);
-      block-size: var(--icon-lg);
-      color: var(--ink-subtle);
-    }
-  }
-  .caption {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-inline-size: 0;
-    padding-inline: calc(var(--space-1) / 2);
-
-    & :global(.glyph) {
-      flex: none;
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-      color: var(--ink-muted);
-    }
-  }
-  .name {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font: var(--type-label);
-  }
-  .meta,
-  .within {
-    padding-inline: calc(var(--space-1) / 2);
-    color: var(--ink-muted);
-    font: var(--type-meta);
-  }
-  /* Its words apart by the gap, never by spaces a flex row would drop. */
-  .meta {
-    display: flex;
-    gap: var(--space-1);
-    min-inline-size: 0;
-    white-space: nowrap;
-
-    & .num {
-      flex: none;
-      font-variant-numeric: tabular-nums;
-    }
-  }
-  .promoted {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-  }
-  /* The page's words round the hit: two lines at most, the hit in strong
-     ink as the finder marks it (FindRow `.reason`). */
-  .within {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    overflow: hidden;
-    overflow-wrap: anywhere;
-    color: var(--ink-subtle);
-
-    & mark {
-      background: none;
-      color: var(--ink-strong);
-      font-weight: var(--weight-strong);
-    }
-  }
-</style>

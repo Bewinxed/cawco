@@ -100,9 +100,12 @@
   </Popover.Trigger>
   <Popover.Content
     align="end"
-    class="w-[360px] max-w-[calc(100vw-2rem)] gap-3 p-3"
+    class="max-w-(--bits-popover-content-available-width)"
+    gap="form"
+    pad="form"
+    width="widest"
   >
-    <form class="form" onsubmit={create}>
+    <form class="flex flex-col gap-space-3" onsubmit={create}>
       <Field
         id="memory-path"
         label={words.pathUnder(userLayerLabel("memories"))}
@@ -114,7 +117,7 @@
         <Input
           aria-invalid={problem ? "true" : undefined}
           autocomplete="off"
-          class="font-mono"
+          face="mono"
           id="memory-path"
           placeholder={words.pathPlaceholder}
           spellcheck="false"
@@ -122,7 +125,13 @@
         />
       </Field>
       {#if failed}
-        <p class="problem" role="alert" transition:unfold>{failed}</p>
+        <p
+          class="type-meta text-status-fail-ink"
+          role="alert"
+          transition:unfold
+        >
+          {failed}
+        </p>
       {/if}
       <Button
         class="self-end"
@@ -137,15 +146,3 @@
     </form>
   </Popover.Content>
 </Popover.Root>
-
-<style>
-  .form {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-</style>

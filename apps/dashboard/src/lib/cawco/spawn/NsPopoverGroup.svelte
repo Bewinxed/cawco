@@ -16,7 +16,9 @@
   import type { TransitionConfig } from "svelte/transition";
   import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
+  import { glidePopoverVariants } from "#lib/components/ui/glide-popover/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { cn } from "#lib/utils.js";
   import {
     type PopoverMember,
     popoverGroup,
@@ -99,7 +101,7 @@
         <Popover.Content
           data-ns-pop
           align={shown.align}
-          class="ns-theme ns-pop"
+          class={cn("ns-theme", glidePopoverVariants())}
           collisionPadding={8}
           customAnchor={shown.trigger}
           onCloseAutoFocus={(event) => {
@@ -111,7 +113,7 @@
             if (
               !focused ||
               focused === document.body ||
-              focused.closest(".ns-pop")
+              focused.closest("[data-ns-pop]")
             ) {
               shown?.trigger?.focus();
             }
@@ -160,14 +162,20 @@
                   ? highlight({ rows: shown.rows })
                   : undefined}
               >
+                <!-- The surface is held at its content's measured height and
+                     tweens to the next one, whether it glides to a sibling or
+                     its own list filters; clipped with a margin so focus rings
+                     at its edges survive. -->
                 <div
-                  class="ns-morph"
+                  class="overflow-clip clip-margin-space-1 motion-safe:transition-[height] motion-safe:duration-(--dur-pop) motion-safe:ease-drawer"
                   style:height={height ? `${height}px` : undefined}
                 >
-                  <div class="ns-measure" bind:offsetHeight={height}>
+                  <div bind:offsetHeight={height}>
                     {#key shown?.id}
+                      <!-- As the surface: a row with a long path shrinks and
+                           ellipsises it, never widening the set past it. -->
                       <div
-                        class="ns-panel-set"
+                        class="grid grid-cols-1 content-start gap-(--ns-pop-gap,0px)"
                         style={`--ns-pop-gap:${shown?.gap ?? 0}px`}
                         use:focusFirst
                         in:panelIn

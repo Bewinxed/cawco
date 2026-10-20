@@ -879,7 +879,7 @@ const swapCheck = async (on: On, clock: Clock) => {
       outgoing.length > 0 &&
       incoming.every(
         (run) =>
-          run.name.endsWith("-icon-swap") &&
+          run.name === "icon-swap" &&
           run.props.join() === "filter,opacity,transform" &&
           run.duration === control
       ) &&
@@ -1688,7 +1688,7 @@ const removeCheck = async (
       stage: !!document.querySelector(stage as string),
       chip: !!document.querySelector(chip as string),
       atts: document.querySelectorAll(
-        '[data-slot="composer"] [data-slot="atts"] [data-artifact]'
+        '[data-slot="composer"] [data-atts] [data-artifact]'
       ).length,
     }),
     [STAGE, CHIP]
@@ -1966,7 +1966,7 @@ const unanswered = (s: number) =>
  * the canvas, and the box is Send again, not pending.
  */
 const heldExportCheck = async (on: On) => {
-  const { kit, base, session } = on;
+  const { kit, base, session, fleet } = on;
   const page = await kit.page("desk");
   await open(page, `${base}/session/${session}`, FIELD);
   await settle(page);
@@ -1997,7 +1997,6 @@ const heldExportCheck = async (on: On) => {
     held += 1;
   });
   const words = "The canvas with its export held";
-  const rows = await page.locator('[data-slot="turn"][data-you]').count();
   await page.fill(FIELD, words);
   await page.focus(FIELD);
   const pressed = performance.now();
@@ -2030,8 +2029,12 @@ const heldExportCheck = async (on: On) => {
     },
     [FIELD, STAGE] as const
   );
-  const sent =
-    (await page.locator('[data-slot="turn"][data-you]').count()) - rows;
+  // What reached the session, read where it lands (the model's requests):
+  // the transcript mounts only the rows in view, so its row count says
+  // nothing of what was sent.
+  const sent = fleet.seen.filter((request) =>
+    request.all.includes(words)
+  ).length;
   kit.check(
     "17: the hub's export held, Send says why over the field within the 5 s wait, keeps the words and the canvas, and the box is Send again",
     held > 0 &&
@@ -2309,7 +2312,7 @@ const dockCheck = async (on: On, clock: Clock) => {
       const node = document.querySelector(sel as string);
       const well = document
         .querySelector(
-          ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="side-well"]'
+          ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-side-well]'
         )
         ?.getBoundingClientRect();
       const at = node?.getBoundingClientRect();
@@ -2395,7 +2398,7 @@ const dockCheck = async (on: On, clock: Clock) => {
   await clock.catchRuns(
     () =>
       page.click(
-        ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-label="Undock"]'
+        ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-label="Undock"]'
       ),
     MOTION,
     8000
@@ -2421,7 +2424,7 @@ const dockCheck = async (on: On, clock: Clock) => {
         frame: at ? [at.left, at.top, at.width, at.height] : null,
         slot: place ? [place.left, place.top, place.width, place.height] : null,
         panel: !!document.querySelector(
-          ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"])'
+          ':is([data-slot="preview-pane"], [data-side-card="preview"])'
         ),
       };
     },
@@ -2708,7 +2711,7 @@ const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
     }
     await page.touchscreen.tap(at.x + at.width / 2, at.y + at.height / 2);
   };
-  await tap(':is([data-att-btn], [data-slot="att-btn"])');
+  await tap("[data-att-btn]");
   await page.getByRole("menuitem", { name: "Draw" }).waitFor();
   await tap('[role="menuitem"]:has-text("Draw")');
   const standing = await until(
@@ -2768,7 +2771,7 @@ const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
       page.evaluate((sel) => {
         const node = document.querySelector(sel);
         const well = document
-          .querySelector('[data-slot="side-well"]')
+          .querySelector("[data-side-well]")
           ?.getBoundingClientRect();
         const at = node?.getBoundingClientRect();
         return well && at && at.width > 0

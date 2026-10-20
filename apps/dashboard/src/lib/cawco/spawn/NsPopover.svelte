@@ -9,8 +9,10 @@
   import type { Snippet } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
+  import { glidePopoverVariants } from "#lib/components/ui/glide-popover/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import PopoverRoot from "#lib/components/ui/popover/popover.svelte";
+  import { cn } from "#lib/utils.js";
   import {
     type PopoverMember,
     type PopoverWidth,
@@ -26,13 +28,15 @@
     trigger,
     children,
     width = 320,
+    fit = false,
     gap = 0,
     align = "start",
     trapFocus = true,
+    pad = "roomy",
     anchor = null,
     label,
     triggerClass = "",
-    triggerStyle,
+    triggerData = {},
     haspopup,
     rows,
     follows = false,
@@ -50,13 +54,30 @@
     children: Snippet;
     /** Pixels, or a CSS length such as a token's `var(--c-…)`. */
     width?: PopoverWidth;
+    /**
+     * The surface takes its content's width, `width` at the least and the
+     * viewport less its margins at the most, and its height uncapped: a list
+     * sized to its widest row and scrolled in whole rows (SessionDetails'
+     * model list).
+     */
+    fit?: boolean;
     gap?: number;
     align?: "start" | "end" | "center";
     trapFocus?: boolean;
+    /**
+     * The surface's inset: the sheet's own (`roomy`), or the ladder's 4px
+     * round a menu whose rows carry their own (`snug`, the trigger menu).
+     */
+    pad?: "roomy" | "snug";
     anchor?: { getBoundingClientRect: () => DOMRect } | HTMLElement | null;
     label?: string;
     triggerClass?: string;
-    triggerStyle?: string;
+    /**
+     * The trigger's own hooks, as data attributes the caller's neighbours
+     * read: `data-tool` (a tool's chip, which a tools row sizes),
+     * `data-account-chip` (the account's, which keeps its chevron).
+     */
+    triggerData?: Partial<Record<`data-${string}`, true>>;
     /** What the trigger opens, when it is not a dialog. */
     haspopup?: "listbox" | "menu";
     /** The rows the hover ghost glides between (components/ui/highlight). */
@@ -131,12 +152,11 @@
       aria-expanded={open}
       aria-haspopup="dialog"
       aria-label={label}
-      class="touch-hit {triggerClass}"
-      data-ns-popover-trigger-class={triggerClass}
+      class={cn("touch-hit", triggerClass)}
+      {...triggerData}
       data-state={open ? "open" : "closed"}
       {id}
       onclick={toggle}
-      style={triggerStyle}
       type="button"
       bind:this={triggerEl}
     >
@@ -148,10 +168,9 @@
     {#if trigger}
       <PopoverPrimitive.Trigger
         aria-label={label}
-        class="touch-hit {triggerClass}"
-        data-ns-popover-trigger-class={triggerClass}
+        class={cn("touch-hit", triggerClass)}
+        {...triggerData}
         {id}
-        style={triggerStyle}
       >
         {#snippet child({ props })}
           <!-- bits-ui marks every trigger as opening a dialog; a list says so. -->
@@ -164,9 +183,10 @@
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
         data-ns-pop
+        data-fit={fit || undefined}
         {align}
         aria-label={rest["aria-label"]}
-        class="ns-theme ns-pop"
+        class={cn("ns-theme", glidePopoverVariants({ pad }))}
         collisionPadding={8}
         customAnchor={anchor}
         id={`${id}-popover`}
@@ -188,11 +208,7 @@
       >
         {#snippet child({ props, wrapperProps, open })}
           <!-- Closing, it lets presses through to the page (floating-presence). -->
-          <div
-            {...wrapperProps}
-            class="ns-pop-shell"
-            style:pointer-events={pressable(open)}
-          >
+          <div {...wrapperProps} style:pointer-events={pressable(open)}>
             <div
               {...props}
               id={`${id}-popover`}

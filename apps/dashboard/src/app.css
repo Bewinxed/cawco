@@ -1,6 +1,19 @@
+/* One cascade order for the whole app, Tailwind's own with two more: tokens
+   in theme, element defaults in base, the libraries' own stylesheets in
+   `vendor` under the house's components (Svelte Flow's and Milkdown
+   Crepe's by lib/vendor-css, loaded with what draws them; the sheets
+   svelte-sonner, vaul-svelte and Event Calendar load from their own
+   components by vite.config.ts's vendorComponentSheets), kit recipes
+   in components, single-purpose classes in utilities (with what has to
+   outrank the typography plugin, which writes there too), and in `overrides`
+   the few page-wide holds that outrank every utility on any element (a
+   field's type floor, a loop held still, the theme flip). A later layer
+   wins over an earlier one whatever the selectors' weight
+   (https://developer.mozilla.org/en-US/docs/Web/CSS/@layer). Stated before
+   Tailwind's import, which declares its four first: a layer's place is
+   where it is first named. */
+@layer theme, base, vendor, components, utilities, overrides;
 @import "tailwindcss" source(".");
-@import "tw-animate-css";
-@import "shadcn-svelte/tailwind.css";
 @import "@fontsource-variable/figtree";
 @import "@fontsource-variable/jetbrains-mono";
 @import "@fontsource/fredoka/600.css";
@@ -8,19 +21,20 @@
 /* Every token the app reads, generated from design/tokens/cawco.tokens.json
    (`bun run tokens`). This sheet defines none of its own. */
 @import "./lib/tokens/tokens.css";
+/* The Tailwind theme over them (`bun run tokens`): a utility exists only
+   where a token does. */
+@import "./lib/tokens/theme.css";
+/* The browser's selection in its tint (`bun run tokens`), the value written
+   out so no element restyles its selection with it. */
+@import "./lib/tokens/selection.css";
+/* The house's variants and one per attribute state (`bun run variants`). */
+@import "./lib/tokens/variants.css";
 /* The house edge fade, its one definition: the component canvas reads the
    same sheet into its pages (packages/agent stage-host build.ts). */
 @import "./edge-fade.css";
 @plugin "@tailwindcss/typography";
 /* The plugin's rules, minus the four that restyled a whole reply per block. */
 @config "../typography.config.ts";
-
-/* One cascade order for the whole app, and it is Tailwind's own: tokens in
-   theme, element defaults in base, kit recipes in components, single-purpose
-   classes in utilities (with what has to outrank the typography plugin, which
-   writes there too). Svelte component styles are unlayered, so they outrank
-   all four by design. */
-@layer theme, base, components, utilities;
 
 /* The screen's bottom inset, on the boxes that stand on the screen's bottom
    (data-safe-bottom), and nowhere else: not inherited, so the keyboard's
@@ -33,14 +47,6 @@
   initial-value: 0px;
 }
 
-@custom-variant dark (&:where(.dark, .dark *));
-
-/* A control under a held press. `:active`, and `[data-pressed]` from the
-   kit menu Trigger (dropdown-menu-trigger.svelte): its menu opens on the
-   press and takes the focus into itself, and Chromium drops `:active` with
-   it a frame in, so the press never painted. */
-@custom-variant pressed (&:is(:active, [data-pressed]));
-
 /* A tab's hang's open and close clock (motion/hang `GROW`): a number the
    run carries between 0 and 1, which nothing draws; each frame's shape is
    read off the run's time. */
@@ -50,7 +56,7 @@
   initial-value: 0;
 }
 
-/* A hanging card's neck (.kit-hang), registered so a glide to another
+/* A hanging card's neck (HangCard), registered so a glide to another
    anchor tweens the cut in its top edge as lengths. */
 @property --neck-start {
   syntax: "<length>";
@@ -148,105 +154,36 @@
   inherits: false;
   initial-value: 0;
 }
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-action-solid: var(--action-solid);
-  --color-on-action: var(--on-action);
-  --color-link: var(--link-ink);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-focus-ring: var(--focus-ring);
-
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-  --color-info: var(--info);
-  --color-error: var(--error);
-
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-selected-bg: var(--selected-bg);
-  --color-selected-ink: var(--selected-ink);
-  --color-selected-icon: var(--selected-icon);
-
-  /* Figtree across the product, JetBrains Mono for code/paths/IDs, Fredoka
-     for brand display (the token file holds the stacks). */
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-  --font-display: var(--font-display);
-
-  /* Only the ladder steps the product uses; Tailwind's own (black-based)
-     shadow scale is cleared so nothing falls back to it. */
-  --shadow-*: initial;
-  --shadow-xs: var(--shadow-xs);
-  --shadow-md: var(--shadow-md);
-  --shadow-lg: var(--shadow-lg);
-  --shadow-xl: var(--shadow-xl);
-
-  --color-tool-run: var(--tool-run);
-  --color-tool-mcp: var(--tool-mcp);
-  --color-tool-search: var(--tool-search);
-  --color-tool-ask: var(--tool-ask);
-  --color-tool-web: var(--tool-web);
-  --color-tool-read: var(--tool-read);
-  --color-tool-agent: var(--tool-agent);
-  --color-tool-edit: var(--tool-edit);
-  --color-tool-write: var(--tool-write);
-  --color-tool-skill: var(--tool-skill);
-  --color-tool-plan: var(--tool-plan);
+/* How chosen a folder tab is (components/ui/fluid-tabs TabItem, `--pick`),
+   typed so a choice interpolates the one number and everything drawn from
+   it follows on its clock. Set on the tab and handed down only along the
+   path to the three that read it (the sheet, the rim, the strong ink:
+   `pick-inherit`): inherited by every element under the tab, each frame of
+   a choice restyled all of them, ~50 a tab. */
+@property --pick {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
 }
-
-@theme inline {
-  /* Radius roles: xs marks and tiles, sm controls inside a surface, md
-     controls and buttons, lg cards and menus, modal the dialog tray. */
-  --radius-xs: var(--radius-xs);
-  --radius-sm: var(--radius-sm);
-  --radius-md: var(--radius-md);
-  --radius-lg: var(--radius-lg);
-  --radius-modal: var(--radius-modal);
-  --radius-well: var(--radius-well);
-  --radius-hair: var(--radius-hair);
-  --radius-panel: var(--radius-panel);
-
-  /* Type roles. Each generates a `text-<role>` utility with its leading. */
-  --text-meta: var(--text-meta);
-  --text-meta--line-height: var(--leading-meta);
-  --text-meta--font-weight: var(--weight-body);
-  --text-label: var(--text-label);
-  --text-label--line-height: var(--leading-label);
-  --text-label--font-weight: var(--weight-strong);
-  --text-body: var(--text-body);
-  --text-body--line-height: var(--leading-body);
-  --text-body--font-weight: var(--weight-body);
-  --text-title: var(--text-title);
-  --text-title--line-height: var(--leading-ui);
-  --text-title--letter-spacing: var(--track-title);
-  --text-title--font-weight: var(--weight-strong);
-  --text-kpi: var(--text-kpi);
-  --text-kpi--line-height: var(--leading-kpi);
-  --text-kpi--font-weight: var(--weight-strong);
-
-  /* Curves. Generates `ease-out`, `ease-in-out`, `ease-drawer`. */
-  --ease-out: var(--ease-out);
-  --ease-in-out: var(--ease-in-out);
-  --ease-drawer: var(--ease-drawer);
-
-  /* Tailwind's own timing, on the product's: `transition-colors` and its
-     siblings run --dur-control on --ease-out, and the stock loops turn on
-     --dur-loop (a rotation is linear; a pulse breathes in-out). */
-  --default-transition-duration: var(--dur-control);
-  --default-transition-timing-function: var(--ease-out);
-  --animate-spin: spin var(--dur-loop) linear infinite;
-  --animate-pulse: pulse var(--dur-loop) var(--ease-in-out) infinite;
-  --animate-ping: ping var(--dur-loop) var(--ease-out) infinite;
+/* The fluid track's come-forward clock (TabsList, `tab-come-forward`): a
+   number the run carries from 0 to 1, which nothing draws. And a tab's rank
+   in the stack (`--z`, the track's; `--z-rest`, from the order and the value
+   until the track ranks it), read only on the box that carries it. Not
+   inherited: as plain custom properties each new rank restyled everything
+   its tab holds, 430 elements a choice. No initial value (`*`), so a box the
+   track has not ranked yet still falls back to its rest rank. */
+@property --forward {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+@property --z {
+  syntax: "*";
+  inherits: false;
+}
+@property --z-rest {
+  syntax: "*";
+  inherits: false;
 }
 
 @layer base {
@@ -275,8 +212,9 @@
      element. */
   :root {
     scrollbar-color: var(--scrollbar-thumb) transparent;
-    /* The seam's inset (.kit-seam, and the transcript's user-message
-       hairline): the text column's own padding. */
+    /* The seam's inset (the home's seam between one machine's rows and the
+       next, and the transcript's user-message hairline): the text column's
+       own padding. */
     --seam-inset: var(--space-3);
     /* The gap between the rows of a tree, and between a parent and its
        first child: one value for every tree (the rail's projects, sessions
@@ -323,7 +261,7 @@
   }
 
   html {
-    @apply antialiased font-sans;
+    @apply antialiased font-body;
     -webkit-tap-highlight-color: transparent;
   }
   /* The screen's bottom inset (the home indicator's room), which a keyboard
@@ -341,13 +279,14 @@
 
   /* The body's background is the screen's bottom edge (cawco/ScreenEdges). */
   body {
-    @apply text-foreground;
+    @apply text-ink-strong;
     font: var(--type-body);
   }
 
+  /* The mono face never ligates: here for code, and in the `font-mono`
+     utility (the behaviours, below) for everything else set in it. */
   code,
-  pre,
-  .font-mono {
+  pre {
     font-family: var(--font-mono);
     font-variant-ligatures: none;
   }
@@ -366,11 +305,8 @@
     text-wrap-style: pretty;
   }
 
-  /* Browser surfaces carry the design too. */
-  ::selection {
-    background: var(--selection);
-  }
-
+  /* Browser surfaces carry the design too (the selection's tint:
+     lib/tokens/selection.css). */
   input,
   textarea {
     caret-color: var(--brand-solid);
@@ -444,334 +380,31 @@
     -webkit-touch-callout: none;
     user-select: none;
   }
-
-  /* iOS Safari zooms into any field whose text is under 16px, and a single
-     missed field brings the zoom back, so this is a floor for every field
-     rather than a per-component fix. Important in the base layer, the
-     strongest place an important declaration can sit, so neither a utility
-     nor a component rule can take a field under it. A floor, not a size: a
-     field set in larger type than 16px (a project's name edited in its
-     title's type) keeps the size it inherits, `1em` being its parent's. */
-  @media (width < 640px), (pointer: coarse) {
-    input:not([type="checkbox"], [type="radio"], [type="range"]),
-    textarea,
-    select {
-      font-size: max(16px, 1em) !important;
-    }
-  }
 }
 
-/* ---- Kit recipes. The kit components in lib/components/ui name these;
-   utilities passed by a consumer still win (components layer). Plain
-   class-keyed rules, never @scope: WebKit checks a scope's root for every
-   element it styles, and a swipe styles a whole transcript on the frame it
-   lets go. With these recipes and the prose rules below as @scope blocks,
-   that frame took 50ms in WebKit against 38ms without. */
-@layer components {
-  /* Touch hit area. On a coarse pointer the control's tappable area grows
-     to 44×44 (WCAG 2.5.8) through a transparent ::after centred on it; the
-     drawn box and the layout do not change. A cluster whose controls sit
-     closer than that sets --hit-gap-x / --hit-gap-y to the gap between
-     them, and each extension stops at the midpoint, so neighbours never
-     overlap. `position: relative` has zero specificity: a positioned host
-     keeps its own position and is already the ::after's containing block.
-     That block is the host's padding box, so the 50% term already measures
-     from inside the border; a bordered host sets --hit-edge to its border
-     width so the gap stop does too, and the midpoint stays the midpoint
-     between the drawn edges. */
-  @media (pointer: coarse) {
-    :where(.touch-hit) {
-      position: relative;
+@layer overrides {
+  /* iOS Safari zooms into any field whose text is under 16px, and a single
+     missed field brings the zoom back, so this is a floor for every field
+     rather than a per-component fix. In the last layer, so no utility or
+     kit recipe can take a field under it. A floor, not a size: a field set
+     in larger type than 16px (a project's name edited in its title's type)
+     keeps the size it inherits, `1em` being its parent's. */
+  input:not([type="checkbox"], [type="radio"], [type="range"]),
+  textarea,
+  select {
+    @variant max-phone {
+      font-size: max(var(--text-field-floor), 1em);
     }
-
-    .touch-hit::after {
-      content: "";
-      position: absolute;
-      inset-inline: max(
-        min(0px, calc(50% - 22px)),
-        calc(var(--hit-gap-x, 44px) / -2 - var(--hit-edge, 0px))
-      );
-      inset-block: max(
-        min(0px, calc(50% - 22px)),
-        calc(var(--hit-gap-y, 44px) / -2 - var(--hit-edge, 0px))
-      );
-    }
-  }
-
-  /* Pointer hit area: the fine-pointer twin of .touch-hit. A control drawn
-     smaller than 24×24 (WCAG 2.5.8) gets a transparent ::after centred on
-     it that reaches 24px; the drawn box and the layout do not change.
-     --hit-gap-x / --hit-gap-y stop it at the midpoint to a closer
-     neighbour, and --hit-edge counts a border, as on touch. --hit-scale is the zoom of a scaled canvas
-     (the workflow graph), so the area stays 24px on screen. */
-  @media (pointer: fine) {
-    :where(.pointer-hit) {
-      position: relative;
-    }
-
-    .pointer-hit::after {
-      content: "";
-      position: absolute;
-      inset-inline: max(
-        min(0px, calc(50% - 12px / var(--hit-scale, 1))),
-        calc(
-          var(--hit-gap-x, 24px / var(--hit-scale, 1)) / -2 -
-            var(--hit-edge, 0px)
-        )
-      );
-      inset-block: max(
-        min(0px, calc(50% - 12px / var(--hit-scale, 1))),
-        calc(
-          var(--hit-gap-y, 24px / var(--hit-scale, 1)) / -2 -
-            var(--hit-edge, 0px)
-        )
-      );
-    }
-  }
-
-  /* The mark line (DESIGN.md, The Mark Line Rule): a mark (an icon, a
-     glyph, an avatar, a status dot, a keycap) and the words set beside it,
-     centred on one cross axis. The kit's rows are mark lines by their own
-     class (an option or tray chip, a menu item, a segment, a section head,
-     a rail line, and
-     the button, badge and toggle, whose base class carries .mark-line); any
-     other row takes .mark-line. Centring boxes centres line boxes, and a line
-     box's middle is not its words' middle: Figtree's ascent and descent sit
-     unevenly about its x-height, and Blink floors the half-leading, so a
-     13px label centred beside a mark sat 0.3px below it in Blink and 1.25px
-     below it in WebKit and Gecko. So each run of words on the line is
-     trimmed to its x-height band (the alphabetic baseline up 1ex) and given
-     back the room the trim took as padding, half above and half below: the
-     run keeps its line's height, so no row, wrap or clip changes, and the
-     middle of its box is the middle of its x-height, which the line's
-     centring puts on the mark's. Exact in every engine (text-box: Chromium
-     133, Safari 18.2, Firefox 154).
-     What the line holds: its words in elements, never bare text beside the
-     mark, because a bare run is an anonymous box no property reaches. What
-     is centred as a box is
-     left alone: an svg or img, the kit's cells (.rail-cell, .kit-keycap,
-     .kit-slot, .icon-swap), and anything else that says so with `data-box`: a mark's
-     own tile, a chevron's cell, a pill or badge that draws its own edge
-     around its words. A run that truncates clips with `overflow: clip`,
-     never `hidden` or `auto`: Gecko does not trim a scroll container, so
-     there a hidden run would keep its line box and take the padding on top
-     of it (the padding box is still its whole line, so the clip is where
-     hidden's was). A run of words whose row cannot be a mark line (a grid
-     whose other rows hold other things) takes .mark-text itself. */
-  :where(.mark-text),
-  :where(
-      .mark-line,
-      .kit-chip,
-      .kit-tray-chip,
-      .kit-item,
-      .kit-segment,
-      .kit-section-head,
-      .rail-line
-    )
-    > :where(
-      :not(
-        svg,
-        img,
-        .rail-cell,
-        .kit-keycap,
-        .kit-slot,
-        .icon-swap,
-        .mark-cell,
-        [data-box]
-      )
-    ) {
-    text-box: trim-both ex alphabetic;
-    padding-block: calc((1lh - 1ex) / 2);
-  }
-  /* A mark beside words that wrap stands on their first line: the row is
-     set to its start, and the mark in a cell one line box tall centres it
-     where the first line's x-height centres (the words' padding puts that
-     at half a line from their top). */
-  .mark-cell {
-    display: grid;
-    flex: none;
-    place-items: center;
-    block-size: 1lh;
-  }
-
-  /* The option chip (DESIGN.md "Option chip"): a 30px box including its
-     border, 8px radius, label type, an optional keycap digit. The box is
-     the same 30px under every pointer; a finger's 44px comes from
-     .touch-hit on the chip, never a taller chip. min-block-size sets the
-     30px; the block padding is only the floor a wrapped label keeps from
-     the border, small enough that one line (the 17px keycap or the label
-     line) never pushes past 30, so a label that wraps inside the chip grows
-     it line by line. `.sel` is a pick: brand edge, recessed fill, inverted
-     keycap — never a size or weight change, so a pick never reflows the
-     row, and never the attn hue, because selection is not a warning. */
-  .kit-chip {
-    --hit-edge: 1px;
-    box-sizing: border-box;
-    min-block-size: 30px;
-    padding-block: var(--space-1);
-    padding-inline: var(--space-3);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    color: var(--ink-strong);
-    font-family: var(--font-body);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-label);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    text-align: start;
-    max-inline-size: 100%;
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        border-color var(--dur-control) var(--ease-out),
-        background-color var(--dur-control) var(--ease-out);
-    }
-    &:is(button) {
-      cursor: pointer;
-    }
-    &:is(button):not(.sel):hover {
-      background: var(--surface-hover);
-    }
-    &.sel {
-      border-color: var(--brand-solid);
-      background: var(--surface-recess);
-    }
-  }
-  /* A chip on the tray row standing on the composer (the delegate tray's,
-     the plan's): the attachment chip's surface, drawn on a layer of its own
-     so a chip can bring it in after its mark, at the row's chip height
-     (--c-tray-chip), label type and 16px glyphs. */
-  .kit-tray-chip {
-    position: relative;
-    isolation: isolate;
-    block-size: var(--c-tray-chip);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--c-pill-gap);
-    padding-inline: var(--space-2);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--ink-strong);
-    font-family: var(--font-body);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-label);
-    cursor: pointer;
-    pointer-events: auto;
-    touch-action: manipulation;
-    -webkit-touch-callout: none;
-    user-select: none;
-    transition: color var(--dur-control) var(--ease-out);
-
-    &::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      border: 1px solid var(--border-hairline);
-      border-radius: inherit;
-      background: var(--surface-raised);
-      box-shadow: var(--shadow-tile);
-      transition: background-color var(--dur-control) var(--ease-out);
-    }
-    & > svg {
-      flex: none;
-      inline-size: 16px;
-      block-size: 16px;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        color var(--dur-control) var(--ease-out),
-        transform var(--dur-control) var(--ease-out);
-
-      &:active {
-        transform: scale(var(--press-scale));
-      }
-    }
-    @media (hover: hover) and (pointer: fine) {
-      &:hover::before {
-        background-color: var(--surface-hover);
-      }
-    }
-  }
-  .kit-keycap {
-    display: inline-grid;
-    place-items: center;
-    min-inline-size: 17px;
-    block-size: 17px;
-    padding-block: 0;
-    padding-inline: 4px;
-    border-radius: var(--radius-xs);
-    background: var(--surface-recess);
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--ink-strong);
-    line-height: 1;
-    flex: 0 0 auto;
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        background-color var(--dur-control) var(--ease-out),
-        color var(--dur-control) var(--ease-out);
-    }
-    .kit-chip.sel & {
-      background: var(--chip-chosen-bg);
-      color: var(--chip-chosen-ink);
-    }
-  }
-  /* A row of option chips, wrapping whole chips onto the next line. Under a
-     finger the rows stand 14px apart, so each chip's 44px .touch-hit area
-     (30 drawn + 7 above + 7 below) meets its neighbour's at the midpoint
-     instead of overlapping it. */
-  .kit-chips {
-    --hit-gap-x: var(--space-2);
-    --hit-gap-y: var(--space-2);
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-
-    @media (pointer: coarse) {
-      --hit-gap-y: calc(var(--space-2) * 2);
-      row-gap: calc(var(--space-2) * 2);
-    }
-  }
-
-  /* The one skeleton (ui/skeleton): a --surface-fill block standing at the
-     size of what it waits for. One band of the raised surface crosses it
-     every 1.2s, transform only; without motion it sits still. */
-
-  .kit-skeleton {
-    position: relative;
-    overflow: hidden;
-    border-radius: var(--radius-sm);
-    background: var(--surface-fill);
-
-    @media (prefers-reduced-motion: no-preference) {
-      &::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        translate: -100% 0;
-        background: linear-gradient(
-          90deg,
-          transparent 0 30%,
-          var(--skeleton-sheen) 50%,
-          transparent 70% 100%
-        );
-        animation: kit-skeleton-sweep var(--dur-loop) linear infinite;
-      }
+    @variant coarse {
+      font-size: max(var(--text-field-floor), 1em);
     }
   }
 
   /* Nothing animates that nobody can see (motion/rest.ts): a hidden tab, an
      element scrolled out of view and an inert surface parked behind the one
-     in front all hold every loop they carry still. A list swap's leaving
-     layer (`data-leaving`) is inert so nobody clicks a row on its way out,
-     but its rows still play their exit.
+     in front all hold every loop they carry still, over the loop's own
+     utility. A list swap's leaving layer (`data-leaving`) is inert so nobody
+     clicks a row on its way out, but its rows still play their exit.
      Each ancestor is its own one-item :where(), never one list: Blink's
      ancestor bloom filter reads a one-item :where() as a plain ancestor and
      rejects every element with no such ancestor before matching it, and
@@ -786,132 +419,41 @@
   :where([inert]:not([data-leaving])) *::before,
   :where([inert]:not([data-leaving])) *::after,
   :where([data-offscreen]) {
-    animation-play-state: paused !important;
+    animation-play-state: paused;
   }
 
-  /* The seam: the hairline the transcript draws between one user message
-     and the next (MessageRow `.well::after`), as a block of its own. The
-     home draws the same one between one machine's rows and the next, so
-     the two can never drift apart. */
-  .kit-seam {
-    flex: none;
-    block-size: 1px;
-    margin: 0 var(--seam-inset);
-    border: 0;
-    background: var(--seam);
+  /* A swap slot that is not the one showing (a button's spinner waits there
+     between presses) carries no loop at all, over the loop's own utility.
+     Held still instead, a paused spinner stayed on the compositor as a
+     moving layer, and the browser, which cannot tell how far a moving layer
+     reaches, put everything drawn after it on layers too: one hidden spinner
+     in the rail took the rail's rows and the whole pane with it. The slot is
+     named as one (`.icon-swap`'s child, a button's icon slot among them):
+     `data-active="false"` alone is also every rail row that is not the open
+     one. */
+  .icon-swap > [data-active="false"] * {
+    animation: none;
   }
 
-  /* Nesting: children hang off their parent on a hairline rail that leaves
-     the bottom edge of the parent's glyph, under its centre; each child
-     joins it with an elbow that curves (--radius-sm) from the rail into an
-     arm ending at the child's glyph, and the last child's elbow ends the
-     rail. No arrowhead: the curve is the joint. One primitive for every
-     nested list (a project → its sessions, session → delegates, delegate →
-     its own, run → steps), each level stepping in by the same
-     --nest-pad and its rows --tree-gap apart, so every tree in the app has
-     one indent and one rhythm. A child with children of its own holds its
-     own `.kit-nest` list inside its item, so every parent has one rail of
-     its own, and the rail on to the next sibling runs straight past the
-     open subtree. The lines are drawn by the children themselves, so as
-     rows open, reflow or leave, the rail grows and shrinks with them and
-     never jumps.
-     Set on the child list:
-       --nest-x       the rail's x from the list's left edge,
-       --nest-lead    the parent glyph's bottom to the list's top,
-       --nest-glyph-y a child glyph's centre from its row's top, and
-       --nest-reach   a child row's left edge to its glyph, all measured
-                      (motion/branch `nestFrom`)
-       --nest-in      the rail to the child row's left edge
-       --nest-gap     the gap between child rows
-     The arm runs on over the row's inset to its glyph, drawn over the row's
-     hover or selected pill, so no pill ever covers a line.
-     Drawn in and out by the fold (motion/branch): one head runs the whole
-     line as a list opens, down the rail, round each elbow's corner and out
-     along its arm to the child's glyph without a pause; as the list folds
-     the group's one clip shortens it from its foot up to the parent. */
-  .kit-nest {
-    /* Until measured (the frame it mounts, before paint): valid, so nothing
-       built on it (`--nest-pad`) drops a whole declaration and then lands a
-       frame later with no change to the DOM. */
-    --nest-x: 0px;
-    --nest-reach: 0px;
-    /* The rail to a child row's left edge: what is left of one --tree-step
-       (mark to mark) after the half mark the rail stands under and the
-       row's own inset. Fixed at one length, a list whose rows are set in
-       further stepped in further: 27px in the home, 22px in the rail. */
-    --nest-half: calc(var(--mark-size, 18px) / 2);
-    --nest-in: calc(var(--tree-step) - var(--nest-half) - var(--nest-reach));
-    --nest-glyph-y: var(--space-4);
-    --nest-gap: var(--tree-gap);
-    --nest-lead: 0px;
-    --nest-pad: calc(var(--nest-x) + var(--nest-in));
-    /* The line's weight, and every length a piece of it is placed or sized
-       by, in whole device pixels (--dpx, device-pixel.ts). Set half a pixel
-       off its glyph's centre and half a pixel over in width and height, a
-       piece was drawn crisp at rest, where the browser snaps its box, and
-       soft while its clip ran: across two pixel columns at half the ink,
-       until the draw ended. On the grid, it is the same line in every
-       frame. */
-    --nest-line: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
-    --nest-left: round(
-      calc(var(--nest-x) - var(--nest-pad) - var(--nest-line) / 2),
-      var(--dpx, 1px)
-    );
-    position: relative;
+  /* The theme flip (theme.svelte.ts) starts no element transitions. The
+     elements only: a pseudo-element whose transition is on a colour names
+     itself where it is styled (the transcript's wells, MessageRow), and
+     naming ::before/::after made WebKit resolve both pseudo-elements of
+     every element on the page to add the class and again to remove it (a
+     ~20ms longer flip frame at 1440). */
+  :root[data-theme-flip],
+  :root[data-theme-flip] * {
+    transition: none;
   }
-  .kit-nest > li {
-    position: relative;
-  }
-  .kit-nest > li::before,
-  .kit-nest > li::after {
-    content: "";
-    position: absolute;
-    z-index: 1;
-    /* Centred on the glyph: the 1px line half a pixel each side of it. */
-    left: var(--nest-left);
-    pointer-events: none;
-    border-color: var(--nest-ink);
-    border-style: solid;
-    border-width: 0;
-  }
-  /* The elbow: down the rail from the row above, round the curve, and out
-     along the arm to the child's glyph. */
-  .kit-nest > li::before {
-    top: calc(-1 * var(--nest-gap));
-    width: round(
-      calc(var(--nest-in) + var(--nest-reach) + var(--nest-line) / 2),
-      var(--dpx, 1px)
-    );
-    height: round(
-      calc(var(--nest-glyph-y) + var(--nest-gap) + var(--nest-line) / 2),
-      var(--dpx, 1px)
-    );
-    border-left-width: var(--nest-line);
-    border-bottom-width: var(--nest-line);
-    border-bottom-left-radius: var(--radius-sm);
-  }
-  .kit-nest > li:first-child::before {
-    top: calc(-1 * var(--nest-lead));
-    height: round(
-      calc(var(--nest-glyph-y) + var(--nest-lead) + var(--nest-line) / 2),
-      var(--dpx, 1px)
-    );
-  }
-  /* The rail on past this child (and anything open under it) to the next
-     one; the last child has none. */
-  .kit-nest > li::after {
-    /* From where the elbow starts to curve away, so the rail runs straight
-       on past the joint instead of breaking at the curve. */
-    top: calc(var(--nest-glyph-y) - var(--radius-sm));
-    /* On over the gap to the next child's row, under that child's elbow:
-       ending at this row's foot, on a fraction of a pixel, its last pixel
-       stood at half the ink wherever the next elbow was not yet drawn. */
-    bottom: calc(-1 * var(--nest-gap));
-    border-left-width: var(--nest-line);
-  }
-  .kit-nest > li:last-child::after {
-    content: none;
-  }
+}
+
+/* ---- Kit recipes. The kit components in lib/components/ui name these;
+   utilities passed by a consumer still win (components layer). Plain
+   class-keyed rules, never @scope: WebKit checks a scope's root for every
+   element it styles, and a swipe styles a whole transcript on the frame it
+   lets go. With these recipes and the prose rules below as @scope blocks,
+   that frame took 50ms in WebKit against 38ms without. */
+@layer components {
   /* A tree's rows just mounted, and their line, held hidden until each is
      built as the line reaches it; the hold goes as the fold lands
      (motion/branch). A row is held by the clip its title wipes in by, which
@@ -924,20 +466,6 @@
      `measureFirst`), so they are written before its other rows are styled. */
   [data-branch-probe] > li ~ li {
     display: none;
-  }
-  /* A line drawing in or running back: each stretch is cut where the line's
-     head is, by two lengths the fold moves (--nest-cut-r, --nest-cut-b). The
-     stretch itself is painted where it stands at rest, in every frame. With
-     the clip itself animated, the browser drew the stretch from a layer of
-     its own, at the half pixel its row starts on rather than on the pixel
-     it is snapped to at rest: across two columns at half the ink, until the
-     draw ended. Neither cut ever runs alongside the line (the other side is
-     left well clear), so a cut only ever ends it. */
-  [data-branch-draw].kit-nest > li::before,
-  [data-branch-draw].kit-nest > li::after,
-  [data-branch-draw] .kit-nest > li::before,
-  [data-branch-draw] .kit-nest > li::after {
-    clip-path: inset(-9999px var(--nest-cut-r) var(--nest-cut-b) -9999px);
   }
   /* A parent's deck (TreeMark) is the rows folded under it. While they
      are out, from the frame their line sets off (a group just mounted
@@ -952,27 +480,30 @@
      at rest) keeps the mark's level inside it, and the group, drawn after
      the link, rides over the mark. Scoped to the row that owns the group
      and stopped at the group, so a child's own mark and deck inside it are
-     its own affair. */
+     its own affair. The mark and its pieces are named by attributes of their
+     own: under a state (the scope's, the hold's, the draw's), Chrome keys an
+     attribute selector to the attribute's name alone, and
+     `[data-slot="tree-mark"]` restyled every `data-slot` in the tree. */
   @scope (
     :is(li, [data-nest-host]):has(
       > [data-flip-anchor]:not([data-branch-wait], [data-state="closing"])
     )
   ) to ([data-flip-anchor]) {
-    .tree-mark .deck {
+    [data-tree-mark] [data-tree-mark-deck] {
       visibility: hidden;
     }
     /* The tree mark reads its own level from this (its style is the
        component's, which outranks this layer), and that its deck is away:
        its echo then shows where the cards stood. Every parent's mark is
        one (a session's, a project's, the "N older" row's). */
-    .tree-mark {
+    [data-tree-mark] {
       --mark-level: 3;
       --deck-away: 1;
     }
   }
   /* An icon on its way along its line takes no press: in flight it passes
      over its parent's mark, whose switch is under it. */
-  [data-branch-draw] .tree-mark {
+  [data-branch-draw] [data-tree-mark] {
     pointer-events: none;
   }
   /* A working row's echo is away while the tree it is in opens (held), and
@@ -983,7 +514,7 @@
      sessions, none with the echo away. Only while it opens: taken away as a
      fold began, what is drawn after the echo changed layers in that frame,
      and that frame went out with content missing instead. */
-  [data-branch-hold] .tree-mark .echo-box {
+  [data-branch-hold] [data-tree-mark] [data-tree-mark-echo-box] {
     display: none;
   }
   /* A group folding away is out of the pointer's reach from the press that
@@ -993,401 +524,6 @@
   [data-flip-anchor][data-state="closing"] {
     pointer-events: none;
   }
-  /* Held: cut whole from below, until its piece is built and moves the cut.
-     A clip of the hold's own outranked the cut, and the line stood hidden
-     until the fold landed, then showed whole in one frame. */
-  [data-branch-hold].kit-nest > li::before,
-  [data-branch-hold].kit-nest > li::after,
-  [data-branch-hold] .kit-nest > li::before,
-  [data-branch-hold] .kit-nest > li::after {
-    --nest-cut-b: 9999px;
-  }
-
-  /* A list section's header (the home's Needs you, Recent): its label at
-     the start, its count pushed to the end in tabular figures, and a
-     neutral hairline under it marking where the section begins. */
-  .kit-section-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    margin: 0 0 var(--space-1);
-    padding: 0 var(--space-3) var(--space-1);
-    border-bottom: 1px solid var(--seam);
-    font: var(--type-label);
-    color: var(--ink-muted);
-    text-align: start;
-
-    & > .count {
-      margin-inline-start: auto;
-      font: var(--type-meta);
-      font-variant-numeric: tabular-nums;
-      color: var(--ink-subtle);
-    }
-  }
-
-  /* The one empty state (ui/empty): mark, title, why, one action, set on
-     the column the content would have started on. One start edge for all
-     of them, its words at the reading measure; never centred line by
-     line. */
-  .kit-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
-    padding-block: var(--space-6);
-    text-align: start;
-
-    & > [data-slot="empty-mark"] {
-      inline-size: 20px;
-      block-size: 20px;
-      margin-block-end: var(--space-1);
-      color: var(--ink-muted);
-    }
-  }
-  .kit-empty-title {
-    max-inline-size: 60ch;
-    font: var(--type-title);
-    letter-spacing: -0.01em;
-    color: var(--ink-strong);
-    text-wrap: balance;
-  }
-  .kit-empty-line {
-    max-inline-size: 60ch;
-    font: var(--type-body);
-    color: var(--ink-muted);
-    text-wrap: pretty;
-
-    & code {
-      font-size: var(--text-label);
-    }
-  }
-  .kit-empty-action {
-    margin-block-start: var(--space-2);
-  }
-  /* The same claim in a strip's room: the mark, then what is missing and
-     why as one sentence on one line, the one action beside it while there
-     is room and under it when there is not (a long machine name), so the
-     sentence keeps its line rather than breaking beside the action. */
-  .kit-empty-inline {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-2);
-    padding-block: 0;
-
-    & > [data-slot="empty-mark"] {
-      flex: none;
-      inline-size: 16px;
-      block-size: 16px;
-      margin-block-end: 0;
-    }
-    & .kit-empty-line {
-      flex: 1 1 auto;
-      min-inline-size: 0;
-      max-inline-size: none;
-      font: var(--type-meta);
-    }
-    & .kit-empty-title {
-      font: var(--type-meta);
-      font-weight: var(--weight-strong);
-      color: var(--ink-strong);
-    }
-    & .kit-empty-action {
-      flex: none;
-      margin-block-start: 0;
-    }
-  }
-
-  /* The composer's shell: what docks at a page's foot (a session's
-     composer, a decision page's note, the project's views on a phone) stands
-     in it. The panel's glass so the page shows faintly under it, the control
-     edge, the 12px radius and the tile shadow; the solid raised surface
-     where transparency is reduced. Its inset and its row are its own. */
-  .kit-dock-shell {
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--material-panel);
-    -webkit-backdrop-filter: blur(var(--material-blur))
-      saturate(var(--material-saturate));
-    backdrop-filter: blur(var(--material-blur))
-      saturate(var(--material-saturate));
-    box-shadow: var(--shadow-tile);
-
-    @media (prefers-reduced-transparency: reduce) {
-      background: var(--surface-raised);
-      -webkit-backdrop-filter: none;
-      backdrop-filter: none;
-    }
-  }
-
-  /* Send's recipe: the one coral control in a dock shell, a square of the
-     composer's field height, concentric with the shell (its radius less the
-     inset that seats it). It presses to --press-scale over --kit-send-press
-     (--dur-control unless its dock says otherwise). */
-  .kit-send {
-    --kit-send-press: var(--dur-control);
-    position: relative;
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    inline-size: var(--c-composer-field);
-    block-size: var(--c-composer-field);
-    border: 0;
-    border-radius: calc(var(--radius-lg) - var(--c-composer-inset));
-    background-color: var(--action-solid);
-    background-image: var(--action-surface);
-    color: var(--on-action);
-    cursor: pointer;
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-
-    & svg {
-      inline-size: 16px;
-      block-size: 16px;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        background-color var(--dur-control) var(--ease-out),
-        color var(--dur-control) var(--ease-out),
-        transform var(--kit-send-press) var(--ease-out);
-
-      &:active:not(:disabled) {
-        transform: scale(var(--press-scale));
-      }
-    }
-    /* Every primary action's hover (DESIGN.md, Primary button). */
-    @media (hover: hover) and (pointer: fine) {
-      &:not(:disabled):hover {
-        background-color: var(--action-hover);
-        background-image: var(--action-surface-hover);
-      }
-    }
-    /* The flat brand stays under the gradient: disabled drops the image. */
-    &:disabled {
-      opacity: 0.55;
-      cursor: default;
-      box-shadow: none;
-      background-image: none;
-    }
-  }
-
-  /* Floating surfaces: popover, dropdown, select, context menu, toast. */
-  .kit-pop {
-    --kit-rise: 0 calc(-1 * var(--pop-rise));
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-overlay);
-    padding: 6px;
-    color: var(--ink-strong);
-
-    &[data-side="top"] {
-      --kit-rise: 0 var(--pop-rise);
-    }
-    &[data-side="left"] {
-      --kit-rise: var(--pop-rise) 0;
-    }
-    &[data-side="right"] {
-      --kit-rise: calc(-1 * var(--pop-rise)) 0;
-    }
-    /* Open and close are transitions on data-state, not keyframes: a close
-       caught mid-open turns back from the opacity and scale it has reached.
-       It opens from its @starting-style (below) over --dur-pop and leaves
-       over --dur-exit; bits-ui holds it mounted until the transition ends
-       (it waits on getAnimations()). It grows from the trigger through
-       bits' transform-origin, which each kit content sets. With reduced
-       motion only the fade runs. */
-    transition: opacity var(--dur-pop) var(--ease-drawer);
-
-    &[data-state="closed"] {
-      opacity: 0;
-      transition-duration: var(--dur-exit);
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        opacity var(--dur-pop) var(--ease-drawer),
-        translate var(--dur-pop) var(--ease-drawer),
-        scale var(--dur-pop) var(--ease-drawer);
-
-      &[data-state="closed"] {
-        translate: var(--kit-rise);
-        scale: var(--pop-scale);
-      }
-    }
-  }
-
-  @starting-style {
-    .kit-pop[data-state="open"] {
-      opacity: 0;
-    }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    @starting-style {
-      .kit-pop[data-state="open"] {
-        translate: var(--kit-rise);
-        scale: var(--pop-scale);
-      }
-    }
-  }
-
-  /* A floating surface that hangs from its anchor as one shape with it
-     (HangCard, motion/hang: the session card and a finger's tab menu from
-     their tab; Caw's panel, the machines and the Jump palette from the top
-     bar's glass). It stands on the anchor's foot. Its edge is drawn by `::after`
-     rather than its border, so its top can be cut across the anchor's span
-     and its flared foot (`--neck-start`, `--neck-end`, `--neck-flare-start`,
-     `--neck-flare-end`, in the card's own coordinates, written by the card
-     from `hang`). On a flush side (`data-flush`) its top corner is square.
-     Its overlay shadow is cut at its top edge, so none falls on the anchor
-     or darkens its foot into a seam. */
-  .kit-pop.kit-hang {
-    /* Its surface, named so the cut across its top edge is drawn in it
-       (`::before`); a card on another surface sets this, not `background`. */
-    --hang-surface: var(--surface-raised);
-    /* What runs on through the cut: the anchor's surface into the card's
-       top. The card's own surface unless its top is another (the session
-       card's head is its tab's). */
-    --hang-neck: var(--hang-surface);
-    /* Cut at its top edge only, with room for the whole overlay shadow past
-       the others (as the pulled menu's `drawPull`). */
-    position: relative;
-    border: 0;
-    background: var(--hang-surface);
-    clip-path: inset(
-      0 -120px -120px round 0 0 var(--radius-lg) var(--radius-lg)
-    );
-
-    &[data-flush="start"] {
-      border-start-start-radius: 0;
-    }
-    &[data-flush="end"] {
-      border-start-end-radius: 0;
-    }
-
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: 1;
-      border: 1px solid var(--border-control);
-      border-radius: inherit;
-      pointer-events: none;
-    }
-    /* The cut: across the neck, the edge's top row is the card's own
-       surface again, drawn over it. A flare's stroke (a band between radii
-       f and f + 1) meets the top edge along it, its last √(2f + 1) px in
-       the edge's own row: the cut starts on that band's outer circle
-       (`--neck-cut`, a shape written by every card through HangCard
-       through hang's `setNeck`), so the edge shows under it exactly where
-       the stroke crosses the row, antialiased as the anchor's own curve
-       is, and the curve runs on into the card's edge as one stroke. A
-       linear fade across the run drew the edge out too soon (0.27 where
-       the band still covers 0.49), a soft smear where the curve met the
-       card (owner: "has a blur or alias"). A clip, not a mask: a mask drew
-       the whole card's edge through a buffer of its own on every paint,
-       which was most of what was left of the frame Caw's panel started its
-       slide in. */
-    /* The cut stops short of a flush side's edge: there the anchor's
-       flank runs straight on down into the card's side, and its first
-       pixel is that side's edge, not the cut. */
-    &[data-flush="start"]::before {
-      --gap-from: 1px;
-    }
-    &[data-flush="end"]::before {
-      --gap-to: calc(var(--neck-end) - 1px);
-    }
-    &::before {
-      --gap-from: calc(var(--neck-start) - var(--neck-flare-start, 0px));
-      --gap-to: calc(var(--neck-end) + var(--neck-flare-end, 0px));
-      content: "";
-      position: absolute;
-      /* The neck is measured from the card's left edge (hang `neckAt`). */
-      top: 0;
-      left: var(--gap-from);
-      z-index: 2;
-      inline-size: calc(var(--gap-to) - var(--gap-from));
-      block-size: 1px;
-      background: var(--hang-neck);
-      clip-path: var(--neck-cut, none);
-      pointer-events: none;
-    }
-  }
-  /* A card or menu hanging from a folder tab (HangCard `tab`: the session
-     card, the tab's menu) is one silhouette with its tab (motion/hang-shape):
-     its edge, its tab's edge and the joint between them are one outline, one
-     stroke over both (`.hang-outline`), and its surface is cut to that
-     outline (`clip-path`, written every frame it moves). So it draws no
-     edge, cut or shadow of its own: no border (`::after`), no cut across the
-     neck (`::before`), no box-shadow (the outline layer casts the shape's).
-     It never slides: shut, it is cut to nothing, and it grows out of its
-     tab's foot. */
-  .kit-pop.kit-hang.tab-hang {
-    box-shadow: none;
-    clip-path: path("M 0 0 Z");
-    translate: none;
-    will-change: auto;
-
-    &::before,
-    &::after {
-      display: none;
-    }
-  }
-  /* The one outline a tab and its hang are drawn in (hang-outline.ts): over
-     the page, just over the card, never in the way of a press. */
-  .hang-outline {
-    position: fixed;
-    inset: 0;
-    inline-size: 100%;
-    block-size: 100%;
-    overflow: visible;
-    pointer-events: none;
-
-    & stop.edge {
-      stop-color: var(--border-control);
-    }
-    & feFlood.far {
-      flood-color: var(--shadow-tint-3);
-    }
-    & feFlood.near {
-      flood-color: var(--shadow-tint);
-    }
-  }
-  /* A card hanging from the top bar's glass (HangCard `glass`: Caw's panel,
-     the machines, the Jump palette). Its top shows its own surface across
-     the cut, so its shadow has no night ring (`shadow-overlay-hung`): the
-     ring is the edge's own pixel, hidden under the drawn edge, and across
-     the cut (and down a phone's screen edge, where no edge is drawn) it was
-     a seam. That shadow is a picture the Shell draws once
-     (motion/hung-shadow) and lays round the card as its border-image, not a
-     box-shadow: WebKit blurred the whole card again on every open, in the
-     frame its slide started on. The card's surface is an element of its
-     own over that picture (`.hung-surface`), as a box's background lies
-     over its box-shadow. */
-  .kit-pop.kit-hang.glass-card {
-    box-shadow: none;
-
-    & > .hung-surface {
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      border-radius: inherit;
-      background: var(--hang-surface);
-      pointer-events: none;
-    }
-  }
-  /* On a phone the glass is a tab tucked into the screen's trailing edge,
-     and the card hanging from it is too: its trailing side is the screen's
-     edge, square and with no edge drawn there, as the glass's. */
-  @media (width < 900px) {
-    .kit-pop.kit-hang.glass-card {
-      border-end-end-radius: 0;
-
-      &::after {
-        border-inline-end-width: 0;
-      }
-    }
-  }
   /* The cut the card comes down from behind (`hang`): its floating wrapper,
      cut at the card's top edge, the anchor's foot, with room for the whole
      overlay shadow past the others. It never moves, so the card's slide is
@@ -1395,277 +531,7 @@
      which bits-ui writes whole on every placement; HangCard marks the
      wrapper it draws (`data-hang`). */
   [data-bits-floating-content-wrapper][data-hang] {
-    clip-path: inset(0 -120px -120px);
-  }
-  /* Open and close are the card's own (`hang`): the kit's rise, scale and
-     fade do not apply, and until it is placed it is held shut, up behind
-     the cut. With reduced motion the kit's fade runs and the card stands
-     open. */
-  @media (prefers-reduced-motion: no-preference) {
-    .kit-pop.kit-hang,
-    .kit-pop.kit-hang[data-state="closed"] {
-      opacity: 1;
-      translate: none;
-      scale: none;
-      transition: none;
-    }
-    /* Shut: up past its own height by the reach of its shadow under it
-       (`--hang-reach`, the hung shadow's), so none of it is left under the
-       cut. */
-    .kit-pop.kit-hang:not(.tab-hang, [data-shown]) {
-      translate: 0 calc(-100% - var(--hang-reach, 0px));
-    }
-    /* Its own layer for as long as it is mounted: WebKit gave the card one
-       for its slide alone and took it away when the slide ended, and that
-       repainted the whole card, its shadow and its rows, in the frame it
-       landed in (75–80 ms in Playwright WebKit at 3x). */
-    .kit-pop.kit-hang:not(.tab-hang) {
-      will-change: translate;
-    }
-    @starting-style {
-      .kit-pop.kit-hang[data-state="open"] {
-        opacity: 1;
-        translate: none;
-        scale: none;
-      }
-    }
-  }
-
-  /* Switch: a 32×18 track (24×14 small). Its hit area is .pointer-hit's
-     24px on a pointer device and .touch-hit's 44px on a touch screen; the
-     drawn track and the layout do not change. The knob travels --dur-toggle
-     on --ease-in-out, the track's colour turning with it, and the track
-     takes the press every control takes. */
-  .kit-switch {
-    transition:
-      background-color var(--dur-toggle) var(--ease-out),
-      transform var(--dur-toggle) var(--ease-out);
-
-    @media (prefers-reduced-motion: no-preference) {
-      &:active:not([data-disabled]) {
-        transform: scale(var(--press-scale));
-      }
-    }
-  }
-
-  :where(.kit-switch) .kit-switch-thumb {
-    @media (prefers-reduced-motion: no-preference) {
-      transition: translate var(--dur-toggle) var(--ease-in-out);
-    }
-  }
-
-  /* A button's icon slot (Button with `label`): its icon at rest, the
-     spinner while its work runs, the check when it is done, cross-fading in
-     one cell over --dur-morph, the clock its label crosses on. A button with
-     no icon at rest keeps the slot folded for good (no width and no gap) and
-     draws what the slot shows over its label's start while the label fades
-     (PendingContent), so its width never changes. */
-  .kit-slot {
-    flex: none;
-    inline-size: var(--btn-icon);
-    --icon-swap-dur: var(--dur-morph);
-
-    &[data-over] {
-      inline-size: 0;
-      margin-inline-end: calc(-1 * var(--btn-gap));
-      place-items: center start;
-    }
-  }
-
-  /* A tick that draws itself: a checkbox's over 160ms, a menu item's over
-     120ms. The stroke is dashed to the tick's length (Tick.svelte's path
-     measures 19.8 units): one 20-unit dash, then a gap longer than the path,
-     offset so that no dash end (and no round cap) sits on the path until it
-     draws. With reduced motion it fades in whole instead. */
-  .kit-tick {
-    opacity: 0;
-    transition: opacity var(--dur-toggle) var(--ease-out);
-
-    &[data-on="true"] {
-      opacity: 1;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      opacity: 1;
-      transition: none;
-
-      & path {
-        stroke-dasharray: 20 30;
-        stroke-dashoffset: 22;
-        transition: stroke-dashoffset var(--dur-toggle) var(--ease-out);
-      }
-      &[data-on="true"] path {
-        stroke-dashoffset: 0;
-      }
-    }
-  }
-
-  /* A radio item's dot: fades in and grows from .6. */
-  .kit-dot {
-    display: block;
-    inline-size: 6px;
-    block-size: 6px;
-    border-radius: var(--radius-pill);
-    background: currentColor;
-    opacity: 0;
-    transition: opacity var(--dur-control) var(--ease-out);
-
-    &[data-on="true"] {
-      opacity: 1;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      scale: 0.6;
-      transition:
-        opacity var(--dur-control) var(--ease-out),
-        scale var(--dur-control) var(--ease-out);
-
-      &[data-on="true"] {
-        scale: 1;
-      }
-    }
-  }
-
-  /* In a menu the tick is quicker. */
-  :where(.kit-item) .kit-tick {
-    transition-duration: var(--dur-control);
-
-    & path {
-      transition-duration: var(--dur-control);
-    }
-  }
-  /* In a button's slot, menu item or not, the check draws on the clock the
-     slot and the label cross on. */
-  .kit-slot .kit-tick {
-    transition-duration: var(--dur-morph);
-
-    & path {
-      transition-duration: var(--dur-morph);
-    }
-  }
-
-  /* A row inside a floating surface. Its highlight is the menu's one
-     ghost (components/ui/highlight), gliding from item to item under
-     pointer and arrow keys alike. */
-  .kit-item {
-    border-radius: var(--radius-sm);
-    transition: var(--transition-control);
-
-    @media not (pointer: coarse) {
-      min-block-size: 32px;
-    }
-    @media (pointer: coarse) {
-      min-block-size: 44px;
-    }
-  }
-
-  /* Segmented: tabs and single toggle groups. A recessed groove holds a
-     lifted thumb that slides under the chosen segment. */
-  .kit-segmented {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    padding: 3px;
-    border-radius: var(--radius-md);
-    background: var(--surface-recess-deep);
-  }
-
-  :where(.kit-segmented) .kit-thumb {
-    position: absolute;
-    inset-block-start: 0;
-    inset-inline-start: 0;
-    transform-origin: 0 0;
-    border-radius: var(--radius-sm);
-    background: var(--surface-lift);
-    box-shadow: var(--shadow-raised);
-    pointer-events: none;
-    opacity: 0;
-  }
-
-  :where(.kit-segmented) .kit-segment {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    block-size: 30px;
-    padding-block: 0;
-    padding-inline: 10px;
-    border-radius: var(--radius-sm);
-    white-space: nowrap;
-    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-    color: var(--ink-muted);
-    transition: var(--transition-control);
-
-    /* One of a group: the press is `press-tint` on the segment, never a
-       scale that would pull it off its neighbours. */
-    &:is([data-state="active"], [data-state="on"]) {
-      color: var(--ink-strong);
-    }
-  }
-
-  /* Tooltip: solid ink, never coral. It fades in over --dur-fade, settling
-     2px toward its trigger; it leaves at once, so moving on is never held
-     up by the last one. With reduced motion only the fade runs. */
-  .kit-tip {
-    --kit-tip-from: 0 2px;
-    border-radius: var(--radius-sm);
-    background: var(--ink-solid);
-    color: var(--on-ink);
-    font: var(--type-meta);
-
-    &[data-side="bottom"] {
-      --kit-tip-from: 0 -2px;
-    }
-    &[data-side="left"] {
-      --kit-tip-from: 2px 0;
-    }
-    &[data-side="right"] {
-      --kit-tip-from: -2px 0;
-    }
-    &:is([data-state="delayed-open"], [data-state="instant-open"]) {
-      animation: kit-tip-fade var(--dur-fade) var(--ease-out) both;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      &:is([data-state="delayed-open"], [data-state="instant-open"]) {
-        animation: kit-tip-in var(--dur-fade) var(--ease-out) both;
-      }
-    }
-  }
-
-  /* Dialog: a recessed tray holding a raised body; 6 + 12 = 18, so the
-     corners are concentric. */
-  .kit-dialog {
-    border-radius: var(--radius-modal);
-    background: var(--surface-recess);
-    box-shadow: var(--shadow-overlay);
-    padding: 6px;
-
-    @media (prefers-reduced-motion: no-preference) {
-      &[data-state="open"] {
-        animation: kit-dialog-in var(--dur-panel) var(--ease-out) both;
-      }
-      &[data-state="closed"] {
-        animation: kit-dialog-out var(--dur-exit) var(--ease-out) both;
-      }
-    }
-  }
-
-  :where(.kit-dialog) .kit-dialog-body {
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    padding: 18px;
-  }
-
-  .kit-scrim {
-    background: var(--scrim);
-    backdrop-filter: blur(var(--scrim-blur));
-
-    &[data-state="open"] {
-      animation: kit-fade-in var(--dur-panel) var(--ease-out) both;
-    }
-    &[data-state="closed"] {
-      animation: kit-fade-out var(--dur-exit) var(--ease-out) both;
-    }
+    @apply clip-block-start;
   }
 
   /* vaul's own slide out (slideToBottom and its siblings) sets no fill
@@ -1675,25 +541,24 @@
     animation-fill-mode: forwards;
   }
   /* A closing drawer and its scrim let presses through to the page, as a
-     closing dialog's and sheet's do (floating-presence `pressable`): left
-     catching them while they slid and faded out, the next tap after a close
-     was lost. vaul draws both through bits-ui with `pointer-events: auto`
-     inline and takes no `child` to say otherwise, so the rule is here. */
-  [data-slot="drawer-content"][data-state="closed"],
-  [data-slot="drawer-overlay"][data-state="closed"] {
-    pointer-events: none !important;
-  }
-  /* Nor does the page stay locked under one. bits-ui holds <body> at
-     `pointer-events: none` for as long as a dialog's content is drawn
-     unless it is drawn through `child`, which vaul-svelte (1.0.0-next.7,
-     the latest) does not take: the lock outlived vaul's slide out, 534ms
-     after a drawer closed on a phone, and the next tap was lost. While a
-     drawer is closing the body takes presses again. Every other modal
-     layer that could be open meanwhile has its own scrim over the page, and
-     a menu still closes on a press outside it. The closing drawer says so
-     on the body (ui/drawer/drawer-content, page-marks). */
-  body[data-drawer~="closed"] {
-    pointer-events: auto !important;
+     closing dialog's and sheet's do (floating-presence `pressable`): vaul
+     draws both through bits-ui with `pointer-events: auto` inline, which
+     only the kit's own inline value replaces, so the kit's drawer content
+     and overlay write it while they close.
+     Nor does the page stay locked under one. bits-ui holds <body> at
+     `pointer-events: none` inline for as long as a dialog's content is
+     drawn unless it is drawn through `child`, which vaul-svelte
+     (1.0.0-next.7, the latest) does not take: the lock outlived vaul's
+     slide out, 534ms after a drawer closed on a phone, and the next tap was
+     lost. While a drawer is closing the page under the body takes presses
+     again: `pointer-events` is inherited, so each of the body's children
+     takes them back (`auto` on a descendant is hit even under a `none`
+     ancestor). Every other modal layer that could be open meanwhile has its
+     own scrim over the page, and a menu still closes on a press outside
+     it. The closing drawer says so on the body (ui/drawer/drawer-content,
+     page-marks). */
+  :where(body[data-drawer~="closed"]) > * {
+    pointer-events: auto;
   }
 
   /* A kit bottom sheet rests on the bottom of what the reader can see and is
@@ -1720,281 +585,981 @@
       var(--drawer-max-height, 85vh),
       var(--visible-height, 100dvh)
     );
-    /* What scrolls in the sheet (.kit-sheet-scroll) drives its header's
-       seam (.kit-sheet-head). */
+    /* What scrolls in the sheet (`kit-sheet-scroll`) drives its header's
+       seam (`sheet-seam`, ui/drawer/drawer-header). */
     timeline-scope: --sheet-scroll;
   }
+}
 
-  /* A sheet's one header (ui/drawer/drawer-header, the New session sheet's
-     head): its title in the title role, then Close at the trailing edge. A
-     hairline under it comes in as what is under it scrolls, so a line
-     scrolled up under the title is cut on a seam, never left loose. */
-  .kit-sheet-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    flex: none;
-    padding-block-end: var(--space-3);
-    border-block-end: 1px solid transparent;
+/* ---- Rules into DOM a component does not render: a library's (PhotoSwipe,
+   Svelte Flow, Streamdown), a script's (the morph's letters, the editors'
+   chips) or a kit part's internals, which take no
+   class from the markup that hosts them. Each is anchored on the host's own
+   hook. */
+@layer components {
+  /* A joined row's duotone glyph: its status layer at the glyph's own
+     opacity (the icon's paths carry `opacity`, which no class reaches). */
+  [data-slot="glyph"] svg[data-duo] [opacity] {
+    opacity: var(--glyph-duo-status-opacity);
   }
-  /* The seam follows the sheet's scroll, inside a sheet: elsewhere the name
-     resolves to no timeline, which Chromium paints as the animation's end. */
-  [data-slot="drawer-content"] .kit-sheet-head {
-    animation: kit-sheet-seam linear both;
-    animation-timeline: --sheet-scroll;
-    animation-range: 0px var(--space-3);
-  }
-  @keyframes kit-sheet-seam {
-    to {
-      border-block-end-color: var(--border-hairline);
+
+  /* Svelte Flow's node and handle (the decisions graph): a card new to the
+     graph fades up where it lands, and the handles the edges need stay as
+     1px points nobody can grab. */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="decision-graph"] .svelte-flow__node-decision {
+      transition: opacity var(--dur-fade) var(--ease-out);
+
+      @starting-style {
+        opacity: 0;
+      }
     }
   }
-  .kit-sheet-scroll {
-    scroll-timeline: --sheet-scroll block;
-  }
-  /* Close, in every sheet and dialog head: a 28px ghost with a 16px glyph,
-     reaching 44px under a finger through .touch-hit. A mouse never drags a
-     sheet; this and Escape put it away. */
-  .kit-sheet-close {
-    --hit-edge: 1px;
-    flex: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    inline-size: 28px;
-    block-size: 28px;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
+  [data-slot="decision-node"] .svelte-flow__handle {
+    inline-size: 1px;
+    block-size: 1px;
+    min-inline-size: 0;
+    min-block-size: 0;
+    border: 0;
     background: transparent;
-    color: var(--ink-muted);
-    cursor: pointer;
-    transition: var(--transition-control);
-
-    & svg {
-      inline-size: 16px;
-      block-size: 16px;
-    }
-    @media (hover: hover) {
-      &:hover {
-        background: var(--surface-hover);
-        color: var(--ink-strong);
-      }
-    }
+    pointer-events: none;
   }
 
-  /* Two icons sharing one slot; the outgoing icon animates out too. */
-  .icon-swap {
-    display: inline-grid;
-    place-items: center;
+  /* PhotoSwipe's DOM (its root is appended to <body>), under the
+     `cawco-pswp` mainClass Lightbox passes it: its chrome on the house's
+     raised surface and hairline, 44px controls. */
+  .cawco-pswp {
+    --pswp-bg: var(--scrim);
+    --pswp-placeholder-bg: var(--surface-recess);
+    --pswp-icon-color: var(--ink-strong);
+    --pswp-error-text-color: var(--ink-muted);
+    color: var(--ink-strong);
 
-    /* How far each has given way (--swap-away, 0 shown to 1 gone) is the one
-       thing that transitions; it fades and blurs by it, and where motion is
-       welcome shrinks by it too. */
-    > * {
-      display: inline-flex;
-      grid-area: 1 / 1;
-      opacity: calc(1 - var(--swap-away));
-      filter: blur(calc(4px * var(--swap-away)));
-      transition: --swap-away var(--icon-swap-dur, var(--dur-pop))
-        var(--ease-out);
+    & .pswp__bg {
+      backdrop-filter: blur(var(--scrim-blur));
+    }
+    & .pswp__top-bar {
+      gap: var(--space-2);
+      padding: var(--space-2);
+      block-size: auto;
+    }
+    & .pswp__button {
+      display: grid;
+      place-items: center;
+      inline-size: var(--c-top-bar-h);
+      block-size: var(--c-top-bar-h);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-sm);
+      background: var(--surface-raised);
+      color: var(--ink-strong);
+      opacity: 1;
+      overflow: visible;
 
+      & svg {
+        inline-size: var(--icon-lg);
+        block-size: var(--icon-lg);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          background: var(--surface-hover);
+        }
+      }
+    }
+    & .pswp__button--arrow {
+      margin-block-start: calc(var(--c-top-bar-h) / -2);
+    }
+    & .pswp__button--arrow--prev {
+      inset-inline-start: var(--space-3);
+    }
+    & .pswp__button--arrow--next {
+      inset-inline-end: var(--space-3);
+    }
+    /* The counter is chrome like the buttons: their chip on the raised
+       surface inside a hairline, so the page under the scrim never reads
+       through it. */
+    & .pswp__counter {
+      display: grid;
+      place-items: center;
+      block-size: var(--c-top-bar-h);
+      margin: 0;
+      padding-inline: var(--space-3);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-sm);
+      background: var(--surface-raised);
+      font-size: var(--text-meta);
+      font-weight: var(--weight-body);
+      font-variant-numeric: tabular-nums;
+      color: var(--ink-strong);
+      text-shadow: none;
+      opacity: 1;
+    }
+    /* PhotoSwipe fades its own chrome with the zoom (`pswp--ui-visible`);
+       the description goes with it. */
+    & .pswp__description {
+      position: absolute;
+      inset-inline: var(--space-3);
+      inset-block-end: var(--space-3);
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-sm);
+      background: var(--surface-recess);
+      color: var(--ink-muted);
+      font-size: var(--text-meta);
+      font-weight: var(--weight-body);
+      opacity: 0;
+
+      & .lines {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-inline-size: 0;
+        overflow-wrap: anywhere;
+      }
+      & .path {
+        font-family: var(--font-mono);
+      }
+      & a {
+        white-space: nowrap;
+        text-decoration: underline;
+        color: inherit;
+      }
       @media (prefers-reduced-motion: no-preference) {
-        scale: calc(1 - 0.75 * var(--swap-away));
+        transition: opacity var(--dur-control) var(--ease-out);
       }
     }
-    > [data-active="false"] {
-      --swap-away: 1;
-      pointer-events: none;
+    &.pswp--ui-visible .pswp__description {
+      opacity: 1;
     }
   }
-  /* A swap slot that is not the one showing (a button's spinner waits there
-     between presses) carries no loop at all. Held still instead, a paused
-     spinner stayed on the compositor as a moving layer, and the browser,
-     which cannot tell how far a moving layer reaches, put everything drawn
-     after it on layers too: one hidden spinner in the rail took the rail's
-     rows and the whole pane with it. The slot is named as one
-     (`.icon-swap`'s child, `.kit-slot`'s): `data-active="false"` alone is
-     also every rail row that is not the open one. */
-  :is(.icon-swap, .kit-slot) > [data-active="false"] * {
+
+  /* The letters the morph (ui/morph-text/morph.ts) writes into its box:
+     each a box of its own on one line, broken only at "\n". A digit rolls in
+     a slot that clips it on the block axis only (clip, unlike hidden, keeps
+     the text's baseline), so a glyph's overhang is never shaved. */
+  [data-slot="letters"] {
+    > :not(br) {
+      display: inline-block;
+      white-space: pre;
+    }
+    > [data-roll] {
+      overflow-x: visible;
+      overflow-y: clip;
+    }
+    > [data-roll] > span {
+      display: inline-block;
+    }
+  }
+
+  /* Streamdown (svelte-streamdown 4.2.1, the latest) writes its token and
+     block animation, and its token spans' inline-block and pre-wrap, into
+     each element's style attribute (dist/context.svelte.js
+     animationTextStyle / animationBlockStyle), and an inline declaration
+     yields only to an important one. The chunk fade in ui/markdown is the
+     only motion streamed text has, and inline, with the prose's own
+     white-space, a streamed paragraph lays out as the settled one does. */
+  [data-slot="md"] [style*="sd-"] {
     animation: none !important;
   }
-
-  /* One hover ghost and one selection pill per list
-     (components/ui/highlight). Drawn under the rows: the list isolates and
-     the layers sit at -1, so a row's text and icons are always above them.
-     The ghost glides 80ms on --ease-in-out and fades in place; the pill
-     glides 120ms on --ease-drawer, in step with the row's ink turning to
-     the selected colour. Where nothing hovers (a touch screen: a tap fires
-     a synthetic mousemove and no mouseleave, so a ghost would park on the
-     last tap as a second selection) there is no ghost at all. */
-  .kit-highlight {
-    isolation: isolate;
+  [data-slot="md"] span[style*="sd-"] {
+    display: inline !important;
+    white-space: inherit !important;
+  }
+  /* The transcript's list (virtua): it hides an item for the moment it
+     takes to measure it, inline, and a row already drawn (Row's
+     `data-drawn`) keeps its visibility; and it writes `pointer-events` on
+     its container while it scrolls, which restyled every row under it.
+     `inherit` (never `visible` or `auto`, which would paint through a hidden
+     ancestor or pass a press through a modal's lock). An inline declaration
+     yields only to an important one. */
+  [data-slot="listing"] [data-item][data-drawn] {
+    visibility: inherit !important;
+  }
+  [data-slot="listing"] > :first-child {
+    pointer-events: inherit !important;
+  }
+  /* The transcript's dock stands at zero height over its foot, taking no
+     pointer; the buttons its children draw (Behind, Catch up, Latest) take
+     it back. */
+  [data-slot="dock"] button {
+    pointer-events: auto;
+  }
+  /* A tool row's gallery: each Shot grows from the shot width and never
+     overflows the row. */
+  [data-slot="shots"] > * {
+    flex: 1 1 var(--tx-shot);
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+  /* A conversation turn's rendered words (MessageBody), in the body role and
+     the turn's rhythm. */
+  [data-slot="msg"] {
+    /* A paragraph after a paragraph, and a list in a list item, keep their
+       gap over the zero margins below (more specific, so first here). */
+    & p + p {
+      margin-block-start: var(--space-3);
+    }
+    & li > ul,
+    & li > ol {
+      margin-block-start: var(--space-1);
+    }
+    & :is(p, li, h1, h2, h3, h4, h5, h6) {
+      text-wrap-style: stable;
+    }
+    & p,
+    & ul,
+    & ol,
+    & blockquote {
+      margin-block: 0;
+    }
+    & li:where(:not(:first-child)) {
+      margin-block-start: var(--space-1);
+    }
+    & ul,
+    & ol {
+      padding-inline-start: var(--space-5);
+    }
+    & :not(pre) > code {
+      display: inline-block;
+      max-inline-size: 100%;
+      vertical-align: baseline;
+      font-family: var(--font-mono);
+      font-size: var(--text-label);
+      line-height: var(--leading-ui);
+      background: var(--code-bg);
+      box-shadow: inset 0 0 0 1px var(--border-hairline);
+      padding-block: 0;
+      padding-inline: var(--c-code-chip-pad-x);
+      border-radius: var(--radius-xs);
+      overflow-wrap: anywhere;
+    }
+    & .prose {
+      font-size: var(--text-body);
+      font-weight: var(--weight-body);
+      line-height: var(--leading-body);
+      color: var(--ink-strong);
+    }
+    & .prose > * {
+      margin-block-start: var(--space-3);
+    }
+    & .prose > :first-child {
+      margin-block-start: 0;
+    }
+    & .prose > :last-child {
+      margin-block-end: 0;
+    }
+    & .prose :is(h1, h2, h3, h4, h5, h6) {
+      font-size: var(--text-body);
+      line-height: var(--leading-ui);
+      font-weight: var(--weight-strong);
+      color: var(--ink-strong);
+    }
+    & .prose > :is(h1, h2, h3, h4, h5, h6):where(:not(:first-child)) {
+      margin-block-start: var(--space-5);
+    }
+    & .prose > pre {
+      font-family: var(--font-mono);
+      font-size: var(--text-label);
+      line-height: var(--leading-body);
+      background: var(--surface-recess);
+      border-radius: var(--radius-sm);
+      padding: var(--space-3);
+      overflow-x: auto;
+    }
+    & .prose > pre code {
+      background: none;
+      padding: 0;
+      font-size: inherit;
+    }
+  }
+  /* An instruction's markdown starts at its box: its first block gives back
+     the gap above it. */
+  [data-slot="instruction"] [data-slot="md"] > :first-child {
+    margin-block-start: 0;
   }
 
-  /* Placed from measured client rects, which are physical: the layers
-     anchor to the physical top-left corner the measurements are taken
-     from. */
-  :where(.kit-highlight) :is(.kit-ghost, .kit-pill, .kit-pill-trail) {
-    position: absolute;
-    inset: 0 auto auto 0;
-    z-index: -1;
+  /* A mention chip in Find's field (`[data-mention-chip]`, which
+     MentionField's script makes; its glyph and the new-session prompt's
+     reference chip carry their own utilities). */
+  [data-editor] [data-mention-chip] {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-inline-size: 100%;
+    margin-inline: 1px;
+    padding: 0 var(--space-2) 0 var(--space-1);
+    border-radius: var(--radius-xs);
+    background: var(--surface-recess);
+    box-shadow: inset 0 0 0 1px var(--border-hairline);
+    font: var(--type-label);
+    color: var(--ink-strong);
+    vertical-align: baseline;
+    white-space: nowrap;
+    cursor: default;
+    user-select: all;
+  }
+
+  /* A divider's summary reads in a note's muted ink, not a turn's
+     (MessageBody's words). */
+  [data-slot="transcript-brief"] {
+    [data-slot="msg"],
+    [data-slot="msg"] .prose,
+    [data-slot="msg"] .prose :is(h1, h2, h3, h4, h5, h6) {
+      color: var(--ink-muted);
+    }
+    [data-slot="msg"] .prose {
+      --tw-prose-body: var(--ink-muted);
+      --tw-prose-headings: var(--ink-muted);
+      --tw-prose-bold: var(--ink-muted);
+    }
+  }
+  /* A turn in a well: its words run to the well's edge, and a code span
+     lifts to the raised surface, the well being the deepest step. */
+  [data-slot="well"] [data-slot="msg"] {
+    max-inline-size: none;
+  }
+  [data-slot="well"] [data-slot="msg"] code {
+    background: var(--surface-raised);
+  }
+  /* A pane's own face (a snippet Who does not render) in the mark's box. */
+  [data-slot="dot"][data-face] svg {
+    display: block;
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
+  }
+  /* A peer's label opens its turn: the whole label is the hit, its ring the
+     house's. MessageRow's speaker line (Who) dims for a ghost and eases for
+     you. */
+  [data-slot="peer-label"] [data-slot="collapsible-trigger"] {
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: var(--radius-xs);
+    }
+    &:focus-visible {
+      outline: none;
+    }
+    &:focus-visible::after {
+      outline: var(--focus-ring-width) solid var(--focus-ring);
+      outline-offset: var(--focus-ring-inset);
+    }
+  }
+  [data-slot="turn"][data-ghost] > [data-turn-who] {
+    opacity: var(--ghost-presence);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="turn"][data-you] > [data-turn-who] {
+      transition: opacity var(--dur-menu) var(--ease-out);
+    }
+  }
+  /* The composer's chips (MentionField's script makes them): clear while
+     another draft's words fly in, hidden while an ask's card stands over the
+     field. The / and @ menu's group heading, which bits-ui renders. */
+  [data-slot="composer-field"]
+    > [data-editor][data-flying]
+    [data-mention-chip] {
+    opacity: 0;
+  }
+  [data-asking]
+    [data-slot="composer-field"]
+    > [data-editor]
+    [data-mention-chip] {
+    visibility: hidden;
+  }
+  [data-slot="menu"] [data-slot="command-group"] [data-command-group-heading] {
+    padding: var(--space-1) var(--space-2) var(--space-2);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+    letter-spacing: var(--track-caps);
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+  /* The workflow editor's panes glide together while paneforge marks one
+     collapsing or expanding; a drag stays 1:1. Svelte Flow's handle on the
+     workflow canvas: its size, and its press in colour (it is placed by its
+     transform, so a scale would move it). */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="pane"]
+      [data-pane-group]:has(
+        > [data-pane-state="collapsing"],
+        > [data-pane-state="expanding"]
+      )
+      > [data-pane] {
+      transition: flex-grow var(--dur-panel) var(--ease-in-out);
+    }
+  }
+  [data-slot="workflow-canvas"] .svelte-flow__handle {
+    width: var(--c-graph-handle);
+    height: var(--c-graph-handle);
+  }
+  [data-slot="workflow-canvas"] .svelte-flow__handle:active {
+    --xy-handle-background-color: var(--brand-solid);
+  }
+
+  /* While a split's divider is dragged, no pane's iframe takes the pointer
+     from it. */
+  [data-split-resizing] iframe {
     pointer-events: none;
-    translate: var(--hl-x) var(--hl-y);
-    opacity: var(--hl-show);
   }
 
-  :where(.kit-highlight) .kit-ghost {
-    display: none;
-    background: var(--surface-hover);
-    transition: --hl-show var(--dur-control) var(--ease-out);
+  /* A touch is the browser's to pan only across the axis a sheet leaves by,
+     on every element inside it: the browser reads touch-action from the
+     finger's element up to the nearest scroller, so a scrolling list in the
+     sheet would otherwise claim the drag that dismisses it
+     (motion/drag.svelte.ts). The sheet's children are its caller's. */
+  [data-slot="sheet-content"]:is([data-side="left"], [data-side="right"]) * {
+    touch-action: pan-y;
+  }
+  [data-slot="sheet-content"]:is([data-side="top"], [data-side="bottom"]) * {
+    touch-action: pan-x;
+  }
 
-    &[data-follow] {
-      display: block;
+  /* A provider's mark takes its ink as `color` (WebKit resolves
+     light-dark() wrongly inside an SVG fill, bugs.webkit.org 283489), and a
+     presentation attribute loses to any rule, so its paths fill from it. */
+  [data-slot="provider-logo"][data-ink],
+  [data-slot="provider-logo"][data-ink] * {
+    fill: currentColor;
+  }
+  /* While a press is held on the composer and while its wheel is up, nothing
+     on the page selects (Composer marks the root). */
+  :root[data-composer-holding],
+  :root[data-composer-holding] * {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  /* Milkdown Crepe's editor (MarkdownEditor), its stylesheets in the
+     `crepe` layer under this one: the palette on the app's tokens, the type
+     roles over Crepe's own scale, the house's focus ring, a finger's 44px. */
+  /* Crepe's structural CSS reads these off `.milkdown` itself, so they are set
+     there rather than on the host. Every value is an app token, so the editor
+     follows light and dark with everything else. */
+  [data-slot="crepe-host"] .milkdown {
+    --crepe-color-background: var(--surface-recess);
+    --crepe-color-on-background: var(--ink-strong);
+    --crepe-color-surface: var(--surface-raised);
+    --crepe-color-surface-low: var(--surface-recess);
+    --crepe-color-on-surface: var(--ink-strong);
+    --crepe-color-on-surface-variant: var(--ink-muted);
+    --crepe-color-outline: var(--ink-muted);
+    --crepe-color-primary: var(--ink-strong);
+    --crepe-color-secondary: var(--surface-hover);
+    --crepe-color-on-secondary: var(--ink-strong);
+    --crepe-color-inverse: var(--ink-strong);
+    --crepe-color-on-inverse: var(--surface-raised);
+    --crepe-color-inline-code: var(--ink-strong);
+    --crepe-color-inline-area: var(--surface-recess);
+    --crepe-color-error: var(--ink-strong);
+    --crepe-color-hover: var(--surface-hover);
+    --crepe-color-selected: var(--surface-fill);
+
+    --crepe-base-font-size: var(--text-body);
+    --crepe-font-title: var(--font-body);
+    --crepe-font-default: var(--font-body);
+    --crepe-font-code: var(--font-mono);
+
+    --crepe-shadow-1: var(--shadow-tile);
+    --crepe-shadow-2: var(--shadow-overlay);
+
+    /* The card already draws the frame; the editor must not draw a second. */
+    background: var(--surface-recess);
+    box-shadow: none;
+    padding: var(--space-1);
+
+    @media (hover: none) {
+      --crepe-color-hover: transparent;
     }
-    @media (hover: hover) {
-      display: block;
+  }
+  /* Crepe's stock CSS sizes text off its own scale, and DESIGN.md admits only
+     the type roles: the body role everywhere, then the exemptions below put
+     the hierarchy back on the elements that carry it (h1 and h2 in the title
+     role, smaller headings and strong text at the body size in 500, code at
+     the label size in the mono). */
+  [data-slot="crepe-host"] .milkdown * {
+    font-weight: var(--weight-body);
+    font-size: var(--text-body);
+    line-height: var(--leading-body);
+    animation: none;
+    transition: none;
+    scroll-behavior: auto;
+  }
+  [data-slot="crepe-host"] .milkdown *::before,
+  [data-slot="crepe-host"] .milkdown *::after {
+    animation: none;
+    transition: none;
+    scroll-behavior: auto;
+  }
+  [data-slot="crepe-host"]
+    .milkdown
+    :is(strong, b, h1, h2, h3, h4, h5, h6, th) {
+    font-weight: var(--weight-strong);
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
+    margin-top: var(--space-5);
+    padding: var(--space-1) 0;
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror :is(h1, h2) {
+    font-size: var(--text-title);
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror :is(h3, h4, h5, h6) {
+    font-size: var(--text-body);
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror {
+    padding: var(--space-4) calc(var(--space-6) - var(--space-1)) var(--space-6)
+      calc(var(--space-7) - var(--space-1));
+    overflow-wrap: anywhere;
+    min-height: calc(var(--space-8) * 8);
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror > :first-child {
+    margin-top: 0;
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror p {
+    padding: var(--space-1) 0;
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror code {
+    font-size: var(--text-label);
+    padding-inline: var(--space-1);
+    border-radius: var(--radius-xs);
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror pre {
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    white-space: pre-wrap;
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror blockquote {
+    padding-inline-start: var(--space-6);
+    margin-block: var(--space-1);
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror blockquote::before {
+    width: var(--space-1);
+    top: var(--space-1);
+    bottom: var(--space-1);
+    border-radius: var(--radius-pill);
+  }
+  [data-slot="crepe-host"] .milkdown .milkdown-code-block {
+    padding: var(--space-2) var(--space-3) var(--space-3);
+    margin-block: var(--space-2);
+    background: var(--surface-recess);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-sm);
+  }
+  [data-slot="crepe-host"] .milkdown :is(.cm-editor, .cm-gutters) {
+    background: var(--surface-recess);
+  }
+  [data-slot="crepe-host"] .milkdown :is(button, input, [role="button"]) {
+    border-radius: var(--radius-sm);
+    font-size: var(--text-label);
+    line-height: var(--leading-ui);
+  }
+  [data-slot="crepe-host"] .milkdown button {
+    border: 1px solid var(--border-control);
+    box-shadow: var(--shadow-tile);
+  }
+  /* Crepe's own focus styles give way to the app's one ring. */
+  [data-slot="crepe-host"] .milkdown :focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+  [data-slot="crepe-host"]
+    .milkdown
+    :is(input, [contenteditable]):focus-visible {
+    outline-offset: var(--focus-ring-inset);
+  }
+  [data-slot="crepe-host"] .milkdown :is(button, [role="button"]):active {
+    background: var(--surface-fill);
+    box-shadow: var(--shadow-inset-sel);
+  }
+  /* The block handle's open item: by day a step past its hover, with its glyph
+     in the strong ink. Not through --crepe-color-selected, which is also the
+     document's text selection. */
+  [data-slot="crepe-host"]
+    .milkdown
+    .milkdown-block-handle
+    .operation-item.active {
+    background: var(--surface-pressed);
+
+    & svg {
+      fill: light-dark(var(--ink-strong), var(--ink-muted));
     }
-    &.kit-glide {
-      @media (prefers-reduced-motion: no-preference) {
-        transition:
-          --hl-x var(--dur-ghost) var(--ease-in-out),
-          --hl-y var(--dur-ghost) var(--ease-in-out),
-          width var(--dur-ghost) var(--ease-in-out),
-          height var(--dur-ghost) var(--ease-in-out),
-          --hl-show var(--dur-control) var(--ease-out);
+  }
+  /* The slash menu's chosen group tab takes the selected wash, apart from its
+     hover (--crepe-color-hover). */
+  [data-slot="crepe-host"]
+    .milkdown
+    .milkdown-slash-menu
+    .tab-group
+    ul
+    li.selected {
+    background: var(--selected-bg);
+    color: var(--selected-ink);
+  }
+  /* Milkdown renders its own toolbar and menus, so they cannot carry
+     `.touch-hit`; under a finger they keep a 44px box. */
+  @variant coarse {
+    [data-slot="crepe-host"]
+      .milkdown
+      :is(
+        button,
+        input,
+        [role="button"],
+        .operation-item,
+        .milkdown-slash-menu li
+      ) {
+      min-width: var(--c-btn-h-lg);
+      min-height: var(--c-btn-h-lg);
+    }
+  }
+}
+
+/* The preview's phone sheet's grabber (SideSheet's `data-preview-grab`
+   handle), DESIGN.md's 100×6, and its hit area. The sheet itself is the
+   kit's hosted DrawerContent. vaul-svelte's own handle rules stand in the
+   `vendor` layer (vite.config.ts, vendorComponentSheets), so these win by
+   layer. */
+@layer components {
+  [data-preview-sheet] [data-preview-grab][data-vaul-handle] {
+    touch-action: none;
+    position: absolute;
+    top: var(--space-1);
+    left: calc(50% - var(--c-grabber-w) / 2);
+    width: var(--c-grabber-w);
+    height: var(--c-grabber-h);
+    border-radius: var(--radius-pill);
+    background: var(--border-control);
+    margin: 0;
+    opacity: 1;
+  }
+  [data-preview-sheet] [data-vaul-handle-hitarea] {
+    height: var(--c-sheet-inspector-head-h);
+  }
+}
+
+/* ---- Sonner's toaster and toasts (the kit's sonner.svelte hosts them;
+   svelte-sonner draws them). Its own sheet stands in the `vendor` layer
+   (vite.config.ts, sonnerSheet), so these win by layer. */
+@layer components {
+  /* The kit's floating surface, over sonner's own box. */
+  [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-overlay);
+    font: var(--type-body);
+  }
+  /* The toast's action and cancel buttons: the label role, an item's radius,
+     and the press every control gives. */
+  [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-button] {
+    border-radius: var(--radius-sm);
+    font: var(--type-label);
+    transition: transform var(--dur-toggle) var(--ease-out);
+
+    @media (prefers-reduced-motion: no-preference) {
+      &:active {
+        transform: scale(var(--press-scale));
       }
     }
   }
 
-  /* The selection is where the reader acts: the apricot selected wash, its
-     row in selected ink (the row sets that; the pill sits under it). */
-  :where(.kit-highlight) :is(.kit-pill, .kit-pill-trail) {
-    background: var(--selected-bg);
+  /* Motion on the kit's scale. Sonner has no timing options, so its
+     transitions are restated here.
+     - Enter: from --pop-rise short of its place on the side of the edge it
+       comes from (below at the desktop's bottom-right, above at the phone's
+       top-centre), fading and moving over --dur-panel on --ease-out. The
+       toast is marked `data-entering` for that length (sonner.svelte).
+     - The stack closing up or making room: --dur-fade on --ease-in-out.
+     - Exit: toward the edge it came from (sonner's own direction) over
+       --dur-exit on --ease-out, inside sonner's 200ms before unmount; a toast
+       swiped away leaves the way the finger threw it, on the same timing.
+     - A toast under a finger keeps sonner's own "no transition", so it tracks
+       the finger 1:1; sonner dismisses past 45px or on a flick faster than
+       0.11px/ms.
+     No height tween: the stack stands expanded (`expand`, in the root
+     layout), every toast at its own height, so an arrival grows nothing.
+     Reduced motion: sonner's own rule turns every transition and animation
+     here off, important-flagged; sonner.svelte fades a toast in and out
+     instead, through the Web Animations API. */
+  [data-sonner-toaster]
+    [data-sonner-toast][data-y-position="bottom"][data-mounted="false"] {
+    --y: translateY(var(--pop-rise));
+  }
+  [data-sonner-toaster]
+    [data-sonner-toast][data-y-position="top"][data-mounted="false"] {
+    --y: translateY(calc(-1 * var(--pop-rise)));
+  }
+  [data-sonner-toaster] [data-sonner-toast]:not([data-swiping="true"]) {
+    transition:
+      transform var(--dur-fade) var(--ease-in-out),
+      opacity var(--dur-fade) var(--ease-out),
+      box-shadow var(--dur-control) var(--ease-out);
+  }
+  [data-sonner-toaster]
+    [data-sonner-toast][data-entering]:not([data-swiping="true"]) {
+    transition:
+      transform var(--dur-panel) var(--ease-out),
+      opacity var(--dur-panel) var(--ease-out),
+      box-shadow var(--dur-control) var(--ease-out);
+  }
+  [data-sonner-toaster]
+    [data-sonner-toast][data-removed="true"]:not([data-swiping="true"]) {
+    transition:
+      transform var(--dur-exit) var(--ease-out),
+      opacity var(--dur-exit) var(--ease-out);
+  }
+  [data-sonner-toaster] [data-sonner-toast][data-swipe-out="true"] {
+    animation-duration: var(--dur-exit);
+    animation-timing-function: var(--ease-out);
   }
 
-  :where(.kit-highlight) .kit-pill.kit-glide {
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        --hl-x var(--dur-control) var(--ease-drawer),
-        --hl-y var(--dur-control) var(--ease-drawer),
-        width var(--dur-control) var(--ease-drawer),
-        height var(--dur-control) var(--ease-drawer);
+  /* A phone's toast sits at the top, under the top bar: at the bottom it
+     lands on the composer, which is exactly where the reader is typing.
+     Full width less the phone bar's edge a side, so a toast lines up with
+     the bar's two ends. The bar does not pad for the notch, so the
+     inset is added here. Sonner's own narrow rules stop at 600px; these hold
+     to 640px, where the layout puts the toaster top-centre. */
+  @media (max-width: 640px) {
+    [data-sonner-toaster][data-y-position="top"][data-x-position="center"] {
+      top: calc(env(safe-area-inset-top) + var(--c-top-bar-h) + var(--space-2));
+      right: var(--c-bar-phone-edge);
+      left: var(--c-bar-phone-edge);
+      width: auto;
+      transform: none;
+    }
+    [data-sonner-toaster][data-y-position="top"][data-x-position="center"]
+      [data-sonner-toast] {
+      right: 0;
+      left: 0;
+      width: 100%;
     }
   }
+}
 
-  :where(.kit-highlight) .kit-pill-trail.kit-fade {
-    transition: --hl-show var(--dur-control) var(--ease-out);
+/* ---- The screen's edges (ScreenEdges): the colours Safari extends past the
+   page at the top and the foot, from what stands at each edge: the bar or
+   the shelf, a scrim, a kit sheet. The strips read --edge-*-background,
+   --edge-*-fade and --edge-shown. */
+@layer components {
+  :root {
+    --edge-top-under: var(--surface-raised);
+    --edge-bottom-under: var(--surface-recess);
+    --edge-top-background: var(--edge-top-under);
+    --edge-bottom-background: var(--edge-bottom-under);
+    --edge-top-fade: 1ms;
+    --edge-bottom-fade: 1ms;
+    --edge-shown: 1;
+    --edge-show-fade: var(--dur-exit);
+    background: var(--edge-top-background);
   }
-
-  /* Less motion: a selection that moves cross-fades instead of gliding,
-     the old place out and the new one in, over --dur-fade. */
-  :where(.kit-highlight) :is(.kit-pill, .kit-pill-trail.kit-fade).kit-swap {
-    transition: --hl-show var(--dur-fade) var(--ease-out);
+  body {
+    background: var(--edge-bottom-background);
   }
+  :root[data-bar~="floating"],
+  :root[data-bar~="hosting"] {
+    --edge-top-under: var(--surface-shelf);
+  }
+  @media (width < 900px), (pointer: coarse) and (orientation: portrait) {
+    :root[data-bar~="hosting"] {
+      --edge-top-under: var(--surface-raised);
+    }
+  }
+  :root[data-scrim~="open"],
+  :root[data-scrim~="lightbox"] {
+    --edge-top-background: color-mix(
+      in srgb,
+      var(--background) var(--scrim-mix),
+      var(--edge-top-under)
+    );
+    --edge-bottom-background: color-mix(
+      in srgb,
+      var(--background) var(--scrim-mix),
+      var(--edge-bottom-under)
+    );
+    --edge-top-fade: var(--dur-panel);
+    --edge-bottom-fade: var(--dur-panel);
+  }
+  :root[data-scrim~="closed"] {
+    --edge-top-fade: var(--dur-exit);
+    --edge-bottom-fade: var(--dur-exit);
+  }
+  :root[data-kit-sheet~="bottom"] {
+    --edge-bottom-background: var(--surface-raised);
+    --edge-bottom-fade: 1ms;
+  }
+  :root[data-kit-sheet~="side"] {
+    --edge-top-background: var(--surface-raised);
+    --edge-bottom-background: var(--surface-raised);
+    --edge-shown: 0;
+    --edge-show-fade: 0s;
+  }
+  :root[data-kit-sheet~="rail"] {
+    --edge-top-background: var(--sidebar);
+    --edge-bottom-background: var(--sidebar);
+  }
+}
 
-  /* ---- Icon cards: New project's templates, the empty fleet's ways in.
-     As many to a row as fit, two on a phone, one on the narrowest. Each
-     card is a bordered box over the list's highlight (components/ui/
-     highlight): the hover ghost under it, and the selection pill drawn in
-     the channel-card recipe (DESIGN.md, Channel cards): 1px brand-solid
-     over surface-recess, at the card's own radius, which the pill takes
-     from the card. Its face is CardFace.
-     A card draws its own 1px border on the pill's rect, so the pill stands
-     over the card's border and fill (z 1) and under its face (CardFace,
-     z 2): left at the highlight's -1, under the card, the card's border
-     covers the frame's brand edge on every pixel and only the hover ghost
-     reads. */
-  .icon-cards {
+/* ---- The bar's glass group (Shell's `tools`): its items (FilesItem,
+   MachinesButton, Jump: `[data-bar-item]`), an item's count
+   (`data-slot="num"`) and its symbol (`data-slot="bar-symbol"`). An item's
+   own utilities (a symbol's tone tint) outrank these by layer. */
+@layer components {
+  [data-slot="tools"] [data-bar-item] {
     position: relative;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: var(--space-3);
-
-    @media (max-width: 639px) {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    @media (max-width: 399px) {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    & :is(.kit-pill, .kit-pill-trail) {
-      z-index: 1;
-      box-sizing: border-box;
-      border: 1px solid var(--brand-solid);
-      background: var(--surface-recess);
-    }
-  }
-
-  .icon-card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-7) var(--space-4) var(--space-4);
-    border: 1px solid var(--border-card);
-    border-radius: var(--radius-md);
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    min-inline-size: var(--c-bar-item);
+    block-size: var(--c-bar-item);
+    border: 0;
+    border-radius: var(--radius-pill);
     background: none;
     color: var(--ink-strong);
-    font: var(--type-meta);
-    text-align: start;
-    cursor: pointer;
     transition: var(--transition-control);
-
-    &:active {
-      background: var(--surface-fill);
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--surface-hover);
+      }
     }
-    &:focus-visible {
-      outline: var(--focus-ring-width) solid var(--focus-ring);
-      outline-offset: -2px;
+    &[data-counted] {
+      --mark-inset: calc((var(--c-bar-item) - var(--c-bar-symbol)) / 2);
+      gap: var(--space-2);
+      padding-inline: var(--mark-inset)
+        calc(var(--mark-inset) + var(--c-bar-symbol) / 12);
     }
-  }
-
-  /* ---- The transcript's columns. Every row kind lays out on these four
-     edges, measured from the row's own inline start: the rail, the glyph
-     cell 11px past it, the 16px cell, and the text column 7px past the
-     cell. Avatars and prose stand at 0. An inner transcript (a delegate's,
-     a subagent's) starts at its parent's text column and repeats them, so
-     every level of nesting steps in by exactly one text column. */
-  .tx-columns {
-    --x-rail: var(--space-2);
-    --x-glyph: calc(var(--x-rail) + var(--space-3));
-    --w-glyph: 16px;
-    --x-text: calc(var(--x-glyph) + var(--w-glyph) + var(--space-2));
-    /* How far a hung body sits from the rail row's content edge (the glyph
-       column): the text column, relative. */
-    --x-hang: calc(var(--x-text) - var(--x-glyph));
-
-    @media (width < 900px) {
-      --x-rail: 0px;
+    [data-slot="num"] {
+      font: var(--type-label);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
   }
-
-  /* A rail-led row: its 2px rail at --x-rail, its content from the glyph
-     column. The head line is the identity mark in the glyph cell, then the
-     row's words at the text column; a disclosure chevron trails the words.
-     Everything the head owns hangs at the text column. */
-  .rail-row {
-    margin-block-start: var(--rail-gap, var(--space-4));
-    margin-inline-start: var(--x-rail);
-    padding-inline-start: calc(var(--x-glyph) - var(--x-rail));
-    background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
+  [data-slot="tools"] [data-slot="bar-symbol"] {
+    inline-size: var(--c-bar-symbol);
+    block-size: var(--c-bar-symbol);
+    color: var(--ink-muted);
   }
-  .rail-line {
+  /* The phone's glass holds Caw alone: under the shell container's desk line
+     (Shell's `@container/shell`, BarGlass `@max-desk/shell`), not the
+     window's, so a phone frame on a desk page draws the phone's group. A
+     container query takes no var(): 900px is --container-desk. */
+  @container shell (width < 900px) {
+    [data-slot="tools"] [data-machines] {
+      display: none;
+    }
+  }
+}
+
+/* ---- Glyphs other components draw: the session hover card's head mark and
+   tone (CawFace, Sprite and the status icons), and a delegate tail's
+   streamed words, which render their own markdown. */
+@layer components {
+  [data-nest-host] [data-session-hover-tone] svg {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+  }
+  [data-nest-host] [data-slot="head"] > [data-slot="mark"] svg {
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
+    color: var(--mark-glyph);
+  }
+  [data-delegate-tail-kind="stream"] [data-slot="text"] * {
+    display: inline;
+    margin: 0;
+    padding: 0;
+    font-size: inherit;
+    line-height: inherit;
+  }
+}
+
+/* ---- The Canvas view's cards (Svelte Flow's nodes): once placed, a card
+   the layout moves eases to its new place; a card new to the canvas fades
+   in where it lands. */
+@layer components {
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="view-canvas"][data-settled] .svelte-flow__node {
+      transition:
+        transform var(--dur-panel) var(--ease-in-out),
+        opacity var(--dur-fade) var(--ease-out);
+
+      @starting-style {
+        opacity: 0;
+      }
+    }
+  }
+}
+
+/* ---- What hangs from a tab (PaneTabs): HangCard's portalled content, the
+   tab's box (TabItem) and bits-ui's floating wrapper, one silhouette with
+   the tab. The card is c-details-card-w wide, the screen less its margins at
+   most; a phone's card stands a margin in from each side, under its tab,
+   clear of the screen's foot. The card's width floor, width and stack are
+   classes PaneTabs gives HangCard. A tab's rim ink (--hang-rim) is read off
+   the tab alone: inherited, its value moving with --pick restyled every
+   element under the tab each frame of a choice. */
+@property --hang-rim {
+  syntax: "*";
+  inherits: false;
+}
+@layer components {
+  /* bits-ui rewrites where the card may stand a few times a frame as it opens
+     and follows its tab; only the card reads those properties (its
+     max-height, HangCard's `details` frame), so they stop at its children
+     and restyle nothing inside. */
+  [data-session-details-popover] > * {
+    --bits-floating-transform-origin: initial;
+    --bits-floating-available-width: initial;
+    --bits-floating-available-height: initial;
+    --bits-floating-anchor-width: initial;
+    --bits-floating-anchor-height: initial;
+    --bits-popover-content-transform-origin: initial;
+    --bits-popover-content-available-width: initial;
+    --bits-popover-content-available-height: initial;
+    --bits-popover-anchor-width: initial;
+    --bits-popover-anchor-height: initial;
+  }
+  /* A tab's rim's ink at the strength it wears it now, read off the tab
+     alone (--hang-rim does not inherit). */
+  [data-session-tabs] [data-slot="tab"] [data-slot="ff-tab"] {
+    --hang-rim: color-mix(
+      in oklab,
+      var(--rim-ink)
+        calc(
+          (
+              var(--rim-rest) + (var(--rim-full) - var(--rim-rest)) *
+                var(--pick)
+            ) *
+            100%
+        ),
+      var(--border-control)
+    );
+  }
+  /* A pinned card follows its tab as the strip scrolls, frame by frame, on a
+     layer of its own; its glide to another tab is the wrapper's move and the
+     card's height together (`data-details-morph`). */
+  [data-bits-floating-content-wrapper][data-session-details] {
+    will-change: transform;
+  }
+  [data-bits-floating-content-wrapper][data-details-morph] {
+    @variant motion-safe {
+      transition: transform var(--dur-pop) var(--ease-drawer);
+    }
+  }
+}
+
+/* ---- The project page: the kit Tabs root in the view strip, and a phone's
+   page children, which are other components' roots. */
+@layer components {
+  [data-slot="strip"] > [data-slot="tabs"] {
     display: flex;
-    align-items: center;
-    gap: calc(var(--x-text) - var(--x-glyph) - var(--w-glyph));
+    flex: 0 1 auto;
     min-inline-size: 0;
   }
-  .rail-cell {
-    inline-size: var(--w-glyph);
-    block-size: var(--w-glyph);
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-  }
-  .rail-hang {
-    margin-inline-start: var(--x-hang);
+  [data-slot="project-page"] {
+    @variant max-phone {
+      & > * {
+        flex-shrink: 0;
+      }
+    }
   }
 }
 
@@ -2005,7 +1570,7 @@
    The rules stop at code blocks and at anything marked .not-prose, the
    plugin's own boundary: what the user or a highlighter rendered keeps its
    own styles. `.prose <type>` keeps the plugin's specificity plus one type,
-   so these win without !important. Plain selectors, not @scope (see the
+   so these win on weight alone. Plain selectors, not @scope (see the
    kit recipes above). */
 @layer utilities {
   .prose {
@@ -2095,80 +1660,17 @@
   color: oklch(from var(--identity-ink) l c var(--identity-h, 120));
 }
 
-/* ---- Chrome materials. Structural translucency, never decoration. */
-@utility material-panel {
-  background: var(--material-panel);
-  backdrop-filter: blur(calc(var(--material-blur) * 1.4))
-    saturate(var(--material-saturate));
-
-  @media (prefers-reduced-transparency: reduce) {
-    background: var(--background);
-    backdrop-filter: none;
-  }
-}
-
-/* ---- Instant press feedback: the hand feels the control before release.
-   Two kinds, chosen by the element's size:
-   - `pressable` scales. Only for a compact, standalone control: a button, an
-     icon button, a chip, a switch — about 44px tall at most, not full width,
-     not one of a segmented group.
-   - `press-tint` darkens the surface and moves nothing. For anything wide,
-     large or grouped: rows, cards, card heads, tabs in a strip, the usage
-     meter. A scale pulls each edge in by size × (1 − 0.97) / 2, so a 300px
-     row's edge moves 4.5px and a press near it can miss, and on a card it
-     reads as the whole block shrinking.
-   The scale sits in the utilities layer after every generated utility rather
-   than inside @utility: Tailwind orders a utility by how many declarations
-   it has, and a second one would move `pressable` ahead of a consumer's own
-   [transition:…] class and lose to it. */
-@utility pressable {
-  transition:
-    transform var(--dur-toggle) var(--ease-out),
-    box-shadow var(--dur-control) var(--ease-out);
-}
-
+/* A row held under a finger (utils/longpress.ts marks it `data-holding`,
+   whatever row it is) takes the press tint (`press-tint`, the behaviours,
+   below) for as long as it is held, over the row's own fill:
+   `#\#` is an id no element has, so `:is(…, #\#)` matches as its other
+   argument does and weighs an id (Selectors 4). Its inks go strong by day,
+   as a pressed control's do. */
 @layer utilities {
-  .pressable {
-    @media (prefers-reduced-motion: no-preference) {
-      /* `[data-pressed]`: the `pressed` variant's kit menu Trigger. */
-      &:is(:active, [data-pressed]) {
-        transform: scale(var(--press-scale));
-      }
-    }
+  :is([data-holding], #\#) {
+    background-color: var(--surface-pressed);
   }
-}
-
-/* The tint must win over a row's own component rule (unlayered, often
-   `background: none` or a hover fill), which wins over any layer. So it is
-   unlayered too, and outranks every such rule by an id's weight: `#\#` is
-   an id no element has, so `:is(…, #\#)` matches as its other argument does
-   and counts as an id (Selectors 4, :is() takes its most specific
-   argument). Not `!important`: an important base value cannot be animated
-   on the compositor (Chromium's kAffectsImportantProperty), so every
-   control's fade into the tint ran on the main thread. A colour change, so
-   it runs under every motion preference. The kit Toggle's on step,
-   `surface-pressed`: by day the hover step is surface-fill's own, so a
-   press under the pointer is the step past it; night keeps surface-fill.
-   `[data-pressed]` is the `pressed` variant's kit menu Trigger. */
-:is(.press-tint:is(:active, [data-pressed]), #\#):not(
-  :disabled,
-  [aria-disabled="true"]
-),
-:is([data-holding], #\#) {
-  background-color: var(--surface-pressed);
-}
-/* Muted ink on the day's press step is 3.93:1 and a selected row's coral
-   ink 4.12:1: those inks inside the pressed control go strong for as long
-   as it is held (8.90:1). Night keeps its inks. */
-@layer utilities {
-  :root:not(.dark)
-    :is(
-      .press-tint:is(:active, [data-pressed]):not(
-          :disabled,
-          [aria-disabled="true"]
-        ),
-      [data-holding]
-    ) {
+  :root:not(.dark) [data-holding] {
     --ink-muted: var(--ink-strong);
     --text-muted: var(--ink-strong);
     --ink-subtle: var(--ink-strong);
@@ -2183,6 +1685,836 @@
   &:focus-visible {
     outline-offset: var(--focus-ring-inset);
   }
+}
+
+/* One side's border taken away whole, as `border-bottom: 0` takes it: no
+   width, no style, the colour back to currentcolor. Tailwind's `border-b-0`
+   only zeroes the width, leaving the side solid in the base border colour;
+   and it has no per-side style. Each is the shorthand itself, which sorts
+   after every border utility of its variant, so it wins over the side's
+   width and colour on the same element as the source rule did. */
+@utility border-t-none {
+  border-top: none;
+}
+@utility border-b-none {
+  border-bottom: none;
+}
+@utility border-l-none {
+  border-left: none;
+}
+@utility border-r-none {
+  border-right: none;
+}
+@utility border-s-none {
+  border-inline-start: none;
+}
+/* One side dashed, the others left as they are (`border-dashed` dashes all
+   four). */
+@utility border-t-dashed {
+  border-top-style: dashed;
+}
+
+/* No transition, as `transition: none` writes it: every longhand back to its
+   initial value. Tailwind's `transition-none` sets only the property, and
+   leaves a duration and curve the element set elsewhere. */
+/* The folder tab's `--pick` taken from the parent: each element on the path
+   from the tab to a reader of it (TabItem; `@property --pick` above does not
+   inherit). */
+@utility pick-inherit {
+  --pick: inherit;
+}
+
+@utility transition-off {
+  transition: none;
+}
+
+/* The property list alone, as `transition-property` writes it. Tailwind's
+   `transition-[…]` also writes the theme's default duration and curve
+   (theme.css `--default-transition-*`), which a rule naming only its
+   properties never set: its element keeps 0s and `ease`. */
+@utility transition-property-* {
+  transition-property: --value([*]);
+}
+
+/* No outline, as `outline: none` writes it: its style, width and colour
+   back to their initial values (none, medium, currentcolor). Tailwind's
+   `outline-none` sets only the style, so the base's focus-ring colour and
+   its :focus-visible width stay. */
+@utility outline-off {
+  outline: none;
+}
+
+/* A background as the `background` shorthand writes it: the colour given,
+   and every other longhand back to its initial value (no image, the clip
+   to the border box, the position at 0% 0%). Tailwind's `bg-*` sets the
+   colour alone. A colour token (`background-surface-raised`), `transparent`,
+   `none`, or a custom property (`background-(--sheet)`). */
+@utility background-* {
+  background: --value(--color-*);
+  background: --value("transparent", "none");
+  background: --value([*]);
+}
+
+/* Declarations Tailwind writes no utility for, each as the source wrote it.
+   A box that takes a value from its parent as it stands (`inherit`): a
+   custom property cannot carry the keyword, which would make the property
+   inherit rather than the value. */
+@utility rounded-inherit {
+  border-radius: inherit;
+}
+/* A `font` shorthand utility files itself (`--tw-sort`, Tailwind's own
+   marker) where the type roles do, before every font longhand utility, so
+   one beside it wins (scripts/role-order.ts holds it). */
+@utility font-inherit {
+  --tw-sort: vertical-align;
+  font: inherit;
+}
+@utility font-family-inherit {
+  font-family: inherit;
+}
+@utility text-size-inherit {
+  font-size: inherit;
+}
+/* `word-break: break-word` (Tailwind's `wrap-break-word` is overflow-wrap,
+   another property). */
+@utility break-word {
+  word-break: break-word;
+}
+/* A running animation held where it stands. */
+@utility animation-paused {
+  animation-play-state: paused;
+}
+/* The muted and subtle inks gone strong inside a control (press-tint sets
+   these two and two more). */
+@utility inks-strong {
+  --ink-muted: var(--ink-strong);
+  --ink-subtle: var(--ink-strong);
+}
+/* Custom properties a component reads, each set from another under a
+   state (`coarse:hit-gap-y-(--row-gap)`). */
+@utility hit-gap-y-* {
+  --hit-gap-y: --value([*]);
+}
+@utility rail-step-* {
+  --rail-step: --value([*]);
+}
+@utility prompt-fs-* {
+  --prompt-fs: --value([*]);
+}
+@utility hit-gap-x-* {
+  --hit-gap-x: --value(--spacing-*, [*]);
+}
+@utility caw-neck-* {
+  --caw-neck: --value([*]);
+}
+@utility press-by-* {
+  --press-by: --value([*]);
+}
+@utility swap-away-* {
+  --swap-away: --value(integer);
+}
+@utility fade-inset-end-* {
+  --fade-inset-end: --value([*]);
+}
+/* A scroll timeline in reach of a head that reads it (HeadFade's
+   `--transcript-head`). A timeline's name is a dashed ident, which a
+   custom property would hand over as its value, so the name is the
+   utility's. */
+@utility timeline-scope-transcript-head {
+  timeline-scope: --transcript-head;
+}
+/* What a press shows by itself on a phone: no tap flash, no callout. */
+@utility tap-highlight-none {
+  -webkit-tap-highlight-color: transparent;
+}
+@utility touch-callout-none {
+  -webkit-touch-callout: none;
+}
+@utility content-visibility-hidden {
+  content-visibility: hidden;
+}
+@utility scheme-inherit {
+  color-scheme: inherit;
+}
+@utility pointer-events-all {
+  pointer-events: all;
+}
+@utility max-h-inherit {
+  max-height: inherit;
+}
+/* A clamp taken off as the source wrote it: Tailwind's `line-clamp-none`
+   also sets overflow, display and orientation. */
+@utility line-clamp-undo {
+  -webkit-line-clamp: unset;
+  line-clamp: none;
+}
+/* The meta size in the mono face as the `font` shorthand sets it: line
+   height normal, every other font subproperty reset. */
+@utility font-mono-meta {
+  --tw-sort: vertical-align;
+  font: var(--text-meta) var(--font-mono);
+}
+/* The box keywords Tailwind does not write (its `items-start` is
+   `flex-start`), and the unsafe alignments. */
+@utility items-box-start {
+  align-items: start;
+}
+@utility items-box-end {
+  align-items: end;
+}
+@utility items-unsafe-end {
+  align-items: unsafe end;
+}
+@utility justify-box-end {
+  justify-content: end;
+}
+@utility justify-self-box-start {
+  justify-self: start;
+}
+@utility justify-self-box-end {
+  justify-self: end;
+}
+@utility self-box-start {
+  align-self: start;
+}
+@utility content-box-start {
+  align-content: start;
+}
+@utility content-unsafe-end {
+  align-content: unsafe end;
+}
+/* `translate` from a custom property as it is, so an unset one computes
+   `none` (Tailwind's `translate-*` composes two axes). */
+@utility translate-raw-* {
+  translate: --value([*]);
+}
+@utility clip-margin-* {
+  overflow-clip-margin: --value(--spacing-*, [*]);
+}
+@utility anchor-none {
+  overflow-anchor: none;
+}
+/* The transcript's scroll as the timeline its head blur reads (HeadFade),
+   the pair of `timeline-scope-transcript-head`. */
+@utility scroll-timeline-transcript-head {
+  scroll-timeline: --transcript-head block;
+}
+/* A suggestion chip's tint, a mix per chip (`--tint`): the border takes the
+   fill's share at 1.5×, mixed in sRGB so the accent reads as if laid over
+   the surface. */
+@utility border-suggest-tint {
+  border-color: color-mix(
+    in srgb,
+    var(--action-solid) calc(var(--tint) * 1.5),
+    var(--surface-raised)
+  );
+}
+@utility bg-suggest-tint {
+  background: color-mix(
+    in srgb,
+    var(--action-solid) var(--tint),
+    var(--surface-raised)
+  );
+}
+@utility bg-suggest-tint-hover {
+  background: color-mix(
+    in srgb,
+    var(--action-solid) calc(var(--tint) + 6%),
+    var(--surface-raised)
+  );
+}
+
+/* ---- What a converted component said that Tailwind has no utility for,
+   named for what it does (tailwindcss.com/docs/adding-custom-styles). */
+
+/* A field's control transition and its height, which carries each new line
+   (DESIGN.md Inputs and fields, Textarea: "a 120ms height transition"). */
+@utility transition-control-grow {
+  transition:
+    var(--transition-control),
+    height var(--dur-control) var(--ease-out);
+}
+
+/* A kit sheet under reduced motion: it fades in and out over the control's
+   beat instead of sliding (DESIGN.md Sheet: "with reduced motion it fades
+   over 120ms"), the sheet's own fade animations. */
+@utility sheet-fade {
+  animation: --theme(--animate-sheet-fade-in);
+  &[data-state="closed"] {
+    animation: --theme(--animate-sheet-fade-out);
+  }
+}
+
+/* The thinking indicator's light: three words wide, ink-strong at its
+   middle, fading to nothing 15% of its width either side. The 300% is the
+   band's geometry, paired with thinking-sheen's -66.6667% and
+   thinking-sheen-hold's 200%. */
+@utility sheen-band {
+  inline-size: 300%;
+  mask-image: linear-gradient(
+    90deg,
+    transparent 35%,
+    var(--mask-opaque) 50%,
+    transparent 65%
+  );
+}
+/* The light over an active thinking step's words: its muted ink, strong at
+   the middle of a band three times the words' width, clipped to the text.
+   The element sets its own ink transparent beside it. */
+@utility step-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--ink-muted) 0% 35%,
+    var(--ink-strong) 50%,
+    var(--ink-muted) 65% 100%
+  );
+  background-size: 300% 100%;
+  background-repeat: repeat;
+  background-clip: text;
+}
+
+/* Rendered markdown that keeps the type of the text it stands in: prose-sm
+   restates its own size and colour on its root, so they are handed back;
+   block margins collapse, each block taking the gap above it and the first
+   giving it back, so the block is exactly as tall as its text. A utility:
+   @tailwindcss/typography writes `.prose` into the utilities layer, which a
+   components rule cannot outrank. */
+@utility markdown-plain {
+  & .prose {
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
+  & :is(p, ul, ol) {
+    margin-block: 0;
+  }
+  & .prose > * {
+    margin-block: var(--space-1) 0;
+  }
+  & .prose > :first-child {
+    margin-block-start: 0;
+  }
+  & :is(ul, ol) {
+    padding-inline-start: var(--space-5);
+  }
+  & strong {
+    color: var(--ink-strong);
+  }
+  & code {
+    font-family: var(--font-mono);
+  }
+}
+
+/* A stroke drawn along its own length: the path carries pathLength="1", its
+   dash is the whole path, and `animate-check-draw` runs the dash's offset
+   from 1 to 0 (DESIGN.md Ticks and dots: "a checkbox tick draws itself along
+   its stroke"). The dash inherits, so an svg's class reaches its paths. */
+@utility dash-unit {
+  stroke-dasharray: 1;
+}
+/* A stroke that keeps its width whatever transform the svg is under (a
+   chevron flipping through scale-y 0). On the path itself: vector-effect
+   does not inherit (`*:vector-non-scaling` from the svg). */
+@utility vector-non-scaling {
+  vector-effect: non-scaling-stroke;
+}
+/* Caw's attention rim: round-capped arcs of the ring's width, each a dash of
+   its own path (pathLength="1"). */
+@utility rim-arc {
+  stroke-width: var(--c-caw-ring);
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+/* A drag handle's dots: a tile of one soft dot. */
+@utility drag-dots {
+  background-image: radial-gradient(
+    circle,
+    var(--ink-subtle) 1px,
+    transparent var(--c-drag-dots-edge)
+  );
+  background-size: var(--c-drag-dots-tile) var(--c-drag-dots-tile);
+}
+
+/* A row's ghost controls rest on the strong fill under a resting pointer by
+   day; by night the kit's own hover is already that fill. */
+@utility ghost-rest-fill {
+  @media (hover: hover) and (pointer: fine) {
+    :root:not(.dark) & [data-ghost]:hover:not(:disabled) {
+      background-color: var(--surface-fill-strong);
+    }
+  }
+}
+
+/* A fold's one row, shut to nothing or open to its content, so the height
+   transitions on grid-template-rows. */
+@utility grid-rows-shut {
+  grid-template-rows: 0fr;
+}
+@utility grid-rows-open {
+  grid-template-rows: 1fr;
+}
+/* Words that take the rest of the row beside a part at its own width. */
+@utility grid-cols-fluid-auto {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+/* A glyph's column before words that take the rest. */
+@utility grid-cols-mark-fluid {
+  grid-template-columns: var(--icon-md) minmax(0, 1fr);
+}
+/* The artifact masonry's row unit: one pixel, each card spanning its height. */
+@utility auto-rows-line {
+  grid-auto-rows: 1px;
+}
+/* The connection band's rows: at least a small button's height; on a phone,
+   room for two lines. */
+@utility auto-rows-band {
+  grid-auto-rows: minmax(var(--c-btn-h-sm), auto);
+}
+@utility auto-rows-band-phone {
+  grid-auto-rows: minmax(max(var(--c-btn-h-sm), 2lh), auto);
+}
+/* A box clipped at its block-start edge only: a slot that cuts what slides
+   in from behind it while its shadow spills past its sides and foot. */
+@utility clip-block-start {
+  clip-path: inset(0 -100vw -100vw);
+}
+
+/* The hooks a component reads, set by its host: the Files lists' floors,
+   an edge fade's length, a hit area's edge. */
+@utility artifacts-min-* {
+  --artifacts-min: --value([*]);
+}
+@utility attachments-min-* {
+  --attachments-min: --value([*]);
+}
+@utility fade-len-* {
+  --fade-len: --value(--spacing-*, [*]);
+}
+@utility hit-edge-hair {
+  --hit-edge: var(--border-width);
+}
+@utility tray-indent-* {
+  --ask-indent: --value(--spacing-*);
+  --fault-indent: --value(--spacing-*);
+}
+
+/* Text from an attribute, as Tailwind's own content utilities write it (so
+   `before:` keeps its content): a count's figure, an empty field's
+   placeholder. */
+@utility content-data-n {
+  --tw-content: attr(data-n);
+  content: var(--tw-content);
+}
+@utility content-placeholder {
+  --tw-content: attr(data-placeholder);
+  content: var(--tw-content);
+}
+
+/* Caw's mark: his still face shows until his animation plays over it. */
+@utility caw-mark-face {
+  & > [data-caw-face] {
+    display: block;
+  }
+  &[data-playing] > [data-caw-face] {
+    visibility: hidden;
+  }
+}
+
+/* A folder tab's drawn parts (fluid-tabs TabItem): the sheet's fill picked
+   in by `--pick`, its hover fill, the status rim's strength, glow, stroke
+   and ink, and the chosen tab's square-shouldered hit with its flared foot. */
+@utility paint-tab-sheet {
+  fill: color-mix(
+    in oklab,
+    var(--sheet) calc(var(--pick) * 100%),
+    var(--tab-fill, var(--surface-recess-deep))
+  );
+}
+@utility paint-tab-hover {
+  fill: var(--tab-hover, var(--surface-hover));
+}
+@utility rim-strength {
+  opacity: calc(
+    var(--rim-rest, 0) + (var(--rim-full, 0) - var(--rim-rest, 0)) * var(--pick)
+  );
+}
+@utility rim-glow {
+  filter: drop-shadow(
+    0 0 var(--tab-rim-glow)
+      color-mix(in oklab, var(--rim-ink, transparent) 50%, transparent)
+  );
+}
+@utility rim-stroke-w {
+  stroke-width: calc(var(--rim-w, 1) * 2px);
+}
+@utility stop-rim-ink {
+  stop-color: var(--rim-ink, transparent);
+}
+@utility clip-tab-foot {
+  clip-path: shape(
+    from 0 100%,
+    arc to var(--flare) calc(100% - var(--flare)) of var(--flare) ccw,
+    line to var(--flare) 0,
+    line to calc(100% - var(--flare)) 0,
+    line to calc(100% - var(--flare)) calc(100% - var(--flare)),
+    arc to 100% 100% of var(--flare) ccw,
+    close
+  );
+}
+
+/* A RowFault whose reason is a note, nothing failed (a not-woken note). */
+@utility fault-ink-muted {
+  --fault-ink: var(--ink-muted);
+}
+/* The compaction line's dash, `--run` long with twice its gap. */
+@utility wave-dash {
+  stroke-linecap: round;
+  stroke-dasharray: var(--run) calc(var(--run) * 2);
+}
+@utility content-rest {
+  --tw-content: attr(data-rest);
+  content: var(--tw-content);
+}
+/* A part at its own width before words that take the rest. */
+@utility grid-cols-auto-fluid {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+/* A well's surface easing its edge and radius as it lands, its opacity on
+   the drawer's curve. */
+@utility transition-well-surface {
+  transition:
+    border-color var(--dur-pop) var(--ease-out),
+    border-radius var(--dur-pop) var(--ease-out),
+    opacity var(--dur-panel) var(--ease-drawer);
+}
+/* Tiles as many to a row as fit at their least width, a lone tile no wider
+   than its row (Limits, a project's spend). */
+@utility grid-cols-usage-tiles {
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, var(--c-usage-tile-min)), 1fr)
+  );
+}
+@utility grid-cols-stat-tiles {
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, var(--c-stat-tile-min)), 1fr)
+  );
+}
+/* The reserve's hatch on a usage meter. */
+@utility hatched {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--border-control) 0 var(--border-width),
+    var(--ring-ground, var(--surface-raised)) var(--border-width) var(--space-1)
+  );
+}
+/* A usage ring's week arc, its account ink moved toward the week's, and the
+   ground it is cut from. */
+@utility arc-week {
+  stroke: color-mix(
+    in oklch,
+    var(--c),
+    var(--account-week-toward) calc(var(--account-week-mix) * 100%)
+  );
+}
+@utility arc-ground {
+  stroke: var(--ring-ground, var(--surface-page));
+}
+/* Svelte Flow's handle reads its colour off this property. */
+@utility xy-handle-brand {
+  --xy-handle-background-color: var(--brand-solid);
+}
+/* ---- The transcript's columns. Every row kind lays out on these four
+   edges, measured from the row's own inline start: the rail, the glyph cell
+   a space-3 past it, the cell (tx-w-glyph), and the text column a space-2
+   past the cell. Avatars and prose stand at 0. An inner transcript (a
+   delegate's, a subagent's) starts at its parent's text column and repeats
+   them, so every level of nesting steps in by exactly one text column. A
+   phone's rows, and a thread's (it has no tool rail), stand the rail on
+   their own edge. */
+@utility tx-columns {
+  --x-rail: var(--tx-x-rail);
+  --x-glyph: calc(var(--x-rail) + var(--space-3));
+  --w-glyph: var(--tx-w-glyph);
+  --x-text: calc(var(--x-glyph) + var(--w-glyph) + var(--space-2));
+  /* How far a hung body sits from the rail row's content edge (the glyph
+     column): the text column, relative. */
+  --x-hang: calc(var(--x-text) - var(--x-glyph));
+
+  @media (width < 900px) {
+    --x-rail: var(--tx-x-rail-narrow);
+  }
+  [data-slot="thread-pane-state"] & {
+    --x-rail: var(--tx-x-rail-narrow);
+  }
+}
+/* A rail-led row: in its place, its 2px rail at --x-rail and its content
+   from the glyph column. The head line is the identity mark in the glyph
+   cell, then the row's words at the text column; a disclosure chevron
+   trails the words. Everything the head owns hangs at the text column. */
+@utility rail-row {
+  margin-block-start: var(--rail-gap, var(--space-4));
+  margin-inline-start: var(--x-rail);
+  padding-inline-start: calc(var(--x-glyph) - var(--x-rail));
+  background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
+}
+@utility rail-line {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--x-text) - var(--x-glyph) - var(--w-glyph));
+  min-inline-size: 0;
+
+  /* A mark line by its own class (DESIGN.md, The Mark Line Rule). */
+  @apply mark-line;
+}
+@utility rail-cell {
+  inline-size: var(--w-glyph);
+  block-size: var(--w-glyph);
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+@utility rail-hang {
+  margin-inline-start: var(--x-hang);
+}
+/* ScreenEdges' top strip paints only above the safe area. */
+@utility edge-mask-top {
+  mask-image: linear-gradient(
+    to bottom,
+    var(--mask-opaque) calc(var(--space-2) + env(safe-area-inset-top)),
+    transparent 0
+  );
+}
+/* The shelf's hairline as one background layer over the shelf (Shell). */
+@utility shelf-hairline {
+  background:
+    linear-gradient(var(--border-hairline), var(--border-hairline)) bottom /
+      100% 1px no-repeat,
+    var(--surface-shelf);
+}
+/* The bar's glass, a step blurrier than the panel material (Shell). */
+@utility glass-backdrop {
+  backdrop-filter: blur(calc(var(--material-blur) * 1.4))
+    saturate(var(--material-saturate));
+}
+/* The bar's join to the strip under it: a flared foot (--f) into a rounded
+   top (--r) over its height (--h); on a phone it runs to the edge. */
+@utility clip-join {
+  clip-path: shape(
+    from 0 100%,
+    arc to calc(var(--f) + 1px) calc(var(--h) - var(--f)) of
+      calc(var(--f) + 1px) ccw,
+    line to calc(var(--f) + 1px) var(--r),
+    arc to calc(var(--f) + var(--r)) 1px of calc(var(--r) - 1px) cw,
+    line to calc(100% - var(--r)) 1px,
+    arc to calc(100% - 1px) var(--r) of calc(var(--r) - 1px) cw,
+    line to calc(100% - 1px) 100%,
+    close
+  );
+}
+@utility clip-join-phone {
+  clip-path: shape(
+    from 0 100%,
+    arc to calc(var(--f) + 1px) calc(var(--h) - var(--f)) of
+      calc(var(--f) + 1px) ccw,
+    line to calc(var(--f) + 1px) var(--r),
+    arc to calc(var(--f) + var(--r)) 1px of calc(var(--r) - 1px) cw,
+    line to 100% 1px,
+    line to 100% 100%,
+    close
+  );
+}
+/* A transcript head's layer coming in over the first c-head-fade of scroll,
+   on the transcript's scroll timeline (HeadFade). */
+@utility head-fade-scrub {
+  animation: var(--animate-head-fade);
+  animation-timeline: --transcript-head;
+  animation-range: 0 var(--c-head-fade);
+}
+@utility will-change-opacity {
+  will-change: opacity;
+}
+/* The session details card's settings row: the model chip shrinks before the
+   others. The chips themselves are ui/chip `size: "compact"`. */
+@utility session-details-chips {
+  & [data-model-chip] {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+}
+/* ModelSection's picker in the details card's model popover: no surface of
+   its own, the search as wide as what is typed in it (autowidth, a character
+   at a time), and the list scrolled in whole rows (c-model-list-max). */
+@utility session-details-model-pop {
+  & [data-slot="picker"] {
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+  & [data-slot="search"] input {
+    --autowidth: 1;
+    @variant motion-safe {
+      transition: width var(--dur-control) var(--ease-out);
+    }
+  }
+  & [data-slot="list"] {
+    height: auto;
+    max-height: var(--c-model-list-max);
+    overflow: hidden auto;
+    scroll-snap-type: y mandatory;
+    /* The row gap, so a snapped row's neighbour shows none of itself. */
+    scroll-padding: var(--space-row);
+  }
+  & [data-slot="row"] {
+    scroll-snap-align: start;
+  }
+}
+/* A tab parked on you (`data-needs`): its label in the strong ink, chosen or
+   not, coming up at the panel's pace. The label is named by its own
+   attribute (`data-ff-tab`): keyed to `data-slot`, a state change restyled
+   every slot in the tab. A utility, so it outranks TabItem's
+   `text-ink-muted` by weight. */
+@utility pane-tab-needs {
+  &[data-needs] [data-ff-tab] {
+    color: var(--ink-strong);
+
+    @variant motion-safe {
+      transition: color var(--dur-panel) var(--ease-out);
+    }
+  }
+}
+
+/* ---- Recipes: custom properties a component's states rewrite, each as its
+   source wrote them. */
+
+/* A pane tab's end pads (PaneTabs), set on the tab so `--px` and
+   `--overlap` resolve there: a pixel short of the kit's at the end, and on
+   the phone's row a title's room at each end that clears the overlap. */
+@utility pane-tab-pads {
+  --px-end: calc(var(--px) - var(--border-width));
+
+  @media (width < 900px) {
+    --px-start: calc(var(--overlap) + var(--c-tab-lead));
+    --px-end: calc(var(--overlap) + var(--radius-lg) - var(--border-width));
+  }
+}
+/* The strengths a pane tab's rim takes (PaneTabs `RIM`), solid under
+   Increase Contrast and reduced transparency. Read on the tab, so an
+   ancestor's `--tab-rim-mix-*` (the folder proof page) still reaches it. */
+@utility pane-tab-rims {
+  --rim-subtle: var(--tab-rim-mix-subtle);
+  --rim-chosen: var(--tab-rim-mix-chosen);
+  --rim-idle: var(--tab-rim-mix-idle);
+
+  @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+    --rim-subtle: 1;
+    --rim-chosen: 1;
+    --rim-idle: 1;
+  }
+}
+/* The compaction divider's chevron clock and line ink (CompactionDivider),
+   which every part of the row reads. How far in the chevron is: 0 away, 1
+   beside the word. It leaves a little quicker than it arrives; a state that
+   shows it names the arrival's clock. */
+@utility divider-chevron {
+  --line: var(--brand-solid);
+  --chev: 0;
+  --chev-dur: var(--dur-control);
+  --chev-ease: var(--ease-out);
+
+  /* In for keyboard focus and while the brief is open. */
+  &:is(:focus-visible, [aria-expanded="true"]) {
+    --chev: 1;
+    --chev-dur: var(--dur-toggle);
+    --chev-ease: var(--ease-arrive);
+  }
+  /* Under the pointer the line and word step to the stronger vermillion and
+     the chevron comes in. */
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(:disabled) {
+      --line: var(--brand-ink-strong);
+      --chev: 1;
+      --chev-dur: var(--dur-toggle);
+      --chev-ease: var(--ease-arrive);
+    }
+  }
+  /* A finger has no hover: what opens always shows that it does. */
+  @media (pointer: coarse) {
+    &:not(:disabled) {
+      --chev: 1;
+    }
+  }
+  /* Settling, nothing offers the brief yet. */
+  &[data-settling] {
+    --chev: 0;
+  }
+}
+/* The divider chevron's mark turning on the spot (CompactionDivider): it
+   slides, grows and sharpens on the row's chevron clock, and turns on the
+   toggle's. Set on the mark, so `--chev-dur` and `--chev-ease` resolve
+   there. A transitioned filter can hang WebKit; this mark is driven on
+   WebKit by scripts/probe-kit/specs/web/safari-blurs.ts, so no other
+   element takes this. */
+@utility divider-chevron-turn {
+  transition:
+    translate var(--chev-dur) var(--chev-ease),
+    scale var(--chev-dur) var(--chev-ease),
+    filter var(--chev-dur) var(--chev-ease),
+    rotate var(--dur-toggle) var(--ease-in-out);
+}
+/* A turn's pad (the transcript skeleton's reader well), a step down at the
+   narrow breakpoint. */
+@utility turn-pad {
+  --pad: var(--space-3);
+
+  @media (width < 900px) {
+    --pad: var(--space-2);
+  }
+}
+/* A clip path, from a custom property on the element
+   (`clip-path-(--fold-clip)`). */
+@utility clip-path-* {
+  clip-path: --value([*]);
+}
+/* A name set down a column (a folded board column's rail). */
+@utility writing-vertical-rl {
+  writing-mode: vertical-rl;
+}
+/* Named grid areas, the areas string in a custom property on the element
+   (`grid-areas-(--row-areas)`). */
+@utility grid-areas-* {
+  grid-template-areas: --value([*]);
+}
+/* A gap taken from the parent, as `gap: inherit` writes it (ArtifactMenu's
+   name and promoted tag keep the kit item's own gap). */
+@utility gap-inherit {
+  gap: inherit;
+}
+/* The project page's grid (project/[id]): the page's area and Caw's dock
+   beside or under it (CawFloat). */
+@utility grid-area-page {
+  grid-area: page;
+}
+@utility grid-area-dock {
+  grid-area: dock;
+}
+/* Right to left as the property alone: the `dir` attribute also sets
+   unicode-bidi. */
+@utility dir-rtl {
+  direction: rtl;
+}
+/* The ground a ring is cut against, set from a colour token under a state
+   (`hover:ring-ground-surface-hover`). */
+@utility ring-ground-* {
+  --ring-ground: --value(--color-*);
+}
+/* The standard `line-clamp` property alone: Tailwind's `line-clamp-N` writes
+   the `-webkit-` form with its display and overflow. */
+@utility line-clamp-std-* {
+  line-clamp: --value(integer);
 }
 
 /* A field that frames a borderless editor with its own controls beside it
@@ -2200,14 +2532,15 @@
 }
 
 /* The same for a search strip whose only border is the rule under it: the
-   rule takes the ring's colour and weight. Important, because the strip's
-   own (unlayered) rule sets that border and would otherwise win over any
-   layer. */
+   rule takes the ring's colour and weight. The strip's own border is a
+   utility (`border-b-border-hairline`, ModelSection), and this selector
+   outweighs it ((0,2,1) to (0,1,0)) in the same layer. */
 @utility field-underline {
   &:has(:is(input, textarea, [contenteditable]):focus-visible) {
-    border-bottom-color: var(--focus-ring) !important;
-    box-shadow: inset 0 calc(-1 * (var(--focus-ring-width) - 1px)) 0
-      var(--focus-ring) !important;
+    border-bottom-color: var(--focus-ring);
+    box-shadow: inset 0
+      calc(-1 * (var(--focus-ring-width) - var(--border-width))) 0
+      var(--focus-ring);
   }
   & :is(input, textarea, [contenteditable]):focus-visible {
     outline: none;
@@ -2215,11 +2548,43 @@
 }
 
 /* A changing figure: digits of one width, so a count or a price that
-   ticks does not move what stands beside it. Important, because a type role
-   is a `font` shorthand, which resets font-variant-numeric, and a
-   component's own (unlayered) rule would otherwise win over any utility. */
+   ticks does not move what stands beside it. A role's utility
+   (`type-<role>`) and `font-inherit` are the `font` shorthand, which resets
+   font-variant-numeric, and sort before this one (`--tw-sort`), so `num`
+   beside either wins by order. The name is DESIGN.md's (The Tabular Figure
+   Rule: "carries `.num`"); the value is Tailwind's own `tabular-nums`. */
 @utility num {
-  font-variant-numeric: tabular-nums !important;
+  @apply tabular-nums;
+}
+
+/* A line pinned to its end whose start fades out over its first 30%
+   (Thinking's folded tail: the newest words show, the oldest fade). */
+@utility tail-fade {
+  mask-image: linear-gradient(to right, transparent, var(--mask-opaque) 30%);
+}
+
+/* Crepe's inline LaTeX editor (MarkdownEditor) writes `class="container"`,
+   which Tailwind's `container` utility reaches: its full width, and at each
+   of Tailwind's own breakpoints (40rem, 48rem, 64rem, 80rem, 96rem) that
+   width at most. The theme's breakpoints (theme.css) would cap it at
+   theirs; these keep the widths it has. No element of the dashboard's own
+   writes `container`. */
+@utility container {
+  @media (width >= 40rem) {
+    max-width: 40rem;
+  }
+  @media (width >= 48rem) {
+    max-width: 48rem;
+  }
+  @media (width >= 64rem) {
+    max-width: 64rem;
+  }
+  @media (width >= 80rem) {
+    max-width: 80rem;
+  }
+  @media (width >= 96rem) {
+    max-width: 96rem;
+  }
 }
 
 /* A measured figure among Figtree words (a time, a share left, a count, an
@@ -2234,22 +2599,19 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A scroller that scrolls without drawing a bar. */
-@utility no-scrollbar {
-  scrollbar-width: none;
-}
+/* The shared sheet, utilities under the names its consumers write: the
+   new-session dialog's (it says how it keeps its cascade). Tailwind inlines
+   an import where it stands, so it comes after the rules above: its rules
+   follow them in the cascade. */
+/* biome-ignore-start lint/correctness/noInvalidPositionAtImportRule: Tailwind's compiler inlines each import in place; the place is the cascade order */
+@import "./lib/cawco/spawn/ns-theme.css";
+/* biome-ignore-end lint/correctness/noInvalidPositionAtImportRule: the import above */
 
 /* ---- Motion is opt-in: every travelling transition and keyframe animation
    in this sheet and in the components sits under
    `@media (prefers-reduced-motion: no-preference)`, and motion driven from
    JavaScript asks `motionOk` (motion/curves.svelte.ts). Opacity and colour
    fades that carry state run either way. The kit's keyframes: */
-@keyframes kit-tip-in {
-  from {
-    opacity: 0;
-    translate: var(--kit-tip-from);
-  }
-}
 @keyframes kit-tip-fade {
   from {
     opacity: 0;
@@ -2258,7 +2620,8 @@
 /* The list swap (motion/list-swap): the model list's harness change and the
    home's Working/Finished switch. Global, because the rows name them from
    an inline style: Svelte rewrites `animation:` inside a component's own
-   <style> to a scoped name but cannot rewrite a string built in script. */
+   scoped styles to a scoped name but cannot rewrite a string built in
+   script. */
 @keyframes ns-in-r {
   from {
     opacity: 0;
@@ -2298,23 +2661,6 @@
     transform: translateY(8px);
   }
 }
-@keyframes kit-dialog-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-}
-@keyframes kit-dialog-out {
-  to {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-}
-@keyframes kit-skeleton-sweep {
-  to {
-    translate: 100% 0;
-  }
-}
 @keyframes kit-fade-in {
   from {
     opacity: 0;
@@ -2334,32 +2680,536 @@
     opacity: var(--breath-floor);
   }
 }
-/* A mark that is live work takes the breath by its class (the in-flight
-   tool glyph, a delegate's live tool row). */
-@media (prefers-reduced-motion: no-preference) {
-  .breathe {
-    animation: breath var(--breath) var(--ease-in-out) infinite;
-  }
-}
 
 /* ---- The theme switch (theme.svelte.ts): a view transition of the root
    alone. The old page fades out as the new one fades in, one --dur-fade on
    --ease-out: the platform's own cross-fade at the product's pace, with no
    shape and no blur. Nothing else on the page carries a
-   view-transition-name, so the root is the only thing taken. */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: var(--dur-fade);
-  animation-timing-function: var(--ease-out);
+   view-transition-name, so the root is the only thing taken. Only the user
+   agent's own transition styles compete here, and any author layer outranks
+   those, so it stands with the element defaults. */
+@layer base {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: var(--dur-fade);
+    animation-timing-function: var(--ease-out);
+  }
 }
 
-/* The flip itself starts no element transitions (theme.svelte.ts). The
-   elements only: a pseudo-element whose transition is on a colour names
-   itself where it is styled (the transcript's wells, MessageRow), and naming
-   ::before/::after made WebKit resolve both pseudo-elements of every element
-   on the page to add the class and again to remove it (a ~20ms longer flip
-   frame at 1440). */
-:root.theme-flip,
-:root.theme-flip * {
-  transition: none !important;
+/* The flip itself starts no element transitions: `overrides`, above. */
+
+/* ---- Sheets ------------------------------------------------------------
+   What scrolls in a sheet names the scroll timeline (`--sheet-scroll`) its
+   header's seam follows (the kit drawer's `timeline-scope`, above): a
+   scroll-driven animation, which Tailwind has no utility for. */
+@utility kit-sheet-scroll {
+  scroll-timeline: --sheet-scroll block;
+}
+/* A sheet's header's seam (DESIGN.md, Drawer: "a seam under it that comes
+   in over the first 11px of the content's scroll"): its hairline comes in as
+   what is under it scrolls, so a line scrolled up under the title is cut on
+   a seam, never left loose. Inside a sheet only (ui/drawer/drawer-header's
+   `in-data-[slot=drawer-content]:`): elsewhere the name resolves to no
+   timeline, which Chromium paints as the animation's end. */
+@utility sheet-seam {
+  animation: kit-sheet-seam linear both;
+  animation-timeline: --sheet-scroll;
+  animation-range: 0px var(--space-3);
+}
+@keyframes kit-sheet-seam {
+  to {
+    border-block-end-color: var(--border-hairline);
+  }
+}
+
+/* ---- Event Calendar ----------------------------------------------------
+   Event Calendar's DOM (@event-calendar/core renders every element here;
+   none takes a class from us but the chips' `classNames`), on the calendar
+   view's host. Its own sheet is in `vendor`, so these win by layer. */
+@layer components {
+  [data-slot="view-calendar"] {
+    /* The library's palette, from the tokens, on `.ec`, where its sheet
+       declares it. Its sheet also pins `.ec` to `color-scheme: light`, which
+       would resolve every `light-dark()` token below to its day half at
+       night: the calendar takes the page's scheme instead. */
+    & .ec {
+      color-scheme: inherit;
+      --ec-bg-color: var(--surface-raised);
+      --ec-text-color: var(--ink-strong);
+      --ec-border-color: var(--border-hairline);
+      --ec-color-400: var(--border-control);
+      --ec-color-300: var(--border-hairline);
+      --ec-color-200: var(--surface-hover);
+      --ec-color-100: var(--surface-band);
+      --ec-color-50: var(--surface-band);
+      --ec-button-bg-color: var(--surface-raised);
+      --ec-button-border-color: var(--border-control);
+      --ec-button-text-color: var(--ink-strong);
+      --ec-button-active-bg-color: var(--surface-hover);
+      --ec-button-active-border-color: var(--border-control);
+      --ec-button-active-text-color: var(--ink-strong);
+      --ec-today-bg-color: var(--surface-band);
+      --ec-highlight-color: var(--surface-hover);
+      --ec-event-bg-color: var(--surface-raised);
+      --ec-event-text-color: var(--ink-strong);
+      --ec-bg-event-color: var(--surface-band);
+      --ec-bg-event-opacity: 1;
+      --ec-event-col-gap: var(--space-1);
+      --ec-now-indicator-color: var(--brand-solid);
+      --ec-popup-bg-color: var(--surface-raised);
+      color: var(--ink-strong);
+      font: var(--type-meta);
+    }
+    & .ec-toolbar {
+      margin-block-end: var(--space-3);
+    }
+    & .ec-title {
+      font: var(--type-title);
+    }
+    & .ec-button {
+      block-size: var(--c-btn-h-sm);
+      padding-inline: var(--space-3);
+      border-radius: var(--radius-md);
+      font: var(--type-label);
+      transition: background-color var(--dur-control) var(--ease-out);
+    }
+    & .ec-button-group .ec-button:first-child {
+      border-start-end-radius: 0;
+      border-end-end-radius: 0;
+    }
+    & .ec-button-group .ec-button:last-child {
+      border-start-start-radius: 0;
+      border-end-start-radius: 0;
+    }
+    & .ec-main {
+      border-radius: var(--radius-lg);
+      background: var(--surface-raised);
+      box-shadow: var(--shadow-tile);
+    }
+    & :is(.ec-day-head, .ec-slots, .ec-all-day) {
+      font: var(--type-meta);
+      color: var(--ink-muted);
+    }
+    /* A chip: as tall as the library makes its slot (a task is a half-hour
+       event, one slot), the title in the label role on one line, cut short
+       with an ellipsis where the slot is narrow. */
+    & .ec-event.chip {
+      padding: 0 var(--space-2);
+      align-items: center;
+      overflow: hidden;
+      border-radius: var(--radius-xs);
+      font: var(--type-label);
+      line-height: 1;
+      box-shadow: none;
+    }
+    & .ec-time-grid .ec-event.chip .ec-event-body {
+      flex-direction: row;
+      align-items: center;
+      min-inline-size: 0;
+    }
+    & .ec-event-time {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      font-variant-ligatures: none;
+      margin-inline-end: var(--space-2);
+    }
+    /* In the week's grid the chip's place is its time: the title has the
+       whole line. The list keeps the time, in its own column. */
+    & .ec-time-grid .ec-event.chip .ec-event-time {
+      display: none;
+    }
+    & .ec-event.chip .ec-event-title {
+      min-inline-size: 0;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    & .ec-event.chip-set {
+      background: var(--surface-raised);
+      color: var(--ink-strong);
+      box-shadow: inset 0 0 0 1px var(--border-control);
+    }
+    & .ec-event.chip-done {
+      background: var(--status-done-bg);
+      color: var(--status-done-ink);
+    }
+    & .ec-event.chip-attn {
+      background: var(--status-attn-bg);
+      color: var(--status-attn-ink);
+    }
+    /* In the phone's list a chip is inset on both sides of its day: the
+       library sizes an event at its day's full width, so its width gives way
+       to the margins rather than pushing the far one past the card's edge. */
+    & .ec-list .ec-event.chip {
+      box-sizing: border-box;
+      inline-size: auto;
+      min-block-size: var(--c-btn-h-lg);
+      margin-inline: var(--space-2);
+    }
+  }
+}
+/* Svelte Flow's attribution (@xyflow/svelte renders it) on every graph
+   canvas, in the meta role on the canvas's own ground in the subtle ink:
+   Svelte Flow's grey wash and grey link read as a stray box in dark. The
+   link reaches the 24px pointer floor (DESIGN.md, The 24 Pointer Rule) and
+   its ring sits on its own box. @xyflow's sheet is in `vendor`, under this. */
+@layer components {
+  :is(
+      [data-slot="workflow-canvas"],
+      [data-slot="view-canvas"],
+      [data-slot="decision-graph"],
+      [data-slot="canvas-map"]
+    )
+    .svelte-flow__attribution {
+    --xy-attribution-background-color: transparent;
+    font: var(--type-meta);
+
+    & a {
+      display: inline-flex;
+      align-items: center;
+      min-height: var(--c-pointer-floor);
+      color: var(--ink-subtle);
+
+      &:focus-visible {
+        outline-offset: var(--focus-ring-inset);
+      }
+    }
+  }
+}
+
+/* ---- Behaviours --------------------------------------------------------
+   The behaviours the whole app names, one custom utility each
+   (tailwindcss.com/docs/adding-custom-styles#adding-custom-utilities), so a
+   class is the one way any of them reaches an element. Each draws at zero
+   weight (`:where(&)`) where the element's own utilities must still win, as
+   they did when these were component rules. */
+
+/* Touch hit area (DESIGN.md, The 44 Touch Rule). On a coarse pointer the
+   control's tappable area grows to 44×44 (WCAG 2.5.8) through a transparent
+   ::after centred on it; the drawn box and the layout do not change. A
+   cluster whose controls sit closer than that sets --hit-gap-x / --hit-gap-y
+   to the gap between them, and each extension stops at the midpoint, so
+   neighbours never overlap. A positioned host keeps its own position and is
+   already the ::after's containing block. That block is the host's padding
+   box, so the 50% term already measures from inside the border; a bordered
+   host sets --hit-edge to its border width so the gap stop does too. */
+@utility touch-hit {
+  @media (pointer: coarse) {
+    :where(&) {
+      position: relative;
+    }
+    :where(&)::after {
+      content: "";
+      position: absolute;
+      inset-inline: max(
+        min(0px, calc(50% - var(--c-touch-floor) / 2)),
+        calc(var(--hit-gap-x, var(--c-touch-floor)) / -2 - var(--hit-edge, 0px))
+      );
+      inset-block: max(
+        min(0px, calc(50% - var(--c-touch-floor) / 2)),
+        calc(var(--hit-gap-y, var(--c-touch-floor)) / -2 - var(--hit-edge, 0px))
+      );
+    }
+  }
+}
+
+/* Pointer hit area (DESIGN.md, The 24 Pointer Rule): the fine-pointer twin
+   of touch-hit, reaching 24px. --hit-scale is the zoom of a scaled canvas
+   (the workflow graph), so the area stays 24px on screen. */
+@utility pointer-hit {
+  @media (pointer: fine) {
+    :where(&) {
+      position: relative;
+    }
+    :where(&)::after {
+      content: "";
+      position: absolute;
+      inset-inline: max(
+        min(0px, calc(50% - var(--c-pointer-floor) / 2 / var(--hit-scale, 1))),
+        calc(
+          var(--hit-gap-x, var(--c-pointer-floor) / var(--hit-scale, 1)) / -2 -
+            var(--hit-edge, 0px)
+        )
+      );
+      inset-block: max(
+        min(0px, calc(50% - var(--c-pointer-floor) / 2 / var(--hit-scale, 1))),
+        calc(
+          var(--hit-gap-y, var(--c-pointer-floor) / var(--hit-scale, 1)) / -2 -
+            var(--hit-edge, 0px)
+        )
+      );
+    }
+  }
+}
+
+/* The mark line (DESIGN.md, The Mark Line Rule): a mark and the words set
+   beside it, centred on one cross axis. Centring boxes centres line boxes,
+   and a line box's middle is not its words' middle (Figtree's ascent and
+   descent sit unevenly about its x-height, and Blink floors the
+   half-leading). So a run of words is trimmed to its x-height band (the
+   alphabetic baseline up 1ex) and given back the room the trim took as
+   padding, half above and half below: the run keeps its line's height, and
+   the middle of its box is the middle of its x-height. `mark-text` is that
+   run standing alone (a pill's own words, a grid cell's label). */
+@utility mark-text {
+  :where(&) {
+    text-box: trim-both ex alphabetic;
+    padding-block: calc((1lh - 1ex) / 2);
+  }
+}
+/* A row of a mark and its words: every run of words in it is trimmed. What
+   is centred as a box is left alone: an svg or img, the kit's cells
+   (.rail-cell, .icon-swap, a button's icon slot among them, .mark-cell), and
+   anything that says so with `data-box` (a keycap among them). A run that
+   truncates clips with `overflow: clip`: Gecko does not trim a scroll
+   container. */
+@utility mark-line {
+  :where(&)
+    > :where(:not(svg, img, .rail-cell, .icon-swap, .mark-cell, [data-box])) {
+    @apply mark-text;
+  }
+}
+/* A mark beside words that wrap stands on their first line: the row is set
+   to its start, and the mark in a cell one line box tall centres it where
+   the first line's x-height centres. */
+@utility mark-cell {
+  :where(&) {
+    display: grid;
+    flex: none;
+    place-items: center;
+    block-size: 1lh;
+  }
+}
+
+/* Two things sharing one slot; the outgoing one animates out too. How far
+   each has given way (--swap-away, 0 shown to 1 gone) is the one thing that
+   transitions; it fades and blurs by it, and where motion is welcome
+   shrinks by it to a quarter (DESIGN.md, Tree mark: "scale 0.25 to 1, blur
+   4px to 0"). */
+@utility icon-swap {
+  :where(&) {
+    display: inline-grid;
+    place-items: center;
+  }
+  :where(& > *) {
+    display: inline-flex;
+    grid-area: 1 / 1;
+    opacity: calc(1 - var(--swap-away));
+    filter: blur(calc(var(--space-1) * var(--swap-away)));
+    transition: --swap-away var(--icon-swap-dur, var(--dur-pop)) var(--ease-out);
+
+    @media (prefers-reduced-motion: no-preference) {
+      scale: calc(1 - 0.75 * var(--swap-away));
+    }
+  }
+  :where(&) > :where([data-active="false"]) {
+    --swap-away: 1;
+    pointer-events: none;
+  }
+}
+
+/* Instant press feedback (DESIGN.md: "a compact control scale to 0.97 on
+   press and a wide or grouped one tint"): the hand feels the control before
+   release. Two kinds, chosen by the element's size:
+   - `pressable` scales. Only for a compact, standalone control: a button, an
+     icon button, a chip, a switch, about 44px tall at most, not full width,
+     not one of a segmented group.
+   - `press-tint` takes the pressed fill and moves nothing. For anything
+     wide, large or grouped: rows, cards, card heads, tabs in a strip. A
+     scale pulls each edge in by size × (1 − 0.97) / 2, so a 300px row's edge
+     moves 4.5px and a press near it can miss.
+   `[data-pressed]` is the `pressed` variant's kit menu Trigger. `pressable`
+   sorts as its transition (`--tw-sort`), so a consumer's `transition-colors`
+   still gives way to it. */
+@utility pressable {
+  --tw-sort: transition-property;
+  transition:
+    transform var(--dur-toggle) var(--ease-out),
+    box-shadow var(--dur-control) var(--ease-out);
+
+  @media (prefers-reduced-motion: no-preference) {
+    &:is(:active, [data-pressed]) {
+      transform: scale(var(--press-scale));
+    }
+  }
+}
+/* The tint wins over the element's own fill and hover fill: `#\#` is an id
+   no element has, so `:is(…, #\#)` matches as its other arguments do and
+   weighs an id (Selectors 4). Not an important declaration: an important
+   base value cannot be animated on the compositor (Chromium's
+   kAffectsImportantProperty). A colour change, so it runs under every motion
+   preference. The kit Toggle's on step, `surface-pressed`. By day, muted ink
+   on it is 3.93:1 and a selected row's coral ink 4.12:1, so those inks go
+   strong for as long as it is held (8.90:1); night keeps its inks. */
+@utility press-tint {
+  &:is(:active, [data-pressed], #\#):not(:disabled, [aria-disabled="true"]) {
+    background-color: var(--surface-pressed);
+  }
+  @variant light {
+    &:is(:active, [data-pressed]):not(:disabled, [aria-disabled="true"]) {
+      --ink-muted: var(--ink-strong);
+      --text-muted: var(--ink-strong);
+      --ink-subtle: var(--ink-strong);
+      --selected-ink: var(--ink-strong);
+    }
+  }
+}
+
+/* Live work breathes (DESIGN.md): a mark that is live work (the in-flight
+   tool glyph, a delegate's live tool row) takes the one shared breath. */
+@utility breathe {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: --theme(--animate-breath);
+  }
+}
+
+/* The mono face never ligates (with `code` and `pre`, base): this extends
+   Tailwind's own `font-mono`, which sets the face. */
+@utility font-mono {
+  font-variant-ligatures: none;
+}
+
+/* ---- Layout ------------------------------------------------------------
+   A pane whose group's divider holds the keyboard (paneforge marks it
+   `data-active="keyboard"` while it has focus): a step from the keyboard is
+   a jump, so the panes either side tween to it (ui/resizable Pane, `grid`).
+   Here rather than in variants.css, which `bun run variants` writes whole. */
+@custom-variant pane-keyed (:where([data-pane-group]:has(> [data-pane-resizer][data-active="keyboard"])) > &);
+/* The phone's session strip (ui/fluid-tabs TabsList, `strip="session"`):
+   its ends fade over a short run, each cut short at a tab drawn chosen
+   (TabsList's `--fade-cap-start`/`--fade-cap-end`), so a tab slides under
+   the toggle and Caw rather than being cut. Five stops a side, an eased
+   ramp no `mask-*` utility draws. */
+@utility strip-edge-mask {
+  --fade-run-start: min(
+    var(--fade-start),
+    calc(var(--fade-cap-start, var(--strip-uncapped)) / 1.5)
+  );
+  --fade-run-end: min(
+    var(--fade-end),
+    var(--fade-cap-end, var(--strip-uncapped))
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    transparent calc(var(--fade-run-start) * 0.375),
+    var(--mask-opaque-a15) calc(var(--fade-run-start) * 0.75),
+    var(--mask-opaque-a60) calc(var(--fade-run-start) * 1.125),
+    var(--mask-opaque) calc(var(--fade-run-start) * 1.5),
+    var(--mask-opaque) calc(100% - var(--fade-run-end)),
+    var(--mask-opaque-a90) calc(100% - var(--fade-run-end) * 0.75),
+    var(--mask-opaque-a50) calc(100% - var(--fade-run-end) * 0.5),
+    var(--mask-opaque-a10) calc(100% - var(--fade-run-end) * 0.25),
+    transparent
+  );
+}
+
+/* ---- App recipes -------------------------------------------------------
+   The app's shared behaviours as Tailwind utilities
+   (tailwindcss.com/docs/adding-custom-styles#adding-custom-utilities). The
+   looks are kit recipes: ui/chip, ui/menu-item, ui/section-header
+   `sectionHeadVariants`, ui/dock-shell, ui/button `sendVariants`,
+   ui/icon-card. */
+
+/* Nesting: children hang off their parent on a hairline rail that leaves
+   the bottom edge of the parent's glyph, under its centre; each child joins
+   it with an elbow that curves (--radius-sm) from the rail into an arm
+   ending at the child's glyph, and the last child's elbow ends the rail. One
+   primitive for every nested list (a project → its sessions, session →
+   delegates, delegate → its own, run → steps), each level stepping in by the
+   same --nest-pad and its rows --tree-gap apart. A child with children of
+   its own holds its own `kit-nest` list inside its item, so every parent has
+   one rail of its own. The lines are drawn by the children themselves, so
+   as rows open, reflow or leave, the rail grows and shrinks with them.
+   Set on the child list (measured by motion/branch `nestFrom`):
+     --nest-x       the rail's x from the list's left edge,
+     --nest-lead    the parent glyph's bottom to the list's top,
+     --nest-glyph-y a child glyph's centre from its row's top,
+     --nest-reach   a child row's left edge to its glyph,
+     --nest-in      the rail to the child row's left edge,
+     --nest-gap     the gap between child rows.
+   Drawn in and out by the fold (motion/branch): a list drawing
+   (`data-branch-draw`) cuts each stretch where the line's head is, by two
+   lengths the fold moves (--nest-cut-r, --nest-cut-b); a list held
+   (`data-branch-hold`) is cut whole from below until its piece is built.
+   The line's weight and every length it is placed by are whole device
+   pixels (--dpx, device-pixel.ts), so it is the same crisp line in every
+   frame. */
+@utility kit-nest {
+  /* Valid until measured, so nothing built on it drops a declaration. */
+  --nest-x: 0px;
+  --nest-reach: 0px;
+  /* The rail to a child row's left edge: what is left of one --tree-step
+     after the half mark the rail stands under and the row's own inset. */
+  --nest-half: calc(var(--mark-size, 18px) / 2);
+  --nest-in: calc(var(--tree-step) - var(--nest-half) - var(--nest-reach));
+  --nest-glyph-y: var(--space-4);
+  --nest-gap: var(--tree-gap);
+  --nest-lead: 0px;
+  --nest-pad: calc(var(--nest-x) + var(--nest-in));
+  --nest-line: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
+  --nest-left: round(
+    calc(var(--nest-x) - var(--nest-pad) - var(--nest-line) / 2),
+    var(--dpx, 1px)
+  );
+  position: relative;
+
+  & > li {
+    position: relative;
+  }
+  & > li::before,
+  & > li::after {
+    content: "";
+    position: absolute;
+    z-index: 1;
+    left: var(--nest-left);
+    pointer-events: none;
+    border-color: var(--nest-ink);
+    border-style: solid;
+    border-width: 0;
+  }
+  /* The elbow: down the rail from the row above, round the curve, and out
+     along the arm to the child's glyph. */
+  & > li::before {
+    top: calc(-1 * var(--nest-gap));
+    width: round(
+      calc(var(--nest-in) + var(--nest-reach) + var(--nest-line) / 2),
+      var(--dpx, 1px)
+    );
+    height: round(
+      calc(var(--nest-glyph-y) + var(--nest-gap) + var(--nest-line) / 2),
+      var(--dpx, 1px)
+    );
+    border-left-width: var(--nest-line);
+    border-bottom-width: var(--nest-line);
+    border-bottom-left-radius: var(--radius-sm);
+  }
+  & > li:first-child::before {
+    top: calc(-1 * var(--nest-lead));
+    height: round(
+      calc(var(--nest-glyph-y) + var(--nest-lead) + var(--nest-line) / 2),
+      var(--dpx, 1px)
+    );
+  }
+  /* The rail on past this child to the next one, from where the elbow
+     starts to curve away; the last child has none. */
+  & > li::after {
+    top: calc(var(--nest-glyph-y) - var(--radius-sm));
+    bottom: calc(-1 * var(--nest-gap));
+    border-left-width: var(--nest-line);
+  }
+  & > li:last-child::after {
+    content: none;
+  }
+  [data-branch-draw]& > li::before,
+  [data-branch-draw]& > li::after,
+  [data-branch-draw] & > li::before,
+  [data-branch-draw] & > li::after {
+    clip-path: inset(-9999px var(--nest-cut-r) var(--nest-cut-b) -9999px);
+  }
+  [data-branch-hold]& > li::before,
+  [data-branch-hold]& > li::after,
+  [data-branch-hold] & > li::before,
+  [data-branch-hold] & > li::after {
+    --nest-cut-b: 9999px;
+  }
 }

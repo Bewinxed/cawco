@@ -14,27 +14,7 @@
 <span
   data-moved={moved || undefined}
   aria-hidden="true"
-  class={["disc", resolved && "resolved", moved && "moved"]}>{number}</span
+  data-resolved={resolved || undefined}
+  class="inline-grid place-items-center shrink-0 size-c-pin rounded-pill bg-action-solid text-on-action type-label num data-resolved:opacity-40 data-moved:bg-surface-fill data-moved:text-ink-muted"
+  >{number}</span
 >
-
-<style>
-  .disc {
-    display: inline-grid;
-    place-items: center;
-    flex-shrink: 0;
-    width: var(--c-pin);
-    height: var(--c-pin);
-    border-radius: var(--radius-pill);
-    background: var(--action-solid);
-    color: var(--on-action);
-    font: var(--type-label);
-    font-variant-numeric: tabular-nums;
-  }
-  .resolved {
-    opacity: 0.4;
-  }
-  .moved {
-    background: var(--surface-fill);
-    color: var(--ink-muted);
-  }
-</style>

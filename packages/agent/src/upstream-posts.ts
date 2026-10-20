@@ -327,7 +327,7 @@ export const makeUpstreamPost = async (
             said: "CawCo did not push: the workspace's clone is gone from this machine.",
           };
     }
-    default:
+    case "mcp":
       return {
         ok: false,
         said: "A connection's post is made by the hub, not a machine.",

@@ -27,9 +27,12 @@
  *  - Approve settles it: the hub holds no ask and the card folds;
  *  - nothing reaches the page's error or unhandled-rejection reporters.
  */
+
+import type { Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../../scratch-fleet";
 import { answering, settled } from "../../answering";
 import {
+  buttonNames,
   COMPOSER,
   type Kit,
   type KitFleet,
@@ -116,13 +119,16 @@ const cardState = () => {
         ':is([data-slot="new-page-field"], [data-slot="add-machine-dialog-field"], [data-slot="project-chip-field"], [data-slot="location-section-field"], [data-slot="task-fields-field"], [data-slot="task-activity-field"], [data-slot="task-labels-field"], [data-slot="field-field"], [data-slot="project-spend-field"], [data-slot="mk-input-field"], [data-field], [data-slot="tool-group-field"], [data-slot="composer-field"], [data-slot="prompt-field"], [data-slot="finder-field"], [data-slot="workflow-run-view-field"])'
       ) ?? []),
     ].map((field) => field.textContent?.replace(/\s+/g, " ").trim() ?? ""),
-    // A button's label and its pending wording stand in one cell
-    // ("ApproveApproving…"): read by how it starts.
-    buttons: [...(card?.querySelectorAll("button") ?? [])].map(
-      (button) => button.textContent?.replace(/\s+/g, " ").trim() ?? ""
-    ),
   };
 };
+
+/** The ask card's buttons, by their accessible names (`buttonNames`). */
+const ASK_CARD = '[data-slot="ask"]';
+/** Approve's accessible name, however it goes on. */
+const APPROVE = /^Approve/;
+/** The ask card's Approve, by its accessible name. */
+const approveOf = (page: Page) =>
+  page.locator(ASK_CARD).getByRole("button", { name: APPROVE }).first();
 
 async function leg(
   kit: Kit,
@@ -167,11 +173,7 @@ async function leg(
 
   const shown = await answering(page, async () => {
     await fleet.send(id, `${ASK} slim the exports`);
-    return settled(
-      page
-        .locator('[data-slot="ask"] button', { hasText: "Approve" })
-        .waitFor({ timeout: 120_000 })
-    );
+    return settled(approveOf(page).waitFor({ timeout: 120_000 }));
   });
   kit.check(
     `${label}: the page answers within a second while the ask arrives`,
@@ -180,15 +182,18 @@ async function leg(
   );
   // The parts come up one after the other once the shape stands.
   await page.waitForTimeout(1000);
-  const card = await page.evaluate(cardState);
+  const card = {
+    ...(await page.evaluate(cardState)),
+    buttons: await buttonNames(page.locator(ASK_CARD)),
+  };
   kit.check(
     `${label}: the composer grows into the ask, its heading the command's description, the command and timeout drawn, Approve and Deny in hand`,
     card.drawn &&
       card.text.includes(DESCRIPTION) &&
       card.command > 0 &&
       card.fields.some((field) => field.includes("300000")) &&
-      card.buttons.some((text) => text.startsWith("Approve")) &&
-      card.buttons.some((text) => text.startsWith("Deny")),
+      card.buttons.some((name) => name.startsWith("Approve")) &&
+      card.buttons.some((name) => name.startsWith("Deny")),
     JSON.stringify(card)
   );
 
@@ -208,9 +213,7 @@ async function leg(
   );
 
   const approved = await answering(page, async () => {
-    await page
-      .locator('[data-slot="ask"] button', { hasText: "Approve" })
-      .tap();
+    await approveOf(page).tap();
     const answered = await settled(
       until(
         "the hub holds no ask",
