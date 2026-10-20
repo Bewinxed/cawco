@@ -76,6 +76,8 @@ interface Form {
 }
 /** Start's state on the line: `enabled` or `disabled`. */
 const START = /· start "[^"]*" (\w+)/;
+/** The crumb is quoted: it holds the separator itself ("Sessions · Fork"). */
+const CRUMB = /· crumb "([^"]*)"/;
 const FIELD = (name: string) => new RegExp(`· ${name} ([^·]*?)(?: ·|$)`);
 const formOf = (line: string): Form | undefined => {
   if (!line.startsWith("form: ")) {
@@ -83,7 +85,7 @@ const formOf = (line: string): Form | undefined => {
   }
   const read = (name: string) => line.match(FIELD(name))?.[1]?.trim() ?? "";
   return {
-    crumb: read("crumb").replaceAll('"', ""),
+    crumb: line.match(CRUMB)?.[1] ?? "",
     cwd: read("cwd"),
     machines: read("machines"),
     mode: read("mode"),
