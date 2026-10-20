@@ -181,7 +181,10 @@
   });
 </script>
 
-<span class="icon-swap kit-slot" data-over={Icon === undefined || undefined}>
+<span
+  class="icon-swap kit-slot data-over:justify-items-start"
+  data-over={Icon === undefined || undefined}
+>
   {#if Icon}
     <span data-active={phase === "idle" && !ringShown}
       ><Icon class="size-(--btn-icon)" /></span

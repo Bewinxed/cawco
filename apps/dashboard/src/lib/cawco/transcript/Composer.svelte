@@ -1954,7 +1954,7 @@
       const target = event.target as Element;
       if (!shell?.contains(target)) {
         wheel?.back();
-      } else if (target.closest(".grown-halo")) {
+      } else if (target.closest('[data-slot="grown-halo"]')) {
         wheel?.grab(event);
       }
     };
@@ -3046,7 +3046,7 @@
            session asking for something is the one loud colour), across the
            composer's width, standing in the tray row as the tray's chips do:
            a tray chip high, a tray gap off the pill. It stands under the
-           grown shape (`.grown-halo`, z 1): brought back, the card grows over
+           grown shape (grown.ts's halo, z 1): brought back, the card grows over
            the bar as it fades. -->
       {@const [first] = askQuestions}
       <div

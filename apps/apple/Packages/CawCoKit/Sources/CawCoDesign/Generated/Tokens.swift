@@ -822,6 +822,10 @@ public enum Size {
     public static let cBtnWordsBlur: Double = 2
     /// The 24 Pointer Rule's floor (DESIGN.md Focus and hit areas): a small control's least hit box under a fine pointer.
     public static let cPointerFloor: Double = 24
+    /// wave 2: W9-behaviours. The 44 Touch Rule's floor (DESIGN.md Focus and hit areas): every control's least hit box under a coarse pointer, reached through `touch-hit`.
+    public static let cTouchFloor: Double = 44
+    /// wave 2: W9-behaviours. How far past three characters the thinking line's light band reaches either side of its middle (the `shimmer` utility, DESIGN.md Thinking indicator).
+    public static let cShimmerReach: Double = 40
     /// The screen's margin a popover or a floating card keeps each side (DESIGN.md Breakpoints: "popovers widen to the viewport less 24px").
     public static let cScreenMargin: Double = 12
     /// A new-session popover's width.

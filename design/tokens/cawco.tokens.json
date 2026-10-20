@@ -5329,6 +5329,22 @@
       },
       "$description": "The 24 Pointer Rule's floor (DESIGN.md Focus and hit areas): a small control's least hit box under a fine pointer."
     },
+    "c-touch-floor": {
+      "$type": "dimension",
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      },
+      "$description": "wave 2: W9-behaviours. The 44 Touch Rule's floor (DESIGN.md Focus and hit areas): every control's least hit box under a coarse pointer, reached through `touch-hit`."
+    },
+    "c-shimmer-reach": {
+      "$type": "dimension",
+      "$value": {
+        "value": 40,
+        "unit": "px"
+      },
+      "$description": "wave 2: W9-behaviours. How far past three characters the thinking line's light band reaches either side of its middle (the `shimmer` utility, DESIGN.md Thinking indicator)."
+    },
     "c-screen-margin": {
       "$type": "dimension",
       "$value": {

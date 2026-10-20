@@ -397,6 +397,8 @@
   --spacing-c-btn-gap: var(--c-btn-gap);
   --spacing-c-btn-words-blur: var(--c-btn-words-blur);
   --spacing-c-pointer-floor: var(--c-pointer-floor);
+  --spacing-c-touch-floor: var(--c-touch-floor);
+  --spacing-c-shimmer-reach: var(--c-shimmer-reach);
   --spacing-c-screen-margin: var(--c-screen-margin);
   --spacing-c-pop-w: var(--c-pop-w);
   --spacing-c-pop-max-h: var(--c-pop-max-h);

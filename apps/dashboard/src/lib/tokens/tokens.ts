@@ -440,6 +440,8 @@ export type TokenSize =
   | "size.c-btn-gap"
   | "size.c-btn-words-blur"
   | "size.c-pointer-floor"
+  | "size.c-touch-floor"
+  | "size.c-shimmer-reach"
   | "size.c-screen-margin"
   | "size.c-pop-w"
   | "size.c-pop-max-h"

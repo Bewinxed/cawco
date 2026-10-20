@@ -142,8 +142,6 @@ const twMergeConfig = {
       // The custom-property setters, one group to a property.
       "hit-gap-x": [{ "hit-gap-x": [validators.isAny] }],
       "hit-gap-y": [{ "hit-gap-y": arbitrary }],
-      "hit-gap-coarse": [{ "hit-gap-coarse": arbitrary }],
-      "join-radius": [{ "join-radius": arbitrary }],
       "caw-neck": [{ "caw-neck": arbitrary }],
       "press-by": [{ "press-by": arbitrary }],
       "swap-away": [{ "swap-away": [validators.isInteger] }],
@@ -199,8 +197,6 @@ const twMerge = extendTailwindMerge<
   | "ring-ground"
   | "hit-gap-x"
   | "hit-gap-y"
-  | "hit-gap-coarse"
-  | "join-radius"
   | "caw-neck"
   | "press-by"
   | "swap-away"
