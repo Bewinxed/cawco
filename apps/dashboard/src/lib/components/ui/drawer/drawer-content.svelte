@@ -41,6 +41,12 @@
   });
 
   export type DrawerContentLooks = VariantProps<typeof drawerContentVariants>;
+
+  /** The bottom sheet's 100×6 grabber (DESIGN.md, Drawer), above its one
+      header; the kit dialog's sheet under the phone line wears it too. */
+  export const grabberVariants = tv({
+    base: "mx-auto mt-4 mb-3 h-c-grabber-h w-c-grabber-w shrink-0 rounded-pill bg-neutral-2",
+  });
 </script>
 
 <script lang="ts">
@@ -48,10 +54,13 @@
   import { Drawer as DrawerPrimitive } from "vaul-svelte";
   import { mirror } from "#lib/cawco/page-marks.js";
   import { visible } from "#lib/cawco/visible-viewport.svelte.js";
+  import { IconClose } from "#lib/icons.js";
   import type { WithoutChildrenOrChild } from "#lib/utils.js";
   import { cn } from "#lib/utils.js";
+  import { sheetHeadVariants } from "./drawer-header.svelte";
   import DrawerOverlay from "./drawer-overlay.svelte";
   import DrawerPortal from "./drawer-portal.svelte";
+  import DrawerTitle from "./drawer-title.svelte";
 
   let {
     ref = $bindable(null),
@@ -63,10 +72,23 @@
     pad,
     height,
     look,
+    title,
+    titleHidden = false,
     children,
     ...restProps
   }: DrawerPrimitive.ContentProps &
     DrawerContentLooks & {
+      /**
+       * The sheet's name. The kit draws the recipe's one header with it
+       * (DESIGN.md, Drawer: the grabber, then the title in the title role
+       * and Close at the trailing edge, the seam under it), so no sheet
+       * stands without a name or a way to put it away. A hosted sheet's
+       * host draws its head and its Close; the name is read out only.
+       */
+      title?: string;
+      /** The name read out but not drawn, on a sheet whose content names
+          itself on screen; Close still stands at the header's trailing edge. */
+      titleHidden?: boolean;
       portalProps?: WithoutChildrenOrChild<ComponentProps<typeof DrawerPortal>>;
       /**
        * The sheet fills a host of its own (the preview standing on the
@@ -145,6 +167,8 @@
    * two. They reach the sheet through its `style` prop: a property written
    * on the node is lost whenever that attribute is redrawn.
    */
+  const head = sheetHeadVariants();
+
   const place = $derived(
     !hosted && visible.height > 0
       ? `--visible-top:${visible.top}px;--visible-height:${visible.height}px;`
@@ -180,8 +204,25 @@
     {#if !hosted}
       <div
         data-slot="drawer-grabber"
-        class="mx-auto mt-4 mb-3 hidden h-c-grabber-h w-c-grabber-w shrink-0 rounded-pill bg-neutral-2 group-data-[vaul-drawer-direction=bottom]/drawer-content:block"
+        class={cn(
+          grabberVariants(),
+          "hidden group-data-[vaul-drawer-direction=bottom]/drawer-content:block"
+        )}
       ></div>
+    {/if}
+    {#if title && hosted}
+      <DrawerTitle visible={false}>{title}</DrawerTitle>
+    {:else if title}
+      <div class={head.head()} data-slot="drawer-header">
+        <DrawerTitle visible={!titleHidden}>{title}</DrawerTitle>
+        <DrawerPrimitive.Close
+          aria-label="Close"
+          class={cn(head.close(), "ms-auto")}
+          title="Close"
+        >
+          <IconClose aria-hidden="true" />
+        </DrawerPrimitive.Close>
+      </div>
     {/if}
     <!-- vaul takes pointer capture on every press in the sheet, which leaves
          a text field without iOS's hold-to-select and Paste callout: a press

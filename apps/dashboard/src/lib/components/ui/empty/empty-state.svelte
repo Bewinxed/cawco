@@ -67,9 +67,11 @@
     class: className,
     ...restProps
   }: Omit<HTMLAttributes<HTMLDivElement>, "title"> &
-    EmptyStateLooks & {
-      icon?: Component;
-      mark?: Snippet;
+    EmptyStateLooks &
+    /* The mark is the recipe's (DESIGN.md, Empty: "a 20px Solar duotone
+       mark"), so no empty state stands without one: the glyph, or what is
+       drawn in its place. */
+    ({ icon: Component; mark?: never } | { icon?: never; mark: Snippet }) & {
       title: string;
       /** Why there is nothing; absent where the title and the action say it all. */
       line?: string | Snippet;

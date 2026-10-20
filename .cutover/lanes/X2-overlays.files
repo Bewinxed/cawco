@@ -145,3 +145,5 @@ apps/dashboard/src/lib/components/ui/tooltip/tooltip-portal.svelte
 apps/dashboard/src/lib/components/ui/tooltip/tooltip-provider.svelte
 apps/dashboard/src/lib/components/ui/tooltip/tooltip-trigger.svelte
 apps/dashboard/src/lib/components/ui/tooltip/tooltip.svelte
+apps/dashboard/src/routes/(app)/motion/overlays/+page.svelte
+apps/dashboard/src/lib/components/ui/dialog/scrim-stack.ts

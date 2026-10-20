@@ -86,10 +86,7 @@
             <Button {...props} size="sm" variant="outline">Sheet</Button>
           {/snippet}
         </Sheet.Trigger>
-        <Sheet.Content side="left">
-          <Sheet.Header>
-            <Sheet.Title>Sheet</Sheet.Title>
-          </Sheet.Header>
+        <Sheet.Content side="left" title="Sheet">
           <div data-slot="body" class="p-space-4">
             <Button data-inside="sheet" onclick={() => inside("sheet")}
               >Press</Button
@@ -146,10 +143,7 @@
             <Button {...props} size="sm" variant="outline">Drawer</Button>
           {/snippet}
         </Drawer.Trigger>
-        <Drawer.Content>
-          <Drawer.Header>
-            <Drawer.Title>Drawer</Drawer.Title>
-          </Drawer.Header>
+        <Drawer.Content title="Drawer">
           <div data-slot="body" class="p-space-4">
             <Button data-inside="drawer" onclick={() => inside("drawer")}
               >Press</Button

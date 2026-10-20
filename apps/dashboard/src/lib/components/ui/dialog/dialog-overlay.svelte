@@ -8,10 +8,11 @@
    * dialog's, sheet's and drawer's. It fades in over --dur-panel and out
    * over --dur-exit with its surface. One that leaves before its dialog
    * says it is closed (the lightbox flying its picture home, `leaving`)
-   * fades out then.
+   * fades out then. One opened over another open scrim draws nothing of
+   * its own (`data-stacked`, scrim-stack.ts): there is one scrim.
    */
   export const scrimVariants = tv({
-    base: "bg-scrim backdrop-blur-(--scrim-blur) data-[leaving]:animate-kit-fade-out data-closed:animate-kit-fade-out data-open:animate-scrim-in",
+    base: "bg-scrim backdrop-blur-(--scrim-blur) data-[leaving]:animate-kit-fade-out data-closed:animate-kit-fade-out data-open:animate-scrim-in data-[stacked]:bg-transparent data-[stacked]:backdrop-filter-none",
   });
 
   export type ScrimLooks = VariantProps<typeof scrimVariants>;
@@ -22,6 +23,7 @@
   import { scrimMark } from "#lib/cawco/page-marks.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
+  import { scrimStack } from "./scrim-stack.js";
 
   let {
     ref = $bindable(null),
@@ -52,6 +54,7 @@
       {...props}
       style:pointer-events={pressable(open)}
       {@attach scrimMark}
+      {@attach scrimStack}
     ></div>
   {/snippet}
 </DialogPrimitive.Overlay>

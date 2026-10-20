@@ -2,6 +2,7 @@
   import { Dialog as SheetPrimitive } from "bits-ui";
   import { scrimMark } from "#lib/cawco/page-marks.js";
   import { scrimVariants } from "#lib/components/ui/dialog/dialog-overlay.svelte";
+  import { scrimStack } from "#lib/components/ui/dialog/scrim-stack.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
 
@@ -25,6 +26,7 @@
       {...props}
       style:pointer-events={pressable(open)}
       {@attach scrimMark}
+      {@attach scrimStack}
     ></div>
   {/snippet}
 </SheetPrimitive.Overlay>

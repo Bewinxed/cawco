@@ -3,6 +3,7 @@
   import type { ComponentProps } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { dialogTrayVariants } from "#lib/components/ui/dialog/dialog-content.svelte";
+  import { grabberVariants } from "#lib/components/ui/drawer/drawer-content.svelte";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import {
     cn,
@@ -31,7 +32,8 @@
 
   // A dialog whose body changes (a failure line, a pending label, a row
   // folding shut) tweens to its new height; the tray around it follows. It is
-  // centred, so it grows from the middle.
+  // centred, so it grows from the middle. Under the phone line it is the
+  // dialog's bottom sheet (dialogTrayVariants), grabber and all.
   const resize = morph();
   const tray = dialogTrayVariants();
 </script>
@@ -41,7 +43,7 @@
   <AlertDialogPrimitive.Content
     class={cn(
       tray.tray(),
-      "group/alert-dialog-content fixed top-1/2 left-1/2 z-(--layer-float) w-full -translate-x-1/2 -translate-y-1/2 outline-none data-[size=default]:max-w-80 data-[size=default]:phone:max-w-112 data-[size=sm]:max-w-80",
+      "group/alert-dialog-content data-[size=sm]:phone:max-w-80",
       className
     )}
     data-size={size}
@@ -53,7 +55,11 @@
     <!-- Drawn through `child`: bits-ui then holds the body's lock only while
          it is open, and clears it at once (floating-presence). -->
     {#snippet child({ props, open })}
-      <div {...props} style:pointer-events={pressable(open)}>
+      <div
+        {...props}
+        style:pointer-events={pressable(open)}
+        style:--sheet-away="translate3d(0, 100%, 0)"
+      >
         <!-- One column no wider than the tray: a row's unwrapping title is cut
              to it, never pushes past it. -->
         <div
@@ -64,6 +70,11 @@
           )}
           {@attach resize}
         >
+          <div
+            aria-hidden="true"
+            class={cn(grabberVariants(), tray.grabber(), "-mb-3")}
+            data-slot="alert-dialog-grabber"
+          ></div>
           {@render children?.()}
         </div>
       </div>
