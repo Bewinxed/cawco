@@ -160,7 +160,7 @@
       >
         <div
           data-slot="top"
-          class="flex min-h-c-btn-h-sm flex-wrap items-center gap-x-space-3 gap-y-space-2 px-space-1"
+          class="flex min-h-c-btn-h flex-wrap items-center gap-x-space-3 gap-y-space-2 px-space-1"
         >
           <span
             aria-hidden="true"
@@ -194,7 +194,6 @@
                       .value,
                   });
                 }}
-                size="sm"
                 value={pinned?.id}
               >
                 {#each accounts as account (account.id)}

@@ -76,6 +76,13 @@ device: desk 1440×900 fine/hover, phone 390×844 coarse/none), dark unless said
 - fixed (X2/X1 routed): the chosen-channel tick drawn in a status hue (L580): a chosen mark is the selected pair. after: `channel tick fill oklch(0.34 0.075 40)` (selected-bg, dark).
 - holds (X2/X1 routed): the SectionFrame head centre, config-mcp's ⋯, destructive acts, the empty states on subagents, phone and skills, and config-accounts-routing's sticky bar: read on this tree above (`head pair centre 96.5 actions centre 96.5`, mcp `trailing gap 7`, `"Remove account" color oklch(0.86 0.07 12)`, routing `footer 521,832 876x68 … fade 40px op 1`).
 
+## One field height (X1's swaps, done in the lane)
+
+- fixed: accounts/StrategyPicker.svelte the Pinned account NativeSelect took `size="sm"` (30) against the Select trigger's 36 (L747, L252); dropped, and its card's head row holds the field's height (`min-h-c-btn-h`) whether the select stands or not. after: routing 1440 `select "Pinned account" 843,183 95x36`, 390 `230,187 101x36`.
+- fixed: KeyValueRows.svelte a row of two 36px fields beside a 30px `icon-sm` Remove (two heights in one row, L729): Remove takes the default `icon` 36. after (mcp-editor, Command): 1440 `input "Environment name" 521,524 285x36 | row: input "Environment valu" h36, button "Remove this line" h36`; 390 `43,573 94x36 | … h36, … h36` (docW 390).
+- fixed (024345569, read again here): AccountEditor reserve, AtLimitBlock wait and over, SigninPanel Code with its Done, AccountSetup's paste-a-code row with Open link and Done, KeyValueRows' fields: no `size="sm"` field remains. after: `input "reserve" 704,440 64x36`, `input "c23-wait" 730,789 64x36`, `input "c23-over" 758,839 64x36`, `input "Code from the sign-in page" 1065,299 240x36 | row: button "DoneChecking…" h36` (390 `23,299 266x36 | … h36`).
+- holds: `git grep -n 'size="sm"'` over the list: 63 left, every one a Button (61), the CopyButton beside a device code (1) or the ToolMatrix Required Switch (1), none a field; no row of them holds a field (action rows: Send key, Sign in, Approve/Deny, Sync all, Retry, Disconnect, the head's and sections' small actions).
+
 ## My calls (no DESIGN.md line settles them)
 
 - StrategyFigure keeps its recessed stage: it is a drawn figure on the stat well's footing (L674, L507), not a nested card.

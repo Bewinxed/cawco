@@ -62,7 +62,7 @@
         aria-label="Remove {row.key || 'this line'}"
         disabled={index === rows.length - 1}
         onclick={() => rows.splice(index, 1)}
-        size="icon-sm"
+        size="icon"
         tone="muted"
         variant="ghost"
       >
