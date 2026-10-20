@@ -1,0 +1,112 @@
+/* The house edge fade (DESIGN.md), one definition: the app reads it
+   through app.css, and every component canvas reads it in its page's own
+   styles (packages/agent stage-host build.ts, chrome.ts), where an embed's
+   story too wide for its embed scrolls sideways under it (canvas
+   runtime.ts `fitToEmbed`). */
+
+/* The edge fades of a scroller (.kit-edge-fade: the tab track, the board,
+   a view's pane, a wide embed's frame), registered so the scroll-driven
+   animation can interpolate them as lengths. */
+@property --fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+/* Where a tab track's edge fades are cut short (TabsList `capFades`) and
+   the run each fade takes from it (PaneTabs' phone row): read by the
+   track's own mask alone, and moved as the track scrolls under a swipe,
+   so none of it is handed down to the tabs, which would all be styled
+   again for it each frame. Any value, none at first (the fades' own
+   `100vw` fallback stands). */
+@property --fade-cap-start {
+  syntax: "*";
+  inherits: false;
+}
+@property --fade-cap-end {
+  syntax: "*";
+  inherits: false;
+}
+
+@layer components {
+  /* A scroller whose content runs past an edge fades that edge out — only
+     that edge, only while there is more to scroll to. The fade lengths ride
+     the scroller's own scroll: at the start nothing is behind, so the
+     leading edge is sharp; at the end nothing is ahead. A scroller that
+     does not overflow has no scroll timeline, so neither edge fades.
+     `-block` is the same down the page. The tabs track, the board and a
+     view's pane share it. A scroller may cut an edge's fade short where
+     something must stay whole (`--fade-cap-start`, `--fade-cap-end`: the
+     tabs track, for the tab drawn chosen).
+     Each edge is its own animation over only the run where it moves, the
+     first and last 6% of the scroll, filled outside it: between them
+     neither changes, so a long scroll asks no restyle or repaint of the
+     scroller for its every frame (edge-fade-perf). */
+  .kit-edge-fade {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 min(var(--fade-start), var(--fade-cap-start, 100vw)),
+      #000 calc(100% - min(var(--fade-end), var(--fade-cap-end, 100vw))),
+      transparent
+    );
+    animation-timeline: scroll(self inline);
+  }
+  /* `--fade-inset-end` stands the foot's fade clear of a bar docked over
+     the scroller's foot (a phone's views bar), so it ends at the bar's top
+     edge and what passes under the bar is the fade's, as a footer's
+     (DESIGN.md: the house edge fade above it so the notes pass under it). */
+  .kit-edge-fade-block {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--fade-start),
+      #000 calc(100% - var(--fade-inset-end, 0px) - var(--fade-end)),
+      transparent calc(100% - var(--fade-inset-end, 0px))
+    );
+    animation-timeline: scroll(self block);
+  }
+  /* Spelled out, never the `animation` shorthand: the build's minifier
+     writes a shorthand's unset duration as `0s`, and a scroll-driven
+     animation of no duration jumps to its end where its range begins. The
+     fade's length: a phone's narrow view keeps it short, so it reads as an
+     edge, not a band across the content. */
+  .kit-edge-fade,
+  .kit-edge-fade-block {
+    /* A faded scroller is its own stacking context, whatever its mask:
+       nothing in it rises over its fades, whatever its z-index. */
+    isolation: isolate;
+    animation-name: kit-edge-fade-start, kit-edge-fade-end;
+    animation-duration: auto;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-range:
+      0% 6%,
+      94% 100%;
+    --fade-len: 40px;
+
+    @media (max-width: 639px) {
+      --fade-len: 16px;
+    }
+  }
+  @keyframes kit-edge-fade-start {
+    from {
+      --fade-start: 0px;
+    }
+    to {
+      --fade-start: var(--fade-len);
+    }
+  }
+  @keyframes kit-edge-fade-end {
+    from {
+      --fade-end: var(--fade-len);
+    }
+    to {
+      --fade-end: 0px;
+    }
+  }
+}

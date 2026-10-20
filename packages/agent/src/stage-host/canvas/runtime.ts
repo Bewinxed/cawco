@@ -91,6 +91,8 @@ export interface SectionModule {
 
 export interface BootOptions {
   adapter: Adapter;
+  /** The house edge fade's sheet (the dashboard's edge-fade.css), set in the page: a wide embed's frame scrolls under it (`fitToEmbed`). */
+  edgeFade: string;
   /** The house faces' `@font-face` rules (Figtree, JetBrains Mono), their files served beside the canvas. */
   faces: string;
   /** How to load each section's module, by its states file. */
@@ -859,7 +861,10 @@ export function boot(options: BootOptions): void {
    * narrower story centres in it at its own size. The scale stops where the
    * story's words would be drawn under EMBED_TYPE_FLOOR: a story still
    * wider than the embed there scrolls sideways in its frame
-   * (`data-cawco-wide`), its words legible.
+   * (`data-cawco-wide`), its words legible, under the house edge fade
+   * (DESIGN.md `kit-edge-fade`, its sheet set in the page by the chrome),
+   * drawn on the side where more is hidden and gone at each end of the
+   * scroll.
    */
   function fitToEmbed(frame: Frame): void {
     const width = widthOf(frame.story, frame.column.width);
@@ -869,10 +874,9 @@ export function boot(options: BootOptions): void {
     const scale =
       type === null ? fit : Math.max(fit, Math.min(1, EMBED_TYPE_FLOOR / type));
     frame.body.style.zoom = scale < 1 ? String(scale) : "";
-    frame.el.toggleAttribute(
-      "data-cawco-wide",
-      width !== null && width * scale > room + 0.5
-    );
+    const wide = width !== null && width * scale > room + 0.5;
+    frame.el.toggleAttribute("data-cawco-wide", wide);
+    frame.el.classList.toggle("kit-edge-fade", wide);
   }
 
   /** The font size most of a story's words stand at, in its own px (CSS zoom leaves the computed size alone); null before it draws any. */
@@ -2257,6 +2261,7 @@ export function boot(options: BootOptions): void {
     canvas,
     spec,
     tokens: options.tokens,
+    edgeFade: options.edgeFade,
     faces: options.faces,
     view,
     sections: () => sections,

@@ -105,6 +105,8 @@ const CANVAS = new URL("./canvas/runtime.ts", import.meta.url).pathname;
 const REPO = new URL("../../../../", import.meta.url).pathname;
 /** CawCo's tokens as the dashboard builds them (`bun run tokens`), for the canvas's own chrome. */
 const TOKENS = join(REPO, "apps/dashboard/src/lib/tokens/tokens.css");
+/** The house edge fade, the dashboard's own sheet: a wide embed's frame scrolls under it in any project's canvas. */
+const EDGE_FADE = join(REPO, "apps/dashboard/src/edge-fade.css");
 /** DialKit's vanilla build, vendored once for the decision pages and reused here for the canvas's timeline and dials. */
 const DIALKIT = join(
   REPO,
@@ -190,13 +192,15 @@ async function canvasRuntime(): Promise<string> {
 
 /** The host, bundled: its text. */
 export async function buildStageHost(): Promise<string> {
-  const [runtime, tokens, dialkitJs, dialkitCss, faces] = await Promise.all([
-    canvasRuntime(),
-    readFile(TOKENS, "utf8"),
-    readFile(join(DIALKIT, "browser.global.js"), "utf8"),
-    readFile(join(DIALKIT, "styles.css"), "utf8"),
-    canvasFaces(),
-  ]);
+  const [runtime, tokens, edgeFade, dialkitJs, dialkitCss, faces] =
+    await Promise.all([
+      canvasRuntime(),
+      readFile(TOKENS, "utf8"),
+      readFile(EDGE_FADE, "utf8"),
+      readFile(join(DIALKIT, "browser.global.js"), "utf8"),
+      readFile(join(DIALKIT, "styles.css"), "utf8"),
+      canvasFaces(),
+    ]);
   const result = await bundled("The stage host", {
     entrypoints: [HOST],
     target: "node",
@@ -209,6 +213,7 @@ export async function buildStageHost(): Promise<string> {
       __SVELTE_SHIMS__: JSON.stringify(await svelteShims()),
       __CANVAS_RUNTIME__: JSON.stringify(runtime),
       __CANVAS_TOKENS__: JSON.stringify(tokens),
+      __CANVAS_EDGE_FADE__: JSON.stringify(edgeFade),
       __DIALKIT_JS__: JSON.stringify(dialkitJs),
       __DIALKIT_CSS__: JSON.stringify(dialkitCss),
       __CANVAS_FACES__: JSON.stringify(faces.css),

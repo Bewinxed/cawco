@@ -209,15 +209,17 @@ const VIRTUAL = "cawco:sheet/";
 /** The canvas's own modules: its entry, runtime, adapter and Svelte props holder. */
 const VIRTUAL_STAGE = "cawco:stage/";
 
-/** Bundled in by build.ts: the canvas's browser runtime (canvas/runtime.ts), CawCo's tokens, and DialKit's vanilla build and stylesheet. */
+/** Bundled in by build.ts: the canvas's browser runtime (canvas/runtime.ts), CawCo's tokens, the house edge fade, and DialKit's vanilla build and stylesheet. */
 declare const __CANVAS_RUNTIME__: string;
 declare const __CANVAS_TOKENS__: string;
+declare const __CANVAS_EDGE_FADE__: string;
 declare const __DIALKIT_JS__: string;
 declare const __DIALKIT_CSS__: string;
 declare const __CANVAS_FACES__: string;
 declare const __CANVAS_FACE_FILES__: Record<string, string>;
 const CANVAS_RUNTIME = __CANVAS_RUNTIME__;
 const CANVAS_TOKENS = __CANVAS_TOKENS__;
+const CANVAS_EDGE_FADE = __CANVAS_EDGE_FADE__;
 const DIALKIT_JS = __DIALKIT_JS__;
 const DIALKIT_CSS = __DIALKIT_CSS__;
 const CANVAS_FACES = __CANVAS_FACES__;
@@ -623,6 +625,7 @@ boot({
   adapter: { mountStory },
   root: ${JSON.stringify(root)},
   tokens: ${JSON.stringify(CANVAS_TOKENS)},
+  edgeFade: ${JSON.stringify(CANVAS_EDGE_FADE)},
   faces: ${JSON.stringify(CANVAS_FACES)},
   load: (file) => import(/* @vite-ignore */ BASE + "/@id/__x00__${VIRTUAL}" + encodeURIComponent(file) + ".js"),
 });
