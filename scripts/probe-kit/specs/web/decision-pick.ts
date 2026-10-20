@@ -1230,6 +1230,159 @@ async function readerLeg(
   await page.close();
 }
 
+/** The page's scroll and the most it can scroll, on each of the next `count` frames. */
+const footFrames = (page: Page, count: number) =>
+  page.evaluate(
+    (n) =>
+      new Promise<{ most: number; scroll: number }[]>((done) => {
+        const seen: { most: number; scroll: number }[] = [];
+        const root = document.scrollingElement as Element;
+        const step = () => {
+          seen.push({
+            scroll: root.scrollTop,
+            most: root.scrollHeight - root.clientHeight,
+          });
+          if (seen.length >= n) {
+            done(seen);
+            return;
+          }
+          requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }),
+    count
+  );
+
+/**
+ * 9. The reader at the page's foot while the fold clamps the scroll there
+ * (L489, L491-492). `look` decided from the keyboard (no ride), the page at
+ * its foot, a pointer's pick on the last card, `radius`: its ride climbs to
+ * the first open card, `path`, at the top, further than the card shrinks.
+ * Held at 0 (the ride at the foot), the reader wheels down (the page can go
+ * no further; the wheel is still theirs); then the clock moves to ½, the
+ * fold's shrink raises the page's foot and clamps the scroll to it, which
+ * reads as the clamp. Played on, the scroll stays at the page's foot, the
+ * reader's maximum, on every frame, and the fold and the flight still land.
+ */
+async function clampLeg(kit: Kit, url: string, label: string) {
+  const page = await kit.page("desk", { theme: "light", init: [CAWCO_BRIDGE] });
+  await page.goto(url, { waitUntil: "load" });
+  await page.waitForFunction(
+    () => document.querySelectorAll(".diagram svg").length >= 2,
+    undefined,
+    { timeout: 30_000 }
+  );
+  await settle(page, 600);
+  await page.locator('#decision-look [data-option="card"]').focus();
+  await page.keyboard.press("Enter");
+  await settle(page, 400);
+  await page.evaluate(() =>
+    window.scrollTo(0, (document.scrollingElement as Element).scrollHeight)
+  );
+  await settle(page, 300);
+  const clock = await Clock.on(page);
+  const chosen = await clock.catchRuns(
+    () => page.locator('#decision-radius [data-option="soft"]').click(),
+    '#decision-radius [data-option="soft"]'
+  );
+  await clock.catchRuns(
+    async () => {
+      await clock.playOn(chosen);
+      await page.waitForFunction(
+        () =>
+          document
+            .getElementById("decision-radius")
+            ?.hasAttribute("data-decided"),
+        undefined,
+        { timeout: 5000 }
+      );
+    },
+    "#decision-radius",
+    5000
+  );
+  const [atStart] = await footFrames(page, 2);
+  // The clamp's frame: the reader's wheel and the fold's shrink land on one
+  // frame. The wheel's first event moves the held fold to ½ (the runs under
+  // the card, from the page, in that event), so the page's foot rises on
+  // the frame the wheel scrolls to it, and the next scroll check finds both.
+  await page.evaluate(() => {
+    addEventListener(
+      "wheel",
+      () => {
+        const card = document.getElementById("decision-radius");
+        for (const run of card?.getAnimations({ subtree: true }) ?? []) {
+          const end = Number(run.effect?.getComputedTiming().endTime ?? 0);
+          run.currentTime = Math.min(end, 200);
+        }
+      },
+      { capture: true, once: true, passive: true }
+    );
+  });
+  const cdp = await page.context().newCDPSession(page);
+  // Every frame from before the wheel's first event, so the frame the
+  // clamp lands on, and any the ride writes after it, are read.
+  const watched = footFrames(page, 40);
+  await cdp.send("Input.synthesizeScrollGesture", {
+    x: 720,
+    y: 450,
+    yDistance: -400,
+    gestureSourceType: "mouse",
+    speed: 2400,
+  });
+  const seen = await watched;
+  // From the frame the fold's shrink first shows (the page's foot rising).
+  const shrunk = seen.findIndex((one) => one.most < (atStart?.most ?? 0) - 1);
+  const held = shrunk < 0 ? [] : seen.slice(shrunk);
+  const [afterWheel] = held;
+  const played = page.evaluate(
+    () =>
+      new Promise<{ most: number; scroll: number }[]>((done) => {
+        const frames: { most: number; scroll: number }[] = [];
+        const root = document.scrollingElement as Element;
+        const body = document.querySelector("#decision-radius .dp-body");
+        const step = () => {
+          frames.push({
+            scroll: root.scrollTop,
+            most: root.scrollHeight - root.clientHeight,
+          });
+          if ((body?.getAnimations().length ?? 0) === 0 && frames.length > 2) {
+            done(frames);
+            return;
+          }
+          requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      })
+  );
+  await clock.release();
+  const after = await played;
+  await settle(page, 300);
+  const landed = await foldOf(page, "radius");
+  const flight = await flightOf(page, "radius", "soft");
+  const atFoot = (one: { most: number; scroll: number }) =>
+    Math.abs(one.scroll - one.most) <= 1;
+  kit.check(
+    `${label}: the reader's wheel at the page's foot as the fold's shrink clamps the scroll there ends the ride: the scroll stays at the page's foot on every frame after, and the fold and the flight still land`,
+    !!atStart &&
+      !!afterWheel &&
+      atFoot(afterWheel) &&
+      held.every(atFoot) &&
+      after.every(atFoot) &&
+      landed.decided &&
+      landed.body < 0.5 &&
+      flight.transform === "none",
+    JSON.stringify({
+      atStart,
+      afterWheel,
+      held,
+      after,
+      landed: { scroll: landed.scroll, card: landed.card, body: landed.body },
+      flight: { transform: flight.transform },
+    })
+  );
+  await page.close();
+}
+
 /** 6. Reduced motion. */
 async function stillLeg(
   kit: Kit,
@@ -1346,6 +1499,7 @@ const spec: Spec = {
         } else {
           await readerLeg(kit, url, view, theme, label, "wheel");
           await readerLeg(kit, url, view, theme, label, "scrollbar");
+          await clampLeg(kit, url, label);
         }
       }
     } finally {

@@ -24,7 +24,14 @@
  * next write, so the ride never writes over it. The one move that is not the
  * reader's is the page clamping the scroll as what the ride rides shrinks it
  * (the scroller at the most it can scroll, short of the ride's write): that
- * the ride rides through. And a finger pressed on the page and moving ends
+ * the ride rides through, unless the reader turned the wheel or pressed a
+ * key since the last check. A reader sent to the page's foot on the frame the
+ * shrink clamps there reads as that clamp, and the ride's next write would
+ * pull them back up (from the foot at 810 to 511, a card near the foot, in
+ * decision-pick). No key is filtered: it
+ * counts only at the clamp, where the page stands at its foot anyway, and
+ * ending the ride there leaves the reader where they are while the fold
+ * still lands. And a finger pressed on the page and moving ends
  * the ride as it starts to move: for the first frames of a drag the browser
  * pans nothing (its touch slop), and a ride writing then would move the page
  * under the finger. Heard passively, for as long as the ride lasts.
@@ -61,24 +68,34 @@ export function scrollOnClock(
       ? (doc.defaultView ?? scroller)
       : scroller;
   const listen = { capture: true, passive: true } as const;
+  /** The reader turned the wheel or pressed a key since the last scroll check. */
+  let acted = false;
   /** The ride ends where it stands, and stops listening. */
   function stop() {
     riding = false;
     cancelAnimationFrame(frame);
     hears.removeEventListener("scroll", scrolled, listen);
     hears.removeEventListener("pointermove", pressedMove, listen);
+    hears.removeEventListener("wheel", readerActs, listen);
+    hears.removeEventListener("keydown", readerActs, listen);
   }
   /** A scroll the ride did not make: the reader's, from here. */
   function scrolled() {
     const now = scroller.scrollTop;
+    const byReader = acted;
+    acted = false;
     if (Math.abs(now - put) <= ROUNDING) {
       return;
     }
     const most = scroller.scrollHeight - scroller.clientHeight;
     const clamped = now < put && Math.abs(now - most) <= ROUNDING;
-    if (!clamped) {
+    if (!clamped || byReader) {
       stop();
     }
+  }
+  /** The wheel or a key: read at the next scroll check, where only the clamp asks. */
+  function readerActs() {
+    acted = true;
   }
   /** A finger or a pen pressed on the page and moving: the reader's drag, before it pans. */
   function pressedMove(event: Event) {
@@ -89,6 +106,8 @@ export function scrollOnClock(
   }
   hears.addEventListener("scroll", scrolled, listen);
   hears.addEventListener("pointermove", pressedMove, listen);
+  hears.addEventListener("wheel", readerActs, listen);
+  hears.addEventListener("keydown", readerActs, listen);
   clock.finished.then(() => {
     if (riding) {
       stop();
