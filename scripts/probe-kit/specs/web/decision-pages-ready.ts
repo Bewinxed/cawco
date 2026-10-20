@@ -31,8 +31,10 @@
  *    tall as its own content (a chip no taller than its row's tallest
  *    content); at 390 the note and Send picks 44px tall (DESIGN.md, The 44
  *    Touch Rule); the cost line, the state, the count, the note's
- *    placeholder, the notice, the Recommended tag and an option's line at
- *    4.5:1 or more on what they stand on; nothing scrolls sideways; no
+ *    placeholder, the Recommended tag and an option's line at 4.5:1 or more
+ *    on what they stand on, and no offline notice (the page is CawCo's,
+ *    through its bridge); nothing scrolls sideways past the window (a story
+ *    too wide for its card at 10px words scrolls in its own frame); no
  *    console error.
  *
  * Captures and their manifest go to .probe/decision-pages/ for a reviewer.
@@ -49,10 +51,15 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { PNG } from "pngjs";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import {
+  blankEmbeds,
+  CAWCO_BRIDGE,
+  capturePage,
   EMBED_FRAME,
   embedDrawFaults,
+  embedPaints,
   idOf,
   readEmbeds,
   STAGE_START_MS,
@@ -652,12 +659,12 @@ function readControls() {
         }
       : null,
     note: note ? Math.round(note.getBoundingClientRect().height) : null,
+    offline: document.querySelector(".dp-offline")?.textContent?.trim() ?? "",
     contrast: {
       cost: ratio(document.querySelector(".dp-cost")),
       state: ratio(document.querySelector(".dp-state:not(.on)")),
       count: ratio(document.querySelector(".dp-meter > span")),
       placeholder: ratio(note, "::placeholder"),
-      notice: ratio(document.querySelector(".dp-offline")),
       tag: ratio(document.querySelector(".dp-tag")),
       line: ratio(document.querySelector('.dp-opt span[id$="-line"]')),
     },
@@ -752,7 +759,7 @@ const spec: Spec = {
     const stage = await startDecisionStage(
       programs,
       Object.fromEntries(
-        [...embedded].map((key) => [idOf(key), FILES[key] ?? ""])
+        [...embedded].map((key) => [idOf(key), [FILES[key] ?? ""]])
       )
     );
 
@@ -760,7 +767,7 @@ const spec: Spec = {
       for (const view of ["desk", "phone"] as const) {
         for (const theme of THEMES) {
           const leg = `${view === "desk" ? "1440×900" : "390×844"} ${theme}`;
-          const page = await kit.page(view, { theme });
+          const page = await kit.page(view, { theme, init: [CAWCO_BRIDGE] });
           const errors: string[] = [];
           page.on("console", (message) => {
             if (message.type() === "error") {
@@ -864,13 +871,13 @@ const spec: Spec = {
               waitUntil: "load",
             });
             await page.waitForSelector(".dp-card", { timeout: 30_000 });
-            const embedded = (programs.get(one.name) ?? "").match(
+            const previews = (programs.get(one.name) ?? "").match(
               PREVIEW
             )?.length;
             await page.waitForFunction(
               ({ count, selector }) =>
                 document.querySelectorAll(selector).length === count,
-              { count: embedded ?? 0, selector: EMBED_FRAME },
+              { count: previews ?? 0, selector: EMBED_FRAME },
               { timeout: 60_000 }
             );
             const { embeds, undrawn: undrawnIn } = await readEmbeds(
@@ -902,8 +909,8 @@ const spec: Spec = {
             );
             const drawnFaults = embeds.flatMap(embedDrawFaults);
             kit.check(
-              `${one.name} ${leg}: every embed draws the component itself, read in its own frame (${embeds.length} of ${embedded ?? 0} embeds: ${embeds.map((e) => `${e.file} ${e.shots.map((shot) => `${shot.story} ${shot.stats.width / SCALE}×${shot.stats.height / SCALE} (${shot.stats.matched} points its paint)`).join(" + ") || "none"}`).join("; ")})`,
-              embeds.length === (embedded ?? 0) &&
+              `${one.name} ${leg}: every embed draws the component itself, read in its own frame (${embeds.length} of ${previews ?? 0} embeds: ${embeds.map((e) => `${e.file} ${e.shots.map((shot) => `${shot.story} ${shot.stats.width / SCALE}×${shot.stats.height / SCALE} (${shot.stats.matched} points its paint)`).join(" + ") || "none"}`).join("; ")})`,
+              embeds.length === (previews ?? 0) &&
                 drawnFaults.length === 0 &&
                 undrawnIn.length === 0 &&
                 said.gone.length === 0,
@@ -919,8 +926,11 @@ const spec: Spec = {
             );
             const sizeFaults = embeds.flatMap((e) => [
               ...e.frames
-                .filter((f) => f.type < 12)
-                .map((f) => `${e.file}/${f.story}: its words at ${f.type}px`),
+                .filter((f) => f.type < (f.zoom < 1 ? 10 : 12))
+                .map(
+                  (f) =>
+                    `${e.file}/${f.story}: its words at ${f.type}px (zoom ${f.zoom})`
+                ),
               ...e.frames
                 .filter((f) => f.right > e.width + 1)
                 .map(
@@ -932,8 +942,26 @@ const spec: Spec = {
                 : []),
             ]);
             const types = embeds.flatMap((e) => e.frames.map((f) => f.type));
+            const scrollers = embeds.flatMap((e) =>
+              e.frames
+                .filter((f) => f.wide)
+                .map(
+                  (f) =>
+                    `${e.file}/${f.story} ${f.w}px at zoom ${f.zoom}, ${f.scrolls}px to scroll`
+                )
+            );
+            sizeFaults.push(
+              ...embeds.flatMap((e) =>
+                e.frames
+                  .filter((f) => f.wide && !(f.scrollable && f.scrolls > 0))
+                  .map(
+                    (f) =>
+                      `${e.file}/${f.story}: wider than its card, yet its frame doesn't scroll sideways`
+                  )
+              )
+            );
             kit.check(
-              `${one.name} ${leg}: every embed at a readable size inside its card (words at ${types.length ? Math.min(...types) : 0}px and up, zoom ${[...new Set(embeds.map((e) => e.scale))].join("/") || "none"}, each embed as tall as what it draws)`,
+              `${one.name} ${leg}: every embed at a readable size inside its card (words at ${types.length ? Math.min(...types) : 0}px and up, zoom ${[...new Set(embeds.map((e) => e.scale))].join("/") || "none"}, each embed as tall as what it draws${scrollers.length ? `; scrolling sideways at 10px words: ${scrollers.join(", ")}` : ""})`,
               sizeFaults.length === 0,
               sizeFaults.join("\n    ")
             );
@@ -958,24 +986,45 @@ const spec: Spec = {
             const inks = Object.entries(controls.contrast);
             const { send } = controls;
             kit.check(
-              `${one.name} ${leg}: muted words hold 4.5:1 (${inks.map(([name, ratio]) => `${name} ${ratio}`).join(", ")}; Send picks ${send?.disabled ? `disabled, at ${send.opacity} opacity, DESIGN.md's recipe` : send?.contrast})`,
-              inks.every(([, ratio]) => ratio !== null && ratio >= 4.5) &&
+              `${one.name} ${leg}: muted words hold 4.5:1 (${inks.map(([name, ratio]) => `${name} ${ratio}`).join(", ")}; Send picks ${send?.disabled ? `disabled, at ${send.opacity} opacity, DESIGN.md's recipe` : send?.contrast}), no offline notice`,
+              controls.offline === "" &&
+                inks.every(([, ratio]) => ratio !== null && ratio >= 4.5) &&
                 (send?.disabled
                   ? send.opacity === 0.5
                   : (send?.contrast ?? 0) >= 4.5),
-              JSON.stringify(controls.contrast)
+              JSON.stringify({
+                ...controls.contrast,
+                offline: controls.offline,
+              })
             );
             kit.check(
               `${one.name} ${leg}: nothing scrolls sideways (${said.sideways}px past the window)`,
               said.sideways <= 0
             );
             const file = `${one.name}-${view === "desk" ? "1440" : "390"}-${theme}.png`;
-            await page.screenshot({
-              path: join(OUT, file),
-              fullPage: true,
-              animations: "disabled",
-            });
+            // Playwright's own full page beside it, read the same way: what the earlier captures were.
+            const fullPage = await embedPaints(
+              page,
+              PNG.sync.read(
+                await page.screenshot({
+                  fullPage: true,
+                  animations: "disabled",
+                })
+              )
+            );
+            const paints = await capturePage(page, join(OUT, file));
+            const blankIn = blankEmbeds(paints);
+            kit.check(
+              `${one.name} ${leg}: the page's own capture, window by window, paints every embed (${paints.map((p) => `${Math.round(p.flat * 1000) / 10}%`).join(", ")} its commonest colour; Playwright's full page reads ${blankEmbeds(fullPage).length} of ${fullPage.length} blank)`,
+              paints.length === (previews ?? 0) && blankIn.length === 0,
+              blankIn.join("\n    ")
+            );
             manifest.captures.push({ file, leg, page: one.name });
+            manifest.reads[`${one.name} ${leg}`] = {
+              ...(manifest.reads[`${one.name} ${leg}`] as object),
+              paints,
+              fullPage,
+            };
           }
 
           kit.check(
