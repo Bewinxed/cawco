@@ -177,7 +177,8 @@ function readPage() {
         radius: style.borderTopLeftRadius,
         // The raised surface the card stands on (DESIGN.md: the option chip is raised).
         raised:
-          !!card && style.backgroundColor === getComputedStyle(card).backgroundColor,
+          !!card &&
+          style.backgroundColor === getComputedStyle(card).backgroundColor,
         trim: words ? getComputedStyle(words).textBoxTrim : "none",
         // The label's x-height middle (its trimmed box's) against the keycap's middle.
         off:
@@ -380,14 +381,18 @@ const spec: Spec = {
             const own = Math.round(WIDE_W * f.zoom);
             return [
               ...(Math.abs(f.w - own) > 1
-                ? [`${f.w}px drawn at zoom ${f.zoom}, its own ${WIDE_W}px would draw ${own}px`]
+                ? [
+                    `${f.w}px drawn at zoom ${f.zoom}, its own ${WIDE_W}px would draw ${own}px`,
+                  ]
                 : []),
               ...(f.type < 9.9 || f.type > 10.1
                 ? [`its words at ${f.type}px, not stopped at 10px`]
                 : []),
               ...(f.wide && f.scrollable && f.scrolls > 0
                 ? []
-                : [`its frame doesn't scroll sideways (wide ${f.wide}, overflow-x scrolls ${f.scrollable}, ${f.scrolls}px past)`]),
+                : [
+                    `its frame doesn't scroll sideways (wide ${f.wide}, overflow-x scrolls ${f.scrollable}, ${f.scrolls}px past)`,
+                  ]),
             ].map((fault) => `“${f.caption}” Wide: ${fault}`);
           });
           kit.check(
