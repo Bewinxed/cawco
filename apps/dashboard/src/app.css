@@ -594,6 +594,45 @@
     block-size: 1lh;
   }
 
+  /* The mention chip: a session or a thing named in words, a recessed badge
+     holding its kind's glyph (tinted by its state, `data-tone`) and its
+     title. Find's field draws it as it is written (MentionField), and a
+     message names a session with it wherever it is read (SessionChip). */
+  .mention-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-inline-size: 100%;
+    margin-inline: 1px;
+    padding: 0 6px 0 4px;
+    border-radius: var(--radius-xs);
+    background: var(--surface-recess);
+    box-shadow: inset 0 0 0 1px var(--border-hairline);
+    font: var(--type-label);
+    color: var(--ink-strong);
+    vertical-align: baseline;
+    white-space: nowrap;
+  }
+  .mention-glyph {
+    display: inline-grid;
+    place-items: center;
+    color: var(--status-idle-glyph);
+
+    & svg {
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
+    }
+  }
+  .mention-chip[data-tone="live"] .mention-glyph {
+    color: var(--status-live-glyph);
+  }
+  .mention-chip[data-tone="attn"] .mention-glyph {
+    color: var(--status-attn-glyph);
+  }
+  .mention-chip[data-tone="fail"] .mention-glyph {
+    color: var(--status-fail-glyph);
+  }
+
   /* The option chip (DESIGN.md "Option chip"): a 30px box including its
      border, 8px radius, label type, an optional keycap digit. The box is
      the same 30px under every pointer; a finger's 44px comes from

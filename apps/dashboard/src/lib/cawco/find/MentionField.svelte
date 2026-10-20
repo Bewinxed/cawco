@@ -804,44 +804,13 @@
     pointer-events: none;
   }
 
-  /* The chip: a recessed badge holding the kind's glyph and the title. */
+  /* The chip (app.css `.mention-chip`) at the field's own size, an atom the
+     caret steps over whole. */
   .editor :global(.mention-chip) {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    max-inline-size: 100%;
-    margin-inline: 1px;
-    padding: 0 6px 0 4px;
-    border-radius: var(--radius-xs);
-    background: var(--surface-recess);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-    font: var(--type-label);
     font-size: 15px;
     line-height: 22px;
-    color: var(--ink-strong);
-    vertical-align: baseline;
-    white-space: nowrap;
     cursor: default;
     user-select: all;
-  }
-  .editor :global(.mention-glyph) {
-    display: inline-grid;
-    place-items: center;
-    color: var(--status-idle-glyph);
-
-    & :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-    }
-  }
-  .editor :global(.mention-chip[data-tone="live"] .mention-glyph) {
-    color: var(--status-live-glyph);
-  }
-  .editor :global(.mention-chip[data-tone="attn"] .mention-glyph) {
-    color: var(--status-attn-glyph);
-  }
-  .editor :global(.mention-chip[data-tone="fail"] .mention-glyph) {
-    color: var(--status-fail-glyph);
   }
 
   /* DESIGN.md, Tooltip: solid ink, never coral; fades and settles from 0.96. */

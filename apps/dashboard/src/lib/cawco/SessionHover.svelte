@@ -1,5 +1,4 @@
-<script lang="ts">
-  import type { ThreadMessage } from "@cawco/core";
+<script lang="ts" module>
   /**
    * The rail's session card: resting the pointer on a session row (Working,
    * Finished, a project's sessions) opens the delegate tray's panel
@@ -15,6 +14,7 @@
    * The card is portalled to the body: the rail isolates its stacking
    * (kit-highlight), so a card drawn inside it would paint under the panes.
    */
+  import type { ThreadMessage } from "@cawco/core";
   import { Portal } from "bits-ui";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconAsk, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
@@ -33,6 +33,105 @@
   import { runIdOf } from "./workflow-runs";
   import { workflowState } from "./workflow-state.svelte";
 
+  /** A thread's newest line, as the card's tail ends on it. */
+  const newestLine = (message: ThreadMessage | undefined): string | null => {
+    if (!message) {
+      return null;
+    }
+    const words = message.author === "event" ? message.noteTitle : message.body;
+    return words.trim().split("\n")[0] ?? null;
+  };
+  const SPEAKER: Record<ThreadMessage["author"], string> = {
+    caw: "Caw",
+    event: "Event",
+    you: "You",
+  };
+
+  /** The session of a run's running step, whose tail is the run's live tail. */
+  function runningStep(id: string): string | null {
+    const runId = runIdOf(id);
+    if (!runId) {
+      return null;
+    }
+    return (
+      workflowState.details[runId]?.steps.find(
+        (step) => step.status === "running" && step.instanceId
+      )?.instanceId ?? null
+    );
+  }
+
+  type Tone = "live" | "needs" | "stopping" | "done" | "failed" | "idle";
+  const toneOf = (id: string): Tone => {
+    const thread = cawco.threadOf(id);
+    if (thread) {
+      if (thread.status === "needs-you") {
+        return "needs";
+      }
+      return thread.status === "working" ? "live" : "idle";
+    }
+    const row = cawco.instanceIndex.byId.get(id);
+    if (row && isFailed(row)) {
+      return "failed";
+    }
+    // Asked to end, its machine yet to confirm the process gone.
+    if (row?.status === "stopping") {
+      return "stopping";
+    }
+    if (
+      (runIdOf(id) && cawco.activityOf(id) === "blocked") ||
+      (cawco.session(id)?.pending ?? []).some((each) => !each.routedTo)
+    ) {
+      return "needs";
+    }
+    if (cawco.activityOf(id) === "working") {
+      return "live";
+    }
+    return row?.status === "stopped" ? "done" : "idle";
+  };
+  const WORD: Record<Tone, string> = {
+    live: "Working",
+    needs: "Needs you",
+    stopping: STOPPING_LABEL,
+    done: "Finished",
+    failed: "Failed",
+    idle: "Idle",
+  };
+
+  /** The row the tail ends on: the question waiting, or the failure. */
+  const noteOf = (id: string, tone: Tone): TailNote | null => {
+    if (tone === "needs") {
+      const asking = (cawco.session(id)?.pending ?? []).find(
+        (each) => !each.routedTo
+      );
+      if (asking) {
+        const text = askDetailOf(
+          asking.toolName,
+          asking.input as Parameters<typeof askDetailOf>[1]
+        );
+        return { key: `ask:${text}`, kind: "ask", text };
+      }
+    }
+    if (tone === "failed") {
+      // A delegate whose work item failed fails for the item's reason; its
+      // session's own error is only the process's.
+      const item = cawco.workItemFor(id);
+      const why =
+        item?.state === "failed"
+          ? item.firstLines.error
+          : cawco.instanceIndex.byId.get(id)?.lastError;
+      return {
+        key: "fail",
+        kind: "fail",
+        text: why || "It failed without saying why.",
+      };
+    }
+    return null;
+  };
+
+  export { sessionCard };
+</script>
+
+<script lang="ts">
   /** The rail whose session rows open the card. */
   let { within }: { within: HTMLElement | undefined } = $props();
 
@@ -93,33 +192,6 @@
     }
     return runIdOf(id) ? runningStep(id) : id;
   };
-
-  /** A thread's newest line, as the card's tail ends on it. */
-  const newestLine = (message: ThreadMessage | undefined): string | null => {
-    if (!message) {
-      return null;
-    }
-    const words = message.author === "event" ? message.noteTitle : message.body;
-    return words.trim().split("\n")[0] ?? null;
-  };
-  const SPEAKER: Record<ThreadMessage["author"], string> = {
-    caw: "Caw",
-    event: "Event",
-    you: "You",
-  };
-
-  /** The session of a run's running step, whose tail is the run's live tail. */
-  function runningStep(id: string): string | null {
-    const runId = runIdOf(id);
-    if (!runId) {
-      return null;
-    }
-    return (
-      workflowState.details[runId]?.steps.find(
-        (step) => step.status === "running" && step.instanceId
-      )?.instanceId ?? null
-    );
-  }
 
   /** The row the open card stands beside. */
   let anchor: HTMLElement | null = null;
@@ -253,75 +325,79 @@
       cancelAnimationFrame(frame);
     };
   });
-
-  type Tone = "live" | "needs" | "stopping" | "done" | "failed" | "idle";
-  const toneOf = (id: string): Tone => {
-    const thread = cawco.threadOf(id);
-    if (thread) {
-      if (thread.status === "needs-you") {
-        return "needs";
-      }
-      return thread.status === "working" ? "live" : "idle";
-    }
-    const row = cawco.instanceIndex.byId.get(id);
-    if (row && isFailed(row)) {
-      return "failed";
-    }
-    // Asked to end, its machine yet to confirm the process gone.
-    if (row?.status === "stopping") {
-      return "stopping";
-    }
-    if (
-      (runIdOf(id) && cawco.activityOf(id) === "blocked") ||
-      (cawco.session(id)?.pending ?? []).some((each) => !each.routedTo)
-    ) {
-      return "needs";
-    }
-    if (cawco.activityOf(id) === "working") {
-      return "live";
-    }
-    return row?.status === "stopped" ? "done" : "idle";
-  };
-  const WORD: Record<Tone, string> = {
-    live: "Working",
-    needs: "Needs you",
-    stopping: STOPPING_LABEL,
-    done: "Finished",
-    failed: "Failed",
-    idle: "Idle",
-  };
-
-  /** The row the tail ends on: the question waiting, or the failure. */
-  const noteOf = (id: string, tone: Tone): TailNote | null => {
-    if (tone === "needs") {
-      const asking = (cawco.session(id)?.pending ?? []).find(
-        (each) => !each.routedTo
-      );
-      if (asking) {
-        const text = askDetailOf(
-          asking.toolName,
-          asking.input as Parameters<typeof askDetailOf>[1]
-        );
-        return { key: `ask:${text}`, kind: "ask", text };
-      }
-    }
-    if (tone === "failed") {
-      // A delegate whose work item failed fails for the item's reason; its
-      // session's own error is only the process's.
-      const item = cawco.workItemFor(id);
-      const why =
-        item?.state === "failed"
-          ? item.firstLines.error
-          : cawco.instanceIndex.byId.get(id)?.lastError;
-      return {
-        key: "fail",
-        kind: "fail",
-        text: why || "It failed without saying why.",
-      };
-    }
-    return null;
-  };
 </script>
+
+<!-- A session's card: its mark, title and state, then its live tail (or a
+     run's steps, or a thread's newest line). The rail's card draws it, and a
+     session chip's popover (SessionChip) does too. -->
+{#snippet sessionCard(id: string)}
+  {@const row = cawco.instanceIndex.byId.get(id)}
+  {@const tone = toneOf(id)}
+  {@const Sprite = sessionSprite(id)}
+  {@const runId = runIdOf(id)}
+  {@const thread = cawco.threadOf(id)}
+  <div data-nest-host>
+    <div data-slot="head" class="head mark-line">
+      <span
+        data-slot="mark"
+        aria-hidden="true"
+        class="mark m{markHue(row?.cwd || id)}"
+        data-box
+      >
+        {#if thread}
+          <CawFace size={14} status={thread.status} />
+        {:else}
+          <Sprite />
+        {/if}
+      </span>
+      <span data-slot="title" class="title"
+        >{row ? instanceTitle(row) : "Session"}</span
+      >
+      <span
+        aria-label={WORD[tone]}
+        class="state {tone}"
+        data-session-hover-tone={tone}
+        data-box
+        role="img"
+      >
+        {#if tone === "live"}
+          <span data-slot="dot" class="dot"></span>
+        {:else if tone === "needs"}
+          <IconAsk />
+        {:else if tone === "stopping"}
+          <Spinner aria-hidden="true" role="presentation" />
+        {:else if tone === "done"}
+          <IconSuccess />
+        {:else if tone === "failed"}
+          <IconWarningTriangle />
+        {/if}
+      </span>
+    </div>
+    {#if thread}
+      <!-- A thread's card: its newest line. -->
+      {@const newest = cawco.threadMessagesOf(thread.id)?.at(-1)}
+      {@const line = newestLine(newest)}
+      {#if newest && line}
+        <p class="newest">
+          <span data-slot="who" class="who">{SPEAKER[newest.author]}</span>
+          <span class="said">{line}</span>
+        </p>
+      {/if}
+    {:else if runId}
+      <!-- A workflow run's card: its steps under it, then the live tail of
+         the one running, the way a session's card ends on its own. -->
+      {@const step = runningStep(id)}
+      <RunSteps glyph=".mark" interactive={false} {runId} />
+      {#if step}
+        <DelegateTail instanceId={step} note={null} />
+      {:else if tone === "failed"}
+        <DelegateTail instanceId="" note={noteOf(id, tone)} />
+      {/if}
+    {:else}
+      <DelegateTail instanceId={id} note={noteOf(id, tone)} />
+    {/if}
+  </div>
+{/snippet}
 
 <Portal>
   <HoverPanel
@@ -335,72 +411,7 @@
     watch={watchOf(openId)}
   >
     {#snippet children(id)}
-      {@const row = cawco.instanceIndex.byId.get(id)}
-      {@const tone = toneOf(id)}
-      {@const Sprite = sessionSprite(id)}
-      {@const runId = runIdOf(id)}
-      {@const thread = cawco.threadOf(id)}
-      <div data-nest-host>
-        <div data-slot="head" class="head mark-line">
-          <span
-            data-slot="mark"
-            aria-hidden="true"
-            class="mark m{markHue(row?.cwd || id)}"
-            data-box
-          >
-            {#if thread}
-              <CawFace size={14} status={thread.status} />
-            {:else}
-              <Sprite />
-            {/if}
-          </span>
-          <span data-slot="title" class="title"
-            >{row ? instanceTitle(row) : "Session"}</span
-          >
-          <span
-            aria-label={WORD[tone]}
-            class="state {tone}"
-            data-session-hover-tone={tone}
-            data-box
-            role="img"
-          >
-            {#if tone === "live"}
-              <span data-slot="dot" class="dot"></span>
-            {:else if tone === "needs"}
-              <IconAsk />
-            {:else if tone === "stopping"}
-              <Spinner aria-hidden="true" role="presentation" />
-            {:else if tone === "done"}
-              <IconSuccess />
-            {:else if tone === "failed"}
-              <IconWarningTriangle />
-            {/if}
-          </span>
-        </div>
-        {#if thread}
-          <!-- A thread's card: its newest line. -->
-          {@const newest = cawco.threadMessagesOf(thread.id)?.at(-1)}
-          {@const line = newestLine(newest)}
-          {#if newest && line}
-            <p class="newest">
-              <span data-slot="who" class="who">{SPEAKER[newest.author]}</span>
-              <span class="said">{line}</span>
-            </p>
-          {/if}
-        {:else if runId}
-          <!-- A workflow run's card: its steps under it, then the live tail of
-             the one running, the way a session's card ends on its own. -->
-          {@const step = runningStep(id)}
-          <RunSteps glyph=".mark" interactive={false} {runId} />
-          {#if step}
-            <DelegateTail instanceId={step} note={null} />
-          {:else if tone === "failed"}
-            <DelegateTail instanceId="" note={noteOf(id, tone)} />
-          {/if}
-        {:else}
-          <DelegateTail instanceId={id} note={noteOf(id, tone)} />
-        {/if}
-      </div>
+      {@render sessionCard(id)}
     {/snippet}
   </HoverPanel>
 </Portal>

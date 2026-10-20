@@ -6,6 +6,7 @@
     type Theme,
   } from "svelte-streamdown";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { referenceOf } from "#lib/cawco/references.js";
   import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
   import { PROSE } from "#lib/prose.js";
   import { draw, stepping } from "../collapsible/draw";
@@ -70,6 +71,13 @@
     descriptionTerm: { base: "" },
     descriptionDetail: { base: "" },
   };
+
+  /**
+   * The links a message may hold: what Streamdown's wildcard lets through
+   * (http, https, mailto, tel), and CawCo's own references (`cawco:`), which
+   * the link rule below draws as what they name.
+   */
+  const LINKS = ["*", "cawco:"];
 
   const COMMENT = /<!--[\s\S]*?-->/g;
   const ESCAPES: Record<string, string> = {
@@ -256,6 +264,7 @@
     class="{PROSE} {invert ? 'prose-invert' : ''}"
     {content}
     controls={{ mermaid: false, table: false }}
+    allowedLinkPrefixes={LINKS}
     mergeTheme={false}
     renderHtml={literal}
     static={!tokens}
@@ -286,6 +295,28 @@
         {token.raw}
       {:else}
         <p>{token.raw}</p>
+      {/if}
+    {/snippet}
+    <!-- A link to something CawCo knows (`[label](cawco:<kind>/<id>)`,
+         references.ts) draws as its kind's element; one whose kind or id
+         names nothing is its label's words, never a link that goes nowhere.
+         Every other link is drawn as Streamdown draws it: a path on this
+         origin in place, anything else in a new tab. -->
+    {#snippet link({ token, children: words })}
+      {@const reference = referenceOf(token.href)}
+      {#if reference?.view}
+        <reference.view id={reference.id} label={words} />
+      {:else if reference}
+        {@render words()}
+      {:else if token.href.startsWith("/")}
+        <a href={token.href} title={token.title}>{@render words()}</a>
+      {:else}
+        <a
+          href={token.href}
+          rel="noopener noreferrer"
+          target="_blank"
+          title={token.title}>{@render words()}</a
+        >
       {/if}
     {/snippet}
   </Streamdown>

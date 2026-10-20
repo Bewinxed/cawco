@@ -74,7 +74,7 @@ export interface Row {
   title: string;
 }
 
-interface Shape {
+export interface Shape {
   glyph: Component;
   tone: Tone;
   word: string;
@@ -88,6 +88,9 @@ const STATE: Record<FindLiveState, Shape> = {
   ended: { glyph: Idle, tone: "quiet", word: "Stopped" },
   unknown: { glyph: Unreachable, tone: "quiet", word: "Unreachable" },
 };
+
+/** How a session in `state` is drawn: its glyph, tone and word, as its Find row draws it. */
+export const liveShape = (state: FindLiveState): Shape => STATE[state];
 
 /** A thread's state on a session's scale: Caw at work, waiting on him, or at rest. */
 const THREAD: Record<FindThread["state"], Shape> = {
