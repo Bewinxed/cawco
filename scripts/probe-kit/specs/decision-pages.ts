@@ -1069,6 +1069,8 @@ const drawOverEmbed = async (on: On, frame: Frame) => {
 const commentInEmbed = async (on: On, frame: Frame) => {
   const { desk, kit } = on;
   await mode(desk, frame, "C");
+  // The mockup's box slides while motion is allowed, and a click waits for it to hold still.
+  await desk.emulateMedia({ reducedMotion: "reduce" });
   const embed = frame.locator(EMBED).first();
   await toPaneTop(embed);
   await settle(desk, 300);
@@ -1080,9 +1082,11 @@ const commentInEmbed = async (on: On, frame: Frame) => {
   const before = Object.keys((await docOf(frame)).pins);
   if (!box) {
     kit.check("(h) the edge option's embed is on the page", false, "no box");
+    await desk.emulateMedia({ reducedMotion: null });
     return;
   }
   await pressIn(frame.frameLocator(EMBED).first(), ".box >> nth=0");
+  await desk.emulateMedia({ reducedMotion: null });
   const pinned = await until(
     "a pin inside the embed in the doc",
     () => docOf(frame),
