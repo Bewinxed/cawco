@@ -272,8 +272,20 @@ function gridOf(args: { selector: string; grid: number }) {
       : "nothing";
   const covered: string[] = [];
   const points: Painted[] = [];
+  // A frame that scrolls its story sideways (an embed's story too wide to fit at 10px words) shows what its scrollport holds: the grid reads that part.
+  const holder = body.parentElement;
+  const port =
+    holder && getComputedStyle(holder).overflowX !== "visible"
+      ? holder.getBoundingClientRect()
+      : null;
+  const left = port ? Math.max(rect.left, port.left) : rect.left;
+  const wide = (port ? Math.min(rect.right, port.right) : rect.right) - left;
   for (let at = 0; at < args.grid * args.grid; at += 1) {
-    const x = ((rect.width - 4) * ((at % args.grid) + 0.5)) / args.grid + 2;
+    const x =
+      left -
+      rect.left +
+      ((wide - 4) * ((at % args.grid) + 0.5)) / args.grid +
+      2;
     const y =
       ((rect.height - 4) * (Math.floor(at / args.grid) + 0.5)) / args.grid + 2;
     const chromed = boxAt(over, rect.left + x, rect.top + y);
