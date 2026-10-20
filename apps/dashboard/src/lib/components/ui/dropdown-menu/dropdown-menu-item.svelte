@@ -24,6 +24,7 @@
 
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import { cn } from "#lib/utils.js";
 
   let {
@@ -43,7 +44,8 @@
 
 <DropdownMenuPrimitive.Item
   class={cn(
-    "kit-item group/dropdown-menu-item relative flex",
+    menuItemVariants(),
+    "group/dropdown-menu-item relative flex",
     "cursor-default select-none items-center gap-2.5 text-label",
     "outline-hidden data-disabled:pointer-events-none",
     "data-inset:pl-space-8",
@@ -57,6 +59,7 @@
     className
   )}
   data-inset={inset}
+  data-menu-item
   data-slot="dropdown-menu-item"
   data-variant={variant}
   bind:ref

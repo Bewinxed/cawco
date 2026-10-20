@@ -234,8 +234,9 @@
      element. */
   :root {
     scrollbar-color: var(--scrollbar-thumb) transparent;
-    /* The seam's inset (.kit-seam, and the transcript's user-message
-       hairline): the text column's own padding. */
+    /* The seam's inset (the home's seam between one machine's rows and the
+       next, and the transcript's user-message hairline): the text column's
+       own padding. */
     --seam-inset: var(--space-3);
     /* The gap between the rows of a tree, and between a parent and its
        first child: one value for every tree (the rail's projects, sessions
@@ -475,335 +476,6 @@
    lets go. With these recipes and the prose rules below as @scope blocks,
    that frame took 50ms in WebKit against 38ms without. */
 @layer components {
-  /* The kit's rows are mark lines by their own class (an option or tray
-     chip, a menu item, a section head): the `mark-line` utility's
-     trim (below, wave 2: W9-behaviours) on each run of words they hold,
-     here in the components layer with the recipes. */
-  :where(.kit-chip, .kit-tray-chip, .kit-item, .kit-section-head) {
-    @apply mark-line;
-  }
-
-  /* The option chip (DESIGN.md "Option chip"): a 30px box including its
-     border, 8px radius, label type, an optional keycap digit. The box is
-     the same 30px under every pointer; a finger's 44px comes from
-     .touch-hit on the chip, never a taller chip. min-block-size sets the
-     30px; the block padding is only the floor a wrapped label keeps from
-     the border, small enough that one line (the 18px keycap or the label
-     line) never pushes past 30, so a label that wraps inside the chip grows
-     it line by line. A pick is the chip's own state by its role: a toggle
-     pressed (`aria-pressed`), a radio checked (`aria-checked`, a single-pick
-     group's item); a record of what was picked is `.kit-chip-chosen`. It
-     draws a brand edge, a recessed fill and an inverted keycap — never a
-     size or weight change, so a pick never reflows the row, and never the
-     attn hue, because selection is not a warning. */
-  .kit-chip {
-    --hit-edge: 1px;
-    box-sizing: border-box;
-    min-block-size: 30px;
-    padding-block: var(--space-1);
-    padding-inline: var(--space-3);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    color: var(--ink-strong);
-    font-family: var(--font-body);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-label);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    text-align: start;
-    max-inline-size: 100%;
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        border-color var(--dur-control) var(--ease-out),
-        background-color var(--dur-control) var(--ease-out);
-    }
-    &:is(button):not([aria-pressed="true"], [aria-checked="true"]):hover {
-      background: var(--surface-hover);
-    }
-    &:is([aria-pressed="true"], [aria-checked="true"], .kit-chip-chosen) {
-      border-color: var(--brand-solid);
-      background: var(--surface-recess);
-    }
-  }
-  /* A chip on the tray row standing on the composer (the delegate tray's,
-     the plan's): the attachment chip's surface, drawn on a layer of its own
-     so a chip can bring it in after its mark, at the row's chip height
-     (--c-tray-chip), label type and 16px glyphs. */
-  .kit-tray-chip {
-    position: relative;
-    isolation: isolate;
-    block-size: var(--c-tray-chip);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--c-pill-gap);
-    padding-inline: var(--space-2);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--ink-strong);
-    font-family: var(--font-body);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-label);
-    pointer-events: auto;
-    touch-action: manipulation;
-    -webkit-touch-callout: none;
-    user-select: none;
-    transition: color var(--dur-control) var(--ease-out);
-
-    &::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      border: 1px solid var(--border-hairline);
-      border-radius: inherit;
-      background: var(--surface-raised);
-      box-shadow: var(--shadow-tile);
-      transition: background-color var(--dur-control) var(--ease-out);
-    }
-    & > svg {
-      flex: none;
-      inline-size: 16px;
-      block-size: 16px;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        color var(--dur-control) var(--ease-out),
-        transform var(--dur-control) var(--ease-out);
-
-      &:active {
-        transform: scale(var(--press-scale));
-      }
-    }
-    @media (hover: hover) and (pointer: fine) {
-      &:hover::before {
-        background-color: var(--surface-hover);
-      }
-    }
-  }
-  /* A row of option chips, wrapping whole chips onto the next line. Under a
-     finger the rows stand 14px apart, so each chip's 44px .touch-hit area
-     (30 drawn + 7 above + 7 below) meets its neighbour's at the midpoint
-     instead of overlapping it. */
-  .kit-chips {
-    --hit-gap-x: var(--space-2);
-    --hit-gap-y: var(--space-2);
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-
-    @media (pointer: coarse) {
-      --hit-gap-y: calc(var(--space-2) * 2);
-      row-gap: calc(var(--space-2) * 2);
-    }
-  }
-
-  /* A scroller whose content runs past an edge fades that edge out — only
-     that edge, only while there is more to scroll to. The fade lengths ride
-     the scroller's own scroll: at the start nothing is behind, so the
-     leading edge is sharp; at the end nothing is ahead. A scroller that
-     does not overflow has no scroll timeline, so neither edge fades.
-     `-block` is the same down the page. The tabs track, the board and a
-     view's pane share it. A scroller may cut an edge's fade short where
-     something must stay whole (`--fade-cap-start`, `--fade-cap-end`: the
-     tabs track, for the tab drawn chosen).
-     Each edge is its own animation over only the run where it moves, the
-     first and last 6% of the scroll, filled outside it: between them
-     neither changes, so a long scroll asks no restyle or repaint of the
-     scroller for its every frame (edge-fade-perf). */
-  .kit-edge-fade {
-    mask-image: linear-gradient(
-      to right,
-      transparent,
-      #000 min(var(--fade-start), var(--fade-cap-start, 100vw)),
-      #000 calc(100% - min(var(--fade-end), var(--fade-cap-end, 100vw))),
-      transparent
-    );
-    animation-timeline: scroll(self inline);
-  }
-  /* `--fade-inset-end` stands the foot's fade clear of a bar docked over
-     the scroller's foot (a phone's views bar), so it ends at the bar's top
-     edge and what passes under the bar is the fade's, as a footer's
-     (DESIGN.md: the house edge fade above it so the notes pass under it). */
-  .kit-edge-fade-block {
-    mask-image: linear-gradient(
-      to bottom,
-      transparent,
-      #000 var(--fade-start),
-      #000 calc(100% - var(--fade-inset-end, 0px) - var(--fade-end)),
-      transparent calc(100% - var(--fade-inset-end, 0px))
-    );
-    animation-timeline: scroll(self block);
-  }
-  /* Spelled out, never the `animation` shorthand: the build's minifier
-     writes a shorthand's unset duration as `0s`, and a scroll-driven
-     animation of no duration jumps to its end where its range begins. The
-     fade's length: a phone's narrow view keeps it short, so it reads as an
-     edge, not a band across the content. */
-  .kit-edge-fade,
-  .kit-edge-fade-block {
-    /* A faded scroller is its own stacking context, whatever its mask:
-       nothing in it rises over its fades, whatever its z-index. */
-    isolation: isolate;
-    animation-name: kit-edge-fade-start, kit-edge-fade-end;
-    animation-duration: auto;
-    animation-timing-function: linear;
-    animation-fill-mode: both;
-    animation-range:
-      0% 6%,
-      94% 100%;
-    --fade-len: 40px;
-
-    @media (max-width: 639px) {
-      --fade-len: 16px;
-    }
-  }
-
-  @keyframes kit-edge-fade-start {
-    from {
-      --fade-start: 0px;
-    }
-    to {
-      --fade-start: var(--fade-len);
-    }
-  }
-  @keyframes kit-edge-fade-end {
-    from {
-      --fade-end: var(--fade-len);
-    }
-    to {
-      --fade-end: 0px;
-    }
-  }
-
-  /* The seam: the hairline the transcript draws between one user message
-     and the next (MessageRow `.well::after`), as a block of its own. The
-     home draws the same one between one machine's rows and the next, so
-     the two can never drift apart. */
-  .kit-seam {
-    flex: none;
-    block-size: 1px;
-    margin: 0 var(--seam-inset);
-    border: 0;
-    background: var(--seam);
-  }
-
-  /* Nesting: children hang off their parent on a hairline rail that leaves
-     the bottom edge of the parent's glyph, under its centre; each child
-     joins it with an elbow that curves (--radius-sm) from the rail into an
-     arm ending at the child's glyph, and the last child's elbow ends the
-     rail. No arrowhead: the curve is the joint. One primitive for every
-     nested list (a project → its sessions, session → delegates, delegate →
-     its own, run → steps), each level stepping in by the same
-     --nest-pad and its rows --tree-gap apart, so every tree in the app has
-     one indent and one rhythm. A child with children of its own holds its
-     own `.kit-nest` list inside its item, so every parent has one rail of
-     its own, and the rail on to the next sibling runs straight past the
-     open subtree. The lines are drawn by the children themselves, so as
-     rows open, reflow or leave, the rail grows and shrinks with them and
-     never jumps.
-     Set on the child list:
-       --nest-x       the rail's x from the list's left edge,
-       --nest-lead    the parent glyph's bottom to the list's top,
-       --nest-glyph-y a child glyph's centre from its row's top, and
-       --nest-reach   a child row's left edge to its glyph, all measured
-                      (motion/branch `nestFrom`)
-       --nest-in      the rail to the child row's left edge
-       --nest-gap     the gap between child rows
-     The arm runs on over the row's inset to its glyph, drawn over the row's
-     hover or selected pill, so no pill ever covers a line.
-     Drawn in and out by the fold (motion/branch): one head runs the whole
-     line as a list opens, down the rail, round each elbow's corner and out
-     along its arm to the child's glyph without a pause; as the list folds
-     the group's one clip shortens it from its foot up to the parent. */
-  .kit-nest {
-    /* Until measured (the frame it mounts, before paint): valid, so nothing
-       built on it (`--nest-pad`) drops a whole declaration and then lands a
-       frame later with no change to the DOM. */
-    --nest-x: 0px;
-    --nest-reach: 0px;
-    /* The rail to a child row's left edge: what is left of one --tree-step
-       (mark to mark) after the half mark the rail stands under and the
-       row's own inset. Fixed at one length, a list whose rows are set in
-       further stepped in further: 27px in the home, 22px in the rail. */
-    --nest-half: calc(var(--mark-size, 18px) / 2);
-    --nest-in: calc(var(--tree-step) - var(--nest-half) - var(--nest-reach));
-    --nest-glyph-y: var(--space-4);
-    --nest-gap: var(--tree-gap);
-    --nest-lead: 0px;
-    --nest-pad: calc(var(--nest-x) + var(--nest-in));
-    /* The line's weight, and every length a piece of it is placed or sized
-       by, in whole device pixels (--dpx, device-pixel.ts). Set half a pixel
-       off its glyph's centre and half a pixel over in width and height, a
-       piece was drawn crisp at rest, where the browser snaps its box, and
-       soft while its clip ran: across two pixel columns at half the ink,
-       until the draw ended. On the grid, it is the same line in every
-       frame. */
-    --nest-line: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
-    --nest-left: round(
-      calc(var(--nest-x) - var(--nest-pad) - var(--nest-line) / 2),
-      var(--dpx, 1px)
-    );
-    position: relative;
-  }
-  .kit-nest > li {
-    position: relative;
-  }
-  .kit-nest > li::before,
-  .kit-nest > li::after {
-    content: "";
-    position: absolute;
-    z-index: 1;
-    /* Centred on the glyph: the 1px line half a pixel each side of it. */
-    left: var(--nest-left);
-    pointer-events: none;
-    border-color: var(--nest-ink);
-    border-style: solid;
-    border-width: 0;
-  }
-  /* The elbow: down the rail from the row above, round the curve, and out
-     along the arm to the child's glyph. */
-  .kit-nest > li::before {
-    top: calc(-1 * var(--nest-gap));
-    width: round(
-      calc(var(--nest-in) + var(--nest-reach) + var(--nest-line) / 2),
-      var(--dpx, 1px)
-    );
-    height: round(
-      calc(var(--nest-glyph-y) + var(--nest-gap) + var(--nest-line) / 2),
-      var(--dpx, 1px)
-    );
-    border-left-width: var(--nest-line);
-    border-bottom-width: var(--nest-line);
-    border-bottom-left-radius: var(--radius-sm);
-  }
-  .kit-nest > li:first-child::before {
-    top: calc(-1 * var(--nest-lead));
-    height: round(
-      calc(var(--nest-glyph-y) + var(--nest-lead) + var(--nest-line) / 2),
-      var(--dpx, 1px)
-    );
-  }
-  /* The rail on past this child (and anything open under it) to the next
-     one; the last child has none. */
-  .kit-nest > li::after {
-    /* From where the elbow starts to curve away, so the rail runs straight
-       on past the joint instead of breaking at the curve. */
-    top: calc(var(--nest-glyph-y) - var(--radius-sm));
-    /* On over the gap to the next child's row, under that child's elbow:
-       ending at this row's foot, on a fraction of a pixel, its last pixel
-       stood at half the ink wherever the next elbow was not yet drawn. */
-    bottom: calc(-1 * var(--nest-gap));
-    border-left-width: var(--nest-line);
-  }
-  .kit-nest > li:last-child::after {
-    content: none;
-  }
   /* A tree's rows just mounted, and their line, held hidden until each is
      built as the line reaches it; the hold goes as the fold lands
      (motion/branch). A row is held by the clip its title wipes in by, which
@@ -816,20 +488,6 @@
      `measureFirst`), so they are written before its other rows are styled. */
   [data-branch-probe] > li ~ li {
     display: none;
-  }
-  /* A line drawing in or running back: each stretch is cut where the line's
-     head is, by two lengths the fold moves (--nest-cut-r, --nest-cut-b). The
-     stretch itself is painted where it stands at rest, in every frame. With
-     the clip itself animated, the browser drew the stretch from a layer of
-     its own, at the half pixel its row starts on rather than on the pixel
-     it is snapped to at rest: across two columns at half the ink, until the
-     draw ended. Neither cut ever runs alongside the line (the other side is
-     left well clear), so a cut only ever ends it. */
-  [data-branch-draw].kit-nest > li::before,
-  [data-branch-draw].kit-nest > li::after,
-  [data-branch-draw] .kit-nest > li::before,
-  [data-branch-draw] .kit-nest > li::after {
-    clip-path: inset(-9999px var(--nest-cut-r) var(--nest-cut-b) -9999px);
   }
   /* A parent's deck (TreeMark) is the rows folded under it. While they
      are out, from the frame their line sets off (a group just mounted
@@ -888,111 +546,6 @@
   [data-flip-anchor][data-state="closing"] {
     pointer-events: none;
   }
-  /* Held: cut whole from below, until its piece is built and moves the cut.
-     A clip of the hold's own outranked the cut, and the line stood hidden
-     until the fold landed, then showed whole in one frame. */
-  [data-branch-hold].kit-nest > li::before,
-  [data-branch-hold].kit-nest > li::after,
-  [data-branch-hold] .kit-nest > li::before,
-  [data-branch-hold] .kit-nest > li::after {
-    --nest-cut-b: 9999px;
-  }
-
-  /* A list section's header (the home's Needs you, Recent): its label at
-     the start, its count pushed to the end in tabular figures, and a
-     neutral hairline under it marking where the section begins. */
-  .kit-section-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    margin: 0 0 var(--space-1);
-    padding: 0 var(--space-3) var(--space-1);
-    border-bottom: 1px solid var(--seam);
-    font: var(--type-label);
-    color: var(--ink-muted);
-    text-align: start;
-
-    & > .count {
-      margin-inline-start: auto;
-      font: var(--type-meta);
-      font-variant-numeric: tabular-nums;
-      color: var(--ink-subtle);
-    }
-  }
-
-  /* The composer's shell: what docks at a page's foot (a session's
-     composer, a decision page's note, the project's views on a phone) stands
-     in it. The panel's glass so the page shows faintly under it, the control
-     edge, the 12px radius and the tile shadow; the solid raised surface
-     where transparency is reduced. Its inset and its row are its own. */
-  .kit-dock-shell {
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--material-panel);
-    -webkit-backdrop-filter: blur(var(--material-blur))
-      saturate(var(--material-saturate));
-    backdrop-filter: blur(var(--material-blur))
-      saturate(var(--material-saturate));
-    box-shadow: var(--shadow-tile);
-
-    @media (prefers-reduced-transparency: reduce) {
-      background: var(--surface-raised);
-      -webkit-backdrop-filter: none;
-      backdrop-filter: none;
-    }
-  }
-
-  /* Send's recipe: the one coral control in a dock shell, a square of the
-     composer's field height, concentric with the shell (its radius less the
-     inset that seats it). It presses to --press-scale over --kit-send-press
-     (--dur-control unless its dock says otherwise). */
-  .kit-send {
-    --kit-send-press: var(--dur-control);
-    position: relative;
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    inline-size: var(--c-composer-field);
-    block-size: var(--c-composer-field);
-    border: 0;
-    border-radius: calc(var(--radius-lg) - var(--c-composer-inset));
-    background-color: var(--action-solid);
-    background-image: var(--action-surface);
-    color: var(--on-action);
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-
-    & svg {
-      inline-size: 16px;
-      block-size: 16px;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        background-color var(--dur-control) var(--ease-out),
-        color var(--dur-control) var(--ease-out),
-        transform var(--kit-send-press) var(--ease-out);
-
-      &:active:not(:disabled) {
-        transform: scale(var(--press-scale));
-      }
-    }
-    /* Every primary action's hover (DESIGN.md, Primary button). */
-    @media (hover: hover) and (pointer: fine) {
-      &:not(:disabled):hover {
-        background-color: var(--action-hover);
-        background-image: var(--action-surface-hover);
-      }
-    }
-    /* The flat brand stays under the gradient: disabled drops the image. */
-    &:disabled {
-      opacity: 0.55;
-      cursor: default;
-      box-shadow: none;
-      background-image: none;
-    }
-  }
-
   /* The cut the card comes down from behind (`hang`): its floating wrapper,
      cut at the card's top edge, the anchor's foot, with room for the whole
      overlay shadow past the others. It never moves, so the card's slide is
@@ -1001,21 +554,6 @@
      wrapper it draws (`data-hang`). */
   [data-bits-floating-content-wrapper][data-hang] {
     @apply clip-block-start;
-  }
-
-  /* A row inside a floating surface. Its highlight is the menu's one
-     ghost (components/ui/highlight), gliding from item to item under
-     pointer and arrow keys alike. */
-  .kit-item {
-    border-radius: var(--radius-sm);
-    transition: var(--transition-control);
-
-    @media not (pointer: coarse) {
-      min-block-size: 32px;
-    }
-    @media (pointer: coarse) {
-      min-block-size: 44px;
-    }
   }
 
   /* vaul's own slide out (slideToBottom and its siblings) sets no fill
@@ -1072,48 +610,6 @@
     /* What scrolls in the sheet (`kit-sheet-scroll`) drives its header's
        seam (`sheet-seam`, ui/drawer/drawer-header). */
     timeline-scope: --sheet-scroll;
-  }
-
-  /* ---- Icon cards: New project's templates, the empty fleet's ways in.
-     As many to a row as fit, two on a phone, one on the narrowest. Each
-     card is a bordered box over the list's highlight (components/ui/
-     highlight, `look: "card"`): the hover ghost under it, and the selection
-     pill drawn in the channel-card recipe. Its face is CardFace. */
-  .icon-cards {
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: var(--space-3);
-
-    @media (max-width: 639px) {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    @media (max-width: 399px) {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-
-  .icon-card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-7) var(--space-4) var(--space-4);
-    border: 1px solid var(--border-card);
-    border-radius: var(--radius-md);
-    background: none;
-    color: var(--ink-strong);
-    font: var(--type-meta);
-    text-align: start;
-    transition: var(--transition-control);
-
-    &:active {
-      background: var(--surface-fill);
-    }
-    &:focus-visible {
-      outline: var(--focus-ring-width) solid var(--focus-ring);
-      outline-offset: -2px;
-    }
   }
 }
 
@@ -1406,9 +902,9 @@
     margin-block-start: 0;
   }
 
-  /* The chips the editors' scripts make: a mention in Find's field
-     (`[data-mention-chip]`, `.mention-glyph`) and a reference in the
-     new-session prompt (PromptEditor's `.ns-chip`). */
+  /* A mention chip in Find's field (`[data-mention-chip]`, which
+     MentionField's script makes; its glyph and the new-session prompt's
+     reference chip carry their own utilities). */
   [data-editor] [data-mention-chip] {
     display: inline-flex;
     align-items: center;
@@ -1425,47 +921,6 @@
     white-space: nowrap;
     cursor: default;
     user-select: all;
-  }
-  [data-editor] .mention-glyph {
-    display: inline-grid;
-    place-items: center;
-    color: var(--status-idle-glyph);
-  }
-  [data-editor] .mention-glyph svg {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-  [data-editor] [data-mention-chip][data-tone="live"] .mention-glyph {
-    color: var(--status-live-glyph);
-  }
-  [data-editor] [data-mention-chip][data-tone="attn"] .mention-glyph {
-    color: var(--status-attn-glyph);
-  }
-  [data-editor] [data-mention-chip][data-tone="fail"] .mention-glyph {
-    color: var(--status-fail-glyph);
-  }
-  [data-slot="editor"] .ns-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    vertical-align: top;
-    block-size: calc(var(--prompt-lh) - 2px);
-    margin: 1px;
-    padding-inline: var(--space-1) var(--space-2);
-    border-radius: var(--radius-sm);
-    background: var(--surface-fill);
-    border: 1px solid var(--border-control);
-    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-    color: var(--ink-strong);
-    white-space: nowrap;
-    user-select: all;
-  }
-  [data-slot="editor"] .ns-chip-icon {
-    display: inline-flex;
-  }
-  [data-slot="editor"] .ns-chip-icon > svg {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
   }
 
   /* A divider's summary reads in a note's muted ink, not a turn's
@@ -3058,29 +2513,12 @@
 @utility will-change-opacity {
   will-change: opacity;
 }
-/* The session details card's settings row: the chips NsPopover's trigger,
-   ToolChips and AccountSwitch render sit in it. The card's width holds the
-   longest names whole, the chips' insides drawn in a little; a phone's row
-   (~350px) fits its three chips with their sides drawn in, and a bordered
-   chip's chevron goes, the account chip's staying (the only hint it opens
-   anything). */
+/* The session details card's settings row: the model chip shrinks before the
+   others. The chips themselves are ui/chip `size: "compact"`. */
 @utility session-details-chips {
   & [data-model-chip] {
     flex: 0 1 auto;
     min-width: 0;
-  }
-  & .ns-chip-btn {
-    gap: var(--space-1);
-    height: var(--row-compact-h);
-  }
-  @variant max-phone {
-    & .ns-chip-btn {
-      height: var(--c-btn-h-lg);
-      padding-inline: var(--space-2);
-    }
-    & .ns-chip-btn:not([data-account-chip]) > svg[data-slot="chevron"] {
-      display: none;
-    }
   }
 }
 /* ModelSection's picker in the details card's model popover: no surface of
@@ -3847,4 +3285,205 @@
     var(--mask-opaque-a10) calc(100% - var(--fade-run-end) * 0.25),
     transparent
   );
+}
+
+/* wave 2: W8-app-recipes */
+/* The app's shared behaviours as Tailwind utilities, same names, users
+   unchanged (tailwindcss.com/docs/adding-custom-styles#adding-custom-utilities).
+   The looks the old sheet classes drew are kit recipes now: ui/chip,
+   ui/menu-item, ui/section-header `sectionHeadVariants`, ui/dock-shell,
+   ui/button `sendVariants`, ui/icon-card. */
+
+/* A scroller whose content runs past an edge fades that edge out, only that
+   edge, only while there is more to scroll to. The fade lengths ride the
+   scroller's own scroll: at the start nothing is behind, so the leading edge
+   is sharp; at the end nothing is ahead. A scroller that does not overflow
+   has no scroll timeline, so neither edge fades. `-block` is the same down
+   the page. A scroller may cut an edge's fade short where something must
+   stay whole (`--fade-cap-start`, `--fade-cap-end`: the tabs track, for the
+   tab drawn chosen). Each edge is its own animation over only the run where
+   it moves, the first and last 6% of the scroll, filled outside it, so a
+   long scroll asks no restyle or repaint for its every frame. Spelled out,
+   never the `animation` shorthand: the build's minifier writes a
+   shorthand's unset duration as `0s`, and a scroll-driven animation of no
+   duration jumps to its end where its range begins. A faded scroller is its
+   own stacking context, whatever its mask: nothing in it rises over its
+   fades. The fade's length and the inline mask are defaults its hosts
+   override (below, in the components layer). */
+@utility kit-edge-fade {
+  isolation: isolate;
+  animation-name: kit-edge-fade-start, kit-edge-fade-end;
+  animation-duration: auto;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-range:
+    0% 6%,
+    94% 100%;
+  animation-timeline: scroll(self inline);
+}
+/* `--fade-inset-end` stands the foot's fade clear of a bar docked over the
+   scroller's foot (a phone's views bar), so it ends at the bar's top edge
+   and what passes under the bar is the fade's, as a footer's (DESIGN.md: the
+   house edge fade above it so the notes pass under it). */
+@utility kit-edge-fade-block {
+  isolation: isolate;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--fade-start),
+    #000 calc(100% - var(--fade-inset-end, 0px) - var(--fade-end)),
+    transparent calc(100% - var(--fade-inset-end, 0px))
+  );
+  animation-name: kit-edge-fade-start, kit-edge-fade-end;
+  animation-duration: auto;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-range:
+    0% 6%,
+    94% 100%;
+  animation-timeline: scroll(self block);
+}
+@keyframes kit-edge-fade-start {
+  from {
+    --fade-start: 0px;
+  }
+  to {
+    --fade-start: var(--fade-len);
+  }
+}
+@keyframes kit-edge-fade-end {
+  from {
+    --fade-end: var(--fade-len);
+  }
+  to {
+    --fade-end: 0px;
+  }
+}
+
+/* Nesting: children hang off their parent on a hairline rail that leaves
+   the bottom edge of the parent's glyph, under its centre; each child joins
+   it with an elbow that curves (--radius-sm) from the rail into an arm
+   ending at the child's glyph, and the last child's elbow ends the rail. One
+   primitive for every nested list (a project → its sessions, session →
+   delegates, delegate → its own, run → steps), each level stepping in by the
+   same --nest-pad and its rows --tree-gap apart. A child with children of
+   its own holds its own `kit-nest` list inside its item, so every parent has
+   one rail of its own. The lines are drawn by the children themselves, so
+   as rows open, reflow or leave, the rail grows and shrinks with them.
+   Set on the child list (measured by motion/branch `nestFrom`):
+     --nest-x       the rail's x from the list's left edge,
+     --nest-lead    the parent glyph's bottom to the list's top,
+     --nest-glyph-y a child glyph's centre from its row's top,
+     --nest-reach   a child row's left edge to its glyph,
+     --nest-in      the rail to the child row's left edge,
+     --nest-gap     the gap between child rows.
+   Drawn in and out by the fold (motion/branch): a list drawing
+   (`data-branch-draw`) cuts each stretch where the line's head is, by two
+   lengths the fold moves (--nest-cut-r, --nest-cut-b); a list held
+   (`data-branch-hold`) is cut whole from below until its piece is built.
+   The line's weight and every length it is placed by are whole device
+   pixels (--dpx, device-pixel.ts), so it is the same crisp line in every
+   frame. */
+@utility kit-nest {
+  /* Valid until measured, so nothing built on it drops a declaration. */
+  --nest-x: 0px;
+  --nest-reach: 0px;
+  /* The rail to a child row's left edge: what is left of one --tree-step
+     after the half mark the rail stands under and the row's own inset. */
+  --nest-half: calc(var(--mark-size, 18px) / 2);
+  --nest-in: calc(var(--tree-step) - var(--nest-half) - var(--nest-reach));
+  --nest-glyph-y: var(--space-4);
+  --nest-gap: var(--tree-gap);
+  --nest-lead: 0px;
+  --nest-pad: calc(var(--nest-x) + var(--nest-in));
+  --nest-line: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
+  --nest-left: round(
+    calc(var(--nest-x) - var(--nest-pad) - var(--nest-line) / 2),
+    var(--dpx, 1px)
+  );
+  position: relative;
+
+  & > li {
+    position: relative;
+  }
+  & > li::before,
+  & > li::after {
+    content: "";
+    position: absolute;
+    z-index: 1;
+    left: var(--nest-left);
+    pointer-events: none;
+    border-color: var(--nest-ink);
+    border-style: solid;
+    border-width: 0;
+  }
+  /* The elbow: down the rail from the row above, round the curve, and out
+     along the arm to the child's glyph. */
+  & > li::before {
+    top: calc(-1 * var(--nest-gap));
+    width: round(
+      calc(var(--nest-in) + var(--nest-reach) + var(--nest-line) / 2),
+      var(--dpx, 1px)
+    );
+    height: round(
+      calc(var(--nest-glyph-y) + var(--nest-gap) + var(--nest-line) / 2),
+      var(--dpx, 1px)
+    );
+    border-left-width: var(--nest-line);
+    border-bottom-width: var(--nest-line);
+    border-bottom-left-radius: var(--radius-sm);
+  }
+  & > li:first-child::before {
+    top: calc(-1 * var(--nest-lead));
+    height: round(
+      calc(var(--nest-glyph-y) + var(--nest-lead) + var(--nest-line) / 2),
+      var(--dpx, 1px)
+    );
+  }
+  /* The rail on past this child to the next one, from where the elbow
+     starts to curve away; the last child has none. */
+  & > li::after {
+    top: calc(var(--nest-glyph-y) - var(--radius-sm));
+    bottom: calc(-1 * var(--nest-gap));
+    border-left-width: var(--nest-line);
+  }
+  & > li:last-child::after {
+    content: none;
+  }
+  [data-branch-draw]& > li::before,
+  [data-branch-draw]& > li::after,
+  [data-branch-draw] & > li::before,
+  [data-branch-draw] & > li::after {
+    clip-path: inset(-9999px var(--nest-cut-r) var(--nest-cut-b) -9999px);
+  }
+  [data-branch-hold]& > li::before,
+  [data-branch-hold]& > li::after,
+  [data-branch-hold] & > li::before,
+  [data-branch-hold] & > li::after {
+    --nest-cut-b: 9999px;
+  }
+}
+
+@layer components {
+  /* The edge fade's defaults, at no weight under every host's own: the
+     length (the house 40px, a phone's 16px so it reads as an edge, not a
+     band) and the inline mask, which PaneTabs' phone strip redraws on its
+     own run (`strip-edge-mask`) and `fade-len-*` sets per scroller. In the
+     utilities layer they would outrank those. */
+  :where(.kit-edge-fade, .kit-edge-fade-block) {
+    --fade-len: var(--c-edge-fade-len);
+
+    @variant max-phone {
+      --fade-len: var(--c-edge-fade-len-phone);
+    }
+  }
+  :where(.kit-edge-fade) {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 min(var(--fade-start), var(--fade-cap-start, 100vw)),
+      #000 calc(100% - min(var(--fade-end), var(--fade-cap-end, 100vw))),
+      transparent
+    );
+  }
 }

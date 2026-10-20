@@ -1,8 +1,8 @@
 <script lang="ts">
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import PendingContent, {
-    whileIdle,
-  } from "#lib/components/ui/button/pending-content.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /** Project chip + popover (§1.4, §2.7): pick, clear, or create a project. */
   import Add from "~icons/solar/add-circle-bold-duotone";
   import Down from "~icons/solar/alt-arrow-down-linear";
@@ -87,8 +87,10 @@
   {onchange}
   {open}
   rows="[data-fh]"
-  triggerClass="ns-chip-btn"
-  triggerTone={project ? undefined : "muted"}
+  triggerClass={chipVariants({
+    variant: "setting",
+    tone: project ? undefined : "muted",
+  })}
 >
   {#snippet trigger()}
     <Files class="text-hue-amber-500" />
@@ -131,7 +133,7 @@
         <input
           aria-label="Project name"
           autocapitalize="off"
-          class="type-body min-w-0 flex-1 border-none border-current bg-transparent p-0 text-ink-strong outline-off"
+          class="type-body min-w-0 flex-1 border-none border-current bg-transparent p-0 text-ink-strong outline-off placeholder:text-ink-muted"
           oninput={(event) => onName(event.currentTarget.value)}
           placeholder="Project name"
           spellcheck="false"
@@ -146,7 +148,7 @@
         <input
           aria-label="Project path"
           autocapitalize="off"
-          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-body leading-body font-normal text-ink-strong outline-off"
+          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-body leading-body font-normal text-ink-strong outline-off placeholder:text-ink-muted"
           oninput={(event) => {
             if (draft) {
               draft = { ...draft, path: event.currentTarget.value };
@@ -165,34 +167,24 @@
           class="type-meta min-w-0 flex-1 truncate text-status-fail-ink"
           role="alert">{createError}</span
         >
-        <button
-          class="ns-btn touch-hit"
-          data-size="sm"
+        <Button
           onclick={() => {
             draft = null;
           }}
-          type="button"
+          size="sm"
+          variant="outline"
         >
           Back
-        </button>
-        <button
-          data-slot="primary"
-          aria-busy={creating || undefined}
-          aria-disabled={creating || undefined}
-          class="ns-btn touch-hit"
-          data-size="sm"
-          data-variant="primary"
+        </Button>
+        <Button
           disabled={!(draft.name.trim() && draft.path.trim())}
-          onclick={whileIdle(() => creating, create)}
-          type="button"
-        >
-          <PendingContent
-            failed={createError !== ""}
-            label="Create"
-            pending={creating}
-            pendingLabel="Creating…"
-          />
-        </button>
+          failed={createError !== ""}
+          label="Create"
+          onclick={create}
+          pending={creating}
+          pendingLabel="Creating…"
+          size="sm"
+        />
       </div>
     </div>
   {:else}
@@ -201,13 +193,13 @@
       <button
         data-slot="row"
         aria-pressed={on}
-        class="ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color] dur-toggle ease-out aria-pressed:bg-selected-bg aria-pressed:text-selected-ink motion-safe:transition-[background-color,transform]"
+        class="ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color] duration-(--dur-toggle) ease-out aria-pressed:bg-selected-bg aria-pressed:text-selected-ink motion-safe:transition-[background-color,transform]"
         data-fh="1"
         onclick={() => onpick(row)}
         style={`--delay:${index * 35}ms`}
         type="button"
       >
-        <span data-slot="tile" class="ns-tile size-c-mark" style:color={row.hue}
+        <span data-slot="tile" class={iconTileVariants()} style:color={row.hue}
           ><Files class="size-icon-md" /></span
         >
         <span data-slot="text" class="min-w-0 flex-1">
@@ -230,7 +222,7 @@
     <button
       data-slot="row"
       data-add
-      class="ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color] dur-toggle ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
+      class="ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color] duration-(--dur-toggle) ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
       data-fh="1"
       onclick={() => {
         draft = { name: "", path: "" };
@@ -238,7 +230,7 @@
       style:--delay={`${projects.length * 35}ms`}
       type="button"
     >
-      <span data-slot="tile" class="ns-tile size-c-mark" data-variant="dashed"
+      <span data-slot="tile" class={iconTileVariants({ empty: true })}
         ><Add class="size-icon-md" /></span
       >
       <span data-slot="name" class="type-label block">New project…</span>

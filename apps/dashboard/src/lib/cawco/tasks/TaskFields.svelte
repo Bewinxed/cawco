@@ -10,6 +10,7 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { IconClose, IconPlus } from "#lib/icons.js";
 
   let {
@@ -66,7 +67,7 @@
 </script>
 
 <section class="flex flex-col gap-space-2">
-  <h3 class="kit-section-head m-0 min-h-c-btn-h-xs px-0">Fields</h3>
+  <h3 class={sectionHeadVariants({ inset: "flush" })}>Fields</h3>
   {#if Object.keys(fields).length > 0}
     <!-- The Relations' key column, so the two parts' values stand on one line. -->
     <dl

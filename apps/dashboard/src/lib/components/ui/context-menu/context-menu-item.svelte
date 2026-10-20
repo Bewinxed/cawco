@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import { cn } from "#lib/utils.js";
 
   let {
@@ -16,7 +17,8 @@
 
 <ContextMenuPrimitive.Item
   class={cn(
-    "kit-item group/context-menu-item relative flex",
+    menuItemVariants(),
+    "group/context-menu-item relative flex",
     "cursor-default select-none items-center gap-2.5 text-label",
     "outline-hidden data-disabled:pointer-events-none",
     "data-inset:pl-9.5",
@@ -29,6 +31,7 @@
     className
   )}
   data-inset={inset}
+  data-menu-item
   data-slot="context-menu-item"
   data-variant={variant}
   bind:ref

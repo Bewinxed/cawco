@@ -737,6 +737,7 @@
            folds back into it the same way (motion/branch). reflow never
            copies or uncovers what is inside (`data-flip-anchor`). -->
       <ul
+        data-nest
         class="kit-nest flex min-w-0 flex-col gap-(--tree-gap) pt-(--tree-gap) pl-(--nest-pad)"
         data-flip-anchor
         in:branch={TREE}
@@ -1097,6 +1098,7 @@
                     (row) => row.id === activeSession
                   )}
                   <ul
+                    data-nest
                     class="kit-nest flex min-w-0 flex-col gap-(--tree-gap) pt-(--tree-gap) pl-(--nest-pad)"
                     data-flip-anchor
                     data-sidebar="menu-sub"

@@ -450,6 +450,7 @@
 @custom-variant slot-hit (&[data-slot="hit"]);
 @custom-variant slot-hitl (&[data-slot="hitl"]);
 @custom-variant slot-icon-action (&[data-slot="icon-action"]);
+@custom-variant slot-icon-card (&[data-slot="icon-card"]);
 @custom-variant slot-identity (&[data-slot="identity"]);
 @custom-variant slot-inner (&[data-slot="inner"]);
 @custom-variant slot-input (&[data-slot="input"]);

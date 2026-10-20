@@ -90,8 +90,13 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { handOver, reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { departBox } from "#lib/cawco/motion/share.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
+  import {
+    Button,
+    sendVariants,
+  } from "#lib/components/ui/button/index.js";
   import { whileIdle } from "#lib/components/ui/button/pending-content.svelte";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { dockShellVariants } from "#lib/components/ui/dock-shell/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Command from "#lib/components/ui/command/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
@@ -3043,7 +3048,7 @@
            tray's chips and the plan's ring step aside meanwhile, as they do
            while the card is up, so the bar costs the transcript nothing the
            row did not already keep clear. The bar is the tray row's chip
-           (app.css .kit-tray-chip) in its needs tone (DelegateTray: a
+           (ui/chip, `variant: "tray"`) in its needs tone (DelegateTray: a
            session asking for something is the one loud colour), across the
            composer's width, standing in the tray row as the tray's chips do:
            a tray chip high, a tray gap off the pill. It stands under the
@@ -3058,7 +3063,12 @@
         <button
           data-slot="asked-chip"
           aria-label={`Show the question from ${ask.asker}: ${first?.question ?? ""}`}
-          class="kit-tray-chip touch-hit w-full min-w-0 text-status-attn-ink pointer-events-auto before:bg-status-attn-bg"
+          class={chipVariants({
+            variant: "tray",
+            class:
+              "touch-hit w-full min-w-0 text-status-attn-ink before:bg-status-attn-bg",
+          })}
+          data-tray-chip
           onclick={restoreAsk}
           type="button"
           bind:this={askedChip}
@@ -3331,7 +3341,7 @@
            nothing, and the textarea itself draws none. Its one-line box is
            the app's composer tokens (app.css `--c-composer-*`), which every
            transcript keeps clear. It is the panel material (app.css
-           `--material-*`, its shell the kit's `.kit-dock-shell`), so the
+           `--material-*`, its shell the kit's ui/dock-shell), so the
            transcript shows faintly through it, and opaque where translucency
            is turned down. The pill's box is what grows out of it shares: the
            grown shape is drawn behind the pill and its rows over it. While
@@ -3355,7 +3365,10 @@
           ? "Meta+Shift+D Control+Shift+D"
           : undefined}
         aria-label={FIELD_LABEL}
-        class="group/cin kit-dock-shell field-shell relative z-2 py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none data-recalling:outline-off data-grown:outline-off [&:is([data-recalling],[data-grown]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-off not-focus-within:touch-none not-focus-within:touch-callout-none"
+        class={dockShellVariants({
+          class:
+            "group/cin field-shell relative z-2 py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none data-recalling:outline-off data-grown:outline-off [&:is([data-recalling],[data-grown]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-off not-focus-within:touch-none not-focus-within:touch-callout-none",
+        })}
         onclickcapture={onholdclick}
         oncontextmenu={onholdnative}
         onpointerdown={onholddown}
@@ -3627,7 +3640,7 @@
           {/if}
           <!-- Pending from the press until the hub takes the message: the glyph
            slot turns to the kit spinner and presses are swallowed. -->
-          <!-- Send is the kit's (app.css `.kit-send`). Optical centring: the
+          <!-- Send is the kit's (ui/button `sendVariants`). Optical centring: the
                send plane's mass sits low-left of its box, so the glyph is
                nudged up and right to look centred rather than measure
                centred. -->
@@ -3636,7 +3649,7 @@
             aria-busy={pending || undefined}
             aria-disabled={pending || held || undefined}
             aria-label={stops ? "Stop the agent" : "Send message"}
-            class="kit-send group/stop touch-hit pressable"
+            class={sendVariants({ class: "group/stop touch-hit" })}
             disabled={!(
               busy ||
               pending ||

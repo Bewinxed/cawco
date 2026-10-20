@@ -698,6 +698,7 @@
     {#if kids.length > 0}
       <ul
         data-slot="tree-branch"
+        data-nest
         class="kit-nest m-0 flex list-none flex-col gap-(--tree-gap) pt-(--tree-gap) pb-0 ps-(--nest-pad) pe-0"
         {@attach nestFrom("[data-tree-mark]")}
       >
@@ -901,7 +902,7 @@
               data-machine={id}
             >
               <hr
-                class="kit-seam absolute inset-x-0 top-0 bottom-auto opacity-0 transition-[opacity] dur-fade ease-out [[data-slot=group][data-filled]~[data-slot=group][data-filled]>&]:opacity-100"
+                class="absolute inset-x-0 top-0 bottom-auto mx-(--seam-inset) h-px border-0 bg-seam opacity-0 transition-[opacity] dur-fade ease-out [[data-slot=group][data-filled]~[data-slot=group][data-filled]>&]:opacity-100"
               />
               {@render header(
                 entry.group,

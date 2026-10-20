@@ -17,6 +17,7 @@
   import { closeInto } from "#lib/cawco/motion/share.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconPlus } from "#lib/icons.js";
@@ -217,7 +218,11 @@
           {#each choices as choice (choice)}
             <button
               data-slot="choice"
-              class="kit-item px-space-3 text-start font-(family-name:--font-mono) text-size-meta text-ink-strong focus-inset"
+              class={menuItemVariants({
+                class:
+                  "px-space-3 text-start font-(family-name:--font-mono) text-size-meta text-ink-strong focus-inset",
+              })}
+              data-menu-item
               disabled={busy}
               onclick={() => choose(choice)}
               type="button"

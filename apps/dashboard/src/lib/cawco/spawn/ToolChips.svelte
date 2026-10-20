@@ -48,6 +48,10 @@
    * Effort and permission as chips that open their pickers on one shared
    * popover surface. Read-only, they are the same chips as plain text.
    */
+  import {
+    type ChipSize,
+    chipVariants,
+  } from "#lib/components/ui/chip/index.js";
   import { IconShield } from "#lib/icons.js";
   import Down from "~icons/solar/alt-arrow-down-linear";
   import Tuning from "~icons/solar/tuning-2-bold-duotone";
@@ -66,6 +70,7 @@
     id = "session",
     closeOnCommit = false,
     readonly = false,
+    size = "regular",
   }: {
     tools: ModelTools;
     /** Prefix for the chips' popover ids. */
@@ -73,6 +78,8 @@
     /** Apply the effort once the level is let go, then close the picker. */
     closeOnCommit?: boolean;
     readonly?: boolean;
+    /** The chips' size: the dialog's, or the session card's `compact` group. */
+    size?: ChipSize;
   } = $props();
   let pop = $state<"effort" | "permission" | null>(null);
   const look = $derived(
@@ -93,9 +100,15 @@
   const effortPicker = $derived(
     !(readonly || effortOff) && tools.efforts.length > 0
   );
-  /** The consequential grant's warning tint on a Full Send chip, hover included. */
-  const FULL_SEND =
-    "border-status-attn-ink bg-status-attn-bg text-status-attn-ink hover:bg-status-attn-bg";
+  /** A setting chip at this row's size; Full Send's in the grant's tone. */
+  const chip = $derived(chipVariants({ variant: "setting", size }));
+  const permissionChipClass = $derived(
+    chipVariants({
+      variant: "setting",
+      size,
+      tone: fullSend ? "grant" : undefined,
+    })
+  );
   /** Apply the level now, but keep the picker open while the chip settles on it. */
   const SETTLE_MS = 260;
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -120,9 +133,8 @@
   {#if effortOff}
     <span
       data-tool
-      data-slot="ns-chip-btn"
       aria-disabled="true"
-      class="ns-chip-btn opacity-55 hover:bg-surface-raised variant-static:hover:bg-surface-recess"
+      class={chip}
       data-variant={readonly ? "static" : undefined}
       title={effortOff.reason}
     >
@@ -131,11 +143,8 @@
       <span class="sr-only">: {effortOff.reason}</span>
     </span>
   {:else}
-    <span
-      data-tool
-      data-slot="ns-chip-btn"
-      data-variant="static"
-      class="ns-chip-btn">{@render effortChip()}</span
+    <span data-tool data-variant="static" class={chip}
+      >{@render effortChip()}</span
     >
   {/if}
 {/snippet}
@@ -164,9 +173,8 @@
       {#if tools.modes.length && tools.permission}
         <span
           data-tool
-          data-slot="ns-chip-btn"
           data-variant="static"
-          class={["ns-chip-btn", fullSend && FULL_SEND]}
+          class={permissionChipClass}
           title={look?.desc || undefined}>{@render permissionChip()}</span
         >
       {/if}
@@ -191,7 +199,7 @@
               pop = value ? "effort" : null;
             }}
             open={pop === "effort"}
-            triggerClass="ns-chip-btn"
+            triggerClass={chip}
             triggerData={{ "data-tool": true }}
             width={300}
           >
@@ -221,16 +229,13 @@
               pop = value ? "permission" : null;
             }}
             open={pop === "permission"}
-            triggerClass={fullSend ? `ns-chip-btn ${FULL_SEND}` : "ns-chip-btn"}
+            triggerClass={permissionChipClass}
             triggerData={{ "data-tool": true }}
             width={340}
           >
             {#snippet trigger()}
               {@render permissionChip()}
-              <Down
-                class={fullSend ? "text-status-attn-ink" : undefined}
-                data-slot="chevron"
-              />
+              <Down data-slot="chevron" />
             {/snippet}
             <PermissionSection
               embedded

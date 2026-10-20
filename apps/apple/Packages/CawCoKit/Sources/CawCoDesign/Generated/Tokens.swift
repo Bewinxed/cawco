@@ -857,6 +857,14 @@ public enum Size {
     public static let cCombPitch: Double = 6
     /// An edge fade at full length at every width, where the kit's phone 16px would show nothing (Files' scrollers, Caw's panel).
     public static let cEdgeFadeLen: Double = 40
+    /// wave 2: W8-app-recipes. The house edge fade's length under 640px (kit-edge-fade, kit-edge-fade-block): short enough to read as an edge on a phone's narrow view, not a band across the content. Sits between the ladder's 14 and 18, so it is its own token.
+    public static let cEdgeFadeLenPhone: Double = 16
+    /// wave 2: W8-app-recipes. A floating surface's row (ui/menu-item): 32px on a fine pointer, 44px on a coarse one (cawco.coarse.tokens.json; DESIGN.md, The 44 Touch Rule). A row height, not spacing, so not space-8.
+    public static let cMenuItemH: Double = 32
+    /// `cMenuItemH` under a coarse pointer (touch).
+    public static let cMenuItemHCoarse: Double = 44
+    /// wave 2: W8-app-recipes. The narrowest an icon card stands in its grid (ui/icon-card), the track floor of the auto-fit columns.
+    public static let cIconCardMin: Double = 160
     /// A sheet's height cap (DESIGN.md Drawer: "It is as tall as its content, up to 85vh").
     public static let cSheetMaxH: Double = 717.4
     /// The peek sheet's height on a touch screen: fixed, so it holds its size from the first frame.

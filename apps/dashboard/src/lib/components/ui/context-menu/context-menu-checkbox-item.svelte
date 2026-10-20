@@ -2,6 +2,7 @@
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
   import { tickVariants } from "#lib/components/ui/checkbox/checkbox.svelte";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import { IconTick } from "#lib/icons.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
 
@@ -21,10 +22,12 @@
 
 <ContextMenuPrimitive.CheckboxItem
   class={cn(
-    "kit-item relative flex cursor-default select-none items-center gap-2 pr-space-8 pl-2.5 text-label outline-hidden data-disabled:pointer-events-none data-inset:pl-9.5 data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    menuItemVariants(),
+    "relative flex cursor-default select-none items-center gap-2 pr-space-8 pl-2.5 text-label outline-hidden data-disabled:pointer-events-none data-inset:pl-9.5 data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     className
   )}
   data-inset={inset}
+  data-menu-item
   data-slot="context-menu-checkbox-item"
   bind:checked
   bind:indeterminate

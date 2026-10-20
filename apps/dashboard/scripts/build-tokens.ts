@@ -127,8 +127,8 @@ const RETIRED = new Set([
  * The house's animations, one `animate-<name>` each, every one on the motion
  * tokens. A plain fade names app.css's `kit-fade-in` / `kit-fade-out`; the
  * keyframes app.css keeps for script-built names (`breath`, `rail-label-in`,
- * `kit-tip-fade`, ns-theme's `ns-in`, `ns-panel`) are named from there; the
- * rest are below. Every travelling one is used under `motion-safe:`.
+ * `kit-tip-fade`) are named from there; the rest are below. Every travelling
+ * one is used under `motion-safe:`.
  */
 const ANIMATIONS: Record<string, string> = {
   // Live work breathes (DESIGN.md): one loop of --breath on ease-in-out.
@@ -191,6 +191,14 @@ const ANIMATIONS: Record<string, string> = {
   "animate-ns-scrim-in":
     "kit-fade-in var(--dur-panel) var(--ease-out) backwards",
   "animate-ns-scrim-out": "kit-fade-out var(--dur-exit) var(--ease-out) both",
+  // The dialog's one-shot entrances, each on a duration the dialog sets on
+  // `.ns-theme` (read with `--theme(… inline)`): a row fading up, a check
+  // landing, the panel rising; its popover opening and closing.
+  "animate-ns-in": "ns-in var(--ns-row-ms) var(--ease-out) backwards",
+  "animate-ns-check": "ns-check var(--ns-check-ms) var(--ease-out) both",
+  "animate-ns-panel": "ns-panel var(--dur-fade) var(--ease-out) both",
+  "animate-ns-pop-in": "ns-pop-in var(--dur-pop) var(--ease-drawer) both",
+  "animate-ns-pop-out": "ns-pop-out var(--dur-exit) var(--ease-out) both",
   // A reply's filed tasks arrive in a cascade (`arrive-delay`), rising, or
   // with reduced motion fading; a project offer settles in the same rise.
   "animate-filed-fade": "kit-fade-in var(--dur-pop) var(--ease-out) backwards",
@@ -263,6 +271,15 @@ const KEYFRAMES: Record<string, string> = {
   "sheet-out": "to {\n  transform: var(--sheet-away);\n}",
   "ns-panel-out":
     "to {\n  transform: translateY(var(--space-2)) scale(var(--press-scale));\n  opacity: 0;\n}",
+  "ns-in":
+    "from {\n  opacity: 0;\n  transform: translateY(8px);\n}\nto {\n  opacity: 1;\n  transform: none;\n}",
+  "ns-check":
+    "from {\n  opacity: 0;\n  transform: scale(0.5);\n}\nto {\n  opacity: 1;\n  transform: none;\n}",
+  "ns-panel":
+    "from {\n  opacity: 0;\n  transform: translateY(6px);\n}\nto {\n  opacity: 1;\n  transform: none;\n}",
+  "ns-pop-out": "to {\n  opacity: 0;\n  scale: var(--pop-scale);\n}",
+  "ns-pop-in":
+    "from {\n  opacity: 0;\n  scale: var(--pop-scale);\n  translate: 0 calc(-1 * var(--pop-rise));\n}",
   "rise-in": "from {\n  opacity: 0;\n  translate: 0 var(--pop-rise);\n}",
   "wave-draw": "from {\n  stroke-dashoffset: var(--run);\n}",
   "wave-breath-draw":

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import { IconChevronRight } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
 
@@ -16,10 +17,12 @@
 
 <DropdownMenuPrimitive.SubTrigger
   class={cn(
-    "kit-item flex cursor-default select-none items-center gap-2 px-2.5 text-label outline-hidden data-open:bg-[var(--surface-hover)] data-inset:pl-space-8 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    menuItemVariants(),
+    "flex cursor-default select-none items-center gap-2 px-2.5 text-label outline-hidden data-open:bg-[var(--surface-hover)] data-inset:pl-space-8 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     className
   )}
   data-inset={inset}
+  data-menu-item
   data-slot="dropdown-menu-sub-trigger"
   bind:ref
   {...restProps}

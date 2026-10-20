@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   /**
    * Everything else that can be opened — every session no other home list
    * shows, each with its delegates in its tree, and the transcripts stored
@@ -93,7 +94,10 @@
     <button
       data-slot="disclosure"
       aria-expanded={recentOpen}
-      class="group/disclosure kit-section-head press-tint focus-inset min-h-c-btn-h w-full rounded-t-sm border-none border-current bg-transparent transition-control hover:bg-surface-hover hover:text-ink-strong"
+      class={sectionHeadVariants({
+        class:
+          "group/disclosure press-tint focus-inset min-h-c-btn-h w-full rounded-t-sm border-none border-current bg-transparent transition-control hover:bg-surface-hover hover:text-ink-strong",
+      })}
       onclick={toggleRecent}
       type="button"
     >
@@ -106,7 +110,12 @@
       <!-- Closed, the count says what is still live inside, as an "N older"
            row says what it hides (older.ts): nothing else on a closed list
            tells the reader a running session is in it. -->
-      <span data-num data-slot="count" class="num count" data-box>
+      <span
+        data-num
+        data-slot="count"
+        class="num ms-auto type-meta text-ink-subtle"
+        data-box
+      >
         <span
           class="inline-grid w-(--digits)"
           style:--digits="{String(home.recentCount).length}ch"

@@ -9,6 +9,7 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { CURVE, dur } from "#lib/cawco/motion/curves.svelte.js";
   import { folds } from "#lib/cawco/motion/fold.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import Up from "~icons/solar/alt-arrow-up-linear";
   import Left from "~icons/solar/arrow-left-linear";
@@ -218,7 +219,7 @@
         aria-invalid={reading && !informational ? true : undefined}
         aria-label="Directory"
         autocapitalize="off"
-        class="min-h-c-btn-h-sm max-phone:min-h-c-row-h min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-strong outline-off"
+        class="min-h-c-btn-h-sm max-phone:min-h-c-row-h min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-strong outline-off placeholder:text-ink-muted"
         id="session-dir"
         oninput={(event) => ondir(event.currentTarget.value)}
         onkeydown={commitOnEnter}
@@ -232,24 +233,25 @@
           class="ns-in mark-line inline-flex h-c-pill-h items-center gap-space-1 rounded-sm bg-status-live-bg px-space-2 font-body text-size-label leading-none font-medium whitespace-nowrap text-status-live-ink"
           ><span>From project</span></span
         >
-        <button
-          class="ns-in h-c-btn-h-sm max-phone:h-c-row-h flex-none rounded-sm border-none border-current bg-transparent px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted hover:bg-surface-hover hover:text-ink-strong"
+        <Button
+          class="ns-in flex-none max-phone:h-c-row-h"
           onclick={onoverride}
+          size="sm"
           style="--delay:40ms"
-          type="button"
+          tone="quiet"
+          variant="ghost"
         >
           Override
-        </button>
+        </Button>
       {:else}
-        <button
-          data-slot="browse"
+        <Button
           aria-expanded={browsing}
-          class="ns-in inline-flex h-c-btn-h-sm max-phone:h-c-row-h flex-none items-center justify-start gap-space-2 rounded-sm border border-border-control bg-surface-recess px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-strong shadow-knob enabled:hover:bg-surface-hover disabled:cursor-not-allowed"
+          class="ns-in flex-none max-phone:h-c-row-h"
           disabled={!machineId}
           id="session-browse"
           onclick={toggleBrowse}
-          style:opacity={machineId ? 1 : 0.5}
-          type="button"
+          size="sm"
+          variant="secondary"
         >
           {#if browsing}
             <Up class="size-icon-md flex-none text-ink-muted" /><span
@@ -259,7 +261,7 @@
             <Search class="size-icon-md flex-none text-ink-muted" />
             <span>Browse</span>
           {/if}
-        </button>
+        </Button>
       {/if}
     </div>
     <div inert={!browsing} {@attach folds(() => browsing, PANEL)}>
@@ -286,7 +288,7 @@
                 {#each crumbs.slice(0, -1) as crumb (crumb.to)}
                   <button
                     data-slot="crumb"
-                    class="min-h-c-row-h min-w-c-row-h flex-none rounded-xs border-none border-current bg-transparent px-space-2 text-inherit hover:bg-surface-hover"
+                    class="press-tint transition-control min-h-c-row-h min-w-c-row-h flex-none rounded-xs border-none border-current bg-transparent px-space-2 text-inherit hover:bg-surface-hover"
                     onclick={() => list(crumb.to)}
                     type="button"
                   >
@@ -298,7 +300,7 @@
               <button
                 data-slot="crumb"
                 aria-current="location"
-                class="min-h-c-row-h min-w-c-row-h max-w-full flex-none rounded-xs border-none border-current bg-surface-lift p-space-2 text-start font-medium wrap-anywhere text-ink-strong"
+                class="press-tint transition-control min-h-c-row-h min-w-c-row-h max-w-full flex-none rounded-xs border-none border-current bg-surface-lift p-space-2 text-start font-medium wrap-anywhere text-ink-strong"
                 onclick={() => list(path)}
                 type="button"
               >
@@ -311,7 +313,7 @@
           >
             {#if canGoUp}
               <button
-                class="press-tint flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-muted hover:bg-surface-hover"
+                class="press-tint transition-control flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-muted hover:bg-surface-hover"
                 onclick={goUp}
                 type="button"
               >
@@ -338,7 +340,7 @@
             {:else}
               {#each folders as folder (`${path}/${folder.name}`)}
                 <button
-                  class="press-tint flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-strong hover:bg-surface-hover"
+                  class="press-tint transition-control flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-strong hover:bg-surface-hover"
                   onclick={() => enter(folder.name)}
                   title={folder.name}
                   type="button"
@@ -372,16 +374,13 @@
               class="max-phone:basis-full min-w-0 truncate font-(family-name:--font-mono) text-size-meta leading-label font-normal text-ink-muted"
               title={path}>{path}</span
             >
-            <button
-              data-slot="primary"
-              class="ns-btn touch-hit max-phone:min-h-c-row-h flex-none whitespace-nowrap max-phone:w-full"
-              data-size="sm"
-              data-variant="primary"
+            <Button
+              class="flex-none max-phone:min-h-c-row-h max-phone:w-full"
               onclick={useFolder}
-              type="button"
+              size="sm"
             >
               Use this folder
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -409,7 +408,7 @@
             <input
               aria-label="Repository"
               autocapitalize="off"
-              class="min-h-c-btn-h-sm max-phone:min-h-c-row-h min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-strong outline-off"
+              class="min-h-c-btn-h-sm max-phone:min-h-c-row-h min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-strong outline-off placeholder:text-ink-muted"
               id="session-repo"
               oninput={(event) => onrepo(event.currentTarget.value)}
               onkeydown={commitOnEnter}

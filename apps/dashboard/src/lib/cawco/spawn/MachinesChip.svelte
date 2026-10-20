@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import { MachineRow } from "#lib/components/ui/machine-row/index.js";
   /**
    * Machines chip + popover (§1.4, §2.5): multi-select rows, then "Connect a
@@ -74,8 +77,10 @@
   {onchange}
   {open}
   rows="[data-fh]"
-  triggerClass="ns-chip-btn"
-  triggerTone={picked.length ? undefined : "fail"}
+  triggerClass={chipVariants({
+    variant: "setting",
+    tone: picked.length ? undefined : "fail",
+  })}
 >
   {#snippet trigger()}
     <Server class="text-hue-cyan-500" />
@@ -98,16 +103,15 @@
       {/if}
       <CheckInStatus>
         {#snippet trail()}
-          <button
-            class="ns-btn touch-hit"
-            data-size="sm"
+          <Button
             onclick={() => {
               pairing = null;
             }}
-            type="button"
+            size="sm"
+            variant="outline"
           >
             Back
-          </button>
+          </Button>
         {/snippet}
       </CheckInStatus>
     </div>
@@ -117,7 +121,7 @@
       <button
         data-slot="row"
         aria-pressed={on}
-        class="ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color,border-radius] dur-toggle ease-out aria-pressed:bg-selected-bg aria-pressed:[&_:is([data-slot=name],[data-slot=meta])]:text-selected-ink disabled:cursor-not-allowed disabled:opacity-55 motion-safe:transition-[background-color,border-radius,transform]"
+        class="ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color,border-radius] duration-(--dur-toggle) ease-out aria-pressed:bg-selected-bg aria-pressed:[&_:is([data-slot=name],[data-slot=meta])]:text-selected-ink disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
         data-fh="1"
         disabled={!row.online}
         onclick={() => ontoggle(row.id)}
@@ -134,7 +138,7 @@
           presence={presenceOf(row)}
         />
         <Check
-          class="size-icon-md flex-none text-ink-strong in-aria-pressed:text-selected-icon transition-[opacity] dur-toggle ease-out motion-safe:transition-[opacity,transform]"
+          class="size-icon-md flex-none text-ink-strong in-aria-pressed:text-selected-icon transition-[opacity] duration-(--dur-toggle) ease-out motion-safe:transition-[opacity,transform]"
           style={`opacity:${on ? 1 : 0};transform:scale(${on ? 1 : 0.94})`}
         />
       </button>
@@ -153,13 +157,13 @@
     <button
       data-slot="row"
       data-add
-      class="ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color,border-radius] dur-toggle ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-55 motion-safe:transition-[background-color,border-radius,transform]"
+      class="ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color,border-radius] duration-(--dur-toggle) ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
       data-fh="1"
       onclick={startPairing}
       style="--delay:140ms"
       type="button"
     >
-      <span data-slot="tile" class="ns-tile size-c-mark" data-variant="dashed"
+      <span data-slot="tile" class={iconTileVariants({ empty: true })}
         ><Add class="size-icon-md" /></span
       >
       <span class="type-label">Connect a machine…</span>

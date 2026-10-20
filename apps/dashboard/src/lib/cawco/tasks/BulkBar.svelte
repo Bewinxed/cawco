@@ -44,6 +44,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import {
@@ -229,7 +230,8 @@
             {#each labels as each (each)}
               <li>
                 <button
-                  class="kit-item w-full text-start"
+                  class={menuItemVariants({ class: "w-full text-start" })}
+                  data-menu-item
                   onclick={() => label(each)}
                   type="button"><span>{each}</span></button
                 >

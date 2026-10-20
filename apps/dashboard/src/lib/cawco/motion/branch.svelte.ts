@@ -95,12 +95,14 @@
  * `data-nest-host`), which is `data-flip="box"` and `position: relative`;
  * the group is `data-flip-anchor`, so reflow never copies or uncovers what
  * is inside it. Each row in it, at any depth, is `data-branch-item`, with
- * its glyph matching `glyph`. A `.kit-nest` group's line (app.css) is its
- * list items' `::before` (the elbow: down, round its corner, out along its
- * arm) and `::after` (the rail on past the child), placed by `nestFrom`.
+ * its glyph matching `glyph`. A nesting group's line (the `kit-nest`
+ * utility, app.css) is its list items' `::before` (the elbow: down, round
+ * its corner, out along its arm) and `::after` (the rail on past the child),
+ * placed by `nestFrom`. The script finds a nesting list by its `data-nest`
+ * hook, never by the utility's name.
  *
  *   {#if open}
- *     <ul class="kit-nest" data-flip-anchor
+ *     <ul class="kit-nest" data-nest data-flip-anchor
  *         in:branch={{ glyph: "[data-tree-mark]" }} out:branch={{ glyph: "[data-tree-mark]" }}
  *         {@attach nestFrom("[data-tree-mark]")}>
  */
@@ -215,7 +217,7 @@ function parentGlyph(group: HTMLElement, selector: string) {
  * first `glyph` in the nearest list item around the list (or the box marked
  * `data-nest-host`); a child's is the first `child` in the first row.
  *
- *   <ul class="kit-nest" {@attach nestFrom("[data-tree-mark]")}>
+ *   <ul class="kit-nest" data-nest {@attach nestFrom("[data-tree-mark]")}>
  *
  * Measured in layout, transforms ignored: first just before motion/rows
  * reads where the rows are, after the update that drew the list
@@ -337,10 +339,13 @@ function settleDrawn(): void {
   measureNests(lists);
 }
 
+/** A nesting list's hook (its markup's `data-nest`). */
+const NEST = "[data-nest]";
+
 /** Every list in a group just shown, the group's own included. */
 function measureNestsIn(group: HTMLElement): void {
   measureNests(
-    [group, ...group.querySelectorAll(".kit-nest")].filter((list) =>
+    [group, ...group.querySelectorAll(NEST)].filter((list) =>
       nests.has(list)
     )
   );
@@ -368,7 +373,7 @@ function measureFirst(group: HTMLElement): void {
   const first = group.querySelector(":scope > li");
   group.setAttribute(PROBE, "");
   measureNests(
-    [group, ...(first?.querySelectorAll(".kit-nest") ?? [])].filter((list) =>
+    [group, ...(first?.querySelectorAll(NEST) ?? [])].filter((list) =>
       nests.has(list)
     )
   );
@@ -379,9 +384,9 @@ function measureFirst(group: HTMLElement): void {
 function depthIn(node: Element): number {
   let depth = 0;
   for (
-    let at = node.parentElement?.closest(".kit-nest");
+    let at = node.parentElement?.closest(NEST);
     at;
-    at = at.parentElement?.closest(".kit-nest")
+    at = at.parentElement?.closest(NEST)
   ) {
     depth += 1;
   }
@@ -714,7 +719,7 @@ function nestOfItem(
   li: HTMLLIElement | null
 ): HTMLElement | null {
   const list = li?.parentElement;
-  return list && group.contains(li) && list.classList.contains("kit-nest")
+  return list && group.contains(li) && list.matches(NEST)
     ? list
     : null;
 }

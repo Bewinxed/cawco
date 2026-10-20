@@ -10,6 +10,7 @@
   import type { TransitionConfig } from "svelte/transition";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconCheck } from "#lib/icons.js";
   import Down from "~icons/solar/alt-arrow-down-linear";
@@ -652,7 +653,7 @@
           <button
             data-slot="cwd"
             aria-label={`Copy working directory ${cwd}`}
-            class="min-w-0 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label text-start wrap-anywhere text-inherit hover:text-ink-strong"
+            class="min-w-0 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label text-start wrap-anywhere text-inherit hover:text-ink-strong active:opacity-72"
             onclick={() => copyToClipboard("Working directory", cwd)}
             title={cwd}
             type="button"
@@ -706,7 +707,10 @@
               }}
               open={modelOpen}
               fit
-              triggerClass="ns-chip-btn"
+              triggerClass={chipVariants({
+                variant: "setting",
+                size: "compact",
+              })}
               triggerData={{ "data-model-chip": true }}
               width={360}
             >
@@ -747,16 +751,17 @@
           {:else}
             <span
               data-tool
-              data-slot="ns-chip-btn"
               data-model-chip
               data-variant="static"
-              class="ns-chip-btn">{@render modelChip()}</span
+              class={chipVariants({ variant: "setting", size: "compact" })}
+              >{@render modelChip()}</span
             >
           {/if}
           <ToolChips
             closeOnCommit
             id="details"
             readonly={!editable}
+            size="compact"
             tools={{
               efforts,
               effort: isEffortLevel(session?.effort) ? session.effort : null,
@@ -775,7 +780,11 @@
           <!-- The account the session bills: the group's fourth setting,
                wrapping with the others when the row runs out. -->
           {#if row?.accountId}
-            <AccountSwitch instance={row} readonly={!editable} />
+            <AccountSwitch
+              instance={row}
+              readonly={!editable}
+              size="compact"
+            />
           {/if}
         </div>
         <!-- One line is always held for what a change says, so its pending,
@@ -869,18 +878,15 @@
     data-slot="footer"
     class="flex flex-none items-center justify-end gap-space-2 px-space-5 py-space-4"
   >
-    <button
-      data-slot="primary"
-      class="ns-btn max-phone:flex-1"
-      data-size="xs"
-      data-variant="primary"
+    <Button
+      class="max-phone:flex-1"
       onclick={() => {
         onclose();
         continueInNewSession(continueSourceOf(sessionId, title));
       }}
-      type="button"
+      size="sm"
     >
       Continue in new session…
-    </button>
+    </Button>
   </div>
 </div>

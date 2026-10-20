@@ -24,6 +24,7 @@
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { dockShellVariants } from "#lib/components/ui/dock-shell/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconChevronLeft, IconSend } from "#lib/icons.js";
@@ -329,14 +330,16 @@
         {refusal}
       </p>
     {/if}
-    <!-- Its shell is the composer's (app.css `.kit-dock-shell`). The note's
+    <!-- Its shell is the composer's (ui/dock-shell). The note's
          sizes stand on the shell, so the field and the twin its autosize
          measures on (motion/autosize.svelte.ts, which writes the twin's own
          style whole) inherit them alike. The phone's 16px floor is app.css's
          for every field. -->
     <div
       data-slot="cin"
-      class="kit-dock-shell flex items-end gap-space-2 p-c-composer-inset ps-space-3"
+      class={dockShellVariants({
+        class: "flex items-end gap-space-2 p-c-composer-inset ps-space-3",
+      })}
       style:--note-leading="var(--leading-ui)"
       style:--note-fs="var(--text-body)"
     >

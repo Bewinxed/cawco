@@ -419,6 +419,10 @@
   --spacing-c-scrollbar-thin: var(--c-scrollbar-thin);
   --spacing-c-comb-pitch: var(--c-comb-pitch);
   --spacing-c-edge-fade-len: var(--c-edge-fade-len);
+  --spacing-c-edge-fade-len-phone: var(--c-edge-fade-len-phone);
+  /* Switches with its context: no literal maps to it. */
+  --spacing-c-menu-item-h: var(--c-menu-item-h);
+  --spacing-c-icon-card-min: var(--c-icon-card-min);
   --spacing-c-sheet-max-h: var(--c-sheet-max-h);
   --spacing-c-peek-sheet-h: var(--c-peek-sheet-h);
   --spacing-c-grabber-w: var(--c-grabber-w);
@@ -680,6 +684,11 @@
   --animate-ns-card-out: ns-panel-out var(--dur-exit) var(--ease-out) both;
   --animate-ns-scrim-in: kit-fade-in var(--dur-panel) var(--ease-out) backwards;
   --animate-ns-scrim-out: kit-fade-out var(--dur-exit) var(--ease-out) both;
+  --animate-ns-in: ns-in var(--ns-row-ms) var(--ease-out) backwards;
+  --animate-ns-check: ns-check var(--ns-check-ms) var(--ease-out) both;
+  --animate-ns-panel: ns-panel var(--dur-fade) var(--ease-out) both;
+  --animate-ns-pop-in: ns-pop-in var(--dur-pop) var(--ease-drawer) both;
+  --animate-ns-pop-out: ns-pop-out var(--dur-exit) var(--ease-out) both;
   --animate-filed-fade: kit-fade-in var(--dur-pop) var(--ease-out) backwards;
   --animate-filed-rise: rise-in var(--dur-pop) var(--ease-out) backwards;
   --animate-offer-settle: rise-in calc(var(--dur-control) * 2) var(--ease-out)
@@ -830,6 +839,49 @@
     to {
       transform: translateY(var(--space-2)) scale(var(--press-scale));
       opacity: 0;
+    }
+  }
+  @keyframes ns-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes ns-check {
+    from {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes ns-panel {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes ns-pop-out {
+    to {
+      opacity: 0;
+      scale: var(--pop-scale);
+    }
+  }
+  @keyframes ns-pop-in {
+    from {
+      opacity: 0;
+      scale: var(--pop-scale);
+      translate: 0 calc(-1 * var(--pop-rise));
     }
   }
   @keyframes rise-in {

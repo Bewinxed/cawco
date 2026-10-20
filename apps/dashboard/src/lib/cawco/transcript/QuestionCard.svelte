@@ -16,12 +16,13 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { fold } from "#lib/cawco/motion/fold.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
+  import { chipsVariants, chipVariants } from "#lib/components/ui/chip/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { IconAsk, IconCheck, IconClose } from "#lib/icons.js";
   /**
    * An answered (or dismissed) `AskUserQuestion` as it settled in the transcript
    * history — the same `.hitl` anatomy as the live prompt, but read-only: the
-   * chosen option is a `.kit-chip-chosen` record, and any freeform reply shows under the options.
+   * chosen option is a `data-chosen` record, and any freeform reply shows under the options.
    * Ported from the mock's `#q-card` (.hitl / .lede / .qopts; chips are the kit option chip).
    */
   import { CLI_REJECTED } from "../question";
@@ -129,7 +130,8 @@
       '[data-slot="qopts"]'
     )) {
       rowHeights.set(row.dataset.question ?? "", row.offsetHeight);
-      for (const option of row.querySelectorAll<HTMLElement>(".kit-chip")) {
+      // The row's children are its chips (the options, then the picks).
+      for (const option of row.querySelectorAll<HTMLElement>(":scope > span")) {
         stood.set(option, {
           top: option.offsetTop,
           left: option.offsetLeft,
@@ -143,7 +145,7 @@
     for (const q of questions) {
       for (const label of chosen(q.question)) {
         const option = root.querySelector<HTMLElement>(
-          `.kit-chip[data-key="${CSS.escape(shareKey(q.question, label))}"]`
+          `[data-slot="qopts"] > [data-key="${CSS.escape(shareKey(q.question, label))}"]`
         );
         if (option) {
           option.dataset.share = shareKey(q.question, label);
@@ -305,16 +307,19 @@
       {q.question}
     </p>
     <!-- The settled record is the live card's anatomy, inert: the same kit
-         option chips (.kit-chips / .kit-chip in app.css, the Kbd keycap), so a
-         pick looks picked, not flagged, and the card settles without a jump. -->
+         option chips (ui/chip, the Kbd keycap), so a pick looks picked, not
+         flagged, and the card settles without a jump. -->
+
     <div
       data-slot="qopts"
-      class="kit-chips rail-hang relative mt-space-row mb-space-2"
+      class={chipsVariants({
+        class: "rail-hang relative mt-space-row mb-space-2",
+      })}
       data-question={q.question}
     >
       {#each settled ? [] : q.options as opt, i (opt.label)}
         <span
-          class="kit-chip"
+          class={chipVariants()}
           data-key={shareKey(q.question, opt.label)}
           out:leave
         >
@@ -325,7 +330,8 @@
         {#each q.options.filter( (opt) => isSelected(q.question, opt.label) ) as opt (opt.label)}
           <span
             data-slot="sel"
-            class="kit-chip kit-chip-chosen"
+            class={chipVariants()}
+            data-chosen
             {@attach land(() => shareKey(q.question, opt.label), {
               ms: dur("--dur-pop"),
             })}

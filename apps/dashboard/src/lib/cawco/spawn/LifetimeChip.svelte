@@ -8,6 +8,8 @@
   import Check from "~icons/solar/check-circle-bold-duotone";
   import Database from "~icons/solar/database-bold-duotone";
   import Fire from "~icons/solar/fire-bold-duotone";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import NsPopover from "./NsPopover.svelte";
 
   let {
@@ -49,7 +51,7 @@
   {onchange}
   {open}
   rows="[data-fh]"
-  triggerClass="ns-chip-btn"
+  triggerClass={chipVariants({ variant: "setting" })}
   width={300}
 >
   {#snippet trigger()}
@@ -68,7 +70,7 @@
     <button
       data-slot="row"
       aria-pressed={on}
-      class="ns-in press-tint relative flex min-h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
+      class="ns-in press-tint transition-control relative flex min-h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
       data-fh="1"
       onclick={() => {
         onlifetime(option.ephemeral);
@@ -79,7 +81,7 @@
     >
       <span
         data-slot="tile"
-        class="ns-tile size-c-mark"
+        class={iconTileVariants()}
         style:color={option.hue}><Icon class="size-icon-md" /></span
       >
       <span data-slot="text" class="min-w-0 flex-1">

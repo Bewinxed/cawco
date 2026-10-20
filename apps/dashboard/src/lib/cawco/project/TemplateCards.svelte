@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
-   * New project's template cards (design §5): radio cards on app.css's icon
-   * cards (the channel-card recipe: one selection frame for the set, 1px
+   * New project's template cards (design §5): radio cards on the kit's icon
+   * cards (ui/icon-card; the channel-card recipe: one selection frame for the set, 1px
    * `brand-solid` over `surface-recess`), as many to a row as fit. The
    * frame is the house highlight's selection pill (components/ui/highlight,
    * the new-session dialog's list), drawn in that recipe: it glides to the
@@ -22,6 +22,10 @@
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import {
+    iconCardsVariants,
+    iconCardVariants,
+  } from "#lib/components/ui/icon-card/index.js";
   import Caw, { LEDGE_LINE, SAFE_MARGIN } from "../home/Caw.svelte";
   import CawPosePicture from "../home/CawPosePicture.svelte";
   import CardFace from "./CardFace.svelte";
@@ -143,15 +147,16 @@
   <RadioGroup.Root
     data-cards
     aria-label="Template"
-    class="icon-cards gap-y-space-8"
+    data-slot="icon-cards"
+    class={iconCardsVariants({ class: "gap-y-space-8" })}
     onValueChange={(next) => {
       selected = (next || null) as TemplateName | null;
     }}
     value={selected ?? ""}
     {@attach measure}
     {@attach highlight({
-      rows: ".icon-card",
-      selected: '.icon-card[data-state="checked"]',
+      rows: '[data-slot="icon-card"]',
+      selected: '[data-slot="icon-card"][data-state="checked"]',
       axis: "xy",
       look: "card",
     })}
@@ -160,7 +165,8 @@
       {@const acted = action?.template === card.template ? action : undefined}
       <div class="relative grid">
         <RadioGroup.Item
-          class="icon-card"
+          data-slot="icon-card"
+          class={iconCardVariants()}
           data-template={card.template}
           value={card.template}
         >

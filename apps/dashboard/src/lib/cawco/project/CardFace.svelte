@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * An icon card's face (app.css `.icon-card`): its head, the icon tile
+   * An icon card's face (ui/icon-card): its head, the icon tile
    * (DESIGN.md: the duotone glyph on a raised 26px tile, in its section
    * hue) with whatever stands beside it; its art, where it has one, centred
    * between the head and the name; then its name and its meta line.

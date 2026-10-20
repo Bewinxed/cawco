@@ -116,6 +116,7 @@
   import { Input } from "#lib/components/ui/input/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -1054,7 +1055,11 @@
           <li>
             <!-- biome-ignore lint/a11y/noLabelWithoutControl: the kit Checkbox renders the control the label names -->
             <label
-              class="kit-item type-label flex w-full items-center gap-space-2 px-space-2 text-ink-strong"
+              class={menuItemVariants({
+                class:
+                  "type-label flex w-full items-center gap-space-2 px-space-2 text-ink-strong",
+              })}
+              data-menu-item
             >
               <Checkbox
                 data-box

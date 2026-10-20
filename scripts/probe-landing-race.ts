@@ -373,7 +373,7 @@ try {
   });
   const chip = page
     .locator(
-      '.kit-tray-chip:is([data-delegate-tray-tone="failed"], [data-key="failed"])'
+      '[data-tray-chip]:is([data-delegate-tray-tone="failed"], [data-key="failed"])'
     )
     .first();
   await chip.waitFor({ timeout: 60_000 });

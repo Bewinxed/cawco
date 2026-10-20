@@ -4,14 +4,6 @@
 
   export const collapsibleTriggerVariants = tv({
     variants: {
-      /** Inside a surface that sets its own type and ink (the new-session
-          dialog, `ns-theme`): the trigger takes the surface's font and ink as
-          every button there does, and eases the control's colours, with the
-          press's transform where motion is welcome. */
-      skin: {
-        surface:
-          "font-inherit text-inherit transition-control motion-safe:transition-control-press",
-      },
       /**
        * The trigger by its role (DESIGN.md, Components). Its words and ink
        * come from the row it heads unless the role names them.
@@ -32,8 +24,7 @@
         head: "rail-line press-tint min-h-c-mark coarse:min-h-c-btn-h-lg min-w-0 rounded-xs text-start text-size-label font-medium transition-[color] dur-control ease-out",
         note: "rail-line inline-flex text-start",
         fold: "mark-line press-tint inline-flex items-center gap-space-1 rounded-xs py-space-1 text-start type-label text-ink-muted transition-[color] dur-control ease-out hover:text-ink-strong",
-        chevron:
-          "grid place-items-center text-ink-muted press-tint",
+        chevron: "grid place-items-center text-ink-muted press-tint",
         opener: "focus-inset block text-start after:absolute after:inset-0",
       },
     },
@@ -51,14 +42,13 @@
   let {
     ref = $bindable(null),
     class: className,
-    skin,
     look,
     ...restProps
   }: CollapsiblePrimitive.TriggerProps & CollapsibleTriggerLooks = $props();
 </script>
 
 <CollapsiblePrimitive.Trigger
-  class={cn(collapsibleTriggerVariants({ skin, look }), className)}
+  class={cn(collapsibleTriggerVariants({ look }), className)}
   data-slot="collapsible-trigger"
   bind:ref
   {...restProps}

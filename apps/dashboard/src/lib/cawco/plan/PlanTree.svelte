@@ -101,6 +101,7 @@
 {#snippet tree(nodes: PlanNode[], nested: boolean)}
   <ul
     data-slot="rows"
+    data-nest={nested || undefined}
     class={nested
       ? "kit-nest flex flex-col gap-space-1 m-0 list-none pbs-space-1 pbe-0 ps-(--rows-pad-start) pe-0"
       : "flex flex-col gap-space-1 m-0 p-0 list-none"}

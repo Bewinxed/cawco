@@ -72,6 +72,7 @@
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { chipsVariants, chipVariants } from "#lib/components/ui/chip/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -861,14 +862,17 @@
                 <ul
                   data-slot="routine-starters"
                   aria-label={words.startersLabel}
-                  class="kit-chips m-0 list-none px-(--starters-inset) py-0 max-desk:px-space-3"
+                  class={chipsVariants({
+                    class:
+                      "m-0 list-none px-(--starters-inset) py-0 max-desk:px-space-3",
+                  })}
                   style:--starters-inset="calc((100% - var(--c-composer-w)) / 2)"
                 >
                   {#each starters as starter (starter.text)}
                     {@const Glyph = GLYPHS[starter.glyph]}
                     <li class="flex max-w-full">
                       <button
-                        class="kit-chip touch-hit"
+                        class={chipVariants({ class: "touch-hit" })}
                         onclick={() => pick(starter.text)}
                         type="button"
                       >

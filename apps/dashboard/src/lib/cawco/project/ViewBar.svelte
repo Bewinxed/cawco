@@ -2,7 +2,7 @@
   /**
    * The project page's views on a phone (under 640px; the strip holds them
    * wider): one bar docked where a session docks its composer, in the
-   * composer's shell (app.css `.kit-dock-shell`), full width less --space-3
+   * composer's shell (ui/dock-shell), full width less --space-3
    * a side, --space-4 and the safe area above the foot. It arrives with the
    * page and never moves. Left to right:
    *
@@ -19,7 +19,7 @@
    * - Needs you, the page's filter (NeedsYouChip), while something needs you;
    * - Ask Caw (the head's own, which a phone's head has no room for), the
    *   screen's one coral control, on Send's recipe
-   *   (app.css `.kit-send`): it opens Caw's panel on a new thread, the
+   *   (ui/button `sendVariants`): it opens Caw's panel on a new thread, the
    *   caret in his composer (work in a project starts by telling Caw).
    *
    * The pill and "+" press to --press-scale over --dur-toggle.
@@ -27,6 +27,8 @@
   import { type Snippet, untrack } from "svelte";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
+  import { sendVariants } from "#lib/components/ui/button/index.js";
+  import { dockShellVariants } from "#lib/components/ui/dock-shell/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "#lib/components/ui/select/index.js";
@@ -128,7 +130,10 @@
 >
   <div
     data-slot="view-bar"
-    class="group kit-dock-shell flex items-center gap-space-2 p-c-composer-inset hit-gap-x-space-2 coarse:gap-space-3 coarse:hit-gap-x-space-3"
+    class={dockShellVariants({
+      class:
+        "group flex items-center gap-space-2 p-c-composer-inset hit-gap-x-space-2 coarse:gap-space-3 coarse:hit-gap-x-space-3",
+    })}
     data-bar
     style:--bar-control-radius="calc(var(--radius-lg) - var(--c-composer-inset))"
     bind:this={shell}
@@ -197,8 +202,7 @@
     <span class="flex-auto"></span>
     <button
       aria-label="Ask Caw"
-      class="kit-send touch-hit pressable"
-      style:--kit-send-press="var(--dur-toggle)"
+      class={sendVariants({ class: "touch-hit" })}
       onclick={onnewsession}
       type="button"
     >

@@ -92,6 +92,7 @@
          (motion/branch `nestFrom`), so a tree nests alike in both. -->
     <ul
       data-slot="tree-branch"
+      data-nest
       class="kit-nest flex flex-col gap-(--tree-gap) m-0 pt-(--tree-gap) pb-0 ps-(--nest-pad) pe-0 list-none"
       data-flip-anchor
       in:branch={TREE}

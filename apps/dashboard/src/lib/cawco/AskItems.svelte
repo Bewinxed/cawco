@@ -70,6 +70,7 @@
       </div>
       {#if kids.length > 0}
         <ul
+          data-nest
           class="kit-nest m-0 list-none p-0"
           {@attach nestFrom("[data-tree-mark]")}
         >

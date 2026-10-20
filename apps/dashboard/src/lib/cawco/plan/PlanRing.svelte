@@ -2,10 +2,11 @@
   /**
    * How far a conversation's plan has got — the progress ring and its figure
    * — as the control that opens the plan beside it (SideSplit). A chip on
-   * the tray row (app.css .kit-tray-chip), the delegate chips' own recipe,
-   * so the row is one height on one line.
+   * the tray row (ui/chip, `variant: "tray"`), the delegate chips' own
+   * recipe, so the row is one height on one line.
    */
   import { planWords } from "@cawco/core";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { IconToolTodo } from "#lib/icons.js";
   import TaskRing from "../TaskRing.svelte";
 
@@ -27,7 +28,12 @@
   data-slot="plan-ring"
   aria-label={planWords.ringLabel(done, total)}
   aria-pressed={open}
-  class="kit-tray-chip touch-hit text-ink-muted aria-pressed:text-ink-strong aria-pressed:before:bg-surface-pressed"
+  class={chipVariants({
+    variant: "tray",
+    class:
+      "touch-hit text-ink-muted aria-pressed:text-ink-strong aria-pressed:before:bg-surface-pressed",
+  })}
+  data-tray-chip
   onclick={onopen}
   type="button"
 >

@@ -17,6 +17,10 @@
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import {
+    iconCardsVariants,
+    iconCardVariants,
+  } from "#lib/components/ui/icon-card/index.js";
   import { barGlass } from "./bar-glass.svelte";
   import Caw from "./home/Caw.svelte";
   import { addMachine, JOIN_WAYS } from "./join/join.svelte";
@@ -86,18 +90,20 @@
             this fleet.
           </p>
           <div
-            class="icon-cards mt-space-4 w-full"
+            data-slot="icon-cards"
+            class={iconCardsVariants({ class: "mt-space-4 w-full" })}
             {@attach highlight({
-              rows: ".icon-card",
-              selected: ".icon-card[data-open]",
+              rows: '[data-slot="icon-card"]',
+              selected: '[data-slot="icon-card"][data-open]',
               axis: "xy",
               look: "card",
             })}
           >
             {#each JOIN_WAYS as card, index (card.way)}
               <button
+                data-slot="icon-card"
                 aria-haspopup="dialog"
-                class="icon-card"
+                class={iconCardVariants()}
                 data-open={addMachine.open && addMachine.way === card.way
                   ? ""
                   : undefined}

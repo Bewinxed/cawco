@@ -6,6 +6,7 @@
    * in a rollout popover) belongs to the caller; this is what sits inside it.
    */
   import type { Component, Snippet } from "svelte";
+  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
 
   let {
     icon: Icon,
@@ -30,7 +31,7 @@
 
 <span
   data-slot="tile"
-  class="inline-flex size-c-mark flex-none items-center justify-center rounded-sm bg-surface-raised shadow-tile data-ink:bg-ink-solid data-ink:text-on-ink data-ink:shadow-none"
+  class={iconTileVariants()}
   data-ink={ink || undefined}
   style:color={ink ? undefined : hue}
   ><Icon class="size-icon-md flex-none" /></span

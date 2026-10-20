@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import type { VariantProps } from "tailwind-variants";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { tv } from "#lib/utils.js";
 
   /**
@@ -7,8 +8,8 @@
    * press, a wide one tints (The Press Rule); its fill and ink are the
    * role's, a state is its attribute.
    * - `chip`: a setting chip (New-session dialog: "Setting chips are 30px
-   *   with an 8px radius, a 16px glyph and a 12px chevron"), the option
-   *   chip's recipe (`kit-chip`).
+   *   with an 8px radius, a 16px glyph and a 12px chevron"), ui/chip's
+   *   `setting` recipe, its press included.
    * - `state`: a state chip that opens what it reports (a rollout's): the
    *   recess, meta words in the muted ink, `data-fail` taking the fail pair,
    *   its fill and ink settling over --dur-panel.
@@ -24,7 +25,7 @@
   export const popoverTriggerVariants = tv({
     variants: {
       look: {
-        chip: "kit-chip motion-safe:transition-control-press motion-safe:pressed:scale-(--press-scale)",
+        chip: chipVariants({ variant: "setting" }),
         state:
           "mark-line inline-flex h-c-btn-h-xs items-center gap-space-1 rounded-sm bg-surface-recess px-space-2 type-meta whitespace-nowrap text-ink-muted transition-chip-settle not-data-fail:hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink motion-safe:pressed:scale-(--press-scale)",
         count:

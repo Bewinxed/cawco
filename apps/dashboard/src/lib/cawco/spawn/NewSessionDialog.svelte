@@ -38,6 +38,8 @@
     DrawerContent,
     DrawerTitle,
   } from "#lib/components/ui/drawer/index.js";
+  import { pressVariants } from "#lib/components/ui/button/index.js";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { sheetHeadVariants } from "#lib/components/ui/drawer/drawer-header.svelte";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import {
@@ -1919,7 +1921,7 @@
         <button
           {...tip}
           aria-label={moveStep ? "Back" : "Close"}
-          class={sheetHead.close()}
+          class={pressVariants({ press: "scale", class: sheetHead.close() })}
           data-vaul-no-drag
           onclick={moveStep ? back : close}
           type="button"
@@ -2007,9 +2009,8 @@
             />
             {#if sourceProject}
               <span
-                data-slot="ns-chip-btn"
                 data-variant="static"
-                class="ns-chip-btn"
+                class={chipVariants({ variant: "setting" })}
                 title={`The new session starts in ${sourceProject.name}, the project of the session it continues`}
               >
                 <Files class="text-hue-amber-500" />

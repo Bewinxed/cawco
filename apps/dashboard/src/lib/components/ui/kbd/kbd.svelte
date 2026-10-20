@@ -14,13 +14,13 @@
        * size in strong ink (Typography, Code: "code, commands, paths, tool
        * names, keycaps"), on the spacing ladder's 18px; filled vermillion with
        * a white digit when its chip is picked (Colors, Chosen option:
-       * `chip-chosen-bg`, `chip-chosen-ink`), the fill turning over
-       * --dur-control where motion is welcome.
+       * `chip-chosen-bg`, `chip-chosen-ink`: ui/chip's `option` sets them),
+       * the fill turning over --dur-control where motion is welcome.
        */
       look: {
         key: "in-data-[slot=tooltip-content]:bg-[var(--on-brand)]/20 in-data-[slot=tooltip-content]:text-[var(--on-brand)] dark:in-data-[slot=tooltip-content]:bg-surface-page/10",
         keycap:
-          "inline-grid h-space-5 min-w-space-5 flex-none place-items-center font-mono text-ink-strong leading-none motion-safe:[transition:background-color_var(--dur-control)_var(--ease-out),color_var(--dur-control)_var(--ease-out)] in-[.kit-chip:is([aria-pressed=true],[aria-checked=true],.kit-chip-chosen)]:bg-chip-chosen-bg in-[.kit-chip:is([aria-pressed=true],[aria-checked=true],.kit-chip-chosen)]:text-chip-chosen-ink",
+          "inline-grid h-space-5 min-w-space-5 flex-none place-items-center font-mono text-ink-strong leading-none motion-safe:[transition:background-color_var(--dur-control)_var(--ease-out),color_var(--dur-control)_var(--ease-out)]",
       },
       /** Its figures in tabular widths (DESIGN.md, The Tabular Figure Rule). */
       figures: { tabular: "tabular-nums" },

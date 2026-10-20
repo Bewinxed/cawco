@@ -9,7 +9,9 @@
   import { crossfade } from "svelte/transition";
   import { autowidth } from "#lib/cawco/motion/autosize.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
+  import { pressVariants } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import Clear from "~icons/solar/close-square-bold-duotone";
   import Code from "~icons/solar/code-square-bold-duotone";
@@ -356,7 +358,7 @@
           aria-label="Search models"
           autocapitalize="off"
           autocorrect="off"
-          class="h-full min-w-0 flex-1 border-none border-current bg-transparent p-0 font-body text-size-body leading-body font-normal text-ink-strong"
+          class="h-full min-w-0 flex-1 border-none border-current bg-transparent p-0 font-body text-size-body leading-body font-normal text-ink-strong placeholder:text-ink-muted"
           id={`${uid}-search`}
           oninput={(event) => {
             query = event.currentTarget.value;
@@ -379,7 +381,11 @@
           <button
             data-slot="clear"
             aria-label="Clear"
-            class="inline-flex size-space-6 items-center justify-center rounded-xs border-none border-current bg-transparent text-ink-subtle hover:text-ink-strong"
+            class={pressVariants({
+              press: "scale",
+              class:
+                "inline-flex size-space-6 items-center justify-center rounded-xs border-none border-current bg-transparent text-ink-subtle hover:text-ink-strong",
+            })}
             onclick={() => {
               query = "";
             }}
@@ -433,17 +439,15 @@
         {#if showCustomRow}
           <button
             data-slot="row"
-            class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint border border-dashed border-neutral-8 bg-surface-raised hover:bg-surface-hover"
+            class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint transition-control border border-dashed border-neutral-8 bg-surface-raised hover:bg-surface-hover"
             data-fh="1"
             onclick={pickCustom}
             type="button"
             in:crossIn
             out:crossOut
           >
-            <span
-              data-slot="tile"
-              class="ns-tile size-c-mark"
-              data-variant="ink"><Code class="size-icon-md" /></span
+            <span data-slot="tile" class={iconTileVariants()} data-ink
+              ><Code class="size-icon-md" /></span
             >
             <span data-slot="text" class="min-w-0 flex-1">
               <span
@@ -493,7 +497,7 @@
               data-slot="row"
               aria-disabled={reason ? true : undefined}
               aria-selected={picked}
-              class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint min-w-0 shrink grow basis-c-model-row-basis border border-transparent bg-transparent"
+              class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint transition-control min-w-0 shrink grow basis-c-model-row-basis border border-transparent bg-transparent"
               data-fh="1"
               data-model={entry.id}
               disabled={Boolean(reason)}
@@ -534,7 +538,9 @@
   {#if mixedMakers}
     <span
       data-slot="tile"
-      class="ns-tile size-c-mark overflow-hidden group-disabled:opacity-50"
+      class={iconTileVariants({
+        class: "overflow-hidden group-disabled:opacity-50",
+      })}
     >
       {#if provider}
         <ProviderLogo model={entry.id} size="control" />

@@ -11,6 +11,7 @@
   import type { Todo } from "#lib/cawco/project-tasks.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconPlus } from "#lib/icons.js";
 
@@ -157,10 +158,13 @@
 {/snippet}
 
 <section class="flex flex-col gap-space-2">
-  <h3 class="kit-section-head min-h-c-btn-h-xs m-0 px-0">
+  <h3 class={sectionHeadVariants({ inset: "flush" })}>
     To-dos
     {#if todos.length > 0}
-      <span data-num data-slot="count" class="count num"
+      <span
+        data-num
+        data-slot="count"
+        class="num ms-auto type-meta text-ink-subtle"
         >{done}/{todos.length}</span
       >
     {/if}
