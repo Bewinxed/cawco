@@ -277,6 +277,26 @@ export default defineConfig([
     files: [file],
     rules: { "shadcn/no-inline-styles": ["error", { allow }] },
   })),
+  // A duration token is read in its unit, through motion `dur()`, never as a
+  // bare number: the built stylesheet's minifier (Lightning CSS) writes
+  // `1000ms` as `1s`, so `parseFloat` of what `getPropertyValue("--dur-…")`
+  // returns reads it 1000× short (Preview's wait grace stood at 1ms so).
+  // motion/curves is where `dur()` reads them.
+  {
+    files: ["src/**/*.svelte", "src/**/*.ts"],
+    ignores: ["src/lib/cawco/motion/curves.svelte.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.property.name='getPropertyValue'][arguments.0.value=/^--dur-/]",
+          message:
+            "Read a duration token with dur() (lib/cawco/motion/curves.svelte.ts): the built stylesheet writes `1000ms` as `1s`, so its bare number isn't milliseconds.",
+        },
+      ],
+    },
+  },
   // A decision page's media measure their own box while mounted: Preview's
   // frame takes the height its page or component canvas says it stands at,
   // and Canvas's frame the box its drawing's shape gives it in its well
