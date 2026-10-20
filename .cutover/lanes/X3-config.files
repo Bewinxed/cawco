@@ -115,3 +115,8 @@ apps/dashboard/src/routes/(app)/config/spend/+page.svelte
 apps/dashboard/src/routes/(app)/config/subagents/+page.svelte
 apps/dashboard/src/routes/(app)/config/subagents/[name]/+page.svelte
 apps/dashboard/src/routes/(app)/config/updates/+page.svelte
+apps/dashboard/src/routes/(app)/motion/traffic/+page.svelte
+apps/dashboard/src/lib/cawco/config/NoMachines.svelte
+apps/dashboard/src/routes/(app)/oauth/mcp/+page.svelte
+scripts/probe-kit/specs/config-undo.ts
+apps/dashboard/src/lib/cawco/config/StickyFoot.svelte

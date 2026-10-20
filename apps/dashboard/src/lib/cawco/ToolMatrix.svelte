@@ -17,13 +17,11 @@
   import {
     IconCheck,
     IconExternal,
-    IconLaptop,
-    IconServer,
     IconTerminal,
     IconWarningTriangle,
   } from "#lib/icons.js";
   import { didntAnswer, type Machine } from "./client.svelte";
-  import { addMachine } from "./join/join.svelte";
+  import NoMachines from "./config/NoMachines.svelte";
   import { machineOs } from "./machine";
   import OsMark from "./OsMark.svelte";
   import { installTool, policyFor, setPolicy } from "./tools";
@@ -283,18 +281,9 @@
     title="Nothing to install"
   />
 {:else if machines.length === 0}
-  <EmptyState
-    icon={IconLaptop}
+  <NoMachines
     line="Tools install on your own machines, and none has joined this hub. Add one and it reports what it already has."
-    title="No machines yet"
-  >
-    {#snippet action()}
-      <Button onclick={() => addMachine.show()}>
-        <IconServer />
-        <span>Add machine</span>
-      </Button>
-    {/snippet}
-  </EmptyState>
+  />
 {:else}
   <!-- One ledger per tool (DESIGN.md, ledger-header and ledger-row): its head
        names the tool, how many machines have it and whether every machine

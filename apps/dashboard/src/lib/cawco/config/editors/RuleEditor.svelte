@@ -293,7 +293,6 @@
     {:else if duplicate}
       <p class="type-meta text-status-fail-ink" in:appear>{duplicate}</p>
     {/if}
-    <ReadingWell text={ruleSentence(draft)} />
     <SwitchField
       hint={draft.enabled
         ? "Watching every session it applies to"
@@ -308,6 +307,9 @@
       </p>
     {/if}
   {/snippet}
+
+  <!-- The rule read back as one sentence, on the page's column. -->
+  <ReadingWell text={ruleSentence(draft)} />
 
   <EditorSection hue={HUE} icon={IconEye} label="What to watch for">
     <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">

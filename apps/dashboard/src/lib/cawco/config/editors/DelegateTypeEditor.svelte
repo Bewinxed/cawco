@@ -6,7 +6,7 @@
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
-  import { IconCpu, IconDocument, IconKey } from "#lib/icons.js";
+  import { IconCpu, IconDocument, IconInfo, IconKey } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import {
@@ -202,15 +202,19 @@
     {:else if duplicate}
       <p class="type-meta text-status-fail-ink" in:appear>{duplicate}</p>
     {/if}
-    <Alert.Root>
-      <Alert.Description>{words.newSessions}</Alert.Description>
-    </Alert.Root>
     {#if failed}
       <p class="type-meta text-status-fail-ink" role="alert" in:appear>
         {failed}
       </p>
     {/if}
   {/snippet}
+
+  <!-- On the page's column, the editor's first row (DESIGN.md, Alert: a
+       compact tinted row with its 16px glyph). -->
+  <Alert.Root>
+    <IconInfo />
+    <Alert.Description>{words.newSessions}</Alert.Description>
+  </Alert.Root>
 
   <EditorSection hue={HUE} icon={IconDocument} label={words.description}>
     <Field

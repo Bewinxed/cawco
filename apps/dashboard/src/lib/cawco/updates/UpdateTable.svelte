@@ -6,12 +6,10 @@
    */
   import { machineLabel } from "@cawco/core";
   import type { BinaryUpdatePolicy } from "@cawco/core/binary-updates";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { EmptyState } from "#lib/components/ui/empty/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Table from "#lib/components/ui/table/index.js";
-  import { IconCheck, IconLaptop, IconServer } from "#lib/icons.js";
-  import { addMachine } from "../join/join.svelte";
+  import { IconCheck } from "#lib/icons.js";
+  import NoMachines from "../config/NoMachines.svelte";
   import { machineOs } from "../machine";
   import OsMark from "../OsMark.svelte";
   import { isCurrent, isOnline, runningOf, type UpdateMachine } from "./model";
@@ -24,18 +22,9 @@
 </script>
 
 {#if machines.length === 0}
-  <EmptyState
-    icon={IconLaptop}
+  <NoMachines
     line="Builds install on your own machines, and none has joined this hub. Add one and it reports what it runs."
-    title="No machines yet"
-  >
-    {#snippet action()}
-      <Button onclick={() => addMachine.show()}>
-        <IconServer />
-        <span>Add machine</span>
-      </Button>
-    {/snippet}
-  </EmptyState>
+  />
 {:else}
   <!-- The ledger (DESIGN.md, ledger-header and ledger-row): a 32px band of
        column heads, 44px rows apart by a hairline, on the page's own card.

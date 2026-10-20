@@ -562,11 +562,11 @@
                     {words.listsNothing}
                   </p>
                 {:else}
-                  <ul data-slot="listing" class="flex flex-col gap-space-row">
+                  <ul data-slot="listing" class="flex flex-col">
                     {#each listings[row.name] as plugin (plugin.name)}
                       {@const id = `${plugin.name}@${row.name}`}
                       <li
-                        class="flex flex-wrap items-center gap-space-2 rounded-sm bg-surface-recess px-space-3 py-space-2"
+                        class="flex flex-wrap items-center gap-space-2 py-space-2 not-first:border-t not-first:border-t-border-hairline"
                       >
                         <span
                           data-slot="text"

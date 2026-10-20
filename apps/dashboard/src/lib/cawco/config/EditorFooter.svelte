@@ -32,14 +32,9 @@
 
 <script lang="ts">
   /**
-   * The editor's commit row: the card's own foot, on the card's surface,
-   * held at the page's foot (sticky) while the fields run on under it, with
-   * the house edge fade above it so they pass under it (DESIGN.md, the
-   * update notice's footer: "on the panel's surface with the house edge
-   * fade above it"). Under 640px Delete is the header's ⋯ menu's, and over
-   * a keyboard the row stands on the keyboard with the fields kept clear of
-   * it (aboveKeyboard, `body`). It never wraps: what the save reaches gives
-   * way first, on one line.
+   * The editor's commit row, on the card's sticky foot (StickyFoot). Under
+   * 640px Delete is the header's ⋯ menu's. It never wraps: what the save
+   * reaches gives way first, on one line.
    *
    * Save shows its work where it was pressed: the kit Button spins while
    * the save runs and draws a check for --dur-hold when it ends well, and
@@ -48,13 +43,11 @@
   import { configureWords } from "@cawco/core";
   import type { Snippet } from "svelte";
   import AskHere from "#lib/cawco/AskHere.svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { aboveKeyboard } from "#lib/cawco/visible-viewport.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconTrash } from "#lib/icons.js";
+  import StickyFoot from "./StickyFoot.svelte";
 
   let {
-    body,
     saving,
     saveLabel,
     canSave = true,
@@ -67,8 +60,6 @@
     question,
     result,
   }: {
-    /** The scrolling body whose fields the row stands under. */
-    body: HTMLElement | null;
     saving: boolean;
     saveLabel: string;
     canSave?: boolean;
@@ -109,46 +100,9 @@
     wasSaving = now;
   });
   $effect(() => () => clearTimeout(savedTimer));
-
-  /**
-   * Whether the fields run on under the row (`data-stuck`): the page can
-   * scroll further down, so the row is held at its foot over them. Read in
-   * the next frame (frameObserver) as the page scrolls or changes size.
-   */
-  function stuck(node: HTMLElement) {
-    const page = body;
-    if (!page) {
-      return;
-    }
-    const read = () => {
-      node.toggleAttribute(
-        "data-stuck",
-        page.scrollTop + page.clientHeight < page.scrollHeight - 0.5
-      );
-    };
-    const sizes = frameObserver(read);
-    const soon = () => sizes.request();
-    page.addEventListener("scroll", soon, { passive: true });
-    sizes.observe(page);
-    if (page.firstElementChild) {
-      sizes.observe(page.firstElementChild);
-    }
-    soon();
-    return () => {
-      page.removeEventListener("scroll", soon);
-      sizes.disconnect();
-    };
-  }
 </script>
 
-<footer
-  data-slot="editor-footer"
-  class="sticky -bottom-space-2 z-1 mt-auto flex-none flex flex-col gap-space-3 bg-surface-raised pt-space-3 pb-(--foot-pb) before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-c-edge-fade-len before:bg-linear-to-b/srgb before:from-transparent before:to-surface-raised before:opacity-0 before:transition-[opacity] before:duration-(--dur-control) before:ease-out data-stuck:before:opacity-100 max-phone:before:h-c-edge-fade-len-phone"
-  data-safe-bottom
-  style:--foot-pb="calc(var(--space-6) + var(--safe-bottom))"
-  {@attach aboveKeyboard(() => body)}
-  {@attach stuck}
->
+<StickyFoot data-slot="editor-footer">
   {#if question}
     <AskHere asker={question.asker} at="editor" />
   {/if}
@@ -197,4 +151,4 @@
       type="submit"
     />
   </div>
-</footer>
+</StickyFoot>

@@ -99,7 +99,6 @@
       : null
   );
   let body = $state<HTMLElement | null>(null);
-  let scroller = $state<HTMLElement | null>(null);
   // Let go once everything is in: any difference from the kept height is
   // tweened, not jumped.
   $effect(() => {
@@ -146,7 +145,6 @@
        foot, held at the page's foot while the fields run on under it. -->
   <div
     class="flex flex-auto flex-col min-h-0 overflow-y-auto px-space-5 py-space-2"
-    bind:this={scroller}
   >
     <div
       data-slot="body"
@@ -239,7 +237,6 @@
         {/if}
       </div>
       <EditorFooter
-        body={scroller}
         {canSave}
         {deleteLabel}
         {deleting}

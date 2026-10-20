@@ -141,7 +141,7 @@
     />
     {#if confirming === "on"}
       <div
-        class="flex max-w-c-measure flex-col gap-space-3 rounded-md bg-surface-recess p-space-4"
+        class="flex max-w-c-measure flex-col gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
         transition:unfold
       >
         <p data-slot="lead" class="type-body text-ink-strong">
@@ -194,7 +194,7 @@
       </div>
     {:else if confirming === "off"}
       <div
-        class="flex max-w-c-measure flex-col gap-space-3 rounded-md bg-surface-recess p-space-4"
+        class="flex max-w-c-measure flex-col gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
         transition:unfold
       >
         <p data-slot="lead" class="type-body text-ink-strong">

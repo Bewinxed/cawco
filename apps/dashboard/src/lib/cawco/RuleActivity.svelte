@@ -75,11 +75,11 @@
         still pending — it clears when their next turn ends without matching.
       </p>
     {/if}
-    <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
+    <ul data-slot="list" class="m-0 flex list-none flex-col p-0">
       {#each visible as row (row.instanceId)}
         <li
           data-slot="entry"
-          class="flex flex-col gap-space-1 rounded-sm bg-surface-recess px-space-3 py-space-2"
+          class="flex flex-col gap-space-1 py-space-2 not-first:border-t not-first:border-t-border-hairline"
           data-flip
         >
           <div

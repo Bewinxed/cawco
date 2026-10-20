@@ -63,10 +63,12 @@
       Nothing has been saved over yet.
     </p>
   {:else}
-    <ul class="flex flex-col gap-space-row m-0 p-0 list-none">
+    <!-- Rows on the card's own surface, parted by the hairline (DESIGN.md,
+         The Frame Recesses Rule: no well inside the card). -->
+    <ul class="flex flex-col m-0 p-0 list-none">
       {#each visibleVersions as version (version.id)}
         <li
-          class="flex flex-wrap items-center justify-between gap-space-2 py-space-2 px-space-3 rounded-sm bg-surface-recess"
+          class="flex flex-wrap items-center justify-between gap-space-2 py-space-2 not-first:border-t not-first:border-t-border-hairline"
           data-flip
         >
           <span class="flex flex-col gap-space-row">

@@ -42,7 +42,6 @@
     saveMemory,
     saveMemoryDoc,
   } from "../../fleet";
-  import AddMachineLink from "../../join/AddMachineLink.svelte";
   import { machineOs } from "../../machine";
   import { orderMachines } from "../../rail.svelte";
   import { deleteMemory } from "../deletes";
@@ -58,6 +57,7 @@
     MAIN,
     memoryStateOf,
   } from "../memory";
+  import NoMachines from "../NoMachines.svelte";
   import PickerChip from "../PickerChip.svelte";
   import RolloutChip from "../RolloutChip.svelte";
   import { configStore, upsert } from "../store.svelte";
@@ -564,9 +564,12 @@
         </div>
       </div>
     {/if}
+    <!-- The editor is a field (DESIGN.md, Inputs and fields, Field shell):
+         the input's raised surface, control edge and extra-small shadow,
+         and its border takes the ring while the text inside has focus. -->
     <div
-      data-slot="well"
-      class="min-h-c-editor-well-min rounded-md bg-surface-recess px-space-2 py-space-1"
+      data-slot="field"
+      class="field-shell min-h-c-editor-well-min rounded-md border border-border-control bg-surface-raised px-space-2 py-space-1 shadow-xs"
     >
       <!-- Crepe reads its text once, when it is made: it waits for a draft
            kept for this file to be back. -->
@@ -598,14 +601,11 @@
            reflow, what follows sliding; a row's compare folds open inside
            it. -->
       <div class="flex flex-col gap-space-2" {@attach reflow()}>
-        <ul
-          data-slot="list"
-          class="m-0 flex list-none flex-col gap-space-row p-0"
-        >
+        <ul data-slot="list" class="m-0 flex list-none flex-col p-0">
           {#each visibleVersions as row (row.id)}
             <li
               data-slot="entry"
-              class="flex flex-col gap-space-2 rounded-sm bg-surface-recess px-space-3 py-space-2"
+              class="flex flex-col gap-space-2 py-space-2 not-first:border-t not-first:border-t-border-hairline"
               data-flip
             >
               <div
@@ -723,9 +723,9 @@
   {#if !scoped(savedScope)}
     <EditorSection hue={HUE} icon={IconLaptop} label={words.perMachine}>
       {#if machines.length === 0}
-        <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
-          <AddMachineLink>{words.noMachines}</AddMachineLink>{words.landsFirst}
-        </p>
+        <NoMachines
+          line="This file lands on the first machine that registers."
+        />
       {:else}
         {#if applied.length > 0}
           <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
@@ -737,10 +737,7 @@
             {/if}
           </p>
         {/if}
-        <ul
-          data-slot="list"
-          class="m-0 flex list-none flex-col gap-space-row p-0"
-        >
+        <ul data-slot="list" class="m-0 flex list-none flex-col p-0">
           {#each machines as machine, index (machine.machineId)}
             {@const item = memoryStateOf(machine, path)}
             {@const online = machine.status === "online"}
@@ -748,7 +745,7 @@
             {@const comparingThis = comparing === machine.machineId}
             <li
               data-slot="entry"
-              class="flex flex-col gap-space-2 rounded-sm bg-surface-recess px-space-3 py-space-2"
+              class="flex flex-col gap-space-2 py-space-2 not-first:border-t not-first:border-t-border-hairline"
             >
               <div
                 class="relative flex flex-wrap items-center gap-x-space-3 gap-y-space-2"

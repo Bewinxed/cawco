@@ -20,8 +20,7 @@
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import { Toggle } from "#lib/components/ui/toggle/index.js";
-  import { IconAlert, IconPlus, IconRules, IconTrash } from "#lib/icons.js";
+  import { IconPlus, IconRules, IconTrash } from "#lib/icons.js";
 
   /**
    * The rules. Each row reads as the sentence the rule is, because a rule is a
@@ -112,15 +111,21 @@
   {/snippet}
   {#snippet toolbar()}
     {#if pendingTotal > 0}
-      <Toggle
+      <!-- The filter chip (DESIGN.md, filter-chip-active): a pill, brand
+           wash and brand ink while it filters, the control edge at rest;
+           drawn as Find's filter chips are. -->
+      <button
         aria-label="Show only rules waiting on an answer"
-        size="sm"
-        variant="outline"
-        bind:pressed={waitingOnly}
+        aria-pressed={waitingOnly}
+        class="mark-line touch-hit inline-flex h-space-6 items-center gap-space-row rounded-pill border border-border-control bg-surface-raised px-space-3 type-label text-ink-muted transition-property-[background-color,color,border-color] aria-pressed:border-transparent aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover motion-safe:transition-property-[background-color,color,border-color,scale] motion-safe:active:scale-(--press-scale)"
+        onclick={() => {
+          waitingOnly = !waitingOnly;
+        }}
+        type="button"
       >
-        <IconAlert />
-        <span>Waiting on an answer ({pendingTotal})</span>
-      </Toggle>
+        <span>Waiting on an answer</span>
+        <span data-slot="num" class="num">{pendingTotal}</span>
+      </button>
     {/if}
   {/snippet}
 

@@ -53,7 +53,6 @@
   } from "../../hooks";
   import { failureWords as message } from "../../hub-read";
   import { newId } from "../../id";
-  import AddMachineLink from "../../join/AddMachineLink.svelte";
   import { machineOs } from "../../machine";
   import RowFault from "../../RowFault.svelte";
   import { orderMachines } from "../../rail.svelte";
@@ -64,6 +63,7 @@
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import Field from "../Field.svelte";
+  import NoMachines from "../NoMachines.svelte";
   import PickerChip from "../PickerChip.svelte";
   import PreviousVersions, {
     type ListedVersion,
@@ -504,7 +504,6 @@
     {:else if duplicate}
       <p class="type-meta text-status-fail-ink" in:appear>{duplicate}</p>
     {/if}
-    <ReadingWell text={hookSentence(draft)} />
     <SwitchField
       hint={draft.enabled
         ? "Registered on every machine it applies to"
@@ -519,6 +518,9 @@
       </p>
     {/if}
   {/snippet}
+
+  <!-- The hook read back as one sentence, on the page's column. -->
+  <ReadingWell text={hookSentence(draft)} />
 
   <EditorSection hue={HUE} icon={IconClock} label="When it runs">
     <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
@@ -864,10 +866,9 @@
   {#if id}
     <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
       {#if machines.length === 0}
-        <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
-          <AddMachineLink>No machines yet</AddMachineLink>
-          — this lands on the first one that registers.
-        </p>
+        <NoMachines
+          line="This hook lands on the first machine that registers."
+        />
       {:else}
         {#if applied.length > 0}
           <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
@@ -880,10 +881,7 @@
             {/if}
           </p>
         {/if}
-        <ul
-          data-slot="machines"
-          class="m-0 flex list-none flex-col gap-space-row p-0"
-        >
+        <ul data-slot="machines" class="m-0 flex list-none flex-col p-0">
           {#each machines as machine, index (machine.machineId)}
             {@const item = stateOn(machine)}
             {@const online = machine.status === "online"}
@@ -893,7 +891,7 @@
             {@const settle = settling[machine.machineId]}
             <li
               data-slot="machine"
-              class="flex flex-col gap-space-2 rounded-sm bg-surface-recess px-space-3 py-space-2"
+              class="flex flex-col gap-space-2 py-space-2 not-first:border-t not-first:border-t-border-hairline"
             >
               <div
                 class="relative flex flex-wrap items-center gap-x-space-3 gap-y-space-2"

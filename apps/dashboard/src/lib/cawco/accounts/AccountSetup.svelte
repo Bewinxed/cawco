@@ -43,6 +43,7 @@
     putRouting,
   } from "#lib/cawco/client.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
+  import StickyFoot from "#lib/cawco/config/StickyFoot.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import {
     appear,
@@ -55,7 +56,6 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
-  import { aboveKeyboard } from "#lib/cawco/visible-viewport.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -563,26 +563,27 @@
             {refused}
           </p>
         {/if}
-        <div
-          data-slot="foot"
-          class="mt-space-5 flex justify-end gap-space-3 @max-setup/setup:sticky @max-setup/setup:bottom-0 @max-setup/setup:z-1 @max-setup/setup:-mx-space-7 @max-setup/setup:bg-surface-raised @max-setup/setup:px-space-7 @max-setup/setup:pt-space-3 @max-setup/setup:pb-space-2"
-          {@attach aboveKeyboard()}
-        >
-          <Button
-            disabled={step === 0 || busy || (step === 1 && signedIn > 0)}
-            label={words.back}
-            onclick={back}
-            variant="outline"
-          />
-          <Button
-            disabled={!canGo}
-            label={nextLabel}
-            onclick={next}
-            pending={busy}
-            pendingLabel={configureWords.saving}
-            variant={keyFirst ? "outline" : "default"}
-          />
-        </div>
+        <!-- The step's commit row is the card's sticky foot at every width
+             (StickyFoot), so Back and Continue stand in view however long
+             the step runs, the step passing under the house fade. -->
+        <StickyFoot data-slot="foot" onPadding>
+          <div class="flex justify-end gap-space-3">
+            <Button
+              disabled={step === 0 || busy || (step === 1 && signedIn > 0)}
+              label={words.back}
+              onclick={back}
+              variant="outline"
+            />
+            <Button
+              disabled={!canGo}
+              label={nextLabel}
+              onclick={next}
+              pending={busy}
+              pendingLabel={configureWords.saving}
+              variant={keyFirst ? "outline" : "default"}
+            />
+          </div>
+        </StickyFoot>
       </div>
     </div>
   </div>
