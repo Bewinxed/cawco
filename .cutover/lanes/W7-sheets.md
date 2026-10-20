@@ -98,7 +98,8 @@ removed: apps/dashboard/src/app.css:21-23 `@import "@event-calendar/core/index.c
 removed: apps/dashboard/src/lib/cawco/views/ViewCalendar.svelte `<style>` (122 lines) — moved whole to app.css `@layer components` (below).
 
 ## Tokens
-No new token. `--c-wf-textarea-min` (90px) has 0 users in src after this lane (`grep` count 0); the token JSON is additions-only here, so its deletion is for integration (see finding).
+No new token.
+token: removed --c-wf-textarea-min 90px — its only reader was workflows.css (dissolved here). Entry deleted from design/tokens/cawco.tokens.json, then `bun run tokens`. The in-list outputs keep the regeneration (theme.css `--spacing-c-wf-textarea-min`, tokens.css `--c-wf-textarea-min`). The off-list outputs were restored for integration to regenerate: tokens.ts, apple Generated/Tokens.swift, and hub decision-page kit/tokens.css. `git grep -i 'wf-textarea-min\|wfTextareaMin'`, outside `.cutover` and those three generated copies, returns 0. `cWfTextareaMin` has 0 Swift readers outside Generated/.
 
 ## Theme additions
 theme: component view-calendar
@@ -137,3 +138,39 @@ fixed: WorkflowInspector.svelte:524 and :1070 the Add rule and Connect selects s
 gap: WorkflowInspector.svelte:409,503,732,1108 and SchemaBuilder.svelte:123 kit Checkbox draws 16×16 with no fine-pointer hit area (ui-observer `small-tap-target … size 16x16 below WCAG 2.5.8 24px minimum`) — DESIGN.md The 24 Pointer Rule → W4-controls (kit Checkbox pointer-hit)
 ui-observer kinds judged and left: `text-clipped`/`horizontal-overflow` in the Validate and Start run buttons is the pending label's cell (DESIGN.md Buttons: "Its pending wording is never drawn, only its accessible name"). `near-miss-alignment` entries sit inside the kit NativeSelect's chevron and the icons' own paths. `#bits-s13` is the shell's "Waiting for the hub" glass, outside the lane.
 Critique: the primary action leads each header (Run workflow, New workflow), and every secondary action is the outline button at the same height. The forms read as one column of label-over-field groups in recessed wells, parted by space. The selection hue is gone from the harness picker (a hue now marks only the primary action). Nothing reads as a stray box.
+
+## Round 2: the build refuses an unlayered rule
+Root cause of the Event Calendar finding: one library loading its own CSS from a component silently undoes the vendor layer, and nothing checked for it.
+
+Audit (postcss over every `vite build` client CSS asset; any style rule with no `@layer` ancestor, including inside a top-level @media/@supports/@container; keyframe blocks excepted). Before the fix, 68 rules in 5 of 9 assets:
+- `photoswipe.*.css`: 50 — PhotoSwipe 5.4.4's `dist/photoswipe.css`, imported by lightbox/Lightbox.svelte:95 `import("photoswipe/style.css")`. → vendorComponentSheets' imported-sheet list (`photoswipe/dist`).
+- `WorkflowCanvasTools.*.css`: 7 — @xyflow/svelte 1.7.0 component `<style>`s (`.a11y-hidden.svelte-73h6ot`, `.svelte-flow__selection.svelte-y79geh`, …: A11yDescriptions, selection, edge label). → the component-sheet list.
+- `markdown.*.css`: 4 — svelte-streamdown 4.2.1 component `<style>`s (`[data-streamdown-table-download]+div`, the line-number rules, the overlay `streamdownOverlayOwn` rewrites). → the component-sheet list. streamdownOverlayOwn still finds its rule once after the wrap; plugins of equal order run in array order.
+- `select.*.css`: 3 — bits-ui 2.19.5 `select/components/select-viewport.svelte` `<style>` (`[data-select-viewport]…`). → the component-sheet list.
+- `0.*.css` (app.css): 4 house rules, each moved:
+  - app.css press tint `:is(.press-tint:is(:active,[data-pressed]), #\#)…`. Its comment's premise ("a row's own component rule (unlayered…)") ended with wave 1: src has 0 component `<style>`, so every background it must beat is a utility. It is now in `@layer utilities` beside its ink twin, outranking by the id weight DESIGN.md The Press Rule names. Measured: `press tint over bg-surface-raised: oklch(0.854 0.014 82) | --surface-pressed oklch(0.854 0.014 82)`.
+  - app.css `@media (prefers-reduced-motion: reduce) { .shimmer { … } }`, a counter-rule. Instead, the shimmer's paint and loop now sit under `prefers-reduced-motion: no-preference` inside `@utility shimmer` (app.css's own rule: "Motion is opt-in"), and the counter-rule is deleted. Measured: no-preference `animation-name: tw-shimmer`, gradient on; reduce `animation-name: none; background-image: none; text-fill = color`, the same state the counter-rule gave.
+  - app.css `.breathe` → `@utility breathe` (one behaviour used across the app; same name, users unchanged). Measured `breath` / `none` by preference.
+  - app.css `::view-transition-old(root), ::view-transition-new(root)` → `@layer base`: only the UA's transition styles compete, and every author layer outranks them.
+- `drawer`, `sonner`, `MarkdownEditor`, `ViewOpenUi`: 0 already.
+- The decisions host bundle needs no exemption: it is built by Bun (packages/core/src/decision-host.ts; its components say "this folder is bundled by Bun with no Tailwind build") and never enters this Vite build. None of the 9 assets is it, and an exemption naming an asset that cannot appear would be dead code.
+
+fixed: PhotoSwipe's own sheet was unlayered, so its `.pswp__button` (50×60, no fill) outranked app.css's `.cawco-pswp` chrome wherever both set a property. Now measured `.cawco-pswp .pswp__button: 44px×44px, radius 8px, bg = --surface-raised`, with matching rules only in layers (base, utilities, components, properties, vendor).
+
+Guard: vite.config.ts vendorComponentSheets gains `generateBundle`. It runs postcss (the dashboard's own dependency, 8.5.31) over every CSS asset, and `this.error`s naming each asset and selector when a style rule stands outside every `@layer`; otherwise it logs the count. `@font-face`, `@property` and `@keyframes` pass. The transform and the guard are one plugin: the vendor-layer contract is wrapped where a sheet enters the build and checked where it leaves.
+- Build log: `css layers: 9 assets, 0 unlayered rules` (once per build environment).
+- Throwaway run, never committed: `.guard-probe-unlayered { color: red; }` added at the head of the W7 block in app.css → `build exit 1`, `RolldownError: css layers: 1 unlayered style rule(s); a library's sheet joins vendorComponentSheets' list, a house rule moves into its layer:` / `_app/immutable/assets/_layout.B4kQX1jZ.css: .guard-probe-unlayered`. Reverted; `git grep guard-probe` returns 0.
+
+fixed: WorkflowEditor.svelte togglePalette comment named "the stylesheet below"; it now names app.css's components rule `[data-slot="pane"] [data-pane-group]:has(> [data-pane-state="collapsing"], > [data-pane-state="expanding"]) > [data-pane]`.
+
+## Round 2: the palette dialog and the inspector drawer
+Both render only under 1024px (WorkflowEditor.svelte `new MediaQuery("(max-width: 1023px)")`). At 1440 "+ Add node" and "Inspector" are hidden (measured), and the palette and inspector stand as panes, which round 1 measured. Measured at 1023 and 390:
+- Palette dialog (DESIGN.md Dialog: "a recess tray (18px radius, 6px padding, overlay shadow) holding a raised body (12px radius, 18px padding)"):
+  - tray `border-radius=18px padding=6px background=oklch(0.967 0.008 84)` (recess) with the overlay shadow;
+  - body `border-radius=12px padding=18px background=oklch(0.993 0.004 85)` (raised);
+  - title 20px at 1023 and 18px at 390 (Title 18→20px);
+  - group heading `h2` 13px / 16.9px (Label);
+  - palette items `border-radius=8px` (items in a surface) with `min-height=44px`.
+  - ui-observer: the only clip/overflow is the dialog close's `span.sr-only` (intended).
+- Inspector drawer: its sheet is drawn by the kit drawer's `::before` (`--surface-raised`, 12px top radius, inset 8px), the kit recipe, unchanged here. Fields are `border-radius=10px padding=8px 12px`, 14px at 1023 and 16px at 390 (The 16px Field Rule), and headings are the label role. ui-observer: 0 observations at 1023, 3 `near-miss-alignment` at 390 (no overflow or clip).
+- 0 page errors and 0 non-hub console errors.

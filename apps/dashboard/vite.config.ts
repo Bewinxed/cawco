@@ -12,6 +12,7 @@ import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
+import postcss, { type AtRule } from "postcss";
 import Icons from "unplugin-icons/vite";
 import {
   defineConfig,
@@ -231,34 +232,94 @@ const runningVersion = (): Plugin => ({
  * unlayered, where it would outrank every rule of the house, and no
  * `@import … layer()` reaches it. Two ways in:
  * - a Svelte component's `<style>`, which the compiler emits unlayered:
- *   svelte-sonner 1.2.1 (Toaster.svelte) and vaul-svelte 1.0.0-next.7
- *   (components/drawer/drawer.svelte);
+ *   svelte-sonner 1.2.1 (Toaster.svelte), vaul-svelte 1.0.0-next.7
+ *   (components/drawer/drawer.svelte), bits-ui 2.19.5
+ *   (select/components/select-viewport.svelte), @xyflow/svelte 1.7.0 (its
+ *   A11yDescriptions, selection and edge-label components) and
+ *   svelte-streamdown 4.2.1 (its table, code and overlay elements);
  * - a stylesheet a component imports from its script: Event Calendar 5.16.0
- *   (src/Calendar.svelte: `import './styles/index.css'`). This transform runs
- *   after Vite's own CSS plugin has inlined that sheet's `@import`s
- *   (theme.css, toolbar.css, …), so the whole sheet takes the layer.
+ *   (src/Calendar.svelte: `import './styles/index.css'`) and PhotoSwipe 5.4.4
+ *   (lightbox/Lightbox.svelte: `import("photoswipe/style.css")`, which is
+ *   dist/photoswipe.css). This transform runs after Vite's own CSS plugin has
+ *   inlined a sheet's `@import`s (Event Calendar's theme.css, toolbar.css, …),
+ *   so the whole sheet takes the layer.
  * Each sheet is wrapped in `@layer vendor { … }` where it enters the build,
  * every declaration as the library wrote it, so app.css restyles their DOM
  * from `components` by layer. A library's `!important` keeps its strength: an
  * important declaration in an earlier layer wins
  * (https://developer.mozilla.org/en-US/docs/Web/CSS/@layer).
+ *
+ * The bundle is held to it where it leaves the build: every style rule in
+ * every CSS asset stands in a cascade layer (wave-1 integration 43ee3780c
+ * moved one library to `@import … layer()` and missed that its component
+ * imported the same sheet again, unlayered, which silently outranked the
+ * house). One unlayered rule fails the build, naming its asset and selector.
+ * `@font-face`, `@property` and `@keyframes` hold no style rules, so they
+ * pass; a keyframe's `from`/`to` blocks are not style rules either.
  */
-const VENDOR_COMPONENT_SHEETS = ["svelte-sonner", "vaul-svelte"];
-const VENDOR_IMPORTED_SHEETS = ["@event-calendar/core/src/styles"];
+const VENDOR_COMPONENT_SHEETS = [
+  "svelte-sonner",
+  "vaul-svelte",
+  "bits-ui",
+  "@xyflow/svelte",
+  "svelte-streamdown",
+];
+const VENDOR_IMPORTED_SHEETS = [
+  "@event-calendar/core/src/styles",
+  "photoswipe/dist",
+];
 const pathPattern = (path: string): string =>
   path.split("/").join("[\\\\/]");
 const VENDOR_COMPONENT_STYLE = new RegExp(
   [
-    `[\\\\/]node_modules[\\\\/](?:${VENDOR_COMPONENT_SHEETS.join("|")})[\\\\/].*\\.svelte\\?.*type=style`,
+    `[\\\\/]node_modules[\\\\/](?:${VENDOR_COMPONENT_SHEETS.map(pathPattern).join("|")})[\\\\/].*\\.svelte\\?.*type=style`,
     `[\\\\/]node_modules[\\\\/](?:${VENDOR_IMPORTED_SHEETS.map(pathPattern).join("|")})[\\\\/][^\\\\/?]+\\.css(?:\\?|$)`,
   ].join("|")
 );
+/** Each style rule in `css` that no `@layer` holds, as its selector. */
+const unlayeredRules = (css: string): string[] => {
+  const found: string[] = [];
+  postcss.parse(css).walkRules((rule) => {
+    for (let at = rule.parent; at && at.type !== "root"; at = at.parent) {
+      if (
+        at.type === "atrule" &&
+        ((at as AtRule).name === "layer" ||
+          (at as AtRule).name.endsWith("keyframes"))
+      ) {
+        return;
+      }
+    }
+    found.push(rule.selector.replace(/\s+/g, " "));
+  });
+  return found;
+};
 export const vendorComponentSheets = (): Plugin => ({
   name: "cawco-vendor-component-sheets",
   transform(code, id) {
     return VENDOR_COMPONENT_STYLE.test(id)
       ? `@layer vendor {\n${code}\n}\n`
       : null;
+  },
+  generateBundle(_options, bundle) {
+    const sheets = Object.values(bundle).filter(
+      (chunk) => chunk.type === "asset" && chunk.fileName.endsWith(".css")
+    );
+    if (sheets.length === 0) {
+      return;
+    }
+    const unlayered = sheets.flatMap((sheet) =>
+      sheet.type === "asset"
+        ? unlayeredRules(String(sheet.source)).map(
+            (selector) => `${sheet.fileName}: ${selector}`
+          )
+        : []
+    );
+    if (unlayered.length > 0) {
+      this.error(
+        `css layers: ${unlayered.length} unlayered style rule(s); a library's sheet joins vendorComponentSheets' list, a house rule moves into its layer:\n${unlayered.join("\n")}`
+      );
+    }
+    console.log(`css layers: ${sheets.length} assets, 0 unlayered rules`);
   },
 });
 

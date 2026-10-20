@@ -3777,9 +3777,10 @@
   }
 }
 
-/* The tint must win over a row's own component rule (unlayered, often
-   `background: none` or a hover fill), which wins over any layer. So it is
-   unlayered too, and outranks every such rule by an id's weight: `#\#` is
+/* The tint must win over a control's own background (a utility, often
+   `bg-transparent` or a hover fill: no component carries a `<style>` of
+   its own), so it stands in the utilities layer with them and outranks
+   every such rule by an id's weight (DESIGN.md, The Press Rule): `#\#` is
    an id no element has, so `:is(…, #\#)` matches as its other argument does
    and counts as an id (Selectors 4, :is() takes its most specific
    argument). Not an important declaration: an important base value cannot be animated
@@ -3789,12 +3790,14 @@
    `surface-pressed`: by day the hover step is surface-fill's own, so a
    press under the pointer is the step past it; night keeps surface-fill.
    `[data-pressed]` is the `pressed` variant's kit menu Trigger. */
-:is(.press-tint:is(:active, [data-pressed]), #\#):not(
-  :disabled,
-  [aria-disabled="true"]
-),
-:is([data-holding], #\#) {
-  background-color: var(--surface-pressed);
+@layer utilities {
+  :is(.press-tint:is(:active, [data-pressed]), #\#):not(
+    :disabled,
+    [aria-disabled="true"]
+  ),
+  :is([data-holding], #\#) {
+    background-color: var(--surface-pressed);
+  }
 }
 /* Muted ink on the day's press step is 3.93:1 and a selected row's coral
    ink 4.12:1: those inks inside the pressed control go strong for as long
@@ -4786,8 +4789,10 @@
    words and an active reasoning step's, each a `.shimmer` span. The words
    are drawn by a band of their own ink, at a fifth of its strength by day
    and lit at night, that crosses them every two seconds; under reduced
-   motion they stand plain. It came with shadcn-svelte's stylesheet,
-   unchanged here. */
+   motion they stand plain. It came with shadcn-svelte's stylesheet; the
+   band is opt-in motion, as every loop here is, so its paint sits under
+   `prefers-reduced-motion: no-preference` and reduced motion draws the
+   words as they are, with no counter-rule. */
 @property --shimmer-angle {
   syntax: "<angle>";
   inherits: true;
@@ -4808,27 +4813,6 @@
     --shimmer-color,
     oklch(from currentColor l c h / calc(alpha* 0.2))
   );
-  background-image: var(
-    --shimmer-image,
-    linear-gradient(
-      calc(90deg + var(--shimmer-angle)),
-      var(--_base) calc(50% - var(--_spread)),
-      color-mix(in oklch, var(--_highlight), var(--_base) 50%)
-        calc(50% - var(--_spread) * 0.5),
-      var(--_highlight) 50%,
-      color-mix(in oklch, var(--_highlight), var(--_base) 50%)
-        calc(50% + var(--_spread) * 0.5),
-      var(--_base) calc(50% + var(--_spread))
-    )
-  );
-  background-repeat: no-repeat;
-  background-size: calc(200% + var(--_spread) * 2) 100%;
-  background-position: 0 0;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: var(--shimmer-text-fill, transparent);
-  animation: tw-shimmer var(--shimmer-duration, 2s) linear infinite;
-
   @variant dark {
     --_highlight: var(
       --shimmer-color,
@@ -4836,8 +4820,31 @@
     );
   }
 
-  &:where([dir="rtl"], [dir="rtl"] *) {
-    animation-direction: reverse;
+  @media (prefers-reduced-motion: no-preference) {
+    background-image: var(
+      --shimmer-image,
+      linear-gradient(
+        calc(90deg + var(--shimmer-angle)),
+        var(--_base) calc(50% - var(--_spread)),
+        color-mix(in oklch, var(--_highlight), var(--_base) 50%)
+          calc(50% - var(--_spread) * 0.5),
+        var(--_highlight) 50%,
+        color-mix(in oklch, var(--_highlight), var(--_base) 50%)
+          calc(50% + var(--_spread) * 0.5),
+        var(--_base) calc(50% + var(--_spread))
+      )
+    );
+    background-repeat: no-repeat;
+    background-size: calc(200% + var(--_spread) * 2) 100%;
+    background-position: 0 0;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: var(--shimmer-text-fill, transparent);
+    animation: tw-shimmer var(--shimmer-duration, 2s) linear infinite;
+
+    &:where([dir="rtl"], [dir="rtl"] *) {
+      animation-direction: reverse;
+    }
   }
 }
 @keyframes tw-shimmer {
@@ -4846,13 +4853,6 @@
   }
   to {
     background-position: 0 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .shimmer {
-    animation: none;
-    background-image: none;
-    -webkit-text-fill-color: currentColor;
   }
 }
 
@@ -4960,10 +4960,10 @@
     opacity: var(--breath-floor);
   }
 }
-/* A mark that is live work takes the breath by its class (the in-flight
-   tool glyph, a delegate's live tool row). */
-@media (prefers-reduced-motion: no-preference) {
-  .breathe {
+/* A mark that is live work takes the breath by its utility (the in-flight
+   tool glyph, a delegate's live tool row): one behaviour across the app. */
+@utility breathe {
+  @media (prefers-reduced-motion: no-preference) {
     animation: breath var(--breath) var(--ease-in-out) infinite;
   }
 }
@@ -4972,11 +4972,15 @@
    alone. The old page fades out as the new one fades in, one --dur-fade on
    --ease-out: the platform's own cross-fade at the product's pace, with no
    shape and no blur. Nothing else on the page carries a
-   view-transition-name, so the root is the only thing taken. */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: var(--dur-fade);
-  animation-timing-function: var(--ease-out);
+   view-transition-name, so the root is the only thing taken. Only the user
+   agent's own transition styles compete here, and any author layer outranks
+   those, so it stands with the element defaults. */
+@layer base {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: var(--dur-fade);
+    animation-timing-function: var(--ease-out);
+  }
 }
 
 /* The flip itself starts no element transitions: `overrides`, above. */

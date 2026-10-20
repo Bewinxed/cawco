@@ -368,7 +368,10 @@
   /**
    * The palette's toggle folds it to its rail and back: every pane's width
    * glides together (paneforge marks the pane collapsing or expanding until
-   * its flex-grow transition ends; the stylesheet below runs it).
+   * its flex-grow transition ends; app.css's components rule
+   * `[data-slot="pane"] [data-pane-group]:has(> [data-pane-state="collapsing"],
+   * > [data-pane-state="expanding"]) > [data-pane]` runs it, with motion
+   * allowed).
    */
   function togglePalette() {
     if (paletteCollapsed) {
