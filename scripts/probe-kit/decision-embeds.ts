@@ -456,7 +456,9 @@ function embedRead() {
         wide,
         /** How far it scrolls sideways in its frame, and whether its frame lets a person scroll it. */
         scrolls: wide ? frame.scrollWidth - frame.clientWidth : 0,
-        scrollable: ["auto", "scroll"].includes(getComputedStyle(frame).overflowX),
+        scrollable: ["auto", "scroll"].includes(
+          getComputedStyle(frame).overflowX
+        ),
         zoom: Math.round(zoomOf(body) * 1000) / 1000,
         state:
           frame.querySelector<HTMLElement>(".cawco-frame-status")?.dataset
