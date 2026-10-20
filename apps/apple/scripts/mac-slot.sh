@@ -27,10 +27,12 @@
 #
 # The locks live in one folder for every caller: workspaces, a person's or
 # the orchestrator's SSH, TestFlight. A keeper process, in its own process
-# group, holds the slot. The caller (this script) holds the keeper's stdin
-# open; when it ends, however it ends (SIGKILL too), the keeper reads EOF,
-# TERMs then KILLs the command's process group, deletes the slot's
-# simulator and frees the slot.
+# group, holds the slot, its pid recorded in the slot's lock. The caller
+# (this script) holds the keeper's stdin open; when it ends, however it ends
+# (SIGKILL too), the keeper reads EOF, TERMs then KILLs the command's process
+# group, deletes the slot's simulator and frees the slot. A keeper killed
+# itself leaves its slot's simulator: the next keeper to start, of either
+# kind, deletes it (reap_orphans).
 # macOS bash 3.2: no flock, so shlock.
 set -euo pipefail
 
@@ -136,8 +138,45 @@ held() { # <lock>: who holds it and for how long
   [[ $since =~ ^[0-9]+$ ]] || since=$now
   echo "$who for $((now - since)) s"
 }
+# A slot no live keeper holds keeps no simulator. A keeper killed outright
+# runs no EXIT trap (a stopped delegate's workspace ends everything it left
+# with SIGKILL, the keeper among them), so its slot's simulator stayed until a
+# keeper took that same slot again, which a build or the other slot never
+# does: "CawCo slot 1 (8466E2BB-…) (Shutdown)" stayed until deleted by hand
+# (2026-10-20). So every keeper, as it starts, takes each slot whose simulator
+# is still there and that no live keeper holds (shlock refuses while the pid
+# recorded in the slot's lock is alive), deletes that slot's simulators, and
+# lets the slot go.
+reap_orphans() {
+  local n slots
+  if ! slots=$(xcrun simctl list devices -j | /usr/bin/python3 -I -c '
+import json, re, sys
+found = set()
+for devices in json.load(sys.stdin)["devices"].values():
+    for d in devices:
+        m = re.fullmatch(r"CawCo slot ([12])", d["name"])
+        if m:
+            found.add(m[1])
+print(" ".join(sorted(found)))
+'); then
+    echo "mac-slot: could not list the simulators, so no slot's leftover simulator was looked for" >&2
+    return 0
+  fi
+  for n in $slots; do
+    if shlock -p $$ -f "$LOCKS/sim-$n"; then
+      SLOT=$n
+      LOCK=$LOCKS/sim-$n
+      echo "mac-slot: slot $n's simulator outlived its keeper" >&2
+      drop_sims
+      rm -f "$LOCK.owner" "$LOCK"
+      SLOT=
+      LOCK=
+    fi
+  done
+}
 
 mkdir -p "$LOCKS"
+reap_orphans
 next_notice=0
 waited=
 while :; do

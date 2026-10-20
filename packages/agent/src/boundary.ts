@@ -2257,7 +2257,8 @@ const gateOf = (id: string): string => join(stateDir(id), "replacing");
 /**
  * The runner: reads request directories off its FIFO and runs each in its
  * own process group, inside the sandbox. A request carries the command, the
- * caller's directory and environment; the runner leaves the exit status and
+ * caller's directory and environment, and the PATH asked for, of which the
+ * command gets what the boundary lets it search ({@link LAUNCH}); the runner leaves the exit status and
  * the directory the command ended in beside them. A `cancel <pid>` line is
  * the executor's cut-off: the runner sends TERM to that command's group, and
  * KILL 4 s later, from inside, where the pid it wrote names it (on Linux the
@@ -2300,9 +2301,33 @@ const gateOf = (id: string): string => join(stateDir(id), "replacing");
  * command's status. A TERM to its group (the executor's cut-off) does the
  * same. A machine whose syscall number it does not know runs no command
  * there. macOS has no subreaper: the command's group goes.
+ *
+ * THE COMMAND'S PATH: of the PATH its executor asked for (`$req/path`, the
+ * request's dir its last argument), only the dirs the boundary lets a command
+ * search, in their order. The launch asks the kernel, under the boundary's
+ * own profile, by looking up a name in each absolute dir: a dir whose lookup
+ * the boundary refuses (EPERM) goes, and every other answer keeps it, a dir
+ * that does not exist (ENOENT) included. A refused dir stops a program's PATH
+ * search there: libuv's on macOS, which Node's `child_process` runs
+ * (`uv__spawn_resolve_and_spawn`, src/unix/process.c, after musl's
+ * `execvp`), goes past ENOENT, ENOTDIR and EACCES and returns any other
+ * error, `default: return err;`, so in a Mac
+ * workspace whose PATH named `~/.local/share/solana/install/active_release/bin`
+ * before Homebrew's, `execFileSync("git", …)` failed with `spawnSync git
+ * EPERM` and the probe kit's `vite build` with it (2026-10-20). Seatbelt
+ * refuses with EPERM; srt's denied dirs on Linux are empty tmpfs mounts,
+ * whose lookups answer ENOENT, so none goes there. The kept PATH reaches the
+ * command's shell in `CAWCO_SEARCHABLE_PATH`, which the shell takes before it
+ * reads the request's environment, where nothing can replace it; never as an
+ * argument, so the request's dir stays the launch's last (`agentWork`).
  */
 const LAUNCH = [
   'if (opendir(my $fds, "/dev/fd")) { my @open = grep { /^[0-9]+$/ && $_ > 2 } readdir($fds); closedir($fds); POSIX::close($_) for @open; }',
+  "my $req = $ARGV[$#ARGV];",
+  'open(my $asked, "<", "$req/path") or die "cawco: the command has no PATH from its executor ($req/path: $!), so it did not run.";',
+  "my $path = do { local $/; <$asked> };",
+  "close($asked);",
+  '$ENV{CAWCO_SEARCHABLE_PATH} = join(":", grep { !(m{^/} && !lstat("$_/.cawco-path-lookup") && $!{EPERM}) } split(/:/, $path, -1));',
   "setpgrp(0, 0);",
   "exec @ARGV unless $ENV{CAWCO_PLACE};",
   'if ($^O eq "linux") {',
@@ -2370,7 +2395,7 @@ while :; do
     esac
     (
       printf '%s\\n' "$sandbox" > "$req/sandbox"
-      /usr/bin/perl -MPOSIX -e "$launch" /bin/bash --norc --noprofile -c '. "$1/env" >/dev/null 2>&1; eval "$CAWCO_SANDBOX_ENV"; if [ -n "\${CAWCO_GIT_PARAMETERS:-}" ]; then export GIT_CONFIG_PARAMETERS="\${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }$CAWCO_GIT_PARAMETERS"; fi; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > >(exec cat > "$req/out") 2> >(exec cat > "$req/err") < /dev/null &
+      /usr/bin/perl -MPOSIX -e "$launch" /bin/bash --norc --noprofile -c 'set -- "$1" "$CAWCO_SEARCHABLE_PATH"; unset CAWCO_SEARCHABLE_PATH; . "$1/env" >/dev/null 2>&1; export PATH="$2"; eval "$CAWCO_SANDBOX_ENV"; if [ -n "\${CAWCO_GIT_PARAMETERS:-}" ]; then export GIT_CONFIG_PARAMETERS="\${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }$CAWCO_GIT_PARAMETERS"; fi; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > >(exec cat > "$req/out") 2> >(exec cat > "$req/err") < /dev/null &
       echo $! > "$req/pid"
       wait $!
       echo $? > "$req/status"
@@ -5685,7 +5710,9 @@ const execScript = (
   // The hub's git helper (`hub-git.ts`) first, then on macOS the toolchain
   // shims.
   const helpers = `${gitHelperDirOf(id)}:${linux ? "" : `${shimsOf(id)}:`}`;
-  const path = `printf 'export PATH=%q\\n' ${shellQuote(helpers)}"$caller_path"`;
+  // The PATH asked for: the launch keeps of it what the boundary lets a
+  // command search ({@link LAUNCH}).
+  const path = `printf '%s' ${shellQuote(helpers)}"$caller_path" > "$req/path"`;
   return `#!/bin/bash
 # CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
 # exec [--session] [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND
@@ -5732,8 +5759,8 @@ pwd -P > "$req/cwd"
 ${commandEnv(id, held.path)
   .map((line) => `  echo ${shellQuote(line)}`)
   .join("\n")}
-  ${path}
 } > "$req/env"
+${path}
 mkfifo "$req/out" "$req/err"
 # Cut off: the runner ends the command's group, in the sandbox's own pid
 # space, where the pid it wrote means that group (RUNNER's "cancel").
