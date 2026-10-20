@@ -105,7 +105,11 @@ import { cloneHolding } from "./workspace-records";
 export const gitDoorOf = (id: string): string =>
   join(workspaceDoorDir(id), "git.sock");
 
-/** Where a workspace's `git-remote-cawco` is, on its commands' PATH. */
+/**
+ * A workspace's read-only bin, first on its commands' PATH: its
+ * `git-remote-cawco` and `cawco-ssh`, and on macOS the boundary's toolchain
+ * shims (boundary.ts `writeShims`).
+ */
 export const gitHelperDirOf = (id: string): string =>
   join(workspaceReadOnlyDir(id), "bin");
 

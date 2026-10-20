@@ -816,9 +816,6 @@ const watchHost = async (
   );
 };
 
-/** A macOS workspace's shims, first on the PATH of every command in its boundary: read-only inside. */
-const shimsOf = (id: string): string => join(roOf(id), "bin");
-
 /**
  * The tools a macOS boundary runs in its own way, each a shim on its PATH.
  * macOS sandboxes do not nest: the boundary is Seatbelt's sandbox, so a tool
@@ -929,7 +926,7 @@ const writeXcodeHome = async (id: string): Promise<void> => {
 };
 
 const writeShims = async (id: string, runtime: string): Promise<void> => {
-  const bin = shimsOf(id);
+  const bin = gitHelperDirOf(id);
   await mkdir(bin, { recursive: true });
   await writeXcodeHome(id);
   await writeScript(
@@ -5755,9 +5752,9 @@ const execScript = (
 ): string => {
   const linux = process.platform === "linux";
   const pid = held.pid === undefined ? "PID" : String(held.pid);
-  // The hub's git helper (`hub-git.ts`) first, then on macOS the toolchain
-  // shims.
-  const helpers = `${gitHelperDirOf(id)}:${linux ? "" : `${shimsOf(id)}:`}`;
+  // The workspace's read-only bin first: the hub's git helpers (`hub-git.ts`)
+  // and, on macOS, the toolchain shims, one folder.
+  const helpers = `${gitHelperDirOf(id)}:`;
   // The PATH asked for: the launch keeps of it what the boundary lets a
   // command search ({@link LAUNCH}).
   const path = `printf '%s' ${shellQuote(helpers)}"$caller_path" > "$req/path"`;
