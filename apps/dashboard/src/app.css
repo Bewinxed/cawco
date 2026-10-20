@@ -3357,18 +3357,17 @@
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
     }
-    @media (width < 900px) {
-      inline-size: var(--c-bar-caw-glass-phone);
-      min-inline-size: var(--c-bar-caw-glass-phone);
-      block-size: var(--c-bar-caw-glass-phone);
-    }
   }
   [data-slot="tools"] [data-slot="bar-symbol"] {
     inline-size: var(--c-bar-symbol);
     block-size: var(--c-bar-symbol);
     color: var(--ink-muted);
   }
-  @media (width < 900px) {
+  /* The phone's glass holds Caw alone: under the shell container's desk line
+     (Shell's `@container/shell`, BarGlass `@max-desk/shell`), not the
+     window's, so a phone frame on a desk page draws the phone's group. A
+     container query takes no var(): 900px is --container-desk. */
+  @container shell (width < 900px) {
     [data-slot="tools"] [data-machines] {
       display: none;
     }

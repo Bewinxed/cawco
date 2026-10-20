@@ -1230,9 +1230,10 @@
                    attachments, leads the group. -->
               <FilesItem count={filesCounted} />
             {/if}
-            <!-- Drawn on every screen and hidden on a phone by its own
-                 class and the bar group's (`[data-machines]` under 900px), so the first client
-                 render keeps the bar the server drew. -->
+            <!-- Drawn on every screen and hidden on the phone's glass by its
+                 own class and the bar group's (`[data-machines]`), both on
+                 the shell container's desk line (`@max-desk/shell`), so the
+                 first client render keeps the bar the server drew. -->
             <Tip keys="⌘K" label="Jump to session">
               {#snippet children(tip)}
                 <button
@@ -1241,7 +1242,7 @@
                   aria-expanded={barGlass.open === "jump"}
                   aria-haspopup="dialog"
                   aria-label="Jump to session"
-                  class="touch-hit press-tint max-desk:hidden"
+                  class="touch-hit press-tint @max-desk/shell:hidden"
                   data-share="jump"
                   onclick={() => {
                     barGlass.toggle("jump");
