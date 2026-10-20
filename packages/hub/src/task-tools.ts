@@ -16,7 +16,6 @@ import {
   type LandsMode,
   PLAN_STEP_PRIORITIES,
   PLAN_STEP_STATUSES,
-  type PlanStep,
   RESULT_ARTIFACT_KINDS,
   type ResultArtifact,
   type ResultArtifactKind,
@@ -26,6 +25,7 @@ import { z } from "zod";
 import { tool } from "./admin-tools";
 import { BUILD_TITLE } from "./design-offers";
 import type { AttemptStart } from "./dispatch";
+import type { WrittenStep } from "./plans";
 import { appleSuggestion } from "./runs-on";
 import { EDGES, normaliseTaskRef } from "./task-file";
 import {
@@ -86,11 +86,15 @@ export interface TaskToolContext {
   tasks: Tasks;
   /** The task the session's work item is an attempt at, if it has one. */
   workItemTask: string | null;
-  /** Replaces the calling session's steps or spec (plans.ts `write`); without it the session scope refuses. */
+  /**
+   * Replaces the calling session's steps or spec (plan-changes.ts
+   * `written`), answering what it is owed of the person's changes; without
+   * it the session scope refuses.
+   */
   writePlan?: (
     row: InstanceRow,
-    written: { steps?: PlanStep[]; spec?: string }
-  ) => Promise<SessionPlan>;
+    written: { steps?: WrittenStep[]; spec?: string }
+  ) => Promise<SessionPlan & { personChanged?: string }>;
 }
 
 const ok = (data: unknown) => ({
@@ -245,6 +249,16 @@ const stepParameter = () =>
       .optional()
       .describe("Your id for it; left out, its position (2, 2.1)."),
     priority: z.enum(PLAN_STEP_PRIORITIES).optional(),
+    waitsOn: z
+      .object({
+        artifact: z.string().trim().min(1),
+        card: z.string().trim().min(1),
+      })
+      .nullable()
+      .optional()
+      .describe(
+        "It waits on the person's pick: the decision page's artifact id and the card's id. Left out: kept; null: cleared."
+      ),
   });
 
 /**
@@ -253,7 +267,7 @@ const stepParameter = () =>
  */
 const stepsOf = (
   written: z.infer<ReturnType<typeof stepParameter>>[]
-): PlanStep[] => {
+): WrittenStep[] => {
   const counts: number[] = [];
   return written.map((step, index) => {
     const depth = step.depth ?? 0;
@@ -270,6 +284,13 @@ const stepsOf = (
       status: step.status,
       depth,
       ...(step.priority ? { priority: step.priority } : {}),
+      ...(step.waitsOn === undefined
+        ? {}
+        : {
+            waitsOn: step.waitsOn
+              ? { artifactId: step.waitsOn.artifact, card: step.waitsOn.card }
+              : null,
+          }),
     };
   });
 };
@@ -563,7 +584,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "todo_write",
-      "Two scopes. Your plan: `steps` replaces your step list (pending, in_progress or completed; `depth` nests), `spec` your spec (markdown: what you build and how, decisions and why); returns your plan. A task's to-dos: tick, untick, add or reword them by id (td-3) or position (2.1) on your work item's task (a session the operator started names any); all land together. Every compaction lists them.",
+      "Two scopes. Your plan: `steps` replaces your step list (pending, in_progress or completed; `depth` nests; `waitsOn` names the decision-page card a step waits on), `spec` your spec (markdown: what you build and how, decisions and why); returns your plan and the person's changes to it you have not heard. A task's to-dos: tick, untick, add or reword them by id (td-3) or position (2.1) on your work item's task (a session the operator started names any); all land together. Every compaction lists them.",
       {
         steps: z
           .array(stepParameter())

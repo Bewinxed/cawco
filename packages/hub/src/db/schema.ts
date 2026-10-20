@@ -3645,6 +3645,44 @@ export const sessionPlans = sqliteTable("session_plans", {
 });
 
 /**
+ * The person's changes to a session's plan (core plan.ts `PlanChange`), in
+ * their words, one row each: what the plan panel shows of them, and what is
+ * still owed to whoever the plan answers to (hub plan-changes.ts). A row
+ * with no `toldAt` waits: for the receiver's next turn (a tick or a move on
+ * an idle session), or for the quiet after the person's last change.
+ */
+export const planChanges = sqliteTable(
+  "plan_changes",
+  {
+    id: text("id").primaryKey(),
+    /** The session whose plan it changed. */
+    instanceId: text("instance_id").notNull(),
+    /** Who hears it: `session:<instance id>` or `caw:<project id>`. */
+    receiver: text("receiver").notNull(),
+    kind: text("kind").$type<import("@cawco/core").PlanEditKind>().notNull(),
+    step: text("step").notNull(),
+    was: text("was").notNull(),
+    words: text("words").notNull(),
+    at: timestamp("at").notNull(),
+    /** When it went to its receiver in a message; null while it waits. */
+    toldAt: timestamp("told_at"),
+    /**
+     * The plan's own session has written its steps since, or was told why a
+     * write of them was refused: a later write no longer checks against it.
+     * Set at once for a change its own session never hears (a delegate's
+     * plan, which its parent hears; a task attempt's, which Caw hears).
+     */
+    settled: integer("settled", { mode: "boolean" }).notNull().default(false),
+    /** Why it reached no one, when nothing could take it. */
+    undelivered: text("undelivered"),
+  },
+  (table) => [
+    index("plan_changes_instance").on(table.instanceId, table.at),
+    index("plan_changes_receiver").on(table.receiver, table.toldAt),
+  ]
+);
+
+/**
  * An artifact (Projects spec §5.10): a document a session made that the
  * person works in — a page, a canvas or a preview — listed in the session's
  * panel newest first. Its live state is one Yjs document, kept as

@@ -237,15 +237,28 @@ export const ARTIFACT_RESPONSES = "artifact_responses";
 export const UPSTREAM_ORIGIN = "upstream";
 
 /**
+ * The `system` origin name of the hub's word on the person's changes to a
+ * plan (hub plan-changes.ts): each step they reworded, added, removed,
+ * commented on, ticked or moved, in their words. It is the person's act, so
+ * it reaches its session as their own words do ({@link byPerson}): into a
+ * running turn at its next step, starting an idle one, reopening an ended
+ * one.
+ */
+export const PLAN_ORIGIN = "plan";
+
+/**
  * Whether a send is the person's own act: their words, their picks or
- * comments on one of the session's artifacts ({@link ARTIFACT_ORIGIN}), or
- * their answer to its held upstream post ({@link UPSTREAM_ORIGIN}). Any of
- * them may wake a stopped session and reopen finished work.
+ * comments on one of the session's artifacts ({@link ARTIFACT_ORIGIN}),
+ * their answer to its held upstream post ({@link UPSTREAM_ORIGIN}), or their
+ * changes to a plan ({@link PLAN_ORIGIN}). Any of them may wake a stopped
+ * session and reopen finished work.
  */
 export const byPerson = (origin: NeutralOrigin): boolean =>
   origin.kind === "human" ||
   (origin.kind === "system" &&
-    (origin.name === ARTIFACT_ORIGIN || origin.name === UPSTREAM_ORIGIN));
+    (origin.name === ARTIFACT_ORIGIN ||
+      origin.name === UPSTREAM_ORIGIN ||
+      origin.name === PLAN_ORIGIN));
 
 /**
  * The hub's line in a session's transcript where it started again fresh
