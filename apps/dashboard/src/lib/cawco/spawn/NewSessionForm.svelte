@@ -1568,6 +1568,12 @@
       document.getElementById("session-dir")?.focus();
       return true;
     }
+    // What disables Start holds every other way in (Ctrl/⌘+Enter, a held
+    // press played back): one rule, `cantStart` (no mode chosen or one the
+    // machine doesn't take among it).
+    if (cantStart) {
+      return true;
+    }
     // The folder not read yet: the press waits for it (`pressedFor`).
     if (locationUnverified) {
       pressedFor = locationKey;
