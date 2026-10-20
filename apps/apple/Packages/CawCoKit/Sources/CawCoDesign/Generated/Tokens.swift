@@ -426,8 +426,6 @@ public enum TypeScale {
     public static let leadingRoot: Double = 1.5
     /// A rendered document's running text (@tailwindcss/typography prose-sm, the project page's docs card): 24/14.
     public static let leadingProseSm: Double = 1.714286
-    /// Tailwind's snug, the theme's leading-snug: no dashboard part sets it since its one user, the kit's ui/field, was deleted.
-    public static let leadingSnug: Double = 1.375
     /// The permission rule tester's preview of what a rule matches (RuleTester, Tailwind's relaxed).
     public static let leadingRelaxed: Double = 1.625
     /// prose-sm: above an h2, in the heading's own ems.

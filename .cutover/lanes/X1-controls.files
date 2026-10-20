@@ -96,3 +96,4 @@ apps/apple/Packages/CawCoKit/Sources/CawCoDesign/Generated/Tokens.swift
 packages/hub/skills/decision-page/kit/tokens.css
 apps/dashboard/src/lib/components/ui/glide-popover/index.ts
 apps/dashboard/src/lib/components/ui/resizable/resizable-handle.svelte
+apps/dashboard/src/lib/tokens/theme.css
