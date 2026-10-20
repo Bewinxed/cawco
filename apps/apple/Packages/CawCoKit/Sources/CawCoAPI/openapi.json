@@ -41147,6 +41147,13 @@
           "name": {
             "type": "string"
           },
+          "nextRuns": {
+            "description": "Its runs ahead, as the scheduler will start them (`nextRunsOf`): the next\nweek's, at most 288, epoch ms; a paused routine's too.",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
           "nextSlot": {
             "type": "number"
           },
@@ -41197,6 +41204,7 @@
           "lastSlot",
           "madeWhy",
           "name",
+          "nextRuns",
           "nextSlot",
           "projectId",
           "prompt",
@@ -42653,6 +42661,13 @@
           "name": {
             "type": "string"
           },
+          "nextRuns": {
+            "description": "Its runs ahead, as the hub's scheduler will start them: the next week's, at most 288, epoch ms.",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
           "nextSlot": {
             "type": "number"
           },
@@ -42678,6 +42693,7 @@
           "id",
           "lastSlot",
           "name",
+          "nextRuns",
           "nextSlot",
           "runs",
           "target",

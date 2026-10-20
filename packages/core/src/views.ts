@@ -139,6 +139,8 @@ export interface ViewRoutine {
   id: string;
   lastSlot: number | null;
   name: string;
+  /** Its runs ahead, as the hub's scheduler will start them: the next week's, at most 288, epoch ms. */
+  nextRuns: number[];
   nextSlot: number;
   /** Newest first. */
   runs: ViewRoutineRun[];

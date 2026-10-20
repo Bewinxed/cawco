@@ -131,11 +131,10 @@
   <!-- The schedule drawn whole: the row's strip with its days or hours. -->
   <div data-slot="schedule-wrap" class="max-w-c-measure pt-space-2">
     <ScheduleStrip
-      cron={routine.cron}
       label={scheduleWords}
       {now}
       paused={!routine.enabled}
-      zone={routine.timeZone}
+      runs={routine.nextRuns}
     />
   </div>
   <div

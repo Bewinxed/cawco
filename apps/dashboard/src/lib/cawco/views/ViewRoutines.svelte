@@ -65,7 +65,7 @@
     updateRoutine,
   } from "#lib/cawco/routines/routines-api.js";
   import ScheduleStrip, {
-    scheduleRuns,
+    stripOf,
   } from "#lib/cawco/routines/ScheduleStrip.svelte";
   import { exactOf, scheduleOf, whenOf } from "#lib/cawco/routines/schedule.js";
   import { since } from "#lib/cawco/rules.js";
@@ -330,8 +330,10 @@
    */
   let span = $state(5);
   function countColumns(ledger: HTMLElement) {
+    // Its own band's heads only: a routine's detail holds ledgers of its own.
     const count = () => {
-      span = [...ledger.querySelectorAll("thead th")].filter(
+      const band = ledger.querySelector("table")?.tHead?.rows[0];
+      span = [...(band?.cells ?? [])].filter(
         (head) => getComputedStyle(head).display !== "none"
       ).length;
     };
@@ -775,19 +777,18 @@
                 >{routine.name}</span
               >
             </Collapsible.Trigger>
-            {@const drawn =
-              scheduleRuns(routine.cron, routine.timeZone, now) !== null}
+            {@const drawn = stripOf(routine.nextRuns, now) !== null}
             {#if drawn}
-              <!-- Its schedule drawn on the line (DESIGN.md, The Show Don't
-                   Tell Rule); the words are the strip's name. -->
+              <!-- Its schedule drawn on the line from the hub's own runs
+                   (DESIGN.md, The Show Don't Tell Rule); the words are the
+                   strip's name. -->
               <span class="block pt-space-1 pb-space-row">
                 <ScheduleStrip
                   compact
-                  cron={routine.cron}
                   label={line.words}
                   {now}
                   paused={!routine.enabled}
-                  zone={routine.timeZone}
+                  runs={routine.nextRuns}
                 />
               </span>
             {/if}

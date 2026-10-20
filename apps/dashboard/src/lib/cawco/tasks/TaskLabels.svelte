@@ -9,6 +9,7 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import { IconClose, IconPlus } from "#lib/icons.js";
 
   let {
@@ -67,12 +68,16 @@
     </Badge>
   {/each}
   {#if adding}
-    <input
+    <!-- The kit's field, its suggestions the kit's own (the sort-vertical
+         glyph, room kept for it). -->
+    <Input
       data-slot="task-labels-field"
       aria-label="New label"
       autocomplete="off"
-      class="h-c-badge-h w-c-task-label-field-w rounded-xs border border-border-control bg-surface-raised px-space-1 type-label text-ink-strong"
+      class="w-c-task-label-field-w"
       list={listId}
+      size="sm"
+      text="label"
       onblur={add}
       onkeydown={(event) => {
         if (event.key === "Enter") {

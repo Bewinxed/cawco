@@ -27,6 +27,7 @@
   import WorkflowCanvasTools from "#lib/components/features/workflows/WorkflowCanvasTools.svelte";
   import { theme } from "#lib/theme.svelte.js";
   import DecisionEdge from "./DecisionEdge.svelte";
+  import DecisionGraphFit from "./DecisionGraphFit.svelte";
   import DecisionGroup from "./DecisionGroup.svelte";
   import DecisionNode from "./DecisionNode.svelte";
 
@@ -56,12 +57,14 @@
   let zoom = $state(1);
   let mounted = $state(false);
   /**
-   * The least zoom: a card's name (the label role) stays 10px, so the fit,
-   * opening or asked for, goes down only that far and the reader pans past
-   * it (DESIGN.md L602, meta is the floor; 10px the readable floor).
+   * The least zoom a fit takes: a card's name (the label role) stays 10px,
+   * so the fit, opening or asked for (DecisionGraphFit), goes down only that
+   * far and a larger graph is panned. The reader's own zoom keeps the flow's
+   * range (`ZOOM`) and may go under it.
    */
   const READABLE_PX = 10;
   let floor = $state<number>(ZOOM.minZoom);
+  let fitter = $state<ReturnType<typeof DecisionGraphFit>>();
   onMount(() => {
     const root = getComputedStyle(document.documentElement);
     const rem = Number.parseFloat(root.fontSize);
@@ -191,8 +194,7 @@
       elementsSelectable={false}
       fitView
       fitViewOptions={{ ...FIT, minZoom: floor }}
-      maxZoom={ZOOM.maxZoom}
-      minZoom={floor}
+      {...ZOOM}
       nodesConnectable={false}
       nodesDraggable
       {nodeTypes}
@@ -225,8 +227,10 @@
           zoom = value;
         }}
       />
+      <DecisionGraphFit bind:this={fitter} minZoom={floor} />
       <Panel position="bottom-center">
         <WorkflowCanvasTools
+          fit={() => fitter?.fit()}
           onfit={() => undefined}
           onzoom={() => undefined}
           {zoom}

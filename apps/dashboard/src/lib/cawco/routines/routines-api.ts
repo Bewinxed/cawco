@@ -48,6 +48,8 @@ export interface Routine {
   keep: boolean;
   lastSlot: number | null;
   name: string;
+  /** Its runs ahead, as the hub's scheduler will start them (hub `nextRunsOf`): the next week's, at most 288, epoch ms. */
+  nextRuns: number[];
   nextSlot: number;
   projectId: string | null;
   prompt: string;
