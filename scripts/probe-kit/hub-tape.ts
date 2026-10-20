@@ -24,6 +24,11 @@
  * its HTTP is recorded and answered by port and path, its sockets by frame,
  * so the preview and its overlay load from the tape with nothing listening.
  *
+ * The preview overlay's script is code under test, never data: its
+ * request is answered with the tree's own build (`overlayOfTree`) behind the
+ * taped parents line, so an overlay change reaches every capture without a
+ * new recording.
+ *
  * An artifact's doc socket (`/ws/artifact/…` on the hub, `/__cawco/artifact/…`
  * on the preview's origin) speaks y-websocket in binary frames, which hold
  * the page's own random client ids, so it is played by the hub's own rules
@@ -42,6 +47,10 @@
  */
 import { gunzipSync, gzipSync } from "node:zlib";
 import type { BrowserContext, Route, WebSocketRoute } from "playwright-core";
+import {
+  bundleOverlay,
+  OVERLAY_PATH,
+} from "../../packages/core/src/preview-proxy";
 
 /** One HTTP exchange as the hub answered it. */
 export interface TapeHttp {
@@ -324,6 +333,38 @@ function parentOrigin(route: Route): string {
 
 const withParent = (text: string, from: string, to: string): string =>
   from ? text.replaceAll(from, to) : text;
+
+/**
+ * The preview overlay as the tree under test builds it (preview-proxy.ts
+ * `bundleOverlay`, the agent's own entry and format), bundled once per run.
+ * The tape holds data, never the code under test: a page's overlay request
+ * keeps its taped first line, the frozen parents (`overlayText`'s data, the
+ * run's dashboard origin put back), and the tree's overlay runs after it.
+ */
+let treeOverlay: Promise<string> | undefined;
+const overlayOfTree = (): Promise<string> => {
+  treeOverlay ??= bundleOverlay();
+  return treeOverlay;
+};
+
+/** A page's overlay request answered: the taped parents line, then the tree's overlay. */
+async function overlayAnswer(
+  found: TapePreview,
+  parent: string,
+  path: string
+): Promise<{ body: string; headers: Record<string, string>; status: number }> {
+  if (found.binary) {
+    throw new Error(
+      `The tape holds the preview overlay (${path}) as bytes, not its text: its parents line can't be read off it.`
+    );
+  }
+  const [parents] = withParent(found.bytes, PARENT_MASK, parent).split("\n", 1);
+  return {
+    status: found.status,
+    headers: { "content-type": "text/javascript" },
+    body: `${parents}\n${await overlayOfTree()}`,
+  };
+}
 
 /** A preview origin's response as the tape keeps it, the asking dashboard's origin masked. */
 function previewExchange(
@@ -746,7 +787,7 @@ export function player(tape: TapeHub) {
   const attach: Attach = async (context, isPreview) => {
     contexts += 1;
     const scope = `context ${contexts}`;
-    await context.route(isPreview, (route) => {
+    await context.route(isPreview, async (route) => {
       const request = route.request();
       const url = new URL(request.url());
       const method = request.method();
@@ -766,6 +807,9 @@ export function player(tape: TapeHub) {
         });
       }
       const parent = parentOrigin(route);
+      if (url.pathname === OVERLAY_PATH) {
+        return route.fulfill(await overlayAnswer(found, parent, path));
+      }
       return route.fulfill({
         status: found.status,
         headers: Object.fromEntries(

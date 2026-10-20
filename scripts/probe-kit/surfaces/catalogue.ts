@@ -148,6 +148,9 @@ const PIN_ROW = "button[data-slot=pin-row]";
 /** The Comments panel's popover; a pin's card, by its number. */
 const PIN_POP = "[data-pin-list-pop]";
 const pinCard = (n: number) => `[data-slot=pin-card][data-pin-card="${n}"]`;
+/** A pin's card placed: beside what its pin stands on (by the element's box), or the foot sheet. */
+const PIN_CARD_PLACED =
+  "[data-slot=pin-card]:is([data-sheet], [data-side=end], [data-side=start], [data-side=below])";
 /** The card's notice for a pin whose element is gone, and its line while the next tap places it. */
 const GONE_SAYS = /^Its element is gone from the page/;
 const PLACING_SAYS = /^Tap the page where it goes/;
@@ -795,6 +798,28 @@ const dropPin = async (page: Page) => {
     throw new Error("the preview's heading has no box");
   }
   await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
+  // Its card stands clear of the heading it pins: beside it where the well
+  // allows, else the foot sheet. Placed once the page has said where the pin
+  // stands (its overlay's `cawco:pin-at`, the element's box with it).
+  const card = page
+    .locator(`${PIN_CARD_PLACED}[aria-label="Pin 1"]`)
+    .filter({ visible: true })
+    .first();
+  await card.waitFor();
+  const placed = await card.boundingBox();
+  const heading = await frame.locator("h1").boundingBox();
+  if (
+    placed &&
+    heading &&
+    placed.x < heading.x + heading.width &&
+    heading.x < placed.x + placed.width &&
+    placed.y < heading.y + heading.height &&
+    heading.y < placed.y + placed.height
+  ) {
+    throw new Error(
+      `pin 1's card ${JSON.stringify(placed)} stands over the heading it pins ${JSON.stringify(heading)}`
+    );
+  }
 };
 
 /** A comment of 48 words: its row wraps to four lines and is cut there. */
@@ -2701,7 +2726,9 @@ export const SURFACES: Surface[] = [
         act: dropPin,
         root: "body",
         widths: ["desk", "phone"],
-        ready: (s) => ({ shows: on(s.art, '[aria-label="Pin 1"]') }),
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_CARD_PLACED}[aria-label="Pin 1"]`),
+        }),
       },
       // The pane's Comments panel, its pins seeded: a short comment the agent
       // answered (its reply in meta), a 48-word one cut at four lines, and a

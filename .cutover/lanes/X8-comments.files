@@ -16,3 +16,4 @@ scripts/probe-kit/surfaces/capture.ts
 scripts/probe-kit/surfaces/catalogue.ts
 apps/dashboard/src/lib/cawco/preview/wire.ts
 packages/agent/src/preview-overlay/pins.ts
+scripts/probe-kit/hub-tape.ts
