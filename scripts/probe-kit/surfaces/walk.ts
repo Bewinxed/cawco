@@ -22,7 +22,7 @@ import {
   type Tape,
   type TapeHold,
 } from "../hub-tape";
-import { adopted, type Kit, open, ROOT, type Theme, type View } from "../kit";
+import { adopted, type Kit, ROOT, type Theme, type View } from "../kit";
 import { actHolds, type State, type Surface, type Width } from "./catalogue";
 import { elementAt, holdStill, installReader, PROPS } from "./read";
 import { type ReadyRead, readyOf } from "./ready";
@@ -917,12 +917,10 @@ async function opened(
   scene: Scene
 ): Promise<void> {
   const route = (state.route ?? surface.route)(scene);
-  await open(
-    page,
-    `${base}${route}`,
-    () => document.readyState !== "loading",
-    60_000
-  );
+  // Loaded, not the kit's `open`: its ready step waits on the Shell's
+  // first-render release, which the walk's paused clock runs only in
+  // `pageReady` below.
+  await page.goto(`${base}${route}`, { waitUntil: "domcontentloaded" });
   // The dev server built the route's modules for that load: loaded again,
   // the page hydrates on modules already built.
   if (surface.serve === "dev") {
