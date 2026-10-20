@@ -73,12 +73,27 @@ const useTool = (name: string, input: object): Reply => ({
   tool: { name, input },
 });
 
-/** Where each lane is: 0 counts its inputs, 1 finishes, 2 is done. */
+/** Where each lane is: 0 counts its inputs, 1 finishes, 2 has called finish_item. */
 const stages = new Map<string, number>();
+/** finish_item calls each lane made. */
+const finishes = new Map<string, number>();
+/** How often a lane calls finish_item while it answers an error. Ours: a model tries again, not forever. */
+const FINISH_TRIES = 5;
+
+/** A lane's finish_item call. */
+const finish = (lane: string): Reply => {
+  finishes.set(lane, (finishes.get(lane) ?? 0) + 1);
+  const headline = `Lane ${lane} counted its inputs.`;
+  return useTool(FINISH, {
+    headline,
+    summary: `${headline}\n\n\`ls "$TMPDIR/inputs" | wc -l\` listed them.`,
+  });
+};
 
 /**
- * A lane counts its inputs, loads finish_item and calls it; the parent and
- * every later turn answer "ok".
+ * A lane counts its inputs, loads finish_item and calls it, and calls it
+ * again while it answers an error, as a model does; the parent and every
+ * later turn answer "ok".
  */
 const respond = (request: Seen): Reply => {
   const lane = request.tools ? LANE.exec(request.all)?.[1] : undefined;
@@ -100,11 +115,14 @@ const respond = (request: Seen): Reply => {
         : text(`${FINISH} is not offered`);
     }
     stages.set(lane, 2);
-    const headline = `Lane ${lane} counted its inputs.`;
-    return useTool(FINISH, {
-      headline,
-      summary: `${headline}\n\n\`ls "$TMPDIR/inputs" | wc -l\` listed them.`,
-    });
+    return finish(lane);
+  }
+  if (
+    request.afterTool &&
+    request.toolFailed &&
+    (finishes.get(lane) ?? 0) < FINISH_TRIES
+  ) {
+    return finish(lane);
   }
   return text("ok");
 };

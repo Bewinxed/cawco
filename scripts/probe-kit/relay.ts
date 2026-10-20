@@ -17,6 +17,10 @@
  * - `muteAfter(bytes)`: everything the hub says to the app is swallowed
  *   once the app has sent `bytes` more: what it sends reaches the hub whole,
  *   and no answer comes back.
+ * - `breakAnswer(match)`: the next request `match` picks reaches the hub
+ *   whole and is answered there; the relay reads that answer to its end,
+ *   passes the first half of it on, and drops the app's connection: the hub
+ *   took the call, and the app never had its answer (`fault.broke`).
  * - `cut()`: every socket cut now, and the hub gone until `release`.
  * - `refuse` / `release`: while refused, the hub's routes answer 502 and its
  *   socket opens to nothing, as a hub gone from the network is to the app.
@@ -39,21 +43,38 @@ export interface Pipe {
 }
 
 export interface RelayOptions {
-  /** What the hub said to the app, changed or as it was; `send` puts more in front of the app. */
+  /**
+   * What the hub said to the app, changed or as it was, or undefined: lost on
+   * its way. `send` puts more in front of the app.
+   */
   toApp?: (
     text: string,
     send: (text: string) => void,
     app: ServerWebSocket<Pipe>
-  ) => string;
+  ) => string | undefined;
   /** What the app said to the hub, read as it passes. */
   toHub?: (text: string) => void;
 }
 
+/** A request as {@link Relay.breakAnswer}'s `match` reads it. */
+export interface Passing {
+  body: string;
+  method: string;
+  path: string;
+}
+
 export interface Relay {
+  breakAnswer: (match: (request: Passing) => boolean) => void;
   cut: () => void;
   cutAfter: (bytes: number) => void;
   /** The hub is gone to the app: why, and when it went. */
-  readonly fault: { refused: boolean; cutAt?: number; mutedAt?: number };
+  readonly fault: {
+    /** The answer `breakAnswer` broke: when, its bytes, and how many were passed on. */
+    broke?: { at: number; bytes: number; passed: number; path: string };
+    cutAt?: number;
+    mutedAt?: number;
+    refused: boolean;
+  };
   muteAfter: (bytes: number) => void;
   readonly port: number;
   refuse: () => void;
@@ -70,6 +91,8 @@ export function relay(hubBase: string, options: RelayOptions = {}): Relay {
   /** The armed switch: bytes left before it acts, and which it is. */
   let armed: { left: number; act: "cut" | "mute" } | undefined;
   let muted = false;
+  /** The request whose answer is to be broken, as `breakAnswer` armed it. */
+  let breakOn: ((request: Passing) => boolean) | undefined;
 
   const cut = () => {
     fault.refused = true;
@@ -99,20 +122,55 @@ export function relay(hubBase: string, options: RelayOptions = {}): Relay {
       }
       const headers = new Headers(request.headers);
       headers.delete("host");
+      const body =
+        request.method === "GET" || request.method === "HEAD"
+          ? undefined
+          : await request.arrayBuffer();
+      const breaking = breakOn?.({
+        method: request.method,
+        path: url.pathname,
+        body: body ? new TextDecoder().decode(body) : "",
+      });
+      if (breaking) {
+        breakOn = undefined;
+      }
       const answer = await fetch(`${hubBase}${url.pathname}${url.search}`, {
         method: request.method,
         headers,
-        body:
-          request.method === "GET" || request.method === "HEAD"
-            ? undefined
-            : await request.arrayBuffer(),
+        body,
         redirect: "manual",
       });
       // fetch hands the body on decoded: its encoding and length no longer hold.
       const out = new Headers(answer.headers);
       out.delete("content-encoding");
       out.delete("content-length");
-      return new Response(answer.body, { status: answer.status, headers: out });
+      if (!breaking) {
+        return new Response(answer.body, {
+          status: answer.status,
+          headers: out,
+        });
+      }
+      const whole = new Uint8Array(await answer.arrayBuffer());
+      const half = whole.subarray(0, Math.floor(whole.byteLength / 2));
+      fault.broke = {
+        at: Date.now(),
+        bytes: whole.byteLength,
+        passed: half.byteLength,
+        path: url.pathname,
+      };
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(half);
+          },
+          // The half on its way first, then the connection dropped.
+          async pull(controller) {
+            await Bun.sleep(200);
+            controller.error(new Error("The relay dropped the connection."));
+          },
+        }),
+        { status: answer.status, headers: out }
+      );
     },
     websocket: {
       open(app: ServerWebSocket<Pipe>) {
@@ -140,7 +198,9 @@ export function relay(hubBase: string, options: RelayOptions = {}): Relay {
           const said = options.toApp
             ? options.toApp(text, (more) => out.forward(more), app)
             : text;
-          out.forward(said);
+          if (said !== undefined) {
+            out.forward(said);
+          }
         };
         hub.onclose = () => app.close();
       },
@@ -180,6 +240,9 @@ export function relay(hubBase: string, options: RelayOptions = {}): Relay {
     port: server.port as number,
     url: `http://127.0.0.1:${server.port}`,
     fault,
+    breakAnswer(match) {
+      breakOn = match;
+    },
     cutAfter(bytes) {
       armed = { left: bytes, act: "cut" };
     },

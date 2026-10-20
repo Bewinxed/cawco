@@ -240,6 +240,7 @@ import { sealAtRest } from "./seal-at-rest";
 import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
 import { type StartersDb, startersDb } from "./starters";
 import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
+import { type ToolCallKeysDb, toolCallKeysDb } from "./tool-call-keys";
 import { type TrackersDb, trackersDb } from "./trackers";
 import { type TrashDb, trashDb } from "./trash";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
@@ -2189,6 +2190,8 @@ export interface DbShape {
     projectId: string,
     taskId: string
   ) => ThreadRow | undefined;
+  /** Each relayed tool call taken under an idempotency key, and its answer (tool-call-keys.ts). */
+  readonly toolCallKeys: ToolCallKeysDb;
   /** The hash of the tools a cawco MCP listing last answered, if it has. */
   readonly toolListing: (listing: string) => string | undefined;
   readonly touchAgent: (machineId: string) => void;
@@ -9269,6 +9272,7 @@ const make = async (path: string): Promise<DbShape> => {
     listUsageLimits: () => db.select().from(usageLimits).all(),
     accounts: accountsDb(db),
     turnUsage: turnUsageDb(db),
+    toolCallKeys: toolCallKeysDb(db),
     atLimit: atLimitDb(db),
     designChecks: designChecksDb(db),
     designOffers: designOffersDb(db),

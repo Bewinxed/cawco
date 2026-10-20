@@ -91,6 +91,7 @@ import type {
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
+  blob,
   customType,
   foreignKey,
   index,
@@ -2571,6 +2572,31 @@ export const turnUsage = sqliteTable(
     index("turn_usage_account_at_idx").on(table.accountId, table.at),
     index("turn_usage_at_idx").on(table.at),
   ]
+);
+
+/**
+ * Every tool call a machine's gateway relayed under an idempotency key, and
+ * its answer once it has one (tool-call-keys.ts): a call sent again under
+ * the same key is answered this, never run again. Kept
+ * `TOOL_CALL_KEY_KEPT_MS` past its last change.
+ */
+export const toolCallKeys = sqliteTable(
+  "tool_call_keys",
+  {
+    /** The key, with the caller's credential and the route, hashed. */
+    id: text("id").primaryKey(),
+    /** `interrupted`: running in the hub's last process when it ended. */
+    state: text("state")
+      .$type<"running" | "answered" | "interrupted">()
+      .notNull(),
+    /** The answer's status, headers (as pairs) and body, once answered. */
+    status: integer("status"),
+    headers: text("headers", { mode: "json" }).$type<[string, string][]>(),
+    body: blob("body", { mode: "buffer" }),
+    /** When it was taken, then when it was answered. */
+    at: timestamp("at").notNull(),
+  },
+  (table) => [index("tool_call_keys_at_idx").on(table.at)]
 );
 
 /**

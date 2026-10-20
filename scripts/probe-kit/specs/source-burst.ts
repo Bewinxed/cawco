@@ -20,6 +20,16 @@
  *    link is back, not refused at once. On 2026-10-20 link-under-load lane 1's
  *    `finish_item` came back "The CawCo hub could not be reached." 0.34 s
  *    into the cut, and its item failed three quiet turns later.
+ * 3. A session on the second machine hands its parent a message, and the
+ *    connection drops after the hub took the call, half its answer passed
+ *    on (relay.ts `breakAnswer`): the call goes again under its key (agent
+ *    mcp-oauth.ts `throughDrops`), the hub answers it its first answer
+ *    (hub tool-call-keys.ts), and the message is delivered once.
+ * 4. A person's message to a session on the second machine is lost with the
+ *    link it was handed on: the relay drops the frame and cuts the link
+ *    (link-under-load lane 11 on 2026-10-20, whose brief went 143 ms before
+ *    the cut and was never read). Once the machine is back, the hub hands it
+ *    again (hub server.ts `handAgain`), and the session reads it once.
  *
  *   bun scripts/probe-kit/run.ts source-burst
  */
@@ -43,6 +53,11 @@ const TITLE = "Titled through the cut";
 const CUT_MS = 3000;
 /** What set_title answers once the hub has the title. */
 const NAMED = `Named this session "${TITLE}"`;
+/** How the leg-3 session's prompt names it, and nothing else does. */
+const ONCE_TAG = "PROBE-SOURCE-BURST-ONCE";
+const HANDOFF = "mcp__cawco__handoff";
+/** The message leg 3 hands the parent: the parent's transcript is counted for it. */
+const DELIVERED = "PROBE-SOURCE-BURST-DELIVERED: one message, sent once.";
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 
@@ -50,8 +65,80 @@ const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 let between: ReturnType<typeof relay> | undefined;
 /** When the cut began and ended, and what the call came back with. */
 const leg2: { cutAt?: number; releasedAt?: number; answer?: Seen } = {};
+/** The message leg 4 loses with its link: its frame names it, and nothing else does. */
+const LOST_TAG = "PROBE-SOURCE-BURST-LOST";
+/** When leg 4's frame was lost and the link let back, and each turn its session took on it. */
+const leg4: { lostAt?: number; releasedAt?: number; turns: Seen[] } = {
+  turns: [],
+};
+
+/**
+ * What the hub says to the second machine: leg 4's message is lost there,
+ * the link cut with it, and let back {@link CUT_MS} later.
+ */
+const toApp = (said: string): string | undefined => {
+  if (leg4.lostAt !== undefined || !said.includes(LOST_TAG)) {
+    return said;
+  }
+  leg4.lostAt = Date.now();
+  between?.cut();
+  setTimeout(() => {
+    between?.release();
+    leg4.releasedAt = Date.now();
+  }, CUT_MS);
+  return undefined;
+};
+
+/** Whom leg 3 hands its message, when it called, and what the call came back with. */
+const leg3: { parent?: string; calledAt?: number; answer?: Seen } = {};
+
+/** Leg 3's session: hands the parent one message, its answer broken on the way back. */
+const once = (request: Seen): Reply => {
+  if (request.afterTool && leg3.calledAt !== undefined) {
+    leg3.answer ??= request;
+    return text("ok");
+  }
+  if (leg3.calledAt !== undefined) {
+    return text("ok");
+  }
+  if (!request.toolNames.includes(HANDOFF)) {
+    return request.toolNames.includes("ToolSearch")
+      ? {
+          everyMs: 5,
+          words: [],
+          tool: {
+            name: "ToolSearch",
+            input: { query: `select:${HANDOFF}`, max_results: 1 },
+          },
+        }
+      : text(`${HANDOFF} is not offered`);
+  }
+  leg3.calledAt = Date.now();
+  between?.breakAnswer(
+    ({ method, path, body }) =>
+      method === "POST" &&
+      path === "/mcp/cawco" &&
+      body.includes('"tools/call"') &&
+      body.includes('"handoff"')
+  );
+  return {
+    everyMs: 5,
+    words: [],
+    tool: {
+      name: HANDOFF,
+      input: { target: leg3.parent, message: DELIVERED },
+    },
+  };
+};
 
 const respond = (request: Seen): Reply => {
+  if (request.tools && request.last.includes(LOST_TAG)) {
+    leg4.turns.push(request);
+    return text("ok");
+  }
+  if (request.tools && request.all.includes(ONCE_TAG)) {
+    return once(request);
+  }
   if (!(request.tools && request.all.includes(AWAY_TAG))) {
     return text("ok");
   }
@@ -92,7 +179,7 @@ const spec: Spec = {
     fleet.launch("agent");
     await fleet.agentUp();
     await fleet.accountSignedIn();
-    between = relay(fleet.base);
+    between = relay(fleet.base, { toApp });
     await fleet.launchMachine(OTHER, {
       CAWCO_HUB_URL: `${between.url.replace("http", "ws")}/ws`,
     });
@@ -194,6 +281,92 @@ const spec: Spec = {
         answered.at >= leg2.cutAt + CUT_MS &&
         named === TITLE,
       `cut ${leg2.cutAt === undefined ? "never" : `for ${CUT_MS} ms`}; answer ${answered ? `${answered.at - (leg2.cutAt ?? answered.at)} ms after the cut began: ${answered.last.slice(0, 300)}` : "none"}; the session's title: ${named ?? "none"}`
+    );
+
+    // 3. A handoff whose answer the link drops after the hub took it, once
+    // the second machine is back from leg 2's cut: a start sent to it while
+    // it reconnects is not this leg's.
+    await until(
+      "the second machine registered again after leg 2's cut",
+      () => fleet.api<{ machineId: string; status: string }[]>("/api/agents"),
+      (agents) =>
+        agents.some(
+          (agent) => agent.machineId === OTHER && agent.status === "online"
+        ),
+      60_000
+    );
+    leg3.parent = parent;
+    const sender = await fleet.spawn(
+      "claude",
+      "Once call",
+      src,
+      { projectId: project.id },
+      OTHER
+    );
+    await fleet.send(sender, `${ONCE_TAG}: hand your parent a message.`, OTHER);
+    const handed = await until(
+      "the handoff whose answer was broken is answered",
+      () => leg3.answer,
+      Boolean,
+      120_000
+    ).catch(() => undefined);
+    const deliveries = () =>
+      fleet.query<{ count: number }>(
+        "SELECT count(*) AS count FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
+        parent,
+        `%${DELIVERED}%`
+      )[0]?.count ?? 0;
+    await until(
+      "the message reaches the parent",
+      deliveries,
+      (n) => n > 0,
+      30_000
+    ).catch(() => undefined);
+    // Long enough for a second run's send to land beside the first.
+    await Bun.sleep(5000);
+    const delivered = deliveries();
+    const { broke } = between.fault;
+    check(
+      "a handoff whose connection drops after the hub took it, half its answer through, is answered its first answer when it goes again, and its message is delivered once",
+      !!handed &&
+        !!broke &&
+        !handed.toolFailed &&
+        handed.at >= broke.at &&
+        delivered === 1,
+      `broken ${broke ? `after ${broke.passed} of ${broke.bytes} bytes` : "never"}; answer ${handed ? `${handed.toolFailed ? "an error" : "a result"} ${handed.at - (broke?.at ?? handed.at)} ms after the break: ${handed.last.slice(0, 300)}` : "none"}; delivered ${delivered} time(s)`
+    );
+
+    // 4. A message lost with the link it was handed on.
+    const reader = await fleet.spawn(
+      "claude",
+      "Lost send",
+      src,
+      { projectId: project.id },
+      OTHER
+    );
+    const lost = await fleet.send(reader, `${LOST_TAG}: say ok.`, OTHER);
+    await until(
+      "the session reads the message lost with its link",
+      () => leg4.turns.length,
+      (turns) => turns > 0,
+      120_000
+    ).catch(() => undefined);
+    // Long enough for a second hand-off's turn to come beside the first.
+    await Bun.sleep(5000);
+    const record = fleet.query<{ state: string }>(
+      "SELECT state FROM sent_messages WHERE uuid = ?",
+      lost
+    )[0]?.state;
+    const [read] = leg4.turns;
+    check(
+      "a message whose frame is lost with the link it was handed on is handed again once the machine is back, and its session reads it once",
+      leg4.lostAt !== undefined &&
+        leg4.releasedAt !== undefined &&
+        leg4.turns.length === 1 &&
+        !!read &&
+        read.at >= leg4.releasedAt &&
+        record === "read",
+      `lost ${leg4.lostAt === undefined ? "never" : `and the link cut for ${CUT_MS} ms`}; ${leg4.turns.length} turn(s) on it${read && leg4.releasedAt !== undefined ? `, the first ${read.at - leg4.releasedAt} ms after the link was back` : ""}; its record: ${record ?? "none"}`
     );
     between.stop();
   },

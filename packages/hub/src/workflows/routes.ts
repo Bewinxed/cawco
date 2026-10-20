@@ -13,6 +13,7 @@ import {
 import { Elysia, ElysiaStatus, status, t } from "elysia";
 import type { DbShape } from "../db";
 import { hidden } from "../hidden";
+import type { ToolCallKeys } from "../tool-call-keys";
 import { WorkItemRefusal } from "../work-items";
 import type { createWorkflowRuntime } from "./runtime";
 
@@ -22,6 +23,7 @@ const SLUG_EDGES = /^-|-$/g;
 export function workflowRoutes(
   db: DbShape,
   runtime: ReturnType<typeof createWorkflowRuntime>,
+  keys: ToolCallKeys,
   presence: (id: string) => string | undefined,
   skills: {
     changed: () => void;
@@ -149,6 +151,26 @@ export function workflowRoutes(
     }
     return row;
   };
+  /**
+   * A step's write as a response, run once per key (tool-call-keys.ts): its
+   * words (every write answers a sentence), or a refusal's status and words.
+   * Typed as what its bytes carry: the route's answers in the OpenAPI
+   * document are read off its handler's type (scripts/openapi.ts).
+   */
+  const once = (
+    request: Request,
+    write: () => string | Promise<string>
+  ): Promise<string | ReturnType<typeof refusal> | Response> =>
+    keys.once(
+      request,
+      async () => {
+        const done = await attempt(write);
+        return done instanceof ElysiaStatus
+          ? new Response(String(done.response), { status: done.status })
+          : new Response(done);
+      },
+      (words) => new Response(words, { status: 409 })
+    );
   return new Elysia()
     .get("/api/workflows", (): { workflows: WorkflowListing[] } => ({
       workflows: db.listWorkflows(),
@@ -364,8 +386,8 @@ export function workflowRoutes(
     .post(
       "/api/workflow-steps/:id/result",
       { body: t.Object({ instanceId: t.String(), result: t.Unknown() }) },
-      ({ params, body }) =>
-        attempt(() =>
+      ({ params, body, request }) =>
+        once(request, () =>
           runtime.submitResult(params.id, body.instanceId, body.result)
         )
     )
@@ -375,8 +397,8 @@ export function workflowRoutes(
         ...hidden,
         body: t.Object({ instanceId: t.String(), value: t.Unknown() }),
       },
-      ({ params, body }) =>
-        attempt(() => {
+      ({ params, body, request }) =>
+        once(request, () => {
           const [row] = db.getInstancesByIds([body.instanceId]);
           if (!row || row.workflowRunId !== params.id) {
             throw new Error("This session is not a step of that workflow run.");

@@ -104,6 +104,13 @@ const SIGNIN_LINE =
  */
 export const MID_TURN = "The user sent a new message while you were working:";
 
+/** Whether a message's content holds a tool's result that was an error (Anthropic's `is_error`). */
+const toolFailed = (content: unknown): boolean =>
+  Array.isArray(content) &&
+  (content as { is_error?: boolean; type?: string }[]).some(
+    (block) => block.type === "tool_result" && block.is_error === true
+  );
+
 /** One request the mock answered. */
 export interface Seen {
   /**
@@ -131,6 +138,11 @@ export interface Seen {
   last: string;
   /** `last` is words read mid-turn, opening with {@link MID_TURN}. */
   lastMidTurn: boolean;
+  /**
+   * {@link afterTool}, and the tool's result was an error: Anthropic's
+   * `is_error` on its `tool_result` (chat completions mark none).
+   */
+  toolFailed: boolean;
   /** The names of the tools it offered, loaded ones only. */
   toolNames: string[];
   /** Whether the harness offered tools: a session's turn, not a side call (a title). */
@@ -1493,6 +1505,7 @@ async function standUp(
             (final.content as { type?: string }[]).some(
               (block) => block.type === "tool_result"
             )),
+        toolFailed: toolFailed(final?.content),
         all: words.map((said) => said.text).join("\n"),
         body: JSON.stringify(body),
         last: words.at(-1)?.said ?? "",

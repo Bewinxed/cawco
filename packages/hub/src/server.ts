@@ -774,6 +774,11 @@ import {
   YOU_ACTOR,
 } from "./tasks";
 import { createThreadRepair } from "./thread-repair";
+import {
+  createToolCallKeys,
+  mcpRefused,
+  toolResultRefused,
+} from "./tool-call-keys";
 import { createTrackers, trackerRoutes } from "./tracker";
 import {
   createTranscripts,
@@ -8720,6 +8725,38 @@ export const createServer = (
     if (again > 0) {
       console.info(
         `[hub] ${machineName(machineId)} is back: ${again} request(s) held for it sent again under their own ids`
+      );
+    }
+  };
+  /**
+   * The machine registered again: every send a session it runs was handed
+   * and has not read goes again, in the order accepted, under its own
+   * hand-off. One handed on a link that dropped may never have reached the
+   * machine: on 2026-10-20 a delegate's brief, handed 143 ms before its
+   * machine's link was cut, stayed pending while its session sat idle, and
+   * its item never started (link-under-load lane 11). The agent takes a
+   * send it had already as had, never as a second turn (session.ts
+   * `#handedBefore`): taken, it says so; held by its process, it says that.
+   * A send owed is not handed here: it goes when its hold ends.
+   */
+  const handAgain = (machineId: string, instanceIds: string[]): void => {
+    const agent = registry.agent(machineId);
+    if (!agent) {
+      return;
+    }
+    let again = 0;
+    for (const instanceId of instanceIds) {
+      for (const send of db.sendsIn(instanceId, ["pending"])) {
+        if (send.owed || !(send.delivery && send.envelope)) {
+          continue;
+        }
+        sendFrame(agent, JSON.parse(send.envelope) as Envelope);
+        again += 1;
+      }
+    }
+    if (again > 0) {
+      console.info(
+        `[hub] ${machineName(machineId)} is back: ${again} unread send(s) handed to it again under their own hand-offs`
       );
     }
   };
@@ -21831,6 +21868,8 @@ export const createServer = (
     machineIds: () => registry.machineIds(),
     pairing: () => hubAuth.mode() === "pairing",
   });
+  // A relayed tool call sent again under its key is answered, not run again.
+  const toolCallKeys = createToolCallKeys({ db: db.toolCallKeys, lifetime });
   const delegationMcp = createDelegationMcp({
     lifetime,
     tasks,
@@ -23981,6 +24020,7 @@ export const createServer = (
         workflowRoutes(
           db,
           workflowRuntime,
+          toolCallKeys,
           (id) => withSessionPresence(db.getInstancesByIds([id]))[0]?.status,
           {
             changed: fanOutFleet,
@@ -24071,7 +24111,11 @@ export const createServer = (
       .all("/mcp/cawco", hidden, ({ request, body, server }) => {
         // Tool deadlines govern long calls; the HTTP idle timer must not cut them short.
         server?.timeout(request, 0);
-        return delegationMcp.handle(request, body);
+        return toolCallKeys.once(
+          request,
+          () => delegationMcp.handle(request, body),
+          (words) => mcpRefused(body, words)
+        );
       })
       .all(
         "/mcp/fleet/:name",
@@ -24362,11 +24406,18 @@ export const createServer = (
           ) {
             server?.timeout(request, 0);
           }
-          return delegationMcp.call(
-            params.instanceId,
-            input.name,
-            input.arguments ?? {},
-            authorization ?? undefined
+          return toolCallKeys.once(
+            request,
+            async () =>
+              Response.json(
+                await delegationMcp.call(
+                  params.instanceId,
+                  input.name,
+                  input.arguments ?? {},
+                  authorization ?? undefined
+                )
+              ),
+            toolResultRefused
           );
         }
       )
@@ -28977,8 +29028,8 @@ export const createServer = (
               }
               // Sessions that ran on while this hub was away: a read that
               // happened meanwhile was framed to nobody, and the transcript
-              // says it happened. Their agent is the one that was handed the
-              // rest, and it is still handing them over.
+              // says it happened. The rest goes again behind the ack
+              // ({@link handAgain}).
               for (const instanceId of peekInstances(message.payload)) {
                 settlePending(instanceId, UNREAD.ended, "wait");
               }
@@ -29167,6 +29218,7 @@ export const createServer = (
               // Behind its ack, which it waits for to take requests: what
               // was held for it while it was away goes again.
               resendHeld(message.machineId);
+              handAgain(message.machineId, peekInstances(message.payload));
               for (const row of toEnd) {
                 endSession(row.id, "stop", {
                   kind: "hub",
