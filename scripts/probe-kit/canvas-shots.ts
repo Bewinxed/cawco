@@ -31,7 +31,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { ElementHandle, Page } from "playwright-core";
+import type { ElementHandle, Frame, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import {
   FramePictureRefusal,
@@ -929,6 +929,65 @@ async function shootOne(page: Page, shot: Shot): Promise<ShotRead> {
 }
 
 /**
+ * An embedded frame brought where the person sees it: its body scrolled
+ * into the window, then waited on until the canvas says it is settled and
+ * the embed holds its whole document. The embed takes the height its canvas
+ * says (runtime.ts posts it as its world resizes; the page's Preview sizes
+ * its frame from that message), which can land after the frame settles:
+ * until it does, the embed is the page's default box and cuts the frame
+ * off. Scrolled to again at that size, since the embed's growth moves it.
+ * Answers what didn't come in time.
+ */
+async function bringIntoView(
+  frame: Frame,
+  selector: string,
+  key: string
+): Promise<string[]> {
+  const scroll = () =>
+    frame.evaluate(
+      (sel) =>
+        document
+          .querySelector(`${sel} > .cawco-frame-body`)
+          ?.scrollIntoView({ block: "start" }),
+      selector
+    );
+  const held = (wait: Promise<unknown>) =>
+    wait.then(
+      () => true,
+      () => false
+    );
+  await scroll();
+  const settled = await held(
+    frame.waitForFunction(
+      (one) =>
+        (
+          globalThis as unknown as {
+            __cawcoCanvas?: { settled?: (frameKey: string) => boolean };
+          }
+        ).__cawcoCanvas?.settled?.(one) === true,
+      key,
+      { timeout: POSE_MS, polling: 100 }
+    )
+  );
+  const whole = await held(
+    frame.waitForFunction(
+      () => innerHeight >= document.documentElement.scrollHeight - 1,
+      null,
+      { timeout: POSE_MS, polling: 100 }
+    )
+  );
+  await scroll();
+  return [
+    ...(settled ? [] : [`not settled in ${POSE_MS / 1000} s`]),
+    ...(whole
+      ? []
+      : [
+          `the embed never grew to its drawing's height in ${POSE_MS / 1000} s`,
+        ]),
+  ];
+}
+
+/**
  * Each frame an embedded canvas shows (a decision page's Preview: the canvas
  * page by=embed, in a frame of `page`), shot where the person sees it: its
  * body scrolled into the window, settled (the canvas's own `settled`), read
@@ -978,28 +1037,7 @@ export async function shootEmbedded(
       stats: { width: 0, height: 0, top: 0, matched: "0/0" },
     };
     // biome-ignore lint/performance/noAwaitInLoops: one frame in the window at a time
-    await frame.evaluate(
-      (sel) =>
-        document
-          .querySelector(`${sel} > .cawco-frame-body`)
-          ?.scrollIntoView({ block: "start" }),
-      selector
-    );
-    const settled = await frame
-      .waitForFunction(
-        (key) =>
-          (
-            globalThis as unknown as {
-              __cawcoCanvas?: { settled?: (one: string) => boolean };
-            }
-          ).__cawcoCanvas?.settled?.(key) === true,
-        one.key,
-        { timeout: POSE_MS, polling: 100 }
-      )
-      .then(
-        () => true,
-        () => false
-      );
+    const late = await bringIntoView(frame, selector, one.key);
     const seen = await frame.evaluate(identityOf, {
       selector,
       holds: null,
@@ -1011,7 +1049,7 @@ export async function shootEmbedded(
     const grid = await frame.evaluate(gridOf, { selector, grid: GRID });
     const faults = [
       ...faultsOf(shot, seen, grid, await frame.evaluate(astrayOf, selector)),
-      ...(settled ? [] : [`not settled in ${POSE_MS / 1000} s`]),
+      ...late,
     ];
     const at = await embed.boundingBox();
     const body = await frame.evaluate((sel) => {

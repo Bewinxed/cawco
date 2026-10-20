@@ -1,0 +1,12 @@
+root = Decisions("How your changes reach an agent's plan", [settled, listhome, wake])
+
+settled = Text("Already settled, nothing to pick: a step can wait on another step, a delegate's work shows as one line under the step it works on, and a change still reaches the work after its agent has finished.", "meta")
+
+listhome = Decision("list-home", "Where does every agent keep its plan?", [lhcawco, lhown], "Recommended: CawCo's list, because it is the only list you can tick, add to or reword. OpenCode and pi already keep their plans there; Claude Code keeps its own unless it is switched over, and CawCo can read that list but not change it.")
+lhcawco = Option("cawco", "CawCo's list, always", "Every change you make lands in the plan itself, and the agent reads it the next time it works.", true, [], "Claude Code can no longer keep its own to-do list, even for someone who would rather it did.")
+lhown = Option("own", "Claude Code may keep its own", "Where it does, you can comment on its steps, and a change you make reaches it as a message it may or may not act on.", false, [], "One plan works two ways, and your change can vanish from the plan until the agent next updates its list.")
+
+wake = Decision("wake", "When an agent is waiting, which of your changes start it working again?", [wkwork, wkevery, wksend], "Recommended: changes to the work, because an agent that is working sees your change at once, but waking a waiting one costs a reply, and every reply adds to your spend.", [], ["list-home"])
+wkwork = Option("work", "Changes to the work", "Rewording, adding or removing a step, or leaving a comment, starts it working 3 seconds after your last edit. Ticking a step off or moving it waits until it next works.", true, [], "A reorder you meant as “do this first” waits until something else starts it.")
+wkevery = Option("every", "Every change", "Any change you make starts it working 3 seconds after your last edit.", false, [], "Ticking three steps from your phone costs a reply that only says “noted”.")
+wksend = Option("send", "Only when you press Send", "Your changes wait on the plan, marked “3 unsent”, until you press Send; then they reach it together and it starts working.", false, [], "One more press, and changes are easy to leave unsent.")
