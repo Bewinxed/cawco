@@ -115,8 +115,8 @@ fixed: src/lib/components/features/DirectoryPicker.svelte:181 Browse was a meta-
 fixed: src/lib/cawco/UsageMeter.svelte:1104 the strip's open state was written twice (`aria-expanded:` and `state-open:`) — once.
 fixed: src/lib/cawco/transcript/Delegate.svelte:428 and Subagent.svelte:81 two disclosure heads with two coarse heights tokens — one head.
 fixed: src/lib/cawco/UsageMeter.svelte:1104, :1123 no defect: the strip's `transition-property: none` read in the first check was the theme flip's own suppression, `:root[data-theme-flip], :root[data-theme-flip] * { transition: none }` (app.css:466-469, layer `overrides`, matched by CDP `CSS.getMatchedStylesForNode` with `data-theme-flip` set; theme.svelte.ts:81 sets the attribute while the theme applies and :78 removes it). Sampled every 50ms from load: 1440 `0ms flip=true tp=none | 51ms flip=false tp=background-color`; 390 `0ms flip=true tp=none | 100ms flip=false tp=background-color`. Without the flip the only transition rules matched are `.transition-\[background-color\]` (`transition-property: background-color`), `.dur-control` and `.ease-out`, all in `utilities`. The recipe holds; nothing changed.
-gap: apps/dashboard/src/app.css:4413 `@utility rail-place` has no user left after the woke-Caw box went; app.css is additions-only for this lane, so the dead utility stands for integration to delete.
+removed: apps/dashboard/src/app.css:4411-4416 `@utility rail-place` and its comment ("A row's place in the transcript's stack…") — its last user was the woke-Caw note's `rail-place` switch in SystemLine.svelte, which this lane removed; dead code goes with the change that killed it (`git grep -n "rail-place" -- apps/dashboard/src` returns nothing).
 
 The relic gate's app.css overrides (Streamdown, virtua) are sanctioned in scripts/relics-check.ts, and the replaced gates read only present files under apps/dashboard/src, so neither is a gap. The Button's cursor is the parent's, for the owner.
 
-Counts: kit-swap 31 lines (34 sites), removed 15, fixed 6, gap 1, token 0, theme 0.
+Counts: kit-swap 31 lines (34 sites), removed 16, fixed 6, gap 0, token 0, theme 0.

@@ -4408,12 +4408,6 @@
     --x-rail: var(--tx-x-rail-narrow);
   }
 }
-/* A row's place in the transcript's stack: the gap above it and the rail
-   column it stands on. */
-@utility rail-place {
-  margin-block-start: var(--rail-gap, var(--space-4));
-  margin-inline-start: var(--x-rail);
-}
 /* A rail-led row: in its place, its 2px rail at --x-rail and its content
    from the glyph column. The head line is the identity mark in the glyph
    cell, then the row's words at the text column; a disclosure chevron
