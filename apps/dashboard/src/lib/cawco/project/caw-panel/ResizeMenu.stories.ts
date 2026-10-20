@@ -17,12 +17,12 @@ export const Desk = {
 
 /** Desk: More open, Wide panel in it. */
 export const MenuOpen = {
-  args: { menu: true, landed: false, peek: 320 },
+  args: { menu: true, landed: false },
   parameters: { viewport: 404 },
 };
 
 /** Desk: after Wide panel, the panel 560 wide (the size it reopens at, too). */
 export const Wide = {
-  args: { landed: false, sized: { w: 560, h: 640 }, peek: 320 },
+  args: { landed: false, sized: { w: 560, h: 640 } },
   parameters: { viewport: 584 },
 };

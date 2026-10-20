@@ -17,6 +17,6 @@ export const Desk = {
 
 /** Desk: the pointer on the leading edge, its grip drawn. */
 export const Pointing = {
-  args: { lit: true, landed: false, peek: 320 },
+  args: { lit: true, landed: false },
   parameters: { viewport: 404 },
 };
