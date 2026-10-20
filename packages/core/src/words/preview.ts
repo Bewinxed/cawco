@@ -18,4 +18,15 @@ export const previewWords = {
   tryAgain: "Try again",
   /** Try again while the page loads. */
   reloading: "Reloading…",
+  /**
+   * A host-mode preview turned the dashboard away twice (hub
+   * preview-access.ts): the browser holds no pass for `domain`, the domain
+   * the names stand under. Opened over plain http, the dashboard is another
+   * site to those https names, so no frame of it carries their pass;
+   * opened over https under them, this browser kept none.
+   */
+  passTurnedAway: (domain: string, overHttps: boolean) =>
+    overHttps
+      ? `This preview turned the dashboard away twice: this browser kept no pass for ${domain}. Allow cookies for ${domain} in this browser, then try again.`
+      : `This preview turned the dashboard away: previews on their own names need the dashboard opened over https under the same domain, which is ${domain}. Open the dashboard at an https address under ${domain}, and its previews open there.`,
 };

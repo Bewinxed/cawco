@@ -7,16 +7,16 @@
  * A scratch fleet (real hub, agent and sessiond, Claude Code against the
  * mock model) and the built app on an iPhone simulator of its own (a
  * mac-slot.sh slot, deleted at the end), reaching the hub at
- * `http://cawco.localhost:<port>` (under the pattern's `cawco.localhost`
- * domain) for the host-mode pass and at `http://127.0.0.1:<port>` for the
- * others. A session previews a server this spec runs
+ * `http://localtest.me:<port>` (under the pattern's localtest.me domain,
+ * which public DNS answers 127.0.0.1 for, every name under it too) for the
+ * host-mode pass and at `http://127.0.0.1:<port>` for the others. A session previews a server this spec runs
  * (`artifact_create` of its port), whose page opens a WebSocket to its own
  * origin as an HMR client does. Three passes, each with two launches of the
  * app on the session (`-open-session`), read from its DEBUG lines
  * (PreviewProbe `preview …`, CanvasDebug `canvas page …`, CanvasProbe
  * `canvas …`):
  *
- * - **https**: the pattern `https://p-{port}.cawco.localhost:<tls>`, the
+ * - **https**: the pattern `https://p-{port}.localtest.me:<tls>`, the
  *   only scheme host mode takes (the pass is a `Secure` cookie). TLS in
  *   front of the hub's first preview port is a terminator this spec runs
  *   ({@link tlsFront}: Bun's TLS listener piping bytes to the hub, Host and
@@ -355,7 +355,7 @@ async function run(kit: Kit): Promise<void> {
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "enter-"));
   const certs = await certificates(
     dir,
-    ports.map((port) => `p-${port}.cawco.localhost`)
+    ports.map((port) => `p-${port}.localtest.me`)
   );
   const front = tlsFront(first, certs);
   console.log(`  TLS on 127.0.0.1:${front.port} in front of ${first}`);
@@ -470,12 +470,9 @@ async function run(kit: Kit): Promise<void> {
         .join(" | ");
 
     // Host mode's names are the app's when it reached the hub under the
-    // pattern's domain (`cawco.localhost` here); at 127.0.0.1 it takes the port.
-    const underDomain = fleet.base.replace(
-      "//127.0.0.1:",
-      "//cawco.localhost:"
-    );
-    const pattern = `https://p-{port}.cawco.localhost:${front.port}`;
+    // pattern's domain (localtest.me here); at 127.0.0.1 it takes the port.
+    const underDomain = fleet.base.replace("//127.0.0.1:", "//localtest.me:");
+    const pattern = `https://p-{port}.localtest.me:${front.port}`;
     const passes = [
       {
         name: "https",

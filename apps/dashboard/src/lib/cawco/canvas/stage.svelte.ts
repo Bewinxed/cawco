@@ -18,7 +18,12 @@
  * starting, a resize or scroll, a slot resizing, or a motion a holder runs
  * (`watch`), and for a short tail after each.
  */
-import { type PreviewAddress, previewRoute } from "@cawco/core";
+import {
+  hostModeDomain,
+  type PreviewAddress,
+  previewRoute,
+  previewWords,
+} from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { theme } from "#lib/theme.svelte.js";
@@ -296,11 +301,16 @@ export class Stage {
 
   /** The page turned the canvas away (`cawco:locked`): the browser enters its previews and the page loads again, once in a row. */
   async turnedAway(): Promise<void> {
-    this.#turnedAway += 1;
     const { origin, entry } = this;
-    if (this.#turnedAway > 1 || !(origin && entry)) {
-      this.unreached =
-        "This canvas turned away its pass twice: this browser didn't keep the preview's cookie. Open the dashboard over https under the previews' domain, then open the canvas again.";
+    if (!(origin && entry)) {
+      return;
+    }
+    this.#turnedAway += 1;
+    if (this.#turnedAway > 1) {
+      this.unreached = previewWords.passTurnedAway(
+        hostModeDomain(origin),
+        location.protocol === "https:"
+      );
       this.entry = null;
       this.changed();
       return;

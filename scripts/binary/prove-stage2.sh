@@ -2147,16 +2147,17 @@ ws_preview_port() { run_script "$hubc" /shared/stage2-preview-port.ts http://127
 ws_preview_says() { as_user "$hubc" curl -sS --max-time 10 "http://127.0.0.1:$(cat "$rigdir/ws-preview-port")/" 2>&1 || true; }
 # Host mode, the owner's: one listener on the preview range's first port routes each request by its Host, a name of
 # the fleet's pattern (preview.ts sessionOfHost), behind the lock (preview-access.ts). Set as Settings › Previews and
-# Caw's admin_previews_write set it (PUT /api/preview-settings), `.cawco.localhost` names, which need no DNS, on
-# https as host mode takes them (a proxy in front serves TLS; here curl reaches the listener's plain port); $1 host or port.
+# Caw's admin_previews_write set it (PUT /api/preview-settings), localtest.me names (every one is 127.0.0.1 in public
+# DNS, which the hub's save checks one of), on https as host mode takes them (a proxy in front serves TLS; here curl
+# reaches the listener's plain port); $1 host or port.
 ws_preview_mode() {
   local first body
   first=$(hub_api /api/preview-settings | json 'd => d.ports.split(/\D+/)[0]')
   body="{\"mode\":\"$1\"}"
-  [[ $1 == port ]] || body="{\"mode\":\"host\",\"pattern\":\"https://p-{port}.cawco.localhost:$first\"}"
+  [[ $1 == port ]] || body="{\"mode\":\"host\",\"pattern\":\"https://p-{port}.localtest.me:$first\"}"
   as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' -X PUT http://127.0.0.1:3456/api/preview-settings -H 'content-type: application/json' -d "$body"
 }
-# The preview's host-mode name (`p-<port>.cawco.localhost:<listener port>`), as the hub gives a client its origin.
+# The preview's host-mode name (`p-<port>.localtest.me:<listener port>`), as the hub gives a client its origin.
 ws_preview_host() { ws_post "/api/instances/$(cat "$rigdir/ws-delegate")/preview-address" '{}' | sed '$d' | json 'd => d.host'; }
 # One request to the preview's host-mode name ($1), with the pass cookie $2 or none: its body, then `HTTP <status>`.
 ws_preview_by_host() {
@@ -2439,7 +2440,7 @@ workspace_across_update() {
   [[ "$answer" == *"HTTP 200" ]]
   on_exit 'ws_preview_mode port > /dev/null'
   ws_preview_host > "$rigdir/ws-preview-host"
-  [[ "$(cat "$rigdir/ws-preview-host")" == p-*.cawco.localhost:* ]] || { echo "the preview's host-mode name: '$(cat "$rigdir/ws-preview-host")'"; return 1; }
+  [[ "$(cat "$rigdir/ws-preview-host")" == p-*.localtest.me:* ]] || { echo "the preview's host-mode name: '$(cat "$rigdir/ws-preview-host")'"; return 1; }
   answer=$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")")
   [[ "$answer" == *"HTTP 401" && "$answer" == *cawco-preview-locked* ]] || { echo "ASSERTION FAILED: a request without a pass got: $answer"; return 1; }
   ws_preview_enter "$(cat "$rigdir/ws-preview-host")" > "$rigdir/ws-preview-pass"

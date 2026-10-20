@@ -1,15 +1,35 @@
 /**
- * Whether a browser keeps a cookie set on `domain` (host mode's pass, core
- * frames.ts `PREVIEW_PASS_COOKIE`): a browser ignores one whose `Domain` is
- * a public suffix ("If the user agent is configured to reject "public
- * suffixes" and the domain-attribute is a public suffix: … ignore the cookie
- * entirely", RFC 6265bis §5.7 step 9), and a name is a public suffix when
- * the Public Suffix List says so, its private section included (`ts.net`,
- * `pages.dev`), or when it has a single label (the list's `*` rule). So the
- * domain has to be a registrable domain or a name under one: never a
- * suffix itself, and never an address.
+ * Whether host mode's pass (core frames.ts `PREVIEW_PASS_COOKIE`), a cookie
+ * set on `domain`, reaches every name under it from a dashboard under it:
+ *
+ * - **public**: `domain` is a public suffix (or an address). A browser
+ *   ignores a cookie whose `Domain` is one ("If the user agent is configured
+ *   to reject "public suffixes" and the domain-attribute is a public suffix:
+ *   … ignore the cookie entirely", RFC 6265bis §5.7 step 9). The Public
+ *   Suffix List says which, its private section included (`ts.net`,
+ *   `pages.dev`), and a name of one label is one (the list's `*` rule).
+ * - **unknown**: `domain` stands under an ending the list doesn't know
+ *   (`.localhost`, `.test`, `.lan`, `.internal`): only that `*` rule makes
+ *   it a domain. Chromium takes a name under no known registry for a site of
+ *   its own, so the dashboard and each preview frame are cross-site and no
+ *   `SameSite=Lax` pass rides a frame (seen on Chromium: a
+ *   `Domain=cawco.localhost` cookie kept, and sent to no frame of a sibling
+ *   name).
+ *
+ * Null: `domain` is a registrable domain under a known ending, or a name
+ * under one.
  */
 import { parse } from "tldts";
 
-export const isPublicSuffix = (domain: string): boolean =>
-  parse(domain, { allowPrivateDomains: true }).domain === null;
+export type PassDomainRefusal =
+  { kind: "public" } | { kind: "unknown"; suffix: string };
+
+export const passDomainRefusal = (domain: string): PassDomainRefusal | null => {
+  const parsed = parse(domain, { allowPrivateDomains: true });
+  if (parsed.domain === null) {
+    return { kind: "public" };
+  }
+  return parsed.isIcann || parsed.isPrivate
+    ? null
+    : { kind: "unknown", suffix: parsed.publicSuffix ?? domain };
+};

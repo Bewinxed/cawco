@@ -145,7 +145,11 @@ export interface PageOptions {
   /**
    * Chromium only: its `--host-resolver-rules`, where a spec needs a name to
    * reach one address alone (`MAP localhost [::1]`: an agent's loopback
-   * beside a scratch hub on 127.0.0.1).
+   * beside a scratch hub on 127.0.0.1; `MAP *.localtest.me 127.0.0.1`: host
+   * mode's names where no DNS answers, as in a workspace). The browser then
+   * connects to every name directly: a proxy the environment names (a
+   * workspace's) would resolve the name itself, and answered such a page
+   * 407.
    */
   hostRules?: string;
   /**
@@ -904,7 +908,12 @@ export class Run {
                   "--disable-features=IsolateOrigins,site-per-process,OriginIsolationHeader",
                 ]
               : []),
-            ...(hostRules ? [`--host-resolver-rules=${hostRules}`] : []),
+            ...(hostRules
+              ? [
+                  `--host-resolver-rules=${hostRules}`,
+                  "--proxy-server=direct://",
+                ]
+              : []),
             DESK_POINTER,
           ],
           ...(scrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}),

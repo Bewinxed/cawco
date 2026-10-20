@@ -43,13 +43,13 @@
  *     each embed remounted, and the page reloaded, which the pane answers
  *     with one new entry, the page and both embeds drawn again.
  *
- * Host-only: the names are localtest.me's, which only the host's DNS
- * resolves (a workspace has none), and a frame carries the pass only under a
- * domain the Public Suffix List knows: Chromium takes each `.localhost` name
- * for a site of its own, so no `SameSite=Lax` pass reaches a frame there.
- * Not run here either: the outpost route (cloudflared itself in front of the
- * host-mode port) and the tailnet route (the hub's HTTPS twins on its
- * tailnet name).
+ * The names are localtest.me's (pass-legs.ts): a frame carries the pass
+ * only under a domain the Public Suffix List knows. Each mode is stored as
+ * Settings › Previews keeps it and the hub started on it (pass-legs
+ * `storeHostMode`), and the browser is told the names, so it runs where no
+ * DNS answers too. Not run here: the outpost route (cloudflared itself in
+ * front of the host-mode port) and the tailnet route (the hub's HTTPS twins
+ * on its tailnet name).
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the legs are read in order, one after another.
@@ -60,10 +60,12 @@ import { type Kit, open, type Spec } from "../kit";
 import {
   hear,
   PASS_DOMAIN,
+  PASS_HOSTS,
   passHeld,
   passPattern,
   passTunnel,
   remount,
+  storeHostMode,
 } from "../pass-legs";
 
 const respond = (request: Seen): Reply => ({
@@ -74,7 +76,7 @@ const respond = (request: Seen): Reply => ({
 const SITE = "The live site";
 const OTHER = "The other site";
 /** Both embeds' headings, as {@link Drawn} sorts them. */
-const BOTH = [OTHER, SITE].join(" | ");
+const BOTH = [OTHER, SITE].toSorted().join(" | ");
 
 const pageProgram = (
   site: string,
@@ -302,16 +304,16 @@ const run = async (kit: Kit) => {
   const tunnel = await passTunnel(kit.out, first, base);
 
   for (const mode of MODES) {
-    const put = await fetch(`${fleet.base}/api/preview-settings`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(settingsOf(mode, tunnel.front)),
-    });
+    await storeHostMode(fleet, settingsOf(mode, tunnel.front));
+    const settings = await fleet.api<{ mode: string; passDomain?: string }>(
+      "/api/preview-settings"
+    );
     // Host mode's names are loaded by a dashboard reached under their domain.
     const board = mode === "port" ? base : tunnel.board;
     const tab = await kit.page("desk", {
       theme: "light",
       ignoreHTTPSErrors: true,
+      hostRules: PASS_HOSTS,
     });
     const heard = hear(tab);
     await open(tab, `${board}/session/${writer}`, '[data-slot="pane"]');
@@ -329,8 +331,11 @@ const run = async (kit: Kit) => {
     const again = await reloadedIn(tab);
     kit.check(
       `(a) ${mode}: the page opened in its writer's panel draws its card, and both Preview embeds draw inside it, again after they reload themselves`,
-      put.ok && panel.card && panel.embeds === BOTH && again.embeds === BOTH,
-      JSON.stringify({ put: put.status, ...panel, reloaded: again.embeds })
+      settings.mode === (mode === "port" ? "port" : "host") &&
+        panel.card &&
+        panel.embeds === BOTH &&
+        again.embeds === BOTH,
+      JSON.stringify({ settings, ...panel, reloaded: again.embeds })
     );
     if (mode === "port") {
       await tab.close();
@@ -461,17 +466,27 @@ const run = async (kit: Kit) => {
     Boolean,
     60_000
   ).catch(() => undefined);
+  // Its own previews go with it (db/index.ts `dropInstances`), the page
+  // staying with the project: waited for before the hub restarts below.
+  const leftOver = await until(
+    "the writer's previews gone with it",
+    () =>
+      fleet.query<{ id: string }>(
+        "SELECT id FROM artifacts WHERE id IN (?, ?)",
+        site.id,
+        other.id
+      ).length,
+    (rows) => rows === 0,
+    60_000
+  ).catch(() => -1);
 
   for (const mode of MODES) {
-    await fetch(`${fleet.base}/api/preview-settings`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(settingsOf(mode, tunnel.front)),
-    });
+    await storeHostMode(fleet, settingsOf(mode, tunnel.front));
     const board = mode === "port" ? base : tunnel.board;
     const tab = await kit.page("desk", {
       theme: "light",
       ignoreHTTPSErrors: true,
+      hostRules: PASS_HOSTS,
     });
     await open(
       tab,
@@ -498,12 +513,14 @@ const run = async (kit: Kit) => {
     kit.check(
       `(b) ${mode}: its writer deleted, the page opens in the Decisions tab, draws its card (the writer's own preview it showed is gone, said so) and takes a new pick`,
       deleteSaid.startsWith("200") &&
+        leftOver === 0 &&
         tabbed.card &&
         tabbed.gone === "What this card showed is gone." &&
         JSON.stringify(picked?.state.leave?.options) ===
           JSON.stringify([option]),
       JSON.stringify({
         deleted: deleteSaid,
+        previewsLeft: leftOver,
         ...tabbed,
         pressed,
         pick: picked?.state.leave ?? null,
@@ -516,9 +533,5 @@ const run = async (kit: Kit) => {
   tunnel.stop();
 };
 
-const spec: Spec = {
-  name: "project-origin",
-  run,
-  host: "its host-mode names are localtest.me's, which only the host's DNS resolves, and a frame carries the pass only under a domain the Public Suffix List knows",
-};
+const spec: Spec = { name: "project-origin", run };
 export default spec;

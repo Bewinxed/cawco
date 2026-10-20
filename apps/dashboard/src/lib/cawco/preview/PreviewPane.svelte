@@ -1,12 +1,14 @@
 <script lang="ts">
   import {
     artifactWords,
+    hostModeDomain,
     machineLabel,
     PREVIEW_LOCKED_MESSAGE,
     PREVIEW_PING_PATH,
     type PreviewDown,
     type PreviewSettings,
     previewRoute,
+    previewWords,
     projectPagePlace,
     type ShownFailure,
     sheetWords,
@@ -307,8 +309,7 @@
    * let in. An entry that landed since stands for it (preview/pass.ts).
    */
   let frameSince = 0;
-  const TURNED_AWAY =
-    "This preview turned away its pass twice: this browser didn't keep the preview's cookie. Open the dashboard over https under the previews' domain, then try again.";
+
   /**
    * Whether this tab reaches the preview's origin (its `/__cawco/ping`,
    * which answers any page with no credentials, and answers 502 with the
@@ -557,7 +558,13 @@
     }
     refusedEntries += 1;
     if (refusedEntries > 1) {
-      failure = { message: TURNED_AWAY, again: "reload" };
+      failure = {
+        message: previewWords.passTurnedAway(
+          hostModeDomain(origin),
+          location.protocol === "https:"
+        ),
+        again: "reload",
+      };
       return;
     }
     const refused = await enterPreviews(origin, frameSince);

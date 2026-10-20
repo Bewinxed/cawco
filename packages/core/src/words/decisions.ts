@@ -47,12 +47,16 @@ export const decisionsWords = {
   send: "Send",
   /** The page's read was refused. */
   unread: (problem: string) => `This page didn't read: ${problem}`,
-  /** The live page's own failures (PageFrame): the hub named nowhere, the origin unreached, the pass refused twice. */
+  /**
+   * The live page's own failures (PageFrame, the app's DecisionPage): the
+   * hub named nowhere, the origin unreached; and the app's view turned away
+   * twice (the dashboard says why with core `previewWords.passTurnedAway`).
+   */
   noAddress: "The hub named no address for this page.",
   unreached: (host: string) =>
     `Pages are served at ${host}, which this browser can't reach.`,
   turnedAway:
-    "This page turned away its pass twice: this browser didn't keep the preview's cookie. Reach previews over https, then open it again.",
+    "This page turned the app away twice: its view kept no pass for the page's preview names. Close the page and open it again, which asks the hub for a new pass.",
   /** A page whose writer the hub no longer holds. */
   gone: "This page's session is gone from the hub, so the page can't be shown here.",
   /** A decided card with nothing picked. */

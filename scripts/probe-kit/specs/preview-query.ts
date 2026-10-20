@@ -30,7 +30,17 @@
  * 4. a name nobody holds answers a live pass 404 with the closed page, and
  *    a stranger (no pass) 401 with the locked page, as a held name does;
  * 5. the pass revoked (its row gone), the held name answers it 401 with the
- *    locked page.
+ *    locked page;
+ * 6. Settings › Previews' save refuses, with the sentence it shows and
+ *    changing nothing, a pattern whose names stand under an ending the
+ *    Public Suffix List doesn't know (`.cawco.localhost`: Chromium takes
+ *    each such name for a site of its own, so no frame carries the pass),
+ *    one under a public suffix (`ts.net`), and an http:// one.
+ *
+ * The names are localtest.me's, which resolve to 127.0.0.1 ("The entire
+ * domain name localtest.me—and all wildcard entries—point to 127.0.0.1",
+ * weblogs.asp.net/owscott/introducing-testing-domain-localtest-me): the hub
+ * is asked for them here as DNS answers them, so it runs where none does.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one request at a time, each read off the wire before the next
 import { createHash } from "node:crypto";
@@ -120,14 +130,24 @@ const rawGet = async (...args: Parameters<typeof rawText>): Promise<string[]> =>
   (await rawText(...args)).split("\r\n\r\n")[0]?.split("\r\n") ?? [];
 
 /**
- * Host mode's names, under `cawco.localhost` so they resolve with no DNS
- * (RFC 6761) and stand under a domain a cookie may be set on, on the
- * range's first port (TLS is a proxy's in front of it, never the hub's).
+ * Host mode's names, under localtest.me (a domain a cookie may be set on,
+ * under an ending the Public Suffix List knows), on the range's first port
+ * (TLS is a proxy's in front of it, never the hub's).
  */
-const PATTERN = `https://p-{session}.cawco.localhost:${HOST_PORT}`;
-const NAME = `p-${INSTANCE}.cawco.localhost:${HOST_PORT}`;
+const DOMAIN = "localtest.me";
+const PATTERN = `https://p-{session}.${DOMAIN}:${HOST_PORT}`;
+const NAME = `p-${INSTANCE}.${DOMAIN}:${HOST_PORT}`;
 /** A name of the pattern no origin holds. */
-const UNHELD = `p-00000000-0000-4000-8000-00000000dead.cawco.localhost:${HOST_PORT}`;
+const UNHELD = `p-00000000-0000-4000-8000-00000000dead.${DOMAIN}:${HOST_PORT}`;
+/** The patterns Settings' save refuses, and a phrase of each refusal. */
+const REFUSED = [
+  {
+    pattern: `https://p-{session}.cawco.localhost:${HOST_PORT}`,
+    says: "whose ending .localhost no public registry holds",
+  },
+  { pattern: "https://p-{port}.ts.net", says: "ts.net, a public suffix" },
+  { pattern: `http://p-{port}.${DOMAIN}`, says: "A host pattern is https://" },
+];
 
 /** The pass host mode's lock gives for a ticket, as the browser sends it back: `name=value`. */
 const PASS = /^set-cookie:\s*([^;]+)/im;
@@ -140,6 +160,15 @@ const COOKIE_LINE = /^cookie:.*$/im;
 const PASS_ATTRIBUTES = /^set-cookie:\s*__Secure-cawco-pass=[^;]+;(.*)$/im;
 
 const run = async (kit: Kit) => {
+  // The names as DNS answers them, for the hub's check that one resolves.
+  const { lookup } = Bun.dns;
+  (Bun.dns as { lookup: unknown }).lookup = (
+    name: string,
+    ...rest: unknown[]
+  ) =>
+    name.endsWith(`.${DOMAIN}`)
+      ? Promise.resolve([{ address: "127.0.0.1", family: 4, ttl: 0 }])
+      : (lookup as (...all: unknown[]) => unknown)(name, ...rest);
   // Before the hub's config is read: its secret key in scratch, its preview ports clear of any hub's.
   const scratch = await mkdtemp(join(tmpdir(), "preview-query-"));
   process.env.CAWCO_DB_PATH = join(scratch, "hub.db");
@@ -263,7 +292,7 @@ const run = async (kit: Kit) => {
       .filter(Boolean)
       .sort();
     const wanted = [
-      "Domain=cawco.localhost",
+      `Domain=${DOMAIN}`,
       "HttpOnly",
       "Max-Age=2592000",
       "Path=/",
@@ -331,9 +360,30 @@ const run = async (kit: Kit) => {
         after.includes(LOCKED_PAGE),
       `revoked ${revoked}; answered ${status(after)}`
     );
+    // 6. Settings' save refuses what no browser's frames could carry.
+    for (const { pattern, says } of REFUSED) {
+      const refused = await listeners.set({ mode: "host", pattern }).then(
+        () => ({ status: 200, message: "kept" }),
+        (error: { message: string; status?: number }) => ({
+          status: error.status ?? 0,
+          message: error.message,
+        })
+      );
+      const now = listeners.settings();
+      kit.check(
+        `6: Settings' save refuses ${pattern} with 422 and its sentence, and host mode stands as it was`,
+        refused.status === 422 &&
+          refused.message.includes(says) &&
+          now.mode === "host" &&
+          now.pattern === PATTERN &&
+          now.passDomain === DOMAIN,
+        `${refused.status}: ${refused.message}; settings ${JSON.stringify(now)}`
+      );
+    }
   } finally {
     await listeners.set({ mode: "port" });
     listeners.release(INSTANCE);
+    (Bun.dns as { lookup: unknown }).lookup = lookup;
     previewTargets.delete(INSTANCE);
     await stopPreview({ instanceId: INSTANCE });
     server.stop(true);

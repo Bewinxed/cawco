@@ -18,7 +18,8 @@
  *       `no-store` with no validators, gzipped: a kept copy would 304 to an
  *       old key.
  * 2. Host mode's by-Host listener (where Cloudflare stands on the owner's
- *    names), past the lock with the pass a ticket gives:
+ *    names, localtest.me's here, the mode stored and the hub started on it:
+ *    pass-legs `storeHostMode`), past the lock with the pass a ticket gives:
  *    a. the same module answers `no-store`, with no `etag` or
  *       `last-modified`;
  *    b. a conditional request for the module answers 200 `no-store`: on a
@@ -35,6 +36,7 @@ import {
 } from "../../../packages/core/src/frames";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
+import { PASS_DOMAIN, storeHostMode } from "../pass-legs";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -285,14 +287,11 @@ const probe = async (kit: Kit) => {
     await fetch(`${fleet.base}/api/preview-settings`)
   ).json()) as { ports: string };
   const first = Number(range.ports.split("–")[0]);
-  const put = await fetch(`${fleet.base}/api/preview-settings`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      mode: "host",
-      pattern: `https://p-{port}.cawco.localhost:${first}`,
-    }),
+  await storeHostMode(fleet, {
+    mode: "host",
+    pattern: `https://p-{port}.${PASS_DOMAIN}:${first}`,
   });
+  const stored = await fleet.api<{ mode: string }>("/api/preview-settings");
   const origin = (await address()).origin ?? "";
   const host = origin ? new URL(origin).host : "";
   const { ticket } = (await (
@@ -308,13 +307,13 @@ const probe = async (kit: Kit) => {
   await hostModule.arrayBuffer();
   kit.check(
     "2a: host mode: the same module answers `no-store`, no etag, no last-modified",
-    put.ok &&
+    stored.mode === "host" &&
       entered.status === 302 &&
       hostModule.status === 200 &&
       hostModule.headers.get("cache-control") === "no-store" &&
       !hostModule.headers.has("etag") &&
       !hostModule.headers.has("last-modified"),
-    `host mode ${put.status}; ${host} entered ${entered.status}; ${said(hostModule)}`
+    `host mode ${stored.mode}; ${host} entered ${entered.status}; ${said(hostModule)}`
   );
   const hostAgain = etag
     ? await read(`${byHost}/src/main.js`, { ...named, "if-none-match": etag })

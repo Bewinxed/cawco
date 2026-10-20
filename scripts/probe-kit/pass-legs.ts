@@ -9,16 +9,43 @@
  *
  * The domain is localtest.me's: "The entire domain name localtest.me—and all
  * wildcard entries—point to 127.0.0.1"
- * (weblogs.asp.net/owscott/introducing-testing-domain-localtest-me). Only
- * the host's DNS resolves it; a workspace has none. A `.localhost` name will
- * not do: Chromium takes each one for a site of its own, so no `SameSite=Lax`
- * pass reaches a frame there.
+ * (weblogs.asp.net/owscott/introducing-testing-domain-localtest-me). A
+ * `.localhost` name will not do: Chromium takes each one for a site of its
+ * own, so no `SameSite=Lax` pass reaches a frame there, and the hub refuses
+ * such a pattern. Where no DNS answers (a workspace), the browser is told
+ * the names ({@link PASS_HOSTS}), and host mode is stored as the hub keeps
+ * it and the hub started on it ({@link storeHostMode}).
  */
 import type { Frame, Page } from "playwright-core";
 import { cloudflareTo, scratchCertificate } from "./cloudflare-front";
+import type { KitFleet } from "./kit";
 
 /** The names' domain: localtest.me and every name under it are 127.0.0.1. */
 export const PASS_DOMAIN = "localtest.me";
+
+/** The browser's own answer for the names, as DNS gives it (kit `hostRules`). */
+export const PASS_HOSTS = `MAP *.${PASS_DOMAIN} 127.0.0.1, MAP ${PASS_DOMAIN} 127.0.0.1`;
+
+/**
+ * The fleet's preview mode as Settings › Previews keeps it, the hub
+ * stopped, the row written and the hub started on it. Settings' save first
+ * checks that one of the names resolves (hub preview.ts `probePattern`),
+ * which a workspace, having no DNS, never passes; a hub starts on a stored
+ * pattern as it is kept. Every session and page goes on across the restart.
+ */
+export async function storeHostMode(
+  fleet: KitFleet,
+  settings: { mode: "port" } | { mode: "host"; pattern: string }
+): Promise<void> {
+  await fleet.stop("hub");
+  fleet.write(
+    "INSERT INTO preview_settings (id, mode, pattern) VALUES ('preview', ?, ?) ON CONFLICT(id) DO UPDATE SET mode = excluded.mode, pattern = excluded.pattern",
+    settings.mode,
+    settings.mode === "host" ? settings.pattern : null
+  );
+  fleet.launch("hub");
+  await fleet.hubUp();
+}
 
 /** Host mode's settings for `placeholder` (`{port}` or `{session}`), its names behind the https front on `front`. */
 export const passPattern = (
@@ -40,7 +67,7 @@ export async function passTunnel(dir: string, first: number, base: string) {
     PASS_DOMAIN,
   ]);
   const names = cloudflareTo(`127.0.0.1:${first}`, certificate);
-  const dashboard = cloudflareTo(new URL(base).host, certificate);
+  const dashboard = cloudflareTo(new URL(base).host, certificate, true);
   return {
     board: `https://${PASS_DOMAIN}:${dashboard.port}`,
     front: names.port as number,

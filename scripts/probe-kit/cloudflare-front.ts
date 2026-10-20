@@ -37,11 +37,18 @@ export const CLOUDFLARE = {
  * added, a WebSocket carried both ways. With `tls` it answers https, as
  * Cloudflare's edge does (a certificate of the run's own,
  * {@link scratchCertificate}, which the page's context accepts with
- * `ignoreHTTPSErrors`).
+ * `ignoreHTTPSErrors`). `forwardedHost`: it names `target` by its own
+ * address in `Host` and says the browser's in `X-Forwarded-Host`, as a proxy
+ * that rewrites the Host does: what the dashboard's server reads its own
+ * origin from (public-origin.js), and what lets a `vite preview` of it, which
+ * refuses a Host it doesn't know with a 403 ("Blocked request. This host
+ * (…) is not allowed"), answer a name of the run's own. The hub's preview
+ * names never take it: the hub routes them by their Host.
  */
 export const cloudflareTo = (
   target: string,
-  tls?: { cert: string; key: string }
+  tls?: { cert: string; key: string },
+  forwardedHost = false
 ) =>
   Bun.serve<{
     backend: WebSocket;
@@ -55,6 +62,10 @@ export const cloudflareTo = (
       const headers = new Headers(request.headers);
       for (const [name, value] of Object.entries(CLOUDFLARE)) {
         headers.set(name, value);
+      }
+      if (forwardedHost) {
+        headers.set("x-forwarded-host", request.headers.get("host") ?? "");
+        headers.set("host", target);
       }
       if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
         const kept: Record<string, string> = {};

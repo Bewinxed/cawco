@@ -873,6 +873,11 @@ public enum Words {
 
         /// Try again while the page loads.
         public static let reloading = "Reloading…"
+
+        /// A host-mode preview turned the dashboard away twice (hub preview-access.ts): the browser holds no pass for `domain`, the domain the names stand under. Opened over plain http, the dashboard is another site to those https names, so no frame of it carries their pass; opened over https under them, this browser kept none.
+        public static func passTurnedAway(domain: String, overHttps: Bool) -> String {
+            overHttps ? "This preview turned the dashboard away twice: this browser kept no pass for \(domain). Allow cookies for \(domain) in this browser, then try again." : "This preview turned the dashboard away: previews on their own names need the dashboard opened over https under the same domain, which is \(domain). Open the dashboard at an https address under \(domain), and its previews open there."
+        }
     }
 
     public enum Offers {
@@ -1310,14 +1315,14 @@ public enum Words {
             "This page didn't read: \(problem)"
         }
 
-        /// The live page's own failures (PageFrame): the hub named nowhere, the origin unreached, the pass refused twice.
+        /// The live page's own failures (PageFrame, the app's DecisionPage): the hub named nowhere, the origin unreached; and the app's view turned away twice (the dashboard says why with core `previewWords.passTurnedAway`).
         public static let noAddress = "The hub named no address for this page."
 
         public static func unreached(host: String) -> String {
             "Pages are served at \(host), which this browser can't reach."
         }
 
-        public static let turnedAway = "This page turned away its pass twice: this browser didn't keep the preview's cookie. Reach previews over https, then open it again."
+        public static let turnedAway = "This page turned the app away twice: its view kept no pass for the page's preview names. Close the page and open it again, which asks the hub for a new pass."
 
         /// A page whose writer the hub no longer holds.
         public static let gone = "This page's session is gone from the hub, so the page can't be shown here."

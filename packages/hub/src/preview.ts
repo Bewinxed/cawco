@@ -17,7 +17,7 @@ import {
 import { readWithin } from "@cawco/core/bounded";
 import { decisionHostFile } from "@cawco/core/decision-host";
 import { detach } from "@cawco/core/detach";
-import { isPublicSuffix } from "@cawco/core/pass-domain";
+import { passDomainRefusal } from "@cawco/core/pass-domain";
 import {
   cachePreview,
   causeOf,
@@ -943,8 +943,10 @@ const labelOf = (key: string): string =>
 
 /**
  * `pattern` parsed, or refused in one sentence: one whose names stand under
- * a public suffix (`ts.net`, `pages.dev`, a bare `localhost`) is refused,
- * since a browser keeps no cookie set on one (core pass-domain.ts).
+ * a public suffix (`ts.net`, `pages.dev`, a bare `localhost`), or under an
+ * ending the Public Suffix List doesn't know (`.localhost`, `.test`,
+ * `.lan`), is refused, since no browser's frames would carry their pass
+ * (core pass-domain.ts).
  */
 const parsePattern = (pattern: string): HostPattern => {
   const parts = pattern.match(PATTERN_SHAPE);
@@ -959,10 +961,17 @@ const parsePattern = (pattern: string): HostPattern => {
     string,
     string?,
   ];
-  if (isPublicSuffix(domain)) {
+  const refusal = passDomainRefusal(domain);
+  if (refusal?.kind === "public") {
     throw new PreviewRefusal(
       422,
-      `The pattern's names stand under ${domain}, a public suffix, where no browser keeps a cookie, so the hub can't give them a pass: use names under a domain of your own, like https://p-{port}.previews.example.com.`
+      `The pattern's names stand under ${domain}, a public suffix, where no browser keeps a cookie, so the hub can't give them a pass. Use names under a domain of your own, like https://p-{port}.previews.example.com, then save again.`
+    );
+  }
+  if (refusal) {
+    throw new PreviewRefusal(
+      422,
+      `The pattern's names stand under ${domain}, whose ending .${refusal.suffix} no public registry holds, so a browser takes each name for a site of its own and no frame of the dashboard carries their pass. Use names under a domain registered on the internet, like https://p-{port}.previews.example.com, then save again.`
     );
   }
   const after = `${name}${port}`;
@@ -995,10 +1004,9 @@ const literal = (text: string): string =>
 
 /**
  * Whether a host pattern's names reach anything: one generated name has to
- * resolve, a made-up session's or the range's first port's. `.localhost`
- * names always do (RFC 6761); any other has to be in the DNS, its record
- * (a wildcard for `{session}`, one per port for `{port}`) pointing at the hub
- * or the proxy in front of it.
+ * resolve, a made-up session's or the range's first port's, in the DNS, its
+ * record (a wildcard for `{session}`, one per port for `{port}`) pointing at
+ * the hub or the proxy in front of it.
  */
 const probePattern = async (pattern: HostPattern): Promise<string | null> => {
   const name = hostFor(
@@ -1007,9 +1015,6 @@ const probePattern = async (pattern: HostPattern): Promise<string | null> => {
       ? PREVIEW_PORTS.first
       : "00000000-0000-4000-8000-000000000000"
   ).replace(PORT_SUFFIX, "");
-  if (name === "localhost" || name.endsWith(".localhost")) {
-    return null;
-  }
   try {
     await Bun.dns.lookup(name);
     return null;

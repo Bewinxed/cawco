@@ -11,7 +11,12 @@
    * it through; turned away, it enters once and loads again
    * (preview/pass.ts).
    */
-  import { decisionsWords, PREVIEW_LOCKED_MESSAGE } from "@cawco/core";
+  import {
+    decisionsWords,
+    hostModeDomain,
+    PREVIEW_LOCKED_MESSAGE,
+    previewWords,
+  } from "@cawco/core";
   import { untrack } from "svelte";
   import { pageSource } from "#lib/cawco/preview/page-source.js";
   import { enterPreviews } from "#lib/cawco/preview/pass.js";
@@ -152,7 +157,10 @@
       } else if (type === PREVIEW_LOCKED_MESSAGE && src) {
         turnedAway += 1;
         if (turnedAway > 1) {
-          problem = decisionsWords.turnedAway;
+          problem = previewWords.passTurnedAway(
+            hostModeDomain(origin),
+            location.protocol === "https:"
+          );
           return;
         }
         enter(origin);

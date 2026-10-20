@@ -136,7 +136,7 @@
     </Field>
     {#if mode === "host"}
       <Field
-        hint={"Start with https://: the names are served over https whichever way you reach the hub. Then put one of {session} or {port} in the first label. {session} stands for the session's id, e.g. https://p-{session}.example.com, and needs a wildcard name. {port} stands for the preview port the session keeps, e.g. https://p-{port}.example.com, so one name per port of the range serves every session. The hub checks one name resolves before it keeps the pattern."}
+        hint={"Start with https://: the names are served over https whichever way you reach the hub. Then put one of {session} or {port} in the first label, under a domain registered on the internet. {session} stands for the session's id, e.g. https://p-{session}.example.com, and needs a wildcard name. {port} stands for the preview port the session keeps, e.g. https://p-{port}.example.com, so one name per port of the range serves every session. The hub checks one name resolves before it keeps the pattern."}
         id="preview-pattern"
         label="Host pattern"
         problem={refused}

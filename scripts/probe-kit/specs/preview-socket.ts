@@ -25,8 +25,9 @@
  *    reconnects and echoes again.
  * 5. An upgrade the server refuses is said in the agent's journal with the
  *    server's reason (`Expected 101 status code`).
- * 6. Host mode (`https://p-{port}.cawco.localhost:<proxy>`, the proxy
- *    answering https), entered with a ticket through the proxy: the socket
+ * 6. Host mode (`https://p-{port}.localtest.me:<proxy>`, the proxy
+ *    answering https, the mode stored and the hub started on it: pass-legs
+ *    `storeHostMode`), entered with a ticket through the proxy: the socket
  *    echoes, and again once the server restarts.
  * 7. A real Vite dev server, its `LAUNCH_EDITOR` a script that leaves a
  *    mark, and a plugin that marks each Vue DevTools RPC frame it hears.
@@ -57,6 +58,7 @@ import { RELAY_HEADER } from "../../../packages/core/src/preview-proxy";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { cloudflareTo, scratchCertificate } from "../cloudflare-front";
 import { type Kit, ROOT, type Spec } from "../kit";
+import { PASS_DOMAIN, PASS_HOSTS, storeHostMode } from "../pass-legs";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -397,29 +399,28 @@ const probe = async (kit: Kit) => {
   );
 
   // 6. Host mode behind Cloudflare over https, entered with a ticket. Its
-  // names stand under `cawco.localhost`, which every browser resolves to
-  // loopback with no DNS (RFC 6761).
+  // names stand under localtest.me, which the browser is told is 127.0.0.1.
   const range = (await (
     await fetch(`${fleet.base}/api/preview-settings`)
   ).json()) as { ports: string };
   const first = Number(range.ports.split("–")[0]);
   const hostFront = cloudflareTo(
     `127.0.0.1:${first}`,
-    await scratchCertificate(kit.out, ["*.cawco.localhost"])
+    await scratchCertificate(kit.out, [`*.${PASS_DOMAIN}`])
   );
-  const put = await fetch(`${fleet.base}/api/preview-settings`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      mode: "host",
-      pattern: `https://p-{port}.cawco.localhost:${hostFront.port}`,
-    }),
+  await storeHostMode(fleet, {
+    mode: "host",
+    pattern: `https://p-{port}.${PASS_DOMAIN}:${hostFront.port}`,
   });
+  const stored = await fleet.api<{ mode: string }>("/api/preview-settings");
   const origin = (await address()).origin ?? "none";
   const { ticket } = (await (
     await fetch(`${fleet.base}/api/preview-ticket`, { method: "POST" })
   ).json()) as PreviewTicket;
-  const named = await kit.page("desk", { ignoreHTTPSErrors: true });
+  const named = await kit.page("desk", {
+    ignoreHTTPSErrors: true,
+    hostRules: PASS_HOSTS,
+  });
   const entered = await named.goto(previewEnterUrl(origin, ticket, "/"), {
     waitUntil: "domcontentloaded",
   });
@@ -428,8 +429,11 @@ const probe = async (kit: Kit) => {
   const sixAgain = await echoes(named, `${generation}:hello`);
   kit.check(
     "6: host mode behind a Cloudflare-like proxy, entered with a ticket: the page's socket echoes, and echoes the new generation once the app restarts",
-    put.ok && entered?.status() === 200 && six.ok && sixAgain.ok,
-    `host mode ${put.status}; ${origin} entered ${entered?.status()}; ${six.said}; after the restart ${sixAgain.said}; the app refused ${refused()}`
+    stored.mode === "host" &&
+      entered?.status() === 200 &&
+      six.ok &&
+      sixAgain.ok,
+    `host mode ${stored.mode}; ${origin} entered ${entered?.status()}; ${six.said}; after the restart ${sixAgain.said}; the app refused ${refused()}`
   );
   await named.context().close();
 

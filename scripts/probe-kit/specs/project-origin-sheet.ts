@@ -32,7 +32,15 @@ import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec } from "../kit";
-import { hear, passHeld, passPattern, passTunnel, remount } from "../pass-legs";
+import {
+  hear,
+  PASS_HOSTS,
+  passHeld,
+  passPattern,
+  passTunnel,
+  remount,
+  storeHostMode,
+} from "../pass-legs";
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,
@@ -192,17 +200,16 @@ const run = async (kit: Kit) => {
   const tunnel = await passTunnel(kit.out, first, base);
 
   for (const mode of ["port", "host"] as const) {
-    const put = await fetch(`${fleet.base}/api/preview-settings`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(
-        mode === "host" ? passPattern("{port}", tunnel.front) : { mode }
-      ),
-    });
+    await storeHostMode(
+      fleet,
+      mode === "host" ? passPattern("{port}", tunnel.front) : { mode }
+    );
+    const settings = await fleet.api<{ mode: string }>("/api/preview-settings");
     const board = mode === "host" ? tunnel.board : base;
     const tab = await kit.page("desk", {
       theme: "light",
       ignoreHTTPSErrors: true,
+      hostRules: PASS_HOSTS,
     });
     const heard = hear(tab);
     await open(tab, `${board}/session/${writer}`, '[data-slot="pane"]');
@@ -217,8 +224,8 @@ const run = async (kit: Kit) => {
     ).catch(() => embedIn(tab));
     kit.check(
       `(a) ${mode}: the page opened in its session's panel draws the component canvas's card inside both Preview embeds`,
-      put.ok && drawn === BOTH,
-      JSON.stringify({ put: put.status, drawn })
+      settings.mode === mode && drawn === BOTH,
+      JSON.stringify({ settings, drawn })
     );
     // The embed loads itself again, as Vite's client does once its socket drops.
     const page$ = await pageFrame(tab);
@@ -269,6 +276,6 @@ const run = async (kit: Kit) => {
 const spec: Spec = {
   name: "project-origin-sheet",
   run,
-  host: "a sheet's stage runs in a stage clone's boundary, which needs namespaces no workspace can make, and its host-mode names are localtest.me's, which only the host's DNS resolves",
+  host: "a sheet's stage runs in a stage clone's boundary, which needs namespaces no workspace can make",
 };
 export default spec;
