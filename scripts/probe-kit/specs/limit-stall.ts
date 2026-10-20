@@ -101,6 +101,13 @@ const LIMIT_MS: Record<Leg, number> = {
 };
 /** How long past A's reset the continued leg watches for its old session. */
 const PAST_RESET_MS = 45_000;
+/**
+ * How long past A's reset a leg held for it watches for its request there:
+ * counted from the reset, never from when the wait starts. A flat wait begun
+ * 119.5 s before a 2-minute reset ended 0.5 s past it, while the turn the
+ * reset resumed was still landing (r90i, warm leg).
+ */
+const PAST_RESET_WATCH_MS = 120_000;
 /** A delegate moved off its limit runs on B within this of A's refusal. */
 const MOVE_WITHIN_MS = 30_000;
 const DELEGATE = "mcp__cawco__delegate";
@@ -704,7 +711,7 @@ const warmLeg = async (
         .childSeen("warm", reset)
         .find((one) => onAccount(one, ACCOUNT) && !one.afterTool),
     Boolean,
-    120_000
+    Math.max(0, reset - Date.now()) + PAST_RESET_WATCH_MS
   ).catch(() => undefined);
   const onB = look
     .childSeen("warm", refusedAt)
@@ -784,7 +791,7 @@ const fullLeg = async (
     "full: it goes on by itself past the reset",
     () => look.childSeen("full", reset).find((one) => !one.afterTool),
     Boolean,
-    120_000
+    Math.max(0, reset - Date.now()) + PAST_RESET_WATCH_MS
   ).catch(() => undefined);
   const early = look
     .childSeen("full", noteAt)
@@ -1161,7 +1168,7 @@ const resetLeg = async (
         .childSeen("reset", reset)
         .find((one) => onAccount(one, ACCOUNT) && !one.afterTool),
     Boolean,
-    180_000
+    Math.max(0, reset - Date.now()) + PAST_RESET_WATCH_MS
   ).catch(() => undefined);
   const ended = fleet.seen.some(
     (one) =>
