@@ -23,6 +23,7 @@ import {
   rmdirSync,
   rmSync,
   unlinkSync,
+  writeFileSync,
 } from "node:fs";
 import {
   chmod,
@@ -35,7 +36,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir, platform } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { parseProcId } from "../packages/agent/src/proc-id";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { readWithin } from "../packages/core/src/bounded";
@@ -434,6 +435,43 @@ export async function leasePortRange(count: number): Promise<PortLease> {
   throw new Error(
     `no block of ${LEASE_BLOCK} ports in ${PORT_RANGE_LOW}-${PORT_RANGE_HIGH - 1} is free of other runs' leases`
   );
+}
+
+/**
+ * A fleet's own service ports (its hub's, MCP's, dashboard's, each
+ * machine's), handed out one at a time from blocks leased as the preview
+ * ports are ({@link leasePortRange}), so no other run on the machine draws
+ * one. They used to come from a bind to port 0, closed at once: a port the
+ * kernel hands out from its ephemeral range, which it can hand the next
+ * run's bind to port 0, or any connection's local end, before the hub binds
+ * it; a second fleet's hub then answered the first fleet's `/health` (the
+ * decision-pages run of 2026-10-20: "SQLiteError: no such table: accounts",
+ * its own hub's database empty).
+ */
+export class PortPool {
+  readonly #leases: PortLease[] = [];
+  #spare: number[] = [];
+
+  /** The next port of the pool's blocks; a block more is leased when they are spent. */
+  async next(): Promise<number> {
+    if (this.#spare.length === 0) {
+      const lease = await leasePortRange(LEASE_BLOCK);
+      this.#leases.push(lease);
+      const [first = 0, last = -1] = lease.range.split("-").map(Number);
+      for (let port = first; port <= last; port += 1) {
+        this.#spare.push(port);
+      }
+    }
+    return this.#spare.shift() as number;
+  }
+
+  /** Lets every block go. */
+  release(): void {
+    for (const lease of this.#leases.splice(0)) {
+      lease.release();
+    }
+    this.#spare = [];
+  }
 }
 
 /**
@@ -1417,10 +1455,13 @@ export async function scratchFleet(options: {
   // Its hub's preview ports, held from every other run on the machine until it closes.
   const previews = await leasePortRange(PREVIEW_PORTS);
   console.log(`… preview ports ${previews.range}, leased`);
+  // Its services' own ports, held the same way.
+  const ports = new PortPool();
   try {
-    return await standUp(options, dirs, heavy, previews);
+    return await standUp(options, dirs, heavy, { previews, ports });
   } catch (error) {
     await dirs.remove();
+    ports.release();
     previews.release();
     heavy.release();
     throw error;
@@ -1435,7 +1476,7 @@ async function standUp(
   },
   dirs: FleetDirs,
   heavy: HeavySlot,
-  previews: PortLease
+  { previews, ports }: { ports: PortPool; previews: PortLease }
 ) {
   const hub = options.hub ?? { bind: "127.0.0.1", at: "127.0.0.1" };
   /** The hub's address as a URL names it: an IPv6 one in brackets. */
@@ -1486,16 +1527,8 @@ async function standUp(
     throw new Error(bridge);
   }
 
-  const freePort = async (): Promise<number> => {
-    const lease = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch: () => new Response(null),
-    });
-    const port = lease.port as number;
-    await lease.stop(true);
-    return port;
-  };
+  /** A port of the fleet's own, leased from every other run ({@link PortPool}). */
+  const freePort = () => ports.next();
   const hubPort = await freePort();
   const previewPorts = previews.range;
   const mcpPort = await freePort();
@@ -1817,6 +1850,24 @@ async function standUp(
   const errs: Partial<Record<Role, string>> = {};
   let launches = 0;
   /**
+   * The id this fleet's hub answers `/health` with (hub hub-id.ts: kept in
+   * `hub-id` beside its database, read on start): minted here and written
+   * there before the hub's first launch, so {@link hubUp} accepts its own
+   * hub alone, never another run's that answers on the port.
+   */
+  let ownHubId = "";
+  /** The hub's id for the database `db` names: the one there, else one minted and written. */
+  const hubIdFor = (db: string): string => {
+    const file = join(dirname(db), "hub-id");
+    if (existsSync(file)) {
+      return readFileSync(file, "utf8").trim();
+    }
+    const minted = crypto.randomUUID();
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `${minted}\n`, { mode: 0o600 });
+    return minted;
+  };
+  /**
    * Starts `role`, under `wrap` when given ({@link serviceSpawn}), with
    * `overrides` laid over the fleet's environment: a name set to `undefined`
    * is left out of it.
@@ -1833,6 +1884,9 @@ async function standUp(
         (entry): entry is [string, string] => entry[1] !== undefined
       )
     );
+    if (role === "hub") {
+      ownHubId = hubIdFor(laid.CAWCO_DB_PATH ?? dbPath);
+    }
     const child = serviceSpawn(
       root,
       role,
@@ -2302,14 +2356,30 @@ async function standUp(
       );
     }
   };
+  /**
+   * The fleet's own hub answering: `/health` says the id this fleet gave it
+   * (`ownHubId`). Anything else that answers on the hub's port fails it at
+   * once, with what answered, and nothing runs against it.
+   */
   const hubUp = async () => {
-    await answering(
+    const health = await answering(
       "hub",
       "the hub answering",
-      () => fetch(`${base}/health`).then((r) => r.ok),
+      () =>
+        fetch(`${base}/health`).then(
+          async (r) =>
+            (r.ok ? await r.json() : undefined) as
+              { hubId?: unknown } | undefined
+        ),
       Boolean,
       90_000
     );
+    if (health?.hubId !== ownHubId) {
+      const pid = procs.hub?.pid;
+      throw new Error(
+        `the hub answering: ${base}/health answered as ${JSON.stringify(health?.hubId ?? null)}, not this fleet's hub ${ownHubId} (pid ${pid}): something else holds its port, and nothing runs against it`
+      );
+    }
     socket = undefined;
   };
   /** What {@link agentOnline} reads of the hub's row for a machine. */
@@ -2723,6 +2793,7 @@ async function standUp(
     await stop("hub");
     await killSessiond();
     await mock.stop(true);
+    ports.release();
     previews.release();
     heavy.release();
   };
