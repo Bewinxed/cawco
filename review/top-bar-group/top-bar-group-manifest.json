@@ -1,0 +1,279 @@
+{
+  "page": null,
+  "program": "decisions/top-bar-group/page.oui",
+  "canvases": {
+    "70726f62-6c65-6d2d-6261-6467652d2d2d": "apps/dashboard/src/lib/cawco/bar-group/ProblemBadge.stories.ts",
+    "70726f62-6c65-6d2d-7469-6e742d2d2d2d": "apps/dashboard/src/lib/cawco/bar-group/ProblemTint.stories.ts",
+    "70726f62-6c65-6d2d-7068-6f6e652d2d2d": "apps/dashboard/src/lib/cawco/bar-group/ProblemPhone.stories.ts",
+    "66696c65-732d-6e6f-6e65-2d2d2d2d2d2d": "apps/dashboard/src/lib/cawco/bar-group/NewFilesNone.stories.ts",
+    "66696c65-732d-646f-742d-2d2d2d2d2d2d": "apps/dashboard/src/lib/cawco/bar-group/NewFilesDot.stories.ts",
+    "6a756d70-2d67-726f-7570-2d2d2d2d2d2d": "apps/dashboard/src/lib/cawco/bar-group/JumpGroupSize.stories.ts",
+    "6a756d70-2d74-6f64-6179-2d2d2d2d2d2d": "apps/dashboard/src/lib/cawco/bar-group/JumpToday.stories.ts"
+  },
+  "shots": [
+    ".probe/decision-pages/top-bar-group-1440-light-01.png",
+    ".probe/decision-pages/top-bar-group-1440-light-02.png",
+    ".probe/decision-pages/top-bar-group-1440-light-03.png",
+    ".probe/decision-pages/top-bar-group-1440-dark-01.png",
+    ".probe/decision-pages/top-bar-group-1440-dark-02.png",
+    ".probe/decision-pages/top-bar-group-1440-dark-03.png",
+    ".probe/decision-pages/top-bar-group-390-light-01.png",
+    ".probe/decision-pages/top-bar-group-390-light-02.png",
+    ".probe/decision-pages/top-bar-group-390-light-03.png",
+    ".probe/decision-pages/top-bar-group-390-light-04.png",
+    ".probe/decision-pages/top-bar-group-390-dark-01.png",
+    ".probe/decision-pages/top-bar-group-390-dark-02.png",
+    ".probe/decision-pages/top-bar-group-390-dark-03.png",
+    ".probe/decision-pages/top-bar-group-390-dark-04.png"
+  ],
+  "cards": [
+    {
+      "id": "problem",
+      "question": "How does a machine problem show on the machines symbol?",
+      "options": [
+        {
+          "id": "badge",
+          "label": "A badge",
+          "recommended": true
+        },
+        {
+          "id": "tint",
+          "label": "The symbol tinted, as today",
+          "recommended": false
+        }
+      ]
+    },
+    {
+      "id": "newfiles",
+      "question": "Does Files mark new files?",
+      "options": [
+        {
+          "id": "none",
+          "label": "No mark",
+          "recommended": true
+        },
+        {
+          "id": "dot",
+          "label": "A dot",
+          "recommended": false
+        }
+      ]
+    },
+    {
+      "id": "jump",
+      "question": "How big is Jump's magnifying glass?",
+      "options": [
+        {
+          "id": "same",
+          "label": "The same size as the others",
+          "recommended": true
+        },
+        {
+          "id": "small",
+          "label": "Smaller, as today",
+          "recommended": false
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "leg": "program",
+      "ok": true,
+      "assertion": "the hub's check keeps the program",
+      "output": "kept"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "every embed (10 of 10) draws the stories its Preview names",
+      "output": "ProblemPhone: Caw 390×43; ProblemPhone: Machines 390×185; ProblemBadge: Down 360×43; ProblemBadge: SignIn 360×43; ProblemTint: Down 359×43; ProblemTint: SignIn 359×43; NewFilesNone: NewFiles 360×43; NewFilesDot: NewFiles 359×43; JumpGroupSize: Desk 360×43; JumpToday: Desk 359×43"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "every frame stands whole in its card: none scrolls sideways",
+      "output": "The same under either · Phone, Caw alone on his tab 1×; The same under either · Phone, the sidebar's machines with the Mac down 1×; A badge · Desk, the Mac down 1×; A badge · Desk, the Mac needing a sign-in 1×; The symbol tinted · Desk, the Mac down 1×; The symbol tinted · Desk, the Mac needing a sign-in 1×; No mark · Desk, new files landed 1×; A dot · Desk, new files landed 1×; The same size · Desk 1×; Smaller, as today · Desk 1×"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "each frame is its own Preview, its caption saying Desk or Phone",
+      "output": "The same under either · Phone, Caw alone on his tab; The same under either · Phone, the sidebar's machines with the Mac down; A badge · Desk, the Mac down; A badge · Desk, the Mac needing a sign-in; The symbol tinted · Desk, the Mac down; The symbol tinted · Desk, the Mac needing a sign-in; No mark · Desk, new files landed; A dot · Desk, new files landed; The same size · Desk; Smaller, as today · Desk"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "the group as drawn: no numbers, one symbol size, the badge, dot and lens where each option puts them",
+      "output": "The same under either · Phone, Caw alone on his tab: caw on 32px glass; A badge · Desk, the Mac down: files 20, jump 20, machines 20 badge 9 at 22.5,22.5, caw on 36px glass; A badge · Desk, the Mac needing a sign-in: files 20, jump 20, machines 20 badge 9 at 22.5,22.5, caw on 36px glass; The symbol tinted · Desk, the Mac down: files 20, jump 20, machines 20, caw on 36px glass; The symbol tinted · Desk, the Mac needing a sign-in: files 20, jump 20, machines 20, caw on 36px glass; No mark · Desk, new files landed: files 20, jump 20, machines 20, caw on 36px glass; A dot · Desk, new files landed: files 20 dot 6 at 23,5, jump 20, machines 20, caw on 36px glass; The same size · Desk: files 20, jump 20, machines 20, caw on 36px glass; Smaller, as today · Desk: files 20, jump 16, machines 20, caw on 36px glass"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "the page never scrolls sideways",
+      "output": "scrollWidth 1440, clientWidth 1440; the page 2132px tall"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "no console errors, the page and its canvases",
+      "output": "none"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "the page's own capture paints every embed (10 of 10)",
+      "output": "The same under either · Phone, Caw alone on his tab at y 310: 52.9% its commonest colour; The same under either · Phone, the sidebar's machines with the Mac down at y 419: 53.1% its commonest colour; A badge · Desk, the Mac down at y 832: 59.1% its commonest colour; A badge · Desk, the Mac needing a sign-in at y 931: 59.1% its commonest colour; The symbol tinted · Desk, the Mac down at y 832: 59.1% its commonest colour; The symbol tinted · Desk, the Mac needing a sign-in at y 931: 59.1% its commonest colour; No mark · Desk, new files landed at y 1380: 59.1% its commonest colour; A dot · Desk, new files landed at y 1380: 59.1% its commonest colour; The same size · Desk at y 1830: 59.1% its commonest colour; Smaller, as today · Desk at y 1830: 59.1% its commonest colour"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
+      "assertion": "the capture in 3 tiles a window tall, each under 1 MiB",
+      "output": "top-bar-group-1440-light-01.png 384 KiB, top-bar-group-1440-light-02.png 394 KiB, top-bar-group-1440-light-03.png 53 KiB"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "every embed (10 of 10) draws the stories its Preview names",
+      "output": "ProblemPhone: Caw 390×43; ProblemPhone: Machines 390×185; ProblemBadge: Down 360×43; ProblemBadge: SignIn 360×43; ProblemTint: Down 359×43; ProblemTint: SignIn 359×43; NewFilesNone: NewFiles 360×43; NewFilesDot: NewFiles 359×43; JumpGroupSize: Desk 360×43; JumpToday: Desk 359×43"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "every frame stands whole in its card: none scrolls sideways",
+      "output": "The same under either · Phone, Caw alone on his tab 1×; The same under either · Phone, the sidebar's machines with the Mac down 1×; A badge · Desk, the Mac down 1×; A badge · Desk, the Mac needing a sign-in 1×; The symbol tinted · Desk, the Mac down 1×; The symbol tinted · Desk, the Mac needing a sign-in 1×; No mark · Desk, new files landed 1×; A dot · Desk, new files landed 1×; The same size · Desk 1×; Smaller, as today · Desk 1×"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "each frame is its own Preview, its caption saying Desk or Phone",
+      "output": "The same under either · Phone, Caw alone on his tab; The same under either · Phone, the sidebar's machines with the Mac down; A badge · Desk, the Mac down; A badge · Desk, the Mac needing a sign-in; The symbol tinted · Desk, the Mac down; The symbol tinted · Desk, the Mac needing a sign-in; No mark · Desk, new files landed; A dot · Desk, new files landed; The same size · Desk; Smaller, as today · Desk"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "the group as drawn: no numbers, one symbol size, the badge, dot and lens where each option puts them",
+      "output": "The same under either · Phone, Caw alone on his tab: caw on 32px glass; A badge · Desk, the Mac down: files 20, jump 20, machines 20 badge 9 at 22.5,22.5, caw on 36px glass; A badge · Desk, the Mac needing a sign-in: files 20, jump 20, machines 20 badge 9 at 22.5,22.5, caw on 36px glass; The symbol tinted · Desk, the Mac down: files 20, jump 20, machines 20, caw on 36px glass; The symbol tinted · Desk, the Mac needing a sign-in: files 20, jump 20, machines 20, caw on 36px glass; No mark · Desk, new files landed: files 20, jump 20, machines 20, caw on 36px glass; A dot · Desk, new files landed: files 20 dot 6 at 23,5, jump 20, machines 20, caw on 36px glass; The same size · Desk: files 20, jump 20, machines 20, caw on 36px glass; Smaller, as today · Desk: files 20, jump 16, machines 20, caw on 36px glass"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "the page never scrolls sideways",
+      "output": "scrollWidth 1440, clientWidth 1440; the page 2132px tall"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "no console errors, the page and its canvases",
+      "output": "none"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "the page's own capture paints every embed (10 of 10)",
+      "output": "The same under either · Phone, Caw alone on his tab at y 310: 52.6% its commonest colour; The same under either · Phone, the sidebar's machines with the Mac down at y 419: 97.4% its commonest colour; A badge · Desk, the Mac down at y 832: 58.2% its commonest colour; A badge · Desk, the Mac needing a sign-in at y 931: 58.2% its commonest colour; The symbol tinted · Desk, the Mac down at y 832: 58.2% its commonest colour; The symbol tinted · Desk, the Mac needing a sign-in at y 931: 58.2% its commonest colour; No mark · Desk, new files landed at y 1380: 58.2% its commonest colour; A dot · Desk, new files landed at y 1380: 58.2% its commonest colour; The same size · Desk at y 1830: 58.2% its commonest colour; Smaller, as today · Desk at y 1830: 58.2% its commonest colour"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
+      "assertion": "the capture in 3 tiles a window tall, each under 1 MiB",
+      "output": "top-bar-group-1440-dark-01.png 386 KiB, top-bar-group-1440-dark-02.png 389 KiB, top-bar-group-1440-dark-03.png 52 KiB"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "every embed (10 of 10) draws the stories its Preview names",
+      "output": "ProblemPhone: Caw 302×33; ProblemPhone: Machines 302×143; ProblemBadge: Down 302×36; ProblemBadge: SignIn 302×36; ProblemTint: Down 302×36; ProblemTint: SignIn 302×36; NewFilesNone: NewFiles 302×36; NewFilesDot: NewFiles 302×36; JumpGroupSize: Desk 302×36; JumpToday: Desk 302×36"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "every frame stands whole in its card: none scrolls sideways",
+      "output": "The same under either · Phone, Caw alone on his tab 0.774×; The same under either · Phone, the sidebar's machines with the Mac down 0.774×; A badge · Desk, the Mac down 0.839×; A badge · Desk, the Mac needing a sign-in 0.839×; The symbol tinted · Desk, the Mac down 0.839×; The symbol tinted · Desk, the Mac needing a sign-in 0.839×; No mark · Desk, new files landed 0.839×; A dot · Desk, new files landed 0.839×; The same size · Desk 0.839×; Smaller, as today · Desk 0.839×"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "each frame is its own Preview, its caption saying Desk or Phone",
+      "output": "The same under either · Phone, Caw alone on his tab; The same under either · Phone, the sidebar's machines with the Mac down; A badge · Desk, the Mac down; A badge · Desk, the Mac needing a sign-in; The symbol tinted · Desk, the Mac down; The symbol tinted · Desk, the Mac needing a sign-in; No mark · Desk, new files landed; A dot · Desk, new files landed; The same size · Desk; Smaller, as today · Desk"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "the group as drawn: no numbers, one symbol size, the badge, dot and lens where each option puts them",
+      "output": "The same under either · Phone, Caw alone on his tab: caw on 32px glass; A badge · Desk, the Mac down: files 19.99, jump 19.99, machines 19.99 badge 9 at 22.51,22.51, caw on 35.99px glass; A badge · Desk, the Mac needing a sign-in: files 19.99, jump 19.99, machines 19.99 badge 9 at 22.51,22.51, caw on 35.99px glass; The symbol tinted · Desk, the Mac down: files 19.99, jump 19.99, machines 19.99, caw on 35.99px glass; The symbol tinted · Desk, the Mac needing a sign-in: files 19.99, jump 19.99, machines 19.99, caw on 35.99px glass; No mark · Desk, new files landed: files 19.99, jump 19.99, machines 19.99, caw on 35.99px glass; A dot · Desk, new files landed: files 19.99 dot 6 at 23.01,4.99, jump 19.99, machines 19.99, caw on 35.99px glass; The same size · Desk: files 19.99, jump 19.99, machines 19.99, caw on 35.99px glass; Smaller, as today · Desk: files 19.99, jump 16, machines 19.99, caw on 35.99px glass"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "the page never scrolls sideways",
+      "output": "scrollWidth 390, clientWidth 390; the page 3139px tall"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "no console errors, the page and its canvases",
+      "output": "none"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "the page's own capture paints every embed (10 of 10)",
+      "output": "The same under either · Phone, Caw alone on his tab at y 484: 92.9% its commonest colour; The same under either · Phone, the sidebar's machines with the Mac down at y 583: 93.6% its commonest colour; A badge · Desk, the Mac down at y 973: 65.3% its commonest colour; A badge · Desk, the Mac needing a sign-in at y 1064: 65.3% its commonest colour; The symbol tinted · Desk, the Mac down at y 1294: 65.3% its commonest colour; The symbol tinted · Desk, the Mac needing a sign-in at y 1385: 65.3% its commonest colour; No mark · Desk, new files landed at y 1873: 65.3% its commonest colour; A dot · Desk, new files landed at y 2085: 65.3% its commonest colour; The same size · Desk at y 2616: 65.3% its commonest colour; Smaller, as today · Desk at y 2828: 65.3% its commonest colour"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
+      "assertion": "the capture in 4 tiles a window tall, each under 1 MiB",
+      "output": "top-bar-group-390-light-01.png 217 KiB, top-bar-group-390-light-02.png 236 KiB, top-bar-group-390-light-03.png 219 KiB, top-bar-group-390-light-04.png 109 KiB"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "every embed (10 of 10) draws the stories its Preview names",
+      "output": "ProblemPhone: Caw 302×33; ProblemPhone: Machines 302×143; ProblemBadge: Down 302×36; ProblemBadge: SignIn 302×36; ProblemTint: Down 302×36; ProblemTint: SignIn 302×36; NewFilesNone: NewFiles 302×36; NewFilesDot: NewFiles 302×36; JumpGroupSize: Desk 302×36; JumpToday: Desk 302×36"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "every frame stands whole in its card: none scrolls sideways",
+      "output": "The same under either · Phone, Caw alone on his tab 0.774×; The same under either · Phone, the sidebar's machines with the Mac down 0.774×; A badge · Desk, the Mac down 0.839×; A badge · Desk, the Mac needing a sign-in 0.839×; The symbol tinted · Desk, the Mac down 0.839×; The symbol tinted · Desk, the Mac needing a sign-in 0.839×; No mark · Desk, new files landed 0.839×; A dot · Desk, new files landed 0.839×; The same size · Desk 0.839×; Smaller, as today · Desk 0.839×"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "each frame is its own Preview, its caption saying Desk or Phone",
+      "output": "The same under either · Phone, Caw alone on his tab; The same under either · Phone, the sidebar's machines with the Mac down; A badge · Desk, the Mac down; A badge · Desk, the Mac needing a sign-in; The symbol tinted · Desk, the Mac down; The symbol tinted · Desk, the Mac needing a sign-in; No mark · Desk, new files landed; A dot · Desk, new files landed; The same size · Desk; Smaller, as today · Desk"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "the group as drawn: no numbers, one symbol size, the badge, dot and lens where each option puts them",
+      "output": "The same under either · Phone, Caw alone on his tab: caw on 32px glass; A badge · Desk, the Mac down: files 19.99, jump 19.99, machines 19.99 badge 9 at 22.51,22.51, caw on 35.99px glass; A badge · Desk, the Mac needing a sign-in: files 19.99, jump 19.99, machines 19.99 badge 9 at 22.51,22.51, caw on 35.99px glass; The symbol tinted · Desk, the Mac down: files 19.99, jump 19.99, machines 19.99, caw on 35.99px glass; The symbol tinted · Desk, the Mac needing a sign-in: files 19.99, jump 19.99, machines 19.99, caw on 35.99px glass; No mark · Desk, new files landed: files 19.99, jump 19.99, machines 19.99, caw on 35.99px glass; A dot · Desk, new files landed: files 19.99 dot 6 at 23.01,4.99, jump 19.99, machines 19.99, caw on 35.99px glass; The same size · Desk: files 19.99, jump 19.99, machines 19.99, caw on 35.99px glass; Smaller, as today · Desk: files 19.99, jump 16, machines 19.99, caw on 35.99px glass"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "the page never scrolls sideways",
+      "output": "scrollWidth 390, clientWidth 390; the page 3139px tall"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "no console errors, the page and its canvases",
+      "output": "none"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "the page's own capture paints every embed (10 of 10)",
+      "output": "The same under either · Phone, Caw alone on his tab at y 484: 92.7% its commonest colour; The same under either · Phone, the sidebar's machines with the Mac down at y 583: 93.3% its commonest colour; A badge · Desk, the Mac down at y 973: 64.2% its commonest colour; A badge · Desk, the Mac needing a sign-in at y 1064: 64.2% its commonest colour; The symbol tinted · Desk, the Mac down at y 1294: 64.2% its commonest colour; The symbol tinted · Desk, the Mac needing a sign-in at y 1385: 64.2% its commonest colour; No mark · Desk, new files landed at y 1873: 64.2% its commonest colour; A dot · Desk, new files landed at y 2085: 64.2% its commonest colour; The same size · Desk at y 2616: 64.2% its commonest colour; Smaller, as today · Desk at y 2828: 64.2% its commonest colour"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
+      "assertion": "the capture in 4 tiles a window tall, each under 1 MiB",
+      "output": "top-bar-group-390-dark-01.png 223 KiB, top-bar-group-390-dark-02.png 231 KiB, top-bar-group-390-dark-03.png 217 KiB, top-bar-group-390-dark-04.png 106 KiB"
+    }
+  ]
+}
