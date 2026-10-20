@@ -35,7 +35,10 @@
  *    (CSS zoom) and never reflowed: its drawn width its own times its zoom.
  *    Its words at 12px or more as drawn, 10px where it is scaled; one that
  *    would scale its words under 10px to fit stops at 10px and scrolls
- *    sideways in its frame, the frame inside the embed.
+ *    sideways in its frame, the frame inside the embed, under the house
+ *    edge fade (DESIGN.md `kit-edge-fade`): read at the scroll's start,
+ *    middle and end, a fade on each side where more is hidden and none at
+ *    either end.
  * 7. A card's three media stand in one column, each at the card's full
  *    width.
  * 8. The page is as CawCo shows it: no offline notice, Send picks enabled,
@@ -91,6 +94,62 @@ const SIDE_W = 360;
 const WIDE_W = 1400;
 
 const MONTHS = ["January", "February", "March", "April", "May", "June"];
+
+/**
+ * Each frame in this embed that scrolls its story sideways, under the house
+ * edge fade at the start of its scroll, its middle and its end: the fades'
+ * lengths as drawn (`--fade-start`, `--fade-end`), its mask, and the
+ * fade's own length. In the embed's page.
+ */
+async function readFades() {
+  const next = () =>
+    new Promise((done) =>
+      requestAnimationFrame(() => requestAnimationFrame(done))
+    );
+  const fades: {
+    at: {
+      end: number;
+      left: number;
+      mask: string;
+      place: string;
+      start: number;
+    }[];
+    len: number;
+    story: string;
+  }[] = [];
+  for (const frame of document.querySelectorAll<HTMLElement>(
+    ".cawco-frame[data-cawco-wide]"
+  )) {
+    const max = frame.scrollWidth - frame.clientWidth;
+    const at: (typeof fades)[number]["at"] = [];
+    for (const [place, left] of [
+      ["start", 0],
+      ["middle", Math.round(max / 2)],
+      ["end", max],
+    ] as const) {
+      frame.scrollLeft = left;
+      await next();
+      const style = getComputedStyle(frame);
+      at.push({
+        end: Number.parseFloat(style.getPropertyValue("--fade-end")),
+        left: frame.scrollLeft,
+        mask: style.maskImage,
+        place,
+        start: Number.parseFloat(style.getPropertyValue("--fade-start")),
+      });
+    }
+    frame.scrollLeft = 0;
+    await next();
+    fades.push({
+      at,
+      len: Number.parseFloat(
+        getComputedStyle(frame).getPropertyValue("--fade-len")
+      ),
+      story: frame.dataset.cawcoStory ?? "",
+    });
+  }
+  return fades;
+}
 
 /** Each Preview, by its caption: the states files its canvas holds, the stories it names (none: every story they have) and the stories it shows. */
 const PREVIEWS: Record<
@@ -420,6 +479,38 @@ const spec: Spec = {
             `${leg}: the ${WIDE_W}px side card scales only as far as 10px words, then scrolls sideways in its frame (${wides.map((f) => `${f.w}px at zoom ${f.zoom}, its words at ${f.type}px, ${f.scrolls}px to scroll`).join(", ")})`,
             wides.length > 0 && wideFaults.length === 0,
             wideFaults.join("\n    ")
+          );
+          // The wide story's frame scrolls under the house edge fade: on the side where more is hidden, none at either end.
+          // One embed at a time, scrolled to: a cross-origin frame off screen draws no frames.
+          const fades: Awaited<ReturnType<typeof readFades>> = [];
+          for (const handle of await page.$$(EMBED_FRAME)) {
+            await handle.scrollIntoViewIfNeeded();
+            fades.push(
+              ...((await (await handle.contentFrame())?.evaluate(readFades)) ??
+                [])
+            );
+          }
+          const fadeFaults = fades.flatMap((f) =>
+            f.at.flatMap((one) => {
+              const want = {
+                start: one.place === "start" ? 0 : f.len,
+                end: one.place === "end" ? 0 : f.len,
+              };
+              return Math.abs(one.start - want.start) > 0.5 ||
+                Math.abs(one.end - want.end) > 0.5 ||
+                one.mask === "none"
+                ? [
+                    `${f.story} at its ${one.place} (scrolled ${one.left}px): fades ${one.start}px and ${one.end}px, want ${want.start}px and ${want.end}px, mask ${one.mask.slice(0, 60)}`,
+                  ]
+                : [];
+            })
+          );
+          kit.check(
+            `${leg}: a frame that scrolls sideways draws the house edge fade where more is hidden, none at either end (${fades.map((f) => `${f.story}, ${f.len}px: ${f.at.map((one) => `${one.place} ${one.start}px|${one.end}px`).join(", ")}`).join("; ")})`,
+            fades.length === frames.filter((f) => f.wide).length &&
+              fades.length > 0 &&
+              fadeFaults.length === 0,
+            fadeFaults.join("\n    ")
           );
           const small = frames.filter((f) => f.type < (f.zoom < 1 ? 10 : 12));
           kit.check(
