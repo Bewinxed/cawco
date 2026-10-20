@@ -132,8 +132,23 @@
   const decided = $derived(pick.picked && !open);
   /** The page's one polite live region and its count (Decisions.svelte). */
   const page = getContext<
-    { say: (words: string) => void; tally: () => string } | undefined
+    | {
+        say: (words: string) => void;
+        stand: (card: string, open: boolean) => void;
+        tally: () => string;
+        work: (card: string) => void;
+        working: () => string;
+      }
+    | undefined
   >("decision-page");
+  // The page hears whether this card stands open (Send stays quiet while
+  // any does) and when the person works in it (its Continue is then the
+  // page's one coral action).
+  $effect(() => {
+    const card = id;
+    page?.stand(card, !decided);
+    return () => page?.stand(card, false);
+  });
   /** The option focus last stood on in this card: Tab's stop among them. */
   let focusedOption = $state("");
   /** The option Tab reaches: the one focus last stood on, else the pick, else the first. */
@@ -199,6 +214,7 @@
     pressed = true;
     instant = key;
     open = true;
+    page?.work(id);
   }
   $effect(() => {
     const group = body;
@@ -229,6 +245,7 @@
       if (option) {
         focusedOption = option.getAttribute("data-option") ?? "";
       }
+      page?.work(id);
     };
     group.addEventListener("pointerdown", pointed, true);
     group.addEventListener("click", disarm, true);
@@ -625,6 +642,7 @@
   /** Opens the card again, focus on its first picked option. */
   async function reopen(event: MouseEvent) {
     turnedBy(event);
+    page?.work(id);
     // A pointer's Change: the head's chips stand on while they fly home.
     returning = acted === "pointer";
     open = true;
@@ -747,6 +765,7 @@
         <button
           aria-keyshortcuts="Enter"
           class="dp-continue"
+          data-quiet={page && page.working() !== id ? "" : undefined}
           onclick={(event) => proceed(pressBy(event))}
           type="button"
           ><span>Continue</span><span aria-hidden="true" class="dp-kc">↵</span

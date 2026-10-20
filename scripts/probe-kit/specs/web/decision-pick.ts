@@ -1994,6 +1994,174 @@ async function stillLeg(
   await still.close();
 }
 
+/**
+ * The coral buttons drawn now: each button whose fill is the coral action
+ * (`action-solid`, or `action-hover` under the mouse), shown (no ancestor at
+ * opacity 0), named by what it is, and whether it stands in the window.
+ */
+const coralOf = (page: Page) =>
+  page.evaluate(() => {
+    const colour = (token: string) => {
+      const probe = document.createElement("i");
+      probe.style.backgroundColor = `var(${token})`;
+      document.body.append(probe);
+      const resolved = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return resolved;
+    };
+    const coral = new Set([colour("--action-solid"), colour("--action-hover")]);
+    return [...document.querySelectorAll<HTMLElement>("button")]
+      .filter(
+        (one) =>
+          coral.has(getComputedStyle(one).backgroundColor) &&
+          one.checkVisibility({ opacityProperty: true })
+      )
+      .map((one) => {
+        const at = one.getBoundingClientRect();
+        const card =
+          one.closest<HTMLElement>("[data-cawco-choice]")?.dataset
+            .cawcoChoice ?? "";
+        return {
+          what: one.classList.contains("dp-send") ? "send" : `${card} continue`,
+          inView: at.bottom > 0 && at.top < innerHeight && at.height > 0,
+        };
+      });
+  });
+
+/** Send as drawn: its fill, edge, ink, its highlight's opacity, and whether it is the node marked before. */
+const sendOf = (page: Page) =>
+  page.evaluate(() => {
+    const send = document.querySelector<HTMLElement>(".dp-send");
+    const marked = (window as unknown as { kitSend?: Element }).kitSend;
+    return {
+      fill: send ? getComputedStyle(send).backgroundColor : "",
+      edge: send ? getComputedStyle(send).borderTopColor : "",
+      ink: send ? getComputedStyle(send).color : "",
+      highlight: send ? Number(getComputedStyle(send, "::before").opacity) : -1,
+      same: !!send && send === marked,
+      quiet: !!send?.hasAttribute("data-quiet"),
+    };
+  });
+
+/**
+ * One coral action at a time, the next act (the owner's ruling): across
+ * load, each pick, each Continue, the last Continue, a Change and its
+ * Continue again, the coral buttons shown are never more than one, and the
+ * one is the next act. Send turns coral as one element, its fill, edge and
+ * ink crossing on one clock (--dur-morph on ease-out), read at 0, ½ and 1.
+ */
+async function coralLeg(
+  kit: Kit,
+  url: string,
+  view: View,
+  theme: (typeof LEGS)[number]["theme"],
+  label: string
+) {
+  const page = await kit.page(view, { theme, init: [CAWCO_BRIDGE] });
+  await page.goto(url, { waitUntil: "load" });
+  await page.waitForFunction(
+    () => document.querySelectorAll(".diagram svg").length >= 2,
+    undefined,
+    { timeout: 30_000 }
+  );
+  await settle(page, 600);
+  const morph = await tokenMs(page, "--dur-morph");
+  const steps: {
+    coral: Awaited<ReturnType<typeof coralOf>>;
+    next: string;
+    step: string;
+  }[] = [];
+  const look = async (step: string, next: string) => {
+    await settle(page, 600);
+    steps.push({ step, next, coral: await coralOf(page) });
+  };
+  const proceed = async (id: string) => {
+    await toContinue(page, id);
+    await pressOn(continueOf(page, id), view);
+  };
+  await look("load", "");
+  await pickIn(page, "path", "direct", view);
+  await look("pick path", "path continue");
+  await proceed("path");
+  await look("Continue path", "");
+  await pickIn(page, "look", "card", view);
+  await look("pick look", "look continue");
+  await proceed("look");
+  await look("Continue look", "");
+  await pickIn(page, "radius", "soft", view);
+  await look("pick radius", "radius continue");
+  // The last Continue: Send turns coral, caught on its clock.
+  await toContinue(page, "radius");
+  await page.evaluate(() => {
+    (window as unknown as { kitSend?: Element | null }).kitSend =
+      document.querySelector(".dp-send");
+  });
+  const before = await sendOf(page);
+  const clock = await Clock.on(page);
+  const runs = await clock.catchRuns(
+    () => pressOn(continueOf(page, "radius"), view),
+    ".dp-done"
+  );
+  const turn: Record<string, Awaited<ReturnType<typeof sendOf>>> = {};
+  for (const at of [0, 0.5, 1]) {
+    await clock.seek(at);
+    turn[String(at)] = await sendOf(page);
+  }
+  await clock.release();
+  await look("Continue radius (the last)", "send");
+  await page.evaluate(() =>
+    document
+      .querySelector("#decision-path .dp-change")
+      ?.scrollIntoView({ block: "center" })
+  );
+  await settle(page, 200);
+  await pressOn(page.locator("#decision-path .dp-change"), view);
+  await look("Change path", "path continue");
+  await proceed("path");
+  await look("Continue path again", "send");
+  const after = await sendOf(page);
+
+  const wrong = steps.filter(
+    (one) =>
+      one.coral.length > 1 ||
+      (one.next === ""
+        ? one.coral.length !== 0
+        : one.coral[0]?.what !== one.next)
+  );
+  kit.check(
+    `${label}: at every step (load, each pick, each Continue, the last Continue, a Change and its Continue again) at most one coral button shows, and it is the next act: the working card's Continue, else Send once no card stands open`,
+    steps.length === 9 && wrong.length === 0,
+    JSON.stringify({ wrong, steps })
+  );
+  const [h0, hHalf, h1] = [turn["0"], turn["0.5"], turn["1"]];
+  kit.check(
+    `${label}: Send turns coral as one element on one clock (--dur-morph, ${morph}ms, on ease-out): its fill, edge, ink and highlight cross, quiet at 0, between at ½, coral at 1, the same node throughout and after`,
+    before.quiet &&
+      runs.length >= 3 &&
+      sameClock(runs).length === 0 &&
+      runs.every(
+        (run) => Math.abs(run.end - morph) < 1 && run.easing === OUT
+      ) &&
+      !!h0 &&
+      !!hHalf &&
+      !!h1 &&
+      // Held, the engine says a colour in oklab; at rest, in oklch.
+      h0.fill !== h1.fill &&
+      hHalf.fill !== h0.fill &&
+      hHalf.fill !== h1.fill &&
+      h0.highlight === 0 &&
+      hHalf.highlight > 0 &&
+      hHalf.highlight < 1 &&
+      h1.highlight === 1 &&
+      [h0, hHalf, h1].every((one) => one.same) &&
+      !h1.quiet &&
+      after.same &&
+      !after.quiet,
+    JSON.stringify({ before, runs: runs.map(said), turn, after })
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "decision-pick",
   run: async (kit: Kit) => {
@@ -2021,6 +2189,7 @@ const spec: Spec = {
       for (const { view, theme, label } of LEGS) {
         const url = stage.pageUrl(NAME, theme);
         await leg(kit, url, view, theme, label);
+        await coralLeg(kit, url, view, theme, label);
         await keyLeg(kit, url, view, theme, label);
         await stillLeg(kit, url, view, theme, label);
         await manyLeg(kit, stage.pageUrl(MANY, theme), view, theme, label);

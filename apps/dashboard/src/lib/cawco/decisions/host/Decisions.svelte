@@ -8,12 +8,21 @@
   rolling. ⌘/Ctrl+Enter sends from anywhere on the page. The page's one
   polite live region says what a card's pick and Continue did
   (Decision.svelte), the count with Continue.
+
+  At any moment one coral action shows, the next act (the owner's ruling
+  on primary and secondary): while any card stands open Send is the kit's
+  outline button, and the open card the person is working in has its
+  Continue coral (Decision.svelte); once the last open card is decided Send
+  turns coral where it stands, the same button changing state, its fill,
+  edge and ink crossing over --dur-morph on ease-out (page.css). Change
+  takes it back the same way.
 -->
 <script lang="ts">
   import { pickOf, readProgram } from "@cawco/core/decisions";
   import type { ElementNode } from "@openuidev/lang-core";
   import { setContext } from "svelte";
   import type { Attachment } from "svelte/attachments";
+  import { SvelteSet } from "svelte/reactivity";
   import cawDark from "../../../../../../../packages/hub/skills/decision-page/kit/caw/dark-ready.webp";
   import cawLight from "../../../../../../../packages/hub/skills/decision-page/kit/caw/light-ready.webp";
   import MorphText from "../../../components/ui/morph-text/morph-text.svelte";
@@ -85,11 +94,26 @@
   let sending = $state(false);
   /** What the page's live region says now. */
   let said = $state("");
+  /** The cards standing open, by id: any one keeps Send quiet. */
+  const opened = new SvelteSet<string>();
+  /** The card the person is working in: its Continue is the coral one. */
+  let working = $state("");
   setContext("decision-page", {
     say: (words: string) => {
       said = words;
     },
     tally: () => `${count} of ${ids.length} picked`,
+    stand: (card: string, open: boolean) => {
+      if (open) {
+        opened.add(card);
+      } else {
+        opened.delete(card);
+      }
+    },
+    work: (card: string) => {
+      working = card;
+    },
+    working: () => working,
   });
 
   /** ⌘/Ctrl+Enter sends, wherever focus is on the page. */
@@ -153,6 +177,7 @@
     <button
       aria-keyshortcuts="Meta+Enter Control+Enter"
       class="dp-send"
+      data-quiet={opened.size > 0 ? "" : undefined}
       disabled={sending || !bridge()}
       onclick={send}
       type="button"><MorphText text={sendLabel} /></button

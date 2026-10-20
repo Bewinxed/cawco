@@ -258,37 +258,21 @@ a {
   }
 }
 /* Continue, at the foot of a card that holds a pick: the act that completes
-   the card, so the kit's primary button (DESIGN.md, Buttons: the coral
-   `action-surface` over `action-solid`, `on-action` words, 36px, 10px
-   radius, 14px padding, 8px gap; 44px under a finger, the lg button). Its
-   key stands on a keycap inside it after its word, on the tint the kit's
-   Kbd takes on a filled surface (`on-brand` at 20%, kbd.svelte). It presses
-   to 0.97 (The Press Rule) and comes in on the card's height tween; with
-   less motion it fades in where it stands (The Reduced Motion Rule). */
+   the card. Its key stands on a keycap inside it after its word. It comes in
+   on the card's height tween; with less motion it fades in where it stands
+   (The Reduced Motion Rule). Its look is the page's coral action's, below. */
 .dp-foot {
   display: flex;
   justify-content: flex-end;
-}
-.dp-continue {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-block-size: var(--c-btn-h);
-  padding: 0 var(--space-4);
-  border: 0;
-  border-radius: var(--radius-md);
-  background-color: var(--action-solid);
-  background-image: var(--action-surface);
-  color: var(--on-action);
-  font: var(--type-button);
-  cursor: pointer;
-  transition: background-color var(--dur-control) var(--ease-out);
 }
 /* The Mark Line Rule: its word trimmed to its x-height beside the keycap. */
 .dp-continue > :not(.dp-kc) {
   text-box: trim-both ex alphabetic;
   padding-block: calc((1lh - 1ex) / 2);
 }
+/* The keycap on the coral takes the tint the kit's Kbd takes on a filled
+   surface (`on-brand` at 20%, kbd.svelte); on the outline, the kit's own
+   keycap (`surface-recess`, strong ink); it crosses with its button. */
 .dp-continue .dp-kc {
   display: inline-grid;
   place-items: center;
@@ -302,29 +286,98 @@ a {
   font-size: var(--text-meta);
   font-weight: var(--weight-body);
   line-height: 1;
+  transition:
+    background-color var(--dur-morph) var(--ease-out),
+    color var(--dur-morph) var(--ease-out);
+}
+.dp-continue:where([data-quiet]) .dp-kc {
+  background: var(--surface-recess);
+  color: var(--ink-strong);
+}
+
+/* At any moment one coral action shows, the next act (the owner's ruling on
+   primary and secondary): Continue on the open card the person works in,
+   else Send once no card stands open (Decision.svelte, Decisions.svelte).
+   Coral is the kit's primary (DESIGN.md, Buttons; Coral Action: the
+   `action-surface` gradient over `action-solid`, `on-action` words); quiet
+   (`data-quiet`) is the kit's outline (raised surface, a
+   `border-button-outline` edge, strong ink). It is one button changing
+   state, never a swap: its fill, edge and ink cross over --dur-morph on
+   ease-out, and the coral's top highlight, a gradient (which does not
+   interpolate), fades on its own layer on that clock. Colour fades, so they
+   run with less motion too (L517). 36px, 10px radius, 14px padding, 8px
+   gap; 44px under a finger, the lg button (The 44 Touch Rule). A press
+   scales it to 0.97 (The Press Rule). */
+:is(.dp-continue, .dp-send) {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-block-size: var(--c-btn-h);
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background-color: var(--action-solid);
+  color: var(--on-action);
+  font: var(--type-button);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-morph) var(--ease-out),
+    border-color var(--dur-morph) var(--ease-out),
+    color var(--dur-morph) var(--ease-out);
+}
+:is(.dp-continue, .dp-send)::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  background-image: var(--action-surface);
+  transition: opacity var(--dur-morph) var(--ease-out);
+}
+:is(.dp-continue, .dp-send)[data-quiet] {
+  background-color: var(--surface-raised);
+  border-color: var(--border-button-outline);
+  color: var(--ink-strong);
+}
+:is(.dp-continue, .dp-send)[data-quiet]::before {
+  opacity: 0;
 }
 @media (hover: hover) and (pointer: fine) {
-  .dp-continue:hover {
+  :is(.dp-continue, .dp-send):not([data-quiet], :disabled):hover {
     background-color: var(--action-hover);
+  }
+  :is(.dp-continue, .dp-send):not([data-quiet], :disabled):hover::before {
     background-image: var(--action-surface-hover);
   }
+  :is(.dp-continue, .dp-send)[data-quiet]:not(:disabled):hover {
+    background-color: var(--surface-hover);
+  }
 }
-.dp-continue:focus-visible {
+:is(.dp-continue, .dp-send):focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
+:is(.dp-continue, .dp-send):disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 @media (pointer: coarse) {
-  .dp-continue {
+  :is(.dp-continue, .dp-send) {
     min-block-size: var(--c-btn-h-lg);
   }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .dp-continue {
+  :is(.dp-continue, .dp-send) {
     transition:
-      background-color var(--dur-control) var(--ease-out),
+      background-color var(--dur-morph) var(--ease-out),
+      border-color var(--dur-morph) var(--ease-out),
+      color var(--dur-morph) var(--ease-out),
       transform var(--dur-control) var(--ease-out);
   }
-  .dp-continue:active {
+  :is(.dp-continue, .dp-send):active:not(:disabled) {
     transform: scale(var(--press-scale));
   }
 }
@@ -536,6 +589,9 @@ a {
   :is(.dp-opt, .dp-kc, .dp-tag, .dp-change, .dp-state, .dp-continue) {
   transition: none;
 }
+.dp-card[data-instant] .dp-continue::before {
+  transition: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .dp-bar i {
     transition: none;
@@ -586,41 +642,14 @@ a {
   }
 }
 
-/* Send: the page's act, coral as Continue is (DESIGN.md, Coral Action). */
+/* Send, at the page's foot: the page's coral action once no card stands
+   open, its outline while any does (the coral action's look, above). */
 .dp-done {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-3);
   align-items: center;
   color: var(--ink-muted);
-}
-.dp-send {
-  font: inherit;
-  min-block-size: var(--c-btn-h);
-  font-weight: var(--weight-strong);
-  cursor: pointer;
-  border: 0;
-  border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-4);
-  background: var(--action-solid);
-  color: var(--on-action);
-}
-.dp-send:hover {
-  background: var(--action-hover);
-}
-.dp-send:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.dp-send:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-/* The 44 Touch Rule: under a finger Send picks is the lg button, 44px tall. */
-@media (pointer: coarse) {
-  .dp-send {
-    min-block-size: var(--c-btn-h-lg);
-  }
 }
 /* The page's one polite live region: heard, never drawn (clipped rather
    than display: none, which would take it out of the accessibility tree). */
