@@ -40,6 +40,7 @@
    * the lines are drawn in the pixels the layer lays out in.
    */
   import { onMount } from "svelte";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { drawnBox } from "#lib/cawco/motion/drawn.js";
 
   let { edges }: { edges: Edge[] } = $props();
@@ -189,7 +190,7 @@
     // Any row that changes size moves the tiles under it (a fold, words
     // rewrapped as a font lands or a column narrows): the host's own size
     // need not change with it.
-    const sizes = new ResizeObserver(follow);
+    const sizes = frameObserver(follow);
     const watch = () => {
       sizes.observe(host);
       for (const row of host.querySelectorAll("[data-row], [data-band]")) {
@@ -223,13 +224,25 @@
   });
 </script>
 
-<svg aria-hidden="true" bind:this={svg} class="wires" data-slot="connectors">
+<!-- A point at the layer's corner the wires draw out from (layer px, no
+     viewBox, never clipped): no box of its own over the rows, so the only
+     paint it lays over them is each wire's, where that wire runs. Physical:
+     the wires are measured from the layer's left edge. -->
+<svg
+  aria-hidden="true"
+  bind:this={svg}
+  class="pointer-events-none absolute top-0 left-0 z-0 size-0 overflow-visible"
+  data-slot="connectors"
+>
   {#each drawn as wire, index (wire.id)}
+    <!-- Each wire draws itself along its length as it arrives (the tick's
+         check-draw on a dash the whole path long). -->
     <path
-      class="wire"
+      class="dash-unit vector-non-scaling fill-none stroke-nest-ink stroke-1 motion-safe:animate-check-draw"
       d={wire.d}
       data-from={wire.from}
       data-kind={wire.kind}
+      data-slot="wire"
       data-to={wire.to}
       pathLength="1"
     />
@@ -242,9 +255,14 @@
           y={wire.pulse.y}
         />
       </clipPath>
-      <g class="pulse-run" clip-path="url(#{uid}-{index})">
+      <!-- Drawn only while it moves: at rest (no animation, reduced motion, a
+           frame whose runs were stopped) there is no band. -->
+      <g
+        class="fill-status-live-glyph opacity-50"
+        clip-path="url(#{uid}-{index})"
+      >
         <rect
-          class="pv-pulse"
+          class="loops opacity-0 motion-safe:animate-plan-pulse"
           data-slot="pulse"
           height="24"
           style:--len="{wire.pulse.length + 24}px"
@@ -256,64 +274,3 @@
     {/if}
   {/each}
 </svg>
-
-<style>
-  /* A point at the layer's corner the wires draw out from (layer px, no
-     viewBox, never clipped): no box of its own over the rows, so the only
-     paint it lays over them is each wire's, where that wire runs. */
-  .wires {
-    position: absolute;
-    /* Physical: the wires are measured from the layer's left edge. */
-    inset: 0 auto auto 0;
-    z-index: 0;
-    inline-size: 0;
-    block-size: 0;
-    overflow: visible;
-    pointer-events: none;
-  }
-  .wire {
-    fill: none;
-    stroke: var(--nest-ink);
-    stroke-width: 1px;
-    stroke-dasharray: 1;
-    stroke-dashoffset: 0;
-    vector-effect: non-scaling-stroke;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .wire {
-      transition: stroke-dashoffset var(--dur-toggle) var(--ease-out);
-
-      @starting-style {
-        stroke-dashoffset: 1;
-      }
-    }
-    .pv-pulse {
-      animation: pv-pulse var(--pv-sweep, var(--dur-loop)) linear infinite;
-    }
-  }
-  .pulse-run {
-    fill: var(--status-live-glyph);
-    opacity: 0.5;
-  }
-  /* Drawn only while it moves: at rest (no animation, reduced motion, a
-     frame whose runs were stopped) there is no band. */
-  .pv-pulse {
-    opacity: 0;
-  }
-  /* At rest at either end (a still picture is paused at the start): no
-     band. It shows only along the way. */
-  @keyframes pv-pulse {
-    0% {
-      opacity: 0;
-      translate: 0 0;
-    }
-    15%,
-    85% {
-      opacity: 1;
-    }
-    100% {
-      opacity: 0;
-      translate: 0 var(--len);
-    }
-  }
-</style>

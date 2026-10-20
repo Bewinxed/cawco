@@ -11,7 +11,8 @@
  * 2. Every embed draws the stories its Preview names: each frame drawn,
  *    with words in it, shot where the owner sees it (canvas-shots.ts).
  * 3. The plan card's lead says "Recommended: <its option>, because …".
- * 4. Each option's drawing stands right under its own chip, in its cell.
+ * 4. Each option's drawing stands in its own cell, right under its chip,
+ *    its line and its cost.
  * 5. Each option draws one frame, the one the reader's screen shows: the
  *    desk's card under a mouse, the phone's sheet under a finger.
  * 6. Lanes stands the steps that run at the same time side by side, in
@@ -109,7 +110,11 @@ function frameFacts() {
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
   };
-  const kinds = [...document.querySelectorAll<HTMLElement>(".frame[data-kind]")]
+  const kinds = [
+    ...document.querySelectorAll<HTMLElement>(
+      '[data-slot="plan-frame"][data-kind]'
+    ),
+  ]
     .filter(shown)
     .map((one) => one.dataset.kind ?? "");
   // Lanes: each band's columns, where their rows stand.
@@ -149,7 +154,10 @@ function frameFacts() {
     return band && box && r && box.width > 0
       ? [
           {
-            label: moment.querySelector(".label")?.textContent?.trim() ?? "",
+            label:
+              moment
+                .querySelector('[data-slot="moment-label"]')
+                ?.textContent?.trim() ?? "",
             centre:
               Math.round(
                 ((r.left + r.width / 2 - box.left) / box.width) * 100
@@ -245,7 +253,9 @@ function crossingsIn(): string[] {
           bottom: (r.bottom - origin.top) / z - 1,
         };
       });
-    for (const wire of svg.querySelectorAll<SVGPathElement>("path.wire")) {
+    for (const wire of svg.querySelectorAll<SVGPathElement>(
+      'path[data-slot="wire"]'
+    )) {
       const ends = [wire.dataset.from ?? "", wire.dataset.to ?? ""];
       const length = wire.getTotalLength();
       for (let at = 0; at <= length; at += 2) {
@@ -418,34 +428,40 @@ type Facts = ReturnType<typeof frameFacts> & {
   cut: string[];
 };
 
-/** The plan card's lead, its recommended option, and each option's chip and drawing on the page. */
+/** The plan card's lead, its recommended option, and each option's words and drawing on the page (decisions/host Decision.svelte, Option.svelte). */
 function pageFacts() {
   const card = document.querySelector<HTMLElement>("#decision-plan");
   const recommended = card
-    ?.querySelector(".dp-tag")
-    ?.closest<HTMLElement>("[data-option]");
+    ?.querySelector('[data-slot="option-cell"] [id$="-tag"]')
+    ?.closest<HTMLElement>('[data-slot="option-cell"]');
   const label =
-    recommended?.querySelector("b > :not(.dp-kc)")?.textContent?.trim() ?? "";
+    recommended
+      ?.querySelector('[data-slot="option-label"]')
+      ?.textContent?.trim() ?? "";
   const cells = [
-    ...(card?.querySelectorAll<HTMLElement>(".dp-optcell") ?? []),
+    ...(card?.querySelectorAll<HTMLElement>('[data-slot="option-cell"]') ?? []),
   ].map((cell) => {
     const c = cell.getBoundingClientRect();
-    const chip = cell.querySelector(".dp-opt")?.getBoundingClientRect();
+    // Its words: the chip, then its line and its cost under it.
+    const words = [
+      ...cell.querySelectorAll("[data-option], [data-option-for]"),
+    ].map((one) => one.getBoundingClientRect());
+    const under = Math.max(...words.map((one) => one.bottom));
     const media = cell
-      .querySelector(".dp-optmedia iframe")
+      .querySelector('[data-slot="option-media"] iframe')
       ?.getBoundingClientRect();
     return {
       option:
         cell.querySelector<HTMLElement>("[data-option]")?.dataset.option ?? "",
-      chip: chip ? Math.round(chip.bottom + scrollY) : 0,
+      words: words.length > 0 ? Math.round(under + scrollY) : 0,
       drawing: media ? Math.round(media.top + scrollY) : 0,
-      gap: chip && media ? Math.round(media.top - chip.bottom) : -1,
+      gap: words.length > 0 && media ? Math.round(media.top - under) : -1,
       inCell: !!media && media.left >= c.left - 1 && media.right <= c.right + 1,
       tall: media ? Math.round(media.height) : 0,
     };
   });
   return {
-    lead: card?.querySelector(".dp-why")?.textContent?.trim() ?? "",
+    lead: card?.querySelector('[data-slot="why"]')?.textContent?.trim() ?? "",
     label,
     cells,
     height: document.documentElement.scrollHeight,
@@ -454,19 +470,20 @@ function pageFacts() {
 
 /** The cards as the person reads them. */
 function cardsOf() {
-  return [...document.querySelectorAll<HTMLElement>(".dp-card")].map(
-    (card) => ({
-      question: card.querySelector("h2")?.textContent?.trim() ?? "",
-      why: card.querySelector(".dp-why")?.textContent?.trim() ?? "",
-      options: [...card.querySelectorAll<HTMLElement>("[data-option]")].map(
-        (option) => ({
-          id: option.dataset.option ?? "",
-          text: option.innerText.replace(/\s+/g, " ").trim(),
-          recommended: option.querySelector(".dp-tag") !== null,
-        })
-      ),
-    })
-  );
+  return [
+    ...document.querySelectorAll<HTMLElement>('[data-slot="decision"]'),
+  ].map((card) => ({
+    question: card.querySelector("h2")?.textContent?.trim() ?? "",
+    why: card.querySelector('[data-slot="why"]')?.textContent?.trim() ?? "",
+    options: [
+      ...card.querySelectorAll<HTMLElement>('[data-slot="option-cell"]'),
+    ].map((cell) => ({
+      id:
+        cell.querySelector<HTMLElement>("[data-option]")?.dataset.option ?? "",
+      text: cell.innerText.replace(/\s+/g, " ").trim(),
+      recommended: cell.querySelector('[id$="-tag"]') !== null,
+    })),
+  }));
 }
 
 /** What each embed's own frame shows, by its states file and the stories it names. */
@@ -609,7 +626,9 @@ function pinsFacts(title: string) {
       ...(section?.querySelectorAll<HTMLElement>('p[data-role="label"]') ?? []),
     ].map((one) => one.textContent?.trim() ?? ""),
     drawings: section?.querySelectorAll("iframe").length ?? 0,
-    picks: section?.querySelectorAll("[data-option], .dp-card").length ?? 0,
+    picks:
+      section?.querySelectorAll('[data-option], [data-slot="decision"]')
+        .length ?? 0,
     pinsCard: !!document.querySelector("#decision-pins"),
   };
 }
@@ -684,7 +703,9 @@ const spec: Spec = {
             errors.push(error.message.slice(0, 240))
           );
           await page.goto(stage.pageUrl(NAME, theme), { waitUntil: "load" });
-          await page.waitForSelector(".dp-card", { timeout: 30_000 });
+          await page.waitForSelector('[data-slot="decision"]', {
+            timeout: 30_000,
+          });
           await page.waitForFunction(
             ({ n, selector }) =>
               document.querySelectorAll(selector).length === n,
@@ -717,10 +738,10 @@ const spec: Spec = {
             at.lead
           );
           check(
-            `${leg}: each option's drawing stands right under its own chip (${at.cells.map((one) => `${one.option} ${one.gap}px under`).join(", ")}; the page ${at.height}px tall)`,
+            `${leg}: each option's drawing stands in its own cell, right under its chip, line and cost (${at.cells.map((one) => `${one.option} ${one.gap}px under`).join(", ")}; the page ${at.height}px tall)`,
             at.cells.length === 3 &&
               at.cells.every(
-                (one) => one.gap >= 0 && one.gap <= 80 && one.inCell
+                (one) => one.gap >= 0 && one.gap <= 40 && one.inCell
               ),
             JSON.stringify(at.cells)
           );

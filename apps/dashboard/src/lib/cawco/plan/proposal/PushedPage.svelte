@@ -13,6 +13,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconChevronLeft, IconExternal } from "#lib/icons.js";
   import AckLine from "./AckLine.svelte";
+  import { OPEN_SESSION, REPORT, ROWS } from "./classes";
   import DelegateRow from "./DelegateRow.svelte";
   import {
     carriersOf,
@@ -45,14 +46,58 @@
     plan.delegates.find((one) => one.id === view.pushed.id)
   );
   const pushed = $derived(Boolean(step || delegate));
+  /**
+   * Both pages: one cell, moving on the drawer curve, in over --dur-panel
+   * and back over --dur-pop (DESIGN.md, Pages: 280ms and 260ms). The page
+   * going away stays seen until it has moved (a visibility transition
+   * holds `visible` to its end), then nothing in it is reachable. With less
+   * motion nothing travels: the pages only cross-fade over --dur-control.
+   */
+  const PAGE =
+    "col-start-1 row-start-1 min-w-0 transition-[translate,opacity,visibility] ease-drawer motion-reduce:translate-x-0 motion-reduce:transition-[opacity,visibility] motion-reduce:duration-(--dur-control) motion-reduce:ease-out";
+  /** The page's head: its tile or mark beside its title. */
+  const HEAD = "grid grid-cols-(--pv-cols-narrow) items-start gap-space-2";
+  const TITLE =
+    "m-0 type-body font-medium wrap-anywhere text-balance text-ink-strong";
+  /** A line on the title's column, in meta. */
+  const META =
+    "num m-0 flex flex-wrap items-center gap-x-space-2 gap-y-space-1 ps-(--pv-tile-in) type-meta";
 </script>
 
-<div class="stack" data-pushed={pushed || undefined} data-slot="push-stack">
-  <div class="page list" inert={pushed}>{@render list()}</div>
-  <div class="page detail" data-slot="pushed-page" inert={!pushed}>
+<!-- Both pages in one cell; the stack cuts what slides past its sides. The
+     page that comes in is the sheet's own surface, so the list it covers
+     never shows through it. With less motion nothing travels: the pages
+     only cross-fade. -->
+<div
+  class="grid overflow-x-clip"
+  data-pushed={pushed || undefined}
+  data-slot="push-stack"
+>
+  <div
+    class={[
+      PAGE,
+      pushed
+        ? "invisible -translate-x-3/10 opacity-60 duration-(--dur-panel) motion-reduce:opacity-0"
+        : "duration-(--dur-pop)",
+    ]}
+    inert={pushed}
+  >
+    {@render list()}
+  </div>
+  <div
+    class={[
+      PAGE,
+      "relative z-1 flex flex-col gap-space-2 self-start bg-surface-raised",
+      pushed
+        ? "translate-x-0 duration-(--dur-panel)"
+        : "invisible translate-x-full duration-(--dur-pop)",
+    ]}
+    data-slot="pushed-page"
+    inert={!pushed}
+  >
     {#if pushed}
       <button
-        class="back pressable mark-line"
+        class="pressable mark-line inline-flex min-h-c-touch-floor items-center gap-space-1 self-start rounded-xs p-0 type-label text-link-ink [&_svg]:size-icon-md"
         onclick={() => {
           view.pushed.id = null;
         }}
@@ -63,11 +108,11 @@
       </button>
       {#if step}
         {@const state = view.stateOf(step.id, step.state)}
-        <header class="head" data-state={state}>
+        <header class={HEAD} data-state={state}>
           <StepTile {state} />
-          <h3 class="title">{step.words}</h3>
+          <h3 class={TITLE}>{step.words}</h3>
         </header>
-        <p class="meta">
+        <p class={[META, "text-ink-muted"]}>
           <span class="num"
             >{view.timeOf(step.id, step.state, step.startedAgo, step.took) ||
               "Not started"}</span
@@ -83,17 +128,17 @@
           {/if}
         </p>
         {#if openBefore(plan, step).length > 0}
-          <p class="after">
+          <p class="m-0 ps-(--pv-tile-in) type-meta text-ink-muted">
             Starts after {openBefore(plan, step)
               .map((one) => one.short)
               .join(" and ")}
           </p>
         {/if}
-        <div class="description" data-slot="description">
+        <div class="ps-(--pv-tile-in) type-body" data-slot="description">
           <MessageBody source={step.description} />
         </div>
         {#if step.subs?.length}
-          <ul class="rows">
+          <ul class={ROWS}>
             <SubRows steps={step.subs} />
           </ul>
         {/if}
@@ -102,7 +147,7 @@
         {/if}
         <StepTools {plan} {step} {steps} />
         {#if carriersOf(plan, step).length > 0}
-          <ul class="rows">
+          <ul class={ROWS}>
             {#each carriersOf(plan, step) as one (one.id)}
               <DelegateRow delegate={one} />
             {/each}
@@ -110,33 +155,45 @@
         {/if}
       {:else if delegate}
         <!-- mark-line: the mark stands at the top of a title that wraps, in its own grid cell -->
-        <header class="head">
+        <header class={HEAD}>
           <SessionMark
             id={delegate.id}
             place={delegate.place}
             status={delegate.status}
           />
-          <h3 class="title">
-            <span class="name">{delegate.name}</span>
+          <h3 class={TITLE}>
+            <span>{delegate.name} ·</span>
             {delegate.problem}
           </h3>
         </header>
-        <div class="line"><ProgressLine {delegate} /></div>
+        <div class="ps-(--pv-tile-in)">
+          <ProgressLine {delegate} />
+        </div>
         {#if delegate.wait}
-          <p class="meta" data-kind={delegate.wait.kind}>
+          <p
+            class={[
+              META,
+              delegate.wait.kind === "you" && "text-status-attn-ink",
+              delegate.wait.kind === "fail" && "text-status-fail-ink",
+              delegate.wait.kind !== "you" &&
+                delegate.wait.kind !== "fail" &&
+                "text-ink-muted",
+            ]}
+            data-kind={delegate.wait.kind}
+          >
             {delegate.wait.words}
           </p>
         {/if}
         {#if delegate.steps.length > 0}
-          <ul class="rows">
+          <ul class={ROWS}>
             <SubRows steps={delegate.steps} />
           </ul>
         {/if}
         {#if delegate.report}
-          <p class="report" data-slot="report">{delegate.report}</p>
+          <p class={REPORT} data-slot="report">{delegate.report}</p>
         {/if}
-        <span class="acts">
-          <button class="open pressable mark-line" type="button">
+        <span class="flex flex-wrap items-center gap-space-3">
+          <button class={["mark-line", OPEN_SESSION]} type="button">
             <span>Open its session</span>
             <IconExternal aria-hidden="true" />
           </button>
@@ -148,172 +205,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  /* Both pages in one cell; the stack cuts what slides past its sides. */
-  .stack {
-    display: grid;
-    overflow-x: clip;
-  }
-  .page {
-    grid-area: 1 / 1;
-    min-inline-size: 0;
-    transition:
-      translate 260ms var(--ease-drawer),
-      opacity 260ms var(--ease-drawer);
-  }
-  /* The page that comes in is the sheet's own surface, so the list it
-     covers never shows through it. */
-  .detail {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    align-self: start;
-    gap: var(--space-2);
-    background: var(--surface-raised);
-    translate: 100% 0;
-  }
-  .stack[data-pushed] {
-    & .list {
-      translate: -30% 0;
-      opacity: 0.6;
-      visibility: hidden;
-      transition:
-        translate 280ms var(--ease-drawer),
-        opacity 280ms var(--ease-drawer),
-        visibility 0s 280ms;
-    }
-    & .detail {
-      translate: 0 0;
-      transition-duration: 280ms;
-    }
-  }
-  .stack:not([data-pushed]) .detail {
-    visibility: hidden;
-    transition:
-      translate 260ms var(--ease-drawer),
-      visibility 0s 260ms;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .page,
-    .stack[data-pushed] .page {
-      translate: 0 0;
-      transition: opacity 120ms var(--ease-out);
-    }
-    .stack[data-pushed] .list {
-      opacity: 0;
-    }
-  }
-  .back {
-    display: inline-flex;
-    align-items: center;
-    align-self: start;
-    gap: var(--space-1);
-    min-block-size: 44px;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: var(--link-ink);
-    font: var(--type-label);
-    cursor: pointer;
-
-    & :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-    }
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 2px;
-    }
-  }
-  .head {
-    display: grid;
-    grid-template-columns: var(--pv-tile, 18px) minmax(0, 1fr);
-    align-items: start;
-    gap: var(--space-2);
-  }
-  .title {
-    margin: 0;
-    font: var(--type-body);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-    text-wrap: balance;
-  }
-  .name::after {
-    content: " ·";
-  }
-  .meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-2);
-    margin: 0;
-    padding-inline-start: calc(var(--pv-tile, 18px) + var(--space-2));
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-
-    &[data-kind="you"] {
-      color: var(--status-attn-ink);
-    }
-    &[data-kind="fail"] {
-      color: var(--status-fail-ink);
-    }
-  }
-  .after {
-    margin: 0;
-    padding-inline-start: calc(var(--pv-tile, 18px) + var(--space-2));
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .line {
-    padding-inline-start: calc(var(--pv-tile, 18px) + var(--space-2));
-  }
-  .description {
-    padding-inline-start: calc(var(--pv-tile, 18px) + var(--space-2));
-    font: var(--type-body);
-  }
-  .rows {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .report {
-    margin: 0;
-    padding: var(--space-2) var(--space-3);
-    border-radius: 5px;
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    font: var(--type-meta);
-    color: var(--ink-strong);
-  }
-  .acts {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .open {
-    display: inline-flex;
-    align-items: center;
-    align-self: start;
-    gap: var(--space-1);
-    min-block-size: 44px;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--link-ink);
-    font: var(--type-meta);
-    cursor: pointer;
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-  }
-</style>

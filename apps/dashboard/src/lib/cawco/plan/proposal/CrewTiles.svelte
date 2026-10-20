@@ -18,11 +18,11 @@
 </script>
 
 {#if delegates.length > 0}
-  <span class="crew" data-slot="crew">
+  <span class="inline-flex items-center gap-space-1" data-slot="crew">
     {#each delegates as one (one.id)}
       <button
         aria-label="{one.name} is on it: show its row"
-        class="mini pressable"
+        class="pressable grid flex-none place-items-center rounded-xs p-0 motion-safe:transition-[translate] motion-safe:duration-(--dur-control) motion-safe:ease-out hover:-translate-y-space-row"
         in:scale={{ start: 0.92, duration: 120 }}
         onclick={(event) => pointAt(view, event.currentTarget, one.id)}
         out:scale={{ start: 0.92, duration: 160 }}
@@ -33,35 +33,3 @@
     {/each}
   </span>
 {/if}
-
-<style>
-  .crew {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-  .mini {
-    --mark-size: var(--pv-tile, 18px);
-    display: grid;
-    flex: none;
-    place-items: center;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    cursor: pointer;
-
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 2px;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition: translate var(--dur-control) var(--ease-out);
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .mini:hover {
-      translate: 0 -2px;
-    }
-  }
-</style>

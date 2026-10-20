@@ -7,6 +7,7 @@
   import MessageBody from "#lib/cawco/MessageBody.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconChevronRight, IconPlus } from "#lib/icons.js";
+  import { CHEVRON } from "./classes";
   import Fold from "./Fold.svelte";
   import type { PlanFixture, Step } from "./fixtures";
   import { useView } from "./view.svelte";
@@ -38,10 +39,10 @@
   }
 </script>
 
-<div class="foot">
+<div class="mt-space-1 flex flex-wrap items-center justify-between gap-space-2">
   {#if adding}
     <form
-      class="new"
+      class="flex min-w-0 flex-auto items-center gap-space-2"
       onsubmit={(event) => {
         event.preventDefault();
         add();
@@ -50,7 +51,7 @@
       <label class="sr-only" for="new-{uid}">The new to-do</label>
       <input
         bind:value={draft}
-        class="field"
+        class="focus-inset min-h-c-row-lead min-w-0 flex-auto rounded-sm border border-border-control bg-surface-raised px-space-2 py-space-1 type-body text-ink-strong in-data-coarse:min-h-c-touch-floor"
         id="new-{uid}"
         onkeydown={(event) => {
           if (event.key === "Escape") {
@@ -63,7 +64,7 @@
     </form>
   {:else}
     <button
-      class="add pressable touch-hit mark-line"
+      class="pressable touch-hit mark-line inline-flex min-h-c-row-lead items-center gap-space-2 rounded-xs p-0 type-label font-normal text-ink-muted transition-[color] duration-(--dur-control) ease-out hover:text-ink-strong in-data-coarse:min-h-c-touch-floor [&_svg]:h-icon-md [&_svg]:w-(--pv-tile)"
       onclick={() => {
         adding = true;
       }}
@@ -73,149 +74,34 @@
       <span>Add a to-do</span>
     </button>
   {/if}
-  <Button class="canvas" label="Open in canvas" size="sm" variant="link" />
+  <!-- Its ink on the foot's trailing edge: the link hangs past it by its
+       own inline padding (DESIGN.md, the row's trailing edge is drawn in
+       ink). -->
+  <Button class="-me-space-3" label="Open in canvas" size="sm" variant="link" />
 </div>
-<section class="spec">
+<section class="mt-space-3 border-t border-border-hairline pt-space-2">
   <button
     aria-controls="spec-{uid}"
     aria-expanded={open}
-    class="spec-head mark-line"
+    class="mark-line focus-inset flex min-h-space-8 w-full items-center gap-space-1 rounded-xs p-0 type-label text-start text-ink-strong in-data-coarse:min-h-c-touch-floor"
     onclick={() => view.toggle("spec")}
     type="button"
   >
-    <span class="spec-name">Spec</span>
-    <span class="spec-at">· written {plan.spec.ago}</span>
-    <span aria-hidden="true" class="chev" data-box data-open={open || undefined}
-      ><IconChevronRight /></span
+    <span>Spec</span>
+    <span class="type-meta text-ink-muted">· written {plan.spec.ago}</span>
+    <span
+      aria-hidden="true"
+      class={[CHEVRON, "ms-auto"]}
+      data-box
+      data-open={open || undefined}><IconChevronRight /></span
     >
   </button>
   <Fold id="spec-{uid}" {open}>
-    <div class="spec-body" data-slot="spec-body">
+    <div
+      class="pt-space-1 pb-space-3 [&_li]:marker:text-ink-muted"
+      data-slot="spec-body"
+    >
       <MessageBody source={plan.spec.markdown} />
     </div>
   </Fold>
 </section>
-
-<style>
-  .foot {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    margin-block-start: var(--space-1);
-
-    & :global(.canvas) {
-      padding-inline: 0;
-    }
-  }
-  .new {
-    display: flex;
-    flex: 1 1 auto;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .field {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    min-block-size: 28px;
-    padding: var(--space-1) var(--space-2);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    color: var(--ink-strong);
-    font: var(--type-body);
-
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: -2px;
-    }
-  }
-  .add {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: 28px;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: var(--ink-muted);
-    font: var(--type-label);
-    font-weight: var(--weight-body);
-    cursor: pointer;
-    transition: color var(--dur-control) var(--ease-out);
-
-    & :global(svg) {
-      inline-size: 18px;
-      block-size: var(--icon-md);
-    }
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 2px;
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .add:hover {
-      color: var(--ink-strong);
-    }
-  }
-  .spec {
-    margin-block-start: var(--space-3);
-    padding-block-start: var(--space-2);
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .spec-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    inline-size: 100%;
-    min-block-size: 32px;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: var(--ink-strong);
-    font: var(--type-label);
-    text-align: start;
-    cursor: pointer;
-
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: -2px;
-    }
-  }
-  .spec-at {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .chev {
-    display: grid;
-    place-items: center;
-    margin-inline-start: auto;
-    color: var(--ink-subtle);
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition: rotate var(--dur-control) var(--ease-out);
-    }
-    &[data-open] {
-      rotate: 90deg;
-    }
-  }
-  .spec-body {
-    padding-block: var(--space-1) var(--space-3);
-
-    & :global(li::marker) {
-      color: var(--ink-muted);
-    }
-  }
-  :global([data-coarse]) .add,
-  :global([data-coarse]) .spec-head {
-    min-block-size: 44px;
-  }
-</style>

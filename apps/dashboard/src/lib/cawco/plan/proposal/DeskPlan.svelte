@@ -43,40 +43,80 @@
   });
 
   const got = $derived(progress(plan));
-  /** The split's height the card stands at (its CSS block-size). */
+  /** The split's height the card stands at (its block size, c-plan-card-h). */
   const DESK_TALL = 680;
 </script>
 
-<div bind:this={desk} class="desk" data-slot="side-card">
+<!-- One cell the card fills: as a flex item it shrank to its words'
+     narrowest width inside its 360px box. It stands at the split's 680px
+     whatever holds it: capped at the viewport's height, inside a decision
+     page's embed (its frame's own viewport, sized to what it draws) it
+     shrank to the frame's first height and the frame then held there. -->
+<div
+  bind:this={desk}
+  class="grid h-c-plan-card-h w-c-plan-card-w max-w-full grid-cols-1 grid-rows-1"
+  data-slot="side-card"
+>
   <SideSurface label="Plan" onclose={() => undefined} recessed={false}>
     {#snippet titleControl()}
-      <span class="head mark-line" data-slot="name-lead">
-        <span class="title">Plan</span>
-        <span class="progress" data-slot="progress" data-box
+      <!-- "Plan", its ring and its count are the name's lead (`name-lead`),
+           the width SideSurface keeps: none of them gives, so the count is
+           never cut. -->
+      <span
+        class="mark-line flex min-w-0 items-center gap-space-2 ps-space-2"
+        data-slot="name-lead"
+      >
+        <span class="flex-none type-label text-ink-strong" data-slot="plan-name"
+          >Plan</span
+        >
+        <span
+          class="grid flex-none text-ink-muted"
+          data-box
+          data-slot="progress"
           ><TaskRing done={got.done} total={got.total} /></span
         >
-        <span data-num class="num figure">{got.done} of {got.total}</span>
+        <span
+          class="num flex-none type-meta whitespace-nowrap text-ink-muted"
+          data-num
+          data-slot="plan-count">{got.done} of {got.total}</span
+        >
       </span>
     {/snippet}
     {#snippet actions()}
       <!-- A box of its own, because SideSurface's direct-child
            `:is(button, a) { flex: none }` is for fixed actions, and this
            chip is the one control in the head that gives way. -->
-      <span class="task-at">
+      <!-- The head's names in one size, on one line (the head recipe's label
+           role): "Plan", the task's title, its stage. The task's badge
+           stands a step clear of the name and gives way first, its title
+           ending in an ellipsis; its slot is the box that shrinks. -->
+      <span class="ms-space-3 flex min-w-0 flex-initial">
         <button
           aria-label="Open the task {plan.task.title}, {plan.task.stage}"
-          class="task mark-line"
+          class="mark-line flex min-w-0 items-center gap-space-1 [&_svg]:flex-none"
           type="button"
         >
-          <GlyphTask aria-hidden="true" class="task-glyph" data-box />
-          <span class="task-title">{plan.task.title}</span>
-          <span class="stage">· {plan.task.stage}</span>
+          <GlyphTask
+            aria-hidden="true"
+            class="size-icon-sm text-ink-muted"
+            data-box
+            data-slot="task-glyph"
+          />
+          <span
+            class="min-w-0 overflow-clip type-label font-normal text-ellipsis whitespace-nowrap text-ink-strong"
+            data-slot="task-title">{plan.task.title}</span
+          >
+          <span
+            class="flex-none type-label font-normal whitespace-nowrap text-ink-muted"
+            data-slot="task-stage">· {plan.task.stage}</span
+          >
           <IconChevronRight aria-hidden="true" />
         </button>
       </span>
     {/snippet}
     <div
-      class="body kit-edge-fade-block"
+      class="kit-edge-fade-block min-h-0 flex-auto overflow-y-auto overscroll-contain px-space-2 pt-space-1 pb-space-4"
+      data-slot="plan-scroll"
       {@attach holdOn(focus)}
       {@attach capEdgeFades}
       {@attach crop && cropWhole(() => desk, DESK_TALL)}
@@ -85,96 +125,3 @@
     </div>
   </SideSurface>
 </div>
-
-<style>
-  /* One cell the card fills: as a flex item it shrank to its words'
-     narrowest width inside the 360px box. It stands at the split's 680px
-     whatever holds it: capped at the viewport's height, inside a decision
-     page's embed (its frame's own viewport, sized to what it draws) it
-     shrank to the frame's first height and the frame then held there. */
-  .desk {
-    display: grid;
-    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
-    inline-size: 360px;
-    max-inline-size: 100%;
-    block-size: 680px;
-  }
-  .head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    padding-inline-start: var(--space-2);
-  }
-  .title {
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .progress {
-    display: grid;
-    color: var(--ink-muted);
-  }
-  .figure {
-    color: var(--ink-muted);
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  /* "Plan", its ring and its count are the name's lead (`name-lead`), the
-     width SideSurface keeps: none of them gives, so the count is never
-     cut. */
-  .title,
-  .progress,
-  .figure {
-    flex: none;
-  }
-  /* The head's names in one size, on one line (the head recipe's label
-     role): "Plan", the task's title, its stage. The task's badge stands a
-     step clear of the name and gives way first, its title ending in an
-     ellipsis; its slot is the box that shrinks. */
-  .task-at {
-    display: flex;
-    flex: 0 1 auto;
-    min-inline-size: 0;
-    margin-inline-start: var(--space-3);
-  }
-  .task {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-inline-size: 0;
-
-    & :global(svg) {
-      flex: none;
-    }
-  }
-  .task-title,
-  .stage {
-    font: var(--type-label);
-    font-weight: var(--weight-body);
-    white-space: nowrap;
-  }
-  .task-title {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    color: var(--ink-strong);
-  }
-  .stage {
-    flex: none;
-    color: var(--ink-muted);
-  }
-  /* The task badge's glyph, grown to the head with the task's title. */
-  .desk :global(.task-glyph) {
-    inline-size: 12px;
-    block-size: 12px;
-    color: var(--ink-muted);
-  }
-  .body {
-    flex: 1 1 auto;
-    min-block-size: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: var(--space-1) var(--space-2) var(--space-4);
-  }
-</style>

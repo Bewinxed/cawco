@@ -8,6 +8,7 @@
    * already, so it draws none.
    */
   import SessionMark from "#lib/cawco/SessionMark.svelte";
+  import { ROWS } from "./classes";
   import type { Delegate } from "./fixtures";
   import { pointAt, useView } from "./view.svelte";
 
@@ -25,111 +26,45 @@
 </script>
 
 {#if needs.length > 0}
-  <section aria-labelledby="needs-{uid}" class="needs" data-slot="needs-you">
-    <h3 class="head mark-line" id="needs-{uid}">
+  <section
+    aria-labelledby="needs-{uid}"
+    class="mb-space-2 flex flex-col gap-space-1 border-b border-border-hairline pb-space-2"
+    data-slot="needs-you"
+  >
+    <h3
+      class="mark-line m-0 flex items-baseline gap-space-2 type-label font-normal text-ink-muted"
+      id="needs-{uid}"
+    >
       <span>Needs you</span>
-      <span class="num count" data-num>{needs.length}</span>
+      <span class="num type-meta" data-num>{needs.length}</span>
     </h3>
-    <ul class="rows">
+    <ul class={[ROWS, "gap-space-row"]}>
       {#each needs as one (one.id)}
         <li>
           <button
-            class="row mark-line press-tint"
+            class="mark-line press-tint focus-inset grid w-full grid-cols-(--pv-cols-narrow) items-start gap-x-space-2 min-h-c-row-lead rounded-xs py-c-plan-row-pad type-label text-start text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover in-data-coarse:min-h-c-touch-floor in-data-coarse:py-c-plan-row-pad-coarse"
             data-kind={one.status}
             data-needs={one.id}
             onclick={(event) => pointAt(view, event.currentTarget, one.id)}
             type="button"
           >
-            <span class="pv-lead" data-box
+            <span class="grid h-(--pv-lead-h) place-items-center" data-box
               ><SessionMark
                 id={one.id}
                 place={one.place}
                 status={one.status}
               /></span
             >
-            <span class="words">{said(one)}</span>
+            <span
+              class={[
+                "min-w-0 wrap-anywhere text-pretty",
+                one.status === "attn" && "text-status-attn-ink",
+                one.status === "fail" && "text-status-fail-ink",
+              ]}>{said(one)}</span
+            >
           </button>
         </li>
       {/each}
     </ul>
   </section>
 {/if}
-
-<style>
-  .needs {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin-block-end: var(--space-2);
-    padding-block-end: var(--space-2);
-    border-block-end: 1px solid var(--border-hairline);
-  }
-  .head {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-    margin: 0;
-    font: var(--type-label);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  .count {
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-  }
-  .rows {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-row);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .words {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    text-wrap: pretty;
-  }
-  .row {
-    display: grid;
-    grid-template-columns: var(--pv-tile, 18px) minmax(0, 1fr);
-    align-items: start;
-    column-gap: var(--space-2);
-    inline-size: 100%;
-    min-block-size: 28px;
-    padding: 5px 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: var(--ink-strong);
-    font: var(--type-label);
-    text-align: start;
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: -2px;
-    }
-    &[data-kind="attn"] .words {
-      color: var(--status-attn-ink);
-    }
-    &[data-kind="fail"] .words {
-      color: var(--status-fail-ink);
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .row:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .pv-lead {
-    display: grid;
-    place-items: center;
-    block-size: max(1lh, var(--pv-tile, 18px));
-  }
-  :global([data-coarse]) .row {
-    min-block-size: 44px;
-    padding-block: 11px;
-  }
-</style>

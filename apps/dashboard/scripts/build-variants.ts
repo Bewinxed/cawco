@@ -56,6 +56,12 @@ const ARIA_STATIC = [
 const DATA_STATIC: { attr: string; value: string }[] = [
   { attr: "kind", value: "tailnet" },
   { attr: "kind", value: "local-name" },
+  // A plan proposal step's state, said in its words (plan/proposal
+  // classes.ts STATE_WORDS: `group-state-doing/row:`); `failed` is read
+  // elsewhere already.
+  { attr: "state", value: "doing" },
+  { attr: "state", value: "you" },
+  { attr: "state", value: "done" },
 ];
 
 const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that hovers.

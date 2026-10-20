@@ -6970,6 +6970,62 @@
       },
       "$description": "The chosen-hover bench's side-panel well height."
     },
+    "c-plan-card-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 360,
+        "unit": "px"
+      },
+      "$description": "A plan proposal's side card (plan/proposal DeskPlan): the split's side at its 360px."
+    },
+    "c-plan-card-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 680,
+        "unit": "px"
+      },
+      "$description": "A plan proposal's side card's height: the split's at a 900px window."
+    },
+    "c-plan-sheet-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 717,
+        "unit": "px"
+      },
+      "$description": "A plan proposal's phone sheet (plan/proposal PhonePlan): 85% of the probe kit's 844px phone."
+    },
+    "c-plan-row-pad": {
+      "$type": "dimension",
+      "$value": {
+        "value": 5,
+        "unit": "px"
+      },
+      "$description": "A plan row's block padding: an 18px tile centred in the 28px row (c-row-lead)."
+    },
+    "c-plan-row-pad-coarse": {
+      "$type": "dimension",
+      "$value": {
+        "value": 11,
+        "unit": "px"
+      },
+      "$description": "A plan row's block padding under a finger: a 22px label line centred in the 44px row (c-touch-floor)."
+    },
+    "c-plan-line-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 48,
+        "unit": "px"
+      },
+      "$description": "A delegate's progress line at its shortest, before what follows it wraps to the next line."
+    },
+    "c-plan-badge-px": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
+      "$description": "A task badge's inline padding (plan/proposal TaskBadge)."
+    },
     "c-bench-field-w": {
       "$type": "dimension",
       "$value": {

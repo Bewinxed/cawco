@@ -16,52 +16,13 @@
 
 <button
   aria-label="Open the task {task.id}, {task.title}, in {task.stage}"
-  class="badge pressable touch-hit"
+  class="pressable touch-hit inline-flex h-c-badge-h flex-none items-center gap-space-1 rounded-xs bg-surface-recess px-c-plan-badge-px type-label font-normal whitespace-nowrap text-ink-strong hover:bg-surface-fill [&_svg]:size-icon-sm [&_svg]:text-ink-muted"
   data-slot="task-badge"
   type="button"
 >
   <GlyphTask aria-hidden="true" />
-  <span class="id" data-slot="task-id">{task.id}</span>
-  <span class="stage">{task.stage}</span>
+  <span class="type-meta font-mono text-ink-muted" data-slot="task-id"
+    >{task.id}</span
+  >
+  <span>{task.stage}</span>
 </button>
-
-<style>
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    flex: none;
-    block-size: 20px;
-    padding-inline: 6px;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-    font: var(--type-label);
-    font-weight: var(--weight-body);
-    white-space: nowrap;
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-      color: var(--ink-muted);
-    }
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 2px;
-    }
-  }
-  .id {
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-    color: var(--ink-muted);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .badge:hover {
-      background: var(--surface-fill);
-    }
-  }
-</style>

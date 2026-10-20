@@ -10,6 +10,7 @@
   import { fade } from "svelte/transition";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconCheck, IconClock } from "#lib/icons.js";
+  import { ON_WORDS } from "./classes";
   import { type Ack, midSentence } from "./view.svelte";
 
   let { ack }: { ack: Ack } = $props();
@@ -41,76 +42,43 @@
   });
 </script>
 
-<div class="ack" data-phase={ack.phase} data-slot="ack">
-  <span class="line mark-line">
-    <span class="mark-cell">
+<!-- In a narrow column (Lanes' steps side by side) the line starts under
+     the tile, so a receiver's name and its state keep to one line. -->
+<div
+  class={[
+    ON_WORDS,
+    "flex min-w-0 flex-col gap-space-row pb-space-1 type-meta text-ink-muted @max-plan-step/step-row:ps-0",
+  ]}
+  data-phase={ack.phase}
+  data-slot="ack"
+>
+  <span
+    class="mark-line flex min-w-0 items-start gap-space-1 [&_svg]:size-icon-sm"
+  >
+    <span
+      class={[
+        "mark-cell",
+        (ack.phase === "seen" || ack.phase === "replied") &&
+          "text-status-done-glyph",
+      ]}
+    >
       {#if ack.phase === "sent"}
         <IconClock aria-hidden="true" />
       {:else}
         <IconCheck aria-hidden="true" />
       {/if}
     </span>
-    <span class="said"><MorphText text={said} /></span>
+    <span class="min-w-0 wrap-anywhere text-balance" data-slot="ack-said"
+      ><MorphText text={said} /></span
+    >
   </span>
   {#if ack.reply && ack.change !== "commented"}
-    <p class="reply" in:fade={{ duration: 200 }}>
-      <span class="who">{ack.to}</span>
+    <p
+      class="m-0 wrap-anywhere text-pretty text-ink-strong"
+      in:fade={{ duration: 200 }}
+    >
+      <span class="font-medium">{ack.to}</span>
       <span>{ack.reply}</span>
     </p>
   {/if}
 </div>
-
-<style>
-  .ack {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-inline-size: 0;
-    padding-inline-start: calc(
-      var(--lead-w, var(--pv-tile, 18px)) + var(--space-2)
-    );
-    padding-block-end: var(--space-1);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .line {
-    display: flex;
-    align-items: start;
-    gap: var(--space-1);
-    min-inline-size: 0;
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 1lh;
-    }
-  }
-  .ack[data-phase="seen"] .mark-cell,
-  .ack[data-phase="replied"] .mark-cell {
-    color: var(--status-done-glyph);
-  }
-  .said {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    text-wrap: balance;
-  }
-  .reply {
-    margin: 0;
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-    text-wrap: pretty;
-  }
-  .who {
-    font-weight: var(--weight-strong);
-
-    &::after {
-      content: " ";
-    }
-  }
-  /* In a narrow column (Lanes' steps side by side) the line starts under
-     the tile, so a receiver's name and its state keep to one line. */
-  @container step-row (inline-size < 15rem) {
-    .ack {
-      padding-inline-start: 0;
-    }
-  }
-</style>

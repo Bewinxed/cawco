@@ -1199,6 +1199,20 @@ public enum Size {
     public static let cBenchSideW: Double = 360
     /// The chosen-hover bench's side-panel well height.
     public static let cBenchSideH: Double = 240
+    /// A plan proposal's side card (plan/proposal DeskPlan): the split's side at its 360px.
+    public static let cPlanCardW: Double = 360
+    /// A plan proposal's side card's height: the split's at a 900px window.
+    public static let cPlanCardH: Double = 680
+    /// A plan proposal's phone sheet (plan/proposal PhonePlan): 85% of the probe kit's 844px phone.
+    public static let cPlanSheetH: Double = 717
+    /// A plan row's block padding: an 18px tile centred in the 28px row (c-row-lead).
+    public static let cPlanRowPad: Double = 5
+    /// A plan row's block padding under a finger: a 22px label line centred in the 44px row (c-touch-floor).
+    public static let cPlanRowPadCoarse: Double = 11
+    /// A delegate's progress line at its shortest, before what follows it wraps to the next line.
+    public static let cPlanLineMin: Double = 48
+    /// A task badge's inline padding (plan/proposal TaskBadge).
+    public static let cPlanBadgePx: Double = 6
     /// The chosen-hover bench's model list and editor width.
     public static let cBenchFieldW: Double = 480
     /// A bench slider's readout ("32px", "100%"), so the figure never jumps.

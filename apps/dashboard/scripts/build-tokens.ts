@@ -244,6 +244,15 @@ const ANIMATIONS: Record<string, string> = {
   // does (The One Loop Rule).
   "animate-skeleton-sweep":
     "kit-skeleton-sweep var(--dur-loop) linear infinite",
+  // A working delegate's line pulsing down its run (plan/proposal
+  // Connectors): one band per --dur-loop, the proposal's own tuning
+  // (--pv-sweep) when its frame sets one, linear as every loop turns.
+  "animate-plan-pulse":
+    "plan-pulse var(--pv-sweep, var(--dur-loop)) linear infinite",
+  // The skeleton's sweep across a working delegate's progress line
+  // (plan/proposal ProgressLine), on the same tuning.
+  "animate-plan-sweep":
+    "kit-skeleton-sweep var(--pv-sweep, var(--dur-loop)) linear infinite",
 };
 /** The keyframes the house's animations name that app.css does not keep. */
 const KEYFRAMES: Record<string, string> = {
@@ -291,6 +300,10 @@ const KEYFRAMES: Record<string, string> = {
   "kit-dialog-out": "to {\n  opacity: 0;\n  transform: translateY(6px);\n}",
   "kit-tip-in": "from {\n  opacity: 0;\n  translate: var(--kit-tip-from);\n}",
   "kit-skeleton-sweep": "to {\n  translate: 100% 0;\n}",
+  // Drawn only along the way: at either end (a still picture is paused at
+  // the start) no band shows.
+  "plan-pulse":
+    "0% {\n  opacity: 0;\n  translate: 0 0;\n}\n15%,\n85% {\n  opacity: 1;\n}\n100% {\n  opacity: 0;\n  translate: 0 var(--len);\n}",
 };
 
 /**
@@ -341,6 +354,11 @@ const CONTAINERS = {
   // (c-panel-w and its space-6 end margin), the pane's inline padding
   // (space-7, space-6), two 240px board columns and the space-3 between.
   "project-dock": "938px",
+  // A plan proposal's rows in a narrow column (Lanes' steps side by side):
+  // a step row's trail, and a delegate row's line and state, stand under
+  // its words.
+  "plan-step": "15rem",
+  "plan-delegate": "13rem",
 };
 const APPLE_DIR = "../apple/Packages/CawCoKit/Sources/CawCoDesign/";
 /** The decision-page skill CawCo ships (packages/hub/src/bundled-skills.ts): its pages wear the same tokens. */

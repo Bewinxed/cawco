@@ -13,6 +13,7 @@
  * is made where the scroller stays once its runs end.
  */
 import type { Attachment } from "svelte/attachments";
+import { frameObserver } from "#lib/cawco/frame-observer.js";
 import { drawnBox } from "#lib/cawco/motion/drawn.js";
 
 const BOXES =
@@ -75,9 +76,7 @@ export function cropWhole(
   base: number
 ): Attachment<HTMLElement> {
   return (node) => {
-    let frame = 0;
     const crop = () => {
-      frame = 0;
       const frameBox = host();
       if (!frameBox) {
         return;
@@ -90,18 +89,15 @@ export function cropWhole(
       const cut = shownTo - gapFrom(lines, shownTo, -1);
       frameBox.style.blockSize = `${base - Math.max(0, cut)}px`;
     };
-    const again = () => {
-      frame ||= requestAnimationFrame(crop);
-    };
-    const sizes = new ResizeObserver(again);
+    // Each answer in the next frame, after a story's hold on a row has
+    // moved the scroller on the same change (focus.ts: attached first, so
+    // its answer runs first).
+    const sizes = frameObserver(crop);
     for (const held of node.children) {
       sizes.observe(held);
     }
-    document.fonts.ready.then(again, again);
-    again();
-    return () => {
-      sizes.disconnect();
-      cancelAnimationFrame(frame);
-    };
+    document.fonts.ready.then(sizes.request, sizes.request);
+    sizes.request();
+    return () => sizes.disconnect();
   };
 }

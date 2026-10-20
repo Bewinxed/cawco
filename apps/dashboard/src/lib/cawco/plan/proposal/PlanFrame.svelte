@@ -83,14 +83,30 @@
   });
 </script>
 
+<!-- The values every row is drawn from, worked out once here from the
+     three the person tunes, and read by the rows as custom properties (a
+     two-lane row in Lanes sets its own --lead-w, --step-cols and
+     --words-in on its item, StepRow): the tile's cell (one line box tall,
+     or the tile's side, whichever is more), its glyph (two thirds of the
+     tile), the words' column after it, a row's columns, a progress line's
+     longest share of its row, and the gap between nested rows. -->
 <div
-  class="frame"
+  class="flex w-max max-w-full"
   data-beat={live ? beat : undefined}
   data-kind={kind}
+  data-slot="plan-frame"
   style:--pv-tile="{tileSize}px"
   style:--mark-size="{tileSize}px"
   style:--pv-line="{lineWeight}px"
   style:--pv-sweep="{sweepSeconds}s"
+  style:--pv-lead-h="max(1lh, var(--pv-tile))"
+  style:--pv-glyph="calc(var(--pv-tile) * 2 / 3)"
+  style:--pv-tile-in="calc(var(--pv-tile) + var(--space-2))"
+  style:--words-in="calc(var(--pv-tile) + var(--space-2))"
+  style:--pv-cols="var(--pv-tile) minmax(0, 1fr) auto"
+  style:--pv-cols-narrow="var(--pv-tile) minmax(0, 1fr)"
+  style:--pv-line-max="max(var(--c-plan-line-min), 32%)"
+  style:--tree-gap="var(--space-row)"
 >
   {#if kind === "delegate"}
     <DelegateFrame />
@@ -106,11 +122,3 @@
     </PhonePlan>
   {/if}
 </div>
-
-<style>
-  .frame {
-    display: flex;
-    inline-size: max-content;
-    max-inline-size: 100%;
-  }
-</style>

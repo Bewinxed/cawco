@@ -25,6 +25,7 @@
   import { IconChevronRight } from "#lib/icons.js";
   import Connectors, { type Edge } from "./Connectors.svelte";
   import CrewTiles from "./CrewTiles.svelte";
+  import { ON_WORDS, ROWS } from "./classes";
   import DelegateRow from "./DelegateRow.svelte";
   import Fold from "./Fold.svelte";
   import {
@@ -190,6 +191,11 @@
     plan.delegates.filter((one) => one.status === "done")
   );
   const uid = $props.id();
+  /** A list of rows, a hair apart. */
+  const LIST = [ROWS, "gap-space-row"];
+  /** A group's quiet head. */
+  const GROUP_HEAD =
+    "m-0 flex items-baseline gap-space-2 type-label font-normal text-ink-muted";
 </script>
 
 {#snippet delegates(list: Delegate[])}
@@ -198,19 +204,24 @@
   {/each}
 {/snippet}
 
-{#snippet foldTrigger(list: Delegate[], word: string)}
+<!-- The queued and finished delegates' line: on the words' column, or in
+     the stack's head line with no tile's indent. -->
+{#snippet foldTrigger(list: Delegate[], word: string, inHead = false)}
   {#if list.length > 0}
     <button
       aria-controls="{word}-{uid}"
       aria-expanded={view.opened.has(word)}
-      class="finished mark-line"
+      class={[
+        "mark-line inline-flex min-h-c-row-lead items-center gap-space-1 self-start rounded-xs p-0 type-meta text-ink-muted in-data-coarse:min-h-c-touch-floor",
+        !inHead && "ps-(--pv-tile-in)",
+      ]}
       onclick={() => view.toggle(word)}
       type="button"
     >
       <span>{list.length} {word}</span>
       <span
         aria-hidden="true"
-        class="chev"
+        class="grid place-items-center [&_svg]:size-icon-sm motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out data-open:rotate-90"
         data-box
         data-open={view.opened.has(word) || undefined}
         ><IconChevronRight /></span
@@ -222,23 +233,24 @@
 {#snippet foldBody(list: Delegate[], word: string)}
   {#if list.length > 0}
     <Fold id="{word}-{uid}" open={view.opened.has(word)}>
-      <ul class="rows">{@render delegates(list)}</ul>
+      <ul class={LIST}>{@render delegates(list)}</ul>
     </Fold>
   {/if}
 {/snippet}
 
 {#snippet ledger()}
   <NeedsYou delegates={plan.delegates} />
-  <ul class="rows" {@attach reflow()} {@attach view.clock.watch}>
+  <ul class={LIST} {@attach reflow()} {@attach view.clock.watch}>
     {#each steps as step (step.id)}
       {@const carried = carriersOf(plan, step)}
       <StepRow {plan} {step} {steps}>
         {#snippet below()}
           {#if carried.length > 0}
+            <!-- One ledger: a delegate hangs one level in off its to-do's tile. -->
             <ul
-              class="kit-nest rows nested"
+              class={[LIST, "kit-nest ps-(--nest-pad)"]}
               data-slot="delegates"
-              {@attach nestFrom(".tile-at", ".pv-lead")}
+              {@attach nestFrom("[data-nest-glyph]", "[data-lead]")}
             >
               {@render delegates(carried)}
             </ul>
@@ -254,7 +266,7 @@
   <StepRow {plan} {pushes} {step} {steps}>
     {#snippet below()}
       {#if carried.length > 0}
-        <ul class="rows on-lane" data-slot="delegates">
+        <ul class={[LIST, ON_WORDS]} data-slot="delegates">
           {@render delegates(carried)}
         </ul>
       {/if}
@@ -264,18 +276,28 @@
 
 {#snippet lanes()}
   <NeedsYou delegates={plan.delegates} />
-  <div class="lanes">
+  <!-- Lanes: a step's tile stands in its lane; its delegates on its words'
+       column. A band's steps stand in columns of one width, side by side,
+       each as tall as its own rows; the gap between them is the lines'
+       room. -->
+  <div class="relative" data-slot="lanes">
     <Connectors edges={laneEdges} />
-    <ul class="rows" {@attach reflow()} {@attach view.clock.watch}>
+    <ul class={LIST} {@attach reflow()} {@attach view.clock.watch}>
       {#each bands as band (band.map((one) => one.id).join(" "))}
         {#if band.length > 1}
           <li
-            class="band"
+            class="min-w-0"
             data-band={band.map((one) => one.id).join(" ")}
             data-flip="box"
             data-slot="band"
           >
-            <ul class="rows columns" style:--columns={band.length}>
+            <ul
+              class={[
+                LIST,
+                "grid grid-cols-(--band-cols) items-start gap-x-space-3",
+              ]}
+              style:--band-cols="repeat({band.length}, minmax(0, 1fr))"
+            >
               {#each band as step (step.id)}
                 {@render laneStep(step)}
               {/each}
@@ -290,18 +312,21 @@
 {/snippet}
 
 {#snippet crew()}
-  <section aria-labelledby="on-it-{uid}" class="group">
+  <!-- Crew first: two groups, each named by a quiet head. -->
+  <section aria-labelledby="on-it-{uid}" class="flex flex-col gap-space-1">
     <!-- The queued delegates wait in the head's own line: what is on it
          stands in the stack, and the queue opens under it when asked. -->
-    <div class="group-top">
-      <h3 class="group-head mark-line" id="on-it-{uid}">
+    <div
+      class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-1"
+    >
+      <h3 class={["mark-line", GROUP_HEAD]} id="on-it-{uid}">
         <span>Delegates</span>
-        <span class="num count" data-num>{onIt.length}</span>
+        <span class="num type-meta" data-num>{onIt.length}</span>
       </h3>
-      {@render foldTrigger(queued, "queued")}
+      {@render foldTrigger(queued, "queued", true)}
     </div>
     <ul
-      class="rows"
+      class={LIST}
       data-slot="stack"
       {@attach reflow()}
       {@attach view.clock.watch}
@@ -312,11 +337,14 @@
     {@render foldTrigger(finished, "finished")}
     {@render foldBody(finished, "finished")}
   </section>
-  <section aria-labelledby="todos-{uid}" class="group">
-    <h3 class="group-head" id="todos-{uid}">To-dos</h3>
-    <div class="lanes">
+  <section
+    aria-labelledby="todos-{uid}"
+    class="mt-space-3 flex flex-col gap-space-1 border-t border-border-hairline pt-space-3"
+  >
+    <h3 class={GROUP_HEAD} id="todos-{uid}">To-dos</h3>
+    <div class="relative" data-slot="lanes">
       <Connectors edges={openEdges} />
-      <ul class="rows" {@attach reflow()}>
+      <ul class={LIST} {@attach reflow()}>
         {#each steps as step (step.id)}
           {@const carried = carriersOf(plan, step)}
           {@const working = carried.filter((one) => one.status !== "done")}
@@ -333,7 +361,9 @@
             {/snippet}
             {#snippet inFold()}
               {#if carried.length > 0}
-                <ul class="rows in-fold">{@render delegates(carried)}</ul>
+                <ul class={[LIST, ON_WORDS]}>
+                  {@render delegates(carried)}
+                </ul>
               {/if}
             {/snippet}
           </StepRow>
@@ -354,137 +384,14 @@
   <PlanFoot {plan} />
 {/snippet}
 
-<div class="plan" data-slot="plan" data-variation={variation}>
+<div
+  class="flex min-w-0 flex-col gap-space-1"
+  data-slot="plan"
+  data-variation={variation}
+>
   {#if pushes}
     <PushedPage list={body} {plan} {steps} />
   {:else}
     {@render body()}
   {/if}
 </div>
-
-<style>
-  .plan {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-inline-size: 0;
-  }
-  .rows {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-row);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    min-inline-size: 0;
-  }
-  /* One ledger: a delegate hangs one level in off its to-do's tile. */
-  .rows.nested {
-    --nest-gap: var(--space-row);
-    padding-inline-start: var(--nest-pad, var(--space-5));
-  }
-
-  /* Lanes, and Crew first's to-dos: a step's tile stands in its lane; a
-     row the second lane runs through takes the two-lane gutter (StepRow's
-     --lead-w), every other row the one tile's. Its delegates stand on its
-     words' column. */
-  .lanes {
-    position: relative;
-  }
-  .on-lane {
-    padding-inline-start: calc(
-      var(--lead-w, var(--pv-tile, 18px)) + var(--space-2)
-    );
-  }
-  /* Lanes: a band's steps in columns of one width, side by side, each as
-     tall as its own rows; the gap between them is the lines' room. */
-  .band {
-    min-inline-size: 0;
-  }
-  .columns {
-    display: grid;
-    grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
-    align-items: start;
-    gap: var(--space-row) var(--space-3);
-  }
-
-  /* Crew first: two groups, each named by a quiet head. */
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-
-    & + .group {
-      margin-block-start: var(--space-3);
-      padding-block-start: var(--space-3);
-      border-block-start: 1px solid var(--border-hairline);
-    }
-  }
-  .group-top {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-1) var(--space-3);
-  }
-  .group-head {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-    margin: 0;
-    font: var(--type-label);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  .count {
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-  }
-  .in-fold {
-    padding-inline-start: calc(
-      var(--lead-w, var(--pv-tile, 18px)) + var(--space-2)
-    );
-  }
-  .finished {
-    display: inline-flex;
-    align-items: center;
-    align-self: start;
-    gap: var(--space-1);
-    min-block-size: 28px;
-    padding: 0;
-    padding-inline-start: calc(var(--pv-tile, 18px) + var(--space-2));
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: var(--ink-muted);
-    font: var(--type-meta);
-    cursor: pointer;
-
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 2px;
-    }
-  }
-  /* In the stack's head line the queue's trigger needs no tile's indent. */
-  .group-top .finished {
-    padding-inline-start: 0;
-  }
-  .chev {
-    display: grid;
-    place-items: center;
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition: rotate var(--dur-control) var(--ease-out);
-    }
-    &[data-open] {
-      rotate: 90deg;
-    }
-  }
-  :global([data-coarse]) .finished {
-    min-block-size: 44px;
-  }
-</style>

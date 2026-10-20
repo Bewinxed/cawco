@@ -7,6 +7,7 @@
  * once its runs end. The person's own scroll, press or key lets it go.
  */
 import type { Attachment } from "svelte/attachments";
+import { frameObserver } from "#lib/cawco/frame-observer.js";
 
 /** Past the fade's end: the row's top stands this far clear of it. */
 const CLEAR = 4;
@@ -33,7 +34,7 @@ export function holdOn(id: string | undefined): Attachment<HTMLElement> {
           (row.getBoundingClientRect().top - box.top) / scale - fade - CLEAR;
       }
     };
-    const sizes = new ResizeObserver(hold);
+    const sizes = frameObserver(hold);
     for (const held of node.children) {
       sizes.observe(held);
     }

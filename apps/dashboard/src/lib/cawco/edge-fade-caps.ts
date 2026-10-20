@@ -38,6 +38,7 @@
  * style.
  */
 import type { Attachment } from "svelte/attachments";
+import { frameObserver } from "#lib/cawco/frame-observer.js";
 
 /** A capped list, as the page's one frame reads and then writes it. */
 interface Capped {
@@ -689,7 +690,7 @@ export const capEdgeFades: Attachment<HTMLElement> = (node) => {
   }
   // The scroller's size moves its foot; what it holds changing size moves
   // the lines in it, a line rewrapped or a fold settled.
-  const sizes = new ResizeObserver(shifted);
+  const sizes = frameObserver(shifted);
   const watchSizes = () => {
     sizes.observe(node);
     for (const held of node.children) {

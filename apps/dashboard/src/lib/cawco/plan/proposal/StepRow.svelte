@@ -16,6 +16,16 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconChevronRight } from "#lib/icons.js";
   import AckLine from "./AckLine.svelte";
+  import {
+    CHEVRON,
+    ON_WORDS,
+    ROW,
+    ROWS,
+    STATE_WORDS,
+    TIME,
+    TRAIL,
+    WORDS,
+  } from "./classes";
   import Fold from "./Fold.svelte";
   import { openBefore, type PlanFixture, type Step } from "./fixtures";
   import StepTile from "./StepTile.svelte";
@@ -67,6 +77,9 @@
   const foldId = $derived(`fold-${uid}`);
   const gone = $derived(view.removed.has(step.id));
   const ack = $derived(view.acks.get(step.id));
+  /** What it waits on, or the session's proposal, under the words. */
+  const UNDER =
+    "col-span-2 col-start-2 row-start-2 flex min-w-0 flex-wrap items-center type-meta text-ink-muted @max-plan-step/step-row:col-span-1 @max-plan-step/step-row:row-start-3";
 
   function press(): void {
     if (pushes) {
@@ -77,21 +90,34 @@
   }
 </script>
 
+<!-- A row in a narrow column (Lanes' steps side by side): the words take
+     the row's width beside the tile, and the trail (its badge, chevron and
+     time) stands under them, so neither is squeezed to a word a line. -->
 <li
-  class="item"
+  class="@container/step-row relative min-w-0 rounded-sm transition-[background-color] duration-(--dur-fade) ease-out data-lit:bg-surface-hover"
   data-lit={view.lit.id === step.id || undefined}
   data-after={step.after?.join(" ")}
   data-row={step.id}
   data-flip="box"
   hidden={dismissed}
-  style:--lead-in="calc({lane} * (var(--pv-tile, 18px) + var(--space-2)))"
+  style:--lead-in="calc({lane} * (var(--pv-tile) + var(--space-2)))"
   style:--lead-w={lanes > 1
-    ? `calc(${lanes} * var(--pv-tile, 18px) + ${lanes - 1} * var(--space-2))`
-    : undefined}
+    ? `calc(${lanes} * var(--pv-tile) + ${lanes - 1} * var(--space-2))`
+    : "var(--pv-tile)"}
+  style:--step-cols="var(--lead-w) minmax(0, 1fr) auto"
+  style:--step-cols-narrow="var(--lead-w) minmax(0, 1fr)"
+  style:--words-in="calc(var(--lead-w) + var(--space-2))"
 >
   {#if gone}
-    <div class="gone">
-      <span class="gone-words">Removed: {step.words}</span>
+    <div
+      class={[
+        ON_WORDS,
+        "flex min-h-c-row-lead flex-wrap items-center gap-space-2 type-meta text-ink-muted in-data-coarse:min-h-c-touch-floor",
+      ]}
+    >
+      <span class="min-w-0 wrap-anywhere line-through"
+        >Removed: {step.words}</span
+      >
       <Button
         onclick={() => {
           view.removed.delete(step.id);
@@ -102,9 +128,18 @@
       >
     </div>
   {:else}
-    <div class="row" data-slot="plan-row" data-state={now}>
-      <span class="pv-lead"
-        ><span class="tile-at" data-tile={step.id}
+    <div
+      class={[
+        ROW,
+        "group/row gap-y-space-row grid-cols-(--step-cols) @max-plan-step/step-row:grid-cols-(--step-cols-narrow)",
+      ]}
+      data-slot="plan-row"
+      data-state={now}
+    >
+      <span
+        class="col-start-1 row-start-1 grid h-(--pv-lead-h) items-center justify-items-start ps-(--lead-in)"
+        data-lead
+        ><span class="grid w-(--pv-tile)" data-nest-glyph data-tile={step.id}
           ><StepTile
             label={step.words}
             onpress={() => {
@@ -122,30 +157,44 @@
       <button
         aria-controls={pushes ? undefined : foldId}
         aria-expanded={pushes ? undefined : open}
-        class="words press-tint"
+        class={[WORDS, STATE_WORDS, "@max-plan-step/step-row:me-0"]}
         data-slot="words"
         onclick={press}
         type="button"
       >
         {step.words}
       </button>
-      <span class="trail mark-line" data-slot="trail">
+      <span
+        class={[
+          "mark-line",
+          TRAIL,
+          "@max-plan-step/step-row:col-start-2 @max-plan-step/step-row:row-start-2 @max-plan-step/step-row:h-auto @max-plan-step/step-row:flex-wrap",
+        ]}
+        data-slot="trail"
+      >
         {@render trail?.()}
         {#if step.promoted}
           <span data-box><TaskBadge task={step.promoted} /></span>
         {/if}
         <span
           aria-hidden="true"
-          class="chev"
+          class={CHEVRON}
           data-box
           data-open={(open && !pushes) || undefined}
           data-slot="chevron"><IconChevronRight /></span
         >
-        <span class="num time" data-num data-slot="time">{time}</span>
+        <span
+          class={[
+            TIME,
+            "@max-plan-step/step-row:w-auto @max-plan-step/step-row:text-start",
+          ]}
+          data-num
+          data-slot="time">{time}</span
+        >
       </span>
       {#if waitsOn.length > 0 && now !== "done"}
         <span
-          class="under after"
+          class={[UNDER, "gap-space-1"]}
           data-slot="after"
           out:fade={{ duration: 160 }}
         >
@@ -156,7 +205,7 @@
             {#if index > 0}<span aria-hidden="true">·</span>{/if}
             <button
               aria-label="Go to {before.short}"
-              class="link pressable"
+              class="pressable rounded-xs p-0 text-link-ink hover:underline"
               data-goes={before.id}
               onclick={(event) => pointAt(view, event.currentTarget, before.id)}
               type="button">{before.short}</button
@@ -164,16 +213,16 @@
           {/each}
         </span>
       {:else if proposed}
-        <span class="under">
+        <span class={[UNDER, "gap-x-space-2 gap-y-space-1"]}>
           <span>Proposed by the session</span>
           <Button
-            class="agree"
+            class="flex-none"
             onclick={() => view.agreed.add(step.id)}
             size="xs"
             variant="outline">Agree</Button
           >
           <Button
-            class="agree"
+            class="flex-none"
             onclick={() => {
               dismissed = true;
             }}
@@ -189,12 +238,19 @@
   {/if}
   {#if !(pushes || gone)}
     <Fold id={foldId} {open}>
-      <div class="body">
-        <div class="description" data-slot="description">
+      <!-- The body starts on the words' column. -->
+      <div class="flex flex-col gap-space-1 pb-space-2">
+        <div
+          class={[ON_WORDS, "type-body text-ink-strong"]}
+          data-slot="description"
+        >
           <MessageBody source={step.description} />
         </div>
         {#if step.subs?.length}
-          <ul class="kit-nest subs" {@attach nestFrom(".tile-at", ".pv-lead")}>
+          <ul
+            class={[ROWS, "kit-nest gap-space-row ps-(--nest-pad)"]}
+            {@attach nestFrom("[data-nest-glyph]", "[data-lead]")}
+          >
             <SubRows steps={step.subs} />
           </ul>
         {/if}
@@ -207,225 +263,3 @@
     {@render below?.()}
   {/if}
 </li>
-
-<style>
-  .item {
-    position: relative;
-    min-inline-size: 0;
-    container: step-row / inline-size;
-    border-radius: var(--radius-sm);
-    transition: background-color var(--dur-fade) var(--ease-out);
-
-    &[data-lit] {
-      background: var(--surface-hover);
-    }
-  }
-  .gone {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: 28px;
-    padding-inline-start: calc(
-      var(--lead-w, var(--pv-tile, 18px)) + var(--space-2)
-    );
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .gone-words {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    text-decoration: line-through;
-  }
-  :global([data-coarse]) .gone {
-    min-block-size: 44px;
-  }
-  .row {
-    display: grid;
-    grid-template-columns:
-      var(--lead-w, var(--pv-tile, 18px)) minmax(0, 1fr)
-      auto;
-    grid-template-areas:
-      "lead words trail"
-      ". under under";
-    column-gap: var(--space-2);
-    row-gap: 2px;
-    align-items: start;
-    min-block-size: 28px;
-    padding-block: 5px;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .pv-lead {
-    grid-area: lead;
-    display: grid;
-    place-items: center start;
-    padding-inline-start: var(--lead-in, 0px);
-    block-size: max(1lh, var(--pv-tile, 18px));
-  }
-  .tile-at {
-    display: grid;
-    inline-size: var(--pv-tile, 18px);
-  }
-  .words {
-    grid-area: words;
-    min-inline-size: 0;
-    margin: -2px -4px;
-    padding: 2px 4px;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: inherit;
-    font: inherit;
-    font-weight: var(--weight-body);
-    text-align: start;
-    overflow-wrap: anywhere;
-    text-wrap: pretty;
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-
-    &:active {
-      background: var(--surface-fill);
-    }
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: -2px;
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .words:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .row[data-state="doing"] .words,
-  .row[data-state="you"] .words {
-    font-weight: var(--weight-strong);
-  }
-  .row[data-state="done"] .words {
-    color: var(--ink-muted);
-  }
-  .row[data-state="failed"] .words {
-    color: var(--status-fail-ink);
-  }
-  .trail {
-    grid-area: trail;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    block-size: max(1lh, var(--pv-tile, 18px));
-  }
-  .chev {
-    display: grid;
-    place-items: center;
-    color: var(--ink-subtle);
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition: rotate var(--dur-control) var(--ease-out);
-    }
-    &[data-open] {
-      rotate: 90deg;
-    }
-  }
-  .time {
-    inline-size: 7ch;
-    text-align: end;
-    color: var(--ink-muted);
-    font: var(--type-meta);
-    line-height: inherit;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  .under {
-    grid-area: under;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-2);
-    min-inline-size: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-
-    & :global(.agree) {
-      flex: none;
-    }
-  }
-  .after {
-    gap: var(--space-1);
-  }
-  .link {
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: var(--link-ink);
-    font: inherit;
-    cursor: pointer;
-
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 2px;
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .link:hover {
-      text-decoration: underline;
-    }
-  }
-  /* The body starts on the words' column. */
-  .body {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding-block: 0 var(--space-2);
-  }
-  .description {
-    padding-inline-start: calc(
-      var(--lead-w, var(--pv-tile, 18px)) + var(--space-2)
-    );
-    color: var(--ink-strong);
-    font: var(--type-body);
-  }
-  .subs {
-    --nest-gap: var(--space-row);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-row);
-    margin: 0;
-    padding: 0;
-    padding-inline-start: var(--nest-pad, var(--space-5));
-    list-style: none;
-  }
-  :global([data-coarse]) .row {
-    min-block-size: 44px;
-    padding-block: 11px;
-  }
-  /* A row in a narrow column (Lanes' steps side by side): the words take
-     the row's width beside the tile, and the trail (its badge, chevron and
-     time) stands under them, so neither is squeezed to a word a line. */
-  @container step-row (inline-size < 15rem) {
-    .row {
-      grid-template-columns: var(--lead-w, var(--pv-tile, 18px)) minmax(0, 1fr);
-      grid-template-areas:
-        "lead words"
-        ". trail"
-        ". under";
-    }
-    .trail {
-      flex-wrap: wrap;
-      block-size: auto;
-    }
-    .time {
-      inline-size: auto;
-      text-align: start;
-    }
-    /* The words are the row's last column: their press tint keeps to the
-       row, bleeding only toward the tile. */
-    .words {
-      margin-inline-end: 0;
-    }
-  }
-</style>

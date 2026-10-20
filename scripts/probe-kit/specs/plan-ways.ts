@@ -234,7 +234,7 @@ const readStories = (page: Page) =>
         rows: rows.length,
         leads: rows.flatMap((row) => {
           const mark = row.querySelector(
-            ':scope > .pv-lead :is([data-slot="step-tile"], [data-slot="tree-mark"])'
+            ':scope > [data-lead] :is([data-slot="step-tile"], [data-tree-mark])'
           );
           const box = mark?.getBoundingClientRect();
           const scale =
@@ -263,7 +263,7 @@ const readSweeps = (page: Page) =>
         run instanceof CSSAnimation &&
         run.animationName === "kit-skeleton-sweep" &&
         target instanceof Element &&
-        target.matches(".pv-sweep") &&
+        target.matches('[data-slot="sweep"]') &&
         !!live?.contains(target)
       );
     });
@@ -315,7 +315,7 @@ const readGeometry = (page: Page) =>
       // The head's words: "Plan", its figure, the task's title and stage.
       const words = [
         ...body.querySelectorAll(
-          '[data-slot="side-card"] :is(.title, .figure, .task-title, .stage), [data-slot="phone-screen"] :is(.sheet-title > span, .figure, .task-title, .stage)'
+          '[data-slot="side-card"] :is([data-slot="plan-name"], [data-slot="plan-count"], [data-slot="task-title"], [data-slot="task-stage"]), [data-slot="phone-screen"] :is([data-slot="plan-name"], [data-slot="plan-count"], [data-slot="task-title"], [data-slot="task-stage"])'
         ),
       ];
       const overlaps: string[] = [];
@@ -369,7 +369,7 @@ const readGeometry = (page: Page) =>
         }).length,
         wires: [
           ...body.querySelectorAll<SVGPathElement>(
-            'svg[data-slot="connectors"] path.wire'
+            'svg[data-slot="connectors"] path[data-slot="wire"]'
           ),
         ].map((path) => Math.round(path.getTotalLength())),
       };
@@ -470,12 +470,12 @@ const stillOf = (page: Page, selector: string) =>
     return {
       runs: runs.length,
       moving: runs.filter((run) => run.playState !== "paused").length,
-      pulses: [...(frame?.querySelectorAll(".pv-pulse") ?? [])].map((el) =>
-        Number(getComputedStyle(el).opacity)
+      pulses: [...(frame?.querySelectorAll('[data-slot="pulse"]') ?? [])].map(
+        (el) => Number(getComputedStyle(el).opacity)
       ),
       breaths: [
         ...(frame?.querySelectorAll(
-          '[data-slot="step-tile"][data-state="doing"] .glyph'
+          '[data-slot="step-tile"][data-state="doing"] [data-glyph]'
         ) ?? []),
       ].map((el) => Number(getComputedStyle(el).opacity)),
     };
@@ -788,7 +788,7 @@ const readReview = (page: Page) =>
         continue;
       }
       const scroller = body.querySelector<HTMLElement>(
-        '[data-slot="side-card"] .body, [data-slot="phone-screen"] .kit-sheet-scroll'
+        '[data-slot="plan-scroll"]'
       );
       const view = scroller?.getBoundingClientRect();
       const inView = (el: Element | null) => {
@@ -810,7 +810,7 @@ const readReview = (page: Page) =>
         ...body.querySelectorAll<HTMLElement>('[data-slot="progress-line"]'),
       ].map((line) => {
         const status = line.getAttribute("data-status") ?? "";
-        const bar = line.querySelector<HTMLElement>(".bar");
+        const bar = line;
         const fill = bar?.querySelector<HTMLElement>('[data-slot="fill"]');
         const result = status === "done" || status === "fail";
         const wantFill = pv.token(
@@ -849,7 +849,7 @@ const readReview = (page: Page) =>
         }));
       const drawn = [
         ...body.querySelectorAll<SVGPathElement>(
-          'svg[data-slot="connectors"] path.wire[data-kind="after"]'
+          'svg[data-slot="connectors"] path[data-slot="wire"][data-kind="after"]'
         ),
       ].map((path) => ({
         edge: `${path.getAttribute("data-from")}>${path.getAttribute("data-to")}`,
@@ -887,7 +887,9 @@ const readReview = (page: Page) =>
         .map((row, i) =>
           Math.round((row.top - (shownRows[i]?.bottom ?? row.top)) / zoom)
         );
-      const sheet = body.querySelector<HTMLElement>(".kit-sheet-scroll");
+      const sheet = body.querySelector<HTMLElement>(
+        '[data-slot="phone-screen"] [data-slot="plan-scroll"]'
+      );
       const description = body.querySelector(
         '[data-row="a2"] [data-slot="fold-body"][data-open] [data-slot="description"]'
       );
@@ -903,16 +905,16 @@ const readReview = (page: Page) =>
         .querySelector('[aria-labelledby^="todos"] h3')
         ?.textContent?.trim();
       // 6. Controls.
-      const answer = [...body.querySelectorAll<HTMLElement>(".act button")].map(
-        (button) => {
-          const hit = getComputedStyle(button, "::after");
-          return {
-            height: button.offsetHeight,
-            radius: getComputedStyle(button).borderTopLeftRadius,
-            hit: `${Math.round(Number.parseFloat(hit.width) || 0)}×${Math.round(Number.parseFloat(hit.height) || 0)}`,
-          };
-        }
-      );
+      const answer = [
+        ...body.querySelectorAll<HTMLElement>('[data-slot="act"] button'),
+      ].map((button) => {
+        const hit = getComputedStyle(button, "::after");
+        return {
+          height: button.offsetHeight,
+          radius: getComputedStyle(button).borderTopLeftRadius,
+          hit: `${Math.round(Number.parseFloat(hit.width) || 0)}×${Math.round(Number.parseFloat(hit.height) || 0)}`,
+        };
+      });
       const toolbar = body.querySelector<HTMLElement>(
         '[data-row="a2"] [role="toolbar"]'
       );
@@ -928,21 +930,23 @@ const readReview = (page: Page) =>
         '[data-row="a2"] [data-slot="thread"] button[type="submit"]'
       );
       // 7. Lanes: pulses only while moving, the gutter given back.
-      const pulses = [...body.querySelectorAll<SVGElement>(".pv-pulse")].map(
-        (el) => ({
-          moving: el.getAnimations().length > 0,
-          opacity: Number(getComputedStyle(el).opacity),
-        })
-      );
+      const pulses = [
+        ...body.querySelectorAll<SVGElement>('[data-slot="pulse"]'),
+      ].map((el) => ({
+        moving: el.getAnimations().length > 0,
+        opacity: Number(getComputedStyle(el).opacity),
+      }));
       const lead = (id: string) =>
         body.querySelector<HTMLElement>(
-          `[data-row="${id}"] > [data-slot="plan-row"] > .pv-lead`
+          `[data-row="${id}"] > [data-slot="plan-row"] > [data-lead]`
         )?.offsetWidth ?? 0;
       // 8. The head's gap, the working glyph at its breath's floor, titles, times.
       // The head's words as drawn: the figure's box cut by the first box
       // over it that clips (SideSurface's name keeps "Plan" and cuts what
       // trails it where the head is short).
-      const figureEl = body.querySelector('[data-slot="side-card"] .figure');
+      const figureEl = body.querySelector(
+        '[data-slot="side-card"] [data-slot="plan-count"]'
+      );
       let figure: { right: number } | undefined;
       if (figureEl) {
         let { right } = figureEl.getBoundingClientRect();
@@ -955,10 +959,10 @@ const readReview = (page: Page) =>
         figure = { right };
       }
       const glyph = body
-        .querySelector('[data-slot="side-card"] .task-glyph')
+        .querySelector('[data-slot="side-card"] [data-slot="task-glyph"]')
         ?.getBoundingClientRect();
       const doing = body.querySelector<HTMLElement>(
-        '[data-slot="step-tile"][data-state="doing"] .glyph'
+        '[data-slot="step-tile"][data-state="doing"] [data-glyph]'
       );
       let breath = 0;
       if (doing) {
@@ -992,7 +996,7 @@ const readReview = (page: Page) =>
       }
       const titles = [
         ...body.querySelectorAll<HTMLElement>(
-          '[data-delegate] [data-slot="words"] .problem'
+          '[data-delegate] [data-slot="words"] [data-slot="problem"]'
         ),
       ].map((one) => one.textContent?.trim() ?? "");
       const named = [
@@ -1043,7 +1047,7 @@ const readReview = (page: Page) =>
         ].map(tileOf),
         delegates: [
           ...body.querySelectorAll(
-            '[data-delegate] [data-slot="tree-mark"] > .face[data-slot="tile"]'
+            '[data-delegate] [data-tree-mark] > [data-slot="tile"]'
           ),
         ].map(tileOf),
       };
@@ -1194,7 +1198,7 @@ const readDrawn = (page: Page) =>
       const crossings: string[] = [];
       const paths = [
         ...body.querySelectorAll<SVGPathElement>(
-          'svg[data-slot="connectors"] path.wire'
+          'svg[data-slot="connectors"] path[data-slot="wire"]'
         ),
       ];
       const sample = (path: SVGPathElement, step: number) => {
@@ -1229,7 +1233,7 @@ const readDrawn = (page: Page) =>
         }
       }
       // 4. The upright runs on the lanes' rails; the two lines into the booking step.
-      const host = body.querySelector<HTMLElement>(".lanes");
+      const host = body.querySelector<HTMLElement>('[data-slot="lanes"]');
       let rails: { lanes: number[]; off: string[] } | null = null;
       let shared: number | null = null;
       if (host) {
@@ -1267,7 +1271,7 @@ const readDrawn = (page: Page) =>
           );
         const uprights: { x: number; what: string }[] = [];
         for (const path of host.querySelectorAll<SVGPathElement>(
-          'svg[data-slot="connectors"] path.wire'
+          'svg[data-slot="connectors"] path[data-slot="wire"]'
         )) {
           // The path is written one space between its words (Connectors).
           const words = (path.getAttribute("d") ?? "")
@@ -1322,7 +1326,7 @@ const readDrawn = (page: Page) =>
         };
         const into = [
           ...host.querySelectorAll<SVGPathElement>(
-            'svg[data-slot="connectors"] path.wire[data-kind="after"][data-to="a6"]'
+            'svg[data-slot="connectors"] path[data-slot="wire"][data-kind="after"][data-to="a6"]'
           ),
         ];
         if (into.length === 2) {
@@ -1334,7 +1338,7 @@ const readDrawn = (page: Page) =>
       }
       // 2. The opened step's title against the scroller's top fade.
       const scroller = body.querySelector<HTMLElement>(
-        '[data-slot="side-card"] .body, [data-slot="phone-screen"] .kit-sheet-scroll'
+        '[data-slot="plan-scroll"]'
       );
       const words = body.querySelector<HTMLElement>(
         '[data-row="a2"] > [data-slot="plan-row"] [data-slot="words"]'
@@ -1369,7 +1373,9 @@ const readDrawn = (page: Page) =>
       }
       // 3. Each acknowledgement: how many lines its words take.
       const acks = [
-        ...body.querySelectorAll<HTMLElement>('[data-slot="ack"] .said'),
+        ...body.querySelectorAll<HTMLElement>(
+          '[data-slot="ack"] [data-slot="ack-said"]'
+        ),
       ]
         .filter((said) => shownText(said))
         .map((said) => {
@@ -1406,10 +1412,10 @@ const readDrawn = (page: Page) =>
       }
       // 5. The phone's sheet: the paper under its last line of words.
       const sheet = body.querySelector<HTMLElement>(
-        '[data-slot="phone-screen"] .plan-sheet'
+        '[data-slot="phone-screen"] [data-slot="drawer-content"]'
       );
       const runsOn = body.querySelector<HTMLElement>(
-        '[data-slot="phone-screen"] .kit-sheet-scroll'
+        '[data-slot="phone-screen"] [data-slot="plan-scroll"]'
       );
       // The sheet's foot as drawn: its own, or the scroller's where the
       // list runs on under it; the paper from the last words above it.
@@ -1438,7 +1444,7 @@ const readDrawn = (page: Page) =>
       // it (its scrollWidth within its clientWidth), the task's chip giving
       // way first.
       const figure = body.querySelector<HTMLElement>(
-        '[data-slot="side-head"] .figure'
+        '[data-slot="side-head"] [data-slot="plan-count"]'
       );
       let count: {
         chip: string;
@@ -1460,7 +1466,7 @@ const readDrawn = (page: Page) =>
         }
         const name = figure.closest<HTMLElement>(".identity");
         const chip = body.querySelector<HTMLElement>(
-          '[data-slot="side-head"] .task-title'
+          '[data-slot="side-head"] [data-slot="task-title"]'
         );
         count = {
           text: figure.textContent?.trim() ?? "",
@@ -1480,7 +1486,8 @@ const readDrawn = (page: Page) =>
       ]
         .filter((el) => shownText(el))
         .map((el) => {
-          const said = el.querySelector<HTMLElement>(".standing-words") ?? el;
+          const said =
+            el.querySelector<HTMLElement>('[data-slot="wait-words"]') ?? el;
           const range = document.createRange();
           range.selectNodeContents(said);
           const tops = new Set(
@@ -1578,7 +1585,7 @@ const readDrawn = (page: Page) =>
       // D3. The queued delegate's words against the paper, the edge fades
       // at rest laid over them: each line drawn whole, at its weakest.
       const waits = body.querySelector<HTMLElement>(
-        '[data-row="ios-booking-9a0"] [data-slot="wait"] .standing-words'
+        '[data-row="ios-booking-9a0"] [data-slot="wait"] [data-slot="wait-words"]'
       );
       let queued: { alpha: number; contrast: number; lines: number } | null =
         null;
@@ -2582,7 +2589,7 @@ async function runOnce(
   const run = await page.evaluate(
     async ({ selector, hold }) => {
       const scroller = document.querySelector<HTMLElement>(
-        `${selector} [data-slot="side-card"] .body`
+        `${selector} [data-slot="side-card"] [data-slot="plan-scroll"]`
       );
       if (!scroller) {
         return null;
@@ -2908,7 +2915,8 @@ async function checkNarrow(kit: Kit, base: string): Promise<void> {
           if (!(row && under) || row.getBoundingClientRect().width === 0) {
             continue;
           }
-          const words = state.querySelector(".standing-words") ?? state;
+          const words =
+            state.querySelector('[data-slot="wait-words"]') ?? state;
           const range = document.createRange();
           range.selectNodeContents(words);
           const tops = new Set(
@@ -2953,7 +2961,7 @@ async function checkNarrow(kit: Kit, base: string): Promise<void> {
           });
         }
         const figure = body.querySelector<HTMLElement>(
-          '[data-slot="side-head"] .figure'
+          '[data-slot="side-head"] [data-slot="plan-count"]'
         );
         const head = body.querySelector<HTMLElement>('[data-slot="side-head"]');
         if (figure && head) {

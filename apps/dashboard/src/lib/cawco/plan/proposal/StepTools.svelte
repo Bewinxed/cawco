@@ -8,6 +8,7 @@
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconArrowDown, IconArrowUp } from "#lib/icons.js";
+  import { ON_WORDS } from "./classes";
   import type { PlanFixture, Step } from "./fixtures";
   import { midSentence, receiverOf, useView } from "./view.svelte";
 
@@ -67,10 +68,21 @@
   }
 </script>
 
-<div class="tools" data-slot="step-tools">
+<div
+  class={[ON_WORDS, "flex min-w-0 flex-col gap-space-2"]}
+  data-slot="step-tools"
+>
   <!-- The house ghost buttons at the 30px size, one group that fits one
-       line: moving is two icon buttons, named for assistive tech. -->
-  <div aria-label="Change this step" class="acts" role="toolbar">
+       line: moving is two icon buttons, named for assistive tech. It moves
+       to a line of its own as a whole rather than leaving a button
+       orphaned on the next; in a narrow column (Lanes' steps side by side)
+       it cannot stand on one line, and wraps, its moving pair kept together
+       by its gap. -->
+  <div
+    aria-label="Change this step"
+    class="-ms-space-2 flex min-w-0 flex-nowrap items-center gap-space-row @max-plan-step/step-row:ms-0 @max-plan-step/step-row:flex-wrap"
+    role="toolbar"
+  >
     <Button onclick={() => start("reword")} size="sm" variant="ghost"
       >Reword</Button
     >
@@ -108,7 +120,7 @@
   </div>
   {#if editing}
     <form
-      class="edit"
+      class="flex min-w-0 items-end gap-space-2"
       onsubmit={(event) => {
         event.preventDefault();
         save();
@@ -119,7 +131,7 @@
       >
       <input
         bind:value={draft}
-        class="field"
+        class="focus-inset min-h-c-btn-h-sm min-w-0 flex-auto rounded-sm border border-border-control bg-surface-raised px-space-2 py-space-1 type-body text-ink-strong in-data-coarse:min-h-c-touch-floor"
         id="edit-{uid}"
         onkeydown={(event) => {
           if (event.key === "Escape") {
@@ -138,15 +150,21 @@
       >
     </form>
   {/if}
-  <div class="thread" data-slot="thread">
+  <div class="flex flex-col gap-space-1" data-slot="thread">
     {#each thread as message, index (index)}
-      <p class="message" data-answer={message.answer || undefined}>
-        <span class="by">{message.by}</span>
+      <p
+        class={[
+          "m-0 rounded-sm py-space-1 type-meta wrap-anywhere text-pretty text-ink-strong",
+          message.answer ? "px-0" : "bg-surface-recess px-space-2",
+        ]}
+        data-answer={message.answer || undefined}
+      >
+        <span class="font-medium">{message.by}</span>
         <span>{message.text}</span>
       </p>
     {/each}
     <form
-      class="say"
+      class="flex min-w-0 items-end gap-space-2"
       onsubmit={(event) => {
         event.preventDefault();
         send();
@@ -155,7 +173,7 @@
       <label class="sr-only" for="say-{uid}">Comment on this step</label>
       <textarea
         bind:value={comment}
-        class="field"
+        class="focus-inset min-h-c-btn-h-sm min-w-0 flex-auto rounded-sm border border-border-control bg-surface-raised px-space-2 py-space-1 type-body text-ink-strong in-data-coarse:min-h-c-touch-floor resize-y"
         id="say-{uid}"
         onkeydown={(event) => {
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -176,88 +194,3 @@
     </form>
   </div>
 </div>
-
-<style>
-  .tools {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    padding-inline-start: calc(
-      var(--lead-w, var(--pv-tile, 18px)) + var(--space-2)
-    );
-  }
-  /* One group: it moves to a line of its own as a whole rather than
-     leaving a button orphaned on the next. */
-  .acts {
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: 2px;
-    margin-inline-start: calc(-1 * var(--space-2));
-    min-inline-size: 0;
-  }
-  .edit,
-  .say {
-    display: flex;
-    align-items: end;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .field {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    min-block-size: 30px;
-    padding: var(--space-1) var(--space-2);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    color: var(--ink-strong);
-    font: var(--type-body);
-    resize: vertical;
-
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: -2px;
-    }
-  }
-  .thread {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-  .message {
-    margin: 0;
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-    font: var(--type-meta);
-    overflow-wrap: anywhere;
-    text-wrap: pretty;
-
-    &[data-answer] {
-      background: none;
-      padding-inline: 0;
-    }
-  }
-  .by {
-    font-weight: var(--weight-strong);
-
-    &::after {
-      content: " ";
-    }
-  }
-  :global([data-coarse]) .field {
-    min-block-size: 44px;
-    font-size: 16px;
-  }
-  /* In a narrow column (Lanes' steps side by side) the group cannot stand
-     on one line: it wraps, its moving pair kept together by its gap. */
-  @container step-row (inline-size < 15rem) {
-    .acts {
-      flex-wrap: wrap;
-      margin-inline-start: 0;
-    }
-  }
-</style>

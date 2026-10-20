@@ -17,6 +17,15 @@
   } from "#lib/icons.js";
   // Page-local Solar glyph the proposal adds (not in $lib/icons.ts yet).
   import GlyphWaiting from "~icons/solar/hourglass-line-bold-duotone";
+  import {
+    CHEVRON,
+    OPEN_SESSION,
+    REPORT,
+    ROWS,
+    TIME,
+    TRAIL,
+    WORDS,
+  } from "./classes";
   import Fold from "./Fold.svelte";
   import type { Delegate } from "./fixtures";
   import ProgressLine from "./ProgressLine.svelte";
@@ -26,10 +35,16 @@
   let {
     delegate,
     pushes = false,
+    line = "share",
+    held,
   }: {
     delegate: Delegate;
     /** Pressing it pushes its page (a phone, Lanes and Crew first). */
     pushes?: boolean;
+    /** Its progress line: its share of the row beside where it stands, or the row's whole width (drawn large). */
+    line?: "share" | "whole";
+    /** Its sweep stood at this share of a run (ProgressLine `held`). */
+    held?: number;
   } = $props();
 
   const view = useView();
@@ -89,9 +104,27 @@
   }
 </script>
 
-<li class="item" data-delegate data-flip="box" data-row={delegate.id}>
-  <div class="row" data-slot="plan-row" data-status={delegate.status}>
-    <span class="pv-lead" data-tile="d:{delegate.id}">
+<!-- A row in a narrow column (under a step in Lanes' columns): the problem
+     takes the row's width beside the tile, the chevron and time under it,
+     and its line and where it stands the row's whole width under those, so
+     a state ("Waiting on you", its act Answer beside or under it) keeps one
+     line. -->
+<li
+  class="@container/delegate-row min-w-0"
+  data-delegate
+  data-flip="box"
+  data-row={delegate.id}
+>
+  <div
+    class="grid grid-cols-(--pv-cols) items-start gap-x-space-2 gap-y-space-1 min-h-c-row-lead py-c-plan-row-pad type-label text-ink-strong in-data-coarse:min-h-c-touch-floor in-data-coarse:py-c-plan-row-pad-coarse @max-plan-delegate/delegate-row:grid-cols-(--pv-cols-narrow)"
+    data-slot="plan-row"
+    data-status={delegate.status}
+  >
+    <span
+      class="col-start-1 row-start-1 grid h-(--pv-lead-h) place-items-center"
+      data-lead
+      data-tile="d:{delegate.id}"
+    >
       <SessionMark
         id={delegate.id}
         place={delegate.place}
@@ -101,33 +134,76 @@
     <button
       aria-controls={pushes ? undefined : foldId}
       aria-expanded={pushes ? undefined : open}
-      class="words press-tint"
+      class={[WORDS, "block @max-plan-delegate/delegate-row:me-0"]}
       data-slot="words"
       onclick={press}
       type="button"
     >
       <span class="sr-only">{delegate.name}: </span>
-      <span class="problem">{delegate.problem}</span>
+      <span
+        class={["font-normal", delegate.status === "done" && "text-ink-muted"]}
+        data-slot="problem">{delegate.problem}</span
+      >
     </button>
-    <span class="trail mark-line" data-slot="trail">
+    <span
+      class={[
+        "mark-line",
+        TRAIL,
+        "@max-plan-delegate/delegate-row:col-start-2 @max-plan-delegate/delegate-row:row-start-2 @max-plan-delegate/delegate-row:h-auto",
+      ]}
+      data-slot="trail"
+    >
       <span
         aria-hidden="true"
-        class="chev"
+        class={CHEVRON}
         data-box
         data-open={(open && !pushes) || undefined}
         data-slot="chevron"><IconChevronRight /></span
       >
-      <span class="num time" data-num data-slot="time">{time}</span>
-    </span>
-    <span class="under">
-      <ProgressLine {delegate} />
       <span
-        class="standing mark-line"
+        class={[
+          TIME,
+          "@max-plan-delegate/delegate-row:w-auto @max-plan-delegate/delegate-row:text-start",
+        ]}
+        data-num
+        data-slot="time">{time}</span
+      >
+    </span>
+    <!-- The progress line, then where it stands, then its act. The line
+         takes the row's room first, up to a fixed share (32%), so every
+         delegate's line starts and ends on one x where there is room. Where
+         the row is short the line gives way first, to its floor; past that,
+         what follows it goes to the next line whole, never through it, so a
+         state beside its act ("Waiting on you" by Answer) never breaks. -->
+    <span
+      class="col-span-2 col-start-2 row-start-2 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 @max-plan-delegate/delegate-row:col-start-1 @max-plan-delegate/delegate-row:row-start-3"
+    >
+      <ProgressLine
+        class={line === "whole"
+          ? "basis-full"
+          : "shrink grow-1000 basis-c-plan-line-min max-w-(--pv-line-max)"}
+        {delegate}
+        {held}
+      />
+      <!-- Words that wrap take what the line leaves them; a state in a word
+           or two (waiting on you, failed) keeps its own width, one line. -->
+      <span
+        class={[
+          "mark-line flex min-w-0 items-start gap-space-1 type-meta [&_svg]:size-icon-sm [&_svg]:flex-none",
+          delegate.wait?.kind === "you" && "flex-none text-status-attn-ink",
+          delegate.wait?.kind === "fail" && "flex-none text-status-fail-ink",
+          delegate.wait?.kind !== "you" &&
+            delegate.wait?.kind !== "fail" &&
+            "flex-1 text-ink-muted",
+        ]}
         data-kind={delegate.wait?.kind}
         data-slot="wait"
       >
         {#if delegate.wait}
-          <span class="mark-cell">
+          <!-- In a narrow row the state's glyph gives its width back: the
+               row's tile says the status in its corner, and the words in
+               their state's ink. -->
+          <span class="mark-cell @max-plan-delegate/delegate-row:hidden">
             {#if delegate.wait.kind === "you"}
               <IconNeedsYou aria-hidden="true" />
             {:else if delegate.wait.kind === "slot"}
@@ -137,13 +213,20 @@
             {/if}
           </span>
         {/if}
-        <span class="standing-words">{standing}</span>
+        <span
+          class={[
+            "min-w-0 wrap-anywhere text-pretty",
+            (delegate.wait?.kind === "you" || delegate.wait?.kind === "fail") &&
+              "whitespace-nowrap",
+          ]}
+          data-slot="wait-words">{standing}</span
+        >
       </span>
       <!-- What it needs from you, where it asks: answer its question (as
            Cofounder answers in place), or retry what failed (Relevance AI's
            Resume; every failure names its way back). -->
       {#if delegate.wait?.kind === "you"}
-        <span class="act"
+        <span class="ms-auto flex flex-none" data-slot="act"
           ><Button
             class="touch-hit"
             label="Answer"
@@ -152,7 +235,7 @@
           /></span
         >
       {:else if delegate.wait?.kind === "fail"}
-        <span class="act"
+        <span class="ms-auto flex flex-none" data-slot="act"
           ><Button
             class="touch-hit"
             label="Retry"
@@ -165,20 +248,34 @@
   </div>
   {#if !pushes}
     <Fold id={foldId} {open}>
-      <div class="body">
+      <!-- What its fold holds, on the words' column: the question or the
+           failure's reason first. -->
+      <div
+        class="flex flex-col items-start gap-space-2 pt-space-1 pb-space-2 ps-(--pv-tile-in)"
+      >
         {#if detail}
-          <p class="detail" data-kind={delegate.wait?.kind}>{detail}</p>
+          <p
+            class={[
+              "m-0 type-body wrap-anywhere text-pretty",
+              delegate.wait?.kind === "fail"
+                ? "text-status-fail-ink"
+                : "text-ink-strong",
+            ]}
+            data-kind={delegate.wait?.kind}
+          >
+            {detail}
+          </p>
         {/if}
         {#if delegate.steps.length > 0}
-          <ul class="steps">
+          <ul class={[ROWS, "self-stretch"]}>
             <SubRows steps={delegate.steps} />
           </ul>
         {/if}
         {#if delegate.report}
-          <p class="report" data-slot="report">{delegate.report}</p>
+          <p class={REPORT} data-slot="report">{delegate.report}</p>
         {/if}
-        <span class="acts">
-          <button class="open pressable mark-line" type="button">
+        <span class="flex flex-wrap items-center gap-space-3">
+          <button class={["mark-line", OPEN_SESSION]} type="button">
             <span>Open its session</span>
             <IconExternal aria-hidden="true" />
           </button>
@@ -190,263 +287,3 @@
     </Fold>
   {/if}
 </li>
-
-<style>
-  .item {
-    min-inline-size: 0;
-    container: delegate-row / inline-size;
-  }
-  .row {
-    display: grid;
-    grid-template-columns: var(--pv-tile, 18px) minmax(0, 1fr) auto;
-    grid-template-areas:
-      "lead words trail"
-      ". under under";
-    column-gap: var(--space-2);
-    row-gap: var(--space-1);
-    align-items: start;
-    min-block-size: 28px;
-    padding-block: 5px;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .pv-lead {
-    grid-area: lead;
-    display: grid;
-    place-items: center;
-    block-size: max(1lh, var(--pv-tile, 18px));
-  }
-  .words {
-    grid-area: words;
-    display: block;
-    min-inline-size: 0;
-    margin: -2px -4px;
-    padding: 2px 4px;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: inherit;
-    font: inherit;
-    text-align: start;
-    overflow-wrap: anywhere;
-    text-wrap: pretty;
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-
-    &:active {
-      background: var(--surface-fill);
-    }
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: -2px;
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .words:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .problem {
-    font-weight: var(--weight-body);
-  }
-  .row[data-status="done"] .problem {
-    color: var(--ink-muted);
-  }
-  .trail {
-    grid-area: trail;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    block-size: max(1lh, var(--pv-tile, 18px));
-  }
-  .chev {
-    display: grid;
-    place-items: center;
-    color: var(--ink-subtle);
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition: rotate var(--dur-control) var(--ease-out);
-    }
-    &[data-open] {
-      rotate: 90deg;
-    }
-  }
-  .time {
-    inline-size: 7ch;
-    text-align: end;
-    color: var(--ink-muted);
-    font: var(--type-meta);
-    line-height: inherit;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  /* The progress line, then where it stands, then its act. The line takes
-     the row's room first, up to a fixed share (32%), so every delegate's
-     line starts and ends on one x where there is room. Where the row is
-     short the line gives way first, to its 48px floor; past that, what
-     follows it goes to the next line whole, never through it, so a state
-     beside its act ("Waiting on you" by Answer) never breaks. */
-  .under {
-    grid-area: under;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-2);
-    min-inline-size: 0;
-
-    & > :global([data-slot="progress-line"]) {
-      flex: 1000 1 48px;
-      max-inline-size: max(48px, 32%);
-    }
-  }
-  .act {
-    display: flex;
-    flex: none;
-    margin-inline-start: auto;
-  }
-  /* The question or the failure's reason, first in the fold. */
-  .detail {
-    margin: 0;
-    font: var(--type-body);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-    text-wrap: pretty;
-
-    &[data-kind="fail"] {
-      color: var(--status-fail-ink);
-    }
-  }
-  /* Words that wrap take what the line leaves them; a state in a word or
-     two keeps its own width, one line. */
-  .standing {
-    display: flex;
-    flex: 1 1 0;
-    align-items: start;
-    gap: var(--space-1);
-    min-inline-size: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-
-    & :global(svg) {
-      flex: none;
-      inline-size: 12px;
-      block-size: 1lh;
-    }
-    &[data-kind="you"] {
-      color: var(--status-attn-ink);
-    }
-    &[data-kind="fail"] {
-      color: var(--status-fail-ink);
-    }
-  }
-  .standing-words {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    text-wrap: pretty;
-  }
-  .standing:is([data-kind="you"], [data-kind="fail"]) {
-    flex: none;
-
-    & .standing-words {
-      white-space: nowrap;
-    }
-  }
-  /* What its fold holds, on the words' column. */
-  .body {
-    display: flex;
-    flex-direction: column;
-    align-items: start;
-    gap: var(--space-2);
-    padding-block: var(--space-1) var(--space-2);
-    padding-inline-start: calc(var(--pv-tile, 18px) + var(--space-2));
-  }
-  .steps {
-    display: flex;
-    flex-direction: column;
-    align-self: stretch;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  /* Its report: the subagent's raised 5px card with the tile shadow. */
-  .report {
-    margin: 0;
-    padding: var(--space-2) var(--space-3);
-    border-radius: 5px;
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    color: var(--ink-strong);
-    font: var(--type-meta);
-    text-wrap: pretty;
-  }
-  .acts {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .open {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-block-size: 24px;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: var(--link-ink);
-    font: var(--type-meta);
-    cursor: pointer;
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 2px;
-    }
-  }
-  :global([data-coarse]) .row {
-    min-block-size: 44px;
-    padding-block: 11px;
-  }
-  :global([data-coarse]) .open {
-    min-block-size: 44px;
-  }
-  /* A row in a narrow column (under a step in Lanes' columns): the problem
-     takes the row's width beside the tile, the chevron and time under it,
-     and its line and where it stands the row's whole width under those, so
-     a state ("Waiting on you", its act Answer beside or under it) keeps one
-     line. */
-  @container delegate-row (inline-size < 13rem) {
-    .row {
-      grid-template-columns: var(--pv-tile, 18px) minmax(0, 1fr);
-      grid-template-areas:
-        "lead words"
-        ". trail"
-        "under under";
-    }
-    .trail {
-      block-size: auto;
-    }
-    .time {
-      inline-size: auto;
-      text-align: start;
-    }
-    /* The words are the row's last column: their press tint keeps to the
-       row, bleeding only toward the tile. */
-    .words {
-      margin-inline-end: 0;
-    }
-    /* The state's glyph gives its width back: the row's tile says the
-       status in its corner, and the words in their state's ink. */
-    .standing .mark-cell {
-      display: none;
-    }
-  }
-</style>

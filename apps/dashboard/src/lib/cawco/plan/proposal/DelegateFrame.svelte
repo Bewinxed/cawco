@@ -6,10 +6,11 @@
    * named. The line is drawn large (the row's whole width, the story's
    * weight) and its band is the raised surface in full, so its place along
    * the fill reads in a still. Each still stands its band where the run
-   * puts it at that share (ProgressLine's `kit-skeleton-sweep`, from -100%
+   * puts it at that share (ProgressLine `held`: its sweep runs from -100%
    * to 100% of its box), drawn there with no animation: a capture that
    * stops animations can't take it back to its start.
    */
+  import { ROWS } from "./classes";
   import DelegateRow from "./DelegateRow.svelte";
   import { livePlan } from "./fixtures";
   import { frameView } from "./view.svelte";
@@ -29,71 +30,26 @@
   ] as const;
 </script>
 
-<div class="moments" data-slot="pulse">
+<div
+  class="flex w-c-plan-card-w max-w-full flex-col gap-space-3"
+  data-slot="pulse-moments"
+>
   {#each MOMENTS as moment (moment.label)}
     <div
-      class="moment"
+      class="flex flex-col gap-space-1"
       data-at={moment.at}
       data-slot="pulse-moment"
-      style:--pv-at={moment.at}
     >
-      <p class="label">{moment.label}</p>
-      <div class="card">
-        <ul class="rows">
+      <p class="m-0 type-meta text-ink-muted" data-slot="moment-label">
+        {moment.label}
+      </p>
+      <div class="rounded-lg bg-surface-raised px-space-3 py-space-1 shadow-xs">
+        <ul class={ROWS}>
           {#each working as one (one.id)}
-            <DelegateRow delegate={one} />
+            <DelegateRow delegate={one} held={moment.at} line="whole" />
           {/each}
         </ul>
       </div>
     </div>
   {/each}
 </div>
-
-<style>
-  .moments {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    inline-size: 360px;
-    max-inline-size: 100%;
-  }
-  .moment {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-  .label {
-    margin: 0;
-    color: var(--ink-muted);
-    font: var(--type-meta);
-  }
-  .card {
-    padding: var(--space-1) var(--space-3);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-xs);
-  }
-  .rows {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  /* The line drawn large: the row's whole width. Its weight is the story's
-     (`lineWeight`). */
-  .card :global([data-slot="progress-line"]) {
-    flex-basis: 100%;
-    max-inline-size: none;
-  }
-  /* The band held at its moment, the raised surface in full across its
-     middle. */
-  .moment :global(.pv-sweep) {
-    animation: none;
-    translate: calc(-100% + var(--pv-at) * 200%) 0;
-    background: linear-gradient(
-      90deg,
-      transparent 0 32%,
-      var(--surface-raised) 42% 58%,
-      transparent 68% 100%
-    );
-  }
-</style>

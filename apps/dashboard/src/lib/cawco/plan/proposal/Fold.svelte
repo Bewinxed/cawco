@@ -3,8 +3,11 @@
    * A step's body opening under it: transitions-dev's Accordion expand, the
    * fold the update notice already uses (DESIGN.md, Update notice). The
    * grid row goes 0fr to 1fr over --dur-panel and back over --dur-exit on
-   * ease-out while the content fades and cross-blurs by --fold-blur; with
-   * reduced motion it only fades. Shut, it is inert, so nothing in it takes
+   * ease-out while the content fades; with reduced motion it only fades.
+   * It does not cross-blur as the update notice does: a transitioned filter
+   * can hang WebKit, so only the folds scripts/probe-kit/specs/web/
+   * safari-blurs.ts drives on WebKit take one (tokens:
+   * --transition-fold-fade). Shut, it is inert, so nothing in it takes
    * focus or a press.
    */
   import type { Snippet } from "svelte";
@@ -13,58 +16,18 @@
     $props();
 </script>
 
-<div class="fold" data-open={open || undefined} data-slot="fold-body" {id}>
-  <div class="inner" inert={!open}>
-    <div class="content">{@render children()}</div>
+<!-- No padding on the track: padding on a 0fr row leaves a strip. -->
+<div
+  class="group/fold grid grid-rows-shut transition-[grid-template-rows] duration-(--dur-exit) ease-out data-open:grid-rows-open motion-safe:data-open:duration-(--dur-panel) motion-reduce:transition-off"
+  data-open={open || undefined}
+  data-slot="fold-body"
+  {id}
+>
+  <div class="min-h-0 overflow-hidden" inert={!open}>
+    <div
+      class="opacity-0 transition-[opacity] duration-(--dur-exit) ease-out group-data-open/fold:opacity-100 group-data-open/fold:duration-(--dur-panel)"
+    >
+      {@render children()}
+    </div>
   </div>
 </div>
-
-<style>
-  .fold {
-    display: grid;
-    grid-template-rows: 0fr;
-    transition: grid-template-rows var(--dur-exit) var(--ease-out);
-
-    &[data-open] {
-      grid-template-rows: 1fr;
-      transition-duration: var(--dur-panel);
-    }
-  }
-  /* No padding on the track: padding on a 0fr row leaves a strip. */
-  .inner {
-    min-block-size: 0;
-    overflow: hidden;
-  }
-  .content {
-    opacity: 0;
-    transition: opacity var(--dur-exit) var(--ease-out);
-
-    .fold[data-open] & {
-      opacity: 1;
-      transition-duration: var(--dur-panel);
-    }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .fold {
-      transition-property: grid-template-rows;
-    }
-    .content {
-      filter: blur(var(--fold-blur));
-      transition-property: opacity, filter;
-
-      /* Open, no filter at all: `none` interpolates from the blur as
-         blur(0) does (w3.org/TR/filter-effects-1/#interpolation-of-filters:
-         "Replace none with the corresponding <filter-value-list> of the
-         other filter"), and the open content is then no filtered layer of
-         its own, drawn as the rows around it are. */
-      .fold[data-open] & {
-        filter: none;
-      }
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .fold {
-      transition: none;
-    }
-  }
-</style>
