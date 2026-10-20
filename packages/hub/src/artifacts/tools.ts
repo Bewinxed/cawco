@@ -287,10 +287,10 @@ export const artifactUpdate = {
 export const artifactRead = {
   name: "artifact_read",
   description:
-    "Read the person's picks, notes and values on one of your artifacts (or your project's pages), each " +
-    "with its page hash; a decision page adds its `program`. " +
-    "`since` (the `seq` of your last read) returns only what changed after it. No id: your newest. A canvas answers " +
-    "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
+    "Read the person's picks, notes and values on an artifact (yours, your delegation tree's, your project's " +
+    "pages), each with its page hash; a decision page adds its `program`. " +
+    "`since` (your last read's `seq`) returns only later changes. No id: your newest. A canvas answers " +
+    "its outline (a line per element; pen strokes as ink over the ids crossed) and `changed`, what " +
     "the person changed since `since` or your last read; `png: true` adds its picture. A component answers its " +
     "frames as drawn, moves, stories, the person's `dials` and `tuned`; `state` adds a frame's style delta, " +
     '`detail: "story"` a story\'s args, `render` draws it, `verify` asks the design verifier.',
@@ -316,8 +316,8 @@ export const artifactRead = {
 export const artifactList = {
   name: "artifact_list",
   description:
-    "Your artifacts (a lead: its project's too), newest first: each with its `does` and `ask`, shown, opened, open " +
-    "pins, unread changes, picks, `sent` (the person pressed Send since your last change) and `waitingOn` person or " +
+    "Your artifacts and your delegation tree's (a lead: its project's too), newest first: each with `does`, `ask`, shown, opened, open pins, unread changes, picks, `sent` (Send pressed since " +
+    "your last change) and `waitingOn` person or " +
     "session. `waiting: true` keeps those waiting on someone.",
   input: { waiting: z.boolean().optional() },
 };

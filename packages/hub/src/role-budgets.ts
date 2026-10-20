@@ -285,6 +285,11 @@ import type { Tasks } from "./tasks";
  * sentence and two one-line arguments, the parts it asks again an enum.
  * About 128 tokens for the lead alone (lead 18,338 measured beside the
  * held change). Raised deliberately, by that.
+ * 2026-10-20, after it: artifact_read and artifact_list read the delegation
+ * tree's artifacts (delegation-tree.ts `treeSessions`, so a review leaf
+ * judges a sibling's canvas handed to its parent): a clause each, paid for
+ * by cutting their own words (worker 27,534, delegate 9,991, lead 18,337
+ * measured). No budget moves.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 27_580,

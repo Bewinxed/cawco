@@ -1190,6 +1190,12 @@ export interface ArtifactServiceDeps {
    * Throws an {@link ArtifactRefusal} saying why it can't.
    */
   stageWrite: (at: StageAt, write: SheetWrite) => Promise<SheetWritten>;
+  /**
+   * Every session of `instance`'s delegation tree (delegation-tree.ts
+   * `treeSessions`): each reads, never changes, the others' artifacts of
+   * its project.
+   */
+  tree: (instance: InstanceRow) => Set<string>;
   /** Stops the server on `port` of workspace `workspace` (agent stage.ts `stopServed`): no artifact previews it any more. Never throws. */
   unserve: (machineId: string, workspace: string, port: number) => void;
   /**
@@ -1376,9 +1382,39 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return row;
   };
 
+  /**
+   * Whether `row` is another session's of `instance`'s delegation tree in
+   * the same project ({@link ArtifactServiceDeps.tree}): the tree reads it,
+   * its owner alone changes it.
+   */
+  const inTree = (instance: InstanceRow, row: ArtifactRow): boolean => {
+    const owner = holder(row);
+    return (
+      !!owner &&
+      owner.id !== instance.id &&
+      owner.projectId === instance.projectId &&
+      deps.tree(instance).has(owner.id)
+    );
+  };
+
+  /** The artifacts of the other sessions of `instance`'s delegation tree in its project ({@link inTree}). */
+  const ofTree = (instance: InstanceRow): ArtifactRow[] =>
+    [...deps.tree(instance)].flatMap((sessionId) =>
+      sessionId !== instance.id &&
+      deps.instance(sessionId)?.projectId === instance.projectId
+        ? db.ofInstance(sessionId)
+        : []
+    );
+
   /** The session's artifact `id`; refused when it is another session's or not there. */
   const own = (instance: InstanceRow, id: string): ArtifactRow => {
     const row = db.get(id);
+    if (row && row.instanceId !== instance.id && inTree(instance, row)) {
+      throw new ArtifactRefusal(
+        403,
+        `${named(row)[0]?.toUpperCase()}${named(row).slice(1)} is session ${row.instanceId?.slice(0, 8)}'s: your delegation tree reads it, and only that session changes it.`
+      );
+    }
     if (!row || row.instanceId !== instance.id) {
       throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
     }
@@ -1704,7 +1740,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /**
    * Artifact `id`, when the session answers its pins ({@link answerable}),
    * or when it is a page of a project the session leads or works in
-   * ({@link projectPage}), whatever became of its writer; refused when
+   * ({@link projectPage}), whatever became of its writer, or when another
+   * session of its delegation tree holds it ({@link inTree}); refused when
    * none. A held next version is read by whoever
    * reads its artifact: the parent reviews what its maker changed.
    */
@@ -1717,7 +1754,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const row =
       answerable(instance).find((one) => one.id === id) ??
       ledPage(instance, id) ??
-      projectPage(instance, id);
+      projectPage(instance, id) ??
+      (next && inTree(instance, next) ? next : undefined);
     if (!row) {
       throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
     }
@@ -4193,14 +4231,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /**
      * `artifact_list`: the session's artifacts (a project's lead also gets
-     * every session's of its project), newest first, each with whose move it
-     * is; `waiting` keeps those where it is somebody's.
+     * every session's of its project), and its delegation tree's
+     * ({@link ofTree}), each of another session's with its `session`,
+     * newest first, each with whose move it is; `waiting` keeps those where
+     * it is somebody's.
      */
     status: (instanceId: string, waitingOnly = false): ArtifactStatus[] => {
       const instance = sessionOf(instanceId);
-      const rows = answerable(instance).sort(
-        (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-      );
+      const rows = [
+        ...new Map(
+          [...answerable(instance), ...ofTree(instance)].map((row) => [
+            row.id,
+            row,
+          ])
+        ).values(),
+      ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       const all = rows.map((row) => statusOf(instance, row));
       return waitingOnly ? all.filter((one) => one.waitingOn.length > 0) : all;
     },

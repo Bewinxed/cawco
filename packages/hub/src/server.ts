@@ -557,7 +557,7 @@ import {
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import type { SendDelivery, SendHold } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
-import { createDelegationTree } from "./delegation-tree";
+import { createDelegationTree, treeSessions } from "./delegation-tree";
 import {
   BUILD_TITLE,
   createDesignOffers,
@@ -12005,6 +12005,8 @@ export const createServer = (
         .listProjects()
         .filter((project) => project.leadInstanceId === instance.id)
         .map((project) => project.id),
+    // A delegation tree reads its sessions' artifacts (delegation-tree.ts).
+    tree: (instance) => treeSessions(db, instance),
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
     open: async (artifact, by) => {

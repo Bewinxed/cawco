@@ -84,6 +84,10 @@
  * H7. A handed canvas with elements is drawn unopened, on the hub machine's
  *    headless screen: its create wrote them, the parent reads them and a
  *    picture, and the parent's panel still shows its own page.
+ * T1–T3. That canvas is read by a second delegate of the parent, png and
+ *    all, and listed to it as the parent's; a session of the project
+ *    outside the tree is refused it (404); the sibling's artifact_update of
+ *    it is refused and its outline stays.
  * H9. The delegate's own artifact_show of what it handed up is refused, and
  *    the parent's panel keeps its page.
  * H8. Once the parent opened it, the delegate's re-create while the
@@ -823,6 +827,10 @@ const handChecks = async ({
     `create: ${drawing.slice(Math.max(0, drawing.indexOf('{"id"')), drawing.indexOf('{"id"') + 500)}; read ${JSON.stringify(drawn)}; ${drawingSends} send(s); own ${ownWhileDrawn.shown}, drawing ${drawingShown?.shown}`
   );
 
+  if (drawingId) {
+    await treeChecks({ kit, fleet, callIn, parent, drawingId });
+  }
+
   // H9. The delegate can't open what it handed up: its artifact_show is
   // refused, and the parent's panel keeps its page.
   const delegateShow = await callDelegate("mcp__cawco__artifact_show", {
@@ -871,6 +879,103 @@ const handChecks = async ({
     canvasId: handedId,
   });
   await refusedHandChecks({ kit, fleet, parent, callDelegate });
+};
+
+/** One artifact as artifact_list answers it to another session of the tree: its holder as `session`. */
+interface TreeListed {
+  id: string;
+  session?: string;
+}
+
+/**
+ * T1–T3: a delegation tree reads its sessions' artifacts (hub
+ * delegation-tree.ts `treeSessions`). The delegate's canvas handed to the
+ * parent (`drawingId`, drawn by H7) is read by a second delegate of the
+ * same parent, picture and all, and listed to it as the parent's; a
+ * session of the project outside the tree gets the 404 it always got; the
+ * sibling's artifact_update is refused and the outline stays.
+ */
+const treeChecks = async ({
+  kit,
+  fleet,
+  callIn,
+  parent,
+  drawingId,
+}: {
+  callIn: (on: string) => (tool: string, input: object) => Promise<string>;
+  drawingId: string;
+  fleet: KitFleet;
+  kit: Kit;
+  parent: string;
+}) => {
+  const sibling = await fleet.spawn("claude", "Hand sibling", fleet.repo, {
+    parent: { instanceId: parent },
+  });
+  const outsider = await fleet.spawn("claude", "Hand outsider", fleet.repo);
+  const callSibling = callIn(sibling);
+  const callOutsider = callIn(outsider);
+  const listOf = (on: string) =>
+    fleet.api<TreeListed[]>(`/api/instances/${on}/artifacts/status`);
+
+  // T1. The sibling reads the handed canvas with its picture, listed as the parent's.
+  const read = await callSibling("mcp__cawco__artifact_read", {
+    id: drawingId,
+    png: true,
+  });
+  const readOnHub = await fleet.api<{ outline?: string; png?: string | null }>(
+    `/api/instances/${sibling}/artifacts/${drawingId}?png=true`
+  );
+  const listed = (await listOf(sibling)).find((one) => one.id === drawingId);
+  kit.check(
+    "T1: a sibling delegate reads the canvas handed to its parent, png and all, and its artifact_list has it as the parent's",
+    read.includes("Handed box") &&
+      !read.includes('"png":null') &&
+      (readOnHub.png?.length ?? 0) > 0 &&
+      listed?.session === parent,
+    `read: ${read.slice(Math.max(0, read.indexOf("{")), read.indexOf("{") + 300)}; hub png ${readOnHub.png?.length ?? "none"} chars; listed ${JSON.stringify(listed ?? null)}`
+  );
+
+  // T2. A session outside the tree gets the same 404 as before.
+  const outside = await callOutsider("mcp__cawco__artifact_read", {
+    id: drawingId,
+    png: true,
+  });
+  const outsideListed = (await listOf(outsider)).some(
+    (one) => one.id === drawingId
+  );
+  kit.check(
+    "T2: a session of the project outside the tree is refused the canvas and lists nothing of it",
+    outside.includes(`This session has no artifact ${drawingId}.`) &&
+      !outside.includes("Handed box") &&
+      !outsideListed,
+    `read: ${outside.slice(-300)}; listed ${outsideListed}`
+  );
+
+  // T3. The sibling's artifact_update is refused; the canvas keeps its outline.
+  const update = await callSibling(UPDATE, {
+    id: drawingId,
+    elements: [
+      {
+        type: "rectangle",
+        id: "sibling-box",
+        x: 200,
+        y: 0,
+        width: 160,
+        height: 60,
+        label: { text: "Sibling box" },
+      },
+    ],
+  });
+  const after = await fleet.api<{ outline: string }>(
+    `/api/instances/${parent}/artifacts/${drawingId}`
+  );
+  kit.check(
+    "T3: the sibling's artifact_update of the parent's canvas is refused, and its outline stays",
+    update.includes("only that session changes it") &&
+      after.outline.includes("Handed box") &&
+      !after.outline.includes("Sibling box"),
+    `update: ${update.slice(-300)}; outline ${after.outline.slice(0, 200)}`
+  );
 };
 
 /** The next version a held change answers (artifacts/service.ts `heldId`). */

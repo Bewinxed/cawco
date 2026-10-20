@@ -11,6 +11,7 @@ import type { DbShape, WorkItemRow } from "./db";
 import type { KeepAliveRow } from "./keep-alive";
 import { sessionLabel } from "./labels";
 import { roleOf } from "./roles";
+import { isHubParent } from "./work-items";
 
 /** `live`: items not dismissed that are not ended or ended in the last hour; `all`: every one. */
 export type DelegateListInclude = "live" | "all";
@@ -113,6 +114,40 @@ const isLive = (item: WorkItemRow, now: number): boolean =>
     item.state === "starting" ||
     item.state === "running" ||
     now - item.endedAt.getTime() < ENDED_LIVE_MS);
+
+/**
+ * Every session of `caller`'s delegation tree, `caller` included: its
+ * session row's `parentInstanceId` walked up to the top (a session with no
+ * parent, or one a routine or a design check started, which reports to no
+ * session), then every delegate under that top, one level at a time, by the
+ * same work items `delegate_list` reads ({@link newestPerSession}).
+ */
+export const treeSessions = (
+  db: Pick<DbShape, "getInstancesByIds" | "workItemsOfParents">,
+  caller: InstanceRow
+): Set<string> => {
+  let top = caller;
+  const above = new Set<string>([caller.id]);
+  while (top.parentInstanceId && !isHubParent(top.parentInstanceId)) {
+    const [parent] = db.getInstancesByIds([top.parentInstanceId]);
+    if (!parent || above.has(parent.id)) {
+      break;
+    }
+    above.add(parent.id);
+    top = parent;
+  }
+  const tree = new Set<string>([top.id, ...above]);
+  let level = [top.id];
+  while (level.length > 0) {
+    level = newestPerSession(db.workItemsOfParents(level))
+      .map((item) => item.instanceId)
+      .filter((id) => !tree.has(id));
+    for (const id of level) {
+      tree.add(id);
+    }
+  }
+  return tree;
+};
 
 export const createDelegationTree = (deps: DelegationTreeDeps) => {
   const { db } = deps;
