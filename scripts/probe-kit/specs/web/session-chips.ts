@@ -25,7 +25,7 @@
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import type { Reply, Seen } from "../../../scratch-fleet";
-import { type Kit, open, settle, type Spec, type View } from "../../kit";
+import { type Kit, open, type Spec, settle, type View } from "../../kit";
 
 const TARGET_TITLE = "Chip target";
 const TARGET_WORDS = "the target's own turn";
