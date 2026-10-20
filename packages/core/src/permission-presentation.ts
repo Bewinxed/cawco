@@ -934,7 +934,6 @@ const DELEGATE_TYPE_FIELDS = [
   "skills",
   "denyTools",
   "canDelegate",
-  "cawcoTodos",
   "connections",
 ] as const;
 

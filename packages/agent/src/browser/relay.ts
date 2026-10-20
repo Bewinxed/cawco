@@ -7,41 +7,30 @@
  * `cawco-relay-certs`, and coturn answers TLS on its one listener, 443,
  * beside plain UDP and TCP.
  *
- * One relay, met to the network as its runtime has it (core `RelayNetwork`):
- * - `host`, a native engine on Linux: coturn on the host network, which is
- *   the machine's own (coturn's README: "Or just use the host network
- *   directly (recommended, as Docker performs badly with large port
- *   ranges)");
- * - `published`, an engine in a VM (every Mac runtime; Colima or Docker
- *   Desktop on Linux): its host network is the VM's, so UDP and TCP 443 and
- *   the UDP relay range are published through the VM's port forwarder on
- *   every address of the machine (a Mac lets a process bind a port under
- *   1024 on every address without root: "iOS never had this restriction and
- *   we've now lifted it on macOS", Apple DTS, developer.apple.com/forums/
- *   thread/674179; Colima forwards a guest's 0.0.0.0 port to the host's
- *   0.0.0.0, TCP and UDP alike: "handle port forwarding to allow listening
- *   on 0.0.0.0", its environment/vm/lima/yaml.go). Every packet comes in
- *   through that one listener, a screen's from outside as this machine's
- *   own, so the address read from here is the one every peer arrives
- *   with. That forwarder rewrites every peer's address to its own
- *   ("Docker Desktop on macOS erases source addresses by design",
- *   vdaluz.com; OrbStack's issue 2333, "Orbstack not passing source IP to
- *   containers"), so coturn reports the machine's public address as its
- *   relay's (`external-ip`), takes a peer's packets without the address
- *   check the forwarder defeats (`server-relay`: "This option eliminates the
- *   IP permissions check on the packets incoming to the relay endpoints"),
- *   and lets the forwarder's own address through the private ranges it
- *   otherwise denies (`allowed-peer-ip`: "If an ip address is specified as
- *   both allowed and denied, then the ip address is considered to be
- *   allowed", coturn's turnserver.conf), that address read by a STUN binding
- *   through the published listener as each start comes up.
+ * One topology on every runtime, native Linux and VM alike: coturn's
+ * container joins the runtime's media network (media-network.ts) at .2, its
+ * one listener, UDP and TCP 443, published on every address of the machine
+ * (a VM's forwarder carries it to the machine: a Mac lets a process bind a
+ * port under 1024 on every address without root, "iOS never had this
+ * restriction and we've now lifted it on macOS", Apple DTS,
+ * developer.apple.com/forums/thread/674179; Colima forwards a guest's
+ * 0.0.0.0 port to the host's 0.0.0.0, TCP and UDP alike). Its UDP relay range
+ * stays inside its container: nothing is published for it.
  *
- * Either way coturn refuses every private and CGNAT peer but this machine's
- * own browsers: the machine's addresses their candidates name are let
- * through (`allowed-peer-ip`), read at each start, so a viewer the relay
- * alone reaches gets a browser of the relay's machine. coturn lets a peer
- * through by address alone, so TCP relaying is off (`no-tcp-relay`) and the
- * exception carries UDP only, which is all a viewer's media takes.
+ * Every relayed stream is relay to relay inside the one coturn: a viewer and a
+ * browser each hold an allocation, and their pair has both relayed addresses
+ * on the relay's public address P. `--external-ip=P/<.2>` maps P to coturn's
+ * own address as each peer address is read, before any check, and whitelists
+ * that one address (coturn 4.18.0 mainrelay.c, "Whitelisting external-ip
+ * private part"); every allocation relays from `--relay-ip=<.2>`, the one
+ * relay address, so a permission for P:port is a permission for a sibling
+ * allocation's socket and the packet is delivered inside coturn's own
+ * network namespace. Every other destination is denied: the private, CGNAT,
+ * loopback, link-local and multicast ranges, and the machine's other public
+ * addresses. A VM forwarder that erases sources ("Docker Desktop on macOS
+ * erases source addresses by design", vdaluz.com) changes nothing: no packet
+ * from outside ever enters a relay socket, which needs a permission for its
+ * source (no `server-relay`). TCP relaying is off (`no-tcp-relay`).
  *
  * The certificate is issued by DNS at Cloudflare when the hub hands the
  * person's token (certbot's `dns-cloudflare` plugin: "The Token needed by
@@ -56,8 +45,8 @@
  * UDP and TCP, a VM's rootless engine), or with one of its ports held by
  * another process, the start fails with the sentence that names the fix,
  * before any container is made. The container is the record: its labels
- * carry the settings it was made with, its DNS name and its forwarder's
- * address, so a daemon that restarts reads the relay back from it.
+ * carry the settings it was made with and its DNS name, so a daemon that
+ * restarts reads the relay back from it.
  */
 import { createHash } from "node:crypto";
 import {
@@ -79,6 +68,7 @@ import type {
   RelayFrame,
   RelayNetwork,
   RelayPorts,
+  RelayReach,
   RelayRenewed,
   RelayRuntimeNeed,
   RelayRuntimeRead,
@@ -91,7 +81,6 @@ import {
   RELAY_HTTP_PORT,
   type RelayFailure,
   STREAM_RELAY_PORT,
-  STREAM_RELAY_PORTS,
 } from "@cawco/core/stream-relay";
 import type Docker from "dockerode";
 import { browserRuntime } from "./browsers";
@@ -101,7 +90,12 @@ import {
   machineAddresses,
   mediaForwarding,
 } from "./media-forwarding";
-import { lanAddress, mappedBy } from "./relay-reach";
+import {
+  ensureMediaNetwork,
+  insidePrefix,
+  onMediaNetwork,
+  relayMediaAddress,
+} from "./media-network";
 import { unmapRelayPorts } from "./relay-router";
 import { type Runtime, runtimeInstallCommand } from "./runtime";
 
@@ -123,8 +117,6 @@ export const CERTS_VOLUME = "cawco-relay-certs";
 const RELAY_LABEL = "dev.cawco.relay";
 /** The label naming the DNS name it was made for, when it has one. */
 const HOSTNAME_LABEL = "dev.cawco.relay.hostname";
-/** The label naming the address a published relay's forwarder hands every peer, when it was let through. */
-const FORWARDER_LABEL = "dev.cawco.relay.forwarder";
 
 const LETSENCRYPT = "/etc/letsencrypt";
 /**
@@ -140,9 +132,9 @@ const PROPAGATION_S = 20;
 const UNPRIVILEGED = "/proc/sys/net/ipv4/ip_unprivileged_port_start";
 
 /**
- * How long coturn has to bind its ports once started, and on a published
- * relay its forwarder to bind them on the machine (Lima's guest agent reads
- * the guest's ports every 3 s, media-forwarding.ts).
+ * How long coturn has to bind its ports once started, and its runtime's
+ * forwarder to bind them on the machine (Lima's guest agent reads the
+ * guest's ports every 3 s, media-forwarding.ts).
  */
 const LIVE_MS = 20_000;
 const LIVE_POLL_MS = 250;
@@ -335,23 +327,6 @@ export const heldPorts = async (
   return [...said.values()];
 };
 
-/**
- * Whether the listener is bound now on UDP and TCP 443, by anyone (coturn,
- * once it is up). TLS answers on that same TCP socket, so it has no port of
- * its own to watch: the hub's `stuns:` probe proves it after the start.
- */
-const boundNow = async (tls: boolean): Promise<RelayPorts> => {
-  const tcp = await boundSockets("tcp");
-  const udp = await boundSockets("udp");
-  const has = (list: BoundSocket[]) =>
-    list.some((one) => one.port === STREAM_RELAY_PORT);
-  return {
-    udp443: has(udp),
-    tcp443: has(tcp),
-    tls: tls && has(tcp),
-  };
-};
-
 /* ------------------------------------------------------------------ */
 /* Containers                                                          */
 /* ------------------------------------------------------------------ */
@@ -382,7 +357,7 @@ export const logsOf = async (
   return at === 0 ? raw.toString("utf8") : parts.join("");
 };
 
-/** Port 80 published on every address of the machine, for certbot's HTTP challenge through a VM's forwarder. */
+/** Port 80 published on every address of the machine, for certbot's HTTP challenge. */
 const HTTP_PUBLISHED = {
   ExposedPorts: { [`${RELAY_HTTP_PORT}/tcp`]: {} },
   PortBindings: {
@@ -395,26 +370,24 @@ const HTTP_PUBLISHED = {
 /**
  * `cmd` run to its end in a certbot container with the certificate volume,
  * and the token's folder at {@link CLOUDFLARE_DIR} when given: its exit code
- * and what it said. On the host network, save a challenge over HTTP on a
- * `published` runtime, which answers on port 80 published.
+ * and what it said. On the runtime's default network; a challenge over HTTP
+ * answers on port 80 published, one by DNS needs no port, and a read of the
+ * volume (`none`) neither.
  */
 const runCertbot = async (
   docker: Docker,
   cmd: string[],
-  dns: boolean,
-  network: RelayNetwork,
+  challenge: "http" | "dns" | "none",
   tokenDir?: string
 ): Promise<{ code: number; said: string }> => {
-  const http = network === "published" && !dns;
+  const http = challenge === "http";
   const container = await docker.createContainer({
     Image: CERTBOT_IMAGE,
     Cmd: cmd,
     Labels: { [RELAY_LABEL]: "certbot" },
     ...(http ? { ExposedPorts: HTTP_PUBLISHED.ExposedPorts } : {}),
     HostConfig: {
-      ...(http
-        ? { PortBindings: HTTP_PUBLISHED.PortBindings }
-        : { NetworkMode: "host" }),
+      ...(http ? { PortBindings: HTTP_PUBLISHED.PortBindings } : {}),
       Mounts: [{ Type: "volume", Source: CERTS_VOLUME, Target: LETSENCRYPT }],
       // `z`: a shared SELinux label, so a rootless Podman on an enforcing
       // host lets the container read the folder.
@@ -429,7 +402,9 @@ const runCertbot = async (
     );
     if (ended.kind === "unanswered") {
       await container.kill().catch(() => undefined);
-      throw new RelayFailed(RELAY_FAILURES.certbotSlow(CERTBOT_MS / 1000, dns));
+      throw new RelayFailed(
+        RELAY_FAILURES.certbotSlow(CERTBOT_MS / 1000, challenge === "dns")
+      );
     }
     return { code: ended.value.StatusCode, said: await logsOf(container) };
   } finally {
@@ -486,8 +461,7 @@ const certificateEnd = async (
   const { code, said } = await runCertbot(
     docker,
     ["certificates", "--cert-name", name],
-    false,
-    "host"
+    "none"
   );
   const expiry = code === 0 ? EXPIRY.exec(said)?.[1] : undefined;
   return expiry ? Date.parse(expiry.replace(" ", "T")) : undefined;
@@ -526,105 +500,109 @@ const challengeFlags = (dns: boolean): string[] =>
     : ["--standalone"];
 
 /**
- * coturn's arguments for `args`: one listener on 443, plain UDP and TCP, and
- * with the certificate's paths TLS on that same listener (turnserver.conf:
- * "TLS & DTLS sessions can connect to the 'plain' TCP & UDP port(s), too").
- * `tls-listening-port` keeps its default, never forwarded nor minted; without
- * a certificate `--no-tls` starts no TLS listener at all.
+ * Where coturn sits: its own address on the runtime's media network
+ * (media-network.ts `relayMediaAddress`), its one listening and relay
+ * address, and the machine's public addresses other than the relay's, each
+ * denied ({@link otherPublic}).
+ */
+export interface RelaySeat {
+  media: string;
+  otherPublic: string[];
+}
+
+/**
+ * coturn's arguments for `args` in `seat`: one listener on 443, plain UDP and
+ * TCP, and with the certificate's paths TLS on that same listener
+ * (turnserver.conf: "TLS & DTLS sessions can connect to the 'plain' TCP & UDP
+ * port(s), too"). `tls-listening-port` keeps its default, never published nor
+ * minted; without a certificate `--no-tls` starts no TLS listener at all.
+ * The relay's public address maps to its one relay address, the only peer it
+ * lets through; every range below is denied, as the module's header says.
  */
 export const coturnArgs = (
   args: RelayStartArgs,
   certified: boolean,
-  network: RelayNetworkSettings
+  seat: RelaySeat
 ): string[] => [
   "-n",
   "--log-file=stdout",
+  `--listening-ip=${seat.media}`,
   `--listening-port=${STREAM_RELAY_PORT}`,
+  `--relay-ip=${seat.media}`,
+  `--external-ip=${args.address}/${seat.media}`,
+  `--min-port=${args.relayRange[0]}`,
+  `--max-port=${args.relayRange[1]}`,
   "--fingerprint",
   "--use-auth-secret",
   `--static-auth-secret=${args.secret}`,
   "--realm=cawco",
-  `--min-port=${args.relayRange[0]}`,
-  `--max-port=${args.relayRange[1]}`,
   "--no-multicast-peers",
   // No TCP relay endpoints (RFC 6062, on by default: "By default TCP relay
-  // endpoints are enabled"): a viewer's media relays over UDP alone, and the
-  // exception for this machine's own addresses below then carries no
-  // connection to another service of the machine.
+  // endpoints are enabled"): a viewer's media relays over UDP alone.
   "--no-tcp-relay",
   "--no-software-attribute",
-  // The private and CGNAT ranges, so the relay reaches no machine of the
-  // owner's networks; loopback peers are refused by coturn's default.
+  // This network, the private and CGNAT ranges, loopback, link-local and
+  // multicast: the relay reaches no machine of the owner's networks, not its
+  // own host, not its VM.
+  "--denied-peer-ip=0.0.0.0-0.255.255.255",
   "--denied-peer-ip=10.0.0.0-10.255.255.255",
+  "--denied-peer-ip=100.64.0.0-100.127.255.255",
+  "--denied-peer-ip=127.0.0.0-127.255.255.255",
+  "--denied-peer-ip=169.254.0.0-169.254.255.255",
   "--denied-peer-ip=172.16.0.0-172.31.255.255",
   "--denied-peer-ip=192.168.0.0-192.168.255.255",
-  "--denied-peer-ip=100.64.0.0-100.127.255.255",
-  "--denied-peer-ip=169.254.0.0-169.254.255.255",
-  // Except this machine's own browsers: the addresses their candidates name
-  // (container-host.ts NAT1TO1), so a viewer the relay alone reaches gets
-  // this machine's browser ("If an ip address is specified as both allowed
-  // and denied, then the ip address is considered to be allowed").
-  ...network.own.map((one) => `--allowed-peer-ip=${one}`),
+  "--denied-peer-ip=224.0.0.0-255.255.255.255",
+  ...seat.otherPublic.map((one) => `--denied-peer-ip=${one}`),
   ...(certified && args.hostname
     ? [
         `--cert=${LETSENCRYPT}/live/${args.hostname}/fullchain.pem`,
         `--pkey=${LETSENCRYPT}/live/${args.hostname}/privkey.pem`,
       ]
     : ["--no-tls"]),
-  ...addressing(args, network),
 ];
 
-/**
- * How coturn names its relay's address. On the host network: the router's or
- * cloud NAT's mapping (`<public>/<private>`), where there is one. Published:
- * inside the VM coturn holds one address of its own, so the public one alone
- * is the mapping (`-X <ip>`: "that ip will be reported as relay IP address of
- * all allocations of its own address family"), with the forwarder's
- * rewriting met as the module's header says.
- */
-const addressing = (
-  args: RelayStartArgs,
-  network: RelayNetworkSettings
-): string[] => {
-  if (network.kind === "host") {
-    return args.externalIp ? [`--external-ip=${args.externalIp}`] : [];
-  }
-  return [
-    `--external-ip=${args.address}`,
-    "--server-relay",
-    ...(network.forwarder ? [`--allowed-peer-ip=${network.forwarder}`] : []),
-  ];
+/** This machine's public IPv4 addresses other than `address`, the relay's: a machine with two public interfaces relays to neither. */
+const otherPublic = async (address: string): Promise<string[]> =>
+  (await machineAddresses()).filter(
+    (one) => !one.includes(":") && isPublicAddress(one) && one !== address
+  );
+
+/** coturn's seat on `docker`'s media network for a relay reached at `address`, the network made when absent. */
+export const relaySeat = async (
+  docker: Docker,
+  address: string
+): Promise<RelaySeat & { network: string }> => {
+  const network = await ensureMediaNetwork(docker);
+  return {
+    network: network.name,
+    media: relayMediaAddress(network),
+    otherPublic: await otherPublic(address),
+  };
 };
-
-/**
- * How a relay meets the network: on the host's, or published with the
- * address its forwarder hands peers, once read; and `own`, this machine's
- * addresses in the ranges it denies that its browsers' candidates name
- * ({@link ownPeers}).
- */
-export type RelayNetworkSettings = { own: string[] } & (
-  { kind: "host" } | { kind: "published"; forwarder?: string }
-);
-
-/**
- * This machine's own addresses a browser's candidates name (neko's NAT1TO1
- * list, media-forwarding.ts `machineAddresses`: its LAN and tailnet
- * addresses, its global IPv6 ones), read now, those of them coturn's
- * denials cover: a public one needs no exception.
- */
-export const ownPeers = async (): Promise<string[]> =>
-  (await machineAddresses()).filter((one) => !isPublicAddress(one));
 
 /** The settings a container was made with, as its label carries them. */
 const settingsHash = (
   args: RelayStartArgs,
   certified: boolean,
-  network: RelayNetworkSettings
+  seat: RelaySeat
 ): string =>
   createHash("sha256")
-    .update(JSON.stringify(coturnArgs(args, certified, network)))
+    .update(JSON.stringify(coturnArgs(args, certified, seat)))
     .digest("hex")
     .slice(0, 16);
+
+/** A tailnet's addresses: 100.64.0.0/10. */
+const TAILNET = "100.64.0.0/10";
+const PRIVATE_V4 = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"];
+
+/** This machine's own LAN and tailnet IPv4 addresses, read now: where another fleet machine's browser reaches the relay first (relay-urls.ts). */
+const reachNow = async (): Promise<RelayReach> => {
+  const v4 = (await machineAddresses()).filter((one) => !one.includes(":"));
+  return {
+    lan: v4.filter((one) => PRIVATE_V4.some((cidr) => insidePrefix(one, cidr))),
+    tailnet: v4.filter((one) => insidePrefix(one, TAILNET)),
+  };
+};
 
 /** The relay's container as the runtime has it, or null. */
 const relayContainer = async (
@@ -651,29 +629,28 @@ const removeRelayContainer = async (docker: Docker): Promise<void> => {
     });
 };
 
-/** How the relay meets the network on `runtime`: its host network where that is the machine's own, else published through its VM's forwarder. */
+/** Where `runtime`'s engine runs, for the journey's runtime step's words: on the machine itself, or in a VM. */
 const networkOf = (runtime: Runtime): RelayNetwork =>
   runtime.ownNetwork ? "host" : "published";
 
 /**
- * The relay's listener as bound now: on the host network, the machine's own
- * sockets; published, what the runtime's forwarder binds on every address of
- * the machine (media-forwarding.ts `forwardingReader`), TLS on its TCP.
+ * The relay's listener as the machine carries it now, read as a browser's
+ * media port is (media-forwarding.ts `forwardingReader`): what is bound on
+ * every address where a process forwards (a VM's forwarder, rootlesskit or
+ * pasta), else a TCP connection through a rootful engine's NAT. TLS answers
+ * on its TCP.
  */
 const listenerBound = async (
   runtime: Runtime,
   tls: boolean
 ): Promise<RelayPorts> => {
-  if (networkOf(runtime) === "host") {
-    return boundNow(tls);
-  }
   const forwarded =
     (await forwardingReader(runtime)?.read(STREAM_RELAY_PORT)) ?? "none";
   const tcp = forwarded !== "none";
   return { udp443: forwarded === "udp+tcp", tcp443: tcp, tls: tls && tcp };
 };
 
-/** Waits until coturn has bound UDP and TCP 443 (published: its forwarder has, on the machine), or throws with its last lines. */
+/** Waits until coturn's UDP and TCP 443 are carried on the machine, or throws with its last lines. */
 const waitLive = async (
   docker: Docker,
   runtime: Runtime,
@@ -712,30 +689,6 @@ const waitLive = async (
       ? RELAY_FAILURES.coturnUnbound(hostname(), missing, LIVE_MS / 1000)
       : RELAY_FAILURES.unforwarded(hostname(), missing, LIVE_MS / 1000)
   );
-};
-
-/** How many STUN bindings the forwarder's address is asked by, each given relay-reach.ts's 3 s. */
-const PROBE_TRIES = 3;
-
-/**
- * The address a published relay's forwarder hands every peer, as coturn
- * answers a STUN binding through the published listener from this machine
- * (its XOR-MAPPED-ADDRESS is the source coturn saw), and whether coturn must
- * let it through: one of the private ranges it denies, and not this machine's
- * own address (a forwarder that keeps sources). Undefined when no binding
- * answered.
- */
-const forwarderAddress = async (): Promise<
-  { address: string; allow: boolean } | undefined
-> => {
-  const from = lanAddress() ?? "127.0.0.1";
-  for (let tried = 0; tried < PROBE_TRIES; tried += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: asked again only when the one before went unanswered.
-    const address = await mappedBy(`stun:${from}:${STREAM_RELAY_PORT}`);
-    if (address) {
-      return { address, allow: !isPublicAddress(address) && address !== from };
-    }
-  }
 };
 
 /* ------------------------------------------------------------------ */
@@ -800,10 +753,9 @@ const runtimeNeed = async (
   if (forwarding.media === "udp+tcp" || !forwarding.command) {
     return null;
   }
-  const [first, last] = STREAM_RELAY_PORTS.relayRange;
   return {
     kind: "forwarder",
-    why: `${forwarding.runtime ?? "The container runtime"} forwards ${forwarding.media === "none" ? "no ports" : "only TCP"} from its VM, and the stream relay needs UDP and TCP ${STREAM_RELAY_PORT} and UDP ${first}–${last}: switch it to its forwarder that carries both.`,
+    why: `${forwarding.runtime ?? "The container runtime"} forwards ${forwarding.media === "none" ? "no ports" : "only TCP"} from its VM, and the stream relay needs UDP and TCP ${STREAM_RELAY_PORT}: switch it to its forwarder that carries both.`,
     command: forwarding.command,
   };
 };
@@ -832,11 +784,11 @@ export const relayRuntimeRead = async (
 };
 
 /**
- * The relay's listener held by another process on the host network, as its
- * failure; undefined when UDP and TCP 443 are free. The ports coturn opens
- * beside it (444, 5349, 5350) are only reserved: coturn starts without them.
- * A published relay's ports are the forwarder's to bind, and the runtime
- * refuses a start whose port is held, in its own words.
+ * The relay's listener held by another process of the machine, as its
+ * failure; undefined when UDP and TCP 443 are free, or the machine has no
+ * socket tables to read (a Mac: there the runtime refuses a start whose port
+ * is held, in its own words). The ports coturn opens beside it (444, 5349,
+ * 5350) stay inside its container.
  */
 const portsRefusal = async (): Promise<RelayFailure | undefined> => {
   const held = await heldPorts([
@@ -883,61 +835,54 @@ const readyToStart = async (args: RelayStartArgs): Promise<Runtime> => {
 };
 
 /**
- * The network settings for `runtime` with this machine's addresses `own`:
- * published, the forwarder's address `kept`'s label names, the first guess
- * until a start reads it again. A container whose label hash differs (the
- * machine's addresses changed since) is made again.
+ * The relay's ports while `kept` runs with these very settings; undefined
+ * otherwise. A container whose label hash differs (made before, or the
+ * machine's public addresses changed since) is made again.
  */
-const keptSettings = (
-  runtime: Runtime,
-  kept: Docker.ContainerInspectInfo | null,
-  own: string[]
-): RelayNetworkSettings =>
-  networkOf(runtime) === "host"
-    ? { kind: "host", own }
-    : {
-        kind: "published",
-        forwarder: kept?.Config.Labels?.[FORWARDER_LABEL],
-        own,
-      };
-
-/** The relay's ports while `kept` runs with these very settings; undefined otherwise. */
 const runningAsAsked = async (
   runtime: Runtime,
   kept: Docker.ContainerInspectInfo | null,
   args: RelayStartArgs,
-  own: string[]
+  seat: RelaySeat
 ): Promise<{ ports: RelayPorts; tls: boolean } | undefined> => {
   const tls =
     !!args.hostname && kept?.Config.Labels?.[HOSTNAME_LABEL] === args.hostname;
-  const settings = keptSettings(runtime, kept, own);
   if (
     !kept?.State.Running ||
-    kept.Config.Labels?.[RELAY_LABEL] !== settingsHash(args, tls, settings)
+    kept.Config.Labels?.[RELAY_LABEL] !== settingsHash(args, tls, seat)
   ) {
     return;
-  }
-  // A runtime restarted since may hand peers another address: then the
-  // container is made again for it.
-  if (settings.kind === "published") {
-    const seen = await forwarderAddress();
-    if (
-      !seen ||
-      (seen.allow ? seen.address : undefined) !== settings.forwarder
-    ) {
-      return;
-    }
   }
   return { ports: await listenerBound(runtime, tls), tls };
 };
 
-/** The relay live: told, and answered as its frame. */
-const liveFrame = (
+/**
+ * The machine's network changed: a live relay's frame told again with the
+ * machine's own addresses read now, so the hub mints every browser's
+ * credential with the reach the relay has (relay-urls.ts). Nothing is told
+ * while the relay is not live, or when its addresses are the same (`tell`
+ * sends a frame only when it changed).
+ */
+export const relayReachChanged = (): Promise<void> =>
+  serial(async () => {
+    if (current.state !== "live") {
+      return;
+    }
+    tell({ ...current, reach: await reachNow() });
+  });
+
+/** The relay live: told with the machine's own addresses, and answered as its frame. */
+const liveFrame = async (
   ports: RelayPorts,
   tls: boolean,
   name: string | undefined
-): RelayFrame => {
-  tell({ state: "live", ports, ...(tls && name ? { hostname: name } : {}) });
+): Promise<RelayFrame> => {
+  tell({
+    state: "live",
+    ports,
+    reach: await reachNow(),
+    ...(tls && name ? { hostname: name } : {}),
+  });
   return { kind: "stream_relay", machineId, ...current };
 };
 
@@ -956,17 +901,12 @@ export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
     const dns = !!args.cloudflareToken;
     const runtime = await relayRuntime();
     const { docker } = runtime;
-    const network = networkOf(runtime);
     if (!dns) {
       const need = await runtimeNeed(runtime, RELAY_HTTP_PORT);
       if (need) {
         throw new RelayFailed(needFailure(need, RELAY_HTTP_PORT));
       }
-      if (network === "host") {
-        await port80Free((held) =>
-          RELAY_FAILURES.certificatePort80(name, held)
-        );
-      }
+      await port80Free((held) => RELAY_FAILURES.certificatePort80(name, held));
     }
     await pullImage(docker, CERTBOT_IMAGE, () => undefined);
     await ensureVolume(docker);
@@ -985,8 +925,7 @@ export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
           "-d",
           name,
         ],
-        dns,
-        network,
+        dns ? "dns" : "http",
         dir
       )
     );
@@ -1024,14 +963,13 @@ export const startRelay = (args: RelayStartArgs): Promise<RelayFrame> =>
       const runtime = await readyToStart(args);
       const { docker } = runtime;
       const kept = await relayContainer(docker);
-      const own = await ownPeers();
-      const running = await runningAsAsked(runtime, kept, args, own);
+      const seat = await relaySeat(docker, args.address);
+      const running = await runningAsAsked(runtime, kept, args, seat);
       if (running) {
-        return liveFrame(running.ports, running.tls, args.hostname);
+        return await liveFrame(running.ports, running.tls, args.hostname);
       }
       await removeRelayContainer(docker);
-      const network = networkOf(runtime);
-      const refused = network === "host" ? await portsRefusal() : undefined;
+      const refused = await portsRefusal();
       if (refused) {
         throw new RelayFailed(refused);
       }
@@ -1051,107 +989,57 @@ export const startRelay = (args: RelayStartArgs): Promise<RelayFrame> =>
       }
       const tls = !!args.hostname;
       tell({ state: "starting", ports: NO_PORTS });
-      // Published, the forwarder's address the container before let through
-      // is the first guess; the start reads it again and makes the container
-      // anew once when it changed.
-      const settings = keptSettings(runtime, kept, own);
-      await createRelay(docker, args, tls, settings);
-      let ports = await waitLive(docker, runtime, tls);
-      if (settings.kind === "published") {
-        ports = await forwarderLetThrough(runtime, args, tls, settings, ports);
-      }
+      await createRelay(docker, args, tls, seat);
+      const ports = await waitLive(docker, runtime, tls);
       console.info(
-        `[relay] live at ${args.address} (${network})${tls ? ` with TLS for ${args.hostname}` : ""}`
+        `[relay] live at ${args.address}, coturn at ${seat.media} on ${seat.network}${tls ? ` with TLS for ${args.hostname}` : ""}`
       );
-      return liveFrame(ports, tls, args.hostname);
+      return await liveFrame(ports, tls, args.hostname);
     } catch (error) {
       return failed(error);
     }
   });
 
 /**
- * A published relay, live on `made`, with the address its forwarder hands
- * peers read and let through: the container made again when that address is
- * not the one it was made with. Its ports as live after.
+ * coturn's published listener, `port` inside its container (443) to `host`
+ * on every address of the machine (443; a probe's stand-in elsewhere): UDP
+ * and TCP. The relay range is never published.
  */
-const forwarderLetThrough = async (
-  runtime: Runtime,
-  args: RelayStartArgs,
-  tls: boolean,
-  made: RelayNetworkSettings & { kind: "published" },
-  ports: RelayPorts
-): Promise<RelayPorts> => {
-  const seen = await forwarderAddress();
-  if (!seen) {
-    throw new RelayFailed(
-      RELAY_FAILURES.unanswered(hostname(), PROBE_TRIES * 3)
-    );
-  }
-  const forwarder = seen.allow ? seen.address : undefined;
-  console.info(
-    `[relay] published through ${runtime.endpoint}: coturn sees this machine's binding from ${seen.address}${forwarder ? ", let through its denied ranges" : ""}`
-  );
-  if (forwarder === made.forwarder) {
-    return ports;
-  }
-  await removeRelayContainer(runtime.docker);
-  await createRelay(runtime.docker, args, tls, { ...made, forwarder });
-  return waitLive(runtime.docker, runtime, tls);
-};
-
-/**
- * coturn's published ports: UDP and TCP 443 and the UDP relay range, on
- * every address of the machine (each relay port to itself, as `external-ip`
- * needs: "relayed port 12345 must be always mapped to the same 'external'
- * port 12345").
- */
-const publishedPorts = (
-  args: RelayStartArgs
+export const listenerPublished = (
+  host: number,
+  port: number = STREAM_RELAY_PORT
 ): { exposed: Record<string, object>; bindings: Docker.PortMap } => {
-  const ports = [
-    `${STREAM_RELAY_PORT}/udp`,
-    `${STREAM_RELAY_PORT}/tcp`,
-    ...Array.from(
-      { length: args.relayRange[1] - args.relayRange[0] + 1 },
-      (_, at) => `${args.relayRange[0] + at}/udp`
-    ),
-  ];
+  const ports = [`${port}/udp`, `${port}/tcp`];
   return {
-    exposed: Object.fromEntries(ports.map((port) => [port, {}])),
+    exposed: Object.fromEntries(ports.map((one) => [one, {}])),
     bindings: Object.fromEntries(
-      ports.map((port) => [
-        port,
-        [{ HostIp: "0.0.0.0", HostPort: port.split("/")[0] }],
-      ])
+      ports.map((one) => [one, [{ HostIp: "0.0.0.0", HostPort: String(host) }]])
     ),
   };
 };
 
-/** coturn's container, made and started: on the host network, or its ports published. */
+/** coturn's container, made and started at its seat on the media network, its listener published. */
 const createRelay = async (
   docker: Docker,
   args: RelayStartArgs,
   tls: boolean,
-  network: RelayNetworkSettings
+  seat: RelaySeat & { network: string }
 ): Promise<void> => {
-  const published =
-    network.kind === "published" ? publishedPorts(args) : undefined;
+  const published = listenerPublished(STREAM_RELAY_PORT);
+  const placed = onMediaNetwork(seat.network, seat.media);
   const container = await docker.createContainer({
     name: RELAY_CONTAINER,
     Image: RELAY_IMAGE,
-    Cmd: coturnArgs(args, tls, network),
+    Cmd: coturnArgs(args, tls, seat),
     Labels: {
-      [RELAY_LABEL]: settingsHash(args, tls, network),
+      [RELAY_LABEL]: settingsHash(args, tls, seat),
       ...(tls && args.hostname ? { [HOSTNAME_LABEL]: args.hostname } : {}),
-      ...(network.kind === "published" && network.forwarder
-        ? { [FORWARDER_LABEL]: network.forwarder }
-        : {}),
     },
-    ...(published ? { ExposedPorts: published.exposed } : {}),
+    ExposedPorts: published.exposed,
+    NetworkingConfig: placed.NetworkingConfig,
     HostConfig: {
-      ...(published
-        ? { PortBindings: published.bindings }
-        : { NetworkMode: "host" }),
+      NetworkMode: placed.NetworkMode,
+      PortBindings: published.bindings,
       RestartPolicy: { Name: "unless-stopped" },
       Mounts: tls
         ? [
@@ -1230,9 +1118,8 @@ export const renewRelay = (args: {
       throw new RelayFailed(RELAY_FAILURES.renewNone(hostname()));
     }
     const dns = !!args.cloudflareToken;
-    const network = networkOf(runtime);
     const before = await certificateEnd(docker, name);
-    if (!dns && network === "host") {
+    if (!dns) {
       await port80Free((held) =>
         RELAY_FAILURES.renewPort80(hostname(), name, held)
       );
@@ -1248,8 +1135,7 @@ export const renewRelay = (args: {
           "--deploy-hook",
           DEPLOY_HOOK,
         ],
-        dns,
-        network,
+        dns ? "dns" : "http",
         dir
       )
     );
@@ -1263,7 +1149,7 @@ export const renewRelay = (args: {
     if (renewed) {
       await docker.getContainer(RELAY_CONTAINER).restart({ t: 5 });
       const ports = await waitLive(docker, runtime, true);
-      tell({ state: "live", ports, hostname: name });
+      await liveFrame(ports, true, name);
       console.info(`[relay] certificate for ${name} renewed; coturn restarted`);
     }
     return { renewed, expiresAt: after ?? before ?? 0 };
@@ -1293,7 +1179,7 @@ export const watchRelay = async (): Promise<void> => {
         await docker.getContainer(RELAY_CONTAINER).start();
       }
       const ports = await waitLive(docker, found, !!name);
-      tell({ state: "live", ports, ...(name ? { hostname: name } : {}) });
+      await liveFrame(ports, !!name, name);
     } catch (error) {
       tell({
         state: "failed",

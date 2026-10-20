@@ -1,14 +1,16 @@
 /**
- * A project's Caw, as one page holds him: the hub's view of the lead (on or
- * off, harness, the session, why it cannot start), and what his face and
- * the head's line say now, derived from live sources only (PRODUCT.md,
- * Derived liveness). The landing page's head draws it; a thread tab reads
- * the same status.
+ * A project's Caw, as one page holds him: on or off, his harness and model,
+ * his session and whether he can start, from what the dashboard holds (the
+ * project's row and the machines), and what his face and the head's line
+ * say now, derived from live sources only (PRODUCT.md, Derived liveness).
+ * The hub's view of him (`GET …/caw`) is read for what only it carries:
+ * what he started that still runs, what his own turn answers, his spend.
+ * The landing page's head draws it; a thread tab reads the same status.
  *
  * The status (fable-lead-switch.md §3, design §2 States):
  * - `reconnecting` while the hub is unreachable, `loading` while another
  *   project's board is on its way past its grace;
- * - `loading` until his view is first read (shown past its grace);
+ * - `loading` until the project's row is read (shown past its grace);
  * - `needs-you` while the lead has a question parked in a thread;
  * - `working` while the lead session is in a turn of its own, on or off;
  * - `sleeping` otherwise while he is off: only your words wake him;
@@ -37,6 +39,7 @@ import {
   cawco,
   cawOf,
   configureCaw,
+  type ProjectRow,
   threadsOf,
 } from "../client.svelte";
 import type { CawStatus } from "../home/Caw.svelte";
@@ -77,13 +80,38 @@ function breathMs(): number {
   return (token.endsWith("ms") ? value : value * 1000) * 4;
 }
 
+/**
+ * Why Caw cannot start, when no machine is online: the one reason the hub
+ * gives (caw.ts `problemOf`: his standing session and every checkout he
+ * starts in need one).
+ */
+export const CAW_NO_MACHINE =
+  "No machine is online, so Caw can’t start. Bring a machine online, then write here.";
+
 /** What the head's line says when Caw has something: words, or his ask as a link. */
 export type CawWords =
   | { kind: "say"; text: string }
   | { kind: "ask"; more: number; text: string; threadId: string };
 
+/**
+ * What the page holds for its Caw: the project's id and row (its load's,
+ * then the dashboard's live one), whether a machine was online as it loaded,
+ * its tasks, and whether it is on its way to another project past the wait's
+ * grace (Caw stands in for it: design §2, Loading).
+ */
+export interface CawPage {
+  id: () => string;
+  machinesOnline: () => boolean;
+  project: () => ProjectRow | null;
+  reading: () => boolean;
+  tasks: () => TaskSummary[];
+}
+
 export class CawLead {
-  /** The hub's view, once read. */
+  /**
+   * The hub's view, once read: what only it carries is read from it (what
+   * he started that still runs, what his turn answers, his spend).
+   */
   view = $state<CawView | null>(null);
   /** The last read or change the hub refused, in its words. */
   refused = $state<string | null>(null);
@@ -92,9 +120,9 @@ export class CawLead {
   /** The task that just landed, held for two breaths. */
   landed = $state<string | null>(null);
   /**
-   * His first read has outlasted --dur-wait-grace: only then does Caw stand
-   * in for the wait (The Real Wait Rule); a read that lands sooner shows
-   * nothing of its own.
+   * The project's row has not come within --dur-wait-grace: only then does
+   * Caw stand in for the wait (The Real Wait Rule); a row that comes sooner
+   * shows nothing of its own.
    */
   waited = $state(false);
   /**
@@ -131,34 +159,30 @@ export class CawLead {
   #landedTimer: ReturnType<typeof setTimeout> | undefined;
 
   readonly #projectId: () => string;
+  readonly #row: () => ProjectRow | null;
+  readonly #loadedOnline: () => boolean;
   readonly #tasks: () => TaskSummary[];
   readonly #reading: () => boolean;
-  /** The project `view` was read for. */
-  #viewFor: string | null = null;
+  /** The project this Caw is now ({@link follow}). */
+  #for: string | null = null;
   /** The project whose arrival opened or kept his panel ({@link arrive}). */
   #arrivedFor: string | null = null;
 
-  /**
-   * `reading`: the page is on its way to another project and the wait has
-   * outlasted its grace; Caw stands in for it (design §2, Loading).
-   */
-  constructor(
-    projectId: () => string,
-    tasks: () => TaskSummary[],
-    reading: () => boolean
-  ) {
-    this.#projectId = projectId;
-    this.#tasks = tasks;
-    this.#reading = reading;
+  constructor(page: CawPage) {
+    this.#projectId = page.id;
+    this.#row = page.project;
+    this.#loadedOnline = page.machinesOnline;
+    this.#tasks = page.tasks;
+    this.#reading = page.reading;
     // The wait is the seat's, from the moment it stands: a page still
-    // connecting has not begun his read, and the seat must not stand empty
-    // past the grace while it does (design §2, Loading). A server render
-    // has no wait to stand in for.
+    // connecting has not read the projects, and the seat must not stand
+    // empty past the grace while it does (design §2, Loading). A server
+    // render has no wait to stand in for.
     if (!browser) {
       return;
     }
     setTimeout(() => {
-      if (this.view === null && this.refused === null) {
+      if (this.project === null) {
         this.waited = true;
       }
     }, dur("--dur-wait-grace"));
@@ -187,15 +211,32 @@ export class CawLead {
   }
 
   /**
-   * The page has read the project's board and his view: his panel opens as
+   * Another project's Caw is not this one's: his view goes, and his panel
+   * and your words to the last project's Caw with it.
+   */
+  #follow(id: string): void {
+    if (this.#for === id) {
+      return;
+    }
+    if (this.#for !== null) {
+      this.#open = false;
+      this.draft.text = "";
+    }
+    this.view = null;
+    this.#for = id;
+  }
+
+  /**
+   * The page has read the project's board and its row: his panel opens as
    * the person last left it here, else while the board is empty and he can
    * take words (a project just made opens on him). Once per project.
    */
   arrive(emptyBoard: boolean): void {
     const id = this.#projectId();
-    if (!id || this.#arrivedFor === id || this.#viewFor !== id) {
+    if (!id || this.#arrivedFor === id || !this.project) {
       return;
     }
+    this.#follow(id);
     this.#arrivedFor = id;
     const kept = stored("local", openKey(id));
     this.#open = kept === null ? emptyBoard : kept === "1";
@@ -204,42 +245,48 @@ export class CawLead {
   /** Reads his view; the page calls it on arrival and after a reconnect. */
   async read(): Promise<void> {
     const id = this.#projectId();
-    // Another project's Caw is not this one's: his view goes, and a Caw
-    // already on screen holds `loading` until this project's is read.
-    if (this.#viewFor !== id) {
-      // A wait already past its grace (the page still connecting) stands.
-      this.waited = this.waited || this.view !== null || this.#reading();
-      this.view = null;
-      // His panel and your words to the last project's Caw are not this one's.
-      if (this.#viewFor !== null) {
-        this.#open = false;
-        this.draft.text = "";
-      }
-    }
-    const grace = this.view
-      ? undefined
-      : setTimeout(() => {
-          this.waited = this.view === null;
-        }, dur("--dur-wait-grace"));
+    this.#follow(id);
     try {
       const view = await cawOf(id);
       if (id === this.#projectId()) {
         this.view = view;
-        this.#viewFor = id;
         this.refused = null;
       }
     } catch (error) {
       this.refused = failureWords(error);
-    } finally {
-      clearTimeout(grace);
-      this.waited = false;
     }
   }
 
-  /** Caw is drawn: his view is read, the read outlasted its grace, or the hub is away. */
+  /**
+   * The project as the hub lists it, the page's (its load's read, then the
+   * dashboard's own row): his switch, harness, model and session, kept
+   * current by `projects.changed` (caw.ts `setLead`, `configure`) and by his
+   * change's own answer (client `configureCaw`).
+   */
+  readonly project = $derived.by(() => this.#row());
+  /** On or off; null until the project is read. */
+  readonly on = $derived(this.project ? this.project.caw : null);
+  /** His harness and model (null: the harness's default), the project's settings. */
+  readonly harness = $derived(this.project?.cawHarness ?? null);
+  readonly model = $derived(this.project?.cawModel ?? null);
+  /** His session's id, while the hub has one. */
+  readonly leadId = $derived(this.project?.leadInstanceId ?? null);
+  /**
+   * A machine is online for him to start on: the dashboard's machines once
+   * the socket's first snapshot is in, the page load's read until then.
+   */
+  readonly #machinesOnline = $derived.by(() =>
+    cawco.liveRead ? cawco.onlineMachines.length > 0 : this.#loadedOnline()
+  );
+  /** Why he cannot start now, in a sentence; null when he can. */
+  readonly problem = $derived(this.#machinesOnline ? null : CAW_NO_MACHINE);
+  /** You can talk to him, on or off: the project is read and a machine is online for him to start on. */
+  readonly canTalk = $derived(this.project !== null && this.#machinesOnline);
+
+  /** Caw is drawn: the project is read, the read outlasted its grace, or the hub is away. */
   readonly shown = $derived.by(
     () =>
-      this.view !== null ||
+      this.project !== null ||
       this.waited ||
       this.#reading() ||
       cawco.hub === "unreachable"
@@ -275,7 +322,7 @@ export class CawLead {
 
   /** The lead's session, while the hub has one. */
   readonly lead = $derived.by(() => {
-    const id = this.view?.leadInstanceId;
+    const id = this.leadId;
     return id ? (cawco.instanceIndex.byId.get(id) ?? null) : null;
   });
 
@@ -285,7 +332,7 @@ export class CawLead {
    * (parked under their own id, tagged to one of this project's threads).
    */
   readonly asks = $derived.by((): BlockedRequest[] => {
-    const id = this.view?.leadInstanceId;
+    const id = this.leadId;
     const threads = new Set(
       threadsOf(this.#projectId()).map((thread) => thread.id)
     );
@@ -308,7 +355,7 @@ export class CawLead {
     if (this.#reading()) {
       return "loading";
     }
-    if (!this.view) {
+    if (!this.project) {
       return "loading";
     }
     if (this.asks.length > 0) {
@@ -316,11 +363,11 @@ export class CawLead {
     }
     // His own turn: an attempt he parents running is not Caw working. Off,
     // he still answers your words, and works while he does.
-    const leadId = this.view.leadInstanceId;
+    const { leadId } = this;
     if (leadId && cawco.busyOf(leadId)) {
       return "working";
     }
-    if (!this.view.on) {
+    if (!this.project.caw) {
       return "sleeping";
     }
     if (this.retrying) {
@@ -395,9 +442,7 @@ export class CawLead {
         };
       }
       case "working": {
-        const tool = this.view?.leadInstanceId
-          ? cawco.currentToolOf(this.view.leadInstanceId)
-          : null;
+        const tool = this.leadId ? cawco.currentToolOf(this.leadId) : null;
         return {
           kind: "say",
           text: tool

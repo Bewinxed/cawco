@@ -3,8 +3,9 @@
  * server, coturn, run by the agent of a machine the internet reaches, so a
  * browser's stream reaches any screen through any network. The hub keeps the
  * shared secret and mints short-lived credentials from it (the TURN REST API
- * scheme coturn's `use-auth-secret` reads); the relay's machine runs it on the
- * host network. These are the shapes every hop speaks: its ports, the
+ * scheme coturn's `use-auth-secret` reads); the relay's machine runs it in its
+ * container on the runtime's media network, its listener published on every
+ * address of the machine. These are the shapes every hop speaks: its ports, the
  * daemon's {@link RelayFrame}, the hub's commands, the guided journey that
  * brings a relay up ({@link RelayJourneyView}), and the words every place
  * that draws it says alike (WORDS.md `stream relay`): the dashboard's card,
@@ -19,27 +20,20 @@ import { CAWCO_ENV, readEnv } from "./index";
  * (turnserver.conf: "TLS & DTLS sessions can connect to the 'plain' TCP & UDP
  * port(s), too"). coturn opens the rest itself on one listening IP: the alt
  * UDP side on 444, and with a certificate its TLS listener on 5349 and 5350,
- * never forwarded and never minted. Its allocations relay through the UDP
- * range. No preview, on the hub or on any agent, ever takes one of these (hub
- * preview.ts, agent hub-loopback.ts).
+ * never forwarded and never minted. No preview, on the hub or on any agent,
+ * ever takes one of these (hub preview.ts, agent hub-loopback.ts).
  *
- * The range lies outside every ephemeral range a machine of the fleet hands
- * out (Linux: "The default values are 32768 and 60999", kernel ip-sysctl;
- * macOS: `net.inet.ip.portrange.first: 49152`, `last: 65535`), so no
- * process's outgoing socket ever holds one of its ports: a VM's forwarder
- * that finds one held binds nothing for it, while coturn inside the VM still
- * allocates it. It lies below Kubernetes' NodePort range too (30000–32767,
- * the k3s a VM's runtime may run) and apart from the hub's and the browsers'
- * ports. Its place is our call; its size is the relay's 249 allocations.
+ * Its allocations relay through the UDP range, inside coturn's own container
+ * alone: the range is never published nor forwarded. Every relayed stream is
+ * relay to relay inside the one coturn (agent relay.ts), which needs no
+ * inbound port. Its place is our call; its size is the relay's 249
+ * allocations, about 40 relayed streams at once.
  */
 export const STREAM_RELAY_PORTS = {
   udp: [443, 444],
   tcp: [443, 5349, 5350],
   relayRange: [24_000, 24_248],
 } as const;
-
-/** The relay range as the person reads it: `24000–24248`. */
-export const RELAY_RANGE_WORDS = `${STREAM_RELAY_PORTS.relayRange[0]}–${STREAM_RELAY_PORTS.relayRange[1]}`;
 
 /** The one port the relay listens on and its URLs name, UDP and TCP, plain and TLS. */
 export const STREAM_RELAY_PORT = 443;
@@ -50,12 +44,10 @@ export const RELAY_HTTP_PORT = 80;
 /** The relay's UDP relay range, as `relay.start` carries it. */
 export type RelayRange = readonly [first: number, last: number];
 
-/** Whether `port` is one of the stream relay's, on either transport. */
+/** Whether `port` is one of the ports the stream relay may hold on its machine, on either transport. */
 export const isStreamRelayPort = (port: number): boolean =>
   (STREAM_RELAY_PORTS.tcp as readonly number[]).includes(port) ||
-  (STREAM_RELAY_PORTS.udp as readonly number[]).includes(port) ||
-  (port >= STREAM_RELAY_PORTS.relayRange[0] &&
-    port <= STREAM_RELAY_PORTS.relayRange[1]);
+  (STREAM_RELAY_PORTS.udp as readonly number[]).includes(port);
 
 /**
  * The STUN server a machine asks for the public address its router maps it
@@ -99,21 +91,30 @@ export interface RelayFrame {
   ports: RelayPorts;
   /** How far an image pull is, while `state` is `pulling`. */
   progress?: { done: number; total: number };
+  /** The relay's machine's own addresses, read as it goes live: where another fleet machine's browser reaches it without the internet. */
+  reach?: RelayReach;
   state: StreamRelayState;
   /** Why it is `failed`, in WORDS.md's error formula ({@link RELAY_FAILURES}). */
   why?: string;
 }
 
+/**
+ * The relay's machine's own IPv4 addresses (agent media-forwarding.ts
+ * `machineAddresses`): its LAN ones (RFC 1918) and its tailnet ones
+ * (100.64/10). Another fleet machine's browser names the relay at one of
+ * them before its public address (agent relay-urls.ts), through the listener
+ * published on every address.
+ */
+export interface RelayReach {
+  lan: string[];
+  tailnet: string[];
+}
+
 /** Hub → daemon: run the relay with the hub's secret, answering its {@link RelayFrame} once live. */
 export const RELAY_START = "relay.start";
 export interface RelayStartArgs {
-  /** The address the relay is reached at, as its URLs name it. */
+  /** The address the relay is reached at, as its URLs name it: coturn reports it for every allocation. */
   address: string;
-  /**
-   * coturn's `external-ip`, where the address is not one of the machine's
-   * own (behind a router, a cloud NAT): `<public>/<private>`.
-   */
-  externalIp?: string;
   /** A DNS name pointing at the machine whose certificate stands ({@link RELAY_CERTIFY}): TLS answers on 443. */
   hostname?: string;
   relayRange: RelayRange;
@@ -161,12 +162,12 @@ export interface RelayRenewed {
 export const RELAY_RUNTIME = "relay.runtime";
 
 /**
- * How the relay meets the network on a runtime. `host`: coturn on the host
- * network, which is the machine's own (a native engine on Linux). `published`:
- * the runtime's engine runs in a VM (every Mac runtime; Colima or Docker
- * Desktop on Linux), whose host network nothing outside reaches, so coturn's
- * ports are published through the VM's port forwarder on every address of
- * the machine.
+ * Where the runtime's engine runs, for the journey's runtime step's words:
+ * `host`, on the machine itself (a native engine on Linux), whose rootless
+ * form must be let bind 443; `published`, in a VM (every Mac runtime; Colima
+ * or Docker Desktop on Linux), whose port forwarder must carry UDP and TCP.
+ * The relay runs alike on both: its container on the media network, its
+ * listener published on every address of the machine.
  */
 export type RelayNetwork = "host" | "published";
 
@@ -269,8 +270,6 @@ export interface RelayPortHealth {
 export interface RelayCandidate {
   /** The address the relay would be reached at. */
   address: string;
-  /** coturn's `external-ip`, when the address is not one of its interfaces'. */
-  externalIp?: string;
   /** Behind a router: its address on the router's network, for the forwards. */
   lan: string | null;
   machineId: string;
@@ -329,18 +328,10 @@ export type RelayStep =
   | {
       step: "router";
       /**
-       * `refused`: no UPnP or NAT-PMP answered; `partial`: the router opened
-       * 443 and capped the relay range; `by-hand`: forwarded by hand, proven
-       * only by the last step.
+       * `refused`: no UPnP or NAT-PMP answered; `by-hand`: forwarded by hand,
+       * proven only by the last step.
        */
-      state:
-        | "waiting"
-        | "needs"
-        | "asking"
-        | "refused"
-        | "partial"
-        | "by-hand"
-        | "done";
+      state: "waiting" | "needs" | "asking" | "refused" | "by-hand" | "done";
       how?: RelayMapHow;
       /** TCP 80 is forwarded too: the certificate is issued and renewed over HTTP. */
       http?: boolean;
@@ -540,9 +531,9 @@ export const relayWhen = (at: number, now = Date.now()): string => {
   return same ? `today ${time}` : `${relayDay(at)}, ${time}`;
 };
 
-/** The forwards to make on a router, as one line to copy: the listener and the relay range, TCP 80 for a certificate over HTTP. */
+/** The forwards to make on a router, as one line to copy: the listener, and TCP 80 for a certificate over HTTP. */
 const forwardsOf = (lan: string, http: boolean): string =>
-  `UDP 443 · TCP 443 · UDP ${RELAY_RANGE_WORDS}${http ? " · TCP 80" : ""} → ${lan}`;
+  `UDP 443 · TCP 443${http ? " · TCP 80" : ""} → ${lan}`;
 
 /* ------------------------------------------------------------------ */
 /* Failures                                                             */
@@ -586,10 +577,6 @@ export const RELAY_FAILURES = {
     seconds: number
   ): RelayFailure => ({
     why: `${couldNotStart(machine)} its container runtime did not forward ${ports.join(", ")} on every address of the machine within ${seconds} s, so nothing outside reaches the stream relay. Check that the runtime forwards ports to the network (OrbStack: Expose ports to LAN on) and that nothing else holds them, then start the stream relay again.`,
-  }),
-  /** The relay published and bound, and no STUN binding answered through the runtime's forwarder. */
-  unanswered: (machine: string, seconds: number): RelayFailure => ({
-    why: `${couldNotStart(machine)} it answered no STUN binding through its container runtime's port forwarder on UDP ${STREAM_RELAY_PORT} within ${seconds} s. Check that the runtime forwards UDP (restart it if it stopped), then start the stream relay again.`,
   }),
   noRuntime: (machine: string, install: string): RelayFailure => ({
     why: `${couldNotStart(machine)} it runs in a container, and this machine has no container runtime. Install one with ${install}, then start the stream relay again.`,
@@ -679,7 +666,7 @@ export const STREAM_RELAY_WORDS = {
   machine: "Pick the machine",
   machineDone: (machine: RelayMachine) =>
     `Runs on ${machine.name} · ${machine.address}${machine.lan ? ", behind a router" : ""}`,
-  none: `No machine of yours is reached from the internet yet. Add one (a small server at a host works), or open UDP and TCP 443 and UDP ${RELAY_RANGE_WORDS} on your router to a machine here, then come back.`,
+  none: "No machine of yours is reached from the internet yet. Add one (a small server at a host works), or open UDP and TCP 443 on your router to a machine here, then come back.",
   runHere: "Run the stream relay here",
   behindRouter: "behind a router",
   offline: "offline",
@@ -732,10 +719,7 @@ export const STREAM_RELAY_WORDS = {
   openingPorts: "Asking the router…",
   routerRefused:
     "Your router didn't answer UPnP or NAT-PMP. Forward these on it, then come back; the last step proves they're open.",
-  routerPartial: (how: RelayMapHow) =>
-    `The router opened UDP and TCP 443 (${how}) but not UDP ${RELAY_RANGE_WORDS}. Forward that range on the router by hand; the last step proves it.`,
   forwards: forwardsOf,
-  rangeForward: (lan: string) => `UDP ${RELAY_RANGE_WORDS} → ${lan}`,
   forwardsLabel: "The forwards to make",
   copyRecord: "Copy record",
   copyForwards: "Copy forwards",

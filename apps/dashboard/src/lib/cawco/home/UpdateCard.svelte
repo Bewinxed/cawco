@@ -17,6 +17,7 @@
 </script>
 
 <script lang="ts">
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { reflowsFrom, reread } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -195,9 +196,7 @@
     if (!(port && row)) {
       return;
     }
-    let frame = 0;
     const read = () => {
-      frame = 0;
       const foot =
         port.getBoundingClientRect().bottom -
         Number.parseFloat(getComputedStyle(port).paddingBottom);
@@ -207,16 +206,15 @@
           node.getBoundingClientRect().top < foot
       );
     };
-    const soon = () => {
-      frame ||= requestAnimationFrame(read);
-    };
+    // Read in the next frame (frameObserver), once, whatever asked: a
+    // resize, or the list scrolling (`soon`).
+    const sizes = frameObserver(read);
+    const soon = () => sizes.request();
     port.addEventListener("scroll", soon, { passive: true });
-    const sizes = new ResizeObserver(soon);
     sizes.observe(row);
     sizes.observe(port);
     soon();
     return () => {
-      cancelAnimationFrame(frame);
       port.removeEventListener("scroll", soon);
       sizes.disconnect();
     };

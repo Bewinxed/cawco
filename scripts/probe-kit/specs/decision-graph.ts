@@ -23,10 +23,18 @@
  *     picked and names the option gone; its state still holds both picks;
  *     its problems say the broken `after`s with their page and card, and
  *     both orphaned picks.
- * (d) A page whose artifact is deleted still draws its cards, unpicked,
- *     said under the graph.
+ * (g) The page drawn on its session's origin: the card whose picked option
+ *     went stands open, "Not picked", never folded to an empty "Decided:";
+ *     a pick on an option it offers folds it to "Decided: Per machine".
+ * (d) artifact_delete of a project's page takes its page.oui out of the
+ *     folder with it, and the graph draws none of its cards.
+ * (e) A project's page outlives its writing session: the session deleted,
+ *     its row stays with no session, and the graph draws its card picked.
+ * (f) A later session's create of the page's name in the project is a
+ *     revision of that page: the same artifact, its picks kept.
  */
-import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
+import type { Page } from "playwright-core";
+import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 const respond = (request: Seen): Reply => ({
@@ -65,6 +73,22 @@ linkyesd = Diagram("flowchart LR\\nSeat --> Machine`;
 const REVISION = `root = Decisions("Price the hosted plan", [shape])
 shape = Decision("shape", "What does a customer pay for?", [team, machine], "A machine is what the fleet costs to run.")
 team = Option("team", "Per team", "One price for the whole team.", false, [], "A big team pays what a small one does.")`;
+
+/** A later session's page that comes after the pricing card left standing: the graph's edge once launch is gone. */
+const ROLLOUT = `root = Decisions("Plan the rollout", [go])
+go = Decision("go", "Does the rollout start now?", [ship, hold], "The price is set first.", [], ["pricing#shape"])
+ship = Option("ship", "Ship it", "Goes out this week.", true, [], "Less time to polish.")
+hold = Option("hold", "Hold it", "Waits for the next release.", false, [], "The waitlist waits.")`;
+
+/** A card's head as the page draws it: its state line, and whether it folded. */
+const cardHead = (page: Page, id: string) =>
+  page.evaluate((card) => {
+    const root = document.getElementById(`decision-${card}`);
+    return {
+      line: root?.querySelector("header .dp-state")?.textContent?.trim() ?? "",
+      decided: !!root?.hasAttribute("data-decided"),
+    };
+  }, id);
 
 interface Broken {
   after?: Record<string, string[]>;
@@ -226,21 +250,194 @@ const run = async (kit: Kit) => {
     JSON.stringify(graph.problems)
   );
 
+  // (g) The page itself, on its project's origin, as the panel loads it.
+  const { port } = await fleet.api<{ port: number }>(
+    `/api/projects/${projectId}/preview-address`,
+    {}
+  );
+  const tab = await kit.page("desk", { theme: "light" });
+  await tab.goto(
+    `http://${new URL(fleet.base).hostname}:${port}/__cawco/page/${pricing.id}/`
+  );
+  await tab.waitForSelector("#decision-shape header .dp-state");
+  const goneHead = await cardHead(tab, "shape");
+  kit.check(
+    '(g) the card whose picked option went stands open, "Not picked", never folded to an empty "Decided:"',
+    goneHead.line === "Not picked" && !goneHead.decided,
+    JSON.stringify(goneHead)
+  );
+  const repicked = await fetch(`${fleet.base}${at(writer)}/${pricing.id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      patch: [
+        {
+          op: "replace",
+          path: "/shape",
+          value: { options: ["machine"], note: "" },
+        },
+      ],
+    }),
+  });
+  // The page as it is served again: the doc's picks as the hub keeps them now.
+  await tab.reload();
+  await tab.waitForSelector("#decision-shape header .dp-state");
+  const pickedHead = await cardHead(tab, "shape");
+  kit.check(
+    '(g) a pick on an option the card offers folds it to "Decided: Per machine"',
+    repicked.ok &&
+      pickedHead.line === "Decided: Per machine" &&
+      pickedHead.decided,
+    JSON.stringify(pickedHead)
+  );
+  await tab.close();
+
+  const folderFile = (path: string) =>
+    fleet
+      .api<{ content: string }>(
+        `/api/projects/${projectId}/folder/file?path=${path}`
+      )
+      .then(
+        () => "there",
+        (error: unknown) => String(error)
+      );
   const gone = await fetch(`${fleet.base}${at(writer)}/${launch.id}?by=agent`, {
     method: "DELETE",
   });
+  const launchFile = await folderFile("decisions/launch/page.oui");
   const after = await graphOf().catch((error: unknown) => String(error));
   kit.check(
-    "(d) a page whose artifact is gone still draws its cards, unpicked, said under the graph",
+    "(d) artifact_delete of a project's page takes its page.oui out of the folder, and the graph draws none of its cards",
     gone.ok &&
-      typeof after !== "string" &&
-      ["launch#date", "launch#promo"].every((id) =>
-        after.cards.some((card) => card.id === id && !card.picked)
-      ) &&
-      after.problems.some((line) =>
-        line.startsWith("decisions/launch/ has no artifact on this hub")
+      launchFile.includes(" 404") &&
+      (typeof after === "string"
+        ? after.includes(" 404")
+        : !after.cards.some((card) => card.id.startsWith("launch#"))),
+    `${gone.status} | ${launchFile} | ${typeof after === "string" ? after : JSON.stringify(after.cards.map((card) => card.id))}`
+  );
+
+  // (e) The rollout comes after the pricing card; then the writer goes.
+  await fleet.api(at(later), {
+    kind: "page",
+    does: "pick",
+    ask: "Pick when the rollout starts",
+    name: "rollout",
+    program: ROLLOUT,
+  });
+  // The person stops the writing session, then deletes it.
+  await fleet.post({
+    verb: "stop",
+    machineId: MACHINE,
+    instanceId: writer,
+    requestId: crypto.randomUUID(),
+    payload: { instanceId: writer },
+  });
+  const stopped = await until(
+    "the writing session stopped",
+    () =>
+      fleet.query<{ status: string }>(
+        "SELECT status FROM instances WHERE id = ?",
+        writer
+      )[0],
+    (row) => row.status === "stopped",
+    60_000
+  ).catch(() => undefined);
+  // Its machine says it holds the session no more a beat after the stop.
+  let deleteSaid = "";
+  await until(
+    "the stopped writing session deleted",
+    async () => {
+      const deleted = await fetch(`${fleet.base}/api/instances/${writer}`, {
+        method: "DELETE",
+      });
+      deleteSaid = `${deleted.status} ${await deleted.text()}`;
+      return deleted.ok;
+    },
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+  const dropped = await until(
+    "the writing session's row gone from the hub",
+    () =>
+      fleet.query<{ n: number }>(
+        "SELECT count(*) AS n FROM instances WHERE id = ?",
+        writer
+      )[0],
+    (row) => row.n === 0,
+    120_000
+  ).catch(() => undefined);
+  const [ending] = fleet.query<{
+    end_confirmed_at: number | null;
+    end_intent: string | null;
+    status: string;
+  }>(
+    "SELECT status, end_intent, end_confirmed_at FROM instances WHERE id = ?",
+    writer
+  );
+  const [stayed] = fleet.query<{ instance_id: string | null }>(
+    "SELECT instance_id FROM artifacts WHERE id = ?",
+    pricing.id
+  );
+  const outlived = await graphOf().catch((error: unknown) => String(error));
+  const shapeNow =
+    typeof outlived === "string"
+      ? undefined
+      : outlived.cards.find((card) => card.id === "pricing#shape");
+  kit.check(
+    "(e) the writing session deleted, its project's page stays with no session, and the graph draws its card picked",
+    !!dropped &&
+      stayed?.instance_id === null &&
+      shapeNow?.picked === true &&
+      typeof outlived !== "string" &&
+      outlived.edges.some(
+        ([from, to]) => from === "pricing#shape" && to === "rollout#go"
       ),
-    typeof after === "string" ? after : JSON.stringify(after.problems)
+    JSON.stringify({
+      dropped: !!dropped,
+      writer: {
+        stopped: !!stopped,
+        deleted: deleteSaid,
+        ending: ending ?? null,
+      },
+      stayed: stayed ?? null,
+      graph: typeof outlived === "string" ? outlived : outlived.cards,
+    })
+  );
+
+  // (f) A later session makes the page of that name again.
+  const remade = await fleet
+    .api<{ id: string }>(at(later), {
+      kind: "page",
+      does: "pick",
+      ask: "Pick one option on each card",
+      name: "pricing",
+      program: now.program,
+    })
+    .catch((error: unknown) => ({ id: String(error) }));
+  const reread = await fleet
+    .api<Read>(`${at(later)}/${pricing.id}`)
+    .catch(() => undefined);
+  const [owner] = fleet.query<{ instance_id: string | null }>(
+    "SELECT instance_id FROM artifacts WHERE id = ?",
+    pricing.id
+  );
+  const [pages] = fleet.query<{ n: number }>(
+    "SELECT count(*) AS n FROM artifacts WHERE project_id = ? AND name = 'pricing' AND kind = 'page'",
+    projectId
+  );
+  kit.check(
+    "(f) a later session's create of the page's name is a revision of that page: the same artifact, now its panel's, its pick kept",
+    remade.id === pricing.id &&
+      owner?.instance_id === later &&
+      pages?.n === 1 &&
+      JSON.stringify(reread?.state.shape?.options) ===
+        JSON.stringify(["machine"]),
+    JSON.stringify({
+      remade: remade.id,
+      owner: owner ?? null,
+      pages: pages?.n,
+      shape: reread?.state.shape ?? null,
+    })
   );
 };
 

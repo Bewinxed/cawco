@@ -6,8 +6,8 @@
  * adds the place they picked when they send ({@link applySetupPicks}).
  *
  * The page's cards, by their ids:
- * - `fleet-delegates`, `fleet-todos`: the fleet's two choices, asked once,
- *   while nobody has set them (`supervisor_config.choices_set_at`).
+ * - `fleet-delegates`: the fleet's delegates choice, asked once, while
+ *   nobody has set it (`supervisor_config.choices_set_at`).
  * - `fleet-upstream`: whether agents may post to other people's
  *   repositories (core upstream-guard.ts), asked once, while nobody has
  *   answered it (`upstream_settings`).
@@ -51,11 +51,7 @@ export const SETUP_PAGE = "setup";
 /** What a sent setup page changes beyond the project's files, which Caw writes. */
 export interface SetupApply {
   /** Sets the fleet's choices named (fleet-choices.ts `setFleetChoices`). */
-  fleet: (choices: {
-    delegates?: boolean;
-    todos?: boolean;
-    upstream?: UpstreamPosts;
-  }) => void;
+  fleet: (choices: { delegates?: boolean; upstream?: UpstreamPosts }) => void;
   /** Adds the place picked as the project's checkout; a refusal throws. */
   place: (
     projectId: string,
@@ -95,7 +91,7 @@ const placeOf = (
 /**
  * When the person sends a project's setup page, by any path (the page's own
  * `cawco.send`, the panel's Send): the fleet's choices (`fleet-delegates`,
- * `fleet-todos`, `on` or `off`) and the place picked (`place`, from
+ * `on` or `off`; `fleet-upstream`) and the place picked (`place`, from
  * `cawco.pickPlace`, added as the project's checkout) are applied before
  * Caw hears the picks, so he writes only the project's files. Any other
  * artifact is left alone.
@@ -110,18 +106,12 @@ export const applySetupPicks = async (
     return;
   }
   const delegates = onOff(state, "fleet-delegates");
-  const todos = onOff(state, "fleet-todos");
   const asked: ChoiceEntry | undefined = state["fleet-upstream"];
   const [picked] = asked?.options ?? [];
   const upstream = UPSTREAM_POSTS.find((answer) => answer === picked);
-  if (
-    delegates !== undefined ||
-    todos !== undefined ||
-    upstream !== undefined
-  ) {
+  if (delegates !== undefined || upstream !== undefined) {
     apply.fleet({
       ...(delegates === undefined ? {} : { delegates }),
-      ...(todos === undefined ? {} : { todos }),
       ...(upstream === undefined ? {} : { upstream }),
     });
   }
@@ -143,13 +133,13 @@ export interface RelayOffer {
 /**
  * The answered parts of a setup the person can ask to change when they ask
  * Caw to set the project up again (caw.ts `project_setup`): each is asked
- * again though it was answered. `fleet` is the two fleet choices.
+ * again though it was answered. `fleet` is the delegates choice.
  */
 export const SETUP_PARTS = ["fleet", "upstream", "relay", "place"] as const;
 export type SetupPart = (typeof SETUP_PARTS)[number];
 
 export interface SetupAsk {
-  /** Whether the fleet's two choices were never set, so the page asks for them. */
+  /** Whether the fleet's delegates choice was never set, so the page asks for it. */
   askFleet: boolean;
   /** Whether the fleet's upstream choice was never answered, so the page asks it. */
   askUpstream: boolean;
@@ -158,6 +148,14 @@ export interface SetupAsk {
    * person's ask in a thread of a project that has one (`project_setup`).
    */
   from: "prompt" | "offer" | "ask";
+  /**
+   * The Setup thread's first message as it reads, which the wake carries as
+   * a thread's wake carries your words (caw.ts `yourWords`): the person's
+   * words (`prompt`), or the note of the offer it was made from (`offer`).
+   * None on the person's ask (`ask`), answered inside the wake that carried
+   * their words.
+   */
+  opened?: string;
   /** It has its checkout already (made from a folder): no card asks for its place. */
   placed: boolean;
   projectName: string;
@@ -182,12 +180,10 @@ const openingOf = (ask: SetupAsk): string => {
     ask.from === "prompt"
       ? ", and their words are the first message of the Setup thread"
       : " from a session's offer, noted in the Setup thread"
-  } (thread ${ask.threadId}). ${ask.template ? `They picked the ${ask.template} template.` : "They picked no template; start from the code template unless their words say otherwise."} Set the project up with them.`;
+  } (thread ${ask.threadId})${ask.opened ? `:\n\n${ask.opened}\n\n` : ". "}${ask.template ? `They picked the ${ask.template} template.` : "They picked no template; start from the code template unless their words say otherwise."} Set the project up with them.`;
 };
 
-const fleetCards = `- \`fleet-delegates\`: "Delegates instead of subagents" — sessions hand work to CawCo's delegates rather than their harness's own subagents. Options \`on\` labelled "Use delegates" (recommended) and \`off\` labelled "Keep subagents".
-- \`fleet-todos\`: "CawCo's to-dos instead of each harness's list" — sessions keep their plan in CawCo rather than their harness's own list and plan mode. Options \`on\` labelled "Use CawCo's to-dos" (recommended) and \`off\` labelled "Keep each harness's list".
-These two are the fleet's, asked once: say so on the cards.`;
+const fleetCards = `- \`fleet-delegates\`: "Delegates instead of subagents" — sessions hand work to CawCo's delegates rather than their harness's own subagents. Options \`on\` labelled "Use delegates" (recommended) and \`off\` labelled "Keep subagents". It is the fleet's, asked once: say so on the card.`;
 
 /** The onboarding step's words, the dashboard's own step and this card alike (WORDS.md `upstream`). */
 const upstreamCard = `- \`fleet-upstream\`: "Other people's repositories" — ${UPSTREAM_WORDS.risk} Options \`off\` labelled "${UPSTREAM_WORDS.keepOff}" (recommended), \`ask\` labelled "${UPSTREAM_WORDS.ask}" (each post waits for the person's approval) and \`on\` labelled "${UPSTREAM_WORDS.allow}". It is the fleet's, asked once, and each project can change it in its settings: say so on the card.`;

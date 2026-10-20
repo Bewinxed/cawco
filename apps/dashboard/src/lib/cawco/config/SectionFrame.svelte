@@ -13,6 +13,7 @@
   import { configureWords } from "@cawco/core";
   import { type Snippet, untrack } from "svelte";
   import { fade } from "svelte/transition";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { appear, dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -72,7 +73,7 @@
       holding = false;
     };
     let timer = setTimeout(release, 300);
-    const sizes = new ResizeObserver(() => {
+    const sizes = frameObserver(() => {
       clearTimeout(timer);
       timer = setTimeout(release, 300);
     });

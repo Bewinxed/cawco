@@ -201,6 +201,8 @@ export type TokenColor =
   | "color.presence-away"
   | "color.presence-off"
   | "color.scrollbar-thumb"
+  | "color.qr-paper"
+  | "color.qr-ink"
   | "color.skeleton-sheen"
   | "color.prose-bullet"
   | "color.identity-ink"
@@ -308,6 +310,10 @@ export type TokenSize =
   | "size.c-pill-fs"
   | "size.c-badge-h"
   | "size.c-stat-h"
+  | "size.c-otp-cell-w"
+  | "size.c-otp-cell-h"
+  | "size.c-pair-w"
+  | "size.c-pair-top"
   | "size.c-toolbar-zone"
   | "size.c-toolbar-ctl"
   | "size.c-find-w"
@@ -656,7 +662,11 @@ export type TokenSize =
   | "motion.deck-step"
   | "motion.ride-fade"
   | "motion.pop-rise"
-  | "motion.fold-blur";
+  | "motion.fold-blur"
+  | "motion.shake-distance"
+  | "motion.shake-overshoot"
+  | "motion.reel-blur"
+  | "motion.swap-rise";
 
 export type TokenFont =
   | "font.font-wordmark"

@@ -32,7 +32,9 @@
  * once they stand still it shows, in place, on the row the pointer is on
  * (`settle`).
  */
+
 import { untrack } from "svelte";
+import { frameObserver } from "#lib/cawco/frame-observer.js";
 import { watchRendered } from "#lib/utils/rendered.js";
 import { tv } from "#lib/utils.js";
 
@@ -948,11 +950,7 @@ export function highlight(options: HighlightOptions) {
     // A resize moves every row at once: the layers follow without a glide,
     // on the next frame, so placing them (which can toggle a scrollbar on a
     // scrolling list) never resizes the list inside its own observer.
-    let pendingResize = 0;
-    const sizes = new ResizeObserver(() => {
-      cancelAnimationFrame(pendingResize);
-      pendingResize = requestAnimationFrame(onResize);
-    });
+    const sizes = frameObserver(() => onResize());
     const onResize = () => {
       forgetScroll();
       if (skipped) {
@@ -1005,12 +1003,8 @@ export function highlight(options: HighlightOptions) {
      * the box they were measured at may have moved on before it.
      */
     const watchedRows = new Set<Element>();
-    let pendingRealign = 0;
-    const toRealign = () => {
-      cancelAnimationFrame(pendingRealign);
-      pendingRealign = requestAnimationFrame(realign);
-    };
-    const rowWatch = new ResizeObserver(toRealign);
+    const rowWatch = frameObserver(() => realign());
+    const toRealign = () => rowWatch.request();
     watchRows = () => {
       for (const row of watchedRows) {
         if (row !== pillRow && row !== ghostRow) {
@@ -1077,7 +1071,6 @@ export function highlight(options: HighlightOptions) {
 
     return () => {
       forgetScroll();
-      cancelAnimationFrame(pendingResize);
       cancelAnimationFrame(pendingHide);
       cancelAnimationFrame(pendingSync);
       cancelAnimationFrame(settling);
@@ -1089,7 +1082,6 @@ export function highlight(options: HighlightOptions) {
       container.removeEventListener("touchmove", onInput, { capture: true });
       container.removeEventListener("keydown", onInput, { capture: true });
       container.removeEventListener("scroll", onScroll, { capture: true });
-      cancelAnimationFrame(pendingRealign);
       for (const type of SETTLES) {
         document.removeEventListener(type, settled, true);
       }

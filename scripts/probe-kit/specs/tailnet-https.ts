@@ -38,7 +38,7 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import { chromium, type Page } from "playwright-core";
-import { freePortRange, until } from "../../scratch-fleet";
+import { leasePortRange, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
 
 const NAME = "probe-box.tail0000.ts.net";
@@ -701,7 +701,7 @@ const run = async (kit: Kit) => {
   // Bun finds a bare command on the PATH this process started with.
   Object.assign(process.env, {
     CAWCO_DB_PATH: join(fleet.sandbox, "in-process.db"),
-    CAWCO_PREVIEW_PORTS: await freePortRange(4),
+    CAWCO_PREVIEW_PORTS: (await leasePortRange(4)).range,
   });
   const { createTailnetHttps } =
     await import("../../../packages/hub/src/tailnet-https");

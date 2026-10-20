@@ -29,6 +29,9 @@
 @import "./lib/tokens/selection.css";
 /* The house's variants and one per attribute state (`bun run variants`). */
 @import "./lib/tokens/variants.css";
+/* The house edge fade, its one definition: the component canvas reads the
+   same sheet into its pages (packages/agent stage-host build.ts). */
+@import "./edge-fade.css";
 @plugin "@tailwindcss/typography";
 /* The plugin's rules, minus the four that restyled a whole reply per block. */
 @config "../typography.config.ts";
@@ -73,33 +76,8 @@
   inherits: true;
   initial-value: 0px;
 }
-/* The edge fades of a scroller (.kit-edge-fade: the tab track, the board,
-   a view's pane), registered so the scroll-driven animation can
-   interpolate them as lengths. */
-@property --fade-start {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
-}
-@property --fade-end {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
-}
-/* Where a tab track's edge fades are cut short (TabsList `capFades`) and
-   the run each fade takes from it (PaneTabs' phone row): read by the
-   track's own mask alone, and moved as the track scrolls under a swipe,
-   so none of it is handed down to the tabs, which would all be styled
-   again for it each frame. Any value, none at first (the fades' own
-   `100vw` fallback stands). */
-@property --fade-cap-start {
-  syntax: "*";
-  inherits: false;
-}
-@property --fade-cap-end {
-  syntax: "*";
-  inherits: false;
-}
+/* The run each tab-track edge fade takes from its cap (PaneTabs' phone
+   row; the fades and their caps: edge-fade.css). */
 @property --fade-run-start {
   syntax: "*";
   inherits: false;
@@ -3132,72 +3110,6 @@
    `sectionHeadVariants`, ui/dock-shell, ui/button `sendVariants`,
    ui/icon-card. */
 
-/* A scroller whose content runs past an edge fades that edge out, only that
-   edge, only while there is more to scroll to. The fade lengths ride the
-   scroller's own scroll: at the start nothing is behind, so the leading edge
-   is sharp; at the end nothing is ahead. A scroller that does not overflow
-   has no scroll timeline, so neither edge fades. `-block` is the same down
-   the page. A scroller may cut an edge's fade short where something must
-   stay whole (`--fade-cap-start`, `--fade-cap-end`: the tabs track, for the
-   tab drawn chosen). Each edge is its own animation over only the run where
-   it moves, the first and last 6% of the scroll, filled outside it, so a
-   long scroll asks no restyle or repaint for its every frame. Spelled out,
-   never the `animation` shorthand: the build's minifier writes a
-   shorthand's unset duration as `0s`, and a scroll-driven animation of no
-   duration jumps to its end where its range begins. A faded scroller is its
-   own stacking context, whatever its mask: nothing in it rises over its
-   fades. The fade's length and the inline mask are defaults its hosts
-   override (below, in the components layer). */
-@utility kit-edge-fade {
-  isolation: isolate;
-  animation-name: kit-edge-fade-start, kit-edge-fade-end;
-  animation-duration: auto;
-  animation-timing-function: linear;
-  animation-fill-mode: both;
-  animation-range:
-    0% 6%,
-    94% 100%;
-  animation-timeline: scroll(self inline);
-}
-/* `--fade-inset-end` stands the foot's fade clear of a bar docked over the
-   scroller's foot (a phone's views bar), so it ends at the bar's top edge
-   and what passes under the bar is the fade's, as a footer's (DESIGN.md: the
-   house edge fade above it so the notes pass under it). */
-@utility kit-edge-fade-block {
-  isolation: isolate;
-  mask-image: linear-gradient(
-    to bottom,
-    transparent,
-    #000 var(--fade-start),
-    #000 calc(100% - var(--fade-inset-end, 0px) - var(--fade-end)),
-    transparent calc(100% - var(--fade-inset-end, 0px))
-  );
-  animation-name: kit-edge-fade-start, kit-edge-fade-end;
-  animation-duration: auto;
-  animation-timing-function: linear;
-  animation-fill-mode: both;
-  animation-range:
-    0% 6%,
-    94% 100%;
-  animation-timeline: scroll(self block);
-}
-@keyframes kit-edge-fade-start {
-  from {
-    --fade-start: 0px;
-  }
-  to {
-    --fade-start: var(--fade-len);
-  }
-}
-@keyframes kit-edge-fade-end {
-  from {
-    --fade-end: var(--fade-len);
-  }
-  to {
-    --fade-end: 0px;
-  }
-}
-
 /* Nesting: children hang off their parent on a hairline rail that leaves
    the bottom edge of the parent's glyph, under its centre; each child joins
    it with an elbow that curves (--radius-sm) from the rail into an arm
@@ -3302,27 +3214,3 @@
   }
 }
 
-@layer components {
-  /* The edge fade's defaults, at no weight under every host's own: the
-     length (the house 40px, a phone's 16px so it reads as an edge, not a
-     band) and the inline mask, which PaneTabs' phone strip redraws on its
-     own run (`strip-edge-mask`) and `fade-len-*` sets per scroller. In the
-     utilities layer they would outrank those. */
-  :where(.kit-edge-fade, .kit-edge-fade-block) {
-    --fade-len: var(--c-edge-fade-len);
-  }
-  @variant max-phone {
-    :where(.kit-edge-fade, .kit-edge-fade-block) {
-      --fade-len: var(--c-edge-fade-len-phone);
-    }
-  }
-  :where(.kit-edge-fade) {
-    mask-image: linear-gradient(
-      to right,
-      transparent,
-      #000 min(var(--fade-start), var(--fade-cap-start, 100vw)),
-      #000 calc(100% - min(var(--fade-end), var(--fade-cap-end, 100vw))),
-      transparent
-    );
-  }
-}

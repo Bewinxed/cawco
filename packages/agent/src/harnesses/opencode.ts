@@ -69,7 +69,6 @@ import {
   opencodeDataDir,
   workspaceScratchDir,
   workspaceSpillDir,
-  workspaceStateDir,
   xdgDataHome,
 } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -87,7 +86,6 @@ import { harnessMcpUrl } from "../delegation";
 import {
   type OpencodeRule,
   opencodeDenyRules,
-  resolvedFleetDenials,
   sessionFleetDenials,
 } from "../denied-tools";
 import { GATE_FORM_ENV, gateForm } from "../gate-form";
@@ -121,7 +119,7 @@ import { fenced } from "../restart";
 import type { SessiondClient } from "../sessiond-client";
 import { listStandIns } from "../stand-ins";
 import { installAdviceText, onToolsMoved, sawTool } from "../tools";
-import { cloneHolding, workspaceRefs } from "../workspace-records";
+import { workspaceRefs } from "../workspace-records";
 import {
   hashText,
   readJson,
@@ -154,7 +152,6 @@ import {
   buildPluginSource,
   OPENCODE_DIR,
   OPENCODE_PLACED_MCP,
-  PLAN_AGENT_OFF,
   prunePlugins,
   retireV1Plugins,
   writePlugin,
@@ -171,6 +168,7 @@ import {
 } from "./opencode-server";
 import {
   askOpencode,
+  forgetBackground,
   OpencodeSession,
   opencodeCatalog,
   splitModel,
@@ -776,15 +774,16 @@ const placeOpencodeMcp = async (
 };
 
 /**
- * OpenCode's `plan` agent under the fleet's "CawCo's to-dos" choice: off in
- * CawCo's servers' launch config ({@link OpencodeHarness.#launchConfig}),
- * never in the person's `opencode.json`, so his own `opencode` keeps it.
+ * OpenCode's `plan` agent, its plan mode: off in every server CawCo launches
+ * ({@link OpencodeHarness.#launchConfig}), since a session's plan and spec
+ * are CawCo's (core `NATIVE_TOOLS.todos`); never in the person's
+ * `opencode.json`, so his own `opencode` keeps it.
  */
 const PLAN_AGENT_OFF_CONFIG = { agents: { plan: { disabled: true } } } as const;
 
 /**
  * The `agents.plan.disabled` CawCo once wrote into the person's
- * `opencode.json` for "CawCo's to-dos" (`ours`, its sidecar says so), taken
+ * `opencode.json` to turn its plan mode off (`ours`, its sidecar says so), taken
  * back out once, with every other key of his `plan` and `agents` kept. A
  * write that fails throws, and the sidecar keeps saying so for the next sync.
  */
@@ -808,34 +807,6 @@ const dropPlanAgentEntry = async (ours: boolean): Promise<void> => {
     ...rest,
     ...(Object.keys(nextAgents).length > 0 ? { agents: nextAgents } : {}),
   });
-};
-
-/**
- * OpenCode's `plan` agent for one session whose own delegate type turns
- * "CawCo's to-dos" on while the fleet's choice is off: a
- * {@link PLAN_AGENT_OFF} mark in its workspace's state dir, which the plugin
- * reads as the clone's location boots and turns into the agent's removal
- * there. Nothing is written into the clone. A session outside every clone is
- * said in the log and left as it is.
- */
-const disablePlanAgentFor = async (
-  spec: SpawnPayload,
-  cwd: string
-): Promise<void> => {
-  if (!spec.cawcoTodos || (await resolvedFleetDenials()).cawcoTodos) {
-    return;
-  }
-  const workspace = spec.workspace ?? (await cloneHolding(cwd));
-  if (!workspace) {
-    console.warn(
-      `[opencode] ${spec.instanceId}: its delegate type turns CawCo's to-dos on, but it runs in ${cwd}, inside no workspace's clone, so OpenCode's plan agent is left as it is there.`
-    );
-    return;
-  }
-  await writeStateFile(
-    join(workspaceStateDir(workspace.id), PLAN_AGENT_OFF),
-    ""
-  );
 };
 
 /** A line CawCo's `excludeFromCheckout` added for an `opencode.jsonc` it wrote into a clone, at its root or in a directory inside it. */
@@ -1692,19 +1663,14 @@ export class OpencodeHarness implements Harness {
     const fleet = await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP);
     // The catalog too: a server reads it only as it starts.
     const catalog = holdsCatalog() ? await this.#catalogDigest() : "";
-    // The to-dos choice too: a server's plan agent follows it at launch.
-    const { cawcoTodos } = await readSidecar(OPENCODE_SIDECAR);
     const held = [placed, fleet].filter(
       (one): one is NonNullable<typeof one> =>
         !!one && Object.keys(one).length > 0
     );
-    if (held.length === 0 && !catalog && !cawcoTodos) {
+    if (held.length === 0 && !catalog) {
       return configHash(config);
     }
     const hash = createHash("sha256").update(configHash(config));
-    if (cawcoTodos) {
-      hash.update("cawco-todos");
-    }
     if (placed && Object.keys(placed).length > 0) {
       hash.update(canonicalizeJson(placed));
     }
@@ -3646,8 +3612,8 @@ export class OpencodeHarness implements Harness {
   /**
    * What this agent's servers launch with: the fleet's static policy, CawCo's
    * plugin, its own hub's MCP server, and — the machine agent's — the fleet's
-   * MCP servers ({@link OPENCODE_FLEET_MCP}), and its `plan` agent off under
-   * the fleet's "CawCo's to-dos" ({@link PLAN_AGENT_OFF_CONFIG}). The launch
+   * MCP servers ({@link OPENCODE_FLEET_MCP}), and its `plan` agent off
+   * ({@link PLAN_AGENT_OFF_CONFIG}). The launch
    * config is the highest of a server's config documents but managed
    * settings (core config.ts `load`: `...content, ...managedSettings`), so a
    * fleet server wins over a user's own of the same name.
@@ -3662,10 +3628,9 @@ export class OpencodeHarness implements Harness {
     const fleet = (await isMachineAgent())
       ? recordOf(await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP))
       : {};
-    const { cawcoTodos } = await readSidecar(OPENCODE_SIDECAR);
     return {
       ...STATIC_POLICY,
-      ...(cawcoTodos ? PLAN_AGENT_OFF_CONFIG : {}),
+      ...PLAN_AGENT_OFF_CONFIG,
       mcp: {
         servers: {
           ...fleet,
@@ -4004,6 +3969,13 @@ export class OpencodeHarness implements Harness {
       if (this.#sessions.get(session.instanceId) !== session) {
         return;
       }
+      // The jobs that ended while nothing was subscribed go first: a missed
+      // turn's end, read next, says what still runs.
+      await session.reconcileBackground().catch((error: unknown) => {
+        console.warn(
+          `[opencode] ${session.instanceId}: its background jobs were not reconciled: ${errorText(error)}`
+        );
+      });
       await Promise.all([session.watchResumedTurn(), session.reconcileGates()]);
     }).finally(() => {
       this.#reconcileJobs.delete(session);
@@ -4057,7 +4029,8 @@ export class OpencodeHarness implements Harness {
     sessionKey: string,
     dir: string,
     instanceId?: string,
-    claimed: readonly string[] = []
+    claimed: readonly string[] = [],
+    forget = false
   ): Promise<void> {
     if (
       claimed.includes(sessionKey) ||
@@ -4128,6 +4101,10 @@ export class OpencodeHarness implements Harness {
       throw new Error(
         "This session didn't end: this machine's OpenCode servers changed while CawCo was ending it. End it again."
       );
+    }
+    // Nothing reattaches it, so nothing reads its jobs again.
+    if (forget) {
+      forgetBackground(sessionKey);
     }
   }
 
@@ -4740,8 +4717,6 @@ export class OpencodeHarness implements Harness {
       identity: ServerIdentity;
     }
   ): Promise<OpencodeSession> {
-    // Before the server first boots the directory's location.
-    await disablePlanAgentFor(spec, ctx.cwd);
     // The account a session runs on is the server it runs in: the account's
     // own, with that account's credential; on no account, the machine's.
     const account = spec.accountDir?.accountId;
@@ -4763,7 +4738,7 @@ export class OpencodeHarness implements Harness {
     // The fleet's baseline, the delegate type's and the spawn's own denials,
     // as session rules.
     const deniedRules: OpencodeRule[] = opencodeDenyRules([
-      ...(await sessionFleetDenials(spec.cawcoTodos)),
+      ...(await sessionFleetDenials()),
       ...(spec.denyTools ?? []),
     ]);
     // The location's readiness, awaited at the first dispatch, never at
@@ -4995,6 +4970,10 @@ export class OpencodeHarness implements Harness {
     if (spec.resume && !spec.resume.fork && turnWasOpen(sessionId)) {
       session.inheritOpenTurn();
     }
+    // Its jobs in the background run on in the server; their ends wake it.
+    if (spec.resume && !spec.resume.fork) {
+      session.inheritBackground();
+    }
     if (spec.reattachOnly === true) {
       session.sleepAfterRecovery();
     }
@@ -5218,6 +5197,7 @@ export class OpencodeHarness implements Harness {
     ).session.remove({
       sessionID: sessionKey,
     });
+    forgetBackground(sessionKey);
   }
 
   async machine(method: string, _args: unknown[]): Promise<unknown> {
@@ -5293,11 +5273,8 @@ export class OpencodeHarness implements Harness {
       sidecar.memory,
       report
     );
-    // The to-dos choice before the poke below: a server launches under it
-    // (`#launchConfig`), and a change of it starts a new one (`#hashConfig`).
     await writeJson(OPENCODE_SIDECAR, {
       mcp,
-      ...(config.cawcoTodos ? { cawcoTodos: true } : {}),
       ...(memory ? { memory } : {}),
     });
     // Poke the watcher now rather than up to 2 s later.

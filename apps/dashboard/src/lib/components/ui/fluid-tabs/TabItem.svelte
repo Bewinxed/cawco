@@ -15,6 +15,7 @@
   import type { Component, Snippet } from "svelte";
   import { untrack } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { HALF } from "#lib/cawco/motion/hang-shape.js";
   import { cn } from "#lib/utils.js";
   import { restRank, useList, useTabs } from "./context.svelte";
@@ -182,9 +183,11 @@
       clearTimeout(keep);
       keep = setTimeout(() => rememberFoldBox(value, now), KEEP_AFTER);
     };
-    const sizes = new ResizeObserver(read);
-    sizes.observe(el);
+    // Read now, and a change in the next frame (frameObserver): the tab's
+    // shape is drawn from it.
     read();
+    const sizes = frameObserver(read);
+    sizes.observe(el);
     return () => {
       sizes.disconnect();
       clearTimeout(keep);

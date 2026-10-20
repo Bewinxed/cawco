@@ -31,6 +31,7 @@
    */
   import { ToggleGroup } from "bits-ui";
   import { onMount, tick, untrack } from "svelte";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -194,8 +195,10 @@
       commandClipped =
         whole.trim().includes("\n") || node.scrollWidth > node.clientWidth;
     };
+    // Read now, and a change in the next frame (frameObserver): the line's
+    // disclosure comes and goes on it.
     measure();
-    const sizes = new ResizeObserver(measure);
+    const sizes = frameObserver(measure);
     sizes.observe(node);
     return () => sizes.disconnect();
   });
@@ -555,8 +558,10 @@
     const measure = () => {
       rail = { top: node.offsetTop, height: node.offsetHeight };
     };
+    // Read now, and a change in the next frame (frameObserver): the rail is
+    // placed on it.
     measure();
-    const sizes = new ResizeObserver(measure);
+    const sizes = frameObserver(measure);
     sizes.observe(node);
     return () => sizes.disconnect();
   });

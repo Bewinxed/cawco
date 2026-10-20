@@ -21,10 +21,11 @@
  *   back out, so the page stands as it was.
  * - **The record keeps its tasks**: whenever the project's tasks change, a
  *   record whose cards' tasks moved is written again with them.
- * - **A page's cards** come from its own file in the folder, the one home
- *   that outlives its artifact (a session deleted takes its artifacts with
- *   it): `page.oui`, kept there by every create and revision in a project,
- *   else the built `index.html`. Each program is read once per hash.
+ * - **A page's cards** come from its own file in the folder: `page.oui`,
+ *   kept there by every create and revision in a project, else the built
+ *   `index.html`. Each program is read once per hash. Its artifact is the
+ *   project's, one per name, and lives as long as that file (a deleted
+ *   session leaves it with no session; db/schema.ts `artifacts.instanceId`).
  * - **The graph** is derived from those programs on every read: each
  *   decision a card, an edge from each decision its `after` names
  *   (`page#card` across pages), a frame per Section. The writer edits the
@@ -650,7 +651,9 @@ export const createDecisions = (deps: DecisionsDeps) => {
   };
 
   const writerOf = (artifact: ArtifactRow | null): DecisionWriter | null => {
-    const row = artifact ? deps.instance(artifact.instanceId) : undefined;
+    const row = artifact?.instanceId
+      ? deps.instance(artifact.instanceId)
+      : undefined;
     return row
       ? {
           instanceId: row.id,

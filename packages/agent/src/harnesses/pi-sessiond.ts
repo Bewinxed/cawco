@@ -324,6 +324,12 @@ export class PiRemoteSession implements HarnessSession {
     if (message.type === "result" && seq <= this.#recoveryHead) {
       message.recovered = true;
     }
+    // What will wake it as the turn ends: the shell commands its host moved
+    // to the background, each of whose ends starts a turn (pi-runtime
+    // `#shellEnded`). pi schedules no wake-up of its own.
+    if (message.type === "result") {
+      message.wakes = { background: this.#background.size, scheduled: 0 };
+    }
     (this.#ctx as Partial<SessiondAwareContext>).line?.(this.#epoch, seq);
     this.#ctx.frame(message);
     // A turn of a host on another gate has ended: its boundary is where the

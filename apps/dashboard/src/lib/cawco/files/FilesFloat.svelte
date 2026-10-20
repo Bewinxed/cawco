@@ -23,6 +23,7 @@
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { barGlass } from "../bar-glass.svelte";
   import { cawco } from "../client.svelte";
+  import { frameObserver } from "../frame-observer";
   import { dur } from "../motion/curves.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
@@ -131,11 +132,14 @@
       }
       place = next ?? place;
     };
+    // Placed now, so it is drawn where it stands; a change of Files' card or
+    // the page in the next frame's callbacks (frameObserver): the float's
+    // width is the panel's, whose head and page it lays out again.
     measure();
     const card = document.querySelector<HTMLElement>(
       '[data-glass-card][data-glass-card-frame="files-pop"]'
     );
-    const seen = new ResizeObserver(measure);
+    const seen = frameObserver(measure);
     if (card) {
       seen.observe(card);
     }

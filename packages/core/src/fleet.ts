@@ -792,12 +792,6 @@ export interface FleetMemory {
 /** The fleet's desired state, as the hub keeps it. */
 export interface FleetConfig {
   /**
-   * The fleet's "CawCo's to-dos" choice (§5.2). On, every session is denied
-   * its harness's own list and plan mode ({@link cawcoTodosDenied}), the
-   * machine's own `claude` too, and OpenCode's `plan` agent is disabled.
-   */
-  cawcoTodos: boolean;
-  /**
    * Fleet-wide tool denials. A machine spawns nothing until a sync has
    * carried them (agent `denied-tools.ts`).
    */

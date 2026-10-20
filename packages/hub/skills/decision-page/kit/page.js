@@ -77,7 +77,6 @@
         `[data-dp-state="${CSS.escape(id)}"]`
       );
       const n = picks[id]?.options.length ?? 0;
-      state?.classList.toggle("on", n > 0);
       if (state) {
         state.textContent = stateLine(n);
       }

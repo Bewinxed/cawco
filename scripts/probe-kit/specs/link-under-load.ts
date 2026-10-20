@@ -27,6 +27,10 @@
  *   known", "Completion is unknown").
  * - The hub's reads of the machines meet their deadlines under the load:
  *   no "did not answer within", no "didn't answer within".
+ * - No request through the second machine's link is cut for waiting on the
+ *   hub (relay.ts `idleCuts`): the relay stood in for that link with Bun's
+ *   10 s idle timeout, and every run ended "Bun.serve() timed out a request
+ *   after 10 seconds" (r60 to r77).
  *
  *   bun scripts/probe-kit/run.ts link-under-load
  */
@@ -73,12 +77,27 @@ const useTool = (name: string, input: object): Reply => ({
   tool: { name, input },
 });
 
-/** Where each lane is: 0 counts its inputs, 1 finishes, 2 is done. */
+/** Where each lane is: 0 counts its inputs, 1 finishes, 2 has called finish_item. */
 const stages = new Map<string, number>();
+/** finish_item calls each lane made. */
+const finishes = new Map<string, number>();
+/** How often a lane calls finish_item while it answers an error. Ours: a model tries again, not forever. */
+const FINISH_TRIES = 5;
+
+/** A lane's finish_item call. */
+const finish = (lane: string): Reply => {
+  finishes.set(lane, (finishes.get(lane) ?? 0) + 1);
+  const headline = `Lane ${lane} counted its inputs.`;
+  return useTool(FINISH, {
+    headline,
+    summary: `${headline}\n\n\`ls "$TMPDIR/inputs" | wc -l\` listed them.`,
+  });
+};
 
 /**
- * A lane counts its inputs, loads finish_item and calls it; the parent and
- * every later turn answer "ok".
+ * A lane counts its inputs, loads finish_item and calls it, and calls it
+ * again while it answers an error, as a model does; the parent and every
+ * later turn answer "ok".
  */
 const respond = (request: Seen): Reply => {
   const lane = request.tools ? LANE.exec(request.all)?.[1] : undefined;
@@ -100,11 +119,14 @@ const respond = (request: Seen): Reply => {
         : text(`${FINISH} is not offered`);
     }
     stages.set(lane, 2);
-    const headline = `Lane ${lane} counted its inputs.`;
-    return useTool(FINISH, {
-      headline,
-      summary: `${headline}\n\n\`ls "$TMPDIR/inputs" | wc -l\` listed them.`,
-    });
+    return finish(lane);
+  }
+  if (
+    request.afterTool &&
+    request.toolFailed &&
+    (finishes.get(lane) ?? 0) < FINISH_TRIES
+  ) {
+    return finish(lane);
   }
   return text("ok");
 };
@@ -334,6 +356,17 @@ const spec: Spec = {
       "every read of the machines meets its deadline under the load",
       late.length === 0,
       late.slice(0, 5).join(" | ")
+    );
+    check(
+      "no request through the second machine's link is cut for waiting on the hub: the relay, standing in for that link, has no idle timeout of its own",
+      between.idleCuts.length === 0,
+      between.idleCuts
+        .map(
+          (one) =>
+            `${one.method} ${one.path} left after ${Math.round(one.idleMs / 1000)} s with nothing passing`
+        )
+        .join(" | ")
+        .slice(0, 1200)
     );
     between.stop();
   },

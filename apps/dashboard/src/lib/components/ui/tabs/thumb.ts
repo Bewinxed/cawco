@@ -1,3 +1,4 @@
+import { frameObserver } from "#lib/cawco/frame-observer.js";
 import { dur, ease } from "#lib/cawco/motion/curves.svelte.js";
 import { tv } from "#lib/utils.js";
 
@@ -102,7 +103,9 @@ export function slideThumb(
     attributes: true,
     attributeFilter: ["data-state"],
   });
-  const sizes = new ResizeObserver(() => place(false));
+  // Placed above, and a resize in the next frame (frameObserver): the
+  // thumb's own size is written from it.
+  const sizes = frameObserver(() => place(false));
   sizes.observe(group);
   return () => {
     changes.disconnect();

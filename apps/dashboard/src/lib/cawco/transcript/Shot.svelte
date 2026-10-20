@@ -109,6 +109,7 @@
 </script>
 
 <script lang="ts">
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     type LightboxShot,
@@ -200,7 +201,9 @@
     if (size !== "card" || src.startsWith("data:")) {
       return;
     }
-    const watch = new ResizeObserver(() => {
+    // Its size in the next frame after the browser laid it out at it
+    // (frameObserver): the card's shape is taken from it.
+    const watch = frameObserver(() => {
       if (img.naturalWidth > 0) {
         served = {
           src: img.currentSrc || src,

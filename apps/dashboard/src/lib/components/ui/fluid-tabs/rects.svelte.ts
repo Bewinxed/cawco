@@ -16,6 +16,10 @@
  */
 
 import { untrack } from "svelte";
+import {
+  type FrameObserver,
+  frameObserver,
+} from "#lib/cawco/frame-observer.js";
 
 /**
  * The custom properties in an inline style. On a box holding a tab they
@@ -63,7 +67,9 @@ export class TabRects {
   readonly #onOrder: (values: string[]) => void;
   #container: HTMLElement | null = null;
   #frame: number | null = null;
-  #sizes: ResizeObserver | null = null;
+  #sizes: FrameObserver | null = null;
+  /** What the last measure in a delivery read, written in the next frame. */
+  #pending: (() => void) | null = null;
   #moves: MutationObserver | null = null;
 
   /** `onOrder` hears the tabs' values in the order they stand. */
@@ -83,7 +89,16 @@ export class TabRects {
   /** Svelte action for the track. */
   container = (node: HTMLElement) => {
     this.#container = node;
-    this.#sizes = new ResizeObserver(() => this.#measureLaidOut());
+    // Read inside the delivery, on its layout; written in the next frame
+    // (frameObserver), so the tabs' new places resize nothing it has passed.
+    this.#sizes = frameObserver(
+      () => {
+        const write = this.#pending;
+        this.#pending = null;
+        write?.();
+      },
+      { read: () => this.#measureLaidOut() }
+    );
     this.#sizes.observe(node);
     for (const el of this.#values.keys()) {
       this.#sizes.observe(el);
@@ -226,20 +241,26 @@ export class TabRects {
    * Measured in the next frame's callbacks instead, after a streamed reply
    * had changed the page again, every resize of a tab laid the page out
    * there (two-pane-perf's stream, 83–135ms of `offsetParent`). A measure
-   * still due that frame is the same one, taken now.
+   * still due that frame is the same one, taken now. What it read is
+   * written in the next frame (`#pending`).
    */
   #measureLaidOut(): void {
     if (this.#frame !== null) {
       cancelAnimationFrame(this.#frame);
       this.#frame = null;
     }
-    this.#measure();
+    this.#pending = this.#read();
   }
 
   #measure(): void {
+    this.#read()?.();
+  }
+
+  /** Reads the tabs' boxes; answers the write that keeps them, or null with no track. */
+  #read(): (() => void) | null {
     const container = this.#container;
     if (!container) {
-      return;
+      return null;
     }
     const rects = new Map<HTMLElement, ItemRect>();
     for (const element of this.items) {
@@ -279,20 +300,19 @@ export class TabRects {
         p.width !== r.width ||
         p.height !== r.height;
     }
-    if (changed) {
-      this.rects = rects;
-    }
-    if (changed || this.#measured.items !== this.items) {
-      this.#measured = { items: this.items, rects: this.rects };
-    }
-    if (
-      container.clientWidth !== this.viewport.width ||
-      container.clientHeight !== this.viewport.height
-    ) {
-      this.viewport = {
-        width: container.clientWidth,
-        height: container.clientHeight,
-      };
-    }
+    const { items } = this;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    return () => {
+      if (changed) {
+        this.rects = rects;
+      }
+      if (changed || this.#measured.items !== items) {
+        this.#measured = { items, rects: this.rects };
+      }
+      if (width !== this.viewport.width || height !== this.viewport.height) {
+        this.viewport = { width, height };
+      }
+    };
   }
 }

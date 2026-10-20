@@ -210,6 +210,7 @@ import { routedToParent } from "./transcript/present";
 import { holdsCompaction } from "./transcript/rows";
 import { speakerName } from "./transcript/speaker";
 import type { DelegateAskEvent, Message } from "./types";
+import { type MissedRead, TRY_AGAIN, unansweredWords } from "./unanswered";
 import { updates } from "./updates/updates.svelte";
 import {
   onBoard,
@@ -286,10 +287,20 @@ export interface ProjectRow {
   cap?: ProjectCap | null;
   /** Made with Caw: its Caw is on. */
   caw: boolean;
+  /** The harness its Caw runs on. */
+  cawHarness: HarnessKind;
+  /** The model its Caw runs; null: its harness's default. */
+  cawModel: string | null;
   createdAt: string;
   id: string;
   /** Where its attempts land when their task says nothing. */
   lands: LandsMode;
+  /**
+   * Its Caw's session, once the hub has started one; null before and after
+   * one is retired. Read again on `projects.changed`, which the hub sends as
+   * it changes (caw.ts `setLead`).
+   */
+  leadInstanceId: string | null;
   /** The connection that signs in to {@link lfsUrl}; null with it. */
   lfsConnection: string | null;
   /** Where its large files live, an LFS endpoint; null: each repository's origin's own LFS. */
@@ -1747,10 +1758,14 @@ function applyFacts(
     }
   }
   // The turn or the compaction just changed how full the window is; ask
-  // rather than guess.
+  // rather than guess, when something in this tab draws it
+  // ({@link showContext}). A tab streams every open tab, the peek and every
+  // delegate card, and a read for each of their turns' ends was a read
+  // nobody saw.
   if (
     (facts.turnsEnded !== undefined || facts.lastCompaction) &&
-    target.machineId
+    target.machineId &&
+    contextShown.has(target.instanceId)
   ) {
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the change is already on screen, this refreshes the reading
     void refreshContext(target.instanceId, target.machineId);
@@ -6424,7 +6439,7 @@ export const cawOf = (projectId: string): Promise<CawView> =>
   askHub(`${projectPath(projectId)}/caw`);
 
 /** Turns a project's Caw on or off, or moves it to another harness or model (null: the harness's default). */
-export const configureCaw = (
+export const configureCaw = async (
   projectId: string,
   change: {
     harness?: HarnessKind;
@@ -6433,8 +6448,22 @@ export const configureCaw = (
     model?: string | null;
     on?: boolean;
   }
-): Promise<CawView> =>
-  askHub(`${projectPath(projectId)}/caw`, json("PATCH", change));
+): Promise<CawView> => {
+  const view = await askHub<CawView>(
+    `${projectPath(projectId)}/caw`,
+    json("PATCH", change)
+  );
+  // The hub's answer is where he stands: the project's row says so now,
+  // before the `projects.changed` it sent brings the row read again.
+  const row = state.projects.find((project) => project.id === projectId);
+  if (row) {
+    row.caw = view.on;
+    row.cawHarness = view.harness;
+    row.cawModel = view.model;
+    row.leadInstanceId = view.leadInstanceId;
+  }
+  return view;
+};
 
 /**
  * What a routine's notice reads of it (hub routines.ts `RoutineView`): kept
@@ -7028,22 +7057,29 @@ function ask<T>(
 export type Unanswered = Extract<Bounded<unknown>, { kind: "unanswered" }>;
 
 /**
- * What the person reads when `machineId` didn't answer in time, in the
- * existing copy's voice (WORDS.md: "nixbox stopped answering (timeout)").
- * `outcome` says what is now not known, when something is.
+ * What the person reads when a read of `machineId` didn't answer in time
+ * (unanswered.ts): what didn't answer and when it is asked again while the
+ * hub says the machine is online ({@link machineConnected}), "It may be
+ * offline" only once it has lost it.
  */
 export function didntAnswer(
   machineId: string,
   missed: Unanswered,
-  outcome?: string
+  words: Omit<MissedRead, "machine" | "online" | "after">
 ): string {
-  return `${machineName(machineId)} didn't answer within ${Math.round(missed.after / 1000)} s${outcome ? `, so ${outcome}` : ""}. It may be offline.`;
+  return unansweredWords({
+    machine: machineName(machineId),
+    online: machineConnected(machineId),
+    after: missed.after,
+    ...words,
+  });
 }
 
 /**
  * A read as an action the person started takes it, for the actions whose
  * one way to say something is the sentence they throw (a menu item, a
  * confirm dialog): the answer, or {@link didntAnswer}'s sentence thrown.
+ * `outcome` says what is now not known, when something is.
  */
 export function answeredOr<T>(
   machineId: string,
@@ -7054,7 +7090,9 @@ export function answeredOr<T>(
     case "answered":
       return read.value;
     case "unanswered":
-      throw new Error(didntAnswer(machineId, read, outcome));
+      throw new Error(
+        didntAnswer(machineId, read, { outcome, again: TRY_AGAIN })
+      );
     default: {
       const unhandled: never = read;
       throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
@@ -7130,7 +7168,7 @@ export async function loadCatalog(machineId: string): Promise<void> {
       case "unanswered":
         // The catalog it last listed stands.
         console.warn(
-          `[cawco] listSessions on ${machineId}: ${didntAnswer(machineId, listed)}`
+          `[cawco] listSessions on ${machineId}: ${didntAnswer(machineId, listed, { missed: "its list of stored sessions didn't come back", again: "The list it gave last stands until the next load." })}`
         );
         break;
       case "answered": {
@@ -7915,26 +7953,80 @@ export async function setPermissionMode(
   }
 }
 
+/** How many surfaces in this tab draw each session's context reading now, by instance id. */
+const contextShown = new Map<string, number>();
+
+/**
+ * A surface that draws `instanceId`'s context reading (the details card,
+ * SessionDetails; the peek's meter, PeekPane) says so for as long as it is
+ * mounted: a turn's or a compaction's end reads it again only while one does
+ * (applyFacts). The surface reads it once itself as it first shows it.
+ * Answers the surface's let-go.
+ */
+export function showContext(instanceId: string): () => void {
+  contextShown.set(instanceId, (contextShown.get(instanceId) ?? 0) + 1);
+  return () => {
+    const left = (contextShown.get(instanceId) ?? 1) - 1;
+    if (left > 0) {
+      contextShown.set(instanceId, left);
+    } else {
+      contextShown.delete(instanceId);
+    }
+  };
+}
+
+/**
+ * What one context read found: the reading it took, or why it took none
+ * (null when the harness reports no context at all).
+ */
+export type ContextRead =
+  | { kind: "read"; usage: ContextUsage }
+  | { kind: "unread"; why: string | null };
+
+/** The context read in flight for each session, by instance id: a second asker joins it. */
+const contextReads = new Map<string, Promise<ContextRead>>();
+
 /**
  * How full the session's context window is, straight from the SDK — the same
  * reading `/context` shows, so the dock never has to estimate it from token
  * counts it saw go past. A `Query` method, so only a live session can answer;
  * a dead one keeps its last number rather than dropping to zero, which would
- * read as "empty" when it means "nobody asked".
+ * read as "empty" when it means "nobody asked". Answers what this read found,
+ * for an asker that writes the figure down (session-export.ts); one asked
+ * while a read is in flight joins that read.
  */
-export async function refreshContext(
+export function refreshContext(
   instanceId: string,
   machineId: string
-): Promise<void> {
-  const target = session(instanceId);
-  // Not asked of a machine that isn't back: the last reading stands.
-  if (
-    target.contextPending ||
-    !machineConnected(machineId) ||
-    !harnessCan({ machineId, harness: target.harness }, "contextUsage")
-  ) {
-    return;
+): Promise<ContextRead> {
+  const inFlight = contextReads.get(instanceId);
+  if (inFlight) {
+    return inFlight;
   }
+  // Not asked of a machine that isn't back: the last reading stands.
+  if (!machineConnected(machineId)) {
+    return Promise.resolve({
+      kind: "unread",
+      why: machineFaultWords(machineName(machineId), "offline"),
+    });
+  }
+  const target = session(instanceId);
+  if (!harnessCan({ machineId, harness: target.harness }, "contextUsage")) {
+    return Promise.resolve({ kind: "unread", why: null });
+  }
+  const reading = readContext(target, machineId).finally(() =>
+    contextReads.delete(instanceId)
+  );
+  contextReads.set(instanceId, reading);
+  return reading;
+}
+
+/** {@link refreshContext}'s one read, kept on the session as it lands. */
+async function readContext(
+  target: SessionState,
+  machineId: string
+): Promise<ContextRead> {
+  const { instanceId } = target;
   target.contextPending = true;
   const requestId = newId();
   const payload: ControlPayload = {
@@ -7954,9 +8046,13 @@ export async function refreshContext(
     );
     switch (read.kind) {
       case "unanswered":
-        // The last reading stands; the details say why it is not newer.
-        target.contextError = didntAnswer(machineId, read);
-        return;
+        // The last reading stands; the details say why it is not newer, and
+        // the next turn's end asks again (applyFacts).
+        target.contextError = didntAnswer(machineId, read, {
+          missed: "this session didn't report its context",
+          again: "It's asked again when its turn ends.",
+        });
+        return { kind: "unread", why: target.contextError };
       case "answered":
         break;
       default: {
@@ -7965,7 +8061,7 @@ export async function refreshContext(
       }
     }
     const usage = read.value;
-    target.context = {
+    const context: ContextUsage = {
       totalTokens: usage.totalTokens,
       maxTokens: usage.maxTokens,
       percentage: usage.percentage,
@@ -7974,11 +8070,14 @@ export async function refreshContext(
       categories: usage.categories.filter((row) => row.name !== "Free space"),
       readAt: Date.now(),
     };
+    target.context = context;
     target.contextError = null;
+    return { kind: "read", usage: context };
   } catch (cause) {
     // A session that cannot answer keeps the last reading; the reason is kept
     // beside it so the details can say why rather than "not reported".
     target.contextError = messageOf(cause);
+    return { kind: "unread", why: target.contextError };
   } finally {
     target.contextPending = false;
   }
@@ -8049,7 +8148,7 @@ export async function refreshCommands(
       case "unanswered":
         // The menu keeps what it last heard; the next open asks again.
         console.warn(
-          `[cawco] supportedCommands on ${instanceId}: ${didntAnswer(machineId, read)}`
+          `[cawco] supportedCommands on ${instanceId}: ${didntAnswer(machineId, read, { missed: "this session didn't list its commands", again: "The menu asks again when it next opens." })}`
         );
         return;
       case "answered":
@@ -8131,7 +8230,7 @@ export async function loadMcpServers(
     switch (read.kind) {
       case "unanswered":
         console.warn(
-          `[cawco] mcpServerStatus on ${instanceId}: ${didntAnswer(machineId, read)}`
+          `[cawco] mcpServerStatus on ${instanceId}: ${didntAnswer(machineId, read, { missed: "this session didn't list its MCP servers", again: "It's asked again the next time the session goes live." })}`
         );
         break;
       case "answered":

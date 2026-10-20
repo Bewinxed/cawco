@@ -7,12 +7,17 @@ import type { FsEntry, NeutralSessionInfo } from "@cawco/core";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import { cawco, closePreview, didntAnswer, machineFs } from "../client.svelte";
 import { conversationHref } from "../links";
+import { TRY_AGAIN } from "../unanswered";
 import type { PaneFleet, PaneMachine } from "./pane-fleet";
 
 /** A machine's folders over the app's socket, opening on where it was working last. */
 export const fleetFolders: FolderReader = {
   list: (machineId, path) => machineFs<FsEntry[]>(machineId, "list", path),
-  unanswered: (machineId, missed) => didntAnswer(machineId, missed),
+  unanswered: (machineId, missed) =>
+    didntAnswer(machineId, missed, {
+      missed: "the folder's listing didn't come back",
+      again: TRY_AGAIN,
+    }),
   recent: (machineId) =>
     cawco
       .catalogOf(machineId)

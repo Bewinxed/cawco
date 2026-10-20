@@ -77,6 +77,7 @@
   import { type Snippet, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { autosize } from "#lib/cawco/motion/autosize.svelte.js";
   import {
     CURVE,
@@ -369,7 +370,10 @@
           ? HINT
           : HINT_SHORT;
     };
-    const sizes = new ResizeObserver(fit);
+    // Fitted now, so the first frame has its hint, and a change in the next
+    // frame (frameObserver): the hint's words are the field's.
+    fit();
+    const sizes = frameObserver(fit);
     sizes.observe(node);
     // The body face may land after the first measure, at a new width.
     let live = true;
@@ -822,7 +826,9 @@
       void draft.text;
       frame = requestAnimationFrame(cue);
     });
-    const sizes = new ResizeObserver(cue);
+    // A resize in the next frame (frameObserver): the cues are the field's
+    // edges, drawn on it. A scroll lays nothing out, and is read at once.
+    const sizes = frameObserver(cue);
     sizes.observe(node);
     node.addEventListener("scroll", cue, { passive: true });
     return () => {
@@ -2497,6 +2503,7 @@
     if (!(node && edit)) {
       return;
     }
+    // biome-ignore lint/style/noRestrictedGlobals: the grown shape (grown.ts, absolutely placed behind the pill) is redrawn, a path and its own height, which resize no box watched; it stands on the pill in the frame the pill grew
     const sizes = new ResizeObserver(([entry]) => {
       const base = entry.borderBoxSize[0].blockSize;
       if (editShape && edit && Math.abs(base - edit.base) > 0.5) {
@@ -2806,7 +2813,9 @@
     if (!node) {
       return;
     }
-    const sizes = new ResizeObserver(() => {
+    // In the next frame (frameObserver): the fit eases the shape to the
+    // card over --dur-fade, which resizes it.
+    const sizes = frameObserver(() => {
       if (askRaised) {
         fitAsk(dur("--dur-fade"));
       }

@@ -107,6 +107,17 @@ export interface RestartReadiness {
 }
 
 /**
+ * The header a machine's gateway sends each relayed tool call's key under
+ * (agent mcp-oauth.ts), the same on every resend; the hub answers a key it
+ * has taken with that call's first answer, never running it again (hub
+ * tool-call-keys.ts). The IETF's name: "The `Idempotency-Key` HTTP request
+ * header field carries this value"
+ * (datatracker.ietf.org/doc/html/draft-ietf-httpapi-idempotency-key-header,
+ * draft 07, §2).
+ */
+export const TOOL_CALL_KEY_HEADER = "idempotency-key";
+
+/**
  * The CawCo tools a restart can cut without losing work: the hub stores the
  * call before it runs and finishes it after a restart. `finish_item` stores
  * its submission and `landingSince` before the landing gate's first step,

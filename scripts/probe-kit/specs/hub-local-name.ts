@@ -45,7 +45,7 @@ import { browseMdns } from "../../../packages/agent/src/discovery";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { reachableLinks } from "../../../packages/core/src/reachable-links";
 import { lanInterfaces } from "../../../packages/hub/src/lan-interfaces";
-import { freePortRange, until } from "../../scratch-fleet";
+import { leasePortRange, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
@@ -208,10 +208,9 @@ interface IpAddr {
 
 /** A hub's own ports: one for its listener, the rest for its previews. */
 const ports = async () => {
-  const [first, last] = (await freePortRange(13)).split("-").map(Number) as [
-    number,
-    number,
-  ];
+  const [first, last] = (await leasePortRange(13)).range
+    .split("-")
+    .map(Number) as [number, number];
   return {
     CAWCO_HUB_PORT: String(first),
     CAWCO_PREVIEW_PORTS: `${first + 1}-${last}`,

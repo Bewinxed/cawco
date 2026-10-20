@@ -80,6 +80,7 @@ export * from "./project-membership";
 // Shared because the tool's schema is unforgiving: the answers go back inside
 // the tool's own input or the call fails validation.
 export * from "./question";
+export * from "./references";
 export * from "./relays";
 // The bounded replay ring behind the Ledger Protocol — SessionRing, lifted
 // from packages/hub/src/stream.ts so sessiond's per-child ring (see
@@ -258,12 +259,6 @@ export interface SpawnPayload {
    * on a session nobody delegated (a mainline session may always delegate).
    */
   canDelegate?: boolean;
-  /**
-   * "CawCo's to-dos" for this session whatever the fleet says: its delegate
-   * type's `cawcoTodos`. The agent adds {@link cawcoTodosDenied} when this or
-   * the fleet's choice is on.
-   */
-  cawcoTodos?: boolean;
   cwd: string;
   /**
    * The delegate type it was started as: its name, and the project whose
@@ -1788,6 +1783,12 @@ export interface ArtifactSummary {
   id: string;
   kind: ArtifactKind;
   name: string;
+  /**
+   * The project whose preview origin serves it: a project's page (Projects
+   * spec §5.8), loaded at `/__cawco/page/<id>/` there (`projectPagePlace`);
+   * absent for anything its session's origin serves.
+   */
+  project?: string;
   /** Its last promote into the project's folder (`artifact_promote`, the doc's `meta.promoted`); null until one. */
   promoted: ArtifactPromotion | null;
   /** The person pressed Send on it since the session last revised it or changed its ask. */

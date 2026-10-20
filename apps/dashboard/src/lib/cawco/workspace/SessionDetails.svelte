@@ -25,6 +25,7 @@
     machineConnected,
     refreshContext,
     relaunchSession,
+    showContext,
     submitCommand,
   } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
@@ -250,6 +251,9 @@
     stopWaiting = untrack(() => whenOpen(() => void refreshContext(id, mid)));
   });
   onDestroy(() => stopWaiting());
+  // The card draws this session's reading while it is mounted: its turns'
+  // ends read it again only while one does (client.svelte.ts `showContext`).
+  $effect(() => showContext(sessionId));
   const reading = $derived(
     (askPending || !!session?.contextPending) && stats.totalTokens === null
   );

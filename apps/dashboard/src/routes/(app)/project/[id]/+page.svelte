@@ -322,20 +322,22 @@
     return () => clearTimeout(grace);
   });
 
-  const lead = new CawLead(
-    () => projectId,
-    () => tasks,
-    () => reading
-  );
+  const lead = new CawLead({
+    id: () => projectId,
+    project: () => project,
+    machinesOnline: () => data.machinesOnline ?? false,
+    tasks: () => tasks,
+    reading: () => reading,
+  });
   /** You can talk to Caw, on or off: only a reason he cannot start (no machine) stops it. */
-  const canTalk = $derived(lead.view !== null && !lead.view.problem);
+  const canTalk = $derived(lead.canTalk);
   /**
-   * Arrived on the project, its board and his view read: his panel opens as
+   * Arrived on the project, its board and its row read: his panel opens as
    * the person last left it here, else while the board is empty, so a
    * project just made opens on Caw (PRD §5.6; CawLead.arrive).
    */
   $effect(() => {
-    if (list !== null && lead.view !== null) {
+    if (list !== null && lead.project !== null) {
       const blank = empty;
       untrack(() => lead.arrive(blank));
     }
@@ -1220,14 +1222,15 @@
   });
 
   // Another hand flipped Caw (another dashboard, the app): the project row the
-  // hub's `projects.changed` brings says where he stands, and his view is
-  // read again, so every switch on him says the same.
+  // hub's `projects.changed` brings says where he stands, which every switch
+  // on him reads; his view is read again for what only it carries (what he
+  // started that still runs, his turn's words).
   let cawSeen: boolean | undefined;
   $effect(() => {
     const on = project?.caw;
     if (cawSeen !== undefined && on !== undefined && on !== cawSeen) {
       untrack(() => {
-        if (lead.view && lead.view.on !== on && !lead.moving) {
+        if (!lead.moving) {
           lead.read();
         }
       });
@@ -1774,7 +1777,7 @@
     <ViewRoutines
       {blocks}
       {canTalk}
-      cawProblem={lead.view?.problem ?? null}
+      cawProblem={lead.problem}
       project={{ id: project.id, name: project.name }}
       starters={routineStarters}
       viewItems={viewItemsOf("routines")}
@@ -1818,7 +1821,7 @@
       </EmptyState>
     </div>
   {:else if empty && !adding}
-    {#if !lead.view}
+    {#if !lead.project}
       <Skeleton class="w-full" height="chart" radius="card" width="chart-cap" />
     {:else if canTalk}
       <!-- While his panel is open the project's starters are in it (CawFloat);
@@ -2029,13 +2032,13 @@
                 seated={!standing}
               />
 
-              {#if lead.view?.problem}
+              {#if lead.problem}
                 <Alert
                   data-id-page-notice
                   class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
                   variant="warning"
                 >
-                  <AlertDescription>{lead.view.problem}</AlertDescription>
+                  <AlertDescription>{lead.problem}</AlertDescription>
                 </Alert>
               {/if}
               {#if stages && stages.problems.length > 0}

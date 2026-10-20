@@ -79,6 +79,7 @@ import type { MachinePath } from "@cawco/core/machine-path";
 import type {
   RelayPortHealth,
   RelayPorts,
+  RelayReach,
   StreamRelayState,
 } from "@cawco/core/stream-relay";
 import { UPSTREAM_POSTS } from "@cawco/core/upstream-guard";
@@ -91,6 +92,8 @@ import type {
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
+  blob,
+  check,
   customType,
   foreignKey,
   index,
@@ -1164,7 +1167,7 @@ export const instances = sqliteTable("instances", {
   role: text("role").$type<import("@cawco/core").SessionRole>(),
   /**
    * The delegate type its spawn named (a fleet type, or its project's), so
-   * what the type says — "CawCo's to-dos" — reads the same for every session
+   * what the type says (its denied tools) reads the same for every session
    * however it started. Null: none.
    */
   delegateType: text("delegate_type"),
@@ -2574,6 +2577,31 @@ export const turnUsage = sqliteTable(
 );
 
 /**
+ * Every tool call a machine's gateway relayed under an idempotency key, and
+ * its answer once it has one (tool-call-keys.ts): a call sent again under
+ * the same key is answered this, never run again. Kept
+ * `TOOL_CALL_KEY_KEPT_MS` past its last change.
+ */
+export const toolCallKeys = sqliteTable(
+  "tool_call_keys",
+  {
+    /** The key, with the caller's credential and the route, hashed. */
+    id: text("id").primaryKey(),
+    /** `interrupted`: running in the hub's last process when it ended. */
+    state: text("state")
+      .$type<"running" | "answered" | "interrupted">()
+      .notNull(),
+    /** The answer's status, headers (as pairs) and body, once answered. */
+    status: integer("status"),
+    headers: text("headers", { mode: "json" }).$type<[string, string][]>(),
+    body: blob("body", { mode: "buffer" }),
+    /** When it was taken, then when it was answered. */
+    at: timestamp("at").notNull(),
+  },
+  (table) => [index("tool_call_keys_at_idx").on(table.at)]
+);
+
+/**
  * Standing instructions the hub enforces on every session it watches: a phrase
  * to look for in what a session says, and a reply to send back when it shows
  * up. The hub is the only component that sees every frame from every machine,
@@ -2837,17 +2865,9 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
   /** Always `'supervisor'`: the hub has one, and a table with a key says so cheaply. */
   id: text("id").primaryKey(),
   /**
-   * The fleet's "CawCo's to-dos" choice (§5.2): every session is denied its
-   * harness's own list and plan mode, added at spawn (`cawcoTodosDenied`),
-   * never stored in `fleet_denied_tools`.
-   */
-  cawcoTodos: integer("cawco_todos", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  /**
-   * When the fleet's two choices (delegates, CawCo's to-dos) were last set
-   * through `PUT /api/fleet/choices`; null while nobody has set them, which
-   * is when a new project's setup page asks for them.
+   * When the fleet's delegates choice was last set through
+   * `PUT /api/fleet/choices`; null while nobody has set it, which is when a
+   * new project's setup page asks for it.
    */
   choicesSetAt: timestamp("choices_set_at"),
   /**
@@ -3617,9 +3637,16 @@ export const artifacts = sqliteTable(
   "artifacts",
   {
     id: text("id").primaryKey(),
-    instanceId: text("instance_id")
-      .notNull()
-      .references(() => instances.id, { onDelete: "cascade" }),
+    /**
+     * The session whose panel holds it. A project's page outlives it: its
+     * life is its source's in the project's folder (`decisions/<name>/`), so
+     * a deleted session leaves it here with no session (null), its picks and
+     * places kept. Every other artifact goes with its session
+     * (db/index.ts `dropInstances`).
+     */
+    instanceId: text("instance_id").references(() => instances.id, {
+      onDelete: "set null",
+    }),
     /**
      * The session whose `artifact_create` last made it: the owner itself, or
      * a delegate that handed it to its parent (`to: "parent"`), which may
@@ -3638,8 +3665,15 @@ export const artifacts = sqliteTable(
     heldFor: text("held_for").references((): AnySQLiteColumn => artifacts.id, {
       onDelete: "cascade",
     }),
-    /** The session's project when it made it; a page there is also written to `decisions/<name>/`. */
-    projectId: text("project_id"),
+    /**
+     * The session's project when it made it; a page there is also written
+     * to `decisions/<name>/`, and is the project's (served on its origin).
+     * A project's delete takes its pages first (db/index.ts
+     * `deleteProject`); anything else of it outlives it with no project.
+     */
+    projectId: text("project_id").references(() => projects.id, {
+      onDelete: "set null",
+    }),
     kind: text("kind").$type<import("@cawco/core").ArtifactKind>().notNull(),
     name: text("name").notNull(),
     /** What the person does on it (core `ARTIFACT_DOES`): pick, judge, try or draw. Every create names it; rows made before it were set to judge. */
@@ -3694,10 +3728,19 @@ export const artifacts = sqliteTable(
   },
   (table) => [
     index("artifacts_instance").on(table.instanceId, table.createdAt),
-    // A held next version shares its artifact's name.
+    // A held next version shares its artifact's name. A project's page is
+    // the project's by its name, whichever session wrote it; every other
+    // artifact is its session's by kind and name.
     uniqueIndex("artifacts_instance_name")
       .on(table.instanceId, table.kind, table.name)
-      .where(sql`${table.heldFor} is null`),
+      .where(
+        sql`${table.heldFor} is null and (${table.projectId} is null or ${table.kind} <> 'page')`
+      ),
+    uniqueIndex("artifacts_project_page")
+      .on(table.projectId, table.name)
+      .where(
+        sql`${table.heldFor} is null and ${table.projectId} is not null and ${table.kind} = 'page'`
+      ),
     uniqueIndex("artifacts_held_for").on(table.heldFor),
   ]
 );
@@ -3738,18 +3781,32 @@ export const shownPreviews = sqliteTable("shown_previews", {
 });
 
 /**
- * The port each session's previews are served on in port mode (preview.ts),
- * and the port its host name says under a `{port}` host pattern: its own
- * origin, kept across restarts so the previewed app keeps its storage.
- * Taken when the session first shows a preview or a canvas, given back when
- * the session ends.
+ * Each preview origin's port (preview.ts), and the port its host name says
+ * under a `{port}` host pattern: kept across restarts so what it serves
+ * keeps its storage. An origin is a session's (its panel's previews and
+ * canvases, taken when it first shows one, given back when it ends) or a
+ * project's (its pages, Projects spec §5.8: one origin for the project's
+ * life, whichever session wrote a page or whether it still stands); exactly
+ * one owns each row, and goes with it.
  */
-export const previewPorts = sqliteTable("preview_ports", {
-  instanceId: text("instance_id")
-    .primaryKey()
-    .references(() => instances.id, { onDelete: "cascade" }),
-  port: integer("port").notNull().unique(),
-});
+export const previewPorts = sqliteTable(
+  "preview_ports",
+  {
+    port: integer("port").primaryKey(),
+    instanceId: text("instance_id")
+      .unique()
+      .references(() => instances.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .unique()
+      .references(() => projects.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    check(
+      "preview_ports_one_owner",
+      sql`(${table.instanceId} is null) <> (${table.projectId} is null)`
+    ),
+  ]
+);
 
 /**
  * The fleet's stream relay (stream-relay.ts) — one row, keyed `'relay'`,
@@ -3768,8 +3825,6 @@ export const streamRelay = sqliteTable("stream_relay", {
   address: text("address").notNull(),
   /** A DNS name pointing at the machine: TLS answers for it once its certificate stands. */
   hostname: text("hostname"),
-  /** coturn's `external-ip`, when the address is not one of the machine's own. */
-  externalIp: text("external_ip"),
   /** Sealed: whoever holds it mints credentials the relay accepts. Null when the hub's key does not open it. */
   secret: sealedText("secret").notNull(),
   /** Whether the person wants it running: Stop relay sets it false, Start relay true. */
@@ -3777,6 +3832,8 @@ export const streamRelay = sqliteTable("stream_relay", {
   state: text("state").$type<StreamRelayState>().notNull().default("starting"),
   /** What its machine has bound, as its last frame said. */
   ports: text("ports", { mode: "json" }).$type<RelayPorts>(),
+  /** Its machine's own LAN and tailnet addresses, as its last live frame said: every browser's mint carries them. */
+  reach: text("reach", { mode: "json" }).$type<RelayReach>(),
   why: text("why"),
   /** The command `why` names as its fix, word for word inside it (shown as code). */
   whyCommand: text("why_command"),
@@ -3859,7 +3916,7 @@ export const streamRelayJourney = sqliteTable("stream_relay_journey", {
   /** Sealed: the person's Cloudflare API token (Zone · DNS · Edit), for the record and the certificate's DNS challenge. */
   cloudflareToken: sealedText("cloudflare_token"),
   /** What the router answered "Open the ports" with; null before it was asked. */
-  router: text("router").$type<"mapped" | "partial" | "refused">(),
+  router: text("router").$type<"mapped" | "refused">(),
   routerHow: text("router_how").$type<"UPnP" | "NAT-PMP">(),
   /** The machine's runtime may bind the relay's lowest port, as last read. */
   lowPorts: integer("low_ports", { mode: "boolean" }).notNull().default(false),

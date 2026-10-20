@@ -21,6 +21,7 @@
    * less motion they move at once and only the label's fade runs).
    */
   import type { Snippet } from "svelte";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
 
   let {
     items,
@@ -85,8 +86,10 @@
     if (!root || items.length === 0) {
       return;
     }
+    // Measured now, and a change in the next frame (frameObserver): the
+    // thumb is placed on the boxes.
     measure();
-    const sizes = new ResizeObserver(measure);
+    const sizes = frameObserver(measure);
     for (const node of root.querySelectorAll("[data-rail-item]")) {
       sizes.observe(node);
     }

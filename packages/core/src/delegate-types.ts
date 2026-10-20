@@ -25,12 +25,13 @@ export interface DelegateType {
    */
   canDelegate?: boolean;
   /**
-   * "CawCo's to-dos" for this type's sessions, whatever the fleet says
-   * (§5.2, "changeable later in Settings and per delegate type"). Denied
-   * lists only union, so a type can turn the choice on, never off: absent or
-   * false leaves it to the fleet. A project type file says `cawco_todos: true`.
+   * Always true: every session keeps CawCo's list, whatever its type. Still
+   * sent because the apps on TestFlight 20261015 through 20261018 read it
+   * (hub openapi.ts's wire check) and send it back on a save, which the hub
+   * ignores; nothing reads it here. It goes in the change that expires those
+   * builds.
    */
-  cawcoTodos?: boolean;
+  cawcoTodos?: true;
   /**
    * The connections (Projects spec §5.5) its sessions may call, by name: the
    * hub lists each one's tools to them as `conn__<name>__<tool>` and runs
@@ -118,24 +119,23 @@ export const delegateTypeProblem = (
 };
 
 /**
- * Each harness's own tools for the two things the fleet's onboarding choices
- * turn off (Projects spec §5.2, §5.6): native subagents ("delegates instead
- * of subagents") and the native to-do list ("CawCo's to-dos instead of each
- * harness's own list"). "CawCo's to-dos" also denies each harness's built-in
- * plan mode (Claude Code's `EnterPlanMode`/`ExitPlanMode`; OpenCode 2.0's is
- * an agent, `plan`, which the OpenCode adapter turns off instead): the
- * session's spec, written through CawCo (`plan.ts`), replaces it. OpenCode
- * 2.0 has no to-do tool, and pi has neither.
+ * Each harness's own tools for the two things CawCo keeps itself (Projects
+ * spec §5.2, §5.6): native subagents (the fleet's "delegates instead of
+ * subagents" choice) and the native to-do list with its plan mode, which
+ * every session is denied: a session's plan is CawCo's list (`todo_write`'s
+ * session scope, core plan.ts), always.
+ *
+ * - Claude Code: its list, `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet`
+ *   and `TodoWrite` (each in agent SDK 0.3.302's `BUILTIN_TOOL_NAMES`), and
+ *   its plan mode, `EnterPlanMode`/`ExitPlanMode`: the session's spec,
+ *   written through CawCo, replaces it.
+ * - OpenCode 2.0 has no list ("The `todowrite` tool is no longer available
+ *   and must not be called", 2.0.29's V2 migration; no `todoread` at all);
+ *   its plan mode is an agent, `plan`, which the OpenCode adapter turns off
+ *   on every server it launches.
+ * - pi has neither (1.3.0's built-ins are `read`, `bash`, `powershell`,
+ *   `edit`, `write`, `grep`, `find` and `ls`).
  */
-/**
- * What a session is denied for "CawCo's to-dos", in Claude Code's names (the
- * OpenCode adapter reads each as its own tool): the harness's own list and
- * its built-in plan mode. Added at spawn to every session the choice is on
- * for, so no stored list has to carry the names.
- */
-export const cawcoTodosDenied = (on: boolean): readonly string[] =>
-  on ? NATIVE_TOOLS.todos.claude : [];
-
 export const NATIVE_TOOLS = {
   subagents: { claude: ["Task", "Agent"], opencode: ["subagent"], pi: [] },
   todos: {
@@ -144,6 +144,7 @@ export const NATIVE_TOOLS = {
       "TaskUpdate",
       "TaskList",
       "TaskGet",
+      "TodoWrite",
       "EnterPlanMode",
       "ExitPlanMode",
     ],
@@ -151,6 +152,14 @@ export const NATIVE_TOOLS = {
     pi: [],
   },
 } as const satisfies Record<string, Record<HarnessKind, readonly string[]>>;
+
+/**
+ * What every session is denied beside the fleet's baseline, in Claude Code's
+ * names (the OpenCode and pi adapters read each as their own tool, and find
+ * none): the harness's own list and its plan mode. Added at spawn and to the
+ * machine's own `claude` settings, so no stored list carries the names.
+ */
+export const OWN_LIST_DENIED: readonly string[] = NATIVE_TOOLS.todos.claude;
 
 /**
  * The toolsets a session runs in (Projects spec §5.3: one `cawco` server, a

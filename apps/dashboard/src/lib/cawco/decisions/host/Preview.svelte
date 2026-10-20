@@ -11,6 +11,10 @@
 -->
 <script lang="ts">
   import { CANVAS_EMBED_SIZE, canvasEmbedUrl } from "@cawco/core/stage";
+  import {
+    type FrameObserver,
+    frameObserver,
+  } from "#lib/cawco/frame-observer.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { served } from "./page.svelte.js";
 
@@ -28,7 +32,7 @@
   );
   let frame = $state<HTMLIFrameElement>();
   let tall = $state<number | null>(null);
-  let watch: ResizeObserver | undefined;
+  let watch: FrameObserver | undefined;
 
   /** A component canvas's own height, as it says it (agent canvas runtime `by=embed`): its frame is as tall. */
   $effect(() => {
@@ -61,8 +65,10 @@
     const measure = () => {
       tall = root.scrollHeight;
     };
+    // Read now, and a change in the next frame (frameObserver): the frame
+    // takes its height from it, which lays its document out again.
     measure();
-    watch = new ResizeObserver(measure);
+    watch = frameObserver(measure);
     watch.observe(root);
   }
   $effect(() => () => watch?.disconnect());

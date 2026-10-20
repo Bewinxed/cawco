@@ -58,6 +58,8 @@ import {
   rewriteSheet,
 } from "./pseudo";
 import { onPageScheme, pageScheme } from "./scheme";
+import { frameAsViewport, windowHeight, windowWidth } from "./viewport";
+import { frameWidths, splitWidth, WIDTH_CONTAINER } from "./width";
 
 /** What the adapter is handed for one story (Storybook's `decorateStory` inputs). */
 export interface MountSpec {
@@ -91,6 +93,8 @@ export interface SectionModule {
 
 export interface BootOptions {
   adapter: Adapter;
+  /** The house edge fade's sheet (the dashboard's edge-fade.css), set in the page: a wide embed's frame scrolls under it (`fitToEmbed`). */
+  edgeFade: string;
   /** The house faces' `@font-face` rules (Figtree, JetBrains Mono), their files served beside the canvas. */
   faces: string;
   /** How to load each section's module, by its states file. */
@@ -391,8 +395,22 @@ export function boot(options: BootOptions): void {
     ...document.styleSheets,
     ...document.adoptedStyleSheets,
   ];
+  /** A sheet the canvas writes for itself (its page style, DialKit's, the width probe): it answers the window. */
+  const canvasOwned = (sheet: CSSStyleSheet) => {
+    const node = sheet.ownerNode;
+    return (
+      node instanceof HTMLElement &&
+      ["cawcoCanvas", "cawcoDialkit", "cawcoProbe"].some(
+        (key) => key in node.dataset
+      )
+    );
+  };
   const rewriteAll = () => {
     for (const sheet of sheetsNow()) {
+      // Width first: the state rewrite then reaches the rules inside the containers it makes.
+      if (!canvasOwned(sheet)) {
+        frameWidths(sheet, rewrite.refused);
+      }
       rewriteSheet(sheet, rewrite);
       forceMotion(sheet, view.motion);
     }
@@ -463,9 +481,112 @@ export function boot(options: BootOptions): void {
   );
   rewriteAll();
 
-  /* --- Reduced motion for script that asks matchMedia ------------------- */
+  /* --- Script that asks matchMedia: reduced motion, and the frame's width */
 
   const media = window.matchMedia.bind(window);
+  /** The width of the frame whose story mounts now: undefined between mounts, null for a frame without one. */
+  let mounting: number | null | undefined;
+  /** The one width every frame drawn has, null where they differ or one has none. */
+  const sharedWidth = (): number | null => {
+    const widths = new Set<number | null>();
+    for (const section of sections) {
+      for (const frame of section.frames.values()) {
+        widths.add(widthOf(frame.story, frame.column.width));
+      }
+    }
+    const [only] = widths;
+    return widths.size === 1 && only !== undefined ? only : null;
+  };
+  /**
+   * Where the engine answers a width condition at a given width: a hidden
+   * container (`cawco-probe`) set to that width, a rule per condition
+   * marking its child, so every syntax a container query takes (ranges,
+   * `and`, `or`) answers as the frame's CSS does.
+   */
+  const probeStyle = document.createElement("style");
+  probeStyle.dataset.cawcoProbe = "";
+  document.head.append(probeStyle);
+  const probeBox = document.createElement("div");
+  probeBox.dataset.cawcoProbe = "";
+  probeBox.setAttribute("aria-hidden", "true");
+  probeBox.style.cssText =
+    "position: absolute; inset-block-start: 0; inset-inline-start: -100000px; block-size: 0; overflow: hidden; visibility: hidden; pointer-events: none; container: cawco-probe / inline-size;";
+  const probeMark = document.createElement("i");
+  probeBox.append(probeMark);
+  document.body.append(probeBox);
+  const conditions = new Map<string, number | null>();
+  /** Whether `condition` holds in a container `width` px wide; null where the engine takes no such condition. */
+  const holdsAt = (condition: string, width: number): boolean | null => {
+    let at = conditions.get(condition);
+    if (at === undefined) {
+      const { sheet } = probeStyle;
+      at = sheet?.cssRules.length ?? null;
+      try {
+        sheet?.insertRule(
+          `@container cawco-probe ${condition} { [data-cawco-probe] > i[data-q="${at}"] { --cawco-q: 1; } }`,
+          at ?? 0
+        );
+      } catch {
+        at = null;
+      }
+      conditions.set(condition, at);
+    }
+    if (at === null) {
+      return null;
+    }
+    probeBox.style.inlineSize = `${width}px`;
+    probeMark.dataset.q = String(at);
+    return (
+      getComputedStyle(probeMark).getPropertyValue("--cawco-q").trim() === "1"
+    );
+  };
+  /* --- Floating layers: the frame they open from is their viewport (viewport.ts) */
+
+  /** The frame last pressed or focused in, where a menu or a popover opens from. */
+  let touched: Frame | null = null;
+  /** The frames with a width of their own, drawn now: each is its story's viewport. */
+  const widthFrames = (): Frame[] =>
+    sections.flatMap((section) =>
+      [...section.frames.values()].filter(
+        (frame) =>
+          frame.el.isConnected &&
+          widthOf(frame.story, frame.column.width) !== null
+      )
+    );
+  const touchedIn = (event: Event) => {
+    const body =
+      event.target instanceof Element
+        ? event.target.closest(".cawco-frame-body")
+        : null;
+    touched = widthFrames().find((frame) => frame.body === body) ?? null;
+  };
+  document.addEventListener("pointerdown", touchedIn, true);
+  document.addEventListener("focusin", touchedIn, true);
+  /**
+   * The frame a floating layer asks the viewport of: the one frame with a
+   * trigger open in it (`aria-expanded`, as a menu's or a popover's
+   * trigger says, so a layer open as its story mounts has its frame); else
+   * the frame last pressed or focused in; else the one frame with a width.
+   * None (the window's own) where several have triggers open and none was
+   * touched, or a frame has no width.
+   */
+  const floatingFrame = (): Frame | null => {
+    const frames = widthFrames();
+    const open = frames.filter((frame) =>
+      frame.body.querySelector('[aria-expanded="true"]')
+    );
+    if (open.length === 1) {
+      return open[0] ?? null;
+    }
+    if (touched && (open.length === 0 ? frames : open).includes(touched)) {
+      return touched;
+    }
+    return open.length === 0 && frames.length === 1
+      ? (frames[0] ?? null)
+      : null;
+  };
+  frameAsViewport(() => floatingFrame()?.body.getBoundingClientRect() ?? null);
+
   window.matchMedia = (query: string) => {
     if (view.motion === "reduce" && REDUCED_QUERY.test(query)) {
       const reduce = query.includes("reduce");
@@ -475,7 +596,31 @@ export function boot(options: BootOptions): void {
         media: query,
       } as MediaQueryList;
     }
-    return media(query);
+    const split = splitWidth(query);
+    if (split.kind !== "frame") {
+      return media(query);
+    }
+    // A frame's story asks at its frame's width; asked between mounts, at the one width every frame has; else the canvas's, as a frame without one answers its CSS.
+    const asked = mounting;
+    const widthNow = () =>
+      (asked === undefined ? sharedWidth() : asked) ?? canvas.clientWidth;
+    // What the window still answers (a media type, a hover), and where its changes are heard.
+    const rest = media(split.media || query);
+    return {
+      get matches() {
+        const held = holdsAt(split.container, widthNow());
+        return held === null
+          ? media(query).matches
+          : held && (!split.media || rest.matches);
+      },
+      media: query,
+      onchange: null,
+      addEventListener: rest.addEventListener.bind(rest),
+      removeEventListener: rest.removeEventListener.bind(rest),
+      addListener: rest.addListener.bind(rest),
+      removeListener: rest.removeListener.bind(rest),
+      dispatchEvent: rest.dispatchEvent.bind(rest),
+    } as MediaQueryList;
   };
 
   /* --- Sections ----------------------------------------------------------- */
@@ -839,6 +984,10 @@ export function boot(options: BootOptions): void {
     into: { error?: PageError }
   ): Mounted | undefined {
     into.error = undefined;
+    const was = mounting;
+    // What the story's script asks of matchMedia while it mounts, its frame answers.
+    const width = Number.parseFloat(body.style.width);
+    mounting = Number.isFinite(width) ? width : null;
     try {
       return adapter.mountStory(body, specFor(section, name, args), (error) => {
         into.error = pageError(error, root, base);
@@ -847,7 +996,20 @@ export function boot(options: BootOptions): void {
     } catch (error) {
       into.error = pageError(error, root, base);
       console.error(`[cawco] story ${name} did not mount:`, error);
+    } finally {
+      mounting = was;
     }
+  }
+
+  /**
+   * A frame body at a story's width: its width, and the width container its
+   * story's width conditions answer to (width.ts). A body without one shrinks
+   * to its story, so it can be no container: it answers the canvas.
+   */
+  function sizeBody(body: HTMLElement, width: number | null): void {
+    body.style.width = width === null ? "" : `${width}px`;
+    body.style.container =
+      width === null ? "" : `${WIDTH_CONTAINER} / inline-size`;
   }
 
   /**
@@ -859,7 +1021,10 @@ export function boot(options: BootOptions): void {
    * narrower story centres in it at its own size. The scale stops where the
    * story's words would be drawn under EMBED_TYPE_FLOOR: a story still
    * wider than the embed there scrolls sideways in its frame
-   * (`data-cawco-wide`), its words legible.
+   * (`data-cawco-wide`), its words legible, under the house edge fade
+   * (DESIGN.md `kit-edge-fade`, its sheet set in the page by the chrome),
+   * drawn on the side where more is hidden and gone at each end of the
+   * scroll.
    */
   function fitToEmbed(frame: Frame): void {
     const width = widthOf(frame.story, frame.column.width);
@@ -869,10 +1034,9 @@ export function boot(options: BootOptions): void {
     const scale =
       type === null ? fit : Math.max(fit, Math.min(1, EMBED_TYPE_FLOOR / type));
     frame.body.style.zoom = scale < 1 ? String(scale) : "";
-    frame.el.toggleAttribute(
-      "data-cawco-wide",
-      width !== null && width * scale > room + 0.5
-    );
+    const wide = width !== null && width * scale > room + 0.5;
+    frame.el.toggleAttribute("data-cawco-wide", wide);
+    frame.el.classList.toggle("kit-edge-fade", wide);
   }
 
   /** The font size most of a story's words stand at, in its own px (CSS zoom leaves the computed size alone); null before it draws any. */
@@ -901,8 +1065,7 @@ export function boot(options: BootOptions): void {
     body.classList.toggle("dark", scheme === "dark");
     body.style.backgroundColor = ground.background;
     body.style.color = ground.color;
-    const width = widthOf(story, column.width);
-    body.style.width = width === null ? "" : `${width}px`;
+    sizeBody(body, widthOf(story, column.width));
     if (embed) {
       fitToEmbed(frame);
     }
@@ -1258,6 +1421,7 @@ export function boot(options: BootOptions): void {
   ): Promise<Probe> {
     const body = document.createElement("div");
     body.className = "cawco-frame-body";
+    sizeBody(body, widthOf(story, "own"));
     rig.append(body);
     const fake: { error?: PageError } = {};
     const mounted = mountInto(
@@ -1419,6 +1583,8 @@ export function boot(options: BootOptions): void {
     for (const { to } of movesOf(section)) {
       const body = document.createElement("div");
       body.className = "cawco-frame-body";
+      const story = storiesOf(section).find((one) => one.name === to);
+      sizeBody(body, story ? widthOf(story, "own") : null);
       rig.append(body);
       try {
         // biome-ignore lint/performance/noAwaitInLoops: one move in the rig at a time
@@ -2257,6 +2423,7 @@ export function boot(options: BootOptions): void {
     canvas,
     spec,
     tokens: options.tokens,
+    edgeFade: options.edgeFade,
     faces: options.faces,
     view,
     sections: () => sections,
@@ -2456,9 +2623,9 @@ export function boot(options: BootOptions): void {
       whole:
         rect.left >= Math.max(0, room.left) - 0.5 &&
         rect.top >= Math.max(0, room.top) - 0.5 &&
-        rect.right <= Math.min(innerWidth, room.right) + 0.5 &&
-        rect.bottom <= Math.min(innerHeight, room.bottom) + 0.5,
-      view: `the world at zoom ${zoom.z} in a ${Math.round(room.width)}×${Math.round(room.height)} canvas, a ${innerWidth}×${innerHeight} window${chrome.phone() ? " (a phone's)" : ""}`,
+        rect.right <= Math.min(windowWidth(), room.right) + 0.5 &&
+        rect.bottom <= Math.min(windowHeight(), room.bottom) + 0.5,
+      view: `the world at zoom ${zoom.z} in a ${Math.round(room.width)}×${Math.round(room.height)} canvas, a ${windowWidth()}×${windowHeight()} window${chrome.phone() ? " (a phone's)" : ""}`,
     };
   };
 

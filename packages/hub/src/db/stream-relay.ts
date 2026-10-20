@@ -2,6 +2,7 @@ import type {
   RelayMapHow,
   RelayPortHealth,
   RelayPorts,
+  RelayReach,
   StreamRelayState,
 } from "@cawco/core/stream-relay";
 import { eq } from "drizzle-orm";
@@ -17,11 +18,12 @@ import {
 export interface StoredRelay {
   address: string;
   checkedAt: number | null;
-  externalIp: string | null;
   health: RelayPortHealth[];
   hostname: string | null;
   machineId: string;
   ports: RelayPorts | null;
+  /** Its machine's own LAN and tailnet addresses, as its last live frame said; null before. */
+  reach: RelayReach | null;
   secret: string | null;
   state: StreamRelayState;
   wanted: boolean;
@@ -34,7 +36,14 @@ export interface StoredRelay {
 export type RelayChange = Partial<
   Pick<
     StoredRelay,
-    "state" | "ports" | "why" | "whyCommand" | "health" | "checkedAt" | "wanted"
+    | "state"
+    | "ports"
+    | "reach"
+    | "why"
+    | "whyCommand"
+    | "health"
+    | "checkedAt"
+    | "wanted"
   >
 >;
 
@@ -53,7 +62,7 @@ export interface StoredJourney {
   machineId: string | null;
   name: string | null;
   nameState: "open" | "pointed" | "skipped";
-  router: "mapped" | "partial" | "refused" | null;
+  router: "mapped" | "refused" | null;
   routerHow: RelayMapHow | null;
 }
 
@@ -92,7 +101,6 @@ export interface StreamRelayDb {
     machineId: string;
     address: string;
     hostname: string | null;
-    externalIp: string | null;
     secret: string;
   }) => void;
   readonly update: (change: RelayChange) => void;
@@ -118,11 +126,11 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
           machineId: row.machineId,
           address: row.address,
           hostname: row.hostname,
-          externalIp: row.externalIp,
           secret: row.secret,
           wanted: row.wanted,
           state: row.state,
           ports: row.ports,
+          reach: row.reach,
           why: row.why,
           whyCommand: row.whyCommand,
           health: row.health,
@@ -130,16 +138,16 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
         }
       : null;
   },
-  set: ({ machineId, address, hostname, externalIp, secret }) => {
+  set: ({ machineId, address, hostname, secret }) => {
     const fresh = {
       machineId,
       address,
       hostname,
-      externalIp,
       secret,
       wanted: true,
       state: "starting" as const,
       ports: null,
+      reach: null,
       why: null,
       whyCommand: null,
       health: [],

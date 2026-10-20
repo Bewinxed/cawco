@@ -30,6 +30,7 @@
    */
   import type { Pin } from "@cawco/core/comments";
   import { type Component, tick, untrack } from "svelte";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
@@ -148,6 +149,7 @@
     if (!(holder && list)) {
       return;
     }
+    // biome-ignore lint/style/noRestrictedGlobals: the room keeps its end by its scroll, which resizes nothing, in the delivery, so no frame paints it short of its newest entry
     const watch = new ResizeObserver(() => {
       if (atEnd) {
         holder.scrollTop = holder.scrollHeight;
@@ -178,7 +180,6 @@
     const top = head;
     const bottom = foot;
     let measured = false;
-    let frame = 0;
     const measure = () => {
       const style = getComputedStyle(holder);
       const gap = Number.parseFloat(style.rowGap) || 0;
@@ -188,21 +189,17 @@
       measured =
         top.offsetHeight + bottom.offsetHeight + 2 * gap + edges >
         holder.clientHeight + 1;
-      if (!frame) {
-        frame = requestAnimationFrame(() => {
-          frame = 0;
-          squeezed = measured;
-        });
-      }
     };
-    const watch = new ResizeObserver(measure);
+    const watch = frameObserver(
+      () => {
+        squeezed = measured;
+      },
+      { read: measure }
+    );
     for (const part of [holder, top, bottom]) {
       watch.observe(part);
     }
-    return () => {
-      cancelAnimationFrame(frame);
-      watch.disconnect();
-    };
+    return () => watch.disconnect();
   });
 
   // A press outside the card closes it; one in a modal layer over

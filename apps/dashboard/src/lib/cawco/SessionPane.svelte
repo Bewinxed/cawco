@@ -160,7 +160,7 @@
     return () => cancelAnimationFrame(frame);
   });
   const phone = $derived(laidWidth > 0 && laidWidth < 900);
-  /** The side surface is the bottom drawer, not the split (layoutPolicy.sideDrawer). */
+  /** The side surface is the bottom drawer, not the split; null until the pane is measured (layoutPolicy.sideDrawer). */
   const drawer = $derived(layoutPolicy.sideDrawer(laidWidth));
   let side = $state<ReturnType<typeof SideSplit>>();
   /** How far what stands on the composer rises past it: the transcript keeps that much room past its end. */

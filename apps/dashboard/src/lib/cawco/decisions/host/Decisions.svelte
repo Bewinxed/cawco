@@ -4,7 +4,7 @@
   kit's hero, meter and footer (page.css `.dp-hero`, `.dp-meter`, `.dp-done`).
 -->
 <script lang="ts">
-  import { readProgram } from "@cawco/core/decisions";
+  import { pickOf, readProgram } from "@cawco/core/decisions";
   import type { ElementNode } from "@openuidev/lang-core";
   import cawDark from "../../../../../../../packages/hub/skills/decision-page/kit/caw/dark-ready.webp";
   import cawLight from "../../../../../../../packages/hub/skills/decision-page/kit/caw/light-ready.webp";
@@ -19,17 +19,19 @@
     children: unknown[];
   }> = $props();
 
-  const ids = $derived(
+  const cards = $derived(
     readProgram({
       type: "element",
       typeName: "Decisions",
       props,
       partial: false,
       hasDynamicProps: false,
-    } as unknown as ElementNode).cards.map((card) => card.id)
+    } as unknown as ElementNode).cards
   );
+  const ids = $derived(cards.map((card) => card.id));
+  /** Cards picked as core `pickOf` counts them, as artifact_list and the graph do. */
   const count = $derived(
-    ids.filter((id) => (picks.now[id]?.options ?? []).length > 0).length
+    cards.filter((card) => pickOf(card, picks.now[card.id]).picked).length
   );
   let sent = $state("");
   let sending = $state(false);
@@ -89,6 +91,13 @@
 
 <style>
   /* tailwind: this file is bundled by Bun for the decision host page, which loads only the kit's page.css and tokens.css and has no Tailwind compiler, so a utility class here would have no CSS behind it — https://tailwindcss.com/docs/installation */
+  /* The page's scroller moves only where a fold rides it (Decision.svelte,
+     motion/scroll-on): the browser's scroll anchoring would jump it as a
+     card folds above the reader's view (the transcript's precedent). */
+  /* css-scope: the decision page's own document root is its scroller; this component is the page */
+  :global(:root) {
+    overflow-anchor: none;
+  }
   /* Caw in the host's theme (the overlay's `data-theme`), else the OS's. */
   .caw-dark {
     display: none;

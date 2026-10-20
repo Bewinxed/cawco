@@ -200,6 +200,7 @@ export function autosize(
     // resizing the field inside its own observer's callback would report
     // the resize back to that observer in the same frame. The observer's
     // own box says how wide it is; asking the field would lay it out again.
+    // biome-ignore lint/style/noRestrictedGlobals: writes nothing: a new width asks `later` (nextFrame) for the refit, in the next frame with the field's other requests
     const sizes = new ResizeObserver(([entry]) => {
       if (Math.abs(entry.borderBoxSize[0].inlineSize - width) > 0.5) {
         later.request(false);

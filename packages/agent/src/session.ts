@@ -4508,7 +4508,8 @@ export class SessionSupervisor {
             key,
             directory,
             instanceId,
-            shared ? [...claimedSessionIds, key] : claimedSessionIds
+            shared ? [...claimedSessionIds, key] : claimedSessionIds,
+            forget === true
           );
           ended = {
             harness: "opencode",

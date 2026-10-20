@@ -145,6 +145,20 @@ const browsersLeg = async (kit: Kit, dylib: string, root: string) => {
     const said = await until(next, "watching");
     const records = real(String(said.records));
     const profile = real(String(said.profile));
+    const moved = (said.moved ?? {}) as {
+      chromiumEnded?: boolean;
+      cookie?: boolean;
+      log?: boolean;
+      oldLeft?: string[];
+    };
+    kit.check(
+      "browsers: a local browser's profile and log an earlier agent kept beside its record come up under chromium/ with the same files as the agent starts, its Chromium stopped first, nothing left at the old place",
+      moved.cookie === true &&
+        moved.log === true &&
+        moved.chromiumEnded === true &&
+        moved.oldLeft?.length === 0,
+      JSON.stringify(moved)
+    );
     const live = await streamsOnce(log, child.pid, (one) => one.length > 0);
     kit.note(
       `browsers: child ${child.pid} holds ${JSON.stringify(live)}; records ${records}; profile ${profile}`

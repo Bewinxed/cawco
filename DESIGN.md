@@ -405,7 +405,7 @@ components:
     typography: "{typography.meta}"
     rounded: "{rounded.pill}"
   option-chip:
-    backgroundColor: "{colors.surface-recess}"
+    backgroundColor: "{colors.surface-raised}"
     textColor: "{colors.ink-strong}"
     typography: "{typography.label}"
     rounded: "{rounded.sm}"

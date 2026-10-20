@@ -319,12 +319,6 @@ export const SESSION_ENTRIES: readonly SessionEntry[] = [
   { kind: "prefix", root: "todos", suffix: "-" },
 ];
 
-/** A session's task list on disk: `tasks/<id>` in its own dir. */
-export const sessionTasksDir = (
-  row: { accountId?: string | null },
-  sessionId: string
-): string => join(sessionConfigDir(row), "tasks", sessionId);
-
 /**
  * The one store of an account of any provider other than Claude's on this
  * machine: its credential in pi-ai's credential format, keyed by the

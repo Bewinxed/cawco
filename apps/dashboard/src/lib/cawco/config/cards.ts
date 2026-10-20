@@ -1,3 +1,4 @@
+import { frameObserver } from "#lib/cawco/frame-observer.js";
 import { keepPrefs, type Pref } from "../prefs";
 import { store, stored } from "../storage";
 
@@ -65,7 +66,7 @@ export function rememberCard(path: string) {
       store("local", CARDS_COOKIE, value);
       keepPrefs({ [CARDS_COOKIE]: value });
     };
-    const sizes = new ResizeObserver(() => {
+    const sizes = frameObserver(() => {
       clearTimeout(timer);
       timer = setTimeout(keep, 400);
     });

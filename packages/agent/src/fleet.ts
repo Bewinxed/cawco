@@ -158,8 +158,6 @@ const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 interface Sidecar {
-  /** The fleet's "CawCo's to-dos" choice, synced from `supervisor_config.cawco_todos`. */
-  cawcoTodos?: boolean;
   /**
    * The fleet's denied-tools list, synced from `fleet_denied_tools`. None
    * before the machine's first sync: the machine has not heard the list,
@@ -302,7 +300,6 @@ const readSidecar = async (): Promise<Sidecar> => {
     memoryDocs: stored?.memoryDocs ?? {},
     // None until the first sync: the machine has not heard the list.
     ...(stored?.deniedTools ? { deniedTools: stored.deniedTools } : {}),
-    ...(stored?.cawcoTodos ? { cawcoTodos: true } : {}),
     hooks: stored?.hooks ?? {},
     ...(stored?.placedMcp ? { placedMcp: stored.placedMcp } : {}),
     placedMemory: stored?.placedMemory ?? {},
@@ -2747,7 +2744,6 @@ const converge = async (
     ...installed,
     skills,
     deniedTools: config.deniedTools,
-    ...(config.cawcoTodos ? { cawcoTodos: true } : {}),
     ...(memory ? { memory } : {}),
     memoryDocs,
     hooks,

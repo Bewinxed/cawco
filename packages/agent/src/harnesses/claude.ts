@@ -71,8 +71,8 @@ import {
   CAWCO_ENV,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
+  CONTROL_CONTEXT_USAGE,
   CONTROL_FORGET_ACCOUNT,
-  CONTROL_GET_TODOS,
   CONTROL_JOIN_ACCOUNT_LOGIN,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
@@ -146,7 +146,7 @@ import {
   removeMcpConfigsOf,
   sweepMcpConfigs,
 } from "../claude-mcp-config";
-import { carrySessions, readTaskList, transcriptIn } from "../claude-sessions";
+import { carrySessions, transcriptIn } from "../claude-sessions";
 import {
   claudeHostVersion,
   claudeToStart,
@@ -2001,7 +2001,7 @@ class ClaudeSession implements HarnessSession {
         // All three layers union: every layer can only add, never remove
         // another layer's entries. Resolved once through `sessionFleetDenials()`
         // so this path and `convergeDeniedTools` read the same value; it adds
-        // the to-do and plan-mode set when "CawCo's to-dos" is on for it.
+        // the harness's own list and plan mode, which every session is denied.
         disallowedTools: [
           ...new Set([
             ...((options as { disallowedTools?: string[] } | undefined)
@@ -2467,6 +2467,15 @@ class ClaudeSession implements HarnessSession {
         if (message.type === "result") {
           if (neutral.type === "result" && this.#lastRequestAt !== undefined) {
             neutral.lastRequestAt = this.#lastRequestAt;
+          }
+          // What will wake it as the turn ends: the CLI's background tasks
+          // (its `background_tasks_changed` list, ambient ones left out) and
+          // the wake-ups its `Stop` hook listed just before this result.
+          if (neutral.type === "result") {
+            neutral.wakes = {
+              background: this.#background.size,
+              scheduled: this.#crons?.all ?? 0,
+            };
           }
           // The turn its boundary hook failed in ends failed, in the hook's
           // words: the hub fails the work item on it and tells the parent.
@@ -3111,6 +3120,15 @@ class ClaudeSession implements HarnessSession {
       // lower than what was asked.
       await this.#readEffort();
       return undefined;
+    }
+    // How full the window is, from the last answer's usage and the CLI's own
+    // estimates: "'summary' answers from the last response's usage and local
+    // estimates without per-category token-count API calls (default 'full')"
+    // (agent SDK 0.3.257 CHANGELOG). The full count waited on Anthropic's
+    // token-count API once per category, and on a busy machine (many
+    // sessions reading after every turn) ran past every reader's deadline.
+    if (method === CONTROL_CONTEXT_USAGE) {
+      return await this.#handle.getContextUsage({ detail: "summary" });
     }
     // The CLI is told its own mode (`fullSend` is its bypass); the session
     // takes the mode CawCo was asked for once the CLI is in it.
@@ -4132,7 +4150,7 @@ export class ClaudeHarness implements Harness {
       subtype: SESSION_DIR_READ,
       account_id: place.accountId,
     } as NeutralMessage);
-    const fleetDenyList = await sessionFleetDenials(spec.cawcoTodos);
+    const fleetDenyList = await sessionFleetDenials();
     // What this process has scheduled is known from its start: nothing until
     // a turn of it ends and says otherwise. Kept, so an agent that attaches
     // to it later knows too, though no turn of it has ended since (one its
@@ -4604,11 +4622,6 @@ export class ClaudeHarness implements Harness {
           )
         );
         return { forgotten: true };
-      case CONTROL_GET_TODOS:
-        return readTaskList(
-          { accountId: (args[2] as string | null | undefined) ?? null },
-          args[0] as string
-        );
       case CONTROL_PROBE_ACCOUNT:
         return probeAccount(args[0] as string);
       case CONTROL_READ_HOME_LOGIN:

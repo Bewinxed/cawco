@@ -210,21 +210,7 @@ const run = async (kit: Kit) => {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  // "CawCo's to-dos" on: the session's steps are its todo_write list.
-  const choices = await fetch(`${fleet.base}/api/fleet/choices`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ todos: true }),
-  });
-  if (
-    !kit.check(
-      "0a: CawCo's to-dos are on",
-      choices.ok,
-      `${choices.status} ${await choices.text()}`
-    )
-  ) {
-    return;
-  }
+  // Every session's steps are its todo_write list.
   const session = await fleet.spawn("claude", "Plan", fleet.repo);
   let n = 0;
   const call = async (input: object, name = TODO_WRITE) => {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import {
@@ -250,7 +251,9 @@ export function previewFrame(
   /** The session's artifacts by id, newest first. */
   artifacts: string[],
   /** A sheet's stage as its doc keeps it; none for any other kind, or before it was told. */
-  stage: StageState | null = null
+  stage: StageState | null = null,
+  /** The project whose origin serves it, `address` being that origin's: a project's page. */
+  project?: string
 ): PreviewFrame {
   return {
     kind: "preview",
@@ -259,6 +262,7 @@ export function previewFrame(
     artifact: target.artifact,
     artifacts,
     ...(address ?? {}),
+    ...(project ? { project } : {}),
     source: target.source,
     revision: target.revision,
     ...(stage ? { stage } : {}),
@@ -401,7 +405,13 @@ export interface PreviewListenerDeps {
   ) => Promise<Response>;
   /** An artifact's kind; undefined when there is none. */
   kindOf: (artifactId: string) => ArtifactKind | undefined;
-  /** The session that owns an artifact; undefined when there is none. */
+  /**
+   * The origin that serves an artifact, by its key: a project's page its
+   * project's ({@link projectOrigin}), whichever session holds it or none;
+   * every other artifact its session's. Undefined when there is none.
+   */
+  originOf: (artifactId: string) => string | undefined;
+  /** The session that holds an artifact (its panel); undefined when there is none, as for a project's page whose session is gone. */
   ownerOf: (artifactId: string) => string | undefined;
   picture: ReturnType<typeof artifactPicture>;
   /** The page's pictures of the person's marks, held for their delivery. */
@@ -419,6 +429,12 @@ export interface PreviewListenerDeps {
   /** Where a shown preview of a machine's is served now, its listener started when it has none. */
   reach: (instanceId: string) => Promise<PreviewReach>;
   send: ReturnType<typeof artifactSend>;
+  /**
+   * Whether origin `key` serves an artifact by its id: the origin that
+   * serves it ({@link originOf}), and a project's origin also its
+   * project's canvases, which its pages' Canvas pieces show inside them.
+   */
+  servedOn: (artifactId: string, key: string) => boolean;
   /** An artifact of the session's brought to the front of its panel from a page (`/show`: a decision page's Canvas, Open to draw). */
   showFrom: (
     request: Request,
@@ -435,16 +451,32 @@ export interface PreviewListenerDeps {
   ) => void;
 }
 
-/** An artifact's sync socket, its send (`/send`) or a canvas's picture (`/picture`), for the session that owns it only. */
+/** An artifact's sync socket, its send (`/send`) or a canvas's picture (`/picture`), on the origin that serves it only ({@link PreviewListenerDeps.originOf}). */
 const joinArtifact = (
   request: Request,
   server: Server<ListenerSocket>,
   [, artifactId, action]: RegExpMatchArray,
-  instanceId: string,
+  key: string,
   deps: PreviewListenerDeps
 ): Response | Promise<Response> | undefined => {
-  if (deps.ownerOf(artifactId) !== instanceId) {
-    return new Response("This session has no such artifact.", { status: 404 });
+  if (!deps.servedOn(artifactId, key)) {
+    return new Response("This origin serves no such artifact.", {
+      status: 404,
+    });
+  }
+  if (!action) {
+    const screen = new URL(request.url).searchParams.get("screen") === "1";
+    return server.upgrade(request, { data: { artifactId, screen } })
+      ? undefined
+      : new Response("WebSocket upgrade failed", { status: 400 });
+  }
+  // What the page asks of its session: the one that holds it now.
+  const instanceId = deps.ownerOf(artifactId);
+  if (!instanceId) {
+    return new Response(
+      "No session holds this page now: send it from its project's Decisions tab.",
+      { status: 409 }
+    );
   }
   if (action === "/send") {
     return deps.send(request, instanceId, artifactId);
@@ -461,10 +493,7 @@ const joinArtifact = (
   if (action === "/show") {
     return deps.showFrom(request, instanceId, artifactId);
   }
-  const screen = new URL(request.url).searchParams.get("screen") === "1";
-  return server.upgrade(request, { data: { artifactId, screen } })
-    ? undefined
-    : new Response("WebSocket upgrade failed", { status: 400 });
+  return new Response("Not found", { status: 404 });
 };
 
 /**
@@ -714,7 +743,7 @@ async function artifactById(
   if (canvas) {
     const [, artifactId, rest] = canvas;
     const embed = url.searchParams.get("embed") === "1";
-    return deps.ownerOf(artifactId) === instanceId &&
+    return deps.servedOn(artifactId, instanceId) &&
       deps.kindOf(artifactId) === "canvas"
       ? serveCanvas(artifactId, rest, deps.state, embed)
       : new Response("This session has no such canvas.", { status: 404 });
@@ -722,10 +751,10 @@ async function artifactById(
   const paged = pathname.match(PAGE_PATH);
   if (paged) {
     const [, artifactId, rest] = paged;
-    return deps.ownerOf(artifactId) === instanceId &&
+    return deps.servedOn(artifactId, instanceId) &&
       deps.kindOf(artifactId) === "page"
       ? servePage(artifactId, rest, deps, url, `/__cawco/page/${artifactId}/`)
-      : new Response("This session has no such page.", { status: 404 });
+      : new Response("This origin serves no such page.", { status: 404 });
   }
   return null;
 }
@@ -767,6 +796,12 @@ async function serveSession(
     return downResponse("closed", 404);
   }
   if ("page" in target.source && target.artifact.kind !== "component") {
+    // A project's page is served on its project's origin alone, at its own
+    // address there (`/__cawco/page/<id>/`): its frame names that origin.
+    if (deps.originOf(target.artifact.id) !== instanceId) {
+      previewFailed(HOP, instanceId, "its page is its project's origin's");
+      return downResponse("closed", 404);
+    }
     return HUB_SERVES[target.artifact.kind](
       target.artifact.id,
       pathname,
@@ -852,6 +887,13 @@ export class PreviewRefusal extends Error {
   }
 }
 
+/** An origin whose session or project the hub no longer holds: let go, and said, never kept. */
+const ownerGone = (key: string): PreviewRefusal =>
+  new PreviewRefusal(
+    409,
+    `No session or project holds the preview origin ${key} now, so it serves nothing.`
+  );
+
 /**
  * The scheme the names are served on (`http` or `https`: how the proxy in
  * front of them serves them, never how a client reached the hub), then
@@ -880,10 +922,27 @@ interface HostPattern {
   shape: RegExp;
 }
 
+/** One DNS label: what a `{session}` name's placeholder holds ({@link labelOf}). */
+const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
 const VALUE_OF = {
-  session: "[0-9a-f-]{36}",
+  // Any origin's label (labelOf): a session's, a project's, an embed's.
+  session: "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?",
   port: "\\d{1,5}",
 } as const;
+
+/**
+ * The label a `{session}` pattern names origin `key` by: the key itself
+ * when it is a DNS label already (a session's id, `project-<uuid>`,
+ * `embed-<uuid>`, a project id like `proj-00000-tde5z`), else `o-` and a
+ * hash of it (a project id with capitals or `_`, or one longer than a
+ * label holds), so every origin the hub hands out has a name, and each name
+ * reads back to one origin ({@link sessionOfHost}).
+ */
+const labelOf = (key: string): string =>
+  DNS_LABEL.test(key)
+    ? key
+    : `o-${createHash("sha256").update(key).digest("hex").slice(0, 40)}`;
 
 /** `pattern` parsed, or refused in one sentence. */
 const parsePattern = (pattern: string): HostPattern => {
@@ -1004,9 +1063,7 @@ export function createPreviewListeners(
   const listen = (
     port: number,
     route: (request: Request) => string | undefined,
-    lock?: PassCookie,
-    /** The origins that may frame what it serves beside the dashboards: an embed's decision page. */
-    ancestors: () => string[] = () => []
+    lock?: PassCookie
   ): Listener => {
     const fetch = async (
       request: Request,
@@ -1015,7 +1072,7 @@ export function createPreviewListeners(
       const instanceId = route(request);
       const stopped = lock && atTheLock(request, lock, instanceId);
       if (stopped) {
-        return framedBy(stopped);
+        return framedBy(stopped, ancestorsOf(instanceId));
       }
       // Port mode: every listener is one session's, so a route names it.
       if (!instanceId) {
@@ -1039,7 +1096,7 @@ export function createPreviewListeners(
       return (
         answer &&
         compressed(
-          framedBy(await withKeyedOverlay(answer), ancestors()),
+          framedBy(await withKeyedOverlay(answer), ancestorsOf(instanceId)),
           request.headers.get("accept-encoding")
         )
       );
@@ -1114,8 +1171,16 @@ export function createPreviewListeners(
 
   /** Each session's listener on its own port, by session. */
   const sessions = new Map<string, Listener>();
-  /** Each embedded preview's listener on its own port (not kept: an embed is made again as its page is served), by its key, with its session. */
-  const embeds = new Map<string, { listener: Listener; owner: string }>();
+  /**
+   * Each embedded preview's listener on its own port (not kept: an embed is
+   * made again as its page is served), by its key, with the origin of the
+   * page that shows it and every origin that page was served on: exactly
+   * those may frame it.
+   */
+  const embeds = new Map<
+    string,
+    { ancestors: Set<string>; listener: Listener; owner: string }
+  >();
   /** Host mode's one listener. */
   let byHost: Listener | undefined;
 
@@ -1155,8 +1220,8 @@ export function createPreviewListeners(
       return `it is ${fleet} port`;
     }
     // A machine of the fleet may run the stream relay on these (443, 444,
-    // 5349, 5350 and its relay range): no preview ever takes one, wherever
-    // CAWCO_PREVIEW_PORTS puts the range.
+    // 5349, 5350): no preview ever takes one, wherever CAWCO_PREVIEW_PORTS
+    // puts the range.
     if (isStreamRelayPort(port)) {
       return "it is the stream relay's port";
     }
@@ -1180,8 +1245,12 @@ export function createPreviewListeners(
     instanceId: string,
     opens: (port: number) => boolean
   ): number => {
+    // An origin whose session or project is gone holds no port: it is let go, never kept.
+    if (!db.ownerHeld(instanceId)) {
+      throw ownerGone(instanceId);
+    }
     const held = db.ports();
-    const kept = held.find((row) => row.instanceId === instanceId)?.port;
+    const kept = held.find((row) => row.key === instanceId)?.port;
     let why = "";
     if (kept !== undefined) {
       const refused = barred(kept);
@@ -1190,26 +1259,54 @@ export function createPreviewListeners(
       }
       why = refused ?? "another process holds it";
     }
-    const taken = new Set(held.map((row) => row.port));
+    const port = firstOpen(new Set(held.map((row) => row.port)), opens);
+    if (port === undefined) {
+      throw everyPortTaken();
+    }
+    if (!db.keepPort(instanceId, port)) {
+      // Its owner went while the listener opened.
+      release(instanceId);
+      throw ownerGone(instanceId);
+    }
+    if (kept !== undefined) {
+      console.warn(
+        `[preview] ${HOP}: preview of ${instanceId} moves from port ${kept} to ${port}: ${why}`
+      );
+    }
+    return port;
+  };
+
+  /** The lowest port of the range not `taken`, not barred, that `opens`; undefined when none does. */
+  const firstOpen = (
+    taken: Set<number>,
+    opens: (port: number) => boolean
+  ): number | undefined => {
     for (
       let port = PREVIEW_PORTS.first;
       port <= PREVIEW_PORTS.last;
       port += 1
     ) {
       if (!(taken.has(port) || barred(port)) && opens(port)) {
-        db.keepPort(instanceId, port);
-        if (kept !== undefined) {
-          console.warn(
-            `[preview] ${HOP}: preview of ${instanceId} moves from port ${kept} to ${port}: ${why}`
-          );
-        }
         return port;
       }
     }
-    throw new PreviewRefusal(
+  };
+
+  /** Every port of the range is held. */
+  const everyPortTaken = (): PreviewRefusal =>
+    new PreviewRefusal(
       503,
       `Every preview port (${PREVIEW_PORTS_TEXT}) is taken: end a session that has a preview or a canvas, then show this one again.`
     );
+
+  /** Origin `key`'s listener stops and its port is free again. */
+  const release = (key: string): void => {
+    const listener = sessions.get(key);
+    if (listener) {
+      detach(listener.stop(), "preview listener stop");
+    }
+    sessions.delete(key);
+    db.dropPort(key);
   };
 
   /** Session `instanceId`'s listener on its port. */
@@ -1226,12 +1323,18 @@ export function createPreviewListeners(
     host: string | null
   ): string | undefined => {
     const value = host?.match(pattern.shape)?.[1]?.toLowerCase();
-    if (!value || pattern.key === "session") {
-      return value;
+    if (!value) {
+      return;
+    }
+    if (pattern.key === "session") {
+      // The origin, of every one held now (a session's, a project's, an embed's), this label names.
+      return [...db.ports().map((row) => row.key), ...embeds.keys()].find(
+        (key) => labelOf(key) === value
+      );
     }
     const port = Number(value);
     return (
-      db.ports().find((row) => row.port === port)?.instanceId ??
+      db.ports().find((row) => row.port === port)?.key ??
       [...embeds].find(([, embed]) => embed.listener.port === port)?.[0]
     );
   };
@@ -1283,7 +1386,7 @@ export function createPreviewListeners(
   const openEmbed = (
     key: string,
     owner: string
-  ): { listener: Listener; owner: string } => {
+  ): { ancestors: Set<string>; listener: Listener; owner: string } => {
     const taken = new Set([
       ...db.ports().map((row) => row.port),
       ...[...embeds.values()].map((embed) => embed.listener.port),
@@ -1299,12 +1402,8 @@ export function createPreviewListeners(
       try {
         const opened = {
           owner,
-          listener: listen(
-            port,
-            () => key,
-            undefined,
-            () => ancestorsOf(owner)
-          ),
+          ancestors: new Set<string>(),
+          listener: listen(port, () => key),
         };
         embeds.set(key, opened);
         return opened;
@@ -1321,33 +1420,40 @@ export function createPreviewListeners(
   };
 
   /**
-   * The origins session `owner`'s decision page is served on, which may frame
-   * its embeds: its own port on any name it is reached by (a LAN address, the
-   * tailnet's name, its HTTPS twin), and in host mode its name.
+   * Who may frame what origin `key` serves beside the dashboards: an embed's
+   * page, on each exact origin it was served on ({@link embeds}); nobody for
+   * any other origin.
    */
-  const ancestorsOf = (owner: string): string[] => {
+  const ancestorsOf = (key: string | undefined): string[] => [
+    ...(key === undefined ? [] : (embeds.get(key)?.ancestors ?? [])),
+  ];
+
+  /**
+   * The origin origin `owner`'s page was served on, read from where it was
+   * reached: host mode's name for it, else its own port on the name the
+   * browser used (a LAN address, the tailnet's name, its HTTPS twin, a
+   * loopback). Null when `at` is neither.
+   */
+  const pageOrigin = (owner: string, at: URL): string | null => {
     const port = sessions.get(owner)?.port;
-    const origins =
-      port === undefined ? [] : [`http://*:${port}`, `https://*:${port}`];
-    if (settings.mode === "host" && settings.pattern) {
-      const pattern = parsePattern(settings.pattern);
-      if (pattern.key === "session" || port !== undefined) {
-        origins.push(
-          originFor(pattern, pattern.key === "port" ? (port as number) : owner)
-        );
-      }
+    if (port !== undefined && at.port === String(port)) {
+      return at.origin;
     }
-    return origins;
+    if (settings.mode === "host" && settings.pattern && port !== undefined) {
+      const pattern = parsePattern(settings.pattern);
+      return originFor(pattern, pattern.key === "port" ? port : labelOf(owner));
+    }
+    return null;
   };
 
   /** Each session that keeps a port and has no listener yet gets one on it (`bind`). */
   const bindKept = (): void => {
-    for (const { instanceId } of db.ports()) {
-      if (!sessions.has(instanceId)) {
+    for (const { key } of db.ports()) {
+      if (!sessions.has(key)) {
         try {
-          bind(instanceId);
+          bind(key);
         } catch (thrown) {
-          previewFailed(HOP, instanceId, causeOf(thrown));
+          previewFailed(HOP, key, causeOf(thrown));
         }
       }
     }
@@ -1392,7 +1498,7 @@ export function createPreviewListeners(
         const pattern = parsePattern(settings.pattern ?? "");
         const origin = originFor(
           pattern,
-          pattern.key === "port" ? port : instanceId
+          pattern.key === "port" ? port : labelOf(instanceId)
         );
         // core `PreviewAddress`: `host` is a bridge for readers before `origin`.
         return { port, origin, host: new URL(origin).host, ...onTailnet };
@@ -1424,14 +1530,22 @@ export function createPreviewListeners(
      * own, started when it has none, which that session's origins may
      * frame; in host mode its whole origin too, named by its key or port.
      */
-    embed(key: string, owner: string): PreviewAddress {
+    embed(key: string, owner: string, pageAt: URL): PreviewAddress {
       const held = embeds.get(key) ?? openEmbed(key, owner);
+      // The page that shows it, as the browser reached it: that exact origin may frame it.
+      const framer = pageOrigin(owner, pageAt);
+      if (framer) {
+        held.ancestors.add(framer);
+      }
       const { port } = held.listener;
       const secure = tailnet.origin(port);
       const onTailnet = secure ? { tailnet: secure } : {};
       if (settings.mode === "host") {
         const pattern = parsePattern(settings.pattern ?? "");
-        const origin = originFor(pattern, pattern.key === "port" ? port : key);
+        const origin = originFor(
+          pattern,
+          pattern.key === "port" ? port : labelOf(key)
+        );
         return { port, origin, host: new URL(origin).host, ...onTailnet };
       }
       return { port, ...onTailnet };
@@ -1447,15 +1561,8 @@ export function createPreviewListeners(
       return gone.map(([key]) => key);
     },
 
-    /** The session ended: its listener stops and its port is free again. */
-    release(instanceId: string): void {
-      const listener = sessions.get(instanceId);
-      if (listener) {
-        detach(listener.stop(), "preview listener stop");
-      }
-      sessions.delete(instanceId);
-      db.dropPort(instanceId);
-    },
+    /** The origin's owner ended (a session, a project): its listener stops and its port is free again. */
+    release,
 
     settings(): PreviewSettings {
       return settings.mode === "host"

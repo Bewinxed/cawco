@@ -6,7 +6,7 @@
  * PlanTree, the plan panel's own rows.
  *
  * A scratch fleet (real hub, agent and sessiond, Claude Code against the
- * mock model) with "CawCo's to-dos" on. The session calls `todo_write` with
+ * mock model). The session calls `todo_write` with
  * four steps, one nested under another. Then, on an upright tablet (the
  * home is the page there, and the wide layout peeks):
  *
@@ -146,21 +146,7 @@ const run = async (kit: Kit) => {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  // "CawCo's to-dos" on: the session's steps are its todo_write list.
-  const choices = await fetch(`${fleet.base}/api/fleet/choices`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ todos: true }),
-  });
-  if (
-    !kit.check(
-      "0a: CawCo's to-dos are on",
-      choices.ok,
-      `${choices.status} ${await choices.text()}`
-    )
-  ) {
-    return;
-  }
+  // Every session's steps are its todo_write list.
   const session = await fleet.spawn("claude", "Plan", fleet.repo);
   let n = 0;
   const call = async (input: object) => {

@@ -309,6 +309,7 @@ import {
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
   SUMMARY_CAP_TOKENS,
   sameIdentity,
+  sessionLink,
   startRefused,
   strategiesFor,
   TARGET_HEADROOM_TOKENS,
@@ -420,6 +421,7 @@ import {
 import { actionRoutes, createActions } from "./actions";
 import { createAdminAsks } from "./admin-asks";
 import { adminTools, isAdminWrite } from "./admin-tools";
+import { createAdmission } from "./admission";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
 import { createArtifactSessions } from "./artifact-session";
 import { createArtifactDocs } from "./artifacts/docs";
@@ -526,6 +528,7 @@ import {
 import type { LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import type { LimitCompaction } from "./db/at-limit";
+import { projectOrigin } from "./db/previews";
 import type {
   ContinuationAsker,
   PriorConversation,
@@ -577,7 +580,6 @@ import { accountForecasts, carrySequence } from "./forecast";
 import { createForgePosts } from "./forge-posts";
 import { gateRoutes, projectCawEdits } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
-import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
 import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
@@ -599,7 +601,7 @@ import {
   keepAliveUsage,
   promptCacheExpiresAt,
 } from "./keep-alive";
-import { type LabelledRow, leafOf, sessionLabel } from "./labels";
+import { boardTitle, type LabelledRow, leafOf, sessionLabel } from "./labels";
 import { createLaws } from "./laws";
 import { createLeadGate, reviewProblem } from "./lead-gate";
 import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
@@ -699,6 +701,7 @@ import {
   FolderRefusal,
   folderFileNames,
   listFolder,
+  onFolderDeletes,
   projectFolderRoutes,
   projectRoot,
   readFolderFile,
@@ -773,6 +776,11 @@ import {
   YOU_ACTOR,
 } from "./tasks";
 import { createThreadRepair } from "./thread-repair";
+import {
+  createToolCallKeys,
+  mcpRefused,
+  toolResultRefused,
+} from "./tool-call-keys";
 import { createTrackers, trackerRoutes } from "./tracker";
 import {
   createTranscripts,
@@ -810,6 +818,9 @@ import { createWorkflowRuntime } from "./workflows/runtime";
 import { createWorkspaceRetire } from "./workspace-retire";
 
 /** What an artifact's name keeps of a Diagram's statement name: lowercase letters, digits and dashes. */
+/** A project's page source in its folder (`decisions/<name>/page.oui` or its built `index.html`), its name at 1. */
+const PAGE_SOURCE =
+  /^decisions\/([a-z0-9][a-z0-9-]{0,62})\/(?:page\.oui|index\.html)$/;
 const NOT_NAME = /[^a-z0-9]+/g;
 const NAME_ENDS = /^-+|-+$/g;
 const NAME_TAIL = /-+$/;
@@ -3010,7 +3021,8 @@ export const createServer = (
     mint: (userId, ttlMs) => streamRelay.mint(userId, ttlMs),
     open: async (artifact) => {
       const opened = await openPreview(
-        artifact.instanceId,
+        // A browser is always its session's: only a project's page outlives one.
+        artifact.instanceId as string,
         artifact.machineId ?? "",
         artifact.source,
         { id: artifact.id, kind: artifact.kind, name: artifact.name }
@@ -3532,12 +3544,27 @@ export const createServer = (
    * contract ({@link protocolRange}): a launch there would ask for no
    * credential, and its agent would stop it before its first turn. That
    * machine is offered this hub's build, and registers on it once installed.
+   * One whose link dropped and is inside the window its agent gets to come
+   * back (core handover.ts `presenceOf`): a start asked then was refused as
+   * the machine offline, and made no row (source-burst, 2026-10-20).
    * The hub keeps the start instead, on the instance row already written for
-   * it, and sends it when the machine can take it ({@link flushOwedStarts}).
+   * it, and sends it when the machine can take it ({@link flushOwedStarts}),
+   * on its register for a machine that was away.
    */
   const startHold = (
     machineId: string
-  ): { kind: "paused" | "update" | "build"; words: string } | undefined => {
+  ):
+    | { kind: "paused" | "update" | "build" | "away"; words: string }
+    | undefined => {
+    if (
+      !registry.agent(machineId) &&
+      machinePresence(machineId).kind === "reconnecting"
+    ) {
+      return {
+        kind: "away",
+        words: `${machineName(machineId)} is reconnecting to the hub`,
+      };
+    }
     const paused = machinePause.words(machineId);
     if (paused) {
       return { kind: "paused", words: paused };
@@ -3574,12 +3601,16 @@ export const createServer = (
    * and a continuation's ({@link spawnFromHub}) meet the same hold.
    */
   const sendSpawn = (
-    agent: NonNullable<ReturnType<typeof registry.agent>>,
+    agent: ReturnType<typeof registry.agent>,
     machineId: string,
     envelope: Envelope<SpawnPayload>
   ): Envelope | undefined => {
     if (holdingStarts(machineId) && envelope.instanceId) {
       db.oweSpawn(envelope.instanceId, JSON.stringify(envelope), Date.now());
+      return;
+    }
+    // No link and no hold: the caller found the machine offline first.
+    if (!agent) {
       return;
     }
     const frame = { ...envelope, payload: bounded(envelope.payload) };
@@ -4908,7 +4939,9 @@ export const createServer = (
           uuid: crypto.randomUUID(),
           message: {
             role: "user",
-            content: `${reportMarker(label, failed, notice, headline)}${body}`,
+            // The delegate as a link (core references.ts) heads the body:
+            // the form the parent copies when it names the delegate.
+            content: `${reportMarker(label, failed, notice, headline)}From ${sessionLink(delegate.id, boardTitle(delegate))}.\n\n${body}`,
           },
           parent_tool_use_id: null,
           origin: {
@@ -8347,7 +8380,9 @@ export const createServer = (
     if (!db.owesSpawn(record.instanceId)) {
       return "behind";
     }
-    return (row && startHold(row.machineId)?.kind) ?? "update";
+    // A machine away was answered above, by why it is away.
+    const held = row && startHold(row.machineId)?.kind;
+    return held && held !== "away" ? held : "update";
   };
 
   /**
@@ -8715,6 +8750,42 @@ export const createServer = (
     if (again > 0) {
       console.info(
         `[hub] ${machineName(machineId)} is back: ${again} request(s) held for it sent again under their own ids`
+      );
+    }
+  };
+  /**
+   * The machine registered again: every send a session it runs was handed
+   * and has not read goes again, in the order accepted, under its own
+   * hand-off. One handed on a link that dropped may never have reached the
+   * machine: on 2026-10-20 a delegate's brief, handed 143 ms before its
+   * machine's link was cut, stayed pending while its session sat idle, and
+   * its item never started (link-under-load lane 11). The agent takes a
+   * send it had already as had, never as a second turn (session.ts
+   * `#handedBefore`): taken, it says so; held by its process, it says that.
+   * A send owed is not handed here: it goes when its hold ends. Nor is one
+   * its harness has said it holds (`held`): a process has it. An agent that
+   * restarted adopts a live Claude process and tells the hub which sends its
+   * CLI holds (claude.ts `adopt`, MESSAGES_HELD), but keeps none of them as
+   * its own hand-offs, so one handed again here would reach that CLI twice.
+   */
+  const handAgain = (machineId: string, instanceIds: string[]): void => {
+    const agent = registry.agent(machineId);
+    if (!agent) {
+      return;
+    }
+    let again = 0;
+    for (const instanceId of instanceIds) {
+      for (const send of db.sendsIn(instanceId, ["pending"])) {
+        if (send.owed || send.held || !(send.delivery && send.envelope)) {
+          continue;
+        }
+        sendFrame(agent, JSON.parse(send.envelope) as Envelope);
+        again += 1;
+      }
+    }
+    if (again > 0) {
+      console.info(
+        `[hub] ${machineName(machineId)} is back: ${again} unread send(s) handed to it again under their own hand-offs`
       );
     }
   };
@@ -9292,35 +9363,6 @@ export const createServer = (
     return [...bySession.values()].filter(
       (one): one is CarrySessionRequest => one !== null
     );
-  };
-
-  /** A session's list as its harness keeps it, asked of its machine (harness-plans.ts). */
-  const planControl: HarnessPlanDeps["control"] = async (
-    machineId,
-    method,
-    args,
-    harness
-  ) => {
-    const response = await callAgent(
-      machineId,
-      method,
-      args,
-      READ_TIMEOUT_MS,
-      harness
-    );
-    switch (response.kind) {
-      case "unanswered":
-        throw new Error(
-          `The plan could not be read: ${unansweredFault(machineId, response)}`
-        );
-      case "answered":
-        if (response.value.error) {
-          throw new Error(String(response.value.error));
-        }
-        return response.value.result;
-      default:
-        throw unreachable(response);
-    }
   };
 
   /**
@@ -10143,13 +10185,42 @@ export const createServer = (
   };
 
   /**
-   * A shown preview's origin for the frames that carry it: its listener
-   * started when it has none. Null only when every port of the range is
-   * taken, which the open that showed it already said.
+   * The project whose origin serves artifact `id` (preview.ts `originOf`):
+   * a project's page, served there whichever session holds it or none;
+   * undefined for anything else, served on its session's origin.
    */
-  const previewAddress = (instanceId: string) => {
+  const pageProject = (id: string): string | undefined => {
+    const row = db.artifacts.get(id);
+    return row?.kind === "page" &&
+      row.projectId !== null &&
+      row.heldFor === null
+      ? row.projectId
+      : undefined;
+  };
+
+  /** The origin session `instanceId`'s panel loads artifact `id` from: its project's for a project's page, else the session's own. */
+  const servedBy = (instanceId: string, id: string): string => {
+    const project = pageProject(id);
+    return project ? projectOrigin(project) : instanceId;
+  };
+
+  /** The key of the origin that serves artifact `id` (preview.ts `originOf`). */
+  const originKeyOf = (id: string): string | undefined => {
+    const project = pageProject(id);
+    return project
+      ? projectOrigin(project)
+      : (db.artifacts.get(id)?.instanceId ?? undefined);
+  };
+
+  /**
+   * A preview origin's address for the frames that carry it (a session's,
+   * or a project's by `projectOrigin`): its listener started when it has
+   * none. Null only when every port of the range is taken, which the open
+   * that showed it already said.
+   */
+  const previewAddress = (key: string) => {
     try {
-      return previewListeners.address(instanceId);
+      return previewListeners.address(key);
     } catch (error) {
       if (error instanceof PreviewRefusal) {
         return null;
@@ -10162,18 +10233,39 @@ export const createServer = (
   const artifactIds = (instanceId: string): string[] =>
     db.artifacts.ofInstance(instanceId).map((row) => row.id);
 
+  /** Session `instanceId`'s open panel as a frame: what it shows, on the origin that serves it. */
+  const shownFrame = (
+    instanceId: string,
+    target: Pick<PreviewTarget, "artifact" | "revision" | "source">
+  ) => {
+    const project = pageProject(target.artifact.id);
+    return previewFrame(
+      instanceId,
+      "open",
+      target,
+      previewAddress(project ? projectOrigin(project) : instanceId),
+      artifactIds(instanceId),
+      artifacts.stageFor(target.artifact.id),
+      project
+    );
+  };
+
   const publishPreview = (
     instanceId: string,
     state: "open" | "closed",
     target: Pick<PreviewTarget, "artifact" | "revision" | "source">
   ) => {
+    const project = pageProject(target.artifact.id);
     const frame = previewFrame(
       instanceId,
       state,
       target,
-      state === "open" ? previewAddress(instanceId) : null,
+      state === "open"
+        ? previewAddress(project ? projectOrigin(project) : instanceId)
+        : null,
       artifactIds(instanceId),
-      artifacts.stageFor(target.artifact.id)
+      artifacts.stageFor(target.artifact.id),
+      project
     );
     streams.sequence(instanceId, frame);
     artifactSessions.refresh(instanceId);
@@ -10459,9 +10551,10 @@ export const createServer = (
       source,
       revision: crypto.randomUUID(),
     };
-    // Its own origin first: with every port of the range taken it is not shown.
+    // Its origin first (a project's page's is its project's): with every
+    // port of the range taken it is not shown.
     try {
-      previewListeners.address(instanceId);
+      previewListeners.address(servedBy(instanceId, artifact.id));
     } catch (error) {
       if (error instanceof PreviewRefusal) {
         return { ok: false, code: 503, error: error.message };
@@ -10919,6 +11012,50 @@ export const createServer = (
         );
   };
 
+  /** Page `name`'s source files in a project's folder: a program's, or an HTML page's built page. */
+  const pageSourcesOf = (name: string): string[] => [
+    `decisions/${name}/${PROGRAM_FILE}`,
+    `decisions/${name}/index.html`,
+  ];
+
+  /**
+   * Page `name`'s source taken out of project `projectId`'s folder in one
+   * commit by the session (artifacts/service.ts `dropPage`): whichever of
+   * its program and built page the folder holds; none when it holds
+   * neither.
+   */
+  const dropPage = async (
+    row: InstanceRow,
+    projectId: string,
+    name: string
+  ): Promise<PageRefusal | undefined> => {
+    try {
+      const held = await Promise.all(
+        pageSourcesOf(name).map(async (path) =>
+          (await folderText(projectId, path)) === undefined ? [] : [path]
+        )
+      );
+      const deletes = held.flat();
+      if (deletes.length === 0) {
+        return;
+      }
+      await changeFolderFiles(
+        projectId,
+        { writes: [], deletes },
+        {
+          author: { name: sessionLabel(row).name },
+          message: `decisions: ${name} deleted`,
+        }
+      );
+    } catch (error) {
+      if (!(error instanceof FolderRefusal)) {
+        throw error;
+      }
+      return { code: error.status === 413 ? 413 : 400, refused: error.message };
+    }
+    decisionsChanged(projectId);
+  };
+
   /** A page built from `from`, its project's folder untouched ({@link keptArtifactPage} keeps it there). */
   const buildArtifactPage = async (
     row: InstanceRow,
@@ -10987,7 +11124,6 @@ export const createServer = (
       const config = db.getSupervisorConfig();
       return {
         deniedTools: config.deniedTools,
-        cawcoTodos: config.cawcoTodos,
         choicesSetAt: config.choicesSetAt,
         upstreamPosts: db.upstreamPosts(),
       };
@@ -11673,6 +11809,12 @@ export const createServer = (
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
     open: async (artifact, by) => {
+      if (artifact.instanceId === null) {
+        return {
+          ok: false,
+          error: `No session holds ${artifact.name} now: it is its project's page.`,
+        };
+      }
       const opened = await openPreview(
         artifact.instanceId,
         artifact.machineId ?? "",
@@ -11693,6 +11835,10 @@ export const createServer = (
       decisions.linksOf(projectId, name, cards),
     keepPage: async (instance, name, page) => {
       const refused = await keepPage(instance, name, page);
+      return refused && { status: refused.code, refused: refused.refused };
+    },
+    dropPage: async (instance, projectId, name) => {
+      const refused = await dropPage(instance, projectId, name);
       return refused && { status: refused.code, refused: refused.refused };
     },
     sending: (instance, artifact, state) =>
@@ -11846,11 +11992,13 @@ export const createServer = (
           `The canvas ${artifact.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`
         );
       }
+      // A canvas is always its session's: only a project's page outlives one.
+      const owner = artifact.instanceId as string;
       const token = crypto.randomUUID();
       const open = {
         canvas: { id: artifact.id, name: artifact.name, sync },
         token,
-        url: `${previewListeners.local(artifact.instanceId)}/__cawco/canvas/${artifact.id}/`,
+        url: `${previewListeners.local(owner)}/__cawco/canvas/${artifact.id}/`,
       };
       const asked = await callAgent(
         machineId,
@@ -11980,6 +12128,36 @@ export const createServer = (
     },
   });
   /**
+   * A project's page lives as long as its source in the project's folder:
+   * a commit that takes `decisions/<name>/`'s page.oui or index.html out and
+   * leaves neither there (a person's delete, folder_write's, a move away,
+   * artifact_delete's own) takes the page with it (artifacts/service.ts
+   * `sourceGone`). Keeping a program drops the built page, and the page
+   * stays.
+   */
+  onFolderDeletes((projectId, paths) => {
+    const names = new Set(
+      paths.flatMap((path) => {
+        const name = PAGE_SOURCE.exec(path)?.[1];
+        return name ? [name] : [];
+      })
+    );
+    for (const name of names) {
+      detach(
+        (async () => {
+          const left = await Promise.all(
+            pageSourcesOf(name).map((path) => folderText(projectId, path))
+          );
+          if (left.every((text) => text === undefined)) {
+            await artifacts.sourceGone(projectId, name);
+            decisionsChanged(projectId);
+          }
+        })(),
+        "a project page whose source left its folder"
+      );
+    }
+  });
+  /**
    * What every panel showed when this hub last ran, kept in the database
    * (openPreview): served again from here on, each preview's listener
    * pointed at or started by its machine's next register.
@@ -12064,9 +12242,15 @@ export const createServer = (
    * that spends a ticket for it, so the person's pass covers it. Nothing
    * when the hub no longer holds it or every port is taken: the page says so.
    */
-  const embedAt = (artifactId: string, reachedAt: URL): { embed?: string } => {
+  const embedAt = (
+    pageId: string,
+    artifactId: string,
+    reachedAt: URL
+  ): { embed?: string } => {
     const row = db.artifacts.get(artifactId);
-    if (!(row?.machineId && "port" in row.source)) {
+    // The origin that serves the page: its embeds are framed by it.
+    const owner = originKeyOf(pageId);
+    if (!(row?.machineId && owner && "port" in row.source)) {
       return {};
     }
     const key = embedKey(artifactId);
@@ -12084,8 +12268,10 @@ export const createServer = (
       });
     }
     let at: ReturnType<typeof previewListeners.embed>;
+    let ownPort: number;
     try {
-      at = previewListeners.embed(key, row.instanceId);
+      at = previewListeners.embed(key, owner, reachedAt);
+      ownPort = previewListeners.address(owner).port;
     } catch (error) {
       if (error instanceof PreviewRefusal) {
         console.warn(`[preview] ${error.message}`);
@@ -12094,7 +12280,6 @@ export const createServer = (
       throw error;
     }
     const path = row.source.path ?? "/";
-    const ownPort = previewListeners.address(row.instanceId).port;
     if (reachedAt.port === String(ownPort) || !at.origin) {
       return {
         embed: `${reachedAt.protocol}//${reachedAt.hostname}:${at.port}${path}`,
@@ -12108,7 +12293,21 @@ export const createServer = (
 
   /** What a session's preview origin serves of the hub: its artifacts' documents and pages (preview.ts). */
   const artifactListener: PreviewListenerDeps = {
-    ownerOf: (artifactId: string) => db.artifacts.get(artifactId)?.instanceId,
+    originOf: originKeyOf,
+    servedOn: (artifactId, key) => {
+      if (originKeyOf(artifactId) === key) {
+        return true;
+      }
+      // A project's canvas, which its pages' Canvas pieces show inside them.
+      const row = db.artifacts.get(artifactId);
+      return (
+        row?.kind === "canvas" &&
+        row.projectId !== null &&
+        key === projectOrigin(row.projectId)
+      );
+    },
+    ownerOf: (artifactId: string) =>
+      db.artifacts.get(artifactId)?.instanceId ?? undefined,
     kindOf: (artifactId: string) => db.artifacts.get(artifactId)?.kind,
     reach: reachPreview,
     unreachable: previewUnreachable,
@@ -12129,7 +12328,7 @@ export const createServer = (
       for (const [id, held] of Object.entries(served.media)) {
         media[id] =
           held && (held.kind === "preview" || held.kind === "component")
-            ? { ...held, ...embedAt(id, reachedAt) }
+            ? { ...held, ...embedAt(artifactId, id, reachedAt) }
             : held;
       }
       return { hash: served.hash, media: scriptJson("cawco-media", media) };
@@ -12960,6 +13159,26 @@ export const createServer = (
     });
   };
 
+  /**
+   * Why `machineId` takes no start now, or nothing. A machine inside its
+   * reconnect window takes it on its register, under the request id its
+   * caller waits on ({@link flushOwedStarts}); a caller `asking` and waiting
+   * on any other hold is told now rather than left to time out.
+   */
+  const startRefusal = (
+    machineId: string,
+    asking: boolean
+  ): string | undefined => {
+    const held = startHold(machineId);
+    if (!(registry.agent(machineId) || held?.kind === "away")) {
+      return machineFault(machineId, "offline");
+    }
+    if (asking && held && held.kind !== "away") {
+      return `${held.words}; start the session again once it has`;
+    }
+    return undefined;
+  };
+
   /** Sends a spawn and opens its row, on the account {@link spawnPlacement} gives. */
   const issueSpawn = (
     machineId: string,
@@ -12969,13 +13188,9 @@ export const createServer = (
     placedAhead?: { accountId?: string }
   ): Envelope | undefined => {
     const agent = registry.agent(machineId);
-    if (!agent) {
-      throw new Error(machineFault(machineId, "offline"));
-    }
-    const held = asked.requestId && startHold(machineId);
-    if (held) {
-      // The caller is waiting for this start; it is told now rather than left to time out.
-      throw new Error(`${held.words}; start the session again once it has`);
+    const refused = startRefusal(machineId, Boolean(asked.requestId));
+    if (refused) {
+      throw new Error(refused);
     }
     const settled = settleSpawn(machineId, asked, fallbackMode);
     if ("refusal" in settled) {
@@ -13091,7 +13306,7 @@ export const createServer = (
     if (refusal) {
       throw new WorkItemRefusal(409, refusal);
     }
-    if (!registry.agent(machineId)) {
+    if (!registry.agent(machineId) && startHold(machineId)?.kind !== "away") {
       throw new WorkItemRefusal(404, machineFault(machineId, "offline"));
     }
     const { parentInstanceId } = peekParent(named);
@@ -16266,16 +16481,7 @@ export const createServer = (
                   (one) => one.key === key && one.machineId === row.machineId
                 ) ?? null)
             : null,
-        preview: target
-          ? previewFrame(
-              instanceId,
-              "open",
-              target,
-              previewAddress(instanceId),
-              artifactIds(instanceId),
-              artifacts.stageFor(target.artifact.id)
-            )
-          : null,
+        preview: target ? shownFrame(instanceId, target) : null,
         session: row
           ? {
               id: row.id,
@@ -16306,16 +16512,7 @@ export const createServer = (
   /** Everything an `instances` frame carries besides the rows themselves. */
   const boardExtras = () => ({
     agents: withPresence(db.listAgents()),
-    previews: [...previewTargets].map(([id, target]) =>
-      previewFrame(
-        id,
-        "open",
-        target,
-        previewAddress(id),
-        artifactIds(id),
-        artifacts.stageFor(target.artifact.id)
-      )
-    ),
+    previews: [...previewTargets].map(([id, target]) => shownFrame(id, target)),
     handoffs: Object.fromEntries(handoffs),
     // Carried on every publish, so a dashboard follows a continuation it
     // started over the socket rather than over the request that started it.
@@ -19447,12 +19644,12 @@ export const createServer = (
   const projectTypes = makeProjectDelegateTypes(delegateTypes);
   /**
    * What the delegate type on a row adds to a session brought back (a wake,
-   * a restore): the same denials and "CawCo's to-dos" its first spawn had,
-   * read from the type as it stands now.
+   * a restore): the same denials its first spawn had, read from the type as
+   * it stands now.
    */
   function typeSettingsOf(
     row: Pick<InstanceRow, "delegateType" | "delegateTypeProject">
-  ): Pick<SpawnPayload, "cawcoTodos" | "delegateType" | "denyTools"> {
+  ): Pick<SpawnPayload, "delegateType" | "denyTools"> {
     if (!row.delegateType) {
       return {};
     }
@@ -19468,7 +19665,6 @@ export const createServer = (
           : {}),
       },
       ...(type?.denyTools?.length ? { denyTools: type.denyTools } : {}),
-      ...(type?.cawcoTodos ? { cawcoTodos: true } : {}),
     };
   }
   /**
@@ -21068,12 +21264,7 @@ export const createServer = (
   // live to the session's followers (plans.ts).
   const plans = createPlans({
     db,
-    lifetime,
     tasks,
-    online: (machineId) => Boolean(registry.agent(machineId)),
-    control: planControl,
-    typeTodos: (projectId, type) =>
-      projectTypes.resolveTypeFor(projectId, type)?.cawcoTodos === true,
     publish: (instanceId, message) =>
       streams.planToFollowers(instanceId, message),
   });
@@ -21739,6 +21930,8 @@ export const createServer = (
     machineIds: () => registry.machineIds(),
     pairing: () => hubAuth.mode() === "pairing",
   });
+  // A relayed tool call sent again under its key is answered, not run again.
+  const toolCallKeys = createToolCallKeys({ db: db.toolCallKeys, lifetime });
   const delegationMcp = createDelegationMcp({
     lifetime,
     tasks,
@@ -23126,12 +23319,18 @@ export const createServer = (
     return state.midTurn || expires === null || expires > Date.now();
   };
 
+  /** The one ledger every move onto an account is charged against (admission.ts): at-limit, rebalance and the wake below. */
+  const admission = createAdmission(db);
+
   /**
    * A Claude session woken for a send with its cache cold is re-placed
    * first, by its kind's strategy: its first request re-reads its whole
    * context wherever it runs, so moving it costs nothing extra (fleet
    * history, at-limit check 3: own-account cold re-writes median 1.0 of the
-   * prompt, cross-organization 0.94). The move is owed to its launch
+   * prompt, cross-organization 0.94). It is charged against the target's
+   * room like every move (admission.ts), so a reset never takes a herd of
+   * waking sessions at once; one that does not fit wakes where it is, and
+   * one admitted onto its account in this window stays. The move is owed to its launch
    * ({@link relaunchAtTurnEnd}), which carries its conversation into the
    * new account's dir; its line is written once that has. A fork stays with
    * its origin, a session a person moved stays where they put it, and only
@@ -23149,7 +23348,8 @@ export const createServer = (
       relaunchAtTurnEnd.has(row.id) ||
       db.atLimit.hold(row.id) ||
       cacheWarm(row) ||
-      !db.accounts.routing(from.provider).atLimit.move
+      !db.accounts.routing(from.provider).atLimit.move ||
+      admission.admittedHere(row)
     ) {
       return;
     }
@@ -23166,8 +23366,21 @@ export const createServer = (
     }
     const accounts = db.accounts.list();
     const toName = accountNameAmong(to, accounts);
+    const verdict = admission.check(
+      row,
+      to,
+      cacheCarries(from, to),
+      Date.now()
+    );
+    if (!verdict.ok) {
+      console.info(
+        `[rebalance] ${sessionName(row)} wakes on ${accountNameAmong(from, accounts)}, not moved to ${toName}: its prompt cache is cold, so it re-reads its context wherever it wakes, but ${verdict.words}.`
+      );
+      return;
+    }
+    admission.charge(row, to, verdict);
     console.info(
-      `[rebalance] ${sessionName(row)} moves from ${accountNameAmong(from, accounts)} to ${toName} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${toName} is where placement puts it now. Its conversation is copied there before it starts.`
+      `[rebalance] ${sessionName(row)} moves from ${accountNameAmong(from, accounts)} to ${toName} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${toName} is where placement puts it now; ${verdict.words}. Its conversation is copied there before it starts.`
     );
     relaunchAtTurnEnd.set(row.id, {
       to: to.id,
@@ -23263,6 +23476,20 @@ export const createServer = (
       db.turnUsage.accountsUsedOn(row.machineId, Date.now() - SIGNIN_PROVEN_MS),
     idle: sessionIdle,
     warm: cacheWarm,
+    admission,
+    cacheExpiresAt: (row) => {
+      const expires = promptCacheExpiresAt(row, followupState(row).lastTurnAt);
+      return expires !== null && expires > Date.now() ? expires : null;
+    },
+    // A question or permission of its pending, or a top-level session a
+    // person wrote to last.
+    waitedOn: (row) =>
+      pending.list().some((ask) => ask.instanceId === row.id) ||
+      (!row.parentInstanceId &&
+        db
+          .sendsIn(row.id, ["read", "pending", "failed"])
+          .filter((send) => !(send.owed || isKeepAlive(send.body)))
+          .at(-1)?.body.origin?.kind === "human"),
     machineName,
     noticed: (notice) => {
       rebalanceNotices.unshift(notice);
@@ -23518,6 +23745,9 @@ export const createServer = (
       JSON.stringify({ ...message, payload }),
       Date.now()
     );
+    console.info(
+      `[hub] start of ${instanceId} kept for ${machineName(message.machineId)}: ${startHold(message.machineId)?.words}`
+    );
     const requestId = message.requestId ?? peek(message.payload, "requestId");
     if (requestId) {
       sendFrame(ws, {
@@ -23627,7 +23857,13 @@ export const createServer = (
       sendFrame(ws, failure(message, placed.refusal));
       return;
     }
-    if (!(registry.agent(message.machineId) && message.instanceId)) {
+    // A machine inside its reconnect window takes the start on its register
+    // ({@link startHold}); only one with no link and no window is offline.
+    if (!(
+      message.instanceId &&
+      (registry.agent(message.machineId) ||
+        machinePresence(message.machineId).kind === "reconnecting")
+    )) {
       sendFrame(
         ws,
         failure(message, machineFault(message.machineId, "offline"))
@@ -23768,6 +24004,7 @@ export const createServer = (
       .use(
         previewRoutes({
           hasInstance: (id) => db.getInstancesByIds([id]).length > 0,
+          hasProject: (id) => db.project(id) !== undefined,
           listener: artifactListener,
           listeners: previewListeners,
           republish: () => {
@@ -23889,6 +24126,7 @@ export const createServer = (
         workflowRoutes(
           db,
           workflowRuntime,
+          toolCallKeys,
           (id) => withSessionPresence(db.getInstancesByIds([id]))[0]?.status,
           {
             changed: fanOutFleet,
@@ -23979,7 +24217,11 @@ export const createServer = (
       .all("/mcp/cawco", hidden, ({ request, body, server }) => {
         // Tool deadlines govern long calls; the HTTP idle timer must not cut them short.
         server?.timeout(request, 0);
-        return delegationMcp.handle(request, body);
+        return toolCallKeys.once(
+          request,
+          () => delegationMcp.handle(request, body),
+          (words) => mcpRefused(body, words)
+        );
       })
       .all(
         "/mcp/fleet/:name",
@@ -24270,11 +24512,18 @@ export const createServer = (
           ) {
             server?.timeout(request, 0);
           }
-          return delegationMcp.call(
-            params.instanceId,
-            input.name,
-            input.arguments ?? {},
-            authorization ?? undefined
+          return toolCallKeys.once(
+            request,
+            async () =>
+              Response.json(
+                await delegationMcp.call(
+                  params.instanceId,
+                  input.name,
+                  input.arguments ?? {},
+                  authorization ?? undefined
+                )
+              ),
+            toolResultRefused
           );
         }
       )
@@ -27354,6 +27603,8 @@ export const createServer = (
           db.project(params.id)?.places.map((place) => place.machineId)
         );
         db.deleteProject(params.id);
+        // Its pages' origin goes with it (its port's row went in the delete).
+        previewListeners.release(projectOrigin(params.id));
         projectsChanged();
         // Its hooks leave every place it had.
         for (const machineId of machines) {
@@ -28891,8 +29142,8 @@ export const createServer = (
               }
               // Sessions that ran on while this hub was away: a read that
               // happened meanwhile was framed to nobody, and the transcript
-              // says it happened. Their agent is the one that was handed the
-              // rest, and it is still handing them over.
+              // says it happened. The rest goes again behind the ack
+              // ({@link handAgain}).
               for (const instanceId of peekInstances(message.payload)) {
                 settlePending(instanceId, UNREAD.ended, "wait");
               }
@@ -29081,6 +29332,7 @@ export const createServer = (
               // Behind its ack, which it waits for to take requests: what
               // was held for it while it was away goes again.
               resendHeld(message.machineId);
+              handAgain(message.machineId, peekInstances(message.payload));
               for (const row of toEnd) {
                 endSession(row.id, "stop", {
                   kind: "hub",
@@ -30835,7 +31087,8 @@ export const createServer = (
                             push.turnEnded(
                               turnId,
                               text || harnessError,
-                              endedAt
+                              endedAt,
+                              neutral.wakes
                             );
                           }
                         }),
@@ -30853,10 +31106,6 @@ export const createServer = (
               // dashboards do; a turn's end is answered above.
               if (kind === "frame" && message.instanceId && !internal) {
                 ruleEngine.observe(
-                  message.instanceId,
-                  (message.payload as FramePayload & { kind: "frame" }).message
-                );
-                plans.observe(
                   message.instanceId,
                   (message.payload as FramePayload & { kind: "frame" }).message
                 );

@@ -23,7 +23,7 @@
    * composer. He stands there instead of on the composer; your first words
    * send him from the hero to his seat on it.
    */
-  import type { CawView, PermissionResult, ThreadMessage } from "@cawco/core";
+  import type { PermissionResult, ThreadMessage } from "@cawco/core";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -47,7 +47,6 @@
     type BlockedRequest,
     blankSession,
     cawco,
-    cawOf,
     readThread,
     readTranscript,
     type SendExtras,
@@ -66,6 +65,7 @@
   import { failureWords, THREAD_SEND_UNREACHED, unreachable } from "./hub-read";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
+  import { CAW_NO_MACHINE } from "./project/caw-lead.svelte";
   import FolderFiles from "./project/FolderFiles.svelte";
   import {
     listTasks,
@@ -133,6 +133,12 @@
       onthread: (threadId: string) => void;
       draft: ComposerDraft;
       under?: Snippet;
+      /**
+       * Caw as the page holding his panel reads him (CawLead): on or off
+       * (null: not known), and whether he can start, so the panel opens on
+       * what its page already knows.
+       */
+      caw: { on: boolean | null; canStart: boolean };
     };
   } = $props();
 
@@ -307,36 +313,43 @@
 
   // --- Caw, the lead -----------------------------------------------------------
 
-  let view = $state<CawView | null>(null);
-  $effect(() => {
-    const pid = projectId;
-    // A thread's status moves with the lead; his view is read again with it.
-    // biome-ignore lint/complexity/noVoid: read-only dependency
-    void thread?.status;
-    if (!(pid && cawco.status === "connected")) {
-      return;
-    }
-    untrack(() => {
-      cawOf(pid).then(
-        (read) => {
-          if (pid === projectId) {
-            view = read;
-          }
-        },
-        () => undefined
-      );
-    });
-  });
-  /**
-   * You can write to Caw, on or off: your words start him. Only a reason he
-   * cannot start (no machine for him) takes the composer away.
+  /*
+   * What the thread first looks like is read from what the dashboard holds
+   * as it opens, never from a request it makes then: the project's row (his
+   * switch, his session) and the machines. Read from his view
+   * (`GET …/caw`) once the pane had mounted, a thread opened with no
+   * composer and no preview beside it, and both came a frame or two later.
    */
-  const writable = $derived(view !== null && !view.problem);
+  const project = $derived(cawco.project(projectId));
+  /** His switch: the page's word on it when docked in his panel, else the project's row. */
+  const cawOn = $derived.by(() => {
+    if (docked) {
+      return docked.caw.on;
+    }
+    return project ? project.caw : null;
+  });
+  /** The machines are known: the socket's first snapshot is in. */
+  const machinesKnown = $derived(cawco.liveRead);
+  /**
+   * No machine is online, so Caw cannot start: the one reason the hub gives
+   * (caw.ts `problemOf`: his standing session and every checkout he starts in
+   * need one). Docked, the page holding his panel says.
+   */
+  const noMachine = $derived(
+    docked
+      ? !docked.caw.canStart
+      : machinesKnown && cawco.onlineMachines.length === 0
+  );
+  /**
+   * You can write to Caw, on or off: your words start him. Only no machine
+   * for him to start on takes the composer away.
+   */
+  const writable = $derived(docked ? !noMachine : machinesKnown && !noMachine);
 
   // --- his plan, the thread's --------------------------------------------------
 
-  /** The lead's session: a thread's plan is his, beside it as a session's is. */
-  const lead = $derived(view?.leadInstanceId ?? null);
+  /** The lead's session: a thread's plan and preview are his, beside it as a session's are. */
+  const lead = $derived(project?.leadInstanceId ?? null);
   // The lead is no tab of this dashboard's, so his plan is followed alone.
   $effect(() => {
     const id = lead;
@@ -353,7 +366,7 @@
   let side = $state<ReturnType<typeof SideSplit>>();
   /** The side surface's share of the width, in percent. */
   let sideShare = $state(0);
-  /** The side surface is the bottom drawer, a task its own page (layoutPolicy.sideDrawer). */
+  /** The side surface is the bottom drawer, a task its own page; null until the pane is measured (layoutPolicy.sideDrawer). */
   const phone = $derived(layoutPolicy.sideDrawer(laidWidth));
 
   /** What Caw plays on the composer: the thread's status, his loop or its still. */
@@ -794,7 +807,7 @@
    */
   const composerRoom = $derived.by(() => {
     if (!writable) {
-      return view ? `${offHeight}px` : "0px";
+      return noMachine ? `${offHeight}px` : "0px";
     }
     // His slot above the pill, and what his acting may draw above it, in
     // every status: a working Caw reaches higher than his still. On the
@@ -802,10 +815,6 @@
     const rise = hero ? 0 : seatSize * (LEDGE_LINE + CAW_HEADROOM);
     return `var(--c-composer-panel) + var(--c-tray-row) + ${rise}px`;
   });
-  /** Caw cannot start because no machine is online: the cause's one action is to look at the machines. */
-  const noMachine = $derived(
-    !!view?.problem && cawco.onlineMachines.length === 0
-  );
   /**
    * Docked in Caw's panel, the composer has a place of its own at the foot
    * and the room ends over it (the owner's pins 17 and 22): nothing scrolls
@@ -998,7 +1007,7 @@
       >
         <EmptyState
           actionWidth="fill"
-          line={view && !view.on
+          line={cawOn === false
             ? "Caw is off, so he acts only when you write to him."
             : undefined}
           title="What’s next for {projectName}?"
@@ -1127,14 +1136,15 @@
         </RegionBoundary>
       </div>
     {/if}
-    {#if view?.problem}
+    {#if noMachine}
       <!-- No composer: Caw cannot start to read it. What is true, and the
-           one thing that changes it, where the composer stands when there
-           is one, as it stands (Composer .dock and .cin): over the pane's
-           foot, in its column and at its lift, on its surface. The
-           transcript clears it as it clears the composer. Its lift reads
-           the screen's bottom inset off this box itself (--safe-bottom does
-           not inherit: data-safe-bottom sets it here). -->
+           one thing that changes it, the machines, where the composer
+           stands when there is one, as it stands (Composer's dock and
+           field): over the pane's foot, in its column and at its lift, on
+           its surface. The transcript clears it as it clears the composer.
+           Its lift reads the screen's bottom inset off this box itself
+           (--safe-bottom does not inherit: data-safe-bottom sets it here). -->
+
       <div
         class="absolute inset-x-0 bottom-(--off-bottom) z-(--layer-dock) w-c-composer-w mx-auto"
         data-safe-bottom
@@ -1144,19 +1154,17 @@
         out:crossOut
       >
         <Alert layout="row" role="status" surface="card">
-          <AlertDescription>{view.problem}</AlertDescription>
-          {#if noMachine}
-            <AlertAction>
-              <Button
-                label="Check machines"
-                onclick={() => {
-                  barGlass.open = "machines";
-                }}
-                size="sm"
-                variant="outline"
-              />
-            </AlertAction>
-          {/if}
+          <AlertDescription>{CAW_NO_MACHINE}</AlertDescription>
+          <AlertAction>
+            <Button
+              label="Check machines"
+              onclick={() => {
+                barGlass.open = "machines";
+              }}
+              size="sm"
+              variant="outline"
+            />
+          </AlertAction>
         </Alert>
       </div>
     {/if}

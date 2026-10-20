@@ -188,6 +188,13 @@ export interface LandOptions {
    */
   mode?: "scale" | "clip" | "grow";
   ms?: number;
+  /**
+   * Fly in the task that mounted the destination rather than at its first
+   * frame: a destination mounted beside motion started in that same task (a
+   * decision card folding to the line it lands on) shares that motion's
+   * start, one clock.
+   */
+  now?: boolean;
   /** Scale both axes by the height ratio, so text keeps its shape. */
   uniform?: boolean;
 }
@@ -316,6 +323,10 @@ export function land(key: () => string | undefined, options: LandOptions = {}) {
       }
       departures.delete(name);
       if (!motionOk.current || performance.now() - from.at > from.ttl) {
+        return;
+      }
+      if (options.now) {
+        fly(node, from, options);
         return;
       }
       // The flight starts with the first frame that draws the destination:

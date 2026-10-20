@@ -9,6 +9,7 @@
     type PreviewTicket,
     previewEnterUrl,
     previewRoute,
+    projectPagePlace,
     type ShownFailure,
     sheetWords,
   } from "@cawco/core";
@@ -71,6 +72,7 @@
     letGo,
     type Stage,
   } from "../canvas/stage.svelte";
+  import { frameObserver } from "../frame-observer";
   import { resolveSessionTitle } from "../links";
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto } from "../motion/share.svelte";
@@ -205,9 +207,13 @@
       return;
     }
     // Its layout width: its entrance scales it, and a scale is not its room.
-    const watch = new ResizeObserver(() => {
+    // Read now, and a change in the next frame (frameObserver): the card
+    // beside it is laid out from it.
+    const read = () => {
       listWidth = panel.offsetWidth;
-    });
+    };
+    read();
+    const watch = frameObserver(read);
     watch.observe(panel);
     return () => {
       watch.disconnect();
@@ -267,9 +273,22 @@
     }
     writeJson(keepKey, { revision: preview.revision, at: place });
   }
-  /** Where a show starts: the page the agent named (`path`), else the root. */
-  const startAt = $derived(
-    (source && "path" in source ? source.path : undefined) ?? "/"
+  /**
+   * Where a show starts: a project's page at its own place on its project's
+   * origin (core `projectPagePlace`, the frame naming the project), else the
+   * page the agent named (`path`), else the root.
+   */
+  const startAt = $derived.by(() => {
+    if (preview?.project) {
+      return projectPagePlace(preview.artifact.id);
+    }
+    return (source && "path" in source ? source.path : undefined) ?? "/";
+  });
+  /** Who gives this origin's host-mode ticket: the project whose origin serves the page, else the session. */
+  const ticketFrom = $derived(
+    preview?.project
+      ? `/api/projects/${encodeURIComponent(preview.project)}/preview-ticket`
+      : `/api/instances/${encodeURIComponent(instanceId)}/preview-ticket`
   );
   /**
    * The place the frame opens, a path on the preview's origin: the start
@@ -557,7 +576,7 @@
       return;
     }
     let live = true;
-    fetch(`/api/instances/${encodeURIComponent(instanceId)}/preview-ticket`, {
+    fetch(ticketFrom, {
       method: "POST",
     })
       .then(async (answer) => {
@@ -790,7 +809,7 @@
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     // Its first report is the frame's size now: every report starts the wait again.
-    const settled = new ResizeObserver(() => {
+    const settled = frameObserver(() => {
       clearTimeout(timer);
       timer = setTimeout(
         () => post({ type: "cawco:capture" }),
@@ -1030,9 +1049,13 @@
     if (!box) {
       return;
     }
-    const watch = new ResizeObserver(() => {
+    // Read now, and a change in the next frame (frameObserver): the
+    // Comments panel is laid out in it.
+    const read = () => {
       wellBox = { w: box.clientWidth, h: box.clientHeight };
-    });
+    };
+    read();
+    const watch = frameObserver(read);
     watch.observe(box);
     return () => watch.disconnect();
   });
@@ -1280,9 +1303,13 @@
     if (!card) {
       return;
     }
-    const watch = new ResizeObserver(() => {
+    // Read now, and a change in the next frame (frameObserver): the panel
+    // stands above it.
+    const read = () => {
       cardHeight = card.offsetHeight;
-    });
+    };
+    read();
+    const watch = frameObserver(read);
     watch.observe(card);
     return () => watch.disconnect();
   });
@@ -1320,42 +1347,39 @@
       post({ type: "cawco:covered", boxes: [] });
       return;
     }
-    let raf = 0;
-    const say = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const framed = frame.getBoundingClientRect();
-        const left = framed.left + frame.clientLeft;
-        const top = framed.top + frame.clientTop;
-        // The panel's wrapper stands where it is placed, at its laid-out size (its entrance scales the panel inside).
-        const boxes = [
-          panel.parentElement ?? panel,
-          ...(card > 0 && room
-            ? [room.querySelector('[data-slot="pin-card"]')]
-            : []),
-        ]
-          .filter((el): el is Element => !!el)
-          .map((el) => {
-            const r = el.getBoundingClientRect();
-            return {
-              x: r.left - left,
-              y: r.top - top,
-              w: r.width,
-              h: r.height,
-            };
-          });
-        post({ type: "cawco:covered", boxes });
-      });
+    // Said in the next frame (frameObserver), whatever moved it: the panel
+    // resized, or its wrapper placed again.
+    const sayNow = () => {
+      const framed = frame.getBoundingClientRect();
+      const left = framed.left + frame.clientLeft;
+      const top = framed.top + frame.clientTop;
+      // The panel's wrapper stands where it is placed, at its laid-out size (its entrance scales the panel inside).
+      const boxes = [
+        panel.parentElement ?? panel,
+        ...(card > 0 && room
+          ? [room.querySelector('[data-slot="pin-card"]')]
+          : []),
+      ]
+        .filter((el): el is Element => !!el)
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return {
+            x: r.left - left,
+            y: r.top - top,
+            w: r.width,
+            h: r.height,
+          };
+        });
+      post({ type: "cawco:covered", boxes });
     };
-    const sized = new ResizeObserver(say);
+    const sized = frameObserver(sayNow);
     sized.observe(panel);
-    const moved = new MutationObserver(say);
+    const moved = new MutationObserver(() => sized.request());
     if (panel.parentElement) {
       moved.observe(panel.parentElement, { attributeFilter: ["style"] });
     }
-    say();
+    sized.request();
     return () => {
-      cancelAnimationFrame(raf);
       sized.disconnect();
       moved.disconnect();
     };

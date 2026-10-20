@@ -32,6 +32,7 @@ import {
   pauseClock,
   QUESTION_DISMISSED,
   relaunchOf,
+  sessionLink,
   withInputsLine,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -121,16 +122,12 @@ export async function fetchDelegateTypes(
 const namedTypeSettings = (
   type: DelegateType | undefined,
   projectId: string | undefined
-): Pick<
-  SpawnPayload,
-  "cawcoTodos" | "delegateType" | "denyTools" | "role"
-> => ({
+): Pick<SpawnPayload, "delegateType" | "denyTools" | "role"> => ({
   denyTools: type?.denyTools,
   // Kept on the row, so the type's word reads the same for every session.
   ...(type
     ? { delegateType: { name: type.name, ...(projectId ? { projectId } : {}) } }
     : {}),
-  ...(type?.cawcoTodos ? { cawcoTodos: true } : {}),
   ...(type?.role ? { role: type.role } : {}),
 });
 
@@ -1904,7 +1901,7 @@ export const handoffActions = ({
             ? ["your parent session"]
             : []),
         ];
-        return `- ${peer.label} — ${peer.dir} · ${facts.join(" · ")}`;
+        return `- ${sessionLink(peer.row.id, peer.title)} (${peer.label}) — ${peer.dir} · ${facts.join(" · ")}`;
       })
       .join("\n");
     return `${listed}\n\n${where}`;
@@ -1997,7 +1994,7 @@ export const handoffActions = ({
       payload,
     });
     const continues = continuesWords(followed);
-    const handed = `Handed to ${peer.label}${continues} (${peer.dir} on ${peer.host}${whose}).`;
+    const handed = `Handed to ${sessionLink(peer.row.id, peer.title)}, ${peer.label}${continues} (${peer.dir} on ${peer.host}${whose}).`;
     return `${handed} ${deliveryWords(delivery)}`;
   },
 
@@ -2088,7 +2085,7 @@ export const handoffActions = ({
       id,
       title,
       text:
-        `Started "${title}" (${leafOf(settled)})${spinOff ? " as a spin-off" : ""}${on} in ${settled}, ` +
+        `Started ${sessionLink(id, title)} (${leafOf(settled)})${spinOff ? " as a spin-off" : ""}${on} in ${settled}, ` +
         `on ${harness} ${model}${type?.effort ? ` at ${type.effort} effort` : ""}${type ? ` (type '${type.name}')` : ""}, ` +
         `in ${opts.permissionMode ?? "this session's own"} permission mode where its harness has modes. ` +
         "It is in the sidebar now, under this session, and the user can open its transcript. " +

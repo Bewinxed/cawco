@@ -223,6 +223,7 @@ export function aboveKeyboard(covers?: () => HTMLElement | null | undefined) {
     // Placed a frame later, and again whenever the scroller takes a new size.
     // Safari's layout never moves, and there the lift comes a frame into the
     // keyboard's rise.
+    // biome-ignore lint/style/noRestrictedGlobals: writes the footer's sticky offset and the fields' scroll padding, a place and a scroll, never a size; it lifts with the keyboard in the frame the scroller took it
     const resized = new ResizeObserver(place);
     resized.observe(box);
     const frame = requestAnimationFrame(place);
@@ -244,6 +245,7 @@ export function trackVisibleViewport(): () => void {
   const root = document.documentElement;
   let frame = 0;
   /** The focused field's scrollers, watched while it has focus. */
+  // biome-ignore lint/style/noRestrictedGlobals: writes nothing: `request` measures in the next frame, with the viewport's own events
   const resized = new ResizeObserver(() => request());
   let watched: HTMLElement | null = null;
 

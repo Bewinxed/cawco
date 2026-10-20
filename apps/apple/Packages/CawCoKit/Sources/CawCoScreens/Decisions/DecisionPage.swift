@@ -320,10 +320,10 @@ final class DecisionPageView: UIView, UITextViewDelegate {
         } else if let record = read?.record {
             records.isHidden = false
             showRecord(record)
-        } else if let artifact, let read, let writer = read.writer {
+        } else if let artifact, let read {
             if frameView?.artifactId != artifact {
                 frameView?.removeFromSuperview()
-                let made = DecisionPageFrame(hub: hub, instanceId: writer.instanceId, artifactId: artifact, name: read.name, title: read.title)
+                let made = DecisionPageFrame(hub: hub, projectId: projectId, artifactId: artifact, name: read.name, title: read.title)
                 body.addSubview(made)
                 NSLayoutConstraint.activate([
                     made.topAnchor.constraint(equalTo: body.topAnchor),
@@ -586,8 +586,9 @@ final class FootFade: UIView {
     }
 }
 
-/// A decision page, live (PageFrame.svelte): the page its session
-/// published, on that session's own preview origin at `/__cawco/page/<id>/`
+/// A decision page, live (PageFrame.svelte): the project's page, on the
+/// project's own preview origin at `/__cawco/page/<id>/`, whichever session
+/// wrote it and whether or not it still stands
 /// (hub preview.ts). Its overlay joins the page's document itself (the
 /// `cawco:hello` names it), so a pick here is a pick in the panel and every
 /// other view, and a revision morphs in place. It draws in the app's
@@ -596,7 +597,7 @@ final class FootFade: UIView {
 final class DecisionPageFrame: UIView, WKScriptMessageHandler, WKNavigationDelegate {
     let artifactId: String
     private let hub: HubConnection
-    private let instanceId: String
+    private let projectId: String
     private let name: String
     private var web: WKWebView!
     private let problem = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
@@ -613,9 +614,9 @@ final class DecisionPageFrame: UIView, WKScriptMessageHandler, WKNavigationDeleg
         }
     }
 
-    init(hub: HubConnection, instanceId: String, artifactId: String, name: String, title: String) {
+    init(hub: HubConnection, projectId: String, artifactId: String, name: String, title: String) {
         self.hub = hub
-        self.instanceId = instanceId
+        self.projectId = projectId
         self.artifactId = artifactId
         self.name = name
         super.init(frame: .zero)
@@ -669,7 +670,7 @@ final class DecisionPageFrame: UIView, WKScriptMessageHandler, WKNavigationDeleg
         route?.origin.appending(components: "__cawco", "page", artifactId, directoryHint: .isDirectory)
     }
 
-    /// Where its session's pages are served, asked once, then entered (with a ticket in host mode).
+    /// Where its project's pages are served, asked once, then entered (with a ticket in host mode).
     private func enter() {
         Task { [weak self] in
             guard let self else { return }
@@ -678,11 +679,11 @@ final class DecisionPageFrame: UIView, WKScriptMessageHandler, WKNavigationDeleg
                 if let route {
                     found = route
                 } else {
-                    found = try await hub.previewAddress(instanceId)
+                    found = try await hub.previewAddress(.project(projectId))
                 }
                 route = found
                 guard let place else { return }
-                web.load(URLRequest(url: try await hub.previewLoad(place, in: instanceId, byHost: found.byHost)))
+                web.load(URLRequest(url: try await hub.previewLoad(place, for: .project(projectId), byHost: found.byHost)))
             } catch {
                 fail(error.localizedDescription)
             }

@@ -42,12 +42,22 @@ export const layoutPolicy = {
    * so a group split beside another (choices b and c) is never squeezed
    * into two phone-narrow columns; a fine pointer gets the drawer in a
    * pane under 900px; a phone always.
+   *
+   * `null` while the pane has no width yet (0): neither is chosen until it is
+   * measured. Read as one or the other, a pane mounting under 900px opened
+   * the split beside the conversation, and its preview with it, for as long
+   * as its children's effects ran before its own width was laid (they run
+   * first: a component's `$effect`s are made once its template is), then put
+   * it away for the sheet.
    */
-  sideDrawer(paneWidth: number): boolean {
+  sideDrawer(paneWidth: number): boolean | null {
+    if (paneWidth <= 0) {
+      return null;
+    }
     if (coarse.current) {
       return !(touchRegular.current && paneWidth >= PHONE_BREAKPOINT);
     }
-    return paneWidth > 0 && paneWidth < 900;
+    return paneWidth < 900;
   },
   /** Whether conversations are a deck of one group at a time, not a grid. */
   get deck(): boolean {

@@ -181,14 +181,54 @@ function gridOf(args: { selector: string; grid: number }) {
         node.nodeType === Node.TEXT_NODE &&
         (node.textContent ?? "").trim() !== ""
     );
-  /** Drawn through, or mixed with what is under it: a box not at full opacity, filtered or blended, here or out to the page. */
-  const mixed = (hit: Element) => {
+  /**
+   * Whether a box's mask draws the point at page (x, y) through: never
+   * where it has none; under the house edge fade (edge-fade.css) within its
+   * fades alone, each as long as its own `--fade-start` and `--fade-end` (a
+   * cap only shortens one): `kit-edge-fade` (a wide embed's frame:
+   * runtime.ts `fitToEmbed`) at its left and right, `kit-edge-fade-block`
+   * at its top and its foot, whose fade ends `--fade-inset-end` short of
+   * the box and leaves that band clear; everywhere under any other mask.
+   */
+  const maskedAt = (
+    at: Element,
+    style: CSSStyleDeclaration,
+    x: number,
+    y: number
+  ) => {
+    if (style.maskImage === "none") {
+      return false;
+    }
+    const fadeOf = (property: string) =>
+      Number.parseFloat(style.getPropertyValue(property));
+    const start = fadeOf("--fade-start");
+    const end = fadeOf("--fade-end");
+    const inline = at.classList.contains("kit-edge-fade");
+    const block = at.classList.contains("kit-edge-fade-block");
+    if (!(
+      (inline || block) &&
+      Number.isFinite(start) &&
+      Number.isFinite(end)
+    )) {
+      return true;
+    }
+    const box = at.getBoundingClientRect();
+    const zoom = (at as HTMLElement).currentCSSZoom;
+    if (inline) {
+      return x < box.left + start * zoom || x >= box.right - end * zoom;
+    }
+    const inset = fadeOf("--fade-inset-end") || 0;
+    return y < box.top + start * zoom || y >= box.bottom - (inset + end) * zoom;
+  };
+  /** Drawn through, or mixed with what is under it: a box not at full opacity, filtered, blended or masked at page (x, y), here or out to the page. */
+  const mixed = (hit: Element, x: number, y: number) => {
     for (let at: Element | null = hit; at; at = at.parentElement) {
       const style = getComputedStyle(at);
       if (
         Number(style.opacity) < 1 ||
         style.filter !== "none" ||
-        style.mixBlendMode !== "normal"
+        style.mixBlendMode !== "normal" ||
+        maskedAt(at, style, x, y)
       ) {
         return true;
       }
@@ -471,13 +511,124 @@ function gridOf(args: { selector: string; grid: number }) {
     const after = onePseudoAt(el, "::after", x, y);
     return after === "none" ? onePseudoAt(el, "::before", x, y) : after;
   };
+  /** `value` split at `sep` outside any parentheses, each part trimmed: a computed shadow's layers at ",", a layer's words at " ". */
+  const partsOf = (value: string, sep: string) => {
+    const parts: string[] = [];
+    let depth = 0;
+    let from = 0;
+    for (let i = 0; i <= value.length; i += 1) {
+      const c = value[i];
+      depth += Number(c === "(") - Number(c === ")");
+      if (i === value.length || (c === sep && depth === 0)) {
+        parts.push(value.slice(from, i).trim());
+        from = i + 1;
+      }
+    }
+    return parts.filter((one) => one !== "");
+  };
+  /** A box's outer shadows: each layer's offsets, blur and spread in its own CSS px (the computed value: colour, then lengths, then inset if inner). */
+  const outerShadowsOf = (style: CSSStyleDeclaration) =>
+    style.boxShadow === "none"
+      ? []
+      : partsOf(style.boxShadow, ",")
+          .map((layer) => partsOf(layer, " "))
+          .filter((words) => !words.includes("inset"))
+          .map((words) => {
+            const [x = 0, y = 0, blur = 0, spread = 0] = words
+              .filter((word) => word.endsWith("px"))
+              .map(Number.parseFloat);
+            return { blur, spread, x, y };
+          });
+  /**
+   * Where one box's outer shadows reach on the page, outside the box: the
+   * box (`drawn`, page px, its lengths `scale` page px each) moved by each
+   * layer's offset, grown by its spread and its blur's reach. The blur is a
+   * Gaussian of σ half its radius (CSS Backgrounds 3, box-shadow); at 3σ,
+   * 1.5 radii, what is left of it is under one level of eight bits.
+   */
+  const castOf = (style: CSSStyleDeclaration, drawn: Drawn, scale: number) =>
+    outerShadowsOf(style).map((one) => {
+      const grow = (one.spread + 1.5 * one.blur) * scale;
+      return {
+        left: drawn.left + one.x * scale - grow,
+        right: drawn.left + drawn.w + one.x * scale + grow,
+        top: drawn.top + one.y * scale - grow,
+        bottom: drawn.top + drawn.h + one.y * scale + grow,
+      };
+    });
+  /** A box drawn in the page, from its rect. */
+  const drawnOf = (box: DOMRect): Drawn => ({
+    h: box.height,
+    left: box.left,
+    top: box.top,
+    w: box.width,
+  });
+  /**
+   * What the body's boxes and their pseudo-elements cast past their own
+   * edges: each outer shadow's reach, outside the box's painted shape (its
+   * rounded corners' curves included, where the shadow shows). A point
+   * there is mixed with what is under it, so it is not read: a card's tile
+   * shadow darkens the gap beside it, which no box there paints. A
+   * pseudo-element whose box can't be told casts from its host's box out,
+   * its reach its own.
+   */
+  const casts = [...body.querySelectorAll("*")].flatMap((el) => {
+    if (
+      !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })
+    ) {
+      return [];
+    }
+    const own = getComputedStyle(el);
+    const edge = el.getBoundingClientRect();
+    const ownWide = sizeOf(own).w;
+    const ownScale =
+      ownWide > 0 ? edge.width / ownWide : (el as HTMLElement).currentCSSZoom;
+    const all = [{ drawn: drawnOf(edge), scale: ownScale, style: own }];
+    for (const pseudo of ["::before", "::after"] as const) {
+      const style = getComputedStyle(el, pseudo);
+      if (paintsAny(style) && style.boxShadow !== "none") {
+        const box = pseudoBoxOf(own, edge, style);
+        all.push({
+          drawn: box ?? drawnOf(edge),
+          scale: box ? box.w / sizeOf(style).w : ownScale,
+          style,
+        });
+      }
+    }
+    return all.flatMap(({ drawn, scale, style }) =>
+      castOf(style, drawn, scale).map((reach) => ({
+        drawn,
+        reach,
+        scale,
+        style,
+      }))
+    );
+  });
+  const castAt = (x: number, y: number) =>
+    casts.some(({ drawn, reach, scale, style }) => {
+      const dx = x - drawn.left;
+      const dy = y - drawn.top;
+      const inside =
+        dx >= 0 &&
+        dy >= 0 &&
+        dx < drawn.w &&
+        dy < drawn.h &&
+        !cutAt(style, drawn, scale, dx, dy);
+      return (
+        !inside &&
+        x >= reach.left &&
+        x < reach.right &&
+        y >= reach.top &&
+        y < reach.bottom
+      );
+    });
   /** The flat colour under a hit at (x, y): the nearest box out from it with an opaque background, its own or a pseudo-element's, and no image; null where that can't be told. */
   const paintedAt = (
     hit: Element,
     x: number,
     y: number
   ): [number, number, number] | null => {
-    if (mixed(hit)) {
+    if (mixed(hit, x, y)) {
       return null;
     }
     for (
@@ -535,7 +686,7 @@ function gridOf(args: { selector: string; grid: number }) {
       points.push({
         page,
         rgb:
-          onText(hit) || boxAt(unhit, page.x, page.y)
+          onText(hit) || boxAt(unhit, page.x, page.y) || castAt(page.x, page.y)
             ? null
             : paintedAt(hit, page.x, page.y),
         x,

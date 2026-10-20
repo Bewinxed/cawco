@@ -452,7 +452,7 @@
          the same whether he sits here or stands over the empty board. His
          seat holds its place while he is read; a read the hub refused draws
          no one, so no empty seat stands by Ask Caw. -->
-    {#if seated && !(lead.refused !== null && lead.view === null)}
+    {#if seated && !(lead.refused !== null && lead.project === null)}
       <div data-slot="seat" class="flex-none" transition:slot>
         <CawSeat {lead} projectId={project.id} projectName={project.name} />
       </div>

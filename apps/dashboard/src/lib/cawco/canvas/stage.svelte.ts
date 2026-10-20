@@ -543,11 +543,13 @@ export function watch(ms = TAIL): void {
   }
 }
 
-/** A slot's own size changing moves its stage too. */
-export const slotSizes =
-  typeof ResizeObserver === "undefined"
-    ? null
-    : new ResizeObserver(() => watch());
+/** A slot's own size changing moves its stage too; none off the browser. */
+export const slotSizes = typeof window === "undefined" ? null : slotObserver();
+
+function slotObserver() {
+  // biome-ignore lint/style/noRestrictedGlobals: writes nothing: it starts the placement loop (`watch`), which places every stage in the frames after
+  return new ResizeObserver(() => watch());
+}
 
 if (typeof document !== "undefined") {
   const moved = () => {

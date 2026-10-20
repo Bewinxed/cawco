@@ -1,4 +1,9 @@
 <script lang="ts" module>
+  import {
+    type FrameObserver,
+    frameObserver,
+  } from "#lib/cawco/frame-observer.js";
+
   /** Peek and Archive: the row's end actions, one recipe. */
   const ROW_ACTION =
     "touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) me-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted transition-control can-hover:absolute can-hover:inset-y-0 can-hover:end-(--action-end) can-hover:my-auto can-hover:me-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:not-group-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) light:hover:not-group-data-current/session-row:bg-surface-fill-strong dark:hover:not-group-data-current/session-row:bg-surface-fill group-not-data-swiping/session-row:transition-control-slide";
@@ -17,14 +22,20 @@
    * One size observer for every row's trailing column: each writes its
    * width on its row as `--trail-w` (`trailWidth`).
    */
-  let trailSizes: ResizeObserver | undefined;
+  let trailSizes: FrameObserver | undefined;
+  /** Writes a trailing column's laid-out width on its row (a border box, unscaled). */
+  const writeTrail = (column: Element) => {
+    column
+      .closest<HTMLElement>('[data-slot="item"]')
+      ?.style.setProperty("--trail-w", getComputedStyle(column).inlineSize);
+  };
   const watchTrail = (node: HTMLElement): (() => void) => {
-    trailSizes ??= new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const [box] = entry.borderBoxSize;
-        entry.target
-          .closest<HTMLElement>('[data-slot="item"]')
-          ?.style.setProperty("--trail-w", `${box.inlineSize}px`);
+    // Written now, and a change in the next frame (frameObserver): the
+    // row's title gives way to it.
+    writeTrail(node);
+    trailSizes ??= frameObserver((changed) => {
+      for (const column of changed) {
+        writeTrail(column);
       }
     });
     trailSizes.observe(node);

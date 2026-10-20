@@ -67,6 +67,7 @@
     readTranscript,
     refreshContext,
     setPeeked,
+    showContext,
     submitCommand,
     takeOverBrowser,
   } from "./client.svelte";
@@ -217,6 +218,14 @@
     }
     // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — the store the effect reads is what this call updates
     untrack(() => void refreshContext(id, machineId));
+  });
+  // The meter draws the peeked session's reading while it runs: its turns'
+  // ends read it again only while one does (client.svelte.ts `showContext`).
+  $effect(() => {
+    const id = target.viewId;
+    if (running) {
+      return showContext(id);
+    }
   });
 
   // The hub's plan, live: a peeked session is streamed (`setPeeked`), and the

@@ -77,9 +77,10 @@
     /**
      * The surface is a sheet, not a split (layoutPolicy.sideDrawer): a phone,
      * or a fine pointer's pane under 900px; an iPad's regular width splits a
-     * pane 640px or wider.
+     * pane 640px or wider. `null` until the pane is measured: neither the
+     * split nor a sheet opens before it is known which one the pane asks for.
      */
-    phone: boolean;
+    phone: boolean | null;
     /** A task one of the conversation's cards opened stands beside it (a desk only). */
     taskOpen?: boolean;
     /** The task's card, handed the switch while another surface is open too. */
@@ -120,7 +121,7 @@
   /** The reader asked for the plan (its ring) and has not closed it. */
   let planAsked = $state(false);
   const planOpen = $derived(planAsked && hasPlan);
-  const taskShown = $derived(taskOpen && !!task && !phone);
+  const taskShown = $derived(taskOpen && !!task && phone === false);
   const open = $derived(side ? sideOpen : previewOpen || planOpen || taskShown);
   /** What is open, in the switch's order. */
   const opened = $derived<Shown[]>([
@@ -162,8 +163,8 @@
     return planOpen && (phone || shown === "plan");
   }
 
-  /** The surface beside the transcript, on screen or not. */
-  const desktopOpen = $derived(open && !phone);
+  /** The surface beside the transcript, on screen or not: a measured pane that splits. */
+  const desktopOpen = $derived(open && phone === false);
 
   /**
    * The sheet stays mounted while its conversation's tab is off screen,

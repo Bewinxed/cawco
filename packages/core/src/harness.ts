@@ -692,23 +692,6 @@ export interface SessionMessage {
   uuid: string;
 }
 
-/**
- * One task of a session's plan, as every harness can express. Claude Code keeps
- * a ledger file per task; opencode has a native `todo` list; pi has neither.
- * The dashboard renders this one shape regardless of which answered.
- */
-export interface NeutralTask {
-  blockedBy: string[];
-  blocks: string[];
-  description?: string;
-  id: string;
-  owner?: string;
-  /** opencode's todos carry one; Claude Code's ledger does not. */
-  priority?: "high" | "medium" | "low";
-  status: "pending" | "in_progress" | "completed";
-  subject: string;
-}
-
 /* ------------------------------------------------------ neutral messages — */
 
 export type NeutralContentBlock =
@@ -1182,6 +1165,26 @@ export interface NeutralResultMessage {
   turnUsage?: ModelTurnUsage[];
   type: "result";
   uuid?: string;
+  /**
+   * What the session has arranged to wake itself as the turn ends, set by
+   * its harness's adapter on every result it reads ({@link TurnWakes}). The
+   * hub pushes a finished turn to the person only when the session waits on
+   * nothing of its own (push.ts `turnEnded`).
+   */
+  wakes?: TurnWakes;
+}
+
+/**
+ * The work a session started that will wake it later, counted as a turn
+ * ends: `background`, its own work still running in the background (a shell
+ * command or a monitor, a subagent moved to the background), whose end
+ * starts a turn of its own; `scheduled`, the wake-ups it set itself (Claude
+ * Code's ScheduleWakeup, CronCreate and `/loop`). Every harness says both:
+ * pi and OpenCode schedule nothing, so theirs is 0.
+ */
+export interface TurnWakes {
+  background: number;
+  scheduled: number;
 }
 
 /** Claude reports uncached input separately from cache reads and writes. */
@@ -1703,14 +1706,6 @@ export interface SpinOffHeld {
 
 /** Full-text search across all transcripts on a machine (daemon-scoped). */
 export const CONTROL_SEARCH_TRANSCRIPTS = "searchTranscripts";
-
-/**
- * A session's plan, answered by whichever harness owns it (`NeutralTask[]`).
- * Args: the harness's session id, the session's directory, and for Claude the
- * account its row runs on (null for none): Claude Code's task list is read
- * from that account's dir alone.
- */
-export const CONTROL_GET_TODOS = "getTodos";
 
 /** One Claude session the hub has a machine carry into the dir its row names. */
 export interface CarrySessionRequest {

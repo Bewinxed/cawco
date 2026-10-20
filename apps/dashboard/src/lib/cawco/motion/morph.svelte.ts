@@ -355,6 +355,7 @@ export function morph({ width = false, ms, rows = false, still }: Morph = {}) {
     };
 
     // Reads only: what it was laid out at, for the next tween to start from.
+    // biome-ignore lint/style/noRestrictedGlobals: reads only: the size it was laid out at, for the next tween to start from
     const laidOut = new ResizeObserver(([entry]) => {
       const [border] = entry.borderBoxSize;
       laid = rows

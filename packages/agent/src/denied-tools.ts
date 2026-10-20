@@ -5,27 +5,25 @@
  * (`~/.claude/cawco-fleet.json`) caches the last-synced value so a machine
  * that loses its hub still has a policy.
  *
- * The fleet's "CawCo's to-dos" choice rides beside it (`FleetConfig.cawcoTodos`,
- * cached in the same sidecar) and is never names in the list: while it is
- * on, {@link cawcoTodosDenied} is added.
+ * Every session is denied its harness's own to-do list and plan mode
+ * besides (core `OWN_LIST_DENIED`): a session's plan is CawCo's list, always.
+ * Those names are never stored in the baseline; they are added here.
  *
  * A machine that has not heard the list, or cannot read the sidecar, spawns
  * nothing until it can: no compiled list stands in for the fleet's.
  *
  * Two consumers read the resolved denials:
  *  1. The spawn paths (`claude.ts`, `opencode.ts`, `pi.ts`), through
- *     {@link sessionFleetDenials}: the baseline, plus the to-do and plan-mode
- *     set when the fleet's choice or the session's own (its delegate type's)
- *     is on.
+ *     {@link sessionFleetDenials}: the baseline, plus the own-list set.
  *  2. `convergeDeniedTools`, which writes the machine's share (the baseline,
- *     plus the set while the fleet's choice is on) into
+ *     plus the own-list set) into
  *     `~/.claude/settings.json` so the user's own `claude` sees the same
  *     denials — at daemon start, and again on every fleet sync.
  *
  * Both read {@link resolvedFleetDenials} — the single source — so they cannot
  * drift from each other.
  */
-import { cawcoTodosDenied, opencodeToolsFor } from "@cawco/core";
+import { OWN_LIST_DENIED, opencodeToolsFor } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { userLayerPath } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -53,14 +51,12 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined =>
 
 /** The fleet's denials as this machine last heard them. */
 export interface FleetDenials {
-  /** The fleet's "CawCo's to-dos" choice. */
-  cawcoTodos: boolean;
   /** The baseline. */
   deniedTools: readonly string[];
 }
 
 /**
- * What the sidecar says of the fleet's denials: the list and the choice, or
+ * What the sidecar says of the fleet's denials: the list, or
  * that this machine has not heard them yet (no sidecar, or one written before
  * a sync carried `deniedTools`), or why the sidecar cannot be read.
  */
@@ -112,7 +108,7 @@ export const readFleetDenials = async (): Promise<FleetDenialsRead> => {
   }
   return {
     kind: "known",
-    denials: { deniedTools: list, cawcoTodos: sidecar.cawcoTodos === true },
+    denials: { deniedTools: list },
   };
 };
 
@@ -168,31 +164,17 @@ export const resolvedFleetDenials = async (): Promise<FleetDenials> => {
   }
 };
 
-/** What the machine's own `claude` is denied: the baseline, and the to-do and plan-mode set while the fleet's choice is on. */
-export const machineDenyList = ({
-  deniedTools,
-  cawcoTodos,
-}: FleetDenials): string[] => [
-  ...new Set([...deniedTools, ...cawcoTodosDenied(cawcoTodos)]),
+/** What the machine's own `claude` is denied: the baseline, and the own-list set. */
+export const machineDenyList = ({ deniedTools }: FleetDenials): string[] => [
+  ...new Set([...deniedTools, ...OWN_LIST_DENIED]),
 ];
 
 /**
- * What the fleet denies a session being spawned: the baseline, and the to-do
- * and plan-mode set when the fleet's choice or the session's own (`cawcoTodos`
- * on its spawn, from its delegate type) is on. The spawn's own `denyTools`
- * union on top, in each adapter.
+ * What the fleet denies a session being spawned: the baseline, and the
+ * own-list set. The spawn's own `denyTools` union on top, in each adapter.
  */
-export const sessionFleetDenials = async (
-  cawcoTodos: boolean | undefined
-): Promise<string[]> => {
-  const fleet = await resolvedFleetDenials();
-  return [
-    ...new Set([
-      ...fleet.deniedTools,
-      ...cawcoTodosDenied(fleet.cawcoTodos || cawcoTodos === true),
-    ]),
-  ];
-};
+export const sessionFleetDenials = async (): Promise<string[]> =>
+  machineDenyList(await resolvedFleetDenials());
 
 /**
  * The settings with every `deny` name they did not already carry, and without

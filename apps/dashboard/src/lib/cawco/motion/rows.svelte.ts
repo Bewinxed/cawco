@@ -1708,6 +1708,7 @@ export function reflow() {
     // read again, every place in the list was laid out a second time in the
     // frame a tree opened.
     let across = -1;
+    // biome-ignore lint/style/noRestrictedGlobals: reads only: every row's place, read again on the layout the resize made, so the next change animates from where the rows stand
     const sizes = new ResizeObserver(([entry]) => {
       const { width } = entry.contentRect;
       if (width !== across) {

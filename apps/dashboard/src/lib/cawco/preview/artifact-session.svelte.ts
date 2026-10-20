@@ -24,6 +24,7 @@ import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { deletePreview } from "../artifact-api";
 import { newId } from "../id";
 import { rowHref } from "../links";
+import { TRY_AGAIN, unansweredWords } from "../unanswered";
 import type {
   PaneFleet,
   PaneMachine,
@@ -278,11 +279,17 @@ export class ArtifactSession implements PaneFleet {
     );
   }
 
-  /** What the tab says when `machineId` didn't answer in time, in the fleet store's words (client.svelte.ts `didntAnswer`). */
+  /** What the tab says when `machineId` didn't answer in time, in the fleet store's words (unanswered.ts). */
   #didntAnswer(machineId: string, missed: { after: number }): string {
-    const name =
-      this.#heard?.machines.find((machine) => machine.machineId === machineId)
-        ?.hostname || machineId;
-    return `${name} didn't answer within ${Math.round(missed.after / 1000)} s. It may be offline.`;
+    const machine = this.#heard?.machines.find(
+      (one) => one.machineId === machineId
+    );
+    return unansweredWords({
+      machine: machine?.hostname || machineId,
+      online: machine?.online ?? false,
+      after: missed.after,
+      missed: "the folder's listing didn't come back",
+      again: TRY_AGAIN,
+    });
   }
 }

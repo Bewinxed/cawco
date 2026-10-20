@@ -25,8 +25,7 @@
  *   `~/.claude.json` and the account's, OpenCode's `opencode.json` and pi's
  *   `mcp.json` hold `his` and nothing of CawCo's, and the old sidecar and the
  *   sidecar's list of what it wrote are gone;
- * - with the fleet's "CawCo's to-dos" on, the OpenCode server CawCo's session
- *   runs on lists no plan agent and lists his own, and his `opencode.json`
+ * - the OpenCode server CawCo's session runs on lists no plan agent and lists his own, and his `opencode.json`
  *   holds his agent and not the plan agent's `disabled` CawCo once wrote.
  *
  * Runs inside a workspace or on the host alike: it delegates nothing.
@@ -297,7 +296,7 @@ const run = async (kit: Kit): Promise<void> => {
         },
       },
       // His own agent, and the plan agent's `disabled` CawCo once wrote
-      // here for "CawCo's to-dos" (its sidecar below says so).
+      // here to turn its plan mode off (its sidecar below says so).
       agents: {
         [HIS_AGENT]: { description: "his own agent", system: "his" },
         plan: { disabled: true },
@@ -339,14 +338,8 @@ const run = async (kit: Kit): Promise<void> => {
   // machine runs this build for the first time: that sync's cleanup knows
   // the fleet's names.
   kit.check(`the fleet runs ${FLEET}`, await put(pids("fleet1")));
-  // The fleet's "CawCo's to-dos" choice on: CawCo's OpenCode sessions run
-  // with no plan agent, and his own `opencode` keeps his.
-  const todos = await fetch(`${fleet.base}/api/fleet/choices`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ todos: true }),
-  });
-  kit.check("the fleet's CawCo's to-dos is on", todos.ok, String(todos.status));
+  // CawCo's OpenCode sessions run with no plan agent, and his own
+  // `opencode` keeps his.
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
@@ -421,7 +414,7 @@ const run = async (kit: Kit): Promise<void> => {
     60_000
   ).catch(() => [] as string[]);
   kit.check(
-    `opencode: with CawCo's to-dos on, the server CawCo's session runs on has no plan agent and has his ${HIS_AGENT} (${agents.join(", ")})`,
+    `opencode: the server CawCo's session runs on has no plan agent and has his ${HIS_AGENT} (${agents.join(", ")})`,
     agents.length > 0 && !agents.includes("plan") && agents.includes(HIS_AGENT),
     JSON.stringify({ agents })
   );

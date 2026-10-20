@@ -178,6 +178,7 @@ import {
 import { sweepBrowserDoors } from "./browser/door";
 import {
   certifyRelay,
+  relayReachChanged,
   relayRuntimeRead,
   removeRelay,
   renewRelay,
@@ -310,7 +311,6 @@ const relayStartOf = (args: unknown): RelayStartArgs => {
     typeof given.address === "string" &&
     given.address.length > 0 &&
     (given.hostname === undefined || typeof given.hostname === "string") &&
-    (given.externalIp === undefined || typeof given.externalIp === "string") &&
     Array.isArray(range) &&
     range.length === 2 &&
     range.every((port) => Number.isInteger(port))
@@ -1723,7 +1723,8 @@ const attach = (
     }
     // The machine's network changed (an interface's address came or went):
     // its capabilities read again, so the public address its router maps it
-    // to (STUN, browser/relay-reach.ts) follows the network it is on.
+    // to (STUN, browser/relay-reach.ts) follows the network it is on, and a
+    // live stream relay here tells its own addresses again (its reach).
     const interfacesNow = (): string =>
       Object.values(networkInterfaces())
         .flatMap((addresses) => addresses ?? [])
@@ -1737,6 +1738,11 @@ const attach = (
         return;
       }
       network = now;
+      relayReachChanged().catch((error: unknown) =>
+        console.warn(
+          `[relay] its addresses were not told again: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
       readPart("the machine's capabilities", probeCapabilities)
         .then((machineCapabilities) => {
           if (machineCapabilities && socket.readyState === WebSocket.OPEN) {

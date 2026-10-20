@@ -9,10 +9,20 @@
  * preferences say so before it first starts.
  */
 import { spawn } from "node:child_process";
-import { accessSync, closeSync, constants, openSync } from "node:fs";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import {
+  accessSync,
+  closeSync,
+  constants,
+  existsSync,
+  openSync,
+} from "node:fs";
+import { mkdir, readdir, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { BROWSER_SCREEN, type BrowserRelay } from "@cawco/core/browser";
+import {
+  BROWSER_SCREEN,
+  type BrowserRelay,
+  isBrowserKey,
+} from "@cawco/core/browser";
 import { bootId, processStart } from "@cawco/core/process-identity";
 import { standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -28,10 +38,13 @@ import { resolveBin, toolEnv } from "../tools";
 import {
   type BrowserHost,
   type BrowserRecord,
+  browsersDir,
   chromiumDir,
   httpAnswers,
   type Progress,
   portsOf,
+  readBrowser,
+  withBrowser,
 } from "./state";
 
 let installingChromium: Promise<void> | undefined;
@@ -123,9 +136,12 @@ const merged = (base: Json, over: Json): Json =>
     })
   );
 
+/** The profile's name in its browser's {@link chromiumDir}. */
+const PROFILE_NAME = "profile";
+
 /** The local browser's profile dir. */
 export const profileDir = (record: BrowserRecord): string =>
-  join(chromiumDir(record.key), "profile");
+  join(chromiumDir(record.key), PROFILE_NAME);
 
 /** Writes the profile's private preferences, into what Chromium kept there before. */
 const writePreferences = async (profile: string): Promise<void> => {
@@ -141,9 +157,15 @@ const writePreferences = async (profile: string): Promise<void> => {
   );
 };
 
+/** The log's name in its browser's {@link chromiumDir}. */
+const LOG_NAME = "chromium.log";
+
 /** Where the local browser's Chromium writes its output. */
 const logFile = (record: BrowserRecord): string =>
-  join(chromiumDir(record.key), "chromium.log");
+  join(chromiumDir(record.key), LOG_NAME);
+
+/** What an agent before 2026-10-20 kept of a local Chromium in its browser's records dir. */
+const KEPT_IN_RECORDS = [PROFILE_NAME, LOG_NAME];
 
 /** The first line of its output that says what went wrong, else its last. */
 const lastWords = async (record: BrowserRecord): Promise<string> => {
@@ -290,5 +312,47 @@ export class LocalHost implements BrowserHost {
   async remove(record: BrowserRecord): Promise<void> {
     await this.stop(record);
     await rm(chromiumDir(record.key), { recursive: true, force: true });
+  }
+
+  /**
+   * Moves each local browser's profile and log from its records dir, where
+   * an agent before 2026-10-20 kept them, into its {@link chromiumDir}, once,
+   * as the agent starts (browsers.ts `watchBrowsers`), so the person's
+   * sign-ins come with it. One is moved only where its new place has none:
+   * a rename, both being under the agent's data dir, so nothing is left at
+   * the old place to read again. A Chromium still running from the old
+   * profile (it outlives the agent that started it) is stopped first: it
+   * opens its files by its `--user-data-dir`, and would grow a second
+   * profile there. Its next start runs from the moved one.
+   */
+  async moveKeptFiles(): Promise<void> {
+    const names = await readdir(browsersDir()).catch(() => [] as string[]);
+    for (const name of names) {
+      const key = name.replace("-", ":");
+      if (!isBrowserKey(key)) {
+        continue;
+      }
+      const from = join(browsersDir(), name);
+      const to = chromiumDir(key);
+      const moving = KEPT_IN_RECORDS.filter(
+        (file) => existsSync(join(from, file)) && !existsSync(join(to, file))
+      );
+      if (moving.length === 0) {
+        continue;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one browser at a time, each under its own lock.
+      await withBrowser(key, async () => {
+        const record = await readBrowser(key);
+        if (record) {
+          await this.stop(record);
+        }
+        await mkdir(to, { recursive: true, mode: 0o700 });
+        for (const file of moving) {
+          // biome-ignore lint/performance/noAwaitInLoops: two renames, in order.
+          await rename(join(from, file), join(to, file));
+        }
+      });
+      console.info(`[browser] ${key}: ${moving.join(" and ")} moved to ${to}`);
+    }
   }
 }

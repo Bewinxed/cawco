@@ -77,7 +77,7 @@
             case "unanswered":
               // Not known yet: the machine is asked again when this effect next runs.
               console.warn(
-                `[cawco] subagents on ${machine.machineId}: ${didntAnswer(machine.machineId, read)}`
+                `[cawco] subagents on ${machine.machineId}: ${didntAnswer(machine.machineId, read, { missed: "its list of subagents didn't come back", again: "It's asked again when this page next reads its machines." })}`
               );
               break;
             default: {

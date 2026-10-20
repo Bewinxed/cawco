@@ -53,6 +53,7 @@
   import { cawco } from "../client.svelte";
   import FindField from "../find/FindField.svelte";
   import { excerptParts } from "../find/find-rows";
+  import { frameObserver } from "../frame-observer";
   import { failureWords } from "../hub-read";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import { crossIn, crossOut, dur } from "../motion/curves.svelte";
@@ -320,16 +321,30 @@
         }
         writeMore(region, past);
       };
+      // Measured now, so the first frame painted has its sign; a resize or
+      // a list that changed in the next frame's callbacks (frameObserver):
+      // the sign coming or going resizes the region and Files' card above
+      // it, which a delivery, and the mutations a write inside one makes,
+      // had already passed.
       measure();
-      const seen = new ResizeObserver(measure);
+      const seen = frameObserver(measure);
       seen.observe(scroller);
       for (const child of scroller.children) {
         seen.observe(child);
       }
-      const added = new MutationObserver(measure);
+      let frame = 0;
+      const added = new MutationObserver(() => {
+        if (frame === 0) {
+          frame = requestAnimationFrame(() => {
+            frame = 0;
+            measure();
+          });
+        }
+      });
       added.observe(scroller, { childList: true, subtree: true });
       scroller.addEventListener("scroll", measure, { passive: true });
       return () => {
+        cancelAnimationFrame(frame);
         seen.disconnect();
         added.disconnect();
         scroller.removeEventListener("scroll", measure);

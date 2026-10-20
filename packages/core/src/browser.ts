@@ -130,8 +130,22 @@ export interface BrowserFrame {
 /** The ICE relay a browser's media is given as it starts: the fleet's stream relay, with a credential minted for it. */
 export interface BrowserRelay {
   credential: string;
+  /**
+   * The relay's machine and its own LAN and tailnet addresses (empty while
+   * that machine has not said them yet): a browser composes its ICE URLs
+   * from them (agent relay-urls.ts). Absent from a viewer's use.
+   */
+  reach?: BrowserRelayReach;
+  /** The relay's public URLs, as every viewer is given them. */
   urls: string[];
   username: string;
+}
+
+/** Where the relay's machine is, as a browser of the fleet composes its ICE URLs from it. */
+export interface BrowserRelayReach {
+  lan: string[];
+  machineId: string;
+  tailnet: string[];
 }
 
 /** Hub → daemon: start the browser of `key` (or wake it), with the stream relay when the fleet has one. Answers the {@link BrowserRow}. */

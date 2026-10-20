@@ -51,8 +51,6 @@
  * - `ctx.mcp.transform`: the project MCP servers CawCo placed, the
  *   workspace's scratch as a root of its chrome-devtools, and every local
  *   server started on the machine's own data dir.
- * - `ctx.agent.transform`: OpenCode's `plan` agent off for a workspace whose
- *   delegate type turns CawCo's to-dos on.
  */
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -95,9 +93,6 @@ export const OPENCODE_DIR = join(
  * the servers of the deepest place that holds it as it boots.
  */
 export const OPENCODE_PLACED_MCP = join(OPENCODE_DIR, "cawco-placed-mcp.json");
-
-/** The mark in a workspace's state dir that turns OpenCode's plan agent off in its clone. */
-export const PLAN_AGENT_OFF = "opencode-plan-agent-off";
 
 /** The plugin's own tools, which take no session credential: they ask the hub as the session's step. */
 const WORKFLOW_TOOLS = [
@@ -528,10 +523,6 @@ export default {
         });
       }
     });
-
-    if (state && existsSync(state + "/" + ${JSON.stringify(PLAN_AGENT_OFF)})) {
-      await ctx.agent.transform((editor) => editor.remove("plan"));
-    }
 
     // Each Code Mode program's calls, by session and the program's own call id
     // (which each call it makes carries too), in the order they started.

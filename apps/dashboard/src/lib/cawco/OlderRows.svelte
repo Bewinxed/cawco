@@ -40,6 +40,7 @@
    */
   import { type Snippet, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
@@ -174,12 +175,14 @@
         node.scrollTop + node.clientHeight < node.scrollHeight - 1
       );
     };
+    // Marked now, and a resize in the next frame (frameObserver): the fade's
+    // edges are drawn on it. A scroll lays nothing out, and is read at once.
     mark();
-    const sizes = new ResizeObserver(mark);
+    const sizes = frameObserver(mark);
     sizes.observe(node);
     // Rows that arrive after the box opened (`fill`) leave its own size as
     // it was: only its content grew.
-    const rows = new MutationObserver(mark);
+    const rows = new MutationObserver(() => sizes.request());
     rows.observe(node, { childList: true });
     node.addEventListener("scroll", mark, { passive: true });
     return () => {

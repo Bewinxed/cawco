@@ -1,6 +1,7 @@
 /**
  * Every session in the fleet as CSV rows: the live ones with what this
- * browser knows of their turns, context and state, then the transcripts
+ * browser knows of their turns and state and their context as read for the
+ * export, then the transcripts
  * stored on the machines that are not running — the ledger the fleet board
  * used to export, now Usage's Sessions export. Each row carries the spend
  * the page's range read for it; a session that spent in the range but is in
@@ -9,7 +10,12 @@
  * (real money) stay in their own columns, never one.
  */
 import { accountsWords, machineLabel, type UsageSummaryRow } from "@cawco/core";
-import { cawco, isFailed } from "./client.svelte";
+import {
+  type ContextRead,
+  cawco,
+  isFailed,
+  refreshContext,
+} from "./client.svelte";
 import { instanceTitle, lastAt } from "./home/home-state.svelte";
 import { catalogTitle } from "./links";
 
@@ -77,11 +83,37 @@ function spendCells(
   ];
 }
 
-/** The sessions file: a header line, then one row per session. */
-export function sessionsCsv(spend: SessionSpend): string {
+/**
+ * A live row's Context cell: the figure this export's own read took, or,
+ * with none, why (the details' words, "… didn't report its context …").
+ * Never a figure from an earlier read.
+ */
+function contextCell(read: ContextRead): string {
+  switch (read.kind) {
+    case "read":
+      return `${Math.round(read.usage.percentage)}%`;
+    case "unread":
+      return read.why ?? "";
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+}
+
+/**
+ * The sessions file: a header line, then one row per session. Every live
+ * session's context is read for it, all at once, each within the read's own
+ * bound (client.svelte.ts `refreshContext`).
+ */
+export async function sessionsCsv(spend: SessionSpend): Promise<string> {
   const cell = (value: string) => `"${value.replaceAll('"', '""')}"`;
   const seen = new Set<string>();
-  const live = cawco.runningInstances.map((row) => {
+  const running = cawco.runningInstances;
+  const reads = await Promise.all(
+    running.map((row) => refreshContext(row.id, row.machineId))
+  );
+  const live = running.map((row, index) => {
     const stats = cawco.statsOf(row.id);
     const at = lastAt(row);
     const { harness } = row;
@@ -93,7 +125,7 @@ export function sessionsCsv(spend: SessionSpend): string {
       machineName(row.machineId),
       HARNESS[harness] ?? harness,
       stats.turns === null ? "" : String(stats.turns),
-      stats.contextPct === null ? "" : `${Math.round(stats.contextPct)}%`,
+      contextCell(reads[index] as ContextRead),
       at ? new Date(at).toISOString() : "",
       stateOf(row.id, isFailed(row)),
       ...spendCells(row.sessionId ? spend.get(row.sessionId) : undefined),

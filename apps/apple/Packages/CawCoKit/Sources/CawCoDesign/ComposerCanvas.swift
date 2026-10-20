@@ -1179,7 +1179,7 @@ final class CanvasRoom: NSObject {
         web?.web.removeFromSuperview()
         let made = CanvasWeb(page: page, instanceId: instanceId) { [weak self] place in
             guard let hub = self?.host?.hub else { throw CanvasRefusal(message: "no hub is connected") }
-            return try await hub.previewLoad(place, in: instanceId, byHost: page.byHost)
+            return try await hub.previewLoad(place, for: .instance(instanceId), byHost: page.byHost)
         }
         made.onDone = { [weak self] in self?.composer.foldCanvas() }
         made.onDock = { [weak self] in self?.composer.dockCanvas() }

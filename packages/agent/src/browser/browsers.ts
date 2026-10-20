@@ -44,6 +44,7 @@ import { ContainerHost, nekoSession, RELAY_RENEW_MS } from "./container-host";
 import { frontOrigin, setOriginSink, syncOrigins } from "./front-origin";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
+import { relayKeyOf } from "./relay-urls";
 import { findRuntime, type Runtime } from "./runtime";
 import {
   missingSignIns,
@@ -410,7 +411,7 @@ export const startBrowser = (args: BrowserStartArgs): Promise<BrowserRow> => {
     if (relay) {
       record = { ...record, relay };
     }
-    record = await slotted(record);
+    record = await slotted(record, await host.heldSlots?.());
     if (
       record.state === "live" &&
       (await host.running(record)) &&
@@ -501,14 +502,14 @@ export const reserveBrowser = async (key: BrowserKey): Promise<void> => {
   gateFor(await reserved(key));
 };
 
-/** Whether a live container's relay credential is near its end and a fresh one came. */
+/** Whether a live container's relay credential is near its end, or is for another relay, and a fresh one came. */
 const relayDue = (
   record: BrowserRecord,
   relay: BrowserRelay | undefined
 ): boolean =>
   !!relay &&
   record.host === "container" &&
-  (record.relayUrls?.join(" ") !== relay.urls.join(" ") ||
+  (record.relayKey !== relayKeyOf(relay) ||
     (record.relayExpiresAt ?? 0) < Date.now() + RELAY_RENEW_MS);
 
 /** Stops the browser of `key`, keeping its profile. */
@@ -769,7 +770,10 @@ const moveIntoContainer = (
     starting.set(key, { state: "starting" });
     told();
     try {
-      let from: BrowserRecord = await slotted(record);
+      let from: BrowserRecord = await slotted(
+        record,
+        await container.heldSlots()
+      );
       if (!(from.state === "live" && (await local.running(from)))) {
         from = await local.start(from, { progress: () => undefined });
       }
@@ -866,6 +870,9 @@ export const watchBrowsers = async (): Promise<() => void> => {
   // A page's origin that settled is told as any change is.
   setOriginSink(() => told());
   await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
+  // A local browser's profile an earlier agent kept beside its record moves
+  // under `chromium/` before anything starts one (local-host.ts `moveKeptFiles`).
+  await local.moveKeptFiles();
   // Every kept browser's gate made before the port answers, so a connection
   // as the agent starts meets its gate as its record says: closed under a
   // take-over the daemon restarted in (`gateFor`), never the no-browser 404.

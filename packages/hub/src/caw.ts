@@ -83,6 +83,7 @@ import {
   type RelayProvider,
   type SendPayload,
   type SpawnPayload,
+  sessionLink,
   type ThreadAnswer,
   type ThreadEvent,
   type ThreadHearing,
@@ -499,6 +500,12 @@ const eventRow = (note: ThreadNote) => ({
   event: note.event,
 });
 
+/** A thread message as a wake carries it: your words, or a note's title over its body. */
+const openedOf = (line: ThreadMessageRow): string =>
+  line.author === "event"
+    ? [line.noteTitle, line.body].filter(Boolean).join("\n\n")
+    : line.body;
+
 /** An attempt's end, in the word an event note reads. */
 const ENDED: Record<ItemEnd, string> = {
   done: "landed",
@@ -616,7 +623,7 @@ export interface CawDeps {
   >;
   /** Ends a session (the lead, when Caw moves harness or model). */
   readonly end: (instanceId: string) => void;
-  /** Whether the fleet's two choices were ever set (the setup page asks for them until they are). */
+  /** Whether the fleet's delegates choice was ever set (the setup page asks for it until it is). */
   readonly fleetChoicesSet: () => boolean;
   /** The project's folder changed under its tasks (stages.md, a task file). */
   readonly folderChanged: (projectId: string) => void;
@@ -1147,6 +1154,17 @@ export const createCaw = ({
 
   // --- the lead session ----------------------------------------------------
 
+  /**
+   * The project's Caw session is now `instanceId` (null: none). Every
+   * dashboard and the app read the projects again: a thread draws its lead's
+   * preview and plan beside it from the project's row, so the row it opens
+   * with names him.
+   */
+  const setLead = (projectId: string, instanceId: string | null): void => {
+    db.setProjectCaw(projectId, { leadInstanceId: instanceId });
+    projectsChanged();
+  };
+
   /** The project's Caw session, when it has one the hub can still wake. */
   const standing = (
     project: ReturnType<typeof projectOf>
@@ -1274,7 +1292,7 @@ export const createCaw = ({
       // edit call of his is put to the hub's gate instead (lead-gate.ts).
       "bypassPermissions"
     );
-    db.setProjectCaw(project.id, { leadInstanceId: instanceId });
+    setLead(project.id, instanceId);
     // A Claude lead's context is the project's whole history, and an idle
     // hour costs it a full rewrite: kept warm, under keep-alive's cap of one
     // rewrite's worth of pings (caw-cost.md: $1.01 of pings against $10.18
@@ -1592,7 +1610,7 @@ export const createCaw = ({
       );
       end(project.leadInstanceId);
     }
-    db.setProjectCaw(project.id, { leadInstanceId: null });
+    setLead(project.id, null);
   };
 
   /**
@@ -2164,13 +2182,19 @@ export const createCaw = ({
     template: StagesTemplate | null,
     {
       change = [],
+      opened,
       stages,
-    }: { change?: readonly SetupPart[]; stages?: string } = {}
+    }: {
+      change?: readonly SetupPart[];
+      opened?: string;
+      stages?: string;
+    } = {}
   ): string =>
     setupEvent({
       askFleet: !fleetChoicesSet() || change.includes("fleet"),
       askUpstream: !upstreamAnswered() || change.includes("upstream"),
       from,
+      ...(opened === undefined ? {} : { opened }),
       placed:
         !change.includes("place") &&
         project.places.some((place) => place.kind === "checkout"),
@@ -2183,7 +2207,9 @@ export const createCaw = ({
 
   /**
    * Wakes the project's Caw with its setup event: your words (your prompt,
-   * or the offer you accepted), so on or off. When Caw cannot start for a
+   * or the offer you accepted), so on or off. The Setup thread's first
+   * message goes with it as it reads, with what rode with your words, as a
+   * thread's wake carries them ({@link yourWords}). When Caw cannot start for a
    * reason the thread already states (no machine online: the thread's
    * composer says so), nothing is added; any other failure, the spend cap's
    * included, is noted in it. `machineOnline` tries again.
@@ -2194,10 +2220,27 @@ export const createCaw = ({
     from: "prompt" | "offer",
     template: StagesTemplate | null
   ): void => {
+    const [first] = db.threadMessages(threadId);
+    let carried: Carried | undefined;
+    try {
+      carried = first?.author === "you" ? carriedOf(first) : undefined;
+    } catch (error) {
+      // A picture your words carried is no longer stored (a setup tried
+      // again long after): the thread says so, and nothing wakes him.
+      noteIn(project.id, threadId, {
+        title: "Caw · could not start",
+        body: error instanceof Error ? error.message : String(error),
+        event: { kind: "caw", what: "could-not-start" },
+      });
+      return;
+    }
     wake(project.id, {
       by: "you",
       threadId,
-      text: setupText(project, threadId, from, template),
+      text: setupText(project, threadId, from, template, {
+        ...(first ? { opened: openedOf(first) } : {}),
+      }),
+      ...(carried?.images || carried?.attachments ? { carried } : {}),
     }).catch((error: unknown) => {
       // No machine for him (the composer says so), or the project was
       // deleted meanwhile: nothing to say.
@@ -2735,7 +2778,7 @@ export const createCaw = ({
           `Caw could not be woken for the thread “${into.title}” in ${project.name}. Nothing was handed.`
         );
       }
-      return `Handed to Caw in the thread “${into.title}” (${project.name}).`;
+      return `Handed to Caw in the thread ${sessionLink(into.id, into.title)} (${project.name}).`;
     },
 
     /**

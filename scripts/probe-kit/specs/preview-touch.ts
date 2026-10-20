@@ -296,13 +296,21 @@ const probe = async (kit: Kit) => {
   await pageFrame(page);
   await settle(page, 400);
 
-  // The drawer opens at its lower height, the conversation and its
-  // composer still in view (DESIGN.md: "It always settles on the middle snap").
+  // The drawer opens at its open stop, over the composer down to the
+  // screen's foot (SideSheet), the conversation's top still in view.
   const opened = await drawerState(page);
+  const hostFoot = await page.evaluate(
+    () =>
+      document
+        .querySelector('[data-slot="preview-sheet-host"]')
+        ?.getBoundingClientRect().bottom ?? 0
+  );
   kit.check(
-    "the drawer opens at its lower height: 60% of the screen, the composer clear below it",
-    Math.abs(opened.shown - Math.min(opened.viewport * 0.6, opened.host)) < 2,
-    JSON.stringify(opened)
+    "the drawer opens at its open stop: its floor the screen's foot, over the composer, the conversation's top above it",
+    opened.snap === "open" &&
+      Math.abs(hostFoot - opened.viewport) < 2 &&
+      opened.shown < opened.host - 50,
+    JSON.stringify({ ...opened, hostFoot })
   );
 
   // 1. Interact: the page is the finger's.

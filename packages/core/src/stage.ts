@@ -200,7 +200,7 @@ export interface SectionRender {
   /** The content hash of the states file and the components it mounts it was drawn from. */
   hash: string;
   moves: MoveRender[];
-  /** Interaction selectors the canvas could not force (§7.1): their columns are not drawn. */
+  /** What the canvas could not draw as asked: interaction selectors it could not force (§7.1), whose columns are not drawn, and width media it leaves to the window (canvas width.ts), which a frame's width does not answer. */
   notForced: string[];
   title: string;
 }

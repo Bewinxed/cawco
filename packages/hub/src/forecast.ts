@@ -234,6 +234,52 @@ export const tokensPerPercent = (
 };
 
 /**
+ * What one percent of an account's window costs in dollars: the same spans
+ * as {@link tokensPerPercent}, its readings' percent deltas laid beside the
+ * `turn_usage` cost (Claude Code's own `costUSD`) of the turns in them. Null
+ * until it has moved {@link MIN_PCT_MEASURED} percent across priced spans.
+ */
+export const usdPerPercent = (
+  window: { kind: string; scopeLabel: string | null },
+  history: HistoryPoint[],
+  turns: readonly { at: Date; costUsd: number | null }[],
+  accountId: string
+): number | null => {
+  const series = new Map<string, HistoryPoint[]>();
+  for (const point of history) {
+    if (
+      point.accountId === accountId &&
+      point.kind === window.kind &&
+      point.scopeLabel === window.scopeLabel
+    ) {
+      const key = point.resetsAt ?? "";
+      series.set(key, [...(series.get(key) ?? []), point]);
+    }
+  }
+  let pct = 0;
+  let usd = 0;
+  for (const points of series.values()) {
+    points.sort((a, b) => a.fetchedAt - b.fetchedAt);
+    const [first] = points;
+    const last = points.at(-1);
+    if (!(first && last) || last.percent <= first.percent) {
+      continue;
+    }
+    const spent = turns
+      .filter((turn) => {
+        const at = turn.at.getTime();
+        return at > first.fetchedAt && at <= last.fetchedAt;
+      })
+      .reduce((sum, turn) => sum + (turn.costUsd ?? 0), 0);
+    if (spent > 0) {
+      pct += last.percent - first.percent;
+      usd += spent;
+    }
+  }
+  return pct >= MIN_PCT_MEASURED ? usd / pct : null;
+};
+
+/**
  * Each account's windows as placement and rebalancing read them: the pace
  * of each (null on an account nothing runs on, as {@link accountForecasts}
  * has it) and what one percent of it costs.

@@ -235,6 +235,39 @@ export const MCP_CONNECT_TIMEOUT_MS = 60_000;
 /** CawCo's own MCP server, as every server's launch config names it (`mcp.servers.cawco`). */
 export const CAWCO_MCP_SERVER = "cawco";
 
+/**
+ * How long a location's first prompt waits once its MCP servers are seen
+ * connected there. OpenCode takes a connected server's tools into its Code
+ * Mode catalog on a debounce ("its catalog update waited in the 100ms
+ * debounce", anomalyco/opencode#54942, the fix for #54794, unmerged at
+ * 2.0.32), and a step before then runs on a catalog without them: Caw's
+ * first step in a fresh location was answered "Unknown tool
+ * 'cawco.project_setup'" by OpenCode itself, its catalog taking CawCo's tools
+ * 195 ms after the server connected (setup-on-ask r78). OpenCode says when
+ * the catalog changes in no event or route, so the debounce is waited out.
+ * Ours: the debounce ten times over.
+ */
+export const CATALOG_SETTLE_MS = 1000;
+
+/** The locations each server's catalog has had its settle in ({@link CATALOG_SETTLE_MS}). */
+const catalogSettled = new WeakMap<OpencodeClient, Set<string>>();
+
+/** Waits out a location's catalog refresh, once per location on each server. */
+const settleCatalog = async (
+  client: OpencodeClient,
+  directory: string,
+  signal: AbortSignal
+): Promise<void> => {
+  const settled = catalogSettled.get(client) ?? new Set<string>();
+  catalogSettled.set(client, settled);
+  if (settled.has(directory)) {
+    return;
+  }
+  await Bun.sleep(CATALOG_SETTLE_MS);
+  signal.throwIfAborted();
+  settled.add(directory);
+};
+
 /** An MCP server that had not connected when a location took its first prompt, and why. */
 export interface McpNotConnected {
   name: string;
@@ -264,6 +297,10 @@ export interface McpNotConnected {
  * that time, the last list the server gave decides, as the deadline did:
  * CawCo's server connected settles with the others still `pending` said as
  * still connecting, anything else refuses.
+ *
+ * Connected is not yet in the catalog: the location's first wait on each
+ * server then waits {@link CATALOG_SETTLE_MS} more, for OpenCode's catalog
+ * to take the servers' tools.
  */
 export const waitForMcp = async (
   client: OpencodeClient,
@@ -338,10 +375,12 @@ export const waitForMcp = async (
   );
   switch (settled.kind) {
     case "answered":
+      await settleCatalog(client, directory, signal);
       return settled.value;
     case "unanswered": {
       const cawco = last ? cawcoOf(last) : undefined;
       if (last && cawco?.status === "connected") {
+        await settleCatalog(client, directory, signal);
         return notConnected(last);
       }
       throw new Error(

@@ -19,6 +19,7 @@ import type {
 } from "@cawco/core/stage";
 import { bridge, type Section, type View } from "./runtime";
 import { type PageScheme, pageScheme } from "./scheme";
+import { windowHeight, windowWidth } from "./viewport";
 
 /** DialKit's vanilla build as the page has it once loaded (`window.DialKit`). */
 interface DialKitGlobal {
@@ -66,6 +67,8 @@ declare global {
 export interface ChromeOptions {
   applyDials: (values: Record<string, unknown>) => void;
   canvas: HTMLElement;
+  /** The house edge fade's sheet, set in the page: a wide embed's frame scrolls under it (runtime.ts `fitToEmbed`). */
+  edgeFade: string;
   /** The house faces' `@font-face` rules, set in the page: a shadow root's own are not heard. */
   faces: string;
   go: (key: string) => void;
@@ -196,6 +199,9 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
    is ever drawn under any of it, whatever the head grows to. */
 .cawco-canvas { position: fixed; inset-block: var(--band) calc(var(--foot) + var(--cawco-floor)); inset-inline: 0 var(--cawco-end); overflow: hidden;
   touch-action: none; background: var(--surface-well); }
+/* The width a frame without one answers its story's width conditions at (canvas width.ts): the canvas's own, as the window
+   was. A frame with a width answers its own body's. */
+.cawco-canvas { container: cawco-width / inline-size; }
 .cawco-world { position: absolute; inset-block-start: 0; inset-inline-start: 0; transform-origin: 0 0; display: flex; flex-direction: column;
   gap: var(--space-8); padding-block-end: 160px; will-change: transform; --cawco-gutter: 0px; padding-inline-start: var(--cawco-gutter); }
 .cawco-section { display: flex; flex-direction: column; gap: var(--space-3); min-block-size: 120px; }
@@ -279,6 +285,9 @@ html[data-cawco-phone] .cawco-dock-dials { inset-block-start: auto; inset-inline
    holding it makes its frame as tall (CANVAS_EMBED_SIZE), and a wheel or a finger on it scrolls that page. A section that
    didn't load, or names no story it has, still says so. */
 html.cawco-embed, html.cawco-embed body { block-size: auto; overflow-x: hidden; overflow-y: auto; }
+/* An embed is no well: around a frame narrower than it stands the surface the decision page draws its Preview on (the
+   host's Preview.svelte frame, surface-page), so no gutter of another colour shows beside a story. */
+html.cawco-embed, html.cawco-embed body, html.cawco-embed .cawco-canvas { background: var(--surface-page); }
 html.cawco-embed .cawco-canvas { position: static; inset: auto; overflow: visible; touch-action: auto; }
 html.cawco-embed .cawco-world { position: static; inline-size: 100%; gap: var(--space-3); padding: 0; will-change: auto; }
 html.cawco-embed .cawco-section { min-block-size: 0; gap: var(--space-3); }
@@ -286,6 +295,10 @@ html.cawco-embed :is(.cawco-section-head, .cawco-colhead, .cawco-frame-label, .c
 html.cawco-embed .cawco-grid { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }
 html.cawco-embed .cawco-frame { gap: 0; min-inline-size: 0; max-inline-size: 100%; }
 html.cawco-embed .cawco-frame[data-cawco-wide] { align-self: stretch; overflow-x: auto; overscroll-behavior-inline: contain; }
+/* Its fade is the house edge fade at its full 40px on every width (DESIGN.md: over words cut mid-word a phone's 16px reads as
+   a clip); a frame showing less than twice that has each fade cut to half of what it shows (the kit's caps), so the two meet
+   in its middle and never cross into a hard edge. */
+html.cawco-embed .cawco-frame[data-cawco-wide] { --fade-len: 40px; --fade-cap-start: 50%; --fade-cap-end: 50%; }
 html.cawco-embed .cawco-stand-in-body { max-inline-size: 100%; }
 html[data-cawco-phone][data-cawco-current] .cawco-frame:not([data-cawco-shown]), html[data-cawco-phone] .cawco-colhead, html[data-cawco-phone][data-cawco-current] .cawco-section:not([data-cawco-shown]) { display: none; }
 `;
@@ -405,7 +418,7 @@ export class Chrome {
     this.#o = options;
     const page = document.createElement("style");
     page.dataset.cawcoCanvas = "";
-    page.textContent = `${options.faces}\n${options.tokens.replaceAll(":root", ".cawco-canvas-page")}\n${PAGE_CSS}`;
+    page.textContent = `${options.faces}\n${options.tokens.replaceAll(":root", ".cawco-canvas-page")}\n${options.edgeFade}\n${PAGE_CSS}`;
     document.head.append(page);
     this.#host = document.createElement("div");
     this.#host.id = "cawco-chrome";
@@ -810,7 +823,7 @@ export class Chrome {
 
   /** Desk or phone, by the page's width. */
   layout(): void {
-    this.#flags.phone = !this.#flags.embedded && innerWidth < PHONE_MAX;
+    this.#flags.phone = !this.#flags.embedded && windowWidth() < PHONE_MAX;
     this.#host.toggleAttribute("data-phone", this.#flags.phone);
     document.documentElement.toggleAttribute(
       "data-cawco-phone",
@@ -1013,7 +1026,7 @@ export class Chrome {
         theme: pageScheme(),
       });
       if (this.#flags.phone) {
-        this.#timelineStartsAt(this.#dock, window.innerHeight / 4);
+        this.#timelineStartsAt(this.#dock, windowHeight() / 4);
       }
     }
     const clips: Record<string, unknown> = {};

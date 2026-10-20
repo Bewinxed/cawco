@@ -58,10 +58,11 @@ export class PiHarness extends PiProfile implements Harness {
         throw new Error(credential.reason);
       }
     }
-    // The fleet's baseline and the to-do set beside the spawn's own denials,
-    // as every harness takes them (denied-tools.ts `sessionFleetDenials`):
-    // its host maps them to pi's names (core `piToolsFor`).
-    const fleet = await sessionFleetDenials(spec.cawcoTodos);
+    // The fleet's baseline and the own-list set beside the spawn's own
+    // denials, as every harness takes them (denied-tools.ts
+    // `sessionFleetDenials`): its host maps them to pi's names (core
+    // `piToolsFor`), and pi has no list or plan mode, so the set maps to none.
+    const fleet = await sessionFleetDenials();
     return await spawnPi(
       {
         ...spec,

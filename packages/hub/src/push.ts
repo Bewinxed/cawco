@@ -68,6 +68,7 @@ import {
   PROJECT_SETTINGS_TOOL,
   pairingWords,
   questionsOf,
+  type TurnWakes,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
@@ -1112,6 +1113,33 @@ export const createPush = ({
   };
 
   /**
+   * What the session's turn leaves it waiting on that is its own, in words,
+   * or undefined when it waits on the person alone: the work items it
+   * delegated still starting or running (a declared wait is a running
+   * item's) or queued for a machine, and what its harness said will wake it
+   * (`wakes`: its background work still running, the wake-ups it set).
+   */
+  const ownWork = (
+    instanceId: string,
+    wakes: TurnWakes | undefined
+  ): string | undefined => {
+    const delegates =
+      db.liveWorkItemsOf(instanceId).length +
+      db
+        .queuedWorkItems()
+        .filter((request) => request.parentInstanceId === instanceId).length;
+    const parts = [
+      [delegates, "delegate(s) at work"],
+      [wakes?.background ?? 0, "background task(s) running"],
+      [wakes?.scheduled ?? 0, "wake-up(s) scheduled"],
+    ] as const;
+    const said = parts
+      .filter(([count]) => count > 0)
+      .map(([count, what]) => `${count} ${what}`);
+    return said.length > 0 ? said.join(", ") : undefined;
+  };
+
+  /**
    * One background push to a device, carrying the whole cleared set, when it
    * has clears it was not handed yet (a visible push since hands them too).
    */
@@ -1316,7 +1344,10 @@ export const createPush = ({
      * answered it (server.ts, at the turn's end; a turn cut by a restart has
      * no result and never comes here). Pushes when the session is one the
      * owner started: top level, not a delegate, a workflow's step, a
-     * project's lead or a continuation's worker; and not stopped by them.
+     * project's lead or a continuation's worker; not stopped by them; and
+     * waiting on them, not on work of its own ({@link ownWork}, read as the
+     * turn ends): that work's end starts its next turn, and the end of the
+     * turn that leaves it waiting on nothing pushes.
      * It waits {@link LOOK_GRACE_MS} first: a dashboard or an app that
      * opens the session marks it looked at (`/api/seen` `look`), and then
      * nothing goes. Then it joins the burst, which drops it if the session
@@ -1328,11 +1359,13 @@ export const createPush = ({
     turnEnded(
       instanceId: string,
       reply: string | undefined,
-      endedAt: Date
+      endedAt: Date,
+      wakes: TurnWakes | undefined
     ): void {
       if (stopped.delete(instanceId)) {
         return;
       }
+      const own = ownWork(instanceId, wakes);
       lifetime.after(LOOK_GRACE_MS, () => {
         const [row] = db.getInstancesByIds([instanceId]);
         if (
@@ -1344,6 +1377,12 @@ export const createPush = ({
           row.role === "lead" ||
           !unseenSince(instanceId, endedAt)
         ) {
+          return;
+        }
+        if (own) {
+          console.log(
+            `[notify] push ${turnCollapseId(instanceId)}: not sent, it waits on its own work (${own})`
+          );
           return;
         }
         const project = projectName(row.projectId);

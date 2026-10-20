@@ -36,7 +36,7 @@
     label?: string;
   } = $props();
 
-  const on = $derived(lead.view?.on ?? false);
+  const on = $derived(lead.on ?? false);
 
   let turnLine = $state<CawRunning | null>(null);
   /** The turn's stop was asked: the line waits for the hub's word that it stopped. */
@@ -107,7 +107,7 @@
 <label data-slot="lead-switch" class="flex flex-wrap items-center gap-space-2">
   <Switch
     data-caw-lead-switch
-    disabled={lead.moving || !lead.view || cutting}
+    disabled={lead.moving || lead.on === null || cutting}
     bind:checked={() => on, (next) => flip(next)}
   />
   <span>{label}</span>

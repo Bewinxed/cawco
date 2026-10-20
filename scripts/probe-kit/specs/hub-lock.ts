@@ -19,7 +19,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { identifiedPid, signal } from "../../../packages/core/src/signal";
-import { freePortRange, until } from "../../scratch-fleet";
+import { leasePortRange, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
@@ -41,10 +41,9 @@ const alive = async (holder: Holder | undefined): Promise<boolean> =>
 
 /** A hub's own ports: one for its listener, the rest for its previews. */
 const ports = async () => {
-  const [first, last] = (await freePortRange(13)).split("-").map(Number) as [
-    number,
-    number,
-  ];
+  const [first, last] = (await leasePortRange(13)).range
+    .split("-")
+    .map(Number) as [number, number];
   return {
     CAWCO_HUB_PORT: String(first),
     CAWCO_PREVIEW_PORTS: `${first + 1}-${last}`,

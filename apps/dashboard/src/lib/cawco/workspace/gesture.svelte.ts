@@ -32,7 +32,9 @@
  * integrated once and handed to the compositor as keyframes. When it lands
  * the inline transforms are cleared and the parking places take over.
  */
+
 import { flushSync } from "svelte";
+import { frameObserver } from "#lib/cawco/frame-observer.js";
 import {
   integrate,
   spring as play,
@@ -537,9 +539,12 @@ export function createSwipe(
     action(node: HTMLElement, enabled = true) {
       let live = enabled;
       root = node;
-      const sizes = new ResizeObserver(() => {
+      // Read now, and a change in the next frame (frameObserver).
+      const read = () => {
         width = node.clientWidth;
-      });
+      };
+      read();
+      const sizes = frameObserver(read);
       sizes.observe(node);
 
       // The panes stand where their transforms put them; the stack itself

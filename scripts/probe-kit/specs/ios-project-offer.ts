@@ -133,11 +133,6 @@ const run = async (kit: Kit) => {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  await fetch(`${fleet.base}/api/fleet/choices`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ todos: true }),
-  });
   const session = await fleet.spawn("claude", "Routes", fleet.repo);
   asks.set("1", { name: TODO_WRITE, input: { steps: STEPS } });
   await fleet.send(session, "PROBE-CALL:1");

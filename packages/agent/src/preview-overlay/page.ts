@@ -43,6 +43,7 @@ import { hold, isHeld } from "./hold";
 import { heardFromHost, toHost } from "./host-origin";
 import { startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
+import { choiceOf, listenForPicks } from "./pick";
 import { cropPicture } from "./picture";
 import { type Box, type Pins, padded, startPins } from "./pins";
 import { inkChrome } from "./radial";
@@ -320,9 +321,6 @@ function change(entry: ChoiceChange): Promise<void> {
   }
   return Promise.resolve();
 }
-
-const choiceOf = (option: Element): Element | null =>
-  option.closest("[data-cawco-choice]");
 
 /** Marks each option in the page as picked or not, from the stored picks. */
 function reflect() {
@@ -606,33 +604,12 @@ function choose(
 /** A refusal the host was already told of; the page stays as stored. */
 const toldHost = () => undefined;
 
-window.addEventListener(
-  "click",
-  (event) => {
-    if (modeNow !== "interact" || !(event.target instanceof Element)) {
-      return;
-    }
-    const option = event.target.closest("[data-option]");
-    const holder = option && choiceOf(option);
-    const choice = holder?.getAttribute("data-cawco-choice");
-    const value = option?.getAttribute("data-option");
-    if (!(holder && choice && value)) {
-      return;
-    }
-    const current = artifact.state()[choice]?.options ?? [];
-    if (holder.hasAttribute("data-cawco-multiple")) {
-      choose(
-        choice,
-        current.includes(value)
-          ? current.filter((picked) => picked !== value)
-          : [...current, value]
-      ).catch(toldHost);
-    } else {
-      choose(choice, current.includes(value) ? null : value).catch(toldHost);
-    }
-  },
-  true
-);
+listenForPicks(window, {
+  choose,
+  interacting: () => modeNow === "interact",
+  picked: (choice) => artifact.state()[choice]?.options ?? [],
+  refused: toldHost,
+});
 
 /*
  * `cawco.pickPlace`: the one request the page makes of its host, which

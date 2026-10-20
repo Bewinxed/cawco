@@ -263,6 +263,7 @@
     // A card that keeps its x while the anchor grows (the glass's trailing
     // card) gets no placement and no resize of its own: its neck is drawn
     // again from the new span here.
+    // biome-ignore lint/style/noRestrictedGlobals: draws the neck only (custom properties, a corner radius, an absolutely placed cut), which resize no box watched; the neck follows its anchor in the frame the anchor grew
     const sized = new ResizeObserver(() => {
       read(at);
       if (card && placedAt !== null) {
@@ -427,6 +428,7 @@
     // of another width, a morph): its neck was measured from the old one,
     // so a card standing flush read as not, and its cut ran a flare past
     // its side. Drawn again from where it stands, with the width it has.
+    // biome-ignore lint/style/noRestrictedGlobals: draws the card's cut and neck only (its clip-path, its outline layer, its neck's properties), which resize no box watched; the cut follows the card in the frame it took its width
     const sized = new ResizeObserver(([entry]) => {
       const next = entry?.borderBoxSize[0]?.inlineSize ?? node.offsetWidth;
       const resized = next !== width;

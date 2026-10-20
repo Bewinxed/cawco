@@ -2,6 +2,7 @@ import { mcpGatewayPort } from "@cawco/core";
 import {
   AGENT_RESTARTING,
   RESUMABLE_CAWCO_TOOLS,
+  TOOL_CALL_KEY_HEADER,
 } from "@cawco/core/binary-updates";
 import { portHolder } from "@cawco/core/live-processes";
 import { HUB_AWAY_BOUND_MS, throughHubAway } from "./hub-away";
@@ -27,12 +28,94 @@ const STEP_RESULT_PATH = /^\/api\/workflow-steps\//;
 const FLEET_PATH = /^\/mcp\/fleet\//;
 
 /**
+ * A keyed call's answer, carried through its link dropping partway: the
+ * call goes again under its key, the hub answers it again from its first
+ * byte without running it again (hub tool-call-keys.ts), and the bytes
+ * already passed on are skipped, so the caller reads one answer whole. A
+ * caller that went away is not resent for.
+ */
+function throughDrops(
+  first: Response & { body: ReadableStream<Uint8Array> },
+  again: () => Promise<Response | { away: string }>,
+  stopped: AbortSignal,
+  what: string
+): ReadableStream<Uint8Array> {
+  const kind = first.headers.get("content-type");
+  let reader = first.body.getReader();
+  let passed = 0;
+  let skip = 0;
+  /**
+   * The call sent again after its answer broke off with `broke`: the
+   * reader of the hub's answer from its first byte, or undefined when that
+   * answer has no body.
+   */
+  const fromTheTop = async (broke: unknown) => {
+    console.warn(
+      `[gateway] ${what}: its answer broke off after ${passed} bytes (${broke instanceof Error ? broke.message : String(broke)}); sent again under its key`
+    );
+    const answer = await again();
+    if ("away" in answer) {
+      throw new Error(
+        `The CawCo hub could not be reached within ${HUB_AWAY_BOUND_MS / 1000} s to finish this answer (last: ${answer.away}).`,
+        { cause: broke }
+      );
+    }
+    // Another answer than the first (a hub that restarted while it ran says
+    // so in its own shape): no part of it follows the first.
+    if (answer.headers.get("content-type") !== kind) {
+      throw new Error(await answer.text(), { cause: broke });
+    }
+    skip = passed;
+    return answer.body?.getReader();
+  };
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      for (;;) {
+        let next: Awaited<ReturnType<typeof reader.read>>;
+        try {
+          // biome-ignore lint/performance/noAwaitInLoops: one read at a time, past the bytes already passed on.
+          next = await reader.read();
+        } catch (error) {
+          if (stopped.aborted) {
+            throw error;
+          }
+          const resumed = await fromTheTop(error);
+          if (!resumed) {
+            controller.close();
+            return;
+          }
+          reader = resumed;
+          continue;
+        }
+        if (next.done) {
+          controller.close();
+          return;
+        }
+        const cut = Math.min(skip, next.value.byteLength);
+        skip -= cut;
+        if (cut < next.value.byteLength) {
+          const chunk = next.value.subarray(cut);
+          passed += chunk.byteLength;
+          controller.enqueue(chunk);
+          return;
+        }
+      }
+    },
+    cancel: (reason) => reader.cancel(reason),
+  });
+}
+
+/**
  * Relay only MCP and the generated tools' exact API routes; never arbitrary
  * hub paths. A request to the hub's own tools waits through the hub being
  * away (hub-away.ts {@link throughHubAway}): the hub answers none of them
  * 502, 503 or 504 itself, so such an answer, or none, means the request
- * never reached it, and it goes again. A fleet server's route does not wait:
- * there the hub says 502 to 504 about the server (fleet-mcp.ts `forward`).
+ * never reached it, and it goes again. A tool call goes under one key, the
+ * same every time it goes ({@link TOOL_CALL_KEY_HEADER}), so the hub answers
+ * one it already took with its first answer and never runs it twice, and
+ * an answer that breaks off partway is had again the same way
+ * ({@link throughDrops}). A fleet server's route does not wait: there the
+ * hub says 502 to 504 about the server (fleet-mcp.ts `forward`).
  */
 async function relayMcp(
   request: Request,
@@ -59,6 +142,11 @@ async function relayMcp(
   // proof rides each call (hub hub-auth.ts `tool` routes), and a caller's
   // own copy of the header never passes.
   headers.delete(PROOF_HEADER);
+  headers.delete(TOOL_CALL_KEY_HEADER);
+  const keyed = toolCall(incoming.pathname, request.method, body);
+  if (keyed) {
+    headers.set(TOOL_CALL_KEY_HEADER, crypto.randomUUID());
+  }
   const tryOnce = async (): Promise<Response> => {
     const hub = new URL(hubUrl());
     hub.protocol = hub.protocol === "wss:" ? "https:" : "http:";
@@ -105,10 +193,17 @@ async function relayMcp(
   ]) {
     outgoing.delete(name);
   }
-  return new Response(response.body, {
-    status: response.status,
-    headers: outgoing,
-  });
+  return new Response(
+    keyed && response.body
+      ? throughDrops(
+          response as Response & { body: ReadableStream<Uint8Array> },
+          () => throughHubAway(tryOnce, request.signal),
+          request.signal,
+          `${request.method} ${incoming.pathname}`
+        )
+      : response.body,
+    { status: response.status, headers: outgoing }
+  );
 }
 
 const parsed = (body: ArrayBuffer): unknown => {
@@ -118,6 +213,30 @@ const parsed = (body: ArrayBuffer): unknown => {
     return undefined;
   }
 };
+
+/**
+ * Whether a relayed request is a tool call, to be run once however often it
+ * goes: a POST to a tool write route, or an MCP POST holding a `tools/call`.
+ */
+function toolCall(
+  pathname: string,
+  method: string,
+  body: ArrayBuffer | undefined
+): boolean {
+  if (!(method === "POST" && body)) {
+    return false;
+  }
+  if (TOOL_WRITE_PATH.test(pathname)) {
+    return true;
+  }
+  if (pathname !== "/mcp/cawco") {
+    return false;
+  }
+  const message = parsed(body);
+  return (Array.isArray(message) ? message : [message]).some(
+    (one) => (one as { method?: unknown } | null)?.method === "tools/call"
+  );
+}
 
 /**
  * The tool a relayed request calls, when a restart cutting it would lose

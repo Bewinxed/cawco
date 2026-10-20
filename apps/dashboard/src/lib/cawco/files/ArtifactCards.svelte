@@ -40,6 +40,7 @@
   import { theme } from "#lib/theme.svelte.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { thumbnailUrl } from "../artifact-api";
+  import { frameObserver } from "../frame-observer";
   import type { ArtifactCard } from "./files.svelte";
 
   let {
@@ -90,10 +91,17 @@
     const styles = getComputedStyle(box);
     cardMin = Number.parseFloat(styles.getPropertyValue("--card-min")) || 1;
     gap = Number.parseFloat(styles.columnGap) || 0;
-    const seen = new ResizeObserver(([entry]) => {
-      ({ width } = entry.contentRect);
-    });
-    seen.observe(box);
+    // Its width now, so the first frame painted has its columns; a change
+    // after it in the next frame (frameObserver: the cards' spans resize
+    // the scroller and Files' card above it).
+    const region = box;
+    // Its laid-out width, unscaled by Files' entrance and unrounded.
+    const read = () => {
+      width = Number.parseFloat(getComputedStyle(region).inlineSize) || 0;
+    };
+    read();
+    const seen = frameObserver(read);
+    seen.observe(region);
     return () => seen.disconnect();
   });
   /** Columns: as many as hold a card at its least width, at least one. */
@@ -129,15 +137,22 @@
       return { card, lane, span };
     });
   });
-  /** Keeps each card's drawn height, so its span is its own. */
+  /**
+   * Keeps each card's drawn height, so its span is its own: read as it is
+   * drawn, and a change after it in the next frame (frameObserver).
+   */
   const measured: Attachment<HTMLElement> = (node) => {
     const id = node.dataset.artifact ?? "";
-    const seen = new ResizeObserver(([entry]) => {
-      const height = entry.borderBoxSize[0]?.blockSize ?? 0;
+    // Its laid-out border box (a card is border-box), unscaled by Files'
+    // entrance and unrounded, as its span is counted in.
+    const read = () => {
+      const height = Number.parseFloat(getComputedStyle(node).blockSize) || 0;
       if (height > 0 && Math.abs((drawn.get(id) ?? 0) - height) > 0.5) {
         drawn.set(id, height);
       }
-    });
+    };
+    read();
+    const seen = frameObserver(read);
     seen.observe(node);
     return () => seen.disconnect();
   };
