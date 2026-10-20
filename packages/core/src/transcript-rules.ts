@@ -1994,6 +1994,7 @@ export function sendRow(
     ...row.metadata,
     ...(record.reason ? { sendFailed: record.reason } : {}),
     ...(record.refusal ? { sendRefusal: record.refusal } : {}),
+    ...(record.modeAsk ? { sendModeAsk: record.modeAsk } : {}),
     ...(origin?.kind === "system" && origin.name === CONTINUATION_ORIGIN
       ? { continuation: true as const }
       : {}),

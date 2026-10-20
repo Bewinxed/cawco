@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { HarnessKind, PermissionMode } from "@cawco/core";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { failureWords } from "#lib/cawco/hub-read.js";
@@ -28,6 +29,8 @@
     editAndResend,
     failedSendPayload,
     forkPointOf,
+    ModeUnchosen,
+    relaunchSession,
     restoreDraft,
     retryFailed,
     retryOf,
@@ -47,10 +50,12 @@
   import DocThumb from "./DocThumb.svelte";
   import { disclosure } from "./disclosure.svelte";
   import { askLift, landing, liftsInto, replacing } from "./lift.svelte";
+  import ModePick from "./ModePick.svelte";
   import Peer from "./Peer.svelte";
   import Shot from "./Shot.svelte";
   import SystemLine from "./SystemLine.svelte";
   import {
+    modeAskRecovery,
     type RecoveryAction,
     recoveryOf,
     type SendRecovery,
@@ -233,9 +238,74 @@
       );
       editing = false;
     } catch (error) {
+      // No mode is named for the restart a rewind is: the session's picker
+      // asks for one at Send edited message, and the rewind goes on it.
+      if (error instanceof ModeUnchosen) {
+        askMode("rewind", editSend, error.ask);
+        return;
+      }
       editError = failureWords(error);
     } finally {
       editPending = false;
+    }
+  }
+
+  /*
+   * No permission mode named for a restart this row asked for (a send that
+   * wakes the session, a rewind): the session's own picker (ModePick) asks
+   * where the person acted, the session starts again on the pick
+   * (relaunchSession), and what they asked for goes. The hub's refusal is
+   * never shown.
+   */
+  let modeAsk = $state<{
+    for: "send" | "rewind";
+    anchor: HTMLElement | null;
+    machineId: string;
+    harness: HarnessKind;
+  } | null>(null);
+  let modeOpen = $state(false);
+  let modePending = $state(false);
+  /** Send edited message: a rewind's picker hangs from it. */
+  let editSend = $state<HTMLButtonElement | null>(null);
+  /** The row's Choose a mode: a send's picker hangs from it. */
+  let modeButton = $state<HTMLButtonElement | null>(null);
+  function askMode(
+    what: "send" | "rewind",
+    anchor: HTMLElement | null,
+    at: { machineId: string; harness: HarnessKind }
+  ): void {
+    modeAsk = {
+      for: what,
+      anchor,
+      machineId: at.machineId,
+      harness: at.harness,
+    };
+    modeOpen = true;
+  }
+  async function pickMode(mode: PermissionMode): Promise<void> {
+    const asked = modeAsk;
+    if (!asked || modePending) {
+      return;
+    }
+    modeOpen = false;
+    modePending = true;
+    editError = "";
+    try {
+      answeredOr(
+        asked.machineId,
+        await relaunchSession(message.instanceId, asked.machineId, mode),
+        "whether the session runs on that mode is not known"
+      );
+      modeAsk = null;
+      if (asked.for === "rewind") {
+        await submitEdit();
+      } else {
+        tryAgain();
+      }
+    } catch (error) {
+      editError = failureWords(error);
+    } finally {
+      modePending = false;
     }
   }
 
@@ -381,16 +451,21 @@
    * is now (send-recovery.svelte.ts): its own words, and what recovers it.
    * A retry that did not go either says its own reason instead.
    */
-  const recovery = $derived(
-    message.state === "failed" &&
-      retry?.stage !== "failed" &&
-      message.metadata?.sendRefusal &&
-      target
-      ? recoveryOf(message.metadata.sendRefusal, target)
-      : null
-  );
+  const recovery = $derived.by(() => {
+    const meta = message.metadata;
+    if (!(message.state === "failed" && retry?.stage !== "failed" && target)) {
+      return null;
+    }
+    if (meta?.sendModeAsk) {
+      return modeAskRecovery(meta.sendModeAsk, target);
+    }
+    return meta?.sendRefusal ? recoveryOf(meta.sendRefusal, target) : null;
+  });
   /** What the reason line says about this failure. */
   const reasonLine = $derived.by(() => {
+    if (recovery?.asks) {
+      return recovery.line;
+    }
     const said = recovery?.line ?? reason;
     return `Couldn't send that message.${said ? ` ${said}` : ""}`;
   });
@@ -403,6 +478,23 @@
    * back with why.
    */
   let retried = $state(false);
+  /**
+   * Sent from this tab and refused while the row stood here, for no mode
+   * named: the session's picker opens at once at Choose a mode (the person
+   * just acted). A row drawn already refused (a reload) waits for the press.
+   */
+  const sentHere = untrack(
+    () => message.state === "sending" || message.state === "pending"
+  );
+  let modeAsked = false;
+  $effect(() => {
+    const action = recovery?.actions.find((one) => one.kind === "mode");
+    if (!(action && sentHere && modeButton) || modeAsked) {
+      return;
+    }
+    modeAsked = true;
+    untrack(() => askMode("send", modeButton, action));
+  });
   /** What the line says while a send again is out, and folds shut on once it has gone. */
   const SENDING_AGAIN = "Sending that message again…";
   /** Whether Edit was offered when the retry went out, held the same way. */
@@ -648,13 +740,17 @@
                   aria-disabled={editPending || undefined}
                   class="pressable action"
                   disabled={!(canEdit && editContent.trim())}
-                  onclick={whileIdle(() => editPending, submitEdit)}
+                  onclick={whileIdle(
+                    () => editPending || modePending,
+                    submitEdit
+                  )}
                   type="button"
+                  bind:this={editSend}
                 >
                   <PendingContent
                     failed={!!editError}
                     label="Send edited message"
-                    pending={editPending}
+                    pending={editPending || modePending}
                     pendingLabel="Sending…"
                   />
                 </button>
@@ -780,6 +876,19 @@
              transcript it grows, so its tail is held while it does. Once a
              retry has gone out its contents stay, inert, for the fold to
              close over; a row that never failed renders none of it. -->
+        {#if modeAsk}
+          <ModePick
+            anchor={modeAsk.anchor}
+            harness={modeAsk.harness}
+            id={`${message.id}-mode`}
+            machineId={modeAsk.machineId}
+            onchange={(value) => {
+              modeOpen = value;
+            }}
+            onpick={pickMode}
+            open={modeOpen}
+          />
+        {/if}
         <div
           data-slot="failure"
           class="failure"
@@ -837,6 +946,27 @@
                             label={`Move to ${nameOf(action.account)}`}
                             pending={going}
                             pendingLabel={`Moving to ${nameOf(action.account)}…`}
+                          />
+                        </button>
+                      {:else if action.kind === "mode"}
+                        <button
+                          data-slot="action"
+                          aria-busy={modePending || undefined}
+                          aria-disabled={modePending || undefined}
+                          aria-expanded={modeOpen}
+                          aria-haspopup="dialog"
+                          class="pressable action"
+                          onclick={whileIdle(
+                            () => modePending,
+                            () => askMode("send", modeButton, action)
+                          )}
+                          type="button"
+                          bind:this={modeButton}
+                        >
+                          <PendingContent
+                            label="Choose a mode"
+                            pending={modePending}
+                            pendingLabel="Starting it…"
                           />
                         </button>
                       {:else}

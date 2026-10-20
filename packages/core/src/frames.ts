@@ -11,6 +11,7 @@ import type {
 } from "./fleet";
 import type {
   HarnessKind,
+  ModeAsk,
   NeutralMessage,
   PermissionUpdate,
   SendRecord,
@@ -623,6 +624,8 @@ export interface ErrorFrame {
   /** A failed session's typed kind, when what failed typed it (core `KindedError`); `message` is its words. */
   lastErrorKind?: LastErrorKind;
   message: string;
+  /** A start that found no permission mode to start its session on: the page asks for one (core `ModeAsk`); `message` is never shown where this is read. */
+  modeAsk?: ModeAsk;
   requestId?: string;
   verb?: Verb;
 }

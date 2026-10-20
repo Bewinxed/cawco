@@ -32,6 +32,7 @@ import type {
   LimitWindow,
   McpPlatform,
   MemoryRole,
+  ModeAsk,
   ModelInfo,
   MoveStage,
   NamedMoveRequest,
@@ -1744,6 +1745,14 @@ export const delegateEvents = sqliteTable(
  * it, so a reload and a hub restart read the same record the live stream
  * carried.
  */
+/**
+ * What refused a send, as its row keeps it: a `SendRefusal`, or no
+ * permission mode to wake its session on (`mode-ask`), which goes out as the
+ * record's `modeAsk` and never as its refusal: the apps read `SendRefusal`
+ * closed (server.ts `toSendRecord`).
+ */
+export type StoredSendRefusal = SendRefusal | ({ kind: "mode-ask" } & ModeAsk);
+
 export const sentMessages = sqliteTable(
   "sent_messages",
   {
@@ -1770,8 +1779,8 @@ export const sentMessages = sqliteTable(
     state: text("state").$type<SendState>().notNull().default("read"),
     /** Why it failed. */
     reason: text("reason"),
-    /** What refused it, when the hub did (`SendRefusal`): what its row offers to recover. */
-    refusal: text("refusal", { mode: "json" }).$type<SendRefusal>(),
+    /** What refused it, when the hub did (`StoredSendRefusal`): what its row offers to recover. */
+    refusal: text("refusal", { mode: "json" }).$type<StoredSendRefusal>(),
     /** A failed send's place: the last thing the session said before it failed. */
     anchor: text("anchor"),
     /** The failed send this one retries. */

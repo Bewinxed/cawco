@@ -13,6 +13,7 @@
  */
 import type {
   HarnessKind,
+  ModeAsk,
   NeutralStatus,
   PermissionMode,
   SendRecord,
@@ -156,6 +157,8 @@ export interface BlockMetadata {
   ruleName?: string;
   /** Why a send did not go: its record's reason. */
   sendFailed?: string;
+  /** No permission mode to wake its session on: its record's ask ({@link ModeAsk}). */
+  sendModeAsk?: ModeAsk;
   /** What refused it, when the hub did: its record's refusal. */
   sendRefusal?: SendRefusal;
   sessionId?: string;

@@ -28,7 +28,11 @@
  * themes, as the dialog is; its open and close scrubbed on the clock against
  * DESIGN.md L768.
  * A fork of a row with no mode opens the form on the fork, never the hub's
- * refusal, and forks once a mode is picked.
+ * refusal, and forks once a mode is picked; from Fork from here on a stopped
+ * session, at that button.
+ * A send to a stopped session that has no mode to wake on (none on its row,
+ * none ever chosen for its harness on its machine) opens its permission
+ * picker where the message is; a pick relaunches it and the message goes.
  *
  *   bun scripts/probe-kit/run.ts web strip-new-session
  */
@@ -695,7 +699,14 @@ async function spawnLinkLeg(kit: Kit, base: string, machineId: string) {
 
 /** Sends `text` to `source` and waits for the turn it opens to close. */
 async function turn(fleet: KitFleet, source: string, text: string) {
-  await fleet.send(source, text);
+  const uuid = await fleet.send(source, text);
+  // Read by the session first: the turn it opens has not opened before it is.
+  await until(
+    `"${text}" read`,
+    () => fleet.sendRow(uuid),
+    (one) => one?.state === "read",
+    120_000
+  );
   await until(
     `"${text}" answered`,
     () =>
@@ -859,6 +870,275 @@ async function forkLeg(
   await page.close();
 }
 
+/** The session's own permission picker (transcript/ModePick), as drawn. */
+const MODE_PICK = '[data-ns-pop][aria-label="Permission mode"]';
+/** The composer's field, named by its hint (as journeys/j3-spawn names it). */
+const COMPOSER = /^Message/;
+/** What the person sends to the stopped session. */
+const AFTER_PICK = "After the pick.";
+
+/**
+ * A stopped session with two answered turns whose row records no permission
+ * mode, on a machine where none was ever chosen for Claude Code: what a
+ * revive, a rewind or a fork of it has to ask for.
+ */
+async function modelessSession(fleet: KitFleet, name: string): Promise<string> {
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name,
+    machineId: MACHINE,
+    cwd: fleet.repo,
+    caw: false,
+  });
+  const source = await fleet.spawn("claude", `${name} source`, fleet.repo, {
+    projectId: project.id,
+  });
+  await turn(fleet, source, "hello");
+  await turn(fleet, source, "again");
+  await fleet.stopSession(source);
+  await until(
+    "the revive source stopped",
+    () => fleet.instance(source),
+    (one) => one?.status === "stopped",
+    60_000
+  );
+  fleet.write(
+    "UPDATE instances SET permission_mode = NULL WHERE id = ?",
+    source
+  );
+  fleet.write(
+    "DELETE FROM chosen_modes WHERE machine_id = ? AND harness = 'claude'",
+    MACHINE
+  );
+  return source;
+}
+
+/** Each of the reader's turns on the page, with the controls its actions offer. */
+const turnActions = (page: Page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll(".turn.you")].map(
+      (one) =>
+        `${(one.querySelector('[data-slot="words"]')?.textContent ?? "").trim().slice(0, 24)}: ${[
+          ...one.querySelectorAll("[data-slot='actions'] button"),
+        ]
+          .map(
+            (button) =>
+              button.getAttribute("aria-label") ??
+              (button.textContent ?? "").trim()
+          )
+          .join(", ")}`
+    )
+  );
+
+/**
+ * Fork from here on a stopped session whose row records no mode: the store
+ * has its conversation's key from its row (client `hydrate`: "The row is the
+ * authority on the key"), so the transcript offers it, and the New Session
+ * form opens at that button as a popover on the fork, Start waiting for a
+ * mode. Closed with Esc, the focus goes back to the button.
+ */
+async function forkHereLeg(kit: Kit, base: string, source: string) {
+  const page = await popoverPage(kit, base, source, "light");
+  const fork = page
+    .getByRole("button", { name: "Fork from here" })
+    .filter({ visible: true })
+    .last();
+  const offered = await fork
+    .waitFor({ state: "attached", timeout: 30_000 })
+    .then(
+      () => "",
+      async () => JSON.stringify(await turnActions(page))
+    );
+  kit.check(
+    "1440 (fine): a stopped session's transcript offers Fork from here",
+    offered === "",
+    offered || "offered"
+  );
+  if (offered) {
+    await page.close();
+    return;
+  }
+  await fork
+    .locator(
+      "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' turn ')][1]"
+    )
+    .hover();
+  await fork.click();
+  const shown = await page
+    .waitForSelector(POPOVER, { state: "visible", timeout: 15_000 })
+    .then(
+      () => "",
+      (error: Error) => error.message
+    );
+  await settle(page, 400);
+  const form = await page.evaluate(
+    ({ card, start }) => {
+      const pop = document.querySelector(card);
+      const go = pop?.querySelector<HTMLButtonElement>(start);
+      const trigger = [
+        ...document.querySelectorAll<HTMLElement>(
+          'button[aria-label="Fork from here"]'
+        ),
+      ].at(-1);
+      const box = pop?.getBoundingClientRect();
+      const at = trigger?.getBoundingClientRect();
+      return {
+        title: pop?.querySelector("h2")?.textContent?.trim() ?? null,
+        disabled: go?.disabled ?? null,
+        chip:
+          pop
+            ?.querySelector('[aria-label^="Permission mode"]')
+            ?.textContent?.trim() ?? null,
+        side: pop?.getAttribute("data-side") ?? null,
+        gap: box && at ? Math.round(box.top - at.bottom) : null,
+        across: box && at ? box.left <= at.left && box.right >= at.right : null,
+      };
+    },
+    { card: POPOVER, start: START }
+  );
+  kit.check(
+    "1440 (fine): Fork from here on that stopped session opens the New Session form at the button, a popover on the fork, Start waiting for a mode",
+    shown === "" &&
+      form.title === "Fork session" &&
+      form.disabled === true &&
+      form.chip === "Choose a mode" &&
+      form.side === "bottom" &&
+      form.gap !== null &&
+      Math.abs(form.gap - SIDE_OFFSET) <= 1 &&
+      form.across === true,
+    JSON.stringify({ shown, ...form })
+  );
+  await page.keyboard.press("Escape");
+  await page.waitForSelector(POPOVER, { state: "detached", timeout: 15_000 });
+  const back = await page.evaluate(
+    () => document.activeElement?.getAttribute("aria-label") ?? null
+  );
+  kit.check(
+    "1440 (fine): Esc closes it, the focus back on Fork from here",
+    back === "Fork from here",
+    `focus on ${back}`
+  );
+  await page.close();
+}
+
+/**
+ * A send to that stopped session, whose wake has no mode to run on: the
+ * session's own permission picker opens at the message's Choose a mode,
+ * and the hub's refusal is never shown. A pick relaunches the session in
+ * place on it, and the message goes.
+ */
+async function reviveLeg(
+  kit: Kit,
+  base: string,
+  fleet: KitFleet,
+  source: string
+) {
+  const page = await popoverPage(kit, base, source, "light");
+  const field = page
+    .getByRole("combobox", { name: COMPOSER })
+    .filter({ visible: true })
+    .first();
+  await field.click();
+  await page.keyboard.type(AFTER_PICK);
+  await page
+    .getByRole("button", { name: "Send message" })
+    .filter({ visible: true })
+    .first()
+    .click();
+  const shown = await page
+    .waitForSelector(MODE_PICK, { state: "visible", timeout: 30_000 })
+    .then(
+      () => "",
+      (error: Error) => error.message
+    );
+  await settle(page, 400);
+  const asked = await page.evaluate(
+    ({ pick, sent }) => {
+      const pop = document.querySelector(pick);
+      // The message's own row: its words, and what it says under them.
+      const row = [...document.querySelectorAll(".turn.you")].find((one) =>
+        (one.textContent ?? "").includes(sent)
+      );
+      const button = [
+        ...(row?.querySelectorAll<HTMLElement>("[data-slot='action']") ?? []),
+      ].find((one) =>
+        (one.textContent ?? "").trim().startsWith("Choose a mode")
+      );
+      const box = pop?.getBoundingClientRect();
+      const at = button?.getBoundingClientRect();
+      const words = `${row?.textContent ?? ""} ${pop?.textContent ?? ""}`;
+      return {
+        rows: pop?.querySelectorAll("[data-perm]").length ?? 0,
+        side: pop?.getAttribute("data-side") ?? null,
+        // Against the button on the side it was placed: 6px (NsPopover's
+        // sideOffset) under its foot, or over its top.
+        gap:
+          box && at
+            ? Math.round(
+                pop?.getAttribute("data-side") === "top"
+                  ? at.top - box.bottom
+                  : box.top - at.bottom
+              )
+            : null,
+        line: words.includes(
+          "Choose a permission mode for this session, and the message goes."
+        ),
+        refusal: words.includes("A permission mode must be chosen"),
+        failure: words.includes("Couldn't send that message"),
+      };
+    },
+    { pick: MODE_PICK, sent: AFTER_PICK }
+  );
+  const [refused] = fleet.query<{ state: string; refusal: string | null }>(
+    "SELECT state, refusal FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
+    source,
+    `%${AFTER_PICK}%`
+  );
+  kit.check(
+    "1440 (fine): a send that has to wake a session with no mode opens its permission picker against the message's Choose a mode; the hub's refusal is never shown",
+    shown === "" &&
+      asked.rows > 0 &&
+      asked.gap !== null &&
+      Math.abs(asked.gap - 6) <= 1 &&
+      asked.line &&
+      !asked.refusal &&
+      !asked.failure &&
+      refused?.refusal?.includes("mode-ask") === true,
+    JSON.stringify({ shown, ...asked, refused })
+  );
+  await page.locator(`${MODE_PICK} [data-perm="${MODE}"]`).click();
+  const went = await until(
+    "the message goes",
+    () =>
+      fleet
+        .query<{ state: string }>(
+          "SELECT state FROM sent_messages WHERE instance_id = ? AND body LIKE ? AND state != 'failed'",
+          source,
+          `%${AFTER_PICK}%`
+        )
+        .at(0),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  const [after] = fleet.query<{
+    status: string;
+    permission_mode: string | null;
+  }>("SELECT status, permission_mode FROM instances WHERE id = ?", source);
+  const shownAfter = await page.evaluate(
+    () =>
+      document.body.textContent?.includes("A permission mode must be chosen") ??
+      false
+  );
+  kit.check(
+    `1440 (fine): picking ${MODE} relaunches the session in place on it, and the message goes`,
+    after?.permission_mode === MODE &&
+      after.status !== "stopped" &&
+      went !== undefined &&
+      !shownAfter,
+    JSON.stringify({ after, went, refusalShown: shownAfter })
+  );
+  await page.close();
+}
+
 const respond = (): Reply => ({ everyMs: 20, words: ["Ready."] });
 
 const spec: Spec = {
@@ -895,6 +1175,9 @@ const spec: Spec = {
     await depthLeg(kit, base, source, "dark");
     await motionLeg(kit, base, source);
     await forkLeg(kit, base, fleet, rows);
+    const modeless = await modelessSession(fleet, "Revives");
+    await forkHereLeg(kit, base, modeless);
+    await reviveLeg(kit, base, fleet, modeless);
   },
 };
 

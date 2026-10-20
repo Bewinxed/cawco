@@ -50,6 +50,7 @@ import type {
   MachineMemorySet,
   MarketplaceLink,
   MarketplaceRead,
+  ModeAsk,
   ModelInfo,
   MoveEnded,
   MoveProgressFrame,
@@ -532,6 +533,7 @@ import { projectOrigin } from "./db/previews";
 import type {
   ContinuationAsker,
   PriorConversation,
+  StoredSendRefusal,
   TrashKind,
 } from "./db/schema";
 import { TAG_MARKERS, tagStoredSend } from "./db/tag-markers";
@@ -2425,6 +2427,39 @@ const peekSendSignal = (
 const sendMode = ({ message }: SendPayload): SendMode =>
   message.shouldQuery === false ? "note" : "turn";
 
+/**
+ * What refused a send, as its record says it: an ask for a mode goes out as
+ * its own field (core `ModeAsk`), never as its `refusal`, which the apps in
+ * people's hands read closed.
+ */
+const wireRefusal = (
+  refusal: StoredSendRefusal | null
+): Pick<SendRecord, "modeAsk" | "refusal"> => {
+  if (!refusal) {
+    return {};
+  }
+  if (refusal.kind === "mode-ask") {
+    return {
+      modeAsk: { machineId: refusal.machineId, harness: refusal.harness },
+    };
+  }
+  return { refusal };
+};
+
+/**
+ * A dashboard start the hub refused, said back on the request: with no mode
+ * to start it on, the ask the page puts right itself (core `ModeAsk`).
+ */
+const refusedStart = (
+  message: Envelope,
+  settled: { refusal: string; ask?: ModeAsk }
+): Envelope<ErrorFrame> => {
+  const refused = failure(message, settled.refusal);
+  return settled.ask
+    ? { ...refused, payload: { ...refused.payload, modeAsk: settled.ask } }
+    : refused;
+};
+
 /** A record as it goes out: on the stream, and with a history read. */
 const toSendRecord = (row: SentMessageRow): SendRecord => ({
   ...(isKeepAlive(row.body) ? { keepAlive: true } : {}),
@@ -2435,7 +2470,7 @@ const toSendRecord = (row: SentMessageRow): SendRecord => ({
   mode: row.mode,
   state: row.state,
   ...(row.reason ? { reason: row.reason } : {}),
-  ...(row.refusal ? { refusal: row.refusal } : {}),
+  ...wireRefusal(row.refusal),
   ...(row.anchor ? { anchor: row.anchor } : {}),
   ...(row.harnessId ? { harnessId: row.harnessId } : {}),
   ...(row.replaces ? { replaces: row.replaces } : {}),
@@ -4560,6 +4595,24 @@ export const createServer = (
     };
   };
   /**
+   * A wake with no permission mode to run on (its row's, else the person's
+   * last for its harness on its machine, `reviveMode`): the page asks for one
+   * where the send was made, and sends it again on it (core `ModeAsk`).
+   */
+  const wakeModeAsk = (
+    row: ReturnType<typeof db.getInstancesByIds>[number]
+  ): { reason: string; refusal: StoredSendRefusal } | undefined => {
+    const mode = modeOf(
+      row.machineId,
+      row.harness ?? "claude",
+      undefined,
+      reviveMode(row)
+    );
+    return "refusal" in mode && mode.ask
+      ? { reason: mode.refusal, refusal: { kind: "mode-ask", ...mode.ask } }
+      : undefined;
+  };
+  /**
    * Why a session takes no input from `origin` now, or nothing when it does
    * ({@link WorkItems.refusal}). Every sender asks this, by way of
    * {@link deliverSend} or {@link sendRoute}.
@@ -4567,7 +4620,9 @@ export const createServer = (
   const inputRefusal = (
     instanceId: string,
     origin: NeutralOrigin
-  ): { gone?: true; reason: string; refusal?: SendRefusal } | undefined => {
+  ):
+    | { gone?: true; reason: string; refusal?: StoredSendRefusal }
+    | undefined => {
     const [row] = db.getInstancesByIds([instanceId]);
     // A person's words to a session a continuation took the work item of
     // are refused, in the words its page says in its composer's place: they
@@ -4590,6 +4645,11 @@ export const createServer = (
       const launch = launchAccount(row.machineId, row, sessionName(row));
       if ("refusal" in launch) {
         return { reason: launch.refusal, refusal: launch.cause };
+      }
+      // Nor one with no permission mode to wake on: the page asks.
+      const unchosen = wakeModeAsk(row);
+      if (unchosen) {
+        return unchosen;
       }
     }
     return row
@@ -5143,7 +5203,7 @@ export const createServer = (
   const failSend = (
     row: SentMessageRow,
     reason: string,
-    refusal?: SendRefusal
+    refusal?: StoredSendRefusal
   ): void => {
     const anchor = anchorFor(row.instanceId, row.uuid);
     unanswered.get(row.instanceId)?.delete(row.uuid);
@@ -6791,7 +6851,7 @@ export const createServer = (
     fallback?: string | null
   ):
     | { payload: SettledSpawn; permissionMode: string | null }
-    | { refusal: string } => {
+    | { refusal: string; ask?: ModeAsk } => {
     const { harness } = payload;
     let paths: Pick<SettledSpawn, "cwd" | "bootstrap" | "scratch">;
     try {
@@ -6833,7 +6893,7 @@ export const createServer = (
     harness: string,
     asked: string | undefined,
     fallback?: string | null
-  ): { mode: string | null } | { refusal: string } => {
+  ): { mode: string | null } | { refusal: string; ask?: ModeAsk } => {
     if (harnessModes(machineId, harness)?.length === 0) {
       return asked
         ? {
@@ -6843,7 +6903,11 @@ export const createServer = (
     }
     const mode = asked ?? fallback;
     if (!mode) {
-      return { refusal: unchosenMode(machineId, harness) };
+      // The page asks for one where the person acted (core `ModeAsk`).
+      return {
+        refusal: unchosenMode(machineId, harness),
+        ask: { machineId, harness: harness as HarnessKind },
+      };
     }
     const unfit = modeRefusal(machineId, harness, mode);
     return unfit ? { refusal: `${unfit} Nothing was started.` } : { mode };
@@ -23837,7 +23901,7 @@ export const createServer = (
     const settled = settleMode(message.machineId, asked, reviveMode(before));
     if ("refusal" in settled) {
       console.warn(`[hub] refused spawn: ${settled.refusal}`);
-      sendFrame(ws, failure(message, settled.refusal));
+      sendFrame(ws, refusedStart(message, settled));
       return;
     }
     const launched = atLaunchDir(message.instanceId, settled.payload);

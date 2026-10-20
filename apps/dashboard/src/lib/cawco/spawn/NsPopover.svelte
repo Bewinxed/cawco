@@ -35,6 +35,7 @@
     triggerStyle,
     haspopup,
     rows,
+    follows = false,
     ...rest
   }: {
     id: string;
@@ -60,6 +61,12 @@
     haspopup?: "listbox" | "menu";
     /** The rows the hover ghost glides between (components/ui/highlight). */
     rows?: string;
+    /**
+     * Its anchor moves by transform (a row in the transcript as it re-anchors
+     * and unfolds), which no scroll or resize tells it of: placed again on
+     * every frame while it is open (bits-ui `updatePositionStrategy`).
+     */
+    follows?: boolean;
     "aria-label"?: string;
   } = $props();
 
@@ -177,6 +184,7 @@
         sideOffset={6}
         style={`--ns-pop-width:${popoverWidth(width)};--ns-pop-gap:${gap}px`}
         {trapFocus}
+        updatePositionStrategy={follows ? "always" : "optimized"}
       >
         {#snippet child({ props, wrapperProps, open })}
           <!-- Closing, it lets presses through to the page (floating-presence). -->
