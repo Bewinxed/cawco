@@ -5,10 +5,14 @@
  * One code path, whether it runs on the update tick (auto-update on) or
  * because a person pressed "Install now".
  *
- * Nothing here ever goes backwards: a build whose signed `sequence` is not
- * above the running one is never installed, a machine other than the hub's own
- * applies only the build its hub is running, and the hub's machine never
- * installs a build with fewer migrations than its database holds.
+ * Nothing here ever goes backwards: every machine is offered the one build its
+ * hub found (`/api/binary-updates/latest`), a build whose signed `sequence` is
+ * not above the running one is never installed, and no machine installs a
+ * build with fewer migrations than the hub's database holds. A machine may
+ * run ahead of its hub (an install on a Mac first is the canary before the
+ * hub takes a build); the guard is the wire-protocol overlap check, by which
+ * a machine other than the hub's own installs only a build whose
+ * `protocolRange` overlaps its hub's.
  */
 import { readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -327,6 +331,8 @@ export class BinaryUpdater {
   readonly #flags: { commanded: boolean; version?: string } = {
     commanded: false,
   };
+  /** The build the hub offered on the last pass, and whether it is newer than the running one; unset while a pass has read no offer. */
+  #offered: { newer: boolean; version: string } | undefined;
   #running: Promise<void> | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
   #trialTimer: ReturnType<typeof setInterval> | undefined;
@@ -463,20 +469,40 @@ export class BinaryUpdater {
     }
     await this.#running;
     await this.tick();
-    const to = this.#state.availableVersion;
-    const waiting = this.#state.waitingOn?.length
-      ? waitingWords(this.#state.waitingOn)
-      : `update is ${this.#state.phase}`;
+    const offered = this.#offered;
+    const installed = this.#state.phase === "installing";
     return {
       from,
-      to,
+      to: offered?.version,
       built: false,
       changed: ["hub", "dashboard", "agent"],
-      installed: this.#state.phase === "installing",
-      pulled: to ? `signed release ${to}` : "no newer release",
+      installed,
+      pulled: offered ? `signed release ${offered.version}` : "nothing",
       restarted: [],
-      ...(this.#state.phase === "installing" ? {} : { skipped: waiting }),
+      ...(installed ? {} : { skipped: this.#notInstalled(command.version) }),
     };
+  }
+
+  /** Why the pass a command ran installed nothing, in the words the command's answer carries. */
+  #notInstalled(named: string | undefined): string {
+    const offered = this.#offered;
+    const { error, phase, waitingOn } = this.#state;
+    if (named !== undefined && offered && offered.version !== named) {
+      return `the hub offers ${offered.version}, not ${named}, the build this install named`;
+    }
+    if (waitingOn?.length) {
+      return waitingWords(waitingOn);
+    }
+    if (phase === "failed" && error) {
+      return error;
+    }
+    if (!offered) {
+      return "the hub's offer was not read; the agent's log says why";
+    }
+    if (!offered.newer) {
+      return `${offered.version}, the build the hub offers, is not newer than the running ${this.#state.installedVersion}`;
+    }
+    return `update is ${phase}`;
   }
 
   async #load(): Promise<void> {
@@ -1027,23 +1053,26 @@ export class BinaryUpdater {
     }
   }
 
-  /** What the hub offers this machine, signature checked, and what the hub's database holds. */
+  /**
+   * What the hub offers this machine, signature checked, and what the hub's
+   * database holds. Every machine is offered the same build: the one the hub
+   * found on the channel (`latest`, which a check refreshes), so an install
+   * asked for right after a check takes the build that check named, on the
+   * hub's machine and every other alike.
+   */
   async #offer(
     installation: BinaryInstallation
   ): Promise<{ dbSchemaVersion?: number; release: SignedRelease }> {
     const hub = installation.hubUrl;
-    // The hub's machine considers the channel's newest; every other machine
-    // takes the build its hub runs, so none is ever ahead of its hub.
-    const path = installation.role === "hub" ? "latest" : "release";
     const body = await askHub(
       "with the build it offers",
       20_000,
-      `${hub}/api/binary-updates/${path}`,
+      `${hub}/api/binary-updates/latest`,
       {},
       async (response) => {
         if (!response.ok) {
           throw new Error(
-            `The hub has no build to offer (${path}: ${response.status})`
+            `The hub has no build to offer (latest: ${response.status})`
           );
         }
         return (await response.json()) as SignedRelease & {
@@ -1052,11 +1081,12 @@ export class BinaryUpdater {
       }
     );
     verifyManifest(body.manifest, body.signature);
-    if (installation.role === "hub") {
-      if (body.manifest.channel !== this.#policy.channel) {
-        throw new Error("The hub offered a build from another channel");
-      }
-    } else {
+    if (body.manifest.channel !== this.#policy.channel) {
+      throw new Error("The hub offered a build from another channel");
+    }
+    // The hub's machine replaces its hub with the build; every other machine
+    // runs it beside the hub as it is, so their wire protocols must overlap.
+    if (installation.role !== "hub") {
       const protocol = await hubProtocol(hub);
       const offered = body.manifest.protocol;
       if (
@@ -1073,6 +1103,7 @@ export class BinaryUpdater {
   }
 
   async #check(): Promise<void> {
+    this.#offered = undefined;
     const installation = await readInstallation();
     if (!installation) {
       return;
@@ -1102,6 +1133,8 @@ export class BinaryUpdater {
     this.#policy = settings.policy;
     const { release, dbSchemaVersion } = await this.#offer(installation);
     const running = await readRunningManifest();
+    const newer = release.manifest.sequence > running.sequence;
+    this.#offered = { newer, version: release.manifest.version };
     // Only a change is written: every write moves `updatedAt`, and the lost-helper rule (#settleLostHelper) reads it.
     if (this.#state.channel !== this.#policy.channel) {
       await this.#set({ channel: this.#policy.channel });
@@ -1113,7 +1146,6 @@ export class BinaryUpdater {
     if (this.#state.phase === "installing" || (await readTrial())) {
       return;
     }
-    const newer = release.manifest.sequence > running.sequence;
     const schemaOk =
       dbSchemaVersion === undefined ||
       release.manifest.schemaVersion >= dbSchemaVersion;

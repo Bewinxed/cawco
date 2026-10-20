@@ -2214,6 +2214,207 @@ const interviewShape = async (on: On) => {
   );
 };
 
+/** A page of two cards, the first tall, for a finger's pick on the artifact's own route. */
+const TAP_STEPS = Array.from(
+  { length: 9 },
+  (_, i) => `S${i}[Step ${i + 1}]`
+).join(" --> ");
+const TAP_PAGE = `root = Decisions("Tap to pick", [tall, second])
+tall = Decision("tall", "Which flow does a review take?", [skim, stages], "The flow sets how long a review runs.", [flow])
+skim = Option("skim", "One pass", "Read it once, merge.", false, [], "Misses what a second look finds.")
+stages = Option("stages", "Three stages: skim, read, merge", "A pass for each.", true, [], "Takes longer.")
+flow = Diagram("flowchart TD\\n${TAP_STEPS}", "The flow")
+second = Decision("second", "Who merges?", [author, lead], "Someone owns the merge.")
+author = Option("author", "The author", "Who wrote it.", true, [], "Marks their own work.")
+lead = Option("lead", "The lead", "One gate.", false, [], "A queue at the lead.")`;
+
+/**
+ * (g) A finger's pick on the phone, on the artifact's own route (the live
+ * dashboard's `/artifact/<id>`): a real tap (`locator.tap()`, touch input in
+ * a touch context) on an option picks it with the pointer's flow, the chosen
+ * option standing in the head and focus going on to the next open card.
+ * Every press event the tap makes is heard at the window, first, and at the
+ * option, with whether it was cancelled, so a tap that never picks says
+ * where it went.
+ */
+const tapLeg = async (on: On) => {
+  const { fleet, kit, writer } = on;
+  const made = await fleet.api<{ id: string }>(
+    `/api/instances/${writer}/artifacts`,
+    {
+      kind: "page",
+      does: "pick",
+      ask: "Pick one option on each card",
+      name: "tap",
+      program: TAP_PAGE,
+    }
+  );
+  const phone = await kit.page("phone", { theme: "dark" });
+  await phone.goto(`${on.base}/artifact/${made.id}`, {
+    waitUntil: "domcontentloaded",
+  });
+  const frame = await until(
+    "the tap page's host frame",
+    async () => {
+      for (const one of phone.frames()) {
+        if ((await countIn(one, "#decision-tall")) > 0) {
+          return one;
+        }
+      }
+      return null;
+    },
+    Boolean,
+    60_000
+  ).catch(() => null);
+  if (!frame) {
+    kit.check("(g) the tap page draws on the phone", false, "no frame");
+    await phone.close();
+    return;
+  }
+  await settle(phone, 600);
+  await frame.evaluate(() => {
+    const heard: string[] = [];
+    (window as unknown as { kitHeard: string[] }).kitHeard = heard;
+    const option = document.querySelector(
+      '#decision-tall [data-option="stages"]'
+    );
+    option?.scrollIntoView({ block: "center" });
+    for (const type of [
+      "pointerdown",
+      "touchstart",
+      "pointerup",
+      "touchend",
+      "mousedown",
+      "mouseup",
+      "click",
+    ]) {
+      addEventListener(
+        type,
+        (event) => {
+          // Read after every capture listener on the window has run.
+          queueMicrotask(() =>
+            heard.push(
+              `${type}@window${event.defaultPrevented ? " (cancelled)" : ""}`
+            )
+          );
+        },
+        { capture: true }
+      );
+      option?.addEventListener(type, (event) =>
+        heard.push(
+          `${type}@option${event.defaultPrevented ? " (cancelled)" : ""}`
+        )
+      );
+    }
+  });
+  await settle(phone, 400);
+  // A real finger's touch lands where the option is drawn: its centre, hit
+  // tested by the page.
+  const under = await frame.evaluate(() => {
+    const option = document.querySelector<HTMLElement>(
+      '#decision-tall [data-option="stages"]'
+    );
+    const box = option?.getBoundingClientRect();
+    if (!(option && box)) {
+      return null;
+    }
+    const at = document.elementsFromPoint(
+      box.left + box.width / 2,
+      box.top + box.height / 2
+    );
+    return {
+      top: at[0]?.closest("[data-option]")?.getAttribute("data-option") ?? "",
+      stack: at
+        .slice(0, 4)
+        .map((el) => `${el.tagName.toLowerCase()}.${el.className}`),
+    };
+  });
+  await frame.locator('#decision-tall [data-option="stages"]').tap();
+  const tapped = await until(
+    "the tall card folded by the tap",
+    () => foldOf(frame, "tall"),
+    (fold) => fold.decided && !fold.body,
+    5000
+  ).catch(() => null);
+  const heard = await frame.evaluate(
+    () => (window as unknown as { kitHeard: string[] }).kitHeard
+  );
+  const now = await foldOf(frame, "tall");
+  kit.check(
+    "(g) 390 dark, a finger: a tap on an option on the artifact's own route picks it with the pointer's flow, the chosen option in the head (named Decided: …), focus on the next open card's first option",
+    under?.top === "stages" &&
+      !!tapped &&
+      tapped.line === "Decided: Three stages: skim, read, merge" &&
+      JSON.stringify(tapped.chips) === '["stages"]' &&
+      tapped.focus.onward,
+    JSON.stringify({ under, tapped, now, heard })
+  );
+
+  // The live check's sequence: the card opened again by Change keeps its
+  // pick, and a press on the picked option lets it go (the overlay's pick,
+  // preview-overlay pick.ts: `current.includes(value) ? null : value`), for
+  // a finger as for a mouse. The card stands open, "Not picked", its head
+  // losing Done, and morph tweens the card to the new head (--dur-morph on
+  // the drawer curve).
+  await frame.locator("#decision-tall .dp-change").tap();
+  await until(
+    "the tall card open again",
+    () => foldOf(frame, "tall"),
+    (fold) => !fold.decided && fold.body,
+    5000
+  ).catch(() => null);
+  await settle(phone, 600);
+  const reopened = await foldOf(frame, "tall");
+  const runs = await frame.evaluate(() => {
+    const root = document.getElementById("decision-tall");
+    const seen: string[] = [];
+    if (root) {
+      new MutationObserver(() => {
+        for (const run of root.getAnimations()) {
+          const timing = run.effect?.getComputedTiming();
+          seen.push(
+            `${run.constructor.name} ${timing?.duration}ms ${run.effect?.getTiming().easing}`
+          );
+        }
+      }).observe(root, { subtree: true, childList: true, characterData: true });
+    }
+    (window as unknown as { kitRuns2: string[] }).kitRuns2 = seen;
+    return root?.getBoundingClientRect().height ?? 0;
+  });
+  await frame.locator('#decision-tall [data-option="stages"]').tap();
+  await settle(phone, 600);
+  const again = await foldOf(frame, "tall");
+  const morphs = await frame.evaluate(() => [
+    ...new Set((window as unknown as { kitRuns2: string[] }).kitRuns2),
+  ]);
+  kit.check(
+    "(g) 390 dark, a finger: on a card opened again by Change, a tap on its picked option lets the pick go, as a click does: the card stands open, Not picked, no chosen option in the head (the live check's 390 failure, its own sequence)",
+    reopened.button === "Done" &&
+      JSON.stringify(reopened.marked) === '["stages"]' &&
+      !again.decided &&
+      again.line === "Not picked" &&
+      again.chips.length === 0 &&
+      again.marked.length === 0,
+    JSON.stringify({ reopened, again, heightBefore: runs, morphs })
+  );
+  await frame.locator('#decision-tall [data-option="skim"]').tap();
+  const other = await until(
+    "the tall card folded by a tap on an unpicked option",
+    () => foldOf(frame, "tall"),
+    (fold) => fold.decided && !fold.body,
+    5000
+  ).catch(() => null);
+  kit.check(
+    "(g) 390 dark, a finger: a tap on an option not yet picked picks it with the pointer's flow, the chip in the head, focus on the next open card's first option",
+    !!other &&
+      other.line === "Decided: One pass" &&
+      JSON.stringify(other.chips) === '["skim"]' &&
+      other.focus.onward,
+    JSON.stringify(other)
+  );
+  await phone.close();
+};
+
 const run = async (kit: Kit) => {
   const on = await publish(kit, await standUp(kit));
   for (const view of ["desk", "phone"] as const) {
@@ -2235,6 +2436,7 @@ const run = async (kit: Kit) => {
   await makeTasks(on);
   await htmlPage(on);
   await reachLeg(on);
+  await tapLeg(on);
   await on.fleet.api(`/api/instances/${on.writer}/artifacts`, {
     kind: "page",
     does: "pick",

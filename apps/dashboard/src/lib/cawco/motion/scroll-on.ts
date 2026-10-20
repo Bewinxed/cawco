@@ -12,6 +12,22 @@
  * With reduced motion nothing travels: the scroll is placed at `to` once the
  * clock lands, where the layout it was measured for stands (DESIGN.md, The
  * Reduced Motion Rule: "heights land at once").
+ *
+ * Any scroll the reader makes ends the ride where it stands (DESIGN.md, The
+ * Interruptible Rule; The Stay In Context Rule: the reader stays where they
+ * are), and the motion the ride was riding (a fold, a flight) runs on to its
+ * end. One rule finds it: a `scroll` that finds the scroller more than 1px
+ * from where the ride last put it (the subpixel rounding allowed) was someone
+ * else's. That is every source alike: a wheel, a finger's pan, the keys, the
+ * scrollbar, middle-click autoscroll, find in page, the browser's own scroll
+ * into view. Each comes to the next frame's scroll steps, before the ride's
+ * next write, so the ride never writes over it. The one move that is not the
+ * reader's is the page clamping the scroll as what the ride rides shrinks it
+ * (the scroller at the most it can scroll, short of the ride's write): that
+ * the ride rides through. And a finger pressed on the page and moving ends
+ * the ride as it starts to move: for the first frames of a drag the browser
+ * pans nothing (its touch slop), and a ride writing then would move the page
+ * under the finger. Heard passively, for as long as the ride lasts.
  */
 import { motionOk } from "./curves.svelte";
 
@@ -24,6 +40,9 @@ export const progressOf = (clock: Animation): number => {
   return timing?.progress ?? 0;
 };
 
+/** How far a reader's scroll may sit from the ride's write and still be the ride's: subpixel rounding. */
+const ROUNDING = 1;
+
 /** Rides `scroller`'s block scroll to `to` on `clock`. Answers a stop. */
 export function scrollOnClock(
   clock: Animation,
@@ -33,10 +52,43 @@ export function scrollOnClock(
   const from = scroller.scrollTop;
   let frame = 0;
   let riding = true;
-  const stop = () => {
+  /** Where the ride last put the scroll. */
+  let put = from;
+  // The page's own scroller is heard on its window; any other on itself.
+  const doc = scroller.ownerDocument;
+  const hears: EventTarget =
+    scroller === doc.scrollingElement || scroller === doc.documentElement
+      ? (doc.defaultView ?? scroller)
+      : scroller;
+  const listen = { capture: true, passive: true } as const;
+  /** The ride ends where it stands, and stops listening. */
+  function stop() {
     riding = false;
     cancelAnimationFrame(frame);
-  };
+    hears.removeEventListener("scroll", scrolled, listen);
+    hears.removeEventListener("pointermove", pressedMove, listen);
+  }
+  /** A scroll the ride did not make: the reader's, from here. */
+  function scrolled() {
+    const now = scroller.scrollTop;
+    if (Math.abs(now - put) <= ROUNDING) {
+      return;
+    }
+    const most = scroller.scrollHeight - scroller.clientHeight;
+    const clamped = now < put && Math.abs(now - most) <= ROUNDING;
+    if (!clamped) {
+      stop();
+    }
+  }
+  /** A finger or a pen pressed on the page and moving: the reader's drag, before it pans. */
+  function pressedMove(event: Event) {
+    const pointer = event as PointerEvent;
+    if (pointer.pointerType !== "mouse" && pointer.buttons !== 0) {
+      stop();
+    }
+  }
+  hears.addEventListener("scroll", scrolled, listen);
+  hears.addEventListener("pointermove", pressedMove, listen);
   clock.finished.then(() => {
     if (riding) {
       stop();
@@ -50,7 +102,8 @@ export function scrollOnClock(
     if (!riding) {
       return;
     }
-    scroller.scrollTop = from + (to - from) * progressOf(clock);
+    put = from + (to - from) * progressOf(clock);
+    scroller.scrollTop = put;
     frame = requestAnimationFrame(step);
   };
   frame = requestAnimationFrame(step);

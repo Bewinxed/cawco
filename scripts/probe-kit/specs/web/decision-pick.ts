@@ -6,7 +6,8 @@
  * the stand-in bridge). A page of three cards: `path` and `look` tall (a
  * long top-down diagram each), `radius` short.
  *
- * At 1440×900 light and 390×844 dark under a finger, each on the clock
+ * At 1440×900 light (a mouse's clicks) and 390×844 dark under a finger (real taps,
+ * `locator.tap()`), each on the clock
  * (anim.ts `Clock`, the DevTools Animation domain):
  * 1. The pressed option shows chosen where it stands: its edge, fill and
  *    keycap change over --dur-control on ease-out, read at 0, ½ and 1 of
@@ -47,11 +48,16 @@
  *    pointer flies each chosen option's keycap and label from its own chip
  *    to its own place in the head on the fold's clock, each source hidden
  *    while its copy flies.
+ * 8. The reader's own scroll ends the ride: a 200px wheel and a 200px
+ *    scrollbar drag (the mouse on its thumb) at 1440, a 200px finger drag at
+ *    390, each at ½ of the fold's held clock, then played on: the scroll
+ *    stays where the reader put it on every frame, and the fold and the
+ *    flight still land (L489, L491-492).
  *
  *   bun scripts/probe-kit/run.ts web decision-pick
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
-import type { Page } from "playwright-core";
+import type { Locator, Page } from "playwright-core";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import { Clock } from "../../anim";
 import { CAWCO_BRIDGE, startDecisionStage } from "../../decision-embeds";
@@ -100,6 +106,14 @@ const LEGS = [
   { view: "desk", theme: "light", label: "1440 light" },
   { view: "phone", theme: "dark", label: "390 dark (coarse)" },
 ] as const;
+
+/**
+ * A press as the device makes it: a finger's tap on the phone (touch input:
+ * pointer, touch and compatibility mouse events, then the click), a mouse's
+ * click on the desk.
+ */
+const pressOn = (locator: Locator, view: (typeof LEGS)[number]["view"]) =>
+  view === "phone" ? locator.tap() : locator.click();
 
 /** A token's colour as the page computes it. */
 const tokenColour = (page: Page, token: string) =>
@@ -311,7 +325,12 @@ interface LongWork {
  * tasks and long animation frames the page reported meanwhile, when the
  * fold started, and where focus went.
  */
-async function liveFold(page: Page, id: string, option: string) {
+async function liveFold(
+  page: Page,
+  id: string,
+  option: string,
+  view: (typeof LEGS)[number]["view"]
+) {
   await toOption(page, id, option);
   await page.evaluate((card) => {
     const frames: LiveFrame[] = [];
@@ -396,7 +415,10 @@ async function liveFold(page: Page, id: string, option: string) {
       watch.disconnect();
     };
   }, id);
-  await page.locator(`#decision-${id} [data-option="${option}"]`).click();
+  await pressOn(
+    page.locator(`#decision-${id} [data-option="${option}"]`),
+    view
+  );
   await page.waitForFunction(
     (card) => {
       const root = document.getElementById(`decision-${card}`);
@@ -604,7 +626,7 @@ async function leg(
   await toOption(page, "path", "direct");
   const open = await foldOf(page, "path");
   const chosenRuns = await clock.catchRuns(
-    () => page.locator('#decision-path [data-option="direct"]').click(),
+    () => pressOn(page.locator('#decision-path [data-option="direct"]'), view),
     '#decision-path [data-option="direct"]'
   );
   const chip: Record<string, Awaited<ReturnType<typeof chipOf>>> = {};
@@ -771,8 +793,16 @@ async function leg(
   // 4. Change at ½ turns it back from the height drawn there.
   await clock.seek(0.5);
   const drawn = await foldOf(page, "path");
+  // At the held ½ the head stands above the window (Change at y -242 at 390,
+  // -273 at 1440: the page is half way down its ride) and the held clock's
+  // ride puts back any scroll that would bring it in, so no finger or mouse
+  // reaches it there: the press is a pointer's click dispatched on Change
+  // (`detail` 1, the pointer's turn, as UI Events counts it).
   const backRuns = await clock.catchRuns(
-    () => page.locator("#decision-path .dp-change").click(),
+    () =>
+      page
+        .locator("#decision-path .dp-change")
+        .dispatchEvent("click", { detail: 1 }),
     "#decision-path"
   );
   const back: Record<string, Awaited<ReturnType<typeof foldOf>>> = {};
@@ -807,7 +837,7 @@ async function leg(
   );
 
   // 5. Played live: the scroll only moves on its way, focus goes on.
-  const look = await liveFold(page, "look", "card");
+  const look = await liveFold(page, "look", "card", view);
   kit.check(
     `${label}: a pick played live folds its card once its chosen colour has landed (--dur-control, ${control}ms, after the press, and no longer), moves the scroll one way only, and focus lands on the next open card's first option`,
     look.foldAfter !== null &&
@@ -826,7 +856,7 @@ async function leg(
       frames: look.frames.slice(0, 40),
     })
   );
-  const radius = await liveFold(page, "radius", "soft");
+  const radius = await liveFold(page, "radius", "soft", view);
   kit.check(
     `${label}: past the last card, focus goes to the first open card above it`,
     oneWay(radius.scrolls) &&
@@ -834,7 +864,7 @@ async function leg(
       radius.focus.option === "direct",
     JSON.stringify(radius)
   );
-  const last = await liveFold(page, "path", "docs");
+  const last = await liveFold(page, "path", "docs", view);
   kit.check(
     `${label}: with no open card left, focus goes to Send`,
     oneWay(last.scrolls) && last.focus.send,
@@ -931,7 +961,10 @@ async function manyLeg(
   const settleMs = await tokenMs(page, "--dur-settle");
   const picked = ["mail", "feed"] as const;
   for (const option of picked) {
-    await page.locator(`#decision-reach [data-option="${option}"]`).click();
+    await pressOn(
+      page.locator(`#decision-reach [data-option="${option}"]`),
+      view
+    );
     await settle(page, 300);
   }
   const sources = Object.fromEntries(
@@ -944,7 +977,7 @@ async function manyLeg(
   );
   const clock = await Clock.on(page);
   const runs = await clock.catchRuns(
-    () => page.locator("#decision-reach .dp-change").click(),
+    () => pressOn(page.locator("#decision-reach .dp-change"), view),
     "#decision-reach"
   );
   const seen: Record<
@@ -1008,6 +1041,195 @@ async function manyLeg(
   await page.close();
 }
 
+/**
+ * 8. The reader's scroll ends the ride (DESIGN.md L489, The Interruptible
+ * Rule; L491-492): a pointer's pick folds the card, and at ½ of its held
+ * clock the reader scrolls 200px (a real wheel at 1440, a touch drag at 390,
+ * through the DevTools input domain). Played on, the scroll stays where the
+ * reader put it on every frame, and the fold and the chosen option's flight
+ * still land.
+ */
+async function readerLeg(
+  kit: Kit,
+  url: string,
+  view: (typeof LEGS)[number]["view"],
+  theme: (typeof LEGS)[number]["theme"],
+  label: string,
+  how: "wheel" | "touch" | "scrollbar"
+) {
+  // The scrollbar's leg draws the page's scrollbars, as a desk's Chromium
+  // does (headless hides them unless asked).
+  const page = await kit.page(view, {
+    theme,
+    init: [CAWCO_BRIDGE],
+    scrollbars: how === "scrollbar",
+  });
+  await page.goto(url, { waitUntil: "load" });
+  await page.waitForFunction(
+    () => document.querySelectorAll(".diagram svg").length >= 2,
+    undefined,
+    { timeout: 30_000 }
+  );
+  await settle(page, 600);
+  await toOption(page, "path", "direct");
+  const clock = await Clock.on(page);
+  const chosen = await clock.catchRuns(
+    () => pressOn(page.locator('#decision-path [data-option="direct"]'), view),
+    '#decision-path [data-option="direct"]'
+  );
+  await clock.catchRuns(
+    async () => {
+      await clock.playOn(chosen);
+      await page.waitForFunction(
+        () =>
+          document
+            .getElementById("decision-path")
+            ?.hasAttribute("data-decided"),
+        undefined,
+        { timeout: 5000 }
+      );
+    },
+    "#decision-path",
+    5000
+  );
+  await clock.seek(0.5);
+  const half = await foldOf(page, "path");
+  const size = page.viewportSize() ?? { width: 390, height: 844 };
+  const cdp = await page.context().newCDPSession(page);
+  await page.evaluate(() => {
+    const heard: string[] = [];
+    (window as unknown as { kitGesture: string[] }).kitGesture = heard;
+    for (const type of [
+      "touchstart",
+      "touchmove",
+      "touchend",
+      "wheel",
+      "scroll",
+      "pointerdown",
+      "pointermove",
+    ]) {
+      addEventListener(type, () => heard.push(type), {
+        capture: true,
+        passive: true,
+      });
+    }
+  });
+  const x = Math.round(size.width / 2);
+  const y = Math.round(size.height * 0.7);
+  if (how === "scrollbar") {
+    // The mouse on the root scrollbar's thumb, dragged down by what moves
+    // the page 200px. The thumb is no element: its box is the scroller's
+    // (the strip past the page's client width; its length and place the
+    // view's share of the page).
+    const bar = await page.evaluate(() => {
+      const root = document.scrollingElement as Element;
+      const strip = innerWidth - root.clientWidth;
+      const length =
+        (root.clientHeight * root.clientHeight) / root.scrollHeight;
+      const top = (root.scrollTop / root.scrollHeight) * root.clientHeight;
+      return {
+        x: root.clientWidth + strip / 2,
+        y: top + length / 2,
+        strip,
+        per: root.clientHeight / root.scrollHeight,
+      };
+    });
+    await page.mouse.move(bar.x, bar.y);
+    await page.mouse.down();
+    for (let step = 1; step <= 20; step += 1) {
+      await page.mouse.move(bar.x, bar.y + (200 * bar.per * step) / 20);
+      await page.waitForTimeout(16);
+    }
+    await page.mouse.up();
+  } else if (how === "touch") {
+    // A finger dragging 200px up the screen, a move a frame: raw touch input
+    // (the input domain's synthesized touch gesture pans nothing in this
+    // emulation, even at rest: 817 → 817, where this drag goes 817 → 1019).
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x, y }],
+    });
+    for (let step = 1; step <= 20; step += 1) {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x, y: y - step * 10 }],
+      });
+      await page.waitForTimeout(16);
+    }
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+  } else {
+    await cdp.send("Input.synthesizeScrollGesture", {
+      x,
+      y,
+      yDistance: -200,
+      gestureSourceType: "mouse",
+      speed: 1200,
+    });
+  }
+  await settle(page, 300);
+  const gesture = [
+    ...new Set(
+      await page.evaluate(
+        () => (window as unknown as { kitGesture: string[] }).kitGesture
+      )
+    ),
+  ];
+  const placed = await foldOf(page, "path");
+  // Played on: every frame's scroll until the fold has landed.
+  const played = page.evaluate(
+    () =>
+      new Promise<number[]>((done) => {
+        const seen: number[] = [];
+        const body = document.querySelector("#decision-path .dp-body");
+        const step = () => {
+          seen.push(scrollY);
+          if ((body?.getAnimations().length ?? 0) === 0 && seen.length > 2) {
+            done(seen);
+            return;
+          }
+          requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      })
+  );
+  await clock.release();
+  const frames = await played;
+  await settle(page, 300);
+  const landed = await foldOf(page, "path");
+  const flight = await flightOf(page, "path", "direct");
+  const moved = Math.abs(placed.scroll - half.scroll);
+  const kept = frames.every((at) => Math.abs(at - placed.scroll) <= 1);
+  kit.check(
+    `${label}: the reader's ${{ wheel: "wheel", touch: "touch drag", scrollbar: "scrollbar drag (the mouse on its thumb)" }[how]} of 200px at ½ of the fold ends the ride: the scroll stays where they put it on every frame after, and the fold and the chosen option's flight still land`,
+    moved >= 150 &&
+      kept &&
+      Math.abs(landed.scroll - placed.scroll) <= 1 &&
+      landed.decided &&
+      landed.body < 0.5 &&
+      flight.transform === "none" &&
+      !!flight.copy &&
+      !!flight.header &&
+      flight.copy.y >= flight.header.y - 0.5,
+    JSON.stringify({
+      gesture,
+      atHalf: half.scroll,
+      afterReader: placed.scroll,
+      moved,
+      frames,
+      landed: { scroll: landed.scroll, card: landed.card, body: landed.body },
+      flight: {
+        transform: flight.transform,
+        copy: flight.copy,
+        header: flight.header,
+      },
+    })
+  );
+  await page.close();
+}
+
 /** 6. Reduced motion. */
 async function stillLeg(
   kit: Kit,
@@ -1030,7 +1252,7 @@ async function stillLeg(
   // The chosen colour still fades (a colour change, L517): caught as the
   // press starts it, then let play on, so the fold it waits for is caught.
   const stillChosen = await stillClock.catchRuns(
-    () => still.locator('#decision-path [data-option="direct"]').click(),
+    () => pressOn(still.locator('#decision-path [data-option="direct"]'), view),
     '#decision-path [data-option="direct"]'
   );
   const stillOpen = await foldOf(still, "path");
@@ -1119,6 +1341,12 @@ const spec: Spec = {
         await keyLeg(kit, url, view, theme, label);
         await stillLeg(kit, url, view, theme, label);
         await manyLeg(kit, stage.pageUrl(MANY, theme), view, theme, label);
+        if (view === "phone") {
+          await readerLeg(kit, url, view, theme, label, "touch");
+        } else {
+          await readerLeg(kit, url, view, theme, label, "wheel");
+          await readerLeg(kit, url, view, theme, label, "scrollbar");
+        }
       }
     } finally {
       await stage.stop();

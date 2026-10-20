@@ -73,6 +73,7 @@ import {
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_CONTEXT_USAGE,
   CONTROL_FORGET_ACCOUNT,
+  CONTROL_INTERRUPT,
   CONTROL_JOIN_ACCOUNT_LOGIN,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
@@ -3136,6 +3137,16 @@ class ClaudeSession implements HarnessSession {
       const mode = args[0] as import("@cawco/core").PermissionMode;
       await this.#handle.setPermissionMode(sdkMode(mode));
       this.#mode.choose(mode);
+      return undefined;
+    }
+    // The session's own interrupt, never the `Query`'s alone: it stops the
+    // CLI's background tasks too ({@link interrupt}). Passed through to
+    // `Query.interrupt`, a background shell the agent then ended in its
+    // workspace (session.ts `#endWork`) was one the CLI read as failed, and
+    // its notice woke the interrupted session (delegate-kill i2, obelisk,
+    // 2026-10-20).
+    if (method === CONTROL_INTERRUPT) {
+      await this.interrupt();
       return undefined;
     }
     const handle = this.#handle as unknown as Record<

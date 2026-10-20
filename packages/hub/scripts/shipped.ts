@@ -88,22 +88,30 @@ const originTags = (cwd: string): Map<string, string> => {
 const tags = (cwd: string, prefix: string): [string, string][] =>
   [...originTags(cwd)].filter(([name]) => name.startsWith(prefix));
 
-/** The newest published nightly: the highest build count among origin's tags. */
-export const newestNightly = (cwd: string): Baseline => {
-  let newest: { commit: string; count: number } | undefined;
-  for (const [tag, commit] of tags(cwd, "nightly-")) {
-    const count = Number(NIGHTLY.exec(tag)?.[1]);
-    if (count > (newest?.count ?? -1)) {
-      newest = { commit, count };
-    }
-  }
-  if (!newest) {
+/**
+ * Every published nightly on origin, newest first: the builds machines run.
+ * Each one's agent meets a hub built now until it updates, and it updates
+ * through routes that hub must still answer.
+ */
+export const publishedNightlies = (cwd: string): Baseline[] => {
+  const nightlies = tags(cwd, "nightly-")
+    .map(([tag, commit]) => ({ commit, count: Number(NIGHTLY.exec(tag)?.[1]) }))
+    .filter(({ count }) => Number.isFinite(count))
+    .sort((a, b) => b.count - a.count);
+  if (!nightlies.length) {
     throw new Error(
       "origin has no nightly-* tag, so the newest published nightly is unknown"
     );
   }
-  return { label: `nightly ${newest.count}`, commit: newest.commit };
+  return nightlies.map(({ commit, count }) => ({
+    label: `nightly ${count}`,
+    commit,
+  }));
 };
+
+/** The newest published nightly: the highest build count among origin's tags. */
+export const newestNightly = (cwd: string): Baseline =>
+  publishedNightlies(cwd)[0] as Baseline;
 
 /** Every TestFlight build uploaded in the last 90 days, by platform and build number. */
 export const installableTestFlight = (
