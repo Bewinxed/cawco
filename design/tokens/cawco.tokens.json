@@ -3569,11 +3569,6 @@
       "$value": 1.7142857,
       "$description": "A rendered document's running text (@tailwindcss/typography prose-sm, the project page's docs card): 24/14."
     },
-    "leading-snug": {
-      "$type": "number",
-      "$value": 1.375,
-      "$description": "The kit's form fields: a field's label, title and content (components/ui/field, Tailwind's snug)."
-    },
     "leading-relaxed": {
       "$type": "number",
       "$value": 1.625,

@@ -3,18 +3,18 @@
   import { tv } from "#lib/utils.js";
 
   export const badgeVariants = tv({
-    base: "group/badge mark-line inline-flex h-icon-lg w-fit shrink-0 items-center justify-center gap-space-1 overflow-hidden whitespace-nowrap rounded-xs bg-[var(--surface-recess)] px-space-2 text-[var(--ink-strong)] text-label leading-none transition-colors has-data-[icon=inline-end]:pr-space-1 has-data-[icon=inline-start]:pl-space-1 [&>svg]:pointer-events-none [&>svg]:size-icon-sm",
+    base: "group/badge mark-line inline-flex h-icon-lg w-fit shrink-0 items-center justify-center gap-space-1 overflow-hidden whitespace-nowrap rounded-xs bg-surface-recess px-space-2 text-ink-strong text-label leading-none transition-colors has-data-[icon=inline-end]:pr-space-1 has-data-[icon=inline-start]:pl-space-1 [&>svg]:pointer-events-none [&>svg]:size-icon-sm",
     variants: {
       variant: {
         default: "",
-        secondary: "text-[var(--ink-muted)]",
+        secondary: "text-ink-muted",
         outline: "",
-        ghost: "bg-transparent text-[var(--ink-muted)]",
-        destructive: "bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]",
-        live: "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]",
-        attn: "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]",
-        done: "bg-[var(--status-done-bg)] text-[var(--status-done-ink)]",
-        fail: "bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]",
+        ghost: "bg-transparent text-ink-muted",
+        destructive: "bg-status-fail-bg text-status-fail-ink",
+        live: "bg-status-live-bg text-status-live-ink",
+        attn: "bg-status-attn-bg text-status-attn-ink",
+        done: "bg-status-done-bg text-status-done-ink",
+        fail: "bg-status-fail-bg text-status-fail-ink",
         /* A release note's section (DESIGN.md, Update notice: "New in
            `note-new-*` with stars, Improved in `note-improved-*` with a
            rising graph, Fixed in `note-fixed-*` with a bug; each ink holds
@@ -30,13 +30,17 @@
        * below for its words, which wrap and grow it line by line from the
        * start (an update's long status). A tab's count (DESIGN.md, Work tab
        * count): its numeral in the meta role and tabular figures, and a press
-       * on it is a press on its tab.
+       * on it is a press on its tab. In a head that is short of room (the
+       * head's inherited `--tight`, a length above 0 while its words are
+       * squeezed) the count's pads step down the ladder from `space-2` to
+       * `space-1`, giving that room back to the words.
        */
       size: {
         cell: "min-h-6 gap-1.5 px-2",
         "cell-tall":
           "h-auto min-h-6 gap-1.5 whitespace-normal px-2 py-space-1 text-start",
-        count: "pointer-events-none text-meta tabular-nums",
+        count:
+          "pointer-events-none px-[clamp(var(--space-1),calc(var(--space-2)_-_var(--tight,0px)_*_1000),var(--space-2))] text-meta tabular-nums",
       },
       /** Its figures in tabular widths (DESIGN.md, The Tabular Figure Rule). */
       figures: { tabular: "tabular-nums" },

@@ -31,12 +31,12 @@
 <!--
 Discriminated Unions + Destructing (required for bindable) do not
 get along, so we shut typescript up by casting `value` to `never`.
-Its segments wrap whole onto the next line where its row is narrower than
-they are, rather than running off a narrow screen; the thumb follows the
-chosen segment wherever it stands.
+One groove, one row (DESIGN.md, Segmented controls and tabs): it never
+wraps, its groove holds every segment (as wide as they are), and a group
+wider than its row stands in its caller's scroller.
 -->
 <ToggleGroupPrimitive.Root
-  class={cn(group(), "flex-wrap", className)}
+  class={cn(group(), "w-max", className)}
   data-slot="toggle-group"
   bind:ref
   bind:value={value as never}

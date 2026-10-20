@@ -4,8 +4,9 @@
  * (two AskUserQuestion calls in one message), each option with its
  * description. Caw's head counts two; the thread's card says “1 of 2”; the
  * person answers it by click, the card moves to “2 of 2”, and the person
- * answers that one by its number key and Enter, as the card's keycaps
- * offer. Caw's next turn carries both answers.
+ * moves into that card's options, then answers by its number key and
+ * Enter, as the card's keycaps offer (a digit is heard only while focus is
+ * in its options, WCAG 2.1.4). Caw's next turn carries both answers.
  *
  * Caw's session runs inside his place's boundary: this journey runs only
  * where a workspace boundary can start (the host), never inside a workspace.
@@ -187,8 +188,11 @@ async function walk(leg: Leg): Promise<void> {
   );
 
   await leg.step(
-    "Answer the second by its number key, then Enter",
+    "Move into the second's options, answer by its number key, then Enter",
     async () => {
+      // Into the options as a person tabs into them: no option is picked
+      // yet, so the group's one tab stop is its first option.
+      await cardAt(page, SECOND_OF_TWO).getByRole("radio").first().focus();
       await page.keyboard.press("2");
       await page.keyboard.press("Enter");
     },

@@ -312,6 +312,55 @@
     caret-color: var(--brand-solid);
   }
 
+  /* A native checkbox, radio, range or progress takes the act colour, never
+     the browser's blue (DESIGN.md, Coral Action: "checked checkboxes and
+     switches"; blue is a status hue). Inherited, so every native control in
+     the page takes it. */
+  :root {
+    accent-color: var(--action-solid);
+  }
+
+  /* A native range is a groove with the act's thumb: its track sits below
+     the surface on `surface-recess-deep` in both themes (DESIGN.md, Depth:
+     the groove recesses), never the engine's own track, which turns
+     near-white at night. */
+  input[type="range"] {
+    appearance: none;
+    background: transparent;
+
+    &::-webkit-slider-runnable-track {
+      block-size: var(--space-1);
+      border-radius: var(--radius-pill);
+      background: var(--surface-recess-deep);
+    }
+    &::-moz-range-track {
+      block-size: var(--space-1);
+      border-radius: var(--radius-pill);
+      background: var(--surface-recess-deep);
+    }
+    &::-moz-range-progress {
+      block-size: var(--space-1);
+      border-radius: var(--radius-pill);
+      background: var(--action-solid);
+    }
+    &::-webkit-slider-thumb {
+      appearance: none;
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
+      margin-block-start: calc((var(--space-1) - var(--icon-md)) / 2);
+      border: none;
+      border-radius: var(--radius-pill);
+      background: var(--action-solid);
+    }
+    &::-moz-range-thumb {
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
+      border: none;
+      border-radius: var(--radius-pill);
+      background: var(--action-solid);
+    }
+  }
+
   /* The one focus indicator (tokens: --focus-ring*). An outline, so it
      tracks each element's own radius and survives forced colours; never a
      box-shadow ring, a border-colour change or a background on focus as
@@ -2891,7 +2940,17 @@
    neighbours never overlap. A positioned host keeps its own position and is
    already the ::after's containing block. That block is the host's padding
    box, so the 50% term already measures from inside the border; a bordered
-   host sets --hit-edge to its border width so the gap stop does too. */
+   host sets --hit-edge to its border width so the gap stop does too.
+   The area stands half a pixel down and to the right of its layout box:
+   Blink hit-tests a press half a pixel up and to the left of where the
+   box is laid out (a touch rounds to the nearest pixel, so a box laid at
+   [100, 144) takes a touch at 99.5 and not at 143.9; a pointer press and
+   elementFromPoint take a 1px area from the point, so 99.2 lands and 99.01
+   does not, 143.99 lands and 144.01 does not).
+   Offset by that half pixel, an area answers a press from 22px before its
+   control's centre to 22px after it, and two areas that meet at a midpoint
+   meet there for the press too, instead of the later one taking the
+   earlier one's last half pixel. */
 @utility touch-hit {
   @media (pointer: coarse) {
     :where(&) {
@@ -2900,6 +2959,7 @@
     :where(&)::after {
       content: "";
       position: absolute;
+      translate: 0.5px 0.5px;
       inset-inline: max(
         min(0px, calc(50% - var(--c-touch-floor) / 2)),
         calc(var(--hit-gap-x, var(--c-touch-floor)) / -2 - var(--hit-edge, 0px))

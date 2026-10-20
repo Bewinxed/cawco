@@ -725,6 +725,8 @@ The kit lives in `apps/dashboard/src/lib/components/ui`. Shared recipes are the 
 **The Earned Count Rule.** A count on a control is drawn only above 0: a count of none says nothing. On the web and in the app alike, at 0 the count element is gone and the control's name drops it too. A figure whose 0 is itself the reading (a measurement, a share, a total the control reports rather than a number of things it opens) is not a count.
 
 ### Buttons
+Buttons: shadcn/ui button and Base UI; prominence per Apple HIG.
+
 Tactile and quiet: a hairline-edged raised block that dips under the hand.
 - **Shape:** gently rounded (10px). Default 36px tall with 14px padding, an 8px gap and 16px icons. `sm` is 30px at the label size with 11px padding. `xs` is 24px. `lg` is 44px. Icon sizes match (36, 30, 24, 44).
 - **Outline (default kit look):** raised surface, 1px `border-button-outline` edge (3:1), strong ink, hover to `surface-hover`.

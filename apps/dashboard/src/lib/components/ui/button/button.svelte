@@ -21,8 +21,11 @@
         pressable: pressVariants({ press: "pressable" }),
       },
       variant: {
+        /* Its fill reaches its border box (`bg-clip-border`), as wide and
+           tall as an edged variant's edge, so a primary beside an outline
+           draws the same 36 (30, 24, 44). */
         default:
-          "border-transparent bg-action-solid bg-action-surface text-on-action hover:bg-action-hover hover:bg-action-surface-hover",
+          "border-transparent bg-action-solid bg-action-surface bg-clip-border text-on-action hover:bg-action-hover hover:bg-action-surface-hover",
         outline: "aria-expanded:not-aria-current-page:bg-surface-hover",
         secondary:
           "border-border-hairline bg-surface-recess hover:bg-surface-hover",
