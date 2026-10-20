@@ -109,4 +109,11 @@
       content: " ";
     }
   }
+  /* In a narrow column (Lanes' steps side by side) the line starts under
+     the tile, so a receiver's name and its state keep to one line. */
+  @container step-row (inline-size < 15rem) {
+    .ack {
+      padding-inline-start: 0;
+    }
+  }
 </style>

@@ -20,6 +20,12 @@ export const Plan = {
   parameters: { viewport: 360 },
 };
 
+/** On your screen · Lanes as the reader's own screen draws it: the phone's sheet under a finger, the desk's card under a mouse (a decision page's drawing). */
+export const Device = {
+  args: { frame: "device" },
+  parameters: { viewport: 360 },
+};
+
 /** Phone · Lanes in the sheet: a step opens on a page of its own. */
 export const Phone = {
   args: { frame: "phone" },

@@ -20,6 +20,12 @@ export const Plan = {
   parameters: { viewport: 360 },
 };
 
+/** On your screen · Crew first as the reader's own screen draws it: the phone's sheet under a finger, the desk's card under a mouse (a decision page's drawing). */
+export const Device = {
+  args: { frame: "device" },
+  parameters: { viewport: 360 },
+};
+
 /** Phone · Crew first in the sheet: a delegate or a step opens on a page of its own. */
 export const Phone = {
   args: { frame: "phone" },
@@ -47,5 +53,29 @@ export const Acknowledged = {
 /** Desk · Crew first live: the stack reorders as delegates finish, a finished one folds into the count, its tile leaves the to-do. */
 export const Live = {
   args: { frame: "desk", live: true },
+  parameters: { viewport: 360 },
+};
+
+/** Desk · Crew first, the to-do that became task tsk-14 open to its description: its row wears the task's glyph and id. */
+export const Opened = {
+  args: { frame: "desk", scenario: "opened" },
+  parameters: { viewport: 360 },
+};
+
+/** A working delegate's progress line, its sweep held near the start of its run. */
+export const SweepStart = {
+  args: { frame: "delegate", held: 0.3 },
+  parameters: { viewport: 360 },
+};
+
+/** The same line, its sweep held halfway along its run. */
+export const SweepMiddle = {
+  args: { frame: "delegate", held: 0.5 },
+  parameters: { viewport: 360 },
+};
+
+/** The same line, its sweep held near the end of its run. */
+export const SweepEnd = {
+  args: { frame: "delegate", held: 0.7 },
   parameters: { viewport: 360 },
 };

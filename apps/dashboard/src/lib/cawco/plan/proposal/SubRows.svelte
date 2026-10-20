@@ -70,4 +70,16 @@
     min-block-size: 44px;
     padding-block: 11px;
   }
+  /* In a narrow column (Lanes' steps side by side) the time stands under
+     the words, so the words keep the row's width. */
+  @container step-row (inline-size < 15rem) {
+    .row {
+      grid-template-columns: var(--pv-tile, 18px) minmax(0, 1fr);
+    }
+    .time {
+      grid-column: 2;
+      inline-size: auto;
+      text-align: start;
+    }
+  }
 </style>

@@ -46,8 +46,9 @@ export interface Comment {
   text: string;
 }
 
-/** What a frame stands at as it starts: at rest, or one change already made. */
-export type Scenario = "rest" | "edited" | "commented" | "acknowledged";
+/** What a frame stands at as it starts: at rest, a step open, or one change already made. */
+export type Scenario =
+  "rest" | "opened" | "edited" | "commented" | "acknowledged";
 
 export interface FrameView {
   acks: SvelteMap<string, Ack>;
@@ -239,11 +240,17 @@ export function frameView(options: {
 }
 
 /**
- * The stories' states: a to-do reworded and seen by this session; a step a
- * delegate carries commented on, sent; the same comment answered.
+ * The stories' states: a step open; a to-do reworded and seen by this
+ * session; a step a delegate carries commented on, sent; the same comment
+ * answered.
  */
 function seed(view: FrameView, plan: PlanFixture, scenario: Scenario): void {
   const step = (id: string) => plan.steps.find((one) => one.id === id);
+  if (scenario === "opened") {
+    // The to-do that became a task, open to its description.
+    view.opened.add("a4");
+    return;
+  }
   if (scenario === "edited") {
     const booking = step("a6");
     if (booking) {

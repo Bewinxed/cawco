@@ -252,4 +252,12 @@
     min-block-size: 44px;
     font-size: 16px;
   }
+  /* In a narrow column (Lanes' steps side by side) the group cannot stand
+     on one line: it wraps, its moving pair kept together by its gap. */
+  @container step-row (inline-size < 15rem) {
+    .acts {
+      flex-wrap: wrap;
+      margin-inline-start: 0;
+    }
+  }
 </style>

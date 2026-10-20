@@ -9,9 +9,10 @@
    * - A · One ledger: one list; a delegate is one row under the to-do it
    *   carries, on the nesting rail; a dependency is an "after …" chip whose
    *   names link to their steps.
-   * - B · Lanes: steps that can run side by side stand in two lanes, and
-   *   lines run from a step to the steps that start after it; a delegate
-   *   sits under its step, on a line that pulses while it works.
+   * - B · Lanes: steps that start after the same steps run at the same
+   *   time, and stand side by side in columns (a band); lines run from a
+   *   step to the steps that start after it, turning only between rows; a
+   *   delegate sits under its step, on a line that pulses while it works.
    * - C · Crew first: the delegates, one flat row each with its progress
    *   line, then the to-dos, each with tiles saying who is on it, on Lanes'
    *   two lanes with a line for each dependency still open.
@@ -140,8 +141,35 @@
       }))
     ),
   ]);
-  const laneSpan = $derived(spanOf(afterEdges));
   const crewSpan = $derived(spanOf(openEdges));
+  /**
+   * Lanes: the rows in bands, each a step alone or the steps that start
+   * after the same steps (they run at the same time), side by side. A step
+   * that waits stands right after the band of the last step it waits on,
+   * so every line joins two bands next to each other and runs past no
+   * other row; a step that waits on nothing keeps its place in the plan.
+   */
+  const bands = $derived.by(() => {
+    const out: Step[][] = [];
+    const keyOf = (step: Step) => (step.after ?? []).join(",");
+    const bandOf = (id: string) =>
+      out.findIndex((band) => band.some((one) => one.id === id));
+    for (const step of steps) {
+      const key = keyOf(step);
+      const last = Math.max(-1, ...(step.after ?? []).map(bandOf));
+      if (key === "" || last < 0) {
+        out.push([step]);
+        continue;
+      }
+      const next = out[last + 1];
+      if (next?.[0] && keyOf(next[0]) === key) {
+        next.push(step);
+      } else {
+        out.splice(last + 1, 0, [step]);
+      }
+    }
+    return out;
+  });
 
   /**
    * Crew first: the stack holds what is on it (needs you, failed, working),
@@ -221,29 +249,41 @@
   </ul>
 {/snippet}
 
+{#snippet laneStep(step: Step)}
+  {@const carried = carriersOf(plan, step)}
+  <StepRow {plan} {pushes} {step} {steps}>
+    {#snippet below()}
+      {#if carried.length > 0}
+        <ul class="rows on-lane" data-slot="delegates">
+          {@render delegates(carried)}
+        </ul>
+      {/if}
+    {/snippet}
+  </StepRow>
+{/snippet}
+
 {#snippet lanes()}
   <NeedsYou delegates={plan.delegates} />
   <div class="lanes">
     <Connectors edges={laneEdges} />
     <ul class="rows" {@attach reflow()} {@attach view.clock.watch}>
-      {#each steps as step (step.id)}
-        {@const carried = carriersOf(plan, step)}
-        <StepRow
-          lane={laneOf(step)}
-          lanes={lanesIn(laneSpan, step)}
-          {plan}
-          {pushes}
-          {step}
-          {steps}
-        >
-          {#snippet below()}
-            {#if carried.length > 0}
-              <ul class="rows on-lane" data-slot="delegates">
-                {@render delegates(carried)}
-              </ul>
-            {/if}
-          {/snippet}
-        </StepRow>
+      {#each bands as band (band.map((one) => one.id).join(" "))}
+        {#if band.length > 1}
+          <li
+            class="band"
+            data-band={band.map((one) => one.id).join(" ")}
+            data-flip="box"
+            data-slot="band"
+          >
+            <ul class="rows columns" style:--columns={band.length}>
+              {#each band as step (step.id)}
+                {@render laneStep(step)}
+              {/each}
+            </ul>
+          </li>
+        {:else}
+          {@render laneStep(band[0] as Step)}
+        {/if}
       {/each}
     </ul>
   </div>
@@ -355,6 +395,17 @@
     padding-inline-start: calc(
       var(--lead-w, var(--pv-tile, 18px)) + var(--space-2)
     );
+  }
+  /* Lanes: a band's steps in columns of one width, side by side, each as
+     tall as its own rows; the gap between them is the lines' room. */
+  .band {
+    min-inline-size: 0;
+  }
+  .columns {
+    display: grid;
+    grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
+    align-items: start;
+    gap: var(--space-row) var(--space-3);
   }
 
   /* Crew first: two groups, each named by a quiet head. */

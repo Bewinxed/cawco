@@ -79,14 +79,16 @@
 
 <style>
   /* One cell the card fills: as a flex item it shrank to its words'
-     narrowest width inside the 360px box. */
+     narrowest width inside the 360px box. It stands at the split's 680px
+     whatever holds it: capped at the viewport's height, inside a decision
+     page's embed (its frame's own viewport, sized to what it draws) it
+     shrank to the frame's first height and the frame then held there. */
   .desk {
     display: grid;
     grid-template: minmax(0, 1fr) / minmax(0, 1fr);
     inline-size: 360px;
     max-inline-size: 100%;
     block-size: 680px;
-    max-block-size: 100dvh;
   }
   .head {
     display: flex;

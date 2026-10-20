@@ -79,10 +79,7 @@
             >
           {/if}
           {#if step.promoted}
-            <TaskBadge
-              stage={step.promoted.stage}
-              title={step.promoted.title}
-            />
+            <TaskBadge task={step.promoted} />
           {/if}
         </p>
         {#if openBefore(plan, step).length > 0}

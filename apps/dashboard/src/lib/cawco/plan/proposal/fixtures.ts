@@ -62,8 +62,8 @@ export interface Step {
   /** What the step is, in a few sentences (markdown). */
   description: string;
   id: string;
-  /** The to-do grew into a task of its own: that task's stage. */
-  promoted?: { stage: string; title: string };
+  /** The to-do grew into a task of its own: that task's id, title and stage. */
+  promoted?: { id: string; stage: string; title: string };
   /** A to-do the session offered and the person has not agreed to. */
   proposed?: boolean;
   /** Its name in a few words, where another step points at it. */
@@ -365,7 +365,11 @@ function rows(moment: Moment): Step[] {
       description:
         "The email names the instructor and the meeting point at the slipway. It became a task of its own, now in review.",
       state: "todo",
-      promoted: { title: "Booking confirmation email", stage: "Review" },
+      promoted: {
+        id: "tsk-14",
+        title: "Booking confirmation email",
+        stage: "Review",
+      },
     },
     {
       id: "a5",

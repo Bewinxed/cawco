@@ -20,6 +20,12 @@ export const Plan = {
   parameters: { viewport: 360 },
 };
 
+/** On your screen · One list as the reader's own screen draws it: the phone's sheet under a finger, the desk's card under a mouse (a decision page's drawing). */
+export const Device = {
+  args: { frame: "device" },
+  parameters: { viewport: 360 },
+};
+
 /** Phone · One list in the sheet: every row a finger's height, steps open in place. */
 export const Phone = {
   args: { frame: "phone" },

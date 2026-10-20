@@ -78,6 +78,20 @@ const STATES = [
   "Live",
 ] as const;
 
+/** Crew first's held stills of a working delegate's sweep (the decision page's pins card). */
+const SWEEPS = ["SweepStart", "SweepMiddle", "SweepEnd"] as const;
+
+/**
+ * Every story a way's states file draws: the states, the frame the
+ * reader's own screen shows (`Device`, the decision page's drawing), and on
+ * Crew first the pins card's: a to-do opened, and the sweep held.
+ */
+const storiesOf = (way: { file: string }): string[] => [
+  ...STATES,
+  "Device",
+  ...(way.file === "CrewFirst" ? ["Opened", ...SWEEPS] : []),
+];
+
 /** A mark's tile as the spec reads it: its side, corner, border and glyph. */
 interface Tile {
   border: string;
@@ -89,7 +103,7 @@ interface Tile {
 /** A figure in a head: the to-dos head carries none. */
 const DIGIT = /\d/;
 
-/** A task's id as the board writes one ("tsk-142", "#142"), never on a badge. */
+/** A task's id as the board writes one ("tsk-142"). */
 const TASK_ID = /\b[a-z]{2,5}-\d+\b|#\d+/i;
 
 const WAYS = [
@@ -1033,6 +1047,9 @@ const readReview = (page: Page) =>
         ...body.querySelectorAll<HTMLElement>('[data-slot="task-badge"]'),
       ].map((badge) => ({
         glyph: !!badge.querySelector("svg"),
+        id:
+          badge.querySelector('[data-slot="task-id"]')?.textContent?.trim() ??
+          "",
         name: badge.getAttribute("aria-label") ?? "",
         words: badge.textContent?.replace(/\s+/g, " ").trim() ?? "",
       }));
@@ -1228,6 +1245,22 @@ const readDrawn = (page: Page) =>
               })
           ),
         ].sort((p, q) => p - q);
+        // A step's tile, in the layer's pixels: a line may land on its top
+        // off the rail, the row gap's drop (Connectors, Lanes' columns).
+        const tops = [...host.querySelectorAll("[data-tile]")].map((tile) => {
+          const r = tile.getBoundingClientRect();
+          return {
+            left: (r.left - at.left) / zoom,
+            right: (r.right - at.left) / zoom,
+            top: (r.top - at.top) / zoom,
+          };
+        });
+        const landing = (x: number, from: number, to: number) =>
+          to - from <= 12 &&
+          tops.some(
+            (tile) =>
+              Math.abs(tile.top - to) <= 1 && x > tile.left && x < tile.right
+          );
         const uprights: { x: number; what: string }[] = [];
         for (const path of host.querySelectorAll<SVGPathElement>(
           'svg[data-slot="connectors"] path.wire'
@@ -1237,22 +1270,29 @@ const readDrawn = (page: Page) =>
             .split(" ")
             .filter(Boolean);
           let x = 0;
+          let y = 0;
           for (let i = 0; i < words.length; i += 1) {
             const command = words[i];
             if (command === "M") {
               x = Number(words[i + 1]);
+              y = Number(words[i + 2]);
               i += 2;
             } else if (command === "H") {
               x = Number(words[i + 1]);
               i += 1;
             } else if (command === "Q") {
               x = Number(words[i + 3]);
+              y = Number(words[i + 4]);
               i += 4;
             } else if (command === "V") {
-              uprights.push({
-                x,
-                what: `${path.getAttribute("data-from")}>${path.getAttribute("data-to")}`,
-              });
+              const to = Number(words[i + 1]);
+              if (!landing(x, y, to)) {
+                uprights.push({
+                  x,
+                  what: `${path.getAttribute("data-from")}>${path.getAttribute("data-to")}`,
+                });
+              }
+              y = to;
               i += 1;
             }
           }
@@ -1916,11 +1956,16 @@ function checkDesk(
       .join(" | ")} unnamed ${report.unnamed.join(",")}`
   );
   const names = Object.keys(stories).sort();
+  const own = storiesOf(way);
+  // The sweep's held stills draw a delegate's row alone, not the plan.
+  const plans = Object.entries(stories).filter(
+    ([story]) => !SWEEPS.includes(story as (typeof SWEEPS)[number])
+  );
   kit.check(
-    `${name}: its 6 stories draw its own plan (${names.join(", ")}), every row on an 18px tile`,
-    names.length === 6 &&
-      Object.values(stories).every(
-        (one) =>
+    `${name}: its ${own.length} stories draw its own plan (${names.join(", ")}), every row on an 18px tile`,
+    names.join() === [...own].sort().join() &&
+      plans.every(
+        ([, one]) =>
           one.variation === way.variation &&
           one.rows > 0 &&
           one.leads.length === 0
@@ -2022,7 +2067,7 @@ function checkGeometry(
     kit.check(
       `${name}: ${story} opens the date picker's description (${one.description.width}×${one.description.height}), draws its dependency lines (${one.wires.join(",") || "none"}) and sweeps its working delegate (${one.sweeps})`,
       one.description.height > 20 &&
-        one.description.width > 200 &&
+        one.description.width > (way.variation === "b" ? 140 : 200) &&
         lined &&
         one.sweeps > 0,
       JSON.stringify(one)
@@ -2227,10 +2272,12 @@ function checkControls(kit: Kit, name: string, way: Way, review: Review): void {
     json(pulses)
   );
   if (way.variation === "b") {
+    // Lanes stands the steps that run at the same time in columns, side by
+    // side: no row keeps a gutter for a second lane of tiles.
     const leads = plan.leads as { a2: number; a4: number; a7: number };
     kit.check(
-      `${name}: the two-lane gutter stands only where the second lane runs (date picker ${leads.a2}px; confirmation email ${leads.a4}px, waiting list ${leads.a7}px)`,
-      leads.a4 === 18 && leads.a7 === 18 && leads.a2 >= leads.a4 * 2,
+      `${name}: every row's lead is one tile, its steps that run together in columns (date picker ${leads.a2}px; confirmation email ${leads.a4}px, waiting list ${leads.a7}px)`,
+      leads.a2 === 18 && leads.a4 === 18 && leads.a7 === 18,
       json(leads)
     );
   }
@@ -2281,26 +2328,29 @@ function checkSmall(kit: Kit, name: string, review: Review): void {
       ),
     json({ steps: steps.slice(0, 4), marks: marks.slice(0, 2) })
   );
-  // The owner's pin: glyphs for task ids. A to-do that grew into a task
-  // wears the task's glyph and its stage, says its title in its name, and
-  // never shows or says an id.
+  // The owner's pin: "glpyhs for task ids or?". A to-do that grew into a
+  // task wears the board's task glyph with the task's id, then its stage,
+  // and its name says the id, the title and the stage.
   const badges = plan.badges as {
     glyph: boolean;
+    id: string;
     name: string;
     words: string;
   }[];
   kit.check(
-    `${name}: a to-do that became a task wears the task's glyph and its stage, says its title in its name, and no id (${badges.map((one) => `"${one.words}"${one.glyph ? " with its glyph" : " no glyph"}, named "${one.name}"`).join("; ")})`,
+    `${name}: a to-do that became a task wears the task's glyph, its id and its stage, and says all three in its name (${badges.map((one) => `"${one.words}"${one.glyph ? " with its glyph" : " no glyph"}, named "${one.name}"`).join("; ")})`,
     badges.length > 0 &&
-      badges.every(
-        (one) =>
+      badges.every((one) => {
+        const stage = one.name.split(", in ")[1] ?? "";
+        return (
           one.glyph &&
-          one.words.length > 0 &&
-          one.name.startsWith("Open the task ") &&
-          one.name.endsWith(`, in ${one.words}`) &&
-          !TASK_ID.test(one.words) &&
-          !TASK_ID.test(one.name)
-      ),
+          TASK_ID.test(one.id) &&
+          one.words.startsWith(one.id) &&
+          one.name.startsWith(`Open the task ${one.id}, `) &&
+          stage !== "" &&
+          one.words.endsWith(stage)
+        );
+      }),
     json(badges)
   );
   const times = plan.times as { fable: number; datePicker: number };

@@ -32,12 +32,6 @@
 </script>
 
 <div bind:this={host} data-coarse class="phone" data-slot="phone-screen">
-  <!-- The conversation the sheet stands over, quiet behind the scrim. -->
-  <div class="behind" aria-hidden="true">
-    <span class="line" style:--w="62%"></span>
-    <span class="line" style:--w="84%"></span>
-    <span class="line" style:--w="48%"></span>
-  </div>
   {#if host}
     <Drawer.Root
       container={host}
@@ -100,18 +94,6 @@
     border-radius: var(--radius-panel);
     background: var(--background);
     box-shadow: var(--shadow-xs);
-  }
-  .behind {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    padding: 72px var(--space-5);
-  }
-  .line {
-    inline-size: var(--w);
-    block-size: 12px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-fill);
   }
   .phone :global(.sheet-title) {
     display: flex;

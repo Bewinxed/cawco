@@ -132,12 +132,7 @@
       <span class="trail mark-line" data-slot="trail">
         {@render trail?.()}
         {#if step.promoted}
-          <span data-box
-            ><TaskBadge
-              stage={step.promoted.stage}
-              title={step.promoted.title}
-            /></span
-          >
+          <span data-box><TaskBadge task={step.promoted} /></span>
         {/if}
         <span
           aria-hidden="true"
@@ -217,6 +212,7 @@
   .item {
     position: relative;
     min-inline-size: 0;
+    container: step-row / inline-size;
     border-radius: var(--radius-sm);
     transition: background-color var(--dur-fade) var(--ease-out);
 
@@ -406,5 +402,25 @@
   :global([data-coarse]) .row {
     min-block-size: 44px;
     padding-block: 11px;
+  }
+  /* A row in a narrow column (Lanes' steps side by side): the words take
+     the row's width beside the tile, and the trail (its badge, chevron and
+     time) stands under them, so neither is squeezed to a word a line. */
+  @container step-row (inline-size < 15rem) {
+    .row {
+      grid-template-columns: var(--lead-w, var(--pv-tile, 18px)) minmax(0, 1fr);
+      grid-template-areas:
+        "lead words"
+        ". trail"
+        ". under";
+    }
+    .trail {
+      flex-wrap: wrap;
+      block-size: auto;
+    }
+    .time {
+      inline-size: auto;
+      text-align: start;
+    }
   }
 </style>
