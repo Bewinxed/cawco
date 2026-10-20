@@ -1124,6 +1124,13 @@ export interface ControlReach {
 const TOUCH_HALF = 22;
 /** Half the 24px a mouse's area reaches (DESIGN.md, The 24 Pointer Rule). */
 const POINTER_HALF = 12;
+/**
+ * How far above its box the sticky foot already takes a press: a chip's
+ * bottom at 769.66 and the foot's top at 777 (a 390×844 window, 2x), a
+ * press at 776.16 lands on the foot. A 44px box this near the foot is the
+ * foot's to a finger, and read a scroll later.
+ */
+const FOOT_SLACK = 1;
 /** One side of a `reachOf` line: how far past its drawn edge a press landed, how far it had to, and what it met. */
 const SIDE =
   /^(left|right|up|down) reach ([\d.]+) need ([\d.]+)(?: SHORT)? \(then (.*)\)$/;
@@ -1233,7 +1240,7 @@ function takeReach(
   const [w = 0, h = 0] = size.split("x").map(Number);
   if (
     !foot.own.includes(`${at} ${size}`) &&
-    y + h / 2 + TOUCH_HALF > foot.top
+    y + h / 2 + TOUCH_HALF > foot.top - FOOT_SLACK
   ) {
     return;
   }
