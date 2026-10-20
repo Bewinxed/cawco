@@ -244,17 +244,30 @@ a {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
   gap: var(--space-2);
 }
-/* A program page's option cell: the chip (the pick), then the option's own
-   media under it, outside the pick, live to the pointer. The two rows are
-   the grid's own (subgrid), so the chips of a row share one track and the
-   media theirs. */
+/* A program page's options (the host's Option.svelte): each option's rows
+   are the grid's own, shared by the options side by side: its chip's top
+   edge (its border and padding), Recommended, its label, its line, its
+   cost, its chip's foot edge, the gap, its media, and the gap to the next
+   row of options. An option without one of them leaves that row empty, so
+   the labels of a row start on one line, and their lines, costs and media
+   on theirs; stacked on a phone, an empty row takes no room. The last gap
+   row is the grid's foot, given back. */
+.dp-opts:has(> .dp-optcell) {
+  grid-auto-rows: calc(var(--space-2) + 1px) auto auto auto auto
+    calc(var(--space-2) + 1px) var(--space-2) auto var(--space-2);
+  row-gap: 0;
+  margin-block-end: calc(var(--space-2) * -1);
+}
+/* The option cell: the chip (the pick), then the option's own media under
+   it, outside the pick, live to the pointer. */
 .dp-optcell {
   display: grid;
-  grid-row: span 2;
+  grid-row: span 9;
   grid-template-rows: subgrid;
   min-inline-size: 0;
 }
 .dp-optmedia {
+  grid-row: 8;
   min-inline-size: 0;
 }
 /* The chip is DESIGN.md's option chip (app.css .kit-chip): at least 30px,
@@ -348,6 +361,36 @@ a {
 }
 .dp-opt[data-cawco-picked] .dp-tag {
   background: var(--surface-raised);
+}
+/* A program page's chip takes its cell's first six rows: its edges are the
+   two edge rows, and each part stands in its own row whatever its option
+   holds, Recommended over the label. The parts keep the chip's spacing: 2px
+   between them, and Recommended's own room under it. */
+.dp-optcell > .dp-opt {
+  grid-row: 1 / span 6;
+  display: grid;
+  grid-template-rows: subgrid;
+  /* The grid's own gutters (none): a subgrid's gap of its own is added
+     around every part, and an empty row would keep it. */
+  row-gap: normal;
+  padding-block: 0;
+
+  & > .dp-tag {
+    grid-row: 2;
+    justify-self: start;
+    margin-block-end: calc(var(--space-1) + 2px);
+  }
+  & > b {
+    grid-row: 3;
+  }
+  & > .dp-line {
+    grid-row: 4;
+    margin-block-start: 2px;
+  }
+  & > .dp-cost {
+    grid-row: 5;
+    margin-block-start: 2px;
+  }
 }
 /* A picked option (DESIGN.md, option chips): the coral edge, a recessed
    fill and the keycap filled vermilion with a white digit; its words keep

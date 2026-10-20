@@ -62,7 +62,9 @@
       >{#if keycap > 0}<span aria-hidden="true" class="dp-kc">{keycap}</span
         >{/if}<span>{String(props.label ?? id)}</span></b
     >
-    {#if props.line}<span id="{uid}-line">{String(props.line)}</span>{/if}
+    {#if props.line}<span class="dp-line" id="{uid}-line"
+        >{String(props.line)}</span
+      >{/if}
     {#if props.cost}<span class="dp-cost" id="{uid}-cost"
         >Cost: {String(props.cost)}</span
       >{/if}
