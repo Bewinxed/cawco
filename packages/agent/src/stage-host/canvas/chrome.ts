@@ -19,6 +19,7 @@ import type {
 } from "@cawco/core/stage";
 import { bridge, type Section, type View } from "./runtime";
 import { type PageScheme, pageScheme } from "./scheme";
+import { windowHeight, windowWidth } from "./viewport";
 
 /** DialKit's vanilla build as the page has it once loaded (`window.DialKit`). */
 interface DialKitGlobal {
@@ -822,7 +823,7 @@ export class Chrome {
 
   /** Desk or phone, by the page's width. */
   layout(): void {
-    this.#flags.phone = !this.#flags.embedded && innerWidth < PHONE_MAX;
+    this.#flags.phone = !this.#flags.embedded && windowWidth() < PHONE_MAX;
     this.#host.toggleAttribute("data-phone", this.#flags.phone);
     document.documentElement.toggleAttribute(
       "data-cawco-phone",
@@ -1025,7 +1026,7 @@ export class Chrome {
         theme: pageScheme(),
       });
       if (this.#flags.phone) {
-        this.#timelineStartsAt(this.#dock, window.innerHeight / 4);
+        this.#timelineStartsAt(this.#dock, windowHeight() / 4);
       }
     }
     const clips: Record<string, unknown> = {};

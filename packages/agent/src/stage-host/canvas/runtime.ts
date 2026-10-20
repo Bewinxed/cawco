@@ -58,6 +58,7 @@ import {
   rewriteSheet,
 } from "./pseudo";
 import { onPageScheme, pageScheme } from "./scheme";
+import { frameAsViewport, windowHeight, windowWidth } from "./viewport";
 import { frameWidths, splitWidth, WIDTH_CONTAINER } from "./width";
 
 /** What the adapter is handed for one story (Storybook's `decorateStory` inputs). */
@@ -539,6 +540,53 @@ export function boot(options: BootOptions): void {
       getComputedStyle(probeMark).getPropertyValue("--cawco-q").trim() === "1"
     );
   };
+  /* --- Floating layers: the frame they open from is their viewport (viewport.ts) */
+
+  /** The frame last pressed or focused in, where a menu or a popover opens from. */
+  let touched: Frame | null = null;
+  /** The frames with a width of their own, drawn now: each is its story's viewport. */
+  const widthFrames = (): Frame[] =>
+    sections.flatMap((section) =>
+      [...section.frames.values()].filter(
+        (frame) =>
+          frame.el.isConnected &&
+          widthOf(frame.story, frame.column.width) !== null
+      )
+    );
+  const touchedIn = (event: Event) => {
+    const body =
+      event.target instanceof Element
+        ? event.target.closest(".cawco-frame-body")
+        : null;
+    touched = widthFrames().find((frame) => frame.body === body) ?? null;
+  };
+  document.addEventListener("pointerdown", touchedIn, true);
+  document.addEventListener("focusin", touchedIn, true);
+  /**
+   * The frame a floating layer asks the viewport of: the one frame with a
+   * trigger open in it (`aria-expanded`, as a menu's or a popover's
+   * trigger says, so a layer open as its story mounts has its frame); else
+   * the frame last pressed or focused in; else the one frame with a width.
+   * None (the window's own) where several have triggers open and none was
+   * touched, or a frame has no width.
+   */
+  const floatingFrame = (): Frame | null => {
+    const frames = widthFrames();
+    const open = frames.filter((frame) =>
+      frame.body.querySelector('[aria-expanded="true"]')
+    );
+    if (open.length === 1) {
+      return open[0] ?? null;
+    }
+    if (touched && (open.length === 0 ? frames : open).includes(touched)) {
+      return touched;
+    }
+    return open.length === 0 && frames.length === 1
+      ? (frames[0] ?? null)
+      : null;
+  };
+  frameAsViewport(() => floatingFrame()?.body.getBoundingClientRect() ?? null);
+
   window.matchMedia = (query: string) => {
     if (view.motion === "reduce" && REDUCED_QUERY.test(query)) {
       const reduce = query.includes("reduce");
@@ -2575,9 +2623,9 @@ export function boot(options: BootOptions): void {
       whole:
         rect.left >= Math.max(0, room.left) - 0.5 &&
         rect.top >= Math.max(0, room.top) - 0.5 &&
-        rect.right <= Math.min(innerWidth, room.right) + 0.5 &&
-        rect.bottom <= Math.min(innerHeight, room.bottom) + 0.5,
-      view: `the world at zoom ${zoom.z} in a ${Math.round(room.width)}×${Math.round(room.height)} canvas, a ${innerWidth}×${innerHeight} window${chrome.phone() ? " (a phone's)" : ""}`,
+        rect.right <= Math.min(windowWidth(), room.right) + 0.5 &&
+        rect.bottom <= Math.min(windowHeight(), room.bottom) + 0.5,
+      view: `the world at zoom ${zoom.z} in a ${Math.round(room.width)}×${Math.round(room.height)} canvas, a ${windowWidth()}×${windowHeight()} window${chrome.phone() ? " (a phone's)" : ""}`,
     };
   };
 
