@@ -32,11 +32,14 @@
 
 <script lang="ts">
   /**
-   * The editor's commit row. It sits outside the scrolling body, on the
-   * recess, so no field scrolls under it at rest; under 640px it pins to the
-   * bottom edge and Delete moves to the header's ⋯ menu, and over a keyboard
-   * it stands on the keyboard with the body's fields kept clear of it
-   * (aboveKeyboard, `body`).
+   * The editor's commit row: the card's own foot, on the card's surface,
+   * held at the page's foot (sticky) while the fields run on under it, with
+   * the house edge fade above it so they pass under it (DESIGN.md, the
+   * update notice's footer: "on the panel's surface with the house edge
+   * fade above it"). Under 640px Delete is the header's ⋯ menu's, and over
+   * a keyboard the row stands on the keyboard with the fields kept clear of
+   * it (aboveKeyboard, `body`). It never wraps: what the save reaches gives
+   * way first, on one line.
    *
    * Save shows its work where it was pressed: the kit Button spins while
    * the save runs and draws a check for --dur-hold when it ends well, and
@@ -45,6 +48,7 @@
   import { configureWords } from "@cawco/core";
   import type { Snippet } from "svelte";
   import AskHere from "#lib/cawco/AskHere.svelte";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { aboveKeyboard } from "#lib/cawco/visible-viewport.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconTrash } from "#lib/icons.js";
@@ -105,46 +109,75 @@
     wasSaving = now;
   });
   $effect(() => () => clearTimeout(savedTimer));
+
+  /**
+   * Whether the fields run on under the row (`data-stuck`): the page can
+   * scroll further down, so the row is held at its foot over them. Read in
+   * the next frame (frameObserver) as the page scrolls or changes size.
+   */
+  function stuck(node: HTMLElement) {
+    const page = body;
+    if (!page) {
+      return;
+    }
+    const read = () => {
+      node.toggleAttribute(
+        "data-stuck",
+        page.scrollTop + page.clientHeight < page.scrollHeight - 0.5
+      );
+    };
+    const sizes = frameObserver(read);
+    const soon = () => sizes.request();
+    page.addEventListener("scroll", soon, { passive: true });
+    sizes.observe(page);
+    if (page.firstElementChild) {
+      sizes.observe(page.firstElementChild);
+    }
+    soon();
+    return () => {
+      page.removeEventListener("scroll", soon);
+      sizes.disconnect();
+    };
+  }
 </script>
 
 <footer
-  class="flex-none py-space-3 px-space-6 bg-surface-recess max-desk:px-space-2 max-phone:sticky max-phone:bottom-0 max-phone:pb-(--off-bottom)"
+  data-slot="editor-footer"
+  class="sticky -bottom-space-2 z-1 mt-auto flex-none flex flex-col gap-space-3 bg-surface-raised pt-space-3 pb-(--foot-pb) before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-c-edge-fade-len before:bg-linear-to-b/srgb before:from-transparent before:to-surface-raised before:opacity-0 before:transition-[opacity] before:duration-(--dur-control) before:ease-out data-stuck:before:opacity-100 max-phone:before:h-c-edge-fade-len-phone"
   data-safe-bottom
-  style:--off-bottom="calc(var(--space-3) + var(--safe-bottom))"
+  style:--foot-pb="calc(var(--space-6) + var(--safe-bottom))"
   {@attach aboveKeyboard(() => body)}
+  {@attach stuck}
 >
   {#if question}
-    <AskHere asker={question.asker} at="editor" class="max-w-c-config-max-w" />
+    <AskHere asker={question.asker} at="editor" />
   {/if}
-  <div
-    data-slot="inner"
-    class="flex items-center gap-space-2 max-w-c-config-max-w max-phone:flex-wrap max-phone:justify-end"
-  >
+  <div data-slot="inner" class="flex min-w-0 items-center gap-space-2">
     {#if ondelete && deleteLabel}
-      <Button
-        data-delete
-        layout="wide"
-        tone="muted"
-        disabled={down !== null || saving}
-        {failed}
-        icon={IconTrash}
-        label={deleteLabel}
-        onclick={ondelete}
-        pending={deleting}
-        pendingLabel={configureWords.deleting}
-        title={down ?? undefined}
-        type="button"
-        variant="ghost"
-      />
+      <span class="flex flex-none max-phone:hidden">
+        <Button
+          data-delete
+          disabled={down !== null || saving}
+          {failed}
+          icon={IconTrash}
+          label={deleteLabel}
+          onclick={ondelete}
+          pending={deleting}
+          pendingLabel={configureWords.deleting}
+          title={down ?? undefined}
+          type="button"
+          variant="destructive"
+        />
+      </span>
     {/if}
-    <span class="flex-auto max-phone:hidden"></span>
-    {#if result}
-      <span
-        data-slot="result"
-        class="inline-flex items-center gap-space-2 min-w-0 type-meta text-ink-muted"
-        >{@render result()}</span
-      >
-    {/if}
+    <span
+      data-slot="result"
+      class="flex min-w-0 flex-auto items-center justify-end gap-space-2 type-meta text-ink-muted"
+    >
+      {#if result}
+        {@render result()}
+      {/if}
+    </span>
     <Button
       disabled={saving}
       onclick={oncancel}

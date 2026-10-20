@@ -75,7 +75,6 @@
       class="flex-1"
       disabled={flow.url === null || flow.phase === "signed-in"}
       placeholder={words.codePlaceholder}
-      size="sm"
       spellcheck="false"
       bind:value={flow.code}
     />
@@ -85,7 +84,6 @@
       label={words.done}
       pending={flow.phase === "checking"}
       pendingLabel={words.checking}
-      size="sm"
       type="submit"
     />
   </form>

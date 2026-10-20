@@ -14,7 +14,6 @@
     placeholder,
     invalid = false,
     disabled = false,
-    mono = false,
     onblur,
   }: {
     value?: string;
@@ -22,7 +21,6 @@
     placeholder: string;
     invalid?: boolean;
     disabled?: boolean;
-    mono?: boolean;
     onblur?: () => void;
   } = $props();
 </script>
@@ -38,8 +36,7 @@
     aria-invalid={invalid ? "true" : undefined}
     aria-label={label}
     autocomplete="off"
-    class="type-title tracking-title w-full min-w-0 rounded-xs border-none border-current bg-transparent px-0 py-space-row text-ink-strong placeholder:text-ink-subtle data-mono:font-(family-name:--font-mono) disabled:text-ink-strong disabled:opacity-100"
-    data-mono={mono || undefined}
+    class="type-title tracking-title w-full min-w-0 rounded-xs border-none border-current bg-transparent px-0 py-space-row text-ink-strong placeholder:text-ink-subtle disabled:text-ink-strong disabled:opacity-100"
     {disabled}
     {onblur}
     {placeholder}

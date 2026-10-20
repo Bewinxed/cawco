@@ -153,7 +153,6 @@
         {/snippet}
         <Input
           autocomplete="off"
-          face="mono"
           id="skill-source"
           oninput={() => {
             if (!named) {
@@ -172,7 +171,7 @@
       >
         {#snippet hint()}
           {words.landsIn}
-          <span class="font-(family-name:--font-mono)"
+          <span class="type-code"
             >{project
               ? projectClaudeRelative("skills", skillName || "name")
               : userLayerLabel("skills", skillName || "name")}</span
@@ -181,7 +180,6 @@
         <Input
           aria-invalid={skillName !== "" && nameProblem ? "true" : undefined}
           autocomplete="off"
-          face="mono"
           id="skill-name"
           oninput={() => {
             named = true;

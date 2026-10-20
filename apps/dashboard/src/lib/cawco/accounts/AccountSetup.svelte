@@ -494,16 +494,19 @@
       </ol>
 
       <div class="flex min-w-0 flex-col">
+        <!-- The step stands on the page's own card, no well of its own
+             (DESIGN.md, The Frame Recesses Rule). The box clips the steps'
+             cross-slide, so it stands one step out, padded back in, and the
+             rings of the controls at its edges stay whole. -->
         <div
           data-slot="step-box"
-          class="relative overflow-hidden rounded-lg border border-border-well bg-surface-well"
-          style:--swatch-ground="var(--surface-well)"
+          class="relative -m-space-1 overflow-hidden"
           {@attach morph()}
         >
           {#key step}
             <div
               data-picker={at === "provider" || undefined}
-              class="p-space-6 @max-setup/setup:p-space-4"
+              class="p-space-1"
               in:stepIn
               out:stepOut
             >
@@ -836,7 +839,6 @@
                       icon={IconArrowUpRight}
                       label={accountsWords.signin.openLink}
                       rel="noopener noreferrer"
-                      size="sm"
                       target="_blank"
                       variant="outline"
                     />
@@ -847,7 +849,6 @@
                       label={accountsWords.signin.openLink}
                       pending={paste.phase === "opening"}
                       pendingLabel={accountsWords.signin.opening}
-                      size="sm"
                       variant="outline"
                     />
                   {/if}
@@ -858,7 +859,6 @@
                     autocomplete="off"
                     flex="code"
                     measure="shrink"
-                    size="sm"
                     disabled={paste.url === null}
                     onkeydown={(event) => {
                       if (event.key === "Enter") {
@@ -877,7 +877,6 @@
                     onclick={() => paste.done()}
                     pending={paste.phase === "checking"}
                     pendingLabel={accountsWords.signin.checking}
-                    size="sm"
                   />
                 </div>
               {/if}
@@ -928,7 +927,7 @@
         >{words.howItShows}</span
       >
       <div
-        class="flex max-w-c-setup-preview-w min-w-0 items-center gap-space-3 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3"
+        class="flex max-w-c-setup-preview-w min-w-0 items-center gap-space-3"
       >
         <AccountTile {hue} provider={choice?.provider ?? ""} size={28} />
         <AccountName account={shown} />

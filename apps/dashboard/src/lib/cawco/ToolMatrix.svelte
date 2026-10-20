@@ -20,6 +20,7 @@
     IconLaptop,
     IconServer,
     IconTerminal,
+    IconWarningTriangle,
   } from "#lib/icons.js";
   import { didntAnswer, type Machine } from "./client.svelte";
   import { addMachine } from "./join/join.svelte";
@@ -106,13 +107,17 @@
   {@const failed = cellKey(machine.machineId, spec.id) in refused}
 
   {#if shown === "installed"}
-    <span class="flex items-center gap-space-1">
-      <Badge size="cell" tone="success" variant="ghost">
-        <IconCheck class="size-icon-md shrink-0" />
-        <span data-slot="num" class="num font-mono"
-          >{toolStatus?.version ?? "—"}</span
+    <!-- Installed is the quiet state: the check and the version in ink, no
+         chip (DESIGN.md, The Idle Has No Fill Rule's quiet row). -->
+    <span class="flex items-center gap-space-2">
+      <span
+        class="mark-line inline-flex items-center gap-space-1 text-ink-strong"
+      >
+        <IconCheck class="size-icon-md shrink-0 text-status-done-glyph" />
+        <code data-slot="num" class="num type-code"
+          >{toolStatus?.version ?? "—"}</code
         >
-      </Badge>
+      </span>
       <span
         class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 hover-hover:opacity-0"
       >
@@ -158,8 +163,7 @@
               size="cell"
               variant="destructive"
             >
-              <span class="size-2 shrink-0 rounded-full bg-error-9" data-box
-              ></span>
+              <IconWarningTriangle class="size-icon-sm shrink-0" />
               <span>Failed</span>
             </Badge>
           {/snippet}
@@ -171,22 +175,27 @@
           width="widest"
         >
           <header
-            class="flex items-baseline gap-space-1 border-b border-border px-space-3 py-space-2"
+            class="flex items-baseline gap-space-1 border-b border-border-hairline px-space-3 py-space-2"
           >
-            <span class="text-label text-ink-strong"
+            <span class="type-label text-ink-strong"
               >{spec.name}
               did not install</span
             >
             {#if toolStatus?.method}
-              <span class="ml-auto shrink-0 font-mono text-label text-ink-muted"
-                >{toolStatus.method}</span
+              <code class="ml-auto shrink-0 type-code text-ink-muted"
+                >{toolStatus.method}</code
               >
             {/if}
           </header>
-          <pre
-            class="max-h-56 overflow-auto px-space-3 py-space-2 font-mono text-label whitespace-pre-wrap">{toolStatus?.detail ??
-              "The machine did not say why."}</pre>
-          <footer class="border-t border-border px-space-3 py-space-2">
+          {#if toolStatus?.detail}
+            <pre
+              class="max-h-56 overflow-auto px-space-3 py-space-2 type-code whitespace-pre-wrap wrap-anywhere">{toolStatus.detail}</pre>
+          {:else}
+            <p class="px-space-3 py-space-2 type-body text-ink-muted">
+              The machine did not say why.
+            </p>
+          {/if}
+          <footer class="border-t border-border-hairline px-space-3 py-space-2">
             <Button
               disabled={!online}
               {failed}
@@ -230,8 +239,8 @@
         {/snippet}
       </Popover.Trigger>
       <Popover.Content align="start" frame="panel-high" width="wide">
-        <p class="font-mono text-label">
-          {toolStatus?.detail ?? "no install method for this platform"}
+        <p class="type-body text-ink-strong">
+          {toolStatus?.detail ?? "No install method for this platform."}
         </p>
       </Popover.Content>
     </Popover.Root>
@@ -287,106 +296,116 @@
     {/snippet}
   </EmptyState>
 {:else}
-  <!-- The matrix scrolls sideways inside the section; the page never does. -->
-  <div
-    class="overflow-x-auto rounded-md bg-surface-raised inset-ring inset-ring-border-hairline"
-  >
-    <Table.Root>
-      <Table.Header>
-        <Table.Row>
-          <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-          <Table.Head
-            class="z-(--layer-sticky)"
-            scope="col"
-            variant="matrix-corner-pinned">Machine</Table.Head
-          >
-          <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-          {#each catalog as spec (spec.id)}
-            {@const policy = policyOf(spec)}
-            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head scope="col" variant="matrix-column-wide-plain">
-              <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <div class="flex flex-col items-start gap-space-2">
-                <span class="mark-line flex items-center gap-space-2">
-                  <span class="text-label text-ink-strong">{spec.name}</span>
-                  <a
-                    data-box
-                    aria-label="{spec.name} homepage"
-                    class="pointer-hit pressable text-ink-muted transition-colors hover:text-ink-strong"
-                    href={spec.homepage}
-                    rel="noreferrer"
-                    target="_blank"
-                    title={spec.homepage}
-                  >
-                    <IconExternal class="size-icon-sm" />
-                  </a>
-                </span>
-                <span data-slot="num" class="num text-meta text-ink-muted"
-                  >{installedOn(spec)}/{machines.length}
-                  installed</span
-                >
-                <label
-                  class="flex items-center gap-space-2 text-label text-ink-muted"
-                >
-                  <Switch
-                    checked={policy.required}
-                    disabled={saving[spec.id] === true}
-                    onCheckedChange={(next) => requireEverywhere(spec, next)}
-                    size="sm"
-                  />
-                  Required on every machine
-                </label>
-                <RowFault
-                  again={() => requireEverywhere(spec, !policy.required)}
-                  reason={policyRefused[spec.id]}
-                />
-              </div>
-            </Table.Head>
-          {/each}
-        </Table.Row>
-      </Table.Header>
-      <Table.Body>
-        {#each machines as machine (machine.machineId)}
-          {@const os = machineOs(machine.os)}
-          {@const online = machine.status === "online"}
-          <Table.Row inactive={!online}>
-            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head
-              class="z-(--layer-sticky)"
-              scope="row"
-              variant="matrix-row-pinned"
+  <!-- One ledger per tool (DESIGN.md, ledger-header and ledger-row): its head
+       names the tool, how many machines have it and whether every machine
+       must; under it a 32px band and a 44px row per machine. Nothing
+       scrolls sideways: under 640px each row is a card, the machine across
+       its start and the tool's state at its end. An offline machine says so
+       in words; its row keeps full ink. -->
+  <div class="flex flex-col gap-space-6">
+    {#each catalog as spec (spec.id)}
+      {@const policy = policyOf(spec)}
+      <section
+        aria-labelledby="tool-{spec.id}"
+        class="flex min-w-0 flex-col gap-space-2"
+        data-tool={spec.id}
+      >
+        <header
+          class="flex flex-wrap items-center justify-between gap-x-space-4 gap-y-space-2"
+        >
+          <span class="mark-line flex min-w-0 items-center gap-space-2">
+            <h2 id="tool-{spec.id}" class="type-label text-ink-strong">
+              {spec.name}
+            </h2>
+            <a
+              data-box
+              aria-label="{spec.name} homepage"
+              class="pointer-hit touch-hit pressable text-ink-muted transition-colors hover:text-ink-strong"
+              href={spec.homepage}
+              rel="noreferrer"
+              target="_blank"
+              title={spec.homepage}
             >
+              <IconExternal class="size-icon-sm" />
+            </a>
+            <span data-slot="num" class="num type-meta text-ink-muted"
+              >{installedOn(spec)}/{machines.length} installed</span
+            >
+          </span>
+          <label
+            class="mark-line flex items-center gap-space-2 type-label text-ink-muted"
+          >
+            <Switch
+              data-box
+              checked={policy.required}
+              disabled={saving[spec.id] === true}
+              onCheckedChange={(next) => requireEverywhere(spec, next)}
+              size="sm"
+            />
+            <span>Required on every machine</span>
+          </label>
+        </header>
+        <RowFault
+          again={() => requireEverywhere(spec, !policy.required)}
+          reason={policyRefused[spec.id]}
+        />
+        <Table.Root
+          layout="ledger"
+          stacks="phone"
+          style="--card-cols: minmax(0, 1fr) auto"
+        >
+          <Table.Header>
+            <Table.Row variant="band">
+              <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+              <Table.Head scope="col" variant="band">Machine</Table.Head>
+              <Table.Head class="w-c-matrix-col-w" scope="col" variant="band"
+                >State</Table.Head
+              >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <span class="flex items-center gap-space-2">
-                <OsMark
-                  class="size-icon-md shrink-0 text-ink-muted"
-                  os={machine.os}
-                />
-                <span class="flex min-w-0 flex-col">
-                  <span class="flex items-center gap-space-2">
-                    <span class="truncate text-label text-ink-strong"
-                      >{machineLabel(machine.hostname)}</span
-                    >
-                    <span
-                      class="size-(--status-dot-size) shrink-0 rounded-pill {online
-                        ? 'bg-presence-online'
-                        : 'bg-presence-off'}"
-                    ></span>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {#each machines as machine (machine.machineId)}
+              {@const os = machineOs(machine.os)}
+              {@const online = machine.status === "online"}
+              <Table.Row class="group/cell" variant="stacks">
+                <Table.Cell variant="ledger-stacks">
+                  <span class="flex min-w-0 items-center gap-space-2">
+                    <OsMark
+                      class="size-icon-md shrink-0 text-ink-muted"
+                      os={machine.os}
+                    />
+                    <span class="flex min-w-0 flex-col">
+                      <span
+                        class="mark-line flex min-w-0 items-center gap-space-2"
+                      >
+                        <span
+                          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-row"
+                          >{machineLabel(machine.hostname)}</span
+                        >
+                        <span
+                          data-box
+                          class="size-(--status-dot-size) shrink-0 rounded-pill {online
+                            ? 'bg-presence-online'
+                            : 'bg-presence-off'}"
+                        ></span>
+                      </span>
+                      <span class="truncate type-meta text-ink-muted"
+                        >{os.label}{online ? "" : " · offline"}</span
+                      >
+                    </span>
                   </span>
-                  <span class="text-label text-ink-muted"
-                    >{os.label}{online ? "" : " · offline"}</span
-                  >
-                </span>
-              </span>
-            </Table.Head>
-            {#each catalog as spec (spec.id)}
-              <Table.Cell class="group/cell" variant="matrix">
-                {@render cell(machine, spec, online)}
-              </Table.Cell>
+                </Table.Cell>
+                <Table.Cell variant="ledger-stacks">
+                  <div class="flex flex-col gap-space-1 whitespace-normal">
+                    {@render cell(machine, spec, online)}
+                  </div>
+                </Table.Cell>
+              </Table.Row>
             {/each}
-          </Table.Row>
-        {/each}
-      </Table.Body>
-    </Table.Root>
+          </Table.Body>
+        </Table.Root>
+      </section>
+    {/each}
   </div>
 {/if}

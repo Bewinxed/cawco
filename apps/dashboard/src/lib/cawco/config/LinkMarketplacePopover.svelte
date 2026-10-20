@@ -158,7 +158,6 @@
         {/snippet}
         <Input
           autocomplete="off"
-          face="mono"
           id="market-source"
           placeholder={words.marketSourcePlaceholder}
           spellcheck="false"
@@ -181,7 +180,6 @@
         <Input
           aria-invalid={clash ? "true" : undefined}
           autocomplete="off"
-          face="mono"
           id="market-name"
           placeholder={words.marketNamePlaceholder}
           spellcheck="false"

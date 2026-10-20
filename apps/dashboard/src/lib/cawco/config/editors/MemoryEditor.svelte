@@ -487,7 +487,7 @@
     </div>
     <h1
       data-slot="title"
-      class="type-title font-(family-name:--font-mono) tracking-title wrap-anywhere text-ink-strong"
+      class="type-title tracking-title wrap-anywhere text-ink-strong"
     >
       {label}
     </h1>
@@ -513,7 +513,7 @@
             formatDistanceToNow(new Date(saved.updatedAt))
           )}</span
         >
-        <span class="font-mono" title={saved.hash}
+        <span class="type-code" title={saved.hash}
           >{saved.hash.slice(0, 8)}</span
         >
       {:else}

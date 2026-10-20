@@ -207,7 +207,7 @@
   {#if limits}
     <section
       data-slot="well"
-      class="rounded-lg border border-border-well bg-surface-well px-space-6 py-space-5 max-phone:p-space-4"
+      class="border-t border-border-hairline pt-space-5"
     >
       <AtLimitBlock
         accounts={limitLanes}

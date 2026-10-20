@@ -61,9 +61,9 @@
 </script>
 
 {#if server.auth?.mode === "oauth"}
-  {#if signedIn}
-    <span class="type-meta text-ink-muted" role="status">{words.signedIn}</span>
-  {:else}
+  <!-- Signed in is the row's status, beside its name (the mcp page's
+       badge); the trailing edge keeps controls only. -->
+  {#if !signedIn}
     <Button
       disabled={!server.enabled}
       failed={problem !== null}

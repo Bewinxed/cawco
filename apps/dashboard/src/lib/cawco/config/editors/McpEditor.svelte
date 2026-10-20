@@ -262,7 +262,6 @@
     <TitleInput
       invalid={serverName !== "" && nameProblem !== undefined}
       label={words.nameLabel}
-      mono
       placeholder={words.namePlaceholder}
       bind:value={serverName}
     />
@@ -331,7 +330,6 @@
           <Field id="mcp-package" label={words.package}>
             <Input
               autocomplete="off"
-              face="mono"
               id="mcp-package"
               oninput={() => {
                 if (!named) {

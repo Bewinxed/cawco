@@ -6,6 +6,7 @@
   import { failureClause, hubRefusal } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { IconPhone } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
@@ -159,17 +160,20 @@
         <span
           data-slot="dot"
           aria-hidden="true"
-          class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-bad:bg-status-attn-glyph group-tone-bad:opacity-100 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+          class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-bad:bg-status-attn-glyph group-tone-bad:opacity-100 group-tone-ok:bg-status-done-glyph group-tone-ok:opacity-100"
           data-box
         ></span>
         <span>{line.text}</span>
       </p>
     {/each}
     {#if devices.length === 0}
-      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
-        Your devices will appear here. Open the CawCo app on your phone and
-        allow notifications to register it.
-      </p>
+      <!-- The way to start is on the phone itself (DESIGN.md, The Empty
+           Starts Work Rule: where Caw can't start, it says how by hand). -->
+      <EmptyState
+        icon={IconPhone}
+        line="Open the CawCo app on your phone and allow notifications to register it."
+        title="No phones yet"
+      />
     {:else}
       <ul class="flex flex-col">
         {#each devices as device (device.id)}

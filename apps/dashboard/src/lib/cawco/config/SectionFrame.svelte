@@ -106,16 +106,22 @@
     {@attach morph()}
     {@attach settled ? rememberCard(page.url.pathname) : undefined}
   >
+    <!-- The actions stand beside the title and its line, centred on the pair
+         (DESIGN.md, Layout), while the pair keeps 9rem beside them: its
+         line wraps first; only actions wider than that leave go under it. -->
     <header
       data-slot="head"
-      class="flex flex-wrap items-start justify-between gap-space-3"
+      class="flex flex-wrap items-center justify-between gap-space-3"
     >
-      <div class="flex min-w-0 flex-col gap-space-1">
-        <h1 data-slot="title" class="type-title tracking-title text-ink-strong">
+      <div class="flex min-w-36 grow basis-0 flex-col gap-space-1">
+        <h1
+          data-slot="title"
+          class="type-title tracking-title text-balance text-ink-strong"
+        >
           {title}
         </h1>
         {#if purpose}
-          <p class="flex flex-wrap items-center gap-space-2">
+          <p class="flex flex-wrap items-center gap-space-2 text-pretty">
             {purpose}
           </p>
         {/if}

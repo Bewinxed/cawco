@@ -293,7 +293,7 @@
     {:else if duplicate}
       <p class="type-meta text-status-fail-ink" in:appear>{duplicate}</p>
     {/if}
-    <ReadingWell>{ruleSentence(draft)}</ReadingWell>
+    <ReadingWell text={ruleSentence(draft)} />
     <SwitchField
       hint={draft.enabled
         ? "Watching every session it applies to"
@@ -361,7 +361,7 @@
           <Input
             aria-invalid={shown("pattern") ? "true" : undefined}
             autocomplete="off"
-            face="mono"
+            face={draft.matchKind === "regex" ? "mono" : undefined}
             id="rule-pattern"
             onblur={() => {
               touched.pattern = true;

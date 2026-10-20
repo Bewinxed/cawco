@@ -111,7 +111,10 @@
         <SectionRow
           hue={HUE}
           icon={IconHook}
-          meta="{template.blurb} {hookSentence(template.draft)}"
+          meta="{template.blurb} {hookSentence(template.draft).replaceAll(
+            '`',
+            ''
+          )}"
           name={template.title}
         >
           {#snippet trailing()}
@@ -159,7 +162,7 @@
           href="/config/hooks/{row.id}"
           hue={HUE}
           icon={IconHook}
-          meta="{row.event} · {hookSentence(row)}"
+          meta="{row.event} · {hookSentence(row).replaceAll('`', '')}"
           name={row.name}
           ontoggle={(next) => toggle(row, next)}
           toggling={busy[row.id] === true}

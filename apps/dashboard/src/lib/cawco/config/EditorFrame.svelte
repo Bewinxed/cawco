@@ -140,15 +140,17 @@
     onsubmit();
   }}
 >
+  <!-- The page scrolls as a section's does (SectionFrame): one raised card
+       on the recess, filling the page, so the card stands at the same
+       height on a list and in its editor. The commit row is the card's own
+       foot, held at the page's foot while the fields run on under it. -->
   <div
-    class="flex flex-auto flex-col min-h-0 overflow-y-auto pt-space-2 px-space-5 pb-space-5 max-phone:pb-(--scroll-pb)"
-    data-safe-bottom
-    style:--scroll-pb={"calc(var(--c-btn-h-sm) + var(--space-8) + var(--safe-bottom))"}
+    class="flex flex-auto flex-col min-h-0 overflow-y-auto px-space-5 py-space-2"
     bind:this={scroller}
   >
     <div
       data-slot="body"
-      class="flex grow shrink-0 basis-auto flex-col gap-space-6 max-w-c-config-max-w py-space-6 px-space-7 rounded-lg bg-surface-raised"
+      class="flex grow shrink-0 basis-auto flex-col gap-space-6 max-w-c-config-max-w pt-space-6 px-space-7 rounded-lg bg-surface-raised"
       bind:this={body}
       style:min-height={card === null ? undefined : `${card}px`}
       {@attach cawco.hub === "connected" && !settling
@@ -236,20 +238,20 @@
           </div>
         {/if}
       </div>
+      <EditorFooter
+        body={scroller}
+        {canSave}
+        {deleteLabel}
+        {deleting}
+        {down}
+        {failed}
+        {oncancel}
+        {ondelete}
+        {question}
+        {result}
+        {saveLabel}
+        {saving}
+      />
     </div>
   </div>
-  <EditorFooter
-    body={scroller}
-    {canSave}
-    {deleteLabel}
-    {deleting}
-    {down}
-    {failed}
-    {oncancel}
-    {ondelete}
-    {question}
-    {result}
-    {saveLabel}
-    {saving}
-  />
 </form>

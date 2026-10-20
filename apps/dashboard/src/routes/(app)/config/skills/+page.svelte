@@ -43,6 +43,7 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
@@ -381,9 +382,7 @@
   <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={HUE} icon={IconBolt} label={words.skills} />
     {#if skills.length === 0}
-      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
-        {words.noSkills}
-      </p>
+      <EmptyState icon={IconBolt} line={words.noSkills} title="No skills yet" />
     {:else}
       <RowList label={words.skills}>
         {#each skills as row (row.name)}
@@ -485,9 +484,11 @@
   >
     <SectionHeader hue={HUE} icon={IconShop} label={words.marketplaces} />
     {#if marketplaces.length === 0}
-      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
-        {words.noMarketplaces}
-      </p>
+      <EmptyState
+        icon={IconShop}
+        line={words.noMarketplaces}
+        title="No marketplaces yet"
+      />
     {:else}
       <RowList label={words.marketplaces}>
         {#each marketplaces as row (row.name)}
@@ -636,9 +637,11 @@
   >
     <SectionHeader hue={HUE} icon={IconLayers} label={words.plugins} />
     {#if plugins.length === 0}
-      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
-        {words.noPlugins}
-      </p>
+      <EmptyState
+        icon={IconLayers}
+        line={words.noPlugins}
+        title="No plugins yet"
+      />
     {:else}
       <RowList label={words.plugins}>
         {#each plugins as row (row.id)}

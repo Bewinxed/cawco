@@ -188,7 +188,6 @@
       disabled={name !== null}
       invalid={Boolean(problemFor("name") || duplicate)}
       label={words.nameLabel}
-      mono
       onblur={() => {
         touched.name = true;
       }}
@@ -287,7 +286,6 @@
     <Field id="type-skills" label={words.skills}>
       <Input
         autocomplete="off"
-        face="mono"
         id="type-skills"
         placeholder={words.skillsPlaceholder}
         spellcheck="false"
@@ -297,7 +295,6 @@
     <Field id="type-deny" label={words.denied}>
       <Input
         autocomplete="off"
-        face="mono"
         id="type-deny"
         placeholder={words.deniedPlaceholder}
         spellcheck="false"

@@ -504,7 +504,7 @@
     {:else if duplicate}
       <p class="type-meta text-status-fail-ink" in:appear>{duplicate}</p>
     {/if}
-    <ReadingWell>{hookSentence(draft)}</ReadingWell>
+    <ReadingWell text={hookSentence(draft)} />
     <SwitchField
       hint={draft.enabled
         ? "Registered on every machine it applies to"
@@ -561,13 +561,12 @@
           problem={shown("matcher")}
         >
           {#snippet hint()}
-            Empty or <span class="font-mono">*</span> matches every value. The tester
+            Empty or <span class="type-code">*</span> matches every value. The tester
             below shows what this one actually does.
           {/snippet}
           <Input
             aria-invalid={shown("matcher") ? "true" : undefined}
             autocomplete="off"
-            face="mono"
             id="hook-matcher"
             onblur={() => {
               touched.matcher = true;
@@ -811,7 +810,6 @@
       >
         <Input
           aria-invalid={shown("timeout") ? "true" : undefined}
-          face="mono"
           id="hook-timeout"
           min="1"
           oninput={(event) => {
