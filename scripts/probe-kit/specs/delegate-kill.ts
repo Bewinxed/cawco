@@ -276,7 +276,7 @@ const run = async (kit: Kit) => {
     check(
       "i2: the interrupted delegate has had no new turn, and its item is running, held",
       woke.length === 0 && item?.state === "running" && item.held_at !== null,
-      `its requests since the interrupt: ${lasts(woke)}; its item: ${JSON.stringify(item)}`
+      `its requests since the interrupt, each by the end of what it read: ${woke.map((seen) => JSON.stringify(seen.all.slice(-400))).join("; ") || "none"}; its item: ${JSON.stringify(item)}`
     );
 
     // i3

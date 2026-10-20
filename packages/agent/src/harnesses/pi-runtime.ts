@@ -128,10 +128,13 @@ class PiShells {
   readonly #foreground = new Map<string, () => void>();
   /** The moved commands still running, by task id. */
   readonly #background = new Map<string, AbortController>();
+  /** The moved commands {@link stopAll} ended, until each one's end is said. */
+  readonly #stopped = new Set<string>();
   /** Said when a command is moved, and when a moved one ends. */
   report: {
     moved: (taskId: string, command: string) => void;
-    ended: (end: BackgroundShellEnd, output: string) => void;
+    /** `stopped`: the session's own interrupt ended it ({@link stopAll}), so its end wakes nothing. */
+    ended: (end: BackgroundShellEnd, output: string, stopped: boolean) => void;
   } = {
     moved: () => undefined,
     ended: () => undefined,
@@ -150,9 +153,10 @@ class PiShells {
     return moves.length;
   }
 
-  /** Ends the moved commands still running. */
+  /** Ends the moved commands still running; each one's end is said as stopped. */
   stopAll(): void {
-    for (const own of this.#background.values()) {
+    for (const [taskId, own] of this.#background) {
+      this.#stopped.add(taskId);
       own.abort();
     }
   }
@@ -204,7 +208,11 @@ class PiShells {
           ({ exitCode }) => {
             settled();
             if (moved) {
-              this.report.ended(shellEnd(taskId, command, { exitCode }), tail);
+              this.report.ended(
+                shellEnd(taskId, command, { exitCode }),
+                tail,
+                this.#stopped.delete(taskId)
+              );
             } else {
               resolve({ exitCode });
             }
@@ -212,7 +220,11 @@ class PiShells {
           (error: unknown) => {
             settled();
             if (moved) {
-              this.report.ended(shellEnd(taskId, command, { error }), tail);
+              this.report.ended(
+                shellEnd(taskId, command, { error }),
+                tail,
+                this.#stopped.delete(taskId)
+              );
             } else {
               reject(error);
             }
@@ -799,7 +811,7 @@ class PiSession implements HarnessSession {
           task_id: taskId,
           description: command,
         }),
-      ended: (end, output) => this.#shellEnded(end, output),
+      ended: (end, output, stopped) => this.#shellEnded(end, output, stopped),
     };
     this.sessionId = session.sessionId;
     this.#answers.watch(session.agent);
@@ -1087,9 +1099,11 @@ class PiSession implements HarnessSession {
    * ({@link BACKGROUND_SHELL}), which pi hands the model as a user message
    * (messages.js `case "custom"`), at the running turn's next boundary or as
    * a turn of its own; and to the transcript as its `task_notification` row,
-   * the one a stored read gives it (pi-services).
+   * the one a stored read gives it (pi-services). One the session's own
+   * interrupt `stopped` starts no turn: the model reads it with its next one
+   * (pi's `deliverAs: "nextTurn"`), and an interrupted session stays idle.
    */
-  #shellEnded(end: BackgroundShellEnd, output: string): void {
+  #shellEnded(end: BackgroundShellEnd, output: string, stopped: boolean): void {
     this.#ctx.frame({
       type: "system",
       subtype: "task_notification",
@@ -1106,7 +1120,9 @@ class PiSession implements HarnessSession {
           display: true,
           details: end,
         },
-        { triggerTurn: true, deliverAs: "steer" }
+        stopped
+          ? { deliverAs: "nextTurn" }
+          : { triggerTurn: true, deliverAs: "steer" }
       )
       .catch((error: unknown) =>
         console.warn(
@@ -1183,7 +1199,7 @@ class PiSession implements HarnessSession {
             };
       }
       case CONTROL_INTERRUPT:
-        await this.#session.abort();
+        await this.interrupt();
         return undefined;
       case CONTROL_SET_MODEL: {
         await this.#session.setModel(
@@ -1229,7 +1245,14 @@ class PiSession implements HarnessSession {
   withdrawPermission(requestId: string, message: string): void {
     this.#gate?.withdraw(requestId, message);
   }
+  /**
+   * Cuts the turn and ends the commands it moved to the background, each
+   * end said for the next turn and waking none ({@link PiShells.stopAll}):
+   * the agent ends what they left in the workspace (session.ts `#endWork`),
+   * and the interrupted session stays idle.
+   */
   async interrupt(): Promise<void> {
+    this.#shells.stopAll();
     await this.#session.abort();
   }
   async stop(): Promise<void> {
