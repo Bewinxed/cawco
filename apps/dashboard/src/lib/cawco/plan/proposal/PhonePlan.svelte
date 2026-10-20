@@ -129,7 +129,7 @@
           <!-- Where the list runs on past the sheet's foot, it fades there
              (the house edge fade) rather than cutting a line in half. -->
           <div
-            class="kit-sheet-scroll kit-edge-fade-block min-h-0 overflow-y-auto overscroll-contain"
+            class="kit-sheet-scroll kit-edge-fade-block min-h-0 flex-1 overflow-y-auto overscroll-contain"
             data-slot="plan-scroll"
             {@attach holdOn(focus)}
             {@attach capEdgeFades}

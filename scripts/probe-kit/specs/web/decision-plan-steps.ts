@@ -294,6 +294,47 @@ function todosIn() {
 }
 
 /**
+ * Where each drawing's sheet closes under its plan: the space from the
+ * plan's last row to the sheet's inner foot, and what the sheet's own
+ * bottom padding is there (each box's between the plan and the sheet, its
+ * padding and border under what it holds). In the page.
+ */
+function footsIn() {
+  return [
+    ...document.querySelectorAll<HTMLElement>('[data-slot="plan"]'),
+  ].flatMap((plan) => {
+    const sheet = plan.closest<HTMLElement>(
+      '[data-slot="side-card"], [data-slot="phone-screen"]'
+    );
+    if (!sheet) {
+      return [];
+    }
+    const zoom = sheet.currentCSSZoom;
+    let padding = 0;
+    for (
+      let at: HTMLElement | null = plan.parentElement;
+      at && sheet.contains(at);
+      at = at.parentElement
+    ) {
+      const style = getComputedStyle(at);
+      padding +=
+        Number.parseFloat(style.paddingBottom) +
+        (at === sheet ? 0 : Number.parseFloat(style.borderBottomWidth));
+    }
+    const foot =
+      sheet.getBoundingClientRect().bottom -
+      Number.parseFloat(getComputedStyle(sheet).borderBottomWidth) * zoom;
+    const space = (foot - plan.getBoundingClientRect().bottom) / zoom;
+    return [
+      {
+        space: Math.round(space * 10) / 10,
+        padding: Math.round(padding * 10) / 10,
+      },
+    ];
+  });
+}
+
+/**
  * Where each plan's top-level step rows stand their status tiles and their
  * words: every x each takes (Lanes' bands of side-by-side steps aside, a
  * column of their own by design; delegates and sub-steps nested under a
@@ -647,6 +688,7 @@ type Facts = ReturnType<typeof frameFacts> & {
   pulseInk: ReturnType<typeof pulseInkIn>;
   columns: ReturnType<typeof columnsIn>;
   todos: ReturnType<typeof todosIn>;
+  foots: ReturnType<typeof footsIn>;
   acts: ReturnType<typeof actsIn>;
   cut: string[];
 };
@@ -732,6 +774,7 @@ async function readFrames(page: Page): Promise<Map<string, Facts>> {
         pulseInk: await frame.evaluate(pulseInkIn),
         columns: await frame.evaluate(columnsIn),
         todos: await frame.evaluate(todosIn),
+        foots: await frame.evaluate(footsIn),
         acts: await frame.evaluate(actsIn),
         cut: [
           ...(await frame.evaluate(sideCutIn)),
@@ -800,6 +843,15 @@ function frameChecks(
     todos.length >= WAYS.length &&
       todos.every((one) => one.total > 0 && one.missing.length === 0),
     JSON.stringify(todos.filter((one) => one.missing.length > 0))
+  );
+  const foots = [...facts.entries()].flatMap(([key, one]) =>
+    one.foots.map((foot) => ({ key: key.replace(".stories.ts", ""), ...foot }))
+  );
+  check(
+    `${leg}: every drawing's sheet closes on its plan's last row, the space under it the sheet's own bottom padding (${foots.map((one) => `${one.key} ${one.space}px for ${one.padding}px`).join(", ")})`,
+    foots.length >= WAYS.length &&
+      foots.every((one) => Math.abs(one.space - one.padding) <= 1),
+    JSON.stringify(foots)
   );
   const acts = WAYS.flatMap((one) =>
     (facts.get(way(one))?.acts ?? []).map((act) => ({ way: one, ...act }))

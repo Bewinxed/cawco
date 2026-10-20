@@ -16,14 +16,18 @@
     $props();
 </script>
 
-<!-- No padding on the track: padding on a 0fr row leaves a strip. -->
+<!-- No padding on the track: padding on a 0fr row leaves a strip. The
+     clip is its content's containing block (`relative`): a box placed out
+     of the flow inside a shut fold (a field's screen-reader label) stood
+     at its place in the hidden content, past the clip, and the list
+     scrolled on into blank paper by it. -->
 <div
   class="group/fold grid grid-rows-shut transition-[grid-template-rows] duration-(--dur-exit) ease-out data-open:grid-rows-open motion-safe:data-open:duration-(--dur-panel) motion-reduce:transition-off"
   data-open={open || undefined}
   data-slot="fold-body"
   {id}
 >
-  <div class="min-h-0 overflow-hidden" inert={!open}>
+  <div class="relative min-h-0 overflow-hidden" inert={!open}>
     <div
       class="opacity-0 transition-[opacity] duration-(--dur-exit) ease-out group-data-open/fold:opacity-100 group-data-open/fold:duration-(--dur-panel)"
     >
