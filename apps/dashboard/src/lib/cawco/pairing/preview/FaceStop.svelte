@@ -6,7 +6,7 @@
 <script lang="ts">
   /**
    * A denied face in the key: the real PairingQr with the face as its head,
-   * at the size the screen draws it, and the same head enlarged under it.
+   * at the size the screen draws it, and the same head enlarged beside it.
    * The faces are the drawings the Caw takes page made, the marks moved
    * level (one line, one size). Preview only, until one is picked and goes
    * into the app's icons.
@@ -23,12 +23,13 @@
   const payload = verification(FIXTURE.hub, FIXTURE.code);
 </script>
 
-<div
-  class="grid w-[var(--c-pair-w)] max-w-full justify-items-center gap-[var(--space-3)]"
->
-  <PairingQr act="still" centre={{ key: face, src }} {payload} />
+<!-- One compact frame: the key at its size, the head enlarged beside it. -->
+<div class="flex items-center justify-center gap-[var(--space-5)]">
+  <div class="w-[var(--c-pair-w)] shrink-0">
+    <PairingQr act="still" centre={{ key: face, src }} {payload} />
+  </div>
   <img
-    class="size-32 rounded-[22%] object-cover"
+    class="size-32 shrink-0 rounded-[22%] object-cover"
     alt=""
     height="128"
     {src}
