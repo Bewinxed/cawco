@@ -737,7 +737,7 @@
   id={`decision-${id}`}
 >
   <header
-    class="flex min-w-0 flex-wrap items-start gap-x-space-3 gap-y-space-2"
+    class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2"
     data-slot="decision-head"
   >
     <h2
@@ -746,13 +746,13 @@
       {question}
     </h2>
     {#if decided || returning}
-      <!-- The decided line: the chosen options' chips, then Change, centred on the question's first line. Opening, the chips fly home and Change fades where it stood; with reduced motion the chips fade too. -->
+      <!-- The decided line: the chosen options' chips, then Change, centred on the question's line beside it, or on a row of its own under it where the head wraps. Opening, the chips fly home and Change fades where it stood; with reduced motion the chips fade too. -->
       <div
-        class="mark-cell grid-rows-1 type-title"
+        class="flex min-w-0 max-w-full"
         data-leaves
         data-leaving={decided ? undefined : ""}
       >
-        <div class="flex items-center gap-space-2">
+        <div class="flex min-w-0 max-w-full flex-wrap items-center gap-space-2">
           <!-- biome-ignore lint/a11y/useSemanticElements: a mark of the pick, named for a screen reader; no control is inside it. -->
           <span
             aria-label={`Decided: ${decidedLine}`}

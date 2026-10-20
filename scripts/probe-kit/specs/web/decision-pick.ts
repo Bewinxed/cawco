@@ -73,6 +73,7 @@ import type { Locator, Page } from "playwright-core";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import { Clock, type Run } from "../../anim";
 import { CAWCO_BRIDGE, startDecisionStage } from "../../decision-embeds";
+import { traceMain } from "../../frames";
 import { type Kit, type Spec, settle } from "../../kit";
 
 const NAME = "pick";
@@ -2235,6 +2236,67 @@ async function coralLeg(
   await page.close();
 }
 
+/**
+ * The fold's frame cost: a pointer's Continue on the path card traced on
+ * the page's main thread (DevTools timeline), each task in the fold's 400ms
+ * with its layout, its style passes and its frame's other rendering (paint,
+ * composite and the rest), ms. Held to the 60Hz frame (16.7ms).
+ */
+async function costLeg(
+  kit: Kit,
+  url: string,
+  view: View,
+  theme: (typeof LEGS)[number]["theme"],
+  label: string
+) {
+  const page = await kit.page(view, { theme, init: [CAWCO_BRIDGE] });
+  await page.goto(url, { waitUntil: "load" });
+  await page.waitForFunction(
+    () => document.querySelectorAll("[data-slot=diagram] svg").length >= 2,
+    undefined,
+    { timeout: 30_000 }
+  );
+  await settle(page, 600);
+  await pickIn(page, "path", "direct", view);
+  await toContinue(page, "path");
+  const traced = await traceMain(
+    page,
+    async () => {
+      await page.evaluate(() => performance.mark("fold"));
+      await pressOn(continueOf(page, "path"), view);
+      await settle(page, 700);
+    },
+    { passes: true }
+  );
+  const start = traced.marks.find((one) => one.name === "fold")?.at ?? 0;
+  const frames = traced.tasks
+    .filter((task) => task.at >= start && task.at <= start + 500_000)
+    .map((task) => {
+      const style = task.passes
+        .filter((pass) => pass.name !== "Layout")
+        .reduce((sum, pass) => sum + pass.ms, 0);
+      const rendering = task.rendering.reduce((sum, [, ms]) => sum + ms, 0);
+      return {
+        layout: Math.round(task.layoutMs * 100) / 100,
+        style: Math.round(style * 100) / 100,
+        rendering: Math.round(rendering * 100) / 100,
+        total: Math.round((task.end - task.at) / 10) / 100,
+        top: task.rendering.slice(0, 3),
+      };
+    });
+  const worst = Math.max(0, ...frames.map((one) => one.total));
+  const median = (values: number[]) =>
+    values.length
+      ? values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)]
+      : 0;
+  kit.check(
+    `${label}: the fold's frames, traced: ${frames.length} tasks over its 400ms, layout ${median(frames.map((one) => one.layout))}ms, style ${median(frames.map((one) => one.style))}ms, rendering (paint, composite and the rest) ${median(frames.map((one) => one.rendering))}ms at the median, the longest task ${worst}ms, under the 16.7ms frame`,
+    frames.length > 0 && worst < 16.7,
+    JSON.stringify(frames)
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "decision-pick",
   run: async (kit: Kit) => {
@@ -2262,6 +2324,7 @@ const spec: Spec = {
       for (const { view, theme, label } of LEGS) {
         const url = stage.pageUrl(NAME, theme);
         await leg(kit, url, view, theme, label);
+        await costLeg(kit, url, view, theme, label);
         await coralLeg(kit, url, view, theme, label);
         await keyLeg(kit, url, view, theme, label);
         await stillLeg(kit, url, view, theme, label);

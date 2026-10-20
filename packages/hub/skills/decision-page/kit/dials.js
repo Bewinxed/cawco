@@ -102,7 +102,7 @@
   };
 
   /** The vanilla build, its store kept in CawCo's. */
-  const kept = () => {
+  const keptKit = () => {
     if (!window.DialKit) {
       throw new Error(
         "cawcoDials needs DialKit: the page loads vendor/dialkit first."
@@ -116,7 +116,7 @@
   let rooted = false;
   let docked = false;
   const kit = () => {
-    const dialKit = kept();
+    const dialKit = keptKit();
     if (!rooted) {
       rooted = true;
       const dock = document.querySelector("[data-cawco-dials]");
@@ -139,7 +139,7 @@
    * change). Returns the panel's controller and the root it drew in.
    */
   window.cawcoDialsIn = (target, name, config, options = {}) => {
-    const dialKit = kept();
+    const dialKit = keptKit();
     const { theme = "light", ...rest } = options;
     const panel = dialKit.createDialKit(name, config, rest);
     const root = document.createElement("div");

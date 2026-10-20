@@ -93,6 +93,7 @@ const kept = (program: string) => `${program.trim()}\n`;
 
 const programOf = (ids: {
   canvas: string;
+  tall: string;
   image: string;
   mockup: string;
   site: string;
@@ -100,7 +101,7 @@ const programOf = (ids: {
 stack = Decision("stack", "Which stack does the launch page use?", [svelte, astro], "Today: the landing is plain HTML.", [shot, flow])
 svelte = Option("svelte", "SvelteKit", "The dashboard's own stack.", true, [], "Heavier than the plain page it replaces.")
 astro = Option("astro", "Astro", "Content first, islands where needed.", false, [seq], "A second stack to keep up.")
-host = Decision("host", "Where does the page run?", [hub, edge], "It ships with the hub today.", [sketch, tune], ["stack"])
+host = Decision("host", "Where does the page run?", [hub, edge], "It ships with the hub today.", [sketch, tallSketch, tune], ["stack"])
 hub = Option("hub", "The hub", "Nothing new to run.", true, [], "Readers far from the hub wait longer.")
 edge = Option("edge", "An edge host", "Closer to readers.", false, [motion], "One more host to run.")
 later = Section("Later", [plan])
@@ -114,6 +115,7 @@ flow = Diagram("flowchart LR\\nVisit[Visit] --> Read[Read] --> Join[Sign up]", "
 seq = Diagram("sequenceDiagram\\nReader->>Hub: open the page\\nHub-->>Reader: the page, live")
 gantt = Diagram("gantt\\ntitle Launch\\ndateFormat YYYY-MM-DD\\nsection Build\\nPage :a1, 2026-10-20, 5d\\nShip :after a1, 2d", "The plan")
 sketch = Canvas("${ids.canvas}", "The rough layout")
+tallSketch = Canvas("${ids.tall}", "The steps, top to bottom")
 motion = Preview("${ids.mockup}", "How it moves")
 tune = Dials("Card", {radius: [12, 0, 32], accent: "#e65d46"})`;
 
@@ -333,6 +335,73 @@ const overflowIn = (frame: Frame) =>
     };
   });
 
+/**
+ * Each Canvas piece's frame against its drawing (DESIGN.md item 12: "a
+ * canvas is its own box, width-fitted, capped at 80vb"): its box, its well's
+ * room and the cap, and the drawing's own bounds read from the canvas's doc
+ * in its frame, padded by its fitted view's 32px as the canvas host pads them
+ * (canvas-host scene.ts `sceneBox`).
+ */
+const canvasBoxes = (frame: Frame) =>
+  frame.evaluate(() =>
+    [
+      ...document.querySelectorAll<HTMLIFrameElement>(
+        'iframe[src*="/__cawco/canvas/"]'
+      ),
+    ].map((el) => {
+      const stage = el.closest("[data-slot=media-stage]");
+      const s = stage?.getBoundingClientRect();
+      const f = el.getBoundingClientRect();
+      let scene: { width: number; height: number } | null = null;
+      try {
+        const doc = (
+          el.contentWindow as unknown as {
+            cawcoArtifact?: {
+              doc: {
+                getArray: (name: string) => {
+                  toArray: () => { get: (key: string) => unknown }[];
+                };
+              };
+            };
+          }
+        )?.cawcoArtifact?.doc;
+        const els = (doc?.getArray("elements").toArray() ?? [])
+          .map(
+            (one) =>
+              one.get("el") as {
+                height: number;
+                isDeleted?: boolean;
+                width: number;
+                x: number;
+                y: number;
+              }
+          )
+          .filter((one) => one && !one.isDeleted);
+        if (els.length > 0) {
+          const left = Math.min(...els.map((one) => one.x));
+          const top = Math.min(...els.map((one) => one.y));
+          const right = Math.max(...els.map((one) => one.x + one.width));
+          const bottom = Math.max(...els.map((one) => one.y + one.height));
+          scene = { width: right - left, height: bottom - top };
+        }
+      } catch {
+        scene = null;
+      }
+      return {
+        caption:
+          el
+            .closest("figure")
+            ?.querySelector("[data-slot=media-caption]")
+            ?.textContent?.trim() ?? "",
+        box: { w: f.width, h: f.height },
+        room: s?.width ?? 0,
+        cap: Number.parseFloat(getComputedStyle(el).maxBlockSize),
+        off: s ? Math.abs(s.left + s.width / 2 - (f.left + f.width / 2)) : 99,
+        scene,
+      };
+    })
+  );
+
 /** Each media piece as the frame draws it. */
 const mediaIn = (frame: Frame) =>
   frame.evaluate(async () => {
@@ -412,7 +481,7 @@ const wordsAt = async (page: Page, src: string): Promise<string> => {
 const diagramInk = (frame: Frame) =>
   frame.evaluate(() => {
     const probe = document.createElement("span");
-    probe.style.color = "var(--surface-page)";
+    probe.style.color = "var(--surface-raised)";
     document.body.append(probe);
     const surface = getComputedStyle(probe).color;
     probe.style.color = "var(--ink-strong)";
@@ -554,6 +623,39 @@ const publish = async (
     drew.ok,
     (await drew.text()).slice(0, 300)
   );
+  // A second drawing of the other shape: taller than it is wide, drawn once
+  // its screen is up in the panel, as the first.
+  const tall = await make<{ id: string }>({
+    kind: "canvas",
+    does: "draw",
+    ask: "Draw the steps",
+    name: "launch-steps",
+  });
+  await until(
+    "the tall canvas's screen in the panel",
+    async () =>
+      countIn(
+        await frameAt(desk, 'iframe[title="Canvas"]'),
+        ".excalidraw canvas"
+      ),
+    (count) => count > 0,
+    120_000
+  );
+  const drewTall = await fetch(
+    `${fleet.base}/api/instances/${writer}/artifacts/${tall.id}`,
+    {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mermaid: "flowchart TD\nWrite --> Check --> Merge --> Ship",
+      }),
+    }
+  );
+  kit.check(
+    "the tall canvas is drawn from Mermaid",
+    drewTall.ok,
+    (await drewTall.text()).slice(0, 300)
+  );
   const mockup = await make<{ id: string }>({
     kind: "page",
     does: "judge",
@@ -587,6 +689,7 @@ const publish = async (
   });
   const program = programOf({
     canvas: canvas.id,
+    tall: tall.id,
     mockup: mockup.id,
     image,
     site: site.id,
@@ -658,6 +761,46 @@ const mediaLeg = async (
   ).catch(() => undefined);
   await settle(shown, 400);
   const media = await mediaIn(frame);
+  const canvases = await until(
+    `${leg}: each canvas sized from its drawing`,
+    () => canvasBoxes(frame),
+    (all) =>
+      all.length === 2 && all.every((one) => one.box.h > 0 && !!one.scene),
+    30_000
+  ).catch(() => canvasBoxes(frame));
+  // The frame the canvas's own fit fills: the drawing at the room's width
+  // less its 32px each side, the margin round it; past the cap, the cap's
+  // height and the width it allows.
+  const fitted = (one: (typeof canvases)[number]) => {
+    if (!one.scene) {
+      return null;
+    }
+    const m = 32;
+    const tall =
+      2 * m + (one.scene.height * (one.room - 2 * m)) / one.scene.width;
+    return tall <= one.cap
+      ? { w: one.room, h: tall }
+      : {
+          w: 2 * m + (one.scene.width * (one.cap - 2 * m)) / one.scene.height,
+          h: one.cap,
+        };
+  };
+  const shapes = canvases.map((one) => ({ ...one, want: fitted(one) }));
+  kit.check(
+    `(a) ${leg}: each canvas is its drawing's own box, width-fitted under the 80vb cap and centred in its well, a wide one and a tall one (${shapes.map((one) => `“${one.caption}” ${Math.round(one.box.w)}×${Math.round(one.box.h)}, its drawing ${one.scene ? `${Math.round(one.scene.width)}×${Math.round(one.scene.height)}` : "unread"}`).join("; ")})`,
+    shapes.length === 2 &&
+      shapes.some((one) => one.box.w > one.box.h) &&
+      shapes.some((one) => one.box.h > one.box.w) &&
+      shapes.every(
+        (one) =>
+          !!one.want &&
+          Math.abs(one.box.w - one.want.w) <= 1 &&
+          Math.abs(one.box.h - one.want.h) <= 1 &&
+          one.box.h <= one.cap + 0.5 &&
+          one.off <= 0.5
+      ),
+    JSON.stringify(shapes)
+  );
   const site = await until(
     `${leg}: the dev server live in the plan card`,
     () => wordsAt(shown, media.site),
@@ -728,7 +871,7 @@ const mediaLeg = async (
   const types = media.diagrams.map(typeOf);
   const ink = await diagramInk(frame);
   kit.check(
-    `(d) ${leg}: a flowchart, a sequence diagram and a Gantt chart drawn by Pele, its nodes on surface-page and its words in ink-strong`,
+    `(d) ${leg}: a flowchart, a sequence diagram and a Gantt chart drawn by Pele, its nodes raised on surface-raised (DESIGN.md: content sits raised on its well) and its words in ink-strong`,
     JSON.stringify(types.toSorted()) ===
       JSON.stringify(["flowchart", "gantt", "sequence"]) &&
       ink.fill === ink.surface &&
@@ -1193,16 +1336,21 @@ const insertAhead = async (on: On, first: string) => {
     return {
       first: document.querySelector("article[data-slot=decision]")?.id,
       astro: astro?.hasAttribute("data-cawco-picked"),
+      // A program's option is its group's radio: its pick is aria-checked,
+      // and the overlay writes no aria-pressed on it (preview-overlay page.ts
+      // \`reflect\`).
+      checked: astro?.getAttribute("aria-checked"),
       pressed: astro?.getAttribute("aria-pressed"),
       stack: stack && { top: stack.top, bottom: stack.bottom },
       disc: disc && { x: disc.x + disc.width / 2, y: disc.y + disc.height / 2 },
     };
   });
   kit.check(
-    "(b) after the insert the new card leads, the pin stands on the stack card, and astro is still marked picked",
+    "(b) after the insert the new card leads, the pin stands on the stack card, and astro is still marked picked (aria-checked, no aria-pressed on a radio)",
     placed.first === "decision-audience" &&
       placed.astro === true &&
-      placed.pressed === "true" &&
+      placed.checked === "true" &&
+      placed.pressed === null &&
       !!placed.stack &&
       !!placed.disc &&
       placed.disc.y >= placed.stack.top - 16 &&
@@ -1724,15 +1872,16 @@ const fitLeg = async (on: On, theme: "light" | "dark") => {
   );
   const wide = await pickRead(frame, "wide");
   const plain = await pickRead(frame, "plain");
+  // A program's option is its group's radio (ui/option-group).
   const named = await frame
-    .getByRole("button", { name: FIT_LABEL, exact: true })
+    .getByRole("radio", { name: FIT_LABEL, exact: true })
     .count();
   kit.check(
-    `(g) 320 ${theme}: a pick is named by its label alone, its line, cost and Recommended its description`,
+    `(g) 320 ${theme}: a pick is named by its label alone (a radio of its card's group), its line, cost and Recommended its description`,
     named === 1 &&
-      wide.aria.startsWith(`- button "${FIT_LABEL}"`) &&
+      wide.aria.startsWith(`- radio "${FIT_LABEL}"`) &&
       wide.description === `Closer to readers. Cost: ${FIT_COST} Recommended` &&
-      plain.aria.startsWith('- button "The hub"') &&
+      plain.aria.startsWith('- radio "The hub"') &&
       plain.description ===
         "Nothing new to run. Cost: Readers far from the hub wait longer.",
     JSON.stringify({ named, wide, plain })

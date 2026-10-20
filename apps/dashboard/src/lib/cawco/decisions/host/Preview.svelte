@@ -175,49 +175,46 @@
       title={held.name}
     ></iframe>
   {:else if held?.embed}
-    {#if ready}
-      <!-- A screen keeps its 16:10 under the cap; a component canvas that said its height is as tall as its frames, and the page scrolls past it. -->
-      <iframe
-        bind:this={frame}
-        class={[
-          "block w-full rounded-xs border-0 bg-surface-page",
-          tall === null && "aspect-16/10 max-h-c-media-max-h",
-        ]}
-        data-shape={tall === null ? "screen" : "drawn"}
-        data-slot="embed"
-        src={ready}
-        style:block-size={tall === null ? undefined : `${tall}px`}
-        title={held.name}
-      ></iframe>
-    {:else}
-      <div class="relative w-full">
-        {#if !waited}
-          <Skeleton class="w-full" height="picture" />
-        {/if}
-        <div
+    <!-- One box for the frame and its wait: the frame once its origin serves, else the skeleton at a screen's shape, past the wait a screen's room; the live region stands over it from the start, its words only once the wait has lasted. -->
+    <div class="relative w-full">
+      {#if ready}
+        <!-- A screen keeps its 16:10 under the cap; a component canvas that said its height is as tall as its frames, and the page scrolls past it. -->
+        <iframe
+          bind:this={frame}
           class={[
-            "grid content-center justify-items-center gap-space-2",
-            waited ? "aspect-16/10" : "absolute inset-0",
+            "block w-full rounded-xs border-0 bg-surface-page",
+            tall === null && "aspect-16/10 max-h-c-media-max-h",
           ]}
+          data-shape={tall === null ? "screen" : "drawn"}
+          data-slot="embed"
+          src={ready}
+          style:block-size={tall === null ? undefined : `${tall}px`}
+          title={held.name}
+        ></iframe>
+      {:else if waited}
+        <div class="aspect-16/10 w-full"></div>
+      {:else}
+        <Skeleton class="w-full" height="picture" />
+      {/if}
+      <div
+        class="pointer-events-none absolute inset-0 grid content-center justify-items-center gap-space-2"
+      >
+        {#if slow && !waited && !ready}
+          <img
+            alt=""
+            height="40"
+            src={scheme.now === "dark" ? cawDark : cawLight}
+            width="40"
+          />
+        {/if}
+        <p
+          class="type-meta text-center text-ink-muted wrap-anywhere"
+          role="status"
         >
-          {#if slow && !waited}
-            <img
-              alt=""
-              height="40"
-              src={scheme.now === "dark" ? cawDark : cawLight}
-              width="40"
-            />
-          {/if}
-          <!-- The live region stands from the start; its words come only once the wait has lasted. -->
-          <p
-            class="type-meta text-center text-ink-muted wrap-anywhere"
-            role="status"
-          >
-            {waitLine}
-          </p>
-        </div>
+          {waitLine}
+        </p>
       </div>
-    {/if}
+    </div>
   {:else}
     <p
       data-slot="media-gone"

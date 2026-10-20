@@ -539,6 +539,11 @@ function readDiagrams() {
               ) / 10,
             ]
           : [99, 99],
+      // Too wide for its well at its words' floor: it scrolls sideways under
+      // the house edge fade.
+      faded:
+        !!stage?.classList.contains("kit-edge-fade") &&
+        getComputedStyle(stage).overflowX === "auto",
       scrolls: [
         (stage?.scrollWidth ?? 0) - (stage?.clientWidth ?? 0),
         (well as HTMLElement).scrollHeight - (well as HTMLElement).clientHeight,
@@ -981,7 +986,7 @@ const spec: Spec = {
               chain.off.every((o) => o <= 0.5)
           );
           kit.check(
-            `${leg}: a diagram draws in the house's look: a node raised with the control's edge at 8px, its name in the label role in strong ink; an edge 1px in muted ink, its words in meta; a subgraph the recess with a hairline, its title in the label role, muted (${JSON.stringify(staged && { off: staged.off, node: staged.node, label: staged.label, edge: staged.edge, edgeWords: staged.edgeWords, cluster: staged.cluster, clusterTitle: staged.clusterTitle, want })})`,
+            `${leg}: a diagram draws in the house's look: a node raised with the control's edge at 8px, its name in the label role in strong ink; an edge 1px in muted ink, its words in meta; a subgraph the recess with a hairline, its title in the label role, muted; centred in its well, or past its words' 10px floor scrolling sideways under the edge fade (${JSON.stringify(staged && { off: staged.off, scrolls: staged.scrolls, faded: staged.faded, smallest: staged.smallest, node: staged.node, label: staged.label, edge: staged.edge, edgeWords: staged.edgeWords, cluster: staged.cluster, clusterTitle: staged.clusterTitle, want })})`,
             !!staged?.node &&
               staged.node.fill === want.raised &&
               staged.node.stroke === want.control &&
@@ -1004,7 +1009,10 @@ const spec: Spec = {
               staged.clusterTitle.size === "13px" &&
               staged.clusterTitle.weight === "500" &&
               staged.clusterTitle.fill === want.muted &&
-              staged.off.every((o) => o <= 0.5)
+              (staged.scrolls[0] > 0
+                ? staged.faded && staged.smallest >= 9.95
+                : staged.off.every((o) => o <= 0.5)) &&
+              staged.scrolls[1] <= 0
           );
           const laid = await page.evaluate(readLayout);
           const inset = view === "desk" ? "21px" : "14px";

@@ -133,11 +133,15 @@
   // whichever is least, and never under its floor; its height follows its
   // viewBox.
   $effect(() => {
+    // Read first: the effect follows what it reads, and the SVG is a DOM
+    // query no state announces.
+    const sized = drawn;
+    const across = room;
     const svg = box?.querySelector("svg");
-    if (!(svg && drawn && room > 0)) {
+    if (!(svg && sized && across > 0)) {
       return;
     }
-    const { width, height, least } = drawn;
+    const { width, height, least } = sized;
     svg.style.inlineSize = `max(${width * least}px, min(${width}px, ${room}px, calc(var(--c-media-max-h) * ${width / height})))`;
     svg.style.blockSize = "auto";
   });

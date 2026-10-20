@@ -11,6 +11,23 @@ start: 61138f3b4 (X1's shared option on cawco/cutover-wave3-base 0f64468e1).
 - fixed: page.css keeps only the HTML route's rules; every rule only the program host used is deleted (pick, flight, Continue, coral/quiet, slot, body, option cell, live region), each selector's grep across page.html, page.js, RECIPES.md and CONTRACT.md 0.
 - fixed: role-order.ts reads the house's `@utility` blocks from design.css (126; font shorthands `font-inherit, font-mono-meta`); style-residual-check.ts no longer skips the host; eslint.config.mjs's host override is gone but for Canvas's and Preview's measured `block-size`/`inline-size`.
 
+## The design, item by item (reads: decision-embed, decision-pick, decision-pages)
+- fixed: 1 frame: one centred column 920 (`c-decision-page-w`), 21 in at a desk and 14 under a finger, groups 18 apart, on `surface-recess`; read at all four legs (decision-embed "the page is one centred column").
+- fixed: 2 hero: the page head, Caw at 40 in a mark cell beside the title in the title role, nothing else.
+- fixed: 3 offline notice: the kit Alert, warning, with its glyph, under the hero.
+- fixed: 4 card: raised, `--radius-panel` 16, the tile shadow, no border, 18/14 in, 11 decided; read (radius 16px, border 0px, fill = surface-raised, shadow = shadow-tile's layers).
+- fixed: 5 head: the question in the title role, balanced, alone while open; decided, the chosen chip and Change (ghost sm) beside it, centred on its line, wrapping to a row of its own under a finger.
+- fixed: 6 why: body, muted, `c-measure` 72ch, pretty.
+- fixed: 7 media: equal columns at `@media-split` (640, the card body's container), else one column; 640 kept: the artifact panel is 320px to 45% of the page (545px beside a 228px rail at 1440, one column there); two columns stand from a 718px page, each well 314px and more.
+- fixed: 8 options: X1's ui/option-group, each cell a 4-row subgrid (chip and badges, line as body, "Cost:" in meta muted, media), chips 30 with their tops and lines on one line across columns (read ≤0.5px), the line and cost labels of their chip.
+- fixed: 9 decided line: the chosen chip carried whole by the flight (motion/share), on the fold's one clock (scrubbed 0/½/1 in decision-pick).
+- fixed: 10 foot: sticky at the window's foot over `--page-inset-bottom`, panel material, the count in meta `.num` with a 120×4 bar (`brand-solid` on `surface-recess-deep`), Send the kit primary 36 / lg 44, its pending ending on its check; no "Sent." line.
+- fixed: 11 note: behind "Add <note>" (ghost sm), folding into the kit Textarea with its "Note" label and Done, and back.
+- fixed: 12 wells: `surface-well`, `border-well`, `rounded-well` 7, 11 in, the piece centred (read ≤0.5px); Pele drawn as written (`autoDirection: false`), scaled to the room and the 80vb cap, never under 10px words, past that sideways under the edge fade; Pele's variables and roles on `[data-slot=diagram]` (node raised, control edge, 8px, label 13/500 strong; edge 1px muted, its words 12px; cluster recess with a hairline, its title 13/500 muted), read in both themes; Canvas sized from its drawing's box; gone lines meta muted.
+- fixed: 13 Row/Column 11 apart; 14 section heading label role, muted, no glyph, 25 above and 11 below.
+- fixed: 15 Dials: inline in a well (dials.js `cawcoDialsIn`, DialKit's `mountControlRenderer`), DialKit's variables set to tokens in host.css, its sheet in `@layer vendor`; no floating panel.
+- fixed: 16 the pick flow: B1's and round 2's motion as main has it; a keyboard's turn lands in one frame (the card's `data-instant` holds every transition under it).
+
 ## Findings (audit 682ede287)
 - ask: views-decision-page (390, blocking: the project's bottom bar covers "Add a note…" and "I'm done picking") is DecisionPage.svelte's composer, X4's file. The host's own foot stands clear of a docked composer: sticky at `bottom: var(--page-inset-bottom)` (preview-overlay page.ts sets it), the page padded by the same.
 - ask: decisions-page, decisions-rest, decisions-graph, views-decisions are DecisionsView/RecordCard/the graph, X4's.
