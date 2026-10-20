@@ -37,8 +37,12 @@
  *     new clone cut again at that commit on main (core injected.ts
  *     `recutLine`; on 2026-10-20 X8 went on in a clone cut again believing
  *     its install there, and its `tsc` failed with ENOENT), its shell reads
- *     that path and M's landed file. It finishes again and its workspace
- *     retires again.
+ *     that path and M's landed file. While that handoff, released after the
+ *     cut under a new hand-off, is still pending, its record keeps it whole
+ *     as it was handed: the line and that hand-off's id, which is what a
+ *     machine that comes back is handed again (hub server.ts `handAgain`),
+ *     never the envelope recorded as it was accepted and held. It finishes
+ *     again and its workspace retires again.
  * (q) Q commits a file and a package.json whose typecheck sleeps, then
  *     passes; pushes its commit to origin's `probe-keep-Q` (as the conductor
  *     pushed K1's by hand on 2026-10-17), and calls finish_item; its parent
@@ -653,6 +657,102 @@ const archivePhase = async (
   );
 };
 
+/** A send's record as {@link watchRelease} reads it. */
+interface SendRow {
+  delivery: string | null;
+  envelope: string | null;
+  state: string;
+  uuid: string;
+}
+
+/** What {@link watchRelease} saw of the held handoff's release. */
+type Released =
+  | { kind: "released"; delivery: string; envelope: string }
+  | { kind: "missed"; why: string };
+
+/** How often {@link watchRelease} reads the records: well under a session's wake, which a released send waits on before it is read. */
+const RELEASE_POLL_MS = 20;
+
+/**
+ * The first send to session `instanceId` whose body holds `mark` seen
+ * pending under a hand-off other than the one it was accepted under: it was
+ * released after its hold (hub server.ts `handReleased`), and the record
+ * still holds what it was handed (`envelope`), which a send no longer
+ * pending does not. Missed when every such send left pending unseen so, or
+ * none was released within `ms`.
+ */
+const watchRelease = async (
+  fleet: Fleet,
+  instanceId: string,
+  mark: string,
+  ms: number
+): Promise<Released> => {
+  const accepted = new Map<string, string | null>();
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    const rows = fleet.query<SendRow>(
+      "SELECT uuid, state, delivery, envelope FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
+      instanceId,
+      `%${mark}%`
+    );
+    for (const row of rows) {
+      if (!accepted.has(row.uuid)) {
+        accepted.set(row.uuid, row.delivery);
+        continue;
+      }
+      if (
+        row.state === "pending" &&
+        row.delivery &&
+        row.envelope &&
+        row.delivery !== accepted.get(row.uuid)
+      ) {
+        return {
+          kind: "released",
+          delivery: row.delivery,
+          envelope: row.envelope,
+        };
+      }
+    }
+    if (rows.length > 0 && rows.every((row) => row.state !== "pending")) {
+      return {
+        kind: "missed",
+        why: `every send holding ${mark} left pending before a release was seen: ${rows.map((row) => row.state).join(", ")}`,
+      };
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: polls the records until the release shows
+    await Bun.sleep(RELEASE_POLL_MS);
+  }
+  return { kind: "missed", why: `no release within ${ms} ms` };
+};
+
+/**
+ * (r) The handoff released after the cut is kept as it was handed: its
+ * record's envelope, what a machine that comes back is handed again (hub
+ * server.ts `handAgain`), carries the hub's line and the hand-off it was
+ * released under.
+ */
+const keptAsHanded = (kit: Kit, released: Released): void => {
+  if (released.kind === "missed") {
+    kit.check(
+      "(r) the handoff released after the cut is kept as it was handed: what a machine that comes back is handed again carries the hub's line and the hand-off it was released under",
+      false,
+      released.why
+    );
+    return;
+  }
+  const kept = JSON.parse(released.envelope) as {
+    payload: { delivery?: string; message: { message: { content: unknown } } };
+  };
+  const line = RECUT_LINE.test(
+    JSON.stringify(kept.payload.message.message.content)
+  );
+  kit.check(
+    "(r) the handoff released after the cut is kept as it was handed: what a machine that comes back is handed again carries the hub's line and the hand-off it was released under",
+    kept.payload.delivery === released.delivery && line,
+    `record's hand-off ${released.delivery}; its envelope's ${kept.payload.delivery ?? "none"}; line ${line ? "there" : "missing"}`
+  );
+};
+
 /** (r) A handoff to a retired delegate cuts its clone again at the same path, and the same session goes on there. */
 const recutPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   const { check } = kit;
@@ -674,6 +774,7 @@ const recutPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     )[0]?.head ?? "null"
   ) as { branch: string; commit: string } | null;
   const message = `${RECUT}: go on in your workspace and say where you are.`;
+  const release = watchRelease(fleet, m.instanceId, RECUT, 300_000);
   const asked = Date.now();
   let handed = await callAsParent("handoff", {
     target: m.instanceId,
@@ -728,6 +829,7 @@ const recutPhase = async (kit: Kit, scene: Scene): Promise<void> => {
       recutSeen.told.times === 1,
     JSON.stringify({ told: recutSeen.told ?? "no line", head })
   );
+  keptAsHanded(kit, await release);
   check(
     "(r) it is the same work item and session, reopened, not a new one; it ended done again",
     items.length === 1 &&

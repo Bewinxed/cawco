@@ -8680,8 +8680,13 @@ export const createServer = (
 
   /**
    * An owed send handed to its machine as its hold ends ({@link releaseOne}),
-   * under a hand-off of its own; its record holds the hub's line when it is
-   * the first message since its workspace was cut again ({@link toldRecut}).
+   * under a hand-off of its own, the hub's line in it when it is the first
+   * message since its workspace was cut again ({@link toldRecut}). Its
+   * record keeps it whole as handed (`envelope`, with this hand-off and that
+   * line), in the same write as its new hand-off: what a machine that comes
+   * back is handed again ({@link handAgain}), and what a fold or a
+   * hand-back owes again, is the send as it was last handed, never as it
+   * was accepted.
    */
   const handReleased = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
@@ -8690,12 +8695,12 @@ export const createServer = (
   ): void => {
     const delivery = crypto.randomUUID();
     envelope.payload.delivery = delivery;
+    const told = toldRecut(envelope);
     changeSend(send, {
       acceptedAt: new Date(),
       delivery,
-      ...(toldRecut(envelope)
-        ? { body: externalizeImages(sentFrame(envelope.payload)) }
-        : {}),
+      envelope: JSON.stringify(envelope),
+      ...(told ? { body: externalizeImages(sentFrame(envelope.payload)) } : {}),
     });
     sendFrame(agent, envelope);
   };
