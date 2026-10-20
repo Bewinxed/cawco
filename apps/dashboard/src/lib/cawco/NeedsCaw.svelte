@@ -69,12 +69,10 @@
    */
   import { mergeProps } from "bits-ui";
   import { untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
+  import type { Attachment } from "svelte/attachments";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { page } from "$app/state";
   import { barGlass } from "./bar-glass.svelte";
-  import { firstRender } from "./first-render.svelte";
   import { type CawFile, type CawHead, stageCaw } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { cawNotices } from "./home/caw-notices.svelte";
@@ -86,19 +84,26 @@
   import { dur, easeOut, motionOk } from "./motion/curves.svelte";
 
   /**
-   * The phone bar, where his glass is his own (Shell). The first paint, on
-   * both sides, has the width cookie's guess (`narrow`; first-render.svelte.ts).
+   * His head's side, px: the compacted still fills it, drawn at that size.
+   * The face's box takes it from the glass's form, which follows the shell
+   * container (BarGlass `@max-desk/shell`), not the window: in the wide
+   * bar's group a symbol's (`--c-bar-symbol`), on the phone's glass his own
+   * glass less the same 4px margin (`--c-bar-caw-head-phone`). The script
+   * reads the box back (`faceSide`), since a container query is the
+   * stylesheet's alone. Before the box is read (the first paint, both
+   * sides), the width cookie's guess (`narrow`; first-render.svelte.ts).
+   * Whether his panel opens as the bottom drawer stays on the window
+   * (GlassCard's `DRAWER_QUERY`): the drawer stands on the screen, not in the bar.
    */
-  const phoneQuery = new MediaQuery(DRAWER_QUERY);
-  const phone = $derived(
-    firstRender.held ? Boolean(page.data.narrow) : phoneQuery.current
-  );
-  /**
-   * His head's side, px: the compacted still fills it. In the wide bar's
-   * group, a symbol's (`--c-bar-symbol`); on a phone, his own glass less the
-   * same 4px margin (`--c-bar-caw-head-phone`).
-   */
-  const head = $derived(phone ? 24 : 20);
+  let measured = $state<number | null>(null);
+  const head = $derived(measured ?? (page.data.narrow ? 24 : 20));
+  const faceSide: Attachment<HTMLElement> = (node) => {
+    const sizes = new ResizeObserver(([entry]) => {
+      measured = Math.round(entry.borderBoxSize[0].inlineSize);
+    });
+    sizes.observe(node);
+    return () => sizes.disconnect();
+  };
 
   const needs = $derived(home.needs);
   const count = $derived(needs.length);
@@ -599,7 +604,7 @@
     data-count={count}
     viewBox="0 0 {RING_BOX} {RING_BOX}"
   >
-    <g class="max-desk:hidden">
+    <g class="@max-desk/shell:hidden">
       {#each arcSlots.filter((k) => roundLow(k) === low) as k (k)}
         <path
           class="rim-arc fill-none stroke-status-attn-glyph"
@@ -626,7 +631,7 @@
         />
       {/if}
     </g>
-    <g data-slot="standing" class="hidden max-desk:inline">
+    <g data-slot="standing" class="hidden @max-desk/shell:inline">
       {#each arcSlots.filter((k) => standLow(k) === low) as k (k)}
         <path
           class="rim-arc fill-none stroke-status-attn-glyph"
@@ -672,7 +677,7 @@
       aria-expanded={barGlass.open === "caw"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0 tap-highlight-none max-desk:coarse:after:start-auto max-desk:coarse:after:end-0 max-desk:coarse:after:top-(--caw-hit-top) max-desk:coarse:after:bottom-auto max-desk:coarse:after:size-c-btn-h-lg"
+      class="touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0 tap-highlight-none @max-desk/shell:coarse:after:start-auto @max-desk/shell:coarse:after:end-0 @max-desk/shell:coarse:after:top-(--caw-hit-top) @max-desk/shell:coarse:after:bottom-auto @max-desk/shell:coarse:after:size-c-btn-h-lg"
       data-needs-caw
       style:--caw-hit-top={"calc((var(--c-bar-caw-glass-phone) - var(--c-btn-h-lg)) / 2)"}
       type="button"
@@ -694,8 +699,9 @@
              under it for the frame the clip lands. -->
         <span
           data-needs-caw-covered={covering || undefined}
-          class="group/face relative col-start-1 row-start-1 start-(--face-x) top-(--face-y) grid data-needs-caw-covered:invisible"
+          class="group/face relative col-start-1 row-start-1 start-(--face-x) top-(--face-y) grid size-c-bar-symbol data-needs-caw-covered:invisible @max-desk/shell:size-c-bar-caw-head-phone"
           data-caw-phase={phase}
+          {@attach faceSide}
           style:--bleed="{CAW_STILL_BLEED}px"
           style:--dx={0.5 - CAW_HEAD_CENTRE.x}
           style:--dy={0.5 - CAW_HEAD_CENTRE.y}

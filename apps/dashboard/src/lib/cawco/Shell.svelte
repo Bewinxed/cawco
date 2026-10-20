@@ -25,6 +25,7 @@
   import { pageIn, pageOut, route } from "#lib/cawco/motion/route.svelte.js";
   import { keepPrefs } from "#lib/cawco/prefs.js";
   import { gridView } from "#lib/cawco/workspace/grid-view.svelte.js";
+  import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Sheet from "#lib/components/ui/sheet/index.js";
@@ -965,13 +966,16 @@
 <!-- The tooltip provider and the lightbox, shared with an artifact's own tab. -->
 <Overlays>
   <!-- As tall as the visible area reaches, so the composer and a page's
-       footer stand on a keyboard (cawco/visible-viewport `floor`).
-       `data-first-paint` while it still draws the server's answers
-       (first-render.svelte.ts), until the release a frame after mount. -->
+       footer stand on a keyboard (cawco/visible-viewport `floor`). As wide
+       as the window, it is the `shell` container the bar's glass takes its
+       form from (BarGlass `@max-desk/shell`): the bar beside a docked rail
+       is narrower than the window, so it could not be. `data-first-paint`
+       while it still draws the server's answers (first-render.svelte.ts),
+       until the release a frame after mount. -->
   <div
     data-slot="shell"
     data-first-paint={firstRender.held || undefined}
-    class="flex h-dvh w-full bg-surface-recess overflow-hidden"
+    class="@container/shell flex h-dvh w-full bg-surface-recess overflow-hidden"
     style="--sidebar-width: var(--rail-w, {railWidth === null
       ? 'var(--c-sidebar-w)'
       : `${railWidth}px`})"
@@ -1217,32 +1221,23 @@
           data-slot="right"
           class="relative ms-auto flex min-w-0 items-center group-data-hosting/top:flex-none group-data-hosting/top:ps-space-3 max-desk:self-stretch max-desk:group-data-hosting/top:flex-initial max-desk:group-data-hosting/top:ps-0 coarse:portrait:group-data-hosting/top:flex-initial coarse:portrait:group-data-hosting/top:ps-0"
         >
-          <div
-            data-slot="tools"
-            class="group/tools relative flex items-center gap-c-bar-group-pad h-c-btn-h p-c-bar-group-pad rounded-pill hit-gap-x-(--c-bar-group-pad) coarse:gap-space-5 coarse:hit-gap-x-(--space-5) before:absolute before:inset-0 before:rounded-inherit before:border before:border-border-hairline before:bg-material-panel before:shadow-tile before:glass-backdrop before:pointer-events-none contrast-more:before:border-border-contrast contrast-more:before:bg-surface-raised contrast-more:before:backdrop-filter-none reduced-transparency:before:border-border-contrast reduced-transparency:before:bg-surface-raised reduced-transparency:before:backdrop-filter-none max-desk:before:border-e-0 max-desk:self-start max-desk:h-c-bar-caw-glass-phone max-desk:mt-(--tools-top) max-desk:p-0 max-desk:rounded-s-(--tools-round) max-desk:rounded-e-none max-desk:caw-neck-(--tools-neck)"
-            data-bar-group
-            data-instant={barGlass.instant ? "" : undefined}
-            data-joined={barGlass.joined ? "" : undefined}
-            style:--flare="var(--radius-lg)"
-            style:--tools-top="calc(var(--c-top-bar-h) - var(--c-tab-row-h))"
-            style:--tools-round="calc(var(--c-bar-caw-glass-phone) / 2)"
-            style:--tools-neck={"calc(var(--c-tab-row-h) - var(--c-bar-caw-glass-phone))"}
-          >
-            <!-- The glass as one shape with the card hanging from it while
-                 one does (bar-glass: Caw's panel, the machines, Jump, Files). -->
-            <span
-              data-slot="join"
-              aria-hidden="true"
-              class="before:absolute before:inset-0 before:bg-surface-raised before:clip-join max-desk:before:clip-join-phone"
-            ></span>
+          <!-- The glass (kit BarGlass), as one shape with the card hanging
+               from it while one does (bar-glass: Caw's panel, the machines,
+               Jump, Files). -->
+          <BarGlass instant={barGlass.instant} joined={barGlass.joined}>
+            {#snippet head()}
+              <!-- Caw's head: what needs you, and its drawer. -->
+              <NeedsCaw />
+            {/snippet}
             {#if railed && files.session}
               <!-- Files, the conversation on screen's artifacts and
                    attachments, leads the group. -->
               <FilesItem count={filesCounted} />
             {/if}
-            <!-- Drawn on every screen and hidden on a phone by its own
-                 class and the bar group's (`[data-machines]` under 900px), so the first client
-                 render keeps the bar the server drew. -->
+            <!-- Drawn on every screen and hidden on the phone's glass by its
+                 own class and the bar group's (`[data-machines]`), both on
+                 the shell container's desk line (`@max-desk/shell`), so the
+                 first client render keeps the bar the server drew. -->
             <Tip keys="⌘K" label="Jump to session">
               {#snippet children(tip)}
                 <button
@@ -1251,7 +1246,7 @@
                   aria-expanded={barGlass.open === "jump"}
                   aria-haspopup="dialog"
                   aria-label="Jump to session"
-                  class="touch-hit press-tint max-desk:hidden"
+                  class="touch-hit press-tint @max-desk/shell:hidden"
                   data-share="jump"
                   onclick={() => {
                     barGlass.toggle("jump");
@@ -1266,9 +1261,7 @@
               {/snippet}
             </Tip>
             <MachinesButton />
-            <!-- Caw's head: what needs you, and its drawer. -->
-            <NeedsCaw />
-          </div>
+          </BarGlass>
           <!-- No always-on hub dot: a green light that is green 99% of the time
              says nothing. Connection health is the band below (HubBand), which
              is shown only when the hub is NOT connected. The theme toggle
