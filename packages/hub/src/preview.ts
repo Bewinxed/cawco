@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import {
@@ -914,11 +915,27 @@ interface HostPattern {
   shape: RegExp;
 }
 
+/** One DNS label: what a `{session}` name's placeholder holds ({@link labelOf}). */
+const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
 const VALUE_OF = {
-  // A session's id, or a project's origin (db/previews.ts `projectOrigin`).
-  session: "(?:project-)?[0-9a-f-]{36}",
+  // Any origin's label (labelOf): a session's, a project's, an embed's.
+  session: "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?",
   port: "\\d{1,5}",
 } as const;
+
+/**
+ * The label a `{session}` pattern names origin `key` by: the key itself
+ * when it is a DNS label already (a session's id, `project-<uuid>`,
+ * `embed-<uuid>`, a project id like `proj-00000-tde5z`), else `o-` and a
+ * hash of it (a project id with capitals or `_`, or one longer than a
+ * label holds), so every origin the hub hands out has a name, and each name
+ * reads back to one origin ({@link sessionOfHost}).
+ */
+const labelOf = (key: string): string =>
+  DNS_LABEL.test(key)
+    ? key
+    : `o-${createHash("sha256").update(key).digest("hex").slice(0, 40)}`;
 
 /** `pattern` parsed, or refused in one sentence. */
 const parsePattern = (pattern: string): HostPattern => {
@@ -1267,8 +1284,14 @@ export function createPreviewListeners(
     host: string | null
   ): string | undefined => {
     const value = host?.match(pattern.shape)?.[1]?.toLowerCase();
-    if (!value || pattern.key === "session") {
-      return value;
+    if (!value) {
+      return;
+    }
+    if (pattern.key === "session") {
+      // The origin, of every one held now (a session's, a project's, an embed's), this label names.
+      return [...db.ports().map((row) => row.key), ...embeds.keys()].find(
+        (key) => labelOf(key) === value
+      );
     }
     const port = Number(value);
     return (
@@ -1379,7 +1402,7 @@ export function createPreviewListeners(
     }
     if (settings.mode === "host" && settings.pattern && port !== undefined) {
       const pattern = parsePattern(settings.pattern);
-      return originFor(pattern, pattern.key === "port" ? port : owner);
+      return originFor(pattern, pattern.key === "port" ? port : labelOf(owner));
     }
     return null;
   };
@@ -1436,7 +1459,7 @@ export function createPreviewListeners(
         const pattern = parsePattern(settings.pattern ?? "");
         const origin = originFor(
           pattern,
-          pattern.key === "port" ? port : instanceId
+          pattern.key === "port" ? port : labelOf(instanceId)
         );
         // core `PreviewAddress`: `host` is a bridge for readers before `origin`.
         return { port, origin, host: new URL(origin).host, ...onTailnet };
@@ -1480,7 +1503,10 @@ export function createPreviewListeners(
       const onTailnet = secure ? { tailnet: secure } : {};
       if (settings.mode === "host") {
         const pattern = parsePattern(settings.pattern ?? "");
-        const origin = originFor(pattern, pattern.key === "port" ? port : key);
+        const origin = originFor(
+          pattern,
+          pattern.key === "port" ? port : labelOf(key)
+        );
         return { port, origin, host: new URL(origin).host, ...onTailnet };
       }
       return { port, ...onTailnet };

@@ -14,6 +14,7 @@
  */
 import { Database } from "bun:sqlite";
 import {
+  closeSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -42,7 +43,11 @@ import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import { openLockFile, tryLock, unlock } from "../packages/core/src/flock";
 import type { FleetFetchFrame } from "../packages/core/src/frames";
 import { HEAVY_ADMITTED_ENV } from "../packages/core/src/heavy-run";
-import { darwinUserDirs, socketPathProblem } from "../packages/core/src/paths";
+import {
+  darwinUserDirs,
+  socketPathProblem,
+  workspaceCacheDir,
+} from "../packages/core/src/paths";
 import { forgetSessiondLink } from "../packages/core/src/sessiond";
 import {
   listedPid,
@@ -307,7 +312,7 @@ const SPACES = /\s+/;
 /** How many preview ports a scratch hub gets: one per session that shows a preview or a canvas. */
 export const PREVIEW_PORTS = 12;
 
-/** Where `freePortRange` picks from, `[LOW, HIGH)`, outside the kernel's ephemeral ports. */
+/** Where `leasePortRange` picks from, `[LOW, HIGH)`, outside the kernel's ephemeral ports. */
 const PORT_RANGE_LOW = 20_000;
 const PORT_RANGE_HIGH = 60_000;
 
@@ -335,48 +340,63 @@ function ephemeralPorts(): { first: number; last: number } {
   return { first, last };
 }
 
-/**
- * A random first port for `count` consecutive ports in `[PORT_RANGE_LOW,
- * PORT_RANGE_HIGH)`, none of them an ephemeral port (`ephemeralPorts`).
- */
-function firstOutsideEphemeral(count: number): number {
-  const ephemeral = ephemeralPorts();
-  // Each stretch of first ports whose whole run stays clear of the range.
-  const stretches = [
-    [PORT_RANGE_LOW, Math.min(PORT_RANGE_HIGH, ephemeral.first) - count],
-    [Math.max(PORT_RANGE_LOW, ephemeral.last + 1), PORT_RANGE_HIGH - count],
-  ].filter(([from, to]) => to >= from);
-  const total = stretches.reduce((all, [from, to]) => all + to - from + 1, 0);
-  if (total === 0) {
-    throw new Error(
-      `no ${count} consecutive ports in ${PORT_RANGE_LOW}-${PORT_RANGE_HIGH - 1} outside the ephemeral ports ${ephemeral.first}-${ephemeral.last}`
-    );
-  }
-  let at = Math.floor(Math.random() * total);
-  for (const [from, to] of stretches) {
-    if (at <= to - from) {
-      return from + at;
-    }
-    at -= to - from + 1;
-  }
-  return stretches[0][0];
+/** Every lease covers one block of this many ports: blocks never overlap, so leases never do. */
+const LEASE_BLOCK = 16;
+
+/** Where port leases are held: the workspaces' shared cache, the one tree every workspace's boundary and the host's shells all write (core heavy-run.ts keeps its slots there too). */
+const LEASES_DIR = join(workspaceCacheDir(), "port-leases");
+
+/** A run's hold on a block of ports: its first `count` as `first-last`, and its release. */
+export interface PortLease {
+  range: string;
+  release: () => void;
 }
 
 /**
- * `count` consecutive ports nothing listens on, as `first-last` (the hub's
- * `CAWCO_PREVIEW_PORTS`): a random run, each port opened and closed to see
- * it is free, again from another start if one is not.
+ * `count` consecutive ports (at most {@link LEASE_BLOCK}) leased for this
+ * process, as `first-last` (a hub's `CAWCO_PREVIEW_PORTS`): the first of a
+ * {@link LEASE_BLOCK}-port block no other run on the machine holds, every
+ * port of it free now.
  *
- * Never among the kernel's ephemeral ports (`ephemeralPorts`). The ports are
- * closed again before the hub binds them, and in that window any outgoing
- * connection of the fleet's (the dashboard's, a harness's, the kit's own)
- * can be given one of them as its local port, which the hub then cannot
- * bind: a run picked there could leave a scratch hub's previews refused.
+ * A block is held by `flock(2)` on its file in {@link LEASES_DIR}, from a
+ * close-on-exec descriptor (core flock.ts), until `release` or the process
+ * ends (a SIGKILL included: the kernel frees it). So two runs, in any
+ * workspaces or on the host, never draw overlapping ports, even while
+ * neither has bound them yet: a hub binds a preview port only once a
+ * session shows something, and an open-and-close probe alone let another
+ * run's hub take the same range in between ("Every preview port
+ * (24081–24092) is taken", 2026-10-20).
+ *
+ * Never among the kernel's ephemeral ports (`ephemeralPorts`): any outgoing
+ * connection of the fleet's can be given one of those as its local port,
+ * which the hub then cannot bind.
  */
-export async function freePortRange(count: number): Promise<string> {
-  for (let tries = 0; tries < 50; tries += 1) {
-    const first = firstOutsideEphemeral(count);
+export async function leasePortRange(count: number): Promise<PortLease> {
+  if (count > LEASE_BLOCK) {
+    throw new Error(`a lease is ${LEASE_BLOCK} ports at most, not ${count}`);
+  }
+  mkdirSync(LEASES_DIR, { recursive: true });
+  const ephemeral = ephemeralPorts();
+  const firsts: number[] = [];
+  for (
+    let first = PORT_RANGE_LOW;
+    first + LEASE_BLOCK <= PORT_RANGE_HIGH;
+    first += LEASE_BLOCK
+  ) {
+    if (first + LEASE_BLOCK <= ephemeral.first || first > ephemeral.last) {
+      firsts.push(first);
+    }
+  }
+  const from = Math.floor(Math.random() * firsts.length);
+  for (let n = 0; n < firsts.length; n += 1) {
+    const first = firsts[(from + n) % firsts.length] as number;
+    const fd = openLockFile(join(LEASES_DIR, `block-${first}`), true);
+    if (!tryLock(fd)) {
+      closeSync(fd);
+      continue;
+    }
     const opened: ReturnType<typeof Bun.serve>[] = [];
+    let free = true;
     try {
       for (let port = first; port < first + count; port += 1) {
         opened.push(
@@ -387,17 +407,33 @@ export async function freePortRange(count: number): Promise<string> {
           })
         );
       }
-      return `${first}-${first + count - 1}`;
     } catch {
-      // Taken: another start.
+      // Something outside every lease holds one: another block.
+      free = false;
     } finally {
-      for (const lease of opened) {
-        // biome-ignore lint/performance/noAwaitInLoops: each lease closes before the hub takes its port
-        await lease.stop(true);
+      for (const probe of opened) {
+        // biome-ignore lint/performance/noAwaitInLoops: each probe closes before the next block is tried
+        await probe.stop(true);
       }
     }
+    if (!free) {
+      unlock(fd);
+      continue;
+    }
+    let held = true;
+    return {
+      range: `${first}-${first + count - 1}`,
+      release: () => {
+        if (held) {
+          held = false;
+          unlock(fd);
+        }
+      },
+    };
   }
-  throw new Error(`no ${count} free consecutive ports after 50 tries`);
+  throw new Error(
+    `no block of ${LEASE_BLOCK} ports in ${PORT_RANGE_LOW}-${PORT_RANGE_HIGH - 1} is free of other runs' leases`
+  );
 }
 
 /**
@@ -1368,10 +1404,14 @@ export async function scratchFleet(options: {
 }) {
   const heavy = await heavySlot();
   const dirs = new FleetDirs();
+  // Its hub's preview ports, held from every other run on the machine until it closes.
+  const previews = await leasePortRange(PREVIEW_PORTS);
+  console.log(`… preview ports ${previews.range}, leased`);
   try {
-    return await standUp(options, dirs, heavy);
+    return await standUp(options, dirs, heavy, previews);
   } catch (error) {
     await dirs.remove();
+    previews.release();
     heavy.release();
     throw error;
   }
@@ -1384,7 +1424,8 @@ async function standUp(
     respond: (request: Seen) => Reply | Promise<Reply>;
   },
   dirs: FleetDirs,
-  heavy: HeavySlot
+  heavy: HeavySlot,
+  previews: PortLease
 ) {
   const hub = options.hub ?? { bind: "127.0.0.1", at: "127.0.0.1" };
   /** The hub's address as a URL names it: an IPv6 one in brackets. */
@@ -1446,7 +1487,7 @@ async function standUp(
     return port;
   };
   const hubPort = await freePort();
-  const previewPorts = await freePortRange(PREVIEW_PORTS);
+  const previewPorts = previews.range;
   const mcpPort = await freePort();
   // The hub names it to every agent, which serves it on its loopback (agent
   // hub-loopback.ts): never the host's own dashboard port.
@@ -2672,6 +2713,7 @@ async function standUp(
     await stop("hub");
     await killSessiond();
     await mock.stop(true);
+    previews.release();
     heavy.release();
   };
   /** Deletes the sandbox, the HOME and the runtime dir beside it (and every added machine's), unless `keep`. */
@@ -2699,7 +2741,7 @@ async function standUp(
     hub,
     /** The port the hub says its dashboard is on (`CAWCO_DASHBOARD_PORT`): the kit serves the built dashboard there. */
     dashboardPort,
-    /** The hub's preview ports (`CAWCO_PREVIEW_PORTS`), as `first-last`: picked outside the kernel's ephemeral ports (`freePortRange`). */
+    /** The hub's preview ports (`CAWCO_PREVIEW_PORTS`), as `first-last`: leased from every other run on the machine (`leasePortRange`). */
     previewPorts,
     /** The dashboard's loopback port the hub names to every agent (`CAWCO_LOCAL_DASHBOARD_PORT`). */
     localDashboardPort,

@@ -6,9 +6,12 @@
  *
  *   bun scripts/probe-kit/run.ts project-origin
  *
- * In port mode (each origin on its own port) and in host mode (a
- * `p-{port}.localhost` pattern, every name on the range's first port, as an
- * outpost's proxy reaches the hub):
+ * Its project's id is of the older shape (capitals and `_`), which a
+ * `{session}` name holds only as a label of its own.
+ *
+ * In port mode (each origin on its own port) and in host mode, by a
+ * `p-{port}.localhost` pattern and by a `p-{session}.localhost` one (every
+ * name on the range's first port, as an outpost's proxy reaches the hub):
  * (a) The page opened in its writer's panel (as Files opens it) draws its
  *     cards, and its option's Preview embed of a dev server draws inside it:
  *     the embed's frame-ancestors name the exact origin the page was served
@@ -138,6 +141,25 @@ const pickIn = async (tab: Page, option: string): Promise<string> => {
     );
 };
 
+/**
+ * How previews are reached in each leg: by port, or by name in host mode,
+ * each origin's name holding its port (`{port}`) or its own label
+ * (`{session}`: a session's id, `project-<id>`, `embed-<id>`), every name on
+ * the range's first port.
+ */
+const MODES = ["port", "host", "session"] as const;
+
+const settingsOf = (mode: (typeof MODES)[number], first: number) => {
+  if (mode === "port") {
+    return { mode };
+  }
+  const placeholder = mode === "host" ? "{port}" : "{session}";
+  return {
+    mode: "host",
+    pattern: `http://p-${placeholder}.localhost:${first}`,
+  };
+};
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
@@ -150,11 +172,18 @@ const run = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const dir = `${fleet.sandbox}/pairing-site`;
   await Bun.$`mkdir -p ${dir} && git init -q -b main ${dir}`.quiet();
-  const { id: projectId } = await fleet.api<{ id: string }>("/api/projects", {
+  // A project of an id shape the hub stores beside its UUIDs (capitals and
+  // `_`, as an older project's): made with no place, so nothing names its id
+  // yet, its id given here, then its place added as a folder joins one.
+  const { id: made } = await fleet.api<{ id: string }>("/api/projects", {
     name: "Pairing",
-    machineId: MACHINE,
-    cwd: dir,
     caw: false,
+  });
+  const projectId = "Pairing_Old-1";
+  fleet.write("UPDATE projects SET id = ? WHERE id = ?", projectId, made);
+  await fleet.api(`/api/projects/${projectId}/places`, {
+    machineId: MACHINE,
+    path: dir,
   });
   const writer = await fleet.spawn("claude", "Pair the code", dir, {
     projectId,
@@ -194,19 +223,15 @@ const run = async (kit: Kit) => {
   const range = await fleet.api<{ ports: string }>("/api/preview-settings");
   const first = Number(range.ports.split("–")[0]);
 
-  for (const mode of ["port", "host"] as const) {
+  for (const mode of MODES) {
     const put = await fetch(`${fleet.base}/api/preview-settings`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(
-        mode === "host"
-          ? { mode, pattern: `http://p-{port}.localhost:${first}` }
-          : { mode }
-      ),
+      body: JSON.stringify(settingsOf(mode, first)),
     });
     // Host mode's names are loaded by a dashboard reached under their domain.
     const board =
-      mode === "host" ? base.replace("127.0.0.1", "localhost") : base;
+      mode === "port" ? base : base.replace("127.0.0.1", "localhost");
     const tab = await kit.page("desk", { theme: "light" });
     await open(tab, `${board}/session/${writer}`, '[data-slot="pane"]');
     // Brought to the front of the writer's panel, as Files opens it.
@@ -260,18 +285,14 @@ const run = async (kit: Kit) => {
     60_000
   ).catch(() => undefined);
 
-  for (const mode of ["port", "host"] as const) {
+  for (const mode of MODES) {
     await fetch(`${fleet.base}/api/preview-settings`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(
-        mode === "host"
-          ? { mode, pattern: `http://p-{port}.localhost:${first}` }
-          : { mode }
-      ),
+      body: JSON.stringify(settingsOf(mode, first)),
     });
     const board =
-      mode === "host" ? base.replace("127.0.0.1", "localhost") : base;
+      mode === "port" ? base : base.replace("127.0.0.1", "localhost");
     const tab = await kit.page("desk", { theme: "light" });
     await open(
       tab,
@@ -284,7 +305,7 @@ const run = async (kit: Kit) => {
       (drawn) => drawn.card && drawn.gone !== "",
       30_000
     ).catch(() => drawnIn(tab));
-    const option = mode === "port" ? "fly" : "swallow";
+    const option = mode === "host" ? "swallow" : "fly";
     const pressed = await pickIn(tab, option);
     const picked = await until(
       `${mode}: the pick on the hub`,
