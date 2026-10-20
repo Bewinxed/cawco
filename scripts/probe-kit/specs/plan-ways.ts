@@ -1093,9 +1093,11 @@ const readReview = (page: Page) =>
         todosHead: todosHead ?? "",
         answer,
         tools,
-        commentPrimary: comment
-          ? getComputedStyle(comment).backgroundImage !== "none"
-          : null,
+        // The kit's variant as the button says it (button.svelte
+        // `data-variant`): the primary's top highlight is now "the base's
+        // one gradient layer" (button.svelte, main e2ca1bfe9), so a
+        // background image no longer marks the primary.
+        commentPrimary: comment ? comment.dataset.variant !== "outline" : null,
         pulses,
         leads: { a2: lead("a2"), a4: lead("a4"), a7: lead("a7") },
         headGap:
