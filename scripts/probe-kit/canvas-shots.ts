@@ -75,6 +75,14 @@ export interface ShotRead extends Shot {
 const POSE_MS = 10_000;
 /** Points per side of the grid each shot is hit-tested and colour-read on. */
 const GRID = 5;
+/**
+ * Points per side of the finer grid read when the first finds no point
+ * clear of words: a frame dense with lines (a thread at its end, a column
+ * of cards) can stand words under every point of five, the gaps between
+ * its lines and blocks falling between them, and no point read is no
+ * evidence either way.
+ */
+const FINE_GRID = 13;
 /** A pixel matches its DOM's paint within this much per channel (antialiasing, a shadow's edge). */
 const TOLERANCE = 10;
 /** At least this share of grid points show the colour their DOM paints. */
@@ -1058,7 +1066,10 @@ export async function shootEmbedded(
       reads.push({ ...blank, faults: ["the frame left the page"] });
       continue;
     }
-    const grid = await frame.evaluate(gridOf, { selector, grid: GRID });
+    const coarse = await frame.evaluate(gridOf, { selector, grid: GRID });
+    const grid = coarse.points.some((point) => point.rgb !== null)
+      ? coarse
+      : await frame.evaluate(gridOf, { selector, grid: FINE_GRID });
     const faults = [
       ...faultsOf(shot, seen, grid, await frame.evaluate(astrayOf, selector)),
       ...late,

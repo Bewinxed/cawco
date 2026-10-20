@@ -138,12 +138,27 @@
   let room = $state<HTMLElement | null>(null);
   /** Your first message is in the room's view. */
   let firstSeen = $state(false);
+  // Opened at its latest, the room rides its end as what it holds or keeps
+  // clear changes size (his seat drawn, the box's height read), as the
+  // thread pane rides its tail: pinned once, it stood short of its end.
+  $effect(() => {
+    const view = room;
+    const column = view?.firstElementChild;
+    if (!(latest && view && column)) {
+      return;
+    }
+    const pin = () => {
+      view.scrollTop = view.scrollHeight;
+    };
+    pin();
+    const sized = frameObserver(pin);
+    sized.observe(column);
+    sized.observe(view);
+    return () => sized.disconnect();
+  });
   $effect(() => {
     if (!room) {
       return;
-    }
-    if (latest) {
-      room.scrollTop = room.scrollHeight;
     }
     const first = room.querySelector("[data-panel-said] > li");
     if (!first) {
