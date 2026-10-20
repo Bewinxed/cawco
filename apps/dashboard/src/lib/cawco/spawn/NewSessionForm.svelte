@@ -2052,6 +2052,7 @@
       </div>
       <!-- A move's line may take two lines; its height follows (morph). -->
       <p
+        data-slot="reading"
         data-why={readingSaysWhy || undefined}
         aria-live="polite"
         class="type-meta m-0 truncate text-status-fail-ink group-data-stepped:not-data-why:hidden data-informational:text-ink-muted data-two:line-clamp-2 data-two:text-pretty data-two:whitespace-normal"

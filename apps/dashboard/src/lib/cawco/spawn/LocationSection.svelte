@@ -436,6 +436,7 @@
   </div>
   {#if !embedded}
     <p
+      data-slot="reading"
       aria-live="polite"
       class="type-meta m-0 min-h-lh truncate text-status-fail-ink data-informational:text-ink-muted"
       data-informational={informational || undefined}

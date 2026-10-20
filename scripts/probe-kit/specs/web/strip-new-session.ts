@@ -1242,7 +1242,7 @@ async function keyStartLeg(kit: Kit, base: string, source: string) {
   // The folder read: a press then goes or not at once, never held for it.
   await page.waitForFunction(
     (card) => {
-      const line = document.querySelector(`${card} .reading`);
+      const line = document.querySelector(`${card} [data-slot="reading"]`);
       return line !== null && line.textContent?.trim() !== "Reading…";
     },
     POPOVER,
@@ -1258,7 +1258,7 @@ async function keyStartLeg(kit: Kit, base: string, source: string) {
     spawns: spawns.length,
     open: (await readForm(page, POPOVER)).open,
     said: await page
-      .locator(`${POPOVER} .reading`)
+      .locator(`${POPOVER} [data-slot="reading"]`)
       .textContent()
       .then((text) => text?.trim() ?? ""),
   };
