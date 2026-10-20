@@ -2409,7 +2409,7 @@ async function leg(
     );
   }
   if (view === "desk" && theme === "light") {
-    await scrollCost(kit, name, page);
+    await scrollCost(kit, name, base, way);
     await checkComment(kit, name, page);
     await checkAfterLinks(kit, name, page);
   }
@@ -2421,15 +2421,23 @@ async function leg(
   await page.close();
 }
 
-/** What one run read: its frames and length, its worst frame and task, its scripting and the caps' share of it, in all and by where it was spent. */
+/** The main thread's time over a run, in milliseconds, as the protocol's Performance metrics count it: all of it, and its script, style and layout. */
+interface Busy {
+  layout: number;
+  script: number;
+  style: number;
+  task: number;
+}
+
+/** What one run read: its frames and length, its worst frame and task, the main thread's time, and the caps' share of it, in all and by where it was spent. */
 interface ScrollRun {
+  busy: Busy;
   by: Map<string, number>;
   caps: number;
   frames: number;
   longest: number;
   ms: number;
   range: number;
-  script: number;
   /** What stirred the page while it ran, most first. */
   stirs: string;
   worstFrame: number;
@@ -2631,9 +2639,16 @@ async function runOnce(
     return null;
   }
   const caps = capsShare(profile);
+  const used = (name: string) =>
+    ((after[name] ?? 0) - (before[name] ?? 0)) * 1000;
   return {
     ...run,
-    script: ((after.ScriptDuration ?? 0) - (before.ScriptDuration ?? 0)) * 1000,
+    busy: {
+      task: used("TaskDuration"),
+      script: used("ScriptDuration"),
+      style: used("RecalcStyleDuration"),
+      layout: used("LayoutDuration"),
+    },
     caps: caps.ms,
     by: caps.by,
   };
@@ -2644,19 +2659,59 @@ const perFrame = (ms: number, frames: number): number =>
   Math.round((ms / Math.max(frames, 1)) * 100) / 100;
 
 /**
- * What the edge fades' caps cost a scroll (DESIGN.md, Edge fade): the desk
- * card's list scrolled down its length and back at a 4x CPU throttle, then
- * the page run as long again with nothing scrolled. Says the frames, the
- * longest frame and task (the Long Tasks API reports 50ms and up), the
- * page's scripting per frame (the protocol's ScriptDuration over the run),
- * the caps' share of it (the sampling profiler's stacks through
- * edge-fade-caps.ts), and the scroll's own: the caps' share less what they
- * spent in the still run, as long, on the page's own beats (the Live
- * story's). A note, not a check: the canvas page runs tasks past 50ms
- * under the throttle with no caps at all (round 4's list, 204-229ms), so
- * it is read against the tree before the caps.
+ * The Live story's whole cycle, each beat once: PlanFrame.svelte steps a
+ * beat every 2.4s through fixtures.ts LIVE_BEATS' five. A still run as
+ * long reads the same beats on every page, where a run of any other length
+ * catches one, two or three of them by chance.
  */
-async function scrollCost(kit: Kit, name: string, page: Page): Promise<void> {
+const LIVE_CYCLE_MS = 5 * 2400;
+
+/** edge-fade-caps.ts as a module that caps nothing: the page with no caps, read against the page with them. */
+const NO_CAPS = "export const capEdgeFades = () => {};\n";
+
+/** One page's two runs: the desk card's list scrolled, then the page still for the Live cycle; and how many lists the caps capped on it. */
+interface CostRuns {
+  capped: number;
+  run: ScrollRun;
+  still: ScrollRun;
+}
+
+/**
+ * The way's canvas at the desk, light, gone to its Plan frame, and its two
+ * runs at a 4× CPU throttle; with `caps` false, the page's edge-fade-caps.ts
+ * is answered by NO_CAPS, so no list is capped.
+ */
+async function costRuns(
+  kit: Kit,
+  base: string,
+  way: Way,
+  caps: boolean
+): Promise<CostRuns | null> {
+  const page = await kit.page("desk", {
+    init: [BRIDGE, HELPERS],
+    theme: "light",
+  });
+  if (!caps) {
+    await page.route(
+      (url) => url.pathname.endsWith("/edge-fade-caps.ts"),
+      (route) =>
+        route.fulfill({ contentType: "text/javascript", body: NO_CAPS })
+    );
+  }
+  await page.goto(
+    canvasUrl(base, `${STORIES}/${way.file}.stories.ts`, {
+      name: way.label,
+      dials: DIALS as CanvasSpec["dials"],
+    })
+  );
+  await reportOn(page);
+  await goTo(page, FRAME("Plan"));
+  const capped = await page.evaluate(
+    () =>
+      [...document.querySelectorAll<HTMLElement>("*")].filter((el) =>
+        el.style.getPropertyValue("--fade-cap-end")
+      ).length
+  );
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Performance.enable");
   await cdp.send("Profiler.enable");
@@ -2664,19 +2719,84 @@ async function scrollCost(kit: Kit, name: string, page: Page): Promise<void> {
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
   try {
     const run = await runOnce(page, cdp, null);
-    const still = run ? await runOnce(page, cdp, run.ms) : null;
-    if (!(run && still)) {
-      kit.note(`${name}: the desk card's list did not scroll`);
-      return;
-    }
-    const own = Math.max(0, run.caps - (still.caps * run.ms) / still.ms);
-    kit.note(
-      `${name}: the desk card's list scrolled ${run.range}px down and back at 4× CPU throttle: ${run.frames} frames, scripting ${perFrame(run.script, run.frames)} ms a frame, the caps' ${perFrame(run.caps, run.frames)} ms of it, the scroll's own ${perFrame(own, run.frames)} ms (the page still as long: the caps' ${perFrame(still.caps, still.frames)} ms a frame on its own beats, ${perFrame(still.caps, still.ms / 1000)} ms a second), longest frame ${run.worstFrame} ms, longest task ${run.longest ? `${run.longest} ms` : "none of 50 ms or more"}; the caps' most, scrolled: ${spentMost(run.by, run.frames)}; still: ${spentMost(still.by, still.frames)}; what stirred the page still: ${still.stirs || "nothing"}`
-    );
+    const still = run ? await runOnce(page, cdp, LIVE_CYCLE_MS) : null;
+    return run && still ? { capped, run, still } : null;
   } finally {
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
     await cdp.detach();
+    await page.close();
   }
+}
+
+/** A run's main thread, and its parts, in milliseconds a second. */
+const perSecond = (busy: Busy, ms: number): Busy => {
+  const each = (value: number) => perFrame(value, ms / 1000);
+  return {
+    task: each(busy.task),
+    script: each(busy.script),
+    style: each(busy.style),
+    layout: each(busy.layout),
+  };
+};
+
+/**
+ * What the edge fades' caps cost (DESIGN.md, Edge fade), as the page's
+ * main thread spends it: the way's canvas with the caps, against the same
+ * canvas with none (NO_CAPS), each at a 4× CPU throttle, the desk card's
+ * list scrolled down its length and back, then the page still for the Live
+ * story's whole cycle. The caps' cost is the difference: the protocol's
+ * TaskDuration, and its script, style and layout, a frame scrolled and a
+ * second still. What the caps force early (a style or layout read the
+ * frame would make anyway) is no cost in the difference, where the
+ * profiler's stacks through edge-fade-caps.ts count it; those stacks say
+ * only where the caps spend. A note, not a check: the canvas page runs
+ * tasks past 50ms under the throttle with no caps at all.
+ */
+async function scrollCost(
+  kit: Kit,
+  name: string,
+  base: string,
+  way: Way
+): Promise<void> {
+  const capped = await costRuns(kit, base, way, true);
+  const bare = await costRuns(kit, base, way, false);
+  if (!(capped && bare)) {
+    kit.note(`${name}: the desk card's list did not scroll`);
+    return;
+  }
+  const scrolled = (busy: Busy, frames: number) =>
+    `${perFrame(busy.task, frames)} ms a frame (script ${perFrame(busy.script, frames)}, style ${perFrame(busy.style, frames)}, layout ${perFrame(busy.layout, frames)})`;
+  const still = (busy: Busy) =>
+    `${busy.task} ms a second (script ${busy.script}, style ${busy.style}, layout ${busy.layout})`;
+  const withStill = perSecond(capped.still.busy, capped.still.ms);
+  const bareStill = perSecond(bare.still.busy, bare.still.ms);
+  const less = (a: Busy, b: Busy): Busy => ({
+    task: Math.round((a.task - b.task) * 100) / 100,
+    script: Math.round((a.script - b.script) * 100) / 100,
+    style: Math.round((a.style - b.style) * 100) / 100,
+    layout: Math.round((a.layout - b.layout) * 100) / 100,
+  });
+  const each = (run: ScrollRun): Busy => ({
+    task: perFrame(run.busy.task, run.frames),
+    script: perFrame(run.busy.script, run.frames),
+    style: perFrame(run.busy.style, run.frames),
+    layout: perFrame(run.busy.layout, run.frames),
+  });
+  const scrollCaps = less(each(capped.run), each(bare.run));
+  const stillCaps = less(withStill, bareStill);
+  // The caps' script is the one part the page's saturated thread doesn't
+  // blur: what each list costs still, and what the scroll asks past what
+  // the page's beats cost the caps over as long.
+  const perList = perFrame(stillCaps.script, capped.capped);
+  const scrollOwn = perFrame(
+    capped.run.busy.script -
+      bare.run.busy.script -
+      (stillCaps.script * capped.run.ms) / 1000,
+    capped.run.frames
+  );
+  kit.note(
+    `${name}: the caps at 4× CPU throttle, the canvas with them (${capped.capped} lists capped) against the same canvas with none (${bare.capped} capped). Still for the Live story's whole cycle (${LIVE_CYCLE_MS / 1000} s, each beat once): ${still(withStill)} with, ${still(bareStill)} without; the caps' ${still(stillCaps)}, their script ${perList} ms a second a list. The scroll's own script, past the caps' on the page's beats as long: ${scrollOwn} ms a frame. The desk card's list scrolled ${capped.run.range}px down and back: ${capped.run.frames} frames at ${scrolled(capped.run.busy, capped.run.frames)} with, ${bare.run.frames} at ${scrolled(bare.run.busy, bare.run.frames)} without; the caps' ${scrollCaps.task} ms a frame (script ${scrollCaps.script}, style ${scrollCaps.style}, layout ${scrollCaps.layout}); longest frame ${capped.run.worstFrame} ms with, ${bare.run.worstFrame} without; longest task ${capped.run.longest} ms with, ${bare.run.longest} without. Where the caps spend, still: ${spentMost(capped.still.by, capped.still.frames)}; scrolled: ${spentMost(capped.run.by, capped.run.frames)}; what stirred the page still: ${capped.still.stirs || "nothing"}`
+  );
 }
 
 /**
