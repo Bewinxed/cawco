@@ -27,7 +27,8 @@
  * On a scratch fleet, through the session's own MCP tool:
  *
  * 5. `artifact_create(kind: "preview", dir)` answers the folder's `weight`:
- *    its files, bytes, js and wasm, as the folder holds them.
+ *    its files, bytes, js and wasm, as the folder holds them, and its start
+ *    page's desk captures (none: it holds no picture).
  */
 import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -162,16 +163,50 @@ const stageChecks = async (kit: Kit) => {
     const page = await kit.page("desk");
     const logged: string[] = [];
     page.on("console", (message) => logged.push(message.text()));
+    /** What went wrong loading a sheet: its page's errors and refused modules. */
+    const wrong: string[] = [];
+    page.on("pageerror", (error) => wrong.push(`pageerror ${error.message}`));
+    page.on("response", (response) => {
+      if (response.status() >= 400) {
+        wrong.push(`${response.status()} ${response.url()}`);
+      }
+    });
+    /** Why a weight came back short: the page's errors, then the stage's last words. */
+    const why = () =>
+      ` [page: ${wrong.join(" | ") || "nothing"}; stage: ${words.slice(-600)}]`;
     /** The sheet of `file` loaded and mounted, then its weight from the stage. */
     const weighed = async (file: string): Promise<SheetWeight | null> => {
       await page.goto(
         `${base}/@cawco/canvas?file=${encodeURIComponent(`${SCRATCH}/${file}`)}`,
         { waitUntil: "load" }
       );
+      // The canvas posts a report on every draw, its first before the
+      // story's section has loaded: the weight is read once the report holds
+      // this file's frames, each drawn (or unshown at this width), so the
+      // story's modules are all in the stage's graph.
       await page.waitForFunction(
-        () =>
-          ((window as unknown as { __cawcoCanvas?: { reports: number } })
-            .__cawcoCanvas?.reports ?? 0) > 0
+        (wanted) => {
+          const sections =
+            (
+              window as unknown as {
+                __cawcoCanvas?: {
+                  report?: {
+                    sections: { file: string; frames: { state: string }[] }[];
+                  };
+                };
+              }
+            ).__cawcoCanvas?.report?.sections ?? [];
+          const section = sections.find((one) => one.file === wanted);
+          return (
+            !!section &&
+            section.frames.length > 0 &&
+            section.frames.every(
+              (frame) => frame.state === "drawn" || frame.state === "unshown"
+            )
+          );
+        },
+        `${SCRATCH}/${file}`,
+        { timeout: 60_000 }
       );
       const answer = (await (
         await fetch(
@@ -186,7 +221,7 @@ const stageChecks = async (kit: Kit) => {
     kit.check(
       "1: a story importing the fleet store reports its weight, and heaviest names that import first",
       !!heavy && heavy.heaviest[0]?.specifier === FLEET_STORE,
-      said(heavy)
+      `${said(heavy)}${heavy?.heaviest[0]?.specifier === FLEET_STORE ? "" : why()}`
     );
 
     // 1b. The store inside a fixture: the fixture is the import, `via` says where its weight enters.
@@ -407,6 +442,8 @@ const folderCheck = async (kit: Kit) => {
     ),
     js: size("app.js") + size("assets/chunk.mjs"),
     wasm: size("assets/mark.wasm"),
+    // Its start page holds no <img>, so no desk capture (core FolderWeight).
+    captures: 0,
   };
   try {
     const fleet = await kit.fleet(respond);
@@ -437,9 +474,12 @@ const folderCheck = async (kit: Kit) => {
       180_000
     )) as string;
     const weight = created.match(ANSWERED_WEIGHT)?.[1];
+    const read = weight ? (JSON.parse(weight) as Record<string, number>) : null;
     kit.check(
-      "5: artifact_create(kind: preview, dir) answers the folder's weight: files, bytes, js, wasm",
-      weight === JSON.stringify(wanted),
+      "5: artifact_create(kind: preview, dir) answers the folder's weight: files, bytes, js, wasm, and its start page's desk captures",
+      !!read &&
+        Object.keys(read).length === Object.keys(wanted).length &&
+        Object.entries(wanted).every(([key, value]) => read[key] === value),
       `answered ${weight ?? created.slice(0, 300)}; the folder holds ${JSON.stringify(wanted)}`
     );
   } finally {
