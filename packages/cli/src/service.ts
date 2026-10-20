@@ -1121,6 +1121,8 @@ const devFor = (
       // meant to drive the machine's own hub, so it names that hub here.
       environment: {
         [CAWCO_ENV.devHubUrl]: readEnv(CAWCO_ENV.hubUrl) ?? hubOrigin(),
+        // systemd starts this vite outside every CawCo entry (core no-huge-pages.ts), and its rolldown's mimalloc madvises its arenas MADV_HUGEPAGE: "When set to 0, THP is disabled for the process that mimalloc runs in" (microsoft.github.io/mimalloc/environment.html).
+        MIMALLOC_ALLOW_THP: "0",
       },
       // vite binds its own port, so the dev flavour has no socket to wait on.
       sockets: undefined,
