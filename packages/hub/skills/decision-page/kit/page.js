@@ -33,14 +33,7 @@
     for (const [n, option] of [
       ...group.querySelectorAll("[data-option]"),
     ].entries()) {
-      const label = option.querySelector("b") ?? option;
-      if (!label.querySelector(".dp-kc")) {
-        const cap = document.createElement("span");
-        cap.className = "dp-kc";
-        cap.setAttribute("aria-hidden", "true");
-        cap.textContent = String(n + 1);
-        label.prepend(cap);
-      }
+      keycap(option.querySelector("b") ?? option, n + 1);
     }
   }
 
@@ -139,3 +132,20 @@
   });
   render();
 })();
+
+/** Option `label`'s keycap digit `n`, once; the words beside it an element (The Mark Line Rule: page.css trims them to their x-height). */
+function keycap(label, n) {
+  if (label.querySelector(".dp-kc")) {
+    return;
+  }
+  if (label.tagName === "B") {
+    const words = document.createElement("span");
+    words.append(...label.childNodes);
+    label.append(words);
+  }
+  const cap = document.createElement("span");
+  cap.className = "dp-kc";
+  cap.setAttribute("aria-hidden", "true");
+  cap.textContent = String(n);
+  label.prepend(cap);
+}

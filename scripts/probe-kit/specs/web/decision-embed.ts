@@ -36,8 +36,10 @@
  * 7. A card's three media stand in one column, each at the card's full
  *    width.
  * 8. The page is as CawCo shows it: no offline notice, Send picks enabled,
- *    every option enabled with its keycap; at 390 the note and Send picks
- *    44px tall (DESIGN.md, The 44 Touch Rule).
+ *    every option enabled with its keycap; every option DESIGN.md's option
+ *    chip (30px and up, 8px radius, raised, its label on its keycap's line
+ *    by The Mark Line Rule); at 390 the note and Send picks 44px tall
+ *    (DESIGN.md, The 44 Touch Rule).
  * 9. The page's own capture, stacked from the window at each scroll
  *    (decision-embeds.ts `capturePage`), paints every embed: no embed's box
  *    in it is one flat colour.
@@ -161,11 +163,32 @@ function readPage() {
     note: Math.min(
       ...[...document.querySelectorAll(".dp-note textarea")].map(tall)
     ),
-    options: options.map((one) => ({
-      option: one.dataset.option ?? "",
-      disabled: one.disabled,
-      keycap: tall(one.querySelector(".dp-kc")),
-    })),
+    options: options.map((one) => {
+      const style = getComputedStyle(one);
+      const cap = one.querySelector(".dp-kc")?.getBoundingClientRect();
+      const words = one.querySelector<HTMLElement>("b > :not(.dp-kc)");
+      const at = words?.getBoundingClientRect();
+      const card = one.closest(".dp-card");
+      return {
+        option: one.dataset.option ?? "",
+        disabled: one.disabled,
+        keycap: tall(one.querySelector(".dp-kc")),
+        h: tall(one),
+        radius: style.borderTopLeftRadius,
+        // The raised surface the card stands on (DESIGN.md: the option chip is raised).
+        raised:
+          !!card && style.backgroundColor === getComputedStyle(card).backgroundColor,
+        trim: words ? getComputedStyle(words).textBoxTrim : "none",
+        // The label's x-height middle (its trimmed box's) against the keycap's middle.
+        off:
+          cap && at
+            ? Math.round(
+                Math.abs(cap.top + cap.height / 2 - (at.top + at.height / 2)) *
+                  100
+              ) / 100
+            : 99,
+      };
+    }),
     trio,
   };
 }
@@ -401,6 +424,19 @@ const spec: Spec = {
           );
           const closed = said.options.filter(
             (one) => one.disabled || one.keycap === 0
+          );
+          const offRecipe = said.options.filter(
+            (one) =>
+              one.h < 30 ||
+              one.radius !== "8px" ||
+              !one.raised ||
+              one.trim !== "trim-both" ||
+              one.off > 0.5
+          );
+          kit.check(
+            `${leg}: every option is DESIGN.md's option chip: 30px and up, 8px radius, raised, its label's x-height middle on its keycap's (${said.options.map((one) => `${one.option} ${one.h}px ${one.radius}, ${one.off}px off`).join(", ")})`,
+            said.options.length > 0 && offRecipe.length === 0,
+            JSON.stringify(offRecipe)
           );
           kit.check(
             `${leg}: the page as CawCo shows it: no offline notice, Send picks enabled, every option live with its keycap (${said.options.length} options)`,
