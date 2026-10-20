@@ -29,6 +29,8 @@ struct SessionMenuContext {
     let continueStored: (ContinueSource) -> Void
     /// Cancels the continuation carried on from this row after its form was put away, in any stage before it starts.
     let cancelContinuation: (String) -> Void
+    /// A Fork whose source carries no mode to start on: the New Session sheet, whose Start waits for a pick.
+    let fork: (ForkSource) -> Void
     /// The window's one question about its sessions, drawn under the row that asked.
     let asks: SessionAsks
     /// The list the menu opened in ("page-work", "page-recent", …): a
@@ -107,7 +109,10 @@ enum SessionMenus {
         first.append(pending("Fork", running: "Forking…", image: Glyph.structure.image, verb: .fork, id: id, status: status,
                              host: host, hub: hub, enabled: forkable != nil && machine != nil) {
             guard let key = forkable else { return nil }
-            return try await hub.fork(machineId: row.machineId, cwd: row.cwd, sessionKey: key, harness: row.harness)
+            // The sheet opens once the menu has gone: one presented as it closes goes with it.
+            return try await hub.fork(ForkSource(machineId: row.machineId, cwd: row.cwd, sessionKey: key, harness: row.harness)) { source in
+                host.whenClosed { context.fork(source) }
+            }
         } then: { forked in
             if let forked { context.open(forked) }
         })
@@ -195,8 +200,9 @@ enum SessionMenus {
         }
         first.append(pending("Fork from here", running: "Forking…", image: Glyph.structure.image, verb: .fork, id: to,
                              status: row?.status.rawValue, host: host, hub: hub) {
-            try await hub.fork(machineId: machineId, cwd: info.cwd ?? "", sessionKey: info.sessionId,
-                               harness: info.harness)
+            try await hub.fork(ForkSource(machineId: machineId, cwd: info.cwd ?? "", sessionKey: info.sessionId, harness: info.harness)) { source in
+                host.whenClosed { context.fork(source) }
+            }
         } then: { forked in
             if let forked { context.open(forked) }
         })

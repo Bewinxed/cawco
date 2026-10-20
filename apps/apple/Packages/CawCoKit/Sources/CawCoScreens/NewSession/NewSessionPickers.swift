@@ -487,14 +487,15 @@ struct FullSendCopy {
 /// is said where every permission pick reports (SessionDetails' feedback line).
 final class PermissionPopover: NsPopoverController {
     private let modes: [(value: String, disabled: Bool)]
-    private let value: String
+    /// The chosen mode; none while the form has none chosen.
+    private let value: String?
     private let harness: String?
     private let restarts: Bool
     private let onPick: (String) -> Void
     /// Full Send's question, after the last row (AskHere).
     private let askView = AskHere()
 
-    init(modes: [(value: String, disabled: Bool)], value: String, harness: String?, restarts: Bool = false,
+    init(modes: [(value: String, disabled: Bool)], value: String?, harness: String?, restarts: Bool = false,
          onPick: @escaping (String) -> Void) {
         self.modes = modes
         self.value = value

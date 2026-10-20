@@ -18,6 +18,23 @@ public struct ContextUsage: Codable, Sendable {
 public struct FileWriteResult: Codable, Sendable { public let bytes: Double }
 public struct ReloadedSkills: Codable, Sendable { public let skills: [Components.Schemas.SlashCommand] }
 
+/// A conversation a Fork branches, where it lives, and the message it branches at (none: its end).
+public struct ForkSource: Sendable {
+    public var machineId: String
+    public var cwd: String
+    public var sessionKey: String
+    public var harness: Components.Schemas.HarnessKind
+    public var at: String?
+
+    public init(machineId: String, cwd: String, sessionKey: String, harness: Components.Schemas.HarnessKind, at: String? = nil) {
+        self.machineId = machineId
+        self.cwd = cwd
+        self.sessionKey = sessionKey
+        self.harness = harness
+        self.at = at
+    }
+}
+
 extension HubConnection {
     /// Starts new work or resumes/forks/relaunches the supplied session. The
     /// generated payload carries every spawn option; no settings are guessed.
@@ -51,27 +68,48 @@ extension HubConnection {
         return named
     }
 
-    /// Branches the conversation `sessionKey` on its own harness (the source row's, or its catalog entry's).
-    @discardableResult
-    public func fork(machineId: String, cwd: String, sessionKey: String,
-        harness: Components.Schemas.HarnessKind, at: String? = nil) async throws -> String {
-        let sourceId = fleet.conversationId(sessionKey: sessionKey, machineId: machineId, cwd: cwd)
-        let source = fleet.byId[sourceId]?.session
-        let payload = Components.Schemas.SpawnPayload(
-            cwd: cwd,
-            effort: source?.effort.flatMap { .init(rawValue: $0.rawValue) },
-            harness: try requested(harness) as Components.Schemas.SpawnPayload.HarnessPayload,
+    /// A branch of the conversation `source.sessionKey` on its own harness
+    /// (the source row's, or its catalog entry's), as it goes out with no
+    /// form: its source's model, effort and recorded mode. A branch is a new
+    /// session nobody picked a mode for, so a Full Send source branches on
+    /// Bypass (`SpawnPrefs.unpicked`). No mode when its source recorded none.
+    public func forkPayload(_ source: ForkSource) throws -> Components.Schemas.SpawnPayload {
+        let sourceId = fleet.conversationId(sessionKey: source.sessionKey, machineId: source.machineId, cwd: source.cwd)
+        let row = fleet.byId[sourceId]?.session
+        return Components.Schemas.SpawnPayload(
+            cwd: source.cwd,
+            effort: row?.effort.flatMap { .init(rawValue: $0.rawValue) },
+            harness: try requested(source.harness) as Components.Schemas.SpawnPayload.HarnessPayload,
             instanceId: UUID().uuidString.lowercased(),
-            model: source?.model.flatMap { $0.isEmpty ? nil : $0 },
-            // A branch is a new session nobody picked a mode for, so a Full
-            // Send source branches on Bypass (`SpawnPrefs.unpicked`).
-            permissionMode: source?.permissionMode
+            model: row?.model.flatMap { $0.isEmpty ? nil : $0 },
+            permissionMode: row?.permissionMode
                 .flatMap(Components.Schemas.SpawnPayload.PermissionModePayload.init(rawValue:))
                 .map(SpawnPrefs.unpicked),
-            resume: .init(sessionKey: sessionKey, fork: true, atMessage: at.flatMap { $0.isEmpty ? nil : $0 }),
+            resume: .init(sessionKey: source.sessionKey, fork: true, atMessage: source.at.flatMap { $0.isEmpty ? nil : $0 }),
             scratch: .init()
         )
-        let id = try await spawn(machineId: machineId, payload: payload)
+    }
+
+    /// Fork: the branch starts at once on what its source carries, and its
+    /// id comes back. A source that recorded no mode, on a harness that has
+    /// modes there (or hasn't said which), carries none to start on: the
+    /// branch goes to `unchosen` (the New Session sheet, whose Start waits
+    /// for a pick) and nil comes back.
+    public func fork(_ source: ForkSource, unchosen: (ForkSource) -> Void) async throws -> String? {
+        let payload = try forkPayload(source)
+        let report = fleet.machines.first { $0.machineId == source.machineId }?
+            .harnesses?.first { $0.harness.rawValue == source.harness.rawValue }
+        guard payload.permissionMode != nil || report?.capabilities.permissionModes.isEmpty == true else {
+            unchosen(source)
+            return nil
+        }
+        return try await fork(machineId: source.machineId, payload: payload)
+    }
+
+    /// Sends a branch (`forkPayload`, as it stands or as the form set it) and its first prompt, when it has one.
+    @discardableResult
+    public func fork(machineId: String, payload: Components.Schemas.SpawnPayload, prompt: String? = nil) async throws -> String {
+        let id = try await spawn(machineId: machineId, payload: payload, prompt: prompt)
         _ = await refresh()
         return id
     }

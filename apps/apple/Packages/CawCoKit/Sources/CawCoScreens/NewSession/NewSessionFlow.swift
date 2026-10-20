@@ -5,8 +5,9 @@ import UIKit
 
 /// The one way into the New Session form, and the continuations it started
 /// (Sidebar.svelte's single dialog mount over continue.svelte.ts): a new
-/// session with a place filled in, or "Continue in new session" from any
-/// session's menu. The hub carries each continuation to its end whatever
+/// session with a place filled in, a Fork whose source carries no mode, or
+/// "Continue in new session" from any session's menu. Every start with no
+/// form of its own opens it; none is refused for want of a mode. The hub carries each continuation to its end whatever
 /// happens to the form. One whose form was put away while it runs is seen
 /// through on the row it was asked from (`HubConnection.acts`): "Continuing
 /// in a new session…", then "Continued in a new session" with the new
@@ -31,9 +32,14 @@ final class NewSessionFlow {
         self.hub = hub
     }
 
-    /// A new session, with what the caller already knows filled in.
-    func start(machineId: String? = nil, cwd: String? = nil, projectId: String? = nil) {
-        show(NewSessionViewController(hub: hub, machineId: machineId, cwd: cwd, projectId: projectId))
+    /// A new session, with what the caller already knows filled in; `spinOff` opens it as a spin-off.
+    func start(machineId: String? = nil, cwd: String? = nil, projectId: String? = nil, spinOff: Bool = false) {
+        show(NewSessionViewController(hub: hub, machineId: machineId, cwd: cwd, projectId: projectId, spinOff: spinOff))
+    }
+
+    /// A Fork whose source carries no mode to start on: the form on the branch, whose Start waits for a pick.
+    func fork(_ source: ForkSource) {
+        show(NewSessionViewController(hub: hub, forking: source))
     }
 
     /// Continue in new session, by the id the hub knows the source by.

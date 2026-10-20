@@ -196,7 +196,7 @@ enum ActsProbe {
         for id in ["p-fork", "p-arch-ok", "p-arch-busy", "p-del"] { say("finished", id, shell) }
         Task {
             await SessionMenus.runPending(.fork, id: "p-fork", host: host, hub: hub, work: {
-                try await hub.fork(machineId: "probe-mac", cwd: "/tmp/probe", sessionKey: "s-fork", harness: .claude)
+                try await hub.fork(ForkSource(machineId: "probe-mac", cwd: "/tmp/probe", sessionKey: "s-fork", harness: .claude)) { _ in }
             }, then: { _ in })
         }
         await wait(0.3)
@@ -245,7 +245,7 @@ enum ActsProbe {
     private static func peek(_ id: String, _ title: String, _ shell: ShellController, home: HomeModel,
                              boards: () -> [HomeViewController], body: (() -> PeekController?) async -> Void) async {
         if let board = boards().first {
-            Peek.show(PeekTarget(viewId: id, title: title), hub: shell.hub, home: home, from: board) { _ in }
+            Peek.show(PeekTarget(viewId: id, title: title), hub: shell.hub, home: home, from: board, open: { _ in }, fork: { _ in })
             await wait(1.5)
         }
         let found = { controllers(PeekController.self, from: shell).first }

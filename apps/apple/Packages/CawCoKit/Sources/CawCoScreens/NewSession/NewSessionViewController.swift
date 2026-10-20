@@ -33,7 +33,8 @@ public struct SessionDraft: Sendable {
     var cwd: String
     var prompt: String
     var harness: String
-    var permissionMode: String
+    /// None when the form went out with no mode (a harness that has none).
+    var permissionMode: String?
     var model: String
     var effort: String?
     var spinOff: Bool
@@ -50,15 +51,20 @@ public struct SessionDraft: Sendable {
 /// does first, where, on which machines, kept or not, and on which model. It
 /// owns the form's logic (the location check, the submission guard, the exact
 /// spawn payload) and composes the designed sections. Over the scrim: a card
-/// in the middle on a regular width, the bottom sheet on a compact one.
+/// in the middle on a regular width, the bottom sheet on a compact one. Every
+/// start with no form of its own opens it (a project's New session and Spin
+/// off, a Fork whose source carries no mode), and Start waits for a mode.
 public final class NewSessionViewController: ObservedViewController, UIViewControllerTransitioningDelegate, UIGestureRecognizerDelegate {
     private static let keptPrompt = "cawco:new-session-prompt"
     private static let effortLevels = ["low", "medium", "high", "xhigh", "max"]
 
     private let hub: HubConnection
-    private let prefill: (machineId: String?, cwd: String?, projectId: String?)
+    private let prefill: (machineId: String?, cwd: String?, projectId: String?, spinOff: Bool)
     /// Continue in new session: the form starts a session seeded with a summary of this one.
     private var continuing: ContinueSource?
+    /// A Fork whose source carries no mode: the form starts the branch, on
+    /// its source's machine, folder and harness, once a mode is picked.
+    private let forking: ForkSource?
     private let restore: SessionDraft?
 
     /// The session the form started is ready to be shown.
@@ -80,7 +86,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private var harness = "claude"
     private var model = ""
     private var effort: String?
-    private var permissionMode = "bypassPermissions"
+    /// None until the person picks one, when no start of theirs is remembered: Start waits for it.
+    private var permissionMode: String?
     /// Full Send came with the form (the last start's mode, or a failed
     /// continuation's) rather than from a pick in it: the warning says where
     /// it came from. A pick in the picker, confirmed there, clears it.
@@ -175,10 +182,11 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
 
     private var compact: Bool { traitCollection.horizontalSizeClass == .compact }
 
-    public init(hub: HubConnection, machineId: String? = nil, cwd: String? = nil, projectId: String? = nil) {
+    public init(hub: HubConnection, machineId: String? = nil, cwd: String? = nil, projectId: String? = nil, spinOff: Bool = false) {
         self.hub = hub
-        prefill = (machineId, cwd, projectId)
+        prefill = (machineId, cwd, projectId, spinOff)
         continuing = nil
+        forking = nil
         restore = nil
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .custom
@@ -188,9 +196,23 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     /// Continue in new session; `restore` is the form a failed continuation was submitted with.
     public init(hub: HubConnection, continuing source: ContinueSource, restore: SessionDraft? = nil) {
         self.hub = hub
-        prefill = (nil, nil, nil)
+        prefill = (nil, nil, nil, false)
         continuing = source
+        forking = nil
         self.restore = restore
+        super.init(nibName: nil, bundle: nil)
+        modalPresentationStyle = .custom
+        transitioningDelegate = self
+    }
+
+    /// Fork, for a source that carries no mode to start on: the branch is a
+    /// spin-off on the source's machine and folder, as a Fork's always is.
+    public init(hub: HubConnection, forking source: ForkSource) {
+        self.hub = hub
+        prefill = (source.machineId, source.cwd, nil, true)
+        continuing = nil
+        forking = source
+        restore = nil
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .custom
         transitioningDelegate = self
@@ -232,7 +254,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         // Only the harness and the permission mode are revived as a form opens;
         // the model and effort it was last set to are kept but start untouched.
         harness = hub.spawnPrefs.harness.rawValue
-        permissionMode = hub.spawnPrefs.permissionMode.rawValue
+        permissionMode = hub.spawnPrefs.permissionMode?.rawValue
+        spinOff = prefill.spinOff
         summarizerHarness = harness
         let seeded = prefill.projectId.flatMap { id in fleet.projects.first { $0.id == id } }
         projectId = seeded?.id
@@ -242,6 +265,14 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         // A seeded project starts at its primary checkout; without one the form asks.
         cwd = continuing?.cwd ?? prefill.cwd ?? seeded?.primaryPlace?.path ?? ""
         prompt = UserDefaults.standard.string(forKey: Self.keptPrompt) ?? ""
+        // A branch runs where its conversation is, on its harness, and opens
+        // on the model and effort its source ran at.
+        if let source = forking, let branch = try? hub.forkPayload(source) {
+            harness = source.harness.rawValue
+            model = branch.model ?? ""
+            effort = branch.effort?.rawValue
+            machinesTouched = true
+        }
         if continuing != nil, let restore {
             repo = restore.repo
             projectId = restore.projectId
@@ -310,8 +341,12 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private var offlineMachine: MachineRow? { fleet.machines.first { machineIds.contains($0.machineId) && $0.status != "online" } }
     private var report: Components.Schemas.HarnessReport? { machine?.harnesses?.first { $0.harness.rawValue == harness } }
 
+    /// The harnesses the rail offers: a branch's is its source's alone.
     private var installed: [String] {
-        ModelCatalog.harnesses.filter { kind in machine?.harnesses?.contains { $0.harness.rawValue == kind && $0.installed } ?? false }
+        ModelCatalog.harnesses.filter { kind in
+            (forking.map { $0.harness.rawValue == kind } ?? true)
+                && (machine?.harnesses?.contains { $0.harness.rawValue == kind && $0.installed } ?? false)
+        }
     }
 
     private var locationKey: String { machineIds.joined(separator: "\u{1}") + "\u{2}" + path }
@@ -380,7 +415,10 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
 
     /// Why the form's mode can't go out: never swapped for another, Start
     /// waits until the machine reports its harness or the person picks a mode it takes.
-    private var modeRefused: String? { refusal(of: permissionMode) }
+    private var modeRefused: String? { permissionMode.flatMap(refusal(of:)) }
+
+    /// A harness with modes and none picked: Start waits for the person's pick.
+    private var modeUnchosen: Bool { !modeless && permissionMode == nil }
 
     private var workdir: String {
         guard let repo else { return path }
@@ -539,7 +577,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
 
     private var cantStart: Bool {
         continueBlocked || !connected || machineIds.isEmpty || offlineMachine != nil || unreadable || locationUnverified || !repoValid
-            || modeRefused != nil
+            || modeRefused != nil || modeUnchosen
             || (moveTo != nil && !(moving || movedAlready))
     }
 
@@ -910,7 +948,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             backButton.isHidden = !step
             closeButton.isHidden = step
             heading.text = step ? (moveEstimated?.ask?.title ?? "New Session") : "New Session"
-            chips.isUserInteractionEnabled = !step
+            // A branch runs where its conversation is: its chips say where, and take no pick.
+            chips.isUserInteractionEnabled = !step && forking == nil
             view.layoutIfNeeded()
         }
         if animated, !UIAccessibility.isReduceMotionEnabled, view.window != nil {
@@ -932,7 +971,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     /// The parts that differ between a new session and a continuation.
     private func buildMode() {
         let continues = continuing != nil
-        crumb.text = continues ? "Sessions · Continue" : "Sessions · New"
+        crumb.text = continues ? "Sessions · Continue" : (forking != nil ? "Sessions · Fork" : "Sessions · New")
         let header = nsSectionHeader(.chatRound, hue: Palette.hueBlue500, continues ? "Next step (optional)" : "First prompt")
         let at = promptSection.arrangedSubviews.firstIndex(of: promptHeader) ?? 0
         promptHeader.removeFromSuperview()
@@ -1078,8 +1117,12 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private var probeSaid = ""
 
     private func probeForm() {
+        // What it opened on, too: `-form-starts` (scripts/probe-kit/specs/ios-form-starts.ts) reads the prefill and the mode.
         let said = "form: step \(moveStep) · start \"\(startLabel)\" \(cantStart ? "disabled" : "enabled") · heading \"\(heading.text ?? "")\" · reading \"\(readingText)\""
-        if said != probeSaid, ProcessInfo.processInfo.arguments.contains("-new-session") {
+            + " · crumb \"\(crumb.text ?? "")\" · machines \(machineIds.joined(separator: ",")) · cwd \(path) · project \(projectId ?? "-")"
+            + " · spinOff \(spinOff) · harness \(harness) · mode \(permissionMode ?? "-")"
+        let arguments = ProcessInfo.processInfo.arguments
+        if said != probeSaid, arguments.contains("-new-session") || arguments.contains("-form-starts") {
             probeSaid = said
             Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(said, privacy: .public)")
         }
@@ -1408,7 +1451,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     }
 
     private func submit() {
-        guard !busy, connected else { return }
+        // A key's start waits for a mode as Start does: the chip asks for one.
+        guard !busy, connected, !modeUnchosen, modeRefused == nil else { return }
         error = validate()
         guard error.isEmpty else {
             requestRefresh()
@@ -1496,7 +1540,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     /// Written only once a spawn has gone out, so an abandoned form teaches nothing (`rememberSpawn`).
     private func remember(_ draft: SessionDraft) throws {
         hub.spawnPrefs.remember(harness: try Self.wire(draft.harness), model: Self.shown(draft),
-                                permissionMode: try Self.wire(draft.permissionMode), effort: try draft.effort.map(Self.wire))
+                                permissionMode: try draft.permissionMode.map(Self.wire), effort: try draft.effort.map(Self.wire))
         hub.spawnPrefs.rememberMachine(draft.machineIds)
     }
 
@@ -1506,9 +1550,19 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     }
 
     private func spawnOne(_ target: String, _ draft: SessionDraft, sendsMode: Bool) async throws -> String {
+        let prompt = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A branch: its source's conversation, on the mode, model and effort picked here.
+        if let source = forking {
+            var payload = try hub.forkPayload(source)
+            payload.permissionMode = sendsMode ? try draft.permissionMode.map(Self.wire) : nil
+            let model = Self.shown(draft)
+            payload.model = model.isEmpty ? nil : model
+            payload.effort = try draft.effort.map(Self.wire)
+            return try await hub.fork(machineId: source.machineId, payload: hub.explicit(machineId: source.machineId, payload), prompt: prompt)
+        }
         var payload = Components.Schemas.SpawnPayload(cwd: draft.cwd, instanceId: UUID().uuidString.lowercased())
         payload.harness = try Self.wire(draft.harness)
-        if sendsMode { payload.permissionMode = try Self.wire(draft.permissionMode) }
+        if sendsMode { payload.permissionMode = try draft.permissionMode.map(Self.wire) }
         let model = Self.shown(draft)
         if !model.isEmpty { payload.model = model }
         if let effort = draft.effort { payload.effort = try Self.wire(effort) }
@@ -1516,7 +1570,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         if let repo = draft.repo { payload.bootstrap = .init(repo: repo, baseDir: draft.baseCwd) }
         payload.projectId = attached(target, draft)
         // The form's own choices stand; `explicit` only names what a harness needs named.
-        return try await hub.spawn(machineId: target, payload: hub.explicit(machineId: target, payload), prompt: draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines))
+        return try await hub.spawn(machineId: target, payload: hub.explicit(machineId: target, payload), prompt: prompt)
     }
 
     /// A form value as the wire's own enum; a value the wire does not know is a fault, never guessed around.
@@ -1542,7 +1596,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             target: .init(
                 harness: try Self.wire(draft.harness), model: Self.shown(draft).isEmpty ? nil : Self.shown(draft), machineId: target, cwd: draft.cwd,
                 effort: try draft.effort.map(Self.wire),
-                permissionMode: sendsMode ? try Self.wire(draft.permissionMode) : nil,
+                permissionMode: sendsMode ? try draft.permissionMode.map(Self.wire) : nil,
                 scratch: draft.spinOff ? .init(worktree: false, baseCwd: draft.cwd) : nil,
                 bootstrap: draft.repo.map { .init(repo: $0, baseDir: draft.baseCwd) },
                 projectId: attached(target, draft)
@@ -1585,7 +1639,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
                 harness: try Self.wire(draft.harness),
                 model: model.isEmpty ? nil : model,
                 effort: try draft.effort.map(Self.wire),
-                permissionMode: sendsMode ? try Self.wire(draft.permissionMode) : nil
+                permissionMode: sendsMode ? try draft.permissionMode.map(Self.wire) : nil
             ),
             prompt: prompt.isEmpty ? nil : prompt
         )
