@@ -26,7 +26,7 @@
  */
 import { writeFile } from "node:fs/promises";
 import type { Page } from "playwright-core";
-import type { Spec } from "../kit";
+import { pageReady, type Spec } from "../kit";
 import { chosen, type State } from "../surfaces/catalogue";
 import type { Scene } from "../surfaces/scene";
 import { PASSES, walkTapes } from "../surfaces/walk";
@@ -102,6 +102,7 @@ async function hydrated(
     if (!(await steady(page, "body"))) {
       return false;
     }
+    await pageReady(page);
     if (state.act) {
       await state.act(page, scene);
     }

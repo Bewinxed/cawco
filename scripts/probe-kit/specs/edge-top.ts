@@ -47,6 +47,11 @@ import {
 } from "../kit";
 
 const STRIP = '[data-slot="edge-top"]';
+/** Caw's head side, px, as NeedsCaw.svelte `head` draws it: 24 on a phone, 20 in the wide bar's group. */
+const HEAD: Record<Extract<View, "desk" | "phone">, number> = {
+  desk: 20,
+  phone: 24,
+};
 /** The rail's trailing edge at the desk: its hairline's column. */
 const RAIL_X = 229;
 const ROWS = [3, 4];
@@ -334,7 +339,11 @@ const differs = (p: Raster, q: Raster): string[] => {
   return found;
 };
 
-type Pane = (view: View, theme: Theme, scale?: number) => Promise<Page>;
+type Pane = (
+  view: keyof typeof HEAD,
+  theme: Theme,
+  scale?: number
+) => Promise<Page>;
 
 /** The strip as WebKit's sampler takes it, with its mask and without. */
 const boxLeg = async (kit: Kit, page: Page, leg: string) => {
@@ -533,6 +542,20 @@ const run = async (kit: Kit) => {
       [[alpha, beta], alpha] as const
     );
     await open(page, `${base}/session/${alpha}`, "[data-session-tab]", 120_000);
+    // As `open` hands the page over, it draws its own answers: Caw's head the
+    // side NeedsCaw sets from the width (`head`, 24 on a phone, 20 in the
+    // wide bar's group), not the server's guess from the cookie.
+    const side = await page.evaluate(() => {
+      const face = document.querySelector<HTMLElement>(
+        "[data-needs-caw] [data-caw-phase]"
+      );
+      return face ? getComputedStyle(face).getPropertyValue("--side") : null;
+    });
+    kit.check(
+      `${view} ${theme}${scale ? ` ${scale}x` : ""}: as open() returns, Caw's head is ${HEAD[view]}px`,
+      side === `${HEAD[view]}px`,
+      `--side ${side ?? "no face"}`
+    );
     // The bar marks the root once it has placed the tabs: hosting them at
     // the desk, floating over the phone's tab row. The strip's colour follows.
     await page.waitForFunction(

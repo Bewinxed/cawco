@@ -965,9 +965,12 @@
 <!-- The tooltip provider and the lightbox, shared with an artifact's own tab. -->
 <Overlays>
   <!-- As tall as the visible area reaches, so the composer and a page's
-       footer stand on a keyboard (cawco/visible-viewport `floor`). -->
+       footer stand on a keyboard (cawco/visible-viewport `floor`).
+       `data-first-paint` while it still draws the server's answers
+       (first-render.svelte.ts), until the release a frame after mount. -->
   <div
     data-slot="shell"
+    data-first-paint={firstRender.held || undefined}
     class="flex h-dvh w-full bg-surface-recess overflow-hidden"
     style="--sidebar-width: var(--rail-w, {railWidth === null
       ? 'var(--c-sidebar-w)'

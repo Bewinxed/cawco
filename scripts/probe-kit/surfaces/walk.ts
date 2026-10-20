@@ -22,7 +22,14 @@ import {
   type Tape,
   type TapeHold,
 } from "../hub-tape";
-import { type Kit, open, ROOT, type Theme, type View } from "../kit";
+import {
+  adopted,
+  type Kit,
+  pageReady,
+  ROOT,
+  type Theme,
+  type View,
+} from "../kit";
 import { actHolds, type State, type Surface, type Width } from "./catalogue";
 import { elementAt, holdStill, installReader, PROPS } from "./read";
 import { type Scene, VARIANTS, type Variant } from "./scene";
@@ -752,32 +759,6 @@ async function stillInPageTime(page: Page): Promise<void> {
 const STILL_STEP_MS = 250;
 const STILL_STRETCHES = 60;
 
-/**
- * In the page: how many elements under `root` (its largest match, else the
- * body) Svelte has adopted. The dev server tags each with `__svelte_meta`;
- * a build marks each one it wires with a symbol-keyed cache (its class,
- * style or attributes, its delegated events: svelte constants.js
- * `CLASS_CACHE`, …). The server's markup carries neither.
- */
-function adopted(root: string): number {
-  let top: Element = document.body;
-  let most = -1;
-  for (const el of document.querySelectorAll(root)) {
-    const n = el.getElementsByTagName("*").length;
-    if (n > most) {
-      top = el;
-      most = n;
-    }
-  }
-  let count = 0;
-  for (const el of [top, ...top.querySelectorAll("*")]) {
-    if ("__svelte_meta" in el || Object.getOwnPropertySymbols(el).length > 0) {
-      count += 1;
-    }
-  }
-  return count;
-}
-
 /** How long the adopted count holds before the page is read as hydrated, and how often it is read. */
 const HYDRATED_HOLD_MS = 1000;
 const HYDRATED_POLL_MS = 100;
@@ -856,12 +837,9 @@ async function opened(
   scene: Scene
 ): Promise<void> {
   const route = (state.route ?? surface.route)(scene);
-  await open(
-    page,
-    `${base}${route}`,
-    () => document.readyState !== "loading",
-    60_000
-  );
+  // Not kit `open`: its ready step runs in the page's frames, which this
+  // page's paused clock holds until `arrive` runs it on.
+  await page.goto(`${base}${route}`, { waitUntil: "domcontentloaded" });
   // The dev server built the route's modules for that load: loaded again,
   // the page hydrates on modules already built.
   if (surface.serve === "dev") {
@@ -870,6 +848,7 @@ async function opened(
   await hydrated(page, "body");
   await trace(page, "hydrated");
   await arrive(page);
+  await pageReady(page);
   await trace(page, "arrived");
   const { act } = state;
   if (!act) {

@@ -1179,7 +1179,110 @@ async function fleetEvidence(fleet: Fleet, dir: string): Promise<void> {
   }
 }
 
-/** Opens `url` and waits for `ready` in the page, fonts loaded. */
+/**
+ * In the page: how many elements under `root` (its largest match, else the
+ * body) Svelte has adopted. The dev server tags each with `__svelte_meta`;
+ * a build marks each one it wires with a symbol-keyed cache (its class,
+ * style or attributes, its delegated events: svelte constants.js
+ * `CLASS_CACHE`, …). The server's markup carries neither.
+ */
+export function adopted(root: string): number {
+  let top: Element = document.body;
+  let most = -1;
+  for (const el of document.querySelectorAll(root)) {
+    const n = el.getElementsByTagName("*").length;
+    if (n > most) {
+      most = n;
+      top = el;
+    }
+  }
+  let count = 0;
+  for (const el of [top, ...top.querySelectorAll("*")]) {
+    if ("__svelte_meta" in el || Object.getOwnPropertySymbols(el).length > 0) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+/** The reads in a row, a frame apart, the page's layout boxes and adopted count hold for {@link pageReady}. */
+const STILL_FRAMES = 3;
+/** A frame at 60Hz, ms: what {@link pageReady} waits between reads. */
+const FRAME_MS = 17;
+/** How long {@link pageReady} gives the page to hydrate, let go of its first paint and stand. */
+const READY_WITHIN_MS = 30_000;
+
+/**
+ * In the page, for {@link pageReady}: the step it still waits on, or, with
+ * none left, every element's layout box and the adopted count as one string.
+ */
+function readiness(): { step: string | null; boxes: string } {
+  let count = 0;
+  const parts: number[] = [];
+  for (const el of document.body.querySelectorAll("*")) {
+    if ("__svelte_meta" in el || Object.getOwnPropertySymbols(el).length > 0) {
+      count += 1;
+    }
+    if (el instanceof HTMLElement) {
+      parts.push(el.offsetLeft, el.offsetTop, el.offsetWidth, el.offsetHeight);
+    }
+  }
+  if (count === 0) {
+    return { step: "hydrated", boxes: "" };
+  }
+  if (document.querySelector("[data-first-paint]")) {
+    return { step: "the Shell's first-render release", boxes: "" };
+  }
+  return { step: null, boxes: `${count};${parts.join(",")}` };
+}
+
+/**
+ * Waits until the page draws its own answers, standing: what a read taken
+ * at `load` and two frames saw was the server's first paint (NeedsCaw's head
+ * the cookie's 20px guess where the hydrated page at 390 draws 24px).
+ *
+ * 1. Hydrated: Svelte has adopted some of the page ({@link adopted}).
+ * 2. The Shell's first-render release: no `[data-first-paint]` stands
+ *    (Shell.svelte, first-render.svelte.ts). A page with no Shell has none.
+ * 3. Still: every element's layout box (`offset*`, which a transform does
+ *    not move, so a running breath or spinner is still) and the adopted
+ *    count the same for {@link STILL_FRAMES} reads in a row a frame apart,
+ *    so a part async Svelte hydrates late, or a size a script sets on
+ *    mount, has landed.
+ *
+ * Read from here, a frame's length apart in real time, never on the page's
+ * own frames: the walk's page runs Playwright's paused fake clock, which
+ * holds `requestAnimationFrame` too. The walk calls it once `stand` has run
+ * that clock on, so the Shell's release (a frame and a task after mount)
+ * has come.
+ */
+export async function pageReady(page: Page): Promise<void> {
+  const deadline = Date.now() + READY_WITHIN_MS;
+  let last = "";
+  let held = 0;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: each read is a frame after the last
+    const now = await page.evaluate(readiness);
+    if (now.step === null) {
+      held = now.boxes === last ? held + 1 : 0;
+      last = now.boxes;
+      if (held >= STILL_FRAMES) {
+        return;
+      }
+    } else {
+      held = 0;
+      last = "";
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `${page.url()}: not ready within ${READY_WITHIN_MS / 1000}s: ${now.step ?? `still for ${STILL_FRAMES} frames`}`
+      );
+    }
+    await page.waitForTimeout(FRAME_MS);
+  }
+}
+
+/** Opens `url`, waits for `ready` in the page and fonts loaded, then for the page's own answers, standing ({@link pageReady}). */
 export async function open(
   page: Page,
   url: string,
@@ -1193,6 +1296,7 @@ export async function open(
     await page.waitForFunction(ready, null, { timeout });
   }
   await page.evaluate(() => document.fonts.ready);
+  await pageReady(page);
 }
 
 /** Waits until every finite animation on the page has landed. */
