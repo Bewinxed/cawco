@@ -68,7 +68,6 @@ import {
   CURATOR_DENIED_TOOLS,
   type Envelope,
   type EventThreadMessage,
-  type FencedHarness,
   type HarnessKind,
   handoffMarker,
   type InstanceRow,
@@ -186,11 +185,6 @@ export const cawDenied = (harness: string): readonly string[] => {
   return CAW_DENIED_TOOLS[harness as HarnessKind];
 };
 
-/** The harnesses a fleet-watch triage run starts on: the ones that fence it to CawCo's tools (core `FencedHarness`). */
-export const TRIAGE_HARNESSES = Object.keys(
-  BOARD_ONLY_DENIED_TOOLS
-) as FencedHarness[];
-
 /** A fleet-watch triage run's denied tools on `harness` (core `BOARD_ONLY_DENIED_TOOLS`): the board alone. */
 const boardOnlyDenied = (harness: string): readonly string[] => {
   if (!(harness in BOARD_ONLY_DENIED_TOOLS)) {
@@ -198,17 +192,17 @@ const boardOnlyDenied = (harness: string): readonly string[] => {
       `Fleet-watch triage does not run on ${harness}: it cannot be fenced to CawCo's tools alone.`
     );
   }
-  return BOARD_ONLY_DENIED_TOOLS[harness as FencedHarness];
+  return BOARD_ONLY_DENIED_TOOLS[harness as HarnessKind];
 };
 
 /** A memory curator's denied tools on `harness` (core `CURATOR_DENIED_TOOLS`); refused on one that cannot fence it. */
 const curatorDenied = (harness: string): readonly string[] => {
   if (!(harness in CURATOR_DENIED_TOOLS)) {
     throw new Error(
-      `The memory curator does not run on ${harness}: it cannot be fenced to CawCo's tools alone. Give the Memory curator routine a delegate type on Claude Code or OpenCode.`
+      `The memory curator does not run on ${harness}: it cannot be fenced to CawCo's tools alone.`
     );
   }
-  return CURATOR_DENIED_TOOLS[harness as FencedHarness];
+  return CURATOR_DENIED_TOOLS[harness as HarnessKind];
 };
 
 /**

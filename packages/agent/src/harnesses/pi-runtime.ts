@@ -52,6 +52,7 @@ import {
   type ExtensionAPI,
   type ExtensionFactory,
   getAgentDir,
+  type LoadExtensionsResult,
   type McpServerConfig,
   ModelRuntime,
   SessionManager,
@@ -483,6 +484,48 @@ const INTERRUPTED =
   "The turn was interrupted before the hub answered this call.";
 
 /**
+ * Where a tool CawCo gave the session comes from, as pi's registry keeps it
+ * (`ToolInfo.sourceInfo.path`, extensions/types.d.ts): pi's built-ins
+ * (`builtin:<name>`), the SDK's custom tools CawCo hands `createAgentSession`
+ * (`<sdk:<name>>`), and CawCo's inline extensions (`<inline:<n>>`,
+ * resource-loader.js `loadExtensionFactories`). A tool any of the person's
+ * own extensions registers carries its file's path; one that takes a
+ * built-in's name takes its place in the registry, path and all
+ * (agent-session.js `_refreshToolRegistry`).
+ */
+const CAWCO_TOOL_SOURCE = /^(?:builtin:|<sdk:|<inline:)/;
+
+/** Whether the tool `name` stands in pi's registry as one CawCo gave the session ({@link CAWCO_TOOL_SOURCE}); a name pi does not hold is not. */
+const cawcosTool = (pi: ExtensionAPI, name: string): boolean => {
+  const path = pi.getAllTools().find((tool) => tool.name === name)
+    ?.sourceInfo.path;
+  return path !== undefined && CAWCO_TOOL_SOURCE.test(path);
+};
+
+/**
+ * A fenced session's extensions (`SpawnPayload.fence`: a fleet-watch triage
+ * run, a memory curator): CawCo's inline ones alone, as Claude Code's and
+ * OpenCode's fences give it CawCo's MCP server alone. None of the person's
+ * own extensions is the session's, nor a built-in one their settings enable
+ * (`builtin:mcp` and its `mcp.json`): pi builds the session's runner from
+ * this list (agent-session.js: `new ExtensionRunner(extensionsResult.extensions,
+ * …)`), and each extension's tools, handlers and commands are its own
+ * (`Extension.tools`, `.handlers`, `.commands`, extensions/types.d.ts). What
+ * they registered as model providers stays on the loader's shared runtime
+ * (`runtime.pendingProviderRegistrations`, extensions/loader.js), which
+ * {@link registerExtensionProviders} puts on the session's model runtime: a
+ * pi model may run on one.
+ */
+const cawcosExtensionsAlone = (
+  base: LoadExtensionsResult
+): LoadExtensionsResult => ({
+  ...base,
+  extensions: base.extensions.filter((extension) =>
+    extension.path.startsWith("<inline:")
+  ),
+});
+
+/**
  * A project's Caw on pi (`SpawnPayload.lead`): each call of his shell and
  * edit tools is put to the hub as a permission ask before it runs, and runs
  * only once the hub's gate allows it (hub lead-gate.ts), as Claude Code's
@@ -497,6 +540,13 @@ const INTERRUPTED =
  * input after the hub judged it ("Later `tool_call` handlers see earlier
  * mutations", types.d.ts `ToolCallEvent`; inline extensions load after the
  * person's own, resource-loader.js `loadFinalExtensionSet`).
+ *
+ * A tool the person's own pi extensions registered (or put in place of a
+ * built-in) is put to the hub too, whatever its name: his extensions keep
+ * working, each call of theirs decided by the gate (lead-gate.ts `isGated`,
+ * your card). CawCo's own tools run as on every harness: its board tools,
+ * pi's readers, and the MCP servers' tools, which Caw has as any session
+ * does ({@link cawcosTool}).
  */
 class PiLeadGate {
   readonly #ctx: HarnessContext;
@@ -516,23 +566,24 @@ class PiLeadGate {
   /** The inline extension: every gated call waits on the hub. */
   extension(): ExtensionFactory {
     return (pi) => {
-      pi.on("tool_call", (event, context) => this.#put(event, context.signal));
+      pi.on("tool_call", (event, context) =>
+        LEAD_GATED_ON_PI.has(event.toolName) || !cawcosTool(pi, event.toolName)
+          ? this.#put(event, context.signal)
+          : undefined
+      );
     };
   }
 
   /**
-   * A call of a gated tool, put to the hub; any other runs as it would. The
-   * call's own id names its transcript row; a call a script made has none
-   * there ("These ids do not appear as tool calls or tool results in the
-   * transcript"). An abort of the turn takes the ask back.
+   * A gated call, put to the hub. The call's own id names its transcript
+   * row; a call a script made has none there ("These ids do not appear as
+   * tool calls or tool results in the transcript"). An abort of the turn
+   * takes the ask back.
    */
   #put(
     event: ToolCallEvent,
     signal: AbortSignal | undefined
-  ): Promise<ToolCallEventResult | undefined> | undefined {
-    if (!LEAD_GATED_ON_PI.has(event.toolName)) {
-      return;
-    }
+  ): Promise<ToolCallEventResult | undefined> {
     if (signal?.aborted) {
       return Promise.resolve({ block: true, reason: INTERRUPTED });
     }
@@ -646,8 +697,8 @@ class PiSession implements HarnessSession {
   readonly #session: AgentSession;
   readonly #credential: { value?: string };
   readonly #tools: CawcoTools;
-  /** The fleet's MCP servers it holds, taken again at each fleet change. */
-  readonly #fleetMcp: FleetMcp;
+  /** The fleet's MCP servers it holds, taken again at each fleet change; none for a fenced session. */
+  readonly #fleetMcp: FleetMcp | undefined;
   /** The status of each answer its provider gave. */
   readonly #answers = new ProviderAnswers();
   /** The runtime the session runs on: its account's, or the machine's own. */
@@ -728,7 +779,7 @@ class PiSession implements HarnessSession {
     tools: CawcoTools,
     runtime: ModelRuntime,
     shells: PiShells,
-    fleetMcp: FleetMcp,
+    fleetMcp: FleetMcp | undefined,
     gate: PiLeadGate | undefined
   ) {
     this.#ctx = ctx;
@@ -1115,11 +1166,22 @@ class PiSession implements HarnessSession {
         return { listed: count };
       }
       // The agent sends the session's door with the changes (pi-sessiond.ts).
-      case CONTROL_MCP_FLEET_CHANGED:
-        return await this.#fleetMcp.take(
-          args[0] as FleetMcpChange[],
-          args[1] as BrowserDoor | undefined
-        );
+      case CONTROL_MCP_FLEET_CHANGED: {
+        const changes = args[0] as FleetMcpChange[];
+        // A fenced session takes no MCP server ({@link cawcosExtensionsAlone}).
+        return this.#fleetMcp
+          ? await this.#fleetMcp.take(
+              changes,
+              args[1] as BrowserDoor | undefined
+            )
+          : {
+              servers: changes.map(({ name, kind }) => ({
+                name,
+                kind,
+                status: "not taken: the session is fenced",
+              })),
+            };
+      }
       case CONTROL_INTERRUPT:
         await this.#session.abort();
         return undefined;
@@ -1227,6 +1289,25 @@ const registerExtensionProviders = (
   extensions.pendingNativeProviderRegistrations = [];
 };
 
+/** The session's store: the one it resumes or forks, else a new one. */
+const sessionManagerFor = async (
+  spec: SpawnPayload,
+  cwd: string
+): Promise<SessionManager> => {
+  if (!spec.resume) {
+    return SessionManager.create(cwd);
+  }
+  const source = await piSessionPath(spec.resume.sessionKey, cwd);
+  if (!source) {
+    throw new Error(
+      `pi cannot ${spec.resume.fork ? "fork" : "resume"} missing session ${spec.resume.sessionKey}.`
+    );
+  }
+  return spec.resume.fork
+    ? SessionManager.forkFrom(source, cwd)
+    : SessionManager.open(source, undefined, cwd);
+};
+
 export async function startPiHost(
   spec: SpawnPayload,
   ctx: HarnessContext
@@ -1265,9 +1346,20 @@ export async function startPiHost(
   // ("SDK sessions do not; add `createCodemodeExtension()`,
   // `createToolSearchExtension()`, and `createMcpExtension()`",
   // pi.dev/docs/latest/sdk): they connect the fleet's beside the person's own
-  // `mcp.json` servers, and find the fleet's `deferred` tools when asked.
-  const fleetMcp = new FleetMcp(ctx.cwd);
-  const door = await ctx.browserDoor?.();
+  // `mcp.json` servers, and find the fleet's `deferred` tools when asked. A
+  // fenced session has none of them, and CawCo's extensions alone
+  // ({@link cawcosExtensionsAlone}).
+  const fenced = spec.fence === true;
+  const fleetMcp = fenced ? undefined : new FleetMcp(ctx.cwd);
+  const mcp: ExtensionFactory[] = fleetMcp
+    ? [
+        createToolSearchExtension(),
+        createMcpExtension(),
+        fleetMcp.extension(
+          (await fleetMcp.read(await ctx.browserDoor?.())).servers
+        ),
+      ]
+    : [];
   const gate = spec.lead ? new PiLeadGate(ctx) : undefined;
   const resourceLoader = new DefaultResourceLoader({
     cwd: ctx.cwd,
@@ -1275,12 +1367,11 @@ export async function startPiHost(
     settingsManager,
     extensionFactories: [
       tools.extension(await piHandoffTools(ctx.instanceId, credential)),
-      createToolSearchExtension(),
-      createMcpExtension(),
-      fleetMcp.extension((await fleetMcp.read(door)).servers),
+      ...mcp,
       // Last, so its verdict is on the input the call runs with.
       ...(gate ? [gate.extension()] : []),
     ],
+    ...(fenced ? { extensionsOverride: cawcosExtensionsAlone } : {}),
     agentsFilesOverride: (base) => ({
       agentsFiles: [...base.agentsFiles, ...memory],
     }),
@@ -1296,26 +1387,12 @@ export async function startPiHost(
       ? await resolvePiModel(runtime, spec.model)
       : undefined;
   const denied = piToolsFor(spec.denyTools ?? []).tools;
-  let manager: SessionManager;
-  if (spec.resume) {
-    const source = await piSessionPath(spec.resume.sessionKey, ctx.cwd);
-    if (!source) {
-      throw new Error(
-        `pi cannot ${spec.resume.fork ? "fork" : "resume"} missing session ${spec.resume.sessionKey}.`
-      );
-    }
-    manager = spec.resume.fork
-      ? SessionManager.forkFrom(source, ctx.cwd)
-      : SessionManager.open(source, undefined, ctx.cwd);
-  } else {
-    manager = SessionManager.create(ctx.cwd);
-  }
   const { session } = await createAgentSession({
     cwd: ctx.cwd,
     agentDir,
     modelRuntime: runtime,
     ...(model ? { model } : {}),
-    sessionManager: manager,
+    sessionManager: await sessionManagerFor(spec, ctx.cwd),
     settingsManager,
     resourceLoader,
     // Its denied tools (its delegate type's, a lead's), by pi's own names:

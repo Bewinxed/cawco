@@ -200,6 +200,9 @@ export const CAW_DENIED_TOOLS = {
 /**
  * Caw's shell and edit tools, by the name each harness asks permission
  * under: every call of one is a permission ask (Claude Code's `ask` rules,
+ * its Windows `PowerShell` beside `Bash`, a built-in of Claude Code 0.3.302's
+ * `BUILTIN_TOOL_NAMES` that "Set CLAUDE_CODE_USE_POWERSHELL_TOOL=1"
+ * turns on;
  * OpenCode's `ask` rules) that the hub's gate decides (hub lead-gate.ts),
  * whatever the session's mode. OpenCode's are 2.0's permission actions:
  * `shell`, and `edit`, which covers `write` and `patch` ("In V2, use
@@ -210,7 +213,7 @@ export const CAW_DENIED_TOOLS = {
  * tool executes. Can block.", pi 1.3.0 extensions/types.d.ts `ToolCallEvent`).
  */
 export const LEAD_GATED_TOOLS = {
-  claude: ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit"],
+  claude: ["Bash", "PowerShell", "Edit", "Write", "MultiEdit", "NotebookEdit"],
   opencode: ["shell", "edit"],
   pi: ["bash", "edit", "write"],
 } as const satisfies Record<HarnessKind, readonly string[]>;
@@ -218,17 +221,10 @@ export const LEAD_GATED_TOOLS = {
 /** Which of a lead's gated tools are shell, by any harness's name; the rest edit files. */
 export const LEAD_SHELL_TOOLS: ReadonlySet<string> = new Set([
   "Bash",
+  "PowerShell",
   "shell",
   "bash",
 ]);
-
-/**
- * The harnesses a fenced session (`SpawnPayload.fence`: a fleet-watch triage
- * run, a memory curator) runs on: the ones that give it CawCo's MCP server
- * and no other. pi's session loads the person's own extensions, which may
- * register any tool, so pi has no fence.
- */
-export type FencedHarness = Exclude<HarnessKind, "pi">;
 
 /**
  * What a session on the board alone may never call: no edit, shell or
@@ -236,16 +232,10 @@ export type FencedHarness = Exclude<HarnessKind, "pi">;
  * exits; it is {@link CAW_DENIED_TOOLS} and Caw's gated tools together.
  */
 export const BOARD_ONLY_DENIED_TOOLS = {
-  claude: [
-    ...CAW_DENIED_TOOLS.claude,
-    "Bash",
-    "Edit",
-    "Write",
-    "MultiEdit",
-    "NotebookEdit",
-  ],
+  claude: [...CAW_DENIED_TOOLS.claude, ...LEAD_GATED_TOOLS.claude],
   opencode: [...CAW_DENIED_TOOLS.opencode, "Bash", "Edit", "Write"],
-} as const satisfies Record<FencedHarness, readonly string[]>;
+  pi: [...CAW_DENIED_TOOLS.pi, ...LEAD_GATED_TOOLS.pi],
+} as const satisfies Record<HarnessKind, readonly string[]>;
 
 /**
  * What a project's memory curator may never call (Projects spec §5.4): the
@@ -257,7 +247,10 @@ export const BOARD_ONLY_DENIED_TOOLS = {
 export const CURATOR_DENIED_TOOLS = {
   claude: [...BOARD_ONLY_DENIED_TOOLS.claude, "WebFetch", "WebSearch"],
   opencode: [...BOARD_ONLY_DENIED_TOOLS.opencode, "WebFetch", "WebSearch"],
-} as const satisfies Record<FencedHarness, readonly string[]>;
+  // pi has no web tool of its own ({@link PI_EQUIVALENTS}), and a fenced pi
+  // session has none from anywhere else (agent pi-runtime.ts `cawcosExtensionsAlone`).
+  pi: BOARD_ONLY_DENIED_TOOLS.pi,
+} as const satisfies Record<HarnessKind, readonly string[]>;
 
 /**
  * Claude Code's tool names as OpenCode 2.0's permission actions. Denied-tool

@@ -64,7 +64,7 @@ import {
 import { Gone, readWithin } from "@cawco/core/bounded";
 import { z } from "zod";
 import { tool } from "./admin-tools";
-import { type CawEvent, TRIAGE_HARNESSES } from "./caw";
+import type { CawEvent } from "./caw";
 import type { DbShape } from "./db";
 import { askJev, type JevAccess, jevAccess, jevUnanswered } from "./jev";
 import type { HubLifetimeShape } from "./lifetime";
@@ -579,23 +579,14 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     }
   };
 
-  /** The harness triage runs on: the project's Caw's, else the session's own when triage can run there, else Claude Code. */
+  /** The harness triage runs on: the project's Caw's, else the session's own. */
   const harnessFor = (
     row: InstanceRow
   ): { harness: SpawnPayload["harness"]; model: string | null } => {
     const project = row.projectId ? db.project(row.projectId) : undefined;
-    if (project) {
-      return { harness: project.cawHarness, model: project.cawModel };
-    }
-    const own = row.harness;
-    return {
-      harness: (
-        TRIAGE_HARNESSES as readonly SpawnPayload["harness"][]
-      ).includes(own)
-        ? own
-        : "claude",
-      model: null,
-    };
+    return project
+      ? { harness: project.cawHarness, model: project.cawModel }
+      : { harness: row.harness, model: null };
   };
 
   const launch = (row: InstanceRow, watch: Watch, queued: Queued) => {
