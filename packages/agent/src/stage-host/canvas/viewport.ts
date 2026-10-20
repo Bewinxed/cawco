@@ -9,6 +9,12 @@
  * left and right; its top and height stay the window's, so a layer still
  * flips up and down as the window allows. The canvas reads the window's
  * own through `windowWidth` and `windowHeight`.
+ *
+ * Which layer asks: floating-ui's `getViewportRect(element)` is handed the
+ * floating layer itself, and reads `element.ownerDocument` (its
+ * `getWindow` and `getDocumentElement`) just before it reads the
+ * viewport. An element's `ownerDocument` is read through here, so the
+ * element asked last is the layer asking, call by call (`asking`).
  */
 
 type Getter<T> = () => T;
@@ -41,6 +47,13 @@ const clientWidthOf = getterOf<number>(
   Element.prototype,
   "clientWidth"
 );
+const ownerDocumentOf = getterOf<Document>(
+  Node.prototype,
+  Node.prototype,
+  "ownerDocument"
+);
+/** The element whose document was read last: the floating layer, as floating-ui asks the viewport for it. */
+let asking: Element | null = null;
 
 /** The window's own width, whatever a frame answers. */
 export const windowWidth: Getter<number> = () => innerWidthOf(window);
@@ -75,13 +88,23 @@ function asFrame(real: VisualViewport, frame: DOMRect): VisualViewport {
 }
 
 /**
- * Has the viewport answer at `frame()`'s box, where it names one (null:
- * the window's own): the visual viewport, the root's client width and
+ * Has the viewport answer at `frame(asking)`'s box, where it names one
+ * (null: the window's own), `asking` the element that asks (the layer
+ * floating-ui places): the visual viewport, the root's client width and
  * `innerWidth`, its left and right clipped to the window.
  */
-export function frameAsViewport(frame: () => DOMRect | null): void {
+export function frameAsViewport(
+  frame: (asking: Element | null) => DOMRect | null
+): void {
+  Object.defineProperty(Element.prototype, "ownerDocument", {
+    configurable: true,
+    get(this: Element) {
+      asking = this;
+      return ownerDocumentOf(this);
+    },
+  });
   const box = (): DOMRect | null => {
-    const at = frame();
+    const at = frame(asking);
     if (!at) {
       return null;
     }
