@@ -1618,7 +1618,7 @@
     "meter-calm": {
       "$type": "color",
       "$value": "{color.neutral-11}",
-      "$description": "Usage meters (design/usage-tracker.md §1, §8): a window with room is the muted ink on the control-edge groove (a quiet reading is a healthy one, and coral is the action's, never data: DESIGN.md The Coral Is Where You Act Rule), spark yellow one near its limit (70% used, or a run-out under an hour away), crimson one from 90%. The calm fill holds about 4.7:1 on its track by day and 5:1 at night."
+      "$description": "Usage meters (DESIGN.md, Limit bar: a fill in the window's state colour): a window with room is the muted ink on the control-edge groove (a quiet reading is a healthy one, and coral is the action's, never data: DESIGN.md The Coral Is Where You Act Rule), spark yellow one near its limit (70% used, or a run-out under an hour away), crimson one from 90%. The calm fill holds about 4.7:1 on its track by day and 5:1 at night."
     },
     "meter-calm-track": {
       "$type": "color",
