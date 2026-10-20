@@ -1840,8 +1840,19 @@ const footFrames = (page: Page, count: number) =>
  * fold's shrink raises the page's foot and clamps the scroll to it, which
  * reads as the clamp. Played on, the scroll stays at the page's foot, the
  * reader's maximum, on every frame, and the fold and the flight still land.
+ *
+ * `gesture` turns the wheel as a mouse's scroll gesture (many events over
+ * frames, the order of the clamp's frame left to the browser); `notch` turns
+ * it once, one real wheel event: the page at its foot moves nothing for it,
+ * so no scroll comes before the ride's next frame, and the wheel alone must
+ * end the ride (the race forced, every run).
  */
-async function clampLeg(kit: Kit, url: string, label: string) {
+async function clampLeg(
+  kit: Kit,
+  url: string,
+  label: string,
+  how: "gesture" | "notch"
+) {
   const page = await kit.page("desk", { theme: "light", init: [CAWCO_BRIDGE] });
   await page.goto(url, { waitUntil: "load" });
   await page.waitForFunction(
@@ -1874,7 +1885,15 @@ async function clampLeg(kit: Kit, url: string, label: string) {
   // frame. The wheel's first event moves the held fold to ½ (the runs under
   // the card, from the page, in that event), so the page's foot rises on
   // the frame the wheel scrolls to it, and the next scroll check finds both.
-  await page.evaluate(() => {
+  // The notch's wheel moves nothing (its default held back, as the foot
+  // holds it): the ride hears the wheel and no scroll at all.
+  await page.evaluate((still) => {
+    if (still) {
+      addEventListener("wheel", (event) => event.preventDefault(), {
+        capture: true,
+        passive: false,
+      });
+    }
     addEventListener(
       "wheel",
       () => {
@@ -1886,18 +1905,28 @@ async function clampLeg(kit: Kit, url: string, label: string) {
       },
       { capture: true, once: true, passive: true }
     );
-  });
+  }, how === "notch");
   const cdp = await page.context().newCDPSession(page);
   // Every frame from before the wheel's first event, so the frame the
   // clamp lands on, and any the ride writes after it, are read.
   const watched = footFrames(page, 40);
-  await cdp.send("Input.synthesizeScrollGesture", {
-    x: 720,
-    y: 450,
-    yDistance: -400,
-    gestureSourceType: "mouse",
-    speed: 2400,
-  });
+  if (how === "notch") {
+    await cdp.send("Input.dispatchMouseEvent", {
+      type: "mouseWheel",
+      x: 720,
+      y: 450,
+      deltaX: 0,
+      deltaY: 100,
+    });
+  } else {
+    await cdp.send("Input.synthesizeScrollGesture", {
+      x: 720,
+      y: 450,
+      yDistance: -400,
+      gestureSourceType: "mouse",
+      speed: 2400,
+    });
+  }
   const seen = await watched;
   // From the frame the fold's shrink first shows (the page's foot rising).
   const shrunk = seen.findIndex((one) => one.most < (atStart?.most ?? 0) - 1);
@@ -1933,7 +1962,7 @@ async function clampLeg(kit: Kit, url: string, label: string) {
   const atFoot = (one: { most: number; scroll: number }) =>
     Math.abs(one.scroll - one.most) <= 1;
   kit.check(
-    `${label}: the reader's wheel at the page's foot as the fold's shrink clamps the scroll there ends the ride: the scroll stays at the page's foot on every frame after, and the fold and the flight still land`,
+    `${label}: the reader's wheel (${how === "notch" ? "one notch, which moves nothing at the foot: the wheel alone ends the ride" : "a scroll gesture"}) at the page's foot as the fold's shrink clamps the scroll there ends the ride: the scroll stays at the page's foot on every frame after, and the fold and the flight still land`,
     !!atStart &&
       !!afterWheel &&
       atFoot(afterWheel) &&
@@ -2512,7 +2541,8 @@ const spec: Spec = {
         } else {
           await readerLeg(kit, url, view, theme, label, "wheel");
           await readerLeg(kit, url, view, theme, label, "scrollbar");
-          await clampLeg(kit, url, label);
+          await clampLeg(kit, url, label, "gesture");
+          await clampLeg(kit, url, label, "notch");
         }
       }
     } finally {
