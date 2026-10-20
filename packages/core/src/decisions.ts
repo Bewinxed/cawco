@@ -188,7 +188,7 @@ export interface GraphLinks {
 
 /** A card's pick as the graph reads it: whether it is picked, and the options of it the card no longer offers. */
 export const pickOf = (
-  card: Pick<DecisionCard, "options">,
+  card: { options: Pick<DecisionOption, "id">[] },
   entry: { options?: string[] } | undefined
 ): { gone: string[]; picked: boolean } => {
   const chosen = entry?.options ?? [];
