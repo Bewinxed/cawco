@@ -19,7 +19,7 @@
   /** Its callers' widths past the phone, each as they drew it: a form, a
       report (an error's whole text), a document (a diff). Every dialog is as
       tall as its content up to the cap (`c-dialog-max-h`), its body
-      scrolling inside; a document stands at the cap from the first frame. */
+      scrolling inside. */
   export const dialogContentVariants = tv({
     variants: {
       width: {
@@ -27,14 +27,13 @@
         report: "phone:max-w-168",
         document: "phone:max-w-320",
       },
-      height: { cap: "h-c-dialog-max-h" },
     },
   });
   /**
    * The raised body: a frame that holds Close where it stands, and the grid
    * of the caller's content that scrolls inside it. `flush`, for what draws
-   * its own padding and gaps; `document`, for a document at the cap (a
-   * diff) that lays itself out in a column and scrolls in its own viewer.
+   * its own padding and gaps; `document`, for a document (a diff) that lays
+   * itself out in a column and scrolls in its own viewer.
    */
   export const dialogBodyVariants = tv({
     slots: {
@@ -73,8 +72,8 @@
     width,
     bodyPad,
     body: bodyLook,
-    height,
     restoreScrollDelay = 0,
+    modal = true,
     ...restProps
   }: WithoutChildrenOrChild<DialogPrimitive.ContentProps> &
     DialogContentLooks & {
@@ -83,6 +82,13 @@
       showCloseButton?: boolean;
       /** Classes for the content grid inside the raised body. */
       bodyClass?: string;
+      /**
+       * Whether it holds the page (DESIGN.md, The Open Page Rule): false for
+       * what only shows something (a diff), which stands over a live page
+       * with no scrim, no focus trap and no scroll lock, a press on the page
+       * landing there while it waits; Close and Esc put it away.
+       */
+      modal?: boolean;
     } = $props();
 
   // A dialog whose body changes (a step, an error, a result) tweens to its
@@ -98,23 +104,35 @@
 </script>
 
 <DialogPortal {...portalProps}>
-  <Dialog.Overlay />
+  {#if modal}
+    <Dialog.Overlay />
+  {/if}
   <!-- Drawn through `child`: bits-ui then holds the body's lock only while it
        is open, and clears it at once (floating-presence). -->
   <DialogPrimitive.Content
     class={cn(
       tray.tray(),
       "fixed top-1/2 left-1/2 z-(--layer-float) flex max-h-c-dialog-max-h w-full max-w-[calc(100%-2rem)] phone:max-w-112 -translate-x-1/2 -translate-y-1/2 flex-col outline-none",
-      dialogContentVariants({ width, height }),
+      dialogContentVariants({ width }),
       className
     )}
     data-slot="dialog-content"
+    interactOutsideBehavior={modal ? "close" : "ignore"}
+    preventScroll={modal}
     {restoreScrollDelay}
+    trapFocus={modal}
     bind:ref
     {...restProps}
   >
     {#snippet child({ props, open })}
-      <div {...props} style:pointer-events={pressable(open)}>
+      <!-- bits-ui (2.19.5) writes `aria-modal="true"` on every dialog's
+           content: one that holds nothing says false, to a screen reader too. -->
+      <div
+        {...props}
+        aria-modal={modal ? "true" : "false"}
+        role="dialog"
+        style:pointer-events={pressable(open)}
+      >
         <div data-slot="body" class={cn(tray.body(), body.frame())}>
           <div data-slot="grid" class={cn(body.grid(), bodyClass)}>
             {@render children?.()}

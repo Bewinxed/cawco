@@ -55,6 +55,7 @@
   import HubBand from "./HubBand.svelte";
   import { deviceRatio } from "./home/device-ratio.svelte";
   import { sessionName } from "./home/home-state.svelte";
+  import { peekBeside } from "./home/peek.svelte";
   import { guardDrops } from "./internal-drag";
   import MachinesButton from "./MachinesButton.svelte";
   import { hangShadow } from "./motion/hung-shadow";
@@ -65,7 +66,6 @@
   import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
   import { runShellShortcut, shellShortcutsAre } from "./shell-shortcut";
-  import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
   import NewSessionPopover from "./spawn/NewSessionPopover.svelte";
   import { newSession, spawning } from "./spawn/new-session.svelte";
   import { store, stored } from "./storage";
@@ -1086,9 +1086,15 @@
       </Sheet.Content>
     </Sheet.Root>
 
+    <!-- While the peek stands open beside the page (a fine pointer's sheet
+         from the right, peek.svelte.ts `peekBeside`) the page, its bar
+         included, ends where the sheet begins: what it holds (the glass
+         group, a docked card) stays whole and usable beside the sheet
+         (DESIGN.md, Peek), never cut under it. -->
     <div
       data-slot="shell-main"
-      class="relative flex-auto min-w-0 flex flex-col overflow-hidden"
+      class="relative flex-auto min-w-0 flex flex-col overflow-hidden data-peek-beside:pe-c-peek-sheet-w"
+      data-peek-beside={peekBeside() || undefined}
     >
       <!-- The bar: the comp's height (`--c-top-bar-h`, so what floats under
            it lands under it); hosted folder tabs stand on its floor. The
@@ -1114,7 +1120,7 @@
         data-slot="top"
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 ps-0 pe-(--top-end) bg-surface-raised border-b border-b-border-hairline coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-(--c-top-bar-h) max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:border-b-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:border-b-none desk:not-portrait:data-hosting:shelf-hairline max-desk:data-floating:border-b-none max-desk:data-floating:bg-transparent"
+        class="group/top peer/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 ps-0 pe-(--top-end) bg-surface-raised border-b border-b-border-hairline coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-(--c-top-bar-h) max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:border-b-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:border-b-none desk:not-portrait:data-hosting:shelf-hairline max-desk:data-floating:border-b-none max-desk:data-floating:bg-transparent"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end="env(safe-area-inset-right, 0px)"
@@ -1408,9 +1414,10 @@
   <!-- One New Session form for every opener (the rail's rows, the phone's
        Start session, a `?spawn=` link, the session strip's "+", a project's
        Spin off) and every session menu's Continue (spawn/new-session,
-       continue.svelte.ts): a popover at the trigger pressed, the dialog
-       where there is none. -->
-  <NewSessionDialog
+       continue.svelte.ts): a popover hanging from the trigger pressed on a
+       desk, the bottom sheet on a phone. -->
+  <NewSessionPopover
+    anchor={continuing.source ? null : spawning.anchor}
     continueFrom={continuing.source ?? undefined}
     onclose={() => {
       spawning.open = false;
@@ -1423,19 +1430,8 @@
       continuing.source = null;
       continuing.restore = null;
     }}
-    open={(spawning.open && spawning.anchor === null) ||
-      continuing.source !== null}
+    open={spawning.open || continuing.source !== null}
     prefill={continuing.source ? undefined : spawning.prefill}
     restore={continuing.restore ?? undefined}
   />
-  {#if spawning.anchor}
-    <NewSessionPopover
-      anchor={spawning.anchor}
-      onclose={() => {
-        spawning.open = false;
-      }}
-      open={spawning.open && continuing.source === null}
-      prefill={spawning.prefill}
-    />
-  {/if}
 </Overlays>

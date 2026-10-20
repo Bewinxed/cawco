@@ -27,6 +27,11 @@
         shrink: "min-h-0",
         cap: "vaul-drawer-direction-bottom:h-[var(--drawer-max-height,var(--c-sheet-max-h))]",
       },
+      /** A side sheet as wide as the room the page gives it (the peek's,
+          `c-peek-sheet-w`, the Shell's trailing pad while it stands open). */
+      width: {
+        peek: "data-[vaul-drawer-direction=right]:w-c-peek-sheet-w",
+      },
       /** The new-session card: the dialog's theme, no outline or margin,
           and under reduced motion none of vaul's settling transform (its
           fade is the base's). `!`: vaul writes that transition inline
@@ -62,6 +67,7 @@
     modal = true,
     pad,
     height,
+    width,
     look,
     children,
     ...restProps
@@ -165,7 +171,7 @@
   <DrawerPrimitive.Content
     class={cn(
       "motion-reduce:sheet-fade group/drawer-content fixed z-(--layer-float) flex h-auto flex-col bg-transparent p-4 text-ink-strong text-label before:absolute before:inset-2 before:-z-1 before:rounded-[var(--radius-lg)] before:border before:border-border before:bg-[var(--surface-raised)] data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=left]:phone:max-w-96 data-[vaul-drawer-direction=right]:phone:max-w-96 data-[vaul-drawer-direction=bottom]:pb-[calc(1rem+var(--safe-bottom))] data-[vaul-drawer-direction=bottom]:before:inset-x-0 data-[vaul-drawer-direction=bottom]:before:bottom-0 data-[vaul-drawer-direction=bottom]:before:rounded-b-none data-[vaul-drawer-direction=bottom]:before:border-x-0 data-[vaul-drawer-direction=bottom]:before:border-b-0",
-      drawerContentVariants({ pad, height, look }),
+      drawerContentVariants({ pad, height, width, look }),
       hosted &&
         "absolute inset-0 z-1 m-0 h-full max-h-none w-full p-0 outline-off before:hidden data-closed:invisible data-[vaul-drawer-direction=bottom]:pb-0",
       className

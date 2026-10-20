@@ -21,14 +21,19 @@ export interface PermissionLook {
   name: string;
 }
 
+/**
+ * Each mode's glyph, in `ink-muted` duotone: a hue for decoration is no
+ * mode's (DESIGN.md, The Reserved Hue Rule; Don't: "use a hue for
+ * decoration"). The two that widen the grant past asking, Bypass and Full
+ * Send, take the warning ink instead (The Consequential Grant Rule): that
+ * tint says what the pick allows.
+ */
 const DRAWN: Partial<Record<PermissionMode, { icon: Component; hue: string }>> =
   {
-    default: { icon: Shield, hue: "var(--hue-green-500)" },
-    plan: { icon: Notes, hue: "var(--hue-cyan-500)" },
-    acceptEdits: { icon: Pen, hue: "var(--hue-blue-500)" },
-    bypassPermissions: { icon: Danger, hue: "var(--hue-orange-500)" },
-    // The consequential grant's shield in its warning ink (DESIGN.md, The
-    // Consequential Grant Rule): Full Send is a wider grant than Bypass.
+    default: { icon: Shield, hue: "var(--ink-muted)" },
+    plan: { icon: Notes, hue: "var(--ink-muted)" },
+    acceptEdits: { icon: Pen, hue: "var(--ink-muted)" },
+    bypassPermissions: { icon: Danger, hue: "var(--status-attn-ink)" },
     fullSend: { icon: IconShield, hue: "var(--status-attn-ink)" },
   };
 

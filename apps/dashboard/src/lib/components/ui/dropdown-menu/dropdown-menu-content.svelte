@@ -19,6 +19,7 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
+  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import {
     drawn,
     own,
@@ -27,12 +28,14 @@
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
+  import { browser } from "$app/env";
   import DropdownMenuPortal from "./dropdown-menu-portal.svelte";
 
   let {
     ref = $bindable(null),
     sideOffset = 4,
     align = "start",
+    collisionPadding,
     portalProps,
     class: className,
     forceMount = false,
@@ -47,6 +50,14 @@
         ComponentProps<typeof DropdownMenuPortal>
       >;
     } = $props();
+
+  // Never flush with the screen's edge: it keeps the pages' gutter from it,
+  // pushed back in where its place would run it off a phone (as the kit
+  // popover does; the rail's sort menu reached the phone's last pixel). The
+  // token is read in the browser, where the menu opens.
+  const inset = $derived(
+    collisionPadding ?? (browser ? numberOf("--space-5") : 0)
+  );
 
   // One ghost glides from item to item under the pointer and arrow keys.
   $effect(() => {
@@ -70,6 +81,7 @@
       dropdownMenuContentVariants({ width, min }),
       className
     )}
+    collisionPadding={inset}
     data-slot="dropdown-menu-content"
     forceMount
     {sideOffset}

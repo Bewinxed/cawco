@@ -37,10 +37,9 @@
    * This file owns the logic — open-reset boundary, submission generation
    * guard, draft snapshot, dual location verification, the exact
    * `spawnSession` payload — and composes the designed sections. Its frame is
-   * its opener's: the centred dialog (NewSessionDialog) or a popover at the
-   * pressed trigger (NewSessionPopover), the bottom sheet under 640px in
-   * both. The frame calls `close` when it is dismissed and `escapeStep` on
-   * Esc.
+   * a popover hanging from the trigger pressed (NewSessionPopover), the
+   * bottom sheet under 640px (NewSessionDialog). The frame calls `close` when
+   * it is dismissed and `escapeStep` on Esc.
    */
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -1848,8 +1847,8 @@
 </script>
 
 <svelte:window onkeydown={keydown} />
-<!-- The form's head, body, notices and footer, as children of its frame's
-     card (NewSessionDialog, NewSessionPopover). -->
+<!-- The form's head, body, notices and footer, as children of its frame
+     (NewSessionPopover, NewSessionDialog's sheet). -->
 <!-- While a start runs the form takes no input; the footer stays live so
      the pending Start keeps its focus (a focused element in an inert
      subtree drops focus to the body). -->
@@ -1889,11 +1888,17 @@
         ><Bolt class="size-icon-sm" /></span
       >
     {/if}
+    <!-- Step 2's title is the move's question, "Move ~/code/chip to
+         obelisk?": it wraps whole, so its destination is never the part an
+         ellipsis takes (DESIGN.md, Don't: "send the reader away from where
+         they asked"; the question names where). The form's own names stay
+         on one line. -->
     <h2
       data-slot="title"
-      class="type-title tracking-title m-0 truncate text-ink-strong"
+      class="type-title tracking-title m-0 min-w-0 text-ink-strong not-data-wraps:truncate data-wraps:text-balance"
+      data-wraps={moveStep || undefined}
     >
-      <MorphText text={headTitle} />
+      <MorphText text={headTitle} wrap={moveStep} />
     </h2>
   </div>
   <Tip keys={moveStep ? undefined : "Esc"} label="Close">

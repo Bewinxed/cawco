@@ -76,8 +76,8 @@ Every read is the engine's: the catalogue's entries walked as `surfaces/capture.
 ## kit-swap
 
 - kit-swap: `home/WorkTabs.svelte:814` `<Badge … size="count" variant={pairOf(tab.id)}>`: X1's tight count Badge (`space-1` inline padding on `--tight`). Three figures at 228 then stand whole (4px short a tab now, 6px given back).
-- kit-swap (sent by the conductor to X2): `components/ui/hang-card/hang-card.svelte:530` the floating wrapper needs `z-(--layer-float)`. jump-open at 1440: the card `popover-content:relative:120 < div:fixed:auto`; at its foot elementFromPoint lands on the composer's ask, `ask:absolute:3 < dock:absolute:50 < dock:absolute:1`.
-- kit-swap (sent to X2): `components/ui/dropdown-menu/dropdown-menu-content.svelte`: a default `collisionPadding` (`--space-5`, as popover-content's). rail-sort at 390: menu [198,435,192,175], flush on the screen's edge.
+- done here (was sent by the conductor to X2; the parent's review decision #3): `components/ui/hang-card/hang-card.svelte` the floating wrapper takes `z-(--layer-float)`. jump-open at 1440: the card `popover-content:relative:120 < div:fixed:auto`; at its foot elementFromPoint lands on the composer's ask, `ask:absolute:3 < dock:absolute:50 < dock:absolute:1`.
+- done here (was sent to X2; the review's rail-sort note): `components/ui/dropdown-menu/dropdown-menu-content.svelte`: a default `collisionPadding` (`--space-5`, as popover-content's). rail-sort at 390: menu [198,435,192,175], flush on the screen's edge.
 - kit-swap (sent to X2): `components/ui/section-header/index.ts:18` `border-seam` → `border-border-hairline`.
 
 ## ask
@@ -116,5 +116,52 @@ Context: the operator's shell and conversation, glanced at between other work, a
 - fixed: L934, two small controls had no area under a finger (the attachment ✕ at 27px clipped, Details at 0): 44px each, by the engine.
 - fixed: L817, a sheet with no Close at step 2: Close at its edge.
 - gap (X1, merge): L625 at the default rail with three-figure counts: labels 4px short until the tight count Badge lands.
-- gap (X2): L666 Stacking: the Jump card at 1440 stands under the composer's ask at its foot (hang-card wrapper z).
+- fixed (was a gap for X2): L666 Stacking: the Jump card stood under the composer's ask at its foot: the hang wrapper takes `layer-float` itself (review X5 #3 below).
 - gap (X8): L887: the inspector is a right-hand panel at 390.
+
+## Review X5 (captures c15bff639), answered
+
+Each read is the engine's, on the surfaces walk (tape) at 1440 and 390 light unless named; the hub's copy on a scratch fleet (move-settled).
+
+- fixed #1 (L505/L813, L916): New Session is one non-modal popover from every desk entry (the rail's Start session, the strip's +, the shortcut), the desk dialog deleted. new-session-open 1440: popover 179,52,569,820; scrims/overlays 0; right of it `main-content`; `role=dialog aria-modal=false`; focus "First prompt". 390 keeps its bottom sheet (L647). DESIGN's recipe is now "New-session popover".
+- fixed #2 (L505, L625, L561): the diff viewer holds nothing and is its content's size. session-diff: overlays 0, `aria-modal=false`, dialog 80,354,1280,191 (grid scrollH 179 = clientH 179); 390: 16,311,358,222; the page under it live (elementFromPoint 20,20 → the page); the path `direction: rtl`, ellipsis at its start (scrollW 552, clientW 198 at 390); added rows (20) on a wash, bg lab(89.6 -1.6 8.1), from `--diff-add-bg` (app.css's `--diffs-bg-addition-override`).
+- fixed #3 (L666): the hang wrapper stands on `layer-float` itself; bits-ui's copy of the card's layer never landed on the glass's card (mounted shut, kept drawn): inline z "" before. jump-peek 390: wrapper computed z 120 (was auto), every point inside the card lands on it.
+- fixed #4 (L818): the page gives the peek its width. caw-panel-peek 1440: shell-main padding-inline-end 384px (`c-peek-sheet-w`), sheet 1056,0,384,900, main-content's right 1056 = the sheet's left, the glass group 875–1035 clear of it; the tool line "Ask user question" (the transcript's `tool-name` rule, core `describeTool`), in the UI face.
+- fixed #5: the folder browser on a phone. new-session-browse 390: surface 12,360,366,390 (scrollW 364 = clientW), foot 25,662,340,68 whole inside it and pinned to its floor (`sticky`), "Use this folder" 32,693,326,30; the crumb one 44px line, the folder you are in whole at its end (272,484,86,44), the folders above it scrolling, opening at their end (rtl scroller, scrollLeft 0, 4px over).
+- fixed #6 (L578/L964): permission glyphs. new-session-permission: Ask first, Plan first, Accept edits oklch(0.495 0.014 74) = `ink-muted`; Bypass and Full Send oklch(0.35 0.075 88) = `status-attn-ink`.
+- route #7 (L552/L580): the Review column's wash and the board notes: X4's board, routed by the parent.
+- fixed #8 (L755): the work tabs' count stands `space-1` from its word at every width. rail-rest: Working gap 4, Finished gap 4 (1440 and 390; was 0–1).
+- holds #9 (L928/L590): the run block's head glyph, X6's fix, holds after integration.
+- fixed #10 (L625): the subagent head. session-rest 390: names 52,444,249,19: name 120 whole, task given way to its basis (`c-give-way-min`, 6ch), the model whole or dropped (dropped first); 1440: name 120, task 101, model 73, all whole.
+- fixed #11 (L795, L777): the limit bar's track is the groove (`border-control`), never a state's tint, and any share draws at least a nub. session-session-card: track oklch(0.89 0.013 82), fill 4px of 96 at 1% (was a coral track the fill's own hue).
+- fixed #12 (L796): one icon slot on every tab-menu item. session-tab-menu: Session details, Continue, Account, Split right, Split down, Close, Close others, Copy link each lead with a 16px glyph.
+- holds #13 (L736): Approve 117 / Deny 102 and their start-set labels are the Pending recipe's reserved cell: "Beside a rest icon the label and its pending wording stand in one cell as wide as the wider of them, read from the start" (Approving… / Denying…).
+- fixed #14 (L863): one compaction row. session-compacted: one "Compacted" on screen, the divider (the `/compact` stdout note folded into the compaction row: rows.ts `isCompactReport`).
+- fixed #15 (L972, clean-copy): the move ask. session-move-ask: rows 1, phase `asking` (the steps only once it runs). move-settled (live hub): "Move …/plain-1 to obelisk-of-light (the second machine with that name)? / CawCo saves the folder as it is now and copies it there. Your files on obelisk-of-light stay where they are." (the destination once; the tape keeps the recorded words). new-session-move: the title wraps whole (1440: 469×75, 390: 280×113, scrollW = clientW), its destination never the ellipsis's.
+- fixed (note): rail-sort 390: menu 180,435,192,175, 18px from the edge (the kit dropdown's collision padding is the page gutter, as the popover's).
+- fixed (note): home-connecting: the bar stays at 0 on a phone (band under it at 51); Reconnect now has a rest glyph, so pending reads "Reconnecting…" (opacity 1), never a bare spinner.
+- fixed (note): session-attach-menu 390: ⌘⇧D `display: none` under a coarse pointer; 1440 shown.
+- fixed (note): new-session-account: Auto is a name (13px, ink-strong) over its reason (12px, ink-muted), on the accounts' text column (65 / 65); a row out of reach fades its mark and name (0.5) and keeps its reason whole (opacity 1, ink-muted).
+- fixed (note): new-session-machines-pair: the install command wraps between its words (4 lines, scrollW = clientW), never cut mid-URL.
+- fixed (note): the project chip's ✕: 24px under a mouse, 44px under a finger, over the trigger's own touch area that covered it (390: every press to ±12px lands on it, was none).
+- fixed (note): session-behind: Try again is the kit link, oklch(0.5 0.15 32) = `link-ink`, beside the line's muted words.
+- fixed (note): menu glyphs: the duotone's half-ink layer did carry (0.5); in the row's near-black ink it read solid. Every menu's lead glyph is `ink-muted` (menu-item recipe). rail-row-menu: Copy path, Copy id, Stop, Archive oklch(0.495 0.014 74), their second layer at 0.5.
+- holds (note, L715–716): Caw's panel's rows are words by its own recipe: "An ask's meta line leads with where it came from: its project's folder glyph … then the kind … then the machine".
+- holds (note, L875): the recall wheel's one-entry dome: its reach is the window's ("its top half the window's height up on a compact window … never fewer than five rows over the line").
+- route (notes, X4, by the parent): project-forget's stray "…", the tray 5px above the dock, the Dropped and Working columns, board status words in mono.
+- holds (note): Caw's tucked-glass count arcs read as dashes along the tab: the owner's direction, at the source (NeedsCaw.svelte: "lines along the rim of the circle that increase with the count", "for more than 9 dashes", and on the phone "the arcs run along that outline instead (`outlinePath`)"); the app's NeedsCawButton draws the same.
+- fixed (note, L610): tools-open's raw JSON and every tool body's field in the code role. session-tools-open: each `pre` JetBrains Mono 12px, line 19.2px (1.6), ligatures none (`type-code liga-none`, the token build's rule: "code's ligatures off are set by … their uses, which carry … `liga-none`").
+- fixed (note, skill-tool, clean-copy): open, a skill row's head leaves its one-line arguments to the body that shows them (core `describeTool`'s skill `detail`; the row's title still names them). session-skill-tool: open "Ran skill /tray-check", its tail `display: none`; closed rows keep it.
+- fixed by #3 (note): the ghost Deny/Approve behind a scroll chevron: the crop (0,550 in the card's frame, 12,43) lands on Caw's panel's answer row, the same glass HangCard as Jump, whose wrapper stood at z auto under any page box with a layer. caw-panel-open 390: Deny 183,597 and Approve 274,597 topmost across their width, the filled tinted pair (L906: Deny on `status-fail-bg`, Approve on `status-done-bg`), and the one page box with a layer over that row the toast layer (z 160, L666). The old capture itself was not re-read.
+- fixed (10): the Transcript's scroll event in the frame a pane is shown in is read in the task behind that frame (`showing`), every other scroll in its event as before (a deferred read let the next frame's follow land over a reader's scroll).
+- fixed (11): top-bar-home and home-rest captured for the record. A desk's `/` is `/session`, which opens the workspace's conversation, and SessionSurface draws the home page under the narrow query alone (`homePage = narrowQuery.current`: "anywhere wider it is the sidebar"); the desk's home is the rail's. top-bar-home takes X0-land's ready, line for line (`widths: ["phone"]`, `body:has(${HOME}) ${TOP_BAR}` at `/session`): "<header data-slot="top"> 390x44 … at /session", light and dark. home-rest: 1440 "<section aria-label="Home"> 227x180" (the rail's), 390 "390x800" (the page).
+
+### Specs on this round's tree
+
+- strip-new-session (web): "ALL PASS (1 specs, 72s)".
+- tab-return: "ALL PASS (1 specs, 613s, 19 note(s))".
+- one-session: "ALL PASS (1 specs, 19s, 2 note(s))".
+- start-session-nest: "the home: the parent's mark counts its children (no fold on the parent's row)" failed on this tree, on a5f89091d and on 8e7b45813 alike: the spec read `li[data-slot="tree-node"]`, and the cutover (94b40a0b3) marks the node `data-tree-node`. The spec reads that now: "ALL PASS (1 specs, 19s)", "the home: the parent's mark counts its children (Show 3 delegates)".
+- move-settled (one assertion added, the ask's destination once): "ALL PASS (1 specs, 16s)".
+- two-pane-perf (767s): decision 10's bound holds, "two pane(s), focus: no switch restyles past the shown pane and its own controls … 0 past them" on all five switches (the last round's run had one at "176 past them"), each "within 1.1x the shown pane and its own controls", every switch painted in 48–72ms. Still failing, the legs on record above as reading differently run to run and on the base: "two panes, stream: no task longer than two frames' budget … (the longest task 30ms of CPU)", "two panes, point: … passes within 1.1x one pane's (1.24x …; elements restyled 3076 against 3067)", "two panes, cold: … (1.13x …)". Recorded by the owner's rule for this lane; not tuned.
+- Not run: session-sheet ("runs on the host, not in this workspace … a workspace boundary cannot start inside another").

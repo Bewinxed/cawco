@@ -93,35 +93,48 @@
         style:--mark-bg="var(--mark-{markHue(seed)})"
         ><Sprite class="size-icon-sm block text-mark-glyph" /></span
       >
-      <!-- A narrow head's squeeze is shared: the type, the title and the
-           model each give way by their own width, so the title (what it
-           does) never shrinks to its first letters while the others stand
-           whole; the status pill stays whole. -->
+      <!-- A narrow head (DESIGN.md, The Truncate Inside Rule: the name
+           stands, the rest gives way): the name stays whole; the model stands
+           whole or drops, first; then the task gives way to a word's start
+           and its ellipsis (`c-give-way-min`) and past that drops. One row
+           one line tall, its overflow clipped: the task stands on it while
+           that much of it fits (its basis) and grows to its whole width as
+           room allows, the model while all of it fits; one that does not
+           fit wraps onto the line below, which is not drawn.
+           The status pill stays whole. -->
       <span
-        class="font-(family-name:--font-mono) text-ink-strong text-size-label flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap max-w-2/5"
-        >{branch.subagentType}</span
+        data-slot="names"
+        class="rail-line h-lh flex-1 flex-wrap content-start overflow-clip"
+        data-box
       >
-      <!-- The disclosure affordance: one glyph in currentColor, rotated by
-           its own state rather than swapped for a second asset. -->
-      <span
-        data-slot="chev"
-        aria-hidden="true"
-        class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-state-open/bhead:rotate-90"
-        data-box><IconChevronRight class="size-icon-sm block" /></span
-      >
-      {#if title !== branch.subagentType}
         <span
-          class="text-ink-muted text-size-meta font-normal overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-auto"
-          >{title}</span
+          data-slot="name"
+          class="flex-none font-(family-name:--font-mono) text-ink-strong whitespace-nowrap"
+          >{branch.subagentType}</span
         >
-      {/if}
-      {#if model}
+        <!-- The disclosure affordance: one glyph in currentColor, rotated by
+             its own state rather than swapped for a second asset. -->
         <span
-          data-slot="model"
-          class="text-ink-muted text-size-meta font-normal flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-          >{modelLabel(model)}</span
+          data-slot="chev"
+          aria-hidden="true"
+          class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-state-open/bhead:rotate-90"
+          data-box><IconChevronRight class="size-icon-sm block" /></span
         >
-      {/if}
+        {#if title !== branch.subagentType}
+          <span
+            data-slot="task"
+            class="min-w-0 max-w-max grow basis-c-give-way-min overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-size-meta font-normal"
+            >{title}</span
+          >
+        {/if}
+        {#if model}
+          <span
+            data-slot="model"
+            class="flex-none whitespace-nowrap text-ink-muted text-size-meta font-normal"
+            >{modelLabel(model)}</span
+          >
+        {/if}
+      </span>
       <!-- The clock is a timer (live off): in the transcript's log the phase
            and its steps are read when they change, not every second. Its
            words on their x-height in the box (.mark-text): 2px past the

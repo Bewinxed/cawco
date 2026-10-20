@@ -387,8 +387,15 @@
         {#if d.object}
           {d.object}
         {/if}
+        <!-- A skill's arguments, the head's tail, are its opened body's
+             words: open, the head leaves them to the body (the row's title
+             still names them). -->
         {#if d.detail}
-          <span class="text-ink-muted opacity-70">{` ${d.detail}`}</span>
+          <span
+            class="text-ink-muted opacity-70 group-state-open/trow:data-told:hidden"
+            data-told={d.expanded === "prose" || undefined}
+            >{` ${d.detail}`}</span
+          >
         {/if}
       </span>
       <!-- shadcn Badge, dressed on the DESIGN.md scale rather than the stock
@@ -612,7 +619,7 @@
                             >result</span
                           >
                           <pre
-                            class="max-h-(--tx-field-cap) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word">{result.text}</pre>
+                            class="max-h-(--tx-field-cap) overflow-auto type-code liga-none text-ink-strong whitespace-pre-wrap break-word">{result.text}</pre>
                         </div>
                       </div>
                     {:else if d.expanded === "prose" && !failed}
@@ -639,7 +646,7 @@
                               >{f.key}</span
                             >
                             <pre
-                              class="max-h-(--tx-field-cap) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word">{f.text}</pre>
+                              class="max-h-(--tx-field-cap) overflow-auto type-code liga-none text-ink-strong whitespace-pre-wrap break-word">{f.text}</pre>
                           </div>
                         {/each}
                         {#if result}
@@ -652,7 +659,7 @@
                               >result</span
                             >
                             <pre
-                              class="max-h-(--tx-field-cap) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word">{result.text}</pre>
+                              class="max-h-(--tx-field-cap) overflow-auto type-code liga-none text-ink-strong whitespace-pre-wrap break-word">{result.text}</pre>
                             {#if result.more}
                               <span
                                 data-slot="more"

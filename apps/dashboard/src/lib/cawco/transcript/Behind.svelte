@@ -68,6 +68,10 @@
     </p>
   {:else}
     <p class="min-w-0 text-balance">Not caught up</p>
-    <Button onclick={onretry} size="sm" variant="ghost">Try again</Button>
+    <!-- The kit link: an action in the line, in the link's ink, never plain
+         words beside the words it answers. -->
+    <Button onclick={onretry} pad="none" size="xs" variant="link"
+      >Try again</Button
+    >
   {/if}
 </div>

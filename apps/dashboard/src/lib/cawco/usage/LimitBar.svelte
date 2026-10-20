@@ -12,8 +12,13 @@
    *   now (the share of time still to come), so fill short of the tick is
    *   burning faster than it lasts.
    *
-   * The fill takes the window's state colour; nothing here carries visible
-   * text. A new reading tweens the fill once; at rest nothing moves.
+   * The fill takes the window's state colour on a groove that is no state's
+   * (`border-control`, the paint of a ring's empty track, which shows on
+   * the raised surface and the session card's alike, DESIGN.md Relay bar),
+   * so an empty bar reads empty and never as a fill. Any share above
+   * nothing draws at least a nub as long as the bar is tall: 1% shows.
+   * Nothing here carries visible text. A new reading tweens the fill once;
+   * at rest nothing moves.
    */
   import type { MeterState } from "../usage";
 
@@ -66,16 +71,19 @@
   aria-valuemin={0}
   aria-valuenow={Math.round(shown)}
   aria-valuetext={said}
-  class="group/bar relative block h-c-meter-bar-h overflow-hidden rounded-hair bg-meter-calm-track state-near:bg-meter-near-track state-over:bg-meter-over-track state-reached:bg-meter-over-track state-stale:bg-meter-stale-track size-compact:h-space-1"
+  class="group/bar relative block h-(--bar-h) overflow-hidden rounded-hair bg-border-control"
   data-reads={reads}
   data-size={size}
   data-state={state}
   role="progressbar"
+  style:--bar-h={size === "compact" ? "var(--space-1)" : "var(--c-meter-bar-h)"}
 >
   <span
     data-slot="fill"
     class="absolute inset-y-0 start-0 w-(--fill-w) rounded-hair bg-meter-calm group-state-near/bar:bg-meter-near group-state-over/bar:bg-meter-over group-state-reached/bar:bg-meter-over group-state-stale/bar:bg-meter-stale motion-safe:transition-[inline-size] motion-safe:duration-(--dur-morph) motion-safe:ease-drawer"
-    style:--fill-w="calc(var(--share) * 100%)"
+    style:--fill-w={shown > 0
+      ? "max(calc(var(--share) * 100%), var(--bar-h))"
+      : "0px"}
     style:--share={shown / 100}
   ></span>
   {#if tick !== null}

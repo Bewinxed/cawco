@@ -19,14 +19,14 @@
  *  5. opened again, Accept edits picked and Start pressed: the form closes,
  *     and a session starts on the tab's machine in its folder in that mode
  *     (the hub's row for it).
- * And the same form in its dialog, where an opener has no trigger (the
- * rail's Start session, at 1440): the card holds the focus, and Esc closes
- * it, the focus back on the opener. From a `?spawn=` link the card keeps the
- * focus through the link's cleanup.
+ * And the same popover from the rail's Start session at 1440, the opener
+ * every start with no trigger of its own hangs it from: no scrim, the page
+ * live beside it, the prompt holding the focus, and Esc closing it, the
+ * focus back on Start session. From a `?spawn=` link it opens there too and
+ * the prompt keeps the focus through the link's cleanup.
  * The popover at 1440: `c-new-session-pop-w` wide, the narrowest the form's
  * own rows hold one line at; recessed under the form's raised body in both
- * themes, as the dialog is; its open and close scrubbed on the clock against
- * DESIGN.md L768.
+ * themes; its open and close scrubbed on the clock against DESIGN.md L768.
  * A fork of a row with no mode opens the form on the fork, never the hub's
  * refusal, and forks once a mode is picked; from Fork from here on a stopped
  * session, at that button.
@@ -47,7 +47,6 @@ import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
 const PLUS = '[data-slot="strip-new"] [data-tnew]';
 const POPOVER = "[data-ns-popover]";
 const SHEET = "[data-session-card][data-vaul-drawer]";
-const DIALOG = "[data-session-card]:not([data-vaul-drawer])";
 /** The rail's own opener, which has no trigger for the form to hang from. */
 const RAIL_START = 'button[aria-label="Start session"]';
 const START = "#session-start";
@@ -268,37 +267,61 @@ async function runLeg(
 }
 
 /**
- * The same form in its dialog, where an opener has no trigger to hang from
- * (the rail's Start session): the card takes the focus as it opens, and Esc
- * closes it and gives the focus back to the opener.
+ * The same popover from the rail's Start session (DESIGN.md, New-session
+ * popover; The Open Page Rule): it hangs from the button, no scrim stands and
+ * a point on the page beside it is the page's, the prompt holds the focus,
+ * and Esc closes it and gives the focus back to Start session.
  */
-async function dialogLeg(kit: Kit, base: string) {
+async function railLeg(kit: Kit, base: string) {
   const page = await kit.page("desk", { theme: "light" });
   await open(page, `${base}/`, RAIL_START, 120_000);
   await settle(page, 400);
   await page.locator(RAIL_START).filter({ visible: true }).first().click();
-  await page.waitForSelector(DIALOG, { state: "visible", timeout: 15_000 });
+  await page.waitForSelector(POPOVER, { state: "visible", timeout: 15_000 });
   await settle(page, 400);
   const shown = await page.evaluate(
-    ({ card, popover }) => {
-      const dialog = document.querySelector<HTMLElement>(card);
+    ({ popover, start }) => {
+      const pop = document.querySelector<HTMLElement>(popover);
+      const trigger = [...document.querySelectorAll<HTMLElement>(start)].find(
+        (one) => one.getClientRects().length > 0
+      );
+      const box = pop?.getBoundingClientRect();
+      const from = trigger?.getBoundingClientRect();
+      // A point on the page beside the popover, past its trailing edge.
+      const x = Math.min(innerWidth - 8, (box?.right ?? 0) + 40);
+      const hit = document.elementFromPoint(x, innerHeight / 2);
+      const prompt = pop?.querySelector('[aria-label="First prompt"]');
       return {
-        open: dialog !== null && dialog.getClientRects().length > 0,
-        focusOnCard: document.activeElement === dialog,
-        prompt: Boolean(dialog?.querySelector('[aria-label="First prompt"]')),
-        popover: document.querySelector(popover) !== null,
+        open: pop !== null && (pop?.getClientRects().length ?? 0) > 0,
+        hangs: !!(box && from) && box.top >= from.bottom - 1,
+        scrims: document.querySelectorAll(
+          '[data-slot="session-scrim"], [data-slot="dialog-overlay"], [data-slot="drawer-overlay"]'
+        ).length,
+        pageAt: hit
+          ? `${hit.localName}${hit.closest("#main-content") ? " in main" : ""}`
+          : "none",
+        live: !!hit?.closest("#main-content") && !pop?.contains(hit),
+        promptFocused:
+          prompt !== null &&
+          prompt !== undefined &&
+          (prompt === document.activeElement ||
+            prompt.contains(document.activeElement)),
       };
     },
-    { card: DIALOG, popover: POPOVER }
+    { popover: POPOVER, start: RAIL_START }
   );
   kit.check(
-    "1440 (fine), no trigger: the form opens as the dialog, the card holding the focus",
-    shown.open && shown.focusOnCard && shown.prompt && !shown.popover,
+    "1440 (fine), the rail's Start session: the popover hangs from it, no scrim stands, the page beside it is live, and the prompt holds the focus",
+    shown.open &&
+      shown.hangs &&
+      shown.scrims === 0 &&
+      shown.live &&
+      shown.promptFocused,
     JSON.stringify(shown)
   );
   await page.keyboard.press("Escape");
   const gone = await page
-    .waitForSelector(DIALOG, { state: "detached", timeout: 15_000 })
+    .waitForSelector(POPOVER, { state: "detached", timeout: 15_000 })
     .then(
       () => "detached",
       (error: Error) => error.message
@@ -307,7 +330,7 @@ async function dialogLeg(kit: Kit, base: string) {
     () => document.activeElement?.getAttribute("aria-label") ?? null
   );
   kit.check(
-    "1440 (fine), no trigger: Esc closes the dialog, the focus back on its opener",
+    "1440 (fine), the rail's Start session: Esc closes the popover, the focus back on Start session",
     gone === "detached" && back === "Start session",
     `${gone}; focus on ${back}`
   );
@@ -486,9 +509,8 @@ const tokenBackground = (page: Page, token: string) =>
   }, token);
 
 /**
- * The Frame Recesses Rule in the popover, as in the dialog: the popover (the
- * frame) is `surface-recess`, the form's body on it `surface-raised`, in
- * each theme; and the dialog's card and body read the same.
+ * The Frame Recesses Rule in the popover: the popover (the frame) is
+ * `surface-recess`, the form's body on it `surface-raised`, in each theme.
  */
 async function depthLeg(
   kit: Kit,
@@ -511,23 +533,12 @@ async function depthLeg(
     recess: await tokenBackground(page, "--surface-recess"),
     raised: await tokenBackground(page, "--surface-raised"),
   };
-  await page.keyboard.press("Escape");
-  await page.waitForSelector(POPOVER, { state: "detached", timeout: 15_000 });
-  await page.locator(RAIL_START).filter({ visible: true }).first().click();
-  await page.waitForSelector(DIALOG, { state: "visible", timeout: 15_000 });
-  await settle(page, 400);
-  const dialog = {
-    card: await backOf(DIALOG),
-    body: await backOf(`${DIALOG} [data-slot="body"]`),
-  };
   kit.check(
-    `1440 ${theme}: the popover recesses (surface-recess) and the form's body stands raised on it (surface-raised), as the dialog's card and body do`,
+    `1440 ${theme}: the popover recesses (surface-recess) and the form's body stands raised on it (surface-raised)`,
     read.frame === read.recess &&
       read.body === read.raised &&
-      read.recess !== read.raised &&
-      dialog.card === read.recess &&
-      dialog.body === read.raised,
-    JSON.stringify({ ...read, dialog })
+      read.recess !== read.raised,
+    JSON.stringify(read)
   );
   await page.close();
 }
@@ -666,34 +677,39 @@ async function motionLeg(kit: Kit, base: string, source: string) {
 }
 
 /**
- * The dialog from a `?spawn=<machine>` link: the URL's cleanup navigation
- * leaves the focus on the card (Shell's `goto(…, { reset: false })`), not
- * on <body>.
+ * The popover from a `?spawn=<machine>` link, hung from the rail's Start
+ * session: the URL's cleanup navigation leaves the focus in the prompt
+ * (Shell's `goto(…, { reset: false })`), not on <body>.
  */
 async function spawnLinkLeg(kit: Kit, base: string, machineId: string) {
   const page = await kit.page("desk", { theme: "light" });
   await open(
     page,
     `${base}/?spawn=${encodeURIComponent(machineId)}`,
-    DIALOG,
+    POPOVER,
     120_000
   );
   await page.waitForFunction(() => !location.search.includes("spawn="), null, {
     timeout: 15_000,
   });
   await settle(page, 400);
-  const held = await page.evaluate((card) => {
-    const dialog = document.querySelector(card);
+  const held = await page.evaluate((popover) => {
+    const prompt = document.querySelector(
+      `${popover} [aria-label="First prompt"]`
+    );
     const focus = document.activeElement;
     return {
-      onCard: focus !== null && focus === dialog,
+      inPrompt:
+        prompt !== null &&
+        focus !== null &&
+        (focus === prompt || prompt.contains(focus)),
       focus: focus ? focus.tagName.toLowerCase() : null,
       url: location.pathname + location.search,
     };
-  }, DIALOG);
+  }, POPOVER);
   kit.check(
-    "1440 (fine), a ?spawn= link: the dialog holds the focus on its card after the link's cleanup, not <body>",
-    held.onCard,
+    "1440 (fine), a ?spawn= link: the popover's prompt holds the focus after the link's cleanup, not <body>",
+    held.inPrompt,
     JSON.stringify(held)
   );
   await page.close();
@@ -724,8 +740,9 @@ async function turn(fleet: KitFleet, source: string, text: string) {
 /**
  * A fork of a session whose row records no mode (its row's mode cleared,
  * as an old row's is, once it has stopped): Fork in its row's menu in the
- * rail opens the New Session form on the fork, as the dialog (a menu's item
- * leaves nothing to hang from): "Fork session", Start "Fork" waiting for a
+ * rail opens the New Session form on the fork, the popover hung from the
+ * rail's Start session (a menu's item leaves nothing to hang from): "Fork
+ * session", Start "Fork" waiting for a
  * mode, never the hub's refusal. With a mode picked, Fork branches the
  * conversation into a new session in that mode, on its source's machine.
  */
@@ -792,7 +809,7 @@ async function forkLeg(
   const before = new Set(rows().map((one) => one.id));
   await page.getByRole("menuitem", { name: "Fork", exact: true }).click();
   const shown = await page
-    .waitForSelector(DIALOG, { state: "visible", timeout: 15_000 })
+    .waitForSelector(POPOVER, { state: "visible", timeout: 15_000 })
     .then(
       () => "",
       (error: Error) => error.message
@@ -815,7 +832,7 @@ async function forkLeg(
         ),
       };
     },
-    { card: DIALOG, start: START }
+    { card: POPOVER, start: START }
   );
   kit.check(
     "1440 (fine): a fork of a row with no mode, from its menu, opens the New Session form on the fork, Start waiting for a mode, never the hub's refusal",
@@ -827,7 +844,7 @@ async function forkLeg(
       !form.refusal,
     JSON.stringify({ shown, ...form })
   );
-  const pop = page.locator(DIALOG);
+  const pop = page.locator(POPOVER);
   await pop.locator('[aria-label^="Permission mode"]').first().click();
   const choice = page.locator(`[data-perm="${MODE}"]`).filter({
     visible: true,
@@ -838,7 +855,7 @@ async function forkLeg(
     ({ card, start }) =>
       document.querySelector<HTMLButtonElement>(`${card} ${start}`)
         ?.disabled === false,
-    { card: DIALOG, start: START },
+    { card: POPOVER, start: START },
     { timeout: 30_000 }
   );
   await pop.locator(START).click();
@@ -1195,7 +1212,7 @@ const spec: Spec = {
     for (const each of LEGS) {
       await runLeg(kit, base, source, each, rows, row);
     }
-    await dialogLeg(kit, base);
+    await railLeg(kit, base);
     await spawnLinkLeg(kit, base, row(source)?.machine_id ?? "");
     await sizeLeg(kit, base, source);
     await depthLeg(kit, base, source, "light");

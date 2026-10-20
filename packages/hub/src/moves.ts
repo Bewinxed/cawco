@@ -844,13 +844,12 @@ export const createMoves = (deps: MovesDeps) => {
   /**
    * Step 2's lines, the owner's pick D ("Plain + details", move design's
    * Owner's picks): what happens to the folder, and how big files go. How
-   * much it fetches is said once, by step 1's reading line.
+   * much it fetches is said once, by step 1's reading line; where it goes,
+   * once, by the title the lines stand under ("Move … to {target}?"), so a
+   * destination told apart from its namesakes ("(the second machine with
+   * that name)") is not said twice.
    */
-  const askLines = (
-    s: MoveInspection,
-    source: string,
-    target: string
-  ): string[] => {
+  const askLines = (s: MoveInspection, source: string): string[] => {
     const big = s.bigFiles;
     const bigBytes = big.reduce((sum, file) => sum + file.bytes, 0);
     const travels =
@@ -858,7 +857,7 @@ export const createMoves = (deps: MovesDeps) => {
         ? `1 big file (${sizeWords(bigBytes)}) travels separately, so the move stays quick.`
         : `${big.length} big files (${sizeWords(bigBytes)}) travel separately, so the move stays quick.`;
     return [
-      `CawCo saves the folder as it is now and copies it to ${target}. Your files on ${source} stay where they are.`,
+      `CawCo saves the folder as it is now and copies it there. Your files on ${source} stay where they are.`,
       ...(big.length > 0 ? [travels] : []),
     ];
   };
@@ -903,7 +902,7 @@ export const createMoves = (deps: MovesDeps) => {
     const target = deps.machineName(targetMachineId);
     const big = s.bigFiles;
     const gitInit = !s.isGit;
-    const lines = askLines(s, source, target);
+    const lines = askLines(s, source);
     const details = askDetails(s, t, steps, source);
     const key = steps.includes("approval")
       ? createHash("sha256")

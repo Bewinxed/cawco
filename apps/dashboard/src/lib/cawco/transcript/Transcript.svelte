@@ -2662,8 +2662,60 @@
       Math.abs(listStart + list.getItemOffset(index) - top - was.at) <= 1
     );
   }
+  /**
+   * The frame a pane is shown in, from `visible` rising to the task after
+   * that frame's rendering. The scroll event its scroller fires there (the
+   * offset it was put away at, taken back as it is drawn) is read after the
+   * frame, in that task (`onscroll`): read in the event, its offset, height
+   * and boxes forced a style pass of their own ahead of the frame's (two
+   * panes, a focus switch: "style 365 by" the handler before the frame's
+   * 1089), and a switch restyled past what it shows. Nobody is scrolling a
+   * pane in the frame it appears in, so every other scroll is read in its
+   * event, where the reader's own scroll is told from this component's
+   * writes before the next frame's follow can land over it.
+   */
+  let showing = false;
+  /** The frame and the task a scroll held in a pane's showing frame is read in. */
+  let heldFrame = 0;
+  let heldTask: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    if (!visible) {
+      return;
+    }
+    showing = true;
+    let task: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      task = setTimeout(() => {
+        showing = false;
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(task);
+      showing = false;
+    };
+  });
+  $effect(() => () => {
+    cancelAnimationFrame(heldFrame);
+    clearTimeout(heldTask);
+  });
   function onscroll(): void {
     awayScroll = 0;
+    if (!showing) {
+      readScroll();
+      return;
+    }
+    if (heldFrame === 0) {
+      heldFrame = requestAnimationFrame(() => {
+        heldTask = setTimeout(() => {
+          heldFrame = 0;
+          readScroll();
+        });
+      });
+    }
+  }
+  /** What a scroll did, read off the scroller (`onscroll`). */
+  function readScroll(): void {
     if (!(scroller && listing && landed)) {
       return;
     }

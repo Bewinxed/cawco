@@ -1378,7 +1378,7 @@ export const SURFACES: Surface[] = [
   },
   {
     // The top bar alone, its glass group included (Shell's
-    // `data-slot="top"`): on the home, and over a conversation's tabs
+    // `data-slot="top"`): on a phone's home, and over a conversation's tabs
     // (hosting them on a desk, floating over them on a phone). The bar
     // glass's own compare against the base reads it at both widths.
     name: "top-bar",
@@ -1386,10 +1386,13 @@ export const SURFACES: Surface[] = [
     route: () => "/",
     states: [
       {
+        // The home is the page under the drawer's width alone: `/` goes on
+        // to `/session` (routes/(app)/+page.server.ts), which a desk opens
+        // on the workspace's conversation (top-bar/session's).
         name: "home",
-        widths: ["desk", "phone"],
+        widths: ["phone"],
         root: TOP_BAR,
-        ready: { shows: TOP_BAR, path: /^\/$/ },
+        ready: { shows: `body:has(${HOME}) ${TOP_BAR}`, path: /^\/session$/ },
       },
       {
         name: "session",

@@ -509,6 +509,18 @@ const isCompactSummary = (m: Message | undefined): m is Message =>
   m?.type === "ui.system_note" && m.metadata?.noteKind === COMPACT_SUMMARY_KIND;
 
 /**
+ * The harness's own word on the compaction it just made: a `/compact`'s
+ * stdout ("Compacted"), a local command's note right after the compaction's
+ * boundary and summary. The divider says it, so the compaction takes it in
+ * (DESIGN.md, Compaction divider: "A compaction has this one row from its
+ * first moment and nothing else in the transcript announces it").
+ */
+const isCompactReport = (m: Message | undefined): boolean =>
+  m?.type === "ui.system_note" &&
+  m.metadata?.noteKind === "Local command" &&
+  m.content.trimStart().startsWith("<local-command-stdout>");
+
+/**
  * Where the newest compaction in `messages` begins, by the pairing
  * {@link compactionAt} folds: its boundary, or its summary when that was read
  * back without one. -1 when they hold none.
@@ -528,8 +540,9 @@ export function newestCompaction(messages: Message[]): number {
 /**
  * The compaction that begins at `messages[i]`, and how many messages it is:
  * a boundary with the summary right after it, a boundary whose summary has
- * not arrived, or a summary read back without its boundary. `null` for any
- * other message.
+ * not arrived, or a summary read back without its boundary, each with the
+ * `/compact`'s own report after it when there is one
+ * ({@link isCompactReport}). `null` for any other message.
  */
 function compactionAt(
   messages: Message[],
@@ -545,6 +558,7 @@ function compactionAt(
     return null;
   }
   const own = `c:${keyOf(first, i)}`;
+  const pair = boundary && brief ? 2 : 1;
   return {
     row: {
       kind: "compaction",
@@ -562,7 +576,7 @@ function compactionAt(
       trigger: boundary?.metadata?.trigger,
       timestamp: first.timestamp,
     },
-    span: boundary && brief ? 2 : 1,
+    span: pair + (isCompactReport(messages[i + pair]) ? 1 : 0),
   };
 }
 
