@@ -701,6 +701,12 @@
     var(--dur-control) both;
   --animate-finish: finish calc(var(--dur-fade) * 2) var(--ease-out);
   --animate-head-fade: head-fade linear both;
+  --animate-dialog-in: kit-dialog-in var(--dur-panel) var(--ease-out) both;
+  --animate-dialog-out: kit-dialog-out var(--dur-exit) var(--ease-out) both;
+  --animate-scrim-in: kit-fade-in var(--dur-panel) var(--ease-out) both;
+  --animate-tip-fade: kit-tip-fade var(--dur-fade) var(--ease-out) both;
+  --animate-tip-in: kit-tip-in var(--dur-fade) var(--ease-out) both;
+  --animate-skeleton-sweep: kit-skeleton-sweep var(--dur-loop) linear infinite;
   @keyframes spin {
     to {
       transform: rotate(360deg);
@@ -869,6 +875,29 @@
   @keyframes head-fade {
     to {
       opacity: 1;
+    }
+  }
+  @keyframes kit-dialog-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  @keyframes kit-dialog-out {
+    to {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  @keyframes kit-tip-in {
+    from {
+      opacity: 0;
+      translate: var(--kit-tip-from);
+    }
+  }
+  @keyframes kit-skeleton-sweep {
+    to {
+      translate: 100% 0;
     }
   }
 }

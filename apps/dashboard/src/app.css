@@ -3357,12 +3357,6 @@
    `@media (prefers-reduced-motion: no-preference)`, and motion driven from
    JavaScript asks `motionOk` (motion/curves.svelte.ts). Opacity and colour
    fades that carry state run either way. The kit's keyframes: */
-@keyframes kit-tip-in {
-  from {
-    opacity: 0;
-    translate: var(--kit-tip-from);
-  }
-}
 @keyframes kit-tip-fade {
   from {
     opacity: 0;
@@ -3410,18 +3404,6 @@
   from {
     opacity: 0;
     transform: translateY(8px);
-  }
-}
-@keyframes kit-dialog-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-}
-@keyframes kit-dialog-out {
-  to {
-    opacity: 0;
-    transform: translateY(6px);
   }
 }
 @keyframes kit-fade-in {
@@ -3482,20 +3464,6 @@
 @keyframes kit-sheet-seam {
   to {
     border-block-end-color: var(--border-hairline);
-  }
-}
-
-/* wave 2: W3-loading */
-/* The skeleton's sweep (ui/skeleton, DESIGN.md Skeleton): one band crossing
-   the placeholder once per `--dur-loop`, turning linearly as every pending
-   loop does (The One Loop Rule), used only under `motion-safe:`. */
-@theme {
-  --animate-skeleton-sweep: kit-skeleton-sweep var(--dur-loop) linear infinite;
-
-  @keyframes kit-skeleton-sweep {
-    to {
-      translate: 100% 0;
-    }
   }
 }
 

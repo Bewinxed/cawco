@@ -225,6 +225,19 @@ const ANIMATIONS: Record<string, string> = {
   // The transcript head's layers come in over the first c-head-fade of
   // scroll, on the transcript's scroll timeline (`head-fade-scrub`).
   "animate-head-fade": "head-fade linear both",
+  // A kit dialog rises in and sinks out over its scrim's fade (ui/dialog).
+  "animate-dialog-in": "kit-dialog-in var(--dur-panel) var(--ease-out) both",
+  "animate-dialog-out": "kit-dialog-out var(--dur-exit) var(--ease-out) both",
+  "animate-scrim-in": "kit-fade-in var(--dur-panel) var(--ease-out) both",
+  // A kit tooltip fades in over --dur-fade, settling 2px toward its trigger
+  // (`--kit-tip-from`, by its side); with reduced motion it only fades.
+  "animate-tip-fade": "kit-tip-fade var(--dur-fade) var(--ease-out) both",
+  "animate-tip-in": "kit-tip-in var(--dur-fade) var(--ease-out) both",
+  // The skeleton's sweep (DESIGN.md Skeleton): one band crossing the
+  // placeholder once per --dur-loop, turning linearly as every pending loop
+  // does (The One Loop Rule).
+  "animate-skeleton-sweep":
+    "kit-skeleton-sweep var(--dur-loop) linear infinite",
 };
 /** The keyframes the house's animations name that app.css does not keep. */
 const KEYFRAMES: Record<string, string> = {
@@ -258,6 +271,10 @@ const KEYFRAMES: Record<string, string> = {
   "cell-swap": "from {\n  opacity: 0;\n  scale: var(--pop-scale);\n}",
   finish: "35% {\n  background-color: var(--status-done-bg);\n}",
   "head-fade": "to {\n  opacity: 1;\n}",
+  "kit-dialog-in": "from {\n  opacity: 0;\n  transform: translateY(6px);\n}",
+  "kit-dialog-out": "to {\n  opacity: 0;\n  transform: translateY(6px);\n}",
+  "kit-tip-in": "from {\n  opacity: 0;\n  translate: var(--kit-tip-from);\n}",
+  "kit-skeleton-sweep": "to {\n  translate: 100% 0;\n}",
 };
 
 /**
