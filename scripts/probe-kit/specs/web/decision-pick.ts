@@ -1845,15 +1845,22 @@ const footFrames = (page: Page, count: number) =>
  * frames, the order of the clamp's frame left to the browser); `notch` turns
  * it once, one real wheel event: the page at its foot moves nothing for it,
  * so no scroll comes before the ride's next frame, and the wheel alone must
- * end the ride (the race forced, every run).
+ * end the ride (the race forced, every run). `bar` presses the mouse on the
+ * root scrollbar's thumb (the page's scrollbars drawn, as a desk's Chromium
+ * draws them): at the foot a press on the thumb moves nothing either, so the
+ * press alone must end the ride.
  */
 async function clampLeg(
   kit: Kit,
   url: string,
   label: string,
-  how: "gesture" | "notch"
+  how: "gesture" | "notch" | "bar"
 ) {
-  const page = await kit.page("desk", { theme: "light", init: [CAWCO_BRIDGE] });
+  const page = await kit.page("desk", {
+    theme: "light",
+    init: [CAWCO_BRIDGE],
+    scrollbars: how === "bar",
+  });
   await page.goto(url, { waitUntil: "load" });
   await page.waitForFunction(
     () => document.querySelectorAll("[data-slot=diagram] svg").length >= 2,
@@ -1886,16 +1893,17 @@ async function clampLeg(
   // the card, from the page, in that event), so the page's foot rises on
   // the frame the wheel scrolls to it, and the next scroll check finds both.
   // The notch's wheel moves nothing (its default held back, as the foot
-  // holds it): the ride hears the wheel and no scroll at all.
-  await page.evaluate((still) => {
-    if (still) {
+  // holds it): the ride hears the wheel and no scroll at all. The bar's
+  // press moves the fold in its pointerdown, as the wheel's first event does.
+  await page.evaluate((by) => {
+    if (by === "notch") {
       addEventListener("wheel", (event) => event.preventDefault(), {
         capture: true,
         passive: false,
       });
     }
     addEventListener(
-      "wheel",
+      by === "bar" ? "pointerdown" : "wheel",
       () => {
         const card = document.getElementById("decision-radius");
         for (const run of card?.getAnimations({ subtree: true }) ?? []) {
@@ -1905,12 +1913,26 @@ async function clampLeg(
       },
       { capture: true, once: true, passive: true }
     );
-  }, how === "notch");
+  }, how);
   const cdp = await page.context().newCDPSession(page);
   // Every frame from before the wheel's first event, so the frame the
   // clamp lands on, and any the ride writes after it, are read.
+  // The root scrollbar's thumb, read before the press: the strip past the
+  // page's client width, its length and place the view's share of the page.
+  const thumb = await page.evaluate(() => {
+    const root = document.scrollingElement as Element;
+    const length = (root.clientHeight * root.clientHeight) / root.scrollHeight;
+    const top = (root.scrollTop / root.scrollHeight) * root.clientHeight;
+    return {
+      x: root.clientWidth + (innerWidth - root.clientWidth) / 2,
+      y: top + length / 2,
+    };
+  });
   const watched = footFrames(page, 40);
-  if (how === "notch") {
+  if (how === "bar") {
+    await page.mouse.move(thumb.x, thumb.y);
+    await page.mouse.down();
+  } else if (how === "notch") {
     await cdp.send("Input.dispatchMouseEvent", {
       type: "mouseWheel",
       x: 720,
@@ -1928,10 +1950,13 @@ async function clampLeg(
     });
   }
   const seen = await watched;
+  if (how === "bar") {
+    await page.mouse.up();
+  }
   // From the frame the fold's shrink first shows (the page's foot rising).
   const shrunk = seen.findIndex((one) => one.most < (atStart?.most ?? 0) - 1);
   const held = shrunk < 0 ? [] : seen.slice(shrunk);
-  const [afterWheel] = held;
+  const [afterReader] = held;
   const played = page.evaluate(
     () =>
       new Promise<{ most: number; scroll: number }[]>((done) => {
@@ -1962,10 +1987,10 @@ async function clampLeg(
   const atFoot = (one: { most: number; scroll: number }) =>
     Math.abs(one.scroll - one.most) <= 1;
   kit.check(
-    `${label}: the reader's wheel (${how === "notch" ? "one notch, which moves nothing at the foot: the wheel alone ends the ride" : "a scroll gesture"}) at the page's foot as the fold's shrink clamps the scroll there ends the ride: the scroll stays at the page's foot on every frame after, and the fold and the flight still land`,
+    `${label}: the reader's ${{ gesture: "wheel (a scroll gesture)", notch: "wheel (one notch, which moves nothing at the foot: the wheel alone ends the ride)", bar: "press on the scrollbar's thumb (which moves nothing at the foot: the press alone ends the ride)" }[how]} at the page's foot as the fold's shrink clamps the scroll there ends the ride: the scroll stays at the page's foot on every frame after, and the fold and the flight still land`,
     !!atStart &&
-      !!afterWheel &&
-      atFoot(afterWheel) &&
+      !!afterReader &&
+      atFoot(afterReader) &&
       held.every(atFoot) &&
       after.every(atFoot) &&
       landed.decided &&
@@ -1973,7 +1998,7 @@ async function clampLeg(
       flight.transform === "none",
     JSON.stringify({
       atStart,
-      afterWheel,
+      afterReader,
       held,
       after,
       landed: { scroll: landed.scroll, card: landed.card, body: landed.body },
@@ -2543,6 +2568,7 @@ const spec: Spec = {
           await readerLeg(kit, url, view, theme, label, "scrollbar");
           await clampLeg(kit, url, label, "gesture");
           await clampLeg(kit, url, label, "notch");
+          await clampLeg(kit, url, label, "bar");
         }
       }
     } finally {
