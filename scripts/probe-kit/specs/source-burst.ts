@@ -30,14 +30,21 @@
  *    (link-under-load lane 11 on 2026-10-20, whose brief went 143 ms before
  *    the cut and was never read). Once the machine is back, the hub hands it
  *    again (hub server.ts `handAgain`), and the session reads it once.
+ * 5. A person starts a session on the second machine 1 s into a 3 s cut of
+ *    its link: the hub keeps the start for the machine's register (hub
+ *    server.ts `startHold`, `flushOwedStarts`), and once the machine is back
+ *    there is one row for it and one session. On 2026-10-20 such a start was
+ *    answered "offline" and made no row (leg 3's, sent as leg 2's cut ended;
+ *    leg 3 starts there still).
  *
  *   bun scripts/probe-kit/run.ts source-burst
  */
+import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
-import { relay } from "../relay";
+import { type Relay, relay } from "../relay";
 
 /** The second machine, which reaches the hub through the relay. */
 const OTHER = "source-burst-other";
@@ -53,6 +60,10 @@ const TITLE = "Titled through the cut";
 const CUT_MS = 3000;
 /** What set_title answers once the hub has the title. */
 const NAMED = `Named this session "${TITLE}"`;
+/** How far into leg 5's cut its start is posted. */
+const START_INTO_CUT_MS = 1000;
+/** Leg 5's session: its rows are counted by it. */
+const STARTED_TITLE = "Started through the cut";
 /** How the leg-3 session's prompt names it, and nothing else does. */
 const ONCE_TAG = "PROBE-SOURCE-BURST-ONCE";
 const HANDOFF = "mcp__cawco__handoff";
@@ -163,6 +174,143 @@ const respond = (request: Seen): Reply => {
     words: [],
     tool: { name: SET_TITLE, input: { title: TITLE } },
   };
+};
+
+type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
+
+/** What legs 3 to 5 run on: the fleet, the checkout, its project, the second machine's relay. */
+interface Legs {
+  check: Kit["check"];
+  fleet: Fleet;
+  link: Relay;
+  projectId: string;
+  src: string;
+}
+
+/** Leg 3: the session hands `parent` its message. */
+const handOnce = async (at: Legs, parent: string): Promise<void> => {
+  leg3.parent = parent;
+  // 3. A handoff whose answer the link drops after the hub took it. Its
+  // session starts as leg 2's cut ends, while the second machine may still
+  // be reconnecting: a start then is kept for its register (leg 5).
+  const sender = await at.fleet
+    .spawn("claude", "Once call", at.src, { projectId: at.projectId }, OTHER)
+    .catch((error: unknown) => {
+      at.check(
+        "the leg-3 session, started as leg 2's cut ends, runs",
+        false,
+        error instanceof Error ? error.message : String(error)
+      );
+    });
+  if (sender) {
+    await at.fleet.send(
+      sender,
+      `${ONCE_TAG}: hand your parent a message.`,
+      OTHER
+    );
+    const handed = await until(
+      "the handoff whose answer was broken is answered",
+      () => leg3.answer,
+      Boolean,
+      120_000
+    ).catch(() => undefined);
+    const deliveries = () =>
+      at.fleet.query<{ count: number }>(
+        "SELECT count(*) AS count FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
+        parent,
+        `%${DELIVERED}%`
+      )[0]?.count ?? 0;
+    await until(
+      "the message reaches the parent",
+      deliveries,
+      (n) => n > 0,
+      30_000
+    ).catch(() => undefined);
+    // Long enough for a second run's send to land beside the first.
+    await Bun.sleep(5000);
+    const delivered = deliveries();
+    const { broke } = at.link.fault;
+    at.check(
+      "a handoff whose connection drops after the hub took it, half its answer through, is answered its first answer when it goes again, and its message is delivered once",
+      !!handed &&
+        !!broke &&
+        !handed.toolFailed &&
+        handed.at >= broke.at &&
+        delivered === 1,
+      `broken ${broke ? `after ${broke.passed} of ${broke.bytes} bytes` : "never"}; answer ${handed ? `${handed.toolFailed ? "an error" : "a result"} ${handed.at - (broke?.at ?? handed.at)} ms after the break: ${handed.last.slice(0, 300)}` : "none"}; delivered ${delivered} time(s)`
+    );
+  }
+};
+
+/** Leg 4. */
+const loseSend = async (at: Legs): Promise<void> => {
+  // 4. A message lost with the link it was handed on.
+  const reader = await at.fleet.spawn(
+    "claude",
+    "Lost send",
+    at.src,
+    { projectId: at.projectId },
+    OTHER
+  );
+  const lost = await at.fleet.send(reader, `${LOST_TAG}: say ok.`, OTHER);
+  await until(
+    "the session reads the message lost with its link",
+    () => leg4.turns.length,
+    (turns) => turns > 0,
+    120_000
+  ).catch(() => undefined);
+  // Long enough for a second hand-off's turn to come beside the first.
+  await Bun.sleep(5000);
+  const record = at.fleet.query<{ state: string }>(
+    "SELECT state FROM sent_messages WHERE uuid = ?",
+    lost
+  )[0]?.state;
+  const [read] = leg4.turns;
+  at.check(
+    "a message whose frame is lost with the link it was handed on is handed again once the machine is back, and its session reads it once",
+    leg4.lostAt !== undefined &&
+      leg4.releasedAt !== undefined &&
+      leg4.turns.length === 1 &&
+      !!read &&
+      read.at >= leg4.releasedAt &&
+      record === "read",
+    `lost ${leg4.lostAt === undefined ? "never" : `and the link cut for ${CUT_MS} ms`}; ${leg4.turns.length} turn(s) on it${read && leg4.releasedAt !== undefined ? `, the first ${read.at - leg4.releasedAt} ms after the link was back` : ""}; its record: ${record ?? "none"}`
+  );
+};
+
+/** Leg 5. */
+const startThroughCut = async (at: Legs): Promise<void> => {
+  // 5. A start posted 1 s into a 3 s cut of the second machine's link.
+  const { link } = at;
+  link.cut();
+  setTimeout(() => link.release(), CUT_MS);
+  await Bun.sleep(START_INTO_CUT_MS);
+  const started = await at.fleet
+    .spawn("claude", STARTED_TITLE, at.src, { projectId: at.projectId }, OTHER)
+    .catch((error: unknown) =>
+      error instanceof Error ? error.message : String(error)
+    );
+  // Long enough for a second start's session to come beside the first.
+  await Bun.sleep(5000);
+  const rows = at.fleet.query<{ id: string; status: string }>(
+    "SELECT id, status FROM instances WHERE title = ?",
+    STARTED_TITLE
+  );
+  const launched = rows.map(
+    ({ id }) =>
+      readFileSync(join(at.fleet.sandbox, `${OTHER}-agent.log`), "utf8")
+        .split("\n")
+        .filter((line) => line.includes(`launch credential installed ${id}`))
+        .length
+  );
+  at.check(
+    "a session started 1 s into a 3 s cut of its machine's link is kept for the machine's register, and makes one row and one session once it is back",
+    rows.length === 1 &&
+      rows[0]?.status === "running" &&
+      launched[0] === 1 &&
+      rows[0]?.id === started,
+    `${rows.length} row(s): ${rows.map((row, index) => `${row.id.slice(0, 8)} ${row.status}, ${launched[index]} launch(es) on ${OTHER}`).join("; ") || "none"}; the start: ${started.length === 36 ? "running" : started.slice(0, 300)}`
+  );
 };
 
 const spec: Spec = {
@@ -283,91 +431,16 @@ const spec: Spec = {
       `cut ${leg2.cutAt === undefined ? "never" : `for ${CUT_MS} ms`}; answer ${answered ? `${answered.at - (leg2.cutAt ?? answered.at)} ms after the cut began: ${answered.last.slice(0, 300)}` : "none"}; the session's title: ${named ?? "none"}`
     );
 
-    // 3. A handoff whose answer the link drops after the hub took it, once
-    // the second machine is back from leg 2's cut: a start sent to it while
-    // it reconnects is not this leg's.
-    await until(
-      "the second machine registered again after leg 2's cut",
-      () => fleet.api<{ machineId: string; status: string }[]>("/api/agents"),
-      (agents) =>
-        agents.some(
-          (agent) => agent.machineId === OTHER && agent.status === "online"
-        ),
-      60_000
-    );
-    leg3.parent = parent;
-    const sender = await fleet.spawn(
-      "claude",
-      "Once call",
+    const legs: Legs = {
+      check,
+      fleet,
+      link: between,
+      projectId: project.id,
       src,
-      { projectId: project.id },
-      OTHER
-    );
-    await fleet.send(sender, `${ONCE_TAG}: hand your parent a message.`, OTHER);
-    const handed = await until(
-      "the handoff whose answer was broken is answered",
-      () => leg3.answer,
-      Boolean,
-      120_000
-    ).catch(() => undefined);
-    const deliveries = () =>
-      fleet.query<{ count: number }>(
-        "SELECT count(*) AS count FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
-        parent,
-        `%${DELIVERED}%`
-      )[0]?.count ?? 0;
-    await until(
-      "the message reaches the parent",
-      deliveries,
-      (n) => n > 0,
-      30_000
-    ).catch(() => undefined);
-    // Long enough for a second run's send to land beside the first.
-    await Bun.sleep(5000);
-    const delivered = deliveries();
-    const { broke } = between.fault;
-    check(
-      "a handoff whose connection drops after the hub took it, half its answer through, is answered its first answer when it goes again, and its message is delivered once",
-      !!handed &&
-        !!broke &&
-        !handed.toolFailed &&
-        handed.at >= broke.at &&
-        delivered === 1,
-      `broken ${broke ? `after ${broke.passed} of ${broke.bytes} bytes` : "never"}; answer ${handed ? `${handed.toolFailed ? "an error" : "a result"} ${handed.at - (broke?.at ?? handed.at)} ms after the break: ${handed.last.slice(0, 300)}` : "none"}; delivered ${delivered} time(s)`
-    );
-
-    // 4. A message lost with the link it was handed on.
-    const reader = await fleet.spawn(
-      "claude",
-      "Lost send",
-      src,
-      { projectId: project.id },
-      OTHER
-    );
-    const lost = await fleet.send(reader, `${LOST_TAG}: say ok.`, OTHER);
-    await until(
-      "the session reads the message lost with its link",
-      () => leg4.turns.length,
-      (turns) => turns > 0,
-      120_000
-    ).catch(() => undefined);
-    // Long enough for a second hand-off's turn to come beside the first.
-    await Bun.sleep(5000);
-    const record = fleet.query<{ state: string }>(
-      "SELECT state FROM sent_messages WHERE uuid = ?",
-      lost
-    )[0]?.state;
-    const [read] = leg4.turns;
-    check(
-      "a message whose frame is lost with the link it was handed on is handed again once the machine is back, and its session reads it once",
-      leg4.lostAt !== undefined &&
-        leg4.releasedAt !== undefined &&
-        leg4.turns.length === 1 &&
-        !!read &&
-        read.at >= leg4.releasedAt &&
-        record === "read",
-      `lost ${leg4.lostAt === undefined ? "never" : `and the link cut for ${CUT_MS} ms`}; ${leg4.turns.length} turn(s) on it${read && leg4.releasedAt !== undefined ? `, the first ${read.at - leg4.releasedAt} ms after the link was back` : ""}; its record: ${record ?? "none"}`
-    );
+    };
+    await handOnce(legs, parent);
+    await loseSend(legs);
+    await startThroughCut(legs);
     between.stop();
   },
 };

@@ -3542,12 +3542,27 @@ export const createServer = (
    * contract ({@link protocolRange}): a launch there would ask for no
    * credential, and its agent would stop it before its first turn. That
    * machine is offered this hub's build, and registers on it once installed.
+   * One whose link dropped and is inside the window its agent gets to come
+   * back (core handover.ts `presenceOf`): a start asked then was refused as
+   * the machine offline, and made no row (source-burst, 2026-10-20).
    * The hub keeps the start instead, on the instance row already written for
-   * it, and sends it when the machine can take it ({@link flushOwedStarts}).
+   * it, and sends it when the machine can take it ({@link flushOwedStarts}),
+   * on its register for a machine that was away.
    */
   const startHold = (
     machineId: string
-  ): { kind: "paused" | "update" | "build"; words: string } | undefined => {
+  ):
+    | { kind: "paused" | "update" | "build" | "away"; words: string }
+    | undefined => {
+    if (
+      !registry.agent(machineId) &&
+      machinePresence(machineId).kind === "reconnecting"
+    ) {
+      return {
+        kind: "away",
+        words: `${machineName(machineId)} is reconnecting to the hub`,
+      };
+    }
     const paused = machinePause.words(machineId);
     if (paused) {
       return { kind: "paused", words: paused };
@@ -3584,12 +3599,16 @@ export const createServer = (
    * and a continuation's ({@link spawnFromHub}) meet the same hold.
    */
   const sendSpawn = (
-    agent: NonNullable<ReturnType<typeof registry.agent>>,
+    agent: ReturnType<typeof registry.agent>,
     machineId: string,
     envelope: Envelope<SpawnPayload>
   ): Envelope | undefined => {
     if (holdingStarts(machineId) && envelope.instanceId) {
       db.oweSpawn(envelope.instanceId, JSON.stringify(envelope), Date.now());
+      return;
+    }
+    // No link and no hold: the caller found the machine offline first.
+    if (!agent) {
       return;
     }
     const frame = { ...envelope, payload: bounded(envelope.payload) };
@@ -8357,7 +8376,9 @@ export const createServer = (
     if (!db.owesSpawn(record.instanceId)) {
       return "behind";
     }
-    return (row && startHold(row.machineId)?.kind) ?? "update";
+    // A machine away was answered above, by why it is away.
+    const held = row && startHold(row.machineId)?.kind;
+    return held && held !== "away" ? held : "update";
   };
 
   /**
@@ -8737,7 +8758,11 @@ export const createServer = (
    * its item never started (link-under-load lane 11). The agent takes a
    * send it had already as had, never as a second turn (session.ts
    * `#handedBefore`): taken, it says so; held by its process, it says that.
-   * A send owed is not handed here: it goes when its hold ends.
+   * A send owed is not handed here: it goes when its hold ends. Nor is one
+   * its harness has said it holds (`held`): a process has it. An agent that
+   * restarted adopts a live Claude process and tells the hub which sends its
+   * CLI holds (claude.ts `adopt`, MESSAGES_HELD), but keeps none of them as
+   * its own hand-offs, so one handed again here would reach that CLI twice.
    */
   const handAgain = (machineId: string, instanceIds: string[]): void => {
     const agent = registry.agent(machineId);
@@ -8747,7 +8772,7 @@ export const createServer = (
     let again = 0;
     for (const instanceId of instanceIds) {
       for (const send of db.sendsIn(instanceId, ["pending"])) {
-        if (send.owed || !(send.delivery && send.envelope)) {
+        if (send.owed || send.held || !(send.delivery && send.envelope)) {
           continue;
         }
         sendFrame(agent, JSON.parse(send.envelope) as Envelope);
@@ -13089,6 +13114,26 @@ export const createServer = (
     });
   };
 
+  /**
+   * Why `machineId` takes no start now, or nothing. A machine inside its
+   * reconnect window takes it on its register, under the request id its
+   * caller waits on ({@link flushOwedStarts}); a caller `asking` and waiting
+   * on any other hold is told now rather than left to time out.
+   */
+  const startRefusal = (
+    machineId: string,
+    asking: boolean
+  ): string | undefined => {
+    const held = startHold(machineId);
+    if (!(registry.agent(machineId) || held?.kind === "away")) {
+      return machineFault(machineId, "offline");
+    }
+    if (asking && held && held.kind !== "away") {
+      return `${held.words}; start the session again once it has`;
+    }
+    return undefined;
+  };
+
   /** Sends a spawn and opens its row, on the account {@link spawnPlacement} gives. */
   const issueSpawn = (
     machineId: string,
@@ -13098,13 +13143,9 @@ export const createServer = (
     placedAhead?: { accountId?: string }
   ): Envelope | undefined => {
     const agent = registry.agent(machineId);
-    if (!agent) {
-      throw new Error(machineFault(machineId, "offline"));
-    }
-    const held = asked.requestId && startHold(machineId);
-    if (held) {
-      // The caller is waiting for this start; it is told now rather than left to time out.
-      throw new Error(`${held.words}; start the session again once it has`);
+    const refused = startRefusal(machineId, Boolean(asked.requestId));
+    if (refused) {
+      throw new Error(refused);
     }
     const settled = settleSpawn(machineId, asked, fallbackMode);
     if ("refusal" in settled) {
@@ -13220,7 +13261,7 @@ export const createServer = (
     if (refusal) {
       throw new WorkItemRefusal(409, refusal);
     }
-    if (!registry.agent(machineId)) {
+    if (!registry.agent(machineId) && startHold(machineId)?.kind !== "away") {
       throw new WorkItemRefusal(404, machineFault(machineId, "offline"));
     }
     const { parentInstanceId } = peekParent(named);
@@ -23649,6 +23690,9 @@ export const createServer = (
       JSON.stringify({ ...message, payload }),
       Date.now()
     );
+    console.info(
+      `[hub] start of ${instanceId} kept for ${machineName(message.machineId)}: ${startHold(message.machineId)?.words}`
+    );
     const requestId = message.requestId ?? peek(message.payload, "requestId");
     if (requestId) {
       sendFrame(ws, {
@@ -23758,7 +23802,13 @@ export const createServer = (
       sendFrame(ws, failure(message, placed.refusal));
       return;
     }
-    if (!(registry.agent(message.machineId) && message.instanceId)) {
+    // A machine inside its reconnect window takes the start on its register
+    // ({@link startHold}); only one with no link and no window is offline.
+    if (!(
+      message.instanceId &&
+      (registry.agent(message.machineId) ||
+        machinePresence(message.machineId).kind === "reconnecting")
+    )) {
       sendFrame(
         ws,
         failure(message, machineFault(message.machineId, "offline"))
