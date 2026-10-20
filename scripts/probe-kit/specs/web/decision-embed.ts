@@ -60,9 +60,11 @@
  *    on a desk; the desk's in an option, narrower); its script reads the
  *    same from matchMedia, as it mounts and after.
  * 9c. A frame is its story's viewport to a floating layer too (canvas
- *    viewport.ts): a phone's bar with its end-aligned menu open, at a
- *    card's full width (an 854px window on a desk), has the menu inside
- *    the 390px frame, shifted in from its start as a phone's window would.
+ *    viewport.ts), each layer its own frame's: a bar at 390, 320 and 480px
+ *    in one embed at a card's full width (an 832px window on a desk), each
+ *    with its end-aligned menu open, untouched and portalled to the page's
+ *    body, has each menu inside its own frame, shifted in from its start
+ *    as a window that wide would.
  * 10. No console error.
  *
  *   bun scripts/probe-kit/run.ts web decision-embed
@@ -101,6 +103,8 @@ const NOTE_ID = idOf("note-alone");
 const SIDE_ID = idOf("side-card");
 const HEAD_ID = idOf("page-head");
 const MENU_ID = idOf("bar-menu");
+/** The bar's stories, each its menu open and untouched: three frames of three widths in one embed. */
+const MENUS = ["Phone", "Small", "Half"];
 const MONTH_ID = idOf("ledger-month");
 const SHEET_ID = idOf("sheet");
 /** The side card's own widths (its stories' viewports). */
@@ -112,14 +116,19 @@ const MONTHS = ["January", "February", "March", "April", "May", "June"];
 const HOUSE_FADE = 40;
 
 /**
- * Each open menu this embed draws: its frame's left and right and the
- * menu's, page px, and the window's width. In the embed's page.
+ * Each open menu this embed draws, found by the trigger in its frame that
+ * names it (`aria-controls`; the menu stands in the page's body, as a
+ * Portal puts it): its frame's left and right and the menu's, page px, and
+ * the window's width. In the embed's page.
  */
 function readMenus() {
   return [...document.querySelectorAll<HTMLElement>(".cawco-frame")].flatMap(
     (frame) => {
       const body = frame.querySelector(".cawco-frame-body");
-      const menu = frame.querySelector(".menu");
+      const named = body
+        ?.querySelector(".more[aria-controls]")
+        ?.getAttribute("aria-controls");
+      const menu = named ? document.getElementById(named) : null;
       if (!(body && menu)) {
         return [];
       }
@@ -279,10 +288,10 @@ const PREVIEWS: Record<
     shows: ["Phone"],
   },
   "The head on a desk": { files: [HEAD], stories: ["Desk"], shows: ["Desk"] },
-  "The bar's menu on a phone": {
+  "The bar's menus, open": {
     files: [MENU],
-    stories: ["Phone"],
-    shows: ["Phone"],
+    stories: MENUS,
+    shows: MENUS,
   },
   "The note": { files: [NOTE], stories: ["Pinned"], shows: ["Pinned"] },
   "January's lines": {
@@ -321,10 +330,10 @@ const PROGRAM = [
   `row = Option("row", "One row everywhere", "Title and tools side by side.", false, [headDesk], "Tools cut short on a phone.")`,
   `headPhone = Preview("${HEAD_ID}", "The head on a phone", ["Phone"])`,
   `headDesk = Preview("${HEAD_ID}", "The head on a desk", ["Desk"])`,
-  `bar = Decision("bar", "Where does the bar's menu open?", [below, aside], "A phone's bar, its menu open, at the card's full width.", [menuPhone])`,
+  `bar = Decision("bar", "Where does the bar's menu open?", [below, aside], "A bar at three widths, each with its menu open, at the card's full width.", [menuPhone])`,
   `below = Option("below", "Under the ⋯", "End-aligned under it.", true, [], "It covers the first line.")`,
   `aside = Option("aside", "Beside the bar", "Off to its end.", false, [], "It runs off a phone's edge.")`,
-  `menuPhone = Preview("${MENU_ID}", "The bar's menu on a phone", ["Phone"])`,
+  `menuPhone = Preview("${MENU_ID}", "The bar's menus, open", ["Phone", "Small", "Half"])`,
 ].join("\n");
 
 /** The fixture copied to scratch and installed once: the project the stage draws. */
@@ -685,8 +694,8 @@ const spec: Spec = {
               one.menu[1] > one.frame[1] + 0.5
           );
           kit.check(
-            `${leg}: a menu opened in a frame stands inside it (${menus.map((one) => `${one.story}: the menu ${one.menu.join("–")} in the frame ${one.frame.join("–")}, a ${one.window}px window`).join("; ")})`,
-            menus.length === 1 && strayMenus.length === 0,
+            `${leg}: each menu open in a frame, untouched, stands inside its own frame (${menus.map((one) => `${one.story}: the menu ${one.menu.join("–")} in the frame ${one.frame.join("–")}, a ${one.window}px window`).join("; ")})`,
+            menus.length === MENUS.length && strayMenus.length === 0,
             JSON.stringify(strayMenus)
           );
           const unlike = grounds.filter((one) => one.embed !== one.host);

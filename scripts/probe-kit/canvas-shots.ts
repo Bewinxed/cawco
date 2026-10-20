@@ -655,6 +655,30 @@ function gridOf(args: { selector: string; grid: number }) {
     el
       ? `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`
       : "nothing";
+  /**
+   * Whether `hit` is a layer of this frame's own story drawn outside its
+   * body (a menu, a popover or a tooltip portalled to the page, bits-ui's
+   * Portal): it, or a box holding it, has an id a trigger in the body names
+   * (`aria-controls`, `aria-describedby`).
+   */
+  const ownLayer = (hit: Element) => {
+    for (
+      let at: Element | null = hit;
+      at && at !== document.body;
+      at = at.parentElement
+    ) {
+      const quoted = at.id ? CSS.escape(at.id) : "";
+      if (
+        quoted &&
+        body.querySelector(
+          `[aria-controls~="${quoted}"], [aria-describedby~="${quoted}"]`
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
   const covered: string[] = [];
   const points: Painted[] = [];
   // A frame that scrolls its story sideways (an embed's story too wide to fit at 10px words) shows what its scrollport holds: the grid reads that part.
@@ -689,6 +713,14 @@ function gridOf(args: { selector: string; grid: number }) {
           onText(hit) || boxAt(unhit, page.x, page.y) || castAt(page.x, page.y)
             ? null
             : paintedAt(hit, page.x, page.y),
+        x,
+        y,
+      });
+    } else if (hit && ownLayer(hit)) {
+      // The story's own layer over it (its open menu): its paint, not read.
+      points.push({
+        page: { x: rect.left + x, y: rect.top + y },
+        rgb: null,
         x,
         y,
       });
