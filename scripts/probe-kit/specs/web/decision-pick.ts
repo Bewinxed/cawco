@@ -1506,9 +1506,11 @@ async function keyLeg(
   );
   await keys.keyboard.press("Control+Enter");
   await settle(keys, 300);
-  // Sent, Send runs the kit's pending (DESIGN.md L731, Buttons, Pending):
-  // the spinner, then its check held for --dur-hold, its label still saying
-  // what went; no "Sent." line of words is drawn beside it.
+  // Sent, Send runs the kit's pending (DESIGN.md L736, Buttons, Pending):
+  // the spinner, then its check in its slot held for --dur-hold, its label
+  // morphing to "Sent" (the X7 review's ruling: Send says it is done) and its
+  // keycaps gone while what went still stands; no "Sent." line of words is
+  // drawn beside it.
   const sent = await keys.evaluate(() => {
     const send = document.querySelector("[data-send]");
     return {
@@ -1518,14 +1520,16 @@ async function keyLeg(
       label:
         send?.querySelector("[data-slot=morph-text]")?.textContent?.trim() ??
         "",
+      keys: [...(send?.querySelectorAll("[data-slot=kbd]") ?? [])].length,
       words: document.querySelector("[data-slot=page-foot]")?.textContent ?? "",
     };
   });
   kit.check(
-    `${label}: Ctrl+Enter sends from an option: Send's pending ends on its check (L731), its label still what went ("${goes}"), and no "Sent." line is drawn`,
+    `${label}: Ctrl+Enter sends from an option ("${goes}"): Send's pending ends on its check (L736), its label now "${sent.label}", ${sent.keys} keycaps, and no "Sent." line is drawn`,
     sent.check === "true" &&
       goes.startsWith("Send ") &&
-      sent.label === goes &&
+      sent.label === "Sent" &&
+      sent.keys === 0 &&
       !sent.words.includes("Sent."),
     JSON.stringify({ goes, ...sent })
   );

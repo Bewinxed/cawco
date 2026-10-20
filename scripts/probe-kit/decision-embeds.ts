@@ -1453,6 +1453,7 @@ const EMBEDDED_PAGE = /^\/__cawco\/page\/([0-9a-f-]{36})\/$/;
 const CAPTURE_IDS = {
   motion: idOf("capture-motion"),
   site: idOf("capture-site"),
+  cards: idOf("capture-cards"),
   gone: idOf("capture-gone"),
   sketch: idOf("capture-sketch"),
 };
@@ -1483,12 +1484,16 @@ motion = Preview("${CAPTURE_IDS.motion}", "How it moves")
 tune = Dials("Card", {radius: [12, 0, 32], accent: "#e65d46"})
 `;
 
-/** One card whose Preview is a dev server that has not answered yet. */
-const WAIT_PROGRAM = `root = Decisions("Open the launch site", [site])
+/** Two cards whose Previews have not answered yet: a dev server's (a screen) and a component canvas's (which says its height only once it serves). */
+const WAIT_PROGRAM = `root = Decisions("Open the launch site", [site, parts])
 site = Decision("site", "Does the launch site read right?", [ship, hold], "It runs on the session's dev server.", [live])
 ship = Option("ship", "Ship it", "The site goes out as it runs.", true, [], "Nothing more is checked.")
 hold = Option("hold", "Hold it a day", "One more pass over the copy.", false, [], "The launch moves a day.")
 live = Preview("${CAPTURE_IDS.site}", "The site as it runs")
+parts = Decision("parts", "Do the site's cards read right?", [keepCards, redo], "They are drawn on the session's stage.", [cards])
+keepCards = Option("keep-cards", "Keep them", "The cards ship as drawn.", true, [], "Nothing more is drawn.")
+redo = Option("redo", "Draw them again", "A tighter card.", false, [], "A day more on the cards.")
+cards = Preview("${CAPTURE_IDS.cards}", "The site's cards")
 `;
 
 /** One card whose picture, canvas and preview are gone from the hub. */
@@ -1524,6 +1529,11 @@ const CAPTURE_PAGES = {
         kind: "preview",
         name: "launch-site",
         embed: `${SILENT_ORIGIN}/`,
+      },
+      [CAPTURE_IDS.cards]: {
+        kind: "component",
+        name: "Card.stories.ts",
+        embed: `${SILENT_ORIGIN}/@cawco/canvas?file=src%2FCard.stories.ts`,
       },
     },
     picks: {},

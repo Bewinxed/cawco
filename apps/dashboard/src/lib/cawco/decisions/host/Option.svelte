@@ -72,7 +72,8 @@
   ]}
   data-slot="option-cell"
 >
-  <div class="flex min-w-0 flex-wrap items-center gap-space-2">
+  <!-- Its lines packed at the row's top (`content-start`): the row is stretched to the track every cell's first row shares, and a stretched line centred the chip there, so a cell whose badge wrapped stood its chip 14px higher than its neighbours'. Each chip stands on the row's first line, its badges centred beside it or wrapped under it. -->
+  <div class="flex min-w-0 flex-wrap content-start items-center gap-space-2">
     <OptionGroupItem
       aria-describedby={described}
       aria-labelledby="{uid}-label"

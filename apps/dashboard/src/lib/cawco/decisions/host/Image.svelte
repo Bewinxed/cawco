@@ -35,11 +35,14 @@
       {src}
     />
   {:else}
+    <!-- One line in its well where the picture would stand, never a slab of its size. -->
     <p
       data-slot="media-gone"
-      class="type-meta grid aspect-16/10 w-full place-items-center text-center text-ink-muted wrap-anywhere"
+      class="type-meta w-full text-ink-muted wrap-anywhere"
     >
-      The picture {file} is not on this page.
+      {failed
+        ? "The picture this card showed didn't load."
+        : "The picture this card showed is gone."}
     </p>
   {/if}
 </Well>

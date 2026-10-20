@@ -1610,11 +1610,15 @@
 }
 /* A mark beside words that wrap stands on their first line: the row is set
    to its start, and the mark in a cell one line box tall centres it where
-   the first line's x-height centres. */
+   the first line's x-height centres. Its track is centred as well as the
+   mark in it: a mark taller than the line (a page head's 40px Caw beside a
+   25px title line) grows the cell's row past the cell, and that row, at the
+   cell's start, stood the mark at the line's top. */
 @utility mark-cell {
   :where(&) {
     display: grid;
     flex: none;
+    place-content: center;
     place-items: center;
     block-size: 1lh;
   }

@@ -35,7 +35,7 @@
   import PendingContent from "#lib/components/ui/button/pending-content.svelte";
   import { Kbd, KbdGroup } from "#lib/components/ui/kbd/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { IconWarningTriangle } from "#lib/icons.js";
+  import { IconSend, IconTick, IconWarningTriangle } from "#lib/icons.js";
   import cawDark from "../../../../../../../packages/hub/skills/decision-page/kit/caw/dark-ready.webp";
   import cawLight from "../../../../../../../packages/hub/skills/decision-page/kit/caw/light-ready.webp";
   import { frameObserver } from "../../frame-observer.js";
@@ -121,13 +121,29 @@
       root.style.scrollPaddingBlockEnd = "";
     };
   };
-  /** Send's label: what goes. */
-  const sendLabel = $derived(
-    count === 0
-      ? "Send picks"
-      : `Send ${count} ${count === 1 ? "pick" : "picks"}`
-  );
   let sending = $state(false);
+  /** What the person has picked and written on each card, as one string. */
+  const standing = $derived(
+    JSON.stringify(
+      ids.map((one) => [
+        one,
+        picks.now[one]?.options ?? [],
+        picks.now[one]?.note ?? "",
+      ])
+    )
+  );
+  /** That, as it stood when the hub last took a send: while it still stands so, Send is spent. */
+  let sentPicks = $state<string | null>(null);
+  const spent = $derived(sentPicks !== null && sentPicks === standing);
+  /** Send's label: what goes, or that it went (morphing through the same MorphText as its count). */
+  const sendLabel = $derived.by(() => {
+    if (spent) {
+      return "Sent";
+    }
+    return count === 0
+      ? "Send picks"
+      : `Send ${count} ${count === 1 ? "pick" : "picks"}`;
+  });
   /** What the page's live region says now. */
   let said = $state("");
   /** The cards standing open, by id: any one keeps Send quiet. */
@@ -180,8 +196,10 @@
       return;
     }
     sending = true;
+    const going = standing;
     try {
       await cawco.send();
+      sentPicks = going;
     } catch (error) {
       console.error("[decision-page] send failed:", error);
     } finally {
@@ -192,8 +210,9 @@
 
 <svelte:window onkeydown={sendKey} />
 
+<!-- At least the window's height, its foot taking the room left above it: on a short page the foot stands at the window's foot as it does on a long one, never under the last card. -->
 <main
-  class="mx-auto flex w-full min-w-0 max-w-c-decision-page-w flex-col gap-space-5 px-space-6 pt-space-6 pb-(--page-inset-bottom) coarse:px-space-4 coarse:pt-space-4"
+  class="mx-auto flex min-h-dvh w-full min-w-0 max-w-c-decision-page-w flex-col gap-space-5 px-space-6 pt-space-6 pb-(--page-inset-bottom) coarse:px-space-4 coarse:pt-space-4"
   data-slot="decision-page"
 >
   <header
@@ -218,8 +237,9 @@
     <Alert variant="warning">
       <IconWarningTriangle />
       <AlertDescription>
-        Picks are kept only when CawCo shows this page: publish it with
-        artifact_create.
+        Picks are kept only when CawCo shows this page: publish it with <code
+          class="text-size-meta wrap-anywhere">artifact_create</code
+        >.
       </AlertDescription>
     </Alert>
   {/if}
@@ -227,7 +247,7 @@
   <footer
     {@attach morph()}
     {@attach footRoom}
-    class="sticky bottom-(--page-inset-bottom) z-(--layer-sticky) -mx-space-6 flex flex-wrap items-center justify-between gap-space-3 border-t border-border-hairline bg-material-panel px-space-6 pt-space-3 pb-safe-space-3 glass-backdrop coarse:-mx-space-4 coarse:px-space-4 reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
+    class="sticky bottom-(--page-inset-bottom) z-(--layer-sticky) -mx-space-6 mt-auto flex flex-wrap items-center justify-between gap-space-3 border-t border-border-hairline bg-material-panel px-space-6 pt-space-3 pb-safe-space-3 glass-backdrop coarse:-mx-space-4 coarse:px-space-4 reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
     data-safe-bottom
     data-slot="page-foot"
   >
@@ -254,12 +274,14 @@
       pending={sending}
       size={coarse.current ? "lg" : "default"}
       variant={opened.size > 0 ? "outline" : "default"}
-      ><PendingContent label={sendLabel} pending={sending} /><KbdGroup
-        aria-hidden="true"
-        data-box
-        ><Kbd reach="keyboard">{modifier}</Kbd><Kbd reach="keyboard">↵</Kbd
-        ></KbdGroup
-      ></Button
+      ><PendingContent
+        icon={spent ? IconTick : IconSend}
+        label={sendLabel}
+        pending={sending}
+      />{#if !spent}<KbdGroup aria-hidden="true" data-box
+          ><Kbd reach="keyboard">{modifier}</Kbd><Kbd reach="keyboard">↵</Kbd
+          ></KbdGroup
+        >{/if}</Button
     >
   </footer>
   <p aria-live="polite" class="sr-only" data-slot="page-said">{said}</p>

@@ -111,10 +111,16 @@
   }
 
   /* DialKit's controls in a Dials well (its variables, kit/vendor/dialkit
-     styles.css), no glass and no blur: a row the default control's height
-     (44px under a finger, The 44 Touch Rule), its track the control edge's
-     groove, its fill the pressed step, its handle raised; names in the label
-     role and every value field in meta, tabular Figtree (a list's column of
+     styles.css), no glass and no blur. Each row is DESIGN.md's Effort chip
+     field: "a 30px raised field (38px on a phone) with a 10px radius", drawn
+     on the row's own box (`::before`), so under a finger the row keeps its
+     44px area (The 44 Touch Rule) while it draws 38. A slider's fill is
+     recess-deep with "a lifted 8px block with a neutral-8 inner edge" at its
+     end (the house knob: `--surface-lift`, `--shadow-knob`), and DialKit's
+     own bar handle, which its script holds hidden at rest, goes. The colour
+     row is the same field, its value and its swatch inside it. Both rows'
+     names stand on one inset (`--space-3`) in the label role in strong ink,
+     every value field in meta, muted, tabular Figtree (a list's column of
      figures, The Tabular Figure Rule and DESIGN.md's Measured figure), never
      DialKit's own Geist Mono, a face the page doesn't have; the colour
      swatch, drawn 20px, reaching 24px under a mouse and 44px under a finger
@@ -123,13 +129,20 @@
      field's never meet, and each value field its row's height under a
      finger; the house focus ring. */
   [data-slot="dials"] .dialkit-root {
+    /* The row's area, and the field drawn in it. */
+    --dial-field-h: var(--c-btn-h-sm);
+    --dial-field-inset: calc(
+      (var(--dial-row-height) - var(--dial-field-h)) / 2
+    );
+    /* The knob: as wide as a step of the house's spacing, the fill's padding round it. */
+    --dial-knob-w: var(--space-3);
     --dial-surface: var(--border-control);
     --dial-surface-hover: var(--surface-hover);
     --dial-surface-active: var(--surface-fill);
     --dial-surface-subtle: var(--surface-recess);
     --dial-text-root: var(--ink-strong);
     --dial-text-section: var(--ink-muted);
-    --dial-text-label: var(--ink-muted);
+    --dial-text-label: var(--ink-strong);
     --dial-text-focus: var(--ink-strong);
     --dial-text-primary: var(--ink-strong);
     --dial-text-secondary: var(--ink-muted);
@@ -140,8 +153,8 @@
     --dial-glass-bg: var(--surface-raised);
     --dial-dropdown-bg: var(--surface-raised);
     --dial-backdrop-blur: 0px;
-    --dial-radius: var(--radius-sm);
-    --dial-row-height: var(--c-btn-h);
+    --dial-radius: var(--radius-md);
+    --dial-row-height: var(--c-btn-h-sm);
     --dial-row-gap: var(--space-2);
     --dial-shadow: var(--shadow-overlay);
     --dial-shadow-dropdown: var(--shadow-overlay);
@@ -151,9 +164,79 @@
 
     @media (pointer: coarse) {
       --dial-row-height: var(--c-btn-h-lg);
+      --dial-field-h: var(--c-effort-track-h-phone);
     }
     & [class$="-label"] {
       font: var(--type-label);
+    }
+
+    /* The slider: the field, its fill and knob, its name and value on the inset. */
+    & .dialkit-slider {
+      overflow: visible;
+      border-radius: 0;
+      background: none;
+
+      &::before {
+        content: "";
+        position: absolute;
+        inset-block: var(--dial-field-inset);
+        inset-inline: 0;
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-md);
+        background: var(--surface-raised);
+      }
+    }
+    & .dialkit-slider-fill {
+      inset-block: calc(var(--dial-field-inset) + 1px);
+      inset-inline-start: 1px;
+      min-inline-size: calc(var(--dial-knob-w) + 2 * var(--space-row));
+      max-inline-size: calc(100% - 2px);
+      border-radius: calc(var(--radius-md) - 1px);
+      background: var(--surface-recess-deep);
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset-block: var(--space-row);
+        inset-inline-end: var(--space-row);
+        inline-size: var(--dial-knob-w);
+        border-radius: var(--radius-sm);
+        background: var(--surface-lift);
+        box-shadow: var(--shadow-knob);
+      }
+    }
+    & .dialkit-slider-handle {
+      display: none;
+    }
+    & .dialkit-slider-label {
+      inset-inline-start: var(--space-3);
+    }
+    & .dialkit-slider-value {
+      inset-inline-end: var(--space-3);
+    }
+
+    /* The colour row: the same field, behind its name, value and swatch. */
+    & .dialkit-color-control {
+      position: relative;
+      isolation: isolate;
+      padding-inline: var(--space-3);
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
+
+      &::before {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        inset-block: var(--dial-field-inset);
+        inset-inline: 0;
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-md);
+        background: var(--surface-raised);
+      }
+    }
+    & :is(.dialkit-slider-value, .dialkit-color-value) {
+      color: var(--ink-muted);
     }
     &
       :is(
@@ -180,10 +263,6 @@
     }
     & .dialkit-color-swatch {
       @apply pointer-hit touch-hit;
-    }
-    & .dialkit-slider-handle {
-      background: var(--surface-raised);
-      box-shadow: var(--shadow-raised);
     }
   }
 }

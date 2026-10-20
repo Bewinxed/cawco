@@ -148,6 +148,17 @@
   });
   setContext("decision-rows", () => rows);
 
+  /** The pieces drawn in a well (Well.svelte), by the library's names for them. */
+  const WELLS = new Set(["Image", "Diagram", "Canvas", "Preview", "Dials"]);
+  /** The card's media are two pictures: they may share the body's width. */
+  const pictures = $derived(
+    Array.isArray(props.media) &&
+      props.media.length === 2 &&
+      props.media.every((node) =>
+        WELLS.has((node as { typeName?: unknown } | null)?.typeName as string)
+      )
+  );
+
   /**
    * The stored pick as core `pickOf` reads it, as the graph and the count
    * do: an option a revision took out is no pick on this card.
@@ -832,11 +843,11 @@
       </p>
     {/if}
     {#if Array.isArray(props.media) && props.media.length > 0}
-      <!-- Two media side by side in equal columns once the card's body holds two at a readable width; one, or three and more, one under another. -->
+      <!-- Two pictures side by side in equal columns once the card's body holds two at a readable width; one, three and more, or words (a Row, a Text, a Badge) beside a picture, one under another, each at the body's width. -->
       <div
         class={[
           "grid min-w-0 grid-cols-1 gap-space-3",
-          props.media.length === 2 && "@media-split:grid-cols-2",
+          pictures && "@media-split:grid-cols-2",
         ]}
         data-slot="decision-media"
       >
@@ -863,9 +874,14 @@
       </div>
     </OptionGroup>
     <div data-slot="note">
+      <!-- A ghost's ink starts inside its box: it hangs back by its padding so its first letter stands on the card's text edge, as RelayJourney's ghosts do. -->
       <div bind:this={noteAdd}>
-        <Button disabled={!bridge()} onclick={askNote} size="sm" variant="ghost"
-          >Add {noteFor}</Button
+        <Button
+          class="-ms-space-3"
+          disabled={!bridge()}
+          onclick={askNote}
+          size="sm"
+          variant="ghost">Add {noteFor}</Button
         >
       </div>
       <div bind:this={noteField}>

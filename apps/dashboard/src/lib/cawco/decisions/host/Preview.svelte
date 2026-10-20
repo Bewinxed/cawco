@@ -10,10 +10,11 @@
   runtime centres each story at its own size, scales one wider than the
   frame to fit it and scrolls one too wide at its words' floor sideways
   under the house edge fade (runtime.ts `fitToEmbed`). Each stands in its
-  well. While the origin is asked, the frame's place holds a skeleton at a
-  screen's shape, and once the wait outlasts its grace Caw and its line stand
-  over it (DESIGN.md, The Claim Of Nothing Rule, The Real Wait Rule). One the
-  hub no longer holds says so in words where it would stand.
+  well. While the origin is asked, the well holds the frame's own height
+  where it is known (a screen's), else one status row, a skeleton until the
+  wait outlasts its grace and Caw and the line then (DESIGN.md, The Claim Of
+  Nothing Rule, The Real Wait Rule). One the hub no longer holds says so in
+  words where it would stand.
 -->
 <script lang="ts">
   import { CANVAS_EMBED_SIZE, canvasEmbedUrl } from "@cawco/core/stage";
@@ -44,6 +45,8 @@
   );
   let frame = $state<HTMLIFrameElement>();
   let tall = $state<number | null>(null);
+  /** It stands at a screen's shape, known before it serves: a dev server's preview or a sheet, not a component canvas, which says its own height. */
+  const screen = $derived(held?.kind !== "component");
   let watch: FrameObserver | undefined;
 
   /** A component canvas's own height, as it says it (agent canvas runtime `by=embed`): its frame is as tall. */
@@ -171,10 +174,9 @@
       title={held.name}
     ></iframe>
   {:else if held?.embed}
-    <!-- One box for the frame and its wait: the frame once its origin serves, else the skeleton at a screen's shape, past the wait a screen's room; the live region stands over it from the start, its words only once the wait has lasted. -->
+    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it serves it is one status row, a skeleton of its line before the grace. Past the grace Caw and the wait's line stand in the row (The Real Wait Rule), over the screen's place; once it serves, the row stands over the frame, empty. The live region is the row's one line throughout. -->
     <div class="relative w-full">
       {#if ready}
-        <!-- A screen keeps its 16:10 under the cap; a component canvas that said its height is as tall as its frames, and the page scrolls past it. -->
         <iframe
           bind:this={frame}
           class={[
@@ -187,15 +189,25 @@
           style:block-size={tall === null ? undefined : `${tall}px`}
           title={held.name}
         ></iframe>
-      {:else if waited}
-        <div class="aspect-16/10 w-full"></div>
-      {:else}
-        <Skeleton class="w-full" height="picture" />
+      {:else if screen}
+        {#if slow}
+          <div class="aspect-16/10 max-h-c-media-max-h w-full"></div>
+        {:else}
+          <Skeleton class="w-full" height="picture" />
+        {/if}
       {/if}
-      <!-- mark-line: Caw stands over the wait's line, in a column; no mark beside words -->
       <div
-        class="pointer-events-none absolute inset-0 grid content-center justify-items-center gap-space-2"
+        class={[
+          "mark-line flex items-center justify-center gap-space-2",
+          ready || screen
+            ? "pointer-events-none absolute inset-0"
+            : "min-h-c-btn-h-lg",
+        ]}
+        data-slot="wait-row"
       >
+        {#if !(ready || slow || screen)}
+          <Skeleton data-box line="meta" width="title" />
+        {/if}
         {#if slow && !waited && !ready}
           <img
             alt=""
@@ -204,18 +216,16 @@
             width="40"
           />
         {/if}
-        <p
-          class="type-meta text-center text-ink-muted wrap-anywhere"
-          role="status"
-        >
+        <p class="type-meta min-w-0 text-ink-muted wrap-anywhere" role="status">
           {waitLine}
         </p>
       </div>
     </div>
   {:else}
+    <!-- One line in its well where the preview would stand, never a slab of its size. -->
     <p
       data-slot="media-gone"
-      class="type-meta grid aspect-16/10 w-full place-items-center text-center text-ink-muted wrap-anywhere"
+      class="type-meta w-full text-ink-muted wrap-anywhere"
     >
       {held
         ? `The ${held.kind} this card shows can't be opened here now.`

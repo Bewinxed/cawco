@@ -174,9 +174,10 @@
       title={`Canvas: ${held.name}`}
     ></iframe>
   {:else}
+    <!-- One line in its well where the drawing would stand, never a slab of its size. -->
     <p
       data-slot="media-gone"
-      class="type-meta grid aspect-16/10 w-full place-items-center text-center text-ink-muted wrap-anywhere"
+      class="type-meta w-full text-ink-muted wrap-anywhere"
     >
       {held
         ? "This piece names an artifact that is not a canvas."
