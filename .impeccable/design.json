@@ -2558,7 +2558,7 @@
       },
       {
         "name": "The Press Rule",
-        "body": "The hand feels a control before release, in one of two ways chosen by size. A compact standalone control (a button, an icon button, a chip, a switch, about 44px tall at most) scales to 0.97 over 160ms on ease-out. Anything wide, large or grouped (rows, cards, card heads, tabs in a strip, segments) tints to `surface-fill` and moves nothing, because a 0.97 scale pulls a 300px row's edge in by 4.5px. A text link dims to 72% opacity. The scale only runs with motion allowed; the tint always runs.",
+        "body": "The hand feels a control before release, in one of two ways chosen by size. A compact standalone control (a button, an icon button, a chip, a switch, about 44px tall at most) scales to 0.97 over 160ms on ease-out. Anything wide, large or grouped (rows, cards, card heads, tabs in a strip, segments) tints to `surface-pressed` and moves nothing, because a 0.97 scale pulls a 300px row's edge in by 4.5px; `surface-pressed` is the kit Toggle's on step, the step past the hover (by day the hover step is `surface-fill`'s own, so a press in `surface-fill` would read as the hover; night keeps `surface-fill`). A text link dims to 72% opacity. The scale only runs with motion allowed; the tint always runs.",
         "section": "components"
       },
       {
@@ -2616,7 +2616,7 @@
       "**Do** say status with a glyph or a word before hue, and draw idle as no chip at all.",
       "**Do** set every changing figure in tabular numerals (`.num`), and keep weights at 400 and 500.",
       "**Do** use Solar bold-duotone for every product icon, linear only for chevrons and arrows, at 12, 16 or 20px.",
-      "**Do** make a compact control scale to 0.97 on press and a wide or grouped one tint to `surface-fill`.",
+      "**Do** make a compact control scale to 0.97 on press and a wide or grouped one tint to `surface-pressed`, the step past the hover, so a press never reads as hovered.",
       "**Do** give every touch control a 44×44 area and every small pointer target a 24×24 area without changing the drawn size.",
       "**Do** enter on ease-out over 260 to 280ms and leave over 160ms; move things already on screen on ease-in-out.",
       "**Do** carry shared objects across a change, and reflow lists rather than letting rows jump.",
