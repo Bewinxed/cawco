@@ -562,15 +562,46 @@ export function boot(options: BootOptions): void {
   };
   document.addEventListener("pointerdown", touchedIn, true);
   document.addEventListener("focusin", touchedIn, true);
+  /** The ids a floating layer holds: its own and its parts' (a menu's content inside its positioned wrapper). */
+  const idsIn = (layer: Element): string[] =>
+    [layer, ...layer.querySelectorAll("[id]")]
+      .map((one) => one.id)
+      .filter(Boolean);
   /**
-   * The frame a floating layer asks the viewport of: the one frame with a
-   * trigger open in it (`aria-expanded`, as a menu's or a popover's
-   * trigger says, so a layer open as its story mounts has its frame); else
-   * the frame last pressed or focused in; else the one frame with a width.
-   * None (the window's own) where several have triggers open and none was
-   * touched, or a frame has no width.
+   * The frame a floating layer belongs to: the one it stands in, or the one
+   * holding the trigger that names it (`aria-controls`, a menu's or a
+   * popover's; `aria-describedby`, a tooltip's), as a layer portalled out
+   * of its frame (bits-ui's Portal, to the body) is named. None for an
+   * element holding frames (the body, the canvas), which is no layer.
    */
-  const floatingFrame = (): Frame | null => {
+  const layerFrame = (layer: Element | null): Frame | null => {
+    if (!layer?.isConnected) {
+      return null;
+    }
+    const frames = widthFrames();
+    if (frames.some((frame) => layer.contains(frame.body))) {
+      return null;
+    }
+    const inside = frames.find((frame) => frame.body.contains(layer));
+    if (inside) {
+      return inside;
+    }
+    const names = idsIn(layer).map((id) => {
+      const quoted = CSS.escape(id);
+      return `[aria-controls~="${quoted}"], [aria-describedby~="${quoted}"]`;
+    });
+    return names.length === 0
+      ? null
+      : (frames.find((frame) => frame.body.querySelector(names.join(", "))) ??
+          null);
+  };
+  /**
+   * The frame script asks the viewport of when no layer of a frame asks:
+   * the one frame with a trigger open in it (`aria-expanded`), else the
+   * frame last pressed or focused in, else the one frame with a width; none
+   * (the window's own) where that names no one frame.
+   */
+  const askedFrame = (): Frame | null => {
     const frames = widthFrames();
     const open = frames.filter((frame) =>
       frame.body.querySelector('[aria-expanded="true"]')
@@ -585,7 +616,11 @@ export function boot(options: BootOptions): void {
       ? (frames[0] ?? null)
       : null;
   };
-  frameAsViewport(() => floatingFrame()?.body.getBoundingClientRect() ?? null);
+  // Each layer asks at its own frame, the one it stands in or its trigger's.
+  frameAsViewport(
+    (layer) =>
+      (layerFrame(layer) ?? askedFrame())?.body.getBoundingClientRect() ?? null
+  );
 
   window.matchMedia = (query: string) => {
     if (view.motion === "reduce" && REDUCED_QUERY.test(query)) {
