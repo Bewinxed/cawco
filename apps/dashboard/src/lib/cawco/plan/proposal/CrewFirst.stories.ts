@@ -20,9 +20,9 @@ export const Plan = {
   parameters: { viewport: 360 },
 };
 
-/** On your screen · Crew first as the reader's own screen draws it: the phone's sheet under a finger, the desk's card under a mouse, cut only between lines (a decision page's drawing). */
+/** On your screen · Crew first as the reader's own screen draws it: the phone's sheet under a finger, the desk's card under a mouse, its whole plan shown (a decision page's drawing). */
 export const Device = {
-  args: { frame: "device", crop: true },
+  args: { frame: "device", whole: true },
   parameters: { viewport: 360 },
 };
 
@@ -56,9 +56,9 @@ export const Live = {
   parameters: { viewport: 360 },
 };
 
-/** Desk · Crew first, the date picker open to its description, its sub-steps and its delegate, cut only between lines (a decision page's drawing). */
+/** Desk · Crew first, the date picker open to its description, its sub-steps and its delegate, its whole plan shown (a decision page's drawing). */
 export const Opened = {
-  args: { frame: "desk", scenario: "opened", crop: true },
+  args: { frame: "desk", scenario: "opened", whole: true },
   parameters: { viewport: 360 },
 };
 

@@ -14,21 +14,21 @@
   import { IconChevronRight } from "#lib/icons.js";
   // Page-local Solar glyph the proposal adds (not in $lib/icons.ts yet).
   import GlyphTask from "~icons/solar/clipboard-check-bold-duotone";
-  import { cropWhole } from "./crop";
   import { type PlanFixture, progress } from "./fixtures";
   import { holdOn } from "./focus";
+  import { standWhole } from "./whole";
 
   let {
     plan,
     focus,
-    crop = false,
+    whole = false,
     children,
   }: {
     plan: PlanFixture;
     /** The row the card stands scrolled to (a step a story opens). */
     focus?: string;
-    /** Cut only between lines (cropWhole): a decision page's drawing. */
-    crop?: boolean;
+    /** Show the whole plan, the frame as tall as it is (standWhole): a decision page's drawing. */
+    whole?: boolean;
     children: Snippet;
   } = $props();
 
@@ -119,7 +119,7 @@
       data-slot="plan-scroll"
       {@attach holdOn(focus)}
       {@attach capEdgeFades}
-      {@attach crop && cropWhole(() => desk, DESK_TALL)}
+      {@attach whole && standWhole(() => desk, DESK_TALL)}
     >
       {@render children()}
     </div>

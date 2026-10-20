@@ -20,7 +20,8 @@
  *    columns.
  * 7. No line crosses a box: every connector, sampled along its length,
  *    stays off every tile, words, badge and time but its own two ends.
- * 8. Nothing is cut: no box clips its words without an ellipsis, and no
+ * 8. Every drawing of the plan shows each of its to-dos, whole. Nothing
+ *    is cut: no box clips its words without an ellipsis, and no
  *    clipping or scrolling box's top or foot runs through a line (words, a
  *    tile, a progress line); every row's words have room (64px, some eight
  *    characters); and every row stands at its place when read, no slide
@@ -252,6 +253,44 @@ function pulseInkIn() {
       ratio: Math.round(((bandL + 0.05) / (fillL + 0.05)) * 100) / 100,
     };
   });
+}
+
+/**
+ * Each plan's to-dos (its step rows, sub-steps under a step aside) and the
+ * ones its drawing shows: a row drawn whole inside its scroller and its
+ * frame, none past an edge. In the page.
+ */
+function todosIn() {
+  return [...document.querySelectorAll<HTMLElement>('[data-slot="plan"]')].map(
+    (plan) => {
+      const rows = [
+        ...plan.querySelectorAll<HTMLElement>(
+          'li[data-row] > [data-slot="plan-row"]'
+        ),
+      ].filter(
+        (row) =>
+          row.querySelector(':scope > [data-lead] [data-slot="step-tile"]') &&
+          !row.closest('.kit-nest, [data-slot="fold-body"]')
+      );
+      const clip = (row: Element) =>
+        [
+          row.closest('[data-slot="plan-scroll"]'),
+          row.closest('[data-slot="side-card"], [data-slot="phone-screen"]'),
+        ].flatMap((one) => (one ? [one.getBoundingClientRect()] : []));
+      const missing = rows.flatMap((row) => {
+        const r = row.getBoundingClientRect();
+        const whole =
+          r.height > 0 &&
+          clip(row).every(
+            (box) => r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5
+          );
+        return whole
+          ? []
+          : [row.parentElement?.getAttribute("data-row") ?? "?"];
+      });
+      return { total: rows.length, missing };
+    }
+  );
 }
 
 /**
@@ -607,6 +646,7 @@ type Facts = ReturnType<typeof frameFacts> & {
   wires: ReturnType<typeof wiresIn>;
   pulseInk: ReturnType<typeof pulseInkIn>;
   columns: ReturnType<typeof columnsIn>;
+  todos: ReturnType<typeof todosIn>;
   acts: ReturnType<typeof actsIn>;
   cut: string[];
 };
@@ -691,6 +731,7 @@ async function readFrames(page: Page): Promise<Map<string, Facts>> {
         wires: await frame.evaluate(wiresIn),
         pulseInk: await frame.evaluate(pulseInkIn),
         columns: await frame.evaluate(columnsIn),
+        todos: await frame.evaluate(todosIn),
         acts: await frame.evaluate(actsIn),
         cut: [
           ...(await frame.evaluate(sideCutIn)),
@@ -750,6 +791,15 @@ function frameChecks(
         !!at && at.rows > 0 && at.tiles.length === 1 && at.words.length === 1
     ),
     JSON.stringify(columns)
+  );
+  const todos = [...facts.entries()].flatMap(([key, one]) =>
+    one.todos.map((plan) => ({ key: key.replace(".stories.ts", ""), ...plan }))
+  );
+  check(
+    `${leg}: every drawing of the plan shows each of its to-dos (${todos.map((one) => `${one.key} ${one.total - one.missing.length} of ${one.total}`).join(", ")})`,
+    todos.length >= WAYS.length &&
+      todos.every((one) => one.total > 0 && one.missing.length === 0),
+    JSON.stringify(todos.filter((one) => one.missing.length > 0))
   );
   const acts = WAYS.flatMap((one) =>
     (facts.get(way(one))?.acts ?? []).map((act) => ({ way: one, ...act }))

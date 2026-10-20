@@ -16,8 +16,8 @@
    * Three values are the person's to tune: the tile's size, the progress
    * line's weight and the sweep's speed.
    *
-   * `crop` cuts the card or the sheet only between lines (crop.ts): a
-   * decision page's drawing, judged and never scrolled.
+   * `whole` stands the card or the sheet as tall as its plan (whole.ts):
+   * a decision page's drawing, judged and never scrolled, shows every row.
    */
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -34,7 +34,7 @@
     frame = "desk",
     live = false,
     scenario = "rest",
-    crop = false,
+    whole = false,
     tileSize = 18,
     lineWeight = 4,
     sweepSeconds = 1.2,
@@ -46,8 +46,8 @@
     live?: boolean;
     /** At rest, a step open, or one change already made: a step reworded, commented on, answered. */
     scenario?: Scenario;
-    /** Cut only between lines, never through one (a decision page's drawing). */
-    crop?: boolean;
+    /** Show the whole plan, every row, the frame as tall as it is (a decision page's drawing). */
+    whole?: boolean;
     /** The step tile's side, px (DESIGN.md's tree mark: 18). */
     tileSize?: number;
     /** The progress line's weight, px (the usage strip's bar: 4). */
@@ -112,11 +112,11 @@
   {:else if kind === "step"}
     <StepFrame />
   {:else if kind === "desk"}
-    <DeskPlan {crop} {focus} {plan}>
+    <DeskPlan {focus} {plan} {whole}>
       <PlanBody {loaded} {plan} {scenario} {variation} />
     </DeskPlan>
   {:else}
-    <PhonePlan {crop} {focus} {plan}>
+    <PhonePlan {focus} {plan} {whole}>
       <PlanBody {loaded} phone {plan} {scenario} {variation} />
     </PhonePlan>
   {/if}
