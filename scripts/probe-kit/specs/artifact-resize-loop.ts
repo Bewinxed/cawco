@@ -214,7 +214,7 @@ const moreStands = (page: Page) =>
   page.evaluate(
     () =>
       !!document.querySelector(
-        '[data-slot="side-card"] .side-head [data-slot="more"]'
+        '[data-slot="side-card"] [data-slot="side-head"] [data-slot="more"]'
       )
   );
 

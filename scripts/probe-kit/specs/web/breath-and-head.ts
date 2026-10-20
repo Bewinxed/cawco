@@ -235,7 +235,7 @@ async function sideHead(kit: Kit, bench: string): Promise<void> {
               box: one.getBoundingClientRect(),
             }));
             const name = card.querySelector<HTMLElement>(
-              '[data-slot="side-head"] > .identity'
+              '[data-slot="side-head"] > [data-slot="identity"]'
             );
             /** What is drawn of a box: cut by every ancestor up to the card that clips. */
             const drawn = (box: DOMRect, from: Element) => {
