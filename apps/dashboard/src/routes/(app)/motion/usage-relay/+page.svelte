@@ -2,7 +2,8 @@
   /**
    * The usage popover (the relay) on a bench: the real strip and its real
    * popover (the rail's, on the desk) or sheet (on the phone), fed a staged
-   * forecast with no hub. `?theme=` light | dark, `?n=` 6 | 20 the number
+   * forecast with no hub, in the reader's theme (its Theme switch sets it,
+   * as the dashboard's own does). `?n=` 6 | 20 the number
    * of Claude accounts, `?view=` desktop | phone where it opens; on a desk
    * the phone view is this page at
    * 390×844 in a frame. Six: five accounts in Petralab (a group) and one in
@@ -31,13 +32,6 @@
 
   $effect(() => {
     stageUsage(count, page.url.searchParams.get("stop"));
-  });
-
-  const scheme = $derived(
-    page.url.searchParams.get("theme") === "dark" ? "dark" : "light"
-  );
-  $effect(() => {
-    theme.set(scheme);
   });
 
   const hrefOf = (key: string, value: string) => {
@@ -87,15 +81,11 @@
     };
   });
 
+  const THEMES = [
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+  ] as const;
   const SWITCHES = [
-    {
-      key: "theme",
-      label: "Theme",
-      options: [
-        { value: "light", label: "Light" },
-        { value: "dark", label: "Dark" },
-      ],
-    },
     {
       key: "n",
       label: "Accounts",
@@ -114,7 +104,7 @@
     },
   ] as const;
   const current = (key: string): string =>
-    ({ n: String(count), view, theme: scheme })[key] ?? "";
+    ({ n: String(count), view })[key] ?? "";
 </script>
 
 <svelte:head><title>Usage relay | CawCo</title></svelte:head>
@@ -125,6 +115,18 @@
     class="pointer-events-auto relative z-60 flex flex-wrap justify-end gap-x-space-4 gap-y-space-2 p-space-2"
     onpointerdown={(event) => event.stopPropagation()}
   >
+    <span class="flex items-center gap-space-1">
+      <span class="type-meta text-ink-muted">Theme</span>
+      {#each THEMES as option (option.value)}
+        <Button
+          aria-pressed={theme.resolved === option.value}
+          onclick={() => theme.set(option.value)}
+          size="xs"
+          variant={theme.resolved === option.value ? "default" : "outline"}
+          >{option.label}</Button
+        >
+      {/each}
+    </span>
     {#each SWITCHES as each (each.key)}
       <span class="flex items-center gap-space-1">
         <span class="type-meta text-ink-muted">{each.label}</span>

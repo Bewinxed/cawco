@@ -12,7 +12,7 @@
    * dissolve into the chosen tab's sheet (HeadFade); at the top there is
    * nothing under the strip and the band is clear.
    *
-   * `?theme=` light | dark; `?at=` the index of the tab chosen first (1).
+   * In the reader's theme; `?at=` the index of the tab chosen first (1).
    * `window.__ht.choose(id)` chooses a tab as a click does; `ids` and
    * `chosen()` say the rest.
    *
@@ -27,7 +27,6 @@
   import type { Message } from "#lib/cawco/types.js";
   import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
   import type { LeafNode } from "#lib/cawco/workspace/workspace.svelte.js";
-  import { theme } from "#lib/theme.svelte.js";
   import { page } from "$app/state";
 
   const ids = [
@@ -183,13 +182,6 @@
     t: "l",
     tabs: ids,
     active: ids[first],
-  });
-
-  const scheme = $derived(
-    page.url.searchParams.get("theme") === "dark" ? "dark" : "light"
-  );
-  $effect(() => {
-    theme.set(scheme);
   });
 
   /** Chooses a tab in the bench's group, as a click on it does. */

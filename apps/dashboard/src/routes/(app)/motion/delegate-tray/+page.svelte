@@ -8,7 +8,7 @@
    * queued behind files another item owns. Only the client's state is
    * seeded (dev's `__cawcoDebug`).
    *
-   * `?theme=dark` draws it at night; `?case=` (1r, 1f, 3r2f, 5f, 7r13f,
+   * In the reader's theme; `?case=` (1r, 1f, 3r2f, 5f, 7r13f,
    * 20r) seeds running and failed delegates instead of the twelve.
    */
   import type { SessionPulse, WorkItemSummary } from "@cawco/core";
@@ -20,7 +20,6 @@
   import { entered } from "#lib/cawco/transcript/tray.svelte.js";
   import type { Message } from "#lib/cawco/types.js";
   import { composerBindings } from "#lib/cawco/workspace/composer-dock.svelte.js";
-  import { theme } from "#lib/theme.svelte.js";
   import { page } from "$app/state";
 
   const ID = "delegate-tray-bench";
@@ -214,13 +213,6 @@
     };
     debug.state.workItems[item.id] = item;
     entered.set(item.instanceId, "none");
-  });
-
-  const scheme = $derived(
-    page.url.searchParams.get("theme") === "dark" ? "dark" : "light"
-  );
-  $effect(() => {
-    theme.set(scheme);
   });
 
   /** The conversation's binding, lent to the group's composer as PaneLeaf lends it. */

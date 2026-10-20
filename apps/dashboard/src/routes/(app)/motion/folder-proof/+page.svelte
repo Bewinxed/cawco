@@ -16,7 +16,7 @@
    *   the shell hosts it, in the rail's 228px column on the desk and across
    *   the phone's home page under 900px.
    *
-   * `?theme=` light | dark; `?at=` the index of the session tab chosen
+   * In the reader's theme; `?at=` the index of the session tab chosen
    * first (1); `?work=` working | finished. `window.__ft.choose(id)` chooses
    * a session tab and `window.__ft.work.choose(id)` Working or Finished, as
    * a click does; `ids` and `chosen()` on each say the rest.
@@ -200,12 +200,8 @@
   /** The drawer layout, where the home is the phone's page, not the rail's. */
   const phone = new MediaQuery("(width < 900px)");
 
-  const scheme = $derived(
-    page.url.searchParams.get("theme") === "dark" ? "dark" : "light"
-  );
-  $effect(() => {
-    theme.set(scheme);
-  });
+  /** The reader's theme, as the dashboard draws it: the rims' tokens are read again when it changes. */
+  const scheme = $derived(theme.resolved);
 
   /** Chooses a tab in the bench's group, as a click on it does. */
   function choose(id: string) {
