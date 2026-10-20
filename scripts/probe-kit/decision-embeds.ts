@@ -472,6 +472,9 @@ function embedRead() {
             .state ?? "",
         type: [...sizes].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0,
         words: body.innerText.trim().length,
+        /** Drawings it shows (an svg, an image, a canvas): a frame of pictures alone, a row of a moment's stills say, draws no words. */
+        drawings: [...body.querySelectorAll("svg, img, canvas")].filter(seen)
+          .length,
       },
     ];
   });
@@ -503,7 +506,7 @@ export type Embed = ReturnType<typeof embedRead> & {
   src: string;
 };
 
-/** What an embed shows that is not the component drawn: a shot's fault, a frame with no words, another set of stories than its Preview names. */
+/** What an embed shows that is not the component drawn: a shot's fault, a frame with neither words nor a drawing, another set of stories than its Preview names. */
 export function embedDrawFaults(e: Embed): string[] {
   return [
     ...(e.shots.length === 0 ? [`${e.file}: no frame to shoot`] : []),
@@ -511,8 +514,11 @@ export function embedDrawFaults(e: Embed): string[] {
       shot.faults.map((fault) => `${e.file}/${shot.story}: ${fault}`)
     ),
     ...e.frames
-      .filter((f) => f.h < 8 || f.words === 0)
-      .map((f) => `${e.file}/${f.story}: ${f.h}px tall, ${f.words} characters`),
+      .filter((f) => f.h < 8 || (f.words === 0 && f.drawings === 0))
+      .map(
+        (f) =>
+          `${e.file}/${f.story}: ${f.h}px tall, ${f.words} characters, ${f.drawings} drawings`
+      ),
     ...(e.frames.map((f) => f.story).join() ===
     (e.named.length ? e.named : e.stories).join()
       ? []

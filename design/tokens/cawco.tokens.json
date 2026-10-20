@@ -5416,7 +5416,17 @@
     "qr-pulse-scale": {
       "$type": "number",
       "$value": 1.04,
-      "$description": "How far a pending pairing QR card's breathing ring grows from the card's edge as it fades, once a breath."
+      "$description": "How far a pairing QR's head swells: its breath while rings ripple from it, and its gulp as it swallows an approved key."
+    },
+    "qr-ping-scale": {
+      "$type": "number",
+      "$value": 1.1,
+      "$description": "How far a waiting pairing QR card's ping grows past the card's edge as it fades, once a breath: far enough to read as a ping from across a room."
+    },
+    "qr-ping-opacity": {
+      "$type": "number",
+      "$value": 0.7,
+      "$description": "How strong a waiting pairing QR card's ping ring starts, at the card's edge, before it fades as it grows."
     },
     "check-scale": {
       "$type": "number",

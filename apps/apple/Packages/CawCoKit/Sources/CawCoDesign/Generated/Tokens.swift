@@ -918,8 +918,12 @@ public enum Motion {
     public static let qrShrink: Double = 0.3
     /// How far the head in a refused pairing key squeezes shut (its height; its width grows by as much) before it shakes.
     public static let qrSqueeze: Double = 0.84
-    /// How far a pending pairing QR card's breathing ring grows from the card's edge as it fades, once a breath.
+    /// How far a pairing QR's head swells: its breath while rings ripple from it, and its gulp as it swallows an approved key.
     public static let qrPulseScale: Double = 1.04
+    /// How far a waiting pairing QR card's ping grows past the card's edge as it fades, once a breath: far enough to read as a ping from across a room.
+    public static let qrPingScale: Double = 1.1
+    /// How strong a waiting pairing QR card's ping ring starts, at the card's edge, before it fades as it grows.
+    public static let qrPingOpacity: Double = 0.7
     /// Where a done check grows from as it takes a ring's place (TaskRing finished, the pairing scanner's approval), over dur-toggle or dur-exit on ease-out.
     public static let checkScale: Double = 0.6
 }

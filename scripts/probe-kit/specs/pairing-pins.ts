@@ -351,6 +351,34 @@ function failed(sel: string) {
   };
 }
 
+/** Pin 13 read on Asking: what the card holds while the hub makes the code. */
+function asking(sel: string) {
+  const frame = document.querySelector(sel) as Element;
+  const qr = frame.querySelector('[data-slot="qr"]');
+  const dots = [...(qr?.querySelectorAll(".dot") ?? [])];
+  const card = qr?.querySelector(".card");
+  return {
+    act: qr?.getAttribute("data-act") ?? "",
+    dots: dots.length,
+    drifting: dots.filter((dot) =>
+      dot
+        .getAnimations()
+        // Svelte scopes a component's keyframes: the name ends in qr-drift.
+        .some((run) =>
+          (run as CSSAnimation).animationName?.endsWith("qr-drift")
+        )
+    ).length,
+    blank: qr?.querySelectorAll(".skeleton").length ?? 0,
+    eyes: [...(qr?.querySelectorAll(".eye") ?? [])].filter(
+      (eye) => getComputedStyle(eye).opacity !== "0"
+    ).length,
+    code: getComputedStyle(qr?.querySelector(".code") ?? document.body).opacity,
+    card: card ? Math.round(card.getBoundingClientRect().width) : 0,
+    caption:
+      frame.querySelector(".foot .live .caption")?.textContent?.trim() ?? "",
+  };
+}
+
 const joined = (values: number[], round: (n: number) => number = r2) =>
   values.map(round).join(" → ");
 
@@ -385,6 +413,16 @@ async function still(kit: Kit, page: Page): Promise<void> {
       fail.buttons.includes("Show details") &&
       !fail.buttons.includes("Change hub") &&
       fail.caw === "needs-you"
+  );
+  const ask = await page.evaluate(asking, story("Asking"));
+  kit.check(
+    `pin 13: Asking is no blank square: its ${ask.card}px card holds ${ask.dots} dots, ${ask.drifting} drifting, stepped back to ${ask.code}, ${ask.eyes} finder eyes and ${ask.blank} grey blocks, over "${ask.caption}"`,
+    ask.act === "loading" &&
+      ask.dots > 100 &&
+      ask.drifting === ask.dots &&
+      ask.blank === 0 &&
+      ask.eyes === 0 &&
+      ask.caption === "Asking the hub for a code…"
   );
 }
 
