@@ -80,6 +80,7 @@ export * from "./project-membership";
 // Shared because the tool's schema is unforgiving: the answers go back inside
 // the tool's own input or the call fails validation.
 export * from "./question";
+export * from "./references";
 export * from "./relays";
 // The bounded replay ring behind the Ledger Protocol — SessionRing, lifted
 // from packages/hub/src/stream.ts so sessiond's per-child ring (see

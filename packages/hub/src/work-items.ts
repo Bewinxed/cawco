@@ -84,6 +84,7 @@ import {
   handoffMarker,
   holdingWords,
   machineCalled,
+  sessionLink,
   sizeWords,
   WORK_ITEM_ORIGIN,
   type WorkspaceLanding,
@@ -133,7 +134,7 @@ import {
   lastCapable,
   projectGate,
 } from "./gate-file";
-import { leafOf, sessionLabel } from "./labels";
+import { boardTitle, leafOf, sessionLabel } from "./labels";
 import {
   type BranchOutcome,
   branchPushCheck,
@@ -4308,7 +4309,7 @@ export const createWorkItems = ({
       item,
       workspace,
       text:
-        `Continued ${label} as work item ${item.id} in workspace ${workspace.id} (${placeOf(workspace)}): ` +
+        `Continued ${sessionLink(session.id, boardTitle(session))}, ${label}, as work item ${item.id} in workspace ${workspace.id} (${placeOf(workspace)}): ` +
         "the brief is its next message, in the same session and its cached transcript. " +
         `${REPORT_ARRIVES} Guide it, or continue it after it ` +
         `reports, with handoff("${session.id}", ...).${extrasLine(item)}${inputsSaid(inputs)}`,
@@ -4981,8 +4982,8 @@ export const createWorkItems = ({
       text:
         `Started work item ${item.id} in workspace ${workspace.id} (${placeOf(workspace)}): ` +
         (settings.forkOf
-          ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, ${label}. It starts with every turn of yours so far.`
-          : `a fresh ${harness} session, ${label}.`) +
+          ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, ${sessionLink(instanceId, request.title)}, ${label}. It starts with every turn of yours so far.`
+          : `a fresh ${harness} session, ${sessionLink(instanceId, request.title)}, ${label}.`) +
         ` ${REPORT_ARRIVES} Guide it, or continue it after it ` +
         `reports, with handoff("${instanceId}", ...): the message lands in the same session and its cached transcript.` +
         (canDelegate

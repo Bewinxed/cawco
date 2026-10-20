@@ -309,6 +309,7 @@ import {
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
   SUMMARY_CAP_TOKENS,
   sameIdentity,
+  sessionLink,
   startRefused,
   strategiesFor,
   TARGET_HEADROOM_TOKENS,
@@ -599,7 +600,7 @@ import {
   keepAliveUsage,
   promptCacheExpiresAt,
 } from "./keep-alive";
-import { type LabelledRow, leafOf, sessionLabel } from "./labels";
+import { boardTitle, type LabelledRow, leafOf, sessionLabel } from "./labels";
 import { createLaws } from "./laws";
 import { createLeadGate, reviewProblem } from "./lead-gate";
 import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
@@ -4937,7 +4938,9 @@ export const createServer = (
           uuid: crypto.randomUUID(),
           message: {
             role: "user",
-            content: `${reportMarker(label, failed, notice, headline)}${body}`,
+            // The delegate as a link (core references.ts) heads the body:
+            // the form the parent copies when it names the delegate.
+            content: `${reportMarker(label, failed, notice, headline)}From ${sessionLink(delegate.id, boardTitle(delegate))}.\n\n${body}`,
           },
           parent_tool_use_id: null,
           origin: {
