@@ -257,6 +257,26 @@ export const withInputsLine = (
       );
 
 /**
+ * The hub's line to a session whose workspace retired while it slept and
+ * was cut again for it at `commit` on `branch` (hub work-items.ts `recut`):
+ * the folder is a new clone, so nothing git does not track came with it.
+ * CawCo installs nothing there (the owner, 2026-10-18: "the delegate or
+ * whatever will handle this as they need in each workspace"); the session
+ * sets up what its next commands need.
+ */
+export const recutLine = (commit: string, branch: string): string =>
+  `[CawCo] Your workspace retired while this session slept, so this folder is a new clone, cut again at ${commit.slice(0, 9)} on ${branch}. Nothing git doesn't track came with it: installed dependencies, build outputs and your $TMPDIR scratch are gone. Set up again whatever your next commands need.`;
+
+/**
+ * `text` with {@link recutLine} right after any hand-off marker: the first
+ * message a session reads in a clone cut again.
+ */
+export const withRecutLine = (
+  text: string,
+  cut: { branch: string; commit: string }
+): string => afterMarker(text, recutLine(cut.commit, cut.branch));
+
+/**
  * A hand-off read back into who sent it and what it says. `from` names the
  * sending session, or the workflow and step for a step's brief; `short` is the
  * sending session's 8-character short id, which consumers pair with its full

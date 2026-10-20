@@ -32,9 +32,13 @@
  *     clone is gone and the row archived.
  * (r) M lands and retires; a handoff from its parent waits at the hub while
  *     M's clone is cut again at the same path, at the commit it landed, and
- *     the same session goes on there (same work item, same transcript): its
- *     shell reads that path and M's landed file. It finishes again and its
- *     workspace retires again.
+ *     the same session goes on there (same work item, same transcript): the
+ *     handoff it is handed opens with the hub's line that the folder is a
+ *     new clone cut again at that commit on main (core injected.ts
+ *     `recutLine`; on 2026-10-20 X8 went on in a clone cut again believing
+ *     its install there, and its `tsc` failed with ENOENT), its shell reads
+ *     that path and M's landed file. It finishes again and its workspace
+ *     retires again.
  * (q) Q commits a file and a package.json whose typecheck sleeps, then
  *     passes; pushes its commit to origin's `probe-keep-Q` (as the conductor
  *     pushed K1's by hand on 2026-10-17), and calls finish_item; its parent
@@ -126,6 +130,9 @@ const RECUT = "PROBE-RECUT-M";
 const RECUT_PWD = /RECUT-PWD=([^\s\\"]+)/;
 const RECUT_FILE = /RECUT-FILE:([^\n\\"]*)/;
 const RECUT_RAN = "RECUT-42";
+/** The hub's line that a folder is a clone cut again (core injected.ts `recutLine`), with the commit and branch it names. */
+const RECUT_LINE =
+  /Your workspace retired while this session slept, so this folder is a new clone, cut again at ([0-9a-f]{9}) on ([^\s]+?)\. Nothing git doesn't track came with it/;
 /** The parent's handoff to Q once its stopped landing's workspace retired, and what Q's shell prints there. */
 const RECUT_Q = "PROBE-RECUT-Q";
 const Q_PWD = /Q-PWD=([^\s\\"]+)/;
@@ -248,7 +255,12 @@ const steps: Record<
 > = {};
 
 /** What M's shell read in its clone cut again. */
-const recutSeen: { pwd?: string; file?: string } = {};
+const recutSeen: {
+  pwd?: string;
+  file?: string;
+  /** The commit and branch the hub's line named, and how many times it was said. */
+  told?: { commit: string; branch: string; times: number };
+} = {};
 
 const tool = (name: string, input: object): Reply => ({
   everyMs: 5,
@@ -292,6 +304,14 @@ const recutTurn = (
   }
   recutSeen.pwd = RECUT_PWD.exec(request.all)?.[1];
   recutSeen.file = RECUT_FILE.exec(request.all)?.[1];
+  const told = RECUT_LINE.exec(request.all);
+  if (told?.[1] && told[2]) {
+    recutSeen.told = {
+      commit: told[1],
+      branch: told[2],
+      times: request.all.split("so this folder is a new clone").length - 1,
+    };
+  }
   return finishing(
     request,
     {
@@ -647,6 +667,12 @@ const recutPhase = async (kit: Kit, scene: Scene): Promise<void> => {
       !existsSync(wm.path),
     `${m.item.state} ${m.item.error ?? ""}; ${retired.state}; clone ${existsSync(wm.path) ? "stands" : "gone"}`
   );
+  const head = JSON.parse(
+    fleet.query<{ head: string | null }>(
+      "SELECT head FROM workspaces WHERE id = ?",
+      wm.id
+    )[0]?.head ?? "null"
+  ) as { branch: string; commit: string } | null;
   const message = `${RECUT}: go on in your workspace and say where you are.`;
   const asked = Date.now();
   let handed = await callAsParent("handoff", {
@@ -693,6 +719,14 @@ const recutPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(r) the same session went on in a clone cut again at the same path: its shell's folder is that path, and it holds M's landed file",
     recutSeen.pwd === wm.path && recutSeen.file === "made by M",
     JSON.stringify({ seen: recutSeen, path: wm.path })
+  );
+  check(
+    "(r) the handoff the session was handed in the clone cut again opens with the hub's line, once, naming the commit and branch it was cut again at",
+    head !== null &&
+      recutSeen.told?.commit === head.commit.slice(0, 9) &&
+      recutSeen.told.branch === head.branch &&
+      recutSeen.told.times === 1,
+    JSON.stringify({ told: recutSeen.told ?? "no line", head })
   );
   check(
     "(r) it is the same work item and session, reopened, not a new one; it ended done again",
@@ -1241,6 +1275,7 @@ const spec: Spec = {
     }
     recutSeen.pwd = undefined;
     recutSeen.file = undefined;
+    recutSeen.told = undefined;
     qSeen.pwd = undefined;
     qSeen.head = undefined;
     qSeen.file = undefined;

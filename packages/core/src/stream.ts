@@ -92,12 +92,16 @@ import type { CarrySessionRequest } from "./harness";
  *    setting to change (`need`: a rootless Linux engine's low ports, a VM's
  *    forwarder, a VM's rootless Podman). A page built for 17 would read the
  *    runtime step's words from `lowest` alone, so it reloads first.
+ * 19: a workspace's archive answers its cut (`WorkspaceCut`) with no
+ *    `installed`: a workspace cut again installs nothing (ab4953b28,
+ *    reverted), and its session is told the folder is new instead. No page
+ *    reads it; a page built for 18 reloads first all the same.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 18;
+export const WIRE_PROTOCOL = 19;
 
 /**
  * What a session's stream carries: the changes each frame made to its

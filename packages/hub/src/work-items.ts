@@ -63,6 +63,7 @@ import type {
   WorkspaceArchived,
   WorkspaceCheckout,
   WorkspaceCommit,
+  WorkspaceCut,
   WorkspaceHolding,
   WorkspaceRef,
   WorkspaceUnlanded,
@@ -3729,8 +3730,13 @@ export const createWorkItems = ({
    * branch it was on no longer holds. Its boundary is started on the account
    * its latest item's session runs on: its delegate goes on in the same
    * session, on its transcript, in the same folder. Filed active again, one
-   * of its project's places. Its installed dependencies are gone with the
-   * old clone. One cut at a time per workspace; every caller shares it.
+   * of its project's places. Nothing git does not track comes back:
+   * installed dependencies, build outputs, its scratch dir. CawCo installs
+   * nothing (the owner, 2026-10-18); the next message handed to its session
+   * opens with the hub's line saying the folder is new (its row's
+   * `recutUntold`, {@link WorkItems.recutTold}), whichever path goes on there (a handoff, a
+   * follow-up, a retry or a continuation), so it sets up what it needs. One
+   * cut at a time per workspace; every caller shares it.
    * `onCut` runs in the step that files it active, before anything else
    * can settle it: what wakes its session there.
    */
@@ -3790,6 +3796,7 @@ export const createWorkItems = ({
           boundaryPid: checkout.boundaryPid,
           base: checkout.base,
           tmp: checkout.tmp,
+          recutUntold: head,
         }) ?? workspace;
       onCut?.();
       workspaceChanged?.(again);
@@ -7182,6 +7189,23 @@ export const createWorkItems = ({
             recutFailed?.(instanceId, reason);
           }
         );
+    },
+
+    /**
+     * Where session `instanceId`'s workspace was cut again, when it was cut
+     * again since a message was last handed to a session of it (its row's
+     * `recutUntold`, set by {@link recut}); taken, so only the first message
+     * handed there says so. Called as a message is handed to the machine.
+     */
+    recutTold(instanceId: string): WorkspaceCut | undefined {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
+      const cut = workspace?.recutUntold ?? undefined;
+      if (workspace && cut) {
+        db.updateWorkspace(workspace.id, { recutUntold: null });
+      }
+      return cut;
     },
 
     /**

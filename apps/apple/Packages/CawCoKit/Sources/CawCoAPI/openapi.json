@@ -30716,6 +30716,9 @@
           "head": {
             "$ref": "#/components/schemas/WorkspaceCut"
           },
+          "recutUntold": {
+            "$ref": "#/components/schemas/WorkspaceCut"
+          },
           "cutFrom": {
             "$ref": "#/components/schemas/WorkspaceFrom"
           },

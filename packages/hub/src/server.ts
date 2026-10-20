@@ -326,6 +326,7 @@ import {
   WITHDRAW_PERMISSION,
   WORKSPACE_CREATE_TIMEOUT_MS,
   type WorkInFlight,
+  withRecutLine,
 } from "@cawco/core";
 import {
   AGENT_RESTARTING,
@@ -8181,6 +8182,44 @@ export const createServer = (
     return true;
   };
 
+  /**
+   * The message `envelope` carries, opened with the hub's line that its
+   * session's workspace was cut again (core injected.ts `withRecutLine`)
+   * when this is the first message handed to a session of it since the cut
+   * (work-items.ts `recutTold`). Called as a send is handed to its machine,
+   * whichever way it goes there (at once, or released after a hold), so a
+   * handoff, a follow-up's or retry's brief and a continuation all carry it,
+   * on any harness. A keep-alive ping never does. Answers whether it did.
+   */
+  const toldRecut = (envelope: Envelope<SendPayload>): boolean => {
+    const { instanceId, message } = envelope.payload;
+    if (isKeepAlive(message)) {
+      return false;
+    }
+    const cut = workItems.recutTold(instanceId);
+    if (!cut) {
+      return false;
+    }
+    const { content } = message.message;
+    if (typeof content === "string") {
+      message.message.content = withRecutLine(content, cut);
+    } else {
+      const at = content.findIndex((part) => part.type === "text");
+      const first = content[at];
+      message.message.content =
+        first?.type === "text"
+          ? content.with(at, {
+              ...first,
+              text: withRecutLine(first.text, cut),
+            })
+          : [{ type: "text", text: withRecutLine("", cut).trim() }, ...content];
+    }
+    console.log(
+      `[hub] send ${message.uuid} to ${instanceId} opens with the hub's line that its clone was cut again at ${cut.commit.slice(0, 9)} on ${cut.branch}`
+    );
+    return true;
+  };
+
   /** {@link deliverSend}'s session path: the message into the session itself. */
   const deliverToSession = (
     envelope: Envelope<SendPayload>,
@@ -8280,6 +8319,7 @@ export const createServer = (
       envelope.payload.delivery = delivery;
     }
     if (agent && !owed) {
+      toldRecut(envelope);
       sendFrame(agent, envelope);
     }
     // Kept for its machine alone, not for its session, an interrupt's hold
@@ -8635,9 +8675,28 @@ export const createServer = (
     ) {
       return;
     }
+    handReleased(agent, send, envelope);
+  };
+
+  /**
+   * An owed send handed to its machine as its hold ends ({@link releaseOne}),
+   * under a hand-off of its own; its record holds the hub's line when it is
+   * the first message since its workspace was cut again ({@link toldRecut}).
+   */
+  const handReleased = (
+    agent: NonNullable<ReturnType<typeof registry.agent>>,
+    send: SentMessageRow,
+    envelope: Envelope<SendPayload>
+  ): void => {
     const delivery = crypto.randomUUID();
     envelope.payload.delivery = delivery;
-    changeSend(send, { acceptedAt: new Date(), delivery });
+    changeSend(send, {
+      acceptedAt: new Date(),
+      delivery,
+      ...(toldRecut(envelope)
+        ? { body: externalizeImages(sentFrame(envelope.payload)) }
+        : {}),
+    });
     sendFrame(agent, envelope);
   };
 

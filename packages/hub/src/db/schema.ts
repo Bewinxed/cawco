@@ -1363,6 +1363,14 @@ export const workspaces = sqliteTable("workspaces", {
    */
   head: text("head", { mode: "json" }).$type<WorkspaceCut>(),
   /**
+   * Where it was cut again (work-items.ts `recut`) while no message has been
+   * handed to a session of it since: the next one opens with the hub's line
+   * that the folder is a new clone (core injected.ts `withRecutLine`), and
+   * clears it. Null otherwise. Kept on the row, so a hub restart between the
+   * cut and that message still says it.
+   */
+  recutUntold: text("recut_untold", { mode: "json" }).$type<WorkspaceCut>(),
+  /**
    * The carry its discard wrote on its machine, its parent or the person
    * letting its unlanded work go: such a workspace is never cut again.
    */
