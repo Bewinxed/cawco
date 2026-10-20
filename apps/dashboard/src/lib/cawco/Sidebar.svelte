@@ -811,11 +811,14 @@
         {#snippet children(tip)}
           <!-- The header's corner action: an icon button on the nav row's
                height. -->
+          <!-- The form hangs from it, and from it too when its opener had
+               no trigger of its own (`data-start-session`, NewSessionPopover). -->
           <button
             {...tip}
             aria-label="Start session"
             class="focus-inset touch-hit inline-grid flex-none place-items-center size-c-nav-h border-none border-current rounded-sm bg-transparent text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
-            onclick={() => newSession()}
+            data-start-session
+            onclick={(event) => newSession(undefined, event.currentTarget)}
             type="button"
           >
             <IconPlus class="size-space-5" />
@@ -1132,7 +1135,11 @@
                       <Sidebar.MenuSubItem data-flip>
                         <Sidebar.MenuSubButton
                           data-branch-item
-                          onclick={() => newSession({ projectId: project.id })}
+                          onclick={(event: MouseEvent) =>
+                            newSession(
+                              { projectId: project.id },
+                              event.currentTarget as HTMLElement
+                            )}
                           row="compact"
                           tone="muted"
                         >

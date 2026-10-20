@@ -1,9 +1,9 @@
 import { tv } from "#lib/utils.js";
 
 /**
- * The new-session dialog's popover surface, the one NsPopover and
+ * The new-session form's popover surface, the one NsPopover and
  * NsPopoverGroup draw (DESIGN.md, Navigation, menus and floating surfaces;
- * New-session dialog: "Its popovers glide between sibling triggers, morphing
+ * New-session popover: "Its own popovers hang from it and glide between sibling triggers, morphing
  * width and height over 260ms on the drawer curve"): portaled, origin-aware,
  * interruptible. Small screens get a wider, taller popover, not a takeover:
  * picking a machine or a project is a detail of the form behind it, so it

@@ -530,7 +530,6 @@ export type TokenSize =
   | "size.c-ledger-title-min"
   | "size.c-side-grip-w"
   | "size.c-side-surface-min"
-  | "size.c-new-session-w"
   | "size.c-effort-track-h-phone"
   | "size.c-model-list-h"
   | "size.c-model-row-basis"

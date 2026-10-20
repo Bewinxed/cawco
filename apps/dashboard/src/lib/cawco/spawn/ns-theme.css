@@ -62,10 +62,10 @@
   }
 }
 
-/* The dialog's one-shot entrances (DESIGN.md, New-session dialog: "Sections
-   fade up 8px in a stagger"; it "enters with `ns-panel`"): the theme's
-   `animate-ns-*` (scripts/build-tokens.ts), read inline because each reads a
-   duration the dialog sets on `.ns-theme`, not on the root. Interruptible
+/* The form's one-shot entrances (DESIGN.md, New-session popover: "Sections
+   fade up 8px in a stagger"; a chip's panel rises with `ns-panel`): the
+   theme's `animate-ns-*` (scripts/build-tokens.ts), read inline because each
+   reads a duration the form sets on `.ns-theme`, not on the root. Interruptible
    transitions are used everywhere the user can retrigger quickly; these run
    once, as do the popover's open and close (ui/glide-popover,
    `animate-ns-pop-in` / `-out`). */

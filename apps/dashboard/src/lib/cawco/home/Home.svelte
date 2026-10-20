@@ -240,7 +240,12 @@
       style:--dock-fade={"linear-gradient(transparent, var(--surface-recess) var(--space-4))"}
       style:--dock-foot="calc(var(--space-3) + var(--safe-bottom))"
     >
-      <Button class="w-full" onclick={() => newSession()} size="lg">
+      <Button
+        class="w-full"
+        onclick={(event: MouseEvent) =>
+          newSession(undefined, event.currentTarget as HTMLElement)}
+        size="lg"
+      >
         <IconPlus />
         <span>Start session</span>
       </Button>

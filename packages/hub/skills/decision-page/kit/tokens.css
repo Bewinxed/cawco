@@ -1167,8 +1167,6 @@
     --c-side-grip-w: 6px;
     /* A side surface's floor (SideSurface SIDE_FLOOR_PX). */
     --c-side-surface-min: 320px;
-    /* The new-session dialog's widest (DESIGN.md: "up to 980px wide"). */
-    --c-new-session-w: 980px;
     /* The effort track on a phone (DESIGN.md Effort chip: "38px on a phone"). */
     --c-effort-track-h-phone: 38px;
     /* The model list's viewport: fixed, so the section keeps its height while filtering. */

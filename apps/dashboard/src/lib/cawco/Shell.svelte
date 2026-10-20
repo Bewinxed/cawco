@@ -65,7 +65,6 @@
   import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
   import { runShellShortcut, shellShortcutsAre } from "./shell-shortcut";
-  import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
   import NewSessionPopover from "./spawn/NewSessionPopover.svelte";
   import { newSession, spawning } from "./spawn/new-session.svelte";
   import { store, stored } from "./storage";
@@ -1408,9 +1407,10 @@
   <!-- One New Session form for every opener (the rail's rows, the phone's
        Start session, a `?spawn=` link, the session strip's "+", a project's
        Spin off) and every session menu's Continue (spawn/new-session,
-       continue.svelte.ts): a popover at the trigger pressed, the dialog
-       where there is none. -->
-  <NewSessionDialog
+       continue.svelte.ts): a popover hanging from the trigger pressed on a
+       desk, the bottom sheet on a phone. -->
+  <NewSessionPopover
+    anchor={continuing.source ? null : spawning.anchor}
     continueFrom={continuing.source ?? undefined}
     onclose={() => {
       spawning.open = false;
@@ -1423,19 +1423,8 @@
       continuing.source = null;
       continuing.restore = null;
     }}
-    open={(spawning.open && spawning.anchor === null) ||
-      continuing.source !== null}
+    open={spawning.open || continuing.source !== null}
     prefill={continuing.source ? undefined : spawning.prefill}
     restore={continuing.restore ?? undefined}
   />
-  {#if spawning.anchor}
-    <NewSessionPopover
-      anchor={spawning.anchor}
-      onclose={() => {
-        spawning.open = false;
-      }}
-      open={spawning.open && continuing.source === null}
-      prefill={spawning.prefill}
-    />
-  {/if}
 </Overlays>

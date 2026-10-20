@@ -487,7 +487,6 @@
   --spacing-c-ledger-title-min: var(--c-ledger-title-min);
   --spacing-c-side-grip-w: var(--c-side-grip-w);
   --spacing-c-side-surface-min: var(--c-side-surface-min);
-  --spacing-c-new-session-w: var(--c-new-session-w);
   --spacing-c-effort-track-h-phone: var(--c-effort-track-h-phone);
   --spacing-c-model-list-h: var(--c-model-list-h);
   --spacing-c-model-row-basis: var(--c-model-row-basis);
@@ -680,10 +679,6 @@
   --animate-sheet-out: sheet-out var(--dur-exit) var(--ease-drawer) forwards;
   --animate-ns-sec: ns-in var(--dur-pop) var(--ease-out) var(--delay, 0ms)
     backwards;
-  --animate-ns-card-in: ns-panel var(--dur-panel) var(--ease-out) backwards;
-  --animate-ns-card-out: ns-panel-out var(--dur-exit) var(--ease-out) both;
-  --animate-ns-scrim-in: kit-fade-in var(--dur-panel) var(--ease-out) backwards;
-  --animate-ns-scrim-out: kit-fade-out var(--dur-exit) var(--ease-out) both;
   --animate-ns-in: ns-in var(--ns-row-ms) var(--ease-out) backwards;
   --animate-ns-check: ns-check var(--ns-check-ms) var(--ease-out) both;
   --animate-ns-panel: ns-panel var(--dur-fade) var(--ease-out) both;
@@ -848,12 +843,6 @@
   @keyframes sheet-out {
     to {
       transform: var(--sheet-away);
-    }
-  }
-  @keyframes ns-panel-out {
-    to {
-      transform: translateY(var(--space-2)) scale(var(--press-scale));
-      opacity: 0;
     }
   }
   @keyframes ns-in {

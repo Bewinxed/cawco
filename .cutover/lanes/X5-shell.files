@@ -291,3 +291,7 @@ apps/dashboard/src/routes/dev/finder/+page.svelte
 scripts/probe-kit/specs/tab-return.ts
 apps/dashboard/src/lib/components/ui/glide-popover/index.ts
 apps/dashboard/src/lib/components/ui/sidebar/sidebar-group-label.svelte
+apps/dashboard/scripts/build-tokens.ts
+apps/dashboard/src/lib/tokens/variants.css
+scripts/probe-kit/specs/web/strip-new-session.ts
+DESIGN.md

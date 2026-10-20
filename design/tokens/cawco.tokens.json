@@ -6088,14 +6088,6 @@
       },
       "$description": "A side surface's floor (SideSurface SIDE_FLOOR_PX)."
     },
-    "c-new-session-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 980,
-        "unit": "px"
-      },
-      "$description": "The new-session dialog's widest (DESIGN.md: \"up to 980px wide\")."
-    },
     "c-effort-track-h-phone": {
       "$type": "dimension",
       "$value": {

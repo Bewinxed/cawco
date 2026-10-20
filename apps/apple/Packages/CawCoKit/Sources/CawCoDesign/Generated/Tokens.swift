@@ -1007,8 +1007,6 @@ public enum Size {
     public static let cSideGripW: Double = 6
     /// A side surface's floor (SideSurface SIDE_FLOOR_PX).
     public static let cSideSurfaceMin: Double = 320
-    /// The new-session dialog's widest (DESIGN.md: "up to 980px wide").
-    public static let cNewSessionW: Double = 980
     /// The effort track on a phone (DESIGN.md Effort chip: "38px on a phone").
     public static let cEffortTrackHPhone: Double = 38
     /// The model list's viewport: fixed, so the section keeps its height while filtering.
