@@ -10,7 +10,7 @@
    *   • Footer: user avatar + machine count
    *
    * The rail is now built from SidebarGroup / SidebarMenu / SidebarMenuButton /
-   * SidebarMenuSub / SidebarMenuSubButton rather than hand-rolled CSS, inheriting
+   * SidebarMenuSubButton rather than hand-rolled CSS, inheriting
    * built-in hover, active, focus, and spacing from the component library.
    *
    * A session says what it is doing on its mark (SessionMark: an echo, or a

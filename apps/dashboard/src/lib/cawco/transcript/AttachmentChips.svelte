@@ -156,7 +156,7 @@
        name. The row pads by --space-1, so the corner sits inside its clip. -->
     {#each draft.texts as t, i (t.name + i)}
       <span class="relative inline-flex max-w-full" data-flip="pop">
-        <DocThumb content={t.content} name={t.name} />
+        <DocThumb content={t.content} name={t.name} removable />
         <button
           aria-label={`Remove ${t.name}`}
           class={pressVariants({
@@ -178,6 +178,7 @@
           name={f.name}
           onretry={() => draft.upload(f.id)}
           progress={f.ref || f.error ? undefined : f.progress}
+          removable
           size={f.size}
         />
         <button

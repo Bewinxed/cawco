@@ -40,7 +40,12 @@
   import { extensionOf } from "../lightbox/extension";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
 
-  type Props =
+  /**
+   * `removable`: a remove ✕ stands on its trailing corner (the composer's
+   * chips), so its words end clear of it: the name gives way inside before
+   * the ✕ (DESIGN.md, The Truncate Inside Rule).
+   */
+  type Props = { removable?: boolean } & (
     | { name: string; content: string }
     | {
         name: string;
@@ -52,10 +57,12 @@
         /** Why the upload failed, in the hub's words: a press calls `onretry`. */
         failed?: string;
         onretry?: () => void;
-      };
+      }
+  );
 
   const props: Props = $props();
   const { name } = $derived(props);
+  const removable = $derived(props.removable === true);
   const file = $derived("content" in props ? undefined : props);
 
   const uid = $props.id();
@@ -151,8 +158,9 @@
 {#if "content" in props}
   <button
     data-slot="doc"
+    data-removable={removable || undefined}
     aria-label={`Open ${name}`}
-    class="press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out hover:bg-surface-hover"
+    class="press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 data-removable:pe-space-6 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out hover:bg-surface-hover"
     data-share={share}
     onclick={() =>
       lightbox.open({ kind: "text", name, content: props.content, share })}
@@ -164,8 +172,9 @@
 {:else if file?.href}
   <a
     data-slot="doc"
+    data-removable={removable || undefined}
     aria-label={`Download ${name}`}
-    class="press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out hover:bg-surface-hover"
+    class="press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 data-removable:pe-space-6 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out hover:bg-surface-hover"
     download={name}
     href={file.href}
     title={name}
@@ -175,8 +184,9 @@
 {:else if file?.failed}
   <button
     data-slot="doc"
+    data-removable={removable || undefined}
     aria-label={`Couldn't upload ${name}: ${file.failed} Try again`}
-    class="press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out hover:bg-surface-hover"
+    class="press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 data-removable:pe-space-6 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out hover:bg-surface-hover"
     onclick={() => file?.onretry?.()}
     title={`${name}: ${file.failed}`}
     type="button"
@@ -187,9 +197,10 @@
   {#if uploading}
     <span
       data-slot="doc"
+      data-removable={removable || undefined}
       aria-busy="true"
       aria-label={`Uploading ${name}`}
-      class="inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out cursor-default"
+      class="inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 data-removable:pe-space-6 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out cursor-default"
       role="status"
       title={name}
     >
@@ -198,7 +209,8 @@
   {:else}
     <span
       data-slot="doc"
-      class="inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out cursor-default"
+      data-removable={removable || undefined}
+      class="inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 data-removable:pe-space-6 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out cursor-default"
       title={name}>{@render face()}</span
     >
   {/if}

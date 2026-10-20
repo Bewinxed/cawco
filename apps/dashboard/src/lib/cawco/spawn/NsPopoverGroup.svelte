@@ -14,11 +14,12 @@
   import type { Snippet } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { dur, easeOut, numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import { glidePopoverVariants } from "#lib/components/ui/glide-popover/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { cn } from "#lib/utils.js";
+  import { browser } from "$app/env";
   import {
     type PopoverMember,
     popoverGroup,
@@ -27,6 +28,16 @@
   } from "./popover-group.svelte";
 
   let { children }: { children: Snippet } = $props();
+
+  /**
+   * Its inset from the screen's edge, the kit popover's rule: the screen's
+   * margin on a phone, the pages' gutter past it. Read in the browser, where
+   * it opens.
+   */
+  const phone = new MediaQuery("(width < 640px)");
+  const inset = $derived(
+    browser ? numberOf(phone.current ? "--c-screen-margin" : "--space-5") : 0
+  );
 
   const outer = popoverGroup();
   const group = outer ?? providePopoverGroup();
@@ -102,7 +113,7 @@
           data-ns-pop
           align={shown.align}
           class={cn("ns-theme", glidePopoverVariants())}
-          collisionPadding={8}
+          collisionPadding={inset}
           customAnchor={shown.trigger}
           onCloseAutoFocus={(event) => {
             event.preventDefault();

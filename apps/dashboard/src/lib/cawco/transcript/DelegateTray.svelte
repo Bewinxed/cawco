@@ -1416,21 +1416,20 @@
           class="flex-auto"
           measure="shrink"
           placeholder="Why this is no longer owed"
-          size="sm"
         />
+        <!-- The row reads one control height, the field's 36px (DESIGN.md,
+             Inputs and fields), so its buttons take the default size. -->
         <Button
           disabled={!reason.trim()}
           label="Dismiss"
           pending={doing === "dismiss"}
           pendingLabel="Dismissing…"
-          size="sm"
           type="submit"
           variant="outline"
         />
         <Button
           label="Cancel"
           onclick={() => cancelReason(item.id)}
-          size="sm"
           variant="ghost"
         />
       </form>
@@ -1704,16 +1703,15 @@
                       class="flex-auto"
                       measure="shrink"
                       placeholder="Why these are no longer owed"
-                      size="sm"
                       bind:ref={allField}
                       bind:value={allReason}
                     />
+                    <!-- One control height in the row: the field's 36px. -->
                     <Button
                       disabled={!allReason.trim()}
                       label="Dismiss all"
                       pending={allPending}
                       pendingLabel="Dismissing…"
-                      size="sm"
                       type="submit"
                       variant="outline"
                     />
@@ -1722,7 +1720,6 @@
                       onclick={() => {
                         allReason = null;
                       }}
-                      size="sm"
                       variant="ghost"
                     />
                   </form>
