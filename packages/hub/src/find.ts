@@ -704,7 +704,10 @@ export const createFind = (deps: FindDeps) => {
       }
     }
     const artifacts = db.find.artifacts().flatMap((artifact) => {
-      const maker = held.get(artifact.instanceId);
+      const maker =
+        artifact.instanceId === null
+          ? undefined
+          : held.get(artifact.instanceId);
       return maker && !leads.has(maker.id)
         ? [
             artifactEntry(

@@ -699,6 +699,7 @@ import {
   FolderRefusal,
   folderFileNames,
   listFolder,
+  onFolderDeletes,
   projectFolderRoutes,
   projectRoot,
   readFolderFile,
@@ -810,6 +811,9 @@ import { createWorkflowRuntime } from "./workflows/runtime";
 import { createWorkspaceRetire } from "./workspace-retire";
 
 /** What an artifact's name keeps of a Diagram's statement name: lowercase letters, digits and dashes. */
+/** A project's page source in its folder (`decisions/<name>/page.oui` or its built `index.html`), its name at 1. */
+const PAGE_SOURCE =
+  /^decisions\/([a-z0-9][a-z0-9-]{0,62})\/(?:page\.oui|index\.html)$/;
 const NOT_NAME = /[^a-z0-9]+/g;
 const NAME_ENDS = /^-+|-+$/g;
 const NAME_TAIL = /-+$/;
@@ -3010,7 +3014,8 @@ export const createServer = (
     mint: (userId, ttlMs) => streamRelay.mint(userId, ttlMs),
     open: async (artifact) => {
       const opened = await openPreview(
-        artifact.instanceId,
+        // A browser is always its session's: only a project's page outlives one.
+        artifact.instanceId as string,
         artifact.machineId ?? "",
         artifact.source,
         { id: artifact.id, kind: artifact.kind, name: artifact.name }
@@ -10919,6 +10924,50 @@ export const createServer = (
         );
   };
 
+  /** Page `name`'s source files in a project's folder: a program's, or an HTML page's built page. */
+  const pageSourcesOf = (name: string): string[] => [
+    `decisions/${name}/${PROGRAM_FILE}`,
+    `decisions/${name}/index.html`,
+  ];
+
+  /**
+   * Page `name`'s source taken out of project `projectId`'s folder in one
+   * commit by the session (artifacts/service.ts `dropPage`): whichever of
+   * its program and built page the folder holds; none when it holds
+   * neither.
+   */
+  const dropPage = async (
+    row: InstanceRow,
+    projectId: string,
+    name: string
+  ): Promise<PageRefusal | undefined> => {
+    try {
+      const held = await Promise.all(
+        pageSourcesOf(name).map(async (path) =>
+          (await folderText(projectId, path)) === undefined ? [] : [path]
+        )
+      );
+      const deletes = held.flat();
+      if (deletes.length === 0) {
+        return;
+      }
+      await changeFolderFiles(
+        projectId,
+        { writes: [], deletes },
+        {
+          author: { name: sessionLabel(row).name },
+          message: `decisions: ${name} deleted`,
+        }
+      );
+    } catch (error) {
+      if (!(error instanceof FolderRefusal)) {
+        throw error;
+      }
+      return { code: error.status === 413 ? 413 : 400, refused: error.message };
+    }
+    decisionsChanged(projectId);
+  };
+
   /** A page built from `from`, its project's folder untouched ({@link keptArtifactPage} keeps it there). */
   const buildArtifactPage = async (
     row: InstanceRow,
@@ -11673,6 +11722,12 @@ export const createServer = (
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
     open: async (artifact, by) => {
+      if (artifact.instanceId === null) {
+        return {
+          ok: false,
+          error: `No session holds ${artifact.name} now: it is its project's page.`,
+        };
+      }
       const opened = await openPreview(
         artifact.instanceId,
         artifact.machineId ?? "",
@@ -11693,6 +11748,10 @@ export const createServer = (
       decisions.linksOf(projectId, name, cards),
     keepPage: async (instance, name, page) => {
       const refused = await keepPage(instance, name, page);
+      return refused && { status: refused.code, refused: refused.refused };
+    },
+    dropPage: async (instance, projectId, name) => {
+      const refused = await dropPage(instance, projectId, name);
       return refused && { status: refused.code, refused: refused.refused };
     },
     sending: (instance, artifact, state) =>
@@ -11846,11 +11905,13 @@ export const createServer = (
           `The canvas ${artifact.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`
         );
       }
+      // A canvas is always its session's: only a project's page outlives one.
+      const owner = artifact.instanceId as string;
       const token = crypto.randomUUID();
       const open = {
         canvas: { id: artifact.id, name: artifact.name, sync },
         token,
-        url: `${previewListeners.local(artifact.instanceId)}/__cawco/canvas/${artifact.id}/`,
+        url: `${previewListeners.local(owner)}/__cawco/canvas/${artifact.id}/`,
       };
       const asked = await callAgent(
         machineId,
@@ -11980,6 +12041,36 @@ export const createServer = (
     },
   });
   /**
+   * A project's page lives as long as its source in the project's folder:
+   * a commit that takes `decisions/<name>/`'s page.oui or index.html out and
+   * leaves neither there (a person's delete, folder_write's, a move away,
+   * artifact_delete's own) takes the page with it (artifacts/service.ts
+   * `sourceGone`). Keeping a program drops the built page, and the page
+   * stays.
+   */
+  onFolderDeletes((projectId, paths) => {
+    const names = new Set(
+      paths.flatMap((path) => {
+        const name = PAGE_SOURCE.exec(path)?.[1];
+        return name ? [name] : [];
+      })
+    );
+    for (const name of names) {
+      detach(
+        (async () => {
+          const left = await Promise.all(
+            pageSourcesOf(name).map((path) => folderText(projectId, path))
+          );
+          if (left.every((text) => text === undefined)) {
+            await artifacts.sourceGone(projectId, name);
+            decisionsChanged(projectId);
+          }
+        })(),
+        "a project page whose source left its folder"
+      );
+    }
+  });
+  /**
    * What every panel showed when this hub last ran, kept in the database
    * (openPreview): served again from here on, each preview's listener
    * pointed at or started by its machine's next register.
@@ -12066,7 +12157,7 @@ export const createServer = (
    */
   const embedAt = (artifactId: string, reachedAt: URL): { embed?: string } => {
     const row = db.artifacts.get(artifactId);
-    if (!(row?.machineId && "port" in row.source)) {
+    if (!(row?.machineId && row.instanceId && "port" in row.source)) {
       return {};
     }
     const key = embedKey(artifactId);
@@ -12108,7 +12199,8 @@ export const createServer = (
 
   /** What a session's preview origin serves of the hub: its artifacts' documents and pages (preview.ts). */
   const artifactListener: PreviewListenerDeps = {
-    ownerOf: (artifactId: string) => db.artifacts.get(artifactId)?.instanceId,
+    ownerOf: (artifactId: string) =>
+      db.artifacts.get(artifactId)?.instanceId ?? undefined,
     kindOf: (artifactId: string) => db.artifacts.get(artifactId)?.kind,
     reach: reachPreview,
     unreachable: previewUnreachable,

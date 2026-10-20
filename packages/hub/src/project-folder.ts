@@ -259,6 +259,34 @@ export const folderPath = (raw: string): string => {
   return parts.join("/");
 };
 
+/** Who hears the files a commit took out of a project's folder (`onFolderDeletes`). */
+const deleteListeners = new Set<(projectId: string, paths: string[]) => void>();
+
+/**
+ * Hears every file a commit takes out of a project's folder, a move's
+ * source included, once the commit stands and the folder's turn is over:
+ * what lives as long as a file there (a project's page, server.ts) goes
+ * with it. Answers what stops hearing.
+ */
+export const onFolderDeletes = (
+  listener: (projectId: string, paths: string[]) => void
+): (() => void) => {
+  deleteListeners.add(listener);
+  return () => {
+    deleteListeners.delete(listener);
+  };
+};
+
+/** Tells each listener the files a commit took out. */
+const tellDeleted = (projectId: string, paths: string[]): void => {
+  if (paths.length === 0) {
+    return;
+  }
+  for (const listener of deleteListeners) {
+    listener(projectId, paths);
+  }
+};
+
 /** The project's folder on disk, whether or not it has been made; refuses anything that is not a project id. */
 export const projectRoot = (projectId: string): string => {
   if (!PROJECT_ID.test(projectId)) {
@@ -1185,7 +1213,7 @@ export const changeFolderFiles = async (
   }
   const rels = [...written, ...deletes];
   const root = projectRoot(projectId);
-  return await inTurn(projectId, async () => {
+  const changed = await inTurn(projectId, async () => {
     await prepare(projectId, root);
     /** What each path held before, to put back if anything fails. */
     const before = new Map<string, Buffer | undefined>();
@@ -1229,6 +1257,8 @@ export const changeFolderFiles = async (
         : error;
     }
   });
+  tellDeleted(projectId, deletes);
+  return changed;
 };
 
 /** Removes the now-empty folders above a deleted file, up to the root. */
@@ -1259,7 +1289,7 @@ export const deleteFolderFile = async (
   }
   const asked = askedMessage(options.message);
   const root = projectRoot(projectId);
-  return await inTurn(projectId, async () => {
+  const done = await inTurn(projectId, async () => {
     await prepare(projectId, root);
     const abs = await writable(root, rel);
     const info = await lstat(abs).catch(notFound(rel));
@@ -1273,7 +1303,7 @@ export const deleteFolderFile = async (
     const previous = info.isFile() ? await readFile(abs) : undefined;
     await unlink(abs);
     try {
-      const done = await commit(
+      const committed = await commit(
         root,
         rel,
         ["rm", "-q", "--cached", "--ignore-unmatch", "--", rel],
@@ -1281,7 +1311,7 @@ export const deleteFolderFile = async (
         options.author ?? YOU
       );
       await pruneEmpty(root, dirname(abs));
-      return done;
+      return committed;
     } catch (error) {
       if (previous) {
         await placeWhole(root, abs, previous).catch(noop);
@@ -1290,6 +1320,8 @@ export const deleteFolderFile = async (
       throw putBack(error, rel);
     }
   });
+  tellDeleted(projectId, [rel]);
+  return done;
 };
 
 /**
@@ -1311,7 +1343,7 @@ export const moveFolderFile = async (
   }
   const asked = askedMessage(options.message);
   const root = projectRoot(projectId);
-  return await inTurn(projectId, async () => {
+  const moved = await inTurn(projectId, async () => {
     await prepare(projectId, root);
     const source = await writable(root, from);
     const info = await lstat(source).catch(notFound(from));
@@ -1348,6 +1380,10 @@ export const moveFolderFile = async (
       throw putBack(error, `${from} and ${to}`);
     }
   });
+  if (from !== to) {
+    tellDeleted(projectId, [from]);
+  }
+  return moved;
 };
 
 /**
