@@ -1152,6 +1152,17 @@ export const createCaw = ({
 
   // --- the lead session ----------------------------------------------------
 
+  /**
+   * The project's Caw session is now `instanceId` (null: none). Every
+   * dashboard and the app read the projects again: a thread draws its lead's
+   * preview and plan beside it from the project's row, so the row it opens
+   * with names him.
+   */
+  const setLead = (projectId: string, instanceId: string | null): void => {
+    db.setProjectCaw(projectId, { leadInstanceId: instanceId });
+    projectsChanged();
+  };
+
   /** The project's Caw session, when it has one the hub can still wake. */
   const standing = (
     project: ReturnType<typeof projectOf>
@@ -1279,7 +1290,7 @@ export const createCaw = ({
       // edit call of his is put to the hub's gate instead (lead-gate.ts).
       "bypassPermissions"
     );
-    db.setProjectCaw(project.id, { leadInstanceId: instanceId });
+    setLead(project.id, instanceId);
     // A Claude lead's context is the project's whole history, and an idle
     // hour costs it a full rewrite: kept warm, under keep-alive's cap of one
     // rewrite's worth of pings (caw-cost.md: $1.01 of pings against $10.18
@@ -1597,7 +1608,7 @@ export const createCaw = ({
       );
       end(project.leadInstanceId);
     }
-    db.setProjectCaw(project.id, { leadInstanceId: null });
+    setLead(project.id, null);
   };
 
   /**

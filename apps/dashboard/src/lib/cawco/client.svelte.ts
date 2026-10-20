@@ -290,6 +290,12 @@ export interface ProjectRow {
   id: string;
   /** Where its attempts land when their task says nothing. */
   lands: LandsMode;
+  /**
+   * Its Caw's session, once the hub has started one; null before and after
+   * one is retired. Read again on `projects.changed`, which the hub sends as
+   * it changes (caw.ts `setLead`).
+   */
+  leadInstanceId: string | null;
   /** The connection that signs in to {@link lfsUrl}; null with it. */
   lfsConnection: string | null;
   /** Where its large files live, an LFS endpoint; null: each repository's origin's own LFS. */

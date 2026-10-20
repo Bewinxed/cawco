@@ -23,7 +23,7 @@
    * composer. He stands there instead of on the composer; your first words
    * send him from the hero to his seat on it.
    */
-  import type { CawView, PermissionResult, ThreadMessage } from "@cawco/core";
+  import type { PermissionResult, ThreadMessage } from "@cawco/core";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -47,7 +47,6 @@
     type BlockedRequest,
     blankSession,
     cawco,
-    cawOf,
     readThread,
     readTranscript,
     type SendExtras,
@@ -307,36 +306,34 @@
 
   // --- Caw, the lead -----------------------------------------------------------
 
-  let view = $state<CawView | null>(null);
-  $effect(() => {
-    const pid = projectId;
-    // A thread's status moves with the lead; his view is read again with it.
-    // biome-ignore lint/complexity/noVoid: read-only dependency
-    void thread?.status;
-    if (!(pid && cawco.status === "connected")) {
-      return;
-    }
-    untrack(() => {
-      cawOf(pid).then(
-        (read) => {
-          if (pid === projectId) {
-            view = read;
-          }
-        },
-        () => undefined
-      );
-    });
-  });
-  /**
-   * You can write to Caw, on or off: your words start him. Only a reason he
-   * cannot start (no machine for him) takes the composer away.
+  /*
+   * What the thread first looks like is read from what the dashboard holds
+   * as it opens, never from a request it makes then: the project's row (his
+   * switch, his session) and the machines. Read from his view
+   * (`GET …/caw`) once the pane had mounted, a thread opened with no
+   * composer and no preview beside it, and both came a frame or two later.
    */
-  const writable = $derived(view !== null && !view.problem);
+  const project = $derived(cawco.project(projectId));
+  /** The machines are known: the socket's first snapshot is in. */
+  const machinesKnown = $derived(cawco.liveRead);
+  /**
+   * No machine is online, so Caw cannot start: the one reason the hub gives
+   * (caw.ts `problemOf`: his standing session and every checkout he starts in
+   * need one).
+   */
+  const noMachine = $derived(
+    machinesKnown && cawco.onlineMachines.length === 0
+  );
+  /**
+   * You can write to Caw, on or off: your words start him. Only no machine
+   * for him to start on takes the composer away.
+   */
+  const writable = $derived(machinesKnown && !noMachine);
 
   // --- his plan, the thread's --------------------------------------------------
 
-  /** The lead's session: a thread's plan is his, beside it as a session's is. */
-  const lead = $derived(view?.leadInstanceId ?? null);
+  /** The lead's session: a thread's plan and preview are his, beside it as a session's are. */
+  const lead = $derived(project?.leadInstanceId ?? null);
   // The lead is no tab of this dashboard's, so his plan is followed alone.
   $effect(() => {
     const id = lead;
@@ -793,7 +790,7 @@
    */
   const composerRoom = $derived.by(() => {
     if (!writable) {
-      return view ? `${offHeight}px` : "0px";
+      return noMachine ? `${offHeight}px` : "0px";
     }
     // His slot above the pill, and what his acting may draw above it, in
     // every status: a working Caw reaches higher than his still. On the
@@ -801,10 +798,6 @@
     const rise = hero ? 0 : seatSize * (LEDGE_LINE + CAW_HEADROOM);
     return `var(--c-composer-panel) + var(--c-tray-row) + ${rise}px`;
   });
-  /** Caw cannot start because no machine is online: the cause's one action is to look at the machines. */
-  const noMachine = $derived(
-    !!view?.problem && cawco.onlineMachines.length === 0
-  );
   /**
    * Docked in Caw's panel, the composer has a place of its own at the foot
    * and the room ends over it (the owner's pins 17 and 22): nothing scrolls
@@ -958,7 +951,7 @@
     {:else if hero}
       <div class="hero" data-thread-hero in:crossIn>
         <EmptyState
-          line={view && !view.on
+          line={project && !project.caw
             ? "Caw is off, so he acts only when you write to him."
             : undefined}
           title="What’s next for {projectName}?"
@@ -1073,9 +1066,9 @@
         </RegionBoundary>
       </div>
     {/if}
-    {#if view?.problem}
+    {#if noMachine}
       <!-- No composer: Caw cannot start to read it. What is true, and the
-           one thing that changes it. -->
+           one thing that changes it: the machines. -->
       <div
         class="off"
         data-safe-bottom
@@ -1084,19 +1077,20 @@
         out:crossOut
       >
         <Alert class="off-line" role="status">
-          <AlertDescription>{view.problem}</AlertDescription>
-          {#if noMachine}
-            <AlertAction>
-              <Button
-                label="Check machines"
-                onclick={() => {
-                  barGlass.open = "machines";
-                }}
-                size="sm"
-                variant="outline"
-              />
-            </AlertAction>
-          {/if}
+          <AlertDescription
+            >No machine is online, so Caw can’t start. Bring a machine online,
+            then write here.</AlertDescription
+          >
+          <AlertAction>
+            <Button
+              label="Check machines"
+              onclick={() => {
+                barGlass.open = "machines";
+              }}
+              size="sm"
+              variant="outline"
+            />
+          </AlertAction>
         </Alert>
       </div>
     {/if}
