@@ -149,6 +149,8 @@ const openRail = async (page: Page) => {
 };
 
 const MAIN = "main";
+/** The shell's top bar (Shell `data-slot="top"`), its glass group in it. */
+const TOP_BAR = 'header[data-slot="top"]';
 /** The scene's finished session's row in the rail. */
 const IDLE_ROW = /Idle: Fix tray chip overflow/;
 /** The chips session's tool rows, in the transcript's order: one of each tool's card. */
@@ -1057,6 +1059,24 @@ export const SURFACES: Surface[] = [
         // `hubSocketUrl`: `location.host`), the walk's server on a port of
         // its run, so two runs printed two pictures.
         mask: (page) => [page.locator("code", { hasText: SOCKET_URL })],
+      },
+    ],
+  },
+  {
+    // The top bar alone, its glass group included (Shell's
+    // `data-slot="top"`): on the home, and over a conversation's tabs
+    // (hosting them on a desk, floating over them on a phone). The bar
+    // glass's own compare against the base reads it at both widths.
+    name: "top-bar",
+    serve: "built",
+    route: () => "/",
+    states: [
+      { name: "home", widths: ["desk", "phone"], root: TOP_BAR },
+      {
+        name: "session",
+        widths: ["desk", "phone"],
+        route: (s) => `/session/${s.todo}`,
+        root: TOP_BAR,
       },
     ],
   },
