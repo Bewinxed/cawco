@@ -462,7 +462,7 @@
              title. -->
         <Table.Root
           layout="ledger"
-          stacks
+          stacks="phone"
           style="--card-cols: minmax(0, 1fr) auto auto"
         >
           {#if spend.threads.length > 0 || spend.caw.unthreadedMonthUsd > 0}
@@ -500,7 +500,7 @@
                 >
                   <Table.Cell
                     variant="ledger-stacks"
-                    class="max-phone:col-span-full"
+                    class="@max-phone/table:col-span-full"
                   >
                     <a
                       data-slot="name"
@@ -540,7 +540,7 @@
                 >
                   <Table.Cell
                     variant="ledger-stacks"
-                    class="max-phone:col-span-full"
+                    class="@max-phone/table:col-span-full"
                     ><span
                       data-slot="name"
                       class="type-label block truncate text-ink-row no-underline"
@@ -601,7 +601,7 @@
                 >
                   <Table.Cell
                     variant="ledger-stacks"
-                    class="max-phone:col-span-full"
+                    class="@max-phone/table:col-span-full"
                   >
                     <a
                       data-slot="name"
@@ -647,7 +647,7 @@
               <Table.Row data-project-spend-row class="relative" variant="stacks">
                 <Table.Cell
                   variant="ledger-stacks"
-                  class="max-phone:col-span-full"
+                  class="@max-phone/table:col-span-full"
                   ><span
                     data-slot="name"
                     class="type-label block truncate text-ink-row no-underline"
@@ -671,7 +671,7 @@
               </Table.Row>
             {/if}
             <Table.Row data-project-spend-row class="relative" variant="stacks">
-              <Table.Cell variant="ledger-stacks" class="max-phone:col-span-full"
+              <Table.Cell variant="ledger-stacks" class="@max-phone/table:col-span-full"
                 ><span
                   data-slot="name"
                   class="type-label block truncate text-ink-row no-underline"

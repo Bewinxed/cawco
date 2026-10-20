@@ -1120,11 +1120,11 @@
     --c-project-details-select-w: 10rem;
     /* The Actions and Runs ledgers' When column. */
     --c-ledger-when-w: 6rem;
-    /* The When column in a ledger under 400px. */
+    /* The When column in a runs ledger under 496px, where Result's floor (c-ledger-title-min) beside When and Outcome at full width no longer fits (build-tokens.ts CONTAINERS table-496px); under 424px the runs are cards. */
     --c-ledger-when-w-narrow: 4.5rem;
     /* The Runs ledger's Outcome column. */
     --c-ledger-outcome-w: 11rem;
-    /* The Outcome column in a ledger under 400px. */
+    /* The Outcome column in a runs ledger under 496px, where Result's floor (c-ledger-title-min) beside When and Outcome at full width no longer fits (build-tokens.ts CONTAINERS table-496px); under 424px the runs are cards. */
     --c-ledger-outcome-w-narrow: 8rem;
     /* The Runs ledger's Took column. */
     --c-ledger-took-w: 5rem;

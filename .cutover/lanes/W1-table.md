@@ -18,7 +18,7 @@ defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfa
 ## Variant table
 | Variant (part prop) | Role | DESIGN.md line | Sites |
 | --- | --- | --- | --- |
-| Table `stacks` | rows become cards on a phone: table, header and body blocks, header hidden | Layout, Fleet board: "Under 640px each row becomes a two-line card" | TaskTable:227, UpdateTable:43, ProjectSpend:461 |
+| Table `stacks` (`phone`, `narrow`) | rows become cards by the table's own width (`@container/table`), one recipe (table.svelte `tableCards`) at each tier: table, body blocks, header hidden, card rows a grid on `--card-cols`, card cells blocks. `phone`: under a 640px ledger; `narrow`: under 424px, where the runs ledger's Result floor beside narrow When and Outcome no longer fits | Layout, Fleet board: "Under 640px each row becomes a two-line card" | TaskTable:227, UpdateTable:43, ProjectSpend:461 (`phone`); RoutineDetail runs ledger (`narrow`) |
 | Table `stickyBand` | the band holds while the block around it scrolls (container clips, not scrolls) | Elevation & Depth: the header band is frame; Density "a 32px header band" | ViewRoutines routines and sources ledgers, ActionsTable |
 | Table container `@container/table` | a column folds by its own table's width | Layout, Breakpoints | every table |
 | TableHeader `section` | a band that heads its own body: on a phone its first head titles the section | Fleet board card (the band stays as the group's title) | ProjectSpend:466, :566 |
@@ -28,7 +28,7 @@ defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfa
 | TableHead `band` | ledger header band: column head role (label, caps, tracking-caps), muted, 32px, surface-band, sticky top 0 | frontmatter ledger-header; Typography, Column head; Density | ActionsTable:94-107, RoutineDetail:173-184, ProjectSpend:469-584, ViewRoutines:922-989, ViewTable:66 |
 | TableHead `matrix-*` | matrix heads: content height, top edge, label role | The Role, Not Size Rule | ToolMatrix:305, :314, :366, UpdateTable:50-74 |
 | TableHead/TableCell `edge="end"` | a column on its end edge: a figure's, a row's trailing action | Tabular Figure Rule (figures in columns) | TaskTable:243, :244, :312, :321, ProjectSpend Spent/Last heads and cells, ViewRoutines:803 |
-| TableHead/TableCell `fold` (`tasks-labels`, `tasks-created`, `tasks-todos`, `tasks-id`, `measure`, `narrow`) | where a column folds away, by its own table's width, so a ledger fits its place and never scrolls sideways; the task ledger's thresholds are the title's floor (`c-ledger-title-min`) plus the columns standing beside it | Fleet board ("fixed table layout … the name column takes what the fixed columns leave"); tokens c-ledger-title-min (14rem), c-task-col-*-w, c-block-routines (34rem), c-ledger-*-narrow (400px); container keys `table-670px`, `table-766px`, `table-878px`, `table-1102px`, `table-34rem`, `table-400px` | TaskTable heads and cells via FOLD (Labels, Created, To-dos, Id); ViewRoutines:777, :790, :934, :939 (measure); RoutineDetail:181, :221 (narrow) |
+| TableHead/TableCell `fold` (`tasks-labels`, `tasks-created`, `tasks-todos`, `tasks-id`, `runs-took`, `measure`) | where a column folds away, by its own table's width, so a ledger fits its place and never scrolls sideways; each ledger's thresholds are its main column's floor (`c-ledger-title-min`) plus the columns standing beside it. A fold that holds in the card names the card tier too, and a cell applies its fold after the card's classes | Fleet board ("fixed table layout … the name column takes what the fixed columns leave"); tokens c-ledger-title-min (14rem), c-task-col-*-w, c-ledger-when-w, c-ledger-outcome-w, c-ledger-took-w and their `-narrow`, c-block-routines (34rem); container keys `table-670px`, `table-766px`, `table-878px`, `table-1102px`, `table-424px`, `table-496px`, `table-576px`, `table-34rem`, `table-400px` (RoutineDetail's lead padding) | TaskTable heads and cells via FOLD (Labels, Created, To-dos, Id); RoutineDetail:181, :221 (runs-took); ViewRoutines:777, :790, :934, :939 (measure) |
 | TableCell `list`, `list-opens`, `ledger`, `ledger-stacks`, `ledger-picks-stacks`, `view`, `view-lead` | a ledger row's cell at the 44px pitch, tabular | frontmatter ledger-row; Density; Tabular Figure Rule | every `h-c-btn-h-lg` / `num` site |
 | TableCell `matrix`, `matrix-stacks-under` | a matrix cell whose words wrap | (matrix of tools and updates) | ToolMatrix:394, UpdateTable:114 |
 
@@ -66,7 +66,7 @@ kit-swap: apps/dashboard/src/lib/cawco/routines/ActionsTable.svelte:102 TableHea
 kit-swap: apps/dashboard/src/lib/cawco/routines/ActionsTable.svelte:107 TableHead band — done
 kit-swap: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:173 TableHead band — done
 kit-swap: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:177 TableHead band — done
-kit-swap: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:181 TableHead band fold="narrow" — done
+kit-swap: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:181 TableHead band fold="runs-took" — done
 kit-swap: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:184 TableHead band — done
 kit-swap: apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte:243 TableHead band edge="end" fold="desk" — done
 kit-swap: apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte:244 TableHead band edge="end" — done
@@ -98,7 +98,7 @@ kit-swap: apps/dashboard/src/lib/cawco/routines/ActionsTable.svelte:151 TableCel
 kit-swap: apps/dashboard/src/lib/cawco/routines/ActionsTable.svelte:159 TableCell list — done
 kit-swap: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:200 TableCell ledger — done
 kit-swap: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:213 TableCell ledger — done
-kit-swap: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:221 TableCell ledger fold="narrow" — done
+kit-swap: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:221 TableCell ledger fold="runs-took" — done
 kit-swap: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:229 TableCell ledger — done
 kit-swap: apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte:312 TableCell ledger-picks-stacks edge="end" fold="desk" — done
 kit-swap: apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte:315 TableCell ledger-picks-stacks — done
@@ -163,7 +163,8 @@ token: --c-ledger-row-h 44px — a ledger's row pitch (DESIGN.md Density "a 44px
 token: --c-ledger-count-w 8rem — a count and its noun ("12 attempts"), Usage's project spend; was a literal `--col-count: 8rem` in ProjectSpend's style attribute
 token: --c-ledger-usd-w 6rem — a month's spend column, Usage's project spend; was a literal `--col-usd: 6rem` (its Last column, `--col-last: 6rem`, is an age and takes `c-ledger-when-w`)
 token: --c-matrix-col-w 14rem — a matrix's wide column floor (Command-line tools, Updates); was `min-w-56` in the kit
-token: --c-ledger-title-min 14rem — a ledger title's least width, the column the ledger exists for (about 30 characters of the label role); the task ledger's fold widths are this plus its columns (build-tokens.ts CONTAINERS). No token held the role (`c-view-lead-min` is a generated table's lead, 9rem). The value is the parent's call: the 224px the 766px read gave the title
+token: --c-ledger-title-min 14rem — a ledger title's least width, the column the ledger exists for (about 30 characters of the label role); the task and runs ledgers' fold widths are this plus their columns (build-tokens.ts CONTAINERS). No token held the role (`c-view-lead-min` is a generated table's lead, 9rem). The value is the parent's call: the 224px the 766px read gave the title
+token: --c-ledger-when-w-narrow and --c-ledger-outcome-w-narrow — values unchanged (4.5rem, 8rem); descriptions reworded from "in a ledger under 400px" to "in a runs ledger under 496px, where Result's floor … no longer fits (table-496px); under 424px the runs are cards"
 All five are in design/tokens/cawco.tokens.json beside c-ledger-took-w; `bun run tokens` regenerated theme.css and tokens.css (committed as written). Its other outputs (apps/apple/.../Tokens.swift, apps/dashboard/src/lib/tokens/tokens.ts, packages/hub/skills/decision-page/kit/tokens.css) are outside this lane's list and were restored; integration reruns `bun run tokens`.
 
 ## Theme additions
@@ -185,11 +186,14 @@ None: no `@utility`, `@custom-variant` or component rule. The new spacing keys (
 .\@max-table-34rem\/table\:hidden { display: none; }      (@container table (width < 34rem))
 .\@max-table-400px\/table\:hidden { display: none; }      (@container table (width < 400px))
 .\@table-400px\/table\:ps-\(--detail-lead\) { padding-inline-start: var(--detail-lead); }   (@container table (width >= 400px))
-.max-phone\:grid-cols-\(--card-cols\) { grid-template-columns: var(--card-cols); }
-:is(.max-phone\:\*\:flex > *) { display: flex; }
-.max-phone\:\[\&_th\:not\(\:first-child\)\]\:hidden th:not(:first-child) { display: none; }
+@container table (width < 640px) { .\@max-phone\/table\:block { display: block; } }
+@container table (width < 424px) { .\@max-table-424px\/table\:block { display: block; } … .\@max-table-424px\/table\:grid { display: grid; } … .\@max-table-424px\/table\:hidden { display: none; } }
+@container table (width < 576px) { .\@max-table-576px\/table\:hidden { display: none; } }
+@container table (width < 496px) { .\@max-table-496px\/table\:w-c-ledger-when-w-narrow { width: var(--c-ledger-when-w-narrow); } }
+@container table (width >= 640px) { @container table (width < 670px) { .\@phone\/table\:\@max-table-670px\/table\:hidden { display: none; } } }
+(the card recipe's `grid-cols-(--card-cols)`, `*:flex` and `[&_th:not(:first-child)]:hidden` are the same rules under each tier's `@container table (width < …)`)
 ```
-Which wins: in a section header on a phone the `th:not(:first-child)` rule (0,2,1) hides the column heads; nothing else sets a th's display there. `max-phone:w-auto` in a card cell follows the site's `w-*` in the sheet (variants sort after bare utilities) at equal specificity, so the card's auto width wins under 640px. Scratch folder deleted.
+Which wins: in a section header in the card the `th:not(:first-child)` rule (0,2,1) hides the column heads; nothing else sets a th's display there. A card cell's `w-auto` and `block` follow the site's `w-*` and the table display in the sheet at equal specificity, so the card wins under its tier. Within the same tier a fold and the card's `block` are one tailwind-merge group, and the cell applies its fold last, so the fold wins (measured: Labels, Created and Took `none` in the cards). Scratch folder deleted.
 
 ## Rendered check
 Dev server (`CAWCO_DEV_HUB_URL=http://127.0.0.1:59999 bunx vite dev`), one playwright-core session, cached chromium_headless_shell-1248, `domcontentloaded`, 1440×900 and 390×844. `/motion/updates` renders UpdateTable; the other consumers need the hub, so a scratch route (deleted, never committed) rendered TaskTable with ticks, RoutineDetail at 40rem and 22rem, and ActionsTable in a 160px scroller.
@@ -214,13 +218,19 @@ Dev server (`CAWCO_DEV_HUB_URL=http://127.0.0.1:59999 bunx vite dev`), one playw
 - fixed: apps/dashboard/scripts/build-tokens.ts:273-275 CONTAINERS `routines-ledger-34rem`, `routines-ledger-399px`, `routines-ledger-400px` → `table-34rem`, `table-400px`, by CONTAINERS' own rule ("named by its container; a container with two widths names each by its width"): the container is `/table` now. One key per width: `@max-table-400px` is Tailwind's `width < 400px`, so the 399px twin went (the narrow fold and the `-narrow` widths now switch under 400px, as their tokens say: "in a ledger under 400px"). Readers: table.svelte (fold measure, narrow), ViewRoutines.svelte:753, RoutineDetail.svelte:116, :173, :177, :199, :212. `bun run tokens` rewrote theme.css's `--container-*`; its outputs outside this list were restored
 - fixed: apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte the task ledger keeps its title at a floor (`c-ledger-title-min`, 224px) at every width from 640px and never scrolls sideways (its fixed columns were 766px in a 640–900px ledger, and a first fold left the title 98px at 640px and 147px at 1025px). Fold order: DESIGN.md ranks no task-ledger columns (its Fleet board line ranks the sessions ledger), so the parent's rule decides — the columns the phone card leaves out go first, Labels then Created; then To-dos, then Id, both of which the card keeps (my call: Id is how a task is referred to, To-dos is its progress, so To-dos goes first). Thresholds, summed from the tokens (build-tokens.ts CONTAINERS): the tick (icon-md + 2 × space-3, 38px), Stage (c-task-col-stage-w, 192px) and Updated (c-task-col-time-w, 112px) always stand, 342px + the floor = 566px, under 640px; Id (104px) shows from 670px, To-dos (96px) from 766px, Created (112px) from 878px, Labels (224px) from 1102px. Id's and To-dos' folds apply only from 640px (`phone:`), so the phone card keeps them. The kit's `desk` and `wide` folds had only this caller and went. Its band computes `position: sticky` (the band variant) but its container still scrolls sideways (`overflow-x: auto`, no `stickyBand`), so it does not hold, as at 682ede287
 - fixed: apps/dashboard/scripts/build-tokens.ts CONTAINERS `table-670px`, `table-766px`, `table-878px`, `table-1102px`, each with its sum in a comment, by CONTAINERS' rule (the `table` container, named by width)
-- gap: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:173-221 the runs ledger's columns keep their full widths from 400px, where Result is left 48px (measured below; 199px at 399px). Holding Result at `c-ledger-title-min` would fold under 352 + 224 = 576px and needs the `-narrow` tokens' descriptions ("in a ledger under 400px") changed — the token JSON is additions-only for this lane, so it is a proposal
+- fixed: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte the runs ledger keeps Result, the column it exists for, at `c-ledger-title-min` at every width (at 400px it was left 48px). By the task ledger's derivation (build-tokens.ts CONTAINERS): Took (80px) shows from 96 + 176 + 80 + 224 = 576px (`fold="runs-took"`); When and Outcome take their narrow widths (72px, 128px) under 96 + 176 + 224 = 496px; under 72 + 128 + 224 = 424px each run is a card (`stacks="narrow"`, `--card-cols: auto minmax(0, 1fr)`), its Result across the first line, then When and Outcome
+- fixed: apps/dashboard/src/lib/components/ui/table the card is keyed on the table's own width, not the viewport: `stacks` is a tier (`phone`, under a 640px ledger; `narrow`, under 424px) over one recipe (`tableCards`), and every card class in the kit and its sites (TaskTable, UpdateTable, ProjectSpend placement) moved from `max-phone:` to `@max-phone/table:`, so a ledger in a narrow panel on a wide window is a card too. TaskTable and UpdateTable read identically at a 390px phone before and after (below). The task ledger's Id and To-dos folds are guarded `@phone/table:` (the card keeps them) instead of the viewport's `phone:`
 - gap: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:162 the runs ledger stays in an `overflow-hidden` rounded frame inside its opened routine, so its band does not hold; holding it would stack a second band under the routines band at the same top — left as is, my call
 - gap: apps/dashboard/src/lib/cawco/views/ViewRoutines.svelte:733 CollapsibleTrigger `border-none border-current` (dead `border-current`) is the CollapsibleTrigger lane's site
 - (The app.css `!important` gap is closed: the relic gate now runs scripts/relics-check.ts, whose SANCTIONED list carries the five Streamdown/virtua overrides with their reasons.)
 
 ## Task ledger fit (rendered)
-One playwright-core session, cached chromium_headless_shell-1248, 1600×900 and 390×844 viewports, `domcontentloaded`; a scratch route (deleted) drew TaskTable with ticks, labels and to-dos (every column present) in sections of each width. The floor is 224px.
+One playwright-core session, cached chromium_headless_shell-1248, 1600×900 and 390×844 viewports, `domcontentloaded`; a scratch route (deleted) drew TaskTable with ticks, labels and to-dos (every column present) in sections of each width. The floor is 224px. After the card moved to the table's own width, the same session read (1600×900):
+```
+tasks 639px: fits=true (639/639) | row grid | pick:block id:block title:block stage:block labels:none todos:block created:none updated:block | title 594px floor-ok=true
+tasks 640px … 1102px: as below, unchanged
+```
+The read from before that change:
 ```
 === 1600x900
 640px: container 640 scrollWidth=640 clientWidth=640 fits=true | pick:table-cell id:none title:table-cell stage:table-cell labels:none todos:none created:none updated:table-cell | title 298px floor-ok=true
@@ -237,10 +247,27 @@ One playwright-core session, cached chromium_headless_shell-1248, 1600×900 and 
 640px: container 640 scrollWidth=640 clientWidth=640 fits=true | pick:block id:block title:block stage:block labels:none todos:block created:none updated:block | title 595px floor-ok=true | row grid
 ```
 
-## Runs ledger at 399 and 400
-The same session, 1600×900: RoutineDetail in sections of 423px and 424px (its inline padding and its frame's borders take 24px), so its runs table's container is 399px and 400px:
+## Runs ledger fit (rendered)
+Before the fix, the same kind of session read the runs table at 399px and 400px (RoutineDetail in sections 24px wider, its padding and frame borders):
 ```
-runs 423px section: table container 399px | When table-cell 72px | Outcome table-cell 128px | Took none 0px | Result table-cell 199px
-runs 424px section: table container 400px | When table-cell 96px | Outcome table-cell 176px | Took table-cell 80px | Result table-cell 48px
+table container 399px | When table-cell 72px | Outcome table-cell 128px | Took none 0px | Result table-cell 199px
+table container 400px | When table-cell 96px | Outcome table-cell 176px | Took table-cell 80px | Result table-cell 48px
 ```
-At 682ede287 `@max-…-399px` (width < 399px) and `@…-400px` (width ≥ 400px) both missed a ledger from 399px up to 400px; `table-400px` alone switches there now.
+After it, one playwright-core session, cached chromium_headless_shell-1248, 1600×900 (a desk window, so the cards below are keyed on the table's own width), RoutineDetail with three runs in sections 24px wider than each table width. The floor is 224px; thresholds 424 (card), 496 (full When and Outcome), 576 (Took):
+```
+runs 328px: scrollWidth=328 clientWidth=328 fits=true | when:block 37px | outcome:block 258px | took:none 0px | result:block 306px | Result 306px floor-ok=true | card: thead none, row grid "37px 258px", result row 1 / col 1--1, row 51px
+runs 423px: scrollWidth=423 clientWidth=423 fits=true | when:block 37px | outcome:block 353px | took:none 0px | result:block 401px | Result 401px floor-ok=true | card: thead none, row grid "37px 353px", result row 1 / col 1--1, row 51px
+runs 424px: scrollWidth=424 clientWidth=424 fits=true | when:table-cell 72px | outcome:table-cell 128px | took:none 0px | result:table-cell 224px | Result 224px floor-ok=true
+runs 495px: scrollWidth=495 clientWidth=495 fits=true | when:table-cell 72px | outcome:table-cell 128px | took:none 0px | result:table-cell 295px | Result 295px floor-ok=true
+runs 496px: scrollWidth=496 clientWidth=496 fits=true | when:table-cell 96px | outcome:table-cell 176px | took:none 0px | result:table-cell 224px | Result 224px floor-ok=true
+runs 575px: scrollWidth=575 clientWidth=575 fits=true | when:table-cell 96px | outcome:table-cell 176px | took:none 0px | result:table-cell 303px | Result 303px floor-ok=true
+runs 576px: scrollWidth=576 clientWidth=576 fits=true | when:table-cell 96px | outcome:table-cell 176px | took:table-cell 80px | result:table-cell 224px | Result 224px floor-ok=true
+runs 616px: scrollWidth=616 clientWidth=616 fits=true | when:table-cell 96px | outcome:table-cell 176px | took:table-cell 80px | result:table-cell 264px | Result 264px floor-ok=true
+```
+
+## The card at a 390px phone, before and after the container key
+The same probe, at 390×844, on TaskTable (scratch) and UpdateTable (`/motion/updates`), read at f5c4941b7's tree (before) and after; `diff` of the two reads is empty:
+```
+TaskTable  table block | thead none | row grid cols "16px 21px 30px 223px 14px" 354x55 pad 7px 11px | pick:block@29,19 16x16 id:block@52,28 21x19 title:block@52,7 309x17 stage:block@80,29 30x17 labels:none@0,-62 0x0 todos:block@117,28 223x18 created:none@0,-62 0x0 updated:block@347,29 14x16
+UpdateTable table block | thead none | row grid cols "308px 36px" 344x56 pad 0px | th:block@39,0 308x48 td:block@347,7 36x34 td:block@39,48 344x7
+```

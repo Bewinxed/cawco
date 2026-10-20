@@ -42,7 +42,7 @@
   >
     <!-- Under 640px each row is a card: the machine and what it runs, then
          the update across the card. -->
-    <Table.Root stacks style="--card-cols: minmax(0, 1fr) auto">
+    <Table.Root stacks="phone" style="--card-cols: minmax(0, 1fr) auto">
       <Table.Header>
         <Table.Row>
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
@@ -101,7 +101,7 @@
               </span>
             </Table.Cell>
             <Table.Cell
-              class="max-phone:col-span-full"
+              class="@max-phone/table:col-span-full"
               variant="matrix-stacks-under"
             >
               <UpdateCell {machine} {policy} />

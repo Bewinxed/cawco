@@ -21,20 +21,20 @@
           "type-meta num h-c-ledger-row-h px-space-3 py-space-2 text-ink-muted group-state-open:bg-surface-well",
         /** A ledger's cell: the row's height holds it, no block padding. */
         ledger: "type-meta num h-c-ledger-row-h px-space-3 py-0 text-ink-muted",
-        /**
-         * A ledger cell over a hairline that drops its box on a phone (a
-         * block of auto size, no padding or border), where its row is a card.
+        /*
+         * Where its table stacks (table.svelte `tableCards`), a ledger
+         * cell drops its box in the card: a block of auto size, no padding
+         * or border.
          */
+        /** A ledger cell over a hairline. */
         "ledger-stacks":
-          "type-meta num h-c-ledger-row-h border-b border-b-border-hairline px-space-3 py-0 text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-none max-phone:p-0",
+          "type-meta num h-c-ledger-row-h border-b border-b-border-hairline px-space-3 py-0 text-ink-muted",
         /**
          * A ledger cell of a pickable row (`group/row`), its hairline gone on
-         * the last row, that drops its box on a phone (a block of auto size,
-         * no padding or border), as the ledger's own phone `td` rule did for
-         * every cell.
+         * the last row, its row's picked fill on it in the ledger.
          */
         "ledger-picks-stacks":
-          "type-meta num h-c-ledger-row-h border-b border-b-border-hairline px-space-3 py-0 text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg max-phone:block max-phone:h-auto max-phone:w-auto max-phone:min-w-0 max-phone:border-none max-phone:p-0 group-data-picked/row:max-phone:bg-transparent",
+          "type-meta num h-c-ledger-row-h border-b border-b-border-hairline px-space-3 py-0 text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg",
         /** A generated view's cell, label text over a hairline. */
         view: "type-label num h-c-ledger-row-h border-b border-b-border-hairline px-space-3 text-ink-muted",
         /** A generated view's lead column, on the row's spacing; its words wrap. */
@@ -43,15 +43,14 @@
         /** A matrix's cell, ruled from its neighbour on the left; its words wrap. */
         matrix:
           "whitespace-normal border-border border-l px-space-4 py-space-2",
-        /** A matrix cell whose left rule goes when the row stacks on a phone. */
-        "matrix-stacks":
-          "border-border border-l px-space-4 py-space-2 max-phone:border-l-none",
+        /** A matrix cell whose left rule goes where its row is a card. */
+        "matrix-stacks": "border-border border-l px-space-4 py-space-2",
         /**
          * `matrix-stacks` whose words wrap, and that sits right under the
-         * line above it on a phone.
+         * line above it in the card.
          */
         "matrix-stacks-under":
-          "whitespace-normal border-border border-l px-space-4 py-space-2 max-phone:border-l-none max-phone:pt-0",
+          "whitespace-normal border-border border-l px-space-4 py-space-2",
       },
       rule: {
         /** A hairline over the cell. */
@@ -74,6 +73,7 @@
 <script lang="ts">
   import type { HTMLTdAttributes } from "svelte/elements";
   import { cn, type WithElementRef } from "#lib/utils.js";
+  import { cardOf, getTableContext } from "./table.svelte";
 
   let {
     ref = $bindable(null),
@@ -90,10 +90,22 @@
     edge?: TableCellEdge;
     fold?: TableCellFold;
   } = $props();
+
+  const table = getTableContext();
+  const card = $derived(
+    variant ? cardOf(table.stacks)?.cell[variant] : undefined
+  );
 </script>
 
+<!-- The fold after the card's own classes: a column folded in the card
+     stays folded where the card makes its cells blocks. -->
 <td
-  class={cn(tableCellVariants({ variant, rule, edge, fold }), className)}
+  class={cn(
+    tableCellVariants({ variant, rule, edge }),
+    card,
+    fold && tableColumn.fold[fold],
+    className
+  )}
   data-slot="table-cell"
   bind:this={ref}
   {...restProps}

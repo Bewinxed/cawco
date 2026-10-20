@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
   import { cn, type WithElementRef } from "#lib/utils.js";
-  import { getTableContext } from "./table.svelte";
+  import { cardOf, getTableContext } from "./table.svelte";
 
   let {
     ref = $bindable(null),
@@ -17,7 +17,7 @@
 <tbody
   class={cn(
     "[&_tr:last-child]:border-0",
-    table.stacks && "max-phone:block",
+    cardOf(table.stacks)?.body,
     className
   )}
   data-slot="table-body"

@@ -5896,7 +5896,7 @@
         "value": 4.5,
         "unit": "rem"
       },
-      "$description": "The When column in a ledger under 400px."
+      "$description": "The When column in a runs ledger under 496px, where Result's floor (c-ledger-title-min) beside When and Outcome at full width no longer fits (build-tokens.ts CONTAINERS table-496px); under 424px the runs are cards."
     },
     "c-ledger-outcome-w": {
       "$type": "dimension",
@@ -5912,7 +5912,7 @@
         "value": 8,
         "unit": "rem"
       },
-      "$description": "The Outcome column in a ledger under 400px."
+      "$description": "The Outcome column in a runs ledger under 496px, where Result's floor (c-ledger-title-min) beside When and Outcome at full width no longer fits (build-tokens.ts CONTAINERS table-496px); under 424px the runs are cards."
     },
     "c-ledger-took-w": {
       "$type": "dimension",

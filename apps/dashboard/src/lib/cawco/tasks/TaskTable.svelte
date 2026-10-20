@@ -230,7 +230,7 @@
   data-pickable={onpick ? "" : undefined}
   style:--card-cols={onpick ? "auto auto auto 1fr auto" : "auto auto 1fr auto"}
 >
-  <Table.Root data-tasks ghostRows="tbody tr" layout="ledger" stacks>
+  <Table.Root data-tasks ghostRows="tbody tr" layout="ledger" stacks="phone">
     <Table.Header>
       {#each table.getHeaderGroups() as group (group.id)}
         <Table.Row variant="band">
@@ -315,11 +315,11 @@
               class={[
                 "w-(--col-w)",
                 cell.column.id === "pick" &&
-                  "max-phone:row-start-1 max-phone:row-span-2 max-phone:col-start-1",
+                  "@max-phone/table:row-start-1 @max-phone/table:row-span-2 @max-phone/table:col-start-1",
                 cell.column.id === "title" &&
-                  "max-phone:row-start-1 max-phone:col-span-full group-data-pickable/ledger:max-phone:col-start-2 group-data-pickable/ledger:max-phone:-col-end-1",
+                  "@max-phone/table:row-start-1 @max-phone/table:col-span-full group-data-pickable/ledger:@max-phone/table:col-start-2 group-data-pickable/ledger:@max-phone/table:-col-end-1",
                 cell.column.id === "updated" &&
-                  "max-phone:col-start-4 group-data-pickable/ledger:max-phone:col-start-5",
+                  "@max-phone/table:col-start-4 group-data-pickable/ledger:@max-phone/table:col-start-5",
               ]}
               data-task-table-col={cell.column.id}
               fold={FOLD[cell.column.id]}

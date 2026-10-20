@@ -273,6 +273,15 @@ const CONTAINERS = {
   "table-34rem": "34rem",
   "task-frame": "56rem",
   "table-400px": "400px",
+  // The routine runs ledger's, by the same rule (Result its floor): its
+  // card under When and Outcome at their narrow widths (c-ledger-when-w-narrow
+  // 72px, c-ledger-outcome-w-narrow 128px) + 224px:
+  "table-424px": "424px",
+  // When and Outcome at full width (c-ledger-when-w 96px,
+  // c-ledger-outcome-w 176px) from 96 + 176 + 224:
+  "table-496px": "496px",
+  // Took (c-ledger-took-w, 80px) from 496 + 80:
+  "table-576px": "576px",
   // The task ledger's folds: each width is the title's floor
   // (c-ledger-title-min, 224px) plus the columns standing beside it, so no
   // column shows until the title can give up its width and keep the floor.

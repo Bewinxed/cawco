@@ -161,25 +161,31 @@
         data-slot="runs-ledger"
         class="overflow-hidden rounded-sm border border-border-hairline bg-surface-raised"
       >
+        <!-- Result is the column this ledger exists for and keeps its floor
+             (c-ledger-title-min): Took folds under 576px, When and Outcome
+             take their narrow widths under 496px, and under 424px each run
+             is a card, its result across it, then when and outcome. -->
         <Table.Root
           data-runs
           aria-labelledby="runs-{routine.id}"
           layout="ledger"
+          stacks="narrow"
+          style="--card-cols: auto minmax(0, 1fr)"
         >
           <Table.Header>
             <Table.Row variant="band">
               <Table.Head
                 data-slot="routine-detail-col-when"
-                class="w-c-ledger-when-w @max-table-400px/table:w-c-ledger-when-w-narrow"
+                class="w-c-ledger-when-w @max-table-496px/table:w-c-ledger-when-w-narrow"
                 variant="band">{words.columnWhen}</Table.Head
               >
               <Table.Head
-                class="w-c-ledger-outcome-w @max-table-400px/table:w-c-ledger-outcome-w-narrow"
+                class="w-c-ledger-outcome-w @max-table-496px/table:w-c-ledger-outcome-w-narrow"
                 variant="band">{words.columnOutcome}</Table.Head
               >
               <Table.Head
                 class="w-c-ledger-took-w"
-                fold="narrow"
+                fold="runs-took"
                 variant="band">{words.columnTook}</Table.Head
               >
               <Table.Head variant="band">{words.columnResult}</Table.Head>
@@ -194,9 +200,10 @@
                 data-run
                 class="group/run"
                 data-outcome={outcome.status}
+                variant="stacks"
               >
                 <Table.Cell
-                  class="w-c-ledger-when-w @max-table-400px/table:w-c-ledger-when-w-narrow"
+                  class="w-c-ledger-when-w @max-table-496px/table:w-c-ledger-when-w-narrow"
                   data-cell="when"
                   rule="top"
                   variant="ledger"
@@ -209,7 +216,7 @@
                   >
                 </Table.Cell>
                 <Table.Cell
-                  class="w-c-ledger-outcome-w @max-table-400px/table:w-c-ledger-outcome-w-narrow"
+                  class="w-c-ledger-outcome-w @max-table-496px/table:w-c-ledger-outcome-w-narrow"
                   data-cell="outcome"
                   rule="top"
                   variant="ledger"
@@ -219,13 +226,18 @@
                 <Table.Cell
                   class="w-c-ledger-took-w"
                   data-cell="took"
-                  fold="narrow"
+                  fold="runs-took"
                   rule="top"
                   variant="ledger"
                 >
                   <span data-slot="num" class="num">{tookOf(run)}</span>
                 </Table.Cell>
-                <Table.Cell data-cell="result" rule="top" variant="ledger">
+                <Table.Cell
+                  class="@max-table-424px/table:col-span-full @max-table-424px/table:row-start-1"
+                  data-cell="result"
+                  rule="top"
+                  variant="ledger"
+                >
                   {#if href}
                     <a
                       data-slot="result"
