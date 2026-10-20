@@ -11,15 +11,16 @@ import type { DbShape, WorkItemRow } from "./db";
 import type { KeepAliveRow } from "./keep-alive";
 import { sessionLabel } from "./labels";
 import { roleOf } from "./roles";
-import { isHubParent } from "./work-items";
+import { type HeldWork, isHubParent, type QueuedDelegate } from "./work-items";
 
 /** `live`: items not dismissed that are not ended or ended in the last hour; `all`: every one. */
 export type DelegateListInclude = "live" | "all";
 
 /**
- * One `delegate_list` read. With `since` or `before`, only items whose
- * lifetime touches that window: started before `before`, and ended after
- * `since` or still live.
+ * One `delegate_list` read. With `since` or `before`, only what that window
+ * holds: delegates whose lifetime touches it (started before `before`, and
+ * ended after `since` or still live), workspaces held inside it, and queued
+ * delegates queued before its end.
  */
 export interface DelegateListQuery {
   before?: Date;
@@ -72,6 +73,15 @@ export interface DelegateNode {
   workspaceId: string;
 }
 
+/** What one `delegate_list` read answers. */
+export interface DelegateList {
+  delegates: DelegateNode[];
+  /** The held workspaces of the tree's delegates (work-items `heldWorkspaces`). */
+  held: HeldWork[];
+  /** The delegates the caller may withdraw, still queued for owned files (work-items `queuedOf`). */
+  queued: QueuedDelegate[];
+}
+
 export interface DelegationTreeDeps {
   /** A session's last activity and whether its prompt cache is still warm (server.ts `followupState`). */
   activity: (row: KeepAliveRow) => {
@@ -86,6 +96,8 @@ export interface DelegationTreeDeps {
     | "sendsIn"
     | "workItemsOfParents"
   >;
+  /** Every held workspace on the fleet (work-items `heldWorkspaces`). */
+  held: () => HeldWork[];
   /** While the item's landing waits (work-items `landingWaitOf`). */
   landingWait: (itemId: string) => { words: string; since: number } | null;
   /** A machine's name as the fleet shows it. */
@@ -96,6 +108,8 @@ export interface DelegationTreeDeps {
   plan: (
     instanceId: string
   ) => Promise<{ done: number; total: number } | undefined>;
+  /** The delegates `caller` may withdraw, still queued (work-items `queuedOf`). */
+  queued: (caller: string) => QueuedDelegate[];
   /** The session stopped at its account's limit, in words (at-limit.ts `stall`); undefined while it runs. */
   stalled: (
     instanceId: string
@@ -158,6 +172,10 @@ const touches = (session: Session, query: DelegateListQuery): boolean =>
       (!query.before || item.createdAt < query.before) &&
       (!(query.since && item.endedAt) || item.endedAt > query.since)
   );
+
+/** Whether a moment falls inside the query's window: at or after `since`, before `before`. */
+const within = (at: Date, query: DelegateListQuery): boolean =>
+  (!query.since || at >= query.since) && (!query.before || at < query.before);
 
 /** In a `live` read: not dismissed (work-items `dismiss`), and not ended, or ended within the hour. */
 const isLive = (item: WorkItemRow, now: number): boolean =>
@@ -302,17 +320,20 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
   };
 
   /**
-   * The caller's delegation tree, in start order. Children are read one level
-   * at a time; `seen` keeps a session from appearing twice, however the
-   * parents run. A session the query leaves out still stands while a child
-   * it keeps hangs under it.
+   * The caller's delegation tree, in start order, with the held workspaces
+   * of every delegate the walk reaches and the caller's queued delegates.
+   * Children are read one level at a time; `seen` keeps a session from
+   * appearing twice, however the parents run. A session the query leaves out
+   * still stands while a child it keeps hangs under it, and its workspaces
+   * still count toward `held`: held work is owed whatever the include.
    */
   const read = async (
     caller: InstanceRow,
     query: DelegateListQuery,
     now = Date.now()
-  ): Promise<DelegateNode[]> => {
+  ): Promise<DelegateList> => {
     const seen = new Set<string>([caller.id]);
+    const workspaces = new Set<string>();
     const kept = (session: Session): boolean =>
       (query.include === "all" || isLive(session.item, now)) &&
       touches(session, query);
@@ -322,6 +343,9 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
       );
       for (const session of level) {
         seen.add(session.item.instanceId);
+        for (const item of session.items) {
+          workspaces.add(item.workspaceId);
+        }
       }
       if (level.length === 0) {
         return [];
@@ -345,21 +369,36 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
       );
       return nodes.filter((node): node is DelegateNode => !!node);
     };
-    const mine = await build(db.workItemsOfParents([caller.id]));
+    const delegates = await build(db.workItemsOfParents([caller.id]));
     const project = ledProject(caller);
-    if (!project) {
-      return mine;
+    if (project) {
+      // The lead's co-parented attempts: each one not already in its own
+      // tree, at the root unless another attempt started it (it nests there).
+      const attempts = db.projectAttempts(project);
+      const attemptIds = new Set(attempts.map((item) => item.instanceId));
+      delegates.push(
+        ...(await build(
+          attempts.filter((item) => !attemptIds.has(item.parentInstanceId))
+        ))
+      );
+      delegates.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
     }
-    // The lead's co-parented attempts: each one not already in its own tree,
-    // at the root unless another attempt started it (it nests there).
-    const attempts = db.projectAttempts(project);
-    const attemptIds = new Set(attempts.map((item) => item.instanceId));
-    const rest = await build(
-      attempts.filter((item) => !attemptIds.has(item.parentInstanceId))
-    );
-    return [...mine, ...rest].sort((a, b) =>
-      a.startedAt.localeCompare(b.startedAt)
-    );
+    return {
+      delegates,
+      held: deps
+        .held()
+        .filter(
+          (work) =>
+            workspaces.has(work.workspaceId) &&
+            within(new Date(work.heldAt), query)
+        ),
+      // Still queued, so live: inside the window once queued before its end.
+      queued: deps
+        .queued(caller.id)
+        .filter(
+          (one) => !query.before || new Date(one.queuedAt) < query.before
+        ),
+    };
   };
 
   return { read };

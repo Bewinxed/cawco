@@ -21778,6 +21778,8 @@ export const createServer = (
   // `delegate_list`: a session's own delegation tree (§5.2).
   const delegationTree = createDelegationTree({
     db,
+    held: () => workItems.heldWorkspaces(),
+    queued: (caller) => workItems.queuedOf(caller),
     landingWait: (itemId) => workItems.landingWaitOf(itemId),
     machineName,
     machinePaused: (machineId) => machinePause.words(machineId),
@@ -28182,15 +28184,6 @@ export const createServer = (
           }
         }
       )
-      // `delegate_list`'s queued delegates: the caller's, and its led project's.
-      .get(
-        "/api/work-items/queued",
-        {
-          ...hidden,
-          query: t.Object({ for: t.String({ minLength: 1 }) }),
-        },
-        ({ query }) => ({ queued: workItems.queuedOf(query.for) })
-      )
       .get("/api/work-items/:id", hidden, ({ params, status }) => {
         const item = workItems.item(params.id);
         return item ?? status(404, `no work item ${params.id}`);
@@ -28198,7 +28191,7 @@ export const createServer = (
       // Archiving a workspace: its machine kills the boundary with every
       // process in it and deletes the clone. Refused while an item runs there.
       // Spent workspaces kept for unlanded work, as the last sweep read them
-      // (workspace-retire.ts); `delegate_list` shows the same list.
+      // (workspace-retire.ts); `delegate_list` shows a session its own tree's.
       // Every held workspace: its item ended with work that is nowhere else,
       // and the session that started its work, told as it was held,
       // continues it or discards it (work-items.ts `heldNotice`).

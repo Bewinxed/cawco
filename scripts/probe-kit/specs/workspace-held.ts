@@ -26,11 +26,15 @@
  *     its work lands and its workspace retires, not held.
  * (d) V commits and finishes blocked, held: its parent's discard_workspace
  *     archives it with a carry holding V's commit, its clone gone.
- * (e) P starts and stays live; Q starts and lands; R starts once Q ended.
- *     The parent's delegate_list with a window from Q's start to its end
- *     answers P and Q, in start order, with their starts and ends (P's end
- *     null), and nothing else of the parent's tree; one from R's start
- *     answers P and R. A window bound that is no ISO time is refused.
+ * (e) H finishes blocked and is held; then P starts and stays live; Q
+ *     starts and lands; R starts once Q ended, finishes blocked and is held;
+ *     then Z, another session's delegate, finishes blocked and is held. The
+ *     parent's delegate_list with a window from Q's start to its end answers
+ *     P and Q, in start order, with their starts and ends (P's end null),
+ *     nothing else of the parent's tree, and no held workspace; one from R's
+ *     start answers P and R, and of the held workspaces R's alone (H's was
+ *     held before it, Z's is another tree's). A window bound that is no ISO
+ *     time is refused.
  *
  *   bun scripts/probe-kit/run.ts workspace-held
  */
@@ -41,8 +45,8 @@ import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
-const TAG = /PROBE-HELD-([ASXTUVPQR])/;
-type Tag = "A" | "S" | "X" | "T" | "U" | "V" | "P" | "Q" | "R";
+const TAG = /PROBE-HELD-([ASXTUVPQRHZ])/;
+type Tag = "A" | "S" | "X" | "T" | "U" | "V" | "P" | "Q" | "R" | "H" | "Z";
 const FINISH = "mcp__cawco__finish_item";
 const COMMIT =
   "git -c user.name=Delegate -c user.email=d@probe.test commit -qm";
@@ -173,6 +177,9 @@ const respond = (request: Seen): Reply => {
       return finishOnce(request, tag, 0, finished(tag));
     case "S":
     case "V":
+    case "H":
+    case "R":
+    case "Z":
       return finishOnce(request, tag, 0, blocked(tag));
     case "T":
       return finishOnce(request, tag, 0, {
@@ -215,13 +222,15 @@ interface Scene {
     name: string,
     args: object
   ) => Promise<{ status: number; text: string }>;
-  /** A delegate asked of the parent, not waited for. */
+  /** A delegate asked of the parent (of `extra.parentInstanceId` when it names one), not waited for. */
   delegate: (tag: Tag, extra?: object) => Promise<Started>;
   /** The item's row once it ended, or as it stands when it does not. */
   ended: (started: Started) => Promise<ItemRow | undefined>;
   fleet: Fleet;
   parentId: string;
   projectId: string;
+  /** The project's repository, every delegate's cwd. */
+  src: string;
   /** The workspace's row once its state is `state`, or as it stands when that does not come. */
   stateBecomes: (id: string, state: string) => Promise<Workspace>;
   workspaceOf: (id: string) => Workspace;
@@ -474,28 +483,34 @@ interface Listed {
   startedAt: string;
 }
 
-/** delegate_list's delegates, as the parent's call answered them, or what it answered instead. */
+/** delegate_list's answer (hub delegation-tree.ts `DelegateList`), as the parent's call answered it. */
+interface Answer {
+  delegates: Listed[];
+  held: { workspaceId: string }[];
+}
+
+/** delegate_list's delegates and held workspaces, as the parent's call answered them, or what it answered instead. */
 const listed = (said: {
   status: number;
   text: string;
-}): { delegates?: Listed[]; refused?: string } => {
+}): Partial<Answer> & { refused?: string } => {
   if (said.status !== 200) {
     return { refused: `${said.status} ${said.text.slice(0, 600)}` };
   }
   const result = JSON.parse(said.text) as {
     content?: { text?: string }[];
     isError?: boolean;
-    structuredContent?: { delegates: Listed[] };
+    structuredContent?: Answer;
   };
   return result.isError
     ? { refused: result.content?.[0]?.text ?? "" }
-    : { delegates: result.structuredContent?.delegates };
+    : { ...result.structuredContent };
 };
 
-/** (e) delegate_list with a window answers the delegates live inside it, in start order. */
+/** (e) delegate_list with a window answers the delegates live inside it, in start order, and its tree's workspaces held inside it. */
 const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   const { check } = kit;
-  const { fleet, workspaceOf } = scene;
+  const { fleet, workspaceOf, stateBecomes } = scene;
   const span = (started: Started) =>
     fleet.query<{ created_at: number; ended_at: number | null }>(
       "SELECT created_at, ended_at FROM work_items WHERE id = ?",
@@ -503,21 +518,36 @@ const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     )[0];
   const iso = (ms: number | null | undefined) =>
     typeof ms === "number" ? new Date(ms).toISOString() : null;
+  /** A delegate that finishes blocked, once its workspace is held. */
+  const heldOne = async (tag: Tag, extra?: object) => {
+    const started = await scene.delegate(tag, extra);
+    await scene.ended(started);
+    return {
+      started,
+      held: await stateBecomes(started.workspaceId, "held"),
+    };
+  };
+  const h = await heldOne("H");
   const p = await scene.delegate("P");
   const q = await scene.delegate("Q");
   const qItem = await scene.ended(q);
-  const r = await scene.delegate("R");
-  const rItem = await scene.ended(r);
+  const { started: r, held: rHeld } = await heldOne("R");
+  const other = await fleet.spawn("claude", "Other", scene.src, {
+    projectId: scene.projectId,
+  });
+  const z = await heldOne("Z", { parentInstanceId: other });
   const [ps, qs, rs] = [span(p), span(q), span(r)];
   check(
-    "(e) Q lands while P runs, then R starts after Q ended and lands",
-    qItem?.state === "done" &&
-      rItem?.state === "done" &&
+    "(e) H held, Q lands while P runs, then R starts after Q ended and is held, and so is Z of another tree",
+    h.held.state === "held" &&
+      rHeld.state === "held" &&
+      z.held.state === "held" &&
+      qItem?.state === "done" &&
       ps?.ended_at === null &&
       typeof qs?.ended_at === "number" &&
       rs !== undefined &&
       rs.created_at > qs.ended_at,
-    `${qItem?.state} ${rItem?.state}; P ${JSON.stringify(ps)} Q ${JSON.stringify(qs)} R ${JSON.stringify(rs)}`
+    `H ${h.held.state}, R ${rHeld.state}, Z ${z.held.state}; Q ${qItem?.state}; P ${JSON.stringify(ps)} Q ${JSON.stringify(qs)} R ${JSON.stringify(rs)}`
   );
   const around = listed(
     await scene.callAsParent("delegate_list", {
@@ -543,6 +573,11 @@ const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
       ]),
     `${around.refused ?? ""}${JSON.stringify(shown)}; P ${p.instanceId} Q ${q.instanceId} R ${r.instanceId}`
   );
+  check(
+    "(e) and no held workspace: H's was held before it, R's and Z's after",
+    around.held !== undefined && around.held.length === 0,
+    JSON.stringify(around.held)
+  );
   const after = listed(
     await scene.callAsParent("delegate_list", {
       since: iso(rs?.created_at),
@@ -553,6 +588,12 @@ const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(e) a window from R's start answers P then R",
     JSON.stringify(afterIds) === JSON.stringify([p.instanceId, r.instanceId]),
     `${after.refused ?? ""}${JSON.stringify(afterIds)}`
+  );
+  const afterHeld = (after.held ?? []).map((one) => one.workspaceId);
+  check(
+    "(e) and of the held workspaces R's alone: not H's, held before it, nor Z's, another tree's",
+    JSON.stringify(afterHeld) === JSON.stringify([r.workspaceId]),
+    `${JSON.stringify(afterHeld)}; H ${h.started.workspaceId} R ${r.workspaceId} Z ${z.started.workspaceId}`
   );
   const loose = listed(
     await scene.callAsParent("delegate_list", { since: "yesterday" })
@@ -631,6 +672,7 @@ const spec: Spec = {
       fleet,
       parentId: parent,
       projectId: project.id,
+      src,
       workspaceOf,
       stateBecomes: (id, state) =>
         until(

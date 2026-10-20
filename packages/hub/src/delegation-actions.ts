@@ -39,16 +39,11 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { ForgeWrite } from "@cawco/core/upstream-post";
 import type { WorkBudget, WorkItemSubmission } from "./db/schema";
-import type { DelegateListQuery, DelegateNode } from "./delegation-tree";
+import type { DelegateList, DelegateListQuery } from "./delegation-tree";
 import { hubHttpUrl, selfFetch } from "./hub-self";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
-import {
-  type HeldWork,
-  type QueuedDelegate,
-  resolveSpawnType,
-  type Unlanded,
-} from "./work-items";
+import { resolveSpawnType, type Unlanded } from "./work-items";
 
 // Every call this module makes is the hub calling its own routes, as itself
 // (hub-self.ts): `selfFetch` refuses any other origin.
@@ -783,7 +778,7 @@ export interface HandoffDeps {
   /** What it is working on, so the receiver knows who is calling. */
   readonly cwd: string;
   /** This session's own delegation tree, read by the hub (delegation-tree.ts). */
-  readonly delegateList?: (query: DelegateListQuery) => Promise<DelegateNode[]>;
+  readonly delegateList?: (query: DelegateListQuery) => Promise<DelegateList>;
   /**
    * Hands a send to the hub's one send path now, and answers what became of
    * it: refused sends throw with the hub's reason.
@@ -963,14 +958,10 @@ export interface HandoffActions {
   ): Promise<DelegateResult>;
   /**
    * This session's delegation tree: its delegates, theirs nested; the
-   * delegates still queued; and the fleet's held workspaces, whose items
+   * delegates still queued; and the tree's held workspaces, whose items
    * ended with work that is nowhere else (work-items.ts `settle`).
    */
-  readonly delegateList: (query: DelegateListQuery) => Promise<{
-    delegates: DelegateNode[];
-    held: HeldWork[];
-    queued: QueuedDelegate[];
-  }>;
+  readonly delegateList: (query: DelegateListQuery) => Promise<DelegateList>;
   /**
    * Lets go of a workspace one of this session's delegates worked in: what
    * it holds that is nowhere else goes to a carry on its machine, then its
@@ -1576,20 +1567,7 @@ export const handoffActions = ({
         "delegate_list is read by the hub, which is not wired here."
       );
     }
-    const [delegates, waiting, spent] = await Promise.all([
-      delegateList(query),
-      fetch(
-        `${hubHttpUrl()}/api/work-items/queued?for=${encodeURIComponent(instanceId)}`
-      ),
-      fetch(`${hubHttpUrl()}/api/workspaces/held`),
-    ]);
-    const refused = [waiting, spent].find((answer) => !answer.ok);
-    if (refused) {
-      throw new Error(await refused.text());
-    }
-    const { queued } = (await waiting.json()) as { queued: QueuedDelegate[] };
-    const { held } = (await spent.json()) as { held: HeldWork[] };
-    return { delegates, held, queued };
+    return await delegateList(query);
   },
   async openItems() {
     const response = await fetch(

@@ -839,7 +839,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "delegate_list",
-      "Your delegation tree in start order, theirs nested: each delegate's state, activity, cache warmth, waits and plan; under queued, delegates waiting for owned files; under held, workspaces whose items ended with unlanded work. Read it before handing off, calling one stuck, or recapping a time span.",
+      "Your delegation tree in start order, theirs nested, with each delegate's state (stalled: at its account's limit, resumes itself) and cache warmth; queued: delegates waiting for owned files; held: its workspaces with unlanded work. Read before handing off, calling one stuck, or recapping a time span.",
       {
         include: z
           .enum(["live", "all"])
