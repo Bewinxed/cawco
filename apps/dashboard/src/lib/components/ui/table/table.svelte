@@ -18,19 +18,23 @@
   export const tableColumn = {
     /** A column on its end edge: a figure's, and a row's trailing action. */
     edge: { end: "text-end" },
-    /** Where a column folds away: by its own table's width (`@container/table`), or on a phone. */
+    /**
+     * Where a column folds away, by its own table's width
+     * (`@container/table`), so a ledger fits its place and never scrolls
+     * sideways.
+     */
     fold: {
-      /** On a phone, where the row is a card that leaves it out. */
-      phone: "max-phone:hidden",
+      /** In a ledger narrower than a wide page (1025px, `wide`). */
+      wide: "@max-wide/table:hidden",
       /** In a ledger narrower than a desk (900px, `desk`). */
       desk: "@max-desk/table:hidden",
       /**
        * In a ledger narrower than the Routines block's measure
        * (`c-block-routines`, 34rem), whose row then says it in its own line.
        */
-      measure: "@max-routines-ledger-34rem/table:hidden",
+      measure: "@max-table-34rem/table:hidden",
       /** In a ledger under 400px, where its columns take their `-narrow` widths. */
-      narrow: "@max-routines-ledger-399px/table:hidden",
+      narrow: "@max-table-400px/table:hidden",
     },
   } as const;
 

@@ -113,7 +113,7 @@
 
 <div
   data-slot="detail"
-  class="flex flex-col gap-space-4 px-space-3 pb-space-4 @routines-ledger-400px/table:ps-(--detail-lead)"
+  class="flex flex-col gap-space-4 px-space-3 pb-space-4 @table-400px/table:ps-(--detail-lead)"
   style:--detail-lead="calc(var(--c-row-lead) + var(--space-3) * 2)"
 >
   <div
@@ -170,11 +170,11 @@
             <Table.Row variant="band">
               <Table.Head
                 data-slot="routine-detail-col-when"
-                class="w-c-ledger-when-w @max-routines-ledger-399px/table:w-c-ledger-when-w-narrow"
+                class="w-c-ledger-when-w @max-table-400px/table:w-c-ledger-when-w-narrow"
                 variant="band">{words.columnWhen}</Table.Head
               >
               <Table.Head
-                class="w-c-ledger-outcome-w @max-routines-ledger-399px/table:w-c-ledger-outcome-w-narrow"
+                class="w-c-ledger-outcome-w @max-table-400px/table:w-c-ledger-outcome-w-narrow"
                 variant="band">{words.columnOutcome}</Table.Head
               >
               <Table.Head
@@ -196,7 +196,7 @@
                 data-outcome={outcome.status}
               >
                 <Table.Cell
-                  class="w-c-ledger-when-w @max-routines-ledger-399px/table:w-c-ledger-when-w-narrow"
+                  class="w-c-ledger-when-w @max-table-400px/table:w-c-ledger-when-w-narrow"
                   data-cell="when"
                   rule="top"
                   variant="ledger"
@@ -209,7 +209,7 @@
                   >
                 </Table.Cell>
                 <Table.Cell
-                  class="w-c-ledger-outcome-w @max-routines-ledger-399px/table:w-c-ledger-outcome-w-narrow"
+                  class="w-c-ledger-outcome-w @max-table-400px/table:w-c-ledger-outcome-w-narrow"
                   data-cell="outcome"
                   rule="top"
                   variant="ledger"

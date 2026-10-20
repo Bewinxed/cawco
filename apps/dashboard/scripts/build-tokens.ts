@@ -270,10 +270,9 @@ const KEYFRAMES: Record<string, string> = {
 const CONTAINERS = {
   "field-group": "28rem",
   details: "30rem",
-  "routines-ledger-34rem": "34rem",
+  "table-34rem": "34rem",
   "task-frame": "56rem",
-  "routines-ledger-399px": "399px",
-  "routines-ledger-400px": "400px",
+  "table-400px": "400px",
   "stop-tray": "420px",
   kinds: "480px",
   "decisions-520px": "520px",

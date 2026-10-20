@@ -207,8 +207,11 @@
   }
 </script>
 
-<!-- Under 640px each row is a card: the tick down its start, the title
-     across the card, then id, stage, to-dos and age. -->
+<!-- From 640px a row ledger that fits its place: Labels folds under 1025px
+     and Created under 900px (the columns the phone card leaves out), so the
+     fixed columns never outgrow it. Under 640px each row is a card: the tick
+     down its start, the title across the card, then id, stage, to-dos and
+     age. -->
 <div
   data-slot="ledger"
   class="group/ledger overflow-hidden rounded-lg bg-surface-raised shadow-tile"
@@ -231,7 +234,11 @@
               aria-sort={sort}
               class="w-(--col-w)"
               data-task-table-col={column.id}
-              fold={column.id === "created" ? "desk" : undefined}
+              fold={column.id === "created"
+                ? "desk"
+                : column.id === "labels"
+                  ? "wide"
+                  : undefined}
               scope="col"
               variant="band"
               style="--col-w: {COL_W[column.id] ?? ''}"
@@ -310,7 +317,7 @@
               fold={cell.column.id === "created"
                 ? "desk"
                 : cell.column.id === "labels"
-                  ? "phone"
+                  ? "wide"
                   : undefined}
               style="--col-w: {COL_W[cell.column.id] ?? ''}"
               variant="ledger-picks-stacks"

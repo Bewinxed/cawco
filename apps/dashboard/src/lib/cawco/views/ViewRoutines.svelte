@@ -750,7 +750,7 @@
               <!-- On a narrow ledger, Last and Next in the same order. -->
               <span
                 data-slot="folded"
-                class="hidden @max-routines-ledger-34rem/table:inline"
+                class="hidden @max-table-34rem/table:inline"
               >
                 · {words.lastShort}
                 <RunStatus

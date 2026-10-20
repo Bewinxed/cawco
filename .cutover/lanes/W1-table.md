@@ -28,7 +28,7 @@ defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfa
 | TableHead `band` | ledger header band: column head role (label, caps, tracking-caps), muted, 32px, surface-band, sticky top 0 | frontmatter ledger-header; Typography, Column head; Density | ActionsTable:94-107, RoutineDetail:173-184, ProjectSpend:469-584, ViewRoutines:922-989, ViewTable:66 |
 | TableHead `matrix-*` | matrix heads: content height, top edge, label role | The Role, Not Size Rule | ToolMatrix:305, :314, :366, UpdateTable:50-74 |
 | TableHead/TableCell `edge="end"` | a column on its end edge: a figure's, a row's trailing action | Tabular Figure Rule (figures in columns) | TaskTable:243, :244, :312, :321, ProjectSpend Spent/Last heads and cells, ViewRoutines:803 |
-| TableHead/TableCell `fold` (`phone`, `desk`, `measure`, `narrow`) | where a column folds away | Layout, Breakpoints; tokens c-block-routines (34rem), c-ledger-*-narrow (400px) | TaskTable:243, :312, :319; ViewRoutines:777, :790, :934, :939; RoutineDetail:181, :221 |
+| TableHead/TableCell `fold` (`wide`, `desk`, `measure`, `narrow`) | where a column folds away, by its own table's width, so a ledger fits its place and never scrolls sideways | Layout, Breakpoints (900 / 1024) and Fleet board ("fixed table layout … the name column takes what the fixed columns leave"); tokens c-block-routines (34rem), c-ledger-*-narrow (400px); container keys `table-34rem`, `table-400px` | TaskTable:243 (desk), Labels head and :319 (wide), :312 (desk); ViewRoutines:777, :790, :934, :939 (measure); RoutineDetail:181, :221 (narrow) |
 | TableCell `list`, `list-opens`, `ledger`, `ledger-stacks`, `ledger-picks-stacks`, `view`, `view-lead` | a ledger row's cell at the 44px pitch, tabular | frontmatter ledger-row; Density; Tabular Figure Rule | every `h-c-btn-h-lg` / `num` site |
 | TableCell `matrix`, `matrix-stacks-under` | a matrix cell whose words wrap | (matrix of tools and updates) | ToolMatrix:394, UpdateTable:114 |
 
@@ -103,7 +103,7 @@ kit-swap: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:229 TableCe
 kit-swap: apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte:312 TableCell ledger-picks-stacks edge="end" fold="desk" — done
 kit-swap: apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte:315 TableCell ledger-picks-stacks — done
 kit-swap: apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte:317 TableCell ledger-picks-stacks — done
-kit-swap: apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte:319 TableCell ledger-picks-stacks fold="phone" — done
+kit-swap: apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte:319 TableCell ledger-picks-stacks fold="wide" (its head too) — done
 kit-swap: apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte:321 TableCell ledger-picks-stacks edge="end" — done
 kit-swap: apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte:323 TableCell ledger-picks-stacks — done
 kit-swap: apps/dashboard/src/lib/cawco/updates/UpdateTable.svelte:114 TableCell matrix-stacks-under — done
@@ -178,8 +178,10 @@ None: no `@utility`, `@custom-variant` or component rule. The new spacing keys (
 .min-w-c-matrix-col-w { min-width: var(--c-matrix-col-w); }
 .\@container\/table { container-type: inline-size; container-name: table; }
 .\@max-desk\/table\:hidden { display: none; }            (inside @container table (width < 900px))
-.\@max-routines-ledger-34rem\/table\:hidden { display: none; }   (@container table (width < 34rem))
-.\@max-routines-ledger-399px\/table\:hidden { display: none; }   (@container table (width < 399px))
+.\@max-wide\/table\:hidden { display: none; }            (inside @container table (width < 1025px))
+.\@max-table-34rem\/table\:hidden { display: none; }      (@container table (width < 34rem))
+.\@max-table-400px\/table\:hidden { display: none; }      (@container table (width < 400px))
+.\@table-400px\/table\:ps-\(--detail-lead\) { padding-inline-start: var(--detail-lead); }   (@container table (width >= 400px))
 .max-phone\:grid-cols-\(--card-cols\) { grid-template-columns: var(--card-cols); }
 :is(.max-phone\:\*\:flex > *) { display: flex; }
 .max-phone\:\[\&_th\:not\(\:first-child\)\]\:hidden th:not(:first-child) { display: none; }
@@ -206,8 +208,18 @@ Dev server (`CAWCO_DEV_HUB_URL=http://127.0.0.1:59999 bunx vite dev`), one playw
 - fixed: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:181, :221 Took folds by the runs ledger's own width (under 400px, the width its `-narrow` tokens name) rather than the outer routines ledger's, so Result no longer shrinks to ~26px between a 399px and a ~420px outer ledger
 - fixed: apps/dashboard/src/lib/components/ui/table/table-cell.svelte base `p-3` (12px, off the ladder) → `px-space-3 py-space-2`; table-head base `px-3` → `px-space-3`, `text-left` → `text-start`
 - fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte card columns `1fr auto auto` → `minmax(0, 1fr) auto auto` (defensive-css, grid min-content)
-- gap: apps/dashboard/src/app.css:2398-2415 five `!important` (Streamdown and virtua inline styles, each documented "an inline declaration yields only to an important one") fail lane-relic-check's `important` count; app.css is additions-only for this lane — Delta T relics
-- gap: apps/dashboard/scripts/build-tokens.ts the container keys the folds read are named for one consumer (`routines-ledger-34rem`, `routines-ledger-399px`); a ledger tier name (`ledger-measure`, `ledger-narrow`) belongs in the generator's CONTAINERS — DESIGN.md Layout, Breakpoints
+- fixed: apps/dashboard/scripts/build-tokens.ts:273-275 CONTAINERS `routines-ledger-34rem`, `routines-ledger-399px`, `routines-ledger-400px` → `table-34rem`, `table-400px`, by CONTAINERS' own rule ("named by its container; a container with two widths names each by its width"): the container is `/table` now. One key per width: `@max-table-400px` is Tailwind's `width < 400px`, so the 399px twin went (the narrow fold and the `-narrow` widths now switch under 400px, as their tokens say: "in a ledger under 400px"). Readers: table.svelte (fold measure, narrow), ViewRoutines.svelte:753, RoutineDetail.svelte:116, :173, :177, :199, :212. `bun run tokens` rewrote theme.css's `--container-*`; its outputs outside this list were restored
+- fixed: apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte Labels folds under a 1025px ledger (`fold="wide"`, head and cells) and Created under 900px, so from 640px the ledger fits its place and never scrolls sideways (its fixed columns were 766px in a 640–900px ledger). Order: DESIGN.md ranks no task-ledger columns (its Fleet board line ranks the sessions ledger), so the parent's rule decides — the columns the phone card already leaves out go first, Labels and Created; Created already folded under 900px at 682ede287, Labels folds before it, under 1025px, so the title keeps ≥147px (at 900px with Labels it would have kept 22px). The kit's `phone` fold had only this caller and `wide` covers the phone too, so it went. Its band computes `position: sticky` (the band variant) but its container still scrolls sideways (`overflow-x: auto`, no `stickyBand`), so it does not hold, as at 682ede287
 - gap: apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:162 the runs ledger stays in an `overflow-hidden` rounded frame inside its opened routine, so its band does not hold; holding it would stack a second band under the routines band at the same top — left as is, my call
 - gap: apps/dashboard/src/lib/cawco/views/ViewRoutines.svelte:733 CollapsibleTrigger `border-none border-current` (dead `border-current`) is the CollapsibleTrigger lane's site
-- gap: apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte the task ledger's fixed columns (38+104+192+224+96+112 = 766px) exceed a 640–900px ledger, so it keeps its sideways scroller and no sticky band — DESIGN.md Fleet board folds columns to fit
+- (The app.css `!important` gap is closed: the relic gate now runs scripts/relics-check.ts, whose SANCTIONED list carries the five Streamdown/virtua overrides with their reasons.)
+
+## Task ledger fit (rendered)
+One playwright-core session, cached chromium_headless_shell-1248, 1440×900 viewport, `domcontentloaded`; a scratch route (deleted) drew TaskTable with ticks, labels and to-dos in sections of each width:
+```
+640px: container 640 scrollWidth=640 clientWidth=640 fits=true | labels none | created none | updated table-cell | title 98px | band position sticky, container overflow-x auto
+766px: container 766 scrollWidth=766 clientWidth=766 fits=true | labels none | created none | updated table-cell | title 224px | band position sticky, container overflow-x auto
+900px: container 900 scrollWidth=900 clientWidth=900 fits=true | labels none | created table-cell | updated table-cell | title 246px | band position sticky, container overflow-x auto
+1024px: container 1024 scrollWidth=1024 clientWidth=1024 fits=true | labels none | created table-cell | updated table-cell | title 370px | band position sticky, container overflow-x auto
+1025px: container 1025 scrollWidth=1025 clientWidth=1025 fits=true | labels table-cell | created table-cell | updated table-cell | title 147px | band position sticky, container overflow-x auto
+```
