@@ -17,6 +17,9 @@
  *   `RECHECK_MS`, armed when A's bench came, its rebalance pass over A's
  *   sessions) each say it stays; past that look the session is still on A,
  *   and its next turn runs there.
+ * - placement: with A at its plan limit keeping going, and B with plan
+ *   room, a new session under Fill first lands on B; pinned to A, it lands
+ *   on A and runs on A's extra usage.
  * - move: A set back to `move`. The session's next turn on A's extra usage
  *   ends, and within {@link MOVE_WITHIN_MS} it is on B; the turn after runs
  *   there, its conversation with it.
@@ -27,7 +30,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Account } from "../../../packages/core/src";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
-import { ACCOUNT, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  ACCOUNT,
+  MACHINE,
+  MODEL,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const B = "acct-scratch-fleet-b";
@@ -153,13 +163,65 @@ const standUp = async (kit: Kit): Promise<KitFleet> => {
       Date.now()
     );
   }
-  const placed = { strategy: "pinned", pinnedAccountId: ACCOUNT };
-  await call(fleet, "PUT", "/api/accounts/routing/anthropic", {
+  await route(fleet, { strategy: "pinned", pinnedAccountId: ACCOUNT });
+  return fleet;
+};
+
+/** Every new session placed by `placed`; at a limit, one moves with no wait for a close reset. */
+const route = (
+  fleet: KitFleet,
+  placed: { pinnedAccountId?: string; strategy: string }
+) =>
+  call(fleet, "PUT", "/api/accounts/routing/anthropic", {
     yours: placed,
     delegates: placed,
     atLimit: { move: true, waitMinutes: 0, moveWholeUnderK: 200 },
   });
-  return fleet;
+
+/** Where the hub would start a person's new session now, and why (`GET /api/accounts/placement`). */
+const preview = (fleet: KitFleet) =>
+  fleet.api<{ accountId: string | null; strategy: string; why: string }>(
+    `/api/accounts/placement?harness=claude&machineId=${MACHINE}&model=${MODEL.claude}&kind=yours`
+  );
+
+/**
+ * A new session while A is at its plan limit, keeping going on its extra
+ * usage, and B has plan room (placement.ts `roomFor`): under Fill first,
+ * which would take A first in order, it lands on B; pinned to A, it lands on
+ * A and its turn runs on A's extra usage, the hub's why saying it is pinned.
+ * Both are stopped after, and every session is pinned to A again.
+ */
+const placementLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
+  await route(fleet, { strategy: "fill-first" });
+  const fillWhy = await preview(fleet);
+  const fresh = await fleet.spawn("claude", "Fresh, fill first", fleet.workdir);
+  const freshOn = accountOf(fleet, fresh);
+  kit.check(
+    "placement: A at its plan limit keeping going on extra usage, B with plan room: a new session under Fill first (A first in order) lands on B",
+    freshOn === B &&
+      fillWhy.accountId === B &&
+      fillWhy.why.includes(
+        "its extra usage is used only when no account has plan room"
+      ),
+    `landed on ${freshOn}; the hub's why: ${fillWhy.why}`
+  );
+  await route(fleet, { strategy: "pinned", pinnedAccountId: ACCOUNT });
+  const pinWhy = await preview(fleet);
+  const pinned = await fleet.spawn("claude", "Fresh, pinned", fleet.workdir);
+  const pinnedOn = accountOf(fleet, pinned);
+  const first = await turn(fleet, pinned, "pinned turn");
+  kit.check(
+    "placement: pinned to A, a new session lands on A, its turn runs on A's extra usage, and the hub's why says it is pinned and keeps going",
+    pinnedOn === ACCOUNT &&
+      !!first &&
+      onAccount(first, ACCOUNT) &&
+      pinWhy.why.includes(
+        "past its plan, it runs on extra usage: it is pinned, and says to keep going at a plan limit"
+      ),
+    `landed on ${pinnedOn}; turn on ${first ? accountOfRequest(first) : "nothing"}; the hub's why: ${pinWhy.why}`
+  );
+  await fleet.stopSession(fresh);
+  await fleet.stopSession(pinned);
 };
 
 /** A's setting as `PATCH /api/accounts/:id` answers it after setting it to `to`. */
@@ -325,6 +387,7 @@ const run = async (kit: Kit) => {
     JSON.stringify(a ?? null)
   );
   const instance = await keepGoingLeg(kit, fleet);
+  await placementLeg(kit, fleet);
   if (instance) {
     await moveLeg(kit, fleet, instance);
   }

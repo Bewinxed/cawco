@@ -245,14 +245,20 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         var neverBackup: Bool
         /// The field's text: empty is no reserve.
         var reserve: String
+        /// At a plan limit with extra usage on: keep going here (on), or move (off).
+        var extraUsage: Bool
 
         init(_ account: FleetAccounts.Account) {
             nickname = account.label ?? ""
             hue = account.hue
             neverBackup = account.neverBackup
             reserve = account.reservePct.map { String(Int($0)) } ?? ""
+            extraUsage = account.atPlanLimit == "extra-usage"
         }
     }
+
+    /// Claude's provider (core `CLAUDE_PROVIDER`): extra usage is Claude's, so only its accounts have the choice.
+    private static let claudeProvider = "anthropic"
 
     private let accountId: String
     private var account: FleetAccounts.Account?
@@ -267,6 +273,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
     private var swatches: SwatchesView!
     private var limitsPart: UIView!
     private let neverBackup = SwitchField(label: Words.Accounts.Editor.neverBackup)
+    private let extraUsage = SwitchField(label: Words.Accounts.Editor.extraUsage)
     private let reserveField = KitField()
     private let reserveLine = metaLine(Words.Accounts.Editor.reserveInvalid, ink: Palette.statusFailInk)
     private var missing: UIView?
@@ -314,6 +321,12 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
             self?.drawFields()
         }
         neverBackup.toggle.accessibilityIdentifier = "account.neverBackup"
+        extraUsage.onChange = { [weak self] on in
+            self?.fields?.extraUsage = on
+            self?.drawFields()
+        }
+        extraUsage.toggle.accessibilityIdentifier = "account.extraUsage"
+        extraUsage.isHidden = true
         let label = KitLabel(TypeScale.typeBody, ink: Palette.inkRow, lines: 0)
         label.text = Words.Accounts.Editor.reserve
         reserveField.keyboardType = .numberPad
@@ -336,7 +349,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         reserve.axis = .vertical
         reserve.spacing = Space.space2
         reserveLine.isHidden = true
-        limitsPart = editorSection(.usage, hue: Palette.hueAmber500, Words.Accounts.Editor.limits, [neverBackup, reserve, reserveLine])
+        limitsPart = editorSection(.usage, hue: Palette.hueAmber500, Words.Accounts.Editor.limits, [neverBackup, extraUsage, reserve, reserveLine])
         limitsPart.isHidden = true
         parts.addArrangedSubview(limitsPart)
     }
@@ -372,6 +385,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         nickname.attributedPlaceholder = NSAttributedString(string: now.label != nil ? Words.Accounts.Editor.nickname : named,
                                                             attributes: [.foregroundColor: Palette.inkSubtle, .font: nickname.font as Any])
         limitsPart.isHidden = !FleetAccounts.limits(now.provider)
+        extraUsage.isHidden = now.provider != Self.claudeProvider
         machines.draw(now, view: view)
         drawFields()
     }
@@ -391,6 +405,8 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         swatches.set(fields.hue)
         (looksHead as? UIStackView)?.arrangedSubviews.first?.tintColor = AccountInk.color(fields.hue)
         neverBackup.set(on: fields.neverBackup, hint: nil)
+        extraUsage.set(on: fields.extraUsage,
+                       hint: fields.extraUsage ? Words.Accounts.Editor.extraUsageOn : Words.Accounts.Editor.extraUsageOff)
         if !reserveField.isFirstResponder, reserveField.text != fields.reserve { reserveField.text = fields.reserve }
         let valid = reservePct != nil
         fold(reserveLine, open: !valid)
@@ -416,9 +432,11 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         drawFields()
         let label = fields.nickname.trimmingCharacters(in: .whitespaces)
         let limits = FleetAccounts.limits(account.provider)
+        let claude = account.provider == Self.claudeProvider
         do {
             try await hub.patchAccount(account.id, label: .some(label.isEmpty ? nil : label), hue: fields.hue,
-                                       neverBackup: limits ? fields.neverBackup : nil, reservePct: limits ? .some(reserve) : .none)
+                                       neverBackup: limits ? fields.neverBackup : nil, reservePct: limits ? .some(reserve) : .none,
+                                       atPlanLimit: claude ? (fields.extraUsage ? "extra-usage" : "move") : nil)
             if let draftPath { ConfigDrafts.shared.drop(draftPath) }
             self.fields = nil
             requestRefresh()

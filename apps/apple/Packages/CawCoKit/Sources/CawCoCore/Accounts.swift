@@ -36,6 +36,9 @@ public enum FleetAccounts {
         public let order: Double
         public let neverBackup: Bool
         public let reservePct: Double?
+        /// At a plan limit with extra usage on (core `AtPlanLimit`): `move` to an
+        /// account with plan room, or keep going on its `extra-usage`.
+        public let atPlanLimit: String
         /// Who it is signed in as; nil until its first sign-in.
         public let identity: Identity?
     }
@@ -427,13 +430,15 @@ public extension HubConnection {
         return try JSONDecoder().decode(Made.self, from: data).id
     }
 
-    /// Changes an account's nickname (`.some(nil)`: its email), colour, order or limits.
+    /// Changes an account's nickname (`.some(nil)`: its email), colour, order, limits,
+    /// or what its sessions do at a plan limit with extra usage on (`atPlanLimit`).
     func patchAccount(_ id: String, label: String?? = .none, hue: String? = nil, neverBackup: Bool? = nil,
-                      order: Int? = nil, reservePct: Int?? = .none) async throws {
+                      order: Int? = nil, reservePct: Int?? = .none, atPlanLimit: String? = nil) async throws {
         var body: [String: Any] = [:]
         if case let .some(label) = label { body["label"] = label ?? NSNull() }
         if let hue { body["hue"] = hue }
         if let neverBackup { body["neverBackup"] = neverBackup }
+        if let atPlanLimit { body["atPlanLimit"] = atPlanLimit }
         if let order { body["order"] = order }
         if case let .some(reserve) = reservePct { body["reservePct"] = reserve ?? NSNull() }
         _ = try await accountsWrite("api/accounts/\(Self.part(id))", method: "PATCH", body: body)

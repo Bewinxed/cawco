@@ -51049,7 +51049,7 @@
         ]
       },
       "AtPlanLimit": {
-        "description": "What a session on an account does once the account reaches a plan limit\nwhile its extra usage is on (Claude Code's `overageStatus` allowed): moves\nto an account with plan room (`move`, the default), or keeps going on this\naccount's extra usage (`extra-usage`). With extra usage off or refused, the\naccount is at its limit as any other is, whichever it says.",
+        "description": "What a session on an account does once the account reaches a plan limit\nwhile its extra usage is on (Claude Code's `overageStatus` allowed): moves\nto an account with plan room (`move`, the default), or keeps going on this\naccount's extra usage (`extra-usage`). With extra usage off or refused, the\naccount is at its limit as any other is, whichever it says. It governs a\nsession that has reached the limit: a new session goes to plan room first,\nand to a keep-going account's extra usage only when no account it may run\non has plan room, or when Pinned pins that account.",
         "type": "string",
         "enum": [
           "extra-usage",

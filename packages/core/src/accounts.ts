@@ -216,7 +216,10 @@ export interface AccountIdentity {
  * while its extra usage is on (Claude Code's `overageStatus` allowed): moves
  * to an account with plan room (`move`, the default), or keeps going on this
  * account's extra usage (`extra-usage`). With extra usage off or refused, the
- * account is at its limit as any other is, whichever it says.
+ * account is at its limit as any other is, whichever it says. It governs a
+ * session that has reached the limit: a new session goes to plan room first,
+ * and to a keep-going account's extra usage only when no account it may run
+ * on has plan room, or when Pinned pins that account.
  */
 export type AtPlanLimit = "move" | "extra-usage";
 

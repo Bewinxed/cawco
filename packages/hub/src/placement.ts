@@ -251,10 +251,16 @@ const byOrder = (list: Account[]): Account[] =>
 class Usage {
   readonly #input: PlacementInput;
   readonly #scope: string | null;
+  /**
+   * Why a keep-going account's extra usage counts as room here, in words
+   * {@link said} quotes; undefined: only plan room counts.
+   */
+  readonly #credits: string | undefined;
 
-  constructor(input: PlacementInput) {
+  constructor(input: PlacementInput, credits?: string) {
     this.#input = input;
     this.#scope = modelScope(input.model);
+    this.#credits = credits;
   }
 
   /** What the account is called beside the others (core `accountNameAmong`). */
@@ -289,13 +295,28 @@ class Usage {
   }
 
   /**
-   * Whether its plan limits stop nothing for this session: it keeps going on
-   * extra usage at its plan limit (core `keepsGoingOnExtraUsage`), and the
-   * session is placed fresh. A session carried off its account at a limit
+   * Whether its plan limits stop nothing for this session: extra usage
+   * counts here ({@link choose} says when), it keeps going on extra usage at
+   * its plan limit (core `keepsGoingOnExtraUsage`), and the session is placed
+   * fresh. A session carried off its account at a limit
    * ({@link PlacementInput.exclude}) goes only to plan room.
    */
   onExtraUsage = (account: Account): boolean =>
+    this.#credits !== undefined &&
     this.#input.exclude === undefined &&
+    keepsGoingOnExtraUsage(
+      account,
+      this.#input.readings.find((one) => one.accountId === account.id)
+    );
+
+  /**
+   * Whether its extra usage would take this session past its plan, here where
+   * only plan room counts: a fresh session, an account that keeps going.
+   */
+  creditsWait = (account: Account): boolean =>
+    this.#credits === undefined &&
+    this.#input.exclude === undefined &&
+    this.binding(account.id) >= 100 &&
     keepsGoingOnExtraUsage(
       account,
       this.#input.readings.find((one) => one.accountId === account.id)
@@ -439,7 +460,7 @@ class Usage {
     const account = this.#input.accounts.find((one) => one.id === id);
     const credits =
       account && this.binding(id) >= 100 && this.onExtraUsage(account)
-        ? "; past its plan, it keeps going on extra usage, as its setting says"
+        ? `; past its plan, it runs on extra usage: ${this.#credits}`
         : "";
     return `5-hour ${pct(this.session(id))}, weekly ${pct(this.weekly(id))}${credits}`;
   }
@@ -456,7 +477,10 @@ const pinned = (
 ): Choice => {
   const account = candidates.find((one) => one.id === pinnedId);
   if (account) {
-    return { account, why: `${usage.name(account)} is pinned.` };
+    return {
+      account,
+      why: `${usage.name(account)} is pinned (${usage.said(account.id)}).`,
+    };
   }
   const backup = byOrder(candidates.filter((one) => !one.neverBackup)).find(
     usage.headroom
@@ -636,26 +660,66 @@ const eligible = (
 };
 
 /**
- * The strategies' part: drop the benched, the past-reserve and the spent,
- * prefer the delegate type's account, else the kind's strategy. With no
- * account left, nothing starts: the refusal says when the first one is back
- * ({@link noRoomRefusal}).
+ * The accounts that can take the session, and how they are read. Plan room
+ * first: a keep-going account's extra usage (core `AtPlanLimit`) is room for
+ * a new session only when no account it may run on has plan room, or when
+ * Pinned pins that account, since the pin and its setting together say to
+ * stay there. A session leaving its account at the limit goes only where a
+ * reading shows room.
+ */
+const roomFor = (
+  input: PlacementInput,
+  allowed: Account[],
+  pinnedId: string | undefined
+): { candidates: Account[]; usage: Usage } => {
+  const carry = input.exclude !== undefined;
+  const among = (usage: Usage) => ({
+    usage,
+    candidates: allowed.filter(
+      (account) => usage.room(account) && (!carry || usage.read(account))
+    ),
+  });
+  const plan = among(new Usage(input));
+  const onPin = among(
+    new Usage(input, "it is pinned, and says to keep going at a plan limit")
+  );
+  const pinnedOnCredits =
+    input.routing[input.kind].strategy === "pinned" &&
+    !plan.candidates.some((one) => one.id === pinnedId) &&
+    onPin.candidates.some((one) => one.id === pinnedId);
+  if (pinnedOnCredits) {
+    return onPin;
+  }
+  return plan.candidates.length > 0
+    ? plan
+    : among(
+        new Usage(
+          input,
+          "no account this session may run on has plan room, and it says to keep going at a plan limit"
+        )
+      );
+};
+
+/**
+ * The strategies' part: drop the benched, the past-reserve and the spent
+ * ({@link roomFor}), prefer the delegate type's account, else the kind's
+ * strategy. With no account left, nothing starts: the refusal says when the
+ * first one is back ({@link noRoomRefusal}).
  */
 const choose = (
   input: PlacementInput,
   allowed: Account[],
   name: (id: string) => string
 ): Placement => {
-  const usage = new Usage(input);
-  // A session leaving its account at the limit goes only where a reading
-  // shows room.
-  const carry = input.exclude !== undefined;
-  const candidates = allowed.filter(
-    (account) => usage.room(account) && (!carry || usage.read(account))
-  );
+  const choice = input.routing[input.kind];
+  const pinnedId = choice.pinnedAccountId ?? byOrder(input.accounts)[0]?.id;
+  const { usage, candidates } = roomFor(input, allowed, pinnedId);
   const outNote = allowed
     .filter((account) => !candidates.includes(account))
     .map((account) => {
+      if (usage.creditsWait(account)) {
+        return `${usage.name(account)} is past its plan, and its extra usage is used only when no account has plan room`;
+      }
       if (usage.benched(account.id)) {
         return `${usage.name(account)} is benched until its window resets`;
       }
@@ -678,8 +742,6 @@ const choose = (
     };
   }
 
-  const choice = input.routing[input.kind];
-  const pinnedId = choice.pinnedAccountId ?? byOrder(input.accounts)[0]?.id;
   const decided = decide(
     choice.strategy,
     candidates,
