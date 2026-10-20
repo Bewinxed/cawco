@@ -4093,6 +4093,19 @@
       },
       "$description": "A sheet's inspector beside the page on a desk (live components spec §5): a prop's name over its control, a five-segment variant or a field at the body size, and the story row's list with its four 30px buttons."
     },
+    "c-sheet-inspector-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 506.4,
+        "unit": "px"
+      },
+      "$description": "An inspector as a phone's sheet over the page's foot: at most 60% of the screen, the page above it live (DESIGN.md, A sheet's inspector: \"at most 60% of the well\"; the workflow editor's inspector).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "60dvh"
+        }
+      }
+    },
     "c-sheet-inspector-head-h": {
       "$type": "dimension",
       "$value": {

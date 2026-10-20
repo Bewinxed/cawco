@@ -27,7 +27,7 @@
     statusWord,
   } from "#lib/cawco/session-status.js";
   import RunBlock from "#lib/cawco/transcript/RunBlock.svelte";
-  import { runHref } from "#lib/cawco/workflow-runs.js";
+  import { runHref, runTabId } from "#lib/cawco/workflow-runs.js";
   import {
     refreshWorkflowLog,
     refreshWorkflowRun,
@@ -38,6 +38,7 @@
     cancelWorkflowRun,
     rerunWorkflow,
   } from "#lib/cawco/workflows.js";
+  import SessionStatus from "#lib/cawco/workspace/SessionStatus.svelte";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
@@ -263,6 +264,9 @@
       <div
         class="flex min-w-0 flex-col gap-space-1 text-size-meta leading-meta"
       >
+        <!-- Where the run stands, in words: its glyph, then its word
+             (DESIGN.md, The Glyph, Word, Hue Rule), as its tab's glyph. -->
+        <SessionStatus sessionId={runTabId(run.id)} />
         <p class="m-0 text-ink-muted">Started {startedAt}</p>
         <!-- A command of the run held by its machine's pause, or queued for
              a shared slot: said where the run's facts are, until it goes. -->

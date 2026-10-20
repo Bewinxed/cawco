@@ -148,8 +148,9 @@ const MACHINES_EMPTY = "h1[data-slot=title]";
 const JUMP = `${OPEN_POPOVER}[aria-label="Jump to"]`;
 const NEEDS_PANEL = `${OPEN_POPOVER}[aria-label="Needs you"]`;
 const PEEK_SHEET = "[data-peek-sheet][data-state=open]";
-/** A graph step's settings in the inspector: its harness, one chosen. */
-const STEP_SETTINGS = "fieldset:has(> legend) button[aria-pressed=true]";
+/** A graph step's settings in the inspector: its harness, one chosen (a single ToggleGroup's item is a radio). */
+const STEP_SETTINGS =
+  "fieldset:has(> legend) [data-slot=toggle-group-item][data-state=on]";
 /** A workflow page's tab, chosen. */
 const workflowTab = (value: string) =>
   `[role=tablist][aria-label="Workflow views"] [role=tab][data-value=${value}][aria-selected=true]`;
@@ -2444,13 +2445,14 @@ export const SURFACES: Surface[] = [
         ready: { shows: workflowTab("runs") },
       },
       {
-        // Run: the launch dialog, opened and not sent.
+        // Run: the launch form, opened and not sent (a popover under the
+        // button on a desk, the bottom sheet on a phone).
         name: "launch",
         route: (s) => `/workflows/${s.workflow}`,
         act: press(RUN_WORKFLOW),
         root: "body",
         ready: {
-          shows: `${OPEN_DIALOG} [data-slot=dialog-title]`,
+          shows: `${OPEN_POPOVER} [data-slot=popover-title], [data-slot=drawer-content][data-state=open] [data-slot=drawer-title]`,
           says: /^Run /,
         },
       },

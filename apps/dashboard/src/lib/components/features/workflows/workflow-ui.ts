@@ -94,6 +94,25 @@ export default async function (w: Workflow<typeof inputs>) {
 }
 `;
 
+/**
+ * One entry of a list the inspector edits (a node's inputs, rules, cases,
+ * options, questions, outputs, ports, a schema's fields): ruled off the one
+ * above on the inspector's own surface, never a well of its own inside it.
+ */
+export const ENTRY =
+  "flex flex-col gap-space-3 border-t border-t-border-hairline pt-space-3";
+
+/** What the inspector holds, by name: the node's kind, the edge, or the workflow's settings. */
+export function inspectorTitle(
+  node?: WorkflowNode,
+  edge?: WorkflowGraph["edges"][number]
+): string {
+  if (node) {
+    return `${kinds.find((entry) => entry.kind === node.kind)?.title ?? node.kind} inspector`;
+  }
+  return edge ? "Edge inspector" : "Workflow settings";
+}
+
 const LINE_PREFIX = /^Line \d+:\s*/;
 /**
  * The hub prefixes a typecheck diagnostic with its line number. The gutter and
@@ -167,6 +186,62 @@ export function newNode(
       throw new Error(`Unknown node kind: ${kind}`);
   }
 }
+
+/**
+ * The gap between a dot at a run's end and its edge's Delete button, which
+ * stands in the run's middle (`space-8` from the dot, WorkflowEdge): their
+ * areas stop at its midpoint (DESIGN.md, The 44 Touch Rule).
+ */
+export const RUN_HIT_GAP =
+  "calc(var(--space-8) - (var(--c-btn-h-xs) + var(--c-graph-handle)) / 2)";
+
+/** A node's box on the canvas, its top-left corner and its size. */
+interface Box {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * Where each node stands on the canvas, so no two ever overlap: its own
+ * place where that is clear, else moved on along the flow (left to right,
+ * the way a graph's edges run) until it clears every node placed before it
+ * by the canvas's gaps (`across` between neighbours across the flow,
+ * `along` where an edge crosses from one to the next). Nodes are
+ * placed in their own order along the flow, so the graph keeps its shape and
+ * every edge still reads source to target. `size` is each node's measured
+ * box; `gap` the two gaps in px.
+ */
+export function placeNodes(
+  nodes: WorkflowNode[],
+  size: (id: string) => { width: number; height: number },
+  gap: { across: number; along: number }
+): Map<string, { x: number; y: number }> {
+  const placed: Box[] = [];
+  const at = new Map<string, { x: number; y: number }>();
+  const order = [...nodes].sort(
+    (a, b) => a.position.x - b.position.x || a.position.y - b.position.y
+  );
+  for (const node of order) {
+    const box: Box = { ...node.position, ...size(node.id) };
+    let blocker = placed.find((other) => clash(box, other, gap));
+    while (blocker) {
+      box.x = blocker.x + blocker.width + gap.along;
+      blocker = placed.find((other) => clash(box, other, gap));
+    }
+    placed.push(box);
+    at.set(node.id, { x: box.x, y: box.y });
+  }
+  return at;
+}
+
+/** Two boxes nearer each other than the gaps allow. */
+const clash = (a: Box, b: Box, gap: { across: number; along: number }) =>
+  a.x < b.x + b.width + gap.along &&
+  b.x < a.x + a.width + gap.along &&
+  a.y < b.y + b.height + gap.across &&
+  b.y < a.y + a.height + gap.across;
 
 export function upstream(graph: WorkflowGraph, nodeId: string): WorkflowNode[] {
   const seen = new Set<string>([nodeId]);

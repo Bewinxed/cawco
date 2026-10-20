@@ -26,7 +26,13 @@
   import SchemaBuilder from "./SchemaBuilder.svelte";
   import TemplateInput from "./TemplateInput.svelte";
   import WhenFields from "./WhenFields.svelte";
-  import { JEV_TYPE_NAMES, templatePaths, upstream } from "./workflow-ui";
+  import {
+    ENTRY,
+    inspectorTitle,
+    JEV_TYPE_NAMES,
+    templatePaths,
+    upstream,
+  } from "./workflow-ui";
 
   let {
     graph,
@@ -41,6 +47,7 @@
     ondescription,
     onselect,
     editBody,
+    sheet = false,
   }: {
     graph: WorkflowGraph;
     node?: WorkflowNode;
@@ -54,7 +61,14 @@
     ondescription: (value: string) => void;
     onselect: (id?: string) => void;
     editBody: (id: string) => void;
+    /**
+     * It stands in a sheet (the narrow editor's drawer): the sheet's header
+     * names what it holds (inspectorTitle), so it draws no head of its own,
+     * and its edges are the sheet's.
+     */
+    sheet?: boolean;
   } = $props();
+  const title = $derived(inspectorTitle(node, edge));
   /**
    * The Add rule and Connect selects are actions, not settings: each stands
    * on its placeholder at rest. Their value is held here and set back to ""
@@ -202,7 +216,8 @@
 
 <section
   aria-label="Workflow inspector"
-  class="flex min-w-0 flex-col gap-space-4 px-space-4 pt-space-5 pb-space-8 type-body text-ink-strong"
+  class="flex min-w-0 flex-col gap-space-4 px-space-4 pt-space-5 pb-space-8 type-body text-ink-strong data-sheet:px-0 data-sheet:pt-space-3 data-sheet:pb-space-4"
+  data-sheet={sheet || undefined}
 >
   <!-- What is selected gives way to the next in place: the two cross-fade
        (the one leaving is taken out of the flow) while the box tweens to
@@ -215,14 +230,23 @@
     {#key node?.id ?? edge?.id ?? "settings"}
       <div class="flex min-w-0 flex-col gap-space-4" in:crossIn out:crossOut>
         {#if node}
-          <div class="flex flex-wrap items-center justify-between gap-space-2">
-            <h2 class="type-label">
-              {node.kind === "step" ? "Step" : node.kind} inspector
-            </h2>
-            <Button onclick={() => onselect()} type="button" variant="outline">
-              Settings
-            </Button>
-          </div>
+          <!-- In the phone sheet its head is the sheet's: the title, then
+               Settings beside Close (WorkflowEditor). -->
+          {#if !sheet}
+            <div
+              class="flex flex-wrap items-center justify-between gap-space-2"
+            >
+              <h2 class="type-label">{title}</h2>
+              <Button
+                class="ms-auto"
+                onclick={() => onselect()}
+                type="button"
+                variant="outline"
+              >
+                Settings
+              </Button>
+            </div>
+          {/if}
           <label class="flex flex-col gap-space-2 type-label text-ink-muted"
             >Title<Input
               oninput={(event) => patch({ title: event.currentTarget.value })}
@@ -233,14 +257,12 @@
             >Node ID<Input
               face="mono"
               readonly
-              text="label"
+              text="meta"
               value={node.id}
             /></label
           >
           {#if node.kind === "step"}
-            <div
-              class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
-            >
+            <div class="flex flex-col gap-space-3">
               <label class="flex flex-col gap-space-2 type-label text-ink-muted"
                 >Run on<NativeSelect
                   class="w-full"
@@ -254,7 +276,7 @@
                 </NativeSelect></label
               >
               <fieldset>
-                <legend class="mb-space-2 text-size-label font-medium"
+                <legend class="mb-space-2 type-label text-ink-muted"
                   >Harness</legend
                 >
                 <ToggleGroup.Root
@@ -362,9 +384,7 @@
           {:else if node.kind === "start"}
             <h3 class="type-label">Inputs</h3>
             {#each node.inputs as entry, index (index)}
-              <div
-                class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
-              >
+              <div class={ENTRY}>
                 <div
                   class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1"
                 >
@@ -465,9 +485,7 @@
             </Button>
           {:else if node.kind === "check"}
             {#each node.rules as entry, index (index)}
-              <div
-                class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
-              >
+              <div class={ENTRY}>
                 <div
                   class="flex flex-wrap items-center justify-between gap-space-2"
                 >
@@ -564,68 +582,64 @@
               </NativeSelect></label
             >
           {:else if node.kind === "branch"}
-            {#each node.cases as entry, index (index)}
-              <div
-                class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
-              >
-                {#if index === node.cases.length - 1}
-                  <h3 class="type-label">Else</h3>
-                {:else}
-                  <label
-                    class="flex flex-col gap-space-2 type-label text-ink-muted"
-                    >Port label<Input
-                      oninput={(event) =>
-                        node?.kind === "branch" &&
-                        patch({
-                          cases: node.cases.map((item, i) =>
-                            i === index
-                              ? { ...item, port: event.currentTarget.value }
-                              : item
-                          ),
-                        })}
-                      value={entry.port}
-                    /></label
-                  ><WhenFields
-                    onchange={(when) =>
+            <!-- The cases in order, Add case under them, then Else on its
+                 own last row: what runs when no case matches. -->
+            {#each node.cases.slice(0, -1) as entry, index (index)}
+              <div class={ENTRY}>
+                <label
+                  class="flex flex-col gap-space-2 type-label text-ink-muted"
+                  >Port label<Input
+                    oninput={(event) =>
                       node?.kind === "branch" &&
                       patch({
                         cases: node.cases.map((item, i) =>
-                          i === index ? { ...item, when } : item
+                          i === index
+                            ? { ...item, port: event.currentTarget.value }
+                            : item
                         ),
                       })}
-                    value={entry.when}
-                  />
-                  <div class="flex flex-wrap items-center gap-space-2">
-                    <Button
-                      variant="outline"
-                      disabled={index === 0}
-                      onclick={() => {
-                        if (node?.kind !== "branch") {
-                          return;
-                        }
-                        const cases = [...node.cases];
-                        [cases[index - 1], cases[index]] = [
-                          cases[index],
-                          cases[index - 1],
-                        ];
-                        patch({ cases });
-                      }}
-                      type="button"
-                    >
-                      Move up
-                    </Button><Button
-                      variant="outline"
-                      onclick={() =>
-                        node?.kind === "branch" &&
-                        patch({
-                          cases: node.cases.filter((_, i) => i !== index),
-                        })}
-                      type="button"
-                    >
-                      Remove case
-                    </Button>
-                  </div>
-                {/if}
+                    value={entry.port}
+                  /></label
+                ><WhenFields
+                  onchange={(when) =>
+                    node?.kind === "branch" &&
+                    patch({
+                      cases: node.cases.map((item, i) =>
+                        i === index ? { ...item, when } : item
+                      ),
+                    })}
+                  value={entry.when}
+                />
+                <div class="flex flex-wrap items-center gap-space-2">
+                  <Button
+                    variant="outline"
+                    disabled={index === 0}
+                    onclick={() => {
+                      if (node?.kind !== "branch") {
+                        return;
+                      }
+                      const cases = [...node.cases];
+                      [cases[index - 1], cases[index]] = [
+                        cases[index],
+                        cases[index - 1],
+                      ];
+                      patch({ cases });
+                    }}
+                    type="button"
+                  >
+                    Move up
+                  </Button><Button
+                    variant="destructive"
+                    onclick={() =>
+                      node?.kind === "branch" &&
+                      patch({
+                        cases: node.cases.filter((_, i) => i !== index),
+                      })}
+                    type="button"
+                  >
+                    Remove case
+                  </Button>
+                </div>
               </div>
             {/each}
             <Button
@@ -646,6 +660,9 @@
             >
               Add case
             </Button>
+            <div class={ENTRY}>
+              <h3 class="type-label">Else</h3>
+            </div>
           {:else if node.kind === "map"}
             <TemplateInput
               label="Over (array path)"
@@ -702,9 +719,7 @@
               value={node.question}
             />
             {#each node.options as entry, index (index)}
-              <div
-                class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
-              >
+              <div class={ENTRY}>
                 <TemplateInput
                   label="Option {index + 1}"
                   onchange={(label) =>
@@ -802,9 +817,7 @@
             </p>
             <h3 class="type-label">Questions · asked in one call</h3>
             {#each node.questions as entry, index (index)}
-              <div
-                class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
-              >
+              <div class={ENTRY}>
                 <div
                   class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1"
                 >
@@ -1058,9 +1071,7 @@
             >
           {:else if node.kind === "end"}
             {#each Object.entries(node.outputs) as [name, path], index (index)}
-              <div
-                class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
-              >
+              <div class={ENTRY}>
                 <label
                   class="flex flex-col gap-space-2 type-label text-ink-muted"
                   >Output name<Input
@@ -1122,9 +1133,7 @@
             >
               <h3 class="type-label">Connections</h3>
               {#each workflowPorts(node) as port (port)}
-                <div
-                  class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
-                >
+                <div class={ENTRY}>
                   <label
                     class="flex flex-col gap-space-2 type-label text-ink-muted"
                     >Connect {port} to<NativeSelect
@@ -1202,7 +1211,9 @@
             Delete node
           </Button>
         {:else if edge}
-          <h2 class="type-label">Edge inspector</h2>
+          {#if !sheet}
+            <h2 class="type-label">{title}</h2>
+          {/if}
           <p class="type-meta text-ink-muted">
             {edge.from.node}
             · {edge.from.port} → {edge.to.node}
@@ -1237,7 +1248,9 @@
             Delete edge
           </Button>
         {:else}
-          <h2 class="type-label">Workflow settings</h2>
+          {#if !sheet}
+            <h2 class="type-label">{title}</h2>
+          {/if}
           <label class="flex flex-col gap-space-2 type-label text-ink-muted"
             >Description<Textarea
               oninput={(event) => ondescription(event.currentTarget.value)}
@@ -1305,7 +1318,11 @@
     {/key}
   </div>
   <section aria-label="Problems" class="flex min-w-0 flex-col gap-space-4">
-    <h2 data-slot="num" class="num type-label">Problems · {problems.length}</h2>
+    <h2 class="type-label">
+      Problems{#if problems.length}<span data-slot="num" class="num"
+          >&nbsp;· {problems.length}</span
+        >{/if}
+    </h2>
     {#if !problems.length}
       <p class="type-meta text-ink-muted">No problems found.</p>
     {/if}

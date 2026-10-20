@@ -16,6 +16,7 @@
   import "#lib/vendor-css/xyflow.css";
   import { onMount, untrack } from "svelte";
   import { newId } from "#lib/cawco/id.js";
+  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { workflowState } from "#lib/cawco/workflow-state.svelte.js";
   import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
@@ -27,7 +28,7 @@
   import WorkflowCanvasTools from "./WorkflowCanvasTools.svelte";
   import WorkflowEdge from "./WorkflowEdge.svelte";
   import WorkflowNodeCard from "./WorkflowNodeCard.svelte";
-  import { upstream } from "./workflow-ui";
+  import { placeNodes, upstream } from "./workflow-ui";
 
   let {
     graph,
@@ -82,17 +83,80 @@
       }
     };
   }
+  /**
+   * The least zoom a fit takes: a node's name (the label role) stays 10px,
+   * so a fit goes down only that far and a larger graph is panned. The
+   * reader's own zoom keeps the flow's range (`ZOOM`).
+   */
+  const READABLE_PX = 10;
+  let floor = $state<number>(ZOOM.minZoom);
+  let fitter = $state<ReturnType<typeof FlowAutoFit>>();
+  /**
+   * The gaps between nodes, in px: `space-5` across the flow (DESIGN.md Map
+   * mode's neighbours), and along it the run an edge crosses, two `space-8`
+   * (as the Canvas view's ranks stand, task-graph.ts), room for an edge's
+   * Delete button clear of the dots at both its ends.
+   */
+  let gap = $state.raw({ across: 0, along: 0 });
+  /** Each node's box as Svelte Flow measured it, by id. */
+  let sizes = $state.raw(new Map<string, { width: number; height: number }>());
   onMount(() => {
+    const root = getComputedStyle(document.documentElement);
+    const label =
+      Number.parseFloat(root.getPropertyValue("--text-label")) *
+      Number.parseFloat(root.fontSize);
+    floor =
+      label > 0 ? Math.min(FIT.maxZoom, READABLE_PX / label) : ZOOM.minZoom;
+    gap = { across: numberOf("--space-5"), along: numberOf("--space-8") * 2 };
     mounted = true;
   });
   const nameOf = (key: string | undefined) =>
     workflowState.workflows.find((entry) => entry.id === key)?.name;
+  /** Where each node is drawn: its stored place, cleared of every other node. */
+  const placed = $derived(
+    placeNodes(
+      graph.nodes,
+      (id) => sizes.get(id) ?? { width: numberOf("--c-wf-node-w"), height: 0 },
+      mounted ? gap : { across: 0, along: 0 }
+    )
+  );
+  /** The placement as a key: a new one refits a view that is still a fit. */
+  const layout = $derived(
+    [...placed].map(([id, at]) => `${id}:${at.x},${at.y}`).join(" ")
+  );
+  // What Svelte Flow measured of each node, once it changes: a node's
+  // height (its summary, its ports) decides what it must clear.
+  $effect(() => {
+    const measured = new Map(
+      nodes.flatMap((node) =>
+        node.measured?.width && node.measured.height
+          ? [
+              [
+                node.id,
+                { width: node.measured.width, height: node.measured.height },
+              ] as const,
+            ]
+          : []
+      )
+    );
+    const known = untrack(() => sizes);
+    const same =
+      measured.size === known.size &&
+      [...measured].every(
+        ([id, box]) =>
+          known.get(id)?.width === box.width &&
+          known.get(id)?.height === box.height
+      );
+    if (!same) {
+      sizes = measured;
+    }
+  });
   $effect(() => {
     const before = new Map(untrack(() => nodes).map((node) => [node.id, node]));
     nodes = graph.nodes.map((node) => ({
       id: node.id,
       type: "workflow",
-      position: node.position,
+      position: placed.get(node.id) ?? node.position,
       // A node keeps what Svelte Flow measured of it across a rebuild.
       // Handed in unmeasured, it is drawn hidden until measured again: each
       // pick hid every node for a frame, and the node just picked, hidden
@@ -109,25 +173,35 @@
           node.kind === "workflow" ? nameOf(node.workflowId) : undefined,
       },
     }));
-    edges = graph.edges.map((edge) => ({
-      id: edge.id,
-      type: "workflow",
-      source: edge.from.node,
-      sourceHandle: edge.from.port,
-      target: edge.to.node,
-      selected: selection === edge.id,
-      data: {
-        label: [
-          edge.when
-            ? `${edge.when.path} ${edge.when.op} ${edge.when.value === undefined ? "" : JSON.stringify(edge.when.value)}`
-            : "",
-          edge.maxIterations ? `×${edge.maxIterations}` : "",
-        ]
-          .filter(Boolean)
-          .join(" · "),
-        remove,
-      },
-    }));
+    edges = graph.edges.map((edge) => {
+      return {
+        id: edge.id,
+        type: "workflow",
+        source: edge.from.node,
+        sourceHandle: edge.from.port,
+        target: edge.to.node,
+        selected: selection === edge.id,
+        data: {
+          /**
+           * Another edge leaves the same node, from the next of its stacked
+           * ports: their Delete buttons stand a port's pitch apart.
+           */
+          stacked: graph.edges.some(
+            (other) =>
+              other.id !== edge.id && other.from.node === edge.from.node
+          ),
+          label: [
+            edge.when
+              ? `${edge.when.path} ${edge.when.op} ${edge.when.value === undefined ? "" : JSON.stringify(edge.when.value)}`
+              : "",
+            edge.maxIterations ? `×${edge.maxIterations}` : "",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          remove,
+        },
+      };
+    });
   });
   function remove(id: string) {
     onchange?.({
@@ -182,12 +256,16 @@
         style:--xy-handle-border-color="var(--surface-raised)"
       >
         {#if mounted}
+          <!-- The attribution stands at the top right: the canvas tools
+               float at the bottom centre, and on a phone they run under
+               the bottom corner. -->
           <SvelteFlow
+            attributionPosition="top-right"
             colorMode={theme.current}
             deleteKey={null}
             {edgeTypes}
             fitView
-            fitViewOptions={FIT}
+            fitViewOptions={{ ...FIT, minZoom: floor }}
             {...ZOOM}
             nodesConnectable
             nodesDraggable={!pan}
@@ -219,7 +297,13 @@
             bind:nodes
           >
             <Background gap={16} size={1} variant={BackgroundVariant.Dots} />
-            <FlowAutoFit {held} nodeCount={graph.nodes.length} />
+            <FlowAutoFit
+              bind:this={fitter}
+              {held}
+              {layout}
+              minZoom={floor}
+              nodeCount={graph.nodes.length}
+            />
             <FlowZoomTracker
               onZoomChange={(value) => {
                 zoom = value;
@@ -229,6 +313,7 @@
               ><WorkflowCanvasTools
                 {canRedo}
                 {canUndo}
+                fit={() => fitter?.fit()}
                 onfit={() => {
                   held = false;
                 }}

@@ -1508,7 +1508,14 @@
     inline-size: var(--icon-md);
     block-size: var(--icon-md);
   }
-  [data-nest-host] [data-slot="head"] > [data-slot="mark"] svg {
+  /* The session hover card's identity tile (its head, beside its tone):
+     the sprite in the mark glyph's ink on the tile's hue. Keyed on that
+     head alone, so another nest host's head mark (a run's status glyph,
+     RunBlock) keeps its own ink. */
+  [data-nest-host]
+    > [data-slot="head"]:has(> [data-session-hover-tone])
+    > [data-slot="mark"]
+    svg {
     inline-size: var(--icon-sm);
     block-size: var(--icon-sm);
     color: var(--mark-glyph);
@@ -2952,7 +2959,9 @@
    Offset by that half pixel, an area answers a press from 22px before its
    control's centre to 22px after it, and two areas that meet at a midpoint
    meet there for the press too, instead of the later one taking the
-   earlier one's last half pixel. */
+   earlier one's last half pixel.
+   --hit-scale is the zoom of a scaled canvas (the workflow graph), so the
+   area stays 44px on screen there, as pointer-hit's stays 24px. */
 @utility touch-hit {
   @media (pointer: coarse) {
     :where(&) {
@@ -2963,12 +2972,18 @@
       position: absolute;
       translate: 0.5px 0.5px;
       inset-inline: max(
-        min(0px, calc(50% - var(--c-touch-floor) / 2)),
-        calc(var(--hit-gap-x, var(--c-touch-floor)) / -2 - var(--hit-edge, 0px))
+        min(0px, calc(50% - var(--c-touch-floor) / 2 / var(--hit-scale, 1))),
+        calc(
+          var(--hit-gap-x, var(--c-touch-floor) / var(--hit-scale, 1)) / -2 -
+            var(--hit-edge, 0px)
+        )
       );
       inset-block: max(
-        min(0px, calc(50% - var(--c-touch-floor) / 2)),
-        calc(var(--hit-gap-y, var(--c-touch-floor)) / -2 - var(--hit-edge, 0px))
+        min(0px, calc(50% - var(--c-touch-floor) / 2 / var(--hit-scale, 1))),
+        calc(
+          var(--hit-gap-y, var(--c-touch-floor) / var(--hit-scale, 1)) / -2 -
+            var(--hit-edge, 0px)
+        )
       );
     }
   }

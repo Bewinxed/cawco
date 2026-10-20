@@ -21,6 +21,8 @@
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
+  import * as Table from "#lib/components/ui/table/index.js";
   import { IconWorkflow } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
@@ -43,6 +45,16 @@
   onMount(() => {
     refreshWorkflows();
   });
+  /**
+   * A row as a card: the name over its status, age and runs, as one block,
+   * and Run at the card's end, centred on the block.
+   */
+  const CARD_COLS = "auto auto minmax(0, 1fr) auto";
+  /** The name stands over the block's three facts. */
+  const NAME_CELL = "@max-phone/table:col-span-3";
+  /** Run stands at the end, down both of the block's lines. */
+  const RUN_CELL =
+    "@max-phone/table:col-start-4 @max-phone/table:row-span-2 @max-phone/table:row-start-1";
   const GRAPH = { graph: { nodes: [newNode("start")], edges: [] } };
   const PROGRAM = { program: STARTER_PROGRAM };
   /**
@@ -111,11 +123,43 @@
     </DropdownMenu.Content>
   </DropdownMenu.Root>
 {/snippet}
+<!-- The ledger's head (DESIGN.md, Density: "a 32px header band"); where the
+     ledger is a card it names nothing. -->
+{#snippet head()}
+  <Table.Header>
+    <Table.Row variant="band">
+      <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+      <Table.Head scope="col" variant="band">Name</Table.Head>
+      <Table.Head class="w-c-workflow-when-col" scope="col" variant="band"
+        >Last run</Table.Head
+      >
+      <Table.Head class="w-c-workflow-when-col" scope="col" variant="band"
+        >Started</Table.Head
+      >
+      <Table.Head
+        class="w-c-workflow-count-col"
+        edge="end"
+        scope="col"
+        variant="band">Runs</Table.Head
+      >
+      <Table.Head
+        class="w-c-workflow-actions-col"
+        edge="end"
+        scope="col"
+        variant="band"><span class="sr-only">Actions</span></Table.Head
+      >
+      <!-- biome-ignore-end lint/a11y/noHeaderScope: the tags above -->
+    </Table.Row>
+  </Table.Header>
+{/snippet}
 
-<!-- At 760px and under (`workflow-cards:`) the table becomes cards: each row
-     its name over its age, its actions at the end of the second line. -->
+<!-- Under a 640px ledger (the kit's `stacks="phone"`) each row is a card
+     (DESIGN.md, Fleet board): the name across it, then the last run, its age
+     and count, with Run at the end of that line. The page pads 25px on its
+     inline start and 21px on its end, its groups 18px apart (DESIGN.md,
+     Layout). -->
 <div
-  class="relative flex min-w-0 flex-1 flex-col gap-space-6 overflow-y-auto px-space-6 py-space-7 type-body text-ink-strong workflow-cards:px-space-4 workflow-cards:py-space-4"
+  class="relative flex min-w-0 flex-1 flex-col gap-space-5 overflow-y-auto ps-space-7 pe-space-6 py-space-7 type-body text-ink-strong max-phone:p-space-4"
   data-slot="list-page"
 >
   <header class="flex flex-wrap items-center justify-between gap-space-2">
@@ -137,69 +181,53 @@
        stand where it will be; then the two cross-fade (the skeleton leaves
        the flow as it goes), so nothing below them moves. -->
   {#if loading}
-    <table
+    <div
       aria-label="Loading workflows"
-      class="block w-full rounded-lg bg-surface-raised p-space-3 shadow-tile"
+      class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
       role="status"
-      style:--cols={"minmax(var(--c-workflow-name-col), 1fr) var(--c-workflow-when-col) var(--c-workflow-when-col) var(--c-workflow-count-col) var(--c-workflow-actions-col)"}
-      style:--cols-cards="1fr auto"
+      style:--card-cols={CARD_COLS}
       out:crossOut
     >
-      <thead class="workflow-cards:block workflow-cards:w-full">
-        <tr
-          class="grid grid-cols-(--cols) items-center gap-space-3 p-space-3 text-left text-size-label font-medium text-ink-muted workflow-cards:hidden"
-          data-slot="heading"
-        >
-          <th class="font-medium" scope="col">Name</th>
-          <th class="font-medium" scope="col">Last run</th>
-          <th class="font-medium" scope="col">Started</th>
-          <th class="font-medium" scope="col">Runs</th>
-          <th class="font-medium" scope="col">Actions</th>
-        </tr>
-      </thead>
-      <tbody
-        aria-hidden="true"
-        class="workflow-cards:block workflow-cards:w-full"
-      >
-        {#each [0, 1, 2] as index (index)}
-          <tr
-            class="grid min-h-c-workflow-row-h grid-cols-(--cols) items-center gap-space-3 border-t border-t-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"
-            data-slot="workflow-row"
-          >
-            <td
-              data-slot="name"
-              class="grid min-h-space-7 coarse:min-h-c-btn-h-lg coarse:content-center wrap-anywhere font-medium text-ink-strong workflow-cards:col-1"
-              ><Skeleton
-                height="x-height"
-                radius="line"
-                type="label"
-                width="title"
-              /></td
-            >
-            <td><Skeleton height="badge" width="short" /></td>
-            <td data-slot="age" class="workflow-cards:col-1"
-              ><Skeleton
-                height="x-height"
-                radius="line"
-                type="meta"
-                width="label"
-              /></td
-            >
-            <td data-slot="count" class="num workflow-cards:hidden"
-              ><Skeleton
-                height="x-height"
-                radius="line"
-                type="meta"
-                width="glyph"
-              /></td
-            >
-            <td class="workflow-cards:col-2 workflow-cards:row-2"
-              ><Skeleton height="control" width="word" /></td
-            >
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+      <Table.Root layout="ledger" stacks="phone">
+        {@render head()}
+        <Table.Body aria-hidden="true">
+          {#each [0, 1, 2] as index (index)}
+            <Table.Row variant="stacks">
+              <Table.Cell class={NAME_CELL} variant="ledger-stacks"
+                ><Skeleton
+                  height="x-height"
+                  radius="line"
+                  type="label"
+                  width="title"
+                /></Table.Cell
+              >
+              <Table.Cell variant="ledger-stacks"
+                ><Skeleton height="badge" width="short" /></Table.Cell
+              >
+              <Table.Cell variant="ledger-stacks"
+                ><Skeleton
+                  height="x-height"
+                  radius="line"
+                  type="meta"
+                  width="label"
+                /></Table.Cell
+              >
+              <Table.Cell edge="end" variant="ledger-stacks"
+                ><Skeleton
+                  height="x-height"
+                  radius="line"
+                  type="meta"
+                  width="glyph"
+                /></Table.Cell
+              >
+              <Table.Cell class={RUN_CELL} edge="end" variant="ledger-stacks"
+                ><Skeleton height="control" width="word" /></Table.Cell
+              >
+            </Table.Row>
+          {/each}
+        </Table.Body>
+      </Table.Root>
+    </div>
   {:else if !rows.length}
     {#if !workflowState.error}
       <div in:crossIn>
@@ -215,84 +243,45 @@
       </div>
     {/if}
   {:else}
-    <table
-      aria-label="Workflows"
-      class="block w-full rounded-lg bg-surface-raised p-space-3 shadow-tile"
-      style:--cols={"minmax(var(--c-workflow-name-col), 1fr) var(--c-workflow-when-col) var(--c-workflow-when-col) var(--c-workflow-count-col) var(--c-workflow-actions-col)"}
-      style:--cols-cards="1fr auto"
+    <div
+      class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+      style:--card-cols={CARD_COLS}
       in:crossIn
     >
-      <thead class="workflow-cards:block workflow-cards:w-full">
-        <tr
-          class="grid grid-cols-(--cols) items-center gap-space-3 p-space-3 text-left text-size-label font-medium text-ink-muted workflow-cards:hidden"
-          data-slot="heading"
-        >
-          <th class="font-medium" scope="col">Name</th>
-          <th class="font-medium" scope="col">Last run</th>
-          <th class="font-medium" scope="col">Started</th>
-          <th class="font-medium" scope="col">Runs</th>
-          <th class="font-medium" scope="col">Actions</th>
-        </tr>
-      </thead>
-      <tbody class="workflow-cards:block workflow-cards:w-full">
-        {#each rows as { workflow, runs, last } (workflow.id)}
-          <tr
-            class="grid min-h-c-workflow-row-h grid-cols-(--cols) items-center gap-space-3 border-t border-t-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"
-            data-slot="workflow-row"
-          >
-            <td>
-              <a
-                data-slot="name"
-                class="grid min-h-space-7 coarse:min-h-c-btn-h-lg coarse:content-center wrap-anywhere font-medium text-ink-strong workflow-cards:col-1"
-                href="/workflows/{workflow.id}"
-                >{workflow.name}
-                <span class="type-meta text-ink-muted"
-                  >{workflow.description}</span
-                ></a
-              >
-            </td>
-            <td>
-              {#if last}
-                <WorkflowStatus status={last.status} />
-              {:else}
-                <span class="type-meta text-ink-muted">No runs</span>
-              {/if}
-            </td>
-            <td
-              data-slot="age"
-              class="type-meta text-ink-muted workflow-cards:col-1"
-            >
-              {last ? formatDistanceToNow(new Date(last.startedAt)) : "—"}
-              <span class="hidden workflow-cards:inline" data-slot="mobile"
-                >{` · ${runs.length} ${runs.length === 1 ? "run" : "runs"}`}</span
-              >
-            </td>
-            <td data-slot="count" class="num workflow-cards:hidden"
-              >{runs.length}</td
-            >
-            <td class="workflow-cards:col-2 workflow-cards:row-2">
-              <span class="contents workflow-cards:hidden" data-slot="desktop"
-                ><Button
-                  disabled={!live}
-                  onclick={(event) => {
-                    launch = { workflow, from: event.currentTarget };
-                  }}
-                  title={live
-                    ? undefined
-                    : "Can't run while the hub is unreachable"}
-                  type="button"
-                  variant="outline"
+      <Table.Root aria-label="Workflows" layout="ledger" stacks="phone">
+        {@render head()}
+        <Table.Body>
+          {#each rows as { workflow, runs, last } (workflow.id)}
+            <Table.Row data-slot="workflow-row" variant="stacks">
+              <Table.Cell class={NAME_CELL} variant="ledger-stacks">
+                <a
+                  data-slot="name"
+                  class="pointer-hit focus-inset flex min-w-0 flex-col justify-center rounded-xs text-inherit no-underline coarse:min-h-c-btn-h-lg"
+                  href="/workflows/{workflow.id}"
+                  ><span class="truncate type-label text-ink-strong"
+                    >{workflow.name}</span
+                  >{#if workflow.description}<span class="truncate"
+                      >{workflow.description}</span
+                    >{/if}</a
                 >
-                  Run
-                </Button></span
+              </Table.Cell>
+              <Table.Cell variant="ledger-stacks">
+                {#if last}
+                  <WorkflowStatus status={last.status} />
+                {:else}
+                  No runs
+                {/if}
+              </Table.Cell>
+              <Table.Cell data-slot="age" variant="ledger-stacks">
+                {last ? formatDistanceToNow(new Date(last.startedAt)) : "—"}
+              </Table.Cell>
+              <!-- The column's head says Runs; in the card, the count says it. -->
+              <Table.Cell data-slot="count" edge="end" variant="ledger-stacks"
+                >{runs.length}<span class="hidden @max-phone/table:inline"
+                  >{runs.length === 1 ? " run" : " runs"}</span
+                ></Table.Cell
               >
-              <details class="hidden workflow-cards:block" data-slot="mobile">
-                <summary
-                  aria-label="Actions for {workflow.name}"
-                  class="pressable workflow-cards:flex workflow-cards:min-h-c-btn-h-lg workflow-cards:items-center"
-                >
-                  Actions
-                </summary>
+              <Table.Cell class={RUN_CELL} edge="end" variant="ledger-stacks">
                 <Button
                   disabled={!live}
                   onclick={(event) => {
@@ -306,12 +295,12 @@
                 >
                   Run
                 </Button>
-              </details>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+              </Table.Cell>
+            </Table.Row>
+          {/each}
+        </Table.Body>
+      </Table.Root>
+    </div>
   {/if}
 </div>
 {#if launch}

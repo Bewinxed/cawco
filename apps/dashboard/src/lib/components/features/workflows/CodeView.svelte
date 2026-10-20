@@ -40,51 +40,48 @@
   } = $props();
 
   /**
-   * Monochrome on purpose. DESIGN.md budgets 2.57% of the surface for hue and
-   * spends it on status; a token rainbow here would make the program the
-   * loudest thing in the product. Structure rides weight and ink instead, and
-   * survives greyscale.
+   * The code surfaces' one theme (DESIGN.md, Syntax): each tag takes the
+   * role Shiki's css-variables theme gives it on every other code surface,
+   * through the same `--code-syntax-token-*` properties app.css maps onto
+   * the syntax tokens. Type and class names are entity names, which that
+   * theme colours as functions.
    */
   const highlight = HighlightStyle.define([
     {
       tag: [tags.keyword, tags.modifier],
-      color: "var(--ink-strong)",
-      fontWeight: "var(--weight-strong)",
+      color: "var(--code-syntax-token-keyword)",
     },
     {
       tag: [
-        tags.definition(tags.variableName),
         tags.function(tags.variableName),
-        tags.propertyName,
+        tags.function(tags.propertyName),
+        tags.typeName,
+        tags.className,
       ],
-      color: "var(--ink-strong)",
+      color: "var(--code-syntax-token-function)",
     },
     {
-      tag: [
-        tags.string,
-        tags.special(tags.string),
-        tags.number,
-        tags.bool,
-        tags.null,
-      ],
-      color: "var(--ink-muted)",
+      tag: [tags.string, tags.special(tags.string), tags.regexp],
+      color: "var(--code-syntax-token-string)",
+    },
+    {
+      tag: [tags.number, tags.bool, tags.null, tags.atom],
+      color: "var(--code-syntax-token-constant)",
     },
     {
       tag: [tags.comment, tags.lineComment, tags.blockComment],
-      color: "var(--ink-muted)",
-      fontStyle: "italic",
+      color: "var(--code-syntax-token-comment)",
     },
-    { tag: [tags.typeName, tags.className], color: "var(--ink-strong)" },
     {
       tag: [tags.operator, tags.punctuation, tags.bracket],
-      color: "var(--ink-muted)",
+      color: "var(--code-syntax-token-punctuation)",
     },
   ]);
   const theme = EditorView.theme({
     "&": {
       height: "100%",
-      color: "var(--ink-strong)",
-      backgroundColor: "var(--surface-recess)",
+      color: "var(--code-syntax-foreground)",
+      backgroundColor: "var(--code-syntax-background)",
       fontSize: "var(--text-label)",
     },
     "&.cm-focused": {
@@ -100,7 +97,7 @@
       caretColor: "var(--ink-strong)",
     },
     ".cm-gutters": {
-      backgroundColor: "var(--surface-recess)",
+      backgroundColor: "var(--code-syntax-background)",
       color: "var(--ink-muted)",
       border: "0",
       borderInlineEnd: "1px solid var(--border-hairline)",
@@ -250,6 +247,6 @@
 <section
   aria-label={label}
   data-slot="code-view"
-  class="h-full min-h-0 bg-surface-recess border border-border-hairline rounded-sm overflow-hidden"
+  class="h-full min-h-0 bg-(color:--code-syntax-background) border border-border-well rounded-md overflow-hidden"
   bind:this={host}
 ></section>
