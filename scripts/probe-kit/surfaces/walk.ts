@@ -932,7 +932,11 @@ export const pageErrors: PageError[] = [];
 function watchErrors(page: Page, pass: Pass): void {
   const add = (message: string) => {
     const label = tracing.get(page)?.label ?? "(before a state)";
-    pageErrors.push({ entry: label.replace("/", "-"), pass: pass.name, message });
+    pageErrors.push({
+      entry: label.replace("/", "-"),
+      pass: pass.name,
+      message,
+    });
   };
   page.on("pageerror", (error) => add(error.message.split("\n")[0] ?? ""));
   page.on("request", (request) => {

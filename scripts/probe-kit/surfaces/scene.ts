@@ -850,6 +850,8 @@ const ARTIFACT_PAGE = `<!doctype html>
 
 /** The media page's name (its route's `page=`), a picture beside its program (1px coral PNG), and its diagram. */
 export const MEDIA_PAGE = "chip-media";
+/** A page with a short name, the media writer's newest (`menu-narrow`). */
+const SHORT_PAGE = "ui";
 const CHIP_PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const CHIP_FLOW = "flowchart LR\nLabel --> Badge\nBadge --> Row";
@@ -982,6 +984,8 @@ export interface Scene {
   /** The task whose one attempt failed. */
   failed: string;
   graph: string;
+  /** The decision project's session that made the media page and, newest, the short-named page. */
+  media: string;
   permission: string;
   project: string;
   /** The task in review: two attempts, the newest's result. */
@@ -1933,6 +1937,17 @@ export async function seedScene(
       join(launchPlace, "shots", "chip.png")
     ),
   });
+  // Last, so it is the writer's newest and its pane shows it: a page whose
+  // name is short (`ui`), which keeps little of the head (SideSurface: the
+  // name keeps its own width), so in a pane at its floor the controls take
+  // the room its ask's line needs and the artifact menu says the line first.
+  await fleet.api(`/api/instances/${mediaWriter}/artifacts`, {
+    kind: "page",
+    name: SHORT_PAGE,
+    does: "pick",
+    ask: "Pick a wrap for the kit's chips",
+    html: ARTIFACT_PAGE,
+  });
 
   // The first account's limit reached, last of its work: a session refused
   // there (hub at-limit.ts), held with nowhere else to go until the second
@@ -2392,6 +2407,7 @@ export async function seedScene(
     graph: graph.id,
     decision,
     decisions: decisions.projectId,
+    media: mediaWriter,
     run: runId,
     runner,
     split,

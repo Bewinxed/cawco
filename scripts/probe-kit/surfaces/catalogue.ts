@@ -285,7 +285,10 @@ const recentOpen = async (page: Page) => {
   if ((await disclosure.getAttribute("aria-expanded")) !== "true") {
     await disclosure.click();
   }
-  await page.locator("[data-slot=home-recent-session-tree] li").first().waitFor();
+  await page
+    .locator("[data-slot=home-recent-session-tree] li")
+    .first()
+    .waitFor();
 };
 
 /** Connect a machine's title, which its dialog and drawer open with. */
@@ -848,7 +851,10 @@ const movesAs =
     Array.isArray(message.payload?.moves)
       ? {
           ...message,
-          payload: { ...message.payload, moves: message.payload.moves.map(job) },
+          payload: {
+            ...message.payload,
+            moves: message.payload.moves.map(job),
+          },
         }
       : message;
 
@@ -953,6 +959,57 @@ const MOVE_AND_START = /^Move & start$/;
 /** A row in the Machines chip's popover (MachinesChip's), and a machine's, not its Add. */
 const MACHINE_ROW_ANY = "button[data-slot=row]";
 const MACHINE_ROW = `${MACHINE_ROW_ANY}:not([data-add])`;
+/**
+ * The side split come to rest after a resize: the side card's box the same
+ * over three of the browser's frames (it slides to its new share).
+ */
+const splitSettled = (page: Page) =>
+  page.waitForFunction(
+    () =>
+      new Promise<boolean>((resolve) => {
+        const card = document.querySelector("[data-slot=side-card]");
+        const boxes: string[] = [];
+        const read = () => {
+          const r = card?.getBoundingClientRect();
+          boxes.push(r ? `${r.x},${r.width}` : "");
+          if (boxes.length < 3) {
+            requestAnimationFrame(read);
+            return;
+          }
+          resolve(new Set(boxes).size === 1);
+        };
+        requestAnimationFrame(read);
+      })
+  );
+
+/**
+ * The side's divider dragged as a person drags it to the side's floor
+ * (side/floor.ts `SIDE_FLOOR_PX`, 320px), and no further: past it the side
+ * collapses (Split.svelte, both panes `collapsible`). Then the split at rest.
+ */
+const SIDE_FLOOR = 320;
+const sideToFloor = async (page: Page) => {
+  const handle = page
+    .locator("[data-slot=side-split] [role=separator]")
+    .first();
+  const split = await page
+    .locator("[data-slot=side-split]")
+    .first()
+    .boundingBox();
+  const grip = await handle.boundingBox();
+  if (!(split && grip)) {
+    throw new Error("the side split or its divider has no box");
+  }
+  const y = grip.y + grip.height / 2;
+  await page.mouse.move(grip.x + grip.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(split.x + split.width - SIDE_FLOOR - 2, y, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  await splitSettled(page);
+};
+
 /** The place picker (PlacePick's form). */
 const PLACE_PICK = "form[data-slot=place-pick]";
 const PLACE_TRIGGER = `${PLACE_PICK} [data-slot=select-trigger]`;
@@ -1133,7 +1190,7 @@ const withLfsOffer = async (page: Page) => {
   );
 };
 
-/** Caw's panel on the project page, then `then` in his thread. *//** Caw's panel on the project page, then `then` in his thread. */
+/** Caw's panel on the project page, then `then` in his thread. */ /** Caw's panel on the project page, then `then` in his thread. */
 const inCawThread =
   (then: (page: Page) => Promise<unknown>) => async (page: Page) => {
     await openCaw(page);
@@ -1241,7 +1298,10 @@ const paneKey = async (page: Page, key: string) => {
   const inPane =
     (await mode.count()) > 0
       ? mode.first()
-      : page.locator("[data-artifact-trigger]").filter({ visible: true }).first();
+      : page
+          .locator("[data-artifact-trigger]")
+          .filter({ visible: true })
+          .first();
   await inPane.focus();
   await page.keyboard.press(key);
 };
@@ -1539,18 +1599,16 @@ const OVERLAYS: [string, string][] = [
 ];
 /** A bench's states past its rest, by the bench's name. */
 const BENCH_STATES: Record<string, State[]> = {
-  overlays: OVERLAYS.map(
-    ([layer, open]): State => ({
-      name: layer,
-      act: (page) =>
-        page
-          .locator(`[data-open="${layer}"]`)
-          .first()
-          .click(layer === "context-menu" ? { button: "right" } : {}),
-      root: "body",
-      ready: { shows: open },
-    })
-  ),
+  overlays: OVERLAYS.map(([layer, open]): State => ({
+    name: layer,
+    act: (page) =>
+      page
+        .locator(`[data-open="${layer}"]`)
+        .first()
+        .click(layer === "context-menu" ? { button: "right" } : {}),
+    root: "body",
+    ready: { shows: open },
+  })),
 };
 
 /** The session's Files: the bar's on a desk, the rail's Files row on a phone (its drawer). */
@@ -1674,7 +1732,9 @@ const EDITORS: Record<string, State[]> = {
                     .first()
                     .click(),
                 root: "body",
-                ready: { shows: "fieldset:has(> legend) input[aria-label$=' name']" },
+                ready: {
+                  shows: "fieldset:has(> legend) input[aria-label$=' name']",
+                },
               },
             ]
           : []),
@@ -2902,17 +2962,15 @@ export const SURFACES: Surface[] = [
       // Its pages still open for picks, each its program drawn in its frame
       // by the decision host (decision-host.ts); the media page's card
       // draws every media part of the library (scene.ts `mediaProgram`).
-      ...["landing", "onboarding", MEDIA_PAGE].map(
-        (name): State => ({
-          name,
-          route: (s) => `/project/${s.decisions}?view=decisions&page=${name}`,
-          root: MAIN,
-          ready: {
-            shows: `${DECISION_PAGE.replace(" [data-slot=page-head]", "")} iframe`,
-            path: new RegExp(`[?&]page=${name}\\b`),
-          },
-        })
-      ),
+      ...["landing", "onboarding", MEDIA_PAGE].map((name): State => ({
+        name,
+        route: (s) => `/project/${s.decisions}?view=decisions&page=${name}`,
+        root: MAIN,
+        ready: {
+          shows: `${DECISION_PAGE.replace(" [data-slot=page-head]", "")} iframe`,
+          path: new RegExp(`[?&]page=${name}\\b`),
+        },
+      })),
       {
         name: "graph",
         route: (s) => `/project/${s.decisions}?view=decisions&mode=graph`,
@@ -3391,7 +3449,10 @@ export const SURFACES: Surface[] = [
             .selectOption("eq");
         },
         root: "body",
-        ready: { shows: "[data-slot=when] [data-slot=when] textarea, [data-slot=when] [data-slot=when] input" },
+        ready: {
+          shows:
+            "[data-slot=when] [data-slot=when] textarea, [data-slot=when] [data-slot=when] input",
+        },
       },
       // The finished run in its own pane: its steps.
       {
@@ -3492,7 +3553,9 @@ export const SURFACES: Surface[] = [
           await machinesOpen(page);
           // The list stands in its own layer, over the pane: pressed there.
           await page
-            .locator("[data-slot=select-content][data-state=open] [role=option]")
+            .locator(
+              "[data-slot=select-content][data-state=open] [role=option]"
+            )
             .first()
             .click();
           // Browse: the machine's folders, from the keyboard as the machine was.
@@ -3505,7 +3568,8 @@ export const SURFACES: Surface[] = [
         root: "body",
         widths: ["desk"],
         ready: {
-          shows: `${PLACE_PICK} [data-slot=collapsible][data-state=open] [data-slot=block]`,
+          // The folders' picker in Browse: its way up a folder (DirectoryPicker).
+          shows: `${PLACE_PICK} [data-slot=collapsible][data-state=open] [aria-label="Parent directory"]`,
           not: "[data-slot=select-content][data-state=open]",
         },
       },
@@ -3520,21 +3584,32 @@ export const SURFACES: Surface[] = [
             .first()
             .click(),
         root: LAYER,
-        ready: { shows: "[data-artifact-list][data-state=open] [data-artifact-row]" },
+        ready: {
+          shows: "[data-artifact-list][data-state=open] [data-artifact-row]",
+        },
       },
       {
-        // The pane narrowed to its least share (the split's separator, End):
-        // its head has no room for the ask's line, and the artifact menu
-        // says it first (ArtifactMenu's line, SideSurface `subtitleStands`).
+        // A page with a short name, in a pane at its floor, a comment pinned
+        // on it and a pick not yet sent: Comments with its count and Send
+        // picks stand in the head beside the mode and Close, and leave the
+        // ask's line less than it needs (SideSurface `subtitleStands`: its
+        // own width, up to 120px), so the artifact menu says it as its first
+        // row (ArtifactMenu's `menu-line`). A live scene's state: the tape
+        // holds no short-named page.
         name: "menu-narrow",
-        route: (s) => `/session/${s.art}`,
+        // The scene's short-named page (scene.ts `SHORT_PAGE`): a long name
+        // keeps the head's room for itself, and the line stands.
+        route: (s) => `/session/${s.media}`,
         widths: ["desk"],
         act: async (page) => {
+          await pinWith(page, "h1", "Keep the heading on one line.");
+          await paneKey(page, "v");
           await page
-            .locator("[data-slot=side-split] [role=separator]")
-            .first()
-            .focus();
-          await page.keyboard.press("End");
+            .frameLocator(PREVIEW_FRAME)
+            .locator("[data-option=wrap]")
+            .click();
+          await page.locator("[data-slot=send]").first().waitFor();
+          await sideToFloor(page);
           await page
             .locator("[data-artifact-trigger]")
             .filter({ visible: true })
@@ -3931,7 +4006,8 @@ export const SURFACES: Surface[] = [
         act: openFiles,
         root: "body",
         ready: {
-          shows: ":is([data-files-panel], [data-files-sheet]) [data-files-card]",
+          shows:
+            ":is([data-files-panel], [data-files-sheet]) [data-files-card]",
         },
       },
       {
@@ -3968,7 +4044,9 @@ export const SURFACES: Surface[] = [
             .first()
             .click();
           await page
-            .locator("[data-files-float][data-state=open] [data-artifact-trigger]")
+            .locator(
+              "[data-files-float][data-state=open] [data-artifact-trigger]"
+            )
             .first()
             .click();
         },
@@ -3997,7 +4075,8 @@ export const SURFACES: Surface[] = [
             .click(),
         root: "[data-ns-popover][data-state=open]",
         ready: {
-          shows: '[data-ns-popover][data-state=open] [aria-label="First prompt"]',
+          shows:
+            '[data-ns-popover][data-state=open] [aria-label="First prompt"]',
           not: OPEN_DIALOG,
         },
       },

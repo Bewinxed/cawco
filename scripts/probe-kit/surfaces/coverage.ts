@@ -440,7 +440,9 @@ const runsNowhere = modules.filter(
   (file) => (through.get(file) ?? []).length === 0
 );
 for (const file of runsNowhere) {
-  console.log(`no component: ${file} (no component imports it: it runs on no page)`);
+  console.log(
+    `no component: ${file} (no component imports it: it runs on no page)`
+  );
 }
 const counted = [
   ...components,
@@ -467,7 +469,9 @@ await writeFile(
     })
     .join("\n")}\n`
 );
-console.log(`each entry's files: ${DRAWN}; each changed file's entries: ${FILES}`);
+console.log(
+  `each entry's files: ${DRAWN}; each changed file's entries: ${FILES}`
+);
 console.log(
   `coverage: ${counted.length - uncovered.length} of ${counted.length} (${components.length} components, ${modules.length - runsNowhere.length} modules, changed since ${base.slice(0, 9)})`
 );
