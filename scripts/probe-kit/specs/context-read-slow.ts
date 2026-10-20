@@ -15,7 +15,15 @@
  *     "may be offline".
  * (c) The process let go (SIGCONT) and its next turn ended: the details show
  *     the reading, and the miss's words are gone.
+ * (d) Three live sessions open as tabs (so this tab streams all three), the
+ *     details of one shown. One turn's end each: the shown one's context is
+ *     read once, and its answer lands in its details; the two nothing shows
+ *     are not read. Counted on the tab's socket, every `getContextUsage` it
+ *     sends the hub for the agent.
+ * (e) A send handed to the machine mid-command, then withdrawn: a context
+ *     read behind the withdrawal is answered within the dashboard's 15 s.
  *
+
  *   bun scripts/probe-kit/run.ts context-read-slow
  */
 import type { Page } from "playwright-core";
@@ -27,6 +35,9 @@ import { type KitFleet, open, type Spec } from "../kit";
 const CONTEXT = ".session-details-popover .stats .context";
 const READING = /^Context \d+% · /;
 const OFFLINE = /may be offline/i;
+/** A turn the mock answers with a long command, for (e)'s withdrawal to wait in. */
+const SLOW_TOOL = "Run the long command.";
+const SLOW_TOOL_S = 60;
 
 /** The details card of `id` opened on `page`: the tab hovered, then pinned by a press inside it. */
 const openDetails = async (
@@ -105,7 +116,22 @@ const spec: Spec = {
   name: "context-read-slow",
   async run(kit) {
     const { check } = kit;
-    const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["done"] }));
+    const fleet = await kit.fleet((request) =>
+      request.last.includes(SLOW_TOOL) && !request.afterTool
+        ? {
+            everyMs: 5,
+            words: [],
+            tool: {
+              name: "Bash",
+              input: {
+                command: `sleep ${SLOW_TOOL_S}`,
+                description: "A long command in the turn",
+                timeout: 600_000,
+              },
+            },
+          }
+        : { everyMs: 5, words: ["done"] }
+    );
     fleet.launch("sessiond");
     await fleet.sessiondUp();
     fleet.launch("hub");
@@ -196,7 +222,169 @@ const spec: Spec = {
       READING.test(after.at(-1) ?? ""),
       JSON.stringify(after)
     );
+
+    // (d) Three live sessions, all open as tabs (so all streamed), one
+    // shown: only the shown one's turn end reads its context.
+    const others = [
+      await fleet.spawn("claude", "Context reads, unseen 1"),
+      await fleet.spawn("claude", "Context reads, unseen 2"),
+    ];
+    const third = await kit.page("desk");
+    const asked: { at: number; id: string; requestId: string }[] = [];
+    const answered = new Map<string, boolean>();
+    third.on("websocket", (socket) => {
+      socket.on("framesent", ({ payload }) => {
+        const frame = parsed(payload);
+        if (frame?.payload?.method === "getContextUsage" && frame.instanceId) {
+          asked.push({
+            at: Date.now(),
+            id: frame.instanceId,
+            requestId: String(frame.requestId),
+          });
+        }
+      });
+      socket.on("framereceived", ({ payload }) => {
+        const frame = parsed(payload);
+        if (frame?.payload?.kind === "control_result") {
+          answered.set(
+            String(frame.payload.requestId),
+            frame.payload.ok === true
+          );
+        }
+      });
+    });
+    for (const other of others) {
+      // biome-ignore lint/performance/noAwaitInLoops: each opens its tab in turn
+      await open(
+        third,
+        `${base}/session/${other}`,
+        `[data-session-tab="${other}"]`,
+        120_000
+      );
+      // Its tab written to the tree the next page load restores.
+      await Bun.sleep(1500);
+    }
+    await openDetails(third, base, id);
+    const tabs = await third.evaluate(
+      (ids) =>
+        ids.filter((one) =>
+          document.querySelector(`[data-session-tab="${one}"]`)
+        ).length,
+      [id, ...others]
+    );
+    await watch(third, 20_000, (line) => READING.test(line));
+    const turnsFrom = Date.now();
+    for (const one of [id, ...others]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one turn at a time, each to its end
+      await fleet.send(one, `A turn that ends: ${one.slice(0, 8)}`);
+      await atRest(fleet, one);
+    }
+    // The reads a turn's end sets off go out within a moment of it.
+    await Bun.sleep(5000);
+    const per = Object.fromEntries(
+      [id, ...others].map((one) => [
+        one.slice(0, 8),
+        asked.filter((ask) => ask.id === one && ask.at >= turnsFrom).length,
+      ])
+    );
+    const shownRead = asked.find((ask) => ask.id === id && ask.at >= turnsFrom);
+    const shownLine = await watch(third, 10_000, (line) => READING.test(line));
+    kit.note(
+      `(d) ${tabs} of 3 sessions open as tabs; getContextUsage per session after one turn end each: ${JSON.stringify(per)}; the shown one's read answered ${shownRead ? answered.get(shownRead.requestId) : "(none asked)"}; its details read ${JSON.stringify(shownLine)}`
+    );
+    check(
+      "(d) all three sessions are open as tabs, so all three stream",
+      tabs === 3,
+      String(tabs)
+    );
+    check(
+      "(d) a turn's end reads no context of a session nothing on screen shows",
+      others.every((one) => per[one.slice(0, 8)] === 0),
+      JSON.stringify(per)
+    );
+    check(
+      "(d) the shown session's turn end reads its context once, and the answer lands in its details",
+      per[id.slice(0, 8)] === 1 &&
+        shownRead !== undefined &&
+        answered.get(shownRead.requestId) === true &&
+        READING.test(shownLine.at(-1) ?? ""),
+      JSON.stringify({ per, shownLine })
+    );
+
+    // (e) A withdrawal waiting on the CLI mid-turn: a context read behind it
+    // is answered within the dashboard's bound.
+    const busy = others[0] as string;
+    await fleet.send(busy, `${SLOW_TOOL} now`);
+    await until(
+      "the mock handing the session its long command",
+      () =>
+        fleet.seen.find(
+          (seen) => seen.last.includes(SLOW_TOOL) && !seen.afterTool
+        ),
+      Boolean,
+      120_000
+    );
+    // The command is running in the turn.
+    await Bun.sleep(3000);
+    const queued = await fleet.send(busy, "Words sent while it works.");
+    // Handed to the machine (no longer owed on the hub), so the withdrawal
+    // is the agent's to make (hub server.ts `withdrawPending`).
+    const handed = await until(
+      "the send handed to the machine",
+      () => fleet.sendRow(queued),
+      (row) => row !== undefined && row.owed === null,
+      20_000
+    ).catch(() => fleet.sendRow(queued));
+    await fleet.post({
+      type: "command",
+      commandId: crypto.randomUUID(),
+      kind: "send.withdraw",
+      machineId: MACHINE,
+      sessionId: busy,
+      payload: { instanceId: busy, sendId: queued },
+    });
+    await Bun.sleep(300);
+    const readFrom = performance.now();
+    const read = await fleet
+      .controlAnswer("getContextUsage", [], 30_000, busy)
+      .then((answer) => ({ ok: answer.ok, error: answer.error }))
+      .catch((error: unknown) => ({ ok: false, error: String(error) }));
+    const tookMs = Math.round(performance.now() - readFrom);
+    const withdrawn = fleet.sendRow(queued);
+    kit.note(
+      `(e) the send read ${JSON.stringify(handed)} as it was withdrawn; the read behind the withdrawal answered ${JSON.stringify(read)} after ${tookMs} ms; the send reads ${JSON.stringify(withdrawn)}`
+    );
+    check(
+      "(e) the withdrawn send had been handed to the machine",
+      handed?.owed === null,
+      JSON.stringify(handed)
+    );
+    check(
+      "(e) a context read behind a pending withdrawal is answered within 15 s",
+      read.ok && tookMs < 15_000,
+      `${tookMs} ms, ${JSON.stringify(read)}`
+    );
   },
+};
+
+/** A socket frame as JSON, or null. */
+const parsed = (
+  payload: string | Buffer
+): {
+  instanceId?: string;
+  payload?: {
+    kind?: string;
+    method?: string;
+    ok?: boolean;
+    requestId?: string;
+  };
+  requestId?: string;
+} | null => {
+  try {
+    return JSON.parse(String(payload));
+  } catch {
+    return null;
+  }
 };
 
 export default spec;

@@ -1750,10 +1750,14 @@ function applyFacts(
     }
   }
   // The turn or the compaction just changed how full the window is; ask
-  // rather than guess.
+  // rather than guess, when something in this tab draws it
+  // ({@link showContext}). A tab streams every open tab, the peek and every
+  // delegate card, and a read for each of their turns' ends was a read
+  // nobody saw.
   if (
     (facts.turnsEnded !== undefined || facts.lastCompaction) &&
-    target.machineId
+    target.machineId &&
+    contextShown.has(target.instanceId)
   ) {
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the change is already on screen, this refreshes the reading
     void refreshContext(target.instanceId, target.machineId);
@@ -7915,6 +7919,28 @@ export async function setPermissionMode(
       throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
   }
+}
+
+/** How many surfaces in this tab draw each session's context reading now, by instance id. */
+const contextShown = new Map<string, number>();
+
+/**
+ * A surface that draws `instanceId`'s context reading (the details card,
+ * SessionDetails; the peek's meter, PeekPane) says so for as long as it is
+ * mounted: a turn's or a compaction's end reads it again only while one does
+ * (applyFacts). The surface reads it once itself as it first shows it.
+ * Answers the surface's let-go.
+ */
+export function showContext(instanceId: string): () => void {
+  contextShown.set(instanceId, (contextShown.get(instanceId) ?? 0) + 1);
+  return () => {
+    const left = (contextShown.get(instanceId) ?? 1) - 1;
+    if (left > 0) {
+      contextShown.set(instanceId, left);
+    } else {
+      contextShown.delete(instanceId);
+    }
+  };
 }
 
 /**
