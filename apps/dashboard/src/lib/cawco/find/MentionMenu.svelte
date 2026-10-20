@@ -108,7 +108,7 @@
       >
         Can't reach the hub. Nothing can be named until it's back.
         <button
-          class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer"
+          class="border-none border-current p-0 bg-transparent text-link-ink"
           onclick={() => mention.retry()}
           type="button">Retry</button
         >

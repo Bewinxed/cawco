@@ -193,7 +193,7 @@
           {#if foldable}
             <button
               aria-expanded={opened.has(step.id)}
-              class="press-tint focus-inset cursor-pointer group flex min-h-space-7 min-w-0 flex-auto items-center rounded-xs border-none border-current bg-transparent py-0 pr-space-1 pl-space-1 text-start text-size-body font-normal text-ink-strong coarse:min-h-c-btn-h-lg"
+              class="press-tint focus-inset group flex min-h-space-7 min-w-0 flex-auto items-center rounded-xs border-none border-current bg-transparent py-0 pr-space-1 pl-space-1 text-start text-size-body font-normal text-ink-strong coarse:min-h-c-btn-h-lg"
               data-err={step.status === "failed" || undefined}
               onclick={() => toggle(step.id)}
               type="button"

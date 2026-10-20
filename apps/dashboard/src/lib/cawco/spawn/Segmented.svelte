@@ -67,7 +67,7 @@
       data-slot="tab"
       aria-checked={item.value === value}
       class={[
-        "press-tint relative inline-flex min-w-0 cursor-pointer items-center justify-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted aria-checked:text-ink-strong",
+        "press-tint relative inline-flex min-w-0 items-center justify-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted aria-checked:text-ink-strong",
         size === "md" ? "h-c-btn-h-sm" : "h-c-btn-h-xs max-phone:h-c-btn-h",
       ]}
       onclick={() => onchange(item.value)}

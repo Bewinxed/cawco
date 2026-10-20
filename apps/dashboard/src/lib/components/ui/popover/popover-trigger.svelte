@@ -28,11 +28,11 @@
         state:
           "mark-line inline-flex h-c-btn-h-xs items-center gap-space-1 rounded-sm bg-surface-recess px-space-2 type-meta whitespace-nowrap text-ink-muted transition-chip-settle not-data-fail:hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink motion-safe:pressed:scale-(--press-scale)",
         count:
-          "pressable h-icon-md min-w-icon-md cursor-pointer overflow-visible px-space-1 text-ink-row type-meta leading-none num",
+          "pressable h-icon-md min-w-icon-md overflow-visible px-space-1 text-ink-row type-meta leading-none num",
         strip:
-          "press-tint flex h-c-btn-h-lg cursor-pointer items-center rounded-sm px-space-3 text-start text-ink-strong transition-[background-color] dur-control ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
+          "press-tint flex h-c-btn-h-lg items-center rounded-sm px-space-3 text-start text-ink-strong transition-[background-color] dur-control ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
         "strip-home":
-          "press-tint flex h-c-usage-strip-home-h cursor-pointer items-center rounded-md px-space-4 text-start text-ink-strong transition-[background-color] dur-control ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
+          "press-tint flex h-c-usage-strip-home-h items-center rounded-md px-space-4 text-start text-ink-strong transition-[background-color] dur-control ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
         meter:
           "mark-line flex h-c-bar-item items-center gap-space-2 rounded-sm px-space-2 text-label tabular-nums text-ink-muted transition-[background-color,color] dur-control ease-out hover:bg-surface-hover data-warn:not-data-critical:not-data-compacting:text-warning-9 data-critical:not-data-compacting:text-error-9 data-compacting:text-ink-strong",
       },

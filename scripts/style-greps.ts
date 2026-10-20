@@ -10,6 +10,11 @@
  *  - a class-keyed `has-[.x]`: a `:has()` keyed on a class restyles its
  *    element whenever any descendant's class changes; it is keyed on an
  *    attribute the child carries (`has-data-needs:`).
+ *  - a pointer cursor (`cursor-pointer`, `cursor: pointer`): a control keeps
+ *    the platform's arrow; only a link's own UA pointer stands. Tailwind v4
+ *    (https://tailwindcss.com/docs/upgrade-guide): "Buttons now use `cursor:
+ *    default` instead of `cursor: pointer` to match the default browser
+ *    behavior."
  * Prints `file:line: text` under the rule each match breaks; exits 1 on any.
  */
 import { resolve } from "node:path";
@@ -29,6 +34,10 @@ const RULES: { name: string; pattern: string; fixed?: boolean }[] = [
     name: "has-[.class] is banned: key :has() on an attribute (has-data-x:)",
     pattern: "has-[.",
     fixed: true,
+  },
+  {
+    name: "a pointer cursor is banned: a control keeps the default arrow (Tailwind v4 upgrade guide, Buttons use the default cursor)",
+    pattern: "(^|[^-[:alnum:]])cursor-pointer([^-[:alnum:]]|$)|cursor[[:space:]]*:[[:space:]]*pointer",
   },
 ];
 
@@ -55,7 +64,7 @@ for (const [i, rule] of RULES.entries()) {
 }
 console.log(
   found === 0
-    ? "style greps: no transition-all, no filter in a transition list, no has-[.class]"
+    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no pointer cursor"
     : `style greps: ${found} match${found === 1 ? "" : "es"}`
 );
 process.exit(found === 0 ? 0 : 1);

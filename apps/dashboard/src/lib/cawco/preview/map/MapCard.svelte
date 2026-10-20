@@ -71,7 +71,7 @@
 >
   <button
     aria-pressed={chosen}
-    class="grid gap-space-row min-w-0 p-space-1 border-none border-current rounded-sm bg-transparent text-start cursor-pointer disabled:cursor-default enabled:aria-pressed-false:hover:bg-surface-hover after:absolute after:inset-0 after:z-1 after:rounded-lg"
+    class="grid gap-space-row min-w-0 p-space-1 border-none border-current rounded-sm bg-transparent text-start enabled:aria-pressed-false:hover:bg-surface-hover after:absolute after:inset-0 after:z-1 after:rounded-lg"
     disabled={!choosable}
     onclick={() => onchoose(node.file)}
     title={choosable

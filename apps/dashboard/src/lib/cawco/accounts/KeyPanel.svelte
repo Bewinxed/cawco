@@ -182,7 +182,7 @@
           <span
             data-slot="pick"
             data-off={!online || undefined}
-            class="group flex min-w-0 cursor-pointer items-center gap-space-3 data-off:cursor-default"
+            class="group flex min-w-0 items-center gap-space-3"
           >
             <Checkbox
               disabled={!online}

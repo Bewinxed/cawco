@@ -21,7 +21,7 @@
      header has no target. -->
 <Collapsible.Trigger
   {...rest}
-  class="group/header mark-line press-tint touch-hit m-0 flex min-h-(--tx-line) max-w-full cursor-pointer items-center gap-space-2 rounded-xs border-none border-current bg-transparent p-0 font-inherit text-start text-inherit enabled:hover:text-ink-strong disabled:cursor-default disabled:after:content-none {className}"
+  class="group/header mark-line press-tint touch-hit m-0 flex min-h-(--tx-line) max-w-full items-center gap-space-2 rounded-xs border-none border-current bg-transparent p-0 font-inherit text-start text-inherit enabled:hover:text-ink-strong disabled:after:content-none {className}"
   data-slot="thinking-steps-header"
 >
   {#if children}

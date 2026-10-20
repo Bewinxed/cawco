@@ -103,7 +103,7 @@
        a pointer does by hovering. -->
   <button
     aria-expanded={open}
-    class="peer/line flex items-center gap-space-3 w-full min-h-c-btn-h-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-ink-muted cursor-pointer focus-inset touch-hit"
+    class="peer/line flex items-center gap-space-3 w-full min-h-c-btn-h-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-ink-muted focus-inset touch-hit"
     onclick={() => {
       open = !open;
     }}

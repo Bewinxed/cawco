@@ -379,7 +379,7 @@
           <button
             data-slot="clear"
             aria-label="Clear"
-            class="inline-flex size-space-6 cursor-pointer items-center justify-center rounded-xs border-none border-current bg-transparent text-ink-subtle hover:text-ink-strong"
+            class="inline-flex size-space-6 items-center justify-center rounded-xs border-none border-current bg-transparent text-ink-subtle hover:text-ink-strong"
             onclick={() => {
               query = "";
             }}
@@ -420,7 +420,7 @@
             {#each swap.leaving as entry, i (entry.id)}
               <div
                 data-slot="row"
-                class="group relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed border border-transparent bg-transparent"
+                class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed border border-transparent bg-transparent"
                 style:animation={swap.leaveAnim(i)}
               >
                 {@render rowBody(entry)}
@@ -433,7 +433,7 @@
         {#if showCustomRow}
           <button
             data-slot="row"
-            class="group relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint border border-dashed border-neutral-8 bg-surface-raised hover:bg-surface-hover"
+            class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint border border-dashed border-neutral-8 bg-surface-raised hover:bg-surface-hover"
             data-fh="1"
             onclick={pickCustom}
             type="button"
@@ -493,7 +493,7 @@
               data-slot="row"
               aria-disabled={reason ? true : undefined}
               aria-selected={picked}
-              class="group relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint min-w-0 shrink grow basis-c-model-row-basis border border-transparent bg-transparent"
+              class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint min-w-0 shrink grow basis-c-model-row-basis border border-transparent bg-transparent"
               data-fh="1"
               data-model={entry.id}
               disabled={Boolean(reason)}

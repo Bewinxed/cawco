@@ -380,34 +380,34 @@
       class="mt-space-3 flex flex-wrap items-center gap-space-2"
     >
       <button
-        class="cursor-pointer rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
+        class="rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
         onclick={() => reset(14)}
         type="button">load history</button
       >
       <button
-        class="cursor-pointer rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
+        class="rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
         onclick={() => run(6, 900)}
         type="button">6 tools @900ms</button
       >
       <button
-        class="cursor-pointer rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
+        class="rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
         onclick={() => run(6, 120)}
         type="button">6 tools @120ms</button
       >
       <button
-        class="cursor-pointer rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
+        class="rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
         onclick={() => assistant("A settled turn.")}
         type="button"
       >
         assistant
       </button>
       <button
-        class="cursor-pointer rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
+        class="rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
         onclick={() => note("task done")}
         type="button">note</button
       >
       <button
-        class="cursor-pointer rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
+        class="rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
         onclick={() => reset(0)}
         type="button">reset</button
       >

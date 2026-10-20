@@ -652,7 +652,7 @@
           <button
             data-slot="cwd"
             aria-label={`Copy working directory ${cwd}`}
-            class="min-w-0 cursor-pointer border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label text-start wrap-anywhere text-inherit hover:text-ink-strong"
+            class="min-w-0 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label text-start wrap-anywhere text-inherit hover:text-ink-strong"
             onclick={() => copyToClipboard("Working directory", cwd)}
             title={cwd}
             type="button"
@@ -871,7 +871,7 @@
   >
     <button
       data-slot="primary"
-      class="ns-btn cursor-pointer max-phone:flex-1"
+      class="ns-btn max-phone:flex-1"
       data-size="xs"
       data-variant="primary"
       onclick={() => {

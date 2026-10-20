@@ -141,7 +141,6 @@
     border-radius: var(--radius-sm);
     background: var(--surface-page);
     color: var(--ink-strong);
-    cursor: pointer;
     &:focus-visible {
       outline: 2px solid var(--focus-ring);
       outline-offset: 2px;

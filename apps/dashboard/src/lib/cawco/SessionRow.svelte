@@ -1,7 +1,7 @@
 <script lang="ts" module>
   /** Peek and Archive: the row's end actions, one recipe. */
   const ROW_ACTION =
-    "touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) me-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer transition-control can-hover:absolute can-hover:inset-y-0 can-hover:end-(--action-end) can-hover:my-auto can-hover:me-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:not-group-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) light:hover:not-group-data-current/session-row:bg-surface-fill-strong dark:hover:not-group-data-current/session-row:bg-surface-fill group-not-data-swiping/session-row:transition-control-slide";
+    "touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) me-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted transition-control can-hover:absolute can-hover:inset-y-0 can-hover:end-(--action-end) can-hover:my-auto can-hover:me-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:not-group-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) light:hover:not-group-data-current/session-row:bg-surface-fill-strong dark:hover:not-group-data-current/session-row:bg-surface-fill group-not-data-swiping/session-row:transition-control-slide";
 
   /**
    * The selection pill for a list of these rows (highlight): it sits under
@@ -646,7 +646,7 @@
     >
       {act.pending}
       <button
-        class="cursor-pointer border-none border-current bg-transparent p-0 font-inherit text-ink-strong underline underline-offset-2"
+        class="border-none border-current bg-transparent p-0 font-inherit text-ink-strong underline underline-offset-2"
         onclick={stopPending}
         type="button">{act.stop.label}</button
       >

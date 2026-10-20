@@ -769,7 +769,7 @@
                 {#if file.open.kind === "file"}
                   {#if file.open.href}
                     <a
-                      class="kit-item relative flex min-h-c-artifact-row-h w-full cursor-pointer items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset"
+                      class="kit-item relative flex min-h-c-artifact-row-h w-full items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset"
                       download={file.name}
                       href={file.open.href}
                       title={file.name}
@@ -790,7 +790,7 @@
                   {/if}
                 {:else}
                   <button
-                    class="kit-item relative flex min-h-c-artifact-row-h w-full cursor-pointer items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset"
+                    class="kit-item relative flex min-h-c-artifact-row-h w-full items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset"
                     onclick={(event) =>
                       openAttachment(file, event.currentTarget)}
                     title={file.name}

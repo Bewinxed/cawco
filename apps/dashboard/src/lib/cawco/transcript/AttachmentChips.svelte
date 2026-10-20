@@ -75,7 +75,7 @@
         <button
           data-slot="canvas-open"
           aria-label="Open the canvas"
-          class="inline-flex items-center gap-space-2 w-auto min-w-0 h-icon-lg p-0 border-none border-current rounded-xs bg-transparent text-ink-strong cursor-pointer flex-none mark-line touch-hit"
+          class="inline-flex items-center gap-space-2 w-auto min-w-0 h-icon-lg p-0 border-none border-current rounded-xs bg-transparent text-ink-strong flex-none mark-line touch-hit"
           onclick={onopencanvas}
           type="button"
         >
@@ -101,7 +101,7 @@
         </button>
         <button
           aria-label="Remove the canvas"
-          class="grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit"
+          class="grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit"
           onclick={onremovecanvas}
           type="button"
         >
@@ -126,7 +126,7 @@
         >
         <button
           aria-label={`Remove ${img.name}`}
-          class="grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit"
+          class="grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit"
           data-box
           onclick={() => removeImage(i)}
           type="button"
@@ -143,7 +143,7 @@
         <DocThumb content={t.content} name={t.name} />
         <button
           aria-label={`Remove ${t.name}`}
-          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline hit-edge-hair rounded-xs bg-surface-raised text-ink-muted cursor-pointer hover:text-ink-strong touch-hit"
+          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline hit-edge-hair rounded-xs bg-surface-raised text-ink-muted hover:text-ink-strong touch-hit"
           onclick={() => removeText(i)}
           type="button"
         >
@@ -162,7 +162,7 @@
         />
         <button
           aria-label={`Remove ${f.name}`}
-          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline hit-edge-hair rounded-xs bg-surface-raised text-ink-muted cursor-pointer hover:text-ink-strong touch-hit"
+          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline hit-edge-hair rounded-xs bg-surface-raised text-ink-muted hover:text-ink-strong touch-hit"
           onclick={() => removeFile(f.id)}
           type="button"
         >

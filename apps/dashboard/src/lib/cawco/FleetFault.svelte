@@ -295,7 +295,7 @@
            minimum; measured at 14.6px. -->
       <button
         aria-expanded={expanded}
-        class="group/disclose mark-line touch-hit inline-flex min-h-space-7 cursor-pointer items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 ms-auto hover:opacity-100"
+        class="group/disclose mark-line touch-hit inline-flex min-h-space-7 items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 ms-auto hover:opacity-100"
         data-box
         onclick={() => {
           expanded = !expanded;
@@ -391,7 +391,7 @@
         {:else}
           <button
             aria-expanded={disclosureOpen}
-            class="group/disclose mark-line touch-hit -ms-space-2 inline-flex min-h-space-7 cursor-pointer items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 hover:opacity-100"
+            class="group/disclose mark-line touch-hit -ms-space-2 inline-flex min-h-space-7 items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 hover:opacity-100"
             onclick={() => {
               disclosureOpen = !disclosureOpen;
             }}

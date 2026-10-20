@@ -718,7 +718,7 @@
         >
       {/if}
       <button
-        class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72"
+        class="border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
         onclick={() => finder.retry()}
         type="button">Retry</button
       >
@@ -748,7 +748,7 @@
         No sessions for “{finder.text.trim()}”
       </p>
       <button
-        class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72"
+        class="border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
         onclick={clear}
         type="button">Open today's sessions</button
       >
@@ -821,7 +821,7 @@
           Nothing waits for you
         </p>
         <button
-          class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72"
+          class="border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
           onclick={() => finder.showFind()}
           type="button">Open today's sessions</button
         >
@@ -893,7 +893,7 @@
             {/if}
           </p>
           <button
-            class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72"
+            class="border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
             onclick={() => finder.retry()}
             type="button">Retry</button
           >

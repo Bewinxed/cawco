@@ -421,7 +421,7 @@
           </ol>
           <details class="group">
             <summary
-              class="mark-line inline-flex cursor-pointer list-none items-center gap-space-2 rounded-xs type-label text-ink-muted details-marker:hidden hover:text-ink-strong"
+              class="mark-line inline-flex list-none items-center gap-space-2 rounded-xs type-label text-ink-muted details-marker:hidden hover:text-ink-strong"
             >
               <IconChevronRight
                 data-chev
@@ -542,7 +542,7 @@
 
           <details class="group" bind:open={keyOpen}>
             <summary
-              class="mark-line inline-flex cursor-pointer list-none items-center gap-space-2 rounded-xs type-label text-ink-muted details-marker:hidden hover:text-ink-strong"
+              class="mark-line inline-flex list-none items-center gap-space-2 rounded-xs type-label text-ink-muted details-marker:hidden hover:text-ink-strong"
             >
               <IconChevronRight
                 data-chev

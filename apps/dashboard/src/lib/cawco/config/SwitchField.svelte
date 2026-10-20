@@ -31,7 +31,7 @@
   <span class="flex min-w-0 flex-col gap-space-row">
     <label
       data-slot="switch-field-label"
-      class="type-label cursor-pointer text-ink-strong"
+      class="type-label text-ink-strong"
       for={id}>{label}</label
     >
     {#if typeof hint === "string"}

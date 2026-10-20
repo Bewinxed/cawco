@@ -833,7 +833,7 @@
           <li>
             <button
               data-slot="connections-page-card"
-              class="mark-line press-tint type-label flex size-full min-h-c-starter-h cursor-pointer items-center gap-space-2 rounded-lg border-none border-current bg-surface-raised p-space-3 text-start text-ink-strong shadow-tile transition-[background-color] dur-control ease-out hover:bg-surface-hover focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
+              class="mark-line press-tint type-label flex size-full min-h-c-starter-h items-center gap-space-2 rounded-lg border-none border-current bg-surface-raised p-space-3 text-start text-ink-strong shadow-tile transition-[background-color] dur-control ease-out hover:bg-surface-hover focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
               onclick={() => startAdding(service)}
               type="button"
             >
@@ -1054,7 +1054,7 @@
           <li>
             <!-- biome-ignore lint/a11y/noLabelWithoutControl: the kit Checkbox renders the control the label names -->
             <label
-              class="kit-item type-label flex w-full cursor-pointer items-center gap-space-2 px-space-2 text-ink-strong"
+              class="kit-item type-label flex w-full items-center gap-space-2 px-space-2 text-ink-strong"
             >
               <Checkbox
                 data-box

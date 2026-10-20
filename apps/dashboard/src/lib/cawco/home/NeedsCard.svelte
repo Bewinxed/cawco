@@ -677,7 +677,7 @@
               data-needs-card-peek
               {...tip}
               aria-label="Peek {item.title}"
-              class="touch-hit pointer-hit focus-inset grid size-c-btn-h-xs cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press) coarse:after:start-(--peek-hit-start) coarse:after:end-(--peek-hit-end)"
+              class="touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press) coarse:after:start-(--peek-hit-start) coarse:after:end-(--peek-hit-end)"
               onclick={peekAsk}
               {onkeydown}
               style:--peek-hit-end={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 + var(--peek-ink))"}

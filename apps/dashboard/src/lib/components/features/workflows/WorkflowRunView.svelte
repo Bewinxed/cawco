@@ -467,7 +467,7 @@
         out:unfold
       >
         <summary
-          class="cursor-pointer py-space-2 text-size-label font-medium text-ink-muted coarse:py-space-4"
+          class="py-space-2 text-size-label font-medium text-ink-muted coarse:py-space-4"
           >Log · <span data-slot="num" class="num">{logLines.length}</span
           ></summary
         >

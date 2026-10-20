@@ -521,9 +521,6 @@
         border-color var(--dur-control) var(--ease-out),
         background-color var(--dur-control) var(--ease-out);
     }
-    &:is(button) {
-      cursor: pointer;
-    }
     &:is(button):not([aria-pressed="true"], [aria-checked="true"]):hover {
       background: var(--surface-hover);
     }
@@ -552,7 +549,6 @@
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     line-height: var(--leading-label);
-    cursor: pointer;
     pointer-events: auto;
     touch-action: manipulation;
     -webkit-touch-callout: none;
@@ -963,7 +959,6 @@
     background-color: var(--action-solid);
     background-image: var(--action-surface);
     color: var(--on-action);
-    cursor: pointer;
     transition:
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out);
@@ -1110,7 +1105,6 @@
     color: var(--ink-strong);
     font: var(--type-meta);
     text-align: start;
-    cursor: pointer;
     transition: var(--transition-control);
 
     &:active {
@@ -1673,7 +1667,6 @@
     border-radius: var(--radius-sm);
     color: var(--ink-muted);
     background: transparent;
-    cursor: pointer;
     text-decoration: none;
     font-family: inherit;
     font-style: inherit;
@@ -2137,7 +2130,6 @@
     border-radius: var(--radius-pill);
     background: none;
     color: var(--ink-strong);
-    cursor: pointer;
     transition: var(--transition-control);
     @media (hover: hover) and (pointer: fine) {
       &:hover {
@@ -3545,7 +3537,6 @@
       border-radius: var(--radius-xs);
       font: var(--type-label);
       line-height: 1;
-      cursor: pointer;
       box-shadow: none;
     }
     & .ec-time-grid .ec-event.chip .ec-event-body {

@@ -233,7 +233,7 @@
           ><span>From project</span></span
         >
         <button
-          class="ns-in h-c-btn-h-sm max-phone:h-c-row-h flex-none cursor-pointer rounded-sm border-none border-current bg-transparent px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted hover:bg-surface-hover hover:text-ink-strong"
+          class="ns-in h-c-btn-h-sm max-phone:h-c-row-h flex-none rounded-sm border-none border-current bg-transparent px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted hover:bg-surface-hover hover:text-ink-strong"
           onclick={onoverride}
           style="--delay:40ms"
           type="button"
@@ -244,7 +244,7 @@
         <button
           data-slot="browse"
           aria-expanded={browsing}
-          class="ns-in inline-flex h-c-btn-h-sm max-phone:h-c-row-h flex-none cursor-pointer items-center justify-start gap-space-2 rounded-sm border border-border-control bg-surface-recess px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-strong shadow-knob enabled:hover:bg-surface-hover disabled:cursor-not-allowed"
+          class="ns-in inline-flex h-c-btn-h-sm max-phone:h-c-row-h flex-none items-center justify-start gap-space-2 rounded-sm border border-border-control bg-surface-recess px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-strong shadow-knob enabled:hover:bg-surface-hover disabled:cursor-not-allowed"
           disabled={!machineId}
           id="session-browse"
           onclick={toggleBrowse}
@@ -286,7 +286,7 @@
                 {#each crumbs.slice(0, -1) as crumb (crumb.to)}
                   <button
                     data-slot="crumb"
-                    class="min-h-c-row-h min-w-c-row-h flex-none cursor-pointer rounded-xs border-none border-current bg-transparent px-space-2 text-inherit hover:bg-surface-hover"
+                    class="min-h-c-row-h min-w-c-row-h flex-none rounded-xs border-none border-current bg-transparent px-space-2 text-inherit hover:bg-surface-hover"
                     onclick={() => list(crumb.to)}
                     type="button"
                   >
@@ -298,7 +298,7 @@
               <button
                 data-slot="crumb"
                 aria-current="location"
-                class="min-h-c-row-h min-w-c-row-h max-w-full flex-none cursor-pointer rounded-xs border-none border-current bg-surface-lift p-space-2 text-start font-medium wrap-anywhere text-ink-strong"
+                class="min-h-c-row-h min-w-c-row-h max-w-full flex-none rounded-xs border-none border-current bg-surface-lift p-space-2 text-start font-medium wrap-anywhere text-ink-strong"
                 onclick={() => list(path)}
                 type="button"
               >
@@ -311,7 +311,7 @@
           >
             {#if canGoUp}
               <button
-                class="press-tint flex h-c-btn-h max-phone:h-c-row-h min-w-0 cursor-pointer items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-muted hover:bg-surface-hover"
+                class="press-tint flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-muted hover:bg-surface-hover"
                 onclick={goUp}
                 type="button"
               >
@@ -338,7 +338,7 @@
             {:else}
               {#each folders as folder (`${path}/${folder.name}`)}
                 <button
-                  class="press-tint flex h-c-btn-h max-phone:h-c-row-h min-w-0 cursor-pointer items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-strong hover:bg-surface-hover"
+                  class="press-tint flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-strong hover:bg-surface-hover"
                   onclick={() => enter(folder.name)}
                   title={folder.name}
                   type="button"

@@ -724,7 +724,7 @@
         >
           <button
             aria-expanded={listOpen}
-            class="group press-tint mark-line type-label -mx-space-1 inline-flex cursor-pointer items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 py-space-row text-ink-strong transition-[background-color] dur-control ease-out hover:bg-surface-hover"
+            class="group press-tint mark-line type-label -mx-space-1 inline-flex items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 py-space-row text-ink-strong transition-[background-color] dur-control ease-out hover:bg-surface-hover"
             data-places-toggle
             onclick={() => {
               listOpen = !listOpen;
@@ -1446,7 +1446,7 @@
       >
         <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch component renders a native button the label names; Biome can't see through the component boundary -->
         <label
-          class="type-label flex cursor-pointer items-center gap-space-2 text-ink-strong"
+          class="type-label flex items-center gap-space-2 text-ink-strong"
         >
           <Switch
             data-review-switch

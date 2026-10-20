@@ -184,7 +184,7 @@
          picture's plus that inset (The Concentric Rule). -->
     <button
       aria-current={artifact.id === chosen || undefined}
-      class="col-start-(--lane) row-end-(--span) grid min-w-0 cursor-pointer gap-space-1 rounded-lg border-none border-current bg-transparent px-space-1 pt-space-1 pb-space-2 text-start text-ink-strong focus-inset"
+      class="col-start-(--lane) row-end-(--span) grid min-w-0 gap-space-1 rounded-lg border-none border-current bg-transparent px-space-1 pt-space-1 pb-space-2 text-start text-ink-strong focus-inset"
       data-artifact={artifact.id}
       data-files-card
       style:--lane={lane + 1}

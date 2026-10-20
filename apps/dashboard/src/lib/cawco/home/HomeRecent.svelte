@@ -93,7 +93,7 @@
     <button
       data-slot="disclosure"
       aria-expanded={recentOpen}
-      class="group/disclosure kit-section-head press-tint focus-inset min-h-c-btn-h w-full cursor-pointer rounded-t-sm border-none border-current bg-transparent transition-control hover:bg-surface-hover hover:text-ink-strong"
+      class="group/disclosure kit-section-head press-tint focus-inset min-h-c-btn-h w-full rounded-t-sm border-none border-current bg-transparent transition-control hover:bg-surface-hover hover:text-ink-strong"
       onclick={toggleRecent}
       type="button"
     >

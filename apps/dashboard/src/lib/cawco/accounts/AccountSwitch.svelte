@@ -85,7 +85,7 @@
           <button
             data-slot="option"
             aria-selected={current}
-            class="group mark-line grid min-h-c-btn-h w-full cursor-pointer grid-cols-(--option-cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong coarse:min-h-c-btn-h-lg disabled:cursor-default"
+            class="group mark-line grid min-h-c-btn-h w-full grid-cols-(--option-cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong coarse:min-h-c-btn-h-lg"
             data-account-option={account.id}
             disabled={going}
             onclick={() => pick(account.id)}

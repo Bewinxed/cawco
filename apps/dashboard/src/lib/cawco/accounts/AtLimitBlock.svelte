@@ -57,7 +57,7 @@
   <div
     class="flex items-center justify-between gap-space-4 pt-space-2 pb-space-3 text-ink-row"
   >
-    <label class="cursor-pointer" for="{id}-move">{words.move}</label>
+    <label for="{id}-move">{words.move}</label>
     <Switch id="{id}-move" bind:checked={atLimit.move} />
   </div>
   {#if atLimit.move}

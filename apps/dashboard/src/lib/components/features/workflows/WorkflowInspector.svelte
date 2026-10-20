@@ -1099,7 +1099,7 @@
               {/each}
             </section>
             <details>
-              <summary class="min-h-c-btn-h cursor-pointer"
+              <summary class="min-h-c-btn-h"
                 >Unwired ports</summary
               >
               {#each workflowPorts(node) as port (port)}

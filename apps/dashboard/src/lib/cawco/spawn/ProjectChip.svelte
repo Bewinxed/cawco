@@ -201,7 +201,7 @@
       <button
         data-slot="row"
         aria-pressed={on}
-        class="ns-in press-tint relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color] dur-toggle ease-out aria-pressed:bg-selected-bg aria-pressed:text-selected-ink motion-safe:transition-[background-color,transform]"
+        class="ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color] dur-toggle ease-out aria-pressed:bg-selected-bg aria-pressed:text-selected-ink motion-safe:transition-[background-color,transform]"
         data-fh="1"
         onclick={() => onpick(row)}
         style={`--delay:${index * 35}ms`}
@@ -230,7 +230,7 @@
     <button
       data-slot="row"
       data-add
-      class="ns-in press-tint relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color] dur-toggle ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
+      class="ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color] dur-toggle ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
       data-fh="1"
       onclick={() => {
         draft = { name: "", path: "" };

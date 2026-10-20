@@ -404,7 +404,7 @@
                unfold under the head. -->
           <button
             aria-expanded={details !== null}
-            class="mark-line -mx-space-1 flex min-w-0 cursor-pointer items-center gap-space-2 rounded-xs border-none border-current bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] dur-control ease-out hover:bg-surface-hover can-hover:aria-expanded:bg-surface-hover"
+            class="mark-line -mx-space-1 flex min-w-0 items-center gap-space-2 rounded-xs border-none border-current bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] dur-control ease-out hover:bg-surface-hover can-hover:aria-expanded:bg-surface-hover"
             data-box
             data-place-line
             onclick={() => {
@@ -432,7 +432,7 @@
                  button's to take away. `p-0` took the recipe's too, and left
                  a 7px box round a 15px line of words. -->
             <button
-              class="flex-none cursor-pointer rounded-xs border-none border-current bg-transparent px-0 font-inherit text-ink-muted transition-[background-color] dur-control ease-out hover:bg-surface-hover"
+              class="flex-none rounded-xs border-none border-current bg-transparent px-0 font-inherit text-ink-muted transition-[background-color] dur-control ease-out hover:bg-surface-hover"
               data-places-line
               onclick={() => openDetails(true)}
               type="button">· {checkouts} places</button

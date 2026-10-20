@@ -455,7 +455,7 @@
                 aria-disabled={busy || !called || undefined}
                 aria-label={preview?.title || name}
                 data-slot="artifact-open"
-                class="flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-c-btn-h-lg after:absolute after:inset-0 after:rounded-md focus-visible:outline-off"
+                class="flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-ink-strong text-size-label font-medium text-start coarse:min-h-c-btn-h-lg after:absolute after:inset-0 after:rounded-md focus-visible:outline-off"
                 onclick={whileIdle(
                   () => busy || !called,
                   () => {
@@ -527,7 +527,7 @@
               aria-controls={opened.has(callId(m)) ? body : undefined}
               aria-expanded={disclosed.get()}
               data-slot="trow"
-              class="group/trow rail-line press-tint w-full min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start cursor-pointer"
+              class="group/trow rail-line press-tint w-full min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
               data-state={disclosed.get() ? "open" : "closed"}
               onclick={() => disclosed.set(!disclosed.get())}
               type="button"

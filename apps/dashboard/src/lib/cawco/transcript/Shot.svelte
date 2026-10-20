@@ -302,7 +302,7 @@
     <button
       data-slot="shot-box"
       aria-label={`Open ${alt}`}
-      class="relative flex items-center justify-start w-full h-(--tx-shot) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--tx-shot-thumb) group-data-thumb/shot:h-(--tx-shot-thumb) cursor-pointer"
+      class="relative flex items-center justify-start w-full h-(--tx-shot) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--tx-shot-thumb) group-data-thumb/shot:h-(--tx-shot-thumb)"
       onclick={open}
       type="button"
     >

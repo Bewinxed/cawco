@@ -236,7 +236,6 @@
     border-radius: var(--radius-md);
     background: var(--surface-raised);
     color: var(--ink-strong);
-    cursor: pointer;
     white-space: nowrap;
   }
   :where(.ns-theme &[data-size="sm"]) {
@@ -292,7 +291,6 @@
     border-radius: var(--radius-sm);
     font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
     color: var(--ink-strong);
-    cursor: pointer;
     white-space: nowrap;
     max-width: 100%;
     transition:

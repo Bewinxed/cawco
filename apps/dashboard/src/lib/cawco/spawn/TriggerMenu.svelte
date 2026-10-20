@@ -44,7 +44,7 @@
     {@const Icon = item.icon}
     <button
       data-slot="row"
-      class="press-tint relative flex h-c-btn-h w-full cursor-pointer items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start text-ink-strong"
+      class="press-tint relative flex h-c-btn-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start text-ink-strong"
       data-fh="1"
       onmousedown={(event) => {
         event.preventDefault();

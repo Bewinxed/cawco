@@ -907,7 +907,7 @@
     <div
       data-slot="ghost"
       aria-selected={k === pick}
-      class="group/ghost absolute bottom-0 h-c-composer-field py-(--ghost-pad) grid grid-cols-(--ghost-cols) gap-x-space-3 items-baseline font-body text-(length:--ghost-size) leading-ui text-ink-strong origin-bottom invisible cursor-pointer will-change-(--ghost-moves) transition-[color] dur-control ease-out data-own:text-transparent aria-selected:not-data-draft:not-data-none:text-selected-ink"
+      class="group/ghost absolute bottom-0 h-c-composer-field py-(--ghost-pad) grid grid-cols-(--ghost-cols) gap-x-space-3 items-baseline font-body text-(length:--ghost-size) leading-ui text-ink-strong origin-bottom invisible will-change-(--ghost-moves) transition-[color] dur-control ease-out data-own:text-transparent aria-selected:not-data-draft:not-data-none:text-selected-ink"
       data-k={k}
       id="{id}-{k}"
       onclick={() => pickRow(k)}
