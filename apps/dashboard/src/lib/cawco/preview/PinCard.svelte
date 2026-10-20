@@ -142,7 +142,8 @@
     }
   });
   // Read at its end, the room stays there as its entries take their height
-  // (their words are set once they have loaded, after the room stands).
+  // (their words are set once they have loaded, after the room stands) and
+  // as the room itself takes its height (the card's cap, a squeeze).
   $effect(() => {
     const holder = roomEl;
     const list = holder?.querySelector('[data-slot="thread"]');
@@ -156,6 +157,7 @@
       }
     });
     watch.observe(list);
+    watch.observe(holder);
     return () => watch.disconnect();
   });
   const readAt = () => {

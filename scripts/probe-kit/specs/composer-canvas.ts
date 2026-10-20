@@ -879,7 +879,7 @@ const swapCheck = async (on: On, clock: Clock) => {
       outgoing.length > 0 &&
       incoming.every(
         (run) =>
-          run.name.endsWith("-icon-swap") &&
+          run.name === "icon-swap" &&
           run.props.join() === "filter,opacity,transform" &&
           run.duration === control
       ) &&
@@ -1966,7 +1966,7 @@ const unanswered = (s: number) =>
  * the canvas, and the box is Send again, not pending.
  */
 const heldExportCheck = async (on: On) => {
-  const { kit, base, session } = on;
+  const { kit, base, session, fleet } = on;
   const page = await kit.page("desk");
   await open(page, `${base}/session/${session}`, FIELD);
   await settle(page);
@@ -1997,7 +1997,6 @@ const heldExportCheck = async (on: On) => {
     held += 1;
   });
   const words = "The canvas with its export held";
-  const rows = await page.locator('[data-slot="turn"][data-you]').count();
   await page.fill(FIELD, words);
   await page.focus(FIELD);
   const pressed = performance.now();
@@ -2030,8 +2029,12 @@ const heldExportCheck = async (on: On) => {
     },
     [FIELD, STAGE] as const
   );
-  const sent =
-    (await page.locator('[data-slot="turn"][data-you]').count()) - rows;
+  // What reached the session, read where it lands (the model's requests):
+  // the transcript mounts only the rows in view, so its row count says
+  // nothing of what was sent.
+  const sent = fleet.seen.filter((request) =>
+    request.all.includes(words)
+  ).length;
   kit.check(
     "17: the hub's export held, Send says why over the field within the 5 s wait, keeps the words and the canvas, and the box is Send again",
     held > 0 &&

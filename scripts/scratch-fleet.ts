@@ -2281,6 +2281,22 @@ async function standUp(
       db.close();
     }
   };
+  /**
+   * Statements run in order on one connection, as a migration's own SQL
+   * runs: its PRAGMAs and TEMP tables hold from one statement to the next,
+   * which a {@link write} each would lose.
+   */
+  const script = (statements: string[]) => {
+    const db = new Database(dbPath);
+    try {
+      db.exec("PRAGMA busy_timeout = 15000");
+      for (const statement of statements) {
+        db.exec(statement);
+      }
+    } finally {
+      db.close();
+    }
+  };
 
   /**
    * {@link until} for a service of the fleet to answer, failed at once when
@@ -2813,6 +2829,7 @@ async function standUp(
     fetched,
     query,
     write,
+    script,
     hubUp,
     agentUp,
     rejoinAs,

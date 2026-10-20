@@ -199,7 +199,7 @@
   const rowOf = (id: string) => ({
     getBoundingClientRect: () => {
       const cell = document.querySelector<HTMLElement>(
-        `[data-slot="cell-d"][data-account="${CSS.escape(id)}"]`
+        `[data-usage-cell][data-account="${CSS.escape(id)}"]`
       );
       const grid = cell?.closest<HTMLElement>('[data-slot="wall"]');
       if (!(cell && grid)) {
@@ -779,10 +779,12 @@
        wash, which the dial's reserve notch takes as its ground; the cell a
        relay band stands for, while that band is hovered or open, the hover
        wash; each of those washes is also the ground the notch takes
-       (`--ring-ground`). (`cell-d` is the hook rowOf reads.) -->
+       (`--ring-ground`). Its hook is an attribute of its own name
+       (`data-usage-cell`, which rowOf reads): the carrier's cell is the
+       tooltip's trigger, whose props bring a `data-slot` of their own. -->
   <!-- biome-ignore lint/a11y/useSemanticElements: a cell is a labelled group of figures and marks, not a form; a fieldset would draw a form's frame and legend -->
   <div
-    data-slot="cell-d"
+    data-usage-cell
     {...props}
     aria-label={cellLabel(ring, c, shown)}
     class="relative col-span-5 grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] duration-(--dur-fade) ease-out data-carrying:inset-ring data-carrying:inset-ring-border-button-outline not-data-lit:data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-off"

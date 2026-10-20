@@ -1359,7 +1359,7 @@ async function seamLeg(kit: Kit, page: Page, leg: string): Promise<void> {
   const well = await page.evaluate(() => {
     const box = (
       document.querySelector(
-        "[data-bench-pane] [data-slot=side-well]"
+        "[data-bench-pane] [data-side-well]"
       ) as HTMLElement
     ).getBoundingClientRect();
     return { top: box.top, width: Math.round(box.width) };

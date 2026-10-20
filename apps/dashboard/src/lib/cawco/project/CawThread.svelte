@@ -279,14 +279,18 @@
           type="button"
           bind:this={cardAnchor}
         >
-          Caw{#if off}<span class="font-normal text-ink-muted">{" · off"}</span
+          Caw{#if off}<span
+              data-slot="off-word"
+              class="font-normal text-ink-muted">{" · off"}</span
             >{/if}
         </button>
       {:else}
         <span
           data-slot="name"
           class="type-label -mx-space-1 rounded-xs border-none border-current bg-transparent px-space-1 font-medium text-ink-strong"
-          >Caw{#if off}<span class="font-normal text-ink-muted">{" · off"}</span
+          >Caw{#if off}<span
+              data-slot="off-word"
+              class="font-normal text-ink-muted">{" · off"}</span
             >{/if}</span
         >
       {/if}

@@ -246,7 +246,7 @@ function paintedFrames() {
       : [];
     const clipped = (inset.length >= 3 ? inset[2] : inset[0]) ?? 0;
     return {
-      splitOpen: split.classList.contains("open"),
+      splitOpen: split.hasAttribute("data-split-open"),
       sheetHost: hostBox ? hostBox.height : null,
       floor: hostBox ? hostBox.bottom - clipped : null,
       composerTop: drawnTop(split),
@@ -697,13 +697,23 @@ declare global {
  * scripts.
  */
 function sheetReader() {
-  const PARTS =
-    ":scope > .composer, .ask, .lift .kit-tray-chip, .suggest:has(.track), .progress-slot > *, .perch";
+  const PARTS = [
+    ':scope > [data-slot="composer"]',
+    '[data-slot="ask"]',
+    '[data-slot="lift"] [data-tray-chip]',
+    '[data-slot="suggest"]:has([data-slot="track"])',
+    '[data-slot="progress-slot"] > *',
+    '[data-slot="perch"]',
+  ].join(", ");
   const drawn = (part: Element) =>
     part.getBoundingClientRect().height > 0 &&
     part.checkVisibility({ opacityProperty: true, visibilityProperty: true });
   const composerOf = () =>
-    [...document.querySelectorAll<HTMLElement>(".leaf > .dock .lift")]
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        '[data-slot="leaf"] > [data-slot="dock"] [data-slot="lift"]'
+      ),
+    ]
       .map((lift) => lift.parentElement)
       .find((dock) => dock?.checkVisibility()) ?? null;
   /**
@@ -757,7 +767,7 @@ function sheetReader() {
       stop: host.getAttribute("data-active-snap"),
       top: sheet ? sheet.getBoundingClientRect().top : null,
       covered: parts.map((part) => ({
-        part: `${part.localName}.${[...part.classList].find((c) => !c.startsWith("svelte-")) ?? ""}`,
+        part: `${part.localName}[${part.dataset.slot ?? ""}]`,
         covered: !!content.contains(hitIn(part.getBoundingClientRect())),
       })),
       pillInView: !!(pill && pillHit && pill.contains(pillHit)),
@@ -1266,7 +1276,11 @@ export const runFiles = async (
         if (document.querySelector('[data-files-float][data-state="open"]')) {
           return "floating";
         }
-        return document.querySelector(".kit-pop.files-pop") ? null : "panel";
+        return document.querySelector(
+          '[data-glass-card][data-glass-card-frame="files-pop"]'
+        )
+          ? null
+          : "panel";
       }),
     Boolean,
     30_000

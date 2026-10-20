@@ -703,8 +703,9 @@
   --animate-wave-breathe:
     wave-breath-draw calc(var(--breath) * 2) var(--ease-out) infinite,
     wave-breath-fade calc(var(--breath) * 2) var(--ease-in-out) infinite;
-  --animate-icon-swap: mark-in var(--dur-control) var(--ease-out) both;
-  --animate-icon-swap-still: kit-fade-in var(--dur-control) var(--ease-out) both;
+  --animate-icon-swap: icon-swap var(--dur-control) var(--ease-out) both;
+  --animate-icon-swap-still: icon-swap-still var(--dur-control) var(--ease-out)
+    both;
   --animate-cell-swap: cell-swap var(--dur-control) var(--ease-out);
   --animate-cell-fade: kit-fade-in var(--dur-control) var(--ease-out);
   --animate-arrive: kit-fade-in var(--dur-menu) var(--ease-out) both;
@@ -825,6 +826,18 @@
       opacity: 0;
       scale: 0.25;
       filter: blur(var(--space-1));
+    }
+  }
+  @keyframes icon-swap {
+    from {
+      opacity: 0;
+      transform: scale(0.25);
+      filter: blur(var(--space-1));
+    }
+  }
+  @keyframes icon-swap-still {
+    from {
+      opacity: 0;
     }
   }
   @keyframes sheet-in {

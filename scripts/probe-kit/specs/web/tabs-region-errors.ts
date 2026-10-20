@@ -295,7 +295,7 @@ function watchHydration(): void {
     ]
       .map(
         (el) =>
-          `${el.getAttribute("data-slot")}${el.classList.contains("lifted") ? " lifted" : ""} ${Math.round(el.getBoundingClientRect().width)}`
+          `${el.getAttribute("data-slot")}${el.hasAttribute("data-lifted") ? " lifted" : ""} ${Math.round(el.getBoundingClientRect().width)}`
       )
       .join(" + "),
     tools: box(document.querySelector('[data-slot="top"] [data-slot="tools"]')),

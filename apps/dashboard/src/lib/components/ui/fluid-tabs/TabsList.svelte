@@ -32,8 +32,9 @@
    *   the tabs are a row's height, on the bar's floor, the ends fading over
    *   a short run so a tab slides under the toggle and Caw. `work`
    *   (WorkTabs): its tabs' pad and the label's gap to its count close up
-   *   as the rail narrows (`--tight`), and a tab after the first starts its
-   *   label past the overlap.
+   *   as the rail narrows (`--tight`), a tab after the first starts its
+   *   label past the overlap, and a tab is as wide as its label and count
+   *   together: a label never gives way, the header's spacing does.
    */
   export const tabsListVariants = tv({
     base: "relative inline-flex flex-none select-none items-center gap-(--gap) rounded-(--radius) bg-(--muted) p-(--pad) [--gap:var(--space-row)] [--icon:var(--icon-md)] [--item:var(--c-tab-item)] [--pad:var(--space-1)] [--px:var(--c-tab-px)] [--radius:var(--radius-sm)] [--shape:calc(var(--radius)_-_var(--pad))] [--sheet:var(--surface-raised)] [--text:var(--text-label)] coarse:[--item:var(--space-8)]",
@@ -56,7 +57,7 @@
           "[--item:var(--strip-item)] [--px:var(--strip-px)] [--rim-w:var(--tab-rim-width)] [--sheet:var(--tab-sheet)] [--tab-hover:light-dark(var(--surface-recess),var(--surface-hover))] coarse:[--item:var(--strip-item)] reduced-transparency:[--rim-w:1] contrast-more:[--rim-w:1]",
         hosted:
           "[--item:var(--strip-item)] [--px:var(--strip-px)] [--rim-w:var(--tab-rim-width)] [--sheet:var(--tab-sheet)] [--tab-hover:light-dark(var(--surface-recess),var(--surface-hover))] coarse:[--item:var(--strip-item)] reduced-transparency:[--rim-w:1] contrast-more:[--rim-w:1]",
-        work: "[--item:var(--space-8)] [--px:calc(var(--space-2)_-_var(--tight)_*_0.09)] [--sheet:light-dark(var(--surface-raised),var(--surface-hover))] [--tab-fill:var(--surface-recess)] [--tab-hover:light-dark(var(--surface-hover),color-mix(in_oklch,var(--surface-fill)_50%,transparent))] coarse:[--item:var(--space-8)] [&_[data-slot=ff-tab]]:[--gap:max(0px,var(--space-row)_-_var(--tight)_*_0.06)] [&_[data-slot=ff-tab]~[data-slot=ff-tab]]:[--px-start:calc(var(--overlap)_+_var(--px))]",
+        work: "[--item:var(--space-8)] [--px:calc(var(--space-2)_-_var(--tight)_*_0.09)] [--sheet:light-dark(var(--surface-raised),var(--surface-hover))] [--tab-fill:var(--surface-recess)] [--tab-hover:light-dark(var(--surface-hover),color-mix(in_oklch,var(--surface-fill)_50%,transparent))] coarse:[--item:var(--space-8)] [&_[data-ff-tab]]:min-w-max [&_[data-hit]]:shrink-0 [&_[data-slot=ff-tab]]:[--gap:max(0px,var(--space-row)_-_var(--tight)_*_0.06)] [&_[data-slot=ff-tab]~[data-slot=ff-tab]]:[--px-start:calc(var(--overlap)_+_var(--px))]",
       },
     },
     compoundVariants: [

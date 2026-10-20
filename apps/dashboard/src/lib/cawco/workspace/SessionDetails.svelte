@@ -814,6 +814,7 @@
   </div>
   <!-- A meter wrapping to a second line tweens the strip's height (morph). -->
   <div
+    data-slot="stats"
     class="flex flex-none flex-wrap items-center gap-space-4 gap-y-space-2 border-t border-t-border-hairline px-space-5 pt-space-3 pb-0 text-size-meta font-normal leading-body num text-ink-strong"
     bind:this={statsEl}
     {@attach morph()}
@@ -826,6 +827,7 @@
          a word, a 4px bar of what is used (usage/LimitBar) and a figure;
          the provider's limit is its own unit (usage/ProviderLimit). -->
     <div
+      data-slot="context"
       class="flex flex-auto flex-wrap items-center gap-x-space-2 gap-y-space-1"
     >
       {#if percent !== null && stats.totalTokens !== null && stats.maxTokens !== null}

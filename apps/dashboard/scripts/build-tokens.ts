@@ -219,11 +219,12 @@ const ANIMATIONS: Record<string, string> = {
   "animate-wave-draw": "wave-draw var(--dur-pop) var(--ease-out) backwards",
   "animate-wave-breathe":
     "wave-breath-draw calc(var(--breath) * 2) var(--ease-out) infinite, wave-breath-fade calc(var(--breath) * 2) var(--ease-in-out) infinite",
-  // A glyph swapping in its slot grows in as a mark does; with reduced
-  // motion it only fades.
-  "animate-icon-swap": "mark-in var(--dur-control) var(--ease-out) both",
+  // A glyph swapping in its slot grows in by `transform`, the glyph leaving
+  // shrinks by `scale` (Composer's Send/Stop), so one caught going both
+  // ways composes the two; with reduced motion it only fades.
+  "animate-icon-swap": "icon-swap var(--dur-control) var(--ease-out) both",
   "animate-icon-swap-still":
-    "kit-fade-in var(--dur-control) var(--ease-out) both",
+    "icon-swap-still var(--dur-control) var(--ease-out) both",
   // An update cell's new state pops in; with reduced motion it fades.
   "animate-cell-swap": "cell-swap var(--dur-control) var(--ease-out)",
   "animate-cell-fade": "kit-fade-in var(--dur-control) var(--ease-out)",
@@ -270,6 +271,9 @@ const KEYFRAMES: Record<string, string> = {
   "mention-tip-in": "from {\n  opacity: 0;\n  scale: var(--press-scale);\n}",
   "mark-in":
     "from {\n  opacity: 0;\n  scale: 0.25;\n  filter: blur(var(--space-1));\n}",
+  "icon-swap":
+    "from {\n  opacity: 0;\n  transform: scale(0.25);\n  filter: blur(var(--space-1));\n}",
+  "icon-swap-still": "from {\n  opacity: 0;\n}",
   "sheet-in": "from {\n  transform: var(--sheet-away);\n}",
   "sheet-out": "to {\n  transform: var(--sheet-away);\n}",
   "ns-panel-out":

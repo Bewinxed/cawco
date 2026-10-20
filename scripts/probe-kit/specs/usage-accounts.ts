@@ -449,7 +449,7 @@ const run = async (kit: Kit) => {
               id,
               document
                 .querySelector(
-                  `[data-slot="cell-d"][data-account="${id}"] [data-name]`
+                  `[data-usage-cell][data-account="${id}"] [data-name]`
                 )
                 ?.textContent?.replace(/\s+/g, " ")
                 .trim() ?? null,
