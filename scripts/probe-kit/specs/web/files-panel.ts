@@ -392,14 +392,14 @@ const desk = async (
     () => document.scrollingElement?.scrollHeight ?? 0
   );
   await control.click();
-  const panel = page.locator(".kit-pop.files-pop");
+  const panel = page.locator("[data-glass-card-frame='files-pop']");
   await panel.waitFor();
   await page.locator("[data-files-card]").first().waitFor();
   await page.waitForTimeout(600);
 
   // 2. It floats.
   const floats = await page.evaluate(() => {
-    const pop = document.querySelector<HTMLElement>(".kit-pop.files-pop");
+    const pop = document.querySelector<HTMLElement>("[data-glass-card-frame='files-pop']");
     let positioned = "";
     for (let at: HTMLElement | null = pop; at; at = at.parentElement) {
       const { position } = getComputedStyle(at);
@@ -610,7 +610,7 @@ const desk = async (
   await page.waitForTimeout(600);
   const picked = await page.evaluate(() => {
     const pop = document
-      .querySelector(".kit-pop.files-pop")
+      .querySelector("[data-glass-card-frame='files-pop']")
       ?.getBoundingClientRect();
     const box = document.querySelector<HTMLElement>("[data-files-float]");
     const rect = box?.getBoundingClientRect();
@@ -653,7 +653,7 @@ const desk = async (
   ] as const) {
     const each = await openSession(kit, base, "desk", theme, id);
     await each.locator("[data-files-control]").click();
-    await each.locator(".kit-pop.files-pop").waitFor();
+    await each.locator("[data-glass-card-frame='files-pop']").waitFor();
     await each.waitForTimeout(600);
     const said = await each.evaluate(() => ({
       empty: !!document.querySelector("[data-files-empty]"),
@@ -741,7 +741,7 @@ const reviewLegs = async (
     '[data-files-region="artifacts"] [data-files-scroll]'
   );
   await slow.locator("[data-files-control]").click();
-  await slow.locator(".kit-pop.files-pop").waitFor();
+  await slow.locator("[data-glass-card-frame='files-pop']").waitFor();
   const opened = Date.now();
   const atOpen = await slow.evaluate(() => ({
     waits: document.querySelectorAll("[data-files-wait]").length,
@@ -896,9 +896,9 @@ const reviewLegs = async (
       label: float?.getAttribute("aria-label"),
       afterFiles:
         !!float &&
-        !!document.querySelector(".kit-pop.files-pop") &&
+        !!document.querySelector("[data-glass-card-frame='files-pop']") &&
         (
-          document.querySelector(".kit-pop.files-pop") as Element
+          document.querySelector("[data-glass-card-frame='files-pop']") as Element
         ).compareDocumentPosition(float) === Node.DOCUMENT_POSITION_FOLLOWING,
     };
   });
@@ -934,7 +934,7 @@ const reviewLegs = async (
   await page.keyboard.press("Escape");
   await page.waitForTimeout(600);
   const stillOpen = await page.evaluate(
-    () => !!document.querySelector(".kit-pop.files-pop[data-state='open']")
+    () => !!document.querySelector("[data-glass-card-frame='files-pop'][data-state='open']")
   );
   kit.check(
     "18: a picture opened from Files shows in the lightbox, and pressing in it and putting it away leaves Files open",
@@ -946,7 +946,7 @@ const reviewLegs = async (
   await page.waitForTimeout(400);
   const short = await page.evaluate(() => {
     const pop = document
-      .querySelector(".kit-pop.files-pop")
+      .querySelector("[data-glass-card-frame='files-pop']")
       ?.getBoundingClientRect();
     const heads = [...document.querySelectorAll(".files-pop .files-head")].map(
       (head) => head.getBoundingClientRect()
@@ -1176,7 +1176,7 @@ const askLegs = async (
 
   const onDesk = await openSession(kit, base, "desk", "light", none);
   await onDesk.locator("[data-files-control]").click();
-  await onDesk.locator(".kit-pop.files-pop").waitFor();
+  await onDesk.locator("[data-glass-card-frame='files-pop']").waitFor();
   const before = await onDesk.evaluate(() => ({
     ask:
       document.querySelector("[data-files-ask]")?.textContent?.trim() ?? null,
@@ -1188,7 +1188,7 @@ const askLegs = async (
   )?.trim();
   await onDesk.locator("[data-files-ask]").click();
   await onDesk
-    .locator(".kit-pop.files-pop[data-state='open']")
+    .locator("[data-glass-card-frame='files-pop'][data-state='open']")
     .waitFor({ state: "detached", timeout: 10_000 })
     .catch(() => null);
   await onDesk.waitForTimeout(800);
@@ -1401,7 +1401,7 @@ const roundThree = async (
       paddingEnd: string;
       overflow: string;
     } | null = await page.evaluate(() => {
-      const pop = document.querySelector<HTMLElement>(".kit-pop.files-pop");
+      const pop = document.querySelector<HTMLElement>("[data-glass-card-frame='files-pop']");
       if (!pop) {
         return null;
       }
@@ -1558,7 +1558,7 @@ const roundThree = async (
   await attach.waitForTimeout(600);
   const attachSaid = await attach.evaluate(() => ({
     filesOpen: !!document.querySelector(
-      ".kit-pop.files-pop[data-state='open']"
+      "[data-glass-card-frame='files-pop'][data-state='open']"
     ),
     composerInput: !!document.querySelector(
       'form[data-slot="cin"] input[type="file"]'
@@ -1591,7 +1591,7 @@ const roundThree = async (
   const narrowed = await narrowing.evaluate(() => ({
     float: !!document.querySelector("[data-files-float]"),
     filesOpen: !!document.querySelector(
-      ".kit-pop.files-pop[data-state='open']"
+      "[data-glass-card-frame='files-pop'][data-state='open']"
     ),
     panel: [...document.querySelectorAll('iframe[title="Preview"]')].some(
       (frame) => !frame.closest("[data-files-float]")

@@ -131,7 +131,7 @@ async function leg(
   pane: string,
   words: string
 ): Promise<void> {
-  await page.waitForSelector('[data-slot="empty"], .kit-empty', {
+  await page.waitForSelector('[data-slot="empty"]', {
     timeout: 60_000,
   });
   // Every pane the group mounts in the background is in by then (PaneLeaf's
@@ -145,7 +145,7 @@ async function leg(
   );
   kit.note(`${way}: A's nodes kept: ${kept.length}; ${lines.join(" | ")}`);
   const named = await page
-    .locator(`[data-slot="pane"][data-pane="${UNKNOWN}"] .kit-empty-title`)
+    .locator(`[data-slot="pane"][data-pane="${UNKNOWN}"] [data-slot="empty-title"]`)
     .allTextContents();
   kit.check(
     `${way}: a named state stands in the unknown id's pane`,
@@ -223,7 +223,7 @@ const spec: Spec = {
     await open(
       page,
       `${base}/session/${UNKNOWN}`,
-      '[data-slot="empty"], .kit-empty',
+      '[data-slot="empty"]',
       120_000
     );
     await leg(kit, page, "full load", a, words);

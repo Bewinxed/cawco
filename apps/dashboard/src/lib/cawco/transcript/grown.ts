@@ -185,6 +185,7 @@ export class GrownShape {
     const shade = `grown-drop-${made}`;
     this.#drop = document.createElement("div");
     this.#drop.className = `${LAYER} opacity-0 invisible origin-bottom data-settled:opacity-100 data-settled:visible data-settled:transition-fade-show`;
+    this.#drop.setAttribute("data-slot", "grown-drop");
     this.#drop.setAttribute("aria-hidden", "true");
     this.#drop.innerHTML = `<svg><defs><filter id="${shade}" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">${lay}</filter></defs><path fill="url(#${fill})" filter="url(#${shade})"/></svg>`;
     host.append(this.#drop);

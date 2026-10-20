@@ -426,7 +426,7 @@ const cardDrawn = () => {
     ?.getBoundingClientRect();
   const surfaces = [
     ...document.querySelectorAll<HTMLElement>(
-      '[data-slot="grown-halo"], .grown-drop'
+      '[data-slot="grown-halo"], [data-slot="grown-drop"]'
     ),
   ].map((node) => {
     const r = node.getBoundingClientRect();

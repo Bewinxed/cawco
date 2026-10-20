@@ -296,7 +296,7 @@ const readPanel = (page: Page) =>
       shell: box(shell),
       greeting: words(
         panel?.querySelector(
-          '[data-thread-hero] [data-slot="empty"] .kit-empty-title'
+          '[data-thread-hero] [data-slot="empty"] [data-slot="empty-title"]'
         )
       ),
       starters,

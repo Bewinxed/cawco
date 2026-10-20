@@ -1958,7 +1958,7 @@ async function artifactSwitchLeg(
           line:
             pane?.querySelector("[data-slot=subtitle]")?.textContent ?? null,
           title:
-            pane?.querySelector("[data-slot=down] .kit-empty-title")
+            pane?.querySelector("[data-slot=down] [data-slot=empty-title]")
               ?.textContent ?? null,
         };
       });
@@ -2090,8 +2090,11 @@ async function stageDownLeg(
       const edge = box.getBoundingClientRect();
       const at = details?.getBoundingClientRect();
       return {
-        title: box.querySelector(".kit-empty-title")?.textContent ?? "",
-        line: box.querySelector(".kit-empty-line")?.textContent?.trim() ?? "",
+        title:
+          box.querySelector('[data-slot="empty-title"]')?.textContent ?? "",
+        line:
+          box.querySelector('[data-slot="empty-line"]')?.textContent?.trim() ??
+          "",
         button: button?.textContent?.trim() ?? null,
         expanded: button?.getAttribute("aria-expanded") ?? null,
         details: details?.textContent?.trim() ?? null,

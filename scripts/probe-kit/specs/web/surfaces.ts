@@ -22,7 +22,7 @@
  * Every layer that has `will-change` is painted again where it stands
  * before its capture (`atRest`). Chromium keeps such a layer's raster from
  * whichever frame of its entrance first painted it: a hanging card's
- * `will-change: translate` (app.css `.kit-pop.kit-hang`, kept for as long
+ * `will-change: translate` (ui/hang-card's `tab: false`, kept for as long
  * as it is mounted for WebKit's sake), a vaul drawer's
  * `will-change: transform`. The same document painted its text at the
  * sub-pixel offset of that frame, so one state gave two or more pictures,

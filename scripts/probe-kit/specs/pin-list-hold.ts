@@ -129,7 +129,7 @@ const drawn = (page: Page): Promise<Drawn> =>
         const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
         return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
       };
-      const skeleton = root?.querySelector(".kit-skeleton");
+      const skeleton = root?.querySelector('[data-slot="skeleton"]');
       const heightOf = (el: Element | null | undefined) =>
         el ? Math.round(el.getBoundingClientRect().height * 10) / 10 : null;
       return {

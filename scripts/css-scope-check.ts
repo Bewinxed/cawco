@@ -32,7 +32,7 @@
  *    purpose (a kit surface it tunes, a `body:has(…)` rule):
  *
  *      /* css-scope: tunes the kit popover only while it holds this list *\/
- *      :global(.kit-pop:has(> .x)) { … }
+ *      :global([data-slot="popover-content"]:has(> .x)) { … }
  *
  *    The comment covers that rule and what is nested in it.
  *

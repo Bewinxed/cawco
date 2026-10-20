@@ -111,22 +111,24 @@
     >
       <span
         class="max-w-c-measure-short type-meta font-medium tracking-title text-ink-strong text-balance"
-        >{title}</span
+        data-slot="empty-title">{title}</span
       >
       <span aria-hidden="true">·</span>
-      {@render why()}
+      <span data-slot="empty-line">{@render why()}</span>
     </p>
   {:else}
     <!-- The title in the title role, the why in muted body, each at the
          short reading measure (DESIGN.md, Empty: "up to 60ch"). -->
     <p
       class="max-w-c-measure-short type-title tracking-title text-ink-strong text-balance"
+      data-slot="empty-title"
     >
       {title}
     </p>
     {#if line}
       <p
         class="mark-text max-w-c-measure-short type-body text-ink-muted text-pretty [&_code]:text-label"
+        data-slot="empty-line"
       >
         {@render why()}
       </p>

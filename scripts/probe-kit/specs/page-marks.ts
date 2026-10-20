@@ -41,6 +41,9 @@ interface Pair {
 }
 
 const WRAPPER = "[data-bits-floating-content-wrapper]";
+/** The kit's scrims, each marking the root with `scrimMark` (cawco/page-marks). */
+const SCRIM =
+  ':is([data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"], [data-slot="drawer-overlay"], [data-slot="sheet-overlay"])';
 const NEW_SESSION = /^(New session|Start session)$/;
 const PROJECT_CHIP = /^Project:/;
 const PERMISSION_MODE = /^Permission mode:/;
@@ -62,14 +65,14 @@ const PAIRS: Pair[] = [
   {
     name: "scrim open",
     on: "root",
-    old: ':root:has(> body > .kit-scrim[data-state="open"])',
+    old: `:root:has(> body > ${SCRIM}[data-state="open"])`,
     now: ':root[data-scrim~="open"]',
     made: true,
   },
   {
     name: "scrim closed",
     on: "root",
-    old: ':root:has(> body > .kit-scrim[data-state="closed"])',
+    old: `:root:has(> body > ${SCRIM}[data-state="closed"])`,
     now: ':root[data-scrim~="closed"]',
     made: true,
   },
@@ -113,13 +116,6 @@ const PAIRS: Pair[] = [
     on: "body",
     old: "body:has(> [data-session-card][data-vaul-drawer])",
     now: "body[data-session-sheet]",
-    made: true,
-  },
-  {
-    name: "hanging card",
-    on: "wrapper",
-    old: `${WRAPPER}:has(> .kit-pop.kit-hang)`,
-    now: `${WRAPPER}[data-hang]`,
     made: true,
   },
   {
