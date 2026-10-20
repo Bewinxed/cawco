@@ -17,14 +17,15 @@
           "pb-(--safe-bottom) vaul-drawer-direction-bottom:pb-(--safe-bottom)",
         "sheet-safe-bottom": "vaul-drawer-direction-bottom:pb-(--safe-bottom)",
       },
-      /** A sheet in a column that may shrink below its content; or one that
-          stands at its cap from the first frame (its own --drawer-max-height,
-          else the recipe's), whatever it holds, so vaul's stops, shares of
-          the screen's height, each hold one height (Files). The placed
-          sheet's max-height keeps it inside the visible area (app.css). */
+      /** A sheet in a column that may shrink below its content; or a bottom
+          sheet that stands at its cap from the first frame (its own
+          --drawer-max-height, else the recipe's 85vh), whatever it holds, so
+          vaul's stops, shares of the screen's height, each hold one height
+          (Files, Caw's sheet, the peek on a touch screen). The placed sheet's
+          max-height keeps it inside the visible area (app.css). */
       height: {
         shrink: "min-h-0",
-        cap: "h-[var(--drawer-max-height,var(--c-sheet-max-h))]",
+        cap: "vaul-drawer-direction-bottom:h-[var(--drawer-max-height,var(--c-sheet-max-h))]",
       },
       /** The new-session card: the dialog's theme, no outline or margin,
           and under reduced motion none of vaul's settling transform (its

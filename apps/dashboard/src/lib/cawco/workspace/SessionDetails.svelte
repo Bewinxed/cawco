@@ -670,7 +670,7 @@
            "why don't we have proper heirachy y and have the controls as a
            coherent group?"): the head on the tab's own surface, and
            everything under it on the card's one body surface
-           (`surface-raised`, the kit-pop's) with no fill of its own: the
+           (`surface-raised`, the floating surface's) with no fill of its own: the
            controls, the meters, the action. Sections part by space, and by
            one hairline, between the controls and the meters; the action
            follows the meters by space alone. The head's edge is the hairline

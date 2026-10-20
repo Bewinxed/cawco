@@ -2,9 +2,14 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  /** Its callers' looks: a sheet whose content pads itself. */
+  /** Its callers' looks: a sheet whose content pads itself; a sheet that
+      stands only under the drawer line (DESIGN.md, Breakpoints: at 900px
+      "the rail becomes a burger sheet"), gone past it however it was left. */
   export const sheetContentVariants = tv({
-    variants: { pad: { none: "p-0" } },
+    variants: {
+      pad: { none: "p-0" },
+      narrow: { true: "desk:hidden" },
+    },
   });
 
   export type SheetContentLooks = VariantProps<typeof sheetContentVariants>;
@@ -44,6 +49,7 @@
     restoreScrollDelay = 0,
     portalProps,
     pad,
+    narrow,
     children,
     ...restProps
   }: WithoutChildrenOrChild<SheetPrimitive.ContentProps> &
@@ -106,7 +112,7 @@
          the sheet's transform inline once it has landed. Asked for less
          motion, it fades in place. */
       "motion-safe:state-closed:animate-sheet-out motion-safe:state-open:animate-sheet-in motion-reduce:state-closed:animate-sheet-fade-out motion-reduce:state-open:animate-sheet-fade-in",
-      sheetContentVariants({ pad }),
+      sheetContentVariants({ pad, narrow }),
       className
     )}
     data-side={side}

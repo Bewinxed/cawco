@@ -7,6 +7,10 @@
     pressable,
   } from "#lib/components/ui/floating-presence.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import {
+    type FloatingSurfaceLooks,
+    floatingSurface,
+  } from "#lib/components/ui/popover/popover-content.svelte";
   import type { WithoutChildrenOrChild } from "#lib/utils.js";
   import { cn } from "#lib/utils.js";
   import ContextMenuPortal from "./context-menu-portal.svelte";
@@ -16,14 +20,16 @@
     portalProps,
     class: className,
     forceMount = false,
+    motion,
     child: callerChild,
     children,
     ...restProps
-  }: ContextMenuPrimitive.ContentProps & {
-    portalProps?: WithoutChildrenOrChild<
-      ComponentProps<typeof ContextMenuPortal>
-    >;
-  } = $props();
+  }: ContextMenuPrimitive.ContentProps &
+    FloatingSurfaceLooks & {
+      portalProps?: WithoutChildrenOrChild<
+        ComponentProps<typeof ContextMenuPortal>
+      >;
+    } = $props();
 
   // One ghost glides from item to item under the pointer and arrow keys.
   $effect(() => {
@@ -40,7 +46,8 @@
 <ContextMenuPortal {...portalProps}>
   <ContextMenuPrimitive.Content
     class={cn(
-      "kit-pop relative z-50 min-w-48 origin-(--bits-context-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
+      floatingSurface({ motion }),
+      "relative z-50 min-w-48 origin-(--bits-context-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
       className
     )}
     data-slot="context-menu-content"

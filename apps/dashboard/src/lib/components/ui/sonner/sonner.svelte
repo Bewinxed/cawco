@@ -175,7 +175,7 @@
 </script>
 
 <!-- sonner paints its toasts from these three variables. They name the
-     floating-surface tokens (`.kit-pop` in app.css): the shadcn
+     floating-surface tokens (the kit's `floatingSurface`): the shadcn
      `--color-popover*` names they used to point at are gone from the token
      set, and an unresolved `var()` left every toast transparent — the page
      under it showed through, and its text and buttons read as painted over

@@ -1121,7 +1121,7 @@
         in:crossIn
         out:crossOut
       >
-        <Alert class="items-center" role="status" surface="card">
+        <Alert layout="row" role="status" surface="card">
           <AlertDescription>{view.problem}</AlertDescription>
           {#if noMachine}
             <AlertAction>

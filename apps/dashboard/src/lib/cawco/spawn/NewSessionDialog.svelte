@@ -38,6 +38,7 @@
     DrawerContent,
     DrawerTitle,
   } from "#lib/components/ui/drawer/index.js";
+  import { sheetHeadVariants } from "#lib/components/ui/drawer/drawer-header.svelte";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import {
     machineHue,
@@ -152,6 +153,8 @@
     /** The operator deleted the source chip: the dialog stays open as a plain New Session. */
     onexitcontinue?: () => void;
   } = $props();
+  /** The sheet's head and its Close, as every kit sheet draws them. */
+  const sheetHead = sheetHeadVariants();
   /** A home folder at the start of a path (Linux, macOS). */
   const HOME = /^\/(home|Users)\/[^/]+(?=\/|$)/;
   /**
@@ -1814,7 +1817,7 @@
     <DrawerContent
       data-session-card
       aria-label="New Session"
-      class="fixed z-81 flex origin-center flex-col"
+      class="z-81"
       data-ns-dialog
       look="new-session"
       onCloseAutoFocus={(event) => {
@@ -1829,7 +1832,7 @@
       style={`--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), var(--space-7)))${open ? "" : "; animation-duration: var(--dur-exit); animation-timing-function: var(--ease-out)"}`}
       bind:ref={card}
     >
-      <DrawerTitle class="sr-only">New session</DrawerTitle>
+      <DrawerTitle visible={false}>New session</DrawerTitle>
       {@render formContent()}
     </DrawerContent>
   </Drawer>
@@ -1874,7 +1877,7 @@
       >
         {#snippet child({ props, open: shown })}
           <div {...props} style:pointer-events={pressable(shown)}>
-            <DialogTitle class="sr-only">New session</DialogTitle>
+            <DialogTitle visible={false}>New session</DialogTitle>
             {@render formContent()}
           </div>
         {/snippet}
@@ -1889,7 +1892,10 @@
        subtree drops focus to the body). -->
   <div
     data-slot="head"
-    class="kit-sheet-head gap-space-3 px-space-1 pt-space-1 pb-space-2 max-phone:touch-none max-phone:px-0 max-phone:pt-0 max-phone:pb-space-3"
+    class={sheetHead.head({
+      class:
+        "gap-space-3 px-space-1 pt-space-1 pb-space-2 max-phone:touch-none max-phone:px-0 max-phone:pt-0 max-phone:pb-space-3",
+    })}
     inert={busy}
   >
     <div class="flex min-w-0 items-center gap-space-3">
@@ -1911,7 +1917,7 @@
         <button
           {...tip}
           aria-label={moveStep ? "Back" : "Close"}
-          class="kit-sheet-close touch-hit"
+          class={sheetHead.close()}
           data-vaul-no-drag
           onclick={moveStep ? back : close}
           type="button"

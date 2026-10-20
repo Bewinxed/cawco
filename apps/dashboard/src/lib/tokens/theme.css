@@ -1179,3 +1179,15 @@
 @utility anim-delay-* {
   animation-delay: --value(--duration-*);
 }
+
+/* wave 2: W5-overlays */
+/* The overlays' clocks (DESIGN.md, Dialog: "enters over 280ms on ease-out
+   rising 6px, exits over 160ms"; Materials, Scrim; Tooltip: "fades in and
+   settles … over 140ms on ease-out"), on the kit's keyframes (app.css). */
+@theme inline {
+  --animate-dialog-in: kit-dialog-in var(--dur-panel) var(--ease-out) both;
+  --animate-dialog-out: kit-dialog-out var(--dur-exit) var(--ease-out) both;
+  --animate-scrim-in: kit-fade-in var(--dur-panel) var(--ease-out) both;
+  --animate-tip-fade: kit-tip-fade var(--dur-fade) var(--ease-out) both;
+  --animate-tip-in: kit-tip-in var(--dur-fade) var(--ease-out) both;
+}

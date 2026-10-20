@@ -87,9 +87,8 @@
        shares of the screen's height, so the sheet holds one height at every
        stop. -->
   <Drawer.Content
-    class="h-(--files-drawer-h)"
     data-files-sheet
-    style="--files-drawer-h: min(var(--drawer-max-height, 85vh), var(--visible-height, 100dvh))"
+    height="cap"
     onCloseAutoFocus={(event: Event) => {
       // The focus moved on by itself (the ask, into the composer): it stays.
       // Opened from the sidebar, which went as it rose: the focus goes back

@@ -84,9 +84,8 @@
     </DropdownMenu.Trigger>
     <DropdownMenu.Content align={inEmptyState ? "start" : "end"} width="wide">
       <!-- The title (the pending content: slot and label) on one line, what it
-           makes on the next. The 44px is the top bar's own height. -->
+           makes on the next, on a row's pitch (the kit's `titled`). -->
       <DropdownMenu.PendingItem
-        class="min-h-c-top-bar-h flex-wrap"
         label="New graph"
         look="titled"
         pendingLabel="Creating…"
@@ -98,7 +97,6 @@
         >
       </DropdownMenu.PendingItem>
       <DropdownMenu.PendingItem
-        class="min-h-c-top-bar-h flex-wrap"
         label="New program"
         look="titled"
         pendingLabel="Creating…"

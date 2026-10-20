@@ -473,7 +473,6 @@
     align="end"
     anchor={glass}
     aria-label={LABEL[shown]}
-    class="data-rehearsing:invisible"
     data-glass-card-frame={FRAME[shown]}
     data-rehearsing={rehearsing || undefined}
     frame={shown}

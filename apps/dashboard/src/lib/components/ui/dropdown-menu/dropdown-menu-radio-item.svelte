@@ -1,3 +1,11 @@
+<script lang="ts" module>
+  /** A radio item's dot (DESIGN.md, Ticks and dots: "A radio dot grows from
+      0.6 as it fades in. With reduced motion both only fade"), the dropdown's
+      and the context menu's. */
+  export const radioDot =
+    "block size-1.5 rounded-pill bg-current opacity-0 transition-opacity duration-(--dur-control) ease-out data-[on=true]:opacity-100 motion-safe:scale-60 motion-safe:transition-[opacity,scale] motion-safe:data-[on=true]:scale-100";
+</script>
+
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import { cn, type WithoutChild } from "#lib/utils.js";
@@ -25,7 +33,7 @@
       data-box
       data-slot="dropdown-menu-radio-item-indicator"
     >
-      <span class="kit-dot" data-on={checked}></span>
+      <span class={radioDot} data-on={checked}></span>
     </span>
     {@render childrenProp?.({ checked })}
   {/snippet}

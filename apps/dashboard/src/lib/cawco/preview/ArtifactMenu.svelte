@@ -238,7 +238,7 @@
     bind:ref={list}
   >
     {#if line && lineDropped}
-      <DropdownMenu.Label data-slot="menu-line" class="wrap-anywhere"
+      <DropdownMenu.Label data-slot="menu-line" kind="line"
         >{line}</DropdownMenu.Label
       >
     {/if}
@@ -258,10 +258,11 @@
           ]
             .filter(Boolean)
             .join(" ")}
-          class="group/artifact min-h-c-artifact-row-h"
+          class="group/artifact"
           data-artifact={artifact.id}
           data-flip
           marks="current-busy"
+          row="artifact"
           onkeydown={(event: KeyboardEvent) => {
             if (event.key === "Delete" || event.key === "Backspace") {
               event.preventDefault();

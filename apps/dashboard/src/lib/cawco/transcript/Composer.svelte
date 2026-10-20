@@ -94,6 +94,7 @@
   import { whileIdle } from "#lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Command from "#lib/components/ui/command/index.js";
+  import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
@@ -476,7 +477,7 @@
 
   /**
    * The `/` and `@` menu leaves the way the kit's surfaces leave
-   * (app.css `.kit-pop[data-state="closed"]`, here `data-side="top"`): back
+   * (`floatingSurface` closed, here `data-side="top"`): back
    * down toward the field it stands on, shrinking to the pop scale as it
    * fades, over --dur-exit. It comes in by the kit's own `@starting-style`.
    */
@@ -3383,7 +3384,7 @@
           <!-- Focus never leaves the field: the menu swallows the mousedown that
            would blur it, so a clicked row lands on the message being written. -->
           <!-- The `/` and `@` menu, above the pill and matched to its width:
-               a kit floating surface (app.css `.kit-pop`) that rises out of
+               a kit floating surface (`floatingSurface`) that rises out of
                the field below it, growing from its bottom edge, the side the
                caret is on. The list inside carries its own inset. shadcn's
                Command parts are addressed by slot from here, so the menu
@@ -3396,7 +3397,10 @@
           <!-- biome-ignore lint/a11y/noStaticElementInteractions: role="presentation" is deliberate — this wrapper is never meant to be announced; the mousedown handler only preventDefaults so focus stays on the field, it is not a user interaction target. -->
           <div
             data-slot="menu"
-            class="kit-pop absolute inset-x-0 bottom-(--menu-foot) max-h-c-composer-menu-max-h overflow-hidden p-0 origin-bottom [&_[data-slot=command]]:bg-transparent [&_[data-slot=command-list]]:max-h-c-composer-menu-max-h [&_[data-slot=command-list]]:overflow-y-auto [&_[data-slot=command-list]]:overscroll-contain [&_[data-slot=command-list]]:p-space-1 [&_[data-slot=command-group]]:py-space-1 [&_[data-slot=command-group]]:px-0 [&_[data-slot=command-group]+[data-slot=command-group]]:border-t [&_[data-slot=command-group]+[data-slot=command-group]]:border-t-border-hairline [&_[data-slot=command-item]]:flex [&_[data-slot=command-item]]:items-baseline [&_[data-slot=command-item]]:gap-space-2 [&_[data-slot=command-item]]:min-h-c-btn-h-sm [&_[data-slot=command-item]]:py-space-1 [&_[data-slot=command-item]]:px-space-2 [&_[data-slot=command-item]]:rounded-sm [&_[data-slot=command-item]]:cursor-pointer [&_[data-slot=command-item]]:text-ink-strong coarse:[&_[data-slot=command-item]]:min-h-c-row-h"
+            class={floatingSurface({
+              class:
+                "absolute inset-x-0 bottom-(--menu-foot) max-h-c-composer-menu-max-h overflow-hidden p-0 origin-bottom [&_[data-slot=command]]:bg-transparent [&_[data-slot=command-list]]:max-h-c-composer-menu-max-h [&_[data-slot=command-list]]:overflow-y-auto [&_[data-slot=command-list]]:overscroll-contain [&_[data-slot=command-list]]:p-space-1 [&_[data-slot=command-group]]:py-space-1 [&_[data-slot=command-group]]:px-0 [&_[data-slot=command-group]+[data-slot=command-group]]:border-t [&_[data-slot=command-group]+[data-slot=command-group]]:border-t-border-hairline [&_[data-slot=command-item]]:flex [&_[data-slot=command-item]]:items-baseline [&_[data-slot=command-item]]:gap-space-2 [&_[data-slot=command-item]]:min-h-c-btn-h-sm [&_[data-slot=command-item]]:py-space-1 [&_[data-slot=command-item]]:px-space-2 [&_[data-slot=command-item]]:rounded-sm [&_[data-slot=command-item]]:cursor-pointer [&_[data-slot=command-item]]:text-ink-strong coarse:[&_[data-slot=command-item]]:min-h-c-row-h",
+            })}
             data-side="top"
             data-state="open"
             id="composer-menu"

@@ -23,6 +23,7 @@
   import type { ComponentProps } from "svelte";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import { submenuSide } from "#lib/components/ui/submenu-side.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { browser } from "$app/env";
@@ -70,7 +71,8 @@
 <ContextMenuPortal {...portalProps}>
   <ContextMenuPrimitive.SubContent
     class={cn(
-      "kit-pop relative z-50 max-h-(--bits-menu-content-available-height) min-w-32 origin-(--bits-menu-content-transform-origin) overflow-y-auto overflow-x-hidden",
+      floatingSurface(),
+      "relative z-50 max-h-(--bits-menu-content-available-height) min-w-32 origin-(--bits-menu-content-transform-origin) overflow-y-auto overflow-x-hidden",
       contextMenuSubContentVariants({ min, width, frame, pad }),
       className
     )}

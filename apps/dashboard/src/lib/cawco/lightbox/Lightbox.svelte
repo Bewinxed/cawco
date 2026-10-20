@@ -223,10 +223,7 @@
   open={doc !== null}
 >
   <DialogPrimitive.Portal>
-    <DialogOverlay
-      class="data-lightbox-leaving:animate-kit-fade-out"
-      data-lightbox-leaving={leaving || undefined}
-    />
+    <DialogOverlay {leaving} />
     <!-- Drawn through `child`: bits-ui then holds the body's lock only while
          it is open, and clears it at once (floating-presence). -->
     <DialogPrimitive.Content

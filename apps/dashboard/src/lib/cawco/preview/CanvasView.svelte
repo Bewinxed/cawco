@@ -91,7 +91,7 @@
     <DropdownMenu.SubTrigger
       ><IconLayers /><span>Canvas view</span></DropdownMenu.SubTrigger
     >
-    <DropdownMenu.SubContent class="w-52"
+    <DropdownMenu.SubContent width="regular"
       >{@render entries()}</DropdownMenu.SubContent
     >
   </DropdownMenu.Sub>

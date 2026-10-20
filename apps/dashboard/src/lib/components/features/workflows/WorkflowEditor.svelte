@@ -863,8 +863,8 @@
        back out. -->
   <Drawer.Root direction={inspectorSide} bind:open={inspectorOpen}>
     <Drawer.Content height="shrink">
-      <Drawer.Title class="sr-only">Workflow inspector</Drawer.Title>
-      <Drawer.Description class="sr-only"
+      <Drawer.Title visible={false}>Workflow inspector</Drawer.Title>
+      <Drawer.Description visible={false}
         >Edit the selected node or workflow settings.</Drawer.Description
       >
       <div class="min-h-0 touch-pan-y overflow-y-auto">

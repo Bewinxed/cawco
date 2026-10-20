@@ -17,6 +17,10 @@
       surface: {
         card: "rounded-lg border border-border-control bg-surface-raised shadow-tile",
       },
+      /** A one-line notice beside its action (DESIGN.md, Alert: "a compact
+          tinted row"): its words centred on the action, not hung from the
+          row's top. */
+      layout: { row: "items-center" },
     },
     defaultVariants: {
       variant: "default",
@@ -25,6 +29,7 @@
 
   export type AlertVariant = VariantProps<typeof alertVariants>["variant"];
   export type AlertSurface = VariantProps<typeof alertVariants>["surface"];
+  export type AlertLayout = VariantProps<typeof alertVariants>["layout"];
 </script>
 
 <script lang="ts">
@@ -36,16 +41,18 @@
     class: className,
     variant = "default",
     surface,
+    layout,
     children,
     ...restProps
   }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
     variant?: AlertVariant;
     surface?: AlertSurface;
+    layout?: AlertLayout;
   } = $props();
 </script>
 
 <div
-  class={cn(alertVariants({ variant, surface }), className)}
+  class={cn(alertVariants({ variant, surface, layout }), className)}
   data-slot="alert"
   role="alert"
   bind:this={ref}

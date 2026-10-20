@@ -372,7 +372,7 @@ export function floatPlace(): {
   width: number;
 } | null {
   const card = document.querySelector<HTMLElement>(
-    '.kit-pop[data-glass-card-frame="files-pop"]'
+    '[data-glass-card][data-glass-card-frame="files-pop"]'
   );
   if (!card) {
     return null;

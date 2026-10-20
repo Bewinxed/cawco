@@ -25,6 +25,7 @@
     pressable,
   } from "#lib/components/ui/floating-presence.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import DropdownMenuPortal from "./dropdown-menu-portal.svelte";
 
@@ -63,7 +64,8 @@
   <DropdownMenuPrimitive.Content
     {align}
     class={cn(
-      "kit-pop relative z-50 max-h-(--bits-dropdown-menu-content-available-height) w-(--bits-dropdown-menu-anchor-width) min-w-48 origin-(--bits-dropdown-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
+      floatingSurface(),
+      "relative z-50 max-h-(--bits-dropdown-menu-content-available-height) w-(--bits-dropdown-menu-anchor-width) min-w-48 origin-(--bits-dropdown-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
       dropdownMenuContentVariants({ width, min }),
       className
     )}

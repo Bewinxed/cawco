@@ -1,3 +1,61 @@
+<script lang="ts" module>
+  import { tv } from "#lib/utils.js";
+
+  /**
+   * The hanging card's recipe, over the kit's floating surface
+   * (`floatingSurface`, motion `hang`).
+   *
+   * Its surface is named (`--hang-surface`) so the cut across its top edge
+   * is drawn in it; a card on another surface sets that, not `background`
+   * (`surface`). What runs on through the cut (`--hang-neck`) is the card's
+   * own surface. Its edge is drawn by `::after` rather than its border, so
+   * its top can be cut across the anchor's span and its flared foot
+   * (`--neck-start`, `--neck-end`, `--neck-flare-start`, `--neck-flare-end`,
+   * in the card's own coordinates, written from `hang`); on a flush side
+   * (`data-flush`) its top corner is square and the cut stops one pixel
+   * short, so the anchor's flank runs straight on into the card's side. The
+   * cut (`::before`) is the card's top edge row drawn again in the neck's
+   * surface, clipped from the flare's outer circle (`--neck-cut`, written by
+   * hang's `setNeck`), so the anchor's curve runs on into the card's edge as
+   * one stroke. A clip, not a mask: a mask drew the whole card's edge
+   * through a buffer of its own on every paint. Its overlay shadow is cut at
+   * its top edge (room for the whole shadow past the other three), so none
+   * falls on the anchor.
+   *
+   * `tab`: one silhouette with its folder tab (motion/hang-shape): no edge,
+   * cut or shadow of its own (the outline layer, hang-outline, draws them),
+   * cut to nothing shut and grown out of the tab's foot, never sliding.
+   * Otherwise it is shut up past its own height by the reach of its shadow
+   * under it (`--hang-reach`) until `hang` says it is shown, and keeps its
+   * own layer while mounted: WebKit gave the card one for its slide alone
+   * and repainted it whole in the frame the slide landed in.
+   *
+   * `glass`: from the top bar's glass. Its shadow is the picture the Shell
+   * draws once (motion/hung-shadow) as its border-image, under its own
+   * surface (the `hung-surface` element), not a box-shadow; on a phone its
+   * trailing side is the screen's edge, square with no edge drawn there.
+   *
+   * A card rehearsing its next face (GlassCard's `data-rehearsing`) is laid
+   * out unseen.
+   */
+  export const hangCardVariants = tv({
+    base: "relative border-0 bg-(--hang-surface) [--hang-surface:var(--surface-raised)] [--hang-neck:var(--hang-surface)] [clip-path:inset(0_-120px_-120px_round_0_0_var(--radius-lg)_var(--radius-lg))] data-[flush=end]:rounded-se-none data-[flush=start]:rounded-ss-none data-[rehearsing]:invisible after:pointer-events-none after:absolute after:inset-0 after:z-1 after:rounded-[inherit] after:border after:border-border-control before:pointer-events-none before:absolute before:top-0 before:left-(--gap-from) before:z-2 before:h-px before:w-[calc(var(--gap-to)-var(--gap-from))] before:bg-(--hang-neck) before:[--gap-from:calc(var(--neck-start)-var(--neck-flare-start,0px))] before:[--gap-to:calc(var(--neck-end)+var(--neck-flare-end,0px))] before:[clip-path:var(--neck-cut,none)] data-[flush=end]:before:[--gap-to:calc(var(--neck-end)-1px)] data-[flush=start]:before:[--gap-from:1px]",
+    variants: {
+      tab: {
+        true: "shadow-none [clip-path:path('M_0_0_Z')] translate-none will-change-auto before:hidden after:hidden",
+        false:
+          "motion-safe:will-change-[translate] motion-safe:not-data-[shown]:[translate:0_calc(-100%-var(--hang-reach,0px))]",
+      },
+      glass: {
+        true: "shadow-none max-desk:rounded-ee-none max-desk:after:border-e-0",
+      },
+      /** The tab's menu hangs on the tab's own surface, as the session card's head is. */
+      surface: { recess: "[--hang-surface:var(--surface-recess)]" },
+    },
+    defaultVariants: { tab: false },
+  });
+</script>
+
 <script lang="ts">
   /**
    * A card that hangs from its anchor as one shape with it (DESIGN.md, "A
@@ -8,7 +66,7 @@
    * It is a kit floating surface (the popover by default, or the context
    * menu's: `as`), so focus, Escape and a press outside are the primitive's.
    * It stands on its anchor's foot (the site gives the primitive side
-   * `bottom` at its offset) and wears `kit-hang` (app.css): its edge drawn
+   * `bottom` at its offset) and wears `hangCardVariants`: its edge drawn
    * inside its box, its top cut across the anchor's span and the anchor's
    * flared foot each side of it (the neck), square on a side it stands flush
    * with. It opens and closes on `hang` (motion/hang): a slide down out of
@@ -28,7 +86,7 @@
    *
    * A card on the bar's glass (`glass`) wears the hung shadow, the picture
    * of `--shadow-overlay-hung` the Shell draws once (motion/hung-shadow),
-   * over its own surface (`.hung-surface`), and on a phone its trailing side
+   * over its own surface (`hung-surface`), and on a phone its trailing side
    * is the screen's edge, as the glass's is.
    */
   import type {
@@ -49,18 +107,20 @@
     hangClip,
   } from "#lib/cawco/motion/hang-shape.js";
   import type { Morph } from "#lib/cawco/motion/morph.svelte.js";
-  import type ContextMenuContent from "#lib/components/ui/context-menu/context-menu-content.svelte";
+  import ContextMenuContent from "#lib/components/ui/context-menu/context-menu-content.svelte";
   import {
     drawn,
     own,
     pressable,
   } from "#lib/components/ui/floating-presence.js";
-  import PopoverContent from "#lib/components/ui/popover/popover-content.svelte";
+  import PopoverContent, {
+    floatingSurface,
+  } from "#lib/components/ui/popover/popover-content.svelte";
   import { cn } from "#lib/utils.js";
   import { outlineLayer } from "./hang-outline.js";
 
-  /** The glass card's faces (GlassCard's `Card`). */
-  type Frame = "caw" | "machines" | "jump" | "files";
+  /** The glass card's faces (GlassCard's `Card`), and the session card. */
+  type Frame = "caw" | "machines" | "jump" | "files" | "details";
   /**
    * Each face's frame, read off what its custom properties hold (on the card,
    * below): Caw's panel `c-panel-w` wide with its rows `--space-2` in; the
@@ -70,13 +130,21 @@
    * room under the glass. Each stands `c-pop-edge` in from the screen's edge
    * on either side (DESIGN.md, Breakpoints: popovers widen to the viewport
    * less 24px); on a phone each keeps the bar's `c-bar-phone-edge` on its
-   * leading side (app.css `.glass-card` squares the trailing one).
+   * leading side (the `glass` recipe squares the trailing one).
+   *
+   * The session card (`details`, PaneTabs) holds its own head and body to
+   * its edge and scrolls inside them: no padding, its overflow clipped and
+   * contained, never taller than its cap or the room bits-ui measures under
+   * its tab, and on a phone than the screen under the bar less its margins
+   * and the safe area.
    */
   const FRAMES: Record<Frame, string> = {
     caw: "w-(--frame-w) max-desk:w-(--frame-w-narrow) gap-0 p-space-2",
     machines: "w-(--frame-w) gap-0",
     jump: "w-(--frame-w) max-h-(--frame-h) gap-0 p-0 max-desk:h-(--frame-h) max-desk:w-(--frame-w-narrow)",
     files: "flex w-(--frame-w) max-h-(--frame-h) flex-col gap-0 p-space-2",
+    details:
+      "flex max-h-[min(var(--c-details-card-max-h),var(--bits-popover-content-available-height,var(--c-sheet-max-h)))] overflow-hidden overscroll-contain p-0 max-phone:max-h-[min(calc(100dvh-var(--c-top-bar-h)-2*var(--c-screen-margin)-var(--safe-bottom)),var(--bits-popover-content-available-height,var(--c-sheet-max-h)))]",
   };
   /** The viewport less a floating card's edge each side. */
   const ROOM = "calc(100vw - 2 * var(--c-screen-margin))";
@@ -84,23 +152,26 @@
   const ROOM_NARROW =
     "calc(100vw - var(--c-bar-phone-edge) - env(safe-area-inset-right, 0px))";
   /** The numbers each face's frame reads (`--frame-w`, `--frame-w-narrow`, `--frame-h`). */
-  const FRAME_SIZES: Record<Frame, { w: string; narrow?: string; h?: string }> =
-    {
-      caw: {
-        w: `min(var(--c-panel-w), ${ROOM})`,
-        narrow: `min(var(--c-panel-w), ${ROOM_NARROW})`,
-      },
-      machines: { w: `min(var(--c-machines-w), ${ROOM})` },
-      jump: {
-        w: `min(var(--c-find-w), ${ROOM})`,
-        narrow: ROOM_NARROW,
-        h: "calc(100dvh - var(--c-top-bar-h) - var(--space-7))",
-      },
-      files: {
-        w: `min(var(--c-panel-w), ${ROOM})`,
-        h: "min(var(--c-caw-panel-h), calc(var(--bits-popover-content-available-height, 85dvh) - 2px))",
-      },
-    };
+  const FRAME_SIZES: Record<
+    Frame,
+    { w?: string; narrow?: string; h?: string }
+  > = {
+    caw: {
+      w: `min(var(--c-panel-w), ${ROOM})`,
+      narrow: `min(var(--c-panel-w), ${ROOM_NARROW})`,
+    },
+    machines: { w: `min(var(--c-machines-w), ${ROOM})` },
+    jump: {
+      w: `min(var(--c-find-w), ${ROOM})`,
+      narrow: ROOM_NARROW,
+      h: "calc(100dvh - var(--c-top-bar-h) - var(--space-7))",
+    },
+    files: {
+      w: `min(var(--c-panel-w), ${ROOM})`,
+      h: "min(var(--c-caw-panel-h), calc(var(--bits-popover-content-available-height, 85dvh) - 2px))",
+    },
+    details: {},
+  };
 
   type Props = Omit<
     PopoverPrimitive.ContentProps & ContextMenuPrimitive.ContentProps,
@@ -118,10 +189,13 @@
     /** It hangs from the top bar's glass. */
     glass?: boolean;
     /**
-     * The glass card's face it frames (GlassCard): Caw's panel, the
-     * machines or Jump, each its own width, padding and height.
+     * The face it frames: the glass card's (GlassCard: Caw's panel, the
+     * machines, Jump or Files, each its own width, padding and height), or
+     * the session card's (`details`).
      */
     frame?: Frame;
+    /** The surface it stands on, when not the raised one: the tab's menu, on its tab's. */
+    surface?: "recess";
     /**
      * It hangs from a folder tab (the session card, the tab's menu): one
      * silhouette with it, grown out of its foot (motion/hang-shape,
@@ -147,6 +221,7 @@
     flared = true,
     glass = false,
     frame,
+    surface,
     tab = false,
     joined = $bindable(false),
     ref = $bindable(null),
@@ -158,6 +233,11 @@
     children,
     ...rest
   }: Props = $props();
+
+  /** The kit's own surface (the popover's or the context menu's), not bits-ui's bare one. */
+  const kitSurface = $derived(
+    Content === PopoverContent || Content === ContextMenuContent
+  );
 
   /** The anchor's span on the screen and its flare; re-read once it may have moved. */
   let span: { left: number; right: number; flare: number } | null = null;
@@ -428,14 +508,15 @@
 <!-- Mounted by bits-ui's forceMount and drawn while its presence says so,
      unless the site keeps it drawn (`forceMount`): the page has its pointer
      back at the dismissal (floating-presence). Its wrapper is marked a
-     hanging card's (`data-hang`), the cut app.css draws on it. -->
+     hanging card's (`data-hang`), the cut app.css draws on it. A kit
+     surface is told it hangs, so it keeps only the fade of its own motion. -->
 <Content
   data-glass-card={glass || undefined}
+  {...kitSurface ? { motion: "hang" as const } : {}}
   {...rest}
   class={cn(
-    "kit-pop kit-hang",
-    glass && "glass-card",
-    tab && "tab-hang",
+    floatingSurface({ motion: "hang" }),
+    hangCardVariants({ tab, glass, surface }),
     frame && FRAMES[frame],
     className
   )}
@@ -456,7 +537,11 @@
         >
           {#if glass}
             <!-- Its surface, over the shadow picture it wears as its border-image (motion/hung-shadow). -->
-            <span aria-hidden="true" class="hung-surface"></span>
+            <span
+              aria-hidden="true"
+              class="pointer-events-none absolute inset-0 -z-1 rounded-[inherit] bg-(--hang-surface)"
+              data-slot="hung-surface"
+            ></span>
           {/if}
           {@render children()}
         </div>

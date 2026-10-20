@@ -369,9 +369,11 @@
       data-caw-lead-card
       align="start"
       aria-label="Caw’s session"
-      class="z-60 flex max-h-(--lead-max-h) w-(--lead-w) overflow-hidden"
+      class="z-60 w-(--lead-w)"
+      height="room"
+      overflow="clip"
       pad="none"
-      style="--lead-w: min(var(--c-lead-card-w), calc(100vw - var(--space-7))); --lead-max-h: min(var(--c-lead-card-max-h), var(--bits-popover-content-available-height, var(--c-sheet-max-h)))"
+      style="--lead-w: min(var(--c-lead-card-w), calc(100vw - var(--space-7))); --pop-max-h: min(var(--c-lead-card-max-h), var(--bits-popover-content-available-height, var(--c-sheet-max-h)))"
       collisionPadding={12}
       customAnchor={cardAnchor}
       onfocusin={() => {

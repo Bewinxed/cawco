@@ -1,6 +1,7 @@
 <script lang="ts">
   import { popOut } from "#lib/cawco/motion/pop.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { floatingSurface } from "#lib/components/ui/popover/index.js";
 
   let {
     label,
@@ -137,7 +138,10 @@
   {#if matches.length}
     <div
       aria-label="Template paths"
-      class="kit-pop absolute top-full inset-x-0 max-h-c-completer-max-h overflow-y-auto z-30"
+      class={floatingSurface({
+        class:
+          "absolute top-full inset-x-0 max-h-c-completer-max-h overflow-y-auto z-30",
+      })}
       data-state="open"
       role="listbox"
       style:transform-origin={origin}

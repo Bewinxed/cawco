@@ -362,7 +362,7 @@
       trapFocus={false}
       bind:ref={drawer}
     >
-      <Drawer.Title class="sr-only">Beside the conversation</Drawer.Title>
+      <Drawer.Title visible={false}>Beside the conversation</Drawer.Title>
       <div
         data-slot="sheet"
         class="relative flex flex-1 flex-col min-h-0 pt-space-3 rounded-t-lg bg-surface-raised shadow-drawer"
