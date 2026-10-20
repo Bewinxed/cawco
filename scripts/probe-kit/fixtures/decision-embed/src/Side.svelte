@@ -1,5 +1,5 @@
 <script>
-  /** A side card, 360px wide by its story's viewport: wider than a decision card's media on a phone. */
+  /** A side card as wide as its story's viewport: 360px, wider than a decision card's media on a phone, or 1400px, wider than any. */
   let { title = "Spend this week", lines = [] } = $props();
 </script>
 

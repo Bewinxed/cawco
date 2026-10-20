@@ -8,8 +8,9 @@
  *   frame (runtime.ts UNMOUNT_MARGIN, where the far observer puts a section
  *   to sleep), and its Recommended option embeds the note's one story by
  *   name (`Preview(…, ["Pinned"])`);
- * - the second card holds three Previews: a 360px side card (wider than a
- *   card's media on a phone), the note, and the ledger's first month.
+ * - the second card holds three Previews: the side card at 360px (wider
+ *   than a card's media on a phone) and at 1400px (wider than any card),
+ *   the note, and the ledger's first month.
  *
  * At 1440×900 and 390×844, light and dark:
  * 1. The program passes the hub's own check (`checkProgram`).
@@ -29,7 +30,9 @@
  *    2px. Each frame stands inside its width, centred in it within 1px; one
  *    narrower than the embed at its own width, one wider scaled down to fit
  *    (CSS zoom) and never reflowed: its drawn width its own times its zoom.
- *    Its words at 12px or more as drawn, 10px where it is scaled.
+ *    Its words at 12px or more as drawn, 10px where it is scaled; one that
+ *    would scale its words under 10px to fit stops at 10px and scrolls
+ *    sideways in its frame, the frame inside the embed.
  * 7. A card's three media stand in one column, each at the card's full
  *    width.
  * 8. The page is as CawCo shows it: no offline notice, Send picks enabled,
@@ -70,8 +73,9 @@ const BOOK_ID = idOf("ledger-and-note");
 const NOTE_ID = idOf("note-alone");
 const SIDE_ID = idOf("side-card");
 const MONTH_ID = idOf("ledger-month");
-/** The side card's own width (its story's viewport). */
+/** The side card's own widths (its stories' viewports). */
 const SIDE_W = 360;
+const WIDE_W = 1400;
 
 const MONTHS = ["January", "February", "March", "April", "May", "June"];
 
@@ -90,7 +94,7 @@ const PREVIEWS: Record<
     shows: [...MONTHS, "Pinned"],
   },
   "The note alone": { files: [NOTE], stories: ["Pinned"], shows: ["Pinned"] },
-  "The side card": { files: [SIDE], stories: [], shows: ["Card"] },
+  "The side card": { files: [SIDE], stories: [], shows: ["Card", "Wide"] },
   "The note": { files: [NOTE], stories: ["Pinned"], shows: ["Pinned"] },
   "January's lines": {
     files: [LEDGER],
@@ -347,6 +351,26 @@ const spec: Spec = {
                 ? scaled.length === sides.length
                 : scaled.length === 0),
             fitFaults.join("\n    ")
+          );
+          const wides = frames.filter((f) => f.story === "Wide");
+          const wideFaults = wides.flatMap((f) => {
+            const own = Math.round(WIDE_W * f.zoom);
+            return [
+              ...(Math.abs(f.w - own) > 1
+                ? [`${f.w}px drawn at zoom ${f.zoom}, its own ${WIDE_W}px would draw ${own}px`]
+                : []),
+              ...(f.type < 9.9 || f.type > 10.1
+                ? [`its words at ${f.type}px, not stopped at 10px`]
+                : []),
+              ...(f.wide && f.scrollable && f.scrolls > 0
+                ? []
+                : [`its frame doesn't scroll sideways (wide ${f.wide}, overflow-x scrolls ${f.scrollable}, ${f.scrolls}px past)`]),
+            ].map((fault) => `“${f.caption}” Wide: ${fault}`);
+          });
+          kit.check(
+            `${leg}: the ${WIDE_W}px side card scales only as far as 10px words, then scrolls sideways in its frame (${wides.map((f) => `${f.w}px at zoom ${f.zoom}, its words at ${f.type}px, ${f.scrolls}px to scroll`).join(", ")})`,
+            wides.length > 0 && wideFaults.length === 0,
+            wideFaults.join("\n    ")
           );
           const small = frames.filter((f) => f.type < (f.zoom < 1 ? 10 : 12));
           kit.check(

@@ -127,6 +127,8 @@ const UNMOUNT_MARGIN = 3;
 const SWEEP_KEPT = 3;
 /** The quiet after the last change before a report is posted. Ours. */
 const REPORT_QUIET_MS = 200;
+/** The smallest an embed draws a story's words, in px: scaled further, they stop being legible. The owner's call ("if the scale would put body text under ~10px, say so"). */
+const EMBED_TYPE_FLOOR = 10;
 
 export type WidthSlot = number | "own";
 
@@ -848,13 +850,39 @@ export function boot(options: BootOptions): void {
    * scales its box and its paint together (MDN, zoom: it "scales the
    * targeted element, which can affect the page layout", where scale()
    * leaves the layout), so the embed stands as tall as what it draws and a
-   * narrower story centres in it at its own size.
+   * narrower story centres in it at its own size. The scale stops where the
+   * story's words would be drawn under EMBED_TYPE_FLOOR: a story still
+   * wider than the embed there scrolls sideways in its frame
+   * (`data-cawco-wide`), its words legible.
    */
   function fitToEmbed(frame: Frame): void {
     const width = widthOf(frame.story, frame.column.width);
     const room = world.clientWidth;
     const fit = width === null || room === 0 ? 1 : Math.min(1, room / width);
-    frame.body.style.zoom = fit < 1 ? String(fit) : "";
+    const type = fit < 1 ? typeOf(frame.body) : null;
+    const scale =
+      type === null ? fit : Math.max(fit, Math.min(1, EMBED_TYPE_FLOOR / type));
+    frame.body.style.zoom = scale < 1 ? String(scale) : "";
+    frame.el.toggleAttribute(
+      "data-cawco-wide",
+      width !== null && width * scale > room + 0.5
+    );
+  }
+
+  /** The font size most of a story's words stand at, in its own px (CSS zoom leaves the computed size alone); null before it draws any. */
+  function typeOf(body: HTMLElement): number | null {
+    const sizes = new Map<number, number>();
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const many = (node.textContent ?? "").trim().length;
+      if (many && node.parentElement) {
+        const size = Number.parseFloat(
+          getComputedStyle(node.parentElement).fontSize
+        );
+        sizes.set(size, (sizes.get(size) ?? 0) + many);
+      }
+    }
+    return [...sizes].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
   }
 
   /** The frame's body set for its column: its scheme, width and forced state. */
