@@ -47,7 +47,14 @@
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { CATALOG_SETTLE_MS } from "../../../packages/agent/src/harnesses/opencode-client";
+import {
+  MACHINE,
+  MODEL,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 import { type Relay, relay } from "../relay";
 
@@ -147,7 +154,71 @@ const once = (request: Seen): Reply => {
   };
 };
 
+/** How a leg-6 session's prompt names it: the tag and its location's number. */
+const OPENCODE_TAG = "PROBE-SOURCE-BURST-OPENCODE";
+const OPENCODE_LANE = new RegExp(`${OPENCODE_TAG}-(\\d+)`);
+/**
+ * Fresh OpenCode locations leg 6 starts a session in. Ours: each first step
+ * races OpenCode's catalog refresh once (anomalyco/opencode#54794); one
+ * location lost that race in setup-on-ask r78, and one alone wins it often.
+ */
+const OPENCODE_LOCATIONS = 4;
+/** OpenCode's log line for CawCo's server connected in a location: its time and the location. */
+const CAWCO_CONNECTED =
+  /^timestamp=(\S+) .*message="mcp connected" server=cawco .*directory=(\S+)/;
+/** OpenCode's Code Mode tool, which runs MCP tools from a script. */
+const CODE_MODE = "execute";
+/** Leg 6, per location: the tool its first step called, and the request after it. */
+const leg6 = new Map<
+  string,
+  { answer?: Seen; called: string; firstAt: number }
+>();
+
+/** A leg-6 session's title: its location's, so each answer names its own. */
+const opencodeTitle = (lane: string): string => `Titled from OpenCode ${lane}`;
+
+/**
+ * A leg-6 session, on OpenCode: its first step calls cawco's set_title as
+ * OpenCode offers it (its MCP name, or its Code Mode catalog), at once, and
+ * the request after the call is kept.
+ */
+const fromOpencode = (request: Seen, lane: string): Reply => {
+  const mine = leg6.get(lane);
+  if (mine) {
+    if (request.afterTool) {
+      mine.answer ??= request;
+    }
+    return text("ok");
+  }
+  const input = { title: opencodeTitle(lane) };
+  const direct = request.toolNames.find((name) =>
+    ["cawco_set_title", SET_TITLE].includes(name)
+  );
+  if (direct) {
+    leg6.set(lane, { called: direct, firstAt: request.at });
+    return { everyMs: 5, words: [], tool: { name: direct, input } };
+  }
+  if (request.toolNames.includes(CODE_MODE)) {
+    leg6.set(lane, { called: CODE_MODE, firstAt: request.at });
+    return {
+      everyMs: 5,
+      words: [],
+      tool: {
+        name: CODE_MODE,
+        input: {
+          code: `return await tools.cawco.set_title(${JSON.stringify(input)});`,
+        },
+      },
+    };
+  }
+  return text(`set_title is not offered: ${request.toolNames.join(", ")}`);
+};
+
 const respond = (request: Seen): Reply => {
+  const lane = request.tools ? OPENCODE_LANE.exec(request.all)?.[1] : undefined;
+  if (lane !== undefined) {
+    return fromOpencode(request, lane);
+  }
   if (request.tools && request.last.includes(LOST_TAG)) {
     leg4.turns.push(request);
     return text("ok");
@@ -281,6 +352,115 @@ const loseSend = async (at: Legs): Promise<void> => {
       record === "read",
     `lost ${leg4.lostAt === undefined ? "never" : `and the link cut for ${CUT_MS} ms`}; ${leg4.turns.length} turn(s) on it${read && leg4.releasedAt !== undefined ? `, the first ${read.at - leg4.releasedAt} ms after the link was back` : ""}; its record: ${record ?? "none"}`
   );
+};
+
+/**
+ * Leg 6: OpenCode sessions, each in a location of its own that no session
+ * has used, whose first step calls a CawCo tool at once through the
+ * machine's gateway: each has CawCo's tools on that first step, and the
+ * hub's answer reaches its model whole. In setup-on-ask r78, Caw's first
+ * step in a fresh location was answered "Unknown tool
+ * 'cawco.project_setup'" by OpenCode itself: its Code Mode catalog took
+ * CawCo's tools 195 ms after the server connected, and the step came first.
+ * Which comes first is a race, which a lightly loaded machine always wins,
+ * so what decides it is read too: each location's first model request comes
+ * at least the agent's settle after OpenCode logged CawCo's server connected
+ * there (agent opencode-client.ts `CATALOG_SETTLE_MS`).
+ */
+const opencodeAnswer = async (at: Legs): Promise<void> => {
+  const lanes = Array.from({ length: OPENCODE_LOCATIONS }, (_, index) =>
+    String(index)
+  );
+  const outcomes: string[] = [];
+  for (const lane of lanes) {
+    const place = join(at.src, `opencode-${lane}`);
+    // biome-ignore lint/performance/noAwaitInLoops: one fresh location at a time, each its own race
+    await mkdir(place, { recursive: true });
+    // Its start and its first message back to back, as the hub starts Caw
+    // with the message that woke him: the message goes right behind the
+    // start, and the location's first prompt as soon as it is ready.
+    const session = crypto.randomUUID();
+    await at.fleet.post({
+      verb: "spawn",
+      machineId: MACHINE,
+      instanceId: session,
+      requestId: crypto.randomUUID(),
+      payload: {
+        instanceId: session,
+        cwd: place,
+        harness: "opencode",
+        model: MODEL.opencode,
+        title: `OpenCode ${lane}`,
+        permissionMode: "bypassPermissions",
+        projectId: at.projectId,
+      },
+    });
+    await at.fleet.send(session, `${OPENCODE_TAG}-${lane}: set your title.`);
+    const answered = await until(
+      `OpenCode ${lane}'s first call is answered`,
+      () => leg6.get(lane)?.answer,
+      Boolean,
+      120_000
+    ).catch(() => undefined);
+    const named = at.fleet.query<{ title: string | null }>(
+      "SELECT title FROM instances WHERE id = ?",
+      session
+    )[0]?.title;
+    const said = answered?.body.indexOf("Named this session") ?? -1;
+    const unknown = answered?.body.indexOf("Unknown tool") ?? -1;
+    const carried =
+      unknown >= 0
+        ? answered?.body.slice(unknown, unknown + 90)
+        : `no answer in ${answered?.body.slice(-300)}`;
+    outcomes.push(
+      said >= 0 && named === opencodeTitle(lane)
+        ? `${lane}: answered`
+        : `${lane}: ${answered ? carried : "never answered"}; title ${named ?? "none"}`
+    );
+  }
+  at.check(
+    `an OpenCode session's first step in a location no session used has CawCo's tools, and its call's answer reaches its model whole (${OPENCODE_LOCATIONS} locations)`,
+    outcomes.every((one) => one.endsWith(": answered")),
+    outcomes.join(" | ").slice(0, 1500)
+  );
+  const connected = await cawcoConnectedAt(at.fleet.home);
+  const gaps = lanes.map((lane) => {
+    const since = connected.get(join(at.src, `opencode-${lane}`));
+    const first = leg6.get(lane)?.firstAt;
+    return since === undefined || first === undefined
+      ? undefined
+      : first - since;
+  });
+  at.check(
+    `each fresh location's first prompt waits out OpenCode's catalog refresh: its first model request comes ${CATALOG_SETTLE_MS} ms or more after CawCo's server connected there`,
+    gaps.every((gap) => gap !== undefined && gap >= CATALOG_SETTLE_MS),
+    lanes
+      .map(
+        (lane, index) =>
+          `${lane}: ${gaps[index] === undefined ? "no connect or no request seen" : `${gaps[index]} ms`}`
+      )
+      .join(" | ")
+  );
+};
+
+/** When OpenCode logged CawCo's MCP server connected, by the location's directory (the last time each). */
+const cawcoConnectedAt = async (home: string): Promise<Map<string, number>> => {
+  const dir = join(home, ".local", "share", "opencode", "log");
+  const files = await Array.fromAsync(
+    new Bun.Glob("*.log").scan({ cwd: dir })
+  ).catch(() => [] as string[]);
+  const connected = new Map<string, number>();
+  for (const file of files) {
+    // biome-ignore lint/performance/noAwaitInLoops: a few log files, read in turn
+    const log = await Bun.file(join(dir, file)).text();
+    for (const line of log.split("\n")) {
+      const found = CAWCO_CONNECTED.exec(line);
+      if (found?.[1] && found[2]) {
+        connected.set(found[2], Date.parse(found[1]));
+      }
+    }
+  }
+  return connected;
 };
 
 /** Leg 5. */
@@ -446,6 +626,7 @@ const spec: Spec = {
     await handOnce(legs, parent);
     await loseSend(legs);
     await startThroughCut(legs);
+    await opencodeAnswer(legs);
     check(
       "no request through the second machine's link is cut for waiting on the hub: the relay, standing in for that link, has no idle timeout of its own",
       between.idleCuts.length === 0,
