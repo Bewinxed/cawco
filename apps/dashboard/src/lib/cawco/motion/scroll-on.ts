@@ -13,55 +13,23 @@
  * clock lands, where the layout it was measured for stands (DESIGN.md, The
  * Reduced Motion Rule: "heights land at once").
  *
- * The reader's own scroll ends the ride where it stands (DESIGN.md, The
+ * Any scroll the reader makes ends the ride where it stands (DESIGN.md, The
  * Interruptible Rule; The Stay In Context Rule: the reader stays where they
- * are): a wheel, a finger or pen dragging (a touch moving, or a pressed touch
- * or pen pointer moving), or a scroll key (the arrows, Page Up and
- * Down, Home, End, Space) pressed anywhere but a field or a control that takes
- * that key. The motion the ride was riding (a fold, a flight) runs on to its
- * end; only the scroll is the reader's from then on. Heard passively, for as
- * long as the ride lasts.
+ * are), and the motion the ride was riding (a fold, a flight) runs on to its
+ * end. One rule finds it: a `scroll` that finds the scroller more than 1px
+ * from where the ride last put it (the subpixel rounding allowed) was someone
+ * else's. That is every source alike: a wheel, a finger's pan, the keys, the
+ * scrollbar, middle-click autoscroll, find in page, the browser's own scroll
+ * into view. Each comes to the next frame's scroll steps, before the ride's
+ * next write, so the ride never writes over it. The one move that is not the
+ * reader's is the page clamping the scroll as what the ride rides shrinks it
+ * (the scroller at the most it can scroll, short of the ride's write): that
+ * the ride rides through. And a finger pressed on the page and moving ends
+ * the ride as it starts to move: for the first frames of a drag the browser
+ * pans nothing (its touch slop), and a ride writing then would move the page
+ * under the finger. Heard passively, for as long as the ride lasts.
  */
 import { motionOk } from "./curves.svelte";
-
-/** The keys that scroll a page when nothing in it takes them. */
-const SCROLL_KEYS = new Set([
-  "ArrowUp",
-  "ArrowDown",
-  "ArrowLeft",
-  "ArrowRight",
-  "PageUp",
-  "PageDown",
-  "Home",
-  "End",
-  " ",
-]);
-
-/** What takes a key itself: typing anywhere, Space on a control it presses, the arrows inside a widget that moves by them. */
-const FIELDS =
-  "input, textarea, select, [contenteditable]:not([contenteditable='false'])";
-const PRESSED_BY_SPACE =
-  "button, summary, [role='button'], [role='checkbox'], [role='switch'], [role='radio'], [role='option'], [role='menuitem'], [role='tab']";
-const MOVED_BY_ARROWS =
-  "[role='slider'], [role='spinbutton'], [role='radiogroup'], [role='listbox'], [role='menu'], [role='menubar'], [role='tablist'], [role='tree'], [role='grid']";
-
-/** Whether `event` scrolls the page: a scroll key that nothing under it takes. */
-const scrollsByKey = (event: KeyboardEvent): boolean => {
-  if (!SCROLL_KEYS.has(event.key)) {
-    return false;
-  }
-  const at = event.target instanceof Element ? event.target : null;
-  if (!at) {
-    return true;
-  }
-  if (at.closest(FIELDS)) {
-    return false;
-  }
-  if (event.key === " " && at.closest(PRESSED_BY_SPACE)) {
-    return false;
-  }
-  return !(event.key.startsWith("Arrow") && at.closest(MOVED_BY_ARROWS));
-};
 
 /** How far `clock` has gone, on its curve, 0 to 1. */
 export const progressOf = (clock: Animation): number => {
@@ -72,6 +40,9 @@ export const progressOf = (clock: Animation): number => {
   return timing?.progress ?? 0;
 };
 
+/** How far a reader's scroll may sit from the ride's write and still be the ride's: subpixel rounding. */
+const ROUNDING = 1;
+
 /** Rides `scroller`'s block scroll to `to` on `clock`. Answers a stop. */
 export function scrollOnClock(
   clock: Animation,
@@ -81,41 +52,43 @@ export function scrollOnClock(
   const from = scroller.scrollTop;
   let frame = 0;
   let riding = true;
-  // The page's own scroller hears the reader on its window; any other on itself.
+  /** Where the ride last put the scroll. */
+  let put = from;
+  // The page's own scroller is heard on its window; any other on itself.
   const doc = scroller.ownerDocument;
   const hears: EventTarget =
     scroller === doc.scrollingElement || scroller === doc.documentElement
       ? (doc.defaultView ?? scroller)
       : scroller;
   const listen = { capture: true, passive: true } as const;
-  // A finger's drag shows first as a pressed touch pointer moving (before
-  // the browser takes it to pan, which may send no touchmove at all), so a
-  // touch or pen pointermove while pressed is the reader's scroll too.
-  const READER = ["wheel", "touchmove", "pointermove", "keydown"] as const;
   /** The ride ends where it stands, and stops listening. */
   function stop() {
     riding = false;
     cancelAnimationFrame(frame);
-    for (const type of READER) {
-      hears.removeEventListener(type, readerScrolls, listen);
-    }
+    hears.removeEventListener("scroll", scrolled, listen);
+    hears.removeEventListener("pointermove", pressedMove, listen);
   }
-  /** The reader scrolls: the scroll is theirs from here. */
-  function readerScrolls(event: Event) {
-    if (event instanceof KeyboardEvent && !scrollsByKey(event)) {
+  /** A scroll the ride did not make: the reader's, from here. */
+  function scrolled() {
+    const now = scroller.scrollTop;
+    if (Math.abs(now - put) <= ROUNDING) {
       return;
     }
-    if (
-      event instanceof PointerEvent &&
-      (event.pointerType === "mouse" || event.buttons === 0)
-    ) {
-      return;
+    const most = scroller.scrollHeight - scroller.clientHeight;
+    const clamped = now < put && Math.abs(now - most) <= ROUNDING;
+    if (!clamped) {
+      stop();
     }
-    stop();
   }
-  for (const type of READER) {
-    hears.addEventListener(type, readerScrolls, listen);
+  /** A finger or a pen pressed on the page and moving: the reader's drag, before it pans. */
+  function pressedMove(event: Event) {
+    const pointer = event as PointerEvent;
+    if (pointer.pointerType !== "mouse" && pointer.buttons !== 0) {
+      stop();
+    }
   }
+  hears.addEventListener("scroll", scrolled, listen);
+  hears.addEventListener("pointermove", pressedMove, listen);
   clock.finished.then(() => {
     if (riding) {
       stop();
@@ -129,7 +102,8 @@ export function scrollOnClock(
     if (!riding) {
       return;
     }
-    scroller.scrollTop = from + (to - from) * progressOf(clock);
+    put = from + (to - from) * progressOf(clock);
+    scroller.scrollTop = put;
     frame = requestAnimationFrame(step);
   };
   frame = requestAnimationFrame(step);

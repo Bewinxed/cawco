@@ -48,8 +48,9 @@
  *    pointer flies each chosen option's keycap and label from its own chip
  *    to its own place in the head on the fold's clock, each source hidden
  *    while its copy flies.
- * 8. The reader's own scroll ends the ride: a 200px wheel (1440) or touch
- *    drag (390) at ½ of the fold's held clock, then played on, the scroll
+ * 8. The reader's own scroll ends the ride: a 200px wheel and a 200px
+ *    scrollbar drag (the mouse on its thumb) at 1440, a 200px finger drag at
+ *    390, each at ½ of the fold's held clock, then played on: the scroll
  *    stays where the reader put it on every frame, and the fold and the
  *    flight still land (L489, L491-492).
  *
@@ -1053,9 +1054,16 @@ async function readerLeg(
   url: string,
   view: (typeof LEGS)[number]["view"],
   theme: (typeof LEGS)[number]["theme"],
-  label: string
+  label: string,
+  how: "wheel" | "touch" | "scrollbar"
 ) {
-  const page = await kit.page(view, { theme, init: [CAWCO_BRIDGE] });
+  // The scrollbar's leg draws the page's scrollbars, as a desk's Chromium
+  // does (headless hides them unless asked).
+  const page = await kit.page(view, {
+    theme,
+    init: [CAWCO_BRIDGE],
+    scrollbars: how === "scrollbar",
+  });
   await page.goto(url, { waitUntil: "load" });
   await page.waitForFunction(
     () => document.querySelectorAll(".diagram svg").length >= 2,
@@ -1108,7 +1116,32 @@ async function readerLeg(
   });
   const x = Math.round(size.width / 2);
   const y = Math.round(size.height * 0.7);
-  if (view === "phone") {
+  if (how === "scrollbar") {
+    // The mouse on the root scrollbar's thumb, dragged down by what moves
+    // the page 200px. The thumb is no element: its box is the scroller's
+    // (the strip past the page's client width; its length and place the
+    // view's share of the page).
+    const bar = await page.evaluate(() => {
+      const root = document.scrollingElement as Element;
+      const strip = innerWidth - root.clientWidth;
+      const length =
+        (root.clientHeight * root.clientHeight) / root.scrollHeight;
+      const top = (root.scrollTop / root.scrollHeight) * root.clientHeight;
+      return {
+        x: root.clientWidth + strip / 2,
+        y: top + length / 2,
+        strip,
+        per: root.clientHeight / root.scrollHeight,
+      };
+    });
+    await page.mouse.move(bar.x, bar.y);
+    await page.mouse.down();
+    for (let step = 1; step <= 20; step += 1) {
+      await page.mouse.move(bar.x, bar.y + (200 * bar.per * step) / 20);
+      await page.waitForTimeout(16);
+    }
+    await page.mouse.up();
+  } else if (how === "touch") {
     // A finger dragging 200px up the screen, a move a frame: raw touch input
     // (the input domain's synthesized touch gesture pans nothing in this
     // emulation, even at rest: 817 → 817, where this drag goes 817 → 1019).
@@ -1170,7 +1203,7 @@ async function readerLeg(
   const moved = Math.abs(placed.scroll - half.scroll);
   const kept = frames.every((at) => Math.abs(at - placed.scroll) <= 1);
   kit.check(
-    `${label}: the reader's ${view === "phone" ? "touch drag" : "wheel"} of 200px at ½ of the fold ends the ride: the scroll stays where they put it on every frame after, and the fold and the chosen option's flight still land`,
+    `${label}: the reader's ${{ wheel: "wheel", touch: "touch drag", scrollbar: "scrollbar drag (the mouse on its thumb)" }[how]} of 200px at ½ of the fold ends the ride: the scroll stays where they put it on every frame after, and the fold and the chosen option's flight still land`,
     moved >= 150 &&
       kept &&
       Math.abs(landed.scroll - placed.scroll) <= 1 &&
@@ -1308,7 +1341,12 @@ const spec: Spec = {
         await keyLeg(kit, url, view, theme, label);
         await stillLeg(kit, url, view, theme, label);
         await manyLeg(kit, stage.pageUrl(MANY, theme), view, theme, label);
-        await readerLeg(kit, url, view, theme, label);
+        if (view === "phone") {
+          await readerLeg(kit, url, view, theme, label, "touch");
+        } else {
+          await readerLeg(kit, url, view, theme, label, "wheel");
+          await readerLeg(kit, url, view, theme, label, "scrollbar");
+        }
       }
     } finally {
       await stage.stop();
