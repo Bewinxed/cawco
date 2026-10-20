@@ -904,7 +904,12 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         // A finger's peers stand a `space-4` apart, a pointer's `space-2` (`@media (pointer: coarse)`).
         acts.spacing = traitCollection.userInterfaceIdiom == .mac ? Space.space2 : Space.space4
         body.append(acts)
-        let card = needsCard(glyph: proposed ? .attention : .failed, tint: proposed ? Palette.statusAttnGlyph : Palette.statusFailGlyph,
+        // Proposed waits on you; an outcome nobody knows is a heads-up to
+        // check (nothing is known to have failed); failed is the failure mark.
+        let (glyph, tint): (Glyph, UIColor) = proposed ? (.attention, Palette.statusAttnGlyph)
+            : action.state == .unknown ? (.warning, Palette.statusAttnGlyph)
+            : (.failed, Palette.statusFailGlyph)
+        let card = needsCard(glyph: glyph, tint: tint,
                              title: title, when: RailAge.ago(action.endedAt ?? action.createdAt, now: now), body: body, quiet: false)
         card.accessibilityIdentifier = "task-action-\(action.id)"
         return card

@@ -45,6 +45,16 @@ public enum FaultCause: String, Sendable {
     case authDiscovery, needsAuth, unsupported, cliTooOld, cliMissing, sshRefused, marketplaceUnlinked, hubOnly
     case drifted, absent, unparsable, unwritable, timedOut, noCheckout, missingBytes, unsafePath, unfetchable, unknown
 
+    /// Something was tried and broke (a read, a write, a fetch, a clone, a
+    /// sync): the failure mark in the fail pair (DESIGN.md, The failure mark
+    /// and the blocked mark). The rest wait on a person and keep the warning.
+    public var broke: Bool {
+        switch self {
+        case .authDiscovery, .sshRefused, .absent, .unparsable, .unwritable, .timedOut, .missingBytes, .unsafePath, .unfetchable, .unknown: true
+        case .needsAuth, .unsupported, .cliTooOld, .cliMissing, .marketplaceUnlinked, .hubOnly, .drifted, .noCheckout: false
+        }
+    }
+
     /// What answers it: ask the machine to converge again, re-resolve the row
     /// at the hub, a person's decision between two copies, or nothing the
     /// app can press.

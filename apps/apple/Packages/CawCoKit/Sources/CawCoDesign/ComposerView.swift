@@ -1044,8 +1044,10 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             // Said as it is drawn: a dimmed box is "dimmed" to VoiceOver too.
             actionBox.accessibilityTraits = actionBox.isEnabled ? .button : [.button, .notEnabled]
         }
+        // Sending can't proceed until the hub is back or readable: the
+        // blocked mark (DESIGN.md, The failure mark and the blocked mark).
         let next: SwapGlyph.Face = if block != nil {
-            .glyph(.warning)
+            .glyph(.blocked)
         } else {
             switch action {
             case .send: .glyph(Glyph.send)
@@ -1589,7 +1591,7 @@ extension ComposerView {
         // As the frame's commit lays it out: a face swapped in since the last one is read as it will be drawn.
         glyph.layoutIfNeeded()
         let face = switch glyph.face {
-        case let .glyph(one): one == Glyph.send ? "send" : one == .stop ? "stop" : one == .warning ? "warning" : "glyph"
+        case let .glyph(one): one == Glyph.send ? "send" : one == .stop ? "stop" : one == .blocked ? "blocked" : "glyph"
         case .spinner: "spinner"
         }
         let ink = glyph.probeInk

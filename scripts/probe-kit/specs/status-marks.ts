@@ -36,10 +36,11 @@ import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { PNG } from "pngjs";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import { until } from "../../scratch-fleet";
-import { capture, colours, contrast, dx, dy, px, type Rgb } from "../ink";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { colours, contrast, dx, dy, px, type Raster, type Rgb } from "../ink";
+import { type Kit, ROOT, type Spec, settle } from "../kit";
 
 const APP = join(ROOT, "apps/dashboard");
 const CARD = "src/lib/cawco/tasks/TaskCard.stories.ts";
@@ -137,6 +138,136 @@ const readFrame = (args: FrameAsk) => {
   };
 };
 
+/** The glyph shown at zoom 1, its centre at the canvas's; its viewport box. */
+const showGlyph = async (page: Page, selector: string) => {
+  // The canvas pans and zooms its world by one transform inside a clipped
+  // viewport, so nothing scrolls a frame into view: the canvas is asked to
+  // stand at its own size (`cawco:canvas-view`, zoom 1) and to show the
+  // frame (`cawco:canvas-go`, its key), and its flight is waited out.
+  const shown = await page.evaluate(async (css) => {
+    const svg = document.querySelector<SVGElement>(css);
+    const key = svg?.closest<HTMLElement>(".cawco-frame")?.dataset.cawcoKey;
+    const world = document.querySelector<HTMLElement>(".cawco-world");
+    const canvas = document.querySelector<HTMLElement>(".cawco-canvas");
+    if (!(svg && key && world && canvas)) {
+      return null;
+    }
+    dispatchEvent(
+      new CustomEvent("cawco:canvas-view", { detail: { zoom: 1 } })
+    );
+    dispatchEvent(new CustomEvent("cawco:canvas-go", { detail: { key } }));
+    // A flight the canvas cancels for a newer one rejects its `finished`
+    // (AbortError): each is waited out settled, until none is left.
+    for (let flights = world.getAnimations(); flights.length > 0; ) {
+      await Promise.allSettled(flights.map((one) => one.finished));
+      flights = world.getAnimations();
+    }
+    // A frame wider than the canvas is centred on its middle, which can leave
+    // the badge at its start outside: the canvas's own wheel pan (zoom.x -=
+    // deltaX) then brings the glyph's centre to the canvas's.
+    const room = canvas.getBoundingClientRect();
+    const was = svg.getBoundingClientRect();
+    canvas.dispatchEvent(
+      new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        deltaX: was.x + was.width / 2 - (room.x + room.width / 2),
+        deltaY: was.y + was.height / 2 - (room.y + room.height / 2),
+      })
+    );
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    const box = svg.getBoundingClientRect();
+    return {
+      box: { x: box.x, y: box.y, width: box.width, height: box.height },
+      inside:
+        box.left >= room.left &&
+        box.right <= room.right &&
+        box.top >= room.top &&
+        box.bottom <= room.bottom,
+      zoom: new DOMMatrix(getComputedStyle(world).transform).a,
+    };
+  }, selector);
+  if (!(shown?.inside && Math.abs(shown.zoom - 1) < 1e-6)) {
+    throw new Error(
+      `the glyph ${selector} was not shown at zoom 1 inside the canvas: ${JSON.stringify(shown)}`
+    );
+  }
+  return shown.box;
+};
+
+/** Where `selector` stands in the viewport now. */
+const boxNow = (page: Page, selector: string) =>
+  page.evaluate((css) => {
+    const box = document.querySelector(css)?.getBoundingClientRect();
+    return box
+      ? { x: box.x, y: box.y, width: box.width, height: box.height }
+      : null;
+  }, selector);
+
+/** A pixel's place between `ink` (0) and `ground` (1), clamped. */
+const shareOf = (rgb: Rgb, ink: Rgb, ground: Rgb): number => {
+  const axis = ground.map((g, i) => g - (ink[i] ?? 0));
+  const length2 = axis.reduce((sum, a) => sum + a * a, 0) || 1;
+  const t =
+    rgb.reduce((sum, c, i) => sum + (c - (ink[i] ?? 0)) * (axis[i] ?? 0), 0) /
+    length2;
+  return Math.min(1, Math.max(0, t));
+};
+
+/**
+ * The glyph's own pixels: shown, left to settle, captured at the box it
+ * holds then, and kept only if it held that box through the capture and the
+ * capture carries the glyph's ink (its disc is ink: a capture with none is
+ * of whatever stood there before the glyph did).
+ */
+const captureGlyph = async (
+  page: Page,
+  selector: string,
+  ink: Rgb,
+  ground: Rgb
+): Promise<Raster> => {
+  const seen: string[] = [];
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await showGlyph(page, selector);
+    await settle(page, 300);
+    const box = await boxNow(page, selector);
+    if (!box) {
+      break;
+    }
+    // The page itself never scrolls (the canvas page is overflow hidden),
+    // so the glyph's viewport box is its place in the capture.
+    const png = PNG.sync.read(
+      await page.screenshot({ animations: "allow", caret: "hide", clip: box })
+    );
+    const after = await boxNow(page, selector);
+    const raster: Raster = {
+      data: png.data,
+      width: png.width,
+      height: png.height,
+      scale: png.width / box.width,
+      x: 0,
+      y: 0,
+    };
+    let inkiest = 1;
+    for (let y = 0; y < png.height; y += 1) {
+      for (let x = 0; x < png.width; x += 1) {
+        inkiest = Math.min(inkiest, shareOf(px(raster, x, y), ink, ground));
+      }
+    }
+    const held = JSON.stringify(after) === JSON.stringify(box);
+    if (held && inkiest <= 0.05) {
+      return raster;
+    }
+    seen.push(
+      `${JSON.stringify(box)} → ${JSON.stringify(after)}, inkiest ${inkiest.toFixed(2)}`
+    );
+  }
+  throw new Error(
+    `the glyph ${selector} was never captured holding still with its ink: ${seen.join("; ")}`
+  );
+};
+
 /**
  * The inner mark's width in device px along the row at `atY` (a fraction of
  * the glyph's height), inside the disc: each pixel counted by where it
@@ -145,32 +276,21 @@ const readFrame = (args: FrameAsk) => {
  */
 const innerMark = async (
   page: Page,
-  seen: Mark,
+  selector: string,
   ink: Rgb,
   ground: Rgb,
   atY: number
 ) => {
-  // The whole view, as the screen draws it: the mark was just scrolled to
-  // its middle, so its box (the view's coordinates) lies inside the capture.
-  const mark = seen;
-  const raster = await capture(page);
-  const y = Math.round(
-    dy(raster, mark.box.top + (mark.box.bottom - mark.box.top) * atY)
-  );
+  const raster = await captureGlyph(page, selector, ink, ground);
+  const side = raster.width / raster.scale;
+  const y = Math.round(dy(raster, side * atY));
   // The disc's middle half, clear of its antialiased rim.
-  const span = mark.box.right - mark.box.left;
-  const from = Math.floor(dx(raster, mark.box.left + span * 0.25));
-  const to = Math.ceil(dx(raster, mark.box.left + span * 0.75));
-  const axis = ground.map((g, i) => g - (ink[i] ?? 0));
-  const length2 = axis.reduce((sum, a) => sum + a * a, 0) || 1;
+  const from = Math.floor(dx(raster, side * 0.25));
+  const to = Math.ceil(dx(raster, side * 0.75));
   let width = 0;
   let peak = 0;
   for (let x = from; x < to; x += 1) {
-    const rgb = px(raster, x, y);
-    const t =
-      rgb.reduce((sum, c, i) => sum + (c - (ink[i] ?? 0)) * (axis[i] ?? 0), 0) /
-      length2;
-    const share = Math.min(1, Math.max(0, t));
+    const share = shareOf(px(raster, x, y), ink, ground);
     width += share;
     peak = Math.max(peak, share);
   }
@@ -395,7 +515,6 @@ const checkInk = async (
   scale: number
 ) => {
   for (const [name, story, atY, diagonal] of INNER_MARKS) {
-    // Read again: it scrolls the badge to the middle of the view.
     const read = await badgeOf(page, story, scheme);
     if (!read?.ground) {
       kit.check(`6 (${scheme}, ${scale}×): ${name} drawn`, false);
@@ -403,7 +522,7 @@ const checkInk = async (
     }
     const ink = await innerMark(
       page,
-      read.mark,
+      `.cawco-frame[data-cawco-file="${CARD}"][data-cawco-story="${story}"][data-cawco-scheme="${scheme}"][data-cawco-interaction="rest"] [data-slot="badge"] svg`,
       await rgbOf(page, read.mark.ink),
       await rgbOf(page, read.ground),
       atY

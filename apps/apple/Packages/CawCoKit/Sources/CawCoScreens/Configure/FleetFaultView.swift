@@ -35,7 +35,10 @@ final class FleetFaultView: UIView {
         self.onResolved = onResolved
         copy = group.cause.copy
         expanded = !compact
-        let (ground, ink) = group.origin == .hub ? (Palette.statusFailBg, Palette.statusFailInk) : (Palette.statusAttnBg, Palette.statusAttnInk)
+        // A hub fault wears the fail pair (nothing downstream mends until it
+        // is), and so does one that broke: the failure mark's own pair.
+        let fails = group.origin == .hub || group.cause.broke
+        let (ground, ink) = fails ? (Palette.statusFailBg, Palette.statusFailInk) : (Palette.statusAttnBg, Palette.statusAttnInk)
         self.ink = ink
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -45,7 +48,7 @@ final class FleetFaultView: UIView {
 
         let title = KitLabel(TypeScale.typeLabel, ink: ink, lines: 0)
         title.text = copy.title
-        let top = UIStackView(arrangedSubviews: [GlyphView(.warning, size: 16, tint: ink), title, where_()])
+        let top = UIStackView(arrangedSubviews: [GlyphView(group.cause.broke ? .failed : .warning, size: 16, tint: ink), title, where_()])
         top.spacing = Space.space2
         top.alignment = .center
         if compact {

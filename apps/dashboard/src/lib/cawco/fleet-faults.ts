@@ -61,6 +61,26 @@ export type FaultCause =
   | "unknown";
 
 /**
+ * The causes where something went wrong: a read, a write, a fetch, a clone
+ * or a sync that was tried and broke. They take the failure mark in the fail
+ * pair (DESIGN.md, The failure mark and the blocked mark). The rest wait on
+ * a person (a sign-in, an install, a decision, a checkout) and keep the
+ * warning's triangle.
+ */
+export const BROKE: ReadonlySet<FaultCause> = new Set<FaultCause>([
+  "auth-discovery",
+  "ssh-refused",
+  "absent",
+  "unparsable",
+  "unwritable",
+  "timed-out",
+  "missing-bytes",
+  "unsafe-path",
+  "unfetchable",
+  "unknown",
+]);
+
+/**
  * What a cause means and what to do about it, in the operator's language.
  *
  * `fix` is the sentence under the raw output; `action` names the affordance

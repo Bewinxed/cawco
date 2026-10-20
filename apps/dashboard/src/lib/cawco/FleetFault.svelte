@@ -20,6 +20,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     IconChevronRight,
+    IconError,
     IconRefresh,
     IconWarningTriangle,
   } from "#lib/icons.js";
@@ -32,6 +33,7 @@
     syncFleet,
   } from "./fleet";
   import {
+    BROKE,
     CAUSE,
     type FaultGroup,
     faultHref,
@@ -61,6 +63,8 @@
   } = $props();
 
   const copy = $derived(CAUSE[group.cause]);
+  /** Something was tried and broke: the failure mark, in the fail pair. */
+  const broke = $derived(BROKE.has(group.cause));
   const machine = $derived(
     machines.find((one) => one.machineId === group.machineId)
   );
@@ -244,9 +248,13 @@
   });
 </script>
 
-<div class="fault" class:hub={group.origin === "hub"}>
+<div class="fault" class:broke class:hub={group.origin === "hub"}>
   <div data-slot="top" class="top mark-line">
-    <IconWarningTriangle class="size-4 shrink-0" />
+    {#if broke}
+      <IconError class="size-4 shrink-0" />
+    {:else}
+      <IconWarningTriangle class="size-4 shrink-0" />
+    {/if}
     <span data-slot="title" class="title">{copy.title}</span>
     <!-- Where, never left implicit: the whole point of the investigation this
          came out of was that a badge named no machine. -->
@@ -474,8 +482,10 @@
     min-width: 0;
   }
   /* A hub fault is not a machine's problem and does not wear a machine's tint:
-     nothing downstream of it can be fixed until it is. */
-  .fault.hub {
+     nothing downstream of it can be fixed until it is. A fault that broke
+     wears the failure mark, and the failure mark wears the fail pair. */
+  .fault.hub,
+  .fault.broke {
     --tone-bg: var(--status-fail-bg);
     --tone-ink: var(--status-fail-ink);
   }

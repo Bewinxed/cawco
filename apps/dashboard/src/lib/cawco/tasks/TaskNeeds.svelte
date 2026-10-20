@@ -24,7 +24,9 @@
     IconError,
     IconLock,
     IconNeedsYou,
+    IconPauseCircle,
     IconTick,
+    IconWarningTriangle,
   } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { decideAction } from "../client.svelte";
@@ -144,13 +146,13 @@
           {#if proposed}
             <IconNeedsYou data-task-needs-glyph class="glyph" />
             <span>Approve {action.tool} on {action.connection}</span>
+          {:else if action.state === "unknown"}
+            <!-- Nothing is known to have failed: a heads-up to check. -->
+            <IconWarningTriangle data-task-needs-glyph class="glyph" />
+            <span>{action.tool} may or may not have happened</span>
           {:else}
             <IconError data-task-needs-glyph class="glyph fail" />
-            <span
-              >{action.state === "unknown"
-                ? `${action.tool} may or may not have happened`
-                : `${action.tool} failed`}</span
-            >
+            <span>{action.tool} failed</span>
           {/if}
           <span data-slot="when" class="when"
             >{ago(action.endedAt ?? action.createdAt)}</span
@@ -218,7 +220,12 @@
         data-reason="failed"
       >
         <h3 data-slot="head" class="head mark-line">
-          <IconError data-task-needs-glyph class="glyph fail" />
+          {#if lastAttempt.state === "cancelled"}
+            <!-- Stopped is not failed: the quiet status mark. -->
+            <IconPauseCircle data-task-needs-glyph class="glyph quiet-mark" />
+          {:else}
+            <IconError data-task-needs-glyph class="glyph fail" />
+          {/if}
           <span
             >{lastAttempt.state === "cancelled"
               ? "Its session was stopped"
@@ -326,6 +333,9 @@
   }
   .head :global(.glyph.fail) {
     color: var(--status-fail-glyph);
+  }
+  .head :global(.glyph.quiet-mark) {
+    color: var(--ink-muted);
   }
   .quiet .head :global(.glyph) {
     color: var(--ink-muted);
