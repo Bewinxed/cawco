@@ -17,14 +17,26 @@
  * Responses and frames go through one typescript-json-schema generator, so a
  * type both use (an `InstanceRow`, a `NeutralMessage`) is one component.
  *
+ * Before anything is written, the wire is held to what is in people's hands:
+ * the apps and dashboard tabs (wire-compat.ts), and every published
+ * nightly's agent, whose hub calls (agent-calls.ts) must each still find a
+ * route here, hidden routes included, and still read what it answers.
+ *
  * Run by hand; the live hub never generates any of this.
  */
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
+import {
+  AGENT_SOURCE,
+  agentCalls,
+  agentSourceAt,
+  type HubRoute,
+  routesFor,
+} from "./agent-calls";
 import { baseRefOf, checkGate, outsideInputs } from "./openapi-inputs";
-import { type Baseline, shippedBaselines } from "./shipped";
+import { type Baseline, publishedNightlies, shippedBaselines } from "./shipped";
 import {
   APP_SCHEMA,
   asSent,
@@ -151,6 +163,11 @@ const optionalBodies = new Set(
         `${route.method.toLowerCase()} ${route.path.replace(/:([^/]+)/g, "{$1}")}`
     )
 );
+
+/** Every route the hub answers, hidden ones too: what a shipped agent is held to. */
+const hubRoutes: HubRoute[] = (
+  hub.routes as { method: string; path: string }[]
+).map(({ method, path }) => ({ method, path }));
 
 // Everything the hub is read for has been read: its timers stop and its
 // database closes now, before the type work below and the scratch's removal.
@@ -1380,6 +1397,105 @@ for (const { app, label, protocol, breaks: against } of readers) {
     `The wire would break ${label} (WIRE_PROTOCOL ${protocol}), at ${places(breaks)}`
   );
 }
+
+/**
+ * The agents machines run: every published nightly's (shipped.ts). A machine
+ * meets a hub built now while it is still on an older build, and it updates
+ * through routes that hub must still answer: nightly 4670's agent asks
+ * `/api/binary-updates/release` for its next build, so a hub without that
+ * route leaves it on 4670 for good. Each agent's hub calls are read off its
+ * source at its tag (agent-calls.ts); every one must find a route here,
+ * hidden routes included, and every response it reads that its commit's
+ * openapi.json describes must still read (the app's compare, every enum
+ * read open: the agent's TypeScript reads a value it does not know).
+ *
+ * The way through is the hub ↔ agent contract itself: an agent whose
+ * `protocolRange` (core runtime.ts) no longer overlaps this hub's is one the
+ * hub refuses to launch on and that never installs a build from it, so what
+ * it calls no longer binds the hub.
+ */
+const RUNTIME = "packages/core/src/runtime.ts";
+const PROTOCOL_RANGE =
+  /export const protocolRange = \{ min: (\d+), max: (\d+) \}/;
+const rangeOf = (text: string, where: string): { max: number; min: number } => {
+  const found = PROTOCOL_RANGE.exec(text);
+  if (!found) {
+    throw new Error(`${RUNTIME} at ${where} declares no protocolRange`);
+  }
+  return { min: Number(found[1]), max: Number(found[2]) };
+};
+const hubRange = rangeOf(
+  await Bun.file(resolve(HUB, "../..", RUNTIME)).text(),
+  "this tree"
+);
+/** A route path as the document keys it (`{id}`), as the hub's table writes it (`:id`). */
+const asRoute = (path: string): HubRoute => ({
+  method: "",
+  path: path.replace(/\{([^}]+)\}/g, ":$1"),
+});
+const agents = publishedNightlies(HUB);
+/** Each call no route answers now: the agents that make it, and where the newest builds it. */
+const unanswered = new Map<string, { builds: string[]; site: string }>();
+for (const nightly of agents) {
+  const show = (path: string): string =>
+    git("show", `${nightly.commit}:${path}`);
+  const range = rangeOf(show(RUNTIME), nightly.label);
+  const calls = agentCalls(agentSourceAt(HUB, nightly.commit));
+  if (calls.size === 0) {
+    throw new Error(
+      `No hub call was read from the agent of ${nightly.label} (${nightly.commit.slice(0, 12)}): agent-calls.ts found no source under its ${AGENT_SOURCE}`
+    );
+  }
+  const lost = [...calls].filter(
+    ([pattern]) => routesFor(hubRoutes, pattern).length === 0
+  );
+  const read = JSON.parse(show(APP_SCHEMA)) as {
+    components?: { schemas?: Record<string, unknown> };
+    paths?: Record<string, unknown>;
+  };
+  const asked = Object.fromEntries(
+    Object.entries(read.paths ?? {}).filter(([path]) =>
+      [...calls.keys()].some(
+        (pattern) => routesFor([asRoute(path)], pattern).length > 0
+      )
+    )
+  );
+  const shapes = wireBreaks({ ...read, paths: asked }, sent as object, {
+    frames: [],
+    sent: new Set(),
+    openBefore: new Set(Object.keys(read.components?.schemas ?? {})),
+  });
+  if (range.min > hubRange.max || range.max < hubRange.min) {
+    if (lost.length || shapes.length) {
+      console.log(
+        `protocolRange ${hubRange.min}–${hubRange.max} no longer overlaps the agent of ${nightly.label} (${range.min}–${range.max}): ${lost.length + shapes.length} break${lost.length + shapes.length === 1 ? "" : "s"} against it allowed`
+      );
+    }
+    continue;
+  }
+  for (const [pattern, sites] of lost) {
+    const seen = unanswered.get(pattern);
+    if (seen) {
+      seen.builds.push(nightly.label);
+    } else {
+      unanswered.set(pattern, {
+        builds: [nightly.label],
+        site: `${sites[0]} at ${nightly.label}`,
+      });
+    }
+  }
+  if (shapes.length) {
+    refused.push(
+      `The wire would break the agent of ${nightly.label} (protocolRange ${range.min}–${range.max}), which machines run until they update, at ${places(shapes)}`
+    );
+  }
+}
+for (const [pattern, { builds, site }] of unanswered) {
+  const one = builds.length === 1;
+  refused.push(
+    `The hub would no longer answer ${pattern}, which the ${one ? "agent" : "agents"} of ${builds.join(", ")} ${one ? "calls" : "call"} (${site}). A machine on ${one ? "that build" : "those builds"} calls it until it updates. Keep the route, or move protocolRange in ${RUNTIME} past ${one ? "that build's" : "those builds'"}.`
+  );
+}
 if (refused.length) {
   rmSync(scratch, { recursive: true, force: true });
   const tabs = tabsRefused
@@ -1389,7 +1505,7 @@ if (refused.length) {
   process.exit(1);
 }
 console.log(
-  `Wire checked against ${bases.map((base) => base.label).join(", ")}`
+  `Wire checked against ${bases.map((base) => base.label).join(", ")}; agent routes against ${agents.map((agent) => agent.label).join(", ")}`
 );
 
 const outputs: [string, string][] = [

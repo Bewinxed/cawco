@@ -339,9 +339,15 @@ What follows from that, concretely, and what must stay true:
   this section assumes it is not.
 - **Updates are signed.** A machine installs only a build whose manifest verifies against
   the release key embedded in its binary (`packages/core/src/release-manifest.ts`), whose
-  sequence is above the running one, and that is the build its hub found on the channel —
-  for every machine but the hub's own, one whose wire protocol overlaps the hub's
-  (`packages/agent/src/binary-update.ts`). Whoever holds the private
+  sequence is above the running one, and that is the build its hub found on the channel
+  (`packages/agent/src/binary-update.ts`). A machine may run ahead of its hub: an install on
+  a Mac before the hub takes the build is the canary, so a bad build is caught there before
+  it can crash-loop the hub. The guard on that is the wire-protocol overlap check: a machine
+  other than the hub's own installs only a build whose `protocolRange`
+  (`packages/core/src/runtime.ts`) overlaps the hub's. The other direction is held at
+  build time: `bun run openapi:check` refuses a hub that no longer answers a route, or a
+  response shape, that a published nightly's agent calls (`packages/hub/scripts/agent-calls.ts`),
+  unless `protocolRange` moves past that build. Whoever holds the private
   release key can run code on every machine that follows the release channel; keeping that
   key out of the repository (`CAWCO_RELEASE_SIGNING_KEY` in an ignored `.env`) is the
   control. A machine that runs a hub's install script trusts that hub.

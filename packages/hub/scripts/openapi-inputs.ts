@@ -9,9 +9,12 @@
  * - {@link INPUT_FILES}: the lockfile (every node_modules type it reads), the
  *   shared tsconfig, the root manifest;
  * - every commit the wire is compared against: `--base` or the merge-base
- *   with origin/main, and each shipped build (shipped.ts: the tags of the
- *   newest nightly and of every TestFlight build still installable, so a new
- *   tag or an expiry changes the key).
+ *   with origin/main, and each shipped build (shipped.ts: the tags of every
+ *   published nightly, whose agents the hub's routes are held to, and of
+ *   every TestFlight build still installable, so a new tag or an expiry
+ *   changes the key);
+ * - the agent's source (`packages/agent/src`), what agent-calls.ts reads
+ *   for the routes an agent built now calls.
  *
  * The list is held to the program: a run that builds it fails when one of the
  * program's files is outside these inputs and node_modules
@@ -19,7 +22,7 @@
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
-import { shippedBaselines } from "./shipped";
+import { publishedNightlies, shippedBaselines } from "./shipped";
 
 const HUB = resolve(import.meta.dir, "..");
 const REPO = resolve(HUB, "../..");
@@ -27,6 +30,7 @@ const INPUT_DIRS = [
   "packages/auth",
   "packages/core",
   "packages/hub",
+  "packages/agent/src",
   "apps/apple/Packages/CawCoKit/Sources/CawCoAPI",
 ];
 const INPUT_FILES = ["bun.lock", "tsconfig.base.json", "package.json"];
@@ -56,6 +60,7 @@ const inputKey = async (baseRef: string): Promise<string> => {
   const bases = [
     { label: "base", commit: baseRef },
     ...shippedBaselines(HUB),
+    ...publishedNightlies(HUB),
   ].map(
     ({ label, commit }) => `${label} ${git("rev-parse", `${commit}^{commit}`)}`
   );

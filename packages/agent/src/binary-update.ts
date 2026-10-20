@@ -7,10 +7,12 @@
  *
  * Nothing here ever goes backwards: every machine is offered the one build its
  * hub found (`/api/binary-updates/latest`), a build whose signed `sequence` is
- * not above the running one is never installed, a machine other than the
- * hub's own installs only a build whose wire protocol overlaps its hub's, and
- * no machine installs a build with fewer migrations than the hub's database
- * holds.
+ * not above the running one is never installed, and no machine installs a
+ * build with fewer migrations than the hub's database holds. A machine may
+ * run ahead of its hub (an install on a Mac first is the canary before the
+ * hub takes a build); the guard is the wire-protocol overlap check, by which
+ * a machine other than the hub's own installs only a build whose
+ * `protocolRange` overlaps its hub's.
  */
 import { readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";

@@ -5,6 +5,14 @@
  * finds it again), so an install asked for after a check takes the build that
  * check named. Each machine verifies what it is given against the embedded
  * release key.
+ *
+ * So a machine may run ahead of its hub, and that is meant: a build
+ * installed on a Mac before the hub takes it is the canary, caught there
+ * before it can crash-loop the hub. The guard is the wire-protocol overlap
+ * check: a machine other than the hub's own installs only a build whose
+ * `protocolRange` overlaps the hub's (agent binary-update.ts `#offer`). The
+ * hub keeps every route a published nightly's agent calls, `/release`
+ * among them (scripts/openapi.ts holds it to them).
  */
 import { Database } from "bun:sqlite";
 import { mkdirSync, readFileSync } from "node:fs";
