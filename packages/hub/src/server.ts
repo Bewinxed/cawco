@@ -23645,8 +23645,13 @@ export const createServer = (
     idle: sessionIdle,
     warm: cacheWarm,
     admission,
+    // Only a measured lifetime (its last request and the TTL its cache was
+    // written with) says a cache outlives a reset. Its last turn plus the
+    // longest lifetime is when expiry is proven, not that it is warm: a
+    // session that never wrote a cache would wait up to an hour with
+    // nothing to keep.
     cacheExpiresAt: (row) => {
-      const expires = promptCacheExpiresAt(row, followupState(row).lastTurnAt);
+      const expires = promptCacheExpiresAt(row);
       return expires !== null && expires > Date.now() ? expires : null;
     },
     // A question or permission of its pending, or a top-level session a
