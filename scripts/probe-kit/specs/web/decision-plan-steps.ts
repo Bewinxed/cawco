@@ -14,6 +14,9 @@
  * 5. The page's own capture paints every embed: the whole page pictured
  *    window by window as the person scrolls it (decision-embeds.ts
  *    `capturePage`), no embed's box one colour in it.
+ * 6. That capture is files a delegate can hand over: RGB, each within the
+ *    hub's 1 MiB (a tall page in numbered sections cut between its cards),
+ *    read back pixel for pixel.
  *
  * The page draws as CawCo shows it, through the overlay's bridge
  * (`CAWCO_BRIDGE`). Each leg's picture goes to .probe/decision-pages, beside
@@ -24,12 +27,14 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
+import { FOLDER_FILE_LIMIT } from "../../../../packages/hub/src/project-folder";
 import {
   APP,
   blankEmbeds,
   CAWCO_BRIDGE,
+  captureFaults,
   capturePage,
   EMBED_FRAME,
   embedDrawFaults,
@@ -177,9 +182,16 @@ const spec: Spec = {
             tall: e.tall,
             frames: e.frames,
           }));
-          const paints = await capturePage(
+          const capture = await capturePage(
             page,
             join(OUT, `${NAME}-${size}-${theme}.png`)
+          );
+          const { paints } = capture;
+          const captured = captureFaults(capture);
+          check(
+            `${leg}: the page's capture is files a delegate can hand over, each RGB and at most ${FOLDER_FILE_LIMIT / 1024 / 1024} MiB, its whole picture pixel for pixel (${capture.files.map((f) => `${basename(f.path)} ${(f.bytes / 1024).toFixed(0)} KiB, rows ${f.rows.from}–${f.rows.to}`).join(", ")}; ${capture.picture.width}×${capture.picture.height})`,
+            capture.files.length > 0 && captured.length === 0,
+            captured.join("\n    ")
           );
           const blank = blankEmbeds(paints);
           check(
