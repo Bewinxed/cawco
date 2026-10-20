@@ -18014,6 +18014,23 @@
         }
       }
     },
+    "/api/local-name": {
+      "get": {
+        "operationId": "getApiLocalName",
+        "responses": {
+          "200": {
+            "description": "getApiLocalName 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalName"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents": {
       "get": {
         "operationId": "getApiAgents",
@@ -32068,6 +32085,9 @@
             "$ref": "#/components/schemas/TailnetHttpsFrame"
           },
           {
+            "$ref": "#/components/schemas/LocalNameFrame"
+          },
+          {
             "$ref": "#/components/schemas/FleetFetchFrame"
           },
           {
@@ -32154,6 +32174,7 @@
             "hub.restart": "#/components/schemas/HubRestartFrame",
             "fleet.upstream": "#/components/schemas/FleetUpstreamFrame",
             "tailnet.https": "#/components/schemas/TailnetHttpsFrame",
+            "local.name": "#/components/schemas/LocalNameFrame",
             "fleet.fetch": "#/components/schemas/FleetFetchFrame",
             "project.cap": "#/components/schemas/ProjectCapFrame",
             "actions": "#/components/schemas/ActionsFrame",
@@ -44498,6 +44519,45 @@
           "operator",
           "port",
           "userspace"
+        ]
+      },
+      "LocalName": {
+        "description": "What `GET /api/local-name` answers, and the `local.name` frame carries.",
+        "type": "object",
+        "properties": {
+          "command": {
+            "description": "The one-line command that lets the hub bind port 80, while `needs`.",
+            "type": "string"
+          },
+          "dashboardPort": {
+            "description": "The dashboard's port, the one port 80 redirects to.",
+            "type": "number"
+          },
+          "host": {
+            "description": "The hub's machine, by its hostname.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The `.local` name the hub holds, once it holds one.",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/LocalNameState"
+          }
+        },
+        "required": [
+          "dashboardPort",
+          "host",
+          "state"
+        ]
+      },
+      "LocalNameState": {
+        "description": "Where a typed `.local` name stands:\n- `off`: the hub answers no name here (mDNS off, no shared network), or\n  port 80 is refused for a reason this machine's setting doesn't fix (a\n  listener of another process holds it);\n- `needs`: Linux refuses the port below `ip_unprivileged_port_start`, and\n  `command` lowers it;\n- `serving`: port 80 redirects to the dashboard.",
+        "type": "string",
+        "enum": [
+          "needs",
+          "off",
+          "serving"
         ]
       },
       "AgentRow": {
@@ -56968,6 +57028,25 @@
         "required": [
           "kind",
           "tailnet"
+        ]
+      },
+      "LocalNameFrame": {
+        "description": "Hub-originated: the hub's `.local` name typed in a browser changed state\n(hub local-name.ts): port 80 came to need the person, they let it, or the\nname came or went. Its onboarding row in Needs you follows.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "local.name"
+            ]
+          },
+          "localName": {
+            "$ref": "#/components/schemas/LocalName"
+          }
+        },
+        "required": [
+          "kind",
+          "localName"
         ]
       },
       "FleetFetchFrame": {

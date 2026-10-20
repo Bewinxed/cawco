@@ -43,8 +43,13 @@
    * DNS page to open, its command to copy, the docs) and its own tick as the
    * hub finds it taken; once HTTPS is on, the row's tick with the https
    * dashboard to open.
+   *
+   * The hub's `.local` name typed in a browser is one of the same: its line,
+   * then its one step (the command that lets the hub answer on port 80),
+   * ticking once the hub holds the port.
    */
   import {
+    localNameWords,
     pairingWords,
     questionsOf,
     type TailnetHttps,
@@ -73,6 +78,7 @@
     IconError,
     IconExternal,
     IconFolder,
+    IconGlobe,
     IconInteract,
     IconLock,
     IconMaximize,
@@ -132,6 +138,7 @@
     if (
       item.kind === "choice" ||
       item.kind === "tailnet" ||
+      item.kind === "local-name" ||
       item.kind === "relay"
     ) {
       return;
@@ -160,6 +167,13 @@
         return item.done
           ? tailnetWords.done(item.tailnet.dashboard ?? "")
           : tailnetWords.lead;
+      case "local-name":
+        return item.done
+          ? localNameWords.done(item.localName.name)
+          : localNameWords.lead(
+              item.localName.name,
+              item.localName.dashboardPort
+            );
       case "relay":
         return "";
       case "pairing":
@@ -280,6 +294,8 @@
         return "Onboarding · each project can change it";
       case "tailnet":
         return tailnetWords.meta(item.tailnet.host);
+      case "local-name":
+        return localNameWords.meta(item.localName.host);
       case "relay":
         return "";
       case "pairing":
@@ -476,17 +492,42 @@
     };
   }
 
-  /** Every step on the path, while one stands; none once HTTPS is on. */
-  const tailnetTodos = $derived.by(() => {
-    if (item.kind !== "tailnet" || item.done) {
-      return [];
+  /**
+   * Every step on an onboarding row's path, while one stands; none once it
+   * is done: HTTPS on the tailnet's, and port 80 for the `.local` name's one.
+   */
+  const todos = $derived.by(
+    (): {
+      step: string;
+      done: boolean;
+      label: string;
+      note: string;
+      href?: string;
+      link?: string;
+      command?: string;
+    }[] => {
+      if (item.kind === "local-name" && !item.done) {
+        return [
+          {
+            step: "low-ports",
+            done: false,
+            label: localNameWords.step,
+            note: localNameWords.note(item.localName.host),
+            command: item.localName.command,
+          },
+        ];
+      }
+      if (item.kind !== "tailnet" || item.done) {
+        return [];
+      }
+      const { tailnet } = item;
+      return (tailnet.steps ?? []).map((todo) => ({
+        step: todo.step,
+        done: todo.done,
+        ...tailnetTodo(tailnet, todo),
+      }));
     }
-    const { tailnet } = item;
-    return (tailnet.steps ?? []).map((todo) => ({
-      todo,
-      ...tailnetTodo(tailnet, todo),
-    }));
-  });
+  );
   /** An approved action waiting for your approval: Deny and Approve stand. */
   const approvable = $derived(
     item.kind === "action" && item.action.state === "proposed"
@@ -605,12 +646,14 @@
         <IconWorkflow aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "choice"}
         <IconShield aria-hidden="true" class="size-icon-md" />
-      {:else if item.kind === "tailnet"}
+      {:else if item.kind === "tailnet" || item.kind === "local-name"}
         {#if item.done}
           <IconSuccess
             aria-hidden="true"
             class="size-icon-md text-status-done-ink"
           />
+        {:else if item.kind === "local-name"}
+          <IconGlobe aria-hidden="true" class="size-icon-md" />
         {:else}
           <IconTailnetHttps aria-hidden="true" class="size-icon-md" />
         {/if}
@@ -693,7 +736,7 @@
     {/if}
     <span
       data-slot="want"
-      class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 line-clamp-std-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block group-kind-choice/row:line-clamp-undo group-kind-tailnet/row:block group-kind-tailnet/row:line-clamp-undo"
+      class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 line-clamp-std-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block group-kind-choice/row:line-clamp-undo group-kind-tailnet/row:block group-kind-tailnet/row:line-clamp-undo group-kind-local-name/row:block group-kind-local-name/row:line-clamp-undo"
       >{want}</span
     >
     {#if item.kind === "ask" && item.request.presentation.command && !item.request.presentation.post}
@@ -859,8 +902,8 @@
           <span class="flex-none num">{item.action.taskId}</span>
         {/if}
       </span>
-    {:else if item.kind === "tailnet"}
-      {#if tailnetTodos.length > 0}
+    {:else if item.kind === "tailnet" || item.kind === "local-name"}
+      {#if todos.length > 0}
         <!-- Every step on the path, in order: a step that stands says what to
              do, where or why, and its control; a step taken is its tick and
              its label. -->
@@ -871,12 +914,12 @@
           role="list"
         >
           <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
-          {#each tailnetTodos as one, index (one.todo.step)}
+          {#each todos as one, index (one.step)}
             <li
               data-slot="step"
               class="group/step mark-line grid grid-cols-(--step-cols) items-box-start gap-x-space-2 gap-y-space-1 type-label"
-              data-done={one.todo.done || undefined}
-              data-step={one.todo.step}
+              data-done={one.done || undefined}
+              data-step={one.step}
               style:--step-cols="var(--icon-md) minmax(0, 1fr)"
             >
               <span class="mark-cell">
@@ -884,7 +927,7 @@
                   data-slot="step-mark"
                   class="grid size-icon-md place-items-center text-ink-muted"
                 >
-                  {#if one.todo.done}
+                  {#if one.done}
                     <IconSuccess
                       aria-hidden="true"
                       class="size-icon-md text-status-done-ink"
@@ -905,11 +948,11 @@
               <span
                 data-slot="step-label"
                 class="min-w-0 type-label wrap-anywhere text-ink-strong group-data-done/step:text-ink-muted"
-                >{#if one.todo.done}<span class="sr-only"
+                >{#if one.done}<span class="sr-only"
                     >{tailnetWords.stepDone}{" "}</span
                   >{/if}{one.label}</span
               >
-              {#if !one.todo.done}
+              {#if !one.done}
                 <span
                   data-slot="step-note"
                   class="col-start-2 min-w-0 type-meta wrap-anywhere text-ink-muted"

@@ -244,6 +244,7 @@ import {
   LIMIT_REACHED,
   LIMITED_PROVIDERS,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
+  LOCAL_WEB_PORT,
   type MachineFault,
   type MachineProviderLists,
   MCP_PLATFORMS,
@@ -609,6 +610,7 @@ import { createLaws } from "./laws";
 import { createLeadGate, reviewProblem } from "./lead-gate";
 import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
+import { createLocalName } from "./local-name";
 import { basicCaller, createMachineCredentials } from "./machine-credentials";
 import {
   type CommandOptions,
@@ -618,7 +620,7 @@ import {
   WouldWait,
   whenStopped,
 } from "./machine-pause";
-import { localHubName } from "./mdns";
+import { followNameInterfaces, localHubName } from "./mdns";
 import { MeaningJudge } from "./meaning";
 import {
   externalizeImages,
@@ -11335,6 +11337,23 @@ export const createServer = (
         ...(seen ? { seen } : {}),
       };
     });
+  /**
+   * The hub's `.local` name typed in a browser (local-name.ts): port 80 on
+   * the interfaces mdns.ts answers the name on, read with it, redirecting to
+   * the dashboard. A change tells every dashboard (its onboarding row).
+   */
+  const localName = createLocalName({ dashboardPort: DASHBOARD_PORT });
+  followNameInterfaces(localName.hold);
+  localName.onChange((state) =>
+    registry.broadcast({
+      verb: "frames",
+      machineId: "hub",
+      payload: { kind: "local.name", localName: state },
+    })
+  );
+  /** The hub's ACME webroot for a certificate issued over HTTP on its own machine, while it holds port 80 there. */
+  const webrootFor = (machineId: string): string | null =>
+    machineId === ownMachineIdRead ? localName.webroot() : null;
   const streamRelay = createStreamRelay({
     db: db.streamRelay,
     call: callAgent,
@@ -11344,6 +11363,7 @@ export const createServer = (
     cloudflareToken: () => relayJourney.token(),
     renewed: (expiresAt) =>
       db.streamRelay.journeyUpdate({ certificateEndsAt: expiresAt }),
+    webrootFor,
   });
   streamRelay.watch();
   /**
@@ -11358,6 +11378,9 @@ export const createServer = (
     call: callAgent,
     machines: relayMachines,
     hubMachineId: () => ownMachineIdRead ?? null,
+    lowestHere: () =>
+      localName.state().state === "needs" ? LOCAL_WEB_PORT : null,
+    webrootFor,
     lifetime,
     publish: (journey) =>
       registry.broadcast({
@@ -24730,6 +24753,10 @@ export const createServer = (
       // stands, the step that needs the person while one does. Every change
       // after it comes as a `tailnet.https` frame.
       .get("/api/tailnet-https", () => tailnetHttps.state())
+      // The hub's `.local` name typed in a browser (local-name.ts): port
+      // 80's state, the command that lets it while one is needed. Every
+      // change after it comes as a `local.name` frame.
+      .get("/api/local-name", () => localName.state())
       // The fleet's list is the person's. A machine reads its own row alone,
       // by its own id (hub-auth.ts): what its CLI's health, install and
       // service checks ask.

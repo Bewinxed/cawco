@@ -15,6 +15,7 @@
 import type {
   ApprovedActionView,
   FleetWatchNotice,
+  LocalName,
   NeutralSessionInfo,
   PairingRequest,
   ProjectCap,
@@ -25,6 +26,7 @@ import type {
 } from "@cawco/core";
 import {
   archiveRefusal,
+  localNameWords,
   machineLabel,
   projectsFor,
   questionsOf,
@@ -397,6 +399,22 @@ export interface TailnetItem {
 }
 
 /**
+ * The hub's `.local` name typed in a browser, while Linux keeps port 80 from
+ * the hub (core local-name.ts): one step, the command that lets it. The hub
+ * tries again on its own; once the port is held the row ticks (`done`) for
+ * a moment, then leaves.
+ */
+export interface LocalNameItem {
+  done: boolean;
+  key: string;
+  kind: "local-name";
+  localName: LocalName & { name: string };
+  place: string;
+  raisedAt: undefined;
+  title: string;
+}
+
+/**
  * The stream relay's guided journey (hub relay-journey.ts), while it asks:
  * set up from Caw's setup card, Settings › Browsers or a take-over through a
  * domain, and not yet live and proven from outside, nor put away with Later
@@ -468,6 +486,7 @@ export type NeedsItem =
   | WatchItem
   | ChoiceItem
   | TailnetItem
+  | LocalNameItem
   | RelayItem
   | PairingItem
   | AdmissionItem
@@ -1156,6 +1175,24 @@ class Home {
             },
           ]
         : [];
+    // Port 80 for the hub's `.local` name: its step while it stands, its tick a moment after.
+    const local = cawco.localName;
+    const named: NeedsItem[] =
+      local?.name &&
+      (local.state === "needs" ||
+        (local.state === "serving" && cawco.localNameTicked))
+        ? [
+            {
+              kind: "local-name",
+              key: "local-name:port-80",
+              localName: { ...local, name: local.name },
+              done: local.state === "serving",
+              title: localNameWords.title(local.name),
+              place: "Onboarding",
+              raisedAt: undefined,
+            },
+          ]
+        : [];
     // The stream relay's journey: its row while it asks, its tick a moment after.
     const journey = cawco.relayJourney;
     const relaying: NeedsItem[] =
@@ -1215,6 +1252,7 @@ class Home {
       ...watched,
       ...unanswered,
       ...secured,
+      ...named,
       ...relaying,
       ...pairings,
       ...admissions,

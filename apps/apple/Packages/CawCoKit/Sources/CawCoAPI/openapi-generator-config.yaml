@@ -102,6 +102,7 @@ typeOverrides:
     LandsMode: OpenEnums.LandsMode
     Law: OpenEnums.Law
     LfsOfferStateAnswer: OpenEnums.LfsOfferStateAnswer
+    LocalNameState: OpenEnums.LocalNameState
     MachineCapabilityId: OpenEnums.MachineCapabilityId
     MachineCapabilityMedia: OpenEnums.MachineCapabilityMedia
     MemoryScopeRole: OpenEnums.MemoryScopeRole

@@ -299,6 +299,7 @@
 @custom-variant kind-dropped (&[data-kind="dropped"]);
 @custom-variant kind-fail (&[data-kind="fail"]);
 @custom-variant kind-gone (&[data-kind="gone"]);
+@custom-variant kind-local-name (&[data-kind="local-name"]);
 @custom-variant kind-markdown (&[data-kind="markdown"]);
 @custom-variant kind-pairing (&[data-kind="pairing"]);
 @custom-variant kind-phone (&[data-kind="phone"]);

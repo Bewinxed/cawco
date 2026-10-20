@@ -43,6 +43,7 @@ import type {
   LandsMode,
   LawBroken,
   LfsOfferState,
+  LocalName,
   MachineHarnessReport,
   McpServerStatus,
   ModeAsk,
@@ -1202,6 +1203,14 @@ const state = $state({
   tailnetHttps: undefined as TailnetHttps | undefined,
   /** Its step was taken while this page stood: the row ticks for {@link TAILNET_TICK_MS}, then leaves. */
   tailnetTicked: false,
+  /**
+   * The hub's `.local` name typed in a browser (`GET /api/local-name`, then
+   * each `local.name` frame): Needs you shows its step while port 80 needs
+   * the person; undefined until read.
+   */
+  localName: undefined as LocalName | undefined,
+  /** Its step was taken while this page stood: the row ticks for {@link TAILNET_TICK_MS}, then leaves. */
+  localNameTicked: false,
   /**
    * The stream relay's journey (`GET /api/stream-relay`, then each
    * `stream_relay.journey` frame): Needs you shows its row while it asks,
@@ -2795,6 +2804,8 @@ async function refresh(): Promise<boolean> {
   readFleetUpstream();
   // HTTPS on the tailnet name: Needs you shows its step while one stands.
   readTailnetHttps();
+  // The hub's `.local` name typed in a browser: its step while one stands.
+  readLocalName();
   // The stream relay's journey: Needs you's row and Settings › Browsers.
   readRelayJourney().catch(() => undefined);
   // Every project's threads, for the rail; frames keep them from here.
@@ -3336,6 +3347,21 @@ function handleFrame(frame: FramePayload): void {
     if (ticked) {
       setTimeout(() => {
         state.tailnetTicked = false;
+      }, TAILNET_TICK_MS);
+    }
+    return;
+  }
+
+  // Port 80 for the `.local` name changed: Needs you's step stands, or ticks.
+  if (frame.kind === "local.name") {
+    heardFrame("local.name");
+    const ticked =
+      state.localName?.state === "needs" && frame.localName.state === "serving";
+    state.localName = frame.localName;
+    state.localNameTicked = ticked;
+    if (ticked) {
+      setTimeout(() => {
+        state.localNameTicked = false;
       }, TAILNET_TICK_MS);
     }
     return;
@@ -6158,6 +6184,15 @@ async function readTailnetHttps(): Promise<void> {
   }
 }
 
+/** Port 80 for the hub's `.local` name, as the hub has it now. */
+async function readLocalName(): Promise<void> {
+  const mark = readLeaves();
+  const read = await load<LocalName>("/api/local-name");
+  if (read && !heardSince("local.name", mark)) {
+    state.localName = read;
+  }
+}
+
 /** The journey as the hub has it now, and whether it ticked while this page stood (asking, then done). */
 function keepRelayJourney(journey: RelayJourneyView): void {
   const before = state.relayJourney;
@@ -8968,6 +9003,14 @@ export const cawco = {
   /** Its step was taken while this page stood, a moment ago: the row ticks. */
   get tailnetTicked(): boolean {
     return state.tailnetTicked;
+  },
+  /** Port 80 for the hub's `.local` name; undefined until read. */
+  get localName(): LocalName | undefined {
+    return state.localName;
+  },
+  /** Its step was taken while this page stood, a moment ago: the row ticks. */
+  get localNameTicked(): boolean {
+    return state.localNameTicked;
   },
   /** The stream relay's journey, as the hub has it; undefined until read. */
   get relayJourney(): RelayJourneyView | undefined {

@@ -28,6 +28,14 @@
  *    from a port other than 5353, so every answer comes back by unicast
  *    (§6.7), as the QU answers macOS asks for do. Each record answering it
  *    is one of `lan0`'s addresses: none of `br9`'s, none of `lan1`'s.
+ *    Then it types the name: `GET http://cawco.local/session?from=lan` at the
+ *    address it was answered with is a 307 to the dashboard's port at the
+ *    same host, its path and query kept (hub local-name.ts), and port 80
+ *    listens on `lan0`'s addresses alone.
+ * 6. Where Linux keeps port 80 from the hub (`ip_unprivileged_port_start`
+ *    above it, the hub without CAP_NET_BIND_SERVICE), a hub in a network of
+ *    its own says so in one line, naming the command at 80, and nothing
+ *    listens on port 80, across more than two of its reads.
  *
  * Multicast needs an interface that carries it: inside a workspace there is
  * only loopback, and leg 5 makes namespaces, so this runs on the host. A hub
@@ -126,15 +134,32 @@ const ask = async <T>(
 const ASK = "--ask";
 /** How long leg 5's device keeps asking while the hub probes its name. */
 const ASK_MS = 60_000;
+/** The dashboard's port the scratch hubs redirect to: the hub's default. */
+const DASHBOARD_PORT = 3000;
+/** What leg 5's device found: the addresses it heard, and what `GET http://<name>/…` answered. */
+interface Asked {
+  heard: string[];
+  /** curl's `<status> <redirect url>`. */
+  redirect: string;
+}
+/** The path leg 5's device types after the name. */
+const TYPED = "/session?from=lan";
+/** Leg 6's one line: the hub's word for a port 80 Linux keeps from it. */
+const FLOOR_LINE =
+  /^\[hub\] port 80 not opened on 192\.168\.77\.1: it is below this machine's ip_unprivileged_port_start \(\d+\)/;
+const SPACES = /\s+/;
+/** An IPv6 address's brackets, as `ss` writes a local address. */
+const BRACKETS = /^\[|\]$/g;
 
 /**
  * Leg 5's device: asks for `name`'s A and AAAA records from `from`, an
  * address on the LAN, on an ephemeral port, so each responder that hears the
  * question answers it by unicast to `from` (RFC 6762 §6.7). Asks every
- * second until something answers, then listens {@link LISTEN_MS} more, and
- * answers every address heard.
+ * second until something answers, then listens {@link LISTEN_MS} more. Then
+ * types the name in as a browser does: `GET http://<name>{@link TYPED}` at
+ * the first IPv4 address heard, from `from`. Answers both.
  */
-const askFromLan = async (name: string, from: string): Promise<string[]> => {
+const askFromLan = async (name: string, from: string): Promise<Asked> => {
   const socket = createSocket("udp4");
   await new Promise<void>((bound) => socket.bind(0, from, bound));
   socket.setMulticastInterface(from);
@@ -164,7 +189,15 @@ const askFromLan = async (name: string, from: string): Promise<string[]> => {
   }
   await Bun.sleep(LISTEN_MS);
   mdns.destroy();
-  return [...heard];
+  const at = [...heard].find((address) => !address.includes(":"));
+  // The hub opens port 80 on the read that follows its interfaces, its
+  // name probed beside it: retried while refused, as a browser's user would.
+  const redirect = at
+    ? await Bun.$`curl -s --noproxy ${"*"} --interface ${from} --resolve ${`${name}:80:${at}`} --retry 20 --retry-connrefused --retry-delay 1 -o /dev/null -w ${"%{http_code} %{redirect_url}"} ${`http://${name}${TYPED}`}`
+        .nothrow()
+        .text()
+    : "no IPv4 address heard";
+  return { heard: [...heard], redirect };
 };
 
 /**
@@ -199,6 +232,31 @@ ip -d -o link show > "$1/links.txt"
 trap "kill $!" EXIT
 "$2" "$4" ${ASK} cawco.local 192.168.77.2 > "$1/answers.json"
 ip -json addr show > "$1/addresses.json"
+ss -ltnH > "$1/listening.txt"
+`;
+
+/**
+ * Leg 6's network: `lan0` alone, `ip_unprivileged_port_start` at 1024 (a
+ * new network namespace's own default, written again), and the hub run
+ * without CAP_NET_BIND_SERVICE (setpriv(1): dropped from its bounding and
+ * inheritable sets, so the root of this user namespace binds as any user
+ * does). It runs past three of the hub's reads (mdns.ts's 10 s), then the
+ * sockets listening are read. `$1` the leg's folder, `$2` bun, `$3` the hub.
+ */
+const FLOOR_SCRIPT = `set -eu
+ip link set lo up
+ip link add lan0 type dummy
+ip link set lan0 multicast on
+ip addr add 192.168.77.1/24 dev lan0
+ip link set lan0 up
+ip route add default via 192.168.77.254 dev lan0
+echo 1024 > /proc/sys/net/ipv4/ip_unprivileged_port_start || true
+cat /proc/sys/net/ipv4/ip_unprivileged_port_start > "$1/floor.txt"
+setpriv --bounding-set -net_bind_service --inh-caps -net_bind_service -- "$2" "$3" > "$1/hub.log" 2>&1 &
+trap "kill $!" EXIT
+for _ in $(seq 120); do grep -q 'ip_unprivileged_port_start' "$1/hub.log" && break; sleep 0.5; done
+sleep 25
+ss -ltnH > "$1/listening.txt"
 `;
 
 interface IpAddr {
@@ -280,9 +338,12 @@ const lanLeg = async (
   const read = (name: string) =>
     existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : "";
   const err = await new Response(box.stderr).text();
-  const answered = (
-    read("answers.json") ? JSON.parse(read("answers.json")) : []
-  ) as string[];
+  const asked = (
+    read("answers.json")
+      ? JSON.parse(read("answers.json"))
+      : { heard: [], redirect: "" }
+  ) as Asked;
+  const answered = asked.heard;
   const addresses = (
     read("addresses.json") ? JSON.parse(read("addresses.json")) : []
   ) as IpAddr[];
@@ -307,11 +368,119 @@ const lanLeg = async (
     answered.length > 0 && foreign.length === 0,
     `heard ${answered.join(", ") || "nothing"}; lan0 ${lan.join(", ")}; br9 ${of("br9").join(", ")}; lan1 ${of("lan1").join(", ")}; not lan0's: ${foreign.join(", ") || "none"}`
   );
+  // The name typed in: a 307 to the dashboard's port at the same host.
+  const location = `http://cawco.local:${DASHBOARD_PORT}${TYPED}`;
+  kit.check(
+    `5: a LAN device's GET http://cawco.local${TYPED} is a 307 to ${location}`,
+    asked.redirect === `307 ${location}`,
+    `curl said "${asked.redirect}"; hub.log ${read("hub.log")
+      .split("\n")
+      .filter((line) => line.includes("port 80"))
+      .join(" | ")}`
+  );
+  const on80 = listeningOn80(read("listening.txt"));
+  const off = on80.filter((address) => !lan.includes(address));
+  kit.check(
+    "5: port 80 listens on lan0's addresses alone, none of br9's or lan1's, no wildcard",
+    on80.length > 0 && off.length === 0,
+    `port 80 on ${on80.join(", ") || "nothing"}; not lan0's: ${off.join(", ") || "none"}`
+  );
   kit.note(`leg 5's links, hub log and answers: ${dir}`);
 };
 
+/** The local addresses `ss -ltnH` lists listening on port 80. */
+const listeningOn80 = (listing: string): string[] =>
+  listing
+    .split("\n")
+    .map((line) => line.trim().split(SPACES)[3] ?? "")
+    .filter((local) => local.endsWith(":80"))
+    .map((local) => local.slice(0, -":80".length).replace(BRACKETS, ""));
+
+/**
+ * Leg 6: a hub Linux keeps port 80 from (FLOOR_SCRIPT). Its folder keeps the
+ * floor read, the hub's log and the sockets listening.
+ */
+const floorLeg = async (
+  kit: Kit,
+  env: Record<string, string>,
+  sandbox: string
+): Promise<void> => {
+  const unshare = Bun.which("unshare");
+  const setpriv = Bun.which("setpriv");
+  kit.check(
+    "6: the host has unshare and setpriv, to run a hub without the right to bind port 80",
+    unshare !== null && setpriv !== null,
+    `unshare ${unshare ?? "missing"}; setpriv ${setpriv ?? "missing"}`
+  );
+  if (!(unshare && setpriv)) {
+    return;
+  }
+  const dir = join(sandbox, "floor-leg");
+  mkdirSync(dir, { recursive: true });
+  const box = Bun.spawn(
+    [
+      unshare,
+      "--map-root-user",
+      "--net",
+      "--pid",
+      "--mount-proc",
+      "--kill-child",
+      "--",
+      "sh",
+      "-c",
+      FLOOR_SCRIPT,
+      "sh",
+      dir,
+      process.execPath,
+      HUB_ENTRY,
+    ],
+    {
+      cwd: ROOT,
+      env: {
+        ...env,
+        ...(await ports()),
+        CAWCO_NO_MDNS: "0",
+        HOST: "0.0.0.0",
+        CAWCO_DB_PATH: join(dir, "hub.db"),
+      },
+      stdout: "ignore",
+      stderr: "pipe",
+    }
+  );
+  const exit = await readWithin(120_000, () => box.exited);
+  if (exit.kind === "unanswered") {
+    box.kill("SIGKILL");
+  }
+  const read = (name: string) =>
+    existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : "";
+  const err = await new Response(box.stderr).text();
+  const floor = read("floor.txt").trim();
+  const lines = read("hub.log")
+    .split("\n")
+    .filter((line) => line.includes("port 80"));
+  const said = lines.filter((line) => FLOOR_LINE.test(line));
+  kit.check(
+    `6: with ip_unprivileged_port_start at ${floor || "?"}, the hub says it in one line, naming the command at 80, and says nothing else of port 80`,
+    exit.kind === "answered" &&
+      exit.value === 0 &&
+      said.length === 1 &&
+      lines.length === 1 &&
+      (said[0] ?? "").includes(
+        "net.ipv4.ip_unprivileged_port_start=80 > /etc/sysctl.d/90-cawco-relay.conf"
+      ),
+    `exit ${exit.kind === "answered" ? exit.value : "timed out"}; port 80 lines: ${lines.join(" | ") || "none"}; stderr ${err.slice(-400)}`
+  );
+  const on80 = listeningOn80(read("listening.txt"));
+  kit.check(
+    "6: nothing listens on port 80 there",
+    read("listening.txt") !== "" && on80.length === 0,
+    `port 80 on ${on80.join(", ") || "nothing"}; listening: ${read("listening.txt").trim().split("\n").length} sockets`
+  );
+  kit.note(`leg 6's floor, hub log and sockets: ${dir}`);
+};
+
 const spec: Spec = {
-  host: "leg 5 makes a user and network namespace (unshare), and legs 1-4 announce on the machine's own interfaces",
+  host: "legs 5 and 6 make user and network namespaces (unshare), and legs 1-4 announce on the machine's own interfaces",
   name: "hub-local-name",
   run: async (kit: Kit) => {
     const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
@@ -446,8 +615,10 @@ const spec: Spec = {
       );
     }
 
-    // 5. A device on the LAN hears the LAN's addresses alone.
+    // 5. A device on the LAN hears the LAN's addresses alone, and typing the name opens the dashboard.
     await lanLeg(kit, fleet.env, fleet.sandbox);
+    // 6. Where Linux keeps port 80 from the hub: one line, no listener.
+    await floorLeg(kit, fleet.env, fleet.sandbox);
   },
 };
 

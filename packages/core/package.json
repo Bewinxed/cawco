@@ -49,6 +49,7 @@
     "./choices": "./src/choices.ts",
     "./decisions": "./src/decisions.ts",
     "./words/decisions": "./src/words/decisions.ts",
+    "./words/local-name": "./src/words/local-name.ts",
     "./words/routines": "./src/words/routines.ts",
     "./canvas": "./src/canvas.ts",
     "./ink": "./src/ink.ts",

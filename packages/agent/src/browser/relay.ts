@@ -36,8 +36,11 @@
  * person's token (certbot's `dns-cloudflare` plugin: "The Token needed by
  * Certbot requires `Zone:DNS:Edit` permissions for only the zones you need
  * certificates for", certbot-dns-cloudflare.readthedocs.io), else over HTTP
- * on port 80 (certbot standalone). The token reaches certbot only as a file
- * mounted 0600 for the one run, and is never logged.
+ * on port 80: on the hub's own machine while the hub holds port 80 (hub
+ * local-name.ts), certbot writes the challenge into the folder the hub
+ * answers it from (`--webroot`), and elsewhere it binds the port itself
+ * (`--standalone`). The token reaches certbot only as a file mounted 0600
+ * for the one run, and is never logged.
  *
  * Nothing starts where it could not run: with no runtime, on a runtime short
  * of a setting the relay needs (`relay.runtime`, the journey's runtime step:
@@ -69,6 +72,7 @@ import type {
   RelayNetwork,
   RelayPorts,
   RelayReach,
+  RelayRenewArgs,
   RelayRenewed,
   RelayRuntimeNeed,
   RelayRuntimeRead,
@@ -126,6 +130,8 @@ const LETSENCRYPT = "/etc/letsencrypt";
  */
 const CLOUDFLARE_DIR = "/run/cawco";
 const CLOUDFLARE_INI = `${CLOUDFLARE_DIR}/cloudflare.ini`;
+/** Where certbot sees the hub's webroot inside its container: the same path at issue and at each renewal. */
+const WEBROOT_DIR = "/run/cawco-acme";
 /** How long the DNS challenge's TXT record has to reach Cloudflare's servers before Let's Encrypt asks (the plugin's default is 10 s). */
 const PROPAGATION_S = 20;
 /** The proc file a rootless runtime's low ports depend on (podman rootless.md). */
@@ -229,6 +235,13 @@ const SOCKET_LINK = /^socket:\[(\d+)\]$/;
 /** The lines of certbot's that say why it failed. */
 const CERTBOT_ERROR =
   /^(?:Detail|Type|Error|An unexpected error)|Problem|error/i;
+/** How an issued certificate met its challenge, for the log line. */
+const CHALLENGE_WORDS = {
+  dns: "DNS at Cloudflare",
+  webroot: "HTTP through the hub's port 80",
+  http: "HTTP on port 80",
+  none: "",
+} as const;
 
 /** Every socket of `proto` bound to a local port: TCP listening, UDP bound. */
 const boundSockets = async (proto: "tcp" | "udp"): Promise<BoundSocket[]> => {
@@ -367,20 +380,32 @@ const HTTP_PUBLISHED = {
   },
 };
 
+/** How certbot meets its challenge: `http` binds port 80 (standalone), `webroot` writes it into the hub's folder. */
+type Challenge = "http" | "webroot" | "dns" | "none";
+
 /**
  * `cmd` run to its end in a certbot container with the certificate volume,
- * and the token's folder at {@link CLOUDFLARE_DIR} when given: its exit code
- * and what it said. On the runtime's default network; a challenge over HTTP
- * answers on port 80 published, one by DNS needs no port, and a read of the
- * volume (`none`) neither.
+ * the token's folder at {@link CLOUDFLARE_DIR} when given, and the hub's
+ * webroot at {@link WEBROOT_DIR} for `webroot`: its exit code and what it
+ * said. On the runtime's default network; a standalone challenge over HTTP
+ * answers on port 80 published, one through the hub's webroot or by DNS
+ * needs no port, and a read of the volume (`none`) neither.
  */
 const runCertbot = async (
   docker: Docker,
   cmd: string[],
-  challenge: "http" | "dns" | "none",
-  tokenDir?: string
+  challenge: Challenge,
+  mounts: { tokenDir?: string; webroot?: string } = {}
 ): Promise<{ code: number; said: string }> => {
   const http = challenge === "http";
+  const binds = [
+    // `z`: a shared SELinux label, so a rootless Podman on an enforcing
+    // host lets the container read the folder.
+    ...(mounts.tokenDir ? [`${mounts.tokenDir}:${CLOUDFLARE_DIR}:ro,z`] : []),
+    ...(challenge === "webroot" && mounts.webroot
+      ? [`${mounts.webroot}:${WEBROOT_DIR}:z`]
+      : []),
+  ];
   const container = await docker.createContainer({
     Image: CERTBOT_IMAGE,
     Cmd: cmd,
@@ -389,9 +414,7 @@ const runCertbot = async (
     HostConfig: {
       ...(http ? { PortBindings: HTTP_PUBLISHED.PortBindings } : {}),
       Mounts: [{ Type: "volume", Source: CERTS_VOLUME, Target: LETSENCRYPT }],
-      // `z`: a shared SELinux label, so a rootless Podman on an enforcing
-      // host lets the container read the folder.
-      ...(tokenDir ? { Binds: [`${tokenDir}:${CLOUDFLARE_DIR}:ro,z`] } : {}),
+      ...(binds.length > 0 ? { Binds: binds } : {}),
     },
   });
   try {
@@ -487,17 +510,43 @@ const port80Free = async (
   }
 };
 
-/** certbot's challenge flags: Cloudflare's DNS with the token's ini, else standalone over port 80. */
-const challengeFlags = (dns: boolean): string[] =>
-  dns
-    ? [
+/**
+ * certbot's challenge flags: Cloudflare's DNS with the token's ini, else over
+ * HTTP through the hub's webroot, else standalone on port 80. A renewal
+ * passes the HTTP ones too, so it follows the hub's port 80 as it stands
+ * now, whichever way the certificate was issued ("options provided to
+ * `certbot renew` will apply to every certificate for which renewal is
+ * attempted", eff-certbot.readthedocs.io/en/stable/using.html).
+ */
+const challengeFlags = (challenge: Challenge): string[] => {
+  switch (challenge) {
+    case "dns":
+      return [
         "--dns-cloudflare",
         "--dns-cloudflare-credentials",
         CLOUDFLARE_INI,
         "--dns-cloudflare-propagation-seconds",
         String(PROPAGATION_S),
-      ]
-    : ["--standalone"];
+      ];
+    case "webroot":
+      return ["--webroot", "--webroot-path", WEBROOT_DIR];
+    case "http":
+      return ["--standalone"];
+    case "none":
+      return [];
+  }
+};
+
+/** How a certificate for `args` meets its challenge: DNS with a token, the hub's webroot when it hands one, else standalone. */
+const challengeOf = (args: {
+  cloudflareToken?: string;
+  webroot?: string;
+}): Challenge => {
+  if (args.cloudflareToken) {
+    return "dns";
+  }
+  return args.webroot ? "webroot" : "http";
+};
 
 /**
  * Where coturn sits: its own address on the runtime's media network
@@ -889,8 +938,9 @@ const liveFrame = async (
 /**
  * `relay.certify`: the relay's certificate for `hostname`, issued (or kept,
  * when one stands and is not due) by DNS at Cloudflare with the person's
- * token, else standalone over port 80; its end answered. The relay itself is
- * not touched: the journey's start step runs it on the certificate after.
+ * token, else over HTTP through the hub's webroot when it hands one, else
+ * standalone over port 80; its end answered. The relay itself is not
+ * touched: the journey's start step runs it on the certificate after.
  */
 export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
   serial(async () => {
@@ -898,10 +948,12 @@ export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
     if (!RELAY_DNS_NAME.test(name)) {
       throw new RelayFailed(RELAY_FAILURES.notDnsName(hostname(), name));
     }
-    const dns = !!args.cloudflareToken;
+    const challenge = challengeOf(args);
+    const dns = challenge === "dns";
     const runtime = await relayRuntime();
     const { docker } = runtime;
-    if (!dns) {
+    // Through the hub's webroot the hub holds port 80: nothing here binds it.
+    if (challenge === "http") {
       const need = await runtimeNeed(runtime, RELAY_HTTP_PORT);
       if (need) {
         throw new RelayFailed(needFailure(need, RELAY_HTTP_PORT));
@@ -915,7 +967,7 @@ export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
         docker,
         [
           "certonly",
-          ...challengeFlags(dns),
+          ...challengeFlags(challenge),
           "--non-interactive",
           "--agree-tos",
           "--register-unsafely-without-email",
@@ -925,8 +977,8 @@ export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
           "-d",
           name,
         ],
-        dns ? "dns" : "http",
-        dir
+        challenge,
+        { tokenDir: dir, webroot: args.webroot }
       )
     );
     if (code !== 0) {
@@ -947,7 +999,7 @@ export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
       );
     }
     console.info(
-      `[relay] certificate for ${name} stands (${dns ? "DNS at Cloudflare" : "HTTP on port 80"}), ends ${new Date(expiresAt).toISOString()}`
+      `[relay] certificate for ${name} stands (${CHALLENGE_WORDS[challenge]}), ends ${new Date(expiresAt).toISOString()}`
     );
     return { expiresAt };
   });
@@ -1104,11 +1156,10 @@ export const removeRelay = (): Promise<RelayFrame> =>
  * new one. Asked every day: a fixed interval does not hold as Let's Encrypt
  * shortens its certificates to 64 and then 45 days. A certificate issued by
  * DNS renews by DNS with the token the hub hands again, its ini at the path
- * the renewal conf names; one issued over HTTP needs port 80 free.
+ * the renewal conf names; one issued over HTTP renews through the hub's
+ * webroot when the hub hands it, else with port 80 free.
  */
-export const renewRelay = (args: {
-  cloudflareToken?: string;
-}): Promise<RelayRenewed> =>
+export const renewRelay = (args: RelayRenewArgs): Promise<RelayRenewed> =>
   serial(async () => {
     const runtime = await relayRuntime();
     const { docker } = runtime;
@@ -1117,9 +1168,9 @@ export const renewRelay = (args: {
     if (!(kept && name)) {
       throw new RelayFailed(RELAY_FAILURES.renewNone(hostname()));
     }
-    const dns = !!args.cloudflareToken;
+    const challenge = challengeOf(args);
     const before = await certificateEnd(docker, name);
-    if (!dns) {
+    if (challenge === "http") {
       await port80Free((held) =>
         RELAY_FAILURES.renewPort80(hostname(), name, held)
       );
@@ -1134,9 +1185,11 @@ export const renewRelay = (args: {
           name,
           "--deploy-hook",
           DEPLOY_HOOK,
+          // DNS renews as its conf names, with the ini at the same path.
+          ...(challenge === "dns" ? [] : challengeFlags(challenge)),
         ],
-        dns ? "dns" : "http",
-        dir
+        challenge,
+        { tokenDir: dir, webroot: args.webroot }
       )
     );
     if (code !== 0) {

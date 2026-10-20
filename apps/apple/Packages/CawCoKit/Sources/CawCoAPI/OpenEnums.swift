@@ -4085,6 +4085,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/LocalNameState`.
+    public enum LocalNameState: OpenEnum {
+        case needs
+        case off
+        case serving
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "needs": self = .needs
+            case "off": self = .off
+            case "serving": self = .serving
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .needs: "needs"
+            case .off: "off"
+            case .serving: "serving"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.needs, .off, .serving]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/MachineCapabilityId`.
     public enum MachineCapabilityId: OpenEnum {
         case browser
