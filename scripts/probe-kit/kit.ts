@@ -954,8 +954,16 @@ export async function open(
   await page.evaluate(() => document.fonts.ready);
 }
 
-/** Waits until every finite animation on the page has landed. */
+/**
+ * Puts the page on a still clock: every infinite animation running is
+ * paused at its start, and every finite one is waited on until it lands.
+ */
 export async function settle(page: Page, ms = 150): Promise<void> {
+  // An infinite run (a working glyph's breath) never lands, so a look after
+  // the wait would catch it mid-loop, a different frame each time: it is
+  // paused at currentTime 0 instead, the product's motion left as designed
+  // and the frame read the same on every look. One started after this (a
+  // row mounted later) is paused by the next settle.
   // A finite run still going after 10s will not land: named, as a failure,
   // never waited on for ever. A run lands when it finishes or stops running:
   // one paused after the wait began (a faded cover's skeleton holds still)
@@ -963,15 +971,25 @@ export async function settle(page: Page, ms = 150): Promise<void> {
   // kept with whether it landed, so one that didn't is named with its state.
   const landed = await readWithin(10_000, () =>
     page.evaluate(async () => {
-      const waits = window
+      const running = window
         .kitRuns()
-        .filter(
-          (run) =>
-            run.playState === "running" &&
-            Number.isFinite(
-              Number(run.effect?.getComputedTiming().endTime ?? 0)
-            )
-        )
+        .filter((run) => run.playState === "running");
+      const end = (run: Animation) =>
+        Number(run.effect?.getComputedTiming().endTime ?? 0);
+      const finite = (run: Animation) => Number.isFinite(end(run));
+      // On the document's clock only: a scroll-driven run's end is a
+      // percentage (NaN here), it moves with its scroller, never on its own.
+      const loops = running.filter(
+        (one) =>
+          one.timeline instanceof DocumentTimeline &&
+          end(one) === Number.POSITIVE_INFINITY
+      );
+      for (const run of loops) {
+        run.pause();
+        run.currentTime = 0;
+      }
+      const waits = running
+        .filter(finite)
         .map((run) => ({ run, settled: false }));
       (window as unknown as { __kitWaits: typeof waits }).__kitWaits = waits;
       /** Resolves once `run` no longer runs (paused, idle), read each frame. */
