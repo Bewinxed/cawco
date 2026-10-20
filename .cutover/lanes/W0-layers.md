@@ -116,6 +116,7 @@ removed: apps/dashboard/src/lib/cawco/spawn/NewSessionDialog.svelte:1817 z-81 �
 removed: NewSessionDialog.svelte:1851 z-80, :1860 z-81, ns-theme.css:350 z-index 90 — a private three-step ladder over the kit's 50; now the float role, ordered by opening as every floating surface is. DESIGN.md:767.
 removed: MentionField.svelte:783 z-60 — a tooltip at its own number over the kit's tooltips; the float role. DESIGN.md:767.
 removed: design/tokens/cawco.tokens.json `effect.z-bench` (49) — folded into `--layer-bench`.
+removed: apps/dashboard/src/lib/components/ui/sonner/sonner.svelte:20–68 (at 022733d65) the dialog shuffle (the `home` wrapper, its `$effect`, the MutationObserver on `[open]` and its comment) — dead code. 57d49c33d added it for a modal `<dialog>` image viewer; d0c58030a moved images to PhotoSwipe, which renders none. apps/dashboard/src has no `<dialog` and no `showModal(`. The `vite build` client output (758 chunks) has 0 files with `showModal(`, 0 with `createElement("dialog")`, and after the deletion 0 with `HTMLDialogElement` (before, 1: this shuffle). Its 2 `<dialog` templates are non-modal library popups: svelte-streamdown 4.2.1's `<dialog aria-modal="false" open="">` (dist/Elements/FootnoteRef.svelte:43, TableDownload.svelte:143, MermaidDownload.svelte:176) and @event-calendar/core 5.16.0's day-grid popup, opened with `el.show()` (src/plugins/day-grid/Popup.svelte:29). Neither enters the top layer or makes the page inert, and the shuffle's `dialog[open]` match would have moved the toast layer into either of them. The toast layer stands on `--layer-toast` over every surface.
 
 ## Gaps
 
@@ -123,7 +124,6 @@ gap: apps/dashboard/src/lib/components/ui/popover/popover-content.svelte:92 (Pop
 gap: tooltip-content.svelte:23, select-content (Select.Portal), dropdown-menu-content / -sub-content, context-menu-content / -sub-content — the same bits-ui Portal, the same lack of an option. DESIGN.md:767.
 gap: dialog-content.svelte, alert-dialog-content.svelte, sheet-content.svelte:92 (SheetPortal) and their overlays — bits-ui Dialog renders a portalled `div role=dialog`, never a `<dialog>` with `showModal()` (no `showModal` in bits-ui 2.19.5 dist). DESIGN.md:767.
 gap: drawer-content.svelte:154 (DrawerPortal) — vaul-svelte's portal is bits-ui `Dialog.Portal` (drawer-portal.svelte). DESIGN.md:767.
-gap: apps/dashboard/src/lib/components/ui/sonner/sonner.svelte:20–68 — the toast layer's move into an open `<dialog>` serves a top-layer modal the app no longer renders (no `<dialog>` or `showModal` in apps/dashboard/src); its z now orders it over every float. Kept: not z, and not this lane's to remove.
 
 ## Rendered reads
 
@@ -142,7 +142,7 @@ ui-observer (`PROBE_UI_OBSERVER=<skill>/observer.browser.js`, same session): the
 
 - Hierarchy: the order now reads as the person's attention does: content, then the chrome that floats on it (dock, bar, toolbar, sheet), then anything they opened (float), then what the system says (toast), then the device's own edge. Before, the new-session card sat at 81 with its popovers at 90 while the kit's sat at 50, and a details card at 60 hid the menus it opened.
 - Consistency: one role per kind of surface. The floating surfaces had five numbers (30, 40, 50, 60, 80/81/90); now they have one, ordered by which was opened last.
-- Remaining weakness: "float" leans on portal order, which is what the top layer gives natively. The top-layer move (gaps above) is the real fix, and it would retire `--layer-float`, `--layer-toast-held` and the sonner dialog shuffle.
+- Remaining weakness: "float" leans on portal order. The kit stays portalled (8d9b84e25 meant "render in their own portal, as every kit floating surface does"), so the order of opening is the rule, and `--layer-float` is its one number.
 
 ## Files
 

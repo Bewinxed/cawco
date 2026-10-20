@@ -17,55 +17,7 @@
 
   let { ...restProps }: SonnerProps = $props();
 
-  /**
-   * Toasts paint above everything on the page, a modal dialog included.
-   *
-   * The layer is a fixed, full-viewport sheet stacked above all app chrome
-   * that lets taps through everywhere but on the toasts. A modal `<dialog>`
-   * (the image viewer) sits in the browser's top layer, above any z-index,
-   * and makes everything outside itself inert: a toast left outside would be
-   * hidden under it and take no tap. So while a modal dialog is open the
-   * layer moves inside the topmost one, and when it closes the layer goes
-   * back home.
-   */
-  let home = $state<HTMLDivElement>();
   let layer = $state<HTMLDivElement>();
-
-  $effect(() => {
-    if (!(home && layer)) {
-      return;
-    }
-    const base = home;
-    const toasts = layer;
-    /** Moves the layer into the topmost modal dialog, or home when there is none. */
-    const settle = () => {
-      // Every <dialog> here opens with showModal(), so an open one is modal.
-      const modals = [
-        ...document.querySelectorAll<HTMLDialogElement>("dialog[open]"),
-      ];
-      const into = modals.at(-1) ?? base;
-      if (toasts.parentElement !== into) {
-        into.append(toasts);
-      }
-    };
-    settle();
-    const watcher = new MutationObserver((changes) => {
-      if (
-        changes.some((change) => change.target instanceof HTMLDialogElement)
-      ) {
-        settle();
-      }
-    });
-    watcher.observe(document.body, {
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["open"],
-    });
-    return () => {
-      watcher.disconnect();
-      base.append(toasts);
-    };
-  });
 
   /**
    * A toast arriving is marked `data-entering` for the length of its
@@ -180,47 +132,45 @@
      set, and an unresolved `var()` left every toast transparent — the page
      under it showed through, and its text and buttons read as painted over
      the toast even though the toast was on top and taking the taps. -->
-<div class="contents" bind:this={home}>
-  <!-- A sheet over the viewport, above the app chrome and every floating
-       surface (--layer-toast), that takes no taps itself; the toasts take
-       their own (`pointer-events-auto` through sonner's `toastOptions.class`).
-       Navigation stays above a toast. While the burger's sheet is open (its
-       scrim and panel on --layer-float), the layer goes under the scrim
-       (--layer-toast-held): a toast
-       arriving then waits dimmed in the content area, and the sheet that
-       covers it on a phone or a narrow tablet is never painted over. -->
-  <div
-    class="pointer-events-none fixed inset-0 z-(--layer-toast) data-under-nav:z-(--layer-toast-held)"
-    bind:this={layer}
-    data-slot="toast-layer"
-    data-under-nav={navSheet.open || undefined}
+<!-- A sheet over the viewport, above the app chrome and every floating
+     surface (--layer-toast), that takes no taps itself; the toasts take
+     their own (`pointer-events-auto` through sonner's `toastOptions.class`).
+     Navigation stays above a toast. While the burger's sheet is open (its
+     scrim and panel on --layer-float), the layer goes under the scrim
+     (--layer-toast-held): a toast arriving then waits dimmed in the content
+     area, and the sheet that covers it on a phone or a narrow tablet is
+     never painted over. -->
+<div
+  class="pointer-events-none fixed inset-0 z-(--layer-toast) data-under-nav:z-(--layer-toast-held)"
+  bind:this={layer}
+  data-slot="toast-layer"
+  data-under-nav={navSheet.open || undefined}
+>
+  <Sonner
+    data-sonner-group
+    class="group"
+    style="--normal-bg: var(--surface-raised); --normal-text: var(--ink-strong); --normal-border: var(--border-control);"
+    theme={theme.current}
+    {...restProps}
+    toastOptions={{
+      ...restProps.toastOptions,
+      class: cn("pointer-events-auto", restProps.toastOptions?.class),
+    }}
   >
-    <Sonner
-      data-sonner-group
-      class="group"
-      style="--normal-bg: var(--surface-raised); --normal-text: var(--ink-strong); --normal-border: var(--border-control);"
-      theme={theme.current}
-      {...restProps}
-      toastOptions={{
-        ...restProps.toastOptions,
-        class: cn("pointer-events-auto", restProps.toastOptions?.class),
-      }}
-    >
-      {#snippet loadingIcon()}
-        <Spinner class="size-icon-md" />
-      {/snippet}
-      {#snippet successIcon()}
-        <IconSuccess class="size-icon-md" />
-      {/snippet}
-      {#snippet errorIcon()}
-        <IconError class="size-icon-md" />
-      {/snippet}
-      {#snippet infoIcon()}
-        <IconInfo class="size-icon-md" />
-      {/snippet}
-      {#snippet warningIcon()}
-        <IconWarningTriangle class="size-icon-md" />
-      {/snippet}
-    </Sonner>
-  </div>
+    {#snippet loadingIcon()}
+      <Spinner class="size-icon-md" />
+    {/snippet}
+    {#snippet successIcon()}
+      <IconSuccess class="size-icon-md" />
+    {/snippet}
+    {#snippet errorIcon()}
+      <IconError class="size-icon-md" />
+    {/snippet}
+    {#snippet infoIcon()}
+      <IconInfo class="size-icon-md" />
+    {/snippet}
+    {#snippet warningIcon()}
+      <IconWarningTriangle class="size-icon-md" />
+    {/snippet}
+  </Sonner>
 </div>
