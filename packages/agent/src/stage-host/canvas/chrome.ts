@@ -284,6 +284,9 @@ html[data-cawco-phone] .cawco-dock-dials { inset-block-start: auto; inset-inline
    holding it makes its frame as tall (CANVAS_EMBED_SIZE), and a wheel or a finger on it scrolls that page. A section that
    didn't load, or names no story it has, still says so. */
 html.cawco-embed, html.cawco-embed body { block-size: auto; overflow-x: hidden; overflow-y: auto; }
+/* An embed is no well: around a frame narrower than it stands the surface the decision page draws its Preview on (the
+   host's Preview.svelte frame, surface-page), so no gutter of another colour shows beside a story. */
+html.cawco-embed, html.cawco-embed body, html.cawco-embed .cawco-canvas { background: var(--surface-page); }
 html.cawco-embed .cawco-canvas { position: static; inset: auto; overflow: visible; touch-action: auto; }
 html.cawco-embed .cawco-world { position: static; inline-size: 100%; gap: var(--space-3); padding: 0; will-change: auto; }
 html.cawco-embed .cawco-section { min-block-size: 0; gap: var(--space-3); }

@@ -53,6 +53,12 @@
  *    gaps between cards (or between a card's blocks) where one file can't
  *    hold the page, none starting inside a block of words or a picture; read
  *    back and stacked they are the picture, pixel for pixel.
+ * 9b. A frame is drawn as its own width says (canvas width.ts): the page
+ *    head named for a phone (390px) stacks under its 640px switch and the
+ *    one named for a desk (1440px) stands in a row, whatever the window of
+ *    the embed holding it (the phone's at the card's full width, past 640px
+ *    on a desk; the desk's in an option, narrower); its script reads the
+ *    same from matchMedia, as it mounts and after.
  * 10. No console error.
  *
  *   bun scripts/probe-kit/run.ts web decision-embed
@@ -83,10 +89,12 @@ const NAME = "ledger";
 const LEDGER = "src/Ledger.stories.js";
 const NOTE = "src/Note.stories.js";
 const SIDE = "src/Side.stories.js";
+const HEAD = "src/Head.stories.js";
 const SHEET = "src/Sheet.stories.js";
 const BOOK_ID = idOf("ledger-and-note");
 const NOTE_ID = idOf("note-alone");
 const SIDE_ID = idOf("side-card");
+const HEAD_ID = idOf("page-head");
 const MONTH_ID = idOf("ledger-month");
 const SHEET_ID = idOf("sheet");
 /** The side card's own widths (its stories' viewports). */
@@ -94,6 +102,69 @@ const SIDE_W = 360;
 const WIDE_W = 1400;
 
 const MONTHS = ["January", "February", "March", "April", "May", "June"];
+
+/**
+ * Each page head this embed draws, as its frame's width says: its layout
+ * (the `@media (max-width: 639px)` rule's flex direction), what its script
+ * read from matchMedia as it mounted, and what matchMedia says in the
+ * embed's page now. In the embed's page.
+ */
+function readHeads() {
+  return [...document.querySelectorAll<HTMLElement>(".cawco-frame")].flatMap(
+    (frame) => {
+      const head = frame.querySelector<HTMLElement>(".head");
+      return head
+        ? [
+            {
+              story: frame.dataset.cawcoStory ?? "",
+              direction: getComputedStyle(head).flexDirection,
+              mounted: head.dataset.narrow ?? "",
+              asked: matchMedia("(max-width: 639px)").matches,
+            },
+          ]
+        : [];
+    }
+  );
+}
+
+/**
+ * What this embed paints beside a frame narrower than it: the first opaque
+ * background out from the element in the gutter at the frame's middle,
+ * resolved to sRGB, and what it is; null where no frame leaves a gutter. In
+ * the embed's page.
+ */
+function readGround() {
+  const rgba = (colour: string) => {
+    const ink = document.createElement("canvas").getContext("2d");
+    if (!ink) {
+      return [];
+    }
+    ink.fillStyle = colour;
+    ink.fillRect(0, 0, 1, 1);
+    return [...ink.getImageData(0, 0, 1, 1).data];
+  };
+  const frame = [...document.querySelectorAll(".cawco-frame")]
+    .map((one) => one.getBoundingClientRect())
+    .find((r) => r.width > 0 && r.left >= 4);
+  if (!frame) {
+    return null;
+  }
+  const y = Math.min(frame.top + frame.height / 2, innerHeight / 2);
+  for (
+    let at = document.elementFromPoint(frame.left / 2, y);
+    at;
+    at = at.parentElement
+  ) {
+    const paint = rgba(getComputedStyle(at).backgroundColor);
+    if (paint[3] === 255) {
+      return {
+        by: `${at.tagName.toLowerCase()}${[...at.classList].map((c) => `.${c}`).join("")}`,
+        rgb: paint.slice(0, 3).join(","),
+      };
+    }
+  }
+  return { by: "nothing", rgb: "" };
+}
 
 /**
  * Each frame in this embed that scrolls its story sideways, under the house
@@ -167,6 +238,12 @@ const PREVIEWS: Record<
   },
   "The note alone": { files: [NOTE], stories: ["Pinned"], shows: ["Pinned"] },
   "The side card": { files: [SIDE], stories: [], shows: ["Card", "Wide"] },
+  "The head on a phone": {
+    files: [HEAD],
+    stories: ["Phone"],
+    shows: ["Phone"],
+  },
+  "The head on a desk": { files: [HEAD], stories: ["Desk"], shows: ["Desk"] },
   "The note": { files: [NOTE], stories: ["Pinned"], shows: ["Pinned"] },
   "January's lines": {
     files: [LEDGER],
@@ -185,7 +262,7 @@ const PREVIEWS: Record<
 const TRIO = ["The side card", "The note", "January's lines"];
 
 const PROGRAM = [
-  `root = Decisions("The spend ledger", [ledger, side])`,
+  `root = Decisions("The spend ledger", [ledger, side, head])`,
   `ledger = Decision("ledger", "Where does the pinned note stand?", [under, alone], "The ledger is long; the note is what a person acts on.", [book])`,
   `under = Option("under", "Under the ledger", "The note after every line.", false, [order], "A person scrolls past sixty lines to reach it.")`,
   `alone = Option("alone", "On its own", "The note in a card of its own.", true, [note], "The ledger loses its summary line.")`,
@@ -199,6 +276,11 @@ const PROGRAM = [
   `month1 = Preview("${MONTH_ID}", "January's lines", ["January"])`,
   `order = Preview("${MONTH_ID}", "March, then January", ["March", "January"])`,
   `sheet = Preview("${SHEET_ID}", "The sheet")`,
+  `head = Decision("head", "Which head does the page open with?", [stack, row], "The phone's head in an embed wider than 640px, the desk's in one narrower.", [headPhone])`,
+  `stack = Option("stack", "Stacked on a phone", "Title over its tools under 640px.", true, [], "Two lines on a phone.")`,
+  `row = Option("row", "One row everywhere", "Title and tools side by side.", false, [headDesk], "Tools cut short on a phone.")`,
+  `headPhone = Preview("${HEAD_ID}", "The head on a phone", ["Phone"])`,
+  `headDesk = Preview("${HEAD_ID}", "The head on a desk", ["Desk"])`,
 ].join("\n");
 
 /** The fixture copied to scratch and installed once: the project the stage draws. */
@@ -294,6 +376,7 @@ const spec: Spec = {
         [BOOK_ID]: [LEDGER, NOTE],
         [NOTE_ID]: [NOTE],
         [SIDE_ID]: [SIDE],
+        [HEAD_ID]: [HEAD],
         [MONTH_ID]: [LEDGER],
         [SHEET_ID]: [SHEET],
       },
@@ -483,13 +566,75 @@ const spec: Spec = {
           // The wide story's frame scrolls under the house edge fade: on the side where more is hidden, none at either end.
           // One embed at a time, scrolled to: a cross-origin frame off screen draws no frames.
           const fades: Awaited<ReturnType<typeof readFades>> = [];
+          const heads: Awaited<ReturnType<typeof readHeads>> = [];
+          const grounds: {
+            caption: string;
+            embed: string;
+            host: string;
+            by: string;
+          }[] = [];
           for (const handle of await page.$$(EMBED_FRAME)) {
             await handle.scrollIntoViewIfNeeded();
+            heads.push(
+              ...((await (await handle.contentFrame())?.evaluate(readHeads)) ??
+                [])
+            );
+            // Beside a narrow story the embed shows the surface the page draws its Preview on, not a gutter of its own.
+            const ground = await (
+              await handle.contentFrame()
+            )?.evaluate(readGround);
+            if (ground) {
+              const host = await handle.evaluate((frame) => {
+                const ink = document.createElement("canvas").getContext("2d");
+                if (!ink) {
+                  return "";
+                }
+                ink.fillStyle = getComputedStyle(frame).backgroundColor;
+                ink.fillRect(0, 0, 1, 1);
+                return [...ink.getImageData(0, 0, 1, 1).data]
+                  .slice(0, 3)
+                  .join(",");
+              });
+              grounds.push({
+                caption:
+                  (await handle.evaluate(
+                    (frame) =>
+                      frame.closest("figure")?.querySelector("figcaption")
+                        ?.textContent ?? ""
+                  )) || "",
+                embed: ground.rgb,
+                host,
+                by: ground.by,
+              });
+            }
             fades.push(
               ...((await (await handle.contentFrame())?.evaluate(readFades)) ??
                 [])
             );
           }
+          // A frame is drawn as its own width says: the phone head stacks, the desk head stands in a row, whatever the embed's window.
+          const headFaults = heads.flatMap((one) => {
+            const narrow = one.story === "Phone";
+            const want = narrow ? "column" : "row";
+            return one.direction === want &&
+              one.mounted === String(narrow) &&
+              one.asked === narrow
+              ? []
+              : [
+                  `${one.story}: its CSS lays it as a ${one.direction}, want ${want}; matchMedia('(max-width: 639px)') said ${one.mounted} as it mounted and says ${one.asked} now, want ${narrow}`,
+                ];
+          });
+          kit.check(
+            `${leg}: a frame is drawn as its own width says, its CSS and its script alike (${heads.map((one) => `${one.story}: ${one.direction}, matchMedia ${one.mounted} mounting, ${one.asked} now`).join("; ")})`,
+            heads.length === 2 && headFaults.length === 0,
+            headFaults.join("\n    ")
+          );
+          const unlike = grounds.filter((one) => one.embed !== one.host);
+          kit.check(
+            `${leg}: beside a narrow story each embed shows the surface its Preview stands on, no gutter of its own (${grounds.map((one) => `“${one.caption}” ${one.embed} by ${one.by}, the Preview ${one.host}`).join("; ")})`,
+            grounds.length > 0 && unlike.length === 0,
+            JSON.stringify(unlike)
+          );
           const fadeFaults = fades.flatMap((f) =>
             f.at.flatMap((one) => {
               const want = {
