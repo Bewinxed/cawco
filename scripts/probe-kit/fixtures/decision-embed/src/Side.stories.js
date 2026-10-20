@@ -10,3 +10,12 @@ export const Card = {
   },
   parameters: { viewport: 360 },
 };
+
+/** The side card at 1400px, a desk's width: fitted into any card its words would fall under 10px, so the embed stops scaling there and scrolls it sideways. */
+export const Wide = {
+  args: {
+    title: "Spend this quarter",
+    lines: ["July: 96.40 USD", "August: 88.15 USD", "September: 102.30 USD"],
+  },
+  parameters: { viewport: 1400 },
+};

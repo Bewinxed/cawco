@@ -423,6 +423,9 @@ function embedRead() {
       return [];
     }
     const r = body.getBoundingClientRect();
+    // A story too wide to fit at a legible scale scrolls sideways in its frame (runtime.ts fitToEmbed): the frame's box is what stands in the embed.
+    const wide = frame.hasAttribute("data-cawco-wide");
+    const box = wide ? frame.getBoundingClientRect() : r;
     /** CSS zoom in effect on an element (the embed's fit, runtime.ts): its words are drawn this much smaller than their font size. */
     const zoomOf = (el: Element) =>
       (el as Element & { currentCSSZoom?: number }).currentCSSZoom ?? 1;
@@ -446,9 +449,14 @@ function embedRead() {
       {
         story: frame.dataset.cawcoStory ?? "",
         h: Math.round(r.height),
-        left: Math.round(r.left),
-        right: Math.round(r.right),
+        left: Math.round(box.left),
+        right: Math.round(box.right),
+        /** Its drawn width, the whole story's (past its frame's edge where it scrolls). */
         w: Math.round(r.width),
+        wide,
+        /** How far it scrolls sideways in its frame, and whether its frame lets a person scroll it. */
+        scrolls: wide ? frame.scrollWidth - frame.clientWidth : 0,
+        scrollable: ["auto", "scroll"].includes(getComputedStyle(frame).overflowX),
         zoom: Math.round(zoomOf(body) * 1000) / 1000,
         state:
           frame.querySelector<HTMLElement>(".cawco-frame-status")?.dataset

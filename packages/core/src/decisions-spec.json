@@ -321,7 +321,7 @@
           "artifact"
         ],
         "additionalProperties": false,
-        "description": "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's preview, or a sheet. A component canvas shows the component alone, each story at its own size and centred, one wider than the card scaled down to fit it."
+        "description": "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's preview, or a sheet. A component canvas shows the component alone, each story at its own size and centred, one wider than the card scaled down to fit it, and one too wide to fit with its words still 10px scrolling sideways."
       },
       "Text": {
         "type": "object",
