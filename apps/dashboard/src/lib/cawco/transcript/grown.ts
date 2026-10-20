@@ -92,6 +92,16 @@ function shadowOf(value: string): Shadow | null {
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
 
+/**
+ * The outline and its drop behind the pill, as utilities (Tailwind scans this
+ * file): on the shell's foot, as wide as it, each layer's svg filling it. Not
+ * standing (`data-settled`), the drop is not drawn at all; while the wheel is
+ * up (the shell's `data-rolling`) the halo's margins take a press and never
+ * pan the page.
+ */
+const LAYER =
+  "absolute z-1 inset-x-0 bottom-0 pointer-events-none *:block *:size-full *:overflow-visible";
+
 let made = 0;
 
 export class GrownShape {
@@ -174,7 +184,7 @@ export class GrownShape {
     );
     const shade = `grown-drop-${made}`;
     this.#drop = document.createElement("div");
-    this.#drop.className = "grown-drop";
+    this.#drop.className = `${LAYER} opacity-0 invisible origin-bottom data-settled:opacity-100 data-settled:visible data-settled:transition-fade-show`;
     this.#drop.setAttribute("aria-hidden", "true");
     this.#drop.innerHTML = `<svg><defs><filter id="${shade}" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">${lay}</filter></defs><path fill="url(#${fill})" filter="url(#${shade})"/></svg>`;
     host.append(this.#drop);
@@ -182,7 +192,7 @@ export class GrownShape {
     this.#dropPath = this.#drop.querySelector("path") as SVGPathElement;
     this.#dropFilter = this.#drop.querySelector("filter") as SVGFilterElement;
     this.#halo = document.createElement("div");
-    this.#halo.className = "grown-halo";
+    this.#halo.className = `${LAYER} in-data-rolling:pointer-events-auto in-data-rolling:touch-none`;
     this.#halo.setAttribute("data-slot", "grown-halo");
     this.#halo.setAttribute("aria-hidden", "true");
     // Solid, not the composer's glass: the transcript must not read through
@@ -214,7 +224,7 @@ export class GrownShape {
         this.#size.w = w;
         this.#sides = null;
         this.paint();
-        if (this.#drop.classList.contains("settled")) {
+        if (this.#drop.hasAttribute("data-settled")) {
           this.#settle();
         }
       }
@@ -412,7 +422,7 @@ export class GrownShape {
   unsettle(): void {
     this.#dropFold?.cancel();
     this.#dropFold = null;
-    this.#drop.classList.remove("settled");
+    this.#drop.removeAttribute("data-settled");
   }
 
   /** The shape as `path()`, in a box `box` placed in the shell. */
@@ -484,7 +494,7 @@ export class GrownShape {
     ] as const) {
       this.#dropFilter.setAttribute(name, String(value));
     }
-    this.#drop.classList.add("settled");
+    this.#drop.setAttribute("data-settled", "");
   }
 
   /**
@@ -505,7 +515,7 @@ export class GrownShape {
     this.#dropFold = null;
     if (!motionOk.current || ms <= 0) {
       if (fade) {
-        this.#drop.classList.remove("settled");
+        this.#drop.removeAttribute("data-settled");
       }
       return;
     }
@@ -544,7 +554,7 @@ export class GrownShape {
       () => {
         if (fade && this.#dropFold === run) {
           // Hidden for good in the same task the motion lets go of it.
-          this.#drop.classList.remove("settled");
+          this.#drop.removeAttribute("data-settled");
           run.cancel();
           this.#dropFold = null;
         }
@@ -567,13 +577,13 @@ export class GrownShape {
   ): Promise<void> {
     cancelAnimationFrame(this.#frame);
     this.#done?.();
-    if (this.#drop.classList.contains("settled") && open <= this.open) {
+    if (this.#drop.hasAttribute("data-settled") && open <= this.open) {
       this.#followDrop(open, ext, ms, base, open < this.open);
     } else {
       // Growing (or turned back mid-fold): the drop comes in once it lands.
       this.#dropFold?.cancel();
       this.#dropFold = null;
-      this.#drop.classList.remove("settled");
+      this.#drop.removeAttribute("data-settled");
     }
     const fromOpen = this.open;
     const fromExt = this.ext;

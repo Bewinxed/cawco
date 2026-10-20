@@ -823,6 +823,8 @@ public enum Size {
     public static let cBtnWordsBlur: Double = 2
     /// The 24 Pointer Rule's floor (DESIGN.md Focus and hit areas): a small control's least hit box under a fine pointer.
     public static let cPointerFloor: Double = 24
+    /// wave 2: W9-behaviours. The 44 Touch Rule's floor (DESIGN.md Focus and hit areas): every control's least hit box under a coarse pointer, reached through `touch-hit`.
+    public static let cTouchFloor: Double = 44
     /// The screen's margin a popover or a floating card keeps each side (DESIGN.md Breakpoints: "popovers widen to the viewport less 24px").
     public static let cScreenMargin: Double = 12
     /// A new-session popover's width.
@@ -869,8 +871,6 @@ public enum Size {
     public static let cEditorWellMin: Double = 320
     /// A fetched skill's choice list before it scrolls.
     public static let cChoiceListMaxH: Double = 208
-    /// A workflow form's textarea floor.
-    public static let cWfTextareaMin: Double = 90
     /// Account setup's step rail.
     public static let cSetupRailW: Double = 184
     /// Account setup's machine-name column, so every machine row's controls start on one x.
@@ -959,14 +959,26 @@ public enum Size {
     public static let cProjectDetailsSelectW: Double = 160
     /// The Actions and Runs ledgers' When column.
     public static let cLedgerWhenW: Double = 96
-    /// The When column in a ledger under 400px.
+    /// The When column in a runs ledger under 496px, where Result's floor (c-ledger-title-min) beside When and Outcome at full width no longer fits (build-tokens.ts CONTAINERS table-496px); under 424px the runs are cards.
     public static let cLedgerWhenWNarrow: Double = 72
     /// The Runs ledger's Outcome column.
     public static let cLedgerOutcomeW: Double = 176
-    /// The Outcome column in a ledger under 400px.
+    /// The Outcome column in a runs ledger under 496px, where Result's floor (c-ledger-title-min) beside When and Outcome at full width no longer fits (build-tokens.ts CONTAINERS table-496px); under 424px the runs are cards.
     public static let cLedgerOutcomeWNarrow: Double = 128
     /// The Runs ledger's Took column.
     public static let cLedgerTookW: Double = 80
+    /// A ledger's header band: its column heads in caps on surface-band, one line, held at the top while the rows scroll under it (DESIGN.md, Density: "a 32px header band"; ledger-header height).
+    public static let cLedgerBandH: Double = 32
+    /// A ledger's row pitch: every row of a ledger, a list or a generated view's table, a name over its meta line or one line of meta (DESIGN.md, Density: "a 44px row pitch"; ledger-row height).
+    public static let cLedgerRowH: Double = 44
+    /// A ledger's count column: a count and its noun in meta, "12 attempts" (Usage's project spend: Wakes, Tries).
+    public static let cLedgerCountW: Double = 128
+    /// A ledger's spend column: a month's dollars in tabular meta, "$1,234.56", on the column's end (Usage's project spend: Spent).
+    public static let cLedgerUsdW: Double = 96
+    /// A matrix's wide column, its floor: a tool's name, its count and its Required switch over each machine's cell (Command-line tools), an update's state and its act (Updates).
+    public static let cMatrixColW: Double = 224
+    /// A ledger title's least width, the column the ledger exists for: about 30 characters of the label role before it truncates. A ledger's lesser columns fold until the title keeps it (the task ledger's container widths in build-tokens.ts CONTAINERS are this plus its column widths).
+    public static let cLedgerTitleMin: Double = 224
     /// The side divider's hit width when the split is expanded.
     public static let cSideGripW: Double = 6
     /// A side surface's floor (SideSurface SIDE_FLOOR_PX).

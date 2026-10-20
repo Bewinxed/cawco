@@ -987,6 +987,8 @@
     --c-btn-words-blur: 2px;
     /* The 24 Pointer Rule's floor (DESIGN.md Focus and hit areas): a small control's least hit box under a fine pointer. */
     --c-pointer-floor: 24px;
+    /* wave 2: W9-behaviours. The 44 Touch Rule's floor (DESIGN.md Focus and hit areas): every control's least hit box under a coarse pointer, reached through `touch-hit`. */
+    --c-touch-floor: 44px;
     /* The screen's margin a popover or a floating card keeps each side (DESIGN.md Breakpoints: "popovers widen to the viewport less 24px"). */
     --c-screen-margin: 12px;
     /* A new-session popover's width. */
