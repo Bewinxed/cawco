@@ -93,7 +93,7 @@ const keyOf = (selector: string): string | null =>
 interface Painted {
   /** Where it stands on the page, CSS px: what the picture's clip is measured on. */
   page: { x: number; y: number };
-  /** The colour the DOM paints at the point, 0–255 sRGB, or null where it can't be told (an image, a gradient, text on it). */
+  /** The colour the DOM paints at the point, 0–255 sRGB, a pseudo-element's surface included, or null where it can't be told (an image, a gradient, text on it, a pseudo-element in the flow). */
   rgb: [number, number, number] | null;
   /** Where it stands in the frame's body, CSS px, for the fault's words. */
   x: number;
@@ -245,8 +245,69 @@ function gridOf(args: { selector: string; grid: number }) {
    */
   const chrome = document.getElementById("cawco-chrome")?.shadowRoot;
   const over = chrome ? boxesOf([...chrome.querySelectorAll("*")]) : [];
-  /** The flat colour under a hit: the nearest box out from it with an opaque background and no image; null where that can't be told. */
-  const paintedAt = (hit: Element): [number, number, number] | null => {
+  /**
+   * What a box's ::after or ::before paints at (x, y), the one drawn last
+   * first: its flat colour, "none" where neither paints there, null where
+   * that can't be told (one in the flow, whose box no read gives; an image;
+   * a colour seen through). A surface drawn on a pseudo-element (the kit's
+   * sheets: drawer-content.svelte) stands over its box's own background.
+   */
+  const pseudoAt = (
+    el: Element,
+    x: number,
+    y: number
+  ): [number, number, number] | "none" | null => {
+    const edge = el.getBoundingClientRect();
+    const own = getComputedStyle(el);
+    const scale =
+      el instanceof HTMLElement && el.offsetWidth > 0
+        ? edge.width / el.offsetWidth
+        : 1;
+    const px = (value: string) => Number.parseFloat(value) * scale;
+    // The padding box: an absolute pseudo-element's insets are from it.
+    const pad = {
+      left: edge.left + px(own.borderLeftWidth),
+      right: edge.right - px(own.borderRightWidth),
+      top: edge.top + px(own.borderTopWidth),
+      bottom: edge.bottom - px(own.borderBottomWidth),
+    };
+    /** Whether a positioned pseudo-element's box holds the point; null where its box can't be told. */
+    const holds = (style: CSSStyleDeclaration): boolean | null => {
+      const insets = [style.left, style.right, style.top, style.bottom];
+      if (!(
+        style.position === "absolute" && insets.every((v) => v.endsWith("px"))
+      )) {
+        return null;
+      }
+      return (
+        x >= pad.left + px(style.left) &&
+        x < pad.right - px(style.right) &&
+        y >= pad.top + px(style.top) &&
+        y < pad.bottom - px(style.bottom)
+      );
+    };
+    for (const pseudo of ["::after", "::before"]) {
+      const style = getComputedStyle(el, pseudo);
+      const [r = 0, g = 0, b = 0, a = 0] = rgba(style.backgroundColor);
+      const fills =
+        !["none", "normal"].includes(style.content) &&
+        style.display !== "none" &&
+        (a > 0 || style.backgroundImage !== "none");
+      const there = fills ? holds(style) : false;
+      if (there !== false) {
+        return there && style.backgroundImage === "none" && a === 255
+          ? [r, g, b]
+          : null;
+      }
+    }
+    return "none";
+  };
+  /** The flat colour under a hit at (x, y): the nearest box out from it with an opaque background, its own or a pseudo-element's, and no image; null where that can't be told. */
+  const paintedAt = (
+    hit: Element,
+    x: number,
+    y: number
+  ): [number, number, number] | null => {
     if (mixed(hit)) {
       return null;
     }
@@ -255,6 +316,10 @@ function gridOf(args: { selector: string; grid: number }) {
       at && body.contains(at);
       at = at.parentElement
     ) {
+      const pseudo = pseudoAt(at, x, y);
+      if (pseudo !== "none") {
+        return pseudo;
+      }
       const style = getComputedStyle(at);
       const [r = 0, g = 0, b = 0, a = 0] = rgba(style.backgroundColor);
       if (style.backgroundImage !== "none" || (a > 0 && a < 255)) {
@@ -301,7 +366,9 @@ function gridOf(args: { selector: string; grid: number }) {
       points.push({
         page,
         rgb:
-          onText(hit) || boxAt(unhit, page.x, page.y) ? null : paintedAt(hit),
+          onText(hit) || boxAt(unhit, page.x, page.y)
+            ? null
+            : paintedAt(hit, page.x, page.y),
         x,
         y,
       });
