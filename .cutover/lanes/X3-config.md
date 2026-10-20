@@ -83,6 +83,10 @@ device: desk 1440×900 fine/hover, phone 390×844 coarse/none), dark unless said
 - fixed (024345569, read again here): AccountEditor reserve, AtLimitBlock wait and over, SigninPanel Code with its Done, AccountSetup's paste-a-code row with Open link and Done, KeyValueRows' fields: no `size="sm"` field remains. after: `input "reserve" 704,440 64x36`, `input "c23-wait" 730,789 64x36`, `input "c23-over" 758,839 64x36`, `input "Code from the sign-in page" 1065,299 240x36 | row: button "DoneChecking…" h36` (390 `23,299 266x36 | … h36`).
 - holds: `git grep -n 'size="sm"'` over the list: 63 left, every one a Button (61), the CopyButton beside a device code (1) or the ToolMatrix Required Switch (1), none a field; no row of them holds a field (action rows: Send key, Sign in, Approve/Deny, Sync all, Retry, Disconnect, the head's and sections' small actions).
 
+## X8's touch read
+
+- holds: accounts/RebalanceNotices.svelte "Dismiss all N rebalances" (and each entry's Dismiss) at 390 coarse (L934). The ✕ is home/NoticeRow's, which RebalanceNotices only labels: `touch-hit pointer-hit` with its area moved back inboard by the ✕'s ink inset (DESIGN.md, Caw's panel: "the ✕'s 44px touch area moves back inboard by the same amount"). Read in caw-panel-open with the notice scrolled into the list's view: 390 `"Dismiss all 1 rebalances" 357,557 24x24 after 44pxx44px reach up +10.5 down +9.5 left +19.5 right +1 clip list 19,50 364x693` (44.5 across, 44 tall, inside the list's edge); the next row's ✕ stands 68px below (`357,625`), so the areas never meet. 1440 fine `after 24pxx24px` on a 24px ✕ (L936). A read with the ✕ scrolled past the list's foot finds nothing under it (`reach … +0`), which is the list's clip, not a missing area.
+
 ## My calls (no DESIGN.md line settles them)
 
 - StrategyFigure keeps its recessed stage: it is a drawn figure on the stat well's footing (L674, L507), not a nested card.
