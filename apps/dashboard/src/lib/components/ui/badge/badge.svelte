@@ -30,13 +30,17 @@
        * below for its words, which wrap and grow it line by line from the
        * start (an update's long status). A tab's count (DESIGN.md, Work tab
        * count): its numeral in the meta role and tabular figures, and a press
-       * on it is a press on its tab.
+       * on it is a press on its tab. In a head that is short of room (the
+       * head's inherited `--tight`, a length above 0 while its words are
+       * squeezed) the count's pads step down the ladder from `space-2` to
+       * `space-1`, giving that room back to the words.
        */
       size: {
         cell: "min-h-6 gap-1.5 px-2",
         "cell-tall":
           "h-auto min-h-6 gap-1.5 whitespace-normal px-2 py-space-1 text-start",
-        count: "pointer-events-none text-meta tabular-nums",
+        count:
+          "pointer-events-none px-[clamp(var(--space-1),calc(var(--space-2)_-_var(--tight,0px)_*_1000),var(--space-2))] text-meta tabular-nums",
       },
       /** Its figures in tabular widths (DESIGN.md, The Tabular Figure Rule). */
       figures: { tabular: "tabular-nums" },

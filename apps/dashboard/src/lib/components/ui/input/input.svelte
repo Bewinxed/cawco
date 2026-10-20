@@ -5,27 +5,36 @@
   /** Its callers' looks, each as they drew it: the mono face for what is
       typed exactly (a path, a command, a key), a text size, the small
       control height beside an `sm` select or button, a number field, and
-      how wide it may run. */
+      how wide it may run. `box` is what sizes the field in its row (its
+      area's, when it has one); `field` is the field's own look. */
   export const inputVariants = tv({
+    slots: { box: "", field: "" },
     variants: {
-      face: { mono: "font-mono" },
-      text: { meta: "text-meta", label: "text-label", title: "text-title" },
+      face: { mono: { field: "font-mono" } },
+      text: {
+        meta: { field: "text-meta" },
+        label: { field: "text-label" },
+        title: { field: "text-title" },
+      },
       /** `sm`: the 30px small control, level with an `sm` NativeSelect or
           Button in the same row. */
-      size: { sm: "h-c-btn-h-sm" },
+      size: { sm: { field: "h-c-btn-h-sm" } },
       /** A field for a short figure (a share, minutes, thousands of
           tokens): the number field's width, tight pads, and its figure
           centred in tabular widths (DESIGN.md, The Tabular Figure Rule). */
       field: {
-        number: "w-c-number-field-w px-space-2 text-center tabular-nums",
+        number: {
+          box: "w-c-number-field-w",
+          field: "px-space-2 text-center tabular-nums",
+        },
       },
       measure: {
-        shrink: "min-w-0",
-        "cap-sm": "max-w-64",
-        "cap-md": "max-w-96",
+        shrink: { box: "min-w-0" },
+        "cap-sm": { box: "max-w-64" },
+        "cap-md": { box: "max-w-96" },
       },
       /** Its share of a row of code cells (`--code-flex`). */
-      flex: { code: "flex-(--code-flex)" },
+      flex: { code: { box: "flex-(--code-flex)" } },
     },
   });
 
@@ -47,7 +56,16 @@
       (
         | { type: "file"; files?: FileList }
         | { type?: InputType; files?: undefined }
-      )
+      ) & {
+        /**
+         * The field's own touch area (DESIGN.md, The 44 Touch Rule): an
+         * `<input>` draws no `::after`, so the field stands in a box of its
+         * own size that carries it, and a press on the area focuses the
+         * field. Off where a frame round the field is the control and
+         * carries the area (InputGroup).
+         */
+        area?: boolean;
+      }
   >;
 
   let {
@@ -62,6 +80,7 @@
     field: kind,
     measure,
     flex,
+    area = true,
     "data-slot": dataSlot = "input",
     ...restProps
   }: Props = $props();
@@ -69,7 +88,7 @@
     inputVariants({ face, text, size, field: kind, measure, flex })
   );
   /** The field's own look, the same for a file picker and a text field. */
-  const field = [
+  const own = [
     "rounded-md shadow-xs transition-control",
     "h-c-input-h w-full min-w-0 border border-border-control",
     "bg-surface-raised px-3 text-ink-strong",
@@ -81,25 +100,57 @@
     "disabled:opacity-50 aria-invalid:border-error-9",
     "dark:aria-invalid:border-error-9/50",
   ];
+  /** Its classes: with an area, the caller's placement sizes the area and
+      the field fills it; without one, they are the field's. */
+  const fieldClass = $derived(
+    area
+      ? cn(own, looks.field())
+      : cn(own, looks.box(), looks.field(), className)
+  );
+
+  /** A press on the area beside the field: the field's own focus. */
+  function focusField(event: MouseEvent): void {
+    if (event.target === event.currentTarget) {
+      ref?.focus();
+    }
+  }
 </script>
 
-{#if type === "file"}
-  <input
-    class={cn(field, looks, className)}
-    data-slot={dataSlot}
-    type="file"
-    bind:this={ref}
-    bind:files
-    bind:value
-    {...restProps}
-  />
+{#snippet control()}
+  {#if type === "file"}
+    <input
+      class={fieldClass}
+      data-slot={dataSlot}
+      type="file"
+      bind:this={ref}
+      bind:files
+      bind:value
+      {...restProps}
+    />
+  {:else}
+    <input
+      class={fieldClass}
+      data-slot={dataSlot}
+      {type}
+      bind:this={ref}
+      bind:value
+      {...restProps}
+    />
+  {/if}
+{/snippet}
+
+{#if area}
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <!-- biome-ignore lint/a11y/noStaticElementInteractions: the field's touch area round it; the field itself is the control and takes the focus. -->
+  <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the field's touch area round it; the field itself is the control and takes the focus. -->
+  <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a keyboard reaches the field itself; only a finger lands on the area. -->
+  <span
+    class={cn("touch-hit inline-flex w-full min-w-0", looks.box(), className)}
+    data-slot="input-area"
+    onclick={focusField}
+  >
+    {@render control()}
+  </span>
 {:else}
-  <input
-    class={cn(field, looks, className)}
-    data-slot={dataSlot}
-    {type}
-    bind:this={ref}
-    bind:value
-    {...restProps}
-  />
+  {@render control()}
 {/if}

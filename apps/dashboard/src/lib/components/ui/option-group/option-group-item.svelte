@@ -6,8 +6,8 @@
 
   /**
    * One option of an OptionGroup: a `radio` (one pick) or a `checkbox`
-   * (several), drawn as the kit's option chip (ui/chip `option`), with a
-   * finger's 44px area (`touch-hit`) and its ring on its own border box
+   * (several), drawn as the kit's option chip (ui/chip `option`, which
+   * carries a finger's 44px area), with its ring on its own border box
    * (`focus-inset`), so a clipping scroller round the group never cuts it.
    * In a `list` group it is a full-width row whose keycap stands on the
    * label's first line.
@@ -43,7 +43,7 @@
 <button
   class={cn(
     chipVariants({ variant: "option" }),
-    "touch-hit focus-inset",
+    "focus-inset",
     group.layout === "list" &&
       "items-box-start grid min-w-0 grid-cols-auto-fluid",
     className

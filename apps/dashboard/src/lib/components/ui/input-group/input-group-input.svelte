@@ -16,6 +16,7 @@
     "flex-1 rounded-none border-0 bg-transparent shadow-none dark:bg-transparent",
     className
   )}
+  area={false}
   data-slot="input-group-control"
   bind:ref
   bind:value
