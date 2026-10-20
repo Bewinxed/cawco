@@ -158,17 +158,6 @@ apps/dashboard/src/lib/cawco/lightbox/Lightbox.svelte
 apps/dashboard/src/lib/cawco/motion/Rail.svelte
 apps/dashboard/src/lib/cawco/move/MoveAsk.svelte
 apps/dashboard/src/lib/cawco/move/MoveWait.svelte
-apps/dashboard/src/lib/cawco/pairing/OtpCells.svelte
-apps/dashboard/src/lib/cawco/pairing/PairingPanel.svelte
-apps/dashboard/src/lib/cawco/pairing/PairingQr.svelte
-apps/dashboard/src/lib/cawco/pairing/ScanSheet.svelte
-apps/dashboard/src/lib/cawco/pairing/SuccessCheck.svelte
-apps/dashboard/src/lib/cawco/pairing/Swap.svelte
-apps/dashboard/src/lib/cawco/pairing/needs/CawPanel.svelte
-apps/dashboard/src/lib/cawco/pairing/needs/NeedsCard.svelte
-apps/dashboard/src/lib/cawco/pairing/preview/NeedsStop.svelte
-apps/dashboard/src/lib/cawco/pairing/preview/PairingStop.svelte
-apps/dashboard/src/lib/cawco/pairing/preview/ScanStop.svelte
 apps/dashboard/src/lib/cawco/plan/PlanPane.svelte
 apps/dashboard/src/lib/cawco/plan/PlanRing.svelte
 apps/dashboard/src/lib/cawco/plan/PlanTree.svelte
