@@ -131,8 +131,18 @@ const undoes = (steps: WrittenStep[], change: PlanChangeRow): boolean => {
         step !== undefined &&
         (step.status === "completed") !== (change.words === "done")
       );
-    default:
+    // A write keeps each step's comments by id ({@link Plans.write}), so it
+    // cannot take one back.
+    case "comment":
       return false;
+    // The order is the session's to keep: a move is bookkeeping (Projects
+    // spec §5.2 "The plan model", point 3), and the write's order stands.
+    case "move":
+      return false;
+    default: {
+      const unhandled: never = change.kind;
+      throw new Error(`unhandled plan change: ${String(unhandled)}`);
+    }
   }
 };
 
