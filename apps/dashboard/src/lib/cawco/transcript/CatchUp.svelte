@@ -26,7 +26,7 @@
        less: the dot beats on --breath. Still, the tag's presence carries it. -->
   <span
     aria-hidden="true"
-    class="size-(--status-dot-size) flex-none rounded-pill bg-status-live-ink motion-safe:animate-breath"
+    class="loops size-(--status-dot-size) flex-none rounded-pill bg-status-live-ink motion-safe:animate-breath"
     data-slot="beat"
   ></span>Catching up…
 </div>

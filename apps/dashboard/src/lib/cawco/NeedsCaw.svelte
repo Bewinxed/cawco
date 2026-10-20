@@ -210,6 +210,8 @@
   const MID = RING_BOX / 2;
   /** The phone's glass, px (`--c-bar-caw-glass-phone`). */
   const STAND_BOX = 32;
+  /** Where the glass's square starts inside the circle's box: its viewBox's origin. */
+  const STAND_INSET = (RING_BOX - STAND_BOX) / 2;
   /**
    * The outline's half height on the path: half the stroke in from one
    * hairline of glass inside the glass's own hairline, as on the circle.
@@ -605,11 +607,11 @@
     data-slot="rim"
     data-foot={low || undefined}
     aria-hidden="true"
-    class="pointer-events-none absolute start-1/2 top-1/2 size-c-btn-h -translate-1/2 overflow-visible data-foot:transition-[opacity] data-foot:duration-(--dur-exit) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:not-group-data-instant/tools:data-foot:duration-(--dur-pop) group-data-instant/tools:data-foot:transition-off"
+    class="pointer-events-none absolute start-1/2 top-1/2 size-c-btn-h -translate-1/2 overflow-visible @max-desk/shell:hidden data-foot:transition-[opacity] data-foot:duration-(--dur-exit) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:not-group-data-instant/tools:data-foot:duration-(--dur-pop) group-data-instant/tools:data-foot:transition-off"
     data-count={count}
     viewBox="0 0 {RING_BOX} {RING_BOX}"
   >
-    <g data-slot="round" class="@max-desk/shell:hidden">
+    <g data-slot="round">
       {#each arcSlots.filter((k) => roundLow(k) === low) as k (k)}
         <path
           class="rim-arc fill-none stroke-status-attn-glyph"
@@ -636,7 +638,21 @@
         />
       {/if}
     </g>
-    <g data-slot="standing" class="hidden @max-desk/shell:inline">
+  </svg>
+  <!-- The phone's: its box is the standing glass, which meets the screen's
+       trailing edge, and its viewBox that glass's square inside the circle's
+       box, so the outline draws one to one where the circle's box drew it
+       and no box of it reaches past the screen (the circle's 36px box stood
+       2px past it, and the shell scrolled sideways by that). -->
+  <svg
+    data-slot="rim"
+    data-foot={low || undefined}
+    aria-hidden="true"
+    class="pointer-events-none absolute start-1/2 top-1/2 hidden size-c-bar-caw-glass-phone -translate-1/2 overflow-visible @max-desk/shell:block data-foot:transition-[opacity] data-foot:duration-(--dur-exit) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:not-group-data-instant/tools:data-foot:duration-(--dur-pop) group-data-instant/tools:data-foot:transition-off"
+    data-count={count}
+    viewBox="{STAND_INSET} {STAND_INSET} {STAND_BOX} {STAND_BOX}"
+  >
+    <g data-slot="standing">
       {#each arcSlots.filter((k) => standLow(k) === low) as k (k)}
         <path
           class="rim-arc fill-none stroke-status-attn-glyph"

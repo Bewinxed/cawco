@@ -56,14 +56,15 @@
   <title>Recall wheel · CawCo</title>
 </svelte:head>
 
-<!-- The composer at the page's foot, as a conversation's stands. -->
-<div class="flex h-full min-h-full flex-col justify-end">
-  <div data-slot="dock" class="relative">
-    <Composer
-      {draft}
-      onstop={() => undefined}
-      onsubmit={() => undefined}
-      recallOf={ID}
-    />
-  </div>
+<!-- The composer's box, as a pane's dock is (PaneLeaf `dock`): the whole
+     page, and the composer docks itself at its foot as a conversation's
+     does, 14px above it plus the safe area, at most 720px wide, and full
+     width with 11px margins under 900px. -->
+<div data-slot="dock" class="relative h-full">
+  <Composer
+    {draft}
+    onstop={() => undefined}
+    onsubmit={() => undefined}
+    recallOf={ID}
+  />
 </div>

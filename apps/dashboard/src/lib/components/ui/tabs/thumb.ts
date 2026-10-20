@@ -17,7 +17,7 @@ export const segmentedVariants = tv({
     group:
       "group/segmented relative inline-flex items-center gap-space-row rounded-md bg-surface-recess-deep p-c-segmented-pad",
     thumb:
-      "pointer-events-none absolute start-0 top-0 origin-top-left rounded-sm bg-surface-lift opacity-0 shadow-raised motion-safe:group-data-pending/segmented:animate-breath",
+      "loops pointer-events-none absolute start-0 top-0 origin-top-left rounded-sm bg-surface-lift opacity-0 shadow-raised motion-safe:group-data-pending/segmented:animate-breath",
     segment:
       "mark-line relative inline-flex h-c-btn-h-sm items-center justify-center gap-c-segment-gap whitespace-nowrap rounded-sm px-c-segment-pad-x py-0 font-body font-medium text-ink-muted text-size-label leading-none transition-control data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
   },

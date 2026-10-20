@@ -179,7 +179,7 @@
           data-task-card-live
           data-slot="dot"
           aria-hidden="true"
-          class="size-space-2 flex-none rounded-pill bg-status-live-glyph motion-safe:animate-breath"
+          class="loops size-space-2 flex-none rounded-pill bg-status-live-glyph motion-safe:animate-breath"
           data-box
         ></span>
         {#if retry}

@@ -82,6 +82,32 @@
   /** The kept width when the handle was taken: a drag that ends expanded gives it back. */
   let dragFrom = untrack(() => defaultWidth);
   /**
+   * A key on the handle is moving it (the APG window splitter's arrows, Home
+   * and End), for the task the key's resize lands in: with `resizing` (the
+   * pointer's), what says the reader moved the handle.
+   */
+  let keyed = false;
+  /**
+   * End from the far edge collapsed the surface in one step: ending the
+   * expansion changes the pane's `defaultSize` (`sideSize`), and paneforge
+   * rebuilds the layout from it on the width kept. Set for the key's task,
+   * the split collapses it again when that rebuild lands, before anything
+   * paints, as End asked.
+   */
+  let collapseAgain = false;
+  function handleKey(event: KeyboardEvent): void {
+    if (
+      event.target instanceof Element &&
+      event.target.closest('[role="separator"]')
+    ) {
+      keyed = true;
+      setTimeout(() => {
+        keyed = false;
+        collapseAgain = false;
+      });
+    }
+  }
+  /**
    * The page's narrowest share beside the surface. Dragged past it, the page
    * collapses to nothing: the surface is expanded.
    */
@@ -247,6 +273,17 @@
   });
   /** The split is sliding: the reader is watching it open or close. */
   let sliding = $state(false);
+  /** The surface's share as its pane was last laid out, in percent. */
+  let laidShare = $state(untrack(() => share));
+  /**
+   * The surface open with no room: the handle taken to the far edge, by the
+   * keyboard's End or the pointer alike, collapses its pane to nothing (the
+   * APG window splitter's End "may completely collapse the secondary pane").
+   * Its card is not drawn then, nor reached by the keyboard: held at its
+   * narrowest it stood past the screen's edge (1440..1760 at 1440). Opening
+   * and closing slide as they did; a share coming back draws it again.
+   */
+  const squeezed = $derived(open && laidShare === 0 && !sliding);
   let mounted = $state(false);
   /** A surface opening out of a departed row: it clips open from it. */
   let fromRow = $state(false);
@@ -262,9 +299,9 @@
     // slides as opening does.
     const full = expanded;
     const pane = sidePane;
-    // The handle reaching the edge or leaving it is the drag's own size:
-    // nothing slides under the pointer.
-    if (!pane || untrack(() => resizing)) {
+    // The handle reaching the edge or leaving it is the hand's own size, the
+    // pointer's or a key's: nothing slides under it, nor puts it back.
+    if (!pane || untrack(() => resizing) || keyed) {
       return;
     }
     if (opening) {
@@ -357,6 +394,8 @@
   data-split-resizing={resizing || undefined}
   data-split-sliding={sliding || undefined}
   class="group/split flex min-h-0 min-w-0 flex-1"
+  onkeydowncapture={handleKey}
+  role="presentation"
   bind:this={root}
   bind:clientWidth={width}
 >
@@ -413,7 +452,17 @@
       minSize={Math.min(SIDE_MAX, sideMin ?? MAIN_MIN)}
       onResize={(size) => {
         share = size;
-        if (!(size > 0 && open && fits)) {
+        laidShare = size;
+        // Collapsed by the reader's hand (End, or the handle to the near edge)
+        // is a size like any other; collapsed by the split (it closes, or
+        // opens from nothing) is none of theirs.
+        const byHand = resizing || keyed;
+        if (collapseAgain && size > 0) {
+          collapseAgain = false;
+          queueMicrotask(() => sidePane?.collapse());
+          return;
+        }
+        if (!(open && fits && (size > 0 || byHand))) {
           return;
         }
         // At the far edge the surface is expanded, however it got there.
@@ -423,9 +472,15 @@
           }
           return;
         }
-        // Off the edge it is not: dragged back out, or Back.
+        // Off the edge it is not: dragged back out, Back, or collapsed. End
+        // from the far edge lands here in one step, with no size between;
+        // the pointer passes through them, and both end the expansion here.
         if (expandAsked) {
+          collapseAgain = size === 0 && keyed;
           setExpanded(false);
+        }
+        if (size === 0) {
+          return;
         }
         // The reader's width is kept; the floor holding it up in a narrow
         // split is not, so a wider one opens at the width they chose.
@@ -441,6 +496,7 @@
              clock. -->
         <div
           data-split-shown={open || undefined}
+          hidden={squeezed}
           class="w-full min-w-c-side-surface-min p-space-3 opacity-0 transform-(--surface-off) transition-[opacity] duration-(--dur-panel) ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:duration-(--dur-panel) data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
           style:--surface-off="translateX(var(--space-7))"
           style:--surface-on="translateX(0)"

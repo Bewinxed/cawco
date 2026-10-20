@@ -1023,13 +1023,18 @@
           <Sidebar {narrow} scroller={keepScroll} />
         </RegionBoundary>
       {/if}
+      <!-- Drawn a grip's width on the rail's edge; under a fine pointer it
+           takes presses up to its midpoint stops (DESIGN.md, The 24 Pointer
+           Rule): 2px past either side, short of the rail rows' edge 8px in
+           and of a stroke begun 6px into the page beside it (ink 8), which
+           draws and does not resize. -->
       <div
         aria-label="Resize sidebar"
         aria-orientation="vertical"
         aria-valuemax={RAIL_MAX}
         aria-valuemin={RAIL_MIN}
         aria-valuenow={railWidth}
-        class="absolute inset-y-0 end-0 w-c-side-grip-w translate-x-1/2 cursor-col-resize touch-none z-5 hover:bg-border-control"
+        class="pointer-hit hit-gap-x-space-1 absolute inset-y-0 end-0 w-c-side-grip-w translate-x-1/2 cursor-col-resize touch-none z-5 hover:bg-border-control"
         onkeydown={resizeKey}
         onpointerdown={startDrag}
         role="slider"

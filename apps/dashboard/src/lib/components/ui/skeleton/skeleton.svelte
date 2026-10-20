@@ -9,7 +9,7 @@
    * motion it sits still. Each prop names what it stands for, never a number.
    */
   export const skeletonVariants = tv({
-    base: "relative block overflow-hidden rounded-sm bg-surface-fill motion-safe:after:absolute motion-safe:after:inset-0 motion-safe:after:-translate-x-full motion-safe:after:animate-skeleton-sweep motion-safe:after:bg-linear-to-r motion-safe:after:from-30% motion-safe:after:via-skeleton-sheen motion-safe:after:to-70%",
+    base: "loops relative block overflow-hidden rounded-sm bg-surface-fill motion-safe:after:absolute motion-safe:after:inset-0 motion-safe:after:-translate-x-full motion-safe:after:animate-skeleton-sweep motion-safe:after:bg-linear-to-r motion-safe:after:from-30% motion-safe:after:via-skeleton-sheen motion-safe:after:to-70%",
     variants: {
       /** The block it holds the place of, at that block's height. */
       height: {

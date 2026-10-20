@@ -948,12 +948,19 @@
       <!-- Projects. Its working sessions echo in turn, top to bottom
            (motion/echo). -->
       <Sidebar.Group data-flip pad="rail" {@attach echoBeat()}>
+        <!-- Its controls end where the rows do, inside the row (the label's
+             `end="action"`) and their group as wide as they are; past the
+             rows' edge they stood in the gutter the rail's grip takes
+             presses in (Shell, "Resize sidebar"). The word gives way first
+             (DESIGN.md, The Truncate Inside Rule). -->
         <Sidebar.GroupLabel end="action" pad="rail">
-          <span>Projects</span>
+          <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
+            >Projects</span
+          >
           <!-- The sort lives here rather than once per list because it governs all
            of them at once: a rail whose projects were ordered by recency and
            whose "Not running" was ordered by name would be two rails. -->
-          <div class="-me-space-1 ms-auto flex items-center gap-space-row">
+          <div class="ms-auto flex flex-none items-center gap-space-row">
             <DropdownMenu.Root>
               <DropdownMenu.Trigger>
                 {#snippet child({ props })}
@@ -997,7 +1004,6 @@
                 <Button
                   {...tip}
                   aria-label="New project"
-                  class="-me-space-1"
                   href="/project/new"
                   size="icon-sm"
                   variant="ghost"

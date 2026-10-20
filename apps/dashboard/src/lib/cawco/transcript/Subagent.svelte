@@ -155,7 +155,7 @@
       >
         <span data-slot="rail-cell" aria-hidden="true" class="rail-cell h-lh"
           ><span
-            class="breathe size-(--status-dot-size) flex-none rounded-pill bg-status-live-glyph"
+            class="breathe loops size-(--status-dot-size) flex-none rounded-pill bg-status-live-glyph"
           ></span></span
         ><span>{view.currentStep}</span>
       </p>

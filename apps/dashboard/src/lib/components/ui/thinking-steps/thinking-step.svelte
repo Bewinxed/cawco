@@ -158,7 +158,7 @@
              breaks where it must, as the description does. -->
         <span
           data-slot="thinking-step-label"
-          class="font-normal wrap-anywhere text-ink-strong transition-control status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-transparent motion-safe:data-shimmer:step-shimmer motion-safe:data-shimmer:animate-step-shimmer"
+          class="loops font-normal wrap-anywhere text-ink-strong transition-control status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-transparent motion-safe:data-shimmer:step-shimmer motion-safe:data-shimmer:animate-step-shimmer"
           data-shimmer={status === "active" || undefined}
           data-status={status}>{label}</span
         >
@@ -178,7 +178,7 @@
         </div>
       {:else if description}
         <span
-          class="wrap-anywhere whitespace-pre-wrap motion-safe:data-shimmer:text-transparent motion-safe:data-shimmer:step-shimmer motion-safe:data-shimmer:animate-step-shimmer"
+          class="loops wrap-anywhere whitespace-pre-wrap motion-safe:data-shimmer:text-transparent motion-safe:data-shimmer:step-shimmer motion-safe:data-shimmer:animate-step-shimmer"
           data-shimmer={(!label && status === "active") || undefined}
           >{description}</span
         >

@@ -87,7 +87,7 @@
       {#each motion.current ? MORPHING : STILL as mark (mark.name)}
         <svg
           aria-hidden="true"
-          class="col-start-1 row-start-1 size-(--box) motion-safe:origin-center motion-safe:mark-circle:animate-thinking-circle motion-safe:mark-lemniscate:animate-thinking-lemniscate"
+          class="loops col-start-1 row-start-1 size-(--box) motion-safe:origin-center motion-safe:mark-circle:animate-thinking-circle motion-safe:mark-lemniscate:animate-thinking-lemniscate"
           data-mark={mark.name}
           fill="none"
           height={compact ? 18 : 20}
@@ -115,7 +115,7 @@
          crosses a word once a breath. -->
     {#each words as word, index}
       <span
-        class="col-start-1 row-start-1 whitespace-nowrap opacity-0 data-first:opacity-100 motion-safe:animate-thinking-word"
+        class="loops col-start-1 row-start-1 whitespace-nowrap opacity-0 data-first:opacity-100 motion-safe:animate-thinking-word"
         data-first={index === 0 || undefined}
         data-slot="word"
         style:--word-delay={`calc(var(--breath) * ${index * 2} - 0.24s)`}
@@ -130,10 +130,10 @@
           >{word}
           {#if motion.current}
             <span
-              class="motion-safe:pointer-events-none motion-safe:absolute motion-safe:inset-y-0 motion-safe:start-0 motion-safe:text-ink-strong motion-safe:sheen-band motion-safe:animate-thinking-sheen"
+              class="loops motion-safe:pointer-events-none motion-safe:absolute motion-safe:inset-y-0 motion-safe:start-0 motion-safe:text-ink-strong motion-safe:sheen-band motion-safe:animate-thinking-sheen"
               data-slot="sheen"
               ><span
-                class="motion-safe:inline-block motion-safe:animate-thinking-sheen-hold"
+                class="loops motion-safe:inline-block motion-safe:animate-thinking-sheen-hold"
                 data-slot="sheen-word">{word}</span
               ></span
             >

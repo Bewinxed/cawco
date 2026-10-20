@@ -21,7 +21,7 @@
 <span
   data-slot={kind}
   aria-label={label}
-  class="size-space-2 flex-none rounded-pill bg-status-live-glyph motion-safe:animate-pulse"
+  class="loops size-space-2 flex-none rounded-pill bg-status-live-glyph motion-safe:animate-pulse"
   {id}
   role="img"
 ></span>

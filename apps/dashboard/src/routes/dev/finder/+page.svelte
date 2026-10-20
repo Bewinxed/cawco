@@ -119,16 +119,24 @@
     </header>
   {/if}
 
-  <main class="flex min-h-0 flex-1 flex-col px-space-6 py-space-5">
-    <ol class="m-0 flex-1 list-none overflow-y-auto p-0" aria-label="Sent">
+  <main class="flex min-h-0 flex-1 flex-col">
+    <ol
+      class="m-0 flex-1 list-none overflow-y-auto px-space-6 pt-space-5 pb-0"
+      aria-label="Sent"
+    >
       {#each log.sent as text, i (i)}
         <li class="py-space-2 type-code whitespace-pre-wrap">{text}</li>
       {/each}
     </ol>
+    <!-- Docked as a conversation's composer is (Composer `group/dock`): 14px
+         above the page's foot plus the safe area, at most 720px wide and
+         centred, and full width with 11px margins under 900px. -->
     <div
       data-slot="composer"
-      class="relative mx-auto flex w-full max-w-c-composer-w flex-none items-end gap-space-2 rounded-lg border border-border-control bg-surface-raised py-space-2 pr-space-2 pl-space-3 shadow-tile"
+      class="relative mx-auto mb-(--dock-foot) flex w-c-composer-w flex-none items-end gap-space-2 rounded-lg border border-border-control bg-surface-raised py-space-2 pr-space-2 pl-space-3 shadow-tile max-desk:mx-space-3 max-desk:w-auto"
       data-composer
+      data-safe-bottom
+      style:--dock-foot="calc(var(--space-4) + var(--safe-bottom))"
     >
       <MentionField
         bind:this={mentionField}

@@ -11,7 +11,10 @@
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
-  import { glidePopoverVariants } from "#lib/components/ui/glide-popover/index.js";
+  import {
+    glidePopoverVariants,
+    popoverRoom,
+  } from "#lib/components/ui/glide-popover/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import PopoverRoot from "#lib/components/ui/popover/popover.svelte";
   import { cn } from "#lib/utils.js";
@@ -103,6 +106,11 @@
   const inset = $derived(
     browser ? numberOf(phone.current ? "--c-screen-margin" : "--space-5") : 0
   );
+  /** The room floating-ui leaves the surface, a frame after it says so (glide-popover `popoverRoom`). */
+  let room = $state<string>();
+  const roomed = popoverRoom((next) => {
+    room = next;
+  });
 
   /**
    * Inside an NsPopoverGroup this is only a trigger: the group owns the one
@@ -226,7 +234,9 @@
               {...props}
               id={`${id}-popover`}
               role="presentation"
+              style:--ns-pop-room={room}
               style:pointer-events={pressable(open)}
+              {@attach roomed}
               {@attach rows ? highlight({ rows }) : undefined}
               {@attach morph()}
             >

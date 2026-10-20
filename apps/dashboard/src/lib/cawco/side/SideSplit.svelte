@@ -281,13 +281,19 @@
     </Drawer.Root>
   {/if}
   {#if phone && visible && active && planOf && hasPlan}
+    <!-- The plan is read beside the conversation it plans, so it holds
+         nothing (DESIGN.md, The Open Page Rule): no scrim, no focus trap,
+         and a press on the page lands there while the plan waits (vaul lets
+         a press outside a sheet that is not modal through). Close, Esc and
+         the grabber put it away. -->
     <Drawer.Root
+      modal={false}
       onOpenChange={(next) => {
         planAsked = next;
       }}
       open={planAsked}
     >
-      <Drawer.Content>
+      <Drawer.Content modal={false} trapFocus={false}>
         <RegionBoundary region="plan">
           <PlanPane
             instanceId={planOf}

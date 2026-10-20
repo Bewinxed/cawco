@@ -11,6 +11,7 @@
    * 640px it is the dialog's bottom sheet (NewSessionDialog).
    */
   import { MediaQuery } from "svelte/reactivity";
+  import { popoverRoom } from "#lib/components/ui/glide-popover/index.js";
   import { Popover, PopoverContent } from "#lib/components/ui/popover/index.js";
   import NewSessionDialog from "./NewSessionDialog.svelte";
   import NewSessionForm from "./NewSessionForm.svelte";
@@ -32,6 +33,21 @@
   const mobile = new MediaQuery("(max-width: 640px)");
   let card = $state<HTMLElement | null>(null);
   let form = $state<NewSessionForm>();
+  /**
+   * The room under the trigger, a frame after floating-ui says so
+   * (glide-popover `popoverRoom`): the form growing (a start notice
+   * unfolding) moves the popover, and its height bound by the room directly
+   * changed inside floating-ui's ResizeObserver delivery.
+   */
+  let room = $state<string>();
+  const roomed = popoverRoom((next) => {
+    room = next;
+  });
+  $effect(() => {
+    if (card) {
+      return roomed(card);
+    }
+  });
 </script>
 
 {#if mobile.current}
@@ -71,7 +87,7 @@
         form?.focusPrompt();
       }}
       side="bottom"
-      style="--pop-w: min(var(--c-new-session-pop-w), 100vw - var(--space-8) * 1.5); --pop-max-h: calc(var(--bits-popover-content-available-height) - 2px)"
+      style={`--pop-w: min(var(--c-new-session-pop-w), 100vw - var(--space-8) * 1.5); --pop-max-h: calc(${room ?? "var(--bits-popover-content-available-height)"} - 2px)`}
       width="room"
       bind:ref={card}
     >

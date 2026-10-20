@@ -408,16 +408,27 @@
      Each ancestor is its own one-item :where(), never one list: Blink's
      ancestor bloom filter reads a one-item :where() as a plain ancestor and
      rejects every element with no such ancestor before matching it, and
-     reads nothing from a list (selector_filter.cc). */
-  :where(:root[data-at-rest]) *,
-  :where(:root[data-at-rest]) *::before,
-  :where(:root[data-at-rest]) *::after,
-  :where([data-offscreen]) *,
-  :where([data-offscreen]) *::before,
-  :where([data-offscreen]) *::after,
-  :where([inert]:not([data-leaving])) *,
-  :where([inert]:not([data-leaving])) *::before,
-  :where([inert]:not([data-leaving])) *::after,
+     reads nothing from a list (selector_filter.cc).
+     What it holds is what loops, by the one mark a loop carries (`loops`),
+     never every descendant: a pane put away or made inert flips one
+     attribute, and with `*` on the right Blink invalidated the pane's whole
+     subtree to pause its two or three loops (a tab press's pointerup:
+     "Invalidation set invalidates subtree on DIV.absolute (by
+     [data-offscreen])", "… on SPAN.row-start-1 (by [inert])", tab-return
+     1c). With a class there, it invalidates only the descendants that carry
+     it ("we need to invalidate all of its descendants which have class `c2`
+     … We won't invalidate all div descendants, as class `c2` is more
+     specific", chromium.googlesource.com/chromium/src/+/HEAD/third_party/
+     blink/renderer/core/css/style-invalidation.md). */
+  :where(:root[data-at-rest]) .loops,
+  :where(:root[data-at-rest]) .loops::before,
+  :where(:root[data-at-rest]) .loops::after,
+  :where([data-offscreen]) .loops,
+  :where([data-offscreen]) .loops::before,
+  :where([data-offscreen]) .loops::after,
+  :where([inert]:not([data-leaving])) .loops,
+  :where([inert]:not([data-leaving])) .loops::before,
+  :where([inert]:not([data-leaving])) .loops::after,
   :where([data-offscreen]) {
     animation-play-state: paused;
   }
@@ -3052,6 +3063,14 @@
       --selected-ink: var(--ink-strong);
     }
   }
+}
+
+/* The mark every loop carries (a spin, a pulse, a breath, a sweep, a
+   shimmer), on the element the loop runs on or whose ::before or ::after it
+   runs on: the rest rule (overrides, above) holds what carries it still
+   wherever nobody can see it. It draws nothing. */
+@utility loops {
+  --loops: on;
 }
 
 /* Live work breathes (DESIGN.md): a mark that is live work (the in-flight

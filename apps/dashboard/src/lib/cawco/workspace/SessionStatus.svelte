@@ -54,7 +54,7 @@
     class={[
       "inline-grid flex-none",
       status.tone === "working" &&
-        "text-status-live-glyph motion-safe:animate-breath",
+        "loops text-status-live-glyph motion-safe:animate-breath",
       status.tone === "attention" && "text-status-attn-glyph",
       status.tone === "failed" && "text-status-fail-glyph",
       status.tone === "quiet" && "text-status-idle-glyph",
