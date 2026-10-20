@@ -39,8 +39,11 @@
  *
  * Each block diagram's groups (plan-model-grill's) stand on one left edge.
  * Each page is captured window by window (decision-embeds.ts
- * `capturePage`) and no embed's box in that capture is one flat colour.
- * Captures and their manifest go to .probe/decision-pages/ for a reviewer.
+ * `capturePage`) and no embed's box in that capture is one flat colour; the
+ * capture is files a delegate can hand over (RGB, each within the hub's
+ * 1 MiB, a tall page in numbered sections cut between its cards), read back
+ * pixel for pixel. Captures and their manifest go to .probe/decision-pages/
+ * for a reviewer, and no file there is over the hub's 1 MiB.
  *
  *   bun scripts/probe-kit/run.ts web decision-pages-ready
  */
@@ -48,15 +51,19 @@
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { Page } from "playwright-core";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
+import { FOLDER_FILE_LIMIT } from "../../../../packages/hub/src/project-folder";
 import {
   blankEmbeds,
+  captureFaults,
   capturePage,
   EMBED_FRAME,
   EMBED_TYPE_FLOOR,
@@ -768,7 +775,15 @@ const spec: Spec = {
     rmSync(OUT, { recursive: true, force: true });
     mkdirSync(OUT, { recursive: true });
     const manifest: {
-      captures: { file: string; leg: string; page: string }[];
+      captures: {
+        files: {
+          bytes: number;
+          file: string;
+          rows: { from: number; to: number };
+        }[];
+        leg: string;
+        page: string;
+      }[];
       pages: Record<string, unknown>;
       reads: Record<string, unknown>;
       ran: string;
@@ -1096,14 +1111,29 @@ const spec: Spec = {
             // The page tiled window by window (decision-embeds.ts
             // `capturePage`): a full-page shot paints a cross-origin embed
             // outside the first window blank.
-            const paints = await capturePage(page, join(OUT, file));
+            const capture = await capturePage(page, join(OUT, file));
+            const { paints } = capture;
+            const captured = captureFaults(capture);
+            kit.check(
+              `${one.name} ${leg}: the page's capture is files a delegate can hand over, each RGB and at most ${FOLDER_FILE_LIMIT / 1024 / 1024} MiB, its whole picture pixel for pixel (${capture.files.map((f) => `${basename(f.path)} ${(f.bytes / 1024).toFixed(0)} KiB, rows ${f.rows.from}–${f.rows.to}`).join(", ")}; ${capture.picture.width}×${capture.picture.height})`,
+              capture.files.length > 0 && captured.length === 0,
+              captured.join("\n    ")
+            );
             const blankBoxes = blankEmbeds(paints);
             kit.check(
               `${one.name} ${leg}: the page's own capture paints every embed (${paints.map((p) => `“${p.embed}” ${Math.round(p.flat * 1000) / 10}% its commonest colour`).join(", ") || "no embeds"})`,
               paints.length === (embedded ?? 0) && blankBoxes.length === 0,
               blankBoxes.join("\n    ")
             );
-            manifest.captures.push({ file, leg, page: one.name });
+            manifest.captures.push({
+              files: capture.files.map((f) => ({
+                bytes: f.bytes,
+                file: basename(f.path),
+                rows: f.rows,
+              })),
+              leg,
+              page: one.name,
+            });
           }
 
           kit.check(
@@ -1113,6 +1143,21 @@ const spec: Spec = {
           );
         }
       }
+      // What a reviewer is handed: no file the hub would refuse.
+      const over = readdirSync(OUT, { recursive: true, withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => join(entry.parentPath, entry.name))
+        .filter((path) => statSync(path).size > FOLDER_FILE_LIMIT);
+      kit.check(
+        `every file in ${OUT.slice(ROOT.length + 1)} within the hub's ${FOLDER_FILE_LIMIT / 1024 / 1024} MiB`,
+        over.length === 0,
+        over
+          .map(
+            (path) =>
+              `${path.slice(OUT.length + 1)}: ${(statSync(path).size / 1024 / 1024).toFixed(2)} MiB`
+          )
+          .join("\n    ")
+      );
     } finally {
       writeFileSync(
         join(OUT, "manifest.json"),
