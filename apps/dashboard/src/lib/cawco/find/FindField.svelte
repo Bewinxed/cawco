@@ -9,8 +9,7 @@
    * its combobox roles, its keys) is the caller's.
    */
   import type { HTMLInputAttributes } from "svelte/elements";
-  import { IconClose } from "#lib/icons.js";
-  import SearchIcon from "~icons/solar/magnifer-bold-duotone";
+  import { IconClose, IconSearch } from "#lib/icons.js";
 
   let {
     value,
@@ -30,7 +29,7 @@
 </script>
 
 <div data-slot="finder-field" class={["field", { phone }]}>
-  <SearchIcon data-finder-lead class="lead" aria-hidden="true" />
+  <IconSearch data-finder-lead class="lead" aria-hidden="true" />
   <input bind:this={input} {value} {...rest} />
   {#if value}
     <button

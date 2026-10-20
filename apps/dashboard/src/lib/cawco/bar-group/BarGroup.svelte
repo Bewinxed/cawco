@@ -15,8 +15,9 @@
    *   trailing edge (Files, Jump and the machines live in the sidebar).
    *
    * The three choice points: `mark` (how a machine problem shows), `files`
-   * (whether Files marks new files) and `jump` (the search glyph: 20px in
-   * the group's cut, SearchGlyph, or Solar's lens at today's 16px). `today`
+   * (whether Files marks new files) and `jump` (the search glyph: the
+   * app's IconSearch at 20px, or Solar's `magnifer-bold-duotone`, the glyph
+   * that ships today, at today's 16px). `today`
    * draws the bar as it ships: the numbers beside Files and the machines,
    * the symbol tinted, the lens at 16px. `hover` draws one item under the
    * pointer, as `.bar-item:hover` does: the canvas forces hover on a whole
@@ -25,12 +26,12 @@
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconSearch } from "#lib/icons.js";
+  import SolarSearch from "~icons/solar/magnifer-bold-duotone";
   import FilesItem from "../files/FilesItem.svelte";
   import NeedsCaw from "../NeedsCaw.svelte";
   import FilesDot from "./FilesDot.svelte";
   import { AT_REST, type FleetMachine } from "./fixtures";
   import MachinesItem from "./MachinesItem.svelte";
-  import SearchGlyph from "./SearchGlyph.svelte";
 
   type Item = "files" | "jump" | "machines" | "caw";
 
@@ -105,9 +106,9 @@
                 type="button"
               >
                 {#if lens === 20}
-                  <SearchGlyph />
-                {:else}
                   <IconSearch aria-hidden="true" />
+                {:else}
+                  <SolarSearch aria-hidden="true" />
                 {/if}
               </button>
             {/snippet}

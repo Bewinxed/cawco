@@ -4,6 +4,16 @@
 export { default as IconClose } from "#lib/components/icons/Close.svelte";
 export { default as IconMinus } from "#lib/components/icons/Minus.svelte";
 export { default as IconPlus } from "#lib/components/icons/Plus.svelte";
+/*
+ * The search glyph, everywhere it shows (Jump, the sheet's search, a search
+ * tool's card): Solar's bold-duotone lens with a full-ink glint, since every
+ * lens Solar ships in that cut is a plain half-ink disc that reads solid at
+ * the bar's 20px. Local, set-matched.
+ */
+export {
+  default as IconSearch,
+  default as IconToolSearch,
+} from "#lib/components/icons/Search.svelte";
 export { default as IconTick } from "#lib/components/icons/Tick.svelte";
 /*
  * The session strip's "+", beside the tabs' close X: Solar's bare add in its
@@ -129,10 +139,6 @@ export { default as IconLink } from "~icons/solar/link-minimalistic-2-bold-duoto
 export { default as IconLock } from "~icons/solar/lock-keyhole-minimalistic-bold-duotone";
 export { default as IconLogout } from "~icons/solar/logout-2-bold-duotone";
 export { default as IconSparkles } from "~icons/solar/magic-stick-3-bold-duotone";
-export {
-  default as IconSearch,
-  default as IconToolSearch,
-} from "~icons/solar/magnifer-bold-duotone";
 export { default as IconMapPoint } from "~icons/solar/map-point-bold-duotone";
 export { default as IconMaximize } from "~icons/solar/maximize-bold-duotone";
 export { default as IconMore } from "~icons/solar/menu-dots-bold-duotone";

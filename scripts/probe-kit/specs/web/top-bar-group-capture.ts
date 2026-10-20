@@ -29,7 +29,8 @@
  *    sign-in badge's an exclamation mark (a bar and a dot).
  * 6. Every desk frame draws at 1:1 on both pages (its zoom 1), so the badge
  *    stands 9 CSS px across as drawn, at 390 too.
- * 7. The 20px search glyph's ink weight against the server's, rasterised
+ * 7. The 20px search glyph is the app's own (icons.ts `IconSearch`, its
+ *    paths Search.svelte's), and its ink weight against the server's, rasterised
  *    from each symbol's own SVG in its ink at 4× (the one thing drawing
  *    alone decides): its mean coverage within a third of the server's, and
  *    full-ink detail at least half the server's share, where Solar's own
@@ -83,6 +84,13 @@ const PROGRAM = readFileSync(
   "utf8"
 );
 const STATES = "src/lib/cawco/bar-group";
+/** The app's search glyph (icons.ts `IconSearch`): its paths, as the 20px lens must draw them. */
+const SEARCH_PATHS = [
+  ...readFileSync(
+    join(ROOT, "apps/dashboard/src/lib/components/icons/Search.svelte"),
+    "utf8"
+  ).matchAll(/\bd="([^"]+)"/g),
+].map((found) => found[1]);
 
 /** Each option canvas's stand-in id, by the name `idOf` makes it from, and its states file. */
 const CANVASES: Record<string, string> = {
@@ -459,7 +467,11 @@ interface Ink {
 }
 
 /** Read in the embed's document: the search glyph's and the server's ink, each rasterised from its SVG alone. */
-async function readInk(): Promise<{ lens: Ink; server: Ink } | null> {
+async function readInk(): Promise<{
+  lens: Ink;
+  paths: string[];
+  server: Ink;
+} | null> {
   const frame = document.querySelector(
     '.cawco-frame[data-cawco-interaction="rest"] [data-bar-group]'
   );
@@ -496,7 +508,13 @@ async function readInk(): Promise<{ lens: Ink; server: Ink } | null> {
       full: Math.round((full / pixels) * 1000) / 1000,
     };
   };
-  return { lens: await inkOf(lens), server: await inkOf(server) };
+  return {
+    lens: await inkOf(lens),
+    paths: [...lens.querySelectorAll("path")].map(
+      (path) => path.getAttribute("d") ?? ""
+    ),
+    server: await inkOf(server),
+  };
 }
 
 /**
@@ -506,7 +524,10 @@ async function readInk(): Promise<{ lens: Ink; server: Ink } | null> {
  */
 async function inkChecks(page: Page, embeds: Embed[], say: Say) {
   const handles = await page.$$(EMBED_FRAME);
-  const read: Record<string, { lens: Ink; server: Ink } | null> = {};
+  const read: Record<
+    string,
+    { lens: Ink; paths: string[]; server: Ink } | null
+  > = {};
   for (const [index, handle] of handles.entries()) {
     const file = embeds[index]?.file ?? "";
     if (file === "JumpGroupSize" || file === "JumpToday") {
@@ -515,6 +536,12 @@ async function inkChecks(page: Page, embeds: Embed[], say: Say) {
     }
   }
   const ours = read.JumpGroupSize;
+  const registered = !!ours && ours.paths.join("|") === SEARCH_PATHS.join("|");
+  say(
+    "the 20px search glyph is the app's IconSearch: its paths are Search.svelte's",
+    registered && SEARCH_PATHS.length === 3,
+    `drawn ${ours?.paths.length ?? 0} paths, Search.svelte ${SEARCH_PATHS.length}${registered ? ", the same" : `: ${JSON.stringify(ours?.paths)}`}`
+  );
   const ok =
     !!ours &&
     Math.abs(ours.lens.mean - ours.server.mean) <= ours.server.mean / 3 &&

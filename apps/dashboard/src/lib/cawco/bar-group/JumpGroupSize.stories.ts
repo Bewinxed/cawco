@@ -1,6 +1,6 @@
 /**
  * Jump's search glyph, the recommended answer: 20px, the size of the
- * group's other three symbols, drawn in their cut (SearchGlyph).
+ * group's other three symbols, drawn in their cut (IconSearch).
  */
 import BarGroup from "./BarGroup.svelte";
 

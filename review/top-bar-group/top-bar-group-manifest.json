@@ -116,6 +116,12 @@
     {
       "leg": "1440×900 light",
       "ok": true,
+      "assertion": "the 20px search glyph is the app's IconSearch: its paths are Search.svelte's",
+      "output": "drawn 3 paths, Search.svelte 3, the same"
+    },
+    {
+      "leg": "1440×900 light",
+      "ok": true,
       "assertion": "the 20px search glyph's ink weighs as the server's: mean within a third, full-ink detail at least half its share",
       "output": "JumpGroupSize: lens mean 0.253 full 0.028, server mean 0.304 full 0.049; JumpToday: lens mean 0.243 full 0.01, server mean 0.304 full 0.049"
     },
@@ -141,7 +147,7 @@
       "leg": "1440×900 light",
       "ok": true,
       "assertion": "the capture in 3 tiles a window tall, each under 1 MiB",
-      "output": "top-bar-group-1440-light-01.png 453 KiB, top-bar-group-1440-light-02.png 369 KiB, top-bar-group-1440-light-03.png 46 KiB"
+      "output": "top-bar-group-1440-light-01.png 453 KiB, top-bar-group-1440-light-02.png 375 KiB, top-bar-group-1440-light-03.png 46 KiB"
     },
     {
       "leg": "1440×900 dark",
@@ -176,6 +182,12 @@
     {
       "leg": "1440×900 dark",
       "ok": true,
+      "assertion": "the 20px search glyph is the app's IconSearch: its paths are Search.svelte's",
+      "output": "drawn 3 paths, Search.svelte 3, the same"
+    },
+    {
+      "leg": "1440×900 dark",
+      "ok": true,
       "assertion": "the 20px search glyph's ink weighs as the server's: mean within a third, full-ink detail at least half its share",
       "output": "JumpGroupSize: lens mean 0.253 full 0.028, server mean 0.304 full 0.049; JumpToday: lens mean 0.243 full 0.01, server mean 0.304 full 0.049"
     },
@@ -201,7 +213,7 @@
       "leg": "1440×900 dark",
       "ok": true,
       "assertion": "the capture in 3 tiles a window tall, each under 1 MiB",
-      "output": "top-bar-group-1440-dark-01.png 454 KiB, top-bar-group-1440-dark-02.png 367 KiB, top-bar-group-1440-dark-03.png 45 KiB"
+      "output": "top-bar-group-1440-dark-01.png 454 KiB, top-bar-group-1440-dark-02.png 373 KiB, top-bar-group-1440-dark-03.png 45 KiB"
     },
     {
       "leg": "390×844 light",
@@ -236,6 +248,12 @@
     {
       "leg": "390×844 light",
       "ok": true,
+      "assertion": "the 20px search glyph is the app's IconSearch: its paths are Search.svelte's",
+      "output": "drawn 3 paths, Search.svelte 3, the same"
+    },
+    {
+      "leg": "390×844 light",
+      "ok": true,
       "assertion": "the 20px search glyph's ink weighs as the server's: mean within a third, full-ink detail at least half its share",
       "output": "JumpGroupSize: lens mean 0.253 full 0.028, server mean 0.304 full 0.049; JumpToday: lens mean 0.243 full 0.01, server mean 0.304 full 0.049"
     },
@@ -243,7 +261,7 @@
       "leg": "390×844 light",
       "ok": true,
       "assertion": "the page never scrolls sideways",
-      "output": "scrollWidth 390, clientWidth 390; the page 3303px tall"
+      "output": "scrollWidth 390, clientWidth 390; the page 3320px tall"
     },
     {
       "leg": "390×844 light",
@@ -255,13 +273,13 @@
       "leg": "390×844 light",
       "ok": true,
       "assertion": "the page's own capture paints every embed (9 of 9)",
-      "output": "Today · Desk, the bar as it stands, the Mac down at y 325: 48.1% its commonest colour; A badge · Desk, the Mac down at y 898: 41.6% its commonest colour; A badge · Desk, the Mac needing a sign-in at y 1017: 41.6% its commonest colour; The symbol tinted · Desk, the Mac down at y 1275: 41.6% its commonest colour; The symbol tinted · Desk, the Mac needing a sign-in at y 1394: 41.6% its commonest colour; No mark · Desk, new files landed at y 1910: 41.6% its commonest colour; A dot · Desk, new files landed at y 2150: 41.6% its commonest colour; The same size · Desk at y 2724: 41.6% its commonest colour; 16px, the size today · Desk at y 2964: 41.6% its commonest colour"
+      "output": "Today · Desk, the bar as it stands, the Mac down at y 325: 48.1% its commonest colour; A badge · Desk, the Mac down at y 898: 41.6% its commonest colour; A badge · Desk, the Mac needing a sign-in at y 1017: 41.6% its commonest colour; The symbol tinted · Desk, the Mac down at y 1275: 41.6% its commonest colour; The symbol tinted · Desk, the Mac needing a sign-in at y 1394: 41.6% its commonest colour; No mark · Desk, new files landed at y 1910: 41.6% its commonest colour; A dot · Desk, new files landed at y 2150: 41.6% its commonest colour; The same size · Desk at y 2740: 41.6% its commonest colour; 16px, the size today · Desk at y 2981: 41.6% its commonest colour"
     },
     {
       "leg": "390×844 light",
       "ok": true,
       "assertion": "the capture in 4 tiles a window tall, each under 1 MiB",
-      "output": "top-bar-group-390-light-01.png 284 KiB, top-bar-group-390-light-02.png 180 KiB, top-bar-group-390-light-03.png 217 KiB, top-bar-group-390-light-04.png 155 KiB"
+      "output": "top-bar-group-390-light-01.png 284 KiB, top-bar-group-390-light-02.png 180 KiB, top-bar-group-390-light-03.png 217 KiB, top-bar-group-390-light-04.png 161 KiB"
     },
     {
       "leg": "390×844 dark",
@@ -296,6 +314,12 @@
     {
       "leg": "390×844 dark",
       "ok": true,
+      "assertion": "the 20px search glyph is the app's IconSearch: its paths are Search.svelte's",
+      "output": "drawn 3 paths, Search.svelte 3, the same"
+    },
+    {
+      "leg": "390×844 dark",
+      "ok": true,
       "assertion": "the 20px search glyph's ink weighs as the server's: mean within a third, full-ink detail at least half its share",
       "output": "JumpGroupSize: lens mean 0.253 full 0.028, server mean 0.304 full 0.049; JumpToday: lens mean 0.243 full 0.01, server mean 0.304 full 0.049"
     },
@@ -303,7 +327,7 @@
       "leg": "390×844 dark",
       "ok": true,
       "assertion": "the page never scrolls sideways",
-      "output": "scrollWidth 390, clientWidth 390; the page 3303px tall"
+      "output": "scrollWidth 390, clientWidth 390; the page 3320px tall"
     },
     {
       "leg": "390×844 dark",
@@ -315,13 +339,13 @@
       "leg": "390×844 dark",
       "ok": true,
       "assertion": "the page's own capture paints every embed (9 of 9)",
-      "output": "Today · Desk, the bar as it stands, the Mac down at y 325: 33.2% its commonest colour; A badge · Desk, the Mac down at y 898: 34.4% its commonest colour; A badge · Desk, the Mac needing a sign-in at y 1017: 34.4% its commonest colour; The symbol tinted · Desk, the Mac down at y 1275: 34.5% its commonest colour; The symbol tinted · Desk, the Mac needing a sign-in at y 1394: 34.5% its commonest colour; No mark · Desk, new files landed at y 1910: 34.5% its commonest colour; A dot · Desk, new files landed at y 2150: 34.5% its commonest colour; The same size · Desk at y 2724: 34.5% its commonest colour; 16px, the size today · Desk at y 2964: 34.7% its commonest colour"
+      "output": "Today · Desk, the bar as it stands, the Mac down at y 325: 33.2% its commonest colour; A badge · Desk, the Mac down at y 898: 34.4% its commonest colour; A badge · Desk, the Mac needing a sign-in at y 1017: 34.4% its commonest colour; The symbol tinted · Desk, the Mac down at y 1275: 34.5% its commonest colour; The symbol tinted · Desk, the Mac needing a sign-in at y 1394: 34.5% its commonest colour; No mark · Desk, new files landed at y 1910: 34.5% its commonest colour; A dot · Desk, new files landed at y 2150: 34.5% its commonest colour; The same size · Desk at y 2740: 34.5% its commonest colour; 16px, the size today · Desk at y 2981: 34.7% its commonest colour"
     },
     {
       "leg": "390×844 dark",
       "ok": true,
       "assertion": "the capture in 4 tiles a window tall, each under 1 MiB",
-      "output": "top-bar-group-390-dark-01.png 289 KiB, top-bar-group-390-dark-02.png 177 KiB, top-bar-group-390-dark-03.png 216 KiB, top-bar-group-390-dark-04.png 152 KiB"
+      "output": "top-bar-group-390-dark-01.png 289 KiB, top-bar-group-390-dark-02.png 177 KiB, top-bar-group-390-dark-03.png 216 KiB, top-bar-group-390-dark-04.png 159 KiB"
     }
   ]
 }

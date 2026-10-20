@@ -11,10 +11,10 @@
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
+  import { IconSearch as Search } from "#lib/icons.js";
   import Clear from "~icons/solar/close-square-bold-duotone";
   import Code from "~icons/solar/code-square-bold-duotone";
   import Cpu from "~icons/solar/cpu-bolt-bold-duotone";
-  import Search from "~icons/solar/magnifer-bold-duotone";
   import HarnessLogo from "../HarnessLogo.svelte";
   import { models, providerOf, rememberModel } from "../models.svelte";
   import {

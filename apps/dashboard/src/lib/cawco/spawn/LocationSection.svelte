@@ -10,13 +10,13 @@
   import { CURVE, dur } from "#lib/cawco/motion/curves.svelte.js";
   import { folds } from "#lib/cawco/motion/fold.svelte.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
+  import { IconSearch as Search } from "#lib/icons.js";
   import Up from "~icons/solar/alt-arrow-up-linear";
   import Left from "~icons/solar/arrow-left-linear";
   import Right from "~icons/solar/arrow-right-linear";
   import Folder from "~icons/solar/folder-bold-duotone";
   import FolderGit from "~icons/solar/folder-git-bold-duotone";
   import FolderOpen from "~icons/solar/folder-open-bold-duotone";
-  import Search from "~icons/solar/magnifer-bold-duotone";
   import Refresh from "~icons/solar/refresh-bold-duotone";
   import { didntAnswer, machineFs } from "../client.svelte";
   import { TRY_AGAIN } from "../unanswered";
