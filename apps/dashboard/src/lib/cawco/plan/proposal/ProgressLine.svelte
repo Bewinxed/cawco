@@ -9,17 +9,17 @@
    * the control edge. A result earns its state pair, as a finished task
    * ring does: done in the done pair, failed in the fail pair.
    *
-   * While the delegate works, the skeleton's sweep crosses the fill: one
-   * band of the raised surface at 60% every --dur-loop, by transform only
-   * (The One Loop Rule). With no plan yet a short band travels the whole
+   * While the delegate works, a sweep crosses the fill: one band of light
+   * (plan-sheen, brighter than the fill in both schemes) every --dur-loop,
+   * by transform only (The One Loop Rule). With no plan yet a short band travels the whole
    * track (the task ring's no-plan arc, laid flat). Finished, the fill eases
    * to full and the band stops; failed, the fill holds where it stopped.
    * With reduced motion no band runs.
    *
    * `held` stands the band where one run puts it at that share (0 its
-   * start, 1 its end), drawn there with no animation and the raised surface
-   * in full across its middle, so a still shows where it is (a capture that
-   * stops animations can't take a running band back to its start).
+   * start, 1 its end), drawn there with no animation, so a still shows
+   * where it is (a capture that stops animations can't take a running band
+   * back to its start).
    */
   import type { Delegate } from "./fixtures";
 
@@ -89,8 +89,10 @@
   ></span>
   {#if working}
     <!-- The sweep stands over the fill only (the whole track while there is
-         no plan), cut to it. A band with no plan is the middle third of its
-         box in ink; a held band the middle sixth in the raised surface. -->
+         no plan), cut to it: light running along the line, the fill mixed
+         toward its scheme's brighter ink (plan-sheen), so the band is always
+         brighter than the fill and never reads as a gap in it. With no plan
+         a band of ink, the middle third of its box, travels the track. -->
     <span
       aria-hidden="true"
       class="pointer-events-none absolute inset-y-0 start-0 w-(--sweep-w) overflow-hidden rounded-hair"
@@ -101,18 +103,14 @@
           held === undefined
             ? "-translate-x-full motion-safe:animate-plan-sweep"
             : "translate-x-(--band-x)",
-          held === undefined &&
-            !planless &&
-            "bg-linear-to-r from-transparent from-30% via-skeleton-sheen via-50% to-transparent to-70%",
+          !planless &&
+            "bg-linear-to-r from-transparent from-25% via-plan-sheen via-50% to-transparent to-75%",
         ]}
         data-slot="sweep"
         style:--band-x={held === undefined
           ? undefined
           : `calc(-100% + ${held} * 200%)`}
-        >{#if held !== undefined}<span
-            class="absolute inset-y-0 inset-x-5/12 bg-surface-raised"
-          ></span>{:else if planless}<span
-            class="absolute inset-y-0 inset-x-1/3 bg-ink-muted"
+        >{#if planless}<span class="absolute inset-y-0 inset-x-1/3 bg-ink-muted"
           ></span>{/if}</span
       ></span
     >

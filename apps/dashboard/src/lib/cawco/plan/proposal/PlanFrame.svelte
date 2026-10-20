@@ -84,12 +84,11 @@
 </script>
 
 <!-- The values every row is drawn from, worked out once here from the
-     three the person tunes, and read by the rows as custom properties (a
-     two-lane row in Lanes sets its own --lead-w, --step-cols and
-     --words-in on its item, StepRow): the tile's cell (one line box tall,
-     or the tile's side, whichever is more), its glyph (two thirds of the
-     tile), the words' column after it, a row's columns, a progress line's
-     longest share of its row, and the gap between nested rows. -->
+     three the person tunes, and read by the rows as custom properties: the
+     tile's cell (one line box tall, or the tile's side, whichever is more),
+     its glyph (two thirds of the tile), the words' column after it, a row's
+     columns, a progress line's longest share of its row, and the gap
+     between nested rows. -->
 <div
   class="flex w-max max-w-full"
   data-beat={live ? beat : undefined}

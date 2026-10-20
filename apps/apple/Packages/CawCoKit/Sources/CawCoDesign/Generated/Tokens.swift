@@ -276,6 +276,8 @@ public enum Palette {
     public static let scrollbarThumb = Palette.named("scrollbar-thumb")
     /// The band of raised surface that crosses a skeleton once per loop.
     public static let skeletonSheen = Palette.named("skeleton-sheen")
+    /// The light running along a working delegate's progress line (plan proposal ProgressLine): its fill mixed toward the brighter ink of its scheme, the raised surface by day, so the band is brighter than the fill and never the track's paper.
+    public static let planSheen = Palette.named("plan-sheen")
     /// List bullets in rendered markdown.
     public static let proseBullet = Palette.named("prose-bullet")
     /// Project identity ink at hue 0; the identity-ink utility turns it to the project's --identity-h. 48%, not 50%: on a row's hover surface the cyan end of the wheel fell to 4.39:1 at 50%, and 48% holds every one of the ten hues above 4.5:1.

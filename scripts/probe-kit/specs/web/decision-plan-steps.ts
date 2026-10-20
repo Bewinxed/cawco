@@ -11,8 +11,9 @@
  * 2. Every embed draws the stories its Preview names: each frame drawn,
  *    with words in it, shot where the owner sees it (canvas-shots.ts).
  * 3. The plan card's lead says "Recommended: <its option>, because …".
- * 4. Each option's drawing stands in its own cell, right under its chip,
- *    its line and its cost.
+ * 4. The options' drawings stand in the card's own media, one under
+ *    another at the card's full width, each captioned with its option's
+ *    keycap and label, in their order; at the desk each is drawn 1:1.
  * 5. Each option draws one frame, the one the reader's screen shows: the
  *    desk's card under a mouse, the phone's sheet under a finger.
  * 6. Lanes stands the steps that run at the same time side by side, in
@@ -205,6 +206,184 @@ function frameFacts() {
 }
 
 /**
+ * Each held moment of the pulse: the band's ink (its gradient's middle
+ * stop) and the fill's, each as the engine resolves it, and their relative
+ * luminances (WCAG 2.2's), so the band is read brighter than the fill, not
+ * judged by eye. In the page.
+ */
+function pulseInkIn() {
+  const paint = document.createElement("canvas").getContext("2d", {
+    willReadFrequently: true,
+  });
+  const rgbOf = (color: string): number[] => {
+    if (!paint) {
+      return [0, 0, 0];
+    }
+    paint.clearRect(0, 0, 1, 1);
+    paint.fillStyle = color;
+    paint.fillRect(0, 0, 1, 1);
+    return [...paint.getImageData(0, 0, 1, 1).data].slice(0, 3);
+  };
+  const luminance = (color: string) => {
+    const [r = 0, g = 0, b = 0] = rgbOf(color).map((c) => {
+      const v = c / 255;
+      return v <= 0.040_45 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  return [
+    ...document.querySelectorAll<HTMLElement>('[data-slot="pulse-moment"]'),
+  ].map((moment) => {
+    const band = moment.querySelector<HTMLElement>('[data-slot="sweep"]');
+    const fill = moment.querySelector<HTMLElement>('[data-slot="fill"]');
+    const ink = band
+      ? getComputedStyle(band).getPropertyValue("--tw-gradient-via").trim()
+      : "";
+    const under = fill ? getComputedStyle(fill).backgroundColor : "";
+    const bandL = ink ? luminance(ink) : 0;
+    const fillL = under ? luminance(under) : 1;
+    return {
+      label:
+        moment
+          .querySelector('[data-slot="moment-label"]')
+          ?.textContent?.trim() ?? "",
+      ink,
+      fill: under,
+      ratio: Math.round(((bandL + 0.05) / (fillL + 0.05)) * 100) / 100,
+    };
+  });
+}
+
+/**
+ * Where each plan's top-level step rows stand their status tiles and their
+ * words: every x each takes (Lanes' bands of side-by-side steps aside, a
+ * column of their own by design; delegates and sub-steps nested under a
+ * step aside). In the page.
+ */
+function columnsIn() {
+  return [...document.querySelectorAll<HTMLElement>('[data-slot="plan"]')].map(
+    (plan) => {
+      const rows = [
+        ...plan.querySelectorAll<HTMLElement>(
+          'li[data-row] > [data-slot="plan-row"]'
+        ),
+      ].filter(
+        (row) =>
+          row.querySelector(':scope > [data-lead] [data-slot="step-tile"]') &&
+          !row.closest(
+            '[data-slot="band"], .kit-nest, [data-slot="fold-body"]'
+          ) &&
+          row.getBoundingClientRect().height > 0
+      );
+      const xs = (selector: string) => [
+        ...new Set(
+          rows.flatMap((row) => {
+            const el = row.querySelector(selector);
+            return el ? [Math.round(el.getBoundingClientRect().left)] : [];
+          })
+        ),
+      ];
+      return {
+        rows: rows.length,
+        tiles: xs(':scope > [data-lead] [data-slot="step-tile"]'),
+        words: xs(':scope > [data-slot="words"]'),
+      };
+    }
+  );
+}
+
+/**
+ * Each act a delegate's row offers (Answer, Retry): inside its own row's
+ * box, and on a line of its own, at that line's start, under where the
+ * row's state starts. In the page.
+ */
+function actsIn() {
+  return [...document.querySelectorAll<HTMLElement>('[data-slot="act"]')]
+    .filter((act) => act.getBoundingClientRect().width > 0)
+    .map((act) => {
+      const row = act
+        .closest('[data-slot="plan-row"]')
+        ?.getBoundingClientRect();
+      const state = act.parentElement
+        ?.querySelector('[data-slot="wait"]')
+        ?.getBoundingClientRect();
+      const under = act.parentElement?.getBoundingClientRect();
+      const r = act.getBoundingClientRect();
+      const ownLine = !!state && r.top >= state.bottom - 1;
+      return {
+        row: act.closest("[data-row]")?.getAttribute("data-row") ?? "",
+        inRow: !!row && r.left >= row.left - 1 && r.right <= row.right + 1,
+        ownLine,
+        atStart: !ownLine || (!!under && Math.abs(r.left - under.left) <= 1),
+      };
+    });
+}
+
+/**
+ * Each dependency a lanes layer's rows name (a step's `data-after`), and the
+ * wire drawn for it: one wire per dependency, each painted (its svg
+ * rendered, a box of its own; its path long, stroked, at full opacity, its
+ * dash at rest). In the page.
+ */
+function wiresIn() {
+  const out: { expected: string[]; drawn: string[]; unpainted: string[] } = {
+    expected: [],
+    drawn: [],
+    unpainted: [],
+  };
+  /** Why a wire draws nothing, if it does not: its svg not rendered, no length, no stroke, seen through, its dash away. */
+  const unpaintedOf = (wire: SVGPathElement, box: DOMRect | undefined) => {
+    const style = getComputedStyle(wire);
+    const rendered = !!box && box.width > 0 && box.height > 0;
+    return [
+      rendered ? "" : `svg ${box?.width ?? 0}×${box?.height ?? 0}`,
+      wire.getTotalLength() > 0 ? "" : "no length",
+      style.stroke === "none" ? "no stroke" : "",
+      Number.parseFloat(style.strokeWidth) > 0 ? "" : "no width",
+      Number(style.opacity) < 1 ? `opacity ${style.opacity}` : "",
+      Math.abs(Number.parseFloat(style.strokeDashoffset) || 0) > 0.01
+        ? `dash at ${style.strokeDashoffset}`
+        : "",
+    ].filter(Boolean);
+  };
+  /** Each dependency the layer's rows name, between two rows it holds. */
+  const dependenciesOf = (host: HTMLElement) => {
+    const rows = new Set(
+      [...host.querySelectorAll<HTMLElement>("[data-row]")].map(
+        (row) => row.dataset.row ?? ""
+      )
+    );
+    return [...host.querySelectorAll<HTMLElement>("[data-after]")].flatMap(
+      (row) =>
+        (row.dataset.after ?? "")
+          .split(" ")
+          .filter((from) => from && rows.has(from))
+          .map((from) => `${from}>${row.dataset.row}`)
+    );
+  };
+  for (const host of document.querySelectorAll<HTMLElement>(
+    '[data-slot="lanes"]'
+  )) {
+    out.expected.push(...dependenciesOf(host));
+    const svg = host.querySelector<SVGSVGElement>(
+      ':scope > svg[data-slot="connectors"]'
+    );
+    const box = svg?.getBoundingClientRect();
+    for (const wire of svg?.querySelectorAll<SVGPathElement>(
+      'path[data-slot="wire"][data-kind="after"]'
+    ) ?? []) {
+      const name = `${wire.dataset.from}>${wire.dataset.to}`;
+      out.drawn.push(name);
+      const why = unpaintedOf(wire, box);
+      if (why.length > 0) {
+        out.unpainted.push(`${name}: ${why.join(", ")}`);
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Every connector in an embed's frame, sampled along its run in its
  * layer's own pixels, against every box but its own two ends. In the page.
  */
@@ -363,13 +542,13 @@ function edgeCutIn(): string[] {
         lines.push({ el: holder, what, r });
       }
     }
-    for (const one of document.querySelectorAll<HTMLElement>(
-      '[data-tile], [data-slot="progress-line"]'
+    // A tile and all it draws (its corner dot stands past its own box).
+    for (const one of document.querySelectorAll<Element>(
+      '[data-tile], [data-tile] *, [data-slot="progress-line"]'
     )) {
       if (shown(one)) {
-        const what = one.dataset.tile
-          ? `tile ${one.dataset.tile}`
-          : "progress line";
+        const tile = one.closest<HTMLElement>("[data-tile]")?.dataset.tile;
+        const what = tile ? `tile ${tile}` : "progress line";
         lines.push({
           el: one,
           what: `the ${what}`,
@@ -425,45 +604,56 @@ function edgeCutIn(): string[] {
 
 type Facts = ReturnType<typeof frameFacts> & {
   crossings: string[];
+  wires: ReturnType<typeof wiresIn>;
+  pulseInk: ReturnType<typeof pulseInkIn>;
+  columns: ReturnType<typeof columnsIn>;
+  acts: ReturnType<typeof actsIn>;
   cut: string[];
 };
 
-/** The plan card's lead, its recommended option, and each option's words and drawing on the page (decisions/host Decision.svelte, Option.svelte). */
+/**
+ * The plan card's lead, its recommended option, its options' labels, and
+ * its drawings: the card's own media (decisions/host Decision.svelte
+ * `decision-media`), one under another at the card body's full width, each
+ * captioned with its option's keycap and label.
+ */
 function pageFacts() {
   const card = document.querySelector<HTMLElement>("#decision-plan");
+  const labelOf = (cell: Element | null | undefined) =>
+    cell?.querySelector('[data-slot="option-label"]')?.textContent?.trim() ??
+    "";
   const recommended = card
     ?.querySelector('[data-slot="option-cell"] [id$="-tag"]')
     ?.closest<HTMLElement>('[data-slot="option-cell"]');
-  const label =
-    recommended
-      ?.querySelector('[data-slot="option-label"]')
-      ?.textContent?.trim() ?? "";
-  const cells = [
-    ...(card?.querySelectorAll<HTMLElement>('[data-slot="option-cell"]') ?? []),
-  ].map((cell) => {
-    const c = cell.getBoundingClientRect();
-    // Its words: the chip, then its line and its cost under it.
-    const words = [
-      ...cell.querySelectorAll("[data-option], [data-option-for]"),
-    ].map((one) => one.getBoundingClientRect());
-    const under = Math.max(...words.map((one) => one.bottom));
-    const media = cell
-      .querySelector('[data-slot="option-media"] iframe')
-      ?.getBoundingClientRect();
+  const labels = [
+    ...(card?.querySelectorAll('[data-slot="option-cell"]') ?? []),
+  ].map(labelOf);
+  const media = card?.querySelector<HTMLElement>(
+    '[data-slot="decision-media"]'
+  );
+  const body = media?.getBoundingClientRect();
+  const drawings = [
+    ...(media?.querySelectorAll<HTMLElement>('[data-slot="media"]') ?? []),
+  ].map((figure) => {
+    const f = figure.getBoundingClientRect();
+    const frame = figure.querySelector("iframe")?.getBoundingClientRect();
     return {
-      option:
-        cell.querySelector<HTMLElement>("[data-option]")?.dataset.option ?? "",
-      words: words.length > 0 ? Math.round(under + scrollY) : 0,
-      drawing: media ? Math.round(media.top + scrollY) : 0,
-      gap: words.length > 0 && media ? Math.round(media.top - under) : -1,
-      inCell: !!media && media.left >= c.left - 1 && media.right <= c.right + 1,
-      tall: media ? Math.round(media.height) : 0,
+      caption:
+        figure
+          .querySelector('[data-slot="media-caption"]')
+          ?.textContent?.trim() ?? "",
+      top: Math.round(f.top + scrollY),
+      width: Math.round(f.width),
+      full: !!body && Math.abs(f.width - body.width) <= 1,
+      tall: frame ? Math.round(frame.height) : 0,
     };
   });
   return {
     lead: card?.querySelector('[data-slot="why"]')?.textContent?.trim() ?? "",
-    label,
-    cells,
+    label: labelOf(recommended),
+    labels,
+    body: body ? Math.round(body.width) : 0,
+    drawings,
     height: document.documentElement.scrollHeight,
   };
 }
@@ -498,6 +688,10 @@ async function readFrames(page: Page): Promise<Map<string, Facts>> {
       facts.set(key, {
         ...(await frame.evaluate(frameFacts)),
         crossings: await frame.evaluate(crossingsIn),
+        wires: await frame.evaluate(wiresIn),
+        pulseInk: await frame.evaluate(pulseInkIn),
+        columns: await frame.evaluate(columnsIn),
+        acts: await frame.evaluate(actsIn),
         cut: [
           ...(await frame.evaluate(sideCutIn)),
           ...(await frame.evaluate(edgeCutIn)),
@@ -544,6 +738,38 @@ function frameChecks(
     `${leg}: Lanes stands the steps that run at the same time side by side (${bands.map((band) => `${band.length} columns at x ${band.map((one) => one.left).join(", ")}, tops ${band.map((one) => one.top).join(", ")}`).join("; ") || "no band"})`,
     bands.length > 0 && sideBySide.length === bands.length,
     JSON.stringify(bands)
+  );
+  const columns = WAYS.map((one) => ({
+    one,
+    at: facts.get(way(one))?.columns[0],
+  }));
+  check(
+    `${leg}: each way's steps stand their status tiles in one column and their words in one (${columns.map(({ one, at }) => `${one} ${at?.rows ?? 0} rows, tiles at ${at?.tiles.join("/") ?? "none"}, words at ${at?.words.join("/") ?? "none"}`).join("; ")})`,
+    columns.every(
+      ({ at }) =>
+        !!at && at.rows > 0 && at.tiles.length === 1 && at.words.length === 1
+    ),
+    JSON.stringify(columns)
+  );
+  const acts = WAYS.flatMap((one) =>
+    (facts.get(way(one))?.acts ?? []).map((act) => ({ way: one, ...act }))
+  );
+  check(
+    `${leg}: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (${acts.map((one) => `${one.way} ${one.row}${one.ownLine ? " own line" : ""}${one.inRow && one.atStart ? "" : " OFF"}`).join(", ")})`,
+    acts.length > 0 && acts.every((one) => one.inRow && one.atStart),
+    JSON.stringify(acts)
+  );
+  const wires = facts.get(way("Lanes"))?.wires;
+  const missing = (wires?.expected ?? []).filter(
+    (one) => !wires?.drawn.includes(one)
+  );
+  check(
+    `${leg}: Lanes draws a line for each step's dependency, each one painted (${wires?.drawn.length ?? 0} lines for ${wires?.expected.length ?? 0} dependencies, ${wires?.unpainted.length ?? 0} unpainted)`,
+    !!wires &&
+      wires.expected.length > 0 &&
+      missing.length === 0 &&
+      wires.unpainted.length === 0,
+    JSON.stringify({ missing, unpainted: wires?.unpainted })
   );
   const all = [...facts.entries()];
   const crossings = all.flatMap(([key, one]) =>
@@ -608,6 +834,12 @@ function pinChecks(
           Math.abs((sweeps[i]?.centre ?? -1) - moment.centre) <= 0.02
       ),
     JSON.stringify(sweeps)
+  );
+  const inks = facts.get(PIN.pulse)?.pulseInk ?? [];
+  check(
+    `${leg}: the pulse is light running along the line, its band brighter than the fill at every moment (${inks.map((one) => `${one.label} ${one.ratio}:1`).join(", ") || "none"})`,
+    inks.length === MOMENTS.length && inks.every((one) => one.ratio >= 1.5),
+    JSON.stringify(inks)
   );
 }
 
@@ -737,13 +969,22 @@ const spec: Spec = {
             at.label !== "" && at.lead.startsWith(lead),
             at.lead
           );
+          // Each option's drawing at a size to read: the card's own media,
+          // each at the body's full width and, at the desk, drawn 1:1.
+          const zooms = embeds
+            .filter((e) => named(e) === "Device")
+            .flatMap((e) => e.frames.map((f) => f.zoom));
           check(
-            `${leg}: each option's drawing stands in its own cell, right under its chip, line and cost (${at.cells.map((one) => `${one.option} ${one.gap}px under`).join(", ")}; the page ${at.height}px tall)`,
-            at.cells.length === 3 &&
-              at.cells.every(
-                (one) => one.gap >= 0 && one.gap <= 40 && one.inCell
-              ),
-            JSON.stringify(at.cells)
+            `${leg}: the options' drawings stand one under another at the card's full width (${at.body}px), each captioned with its option, in their order (${at.drawings.map((one) => `"${one.caption}" ${one.width}px`).join(", ")}; drawn at ${zooms.join(", ")}; the page ${at.height}px tall)`,
+            at.drawings.length === 3 &&
+              at.drawings.every(
+                (one, i) =>
+                  one.full &&
+                  one.caption === `${i + 1} · ${at.labels[i] ?? ""}` &&
+                  (i === 0 || one.top > (at.drawings[i - 1]?.top ?? 0))
+              ) &&
+              (view === "phone" || zooms.every((zoom) => zoom >= 0.99)),
+            JSON.stringify({ labels: at.labels, drawings: at.drawings, zooms })
           );
 
           const pins = await page.evaluate(pinsFacts, PINS_TITLE);
@@ -780,7 +1021,7 @@ const spec: Spec = {
           const capture = await captured(page, leg, `${size}-${theme}`, check);
           legs[leg] = {
             height: at.height,
-            options: at.cells,
+            drawings: at.drawings,
             files: capture.files.map((one) => one.path.replace(`${ROOT}/`, "")),
             embeds: embeds.map((e) => ({
               file: e.file,

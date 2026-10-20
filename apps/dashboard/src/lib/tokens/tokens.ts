@@ -206,6 +206,7 @@ export type TokenColor =
   | "color.presence-off"
   | "color.scrollbar-thumb"
   | "color.skeleton-sheen"
+  | "color.plan-sheen"
   | "color.prose-bullet"
   | "color.identity-ink"
   | "color.machine-offline"

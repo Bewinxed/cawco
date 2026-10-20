@@ -1792,6 +1792,19 @@
         }
       }
     },
+    "plan-sheen": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.7689, 0.0085, 80.05]
+      },
+      "$description": "The light running along a working delegate's progress line (plan proposal ProgressLine): its fill mixed toward the brighter ink of its scheme, the raised surface by day, so the band is brighter than the fill and never the track's paper.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklch, {color.ink-muted}, {color.surface-raised} 55%)"
+        }
+      }
+    },
     "prose-bullet": {
       "$type": "color",
       "$value": {

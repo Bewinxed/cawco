@@ -2,9 +2,8 @@
  * The class strings every plan row draws with (a step's, a delegate's, a
  * sub-step's), each written once. A row is a grid: the tile's column, the
  * words, the trail; what it waits on stands under the words. Its columns
- * and lengths are PlanFrame's (`--pv-cols`, `--pv-lead-h`, `--words-in`),
- * a step row's its own item's (StepRow `--step-cols`, `--words-in`) where
- * Lanes' gutter holds two lanes. A frame drawn for a finger
+ * and lengths are PlanFrame's (`--pv-cols`, `--pv-lead-h`, `--words-in`).
+ * A frame drawn for a finger
  * (`data-coarse`, PhonePlan) gives every row the 44px floor.
  *
  * A row in a narrow column (Lanes' steps side by side) is laid out by its
@@ -46,7 +45,7 @@ export const TIME =
 /** A list of rows. */
 export const ROWS = "m-0 flex min-w-0 list-none flex-col p-0";
 
-/** What stands on a step's words' column under its row: its tile's column (or its two lanes') and the gap. */
+/** What stands on a step's words' column under its row: its tile's column and the gap. */
 export const ON_WORDS = "ps-(--words-in)";
 
 /** What stands on the words' column of a row with one tile (a delegate's, a pushed page's). */

@@ -226,7 +226,9 @@
            Cofounder answers in place), or retry what failed (Relevance AI's
            Resume; every failure names its way back). -->
       {#if delegate.wait?.kind === "you"}
-        <span class="ms-auto flex flex-none" data-slot="act"
+        <span
+          class="ms-auto flex flex-none @max-plan-delegate/delegate-row:ms-0"
+          data-slot="act"
           ><Button
             class="touch-hit"
             label="Answer"
@@ -235,7 +237,9 @@
           /></span
         >
       {:else if delegate.wait?.kind === "fail"}
-        <span class="ms-auto flex flex-none" data-slot="act"
+        <span
+          class="ms-auto flex flex-none @max-plan-delegate/delegate-row:ms-0"
+          data-slot="act"
           ><Button
             class="touch-hit"
             label="Retry"

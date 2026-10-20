@@ -16,8 +16,9 @@ import type { Attachment } from "svelte/attachments";
 import { frameObserver } from "#lib/cawco/frame-observer.js";
 import { drawnBox } from "#lib/cawco/motion/drawn.js";
 
+/** A box drawn as a line: a tile and all it draws (its corner dot stands past its own box), a control, a field, a progress line. */
 const BOXES =
-  '[data-tile], button, input, textarea, [data-slot="progress-line"]';
+  '[data-tile], [data-tile] *, button, input, textarea, [data-slot="progress-line"]';
 
 /** Each line in the scroller, top and foot, in what scrolls. */
 function linesIn(node: HTMLElement): [number, number][] {

@@ -14,8 +14,8 @@
    *   step to the steps that start after it, turning only between rows; a
    *   delegate sits under its step, on a line that pulses while it works.
    * - C · Crew first: the delegates, one flat row each with its progress
-   *   line, then the to-dos, each with tiles saying who is on it, on Lanes'
-   *   two lanes with a line for each dependency still open.
+   *   line, then the to-dos in one column, each with tiles saying who is on
+   *   it and what it waits on named under its words, each name a link.
    *
    * On a phone, A opens a step in place; B and C push its page.
    */
@@ -67,20 +67,6 @@
   const steps = $derived(view.arrange(plan.steps));
   const pushes = $derived(phone && variation !== "a");
 
-  /** Lanes: a step beside a later one that starts after the same step. */
-  const laneOf = (step: Step): number => {
-    const key = (step.after ?? []).join(",");
-    if (!key) {
-      return 0;
-    }
-    const index = steps.findIndex((one) => one.id === step.id);
-    return steps.some(
-      (other, at) => at > index && (other.after ?? []).join(",") === key
-    )
-      ? 1
-      : 0;
-  };
-
   const afterEdges = $derived(
     steps.flatMap((step) =>
       (step.after ?? []).map((from): Edge => ({
@@ -90,47 +76,6 @@
       }))
     )
   );
-  /**
-   * Crew first draws only what still gates: an edge from a prerequisite
-   * that has not finished. A finished one no longer holds anything back,
-   * and its line would start at a done step.
-   */
-  const openEdges = $derived(
-    afterEdges.filter((edge) => {
-      const before = steps.find((one) => one.id === edge.from);
-      return before && view.stateOf(before.id, before.state) !== "done";
-    })
-  );
-  /**
-   * The rows the second lane runs through: its steps, and every row a line
-   * into or out of one of them starts or ends at, with the rows between.
-   * Only they keep the two-lane gutter, so a line crossing to the second
-   * lane runs in the gutter, never under a row's words; every other row
-   * gives the gutter back to its words.
-   */
-  const spanOf = (edges: Edge[]): { from: number; to: number } => {
-    const index = (id: string) => steps.findIndex((one) => one.id === id);
-    const second = new Set(
-      steps.filter((step) => laneOf(step) === 1).map((step) => step.id)
-    );
-    const at = [
-      ...[...second].map(index),
-      ...edges
-        .filter(
-          (edge) =>
-            edge.kind === "after" &&
-            (second.has(edge.from) || second.has(edge.to))
-        )
-        .flatMap((edge) => [index(edge.from), index(edge.to)]),
-    ].filter((one) => one >= 0);
-    return at.length === 0
-      ? { from: -1, to: -1 }
-      : { from: Math.min(...at), to: Math.max(...at) };
-  };
-  const lanesIn = (span: { from: number; to: number }, step: Step): number => {
-    const index = steps.findIndex((one) => one.id === step.id);
-    return index >= span.from && index <= span.to ? 2 : 1;
-  };
   const laneEdges = $derived([
     ...afterEdges,
     ...steps.flatMap((step) =>
@@ -142,7 +87,6 @@
       }))
     ),
   ]);
-  const crewSpan = $derived(spanOf(openEdges));
   /**
    * Lanes: the rows in bands, each a step alone or the steps that start
    * after the same steps (they run at the same time), side by side. A step
@@ -276,8 +220,8 @@
 
 {#snippet lanes()}
   <NeedsYou delegates={plan.delegates} />
-  <!-- Lanes: a step's tile stands in its lane; its delegates on its words'
-       column. A band's steps stand in columns of one width, side by side,
+  <!-- Lanes: a step's delegates stand on its words' column, joined to it by
+       a line. A band's steps stand in columns of one width, side by side,
        each as tall as its own rows; the gap between them is the lines'
        room. -->
   <div class="relative" data-slot="lanes">
@@ -342,34 +286,26 @@
     class="mt-space-3 flex flex-col gap-space-1 border-t border-border-hairline pt-space-3"
   >
     <h3 class={GROUP_HEAD} id="todos-{uid}">To-dos</h3>
-    <div class="relative" data-slot="lanes">
-      <Connectors edges={openEdges} />
-      <ul class={LIST} {@attach reflow()}>
-        {#each steps as step (step.id)}
-          {@const carried = carriersOf(plan, step)}
-          {@const working = carried.filter((one) => one.status !== "done")}
-          <StepRow
-            lane={laneOf(step)}
-            lanes={lanesIn(crewSpan, step)}
-            {plan}
-            {pushes}
-            {step}
-            {steps}
-          >
-            {#snippet trail()}
-              <CrewTiles delegates={working} />
-            {/snippet}
-            {#snippet inFold()}
-              {#if carried.length > 0}
-                <ul class={[LIST, ON_WORDS]}>
-                  {@render delegates(carried)}
-                </ul>
-              {/if}
-            {/snippet}
-          </StepRow>
-        {/each}
-      </ul>
-    </div>
+    <!-- One column: every to-do's tile and words on one line each, what it
+         waits on named under its words, each name a link to its step. -->
+    <ul class={LIST} {@attach reflow()}>
+      {#each steps as step (step.id)}
+        {@const carried = carriersOf(plan, step)}
+        {@const working = carried.filter((one) => one.status !== "done")}
+        <StepRow {plan} {pushes} {step} {steps}>
+          {#snippet trail()}
+            <CrewTiles delegates={working} />
+          {/snippet}
+          {#snippet inFold()}
+            {#if carried.length > 0}
+              <ul class={[LIST, ON_WORDS]}>
+                {@render delegates(carried)}
+              </ul>
+            {/if}
+          {/snippet}
+        </StepRow>
+      {/each}
+    </ul>
   </section>
 {/snippet}
 

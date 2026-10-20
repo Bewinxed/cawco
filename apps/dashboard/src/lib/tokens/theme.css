@@ -225,6 +225,7 @@
   --color-presence-off: var(--presence-off);
   --color-scrollbar-thumb: var(--scrollbar-thumb);
   --color-skeleton-sheen: var(--skeleton-sheen);
+  --color-plan-sheen: var(--plan-sheen);
   --color-prose-bullet: var(--prose-bullet);
   --color-identity-ink: var(--identity-ink);
   --color-machine-offline: var(--machine-offline);

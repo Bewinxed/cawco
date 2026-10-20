@@ -224,14 +224,17 @@
   });
 </script>
 
-<!-- A point at the layer's corner the wires draw out from (layer px, no
+<!-- A pixel at the layer's corner the wires draw out from (layer px, no
      viewBox, never clipped): no box of its own over the rows, so the only
-     paint it lays over them is each wire's, where that wire runs. Physical:
-     the wires are measured from the layer's left edge. -->
+     paint it lays over them is each wire's, where that wire runs. Never
+     zero: "A value of zero disables rendering of the element"
+     (w3.org/TR/SVG11/struct.html, the svg's width and height), and drew
+     no wire. Physical: the
+     wires are measured from the layer's left edge. -->
 <svg
   aria-hidden="true"
   bind:this={svg}
-  class="pointer-events-none absolute top-0 left-0 z-0 size-0 overflow-visible"
+  class="pointer-events-none absolute top-0 left-0 z-0 size-px overflow-visible"
   data-slot="connectors"
 >
   {#each drawn as wire, index (wire.id)}

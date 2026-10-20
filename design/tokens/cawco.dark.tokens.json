@@ -1386,6 +1386,18 @@
         }
       }
     },
+    "plan-sheen": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.9184, 0.0102, 81.6]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklch, {color.ink-muted}, {color.ink-strong} 90%)"
+        }
+      }
+    },
     "prose-bullet": {
       "$type": "color",
       "$value": {

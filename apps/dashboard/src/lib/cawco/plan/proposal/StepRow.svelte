@@ -39,8 +39,6 @@
     plan,
     steps,
     pushes = false,
-    lane = 0,
-    lanes = 1,
     trail,
     inFold,
     below,
@@ -51,10 +49,6 @@
     steps: Step[];
     /** Pressing the words pushes the step's page (a phone, Lanes and Crew first). */
     pushes?: boolean;
-    /** Lanes: which of the two lanes its tile stands in. */
-    lane?: number;
-    /** Lanes: how many lanes run through this row (its gutter's width). */
-    lanes?: number;
     /** More at the trailing edge, before the chevron (Crew first: who is on it). */
     trail?: Snippet;
     /** More inside the fold, after the sub-steps (Crew first: its delegates). */
@@ -100,13 +94,6 @@
   data-row={step.id}
   data-flip="box"
   hidden={dismissed}
-  style:--lead-in="calc({lane} * (var(--pv-tile) + var(--space-2)))"
-  style:--lead-w={lanes > 1
-    ? `calc(${lanes} * var(--pv-tile) + ${lanes - 1} * var(--space-2))`
-    : "var(--pv-tile)"}
-  style:--step-cols="var(--lead-w) minmax(0, 1fr) auto"
-  style:--step-cols-narrow="var(--lead-w) minmax(0, 1fr)"
-  style:--words-in="calc(var(--lead-w) + var(--space-2))"
 >
   {#if gone}
     <div
@@ -131,13 +118,13 @@
     <div
       class={[
         ROW,
-        "group/row gap-y-space-row grid-cols-(--step-cols) @max-plan-step/step-row:grid-cols-(--step-cols-narrow)",
+        "group/row gap-y-space-row grid-cols-(--pv-cols) @max-plan-step/step-row:grid-cols-(--pv-cols-narrow)",
       ]}
       data-slot="plan-row"
       data-state={now}
     >
       <span
-        class="col-start-1 row-start-1 grid h-(--pv-lead-h) items-center justify-items-start ps-(--lead-in)"
+        class="col-start-1 row-start-1 grid h-(--pv-lead-h) place-items-center"
         data-lead
         ><span class="grid w-(--pv-tile)" data-nest-glyph data-tile={step.id}
           ><StepTile

@@ -1760,26 +1760,26 @@ function checkDrawn(
     json(acks)
   );
   checkRound5(kit, name, drawn, view);
-  if (way.variation === "a") {
-    return;
-  }
-  // 4. One rail per lane; the two lines into the booking step share nothing.
-  const rails = shown.flatMap(([story, one]) =>
-    one.rails ? [{ story, ...one.rails }] : []
-  );
-  kit.check(
-    `${name}: every upright line and nesting rail stands on a lane's rail, one x per lane (${rails.map((one) => `${one.story} ${one.lanes.join("/")}`).join("; ")})`,
-    rails.length > 0 &&
-      rails.every((one) => one.lanes.length <= 2 && one.off.length === 0),
-    json(rails.filter((one) => one.off.length > 0 || one.lanes.length > 2))
-  );
-  if (view === "desk") {
-    const plan = drawn.Plan;
-    kit.check(
-      `${name}: the two lines into the booking step share no stretch (${plan?.shared ?? "not two"} px shared)`,
-      plan?.shared === 0,
-      json(plan?.rails)
+  // 4. Lanes, the one way that draws lines: one rail per lane; the two
+  // lines into the booking step share nothing.
+  if (way.variation === "b") {
+    const rails = shown.flatMap(([story, one]) =>
+      one.rails ? [{ story, ...one.rails }] : []
     );
+    kit.check(
+      `${name}: every upright line and nesting rail stands on a lane's rail, one x per lane (${rails.map((one) => `${one.story} ${one.lanes.join("/")}`).join("; ")})`,
+      rails.length > 0 &&
+        rails.every((one) => one.lanes.length <= 2 && one.off.length === 0),
+      json(rails.filter((one) => one.off.length > 0 || one.lanes.length > 2))
+    );
+    if (view === "desk") {
+      const plan = drawn.Plan;
+      kit.check(
+        `${name}: the two lines into the booking step share no stretch (${plan?.shared ?? "not two"} px shared)`,
+        plan?.shared === 0,
+        json(plan?.rails)
+      );
+    }
   }
   // 7. Crew first's tiles at the tree mark's 18px, none over another.
   if (way.variation === "c") {
@@ -2074,7 +2074,7 @@ function checkGeometry(
       continue;
     }
     const lined =
-      way.variation === "a" || one.wires.some((length) => length > 0);
+      way.variation !== "b" || one.wires.some((length) => length > 0);
     kit.check(
       `${name}: ${story} opens the date picker's description (${one.description.width}×${one.description.height}), draws its dependency lines (${one.wires.join(",") || "none"}) and sweeps its working delegate (${one.sweeps})`,
       one.description.height > 20 &&
@@ -2159,26 +2159,22 @@ function checkGraph(kit: Kit, name: string, way: Way, review: Review): void {
   const drew = new Set(
     drawn.filter((one) => one.length > 0).map((one) => one.edge)
   );
-  const wanted = new Set(
-    deps
-      .filter((one) => (way.variation === "c" ? one.open : true))
-      .map((one) => one.edge)
-  );
-  if (way.variation === "a") {
+  const wanted = new Set(deps.map((one) => one.edge));
+  if (way.variation === "b") {
     kit.check(
-      `${name}: One list draws no lines; the waiting step says what it waits on (${plan.afterChip})`,
-      drawn.length === 0 &&
-        String(plan.afterChip).includes("Date picker") &&
-        String(plan.afterChip).includes("Deposit"),
-      json({ drawn, chip: plan.afterChip })
-    );
-  } else {
-    kit.check(
-      `${name}: every line drawn is a dependency of the plan's, and every ${way.variation === "c" ? "open " : ""}dependency is drawn (${[...drew].join(", ")})`,
+      `${name}: every line drawn is a dependency of the plan's, and every dependency is drawn (${[...drew].join(", ")})`,
       drew.size === wanted.size &&
         [...wanted].every((edge) => drew.has(edge)) &&
         drawn.every((one) => deps.some((dep) => dep.edge === one.edge)),
       json({ drawn, wanted: [...wanted] })
+    );
+  } else {
+    kit.check(
+      `${name}: ${way.label} draws no lines; the waiting step says what it waits on (${plan.afterChip})`,
+      drawn.length === 0 &&
+        String(plan.afterChip).includes("Date picker") &&
+        String(plan.afterChip).includes("Deposit"),
+      json({ drawn, chip: plan.afterChip })
     );
   }
   if (way.variation === "c") {

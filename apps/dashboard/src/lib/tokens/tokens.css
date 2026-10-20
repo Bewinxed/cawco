@@ -400,6 +400,11 @@
     --scrollbar-thumb: oklch(from var(--muted-foreground) l c h / 0.35);
     /* The band of raised surface that crosses a skeleton once per loop. */
     --skeleton-sheen: oklch(from var(--surface-raised) l c h / 0.6);
+    /* The light running along a working delegate's progress line (plan proposal ProgressLine): its fill mixed toward the brighter ink of its scheme, the raised surface by day, so the band is brighter than the fill and never the track's paper. */
+    --plan-sheen: light-dark(
+      color-mix(in oklch, var(--ink-muted), var(--surface-raised) 55%),
+      color-mix(in oklch, var(--ink-muted), var(--ink-strong) 90%)
+    );
     /* List bullets in rendered markdown. */
     --prose-bullet: oklch(from var(--muted-foreground) l c h / 0.55);
     /* Project identity ink at hue 0; the identity-ink utility turns it to the project's --identity-h. 48%, not 50%: on a row's hover surface the cyan end of the wheel fell to 4.39:1 at 50%, and 48% holds every one of the ten hues above 4.5:1. */
