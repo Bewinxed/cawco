@@ -3,18 +3,18 @@
   import { tv } from "#lib/utils.js";
 
   export const badgeVariants = tv({
-    base: "group/badge mark-line inline-flex h-icon-lg w-fit shrink-0 items-center justify-center gap-space-1 overflow-hidden whitespace-nowrap rounded-xs bg-[var(--surface-recess)] px-space-2 text-[var(--ink-strong)] text-label leading-none transition-colors has-data-[icon=inline-end]:pr-space-1 has-data-[icon=inline-start]:pl-space-1 [&>svg]:pointer-events-none [&>svg]:size-icon-sm",
+    base: "group/badge mark-line inline-flex h-icon-lg w-fit shrink-0 items-center justify-center gap-space-1 overflow-hidden whitespace-nowrap rounded-xs bg-surface-recess px-space-2 text-ink-strong text-label leading-none transition-colors has-data-[icon=inline-end]:pr-space-1 has-data-[icon=inline-start]:pl-space-1 [&>svg]:pointer-events-none [&>svg]:size-icon-sm",
     variants: {
       variant: {
         default: "",
-        secondary: "text-[var(--ink-muted)]",
+        secondary: "text-ink-muted",
         outline: "",
-        ghost: "bg-transparent text-[var(--ink-muted)]",
-        destructive: "bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]",
-        live: "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]",
-        attn: "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]",
-        done: "bg-[var(--status-done-bg)] text-[var(--status-done-ink)]",
-        fail: "bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]",
+        ghost: "bg-transparent text-ink-muted",
+        destructive: "bg-status-fail-bg text-status-fail-ink",
+        live: "bg-status-live-bg text-status-live-ink",
+        attn: "bg-status-attn-bg text-status-attn-ink",
+        done: "bg-status-done-bg text-status-done-ink",
+        fail: "bg-status-fail-bg text-status-fail-ink",
         /* A release note's section (DESIGN.md, Update notice: "New in
            `note-new-*` with stars, Improved in `note-improved-*` with a
            rising graph, Fixed in `note-fixed-*` with a bug; each ink holds

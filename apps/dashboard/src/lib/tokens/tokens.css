@@ -610,7 +610,7 @@
     --leading-root: 1.5;
     /* A rendered document's running text (@tailwindcss/typography prose-sm, the project page's docs card): 24/14. */
     --leading-prose-sm: 1.7142857;
-    /* The kit's form fields: a field's label, title and content (components/ui/field, Tailwind's snug). */
+    /* Tailwind's snug, the theme's leading-snug: no dashboard part sets it since its one user, the kit's ui/field, was deleted. */
     --leading-snug: 1.375;
     /* The permission rule tester's preview of what a rule matches (RuleTester, Tailwind's relaxed). */
     --leading-relaxed: 1.625;

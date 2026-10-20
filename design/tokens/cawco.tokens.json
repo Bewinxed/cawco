@@ -3572,7 +3572,7 @@
     "leading-snug": {
       "$type": "number",
       "$value": 1.375,
-      "$description": "The kit's form fields: a field's label, title and content (components/ui/field, Tailwind's snug)."
+      "$description": "Tailwind's snug, the theme's leading-snug: no dashboard part sets it since its one user, the kit's ui/field, was deleted."
     },
     "leading-relaxed": {
       "$type": "number",

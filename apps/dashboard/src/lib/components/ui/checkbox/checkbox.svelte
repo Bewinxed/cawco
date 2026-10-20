@@ -62,7 +62,7 @@
 <CheckboxPrimitive.Root
   class={cn(
     "peer relative flex size-icon-md shrink-0 items-center",
-    "justify-center rounded-[var(--radius-xs)] border",
+    "justify-center rounded-xs border",
     /* Drawn at 16px: its hit area reaches 44px under a finger and 24px
        under a fine pointer (DESIGN.md, The 44 Touch Rule, The 24 Pointer
        Rule). */

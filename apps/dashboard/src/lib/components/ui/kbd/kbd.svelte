@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   export const kbdVariants = tv({
-    base: "pointer-events-none inline-flex h-icon-lg w-fit min-w-5 select-none items-center justify-center gap-space-1 rounded-xs bg-[var(--surface-recess)] px-space-1 font-body text-ink-muted text-meta [&_svg:not([class*='size-'])]:size-icon-sm",
+    base: "pointer-events-none inline-flex h-icon-lg w-fit min-w-5 select-none items-center justify-center gap-space-1 rounded-xs bg-surface-recess px-space-1 font-body text-ink-muted text-meta [&_svg:not([class*='size-'])]:size-icon-sm",
     variants: {
       /**
        * A key named in a hint (the default): in a tooltip it takes the
@@ -21,7 +21,7 @@
        * every pointer: a finger's option still wears its key.
        */
       look: {
-        key: "in-data-[slot=tooltip-content]:bg-[var(--on-brand)]/20 in-data-[slot=tooltip-content]:text-[var(--on-brand)] dark:in-data-[slot=tooltip-content]:bg-surface-page/10",
+        key: "in-data-[slot=tooltip-content]:bg-on-brand/20 in-data-[slot=tooltip-content]:text-on-brand dark:in-data-[slot=tooltip-content]:bg-surface-page/10",
         keycap:
           "inline-grid h-space-5 min-w-space-5 flex-none place-items-center font-mono text-ink-strong leading-none group-aria-checked/option:bg-chip-chosen-bg group-aria-checked/option:text-chip-chosen-ink group-aria-pressed/option:bg-chip-chosen-bg group-aria-pressed/option:text-chip-chosen-ink group-data-chosen/option:bg-chip-chosen-bg group-data-chosen/option:text-chip-chosen-ink motion-safe:[transition:background-color_var(--dur-control)_var(--ease-out),color_var(--dur-control)_var(--ease-out)]",
       },
