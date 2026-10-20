@@ -560,7 +560,6 @@
 @custom-variant slot-select-trigger (&[data-slot="select-trigger"]);
 @custom-variant slot-session-details (&[data-slot="session-details"]);
 @custom-variant slot-session-row-note (&[data-slot="session-row-note"]);
-@custom-variant slot-session-scrim (&[data-slot="session-scrim"]);
 @custom-variant slot-session-status (&[data-slot="session-status"]);
 @custom-variant slot-settings (&[data-slot="settings"]);
 @custom-variant slot-shade (&[data-slot="shade"]);

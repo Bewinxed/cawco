@@ -828,6 +828,18 @@
     const over = writable ? foot.stack + foot.perch : offHeight;
     return `calc(var(--space-4) + var(--safe-bottom) + ${over}px + var(--space-2))`;
   });
+  /**
+   * Where "Jump to latest" rests, up from the transcript's foot: on the
+   * composer's stack, beside Caw, where the composer stands over the rows;
+   * docked, where the composer has its own place under them, just over the
+   * foot. Neither, the clearance's top (Transcript's own).
+   */
+  const latestInset = $derived.by(() => {
+    if (reserved) {
+      return "var(--space-2)";
+    }
+    return writable && foot.stack ? latestFoot : undefined;
+  });
 </script>
 
 {#snippet face(live: boolean)}
@@ -1041,9 +1053,7 @@
           agentName="Caw"
           bare
           {focused}
-          latestInset={writable && foot.stack && !reserved
-            ? `calc(${latestFoot} - max(calc(var(--space-8) * 3), var(--composer-clearance)))`
-            : undefined}
+          {latestInset}
           onshown={(drawn) => {
             shown = drawn;
           }}

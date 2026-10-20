@@ -564,7 +564,7 @@
               class="rail-cell h-lh"
               >{#if status.beat}
                 <span
-                  class="size-(--status-dot-size) flex-none rounded-pill bg-status-live-glyph motion-safe:animate-breath"
+                  class="loops size-(--status-dot-size) flex-none rounded-pill bg-status-live-glyph motion-safe:animate-breath"
                 ></span>
               {/if}</span
             >

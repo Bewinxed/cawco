@@ -40,21 +40,6 @@
   }
 }
 
-/* The effort comb's ticks: a repeating gradient at the comb's pitch, a
-   drawn pattern Tailwind has no utility for. */
-@utility fai-comb {
-  :where(.ns-theme &) {
-    height: var(--space-4);
-    background-image: repeating-linear-gradient(
-      to right,
-      var(--neutral-5) 0 1px,
-      transparent 1px var(--c-comb-pitch)
-    );
-    background-repeat: no-repeat;
-    background-size: 100% 100%;
-  }
-}
-
 /* The dialog's thin scrollbars, the standard properties and WebKit's
    pseudo-elements together. */
 @utility fai-scroll {
@@ -77,10 +62,10 @@
   }
 }
 
-/* The dialog's one-shot entrances (DESIGN.md, New-session dialog: "Sections
-   fade up 8px in a stagger"; it "enters with `ns-panel`"): the theme's
-   `animate-ns-*` (scripts/build-tokens.ts), read inline because each reads a
-   duration the dialog sets on `.ns-theme`, not on the root. Interruptible
+/* The form's one-shot entrances (DESIGN.md, New-session popover: "Sections
+   fade up 8px in a stagger"; a chip's panel rises with `ns-panel`): the
+   theme's `animate-ns-*` (scripts/build-tokens.ts), read inline because each
+   reads a duration the form sets on `.ns-theme`, not on the root. Interruptible
    transitions are used everywhere the user can retrigger quickly; these run
    once, as do the popover's open and close (ui/glide-popover,
    `animate-ns-pop-in` / `-out`). */

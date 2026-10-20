@@ -361,7 +361,7 @@
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-60 group-tone-ok:bg-status-done-glyph group-tone-ok:opacity-100 motion-safe:animate-breath"
+                class="loops size-space-2 flex-none rounded-pill bg-ink-muted opacity-60 group-tone-ok:bg-status-done-glyph group-tone-ok:opacity-100 motion-safe:animate-breath"
                 data-box
                 data-pulse
               ></span>

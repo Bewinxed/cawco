@@ -858,8 +858,6 @@ public enum Size {
     public static let cTipMaxW: Double = 320
     /// A thin WebKit scrollbar's thickness in a new-session scroller.
     public static let cScrollbarThin: Double = 8
-    /// The effort comb's tick pitch: a drawn pattern, not spacing.
-    public static let cCombPitch: Double = 6
     /// An edge fade at full length at every width, where the kit's phone 16px would show nothing (Files' scrollers, Caw's panel).
     public static let cEdgeFadeLen: Double = 40
     /// The house edge fade's length under 640px (kit-edge-fade, kit-edge-fade-block): short enough to read as an edge on a phone's narrow view, not a band across the content. Sits between the ladder's 14 and 18, so it is its own token.
@@ -874,6 +872,8 @@ public enum Size {
     public static let cSheetMaxH: Double = 717.4
     /// The peek sheet's height on a touch screen: fixed, so it holds its size from the first frame.
     public static let cPeekSheetH: Double = 675.2
+    /// The peek sheet's width with a fine pointer, beside the page, and the room the page gives it at its trailing edge while it stands open (DESIGN.md Peek: "a sheet from the right beside the home it was opened from").
+    public static let cPeekSheetW: Double = 384
     /// The drawer grabber's width (DESIGN.md Drawer: "A 100×6 grabber").
     public static let cGrabberW: Double = 100
     /// The drawer grabber's height (DESIGN.md Drawer: "A 100×6 grabber").
@@ -1022,8 +1022,6 @@ public enum Size {
     public static let cSideGripW: Double = 6
     /// A side surface's floor (SideSurface SIDE_FLOOR_PX).
     public static let cSideSurfaceMin: Double = 320
-    /// The new-session dialog's widest (DESIGN.md: "up to 980px wide").
-    public static let cNewSessionW: Double = 980
     /// The effort track on a phone (DESIGN.md Effort chip: "38px on a phone").
     public static let cEffortTrackHPhone: Double = 38
     /// The model list's viewport: fixed, so the section keeps its height while filtering.
@@ -1121,6 +1119,8 @@ public enum Size {
     /// How far the settle's text clip reaches past a word's box, so ascenders and descenders survive.
     /// In em: multiply by the font size for points.
     public static let cCompactionWordBleed: Double = 0.5
+    /// The least of a head's part that gives way before it drops (DESIGN.md, The Truncate Inside Rule): six characters, a word's start and its ellipsis (a subagent's task and model).
+    public static let cGiveWayMin: Double = 48
     /// A ticking clock's room: seven digit widths hold "59m 59s".
     public static let cElapsedW: Double = 56
     /// The room the folded field's "+N lines" stands in.

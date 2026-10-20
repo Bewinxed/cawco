@@ -108,7 +108,7 @@
     title={meterTitle}
   >
     {#if compacting}
-      <IconCompact class="size-space-4 animate-pulse" />
+      <IconCompact class="loops size-space-4 animate-pulse" />
       <span>Compacting</span>
     {:else}
       <!-- Glyph and number, no rail. A 28px bar under a text field is too short
@@ -196,7 +196,7 @@
       <p
         class="mark-line flex items-center gap-2 border-t border-border px-3 py-2 text-label"
       >
-        <IconCompact class="size-space-4 animate-pulse" />
+        <IconCompact class="loops size-space-4 animate-pulse" />
         <span>Compacting now — the session is rewriting its own context.</span>
       </p>
     {:else if compaction}

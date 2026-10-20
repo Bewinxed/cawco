@@ -108,7 +108,6 @@
       <Select.Trigger
         aria-labelledby="place-machine-label"
         class="w-full"
-        size="sm"
         tone="strong"
       >
         {#if machine}

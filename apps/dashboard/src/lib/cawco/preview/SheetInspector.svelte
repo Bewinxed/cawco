@@ -247,7 +247,6 @@
           measure="shrink"
           onchange={(event) =>
             inspector.choose((event.currentTarget as HTMLSelectElement).value)}
-          size="sm"
           value={inspector.chosen ?? ""}
         >
           {#each sheet.stories as one (one.name)}
@@ -262,7 +261,7 @@
             disabled={!!inspector.writing}
             icon={IconCopy}
             onclick={() => startNaming("duplicate")}
-            size="icon-sm"
+            size="icon"
             title={words.duplicate}
             variant="ghost"
           />
@@ -271,7 +270,7 @@
             disabled={!up || !!inspector.writing}
             icon={IconArrowUp}
             onclick={() => up && inspector.op(up)}
-            size="icon-sm"
+            size="icon"
             title={words.moveUp}
             variant="ghost"
           />
@@ -280,7 +279,7 @@
             disabled={!down || !!inspector.writing}
             icon={IconArrowDown}
             onclick={() => down && inspector.op(down)}
-            size="icon-sm"
+            size="icon"
             title={words.moveDown}
             variant="ghost"
           />
@@ -289,7 +288,7 @@
             disabled={!!inspector.writing}
             icon={IconTrash}
             onclick={remove}
-            size="icon-sm"
+            size="icon"
             title={words.remove}
             variant="ghost"
           />
@@ -378,7 +377,6 @@
                       inspector.set(prop, option);
                     }
                   }}
-                  size="sm"
                   value={shown(
                     value ?? prop.defaultValue?.replaceAll(QUOTES, "")
                   )}

@@ -36,7 +36,7 @@
   import { IconChevronLeft, IconSearch, IconSidebar } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import { fieldKeeps } from "#lib/utils/typing.js";
-  import { browser } from "$app/env";
+  import { browser, dev } from "$app/env";
   import { goto, onNavigate } from "$app/navigation";
   import { page } from "$app/state";
   import AddMachineDialog from "./AddMachineDialog.svelte";
@@ -55,6 +55,7 @@
   import HubBand from "./HubBand.svelte";
   import { deviceRatio } from "./home/device-ratio.svelte";
   import { sessionName } from "./home/home-state.svelte";
+  import { peekBeside } from "./home/peek.svelte";
   import { guardDrops } from "./internal-drag";
   import MachinesButton from "./MachinesButton.svelte";
   import { hangShadow } from "./motion/hung-shadow";
@@ -65,7 +66,6 @@
   import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
   import { runShellShortcut, shellShortcutsAre } from "./shell-shortcut";
-  import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
   import NewSessionPopover from "./spawn/NewSessionPopover.svelte";
   import { newSession, spawning } from "./spawn/new-session.svelte";
   import { store, stored } from "./storage";
@@ -951,8 +951,27 @@
         return (id ? cawco.project(id)?.name : undefined) ?? "Project";
       case "config":
         return "Configure";
+      case "usage":
+        return "Usage";
+      case "workflows":
+        return "Workflows";
+      // The MCP server sign-in's return (its page: "Finishing sign-in").
+      case "oauth":
+        return "MCP sign-in";
+      // The motion benches (`vite dev` and the probe kit's bench build).
+      case "motion":
+        return "Bench";
       default:
-        return section[0].toUpperCase() + section.slice(1);
+        // Every route under the app's layout has its name above, and a path
+        // nothing answers is the route's error ("Not found"). A route added
+        // without one says so at once in dev, never a capitalised slug
+        // ("Oauth"); a shipped bar names nothing rather than guess.
+        if (dev) {
+          throw new Error(
+            `The bar has no name for /${section}: add it to Shell's crumb`
+          );
+        }
+        return "";
     }
   });
 </script>
@@ -978,10 +997,13 @@
        form from (BarGlass `@max-desk/shell`): the bar beside a docked rail
        is narrower than the window, so it could not be. `data-first-paint`
        while it still draws the server's answers (first-render.svelte.ts),
-       until the release a frame after mount. -->
+       until the release a frame after mount; `data-first-render` from that
+       release on, the page drawing its own answers (what the probe kit's
+       page-ready waits for). -->
   <div
     data-slot="shell"
     data-first-paint={firstRender.held || undefined}
+    data-first-render={!firstRender.held || undefined}
     class="@container/shell flex h-dvh w-full bg-surface-recess overflow-hidden"
     style="--sidebar-width: var(--rail-w, {railWidth === null
       ? 'var(--c-sidebar-w)'
@@ -1001,13 +1023,18 @@
           <Sidebar {narrow} scroller={keepScroll} />
         </RegionBoundary>
       {/if}
+      <!-- Drawn a grip's width on the rail's edge; under a fine pointer it
+           takes presses up to its midpoint stops (DESIGN.md, The 24 Pointer
+           Rule): 2px past either side, short of the rail rows' edge 8px in
+           and of a stroke begun 6px into the page beside it (ink 8), which
+           draws and does not resize. -->
       <div
         aria-label="Resize sidebar"
         aria-orientation="vertical"
         aria-valuemax={RAIL_MAX}
         aria-valuemin={RAIL_MIN}
         aria-valuenow={railWidth}
-        class="absolute inset-y-0 end-0 w-c-side-grip-w translate-x-1/2 cursor-col-resize touch-none z-5 hover:bg-border-control"
+        class="pointer-hit hit-gap-x-space-1 absolute inset-y-0 end-0 w-c-side-grip-w translate-x-1/2 cursor-col-resize touch-none z-5 hover:bg-border-control"
         onkeydown={resizeKey}
         onpointerdown={startDrag}
         role="slider"
@@ -1059,9 +1086,15 @@
       </Sheet.Content>
     </Sheet.Root>
 
+    <!-- While the peek stands open beside the page (a fine pointer's sheet
+         from the right, peek.svelte.ts `peekBeside`) the page, its bar
+         included, ends where the sheet begins: what it holds (the glass
+         group, a docked card) stays whole and usable beside the sheet
+         (DESIGN.md, Peek), never cut under it. -->
     <div
       data-slot="shell-main"
-      class="relative flex-auto min-w-0 flex flex-col overflow-hidden"
+      class="relative flex-auto min-w-0 flex flex-col overflow-hidden data-peek-beside:pe-c-peek-sheet-w"
+      data-peek-beside={peekBeside() || undefined}
     >
       <!-- The bar: the comp's height (`--c-top-bar-h`, so what floats under
            it lands under it); hosted folder tabs stand on its floor. The
@@ -1087,7 +1120,7 @@
         data-slot="top"
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 ps-0 pe-(--top-end) bg-surface-raised border-b border-b-seam coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-(--c-top-bar-h) max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:border-b-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:border-b-none desk:not-portrait:data-hosting:shelf-hairline max-desk:data-floating:border-b-none max-desk:data-floating:bg-transparent"
+        class="group/top peer/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 ps-0 pe-(--top-end) bg-surface-raised border-b border-b-border-hairline coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-(--c-top-bar-h) max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:border-b-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:border-b-none desk:not-portrait:data-hosting:shelf-hairline max-desk:data-floating:border-b-none max-desk:data-floating:bg-transparent"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end="env(safe-area-inset-right, 0px)"
@@ -1381,9 +1414,10 @@
   <!-- One New Session form for every opener (the rail's rows, the phone's
        Start session, a `?spawn=` link, the session strip's "+", a project's
        Spin off) and every session menu's Continue (spawn/new-session,
-       continue.svelte.ts): a popover at the trigger pressed, the dialog
-       where there is none. -->
-  <NewSessionDialog
+       continue.svelte.ts): a popover hanging from the trigger pressed on a
+       desk, the bottom sheet on a phone. -->
+  <NewSessionPopover
+    anchor={continuing.source ? null : spawning.anchor}
     continueFrom={continuing.source ?? undefined}
     onclose={() => {
       spawning.open = false;
@@ -1396,19 +1430,8 @@
       continuing.source = null;
       continuing.restore = null;
     }}
-    open={(spawning.open && spawning.anchor === null) ||
-      continuing.source !== null}
+    open={spawning.open || continuing.source !== null}
     prefill={continuing.source ? undefined : spawning.prefill}
     restore={continuing.restore ?? undefined}
   />
-  {#if spawning.anchor}
-    <NewSessionPopover
-      anchor={spawning.anchor}
-      onclose={() => {
-        spawning.open = false;
-      }}
-      open={spawning.open && continuing.source === null}
-      prefill={spawning.prefill}
-    />
-  {/if}
 </Overlays>

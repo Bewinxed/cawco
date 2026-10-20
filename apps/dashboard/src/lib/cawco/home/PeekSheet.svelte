@@ -3,17 +3,15 @@
    * The one peek sheet, in the wide layout only (peek.svelte.ts): a phone
    * opens a session, it does not peek. On an iPad's touch screen it rises
    * from the bottom, as a tab's details do; with a fine pointer it comes in
-   * from the right, beside the home it was opened from. Open in the pane
+   * from the right, `c-peek-sheet-w` wide, beside the home it was opened
+   * from, the page giving it that room (`peekBeside`). Open in the pane
    * dives.
    */
-  import { MediaQuery } from "svelte/reactivity";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { afterNavigate } from "$app/navigation";
   import PeekPane from "../PeekPane.svelte";
-  import { closePeek, peek, peekable } from "./peek.svelte";
-
-  const touch = new MediaQuery("(hover: none), (pointer: coarse)");
+  import { closePeek, peek, peekable, peekRises } from "./peek.svelte";
 
   // The window narrowed into the phone's layout, where there is no peek.
   $effect(() => {
@@ -32,8 +30,14 @@
   });
 </script>
 
+<!-- With a fine pointer the peek stands beside the home and holds nothing
+     (DESIGN.md, The Open Page Rule): no scrim, no focus trap, and a press on
+     the page lands there while the peek waits (vaul lets a press outside a
+     sheet that is not modal through); Close, Esc or leaving the place put it
+     away. An iPad's touch screen keeps the drawer's recipe. -->
 <Drawer.Root
-  direction={touch.current ? "bottom" : "right"}
+  direction={peekRises() ? "bottom" : "right"}
+  modal={peekRises()}
   onOpenChange={(open) => {
     peek.open = open;
   }}
@@ -45,8 +49,11 @@
   <Drawer.Content
     data-peek-sheet
     height="cap"
+    modal={peekRises()}
     pad="sheet-safe-bottom"
     style="--drawer-max-height: var(--c-peek-sheet-h)"
+    trapFocus={peekRises()}
+    width="peek"
   >
     <Drawer.Title visible={false}>Peek</Drawer.Title>
     <Drawer.Description visible={false}

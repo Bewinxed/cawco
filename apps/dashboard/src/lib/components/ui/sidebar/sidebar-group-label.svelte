@@ -3,12 +3,12 @@
   import { tv } from "#lib/utils.js";
 
   /** Its callers' looks: the rail's section labels on its rows' inline
-      axis; and one with an action at its end, whose end pad is the
-      action's and whose height is a finger's under one. */
+      axis; and one with an action at its end, which ends where the rows do
+      (no end pad of its own) and whose height is a finger's under one. */
   export const sidebarGroupLabelVariants = tv({
     variants: {
       pad: { rail: "px-2.5" },
-      end: { action: "pointer-coarse:h-11 pr-space-1" },
+      end: { action: "pointer-coarse:h-11 pr-0" },
     },
   });
 

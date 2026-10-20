@@ -34,8 +34,9 @@
   import { untrack } from "svelte";
   import { fade } from "svelte/transition";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { IconError } from "#lib/icons.js";
-  import IconChevron from "~icons/solar/alt-arrow-right-bold-duotone";
+  // The chevron in Solar's linear cut, a glyph and not a mark (DESIGN.md,
+  // The Solar Duotone Rule).
+  import { IconChevronRight as IconChevron, IconError } from "#lib/icons.js";
   import Caw from "../home/Caw.svelte";
   import CawMark from "../home/CawMark.svelte";
   import MessageBody from "../MessageBody.svelte";
@@ -201,7 +202,7 @@
         d={WAVE}
         style:--run="calc((100cqi - 2px) * 1.08)"
         style:--wave-stroke="max(var(--dpx, 1px), round(1px, var(--dpx, 1px)))"
-        class="wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--dur-control) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
+        class="loops wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--dur-control) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
       /></svg
     >
   </span>
@@ -286,7 +287,7 @@
         d={WAVE}
         style:--run="calc((100cqi - 2px) * 1.08)"
         style:--wave-stroke="max(var(--dpx, 1px), round(1px, var(--dpx, 1px)))"
-        class="wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--dur-control) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
+        class="loops wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--dur-control) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
       /></svg
     >
   </span>

@@ -7,12 +7,18 @@
    */
   import { Popover as PopoverPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
+  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
-  import { glidePopoverVariants } from "#lib/components/ui/glide-popover/index.js";
+  import {
+    glidePopoverVariants,
+    popoverRoom,
+  } from "#lib/components/ui/glide-popover/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import PopoverRoot from "#lib/components/ui/popover/popover.svelte";
   import { cn } from "#lib/utils.js";
+  import { browser } from "$app/env";
   import {
     type PopoverMember,
     type PopoverWidth,
@@ -90,6 +96,21 @@
     follows?: boolean;
     "aria-label"?: string;
   } = $props();
+
+  /**
+   * Its inset from the screen's edge, the kit popover's rule: the screen's
+   * margin on a phone, the pages' gutter past it. Read in the browser, where
+   * it opens.
+   */
+  const phone = new MediaQuery("(width < 640px)");
+  const inset = $derived(
+    browser ? numberOf(phone.current ? "--c-screen-margin" : "--space-5") : 0
+  );
+  /** The room floating-ui leaves the surface, a frame after it says so (glide-popover `popoverRoom`). */
+  let room = $state<string>();
+  const roomed = popoverRoom((next) => {
+    room = next;
+  });
 
   /**
    * Inside an NsPopoverGroup this is only a trigger: the group owns the one
@@ -187,7 +208,7 @@
         {align}
         aria-label={rest["aria-label"]}
         class={cn("ns-theme", glidePopoverVariants({ pad }))}
-        collisionPadding={8}
+        collisionPadding={inset}
         customAnchor={anchor}
         id={`${id}-popover`}
         onCloseAutoFocus={(event) => {
@@ -213,7 +234,9 @@
               {...props}
               id={`${id}-popover`}
               role="presentation"
+              style:--ns-pop-room={room}
               style:pointer-events={pressable(open)}
+              {@attach roomed}
               {@attach rows ? highlight({ rows }) : undefined}
               {@attach morph()}
             >

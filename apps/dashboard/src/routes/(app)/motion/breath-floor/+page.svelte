@@ -84,7 +84,7 @@
       <div class="relative" data-breather="catch-up"><CatchUp /></div>
       <div class="flex flex-wrap gap-space-2">
         {#each INKS as ink (ink)}
-          <span class="breathe inline-flex {ink}" data-breather={ink}
+          <span class="breathe loops inline-flex {ink}" data-breather={ink}
             ><IconToolGeneric class="size-icon-md" /></span
           >
         {/each}

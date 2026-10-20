@@ -384,7 +384,7 @@
   <header
     data-slot="side-head"
     data-fitted={all.length > 0 || undefined}
-    class="flex h-c-btn-h-lg flex-none items-center gap-space-1 hit-gap-x-space-1 coarse:data-fitted:gap-space-4 coarse:data-fitted:hit-gap-x-space-4"
+    class="flex h-c-btn-h-lg flex-none items-center gap-space-1 hit-gap-x-space-1 coarse:data-fitted:gap-space-5 coarse:data-fitted:hit-gap-x-space-5"
     bind:this={head}
   >
     {#if switcher}

@@ -10,7 +10,7 @@
    *   • Footer: user avatar + machine count
    *
    * The rail is now built from SidebarGroup / SidebarMenu / SidebarMenuButton /
-   * SidebarMenuSub / SidebarMenuSubButton rather than hand-rolled CSS, inheriting
+   * SidebarMenuSubButton rather than hand-rolled CSS, inheriting
    * built-in hover, active, focus, and spacing from the component library.
    *
    * A session says what it is doing on its mark (SessionMark: an echo, or a
@@ -811,11 +811,14 @@
         {#snippet children(tip)}
           <!-- The header's corner action: an icon button on the nav row's
                height. -->
+          <!-- The form hangs from it, and from it too when its opener had
+               no trigger of its own (`data-start-session`, NewSessionPopover). -->
           <button
             {...tip}
             aria-label="Start session"
             class="focus-inset touch-hit inline-grid flex-none place-items-center size-c-nav-h border-none border-current rounded-sm bg-transparent text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
-            onclick={() => newSession()}
+            data-start-session
+            onclick={(event) => newSession(undefined, event.currentTarget)}
             type="button"
           >
             <IconPlus class="size-space-5" />
@@ -948,12 +951,19 @@
       <!-- Projects. Its working sessions echo in turn, top to bottom
            (motion/echo). -->
       <Sidebar.Group data-flip pad="rail" {@attach echoBeat()}>
+        <!-- Its controls end where the rows do, inside the row (the label's
+             `end="action"`) and their group as wide as they are; past the
+             rows' edge they stood in the gutter the rail's grip takes
+             presses in (Shell, "Resize sidebar"). The word gives way first
+             (DESIGN.md, The Truncate Inside Rule). -->
         <Sidebar.GroupLabel end="action" pad="rail">
-          <span>Projects</span>
+          <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
+            >Projects</span
+          >
           <!-- The sort lives here rather than once per list because it governs all
            of them at once: a rail whose projects were ordered by recency and
            whose "Not running" was ordered by name would be two rails. -->
-          <div class="-me-space-1 ms-auto flex items-center gap-space-row">
+          <div class="ms-auto flex flex-none items-center gap-space-row">
             <DropdownMenu.Root>
               <DropdownMenu.Trigger>
                 {#snippet child({ props })}
@@ -997,7 +1007,6 @@
                 <Button
                   {...tip}
                   aria-label="New project"
-                  class="-me-space-1"
                   href="/project/new"
                   size="icon-sm"
                   variant="ghost"
@@ -1126,7 +1135,11 @@
                       <Sidebar.MenuSubItem data-flip>
                         <Sidebar.MenuSubButton
                           data-branch-item
-                          onclick={() => newSession({ projectId: project.id })}
+                          onclick={(event: MouseEvent) =>
+                            newSession(
+                              { projectId: project.id },
+                              event.currentTarget as HTMLElement
+                            )}
                           row="compact"
                           tone="muted"
                         >

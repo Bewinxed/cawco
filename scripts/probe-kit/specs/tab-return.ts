@@ -950,11 +950,19 @@ const hiddenLoopsOf = (page: Page) =>
     const where = running
       .slice(0, 4)
       .map(({ loop, effect, el }) => named(loop, effect, el));
+    // Each loop by its keyframes, where it runs and its play state: which
+    // loops the census holds (a skeleton's sweep on ::after, a breath).
+    const kinds = new Map<string, number>();
+    for (const { loop, effect } of runs) {
+      const kind = `${(loop as CSSAnimation).animationName ?? "script"}${effect.pseudoElement ?? ""} ${loop.playState}`;
+      kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+    }
+    const byKind = [...kinds].map(([kind, n]) => `${kind} ×${n}`).join(", ");
     return {
       running: running.length,
       paused: runs.length - running.length,
       panes: panes.length,
-      line: `${runs.length} animations in ${panes.length} panes off screen (${panes.length - laidOut} put away, ${laidOut} laid out unseen): ${running.length} running, ${runs.length - running.length} paused; ${runs.length - pseudo} on elements, ${pseudo} on ::before/::after${where.length > 0 ? ` (running: ${where.join(", ")})` : ""}`,
+      line: `${runs.length} animations in ${panes.length} panes off screen (${panes.length - laidOut} put away, ${laidOut} laid out unseen): ${running.length} running, ${runs.length - running.length} paused; ${runs.length - pseudo} on elements, ${pseudo} on ::before/::after${byKind ? `; by keyframes: ${byKind}` : ""}${where.length > 0 ? ` (running: ${where.join(", ")})` : ""}`,
     };
   });
 

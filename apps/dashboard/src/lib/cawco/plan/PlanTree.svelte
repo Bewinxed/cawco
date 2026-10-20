@@ -92,7 +92,7 @@
       <span
         data-plan-pane-live={status === "in_progress" || undefined}
         data-slot="dot"
-        class="size-(--status-dot-size) rounded-pill inset-ring inset-ring-ink-subtle data-plan-pane-live:inset-ring-0 data-plan-pane-live:bg-status-live-glyph motion-safe:data-plan-pane-live:animate-breath"
+        class="loops size-(--status-dot-size) rounded-pill inset-ring inset-ring-ink-subtle data-plan-pane-live:inset-ring-0 data-plan-pane-live:bg-status-live-glyph motion-safe:data-plan-pane-live:animate-breath"
       ></span>
     {/if}
   </span>

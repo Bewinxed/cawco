@@ -40,10 +40,13 @@
    * the house morph.
    *
    * Under the drawer's line, where the bar is the phone's one row, the band
-   * stands at the top of the screen, over the bar, on every screen
-   * (JOURNEY.md: "The connection band persists at the top of the viewport
-   * across all mobile surfaces"): where the bar floats over a
-   * conversation's tabs, the bar and the tabs move down together under it.
+   * stands under the bar as it does on a desk, at the top of every phone
+   * screen (JOURNEY.md: "The connection band persists at the top of the
+   * viewport across all mobile surfaces"), the bar staying where it is.
+   * Where the bar floats over a conversation's tabs it is one row with them,
+   * so the band stands over that row and the bar and the tabs move down
+   * together under it: under the bar it would stand behind the bar's
+   * controls.
    *
    * The first connection is not a fault: `status` starts `disconnected`, a
    * socket not made yet reads like one that failed, so the band waits for
@@ -56,6 +59,7 @@
   import { onMount, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import { IconRefresh } from "#lib/icons.js";
   import { browser } from "$app/env";
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
   import { dur } from "./motion/curves.svelte";
@@ -274,11 +278,11 @@
      own clock, so the band's foot and the page's top move as one edge. The
      bar's foot is the band's top edge: it travels up under the bar, and its
      shadow still falls on the page. Under the drawer's line (DRAWER_QUERY)
-     it stands at the top of the screen, over the bar: the same place on
-     every phone screen. -->
+     a bar floating over a conversation's tabs (the Shell's `peer/top`,
+     `data-floating`) has the band over it instead, with its tabs. -->
 <div
   data-slot="hub-band-slot"
-  class="pointer-events-none relative z-(--layer-band) grid flex-none grid-rows-shut clip-block-start @container/hub-band data-open:grid-rows-open max-desk:-order-1 motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
+  class="pointer-events-none relative z-(--layer-band) grid flex-none grid-rows-shut clip-block-start @container/hub-band data-open:grid-rows-open max-desk:peer-data-floating/top:-order-1 motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
   data-open={band ? "" : undefined}
 >
   <!-- The live region stands from the first markup, so assistive tech has
@@ -297,10 +301,13 @@
       <!-- The sentence and its button on one row, the row at least the
            button's height whether a state has one or not, and two lines tall
            where a phone wraps the sentence: every state is one height at a
-           width. -->
+           width. The house alert (DESIGN.md, Alert: "a compact tinted row,
+           never a slab"): its status pair, its corner and padding, no edge,
+           standing on the page's own insets (the composer's 11px margins
+           under the drawer's line). -->
       <div
         data-slot="hub-band"
-        class="pointer-events-auto invisible grid auto-rows-band grid-cols-fluid-auto items-center gap-x-space-3 border-b border-b-border-hairline bg-status-attn-bg py-space-2 ps-space-7 pe-space-6 text-size-body font-normal text-status-attn-ink tabular-nums opacity-0 shadow-tile @max-phone/hub-band:auto-rows-band-phone data-open:visible data-open:opacity-100 tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink tone-live:bg-status-live-bg tone-live:text-status-live-ink motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:-translate-y-full motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
+        class="pointer-events-auto invisible mx-space-3 mt-space-2 grid auto-rows-band grid-cols-fluid-auto items-center gap-x-space-3 rounded-md bg-status-attn-bg px-3 py-2.5 text-size-body font-normal text-status-attn-ink tabular-nums opacity-0 desk:ms-space-7 desk:me-space-6 @max-phone/hub-band:auto-rows-band-phone data-open:visible data-open:opacity-100 tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink tone-live:bg-status-live-bg tone-live:text-status-live-ink motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:-translate-y-full motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
         aria-hidden={band ? undefined : "true"}
         data-open={band ? "" : undefined}
         data-tone={tone}
@@ -329,9 +336,12 @@
             />{/key}
         </p>
         {#if pressable}
-          <!-- Pending in place while an attempt is out, whoever started it. -->
+          <!-- Pending in place while an attempt is out, whoever started it: its
+               rest glyph's slot takes the spinner and its words turn to
+               "Reconnecting…" (DESIGN.md, Pending), never a bare spinner. -->
           <Button
             failed={cawco.status !== "connecting"}
+            icon={IconRefresh}
             label="Reconnect now"
             onclick={reconnectNow}
             pending={cawco.status === "connecting"}

@@ -69,6 +69,12 @@
     IconArrowRight,
     IconChevronDown,
     IconClose,
+    IconCloseOthers,
+    IconCloseTab,
+    IconInfo,
+    IconMoveTab,
+    IconSplitDown,
+    IconSplitRight,
   } from "#lib/icons.js";
   import { page } from "$app/state";
   import AccountSubmenu from "../accounts/AccountSubmenu.svelte";
@@ -1517,8 +1523,11 @@
                 if (anchor) {
                   showDetails(tab.id, anchor, true);
                 }
-              }}>Session details</ContextMenu.Item
+              }}
             >
+              <IconInfo />
+              <span>Session details</span>
+            </ContextMenu.Item>
             <ContextMenu.Item
               onSelect={() =>
                 continueInNewSession(continueSourceOf(tab.id, tab.label))}
@@ -1537,12 +1546,14 @@
           <ContextMenu.Item
             onSelect={() => workspace.split(leaf.id, "right", tab.id)}
           >
-            Split right
+            <IconSplitRight />
+            <span>Split right</span>
           </ContextMenu.Item>
           <ContextMenu.Item
             onSelect={() => workspace.split(leaf.id, "bottom", tab.id)}
           >
-            Split down
+            <IconSplitDown />
+            <span>Split down</span>
           </ContextMenu.Item>
           {#if otherLeaves.length > 0}
             <ContextMenu.Separator />
@@ -1550,14 +1561,16 @@
               <ContextMenu.Item
                 onSelect={() => workspace.move(tab.id, other.id)}
               >
-                Move to group {i + 2}
+                <IconMoveTab />
+                <span>Move to group {i + 2}</span>
               </ContextMenu.Item>
             {/each}
           {/if}
           <ContextMenu.Separator />
-          <ContextMenu.Item onSelect={() => workspace.close(tab.id)}
-            >Close</ContextMenu.Item
-          >
+          <ContextMenu.Item onSelect={() => workspace.close(tab.id)}>
+            <IconCloseTab />
+            <span>Close</span>
+          </ContextMenu.Item>
           <ContextMenu.Item
             disabled={leaf.tabs.length < 2}
             onSelect={() => {
@@ -1568,7 +1581,8 @@
               }
             }}
           >
-            Close others
+            <IconCloseOthers />
+            <span>Close others</span>
           </ContextMenu.Item>
           <ContextMenu.Separator />
           <ContextMenu.CopyItem

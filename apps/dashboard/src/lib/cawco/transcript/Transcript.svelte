@@ -70,6 +70,7 @@
   import CatchUp from "./CatchUp.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
   import { compactionMarkComing } from "./compaction-mark";
+  import { paneDrafts } from "./composer-draft.svelte";
   import Delegate from "./Delegate.svelte";
   import { disclosureAt } from "./disclosure.svelte";
   import Latest from "./Latest.svelte";
@@ -154,7 +155,7 @@
      * that read it, as `parkedHeight` is.
      */
     shelfHeight?: number;
-    /** Where the way back to the tail rests over the foot, when the pane says (a thread). */
+    /** Where the way back to the tail rests, up from the scroller's foot, when the pane says (a thread). */
     latestInset?: string;
   } = $props();
 
@@ -2661,8 +2662,60 @@
       Math.abs(listStart + list.getItemOffset(index) - top - was.at) <= 1
     );
   }
+  /**
+   * The frame a pane is shown in, from `visible` rising to the task after
+   * that frame's rendering. The scroll event its scroller fires there (the
+   * offset it was put away at, taken back as it is drawn) is read after the
+   * frame, in that task (`onscroll`): read in the event, its offset, height
+   * and boxes forced a style pass of their own ahead of the frame's (two
+   * panes, a focus switch: "style 365 by" the handler before the frame's
+   * 1089), and a switch restyled past what it shows. Nobody is scrolling a
+   * pane in the frame it appears in, so every other scroll is read in its
+   * event, where the reader's own scroll is told from this component's
+   * writes before the next frame's follow can land over it.
+   */
+  let showing = false;
+  /** The frame and the task a scroll held in a pane's showing frame is read in. */
+  let heldFrame = 0;
+  let heldTask: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    if (!visible) {
+      return;
+    }
+    showing = true;
+    let task: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      task = setTimeout(() => {
+        showing = false;
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(task);
+      showing = false;
+    };
+  });
+  $effect(() => () => {
+    cancelAnimationFrame(heldFrame);
+    clearTimeout(heldTask);
+  });
   function onscroll(): void {
     awayScroll = 0;
+    if (!showing) {
+      readScroll();
+      return;
+    }
+    if (heldFrame === 0) {
+      heldFrame = requestAnimationFrame(() => {
+        heldTask = setTimeout(() => {
+          heldFrame = 0;
+          readScroll();
+        });
+      });
+    }
+  }
+  /** What a scroll did, read off the scroller (`onscroll`). */
+  function readScroll(): void {
     if (!(scroller && listing && landed)) {
       return;
     }
@@ -3847,11 +3900,28 @@
          where it stands. The two keys that do anything from the composer
          below. Left-aligned: this surface is a ledger. -->
     <div class="isolate" in:crossIn>
+      <!-- Its one action starts the work (DESIGN.md, The Empty Starts Work
+           Rule): the keys go to this session's composer, where the first
+           instruction is written; with no composer standing, none. -->
       <EmptyState
         icon={IconChat}
         line="Send the first instruction below — / lists this session's commands, @ names a machine or session."
         title="No messages yet"
-      />
+      >
+        {#snippet action()}
+          {@const draft = paneDrafts.get(session.instanceId)}
+          {#if draft}
+            <Button
+              onclick={() => {
+                draft.focusWanted = true;
+              }}
+              variant="outline"
+            >
+              Write the first instruction
+            </Button>
+          {/if}
+        {/snippet}
+      </EmptyState>
     </div>
   {/if}
 
@@ -4006,8 +4076,9 @@
                     >{d.label}</span
                   >
                 {/if}
+                <!-- The argument gives way first (ToolGroup's row). -->
                 <span
-                  class="font-(family-name:--font-mono) text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0"
+                  class="font-(family-name:--font-mono) text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-1"
                   >{row.glance.glance}</span
                 >
               </div>
@@ -4054,21 +4125,22 @@
   <!-- Floating above the composer column, at zero height in the flow, so
        nothing here coming or going moves a row: the catch-up, from the switch
        until it has appended, and — scrolled away from the tail — the way back.
-       Where it rests is the pane's to say (`--latest-inset`): a thread keeps
-       the room Caw's rise takes above its composer; elsewhere it stands at
-       the top of the composer's clearance, and over what rises past it
-       (`--parked-room`): never under an ask. A sticky box keeps off a
-       scroller's padding, so it is measured from the scroller's own foot,
-       under the foot room. Over the pane's foot fade (FootFade), which only
-       the rows pass under. A column hung up from the foot: what overflows
-       its zero height goes up, the pills at the bottom and the
-       not-caught-up line over them. -->
+       Where it rests, up from the scroller's foot, is the pane's to say
+       (`--latest-inset`): a thread keeps the room Caw's rise takes above its
+       composer; elsewhere it stands at the top of the composer's clearance
+       (the foot room less the composer's own dock gap, where the last row
+       ends at the tail), and over what rises past it (`--parked-room`):
+       never under an ask. A sticky box's inset is measured from the
+       scrollport's foot, so the foot room is counted once. Over the pane's
+       foot fade (FootFade), which only the rows pass under. A column hung
+       up from the foot: what overflows its zero height goes up, the pills
+       at the bottom and the not-caught-up line over them. -->
   <div
     data-slot="dock"
     class="sticky z-2 bottom-(--dock-bottom) h-0 flex flex-col justify-box-end items-center gap-space-2 pointer-events-none"
     style:--latest-inset={latestInset}
     style:--parked-room="{parkedHeight + shelfHeight}px"
-    style:--dock-bottom={"calc(var(--foot-room) + var(--latest-inset, calc(var(--foot-room) - var(--space-4) + var(--parked-room, 0px))))"}
+    style:--dock-bottom={"var(--latest-inset, calc(var(--foot-room) - var(--space-4) + var(--parked-room, 0px)))"}
   >
     <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->
     {#if behind}

@@ -35,12 +35,12 @@
     ref = $bindable(null),
     sideOffset = 4,
     align = "start",
+    collisionPadding,
     portalProps,
     class: className,
     forceMount = false,
     width,
     min,
-    collisionPadding,
     child: callerChild,
     children,
     ...restProps

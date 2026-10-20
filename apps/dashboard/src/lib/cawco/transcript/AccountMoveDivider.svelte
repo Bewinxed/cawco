@@ -27,7 +27,9 @@
    * the chevron opens as a compaction's brief opens.
    */
   import { accountMoveWords } from "@cawco/core";
-  import IconChevron from "~icons/solar/alt-arrow-right-bold-duotone";
+  // The chevron in Solar's linear cut, a glyph and not a mark (DESIGN.md,
+  // The Solar Duotone Rule).
+  import { IconChevronRight as IconChevron } from "#lib/icons.js";
   import IconTransfer from "~icons/solar/transfer-horizontal-bold-duotone";
   import { hueVar } from "../accounts/model.svelte";
   import MessageBody from "../MessageBody.svelte";

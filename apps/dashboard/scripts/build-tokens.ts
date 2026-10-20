@@ -181,16 +181,10 @@ const ANIMATIONS: Record<string, string> = {
   // A kit sheet slides in and out from its side (`--sheet-away`).
   "animate-sheet-in": "sheet-in var(--dur-panel) var(--ease-drawer)",
   "animate-sheet-out": "sheet-out var(--dur-exit) var(--ease-drawer) forwards",
-  // The new-session dialog (DESIGN.md New-session dialog): its sections fade
-  // up in turn (`--delay`), its card enters with ns-panel and leaves sinking
-  // and shrinking, its scrim fades.
+  // The new-session form (DESIGN.md New-session popover): its sections fade
+  // up in turn (`--delay`).
   "animate-ns-sec":
     "ns-in var(--dur-pop) var(--ease-out) var(--delay, 0ms) backwards",
-  "animate-ns-card-in": "ns-panel var(--dur-panel) var(--ease-out) backwards",
-  "animate-ns-card-out": "ns-panel-out var(--dur-exit) var(--ease-out) both",
-  "animate-ns-scrim-in":
-    "kit-fade-in var(--dur-panel) var(--ease-out) backwards",
-  "animate-ns-scrim-out": "kit-fade-out var(--dur-exit) var(--ease-out) both",
   // The dialog's one-shot entrances, each on a duration the dialog sets on
   // `.ns-theme` (read with `--theme(… inline)`): a row fading up, a check
   // landing, the panel rising; its popover opening and closing.
@@ -276,8 +270,6 @@ const KEYFRAMES: Record<string, string> = {
   "icon-swap-still": "from {\n  opacity: 0;\n}",
   "sheet-in": "from {\n  transform: var(--sheet-away);\n}",
   "sheet-out": "to {\n  transform: var(--sheet-away);\n}",
-  "ns-panel-out":
-    "to {\n  transform: translateY(var(--space-2)) scale(var(--press-scale));\n  opacity: 0;\n}",
   "ns-in":
     "from {\n  opacity: 0;\n  transform: translateY(8px);\n}\nto {\n  opacity: 1;\n  transform: none;\n}",
   "ns-check":

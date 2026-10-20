@@ -5,10 +5,10 @@
  * a project's Spin off) only asks for it, so it is there whichever rail is
  * mounted (the wide screen's, the drawer's) and when neither is, and what is
  * typed in it outlives the place it was opened from. A fork with no mode to
- * run in opens it too, on the fork ({@link startFork}). Asked with a trigger,
- * it opens as a popover at that trigger (NewSessionPopover); without one, as
- * the centred dialog (NewSessionDialog). Under 640px both are its bottom
- * sheet.
+ * run in opens it too, on the fork ({@link startFork}). It opens as a popover
+ * hanging from the trigger pressed (NewSessionPopover); asked without one, from
+ * the rail's Start session. Under 640px it is the bottom sheet
+ * (NewSessionDialog).
  */
 import type { Bounded } from "@cawco/core/bounded";
 import {
@@ -43,7 +43,7 @@ export const FORM_SIZES = ["data-stepped", "data-pair"] as const;
 export const spawning = $state<{
   open: boolean;
   prefill: SpawnPrefill | undefined;
-  /** The trigger it was opened from, which it hangs from; null for the dialog. */
+  /** The trigger it was opened from, which it hangs from; null hangs it from the rail's Start session. */
   anchor: HTMLElement | null;
 }>({
   open: false,
@@ -53,8 +53,8 @@ export const spawning = $state<{
 
 /**
  * Opens the New Session form, on `prefill`'s machine, folder or project when
- * given: at `anchor`, the trigger pressed, when there is one; the dialog
- * otherwise.
+ * given: hanging from `anchor`, the trigger pressed, when there is one; from
+ * the rail's Start session otherwise.
  */
 export function newSession(
   prefill?: SpawnPrefill,

@@ -90,6 +90,8 @@
   triggerClass={chipVariants({
     variant: "setting",
     tone: project ? undefined : "muted",
+    // Never wider than its row: a long name ends in its ellipsis.
+    class: "min-w-0",
   })}
 >
   {#snippet trigger()}
@@ -100,10 +102,15 @@
       >
     {/key}
     {#if project}
+      <!-- Its hit area the house's: 24px under a mouse, 44px under a finger
+           (DESIGN.md, The 24 Pointer Rule; The 44 Touch Rule), over the chip
+           it ends: a layer over the trigger's own touch area (its
+           `touch-hit`, drawn after it), which covered it under a finger, so
+           a tap on the ✕ opened the popover instead. -->
       <!-- biome-ignore lint/a11y/useSemanticElements: the clear control sits inside the chip trigger, which is already a button; buttons cannot nest -->
       <span
         data-slot="clear"
-        class="ns-check relative -mr-space-row inline-flex size-space-5 items-center justify-center rounded-xs text-ink-subtle transition-[background-color,color] duration-(--dur-control) ease-out before:absolute before:-inset-space-1 hover:bg-surface-hover hover:text-ink-strong"
+        class="ns-check pointer-hit touch-hit relative z-1 -mr-space-row inline-flex size-space-5 items-center justify-center rounded-xs text-ink-subtle transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:text-ink-strong"
         onclick={(event) => {
           event.stopPropagation();
           onclear();

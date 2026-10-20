@@ -112,13 +112,6 @@ const PAIRS: Pair[] = [
     made: true,
   },
   {
-    name: "session sheet",
-    on: "body",
-    old: "body:has(> [data-session-card][data-vaul-drawer])",
-    now: "body[data-session-sheet]",
-    made: true,
-  },
-  {
     name: "session card",
     on: "wrapper",
     old: `${WRAPPER}:has(> [data-session-details-popover])`,

@@ -14,11 +14,16 @@
   import type { Snippet } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { dur, easeOut, numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
-  import { glidePopoverVariants } from "#lib/components/ui/glide-popover/index.js";
+  import {
+    glidePopoverVariants,
+    popoverRoom,
+  } from "#lib/components/ui/glide-popover/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { cn } from "#lib/utils.js";
+  import { browser } from "$app/env";
   import {
     type PopoverMember,
     popoverGroup,
@@ -27,6 +32,16 @@
   } from "./popover-group.svelte";
 
   let { children }: { children: Snippet } = $props();
+
+  /**
+   * Its inset from the screen's edge, the kit popover's rule: the screen's
+   * margin on a phone, the pages' gutter past it. Read in the browser, where
+   * it opens.
+   */
+  const phone = new MediaQuery("(width < 640px)");
+  const inset = $derived(
+    browser ? numberOf(phone.current ? "--c-screen-margin" : "--space-5") : 0
+  );
 
   const outer = popoverGroup();
   const group = outer ?? providePopoverGroup();
@@ -43,6 +58,27 @@
    * not grown from the last surface's.
    */
   let height = $state(0);
+  /**
+   * The content's height, read in the frame after it changed
+   * (frameObserver) and held on the surface there. Written inside the
+   * observer's delivery (a `bind:offsetHeight`), the surface's height
+   * changed under the floating wrapper floating-ui's `autoUpdate` watches, at
+   * a depth the delivery had already passed: picking Full Send swapped the
+   * content for its confirm and the page raised "ResizeObserver loop
+   * completed with undelivered notifications" (new-session-full-send, desk).
+   */
+  const measured = (node: HTMLElement) => {
+    const sized = frameObserver(() => {
+      height = node.offsetHeight;
+    });
+    sized.observe(node);
+    return () => sized.disconnect();
+  };
+  /** The room floating-ui leaves the surface, a frame after it says so (glide-popover `popoverRoom`). */
+  let room = $state<string>();
+  const roomed = popoverRoom((next) => {
+    room = next;
+  });
 
   /** The member the surface was last open on; cleared when it closes. */
   let last: PopoverMember | undefined;
@@ -102,7 +138,7 @@
           data-ns-pop
           align={shown.align}
           class={cn("ns-theme", glidePopoverVariants())}
-          collisionPadding={8}
+          collisionPadding={inset}
           customAnchor={shown.trigger}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
@@ -157,7 +193,9 @@
                 data-morph={morphing ? "" : undefined}
                 id={`${shown?.id}-popover`}
                 role="presentation"
+                style:--ns-pop-room={room}
                 style:pointer-events={pressable(open)}
+                {@attach roomed}
                 {@attach shown?.rows
                   ? highlight({ rows: shown.rows })
                   : undefined}
@@ -170,7 +208,7 @@
                   class="overflow-clip clip-margin-space-1 motion-safe:transition-[height] motion-safe:duration-(--dur-pop) motion-safe:ease-drawer"
                   style:height={height ? `${height}px` : undefined}
                 >
-                  <div bind:offsetHeight={height}>
+                  <div {@attach measured}>
                     {#key shown?.id}
                       <!-- As the surface: a row with a long path shrinks and
                            ellipsises it, never widening the set past it. -->

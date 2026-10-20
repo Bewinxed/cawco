@@ -8,7 +8,7 @@
    * (The Reduced Motion Rule: an indeterminate spinner keeps turning).
    */
   export const spinnerVariants = tv({
-    base: "size-icon-md animate-spin",
+    base: "loops size-icon-md animate-spin",
     variants: {
       /** The muted ink; or the live glyph while its run is running. */
       tone: {

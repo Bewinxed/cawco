@@ -5477,14 +5477,6 @@
       },
       "$description": "A thin WebKit scrollbar's thickness in a new-session scroller."
     },
-    "c-comb-pitch": {
-      "$type": "dimension",
-      "$value": {
-        "value": 6,
-        "unit": "px"
-      },
-      "$description": "The effort comb's tick pitch: a drawn pattern, not spacing."
-    },
     "c-edge-fade-len": {
       "$type": "dimension",
       "$value": {
@@ -5542,6 +5534,14 @@
           "css": "80dvh"
         }
       }
+    },
+    "c-peek-sheet-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 384,
+        "unit": "px"
+      },
+      "$description": "The peek sheet's width with a fine pointer, beside the page, and the room the page gives it at its trailing edge while it stands open (DESIGN.md Peek: \"a sheet from the right beside the home it was opened from\")."
     },
     "c-grabber-w": {
       "$type": "dimension",
@@ -6147,14 +6147,6 @@
       },
       "$description": "A side surface's floor (SideSurface SIDE_FLOOR_PX)."
     },
-    "c-new-session-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 980,
-        "unit": "px"
-      },
-      "$description": "The new-session dialog's widest (DESIGN.md: \"up to 980px wide\")."
-    },
     "c-effort-track-h-phone": {
       "$type": "dimension",
       "$value": {
@@ -6566,6 +6558,19 @@
       "$extensions": {
         "dev.cawco": {
           "css": "0.5em"
+        }
+      }
+    },
+    "c-give-way-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 48,
+        "unit": "px"
+      },
+      "$description": "The least of a head's part that gives way before it drops (DESIGN.md, The Truncate Inside Rule): six characters, a word's start and its ellipsis (a subagent's task and model).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "6ch"
         }
       }
     },

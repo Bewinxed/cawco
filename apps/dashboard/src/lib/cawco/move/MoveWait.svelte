@@ -211,12 +211,20 @@
   };
 
   /**
-   * The rows drawn: every step, in order, until the session starts; then the
-   * ready line alone, the others folding shut (the One Object Rule).
+   * The rows drawn: while the move waits on its yes, the ask alone (what
+   * "Move it" would run is its Details; nothing has run, so no step is drawn
+   * ahead of the answer); once it runs, every step, in order, until the
+   * session starts; then the ready line alone, the others folding shut (the
+   * One Object Rule).
    */
   const rows = $derived(
     job.steps
-      .filter((step) => job.stage !== "started" || step === "start")
+      .filter((step) => {
+        if (asking) {
+          return step === "approval";
+        }
+        return job.stage !== "started" || step === "start";
+      })
       .map((step) => {
         const phase = phaseOf(step);
         return { step, phase, label: labelOf(step, phase) };
@@ -522,9 +530,13 @@
                 </div>
               {/if}
               {#if row.phase === "asking" && job.ask}
+                <!-- Under a finger its rows open to --space-5, so the Details
+                     fold's 44px area and the answers' under it both stand
+                     whole (DESIGN.md, The 44 Touch Rule: "clusters open their
+                     gap on touch"). -->
                 <div
                   data-slot="move-wait-card"
-                  class="grid gap-space-3 mbs-space-1 p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-stat"
+                  class="grid gap-space-3 coarse:gap-space-5 mbs-space-1 p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-stat"
                   in:unfold
                   out:unfold
                 >

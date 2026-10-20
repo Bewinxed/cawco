@@ -421,7 +421,6 @@
   --spacing-c-pop-max-h-phone: var(--c-pop-max-h-phone);
   --spacing-c-tip-max-w: var(--c-tip-max-w);
   --spacing-c-scrollbar-thin: var(--c-scrollbar-thin);
-  --spacing-c-comb-pitch: var(--c-comb-pitch);
   --spacing-c-edge-fade-len: var(--c-edge-fade-len);
   --spacing-c-edge-fade-len-phone: var(--c-edge-fade-len-phone);
   /* Switches with its context: no literal maps to it. */
@@ -429,6 +428,7 @@
   --spacing-c-icon-card-min: var(--c-icon-card-min);
   --spacing-c-sheet-max-h: var(--c-sheet-max-h);
   --spacing-c-peek-sheet-h: var(--c-peek-sheet-h);
+  --spacing-c-peek-sheet-w: var(--c-peek-sheet-w);
   --spacing-c-grabber-w: var(--c-grabber-w);
   --spacing-c-grabber-h: var(--c-grabber-h);
   --spacing-c-lightbox-sheet-w: var(--c-lightbox-sheet-w);
@@ -496,7 +496,6 @@
   --spacing-c-ledger-title-min: var(--c-ledger-title-min);
   --spacing-c-side-grip-w: var(--c-side-grip-w);
   --spacing-c-side-surface-min: var(--c-side-surface-min);
-  --spacing-c-new-session-w: var(--c-new-session-w);
   --spacing-c-effort-track-h-phone: var(--c-effort-track-h-phone);
   --spacing-c-model-list-h: var(--c-model-list-h);
   --spacing-c-model-row-basis: var(--c-model-row-basis);
@@ -545,6 +544,7 @@
   --spacing-c-workflow-row-h: var(--c-workflow-row-h);
   --spacing-c-atts-max-h: var(--c-atts-max-h);
   --spacing-c-compaction-word-bleed: var(--c-compaction-word-bleed);
+  --spacing-c-give-way-min: var(--c-give-way-min);
   --spacing-c-elapsed-w: var(--c-elapsed-w);
   --spacing-c-composer-more-w: var(--c-composer-more-w);
   --spacing-c-composer-menu-max-h: var(--c-composer-menu-max-h);
@@ -689,10 +689,6 @@
   --animate-sheet-out: sheet-out var(--dur-exit) var(--ease-drawer) forwards;
   --animate-ns-sec: ns-in var(--dur-pop) var(--ease-out) var(--delay, 0ms)
     backwards;
-  --animate-ns-card-in: ns-panel var(--dur-panel) var(--ease-out) backwards;
-  --animate-ns-card-out: ns-panel-out var(--dur-exit) var(--ease-out) both;
-  --animate-ns-scrim-in: kit-fade-in var(--dur-panel) var(--ease-out) backwards;
-  --animate-ns-scrim-out: kit-fade-out var(--dur-exit) var(--ease-out) both;
   --animate-ns-in: ns-in var(--ns-row-ms) var(--ease-out) backwards;
   --animate-ns-check: ns-check var(--ns-check-ms) var(--ease-out) both;
   --animate-ns-panel: ns-panel var(--dur-fade) var(--ease-out) both;
@@ -857,12 +853,6 @@
   @keyframes sheet-out {
     to {
       transform: var(--sheet-away);
-    }
-  }
-  @keyframes ns-panel-out {
-    to {
-      transform: translateY(var(--space-2)) scale(var(--press-scale));
-      opacity: 0;
     }
   }
   @keyframes ns-in {
