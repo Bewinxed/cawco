@@ -206,10 +206,8 @@
       live={new Set()}
       onclose={noop}
       onopen={noop}
-      onplace={noop}
       onretry={noop}
       {pins}
-      placing={null}
     />
   </section>
   <section class="min-w-0" data-probe="files">

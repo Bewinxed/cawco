@@ -1,0 +1,49 @@
+# X8-comments: the preview's Comments panel
+
+Start 0f64468e11d27314a553e5ed64d5df3b3734c4c8. Every read below is the engine's, from `scripts/probe-kit/specs/comments.ts` leg k (the panel), leg j (pins beside the panel), legs 4 and 5, at 1440 default split, 1440 expanded, 820 touch and 390: `ALL PASS (1 specs, 138s)`, 105 assertions. `pin-list-hold`: `ALL PASS (1 specs, 58s)`, 30 assertions.
+
+## The owner's report and the build spec
+- fixed: the row is the comment. The title is the person's first words in body, `ink-strong`, `line-clamp: 4`; the second line is the thread's last line in meta ink, cut inside its span. `pinName` now stands only in the card's head. Read: 48-word row `{"lines":4,"clamp":"4"}`, six-word row `{"lines":1,"last":true}` at 1440 expanded, 820 and 390.
+- fixed: the whole row is one `<button>` (44px `min-height`, `py-space-2`, flex-start, the disc in a `mark-cell`). The `movedRow` snippet and its outline "Place again" are deleted. Read: every row `{"button":true,"inside":0}`, gone pin 3 included, at all four sizes.
+- fixed: a gone pin opens its card like any other. The card says "Its element is gone from the page" in meta, with "Pin it somewhere else" (the `sm` ghost) beside it. While placing it says "Tap the page where it goes", with Cancel (ghost); the card stays open and the next tap pins it anew. Closing the card cancels placing. comments.ts leg 5 reads it.
+- fixed: Reply is the card's one primary; Resolve/Reopen, ⋯, Close, Pin it somewhere else and Cancel are ghost. Nothing in the panel or the card is outline. Read: card buttons `Resolve pin ghost, More for pin 3 ghost, Close ghost, Pin it somewhere else ghost, Reply primary`; panel `Close comments ghost`.
+- fixed: the widths are `c-pin-list-min` 280, `c-pin-list-share` 0.3 and `c-pin-list-max` → `{size.c-panel-w}` (380), plus the new `c-pin-card-min` 240 (the card's floor beside the panel). Each `$description` is rewritten from the content measurements. Read at 1440 expanded: well 1211, panel 363.3 (= 0.3 × 1211).
+- fixed: beside or stacked. Beside holds when the well ≥ panel + 8 + `c-pin-card-min` + 2×8. Below that, the panel is the well less two gutters, a row's card rises as the foot sheet, and the panel closes while the card stands. The pane keeps its tab and scroll (`bind:filter`, `bind:scroll`), so the card's Close brings it back as it was. Reads: 1440 default well 506.95 → stacked, panel 491; Close brings the panel back on `Resolved 6` at `scrollTop 60 → 60` (390, where Resolved scrolls); 820 touch well 330.5 → stacked, panel 315; 390 well 374 → stacked, panel 358; 1440 expanded well 1211, threshold 627.3 → beside.
+- corrected (measure): the spec's "the default 1440 desk must show beside" rested on an advisor read of a ~545px well. This tree draws **506.95** at the 1440 default split. The beside threshold is **544** with the card floor at 240, and **528** at the spec's lowest floor of 224. A beside default would need a floor of **≤ 171** (with the 16px margin). The parent ruled (A): keep floors 280/240, so the default split stacks and the expanded split stands beside.
+- fixed: a gone pin's card stands at the narrowed room's top-right (left = room.w − width − 8, top = 8), never under the panel. The `not-data-placed` well-corner fallback classes are deleted. Read at 1440 expanded: card `x 781 w 280` (right 1061), panel `x 1068.5` → gap 7.5; card top 108 = room top 100 + 8.
+- fixed: `.pin-list-pop` padding is the kit popover's own, 6px (`pad="inset"` dropped). The floor's text column is 280 − 2 border − 12 pad − 14 row inset − 20 disc − 7 gap = 225, the column the token's description measures. Read: `"padding":"6px"`.
+- fixed: DESIGN.md's Comments panel recipe is replaced with the advisor's text, with the parenthesised numbers swapped for tokens and "at its own padding" for the inner `--space-2`. A pin's card gains the gone-pin sentence.
+- corrected: the phone stacks too. On main the phone's card stood at the foot with the panel squeezed above it (`listRoom` less `cardHeight`). Now the panel goes while the card stands (DESIGN.md Comments panel, "the panel goes … as Files goes for a chosen artifact"; L763). `floorIn`, `cardHeight` and the sheet branch of `listRoom` are deleted.
+
+## The audit's rows (group-00)
+- fixed-in-wave2: artifact-comments, "The Comments popover covers the artifact's title" (L885). The recipe says the panel "floats over the page and never pushes it": the kit Popover hung at the well's top-right. Pins it covers are brought out by `cawco:covered`, read by leg j (card and disc clear of the panel, beside) at 1440 expanded.
+- fixed-in-wave2: artifact-place-pick, "The Comments popover sits over the Machine and Folder fields" (L885). Same rule and read as artifact-comments.
+- fixed-in-wave2: artifact-pin, "The pin card covers the page text it is pinned to" (L887). The recipe is "beside its pin": the card stands GAP 12 from the disc, and leg j reads the disc clear of the card.
+- fixed-in-wave2: bench-chosen-hover-rest, "The Comments panel has no raised surface or edge" (L885). The bench draws PinList bare; in the pane the panel is the kit's floating surface. Read: fill `oklch(0.993 0.004 85)`, edge `1px oklch(0.89 0.013 82)`, shadow `oklch(0.295 0.01 70 / 0.2) 0px 18px 48px` + `… 0px 2px 6px`.
+
+## From X5 and X2 via the parent
+- fixed: `PreviewPane.svelte` `inspectorLayout` was `sheet ? "sheet" : "panel"`, so the artifact's own tab at 390 drew the right-hand panel (X5 read aside 296×777 at x79; DESIGN.md L887 asks for the sheet on a phone). It now also takes the phone breakpoint `(width < 640px)`, the query SideSheet uses. Read (capture outline, sheet-inspect): 390 `aside data-inspector="sheet" 15,363 360x466`; 1440 `aside data-inspector="panel" 1129,52 296x833`.
+- fixed: X2's sheet-inspect phone note, "Outlin" (40,65) cut by the Inspect panel. It was the same cause: the page frame squeezed beside the right-hand inspector. Read at 390: the frame is `15,52 360x777`, and the inspector sheet starts at y 363, under the label's y 65.
+
+## Asks
+- ask (granted): `apps/dashboard/src/routes/(app)/motion/chosen-hover/+page.svelte` passed the deleted `onplace`/`placing` to PinList. Added to the list; the two lines are deleted. `git grep -n "onplace\|placing=" apps/dashboard/src` now names only DecisionGraph's own `onplace` and PinCard/PreviewPane's new card API.
+
+## My calls (no DESIGN.md line settles them)
+- A pin with nothing written yet titles its row "Nothing written yet" ("Annotation" for an annotation) in `ink-muted`, never the element's words (recipe: "The element's words are never the row's title").
+- The second line appears only once the thread runs past its first entry. With one entry it would repeat the title (recipe: "the thread holds the rest").
+- The skeleton row is the row at its floor (disc and one body bar, 44px), the size of a one-line comment (recipe: "skeleton rows at the rows' size").
+- The panel closes while it stands aside (rather than drawn invisible) because the kit Popover's contract allows no visibility class (`shadcn/no-restyle`). Its tab and scroll live in the pane.
+
+## The probe kit
+- The catalogue capture takes lowercase labels only (`^[a-z0-9][a-z0-9-]*$`), so the captures are `--label=x8-comments`: `ALL READY (18 captures)`.
+- comments.ts: leg k is new (the panel at four sizes). Leg 5 now reads the gone pin's card and its Pin it somewhere else. Leg j and leg 4 read beside or stacked by what the engine shows, now that the 1440 default split stacks. `rowsOf` closes a stacked card so the panel comes back. On base, leg 4's live dot was pin 2's row (the last delivery's stamp, `2:2026-10-20T12:23:31.670Z`), so the rows are read with the panel in view and pin 1's card opens from its row after the reply.
+- pin-list-hold.ts: the moved rows are now `[data-pin-row][data-moved]`, each one button holding none, in place of the deleted `[data-moved-row]` and its Place again.
+
+## Interface-craft critique (Design Critique, against DESIGN.md)
+- fixed: "most comments are trimmed". Comments panel recipe, four lines and cut; read `lines 4, clamp "4"` at all four sizes, the six-word comment 185px on one line inside the floor's 225px column.
+- fixed: "why i can't click a comment". The whole row is the press (recipe: "it holds no button"); read `{"button":true,"inside":0}` on every row.
+- fixed: "misusing primary/secondary". Reply is the card's one primary (A pin's card); read 1 primary, 0 outline across the panel and the card.
+- fixed: the "Place again" pattern is gone. The gone pin's card says the loss once, in meta, with a ghost action (A pin's card); leg 5 read.
+- fixed: the panel is the kit's floating surface (L885 audit row); read fill, 1px edge and shadow.
+- holds: the card head's anchor name truncates with an ellipsis beside its three glyphs (artifact-pin reach `span[name] "Three ways a long chip wraps" 118 of 172, overflow hidden`). L623 truncates a name inside its row; the selector stands in the anchor's tooltip.
+- holds: the panel's controls at desk are the kit's 30px glyph buttons and 24px tabs, which meet the 24 Pointer Rule by their drawn size (artifact-comments reach: `Close comments 30x30`, `Open 52x24`, `Resolved 74x24`).

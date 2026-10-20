@@ -291,6 +291,7 @@ export type TokenSize =
   | "size.c-artifact-row-h"
   | "size.c-pin"
   | "size.c-pin-card-w"
+  | "size.c-pin-card-min"
   | "size.c-sheet-inspector-w"
   | "size.c-sheet-inspector-head-h"
   | "size.c-canvas-skeleton-w"

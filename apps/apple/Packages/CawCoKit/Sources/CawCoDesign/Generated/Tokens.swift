@@ -547,6 +547,8 @@ public enum Size {
     public static let cPin: Double = 20
     /// A pin's card over the page, at its widest: the anchor line with Resolve, ⋯ and Close, the thread, the reply field (DESIGN.md Artifact panel, canvas and ink). Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px is the narrowest that keeps the anchor line beside its four controls.
     public static let cPinCardW: Double = 280
+    /// A pin's card at its narrowest beside the Comments panel: its head (disc, what it stands on, Resolve, ⋯ and Close) on one line and the reply field. Where the well holds the panel, a gutter, this and the card's two edges, the card stands beside the panel; below that it rises as the foot sheet while the panel goes.
+    public static let cPinCardMin: Double = 240
     /// A sheet's inspector beside the page on a desk (live components spec §5): a prop's name over its control, a five-segment variant or a field at the body size, and the story row's list with its four 30px buttons.
     public static let cSheetInspectorW: Double = 296
     /// The inspector's head, Inspect and Close: the artifact panel's own head height (DESIGN.md Artifact panel, canvas and ink).
@@ -559,12 +561,12 @@ public enum Size {
     public static let cGraphEdge: Double = 1.5
     /// A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink).
     public static let cMapNodeW: Double = 264
-    /// The preview's Comments panel, floating over the page's top-right: its share of the pane's width (Magnific's floating panel, about 22%), held between c-pin-list-min and c-pin-list-max.
-    public static let cPinListShare: Double = 0.22
-    /// The Comments panel at its narrowest: a row's disc, anchor line and last reply's first line.
-    public static let cPinListMin: Double = 260
-    /// The Comments panel at its widest.
-    public static let cPinListMax: Double = 340
+    /// The preview's Comments panel, floating over the well's top-right: its share of the well's width, held between c-pin-list-min and c-pin-list-max. At 0.3 a desk well past about 930px gives the rows more than the floor's 225px text column, so a longer comment wraps to fewer lines.
+    public static let cPinListShare: Double = 0.3
+    /// The Comments panel at its narrowest: a row's text column of 225px beside its disc, where a six-word comment in the body role stands on one line and a 48-word one wraps to its four-line cut.
+    public static let cPinListMin: Double = 280
+    /// The Comments panel at its widest: the house floating-panel width (c-panel-w), as Caw's panel and the usage popover stand.
+    public static let cPinListMax: Double = 380
     /// A task's review on a page wide enough for two columns: the session's words, what to check and its attachments, beside the artifact it presented (TaskReview).
     public static let cReviewWords: Double = 320
     public static let cMark: Double = 26

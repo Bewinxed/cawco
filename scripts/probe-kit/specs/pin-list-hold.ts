@@ -13,8 +13,8 @@
  *    which the overlay moves aside itself (`movedAt`); one of those two
  *    resolved through the hub. The list's tabs read the hub's counts (Open
  *    2, Resolved 1), the head's count the open one; Open lists pin 1 and pin
- *    3, pin 3 marked moved with Place again in its row; Resolved lists pin 2
- *    the same way.
+ *    3, pin 3's row marked moved (its disc recessed) and, like every row,
+ *    one button holding no other; Resolved lists pin 2 the same way.
  * 2. The pane's doc held back by a stand-in for its socket (`routeWebSocket`
  *    on `/ws/artifact/`, the hub's messages kept 2.5 s): from the socket's
  *    start until the doc lands no empty state, no row, no tab count and no
@@ -155,8 +155,8 @@ const drawn = (page: Page): Promise<Drawn> =>
         tabs: [...(root?.querySelectorAll('[role="tab"]') ?? [])].map(
           (tab) => tab.textContent?.trim() ?? ""
         ),
-        rows: numbers("[data-pin-row]", "data-pin-row"),
-        moved: numbers("[data-moved-row]", "data-moved-row"),
+        rows: numbers("[data-pin-row]:not([data-moved])", "data-pin-row"),
+        moved: numbers("[data-pin-row][data-moved]", "data-pin-row"),
         empty: !!root?.querySelector('[data-slot="pin-list-empty"]'),
         reading: !!root?.querySelector('[data-slot="pin-list-reading"]'),
         failed: reason?.textContent?.replace(/\s+/g, " ").trim() ?? null,
@@ -168,11 +168,15 @@ const drawn = (page: Page): Promise<Drawn> =>
     { list: LIST, pane: PANE }
   );
 
-/** Each moved row's Place again, by pin number. */
-const placeAgain = (page: Page, pin: number) =>
-  page.locator(`${LIST} [data-moved-row="${pin}"]`).getByRole("button", {
-    name: "Place again",
-  });
+/** Whether pin `pin`'s row is a button, and how many buttons stand inside it (none: the row is the press). */
+const rowPress = (page: Page, pin: number) =>
+  page
+    .locator(`${LIST} [data-pin-row="${pin}"]`)
+    .evaluate((row) => ({
+      button: row.tagName === "BUTTON",
+      inside: row.querySelectorAll("button").length,
+    }))
+    .catch(() => ({ button: false, inside: -1 }));
 
 const pageFrame = async (page: Page): Promise<Frame> =>
   (await until(
@@ -220,7 +224,7 @@ const recorder = () => {
       `tabs=${tabs}`,
       list.querySelector('[data-slot="pin-list-empty"]') ? "empty" : "",
       list.querySelector('[data-slot="pin-list-reading"]') ? "reading" : "",
-      list.querySelector("[data-pin-row], [data-moved-row]") ? "rows" : "",
+      list.querySelector("[data-pin-row]") ? "rows" : "",
     ]
       .filter(Boolean)
       .join(" ");
@@ -440,7 +444,7 @@ const pinned = async (at: At): Promise<HubPin[]> => {
   return resolved;
 };
 
-/** 1. The tabs and the head read the hub's counts; moved pins under their own tab, Place again in their rows. */
+/** 1. The tabs and the head read the hub's counts; moved pins under their own tab, each row one button. */
 const counts = async (at: At, leg: Leg, hub: HubPin[]) => {
   const { view } = leg;
   const check = (name: string, ok: boolean, detail: string) =>
@@ -462,13 +466,14 @@ const counts = async (at: At, leg: Leg, hub: HubPin[]) => {
       (view === "phone" || onOpen.count === String(openOnHub)),
     JSON.stringify(onOpen)
   );
-  const openPlace = await placeAgain(page, 3).count();
+  const openPress = await rowPress(page, 3);
   check(
-    "1: Open lists pin 1, and pin 3 marked moved with Place again in its row",
+    "1: Open lists pin 1, and pin 3 marked moved, its row one button holding none",
     onOpen.rows.join() === "1" &&
       onOpen.moved.join() === "3" &&
-      openPlace === 1,
-    `${JSON.stringify(onOpen)}; Place again on 3: ${openPlace}`
+      openPress.button &&
+      openPress.inside === 0,
+    `${JSON.stringify(onOpen)}; pin 3's row: ${JSON.stringify(openPress)}`
   );
   await page.locator(`${LIST} [role="tab"]`, { hasText: "Resolved" }).click();
   const onResolved = await until(
@@ -477,14 +482,15 @@ const counts = async (at: At, leg: Leg, hub: HubPin[]) => {
     (now) => now.moved.includes(2) || now.empty,
     10_000
   ).catch(() => drawn(page));
-  const resolvedPlace = await placeAgain(page, 2).count();
+  const resolvedPress = await rowPress(page, 2);
   check(
-    "1: Resolved lists pin 2, moved and resolved, with Place again in its row",
+    "1: Resolved lists pin 2, moved and resolved, its row one button holding none",
     onResolved.rows.length === 0 &&
       onResolved.moved.join() === "2" &&
-      resolvedPlace === 1 &&
+      resolvedPress.button &&
+      resolvedPress.inside === 0 &&
       !onResolved.empty,
-    `${JSON.stringify(onResolved)}; Place again on 2: ${resolvedPlace}`
+    `${JSON.stringify(onResolved)}; pin 2's row: ${JSON.stringify(resolvedPress)}`
   );
   await page.close();
 };

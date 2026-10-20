@@ -17,6 +17,7 @@
   import { type PreviewMode, previewMode } from "@cawco/core/comments";
   import { STAGE_CLONE_MS, STAGE_READY_MS } from "@cawco/core/stage";
   import { type Snippet, untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import {
     failureClause,
     failureWords,
@@ -1022,8 +1023,9 @@
       : null;
   });
   const inspecting = $derived(!!inspector && inspectOpen);
-  /** A right panel beside the page on a desk and a tablet; on a phone, where the pane is the sheet over the conversation, a sheet over the page's foot (the spec's §5). */
-  const inspectorLayout = $derived(sheet ? "sheet" : "panel");
+  /** A right panel beside the page on a desk and a tablet; on a phone (the pane as the sheet over the conversation, or the artifact's own tab), a sheet over the page's foot (the spec's §5). */
+  const phone = new MediaQuery("(width < 640px)");
+  const inspectorLayout = $derived(sheet || phone.current ? "sheet" : "panel");
   /** A compile error's place, `file:line:column` as far as the toolchain's Vite payload names it (Astro and Nuxt run Vite inside). */
   const errorPlace = (error: {
     column: number | null;
@@ -1044,11 +1046,22 @@
   );
   /** The well's box: the Comments panel's room under the head. */
   let wellBox = $state({ w: 0, h: 0 });
+  /** The Comments panel's and a pin card's sizes, from their tokens: the panel's share, its floor and ceiling, the card's floor. */
+  let pinSizes = $state({ share: 0, min: 0, max: 0, card: 0 });
   $effect(() => {
     const box = well;
     if (!box) {
       return;
     }
+    const style = getComputedStyle(box);
+    const token = (name: string) =>
+      Number.parseFloat(style.getPropertyValue(name)) || 0;
+    pinSizes = {
+      share: token("--c-pin-list-share"),
+      min: token("--c-pin-list-min"),
+      max: token("--c-pin-list-max"),
+      card: token("--c-pin-card-min"),
+    };
     // Read now, and a change in the next frame (frameObserver): the
     // Comments panel is laid out in it.
     const read = () => {
@@ -1059,8 +1072,22 @@
     watch.observe(box);
     return () => watch.disconnect();
   });
-  /** The well's gutter, px (`--space-2`): the panel's and the card's distance from its edges. */
+  /** The well's gutter, px: the panel's and the card's distance from its edges. */
   const GUTTER = 8;
+  /** The card's distance from its room's edges, px (PinCard's `EDGE`). */
+  const CARD_EDGE = 8;
+  /**
+   * Beside or stacked: where the well holds the panel at its share, a
+   * gutter, and a card at its floor with its two edges, the card stands
+   * beside the panel. Below that the panel is the well less two gutters,
+   * and an open card rises as the foot sheet while the panel stands aside.
+   */
+  const besideW = $derived(
+    Math.min(Math.max(pinSizes.min, wellBox.w * pinSizes.share), pinSizes.max)
+  );
+  const stacked = $derived(
+    wellBox.w < besideW + GUTTER + pinSizes.card + 2 * CARD_EDGE
+  );
   /**
    * Where the Comments panel hangs: the well's top-right corner, under the
    * head, so the panel's top and right stand a gutter inside the well
@@ -1079,7 +1106,7 @@
     getBoundingClientRect: () => {
       const box = well?.getBoundingClientRect();
       return box
-        ? new DOMRect(box.right - GUTTER, box.top + floorIn(box), 0, 0)
+        ? new DOMRect(box.right - GUTTER, box.bottom, 0, 0)
         : new DOMRect();
     },
   };
@@ -1269,97 +1296,61 @@
     }
     const y = at.y + frame.top + iframe.clientTop - box.top;
     const above = y - at.r - PIN_GAP - GUTTER;
-    const below = floorIn(box) - GUTTER - (y + at.r + PIN_GAP);
+    const below = box.height - GUTTER - (y + at.r + PIN_GAP);
     const side = kept ?? (above >= below ? "top" : "bottom");
     return { id, side, room: Math.max(0, side === "top" ? above : below) };
   }
-  /**
-   * How far down the well the panel may reach, px from its top: its foot,
-   * or on a phone the top of the open card standing there.
-   */
-  function floorIn(box: DOMRect): number {
-    const room = pinRoom;
-    const card = sheet
-      ? room?.querySelector<HTMLElement>('[data-slot="pin-card"]')
-      : null;
-    // Its laid-out place, not its drawn one: it rises and scales in as it opens.
-    return room && card
-      ? Math.min(
-          box.height,
-          room.getBoundingClientRect().top + card.offsetTop - box.top
-        )
-      : box.height;
-  }
-  /** The open card's height on a phone, where it stands at the well's foot: the panel stands above it. */
-  let cardHeight = $state(0);
   let pinRoom = $state<HTMLDivElement>();
-  $effect(() => {
-    const room = pinRoom;
-    if (!(sheet && cardPin && room)) {
-      cardHeight = 0;
-      return;
-    }
-    const card = room.querySelector<HTMLElement>('[data-slot="pin-card"]');
-    if (!card) {
-      return;
-    }
-    // Read now, and a change in the next frame (frameObserver): the panel
-    // stands above it.
-    const read = () => {
-      cardHeight = card.offsetHeight;
-    };
-    read();
-    const watch = frameObserver(read);
-    watch.observe(card);
-    return () => watch.disconnect();
-  });
+  /** The open card rises as the foot sheet: on a phone, and where the well can't hold it beside the open panel. */
+  const cardSheet = $derived(sheet || (stacked && listOpen));
+  /** The panel stands aside while a card stands at the foot, and comes back as it was (its tab, its scroll) when the card closes. */
+  const listAway = $derived(listOpen && cardSheet && !!cardPin);
+  /** The panel's tab and its rows' scroll, kept while it stands aside. */
+  let listFilter = $state<"open" | "resolved">("open");
+  let listScroll = $state(0);
   /**
    * The panel's room, as its height reads it (`--pin-list-room`, its
-   * max-block-size that less `--space-4`, two gutters): the well's, a stuck
-   * pin's side of it, or on a phone the well above the open card.
+   * max-block-size that less `--space-4`, two gutters): the well's, or a
+   * stuck pin's side of it.
    */
-  const listRoom = $derived.by(() => {
-    if (listYield) {
-      return listYield.room + 2 * GUTTER;
-    }
-    if (sheet && cardHeight > 0) {
-      return Math.max(0, wellBox.h - cardHeight - GUTTER);
-    }
-    return wellBox.h;
-  });
+  const listRoom = $derived(
+    listYield ? listYield.room + 2 * GUTTER : wellBox.h
+  );
+  /** The panel's width: its share of the well between its floor and ceiling, or stacked, the well less two gutters. */
+  const listW = $derived(
+    `${stacked ? Math.max(0, wellBox.w - 2 * GUTTER) : besideW}px`
+  );
   /**
    * What the host's chrome covers of the page, told to its overlay
-   * (`cawco:covered`, the page's viewport px): the open panel and, on a
-   * phone, the card at the well's foot. A pin the pane opens is brought out
-   * from under them (pins.ts `reveal`). Told again as either resizes or
-   * moves, and as nothing once the panel shuts.
+   * (`cawco:covered`, the page's viewport px): the open panel, or the card
+   * at the well's foot while the panel stands aside. A pin the pane opens
+   * is brought out from under them (pins.ts `reveal`). Told again as either
+   * resizes or moves, and as nothing once the panel shuts.
    */
   $effect(() => {
     const frame = iframe;
-    const panel = listPanel;
     const open = listOpen;
+    const panel = listAway ? null : listPanel;
     const room = pinRoom;
-    const card = sheet && cardPin ? cardHeight : 0;
+    const card =
+      cardSheet && cardPin
+        ? room?.querySelector('[data-slot="pin-card"]')
+        : null;
     if (!(frame && connected)) {
       return;
     }
-    if (!(open && panel)) {
+    if (!(open && (panel || card))) {
       post({ type: "cawco:covered", boxes: [] });
       return;
     }
     // Said in the next frame (frameObserver), whatever moved it: the panel
-    // resized, or its wrapper placed again.
+    // or the card resized, or the panel's wrapper placed again.
     const sayNow = () => {
       const framed = frame.getBoundingClientRect();
       const left = framed.left + frame.clientLeft;
       const top = framed.top + frame.clientTop;
       // The panel's wrapper stands where it is placed, at its laid-out size (its entrance scales the panel inside).
-      const boxes = [
-        panel.parentElement ?? panel,
-        ...(card > 0 && room
-          ? [room.querySelector('[data-slot="pin-card"]')]
-          : []),
-      ]
+      const boxes = [panel ? (panel.parentElement ?? panel) : null, card]
         .filter((el): el is Element => !!el)
         .map((el) => {
           const r = el.getBoundingClientRect();
@@ -1373,9 +1364,13 @@
       post({ type: "cawco:covered", boxes });
     };
     const sized = frameObserver(sayNow);
-    sized.observe(panel);
+    for (const el of [panel, card]) {
+      if (el) {
+        sized.observe(el);
+      }
+    }
     const moved = new MutationObserver(() => sized.request());
-    if (panel.parentElement) {
+    if (panel?.parentElement) {
       moved.observe(panel.parentElement, { attributeFilter: ["style"] });
     }
     sized.request();
@@ -1447,6 +1442,9 @@
     pinAt = null;
     listYield = null;
     cardError = null;
+    if (id && id === placing) {
+      placeElsewhere(false);
+    }
     post({ type: "cawco:track-pin", id: null });
     if (id && id === madePin) {
       madePin = null;
@@ -1493,11 +1491,23 @@
       untrack(openLinkedPin);
     }
   });
-  /** Place again: Comment mode until the next tap pins the moved pin anew. */
-  function placeAgain(id: string) {
-    placingFrom = mode;
-    closeCard();
-    setMode("comment", id);
+  /**
+   * The open card's Pin it somewhere else: Comment mode, its card still
+   * open, until the next tap on the page pins the gone pin anew; Cancel
+   * (or the card closing) puts the mode back as it was.
+   */
+  function placeElsewhere(on: boolean) {
+    if (on && openPin) {
+      placingFrom = mode;
+      setMode("comment", openPin);
+      return;
+    }
+    if (placingFrom && placingFrom !== "comment") {
+      setMode(placingFrom);
+    } else {
+      setMode(mode);
+    }
+    placingFrom = null;
   }
   /** The person's words in the open pin's thread; a resolved pin's reply reopens it ("Reply to reopen"). */
   function reply(text: string): boolean {
@@ -2388,14 +2398,13 @@
        It stays while the person works the page and opens threads (a press
        outside it is theirs), and goes with its Close, Comments again, or
        an Esc once no card is open and the mode is Interact. -->
-  <Popover.Root onOpenChange={showList} open={listOpen && !!well}>
+  <Popover.Root onOpenChange={showList} open={listOpen && !listAway && !!well}>
     <Popover.Content
       data-pin-list-pop
       align="end"
       class="w-(--pin-list-w)"
       gap="none"
       height="room"
-      pad="inset"
       bind:ref={listPanel}
       customAnchor={listYield?.side === "bottom" ? wellFoot : wellCorner}
       onEscapeKeydown={(event) => {
@@ -2412,7 +2421,7 @@
       onOpenAutoFocus={(event) => event.preventDefault()}
       side={listYield?.side === "bottom" ? "top" : "bottom"}
       sideOffset={GUTTER}
-      style={`--pin-list-room: ${listRoom}px; --pin-list-pane: ${wellBox.w}px; --pin-list-w: clamp(var(--c-pin-list-min), calc(var(--pin-list-pane) * var(--c-pin-list-share)), min(var(--c-pin-list-max), calc(var(--pin-list-pane) - var(--space-4)))); --pop-max-h: min(calc(var(--pin-list-room) - var(--space-4)), var(--bits-popover-content-available-height, 100dvh))`}
+      style={`--pin-list-room: ${listRoom}px; --pin-list-w: ${listW}; --pop-max-h: min(calc(var(--pin-list-room) - var(--space-4)), var(--bits-popover-content-available-height, 100dvh))`}
       trapFocus={false}
     >
       <PinList
@@ -2421,10 +2430,10 @@
         hold={listHold}
         onclose={() => showList(false)}
         onopen={openCard}
-        onplace={placeAgain}
         onretry={() => doc?.retry()}
         {pins}
-        {placing}
+        bind:filter={listFilter}
+        bind:scroll={listScroll}
       />
     </Popover.Content>
   </Popover.Root>
@@ -2838,14 +2847,16 @@
         onclose={closeCard}
         ondelete={deleteOpenPin}
         onreply={reply}
+        onplace={placeElsewhere}
         onresolve={resolvePin}
         pin={cardPin}
+        placing={placing === cardPin.id}
         problem={cardError}
         room={{
-          w: listWidth > 0 && !sheet ? roomW - listWidth - GUTTER : roomW,
+          w: listOpen && !cardSheet ? roomW - listWidth - GUTTER : roomW,
           h: roomH,
         }}
-        {sheet}
+        sheet={cardSheet}
         bind:draft={
           () => (cardPin ? drafts.text(cardPin.id) : ""),
           (text) => {
