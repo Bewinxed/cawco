@@ -35,7 +35,7 @@
     {#if origin === "editor"}
       Compiled from this graph on save. Edit the graph to change it.
     {:else}
-      The program is the workflow. It saves as you type.
+      The program is the workflow.
     {/if}
   </p>
   <!-- The program is one code surface on the page's field: the well

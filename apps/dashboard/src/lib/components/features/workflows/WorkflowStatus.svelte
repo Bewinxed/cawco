@@ -1,14 +1,6 @@
 <script lang="ts">
   import type { WorkflowRunStatus, WorkflowStepStatus } from "@cawco/core";
-  import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import {
-    IconCheck,
-    IconChevronUp,
-    IconDot,
-    IconError,
-    IconStop,
-  } from "#lib/icons.js";
 
   let {
     status,
@@ -36,30 +28,18 @@
   // A held step waits on its run's supervisor, not the operator: it says so
   // in its own word under the same attention tone.
   const label = $derived(status === "held" ? "held" : labels[tone] || status);
-  const icons = {
-    live: IconDot,
-    attn: IconChevronUp,
-    done: IconCheck,
-    fail: IconError,
-    idle: IconStop,
-  };
-  const Glyph = $derived(icons[tone]);
 </script>
 
-<!-- One chip for the life of the status: a change tints it over --dur-panel,
-     the glyph cross-fades in its cell and the label morphs in place. In a
-     `reflow` list (the rail, the board's queue) the chip still pops in and
-     out as a whole (motion/rows). -->
+<!-- The board's state pill (DESIGN.md, Board state pill): the word inside
+     its status tint, with no glyph; idle drops the tint and the padding. A
+     change turns the tint over --dur-panel and morphs the word in place. In
+     a `reflow` list the pill still pops in and out as a whole (motion/rows). -->
 <span
-  class="mark-line type-label inline-flex items-center gap-space-1 rounded-pill bg-(color:--chip-bg) px-space-2 py-space-1 whitespace-nowrap text-(color:--chip-ink) transition-[background-color,color] duration-(--dur-panel) ease-out"
+  data-slot="workflow-status"
+  class={[
+    "mark-text type-label inline-flex h-c-pill-h flex-none items-center rounded-pill whitespace-nowrap text-status-idle-ink transition-[background-color,color] duration-(--dur-panel) ease-out tone-live:bg-status-live-bg tone-live:text-status-live-ink tone-attn:bg-status-attn-bg tone-attn:text-status-attn-ink tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink",
+    tone !== "idle" && "px-space-3",
+  ]}
   data-flip="pop"
-  style:--chip-bg="var(--status-{tone}-bg)"
-  style:--chip-ink="var(--status-{tone}-ink)"
-  ><span data-slot="glyph" aria-hidden="true" class="grid" data-box
-    >{#key tone}
-      <span class="col-start-1 row-start-1 grid" transition:crossIn
-        ><Glyph class="size-icon-sm" /></span
-      >
-    {/key}</span
-  ><MorphText text={label} /></span
+  data-tone={tone}><MorphText text={label} /></span
 >

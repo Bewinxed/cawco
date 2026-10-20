@@ -7,50 +7,10 @@
   import { workflowPorts } from "@cawco/core";
   import { Handle, type NodeProps, Position } from "@xyflow/svelte";
   import WorkflowStatus from "./WorkflowStatus.svelte";
-  import { JEV_TYPE_NAMES, kinds } from "./workflow-ui";
+  import { JEV_TYPE_NAMES, kinds, RUN_HIT_GAP } from "./workflow-ui";
 
   let { data, selected }: NodeProps = $props();
   const node = $derived(data.node as WorkflowNode);
-
-  /**
-   * Stacked ports sit a few screen pixels apart at fit zoom, too close for
-   * a target each. Under a mouse the port column is one target, and it acts
-   * for the port whose centre is nearest the pointer: that handle shows it
-   * on hover, and a press starts the connection from it.
-   */
-  let portsEl = $state<HTMLElement | null>(null);
-  let near = $state<string | null>(null);
-  const nearest = (y: number): HTMLElement =>
-    [
-      ...(portsEl as HTMLElement).querySelectorAll<HTMLElement>(
-        ".svelte-flow__handle"
-      ),
-    ]
-      .map((handle) => {
-        const box = handle.getBoundingClientRect();
-        return { handle, gap: Math.abs(box.top + box.height / 2 - y) };
-      })
-      .reduce((a, b) => (b.gap < a.gap ? b : a)).handle;
-  const aim = (event: MouseEvent) => {
-    near = nearest(event.clientY).dataset.handleid ?? null;
-  };
-  /** The press and the click go to the nearest port's handle, where Svelte Flow listens. */
-  const route = (event: MouseEvent) => {
-    event.preventDefault();
-    nearest(event.clientY).dispatchEvent(
-      new MouseEvent(event.type, {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-        clientX: event.clientX,
-        clientY: event.clientY,
-        screenX: event.screenX,
-        screenY: event.screenY,
-        button: event.button,
-        buttons: event.buttons,
-      })
-    );
-  };
   const ports = $derived(workflowPorts(node));
   const title = $derived(node.title);
   const modelled = $derived(node.kind === "step");
@@ -87,7 +47,12 @@
   });
 </script>
 
-<!-- The selection ring is always drawn, over the card's own border (so the
+<!-- Each dot's area (`pointer-hit`, `touch-hit`, held on screen by the
+     canvas's --hit-scale) stops at the midpoint to its edge's Delete
+     button, which stands in the middle of the run between two cards
+     (WorkflowEdge). `absolute` keeps Svelte Flow's own place for the dot:
+     the areas' `position: relative` would otherwise put it in the row's
+     flow. The selection ring is always drawn, over the card's own border (so the
      border itself turns the colour, never a second ring round it); choosing a
      node fades its colour in over --dur-control, and the one let go fades out
      the same way. Keyboard focus on the node uses the same ring in the focus
@@ -98,11 +63,12 @@
   class="w-c-wf-node-w rounded-md border border-border-hairline bg-surface-raised text-size-body font-normal text-ink-strong shadow-tile outline-(length:--focus-ring-width) outline-solid outline-transparent outline-offset-(--focus-ring-inset) transition-[outline-color] duration-(--dur-control) ease-out data-is-selected:outline-brand-solid node-focus-visible:outline-focus-ring"
   data-is-selected={selected || undefined}
   data-map={node.kind === "map" || undefined}
+  style:--hit-gap-x={RUN_HIT_GAP}
 >
   {#if node.kind !== "start"}
     <Handle
       aria-label="Input for {title}"
-      class="pointer-hit"
+      class="pointer-hit touch-hit absolute z-1"
       position={Position.Left}
       type="target"
     />
@@ -114,7 +80,7 @@
       data-box
       data-filled={modelled || undefined}
       ><Glyph aria-hidden="true" class="size-icon-md" /></span
-    ><strong class="flex-1 font-medium wrap-anywhere text-ink-strong"
+    ><strong class="flex-1 type-label wrap-anywhere text-ink-strong"
       >{title}</strong
     >
   </header>
@@ -143,48 +109,34 @@
     {/if}
   </div>
   {#if ports.length > 1}
+    <!-- Each port's dot is its own target: its area reaches the floor on
+         screen at any zoom (--hit-scale) and stops at the midpoint to the
+         next port's, one row's pitch apart. -->
     <div
       data-slot="ports"
-      class="relative border-t border-t-border-hairline py-space-2"
-      bind:this={portsEl}
+      class="border-t border-t-border-hairline py-space-2"
+      style:--hit-gap-y="calc(var(--c-btn-h-sm) - var(--c-graph-handle))"
     >
       {#each ports as port (port)}
         <div
           data-slot="port"
-          class="group relative px-space-4 py-space-1 text-right text-size-label font-medium fine:data-near:text-ink-strong fine:data-near:xy-handle-brand"
-          data-near={near === port || undefined}
+          class="relative flex h-c-btn-h-sm items-center justify-end px-space-4 text-size-label font-medium hover:text-ink-strong hover:xy-handle-brand"
         >
           {port}
           <Handle
             aria-label="{title}: {port}"
+            class="pointer-hit touch-hit absolute z-1"
             id={port}
             position={Position.Right}
             type="source"
           />
         </div>
       {/each}
-      <!-- The column's one target: its full height and the half-gap stops
-           above and below, 24px wide on screen at any zoom, centred on the
-           handles. -->
-      <div
-        aria-hidden="true"
-        data-slot="port-hit"
-        class="nodrag nopan hidden fine:absolute fine:inset-y-(--off-block) fine:end-(--off-end) fine:block fine:w-(--hit-w) fine:cursor-crosshair"
-        onclick={route}
-        onmousedown={route}
-        onmouseleave={() => {
-          near = null;
-        }}
-        onmousemove={aim}
-        style:--off-block="calc(var(--space-5) / -2)"
-        style:--off-end="calc(var(--c-pointer-floor) / -2 / var(--hit-scale, 1))"
-        style:--hit-w="calc(var(--c-pointer-floor) / var(--hit-scale, 1))"
-      ></div>
     </div>
   {:else if ports[0]}
     <Handle
       aria-label="{title}: {ports[0]}"
-      class="pointer-hit"
+      class="pointer-hit touch-hit absolute z-1"
       id={ports[0]}
       position={Position.Right}
       type="source"

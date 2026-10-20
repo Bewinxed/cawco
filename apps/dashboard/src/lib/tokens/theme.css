@@ -304,6 +304,7 @@
   --spacing-c-pin: var(--c-pin);
   --spacing-c-pin-card-w: var(--c-pin-card-w);
   --spacing-c-sheet-inspector-w: var(--c-sheet-inspector-w);
+  --spacing-c-sheet-inspector-max-h: var(--c-sheet-inspector-max-h);
   --spacing-c-sheet-inspector-head-h: var(--c-sheet-inspector-head-h);
   --spacing-c-canvas-skeleton-w: var(--c-canvas-skeleton-w);
   --spacing-c-canvas-skeleton-h: var(--c-canvas-skeleton-h);

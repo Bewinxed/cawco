@@ -31,6 +31,7 @@
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
@@ -39,6 +40,7 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Tabs from "#lib/components/ui/tabs/index.js";
+  import { IconHistory } from "#lib/icons.js";
   import { beforeNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
   import { paneSlide, towards } from "./pane-slide";
@@ -68,8 +70,6 @@
   let now = $state(Date.now());
   let paletteOpen = $state(false);
   let inspectorOpen = $state(false);
-  /** The edge the narrow inspector rises from: the selected node's side. */
-  let inspectorSide = $state<"left" | "right" | "bottom">("bottom");
   let paletteCollapsed = $state(false);
   let panelWidth = $state(940);
   let palettePane = $state<{ collapse: () => void; expand: () => void }>();
@@ -336,25 +336,22 @@
     root = JSON.parse(next);
     selected = undefined;
   }
-  /**
-   * The side of the screen a node is drawn on, for the narrow inspector to
-   * rise from; with no node on screen (the workflow's settings, an edge),
-   * from the bottom.
-   */
-  function sideOf(key?: string): "left" | "right" | "bottom" {
-    const at = key
-      ? document.querySelector(
-          `.svelte-flow__node[data-id="${CSS.escape(key)}"]`
-        )
-      : null;
-    if (!at) {
-      return "bottom";
-    }
-    const box = at.getBoundingClientRect();
-    return box.left + box.width / 2 < window.innerWidth / 2 ? "left" : "right";
+  /** The workflow can run as it stands: saved, sound, and the hub there. */
+  const runnable = $derived(
+    !!(workflow && live) &&
+      !errorMessage &&
+      !dirty &&
+      !saving &&
+      problems.length === 0
+  );
+  /** Opens the launch form under the button that asked for it. */
+  function openLaunch(from: HTMLElement) {
+    inspectorOpen = false;
+    paletteOpen = false;
+    launchFrom = from;
+    launch = true;
   }
   function openInspector() {
-    inspectorSide = sideOf(selected);
     inspectorOpen = true;
   }
   function select(key?: string) {
@@ -458,10 +455,14 @@
 {#snippet palette()}
   <div
     data-slot="palette"
-    class="flex h-full min-w-0 flex-col gap-space-4 overflow-y-auto px-space-3 py-space-4"
+    class="kit-edge-fade-block flex h-full min-w-0 flex-col gap-space-4 overflow-y-auto px-space-1 py-space-4"
     {@attach highlight({ rows: '[data-slot="palette-item"]' })}
   >
-    <div class="flex flex-wrap items-center justify-between gap-space-2">
+    <!-- Heads and rows share one edge: the rows' highlight runs the
+         palette's width, and their words start where the heads do. -->
+    <div
+      class="flex flex-wrap items-center justify-between gap-space-2 px-space-2"
+    >
       <h2 class="type-label">
         <MorphText text={paletteCollapsed ? "Add" : "Nodes"} />
       </h2>
@@ -479,11 +480,11 @@
     </div>
     {#each ["Flow", "Work", "People"] as group (group)}
       <section class="flex min-w-0 flex-col gap-space-4">
-        <h3 class="type-label">{group}</h3>
+        <h3 class="px-space-2 type-label">{group}</h3>
         {#each kinds.filter((entry) => entry.group === group) as entry (entry.kind)}
           <button
             data-slot="palette-item"
-            class="press-tint -mx-space-2 flex min-h-c-btn-h-lg items-center gap-space-3 rounded-sm p-space-2 text-start"
+            class="press-tint flex min-h-c-btn-h-lg items-center gap-space-3 rounded-sm p-space-2 text-start"
             onclick={() => add(entry.kind)}
             title={entry.meaning}
             type="button"
@@ -507,11 +508,11 @@
     {/each}
     {#if !paletteCollapsed || narrow.current}
       <section class="flex min-w-0 flex-col gap-space-4" transition:crossIn>
-        <h3 class="type-label">Templates</h3>
+        <h3 class="px-space-2 type-label">Templates</h3>
         {#each types as type (type.name)}
           <button
             data-slot="palette-item"
-            class="press-tint -mx-space-2 flex min-h-c-btn-h-lg items-center gap-space-3 rounded-sm p-space-2 text-start"
+            class="press-tint flex min-h-c-btn-h-lg items-center gap-space-3 rounded-sm p-space-2 text-start"
             onclick={() => add("step", type)}
             type="button"
           >
@@ -620,17 +621,8 @@
           type="button"
           variant="outline"
         /><Button
-          disabled={!(workflow && live) ||
-            !!errorMessage ||
-            dirty ||
-            saving ||
-            problems.length > 0}
-          onclick={(event) => {
-            inspectorOpen = false;
-            paletteOpen = false;
-            launchFrom = event.currentTarget;
-            launch = true;
-          }}
+          disabled={!runnable}
+          onclick={(event) => openLaunch(event.currentTarget)}
           title={live ? undefined : "Can't run while the hub is unreachable"}
           type="button"
         >
@@ -663,13 +655,14 @@
             >
               + Add node
             </Button><Button
-              data-slot="num"
               figures="tabular"
               onclick={openInspector}
               type="button"
               variant="outline"
             >
-              Inspector · {problems.length}
+              Inspector{#if problems.length}<span data-slot="num" class="num"
+                  >&nbsp;· {problems.length}</span
+                >{/if}
             </Button></span
           >
         {/if}
@@ -769,30 +762,24 @@
                 class="flex w-c-workflow-runs-w min-w-0 shrink-0 flex-col gap-space-4 overflow-y-auto border-e border-e-border-hairline p-space-3 max-wide:w-full max-wide:border-e-0"
                 {@attach reflow()}
               >
-                <!-- The kit's ghost and pill: hover glides, and the pill
-                     follows the choice (the chips draw no fill of their own
-                     here). -->
+                <!-- Filters over the runs (DESIGN.md, filter-chip-active):
+                     the chosen one in the brand wash, a 21px pill. -->
                 <div
                   data-slot="filters"
                   class="flex flex-wrap items-center gap-space-2"
-                  {@attach highlight({
-                    rows: '[data-slot="run-filter"]',
-                    selected: '[aria-pressed="true"]',
-                    axis: "x",
-                  })}
                 >
                   {#each [{ value: "all", label: "All" }, { value: "waiting", label: "Needs you" }, { value: "failed", label: "Failed" }] as item (item.value)}
-                    <Button
+                    <button
                       data-slot="run-filter"
+                      class="pointer-hit touch-hit inline-flex h-space-6 items-center rounded-pill px-space-3 type-label text-ink-muted transition-colors aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover"
                       aria-pressed={filter === item.value}
                       onclick={() => {
                         filter = item.value;
                       }}
                       type="button"
-                      variant="ghost"
                     >
                       {item.label}
-                    </Button>
+                    </button>
                   {/each}
                 </div>
                 {#if !runs.length}
@@ -806,27 +793,54 @@
                   {@const supervisor = run.supervisorInstanceId
                     ? cawco.instanceIndex.byId.get(run.supervisorInstanceId)
                     : undefined}
+                  <!-- When it started over how long it took, as one
+                       block, its state at the end. -->
                   <a
                     data-slot="run-entry"
-                    class="flex min-w-0 flex-col gap-space-4 border-b border-b-border-hairline p-space-3 text-start text-inherit no-underline"
+                    class="flex min-w-0 items-center justify-between gap-space-3 border-b border-b-border-hairline p-space-3 text-start text-inherit no-underline"
                     data-flip
                     href={runHref(run.id)}
                   >
-                    <div
-                      class="flex flex-wrap items-center justify-between gap-space-2"
-                    >
-                      <span>{new Date(run.startedAt).toLocaleString()}</span>
-                      <WorkflowStatus status={run.status} />
-                    </div>
-                    <span class="type-meta text-ink-muted"
-                      >{duration(run.startedAt, run.endedAt, now)}
-                      {supervisor?.title
-                        ? ` · from ${supervisor.title}`
-                        : ""}</span
-                    >
+                    <span class="flex min-w-0 flex-col gap-space-1">
+                      <span class="wrap-anywhere"
+                        >{new Date(run.startedAt).toLocaleString()}</span
+                      >
+                      <span class="type-meta wrap-anywhere text-ink-muted"
+                        >{duration(run.startedAt, run.endedAt, now)}
+                        {supervisor?.title
+                          ? ` · from ${supervisor.title}`
+                          : ""}</span
+                      >
+                    </span>
+                    <WorkflowStatus status={run.status} />
                   </a>
                 {/each}
               </aside>
+              <!-- Beside the list on a desk: a run opens in its own tab, so
+                   nothing is chosen here, and the pane offers the work that
+                   fills the list (DESIGN.md, Empty). -->
+              <div class="flex min-w-0 flex-1 max-wide:hidden">
+                <EmptyState
+                  class="flex-1"
+                  icon={IconHistory}
+                  line="A run opens in its own tab, as a session does."
+                  pad="pane"
+                  title={runs.length ? "Open a run to watch it" : "No runs yet"}
+                >
+                  {#snippet action()}
+                    <Button
+                      disabled={!runnable}
+                      onclick={(event) => openLaunch(event.currentTarget)}
+                      size="sm"
+                      title={live
+                        ? undefined
+                        : "Can't run while the hub is unreachable"}
+                      type="button"
+                      variant="outline">Run workflow</Button
+                    >
+                  {/snippet}
+                </EmptyState>
+              </div>
             </div>
           {/if}
         </div>
@@ -834,7 +848,7 @@
     </div>
   {/if}
 </div>
-{#if workflow && launch}
+{#if workflow && launch && launchFrom}
   <WorkflowLaunch
     from={launchFrom}
     onclose={() => {
@@ -852,19 +866,33 @@
       {@render palette()}</Dialog.Content
     ></Dialog.Root
   >
-  <!-- The inspector rises as a drawer from the side the selected node is
-       drawn on (from the bottom for the settings), and follows a drag 1:1
-       back out. -->
-  <Drawer.Root direction={inspectorSide} bind:open={inspectorOpen}>
-    <Drawer.Content height="shrink">
+  <!-- The inspector is the house phone sheet (DESIGN.md, A sheet's
+       inspector, and the Drawer recipe): over the page's foot, edge to edge,
+       as tall as it needs up to 60% of the screen, the graph above it live
+       (The Open Page Rule), and it follows a drag 1:1 back down. -->
+  <Drawer.Root direction="bottom" modal={false} bind:open={inspectorOpen}>
+    <Drawer.Content
+      height="shrink"
+      modal={false}
+      style="--drawer-max-height: var(--c-sheet-inspector-max-h)"
+    >
       <Drawer.Header>
         <Drawer.Title>{inspectorTitle(node, edge)}</Drawer.Title>
+        {#if node}
+          <Button
+            class="ms-auto"
+            onclick={() => select()}
+            size="sm"
+            type="button"
+            variant="ghost">Settings</Button
+          >
+        {/if}
       </Drawer.Header>
       <Drawer.Description visible={false}
         >Edit the selected node or workflow settings.</Drawer.Description
       >
       <div
-        class="kit-edge-fade-block min-h-0 touch-pan-y overflow-y-auto overscroll-contain"
+        class="kit-sheet-scroll kit-edge-fade-block min-h-0 touch-pan-y overflow-y-auto overscroll-contain"
       >
         {@render inspector(true)}
       </div>

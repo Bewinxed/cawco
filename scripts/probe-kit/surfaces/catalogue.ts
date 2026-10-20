@@ -2445,13 +2445,14 @@ export const SURFACES: Surface[] = [
         ready: { shows: workflowTab("runs") },
       },
       {
-        // Run: the launch dialog, opened and not sent.
+        // Run: the launch form, opened and not sent (a popover under the
+        // button on a desk, the bottom sheet on a phone).
         name: "launch",
         route: (s) => `/workflows/${s.workflow}`,
         act: press(RUN_WORKFLOW),
         root: "body",
         ready: {
-          shows: `${OPEN_DIALOG} [data-slot=dialog-title]`,
+          shows: `${OPEN_POPOVER} [data-slot=popover-title], [data-slot=drawer-content][data-state=open] [data-slot=drawer-title]`,
           says: /^Run /,
         },
       },

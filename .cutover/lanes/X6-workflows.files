@@ -22,5 +22,14 @@ apps/dashboard/src/lib/components/features/workflows/pane-slide.ts
 apps/dashboard/src/lib/components/features/workflows/workflow-ui.ts
 apps/dashboard/src/routes/(app)/workflows/+page.svelte
 apps/dashboard/src/routes/(app)/workflows/[id]/+page.svelte
-# catalogue.ts: its STEP_SETTINGS entry only (the graph-step ready selector); X0-coverage owns the rest of the catalogue
+# catalogue.ts: its STEP_SETTINGS and workflows-launch ready entries only; X0-coverage owns the rest of the catalogue
 scripts/probe-kit/surfaces/catalogue.ts
+# app.css: its @utility touch-hit rule (the --hit-scale term) and the session hover head-mark rule only, by the parent's leave
+apps/dashboard/src/app.css
+# the c-sheet-inspector-max-h token (L887) and every file bun run tokens rewrote for it
+design/tokens/cawco.tokens.json
+apps/dashboard/src/lib/tokens/theme.css
+apps/dashboard/src/lib/tokens/tokens.css
+apps/dashboard/src/lib/tokens/tokens.ts
+apps/apple/Packages/CawCoKit/Sources/CawCoDesign/Generated/Tokens.swift
+packages/hub/skills/decision-page/kit/tokens.css

@@ -72,9 +72,14 @@
     }
   }}
 />
+<!-- Under a finger the cluster opens its gap (DESIGN.md, The 44 Touch
+     Rule), so each control's 44px area stands clear of its neighbours'.
+     The bar stands over the canvas, not in its zoom: its areas take no
+     --hit-scale from the canvas it floats on. -->
 <div
   data-slot="tools"
-  class="flex items-center gap-space-1 rounded-lg bg-surface-raised p-space-1 text-ink-strong shadow-tile"
+  style:--hit-scale="1"
+  class="flex items-center gap-space-1 rounded-lg bg-surface-raised p-space-1 text-ink-strong shadow-tile coarse:gap-space-3"
 >
   {#if onpan}
     <Toggle

@@ -45,10 +45,16 @@
   onMount(() => {
     refreshWorkflows();
   });
-  /** A row as a card: the name across it, then status, age, runs and Run. */
-  const CARD_COLS = "auto minmax(0, 1fr) auto auto";
-  /** The name stands across the card. */
-  const NAME_CELL = "@max-phone/table:col-span-full";
+  /**
+   * A row as a card: the name over its status, age and runs, as one block,
+   * and Run at the card's end, centred on the block.
+   */
+  const CARD_COLS = "auto auto minmax(0, 1fr) auto";
+  /** The name stands over the block's three facts. */
+  const NAME_CELL = "@max-phone/table:col-span-3";
+  /** Run stands at the end, down both of the block's lines. */
+  const RUN_CELL =
+    "@max-phone/table:col-start-4 @max-phone/table:row-span-2 @max-phone/table:row-start-1";
   const GRAPH = { graph: { nodes: [newNode("start")], edges: [] } };
   const PROGRAM = { program: STARTER_PROGRAM };
   /**
@@ -214,7 +220,7 @@
                   width="glyph"
                 /></Table.Cell
               >
-              <Table.Cell edge="end" variant="ledger-stacks"
+              <Table.Cell class={RUN_CELL} edge="end" variant="ledger-stacks"
                 ><Skeleton height="control" width="word" /></Table.Cell
               >
             </Table.Row>
@@ -250,7 +256,7 @@
               <Table.Cell class={NAME_CELL} variant="ledger-stacks">
                 <a
                   data-slot="name"
-                  class="focus-inset flex min-w-0 flex-col justify-center rounded-xs text-inherit no-underline coarse:min-h-c-btn-h-lg"
+                  class="pointer-hit focus-inset flex min-w-0 flex-col justify-center rounded-xs text-inherit no-underline coarse:min-h-c-btn-h-lg"
                   href="/workflows/{workflow.id}"
                   ><span class="truncate type-label text-ink-strong"
                     >{workflow.name}</span
@@ -275,7 +281,7 @@
                   >{runs.length === 1 ? " run" : " runs"}</span
                 ></Table.Cell
               >
-              <Table.Cell edge="end" variant="ledger-stacks">
+              <Table.Cell class={RUN_CELL} edge="end" variant="ledger-stacks">
                 <Button
                   disabled={!live}
                   onclick={(event) => {
