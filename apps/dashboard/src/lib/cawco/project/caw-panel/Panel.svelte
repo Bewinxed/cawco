@@ -21,10 +21,11 @@
    *   the page.
    * - `centre`: the thread's room holds one block at its middle (a blocking
    *   state takes the panel's centre).
-   * - `peek`: only the panel's top, for a choice about its head: the panel
-   *   (desk) or the screen (phone) cut short with no message box, its
-   *   foot fading to the page's ground so the crop reads as going on. The cut is a crop of the
-   *   frame, not a design length.
+   * - `peek`: only the panel's top, this many px tall: the panel (desk) or
+   *   the screen (phone, the card 60px shorter: the bar over it and a gap
+   *   under it) cut short with no message box, its foot fading to the
+   *   page's ground so the crop reads as going on. The cut is a crop of the
+   *   frame, sized to its story's content, not a design length.
    * - `menu`: the head's More menu stands open, drawn in the frame.
    * - `lit`: a resize grip drawn as it is under the pointer.
    * - `sized`: the size it opens at, as a drag or Wide panel left it (the
@@ -57,7 +58,7 @@
     composer = "Message Caw",
     resize = null,
     centre = false,
-    peek = false,
+    peek = null,
     menu = false,
     lit = false,
     sized = null,
@@ -72,7 +73,8 @@
     composer?: string | null;
     resize?: "edges" | "corner" | "menu" | null;
     centre?: boolean;
-    peek?: boolean;
+    /** The crop's height in px; null draws the whole panel. */
+    peek?: number | null;
     menu?: boolean;
     lit?: boolean;
     /** The size it opens at: one a drag or Wide panel gave it, kept when it reopens. */
@@ -81,7 +83,7 @@
   } = $props();
 
   const phone = $derived(form === "phone");
-  const boxed = $derived(peek ? null : composer);
+  const boxed = $derived(peek === null ? composer : null);
   const draft = new ComposerDraft();
   /** Caw's glass on the phone's bar: what the panel hangs from. */
   let glass = $state<HTMLElement | null>(null);
@@ -166,9 +168,10 @@
     <div
       class={[
         "@container relative inline-full overflow-hidden rounded-lg bg-(--surface-page) after:pointer-events-none after:absolute after:inset-0 after:z-50 after:rounded-lg after:border after:border-(--border-hairline)",
-        peek ? "block-[400px]" : "block-[844px]",
+        peek === null ? "block-[844px]" : "block-(--peek)",
       ]}
       data-panel-form="phone"
+      style:--peek={peek === null ? undefined : `${peek}px`}
     >
       <!-- The phone's bar, its hairline floor, and Caw's glass tucked into
            the screen's trailing edge: the tabs' top to the floor line, square
@@ -211,7 +214,9 @@
             avoidCollisions={false}
             class={[
               "flex w-[calc(100cqi-var(--c-bar-phone-edge))] flex-col gap-0 overflow-hidden rounded-ee-none p-0 after:border-e-0",
-              peek ? "block-[340px]" : "block-(--c-caw-panel-h)",
+              peek === null
+                ? "block-(--c-caw-panel-h)"
+                : "block-[calc(var(--peek)-60px)]",
             ]}
             customAnchor={glass}
             data-panel
@@ -230,7 +235,7 @@
       {/if}
       <!-- The cut: the frame's foot fades to the page's ground, so the
            crop reads as going on. -->
-      {#if peek}
+      {#if peek !== null}
         <span
           aria-hidden="true"
           class="pointer-events-none absolute inset-x-0 inset-be-0 z-60 block-(--space-8) bg-linear-to-b from-transparent to-(--surface-page)"
@@ -246,9 +251,10 @@
       <div
         class={[
           "relative flex inline-(--c-panel-w) max-inline-full shrink-0 flex-col rounded-lg bg-(--surface-raised) shadow-(--shadow-overlay)",
-          peek ? "block-[320px]" : "block-(--c-caw-panel-h)",
+          peek === null ? "block-(--c-caw-panel-h)" : "block-(--peek)",
         ]}
         data-panel
+        style:--peek={peek === null ? undefined : `${peek}px`}
         style:--c-panel-w={size ? `${size.w}px` : undefined}
         style:--c-caw-panel-h={size ? `${size.h}px` : undefined}
       >
@@ -270,7 +276,7 @@
       </div>
       <!-- The cut: the frame's foot fades to the page's ground, so the
            crop reads as going on. -->
-      {#if peek}
+      {#if peek !== null}
         <span
           aria-hidden="true"
           class="pointer-events-none absolute inset-x-0 inset-be-0 z-60 block-(--space-8) bg-linear-to-b from-transparent to-(--surface-page)"

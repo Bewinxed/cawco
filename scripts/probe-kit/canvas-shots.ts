@@ -279,43 +279,6 @@ function gridOf(args: { selector: string; grid: number }) {
     )
   );
   /**
-   * What the body's boxes cast past their own edges: each outer box-shadow's
-   * reach (its offset, blur and spread), outside the box itself. A point
-   * there is mixed with what is under it, so it is not read: a card's tile
-   * shadow darkens the gap beside it, which no box there paints.
-   */
-  const castBy = [...body.querySelectorAll("*")].flatMap((el) => {
-    const shadow = getComputedStyle(el).boxShadow;
-    if (shadow === "none") {
-      return [];
-    }
-    const reach = Math.max(
-      0,
-      ...shadow
-        .replace(/[a-z-]+\([^()]*(?:\([^()]*\)[^()]*)*\)/gi, "")
-        .split(",")
-        .filter((layer) => !layer.includes("inset"))
-        .map((layer) => {
-          const [x = 0, y = 0, blur = 0, spread = 0] = (
-            layer.match(/-?[\d.]+px/g) ?? []
-          ).map(Number.parseFloat);
-          return (
-            Math.max(Math.abs(x), Math.abs(y)) + blur + Math.max(0, spread)
-          );
-        })
-    );
-    return reach > 0 ? [{ box: el.getBoundingClientRect(), reach }] : [];
-  });
-  const castAt = (x: number, y: number) =>
-    castBy.some(
-      ({ box, reach }) =>
-        !(x >= box.left && x < box.right && y >= box.top && y < box.bottom) &&
-        x >= box.left - reach &&
-        x < box.right + reach &&
-        y >= box.top - reach &&
-        y < box.bottom + reach
-    );
-  /**
    * Every drawn border's line, as a band in the page: its width at the box's
    * zoom, and a pixel either side, where a hairline's antialiasing at a
    * fractional zoom (an embed fitting a story to its card) mixes it with

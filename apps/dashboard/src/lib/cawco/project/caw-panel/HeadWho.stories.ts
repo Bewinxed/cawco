@@ -44,7 +44,7 @@ export const PhoneLong = {
 export const DeskHead = {
   args: {
     form: "desk",
-    peek: true,
+    peek: 320,
     fact: { text: "Waiting on your numbers", tone: "attn" },
   },
   parameters: { viewport: 404 },
@@ -52,6 +52,6 @@ export const DeskHead = {
 
 /** Phone, the panel's top: nothing waits on you. */
 export const PhoneHead = {
-  args: { form: "phone", peek: true },
+  args: { form: "phone", peek: 400 },
   parameters: { viewport: "phone" },
 };

@@ -64,7 +64,7 @@
     suggest = "rows",
     long = false,
     landed = true,
-    peek = false,
+    peek = null,
     menu = false,
     lit = false,
     sized = null,
@@ -82,7 +82,7 @@
     long?: boolean;
     /** The filed tasks have landed under his reply. */
     landed?: boolean;
-    peek?: boolean;
+    peek?: number | null;
     menu?: boolean;
     lit?: boolean;
     sized?: { w: number; h: number } | null;

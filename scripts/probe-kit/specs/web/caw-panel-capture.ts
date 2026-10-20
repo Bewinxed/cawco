@@ -21,8 +21,12 @@
  * frame is its own Preview captioned Desk or Phone, and each suggestion
  * row is as wide as its words up to its column.
  *
- * Writes each leg's page in tiles a window tall, each under 1 MiB, to
- * `.probe/decision-pages/caw-panel-{1440,390}-{light,dark}-NN.png`, and
+ * At 390 the one frame wider than a phone's card (after Wide panel, 560)
+ * scrolls sideways, under the house edge fade where more is hidden.
+ *
+ * Writes each leg's page as `capturePage` cuts it (decision-embeds.ts: one
+ * file, or numbered sections between cards, each under the hub's 1 MiB) to
+ * `.probe/decision-pages/caw-panel-{1440,390}-{light,dark}[-N].png`, and
  * `caw-panel-manifest.json` beside them: each card's question and options,
  * and every check above with its output. The run writes them into a
  * staging folder and swaps them in at its end, replacing only this page's
@@ -40,13 +44,13 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { Page } from "playwright-core";
-import { PNG } from "pngjs";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import {
   blankEmbeds,
   CAWCO_BRIDGE,
+  captureFaults,
   capturePage,
   EMBED_FRAME,
   type Embed,
@@ -60,7 +64,7 @@ import { type Kit, ROOT, SCALE, type Spec, THEMES } from "../../kit";
 const OUT = join(ROOT, ".probe/decision-pages");
 const NAME = "caw-panel";
 /**
- * This run's tiles and manifest until it ends: the last run's stay in OUT
+ * This run's capture files and manifest until it ends: the last run's stay in OUT
  * meanwhile, and only this page's files there are replaced (publish).
  */
 const NEXT = join(OUT, `.${NAME}-next`);
@@ -93,14 +97,12 @@ const OPTION =
   /^(\w+) = Option\("([^"]+)", "((?:[^"\\]|\\.)*)"[^\n]*?, (true|false), /;
 const PREVIEW = /^\w+ = Preview\("([0-9a-f-]+)"/;
 /**
- * The resize card's sizes past the rest one (after Wide panel, 560; reopened
- * at a dragged size, 480): wider than a phone's card can hold with legible
- * words, so at 390 they scroll sideways in their frame; at 1440 they stand
- * whole like every other frame.
+ * The resize card's size past the rest one (after Wide panel, 560): wider
+ * than a phone's card can hold with legible words, so at 390 it scrolls
+ * sideways in its frame, under the house edge fade, its caption saying so;
+ * at 1440 it stands whole like every other frame.
  */
-const WIDER_THAN_A_PHONE = new Set(["Wide", "Reopened"]);
-/** The most a capture tile may weigh: a picture a reader opens whole. */
-const MIB = 1024 * 1024;
+const WIDER_THAN_A_PHONE = new Set(["Wide"]);
 /** A frame's caption names its form after the option's label: "Cards · Desk". */
 const FORM = /^(Desk|Phone)\b/;
 
@@ -240,48 +242,46 @@ async function suggestionRows(page: Page, say: Say): Promise<void> {
 }
 
 /**
- * The page's capture in tiles a window tall, top to bottom, each a picture
- * a reader opens whole (the capture itself is several MiB), the capture
- * removed. Answers the tiles' paths from the repo's root.
+ * Each frame of the embed that scrolls its story sideways, read at the
+ * start of its scroll: the house edge fade's lengths there (`--fade-start`,
+ * `--fade-end`) and its mask. In the embed's page.
  */
-async function tileCapture(
-  page: Page,
-  shot: string,
-  leg: string,
-  say: Say
-): Promise<string[]> {
-  const whole = PNG.sync.read(readFileSync(shot));
-  const step = Math.round(
-    (await page.evaluate(() => innerHeight * devicePixelRatio)) || 1
-  );
-  const tiles: { bytes: number; path: string }[] = [];
-  for (let top = 0; top < whole.height; top += step) {
-    const rows = Math.min(step, whole.height - top);
-    const tile = new PNG({ width: whole.width, height: rows });
-    PNG.bitblt(whole, tile, 0, top, whole.width, rows, 0, 0);
-    const path = join(
-      NEXT,
-      `${NAME}-${leg}-${String(tiles.length + 1).padStart(2, "0")}.png`
+function startFades() {
+  return [
+    ...document.querySelectorAll<HTMLElement>(".cawco-frame[data-cawco-wide]"),
+  ].map((frame) => {
+    frame.scrollLeft = 0;
+    const style = getComputedStyle(frame);
+    return {
+      story: frame.dataset.cawcoStory ?? "",
+      start: Number.parseFloat(style.getPropertyValue("--fade-start")) || 0,
+      end: Number.parseFloat(style.getPropertyValue("--fade-end")) || 0,
+      mask: style.maskImage,
+    };
+  });
+}
+
+/** Every frame that scrolls sideways draws the house edge fade on the side where more is hidden (at its start, the end side) and none at its start. */
+async function wideFades(page: Page, say: Say): Promise<void> {
+  const fades: ReturnType<typeof startFades> = [];
+  for (const handle of await page.$$(EMBED_FRAME)) {
+    await handle.scrollIntoViewIfNeeded();
+    fades.push(
+      ...((await (await handle.contentFrame())?.evaluate(startFades)) ?? [])
     );
-    const bytes = PNG.sync.write(tile, { colorType: 2, deflateLevel: 9 });
-    writeFileSync(path, bytes);
-    tiles.push({ path, bytes: bytes.length });
   }
-  rmSync(shot);
-  const heavy = tiles.filter((one) => one.bytes >= MIB);
+  const bare = fades.filter(
+    (one) => one.end <= 0 || one.start !== 0 || one.mask === "none"
+  );
   say(
-    `the capture in ${tiles.length} tiles a window tall, each under 1 MiB`,
-    tiles.length > 0 && heavy.length === 0,
-    tiles
+    `each frame that scrolls sideways (${fades.length}) draws the house edge fade where more is hidden`,
+    bare.length === 0,
+    fades
       .map(
         (one) =>
-          `${one.path.split("/").at(-1)} ${Math.round(one.bytes / 1024)} KiB`
+          `${one.story}: fades ${one.start}px at its start, ${one.end}px at its end, mask ${one.mask === "none" ? "none" : "drawn"}`
       )
-      .join(", ")
-  );
-  // Where each stands once the run publishes them.
-  return tiles.map((one) =>
-    join(OUT, one.path.split("/").at(-1) as string).slice(ROOT.length + 1)
+      .join("; ") || "none scrolls"
   );
 }
 
@@ -395,6 +395,7 @@ const spec: Spec = {
             check(leg, assertion, ok, output);
           frameChecks(embeds, say, width < 1440);
           await suggestionRows(page, say);
+          await wideFades(page, say);
           await page.evaluate(() => window.scrollTo(0, 0));
           const across = await page.evaluate(() => ({
             scroll: document.documentElement.scrollWidth,
@@ -416,7 +417,8 @@ const spec: Spec = {
           // The whole page as the owner scrolls it, window by window (decision-embeds.ts
           // `capturePage`: a full-page shot draws a cross-origin embed past the first window blank).
           const shot = join(NEXT, `${NAME}-${width}-${theme}.png`);
-          const paints = await capturePage(page, shot);
+          const capture = await capturePage(page, shot);
+          const { paints } = capture;
           const blank = blankEmbeds(paints);
           check(
             leg,
@@ -430,8 +432,25 @@ const spec: Spec = {
                 )
                 .join("; ")
           );
-          const tiles = await tileCapture(page, shot, `${width}-${theme}`, say);
-          shots.push(...tiles);
+          const captured = captureFaults(capture);
+          check(
+            leg,
+            "the capture is files a delegate can hand over, each under 1 MiB, cut between cards, its whole picture pixel for pixel",
+            capture.files.length > 0 && captured.length === 0,
+            captured.join(" | ") ||
+              capture.files
+                .map(
+                  (one) =>
+                    `${basename(one.path)} ${Math.round(one.bytes / 1024)} KiB, rows ${one.rows.from}–${one.rows.to}`
+                )
+                .join(", ")
+          );
+          // Where each stands once the run publishes them.
+          shots.push(
+            ...capture.files.map((one) =>
+              join(OUT, basename(one.path)).slice(ROOT.length + 1)
+            )
+          );
           await page.close();
         }
       }
@@ -443,7 +462,7 @@ const spec: Spec = {
       `${JSON.stringify(
         {
           page: "78a326ed-76cd-44b0-90c3-5e3261a17b56",
-          revision: 9,
+          revision: 10,
           program: "decisions/caw-panel/page.oui",
           shots,
           cards: cardsOf(PROGRAM),

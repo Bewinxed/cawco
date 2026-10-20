@@ -26,3 +26,9 @@ export const PhoneLong = {
   args: { form: "phone", long: true },
   parameters: { viewport: "phone" },
 };
+
+/** Desk, the panel's top: no machine is online, the note under the last message. */
+export const DeskTop = {
+  args: { form: "desk", peek: 480 },
+  parameters: { viewport: 404 },
+};
