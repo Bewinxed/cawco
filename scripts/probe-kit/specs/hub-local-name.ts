@@ -36,6 +36,27 @@
  *    above it, the hub without CAP_NET_BIND_SERVICE), a hub in a network of
  *    its own says so in one line, naming the command at 80, and nothing
  *    listens on port 80, across more than two of its reads.
+ * 7. The stream relay's certificate through the hub's port 80, against a
+ *    scratch ACME (probe-kit pebble.ts: pebble with real HTTP-01 validation
+ *    on port 80, its DNS answering every name with one address). At that
+ *    address, in a rootless Podman container on pebble's network, the hub's
+ *    own port 80 (hub local-name.ts) runs as a user with
+ *    `ip_unprivileged_port_start` at 80 there, its webroot a folder of this
+ *    leg's. The agent's own `relay.certify` (agent browser/relay.ts), run
+ *    here with that webroot, issues through `--webroot`; certbot finds
+ *    pebble by the `cli.ini` certbot reads from its config folder (the
+ *    relay's certificate volume): `server` and `no-verify-ssl`. Asserted:
+ *    the agent's line `certificate for <name> stands (HTTP through the hub's
+ *    port 80)`, the certificate in the volume verifying against pebble's
+ *    intermediate, and no container publishing port 80 while it ran. It
+ *    runs only where this machine has no relay (its volume is the leg's).
+ * 8. macOS only: the first hub holds port 80 on the wildcard address, as a
+ *    user. A request to this Mac's LAN address is a 307 to the dashboard's
+ *    port at the host it named; a request from an address on no shared
+ *    network (the tailnet's, when there is one) is a 404; nothing else
+ *    listens on port 80.
+ *
+ * Legs 5 to 7 run on Linux, leg 8 on macOS; legs 1 to 4 on both.
  *
  * Multicast needs an interface that carries it: inside a workspace there is
  * only loopback, and leg 5 makes namespaces, so this runs on the host. A hub
@@ -45,8 +66,8 @@
  *   bun scripts/probe-kit/run.ts hub-local-name
  */
 import { createSocket } from "node:dgram";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { networkInterfaces } from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { networkInterfaces, platform } from "node:os";
 import { join } from "node:path";
 import makeMdns from "multicast-dns";
 import { browseMdns } from "../../../packages/agent/src/discovery";
@@ -55,6 +76,7 @@ import { reachableLinks } from "../../../packages/core/src/reachable-links";
 import { lanInterfaces } from "../../../packages/hub/src/lan-interfaces";
 import { leasePortRange, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
+import { ACME_NETWORK, podmanRun, startPebble } from "../pebble";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const HUB_ENTRY = join(ROOT, "packages", "hub", "src", "index.ts");
@@ -134,8 +156,6 @@ const ask = async <T>(
 const ASK = "--ask";
 /** How long leg 5's device keeps asking while the hub probes its name. */
 const ASK_MS = 60_000;
-/** The dashboard's port the scratch hubs redirect to: the hub's default. */
-const DASHBOARD_PORT = 3000;
 /** What leg 5's device found: the addresses it heard, and what `GET http://<name>/…` answered. */
 interface Asked {
   heard: string[];
@@ -368,8 +388,10 @@ const lanLeg = async (
     answered.length > 0 && foreign.length === 0,
     `heard ${answered.join(", ") || "nothing"}; lan0 ${lan.join(", ")}; br9 ${of("br9").join(", ")}; lan1 ${of("lan1").join(", ")}; not lan0's: ${foreign.join(", ") || "none"}`
   );
-  // The name typed in: a 307 to the dashboard's port at the same host.
-  const location = `http://cawco.local:${DASHBOARD_PORT}${TYPED}`;
+  // The name typed in: a 307 to the leg's hub's own dashboard port (the
+  // fleet's, which it inherits; hub config.ts `DASHBOARD_PORT`) at the same host.
+  const dashboardPort = env.CAWCO_DASHBOARD_PORT;
+  const location = `http://cawco.local:${dashboardPort}${TYPED}`;
   kit.check(
     `5: a LAN device's GET http://cawco.local${TYPED} is a 307 to ${location}`,
     asked.redirect === `307 ${location}`,
@@ -479,8 +501,375 @@ const floorLeg = async (
   kit.note(`leg 6's floor, hub log and sockets: ${dir}`);
 };
 
+/** Leg 7's name for the relay's certificate: any name, pebble's DNS answers every one. */
+const ACME_NAME = "relay.cawco-probe.test";
+/** The agent's certificate volume and certbot image (agent browser/relay.ts `CERTS_VOLUME`, `CERTBOT_IMAGE`), in full for the Podman CLI. */
+const CERTS_VOLUME = "cawco-relay-certs";
+const CERTBOT = "docker.io/certbot/dns-cloudflare:v5.8.0";
+/** The image leg 7's hub runs in: the host's own bun, mounted. */
+const HUB_IMAGE = "docker.io/library/debian:bookworm-slim";
+const ACME_HUB = "cawco-probe-acme-hub";
+
+/**
+ * Leg 7's hub: the hub's own port 80 (local-name.ts), held on the
+ * container's one interface. `$CAWCO_LOCAL_NAME` is the module's path.
+ */
+const ACME_HUB_SCRIPT = `const { createLocalName } = await import(process.env.CAWCO_LOCAL_NAME);
+const name = createLocalName({ dashboardPort: 3000 });
+await name.hold(["eth0"]);
+console.log(JSON.stringify(name.state()));
+setInterval(() => name.hold(["eth0"]), 10_000);
+`;
+
+/** `url` read from pebble's network, its TLS unchecked (pebble's own test CA): the body, or undefined. */
+const readOnAcme = async (
+  podman: string,
+  url: string
+): Promise<string | undefined> => {
+  const read = await podmanRun(podman, [
+    "run",
+    "--rm",
+    "--network",
+    ACME_NETWORK.name,
+    "--entrypoint",
+    "python3",
+    CERTBOT,
+    "-c",
+    "import ssl,sys,urllib.request;print(urllib.request.urlopen(sys.argv[1],context=ssl._create_unverified_context(),timeout=5).read().decode())",
+    url,
+  ]);
+  return read.code === 0 ? read.out : undefined;
+};
+
+/** Every container `podman ps` lists now: its names, labels and published ports. */
+interface Listed {
+  Labels?: Record<string, string> | null;
+  Names?: string[];
+  Ports?: { host_port?: number }[] | null;
+}
+
+/** Leg 7's hub in its container, at the address pebble's DNS gives every name: its port 80 held as a user, the floor at 80. */
+const startAcmeHub = async (
+  podman: string,
+  dir: string,
+  webroot: string,
+  script: string
+): Promise<void> => {
+  const hub = await podmanRun(podman, [
+    "run",
+    "-d",
+    "--name",
+    ACME_HUB,
+    "--network",
+    ACME_NETWORK.name,
+    "--ip",
+    ACME_NETWORK.target,
+    "--user",
+    "65534:65534",
+    "--sysctl",
+    "net.ipv4.ip_unprivileged_port_start=80",
+    "-e",
+    "HOME=/tmp",
+    "-e",
+    "XDG_DATA_HOME=/data",
+    "-e",
+    "HOST=0.0.0.0",
+    "-e",
+    `CAWCO_LOCAL_NAME=${join(ROOT, "packages", "hub", "src", "local-name.ts")}`,
+    "-v",
+    `${process.execPath}:/usr/local/bin/bun:ro`,
+    "-v",
+    `${ROOT}:${ROOT}:ro`,
+    "-v",
+    `${dir}:${dir}:ro`,
+    "-v",
+    `${webroot}:/data/cawco/acme:z`,
+    "-w",
+    ROOT,
+    HUB_IMAGE,
+    "/usr/local/bin/bun",
+    script,
+  ]);
+  if (hub.code !== 0) {
+    throw new Error(`the hub's container didn't start: ${hub.out}`);
+  }
+};
+
+/** Every container `podman ps` lists from now until `stop`: whether certbot's was seen, and any that published port 80. */
+const watchPort80 = (podman: string) => {
+  const published: string[] = [];
+  const seen: { certbot: boolean; watching: boolean } = {
+    certbot: false,
+    watching: true,
+  };
+  const listing = (async () => {
+    while (seen.watching) {
+      // biome-ignore lint/performance/noAwaitInLoops: one listing at a time, while certbot runs
+      const listed = await podmanRun(podman, ["ps", "--format", "json"]);
+      for (const one of JSON.parse(listed.out || "[]") as Listed[]) {
+        seen.certbot ||= one.Labels?.["dev.cawco.relay"] === "certbot";
+        for (const port of one.Ports ?? []) {
+          if (port.host_port === 80) {
+            published.push(`${one.Names?.join(",")} ${JSON.stringify(port)}`);
+          }
+        }
+      }
+      await Bun.sleep(250);
+    }
+  })();
+  return {
+    async stop() {
+      seen.watching = false;
+      await listing;
+      return { certbotSeen: seen.certbot, published };
+    },
+  };
+};
+
+/**
+ * Leg 7: the relay's certificate over HTTP through the hub's port 80,
+ * issued by a scratch pebble. Its folder keeps pebble's config, the hub's
+ * webroot and log, the certificate and pebble's intermediate.
+ */
+/** Leg 7's podman and openssl, where both stand and this machine has no stream relay; null, said, otherwise. */
+const acmeTools = async (
+  kit: Kit
+): Promise<{ podman: string; openssl: string } | null> => {
+  const podman = Bun.which("podman");
+  const openssl = Bun.which("openssl");
+  kit.check(
+    "7: the host has podman and openssl",
+    podman !== null && openssl !== null,
+    `podman ${podman ?? "missing"}; openssl ${openssl ?? "missing"}`
+  );
+  if (!(podman && openssl)) {
+    return null;
+  }
+  const [volume, container] = await Promise.all([
+    podmanRun(podman, ["volume", "exists", CERTS_VOLUME]),
+    podmanRun(podman, ["container", "exists", "cawco-relay"]),
+  ]);
+  const free = volume.code !== 0 && container.code !== 0;
+  kit.check(
+    "7: this machine has no stream relay (its certificate volume is the leg's)",
+    free,
+    free
+      ? "no cawco-relay container, no cawco-relay-certs volume"
+      : "a stream relay stands here: run the leg on a machine without one"
+  );
+  if (!free) {
+    return null;
+  }
+  return { podman, openssl };
+};
+
+const acmeLeg = async (kit: Kit, sandbox: string): Promise<void> => {
+  const tools = await acmeTools(kit);
+  if (!tools) {
+    return;
+  }
+  const { podman, openssl } = tools;
+  const dir = join(sandbox, "acme-leg");
+  const webroot = join(dir, "webroot");
+  mkdirSync(webroot, { recursive: true });
+  const script = join(dir, "hub.ts");
+  writeFileSync(script, ACME_HUB_SCRIPT);
+  const said: string[] = [];
+  const { info } = console;
+  let pebble: Awaited<ReturnType<typeof startPebble>> | undefined;
+  try {
+    pebble = await startPebble(podman, dir, {
+      containers: [ACME_HUB],
+      volumes: [CERTS_VOLUME],
+    });
+    for (const image of [HUB_IMAGE, CERTBOT]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one pull at a time
+      const pulled = await podmanRun(podman, ["pull", "-q", image]);
+      if (pulled.code !== 0) {
+        throw new Error(`podman pull ${image}: ${pulled.out}`);
+      }
+    }
+    // The hub's port 80 at the address pebble's DNS gives every name.
+    await startAcmeHub(podman, dir, webroot, script);
+    const serving = await until(
+      "the hub serving port 80 on pebble's network",
+      async () => (await podmanRun(podman, ["logs", ACME_HUB])).out,
+      (log) => log.includes('"state":"serving"'),
+      60_000
+    ).catch((error: Error) => error.message);
+    kit.check(
+      `7: the hub holds port 80 at ${ACME_NETWORK.target}, as a user, with ip_unprivileged_port_start at 80`,
+      serving.includes('"state":"serving"'),
+      serving.split("\n").slice(-4).join(" | ")
+    );
+    await until(
+      "pebble's directory answering",
+      () => readOnAcme(podman, pebble?.directory ?? ""),
+      (body) => body?.includes("newOrder") ?? false,
+      60_000
+    );
+    // certbot reads its config folder's cli.ini: pebble, not Let's Encrypt.
+    const made = await podmanRun(podman, [
+      "volume",
+      "create",
+      "--label",
+      "dev.cawco.relay=certs",
+      CERTS_VOLUME,
+    ]);
+    const ini = await podmanRun(podman, [
+      "run",
+      "--rm",
+      "-v",
+      `${CERTS_VOLUME}:/etc/letsencrypt`,
+      "--entrypoint",
+      "sh",
+      CERTBOT,
+      "-c",
+      'printf "server = %s\nno-verify-ssl = true\n" "$1" > /etc/letsencrypt/cli.ini',
+      "sh",
+      pebble.directory,
+    ]);
+    if (made.code !== 0 || ini.code !== 0) {
+      throw new Error(
+        `the certificate volume's cli.ini: ${made.out} ${ini.out}`
+      );
+    }
+    // Every container while it runs: certbot's seen, none publishing 80.
+    const watch = watchPort80(podman);
+    console.info = (...words: unknown[]) => {
+      said.push(words.map(String).join(" "));
+      info(...words);
+    };
+    const relay = await import("../../../packages/agent/src/browser/relay");
+    const issued = await relay
+      .certifyRelay({ hostname: ACME_NAME, webroot })
+      .then(
+        (done) => `ends ${new Date(done.expiresAt).toISOString()}`,
+        (error: Error) => `refused: ${error.message}`
+      );
+    console.info = info;
+    const { certbotSeen, published } = await watch.stop();
+    const line = said.find((one) =>
+      one.startsWith(
+        `[relay] certificate for ${ACME_NAME} stands (HTTP through the hub's port 80)`
+      )
+    );
+    kit.check(
+      `7: the agent says the certificate for ${ACME_NAME} stands, through the hub's port 80`,
+      line !== undefined,
+      `${issued}; said: ${said.join(" | ") || "nothing"}`
+    );
+    const cert = await podmanRun(podman, [
+      "run",
+      "--rm",
+      "-v",
+      `${CERTS_VOLUME}:/etc/letsencrypt:ro`,
+      "--entrypoint",
+      "cat",
+      CERTBOT,
+      `/etc/letsencrypt/live/${ACME_NAME}/cert.pem`,
+    ]);
+    const intermediate = await readOnAcme(
+      podman,
+      `${pebble.management}/intermediates/0`
+    );
+    writeFileSync(join(dir, "cert.pem"), cert.out);
+    writeFileSync(join(dir, "intermediate.pem"), intermediate ?? "");
+    const verified =
+      await Bun.$`${openssl} verify -partial_chain -CAfile ${join(dir, "intermediate.pem")} ${join(dir, "cert.pem")}`
+        .nothrow()
+        .quiet();
+    const issuer =
+      await Bun.$`${openssl} x509 -noout -issuer -subject -in ${join(dir, "cert.pem")}`
+        .nothrow()
+        .text();
+    kit.check(
+      "7: the certificate in the relay's volume was issued by this pebble's CA",
+      cert.code === 0 && verified.exitCode === 0,
+      `${verified.stdout.toString().trim()}${verified.stderr.toString().trim()}; ${issuer.trim().replaceAll("\n", "; ")}`
+    );
+    kit.check(
+      "7: certbot ran, and no container published port 80 while it did",
+      certbotSeen && published.length === 0,
+      `certbot ${certbotSeen ? "seen" : "never seen"}; port 80 published by: ${published.join("; ") || "none"}`
+    );
+    const hubLog = (await podmanRun(podman, ["logs", ACME_HUB])).out;
+    writeFileSync(join(dir, "hub.log"), hubLog);
+  } catch (error) {
+    kit.check("7: the scratch ACME leg ran to its end", false, String(error));
+  } finally {
+    console.info = info;
+    await pebble?.stop();
+    kit.note(`leg 7's config, webroot, certificate and hub log: ${dir}`);
+  }
+};
+
+/** An address of this Mac's that is on no shared network (the tailnet's, a VPN's), when it has one. */
+const offNetworkAddress = (shared: string[]): string | undefined =>
+  Object.entries(networkInterfaces())
+    .filter(([name]) => !shared.includes(name))
+    .flatMap(([, entries]) => entries ?? [])
+    .find((entry) => !entry.internal && entry.family === "IPv4")?.address;
+
+/**
+ * Leg 8 (macOS): the first hub's port 80 on the wildcard address. `name`
+ * is the name it holds, `base` its listener, `dashboardPort` the fleet's.
+ */
+const macLeg = async (
+  kit: Kit,
+  name: string,
+  dashboardPort: string
+): Promise<void> => {
+  const own = await answerable();
+  const lan = [...own.lan].find((address) => !address.includes(":"));
+  if (!lan) {
+    kit.check("8: this Mac has a LAN address", false, "none");
+    return;
+  }
+  const typed = "/session?from=mac";
+  const get = (address: string, from?: string) =>
+    Bun.$`curl -s --noproxy ${"*"} ${from ? ["--interface", from] : []} --retry 15 --retry-connrefused --retry-delay 1 -o /dev/null -w ${"%{http_code} %{redirect_url}"} -H ${`Host: ${name}`} ${`http://${address}${typed}`}`
+      .nothrow()
+      .text();
+  const answered = await get(lan);
+  const location = `http://${name}:${dashboardPort}${typed}`;
+  kit.check(
+    `8: GET http://${lan}${typed} (Host ${name}) is a 307 to ${location}`,
+    answered === `307 ${location}`,
+    `curl said "${answered}"`
+  );
+  const off = offNetworkAddress(own.shared);
+  if (off) {
+    const refused = await get(off, off);
+    kit.check(
+      `8: a request from ${off}, on no shared network, is a 404`,
+      refused.startsWith("404"),
+      `curl said "${refused}"`
+    );
+  } else {
+    kit.note(
+      "8: this Mac has no address off its shared networks: the 404 leg is not run"
+    );
+  }
+  const listening = await Bun.$`lsof -nP -iTCP:80 -sTCP:LISTEN`
+    .nothrow()
+    .text();
+  const rows = listening
+    .split("\n")
+    .slice(1)
+    .filter(Boolean)
+    .map((row) => row.trim().split(SPACES));
+  const owners = new Set(rows.map((row) => row[1]));
+  const wildcard = rows.every((row) => (row[8] ?? "").startsWith("*:80"));
+  kit.check(
+    "8: one process listens on port 80, on the wildcard address alone",
+    rows.length > 0 && owners.size === 1 && wildcard,
+    listening.trim().replaceAll("\n", " | ") || "nothing listens on port 80"
+  );
+};
+
 const spec: Spec = {
-  host: "legs 5 and 6 make user and network namespaces (unshare), and legs 1-4 announce on the machine's own interfaces",
+  host: "legs 5 and 6 make user and network namespaces (unshare), leg 7 runs rootless Podman containers, and legs 1-4 announce on the machine's own interfaces",
   name: "hub-local-name",
   run: async (kit: Kit) => {
     const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
@@ -615,10 +1004,17 @@ const spec: Spec = {
       );
     }
 
+    if (platform() === "darwin") {
+      // 8. The wildcard port 80 as a user, the first hub's.
+      await macLeg(kit, first, fleet.env.CAWCO_DASHBOARD_PORT);
+      return;
+    }
     // 5. A device on the LAN hears the LAN's addresses alone, and typing the name opens the dashboard.
     await lanLeg(kit, fleet.env, fleet.sandbox);
     // 6. Where Linux keeps port 80 from the hub: one line, no listener.
     await floorLeg(kit, fleet.env, fleet.sandbox);
+    // 7. The relay's certificate through the hub's port 80, from a scratch pebble.
+    await acmeLeg(kit, fleet.sandbox);
   },
 };
 

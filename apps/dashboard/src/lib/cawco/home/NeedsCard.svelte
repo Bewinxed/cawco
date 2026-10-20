@@ -172,6 +172,7 @@
           ? localNameWords.done(item.localName.name)
           : localNameWords.lead(
               item.localName.name,
+              item.localName.host,
               item.localName.dashboardPort
             );
       case "relay":
