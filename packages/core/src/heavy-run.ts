@@ -1337,21 +1337,45 @@ const lookOnce = (
 
 /**
  * The heavy runs holding slots on this machine now, each once, as their
- * records name them ({@link describeRuns}), read under the gate's lock as
- * admission reads them ({@link lookAtSlots}, taking none); undefined when
- * another run holds the gate this tick. The agent's hold on idle sleep counts
- * these (agent awake.ts).
+ * records name them ({@link describe}), read under the gate's lock; undefined
+ * when another run holds the gate this tick. It makes nothing: only the slot
+ * files there are looked at, each held while another holds its lock, and a
+ * machine with no slots' dir has none held. Not {@link lookAtSlots}, which
+ * makes every slot below the ceiling: once every 10 s, with this agent's own
+ * ceiling, it filled the dir with empty slots no run had written (a scratch
+ * fleet's eight, read by its probe as records). The agent's hold on idle
+ * sleep counts these (agent awake.ts).
  */
 export const heldHeavyRuns = (): string[] | undefined => {
   const dir = slotsDir();
-  mkdirSync(dir, { recursive: true });
-  const gate = openLockFile(join(dir, "gate"), true);
+  let gate: number;
+  try {
+    gate = openLockFile(join(dir, "gate"), false);
+  } catch {
+    // No gate yet: no run has ever looked at the slots here.
+    return [];
+  }
   if (!tryLock(gate)) {
     closeSync(gate);
     return;
   }
   try {
-    const { held } = lookAtSlots(dir, slotCount(), 0);
+    const held: string[] = [];
+    for (const name of readdirSync(dir).filter((one) => SLOT_FILE.test(one))) {
+      const path = join(dir, name);
+      let fd: number;
+      try {
+        fd = openLockFile(path, false);
+      } catch {
+        continue;
+      }
+      if (tryLock(fd)) {
+        unlock(fd);
+      } else {
+        closeSync(fd);
+        held.push(path);
+      }
+    }
     return [...new Set(held.map(describe))];
   } finally {
     unlock(gate);

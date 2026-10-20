@@ -149,7 +149,10 @@ export const keepAwakeWhileWorking = (
     const commands = commandsRunning();
     return [
       ...(running.length > 0
-        ? [`a turn in session ${named(running.map((id) => id.slice(0, 8)))}`]
+        ? [
+            // OpenCode's own words (`opencode:pending-operations`) stay whole; a session's id goes short.
+            `a turn in session ${named(running.map((id) => (id.includes(":") ? id : id.slice(0, 8))))}`,
+          ]
         : []),
       ...commands,
       ...(workspaces.length > 0

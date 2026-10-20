@@ -28,9 +28,9 @@
  *     the probe runs on the host, the user's own, outside every boundary:
  *     the boundary keeps its signals to itself, and that sleep runs on.
  * w1. Linux: while its first commands run, within 20 s logind lists one
- *     idle-sleep hold of the agent's (`systemd-inhibit --list`: CawCo,
- *     idle:sleep, block-weak, its process under the fleet's HOME; agent
- *     awake.ts).
+ *     idle-sleep hold of the agent's (`systemd-inhibit --list`: CawCo, its
+ *     WHAT idle and sleep, which logind prints `sleep:idle`, block-weak, its
+ *     process under the fleet's HOME; agent awake.ts).
  * w2. Linux: within 20 s of s1, with nothing left running, it lists none.
  *
  * The hub's landing push is never cut by a delegate's interrupt (on macOS a
@@ -436,7 +436,7 @@ const of = (found: Map<string, number[]>, mark: Markers): string[] =>
  * holding it), command, what, why and mode.
  */
 const AWAKE_ROW =
-  /^\s*CawCo\s+\d+\s+\S+\s+(\d+)\s+\S+\s+idle:sleep\s+.*\sblock-weak\s*$/;
+  /^\s*CawCo\s+\d+\s+\S+\s+(\d+)\s+\S+\s+(?:idle:sleep|sleep:idle)\s+.*\sblock-weak\s*$/;
 
 /**
  * Linux: logind's inhibitors now (`systemd-inhibit --list`), and those of
@@ -648,7 +648,7 @@ const firstLegs = async (rig: Rig): Promise<void> => {
       AWAKE_MS
     ).catch(() => awakeHolds(rig.home));
     check(
-      "w1: while its commands run, logind lists the agent's one idle-sleep hold (CawCo, idle:sleep, block-weak)",
+      "w1: while its commands run, logind lists the agent's one idle-sleep hold (CawCo, idle and sleep, block-weak)",
       held.mine.length === 1,
       `systemd-inhibit --list:\n${held.listing}`
     );
@@ -872,6 +872,15 @@ interface HeavyRecord {
 /** A slot's file, or a gate's ticket: `slot-<i>`, `gate-<arrival>-<pid>` (core heavy-run.ts). */
 const HEAVY_FILE = /^(slot-\d+|gate-\d{15}-\d+)$/;
 
+/** A slot's or ticket's record, or none while its run has not written it whole: a holder empties its file, then writes its name (core heavy-run.ts `readHolder`). */
+const recordOf = (raw: string): HeavyRecord | undefined => {
+  try {
+    return JSON.parse(raw) as HeavyRecord;
+  } catch {
+    // Not written whole yet.
+  }
+};
+
 /** The fleet's heavy-run slots and gate tickets, each with the record its run wrote, read on the host. */
 const heavyFiles = async (
   dir: string
@@ -881,9 +890,8 @@ const heavyFiles = async (
       .filter((name) => HEAVY_FILE.test(name))
       .map(async (name) => ({
         name,
-        record: await readFile(join(dir, name), "utf8").then(
-          (raw) => JSON.parse(raw) as HeavyRecord,
-          () => undefined
+        record: recordOf(
+          await readFile(join(dir, name), "utf8").catch(() => "")
         ),
       }))
   );
