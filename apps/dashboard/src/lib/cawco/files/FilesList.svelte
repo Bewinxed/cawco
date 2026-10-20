@@ -446,7 +446,7 @@
            each segment its noun and its count, equal widths. The phone's one
            list: the chosen list fills what is left of the drawer with its own
            scroll. -->
-        <Tabs.Root bind:value={list} class="min-h-0 flex-1">
+        <Tabs.Root bind:value={list} class="flex-1" layout="column">
           <Tabs.List aria-label="Artifacts or attachments" class="mt-space-1">
             <Tabs.Trigger data-files-segment="artifacts" value="artifacts">
               <span>Artifacts</span>
@@ -469,15 +469,15 @@
                nothing around it clips its scrollbar or its rows' touch
                areas). -->
           <Tabs.Content
-            class="flex min-h-0 flex-col"
             data-files-region="artifacts"
+            layout="column"
             value="artifacts"
           >
             {@render artifactsBody()}
           </Tabs.Content>
           <Tabs.Content
-            class="flex min-h-0 flex-col"
             data-files-region="attachments"
+            layout="column"
             value="attachments"
           >
             {@render attachmentsBody()}

@@ -572,7 +572,6 @@
       .kit-chip,
       .kit-tray-chip,
       .kit-item,
-      .kit-segment,
       .kit-section-head,
       .rail-line
     )
@@ -816,102 +815,6 @@
     }
   }
 
-  /* The fluid tabs' track (ui/fluid-tabs TabsList), the kit's own recipe:
-     its size ladder is custom properties every tab reads, and hosts tune it
-     by selector on `.ff-tabs-list` (PaneTabs, WorkTabs), outranking it. The
-     pad and the item add up to the control height — 36px by default, 28px
-     compact — so the control lines up with the buttons, selects and inputs
-     beside it. `--shape` is the corner the overlays and items share;
-     `--sheet` is the chosen segment's surface. A finger needs more room
-     than a pointer: one step up the ladder on a coarse pointer — a 40px
-     control — its shape unchanged. A scrolling track hugs its items and
-     gives way — never grows — when the row it sits in is narrower than
-     they are; where tabs run past an edge, that edge fades them out
-     (.kit-edge-fade, on the track), and a chosen tab is brought clear of
-     each edge's fade (`inView`; a host whose fades differ sets its own). */
-  .ff-tabs-list {
-    --pad: 4px;
-    --item: 28px;
-    --gap: 2px;
-    --px: 12px;
-    --icon: 16px;
-    --text: var(--text-label);
-    --radius: var(--radius-sm);
-    --shape: calc(var(--radius) - var(--pad));
-    --sheet: var(--surface-raised);
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    flex: 0 0 auto;
-    gap: var(--gap);
-    padding: var(--pad);
-    border-radius: var(--radius);
-    background: var(--muted);
-    user-select: none;
-    -webkit-user-select: none;
-
-    @media (pointer: coarse) {
-      --item: 32px;
-    }
-
-    &[data-scrollable] {
-      --edge-room-start: var(--fade-len);
-      --edge-room-end: var(--fade-len);
-      flex: 0 1 auto;
-      min-inline-size: 0;
-      max-inline-size: 100%;
-      overflow-x: auto;
-      overflow-y: hidden;
-      scrollbar-width: none;
-
-      &::-webkit-scrollbar {
-        display: none;
-      }
-    }
-  }
-  /* Compact, with its own step up on a coarse pointer (24 → 28): this
-     rule outranks the bare class, so the ladder above would not move it. */
-  [data-size="compact"] .ff-tabs-list {
-    --pad: 2px;
-    --item: 24px;
-    --px: 10px;
-    --icon: 16px;
-    --text: var(--text-label);
-    --radius: var(--radius-xs);
-
-    @media (pointer: coarse) {
-      --item: 28px;
-    }
-  }
-  /* Folder tabs: no well. The items stand on the row's shelf — the row
-     draws that hairline along its own bottom edge — and the chosen one is a
-     sheet with a rounded top and no bottom, in the surface of what lies
-     below, so it opens into it. The chosen sheet flares outward at its foot
-     into the page below; the track keeps that much room at each end so a
-     scrolling track does not clip the first or last flare. Neighbouring
-     tabs overlap by the flare: a tucked edge lies exactly under the chosen
-     sheet's foot, and the gap between tabs is gone; the track's leading pad
-     takes the first tab's overlap back. The tabs' stacks meet in this one
-     (TabsList's script), kept in the track. The sides of every outline
-     bring their top corners in by `--slope-start` and `--slope-end` from the
-     foot (the owner's pick: 1px and 0px). A choice travels over
-     `--choose-dur` on `--choose-ease`, every part of it together (the
-     owner's pick, "Slow · 400ms"; DESIGN.md, Folder tabs). */
-  [data-variant="folder"] .ff-tabs-list {
-    --shape: var(--radius) var(--radius) 0 0;
-    --flare: var(--radius);
-    --overlap: var(--flare);
-    gap: 0;
-    padding-inline: calc(var(--flare) + var(--overlap)) var(--flare);
-    padding-block-end: 0;
-    border-radius: 0;
-    background: none;
-    isolation: isolate;
-    --slope-start: 1px;
-    --slope-end: 0px;
-    --choose-dur: var(--dur-settle);
-    --choose-ease: var(--ease-crossfade);
-  }
   @keyframes kit-edge-fade-start {
     from {
       --fade-start: 0px;
@@ -1188,79 +1091,6 @@
       font: var(--type-meta);
       font-variant-numeric: tabular-nums;
       color: var(--ink-subtle);
-    }
-  }
-
-  /* The one empty state (ui/empty): mark, title, why, one action, set on
-     the column the content would have started on. One start edge for all
-     of them, its words at the reading measure; never centred line by
-     line. */
-  .kit-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
-    padding-block: var(--space-6);
-    text-align: start;
-
-    & > [data-slot="empty-mark"] {
-      inline-size: 20px;
-      block-size: 20px;
-      margin-block-end: var(--space-1);
-      color: var(--ink-muted);
-    }
-  }
-  .kit-empty-title {
-    max-inline-size: 60ch;
-    font: var(--type-title);
-    letter-spacing: -0.01em;
-    color: var(--ink-strong);
-    text-wrap: balance;
-  }
-  .kit-empty-line {
-    max-inline-size: 60ch;
-    font: var(--type-body);
-    color: var(--ink-muted);
-    text-wrap: pretty;
-
-    & code {
-      font-size: var(--text-label);
-    }
-  }
-  .kit-empty-action {
-    margin-block-start: var(--space-2);
-  }
-  /* The same claim in a strip's room: the mark, then what is missing and
-     why as one sentence on one line, the one action beside it while there
-     is room and under it when there is not (a long machine name), so the
-     sentence keeps its line rather than breaking beside the action. */
-  .kit-empty-inline {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-2);
-    padding-block: 0;
-
-    & > [data-slot="empty-mark"] {
-      flex: none;
-      inline-size: 16px;
-      block-size: 16px;
-      margin-block-end: 0;
-    }
-    & .kit-empty-line {
-      flex: 1 1 auto;
-      min-inline-size: 0;
-      max-inline-size: none;
-      font: var(--type-meta);
-    }
-    & .kit-empty-title {
-      font: var(--type-meta);
-      font-weight: var(--weight-strong);
-      color: var(--ink-strong);
-    }
-    & .kit-empty-action {
-      flex: none;
-      margin-block-start: 0;
     }
   }
 
@@ -1723,52 +1553,6 @@
     }
   }
 
-  /* Segmented: tabs and single toggle groups. A recessed groove holds a
-     lifted thumb that slides under the chosen segment. */
-  .kit-segmented {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    padding: 3px;
-    border-radius: var(--radius-md);
-    background: var(--surface-recess-deep);
-  }
-
-  :where(.kit-segmented) .kit-thumb {
-    position: absolute;
-    inset-block-start: 0;
-    inset-inline-start: 0;
-    transform-origin: 0 0;
-    border-radius: var(--radius-sm);
-    background: var(--surface-lift);
-    box-shadow: var(--shadow-raised);
-    pointer-events: none;
-    opacity: 0;
-  }
-
-  :where(.kit-segmented) .kit-segment {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    block-size: 30px;
-    padding-block: 0;
-    padding-inline: 10px;
-    border-radius: var(--radius-sm);
-    white-space: nowrap;
-    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-    color: var(--ink-muted);
-    transition: var(--transition-control);
-
-    /* One of a group: the press is `press-tint` on the segment, never a
-       scale that would pull it off its neighbours. */
-    &:is([data-state="active"], [data-state="on"]) {
-      color: var(--ink-strong);
-    }
-  }
-
   /* Tooltip: solid ink, never coral. It fades in over --dur-fade, settling
      2px toward its trigger; it leaves at once, so moving on is never held
      up by the last one. With reduced motion only the fade runs. */
@@ -1973,91 +1757,11 @@
       pointer-events: none;
     }
   }
-  /* One hover ghost and one selection pill per list
-     (components/ui/highlight). Drawn under the rows: the list isolates and
-     the layers sit at -1, so a row's text and icons are always above them.
-     The ghost glides 80ms on --ease-in-out and fades in place; the pill
-     glides 120ms on --ease-drawer, in step with the row's ink turning to
-     the selected colour. Where nothing hovers (a touch screen: a tap fires
-     a synthetic mousemove and no mouseleave, so a ghost would park on the
-     last tap as a second selection) there is no ghost at all. */
-  .kit-highlight {
-    isolation: isolate;
-  }
-
-  /* Placed from measured client rects, which are physical: the layers
-     anchor to the physical top-left corner the measurements are taken
-     from. */
-  :where(.kit-highlight) :is(.kit-ghost, .kit-pill, .kit-pill-trail) {
-    position: absolute;
-    inset: 0 auto auto 0;
-    z-index: -1;
-    pointer-events: none;
-    translate: var(--hl-x) var(--hl-y);
-    opacity: var(--hl-show);
-  }
-
-  :where(.kit-highlight) .kit-ghost {
-    display: none;
-    background: var(--surface-hover);
-    transition: --hl-show var(--dur-control) var(--ease-out);
-
-    &[data-follow] {
-      display: block;
-    }
-    @media (hover: hover) {
-      display: block;
-    }
-    &.kit-glide {
-      @media (prefers-reduced-motion: no-preference) {
-        transition:
-          --hl-x var(--dur-ghost) var(--ease-in-out),
-          --hl-y var(--dur-ghost) var(--ease-in-out),
-          width var(--dur-ghost) var(--ease-in-out),
-          height var(--dur-ghost) var(--ease-in-out),
-          --hl-show var(--dur-control) var(--ease-out);
-      }
-    }
-  }
-
-  /* The selection is where the reader acts: the apricot selected wash, its
-     row in selected ink (the row sets that; the pill sits under it). */
-  :where(.kit-highlight) :is(.kit-pill, .kit-pill-trail) {
-    background: var(--selected-bg);
-  }
-
-  :where(.kit-highlight) .kit-pill.kit-glide {
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        --hl-x var(--dur-control) var(--ease-drawer),
-        --hl-y var(--dur-control) var(--ease-drawer),
-        width var(--dur-control) var(--ease-drawer),
-        height var(--dur-control) var(--ease-drawer);
-    }
-  }
-
-  :where(.kit-highlight) .kit-pill-trail.kit-fade {
-    transition: --hl-show var(--dur-control) var(--ease-out);
-  }
-
-  /* Less motion: a selection that moves cross-fades instead of gliding,
-     the old place out and the new one in, over --dur-fade. */
-  :where(.kit-highlight) :is(.kit-pill, .kit-pill-trail.kit-fade).kit-swap {
-    transition: --hl-show var(--dur-fade) var(--ease-out);
-  }
-
   /* ---- Icon cards: New project's templates, the empty fleet's ways in.
      As many to a row as fit, two on a phone, one on the narrowest. Each
      card is a bordered box over the list's highlight (components/ui/
-     highlight): the hover ghost under it, and the selection pill drawn in
-     the channel-card recipe (DESIGN.md, Channel cards): 1px brand-solid
-     over surface-recess, at the card's own radius, which the pill takes
-     from the card. Its face is CardFace.
-     A card draws its own 1px border on the pill's rect, so the pill stands
-     over the card's border and fill (z 1) and under its face (CardFace,
-     z 2): left at the highlight's -1, under the card, the card's border
-     covers the frame's brand edge on every pixel and only the hover ghost
-     reads. */
+     highlight, `look: "card"`): the hover ghost under it, and the selection
+     pill drawn in the channel-card recipe. Its face is CardFace. */
   .icon-cards {
     position: relative;
     display: grid;
@@ -2069,13 +1773,6 @@
     }
     @media (max-width: 399px) {
       grid-template-columns: minmax(0, 1fr);
-    }
-
-    & :is(.kit-pill, .kit-pill-trail) {
-      z-index: 1;
-      box-sizing: border-box;
-      border: 1px solid var(--brand-solid);
-      background: var(--surface-recess);
     }
   }
 
@@ -2780,34 +2477,6 @@
   [data-slot="wait"] [data-slot="row"] [data-slot="thinking-step-label"] {
     overflow-wrap: anywhere;
   }
-  [data-work-tabs][data-slot="tabs"] .ff-tabs-list {
-    --px: calc(var(--space-2) - var(--tight) * 0.09);
-    --text: var(--text-label);
-    --item: var(--space-8);
-    --sheet: light-dark(var(--surface-raised), var(--surface-hover));
-    --tab-hover: light-dark(
-      var(--surface-hover),
-      color-mix(in oklch, var(--surface-fill) 50%, transparent)
-    );
-    --tab-fill: var(--surface-recess);
-  }
-  /* A work tab is as wide as its label and its count, the label to its count
-     closer on a narrow rail. */
-  [data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="ff-tab"] {
-    --gap: max(0px, var(--space-row) - var(--tight) * 0.06);
-    min-inline-size: max-content;
-  }
-  /* A work tab after the first starts its label past the overlap. */
-  [data-work-tabs][data-slot="tabs"]
-    .ff-tabs-list
-    [data-slot="ff-tab"]
-    ~ [data-slot="ff-tab"] {
-    --px-start: calc(var(--overlap) + var(--px));
-  }
-  /* A work tab's label never gives way: the header's spacing does. */
-  [data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="hit"] {
-    flex-shrink: 0;
-  }
   /* The preview's well: Comment and Draw turn its own border the accent,
      inside its box, never a second ring; Interact leaves it as the page's
      own. The ring eases except while the split slides. */
@@ -2846,13 +2515,6 @@
     inline-size: auto;
     block-size: var(--c-composer-field);
     border-radius: var(--bar-control-radius);
-  }
-  /* The project details' toggles breathe their thumb while the hub answers
-     (`data-pending`). */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-project-details] [data-slot="toggle-group"][data-pending] .kit-thumb {
-      animation: breath var(--breath) var(--ease-in-out) infinite;
-    }
   }
   [data-slot="tab"][role="radio"] svg {
     flex: none;
@@ -3410,134 +3072,6 @@
       @starting-style {
         opacity: 0;
       }
-    }
-  }
-}
-
-/* ---- PaneTabs' strip: the host rules on the kit's Tabs root
-   (`data-session-tabs`, `data-hosted`) and on TabsList's track
-   (`.ff-tabs-list`, `data-scrollable` while it scrolls). They set the
-   track's size ladder and outrank its folder padding by selector. */
-@layer components {
-  [data-session-tabs] {
-    /* A tab's height, its inner pad and its flared foot's room at the
-       track's end, shared by the track and the "+" after it. */
-    --strip-px: var(--space-3);
-    --strip-item-rest: var(--space-8);
-    --strip-reach: var(--space-3);
-    --strip-fade: var(--c-tab-strip-fade);
-    --strip-uncapped: var(--c-tab-strip-uncapped);
-    --strip-item: var(--strip-item-rest);
-    --strip-flare: var(--radius-sm);
-    display: flex;
-    align-items: flex-end;
-    flex: 0 0 auto;
-    min-inline-size: 0;
-    padding-block: var(--space-1) 0;
-    padding-inline: var(--space-7) var(--space-4);
-    /* The shelf: two steps below the transcript, one below an unchosen tab,
-       so the chosen tab (in the transcript's own surface) reads as the page
-       it opens. */
-    background: var(--surface-shelf);
-
-    /* The tab controls' touch areas reach past the row's bottom edge: on a
-       coarse pointer the row stacks above the transcript beneath it. */
-    @variant coarse {
-      position: relative;
-      z-index: 1;
-    }
-  }
-  [data-session-tabs][data-hosted] {
-    flex: 1 1 0;
-    align-self: stretch;
-    padding: 0;
-    background: none;
-  }
-  /* The leaf's container query takes no var(): 620px is --container-leaf. */
-  @container leaf (width <= 620px) {
-    [data-session-tabs]:not([data-hosted]) {
-      padding-inline-start: var(--space-4);
-    }
-  }
-  /* On a phone this row is the app's only bar: the bar's height, its two ends
-     left to the sidebar toggle and to Caw's glass. */
-  [data-session-tabs]:not([data-hosted]) {
-    @variant max-desk {
-      --strip-item: var(--c-tab-row-h);
-      --strip-flare: var(--radius-lg);
-      min-block-size: var(--c-top-bar-h);
-      padding-block-start: 0;
-      padding-inline: calc(var(--c-bar-phone-edge) + var(--c-bar-toggle-glyph))
-        calc(var(--c-bar-phone-gap) + var(--c-bar-caw-glass-phone));
-    }
-  }
-  /* The session track scrolls sideways, and a scroll container clips on both
-     axes; its transparent padding grows into an equal negative margin on a
-     coarse pointer, so the controls' touch areas above and below the tabs
-     sit inside its clip and nothing moves. */
-  [data-session-tabs][data-slot="tabs"] .ff-tabs-list[data-scrollable] {
-    @variant coarse {
-      padding-block: calc(var(--pad) + var(--strip-reach)) var(--strip-reach);
-      margin-block: calc(-1 * var(--strip-reach));
-    }
-  }
-  /* The strip takes one step taller than the component's default in a bar
-     with room, the component's own text size and a tighter pad. The hover
-     ghost lifts an unchosen tab's card toward the chosen sheet's surface; by
-     night it is the hover step. */
-  [data-session-tabs][data-slot="tabs"] .ff-tabs-list {
-    --px: var(--strip-px);
-    --text: var(--text-label);
-    --item: var(--strip-item);
-    /* The chosen tab's sheet: the transcript's head dissolves into the same
-       token (HeadFade). */
-    --sheet: var(--tab-sheet);
-    --tab-hover: light-dark(var(--surface-recess), var(--surface-hover));
-    /* The status rim's stroke, a plain number, drawn on each tab's own path
-       (TabItem); one unit under more contrast or less transparency. */
-    --rim-w: var(--tab-rim-width);
-  }
-  @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
-    [data-session-tabs][data-slot="tabs"] .ff-tabs-list {
-      --rim-w: 1;
-    }
-  }
-  /* The phone's row: tabs a row's height tall, on the bar's floor, the
-     strip's ends fading over a short run so a tab slides under the toggle and
-     Caw rather than being cut. Each end's fade is cut short at a tab drawn
-     chosen (TabsList `--fade-cap-start`/`--fade-cap-end`). */
-  [data-session-tabs]:not([data-hosted])[data-slot="tabs"]
-    .ff-tabs-list[data-scrollable] {
-    @variant max-desk {
-      --item: var(--strip-item);
-      --pad: 0px;
-      --fade-len: var(--strip-fade);
-      --edge-room-start: calc(var(--fade-len) * 1.5);
-      --radius: var(--radius-lg);
-      --overlap: var(--radius-sm);
-      padding-block-start: calc(var(--c-top-bar-h) - var(--c-tab-row-h));
-      margin-block-start: 0;
-      --fade-run-start: min(
-        var(--fade-start),
-        calc(var(--fade-cap-start, var(--strip-uncapped)) / 1.5)
-      );
-      --fade-run-end: min(
-        var(--fade-end),
-        var(--fade-cap-end, var(--strip-uncapped))
-      );
-      mask-image: linear-gradient(
-        to right,
-        transparent,
-        transparent calc(var(--fade-run-start) * 0.375),
-        var(--mask-opaque-a15) calc(var(--fade-run-start) * 0.75),
-        var(--mask-opaque-a60) calc(var(--fade-run-start) * 1.125),
-        var(--mask-opaque) calc(var(--fade-run-start) * 1.5),
-        var(--mask-opaque) calc(100% - var(--fade-run-end)),
-        var(--mask-opaque-a90) calc(100% - var(--fade-run-end) * 0.75),
-        var(--mask-opaque-a50) calc(100% - var(--fade-run-end) * 0.5),
-        var(--mask-opaque-a10) calc(100% - var(--fade-run-end) * 0.25),
-        transparent
-      );
     }
   }
 }
@@ -4984,3 +4518,38 @@
 }
 
 /* The flip itself starts no element transitions: `overrides`, above. */
+
+/* wave 2: W6-layout */
+/* A pane whose group's divider holds the keyboard (paneforge marks it
+   `data-active="keyboard"` while it has focus): a step from the keyboard is
+   a jump, so the panes either side tween to it (ui/resizable Pane, `grid`).
+   Here rather than in variants.css, which `bun run variants` writes whole. */
+@custom-variant pane-keyed (:where([data-pane-group]:has(> [data-pane-resizer][data-active="keyboard"])) > &);
+/* The phone's session strip (ui/fluid-tabs TabsList, `strip="session"`):
+   its ends fade over a short run, each cut short at a tab drawn chosen
+   (TabsList's `--fade-cap-start`/`--fade-cap-end`), so a tab slides under
+   the toggle and Caw rather than being cut. Five stops a side, an eased
+   ramp no `mask-*` utility draws. */
+@utility strip-edge-mask {
+  --fade-run-start: min(
+    var(--fade-start),
+    calc(var(--fade-cap-start, var(--strip-uncapped)) / 1.5)
+  );
+  --fade-run-end: min(
+    var(--fade-end),
+    var(--fade-cap-end, var(--strip-uncapped))
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    transparent calc(var(--fade-run-start) * 0.375),
+    var(--mask-opaque-a15) calc(var(--fade-run-start) * 0.75),
+    var(--mask-opaque-a60) calc(var(--fade-run-start) * 1.125),
+    var(--mask-opaque) calc(var(--fade-run-start) * 1.5),
+    var(--mask-opaque) calc(100% - var(--fade-run-end)),
+    var(--mask-opaque-a90) calc(100% - var(--fade-run-end) * 0.75),
+    var(--mask-opaque-a50) calc(100% - var(--fade-run-end) * 0.5),
+    var(--mask-opaque-a10) calc(100% - var(--fade-run-end) * 0.25),
+    transparent
+  );
+}

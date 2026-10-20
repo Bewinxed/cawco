@@ -13,7 +13,8 @@
    * the card (bridged) keeps it. A fine pointer only; touch has no hover.
    *
    * The card is portalled to the body: the rail isolates its stacking
-   * (kit-highlight), so a card drawn inside it would paint under the panes.
+   * (its highlight, components/ui/highlight), so a card drawn inside it
+   * would paint under the panes.
    */
   import { Portal } from "bits-ui";
   import { Spinner } from "#lib/components/ui/spinner/index.js";

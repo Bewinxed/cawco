@@ -783,6 +783,7 @@
           .foldBoxes}
         fill="none"
         onValueChange={(id: string) => choose(id as WorkTab)}
+        strip="work"
         value={workTab.current}
         values={TAB_IDS}
         variant="folder"

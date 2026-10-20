@@ -133,7 +133,7 @@ function carry(
   x0: number,
   first: PointerEvent
 ): void {
-  const track = tab.closest<HTMLElement>(".ff-tabs-list");
+  const track = tab.closest<HTMLElement>('[data-slot="ff-tabs-list"]');
   const strip = tab.closest<HTMLElement>("[data-strip]");
   const order = workspace.leaf(drag.leafId)?.tabs ?? [];
   if (!(track && strip && order.includes(drag.sessionId))) {
@@ -233,7 +233,7 @@ function carry(
     const other = hit?.closest<HTMLElement>("[data-strip]");
     const otherId = other?.dataset.strip;
     if (other && otherId && otherId !== drag.leafId) {
-      const otherTrack = other.querySelector(".ff-tabs-list");
+      const otherTrack = other.querySelector('[data-slot="ff-tabs-list"]');
       const otherTabs = otherTrack
         ? tabsOf(otherTrack, workspace.leaf(otherId)?.tabs ?? [])
         : [];

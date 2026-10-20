@@ -153,6 +153,7 @@
       rows: ".icon-card",
       selected: '.icon-card[data-state="checked"]',
       axis: "xy",
+      look: "card",
     })}
   >
     {#each cards as card (card.template)}

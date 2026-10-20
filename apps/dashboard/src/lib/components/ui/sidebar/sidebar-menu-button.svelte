@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   export const sidebarMenuButtonVariants = tv({
-    base: "peer/menu-button group/menu-button mark-line focus-inset press-tint flex w-full items-center gap-2 overflow-hidden rounded-[var(--radius-sm)] px-3 py-2 text-left text-label transition-[width,height,padding,color,background-color] duration-(--dur-toggle) ease-out hover:text-ink-strong active:text-ink-strong disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:font-medium data-active:text-selected-ink data-open:hover:text-ink-strong group-data-[collapsible=icon]:size-space-8! group-data-[collapsible=icon]:p-2! [&>span:last-child]:min-w-0 [&>span:last-child]:overflow-clip [&>span:last-child]:text-ellipsis [&>span:last-child]:whitespace-nowrap [&>svg]:size-icon-md [&>svg]:shrink-0 data-active:[&_svg]:text-selected-icon",
+    base: "peer/menu-button group/menu-button mark-line focus-inset press-tint flex w-full items-center gap-2 overflow-hidden rounded-sm px-3 py-2 text-left text-label transition-[width,height,padding,color,background-color] duration-(--dur-toggle) ease-out hover:text-ink-strong active:text-ink-strong disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:font-medium data-active:text-selected-ink data-open:hover:text-ink-strong [&>span:last-child]:min-w-0 [&>span:last-child]:overflow-clip [&>span:last-child]:text-ellipsis [&>span:last-child]:whitespace-nowrap [&>svg]:size-icon-md [&>svg]:shrink-0 data-active:[&_svg]:text-selected-icon",
     variants: {
       variant: {
         default: "hover:text-ink-strong",
@@ -11,18 +11,19 @@
           "bg-surface-page shadow-[0_0_0_1px_var(--sidebar-border)] hover:text-ink-strong hover:shadow-[0_0_0_1px_var(--border-control)]",
       },
       size: {
-        default: "h-[var(--c-nav-h)] text-label",
+        default: "h-c-nav-h text-label",
         sm: "h-space-8 text-meta",
-        lg: "h-14 px-3 text-label group-data-[collapsible=icon]:p-0!",
+        lg: "h-14 px-3 text-label",
       },
-      /** The rail's own rows, each as it drew them: a destination in the
-          nav band (body type), a project in the list (its end pad the
-          sessions' so their counts stand in one column), and the avatar
-          button, which pads nothing. */
+      /** The rail's own rows: a destination in the nav band (body type, the
+          nav row's height, 44px under a finger), a project in the list (a
+          30px row, its end pad the sessions' so their counts stand in one
+          column), and the avatar: a 30px square that pads nothing, its
+          touch area reaching 44px past its box (The 44 Touch Rule). */
       row: {
         nav: "gap-2.5 px-2.5 text-body",
-        list: "gap-2.5 py-0 pr-2 pl-2.5",
-        avatar: "p-0",
+        list: "h-c-btn-h-sm gap-2.5 py-0 pr-2 pl-2.5",
+        avatar: "touch-hit size-c-btn-h-sm justify-center overflow-visible p-0",
       },
     },
     defaultVariants: {

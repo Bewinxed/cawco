@@ -2,9 +2,10 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  /** Its callers' looks: a body of sections a step and a half apart. */
+  /** Its callers' looks: a body of sections, a column of them a step and a
+      half apart. */
   export const cardContentVariants = tv({
-    variants: { gap: { section: "gap-space-4" } },
+    variants: { gap: { section: "flex flex-col gap-space-4" } },
   });
 
   export type CardContentLooks = VariantProps<typeof cardContentVariants>;

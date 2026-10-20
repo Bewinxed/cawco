@@ -790,6 +790,22 @@ public enum Size {
     public static let rowCompactGap: Double = 6
     /// A compact session row's trailing inset: where every row in the rail ends.
     public static let rowCompactPadEnd: Double = 8
+    /// A two-line session row's height, in the home's lists: its two lines at the lead column's 18px and a 4px pad above and below (SessionRow). The "N older" row among them stands at it (OlderRows, the sidebar sub-button's `compact-tall` row).
+    public static let rowTallH: Double = 44
+    /// A segmented control's groove round its lifted thumb (DESIGN.md, Segmented: "a recess-deep groove with a 10px radius and 3px padding"): the groove's 10px less the thumb's 8px, plus a pixel of air, so the corners stay concentric.
+    public static let cSegmentedPad: Double = 3
+    /// A segment's glyph to its label, and its label to its count (Tabs, single toggle groups).
+    public static let cSegmentGap: Double = 6
+    /// A segment's inline padding (DESIGN.md, Segmented: "Segments are 30px tall with 10px padding").
+    public static let cSegmentPadX: Double = 10
+    /// A fluid tab's height on its track (DESIGN.md, Fluid tabs: "a track of 4px padding and 28px items (36px control)"); a compact track's under a finger.
+    public static let cTabItem: Double = 28
+    /// A fluid tab's inline padding at the default size.
+    public static let cTabPx: Double = 12
+    /// How far a folder tab's path brings its top corner in from its foot on the leading side (DESIGN.md, Folder tabs, Slopes: the owner's pick).
+    public static let cTabSlopeStart: Double = 1
+    /// How far a folder tab's path brings its top corner in from its foot on the trailing side (DESIGN.md, Folder tabs, Slopes: the owner's pick). Written with its unit: it is added to lengths in calc() (PaneTabs' cast).
+    public static let cTabSlopeEnd: Double = 0
     /// Running text's measure (DESIGN.md Body: 60 to 72ch): a note, a hint, a rule's or hook's sentence, a fault's explanation, the expanded plan, a refused write.
     public static let cMeasure: Double = 576
     /// Running text at the short end of DESIGN.md's 60 to 72ch, beside a control that takes the rest of the row.

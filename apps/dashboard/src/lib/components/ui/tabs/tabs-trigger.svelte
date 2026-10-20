@@ -1,6 +1,9 @@
 <script lang="ts">
   import { Tabs as TabsPrimitive } from "bits-ui";
   import { cn } from "#lib/utils.js";
+  import { segmentedVariants } from "./thumb.js";
+
+  const { segment } = segmentedVariants();
 
   let {
     ref = $bindable(null),
@@ -11,7 +14,8 @@
 
 <TabsPrimitive.Trigger
   class={cn(
-    "kit-segment press-tint focus-inset touch-hit flex-1 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    segment(),
+    "press-tint focus-inset touch-hit flex-1 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     className
   )}
   data-slot="tabs-trigger"

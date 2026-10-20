@@ -444,6 +444,7 @@
 @custom-variant slot-group (&[data-slot="group"]);
 @custom-variant slot-head (&[data-slot="head"]);
 @custom-variant slot-heading (&[data-slot="heading"]);
+@custom-variant slot-highlight-ghost (&[data-slot="highlight-ghost"]);
 @custom-variant slot-hint (&[data-slot="hint"]);
 @custom-variant slot-hit (&[data-slot="hit"]);
 @custom-variant slot-hitl (&[data-slot="hitl"]);
