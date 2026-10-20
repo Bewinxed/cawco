@@ -34,30 +34,35 @@ const SECRET_COLUMNS = [
 /** Seals each plain secret in place, in one transaction; answers how many, by `table.column`. */
 export const sealAtRest = (sqlite: Database): Record<string, number> => {
   const sealed: Record<string, number> = {};
-  sqlite.transaction(() => {
-    for (const { table, key, columns } of SECRET_COLUMNS) {
-      for (const column of columns) {
-        const rows = sqlite
-          .query(
-            `SELECT ${key} AS id, ${column} AS value FROM ${table} WHERE ${column} IS NOT NULL`
-          )
-          .all() as { id: string; value: string }[];
-        const update = sqlite.query(
-          `UPDATE ${table} SET ${column} = ? WHERE ${key} = ?`
-        );
-        let count = 0;
-        for (const row of rows) {
-          if (!isSealed(row.value)) {
-            update.run(hubSecrets().seal(row.value), row.id);
-            count += 1;
+  // Immediate, as every transaction on the hub's file (db/index.ts `make`):
+  // it reads, then writes, and a read that upgrades is refused at once while
+  // another connection writes.
+  sqlite
+    .transaction(() => {
+      for (const { table, key, columns } of SECRET_COLUMNS) {
+        for (const column of columns) {
+          const rows = sqlite
+            .query(
+              `SELECT ${key} AS id, ${column} AS value FROM ${table} WHERE ${column} IS NOT NULL`
+            )
+            .all() as { id: string; value: string }[];
+          const update = sqlite.query(
+            `UPDATE ${table} SET ${column} = ? WHERE ${key} = ?`
+          );
+          let count = 0;
+          for (const row of rows) {
+            if (!isSealed(row.value)) {
+              update.run(hubSecrets().seal(row.value), row.id);
+              count += 1;
+            }
+          }
+          if (count > 0) {
+            sealed[`${table}.${column}`] = count;
           }
         }
-        if (count > 0) {
-          sealed[`${table}.${column}`] = count;
-        }
       }
-    }
-  })();
+    })
+    .immediate();
   if (Object.keys(sealed).length > 0) {
     // An UPDATE leaves the old bytes in the file's freed space and in the
     // WAL until something writes over them: the plain values would still be

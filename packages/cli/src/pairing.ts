@@ -45,7 +45,7 @@ export const pairingOff = (): number => {
       ).run(Date.now());
       db.query("DELETE FROM owner_devices").run();
       db.query("DELETE FROM machine_keys").run();
-    })();
+    }).immediate();
   } finally {
     db.close();
   }

@@ -149,17 +149,20 @@ export const mergeProjectPages = (client: Database): number => {
     groups.set(key, [...(groups.get(key) ?? []), row]);
   }
   let folded = 0;
-  client.transaction(() => {
-    for (const [newest, ...older] of groups.values()) {
-      if (!newest || older.length === 0) {
-        continue;
+  // Immediate, as every transaction on the hub's file (db/index.ts `make`).
+  client
+    .transaction(() => {
+      for (const [newest, ...older] of groups.values()) {
+        if (!newest || older.length === 0) {
+          continue;
+        }
+        const picks = foldInto(client, newest, older);
+        folded += older.length;
+        console.info(
+          `[artifacts] project ${newest.project_id}'s page ${newest.name}: ${older.length} older row${older.length === 1 ? "" : "s"} folded into ${newest.id}, ${picks} pick${picks === 1 ? "" : "s"} taken in.`
+        );
       }
-      const picks = foldInto(client, newest, older);
-      folded += older.length;
-      console.info(
-        `[artifacts] project ${newest.project_id}'s page ${newest.name}: ${older.length} older row${older.length === 1 ? "" : "s"} folded into ${newest.id}, ${picks} pick${picks === 1 ? "" : "s"} taken in.`
-      );
-    }
-  })();
+    })
+    .immediate();
   return folded;
 };
