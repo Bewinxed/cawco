@@ -666,7 +666,7 @@
   <form
     data-slot="add"
     aria-label={words.signInService(service.label)}
-    class="mb-space-4 flex max-w-c-measure flex-col gap-space-3 rounded-md bg-surface-recess p-space-4"
+    class="mb-space-4 flex max-w-c-measure flex-col gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
     onsubmit={add}
     transition:unfold
   >

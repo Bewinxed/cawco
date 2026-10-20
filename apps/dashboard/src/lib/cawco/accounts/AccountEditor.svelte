@@ -211,7 +211,6 @@
             field="number"
             id="reserve"
             inputmode="numeric"
-            size="sm"
             bind:value={fields.reserve}
           />
           <span>{words.editor.reserveUnit}</span>

@@ -106,13 +106,15 @@
 >
   <div
     data-slot="row"
-    class="group/row relative flex min-h-c-row-h items-center gap-space-3 rounded-sm px-space-2 py-space-2 transition-control data-two:min-h-c-row-h-two has-link-active:bg-surface-fill light:has-link-active:bg-surface-fill-strong light:has-link-active:inks-strong max-phone:flex-wrap"
+    class="group/row relative flex min-h-c-row-h items-center gap-space-3 rounded-sm px-space-2 py-space-2 transition-control data-two:min-h-c-row-h-two has-link-active:bg-surface-fill light:has-link-active:bg-surface-fill-strong light:has-link-active:inks-strong max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:grid-rows-(--row-rows) max-phone:gap-x-space-3 max-phone:gap-y-space-row"
     data-off={enabled === false || undefined}
     data-two={meta !== undefined || undefined}
+    style:--row-cols="var(--c-mark) minmax(0, 1fr) auto"
+    style:--row-rows={meta === undefined ? "auto" : "auto auto"}
   >
     <span
       data-slot="tile"
-      class="inline-flex size-c-mark flex-none items-center justify-center rounded-sm bg-surface-raised text-ink-muted shadow-tile *:size-icon-md *:flex-none"
+      class="inline-flex size-c-mark flex-none items-center justify-center rounded-sm bg-surface-raised text-ink-muted shadow-tile *:size-icon-md *:flex-none max-phone:row-span-full max-phone:self-center"
       data-share={href ? `icon:${href}` : undefined}
       style:color={hue}
       {@attach land(() => {
@@ -128,17 +130,16 @@
     </span>
     <span
       data-slot="text"
-      class="flex min-w-0 flex-auto flex-col gap-space-row transition-opacity duration-(--dur-panel) ease-out group-data-off/row:opacity-55 max-phone:basis-(--text-basis)"
-      style:--text-basis="calc(100% - var(--c-mark) - var(--space-3))"
+      class="flex min-w-0 flex-auto flex-col gap-space-row max-phone:contents"
     >
       <span
         data-slot="name"
-        class="flex min-w-0 items-center gap-space-2 type-label text-ink-strong"
+        class="flex min-w-0 items-center gap-space-2 type-label text-ink-strong transition-opacity duration-(--dur-panel) ease-out group-data-off/row:opacity-55 max-phone:col-start-2 max-phone:row-start-1"
         data-mono={mono || undefined}
       >
         {#if href}
           <a
-            class="truncate text-inherit no-underline outline-off in-data-mono:font-(family-name:--font-mono) after:absolute after:inset-0 after:rounded-inherit focus-visible:after:outline-solid focus-visible:after:outline-(length:--focus-ring-width) focus-visible:after:outline-focus-ring focus-visible:after:outline-offset-(--focus-ring-inset)"
+            class="truncate text-inherit no-underline outline-off in-data-mono:type-code after:absolute after:inset-0 after:rounded-inherit focus-visible:after:outline-solid focus-visible:after:outline-(length:--focus-ring-width) focus-visible:after:outline-focus-ring focus-visible:after:outline-offset-(--focus-ring-inset)"
             data-link
             data-share="title:{href}"
             {href}
@@ -147,7 +148,7 @@
         {:else}
           <span
             data-slot="section-row-label"
-            class="truncate text-inherit no-underline outline-off in-data-mono:font-(family-name:--font-mono)"
+            class="truncate text-inherit no-underline outline-off in-data-mono:type-code"
             {@attach land(() => (share ? `title:${share}` : undefined), {
               uniform: true,
             })}>{name}</span
@@ -160,17 +161,18 @@
       {#if meta !== undefined}
         <span
           data-slot="meta"
-          class="truncate type-meta text-ink-muted"
+          class="truncate type-meta text-ink-muted transition-opacity duration-(--dur-panel) ease-out group-data-off/row:opacity-55 max-phone:col-start-2 max-phone:-col-end-1 max-phone:row-start-2"
           title={meta}>{meta}</span
         >
       {/if}
     </span>
     <!-- A 30px ⋯ and a 32px switch: on a coarse pointer the gap opens to 14px,
-         so each touch area reaches 44px before meeting its neighbour's. -->
+         so each touch area reaches 44px before meeting its neighbour's. The
+         cluster holds the row's trailing edge at every width: on a phone the
+         name gives way beside it and the meta line runs on under both. -->
     <span
       data-slot="controls"
-      class="relative z-1 flex flex-none items-center ghost-rest-fill gap-space-2 hit-gap-x-(--space-2) coarse:gap-space-4 coarse:hit-gap-x-(--space-4) max-phone:ms-(--controls-ms)"
-      style:--controls-ms="calc(var(--c-mark) + var(--space-3))"
+      class="relative z-1 flex flex-none items-center ghost-rest-fill gap-space-2 hit-gap-x-(--space-2) coarse:gap-space-4 coarse:hit-gap-x-(--space-4) max-phone:col-start-3 max-phone:row-start-1"
     >
       {#if rollout}
         {@render rollout()}

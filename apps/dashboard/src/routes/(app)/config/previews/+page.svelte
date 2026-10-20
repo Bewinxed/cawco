@@ -93,13 +93,19 @@
   title={section.label}
 >
   <div data-slot="group" class="flex flex-col gap-space-2">
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+    <p
+      data-slot="note"
+      class="type-meta max-w-c-measure text-pretty text-ink-muted"
+    >
       A previewed app runs on an origin of its own, so it never shares the
       dashboard's storage or sign-ins. Every open preview moves to the new
       address once this is saved.
     </p>
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
-      On a computer running CawCo, open <code class="font-mono text-ink-strong"
+    <p
+      data-slot="note"
+      class="type-meta max-w-c-measure text-pretty text-ink-muted"
+    >
+      On a computer running CawCo, open <code class="type-code text-ink-strong"
         >http://localhost:3455</code
       >; previews there run in their own process on Chrome, Edge and Brave.
     </p>
@@ -148,7 +154,10 @@
       <!-- What the names need before Save, where the operator sets them. -->
       <div class="flex flex-col gap-space-2">
         <p class="type-label text-ink-strong">Before you save</p>
-        <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+        <p
+          data-slot="note"
+          class="type-meta max-w-c-measure text-pretty text-ink-muted"
+        >
           Every name the pattern makes has to reach the hub's port {firstPort}.
           Behind Cloudflare, with the dashboard on a tunnel already:
         </p>
@@ -159,10 +168,10 @@
           {#if byPort}
             <li>
               In DNS, add a proxied CNAME record for each port of the range,
-              <code class="font-mono text-ink-strong">p-{firstPort}</code>
-              to <code class="font-mono text-ink-strong">p-{lastPort}</code>,
+              <code class="type-code text-ink-strong">p-{firstPort}</code>
+              to <code class="type-code text-ink-strong">p-{lastPort}</code>,
               whose target is your tunnel,
-              <code class="font-mono text-ink-strong"
+              <code class="type-code text-ink-strong"
                 >&lt;tunnel-id&gt;.cfargotunnel.com</code
               >. No wildcard is needed, so one you already use elsewhere stays
               as it is.
@@ -170,13 +179,13 @@
             <li>
               In Networking › Tunnels › your tunnel › Routes, add a published
               application for each of those names, service
-              <code class="font-mono text-ink-strong"
+              <code class="type-code text-ink-strong"
                 >http://localhost:{firstPort}</code
               >
               on the hub's machine.
             </li>
             <li>
-              Set the pattern to <code class="font-mono text-ink-strong"
+              Set the pattern to <code class="type-code text-ink-strong"
                 >https://p-{"{port}"}.example.com</code
               >
               and save.
@@ -184,43 +193,49 @@
           {:else}
             <li>
               In DNS, add a proxied CNAME record named <code
-                class="font-mono text-ink-strong">*</code
+                class="type-code text-ink-strong">*</code
               >
               whose target is your tunnel,
-              <code class="font-mono text-ink-strong"
+              <code class="type-code text-ink-strong"
                 >&lt;tunnel-id&gt;.cfargotunnel.com</code
               >. Records you already have keep their own targets.
             </li>
             <li>
               In Networking › Tunnels › your tunnel › Routes, add a published
-              application: hostname <code class="font-mono text-ink-strong"
+              application: hostname <code class="type-code text-ink-strong"
                 >*.example.com</code
               >, service
-              <code class="font-mono text-ink-strong"
+              <code class="type-code text-ink-strong"
                 >http://localhost:{firstPort}</code
               >
               on the hub's machine.
             </li>
             <li>
               Set the pattern to
-              <code class="font-mono text-ink-strong"
+              <code class="type-code text-ink-strong"
                 >https://p-{"{session}"}.example.com</code
               >
               and save. Keep {"{session}"} in the first label: Cloudflare's free certificate
               covers one level of subdomain, not
-              <code class="font-mono text-ink-strong"
+              <code class="type-code text-ink-strong"
                 >*.previews.example.com</code
               >.
             </li>
           {/if}
         </ol>
-        <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+        <p
+          data-slot="note"
+          class="type-meta max-w-c-measure text-pretty text-ink-muted"
+        >
           Leave these names out of Cloudflare Access, or any sign-in in front of
           them. The hub locks them itself: a name opens only for the dashboard
           and the app, which ask the hub for a pass, and answers anyone else
           with 401.
         </p>
-        <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+        <p
+          data-slot="note"
+          class="type-meta max-w-c-measure text-pretty text-ink-muted"
+        >
           Without Cloudflare: point the pattern's names ({byPort
             ? "one per port"
             : "a wildcard"}) at the hub, or at a proxy that sends them to port
@@ -237,7 +252,6 @@
         onclick={save}
         pending={saving}
         pendingLabel="Saving…"
-        size="sm"
       />
     </div>
   </div>

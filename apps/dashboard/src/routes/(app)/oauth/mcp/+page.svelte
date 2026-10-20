@@ -52,11 +52,16 @@
 
 <div class="min-w-0 flex-auto overflow-y-auto p-space-6">
   {#if failure}
-    <EmptyState
-      icon={IconWarningTriangle}
-      line={failure}
-      title="Sign-in didn't finish"
-    >
+    <!-- A failure says itself by glyph, word and hue (DESIGN.md, The Glyph,
+         Word, Hue Rule): the warning glyph in the fail ink at the empty
+         block's 20px, then the title's words. -->
+    <EmptyState line={failure} title="Sign-in didn't finish">
+      {#snippet mark()}
+        <IconWarningTriangle
+          aria-hidden="true"
+          class="mb-space-1 size-icon-lg text-status-fail-glyph"
+        />
+      {/snippet}
       {#snippet action()}
         <Button href="/config/mcp" label="Back to MCP servers" />
       {/snippet}

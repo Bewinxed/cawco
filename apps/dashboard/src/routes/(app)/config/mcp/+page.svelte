@@ -21,9 +21,11 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import { toast } from "#lib/cawco/toasts.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
+    IconCheck,
     IconGlobe,
     IconPlus,
     IconRefresh,
@@ -171,6 +173,25 @@
           ontoggle={(next) => toggle(row, next)}
           toggling={busy[row.name] === true}
         >
+          {#snippet badge()}
+            {#if row.auth?.mode === "oauth" && row.auth.state === "signed-in"}
+              <!-- It gives way with the name, by an ellipsis in its own
+                   words (DESIGN.md, The Truncate Inside Rule), so it never
+                   runs under the row's controls. -->
+              <Badge
+                class="shrink"
+                role="status"
+                title={words.signedIn}
+                variant="done"
+              >
+                <IconCheck />
+                <span
+                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                  >{words.signedIn}</span
+                >
+              </Badge>
+            {/if}
+          {/snippet}
           {#snippet rollout()}
             <RolloutChip
               kind="mcp"

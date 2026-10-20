@@ -29,6 +29,9 @@
   import { buildRowsFrom } from "#lib/cawco/transcript/rows.js";
   import Transcript from "#lib/cawco/transcript/Transcript.svelte";
   import type { Message } from "#lib/cawco/types.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { IconChat } from "#lib/icons.js";
 
   const INSTANCE = "traffic-bench";
 
@@ -369,60 +372,72 @@
      is a fixed box; virtua resizing it from inside its own measure was a
      ResizeObserver loop no real pane has. -->
 <div class="flex min-h-0 flex-auto flex-col bg-surface-recess">
-  <header class="border-b border-b-border-hairline px-space-5 py-space-4">
-    <h1 class="text-size-title font-medium text-ink-strong">Arrival traffic</h1>
-    <p class="mt-space-1 text-size-body font-normal text-ink-muted">
+  <!-- On the transcript's own start edge (its `pad="transcript"`), so the
+       head, the controls and the transcript's first row or empty state
+       stand on one x. The controls are the kit's xs outline buttons, one
+       height, wrapping whole. -->
+  <header
+    class="flex flex-col gap-space-2 border-b border-b-border-hairline py-space-4 ps-space-7 pe-space-6 max-desk:px-space-5"
+  >
+    <h1 class="type-title tracking-title text-ink-strong">Arrival traffic</h1>
+    <p class="type-body text-pretty text-ink-muted">
       The real transcript, driven without a model. Sequence it from
-      <code class="font-mono">window.__traffic</code>, or use these.
+      <code class="type-code">window.__traffic</code>, or use these.
     </p>
     <div
       data-slot="controls"
-      class="mt-space-3 flex flex-wrap items-center gap-space-2"
+      class="flex flex-wrap items-center gap-space-2 hit-gap-x-(--space-2) hit-gap-y-(--space-2) coarse:gap-y-space-4 coarse:hit-gap-y-(--space-4)"
     >
-      <button
-        class="rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
-        onclick={() => reset(14)}
-        type="button">load history</button
+      <Button onclick={() => reset(14)} size="xs" variant="outline"
+        >Load history</Button
       >
-      <button
-        class="rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
-        onclick={() => run(6, 900)}
-        type="button">6 tools @900ms</button
+      <Button onclick={() => run(6, 900)} size="xs" variant="outline"
+        >6 tools at 900ms</Button
       >
-      <button
-        class="rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
-        onclick={() => run(6, 120)}
-        type="button">6 tools @120ms</button
+      <Button onclick={() => run(6, 120)} size="xs" variant="outline"
+        >6 tools at 120ms</Button
       >
-      <button
-        class="rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
+      <Button
         onclick={() => assistant("A settled turn.")}
-        type="button"
+        size="xs"
+        variant="outline">Assistant turn</Button
       >
-        assistant
-      </button>
-      <button
-        class="rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
-        onclick={() => note("task done")}
-        type="button">note</button
+      <Button onclick={() => note("task done")} size="xs" variant="outline"
+        >Note</Button
       >
-      <button
-        class="rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover"
-        onclick={() => reset(0)}
-        type="button">reset</button
+      <Button onclick={() => reset(0)} size="xs" variant="outline">Reset</Button
       >
-      <span
-        data-slot="count"
-        class="num text-size-meta font-normal text-ink-muted"
+      <span data-slot="count" class="num type-meta text-ink-muted"
         >{session.messages.length} messages</span
       >
     </div>
   </header>
 
   <div data-slot="pane" class="flex min-h-0 flex-auto flex-col">
+    <!-- The bench has no composer, so the transcript's own empty state (its
+         way in is the composer below) would point at nothing: it stands
+         bare, and the bench says what is empty and starts the traffic that
+         fills it (DESIGN.md, Empty; The Empty Starts Work Rule), on the
+         transcript's start edge. The transcript stays mounted under it, so
+         what arrives next still arrives live. -->
+    {#if session.messages.length === 0}
+      <EmptyState
+        icon={IconChat}
+        line="Load a history, or send traffic from the controls above or from window.__traffic."
+        pad="transcript"
+        title="Nothing has arrived yet"
+      >
+        {#snippet action()}
+          <Button onclick={() => reset(14)} variant="outline"
+            >Load history</Button
+          >
+        {/snippet}
+      </EmptyState>
+    {/if}
     {#key generation}
       <Transcript
         agentName="Traffic"
+        bare
         focused
         onlanded={() => {
           landed = true;

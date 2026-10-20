@@ -38,6 +38,21 @@
    * (--dur-menu) and leaves the same way on the exit tier; its figure ticks
    * over through MorphText. With reduced motion, a fade.
    */
+  /**
+   * The chosen section stands whole in the rail: a rail shorter than its
+   * sections scrolls the chosen row into view when the section changes, by
+   * the least it takes (`block: "nearest"`), never cut at the rail's foot.
+   */
+  function shown(rail: HTMLElement) {
+    // Read so the attachment runs again when the section changes.
+    if (!current) {
+      return;
+    }
+    rail
+      .querySelector<HTMLElement>('[aria-current="page"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+
   function badge(
     _node: Element,
     _params?: undefined,
@@ -64,12 +79,13 @@
     rows: '[data-slot="row"]',
     selected: '[aria-current="page"]',
   })}
+  {@attach shown}
 >
   {#each GROUPS as { group, sections } (group)}
     <div data-slot="group" class="flex flex-col">
       <h2
         data-slot="config-rail-label"
-        class="pt-space-4 px-space-3 pb-space-2 type-body text-ink-muted"
+        class="pt-space-4 px-space-3 pb-space-2 type-label text-ink-muted"
       >
         {group}
       </h2>
@@ -81,6 +97,7 @@
           <li>
             <a
               data-slot="row"
+              aria-busy={section.counted && count === null ? "true" : undefined}
               aria-current={current === section.slug ? "page" : undefined}
               class="group/row relative flex items-center gap-space-3 h-c-rail-row-h pl-space-2 pr-space-3 rounded-sm text-ink-row no-underline transition-control aria-current-page:text-selected-ink group-variant-list/rail:h-c-row-h focus-inset press-tint"
               href="/config/{section.slug}"
@@ -119,17 +136,10 @@
                 >
               {/if}
               {#if section.counted}
-                <!-- The figure is its own element, not the dash's text
-                     rewritten: it arrives in place rather than moving in.
-                     A read count stands only above 0 (DESIGN.md, The Earned
-                     Count Rule). -->
-                {#if count === null}
-                  <span
-                    data-slot="count"
-                    class="flex-none min-w-c-rail-count-min text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink"
-                    >—</span
-                  >
-                {:else if count > 0}
+                <!-- A count stands only once it is read and above 0: until
+                     the section is read the row claims nothing (DESIGN.md,
+                     The Earned Count Rule; The Claim Of Nothing Rule). -->
+                {#if count !== null && count > 0}
                   <span
                     data-slot="count"
                     class="flex-none min-w-c-rail-count-min text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink"

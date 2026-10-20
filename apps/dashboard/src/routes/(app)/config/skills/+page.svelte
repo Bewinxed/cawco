@@ -43,6 +43,7 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
@@ -331,6 +332,23 @@
   }
 </script>
 
+<!-- Link marketplace: the toolbar's, and the empty groups' one action. -->
+{#snippet linkMarketplace()}
+  <LinkMarketplacePopover
+    down={hubDown()}
+    onsaved={(row) => {
+      if (fleet) {
+        upsert(
+          fleet.config.marketplaces,
+          row,
+          (other) => other.name === row.name
+        );
+      }
+    }}
+    taken={marketplaces.map((row) => row.name)}
+  />
+{/snippet}
+
 <SectionFrame
   problem={store.fleet.error}
   purpose={section.purpose}
@@ -363,27 +381,25 @@
       />
     {/if}
     <RowFault again={refetchAll} reason={refetchProblem} />
-    <LinkMarketplacePopover
-      down={hubDown()}
-      onsaved={(row) => {
-        if (fleet) {
-          upsert(
-            fleet.config.marketplaces,
-            row,
-            (other) => other.name === row.name
-          );
-        }
-      }}
-      taken={marketplaces.map((row) => row.name)}
-    />
+    {@render linkMarketplace()}
   {/snippet}
 
   <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={HUE} icon={IconBolt} label={words.skills} />
     {#if skills.length === 0}
-      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
-        {words.noSkills}
-      </p>
+      <!-- Each empty group's one action starts what fills it, by hand
+           (DESIGN.md, The Empty Starts Work Rule): the same Fetch skill and
+           Link marketplace the page offers above, or browsing a linked
+           marketplace. -->
+      <EmptyState icon={IconBolt} line={words.noSkills} title="No skills yet">
+        {#snippet action()}
+          <FetchSkillPopover
+            down={hubDown()}
+            onsaved={landedSkill}
+            taken={skills.map((row) => row.name)}
+          />
+        {/snippet}
+      </EmptyState>
     {:else}
       <RowList label={words.skills}>
         {#each skills as row (row.name)}
@@ -485,9 +501,15 @@
   >
     <SectionHeader hue={HUE} icon={IconShop} label={words.marketplaces} />
     {#if marketplaces.length === 0}
-      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
-        {words.noMarketplaces}
-      </p>
+      <EmptyState
+        icon={IconShop}
+        line={words.noMarketplaces}
+        title="No marketplaces yet"
+      >
+        {#snippet action()}
+          {@render linkMarketplace()}
+        {/snippet}
+      </EmptyState>
     {:else}
       <RowList label={words.marketplaces}>
         {#each marketplaces as row (row.name)}
@@ -561,11 +583,11 @@
                     {words.listsNothing}
                   </p>
                 {:else}
-                  <ul data-slot="listing" class="flex flex-col gap-space-row">
+                  <ul data-slot="listing" class="flex flex-col">
                     {#each listings[row.name] as plugin (plugin.name)}
                       {@const id = `${plugin.name}@${row.name}`}
                       <li
-                        class="flex flex-wrap items-center gap-space-2 rounded-sm bg-surface-recess px-space-3 py-space-2"
+                        class="flex flex-wrap items-center gap-space-2 py-space-2 not-first:border-t not-first:border-t-border-hairline"
                       >
                         <span
                           data-slot="text"
@@ -636,9 +658,27 @@
   >
     <SectionHeader hue={HUE} icon={IconLayers} label={words.plugins} />
     {#if plugins.length === 0}
-      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
-        {words.noPlugins}
-      </p>
+      <EmptyState
+        icon={IconLayers}
+        line={words.noPlugins}
+        title="No plugins yet"
+      >
+        {#snippet action()}
+          {#if marketplaces[0]}
+            {@const first = marketplaces[0]}
+            <Button
+              icon={IconShop}
+              label="{words.browse} {first.name}"
+              onclick={() => browse(first)}
+              pending={reading[first.name] === true}
+              pendingLabel={words.reading(first.name)}
+              variant="outline"
+            />
+          {:else}
+            {@render linkMarketplace()}
+          {/if}
+        {/snippet}
+      </EmptyState>
     {:else}
       <RowList label={words.plugins}>
         {#each plugins as row (row.id)}

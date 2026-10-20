@@ -261,8 +261,8 @@ interface On {
 const [template] = HOOK_TEMPLATES;
 
 /**
- * The config rail's count on `slug`'s row once read (no dash left): its
- * text, or "none" when it is not drawn.
+ * The config rail's count on `slug`'s row once read (the row no longer
+ * `aria-busy`): its text, or "none" when it is not drawn.
  */
 const railCount = (page: Page, slug: string): Promise<string> =>
   page
@@ -272,7 +272,7 @@ const railCount = (page: Page, slug: string): Promise<string> =>
           `a[data-slot="row"][href="${href}"]`
         );
         const count = row?.querySelector('[data-slot="count"]');
-        if (!row || count?.textContent === "—") {
+        if (!row || row.getAttribute("aria-busy") === "true") {
           return null;
         }
         return count?.textContent ?? "none";

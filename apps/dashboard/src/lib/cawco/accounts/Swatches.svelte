@@ -9,7 +9,13 @@
   }: { value: AccountHue; label?: string } = $props();
 </script>
 
-<div aria-label={label} class="flex flex-wrap gap-space-3" role="radiogroup">
+<!-- Each swatch's touch area stops at the midpoint to its neighbour's
+     (DESIGN.md, The 44 Touch Rule: `--hit-gap-x`, `--hit-gap-y`). -->
+<div
+  aria-label={label}
+  class="flex flex-wrap gap-space-3 hit-gap-x-(--space-3) hit-gap-y-(--space-3)"
+  role="radiogroup"
+>
   {#each accountsWords.swatches as swatch (swatch.hue)}
     <!-- biome-ignore lint/a11y/useSemanticElements: a colour swatch ringed when chosen; a native radio cannot draw it -->
     <button

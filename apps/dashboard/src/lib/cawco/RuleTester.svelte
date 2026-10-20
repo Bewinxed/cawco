@@ -61,13 +61,15 @@
   const marked = $derived(hits.map((hit) => `${hit.start}-${hit.end}`).join());
 </script>
 
-<div class="flex flex-col gap-2 rounded-md bg-surface-recess p-3">
-  <div class="flex flex-wrap items-baseline justify-between gap-2">
-    <span class="text-label text-ink-strong">Try it</span>
+<!-- On the section's own surface: the editor's card holds no well of its
+     own (DESIGN.md, The Frame Recesses Rule). -->
+<div class="flex flex-col gap-space-2">
+  <div class="flex flex-wrap items-baseline justify-between gap-space-2">
+    <span class="type-label text-ink-strong">Try it</span>
     <span
       aria-live="polite"
-      class="text-meta transition-colors duration-(--dur-pop) ease-out {firing
-        ? 'text-success-9'
+      class="type-meta transition-colors duration-(--dur-pop) ease-out {firing
+        ? 'text-status-done-ink'
         : 'text-ink-muted'}"
       role="status"
     >
@@ -77,23 +79,21 @@
 
   <Textarea
     aria-label="Sample text to test this rule against"
-    face="mono"
-    fill="page"
     placeholder="I've fixed the parser. One honest caveat: the error path is still untested."
     resize="block"
     rows={3}
     spellcheck="false"
-    text="label"
     bind:value={sample}
   />
 
   {#if sample.trim() && draft.pattern.trim()}
     <!-- The text, and over it the marks alone (their text transparent), in
          one cell: when the hits move, the new marks cross-fade over the old
-         over --dur-control while the words stay put. -->
+         over --dur-control while the words stay put. The hits take the
+         selection tint, as a search's matched words do. -->
     <div
       data-slot="grid"
-      class="relative grid max-h-40 overflow-y-auto rounded-sm bg-surface-page font-(family-name:--font-mono) text-label leading-relaxed"
+      class="relative grid max-h-40 overflow-y-auto rounded-md border border-border-hairline type-body"
     >
       <p
         data-slot="layer"
@@ -111,7 +111,7 @@
         >
           {#each segments as segment, index (index)}
             {#if segment.hit}
-              <mark class="rounded-xs bg-success-9/25 text-transparent"
+              <mark class="rounded-hair bg-selection text-transparent"
                 >{segment.text}</mark
               >
             {:else}

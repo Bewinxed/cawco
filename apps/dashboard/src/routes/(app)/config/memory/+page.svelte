@@ -23,8 +23,9 @@
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import { toast } from "#lib/cawco/toasts.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import { IconBook, IconTrash } from "#lib/icons.js";
+  import { IconBook, IconSearch, IconTrash } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
 
   /**
@@ -97,12 +98,14 @@
     />
   {/snippet}
   {#snippet toolbar()}
-    <Input
-      aria-label={words.filterLabel}
-      measure="cap-sm"
-      placeholder={words.filter}
-      bind:value={filter}
-    />
+    <!-- The page's width on a phone, a short field's beside the rows wider. -->
+    <span class="flex w-full phone:max-w-64">
+      <Input
+        aria-label={words.filterLabel}
+        placeholder={words.filter}
+        bind:value={filter}
+      />
+    </span>
   {/snippet}
 
   <RowList label={words.list}>
@@ -179,8 +182,10 @@
     {/each}
   </RowList>
   {#if !mainShown && shown.length === 0}
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
-      {words.noMatch(filter.trim())}
-    </p>
+    <EmptyState
+      icon={IconSearch}
+      line="Try fewer letters, or clear the filter."
+      title={words.noMatch(filter.trim())}
+    />
   {/if}
 </SectionFrame>

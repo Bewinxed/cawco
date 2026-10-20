@@ -44,9 +44,7 @@
         face="mono"
         oninput={settle}
         placeholder={keyPlaceholder}
-        size="sm"
         spellcheck="false"
-        text="meta"
         bind:value={row.key}
       />
       <Input
@@ -57,16 +55,14 @@
         style="--value-basis: 0%; --value-grow: 2"
         oninput={settle}
         placeholder={valuePlaceholder}
-        size="sm"
         spellcheck="false"
-        text="meta"
         bind:value={row.value}
       />
       <Button
         aria-label="Remove {row.key || 'this line'}"
         disabled={index === rows.length - 1}
         onclick={() => rows.splice(index, 1)}
-        size="icon-sm"
+        size="icon"
         tone="muted"
         variant="ghost"
       >

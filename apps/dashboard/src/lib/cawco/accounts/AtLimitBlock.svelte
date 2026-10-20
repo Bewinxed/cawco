@@ -74,7 +74,6 @@
           id="{id}-wait"
           inputmode="numeric"
           min="0"
-          size="sm"
           oninput={(event) => {
             atLimit.waitMinutes = whole(event.currentTarget.value);
           }}
@@ -95,7 +94,6 @@
           id="{id}-over"
           inputmode="numeric"
           min="0"
-          size="sm"
           oninput={(event) => {
             atLimit.moveWholeUnderK = whole(event.currentTarget.value);
           }}

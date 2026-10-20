@@ -278,7 +278,12 @@ const PART = {
   name: "min-w-0 overflow-hidden text-ellipsis",
   pin: "size-icon-sm text-ink-muted",
   clock: `${AT} px-space-1 rounded-xs ${META} tabular-nums text-right text-ink-muted`,
-  clockWash: `${AT} rounded-xs bg-(--c)/26 opacity-0`,
+  /**
+   * The soonest clock's emphasis (Soonest reset): the selection tint, as a
+   * search marks its match, never the lane's hue at a wash, which read as a
+   * status khaki (DESIGN.md, The Reserved Hue Rule).
+   */
+  clockWash: `${AT} rounded-xs bg-selection opacity-0`,
   blocked: `${AT} ${META} font-medium text-right text-data-bad opacity-0`,
   bar: `${STRIP} bg-surface-fill`,
   headroom: `${STRIP} bg-(--c)/42 opacity-0`,

@@ -200,7 +200,14 @@
       icon={section.icon}
       line="Write one, or adopt one a machine already has from the list below."
       title="No subagents yet"
-    />
+    >
+      {#snippet action()}
+        <Button href="/config/subagents/new" variant="outline">
+          <IconPlus />
+          <span>Write a subagent</span>
+        </Button>
+      {/snippet}
+    </EmptyState>
   {:else}
     <RowList label="Fleet subagents">
       {#each agents as row (row.name)}

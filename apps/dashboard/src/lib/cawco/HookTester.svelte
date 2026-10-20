@@ -4,6 +4,10 @@
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
+  import {
+    chipsVariants,
+    chipVariants,
+  } from "#lib/components/ui/chip/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
 
   /**
@@ -34,7 +38,7 @@
   };
   const KIND_TONE = {
     all: "muted-edge",
-    exact: "success-edge",
+    exact: "muted-edge",
     regex: "warning-edge",
   } as const satisfies Record<HookMatcherKind, string>;
   const KIND_HOW: Record<HookMatcherKind, string> = {
@@ -50,39 +54,41 @@
   );
 </script>
 
-<div class="flex flex-col gap-2 rounded-md bg-surface-recess p-3">
-  <div class="flex flex-wrap items-center gap-2">
+<!-- On the section's own surface: the editor's card holds no well of its
+     own (DESIGN.md, The Frame Recesses Rule). -->
+<div class="flex flex-col gap-space-3">
+  <div class="flex flex-wrap items-center gap-space-2">
     <Badge class="shrink-0" tone={KIND_TONE[kind]} variant="outline"
       ><span>{KIND_LABEL[kind]}</span></Badge
     >
-    <span class="text-meta text-ink-muted">{KIND_HOW[kind]}</span>
+    <span class="type-meta text-ink-muted">{KIND_HOW[kind]}</span>
   </div>
 
   {#if info?.suggests && info.suggests.length > 0}
-    <div class="flex flex-wrap items-center gap-1.5" in:unfold out:unfold>
-      <span class="text-label text-ink-muted">Real values:</span>
-      {#each info.suggests as suggestion (suggestion)}
-        <button
-          class="pointer-hit pressable rounded-sm border border-border px-2 py-0.5 font-mono text-label text-ink-strong transition-colors hover:bg-accent"
-          onclick={() => {
-            matcher = suggestion;
-          }}
-          type="button"
-        >
-          {suggestion}
-        </button>
-      {/each}
+    <div class="flex flex-col gap-space-2" in:unfold out:unfold>
+      <span class="type-label text-ink-muted">Real values</span>
+      <div class={chipsVariants()}>
+        {#each info.suggests as suggestion (suggestion)}
+          <button
+            class={[chipVariants({ variant: "option" }), "touch-hit"]}
+            onclick={() => {
+              matcher = suggestion;
+            }}
+            type="button"
+          >
+            <span>{suggestion}</span>
+          </button>
+        {/each}
+      </div>
     </div>
   {/if}
 
-  <label class="flex flex-col gap-1.5 text-meta text-ink-muted">
+  <label class="flex flex-col gap-space-2 type-label text-ink-muted">
     Try it — {info?.filters ?? "the value this event carries"}
     <Input
       autocomplete="off"
-      face="mono"
       placeholder={info?.suggests?.[0] ?? "a sample value"}
       spellcheck="false"
-      text="label"
       bind:value={sample}
     />
   </label>
@@ -92,14 +98,14 @@
   {#if sample.trim()}
     <p
       aria-live="polite"
-      class="relative flex flex-col text-label"
+      class="relative flex flex-col type-label"
       role="status"
       in:unfold
       out:unfold
     >
       {#key hit}
         <span
-          class={hit ? "text-success-9" : "text-ink-muted"}
+          class={hit ? "text-status-done-ink" : "text-ink-muted"}
           in:crossIn
           out:crossOut
           >{hit

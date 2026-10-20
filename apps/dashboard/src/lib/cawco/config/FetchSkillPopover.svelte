@@ -153,7 +153,6 @@
         {/snippet}
         <Input
           autocomplete="off"
-          face="mono"
           id="skill-source"
           oninput={() => {
             if (!named) {
@@ -172,7 +171,7 @@
       >
         {#snippet hint()}
           {words.landsIn}
-          <span class="font-(family-name:--font-mono)"
+          <span class="type-code"
             >{project
               ? projectClaudeRelative("skills", skillName || "name")
               : userLayerLabel("skills", skillName || "name")}</span
@@ -181,7 +180,6 @@
         <Input
           aria-invalid={skillName !== "" && nameProblem ? "true" : undefined}
           autocomplete="off"
-          face="mono"
           id="skill-name"
           oninput={() => {
             named = true;
@@ -191,8 +189,9 @@
           bind:value={skillName}
         />
       </Field>
-      <div>
+      <Field id="skill-scope" label={words.scope}>
         <PickerChip
+          field={{ id: "skill-scope" }}
           label={words.scope}
           onpick={(next) => {
             projectId = next;
@@ -206,7 +205,7 @@
           ]}
           value={projectId}
         />
-      </div>
+      </Field>
       {#if choices.length > 0}
         <div
           class="flex flex-col max-h-c-choice-list-max-h overflow-y-auto"

@@ -1,14 +1,17 @@
 <script lang="ts">
-  /** A recessed well for text read back to the operator: a rule or hook's sentence. */
-  import type { Snippet } from "svelte";
+  /**
+   * Text read back to the operator (a rule or hook's sentence), on the kit
+   * Alert's default row (DESIGN.md, Alert: "a compact tinted row … default
+   * (recess)"). Core marks the code in it with backticks (a command), set in
+   * the code face by Coded, never shown as raw backticks.
+   */
+  import Coded from "#lib/cawco/Coded.svelte";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as Alert from "#lib/components/ui/alert/index.js";
 
-  let { children }: { children: Snippet } = $props();
+  let { text }: { text: string } = $props();
 </script>
 
-<p
-  data-slot="well"
-  aria-live="polite"
-  class="max-w-c-measure py-space-3 px-space-4 rounded-md bg-surface-recess type-body text-ink-strong transition-[background-color,color] duration-(--dur-pop) ease-out"
->
-  {@render children()}
-</p>
+<Alert.Root aria-live="polite" class="max-w-c-measure" data-slot="well">
+  <Alert.Description><Coded {text} /></Alert.Description>
+</Alert.Root>

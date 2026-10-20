@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button } from "#lib/components/ui/button/index.js";
   /**
    * A picker as a chip: what is chosen, and a popover listing the rest. Used
    * for the narrowings — machine, project, harness, model — where "every" is
@@ -11,7 +12,7 @@
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { IconCheck, IconChevronDown } from "#lib/icons.js";
+  import { IconCheck, IconChevronDown, IconUnfold } from "#lib/icons.js";
 
   let {
     label,
@@ -19,8 +20,17 @@
     picked,
     options,
     onpick,
+    field,
   }: {
     label: string;
+    /**
+     * It stands in a form among 36px fields, as one of them, under a Field's
+     * label (whose `for` this id is): the Select trigger's recipe (DESIGN.md,
+     * Inputs and fields: "Select trigger: the input's look with a
+     * sort-vertical glyph"), not the setting chip, which is for a narrowing
+     * shown as a small trigger.
+     */
+    field?: { id: string };
     /** The chosen option's value; the empty string is the "every" option. */
     value?: string;
     /** The chosen options' values, when it holds several. */
@@ -45,13 +55,40 @@
 </script>
 
 <Popover.Root bind:open={expanded}>
-  <Popover.Trigger data-picker-chip aria-label="{label}: {chosen}" look="chip">
-    <span class="text-ink-muted">{label}</span>
-    <span data-slot="num" class="min-w-0 truncate num"
-      ><MorphText text={chosen} /></span
+  {#if field}
+    <Popover.Trigger>
+      {#snippet child({ props })}
+        <Button
+          {...props}
+          id={field.id}
+          align="trigger"
+          aria-label="{label}: {chosen}"
+          class="w-full"
+          data-picker-field
+          variant="outline"
+        >
+          <span
+            data-slot="num"
+            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap num"
+            ><MorphText text={chosen} /></span
+          >
+          <IconUnfold class="text-ink-muted" />
+        </Button>
+      {/snippet}
+    </Popover.Trigger>
+  {:else}
+    <Popover.Trigger
+      data-picker-chip
+      aria-label="{label}: {chosen}"
+      look="chip"
     >
-    <IconChevronDown data-slot="chevron" />
-  </Popover.Trigger>
+      <span class="text-ink-muted">{label}</span>
+      <span data-slot="num" class="min-w-0 truncate num"
+        ><MorphText text={chosen} /></span
+      >
+      <IconChevronDown data-slot="chevron" />
+    </Popover.Trigger>
+  {/if}
   <Popover.Content
     align="start"
     gap="none"

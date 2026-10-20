@@ -361,7 +361,7 @@
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-60 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100 motion-safe:animate-breath"
+                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-60 group-tone-ok:bg-status-done-glyph group-tone-ok:opacity-100 motion-safe:animate-breath"
                 data-box
                 data-pulse
               ></span>
@@ -377,11 +377,11 @@
                   cx="10"
                   cy="10"
                   r="10"
-                  class="fill-status-live-bg stroke-none"
+                  class="fill-status-done-bg stroke-none"
                 ></circle>
                 <path
                   d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                  class="stroke-status-live-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
+                  class="stroke-status-done-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
                   pathLength="1"
                   stroke-linecap="round"
                   stroke-linejoin="round"
@@ -397,7 +397,7 @@
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-done-glyph group-tone-ok:opacity-100"
                 data-box
               ></span>
               <span>Not connected</span>
@@ -434,7 +434,7 @@
               pending={removingKey}
               pendingLabel="Removing…"
               size="sm"
-              variant="outline"
+              variant="destructive"
             />
           {/if}
           <Button
@@ -463,7 +463,7 @@
       <span
         data-slot="dot"
         aria-hidden="true"
-        class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+        class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-done-glyph group-tone-ok:opacity-100"
         data-box
       ></span>
       <span>{routeLine}</span>
@@ -513,11 +513,11 @@
                   cx="10"
                   cy="10"
                   r="10"
-                  class="fill-status-live-bg stroke-none"
+                  class="fill-status-done-bg stroke-none"
                 ></circle>
                 <path
                   d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                  class="stroke-status-live-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
+                  class="stroke-status-done-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
                   pathLength="1"
                   stroke-linecap="round"
                   stroke-linejoin="round"
@@ -529,7 +529,7 @@
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-done-glyph group-tone-ok:opacity-100"
                 data-box
               ></span>
               <span>Not set</span>

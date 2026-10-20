@@ -15,8 +15,8 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconChevronDown, IconChevronRight, IconLaptop } from "#lib/icons.js";
   import type { Machine } from "./client.svelte";
+  import NoMachines from "./config/NoMachines.svelte";
   import { adoptSkill, inspectMachine, saveMcpServer } from "./fleet";
-  import AddMachineLink from "./join/AddMachineLink.svelte";
   import OsMark from "./OsMark.svelte";
   import RowFault from "./RowFault.svelte";
 
@@ -109,9 +109,7 @@
        drops for a moment says "Offline" in the same place, so nothing under
        the list moves. It opens only while it is up; open, it can still close. -->
   {#if machines.length === 0}
-    <p data-slot="note" class="max-w-c-measure type-meta text-ink-muted">
-      <AddMachineLink>{words.noMachines}</AddMachineLink>{words.noMachinesAfter}
-    </p>
+    <NoMachines line="Each one reports what it has once it registers." />
   {:else}
     <ul data-slot="machines" class="-mx-space-2 flex flex-col gap-space-row">
       {#each machines as machine (machine.machineId)}
@@ -173,12 +171,12 @@
                 {kind === "mcp" ? words.noMcpAtAll : words.noSkillsAtAll}
               </p>
             {:else}
-              <ul class="mx-space-2 mb-space-2 flex flex-col gap-space-row">
+              <ul class="mx-space-2 mb-space-2 flex flex-col">
                 {#each rows as row ("path" in row ? row.path : `${row.scope}:${row.name}`)}
                   {@const key = keyOf(machine.machineId, row.scope, row.name)}
                   <li
                     data-slot="entry"
-                    class="flex flex-wrap items-center gap-space-2 rounded-sm bg-surface-recess px-space-3 py-space-2"
+                    class="flex flex-wrap items-center gap-space-2 py-space-2 not-first:border-t not-first:border-t-border-hairline"
                   >
                     <span
                       data-slot="text"

@@ -146,13 +146,13 @@ You are a <role>, working in one repository at a time.
   {#snippet header()}
     <h1
       data-slot="title"
-      class="type-title font-(family-name:--font-mono) wrap-anywhere text-ink-strong"
+      class="type-title tracking-title wrap-anywhere text-ink-strong"
     >
       {agent ? agent.name : front.name || "New subagent"}
     </h1>
     <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       The file is the definition. It lands at
-      <span class="font-mono"
+      <span class="type-code"
         >{userLayerLabel("agents", `${target ?? "name"}.md`)}</span
       >
       on every machine, and Claude Code picks it up within seconds.

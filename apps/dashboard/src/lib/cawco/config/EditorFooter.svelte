@@ -32,11 +32,9 @@
 
 <script lang="ts">
   /**
-   * The editor's commit row. It sits outside the scrolling body, on the
-   * recess, so no field scrolls under it at rest; under 640px it pins to the
-   * bottom edge and Delete moves to the header's ⋯ menu, and over a keyboard
-   * it stands on the keyboard with the body's fields kept clear of it
-   * (aboveKeyboard, `body`).
+   * The editor's commit row, on the card's sticky foot (StickyFoot). Under
+   * 640px Delete is the header's ⋯ menu's. It never wraps: what the save
+   * reaches gives way first, on one line.
    *
    * Save shows its work where it was pressed: the kit Button spins while
    * the save runs and draws a check for --dur-hold when it ends well, and
@@ -45,12 +43,11 @@
   import { configureWords } from "@cawco/core";
   import type { Snippet } from "svelte";
   import AskHere from "#lib/cawco/AskHere.svelte";
-  import { aboveKeyboard } from "#lib/cawco/visible-viewport.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconTrash } from "#lib/icons.js";
+  import StickyFoot from "./StickyFoot.svelte";
 
   let {
-    body,
     saving,
     saveLabel,
     canSave = true,
@@ -63,8 +60,6 @@
     question,
     result,
   }: {
-    /** The scrolling body whose fields the row stands under. */
-    body: HTMLElement | null;
     saving: boolean;
     saveLabel: string;
     canSave?: boolean;
@@ -107,44 +102,41 @@
   $effect(() => () => clearTimeout(savedTimer));
 </script>
 
-<footer
-  class="flex-none py-space-3 px-space-6 bg-surface-recess max-desk:px-space-2 max-phone:sticky max-phone:bottom-0 max-phone:pb-(--off-bottom)"
-  data-safe-bottom
-  style:--off-bottom="calc(var(--space-3) + var(--safe-bottom))"
-  {@attach aboveKeyboard(() => body)}
->
+<StickyFoot data-slot="editor-footer">
   {#if question}
-    <AskHere asker={question.asker} at="editor" class="max-w-c-config-max-w" />
+    <AskHere asker={question.asker} at="editor" />
   {/if}
+  <!-- On a phone what the save reaches takes its own line over the buttons,
+       from the start edge, so a chip never stands past the card's start. -->
   <div
     data-slot="inner"
-    class="flex items-center gap-space-2 max-w-c-config-max-w max-phone:flex-wrap max-phone:justify-end"
+    class="flex min-w-0 items-center justify-end gap-space-2 max-phone:flex-wrap"
   >
     {#if ondelete && deleteLabel}
-      <Button
-        data-delete
-        layout="wide"
-        tone="muted"
-        disabled={down !== null || saving}
-        {failed}
-        icon={IconTrash}
-        label={deleteLabel}
-        onclick={ondelete}
-        pending={deleting}
-        pendingLabel={configureWords.deleting}
-        title={down ?? undefined}
-        type="button"
-        variant="ghost"
-      />
+      <span class="me-auto flex flex-none max-phone:hidden">
+        <Button
+          data-delete
+          disabled={down !== null || saving}
+          {failed}
+          icon={IconTrash}
+          label={deleteLabel}
+          onclick={ondelete}
+          pending={deleting}
+          pendingLabel={configureWords.deleting}
+          title={down ?? undefined}
+          type="button"
+          variant="destructive"
+        />
+      </span>
     {/if}
-    <span class="flex-auto max-phone:hidden"></span>
-    {#if result}
-      <span
-        data-slot="result"
-        class="inline-flex items-center gap-space-2 min-w-0 type-meta text-ink-muted"
-        >{@render result()}</span
-      >
-    {/if}
+    <span
+      data-slot="result"
+      class="flex min-w-0 flex-auto items-center justify-end gap-space-2 type-meta text-ink-muted empty:hidden max-phone:basis-full max-phone:justify-start"
+    >
+      {#if result}
+        {@render result()}
+      {/if}
+    </span>
     <Button
       disabled={saving}
       onclick={oncancel}
@@ -164,4 +156,4 @@
       type="submit"
     />
   </div>
-</footer>
+</StickyFoot>
