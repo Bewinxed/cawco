@@ -119,7 +119,14 @@ import type { Frame, Locator, Page } from "playwright-core";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { traceMain } from "../frames";
-import { COMPOSER, type Kit, open, type Spec, settle } from "../kit";
+import {
+  buttonNames,
+  COMPOSER,
+  type Kit,
+  open,
+  type Spec,
+  settle,
+} from "../kit";
 import {
   docOf,
   dragFromIcon,
@@ -1868,21 +1875,22 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   )?.[0];
   const card = on.page.locator(`[data-pin-card="${target}"]`);
   // The head holds what acts on the pin (Resolve, ⋯, Close) on its row; the foot holds Reply alone.
-  const parts = await card.evaluate((el) => {
-    const head = el.querySelector('[data-slot="head"]');
-    const named = [...(head?.querySelectorAll("button") ?? [])].map(
-      (button) => button.getAttribute("aria-label") ?? ""
-    );
-    const tops = [...(head?.querySelectorAll("button") ?? [])].map((button) =>
-      Math.round(button.getBoundingClientRect().top)
-    );
-    const foot = [
-      ...el.querySelectorAll(
-        ':is([data-slot="actions"], [data-actions]) button'
-      ),
-    ].map((button) => button.textContent?.trim());
-    return { named, tops, foot };
-  });
+  const parts = {
+    ...(await card.evaluate((el) => {
+      const head = el.querySelector('[data-slot="head"]');
+      const named = [...(head?.querySelectorAll("button") ?? [])].map(
+        (button) => button.getAttribute("aria-label") ?? ""
+      );
+      const tops = [...(head?.querySelectorAll("button") ?? [])].map((button) =>
+        Math.round(button.getBoundingClientRect().top)
+      );
+      return { named, tops };
+    })),
+    // By their accessible names: a kit Button's text holds its pending words too.
+    foot: await buttonNames(
+      card.locator(':is([data-slot="actions"], [data-actions])').first()
+    ).catch(() => [] as string[]),
+  };
   on.kit.check(
     "c: the card's head holds Resolve pin, its ⋯ and Close on one row, and its foot Reply alone",
     parts.named[0] === "Resolve pin" &&
@@ -2577,19 +2585,12 @@ const roomChecks = async (on: On) => {
     15_000
   ).catch(() => 0);
   await settle(on.page, 400);
-  const seen = await card.evaluate((el) => {
+  const read = await card.evaluate((el) => {
     const box = (part: Element | null) => {
       const r = part?.getBoundingClientRect();
       return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
     };
     const room = el.querySelector("[data-pin-room]");
-    // By its words, or its name when it is a glyph (the head's Resolve pin).
-    const button = (name: string) =>
-      [...el.querySelectorAll("button")].find(
-        (one) =>
-          one.textContent?.trim() === name ||
-          one.getAttribute("aria-label") === name
-      ) ?? null;
     return {
       card: box(el),
       cardScrolls: el.scrollHeight > el.clientHeight + 1,
@@ -2601,11 +2602,24 @@ const roomChecks = async (on: On) => {
           }
         : null,
       entries: el.querySelectorAll('[data-slot="entry"]').length,
-      resolve: box(button("Resolve pin")),
-      reply: box(button("Reply")),
       field: box(el.querySelector("textarea")),
     };
   });
+  // The head's Resolve pin and the foot's Reply by their accessible names: a
+  // kit Button's text holds its pending words too.
+  const boxOf = async (name: string) => {
+    const r = await card
+      .getByRole("button", { name, exact: true })
+      .first()
+      .boundingBox()
+      .catch(() => null);
+    return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+  };
+  const seen = {
+    ...read,
+    resolve: await boxOf("Resolve pin"),
+    reply: await boxOf("Reply"),
+  };
   const inside = (part: typeof seen.resolve) =>
     !!part &&
     !!seen.card &&

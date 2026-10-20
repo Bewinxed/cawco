@@ -1357,6 +1357,23 @@ export async function open(
   await pageReady(page);
 }
 
+/** A button line of an ARIA snapshot (`- button "Try again"`), its name quoted as JSON. */
+const BUTTON_LINE = /- button "((?:[^"\\]|\\.)*)"/g;
+
+/**
+ * The buttons in `scope` by their accessible names, as the accessibility
+ * tree computes them, in order. A button's words are read here, never off
+ * its text: a kit Button that can be pending keeps its idle and pending
+ * words in one cell (ui/button pending-content), the one not shown
+ * aria-hidden, so its text content holds both ("Try againStarting…").
+ */
+export async function buttonNames(scope: Locator): Promise<string[]> {
+  const aria = await scope.ariaSnapshot();
+  return [...aria.matchAll(BUTTON_LINE)].map(
+    ([, name]) => JSON.parse(`"${name}"`) as string
+  );
+}
+
 /** Waits until every finite animation on the page has landed. */
 export async function settle(page: Page, ms = 150): Promise<void> {
   // A finite run still going after 10s will not land: named, as a failure,

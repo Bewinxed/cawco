@@ -807,10 +807,15 @@ const reviewLegs = async (
     cards: document.querySelectorAll("[data-files-card]").length,
     count: document.querySelector("[data-files-count]")?.textContent ?? null,
   }));
+  // Its Try again by its accessible name: a kit Button's text holds its pending words too.
+  const refusedRetry = await refused
+    .locator('[data-files-region="attachments"] [data-files-failed]')
+    .getByRole("button", { name: "Try again", exact: true })
+    .count();
   kit.check(
     "14: the attachments read refused says so in its region (RowFault, Try again), the artifacts still listed, and the bar claims no count",
     !!refusedSaid.fault?.includes("Couldn't read this session's attachments") &&
-      !!refusedSaid.fault.includes("Try again") &&
+      refusedRetry > 0 &&
       refusedSaid.cards > 0 &&
       refusedSaid.count === null,
     JSON.stringify(refusedSaid)

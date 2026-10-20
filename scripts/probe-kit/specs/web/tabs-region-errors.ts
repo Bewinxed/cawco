@@ -573,7 +573,8 @@ async function tryAgain(kit: Kit, step: string, page: Page) {
     return;
   }
   await page
-    .locator(`${FAILED} button`, { hasText: "Try again" })
+    .locator(FAILED)
+    .getByRole("button", { name: "Try again", exact: true })
     .first()
     .click();
   await stripOrFailure(page);

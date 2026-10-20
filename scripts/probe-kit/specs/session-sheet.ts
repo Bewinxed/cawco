@@ -149,7 +149,7 @@ import {
   STAGE_READY_MS,
 } from "../../../packages/core/src/stage";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, ROOT, type Spec } from "../kit";
+import { buttonNames, type Kit, open, ROOT, type Spec } from "../kit";
 
 const STORY = "src/Card.stories.js";
 /** A story file whose stories are built four ways (legs 16 and 17). */
@@ -1054,17 +1054,17 @@ async function neverDrawnLeg(
     .locator(`${PANE} [data-slot="cover"] [data-slot="cover-state"]`)
     .textContent({ timeout: 30_000 })
     .catch(() => null);
-  const stuck = await desk
-    .locator(`${PANE} [data-never-drawn]`)
+  const neverDrawn = desk.locator(`${PANE} [data-never-drawn]`);
+  const stuck = await neverDrawn
     .waitFor({ timeout: STAGE_READY_MS + 20_000 })
     .then(
-      () =>
-        desk.locator(`${PANE} [data-never-drawn]`).evaluate((node) => ({
-          text: node.textContent?.replace(/\s+/g, " ").trim() ?? "",
-          buttons: [...node.querySelectorAll("button")].map((one) =>
-            one.textContent?.trim()
-          ),
-        })),
+      async () => ({
+        text: await neverDrawn.evaluate(
+          (node) => node.textContent?.replace(/\s+/g, " ").trim() ?? ""
+        ),
+        // By their accessible names: a kit Button's text holds its pending words too.
+        buttons: await buttonNames(neverDrawn),
+      }),
       () => null
     );
   const took = Date.now() - waited;
@@ -1084,20 +1084,20 @@ async function neverDrawnLeg(
   // Remove is destructive: asked in place under its button, and only its confirm removes.
   const before = await panelArtifacts();
   await desk
-    .locator(`${PANE} [data-never-drawn] button`, { hasText: "Remove" })
-    .first()
+    .locator(`${PANE} [data-never-drawn]`)
+    .getByRole("button", { name: "Remove", exact: true })
     .click();
   const ask = desk.locator(`${PANE} [data-ask="never-drawn-remove"]`);
-  const asked = await ask
-    .evaluate((node) => ({
-      title: node.querySelector('[data-slot="title"]')?.textContent?.trim(),
-      buttons: [...node.querySelectorAll("button")].map((one) =>
-        one.textContent?.trim()
-      ),
-    }))
+  const asked = await Promise.all([
+    ask.evaluate((node) =>
+      node.querySelector('[data-slot="title"]')?.textContent?.trim()
+    ),
+    buttonNames(ask),
+  ])
+    .then(([title, buttons]) => ({ title, buttons }))
     .catch(() => null);
   const stillThere = (await panelArtifacts()).includes("never-drawn");
-  await ask.locator("button", { hasText: "Remove canvas" }).click();
+  await ask.getByRole("button", { name: "Remove canvas", exact: true }).click();
   const gone = await until(
     "the canvas out of the session's artifacts",
     panelArtifacts,

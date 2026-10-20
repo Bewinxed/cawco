@@ -388,9 +388,9 @@ const rows = async (kit: Kit, { fleet, project, second, url }: Setup) => {
   await page.locator(`${TRAY} [data-caw-lead-switch]`).click();
   // Off over his own work asks first (CawLeadSwitch): let it finish.
   const finish = page
-    .locator(
-      "[data-caw-turn-line] button:has-text('Let him finish'), [data-stop-other]"
-    )
+    .locator("[data-caw-turn-line]")
+    .getByRole("button", { name: "Let him finish", exact: true })
+    .or(page.locator("[data-stop-other]"))
     .first();
   await finish
     .waitFor({ timeout: 3000 })

@@ -1101,20 +1101,22 @@ async function reviveLeg(
       (error: Error) => error.message
     );
   await settle(page, 400);
+  // The row's Choose a mode, by its accessible name: a kit Button's text
+  // holds its pending words too ("Choose a modeStarting it…").
+  const chooser = await page
+    .locator('[data-slot="turn"][data-you]', { hasText: revive.words })
+    .getByRole("button", { name: "Choose a mode", exact: true })
+    .first()
+    .boundingBox()
+    .catch(() => null);
   const asked = await page.evaluate(
-    ({ pick, sent, line }) => {
+    ({ pick, sent, line, at }) => {
       const pop = document.querySelector(pick);
       // The message's own row: its words, and what it says under them.
       const row = [
         ...document.querySelectorAll('[data-slot="turn"][data-you]'),
       ].find((one) => (one.textContent ?? "").includes(sent));
-      const button = [
-        ...(row?.querySelectorAll<HTMLElement>("[data-slot='action']") ?? []),
-      ].find((one) =>
-        (one.textContent ?? "").trim().startsWith("Choose a mode")
-      );
       const box = pop?.getBoundingClientRect();
-      const at = button?.getBoundingClientRect();
       const words = `${row?.textContent ?? ""} ${pop?.textContent ?? ""}`;
       return {
         rows: pop?.querySelectorAll("[data-perm]").length ?? 0,
@@ -1125,8 +1127,8 @@ async function reviveLeg(
           box && at
             ? Math.round(
                 pop?.getAttribute("data-side") === "top"
-                  ? at.top - box.bottom
-                  : box.top - at.bottom
+                  ? at.y - box.bottom
+                  : box.top - (at.y + at.height)
               )
             : null,
         line: words.includes(line),
@@ -1139,7 +1141,7 @@ async function reviveLeg(
         ).trim(),
       };
     },
-    { pick: MODE_PICK, sent: revive.words, line: revive.line }
+    { pick: MODE_PICK, sent: revive.words, line: revive.line, at: chooser }
   );
   // What the hub hands every screen for the session (its board row).
   const listed = (await (
