@@ -6,11 +6,13 @@
  * - the first card embeds two states files, a ledger of six 480px months
  *   and the note under it, which stands past three heights of the embed's
  *   frame (runtime.ts UNMOUNT_MARGIN, where the far observer puts a section
- *   to sleep), and its Recommended option embeds the note's one story by
- *   name (`Preview(…, ["Pinned"])`);
+ *   to sleep); its Recommended option embeds the note's one story by name
+ *   (`Preview(…, ["Pinned"])`), and its other option two months against
+ *   the file's order (`Preview(…, ["March", "January"])`);
  * - the second card holds three Previews: the side card at 360px (wider
  *   than a card's media on a phone) and at 1400px (wider than any card),
- *   the note, and the ledger's first month.
+ *   the note, and the ledger's first month; one option embeds a sheet
+ *   whose surface is its ::before (as the kit's drawer-content.svelte).
  *
  * At 1440×900 and 390×844, light and dark:
  * 1. The program passes the hub's own check (`checkProgram`).
@@ -20,10 +22,11 @@
  *    each embed by scrolling the page (nothing inside it moved), and again
  *    after the page is scrolled away and back, every states file it holds
  *    is loaded and every story it shows a drawn frame with a box.
- * 4. It draws the stories its Preview names (every story when it names
- *    none): each frame drawn, with words in it, shot where the person sees
- *    it (canvas-shots.ts `shootEmbedded`): nothing over it, not one colour,
- *    its pixels its DOM's paint.
+ * 4. It draws the stories its Preview names, in the order it names them
+ *    (every story, in its file's order, when it names none): each frame
+ *    drawn, with words in it, shot where the person sees it (canvas-shots.ts
+ *    `shootEmbedded`): nothing over it, not one colour, its pixels its DOM's
+ *    paint, a pseudo-element's surface included.
  * 5. None of the canvas's working chrome is seen (band, crumb, foot, steps,
  *    section heads, labels, statuses).
  * 6. It posted its height: the embed is as tall as what it draws, within
@@ -71,10 +74,12 @@ const NAME = "ledger";
 const LEDGER = "src/Ledger.stories.js";
 const NOTE = "src/Note.stories.js";
 const SIDE = "src/Side.stories.js";
+const SHEET = "src/Sheet.stories.js";
 const BOOK_ID = idOf("ledger-and-note");
 const NOTE_ID = idOf("note-alone");
 const SIDE_ID = idOf("side-card");
 const MONTH_ID = idOf("ledger-month");
+const SHEET_ID = idOf("sheet");
 /** The side card's own widths (its stories' viewports). */
 const SIDE_W = 360;
 const WIDE_W = 1400;
@@ -103,6 +108,13 @@ const PREVIEWS: Record<
     stories: ["January"],
     shows: ["January"],
   },
+  // Named against the file's order: drawn in the order named.
+  "March, then January": {
+    files: [LEDGER],
+    stories: ["March", "January"],
+    shows: ["March", "January"],
+  },
+  "The sheet": { files: [SHEET], stories: [], shows: ["Drawer"] },
 };
 /** The second card's three media, by caption. */
 const TRIO = ["The side card", "The note", "January's lines"];
@@ -110,16 +122,18 @@ const TRIO = ["The side card", "The note", "January's lines"];
 const PROGRAM = [
   `root = Decisions("The spend ledger", [ledger, side])`,
   `ledger = Decision("ledger", "Where does the pinned note stand?", [under, alone], "The ledger is long; the note is what a person acts on.", [book])`,
-  `under = Option("under", "Under the ledger", "The note after every line.", false, [], "A person scrolls past sixty lines to reach it.")`,
+  `under = Option("under", "Under the ledger", "The note after every line.", false, [order], "A person scrolls past sixty lines to reach it.")`,
   `alone = Option("alone", "On its own", "The note in a card of its own.", true, [note], "The ledger loses its summary line.")`,
   `book = Preview("${BOOK_ID}", "The ledger and its note")`,
   `note = Preview("${NOTE_ID}", "The note alone", ["Pinned"])`,
   `side = Decision("side", "Which goes beside the ledger?", [card, pin], "Three ways, each at the card's full width.", [card1, pin1, month1])`,
   `card = Option("card", "The side card", "The week's spend in its own card.", true, [], "It takes 360px beside the ledger.")`,
-  `pin = Option("pin", "The note", "Only the pinned note.", false, [], "The week's spend is a click away.")`,
+  `pin = Option("pin", "The note", "Only the pinned note.", false, [sheet], "The week's spend is a click away.")`,
   `card1 = Preview("${SIDE_ID}", "The side card")`,
   `pin1 = Preview("${NOTE_ID}", "The note", ["Pinned"])`,
   `month1 = Preview("${MONTH_ID}", "January's lines", ["January"])`,
+  `order = Preview("${MONTH_ID}", "March, then January", ["March", "January"])`,
+  `sheet = Preview("${SHEET_ID}", "The sheet")`,
 ].join("\n");
 
 /** The fixture copied to scratch and installed once: the project the stage draws. */
@@ -216,6 +230,7 @@ const spec: Spec = {
         [NOTE_ID]: [NOTE],
         [SIDE_ID]: [SIDE],
         [MONTH_ID]: [LEDGER],
+        [SHEET_ID]: [SHEET],
       },
       { root: fixtureRoot(), kit: false }
     );
