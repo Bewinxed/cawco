@@ -91,7 +91,7 @@ import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
-import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
+import { CAWCO_ENV, WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { atMost } from "@cawco/core/at-most";
 import { binaryRoot, readUpdateState } from "@cawco/core/binary-installation";
 import { nestedSeatbeltRefusal } from "@cawco/core/boundary-nesting";
@@ -144,6 +144,7 @@ import {
 import {
   commandLine as commandLineOf,
   commandLines,
+  processArgs,
   processLineage,
   processStart,
 } from "@cawco/core/process-identity";
@@ -3234,6 +3235,197 @@ const workLeft = async (
     ...(ports.length > 0 ? [`listens on ${ports.join(", ")}`] : []),
   ];
   return words.length > 0 ? words.join(" and ") : "runs";
+};
+
+/**
+ * How long what a session left running in a workspace is given to end on
+ * SIGTERM before it is killed ({@link endSessionWork}). Ours: a TERM ends a
+ * shell, a build and a `sleep` at once; a mac-slot keeper's EXIT trap shuts
+ * its simulator down and frees its slot, which takes a few seconds on a
+ * loaded Mac; five is the boundary's own stop wait ({@link STOP_TIMEOUT_MS}).
+ */
+const WORK_GRACE_MS = STOP_TIMEOUT_MS;
+
+/** How long {@link endSessionWork} waits for its SIGKILL to land before it says what is left. */
+const KILL_WAIT_MS = 2000;
+
+/** One process of a workspace's work ({@link workers}). */
+interface Worker {
+  readonly pgid: number;
+  readonly pid: number;
+  readonly ppid: number;
+  readonly started: string;
+}
+
+/** {@link workers} of workspace `id` alone, by pid, off one reading of the process table. */
+const workOf = async (
+  id: string,
+  seen: Seen[],
+  lines: readonly { command: string; pid: number }[]
+): Promise<number[]> => {
+  const held = await readHeld(id).catch(() => undefined);
+  const generations = [...(held ? [held] : []), ...(await readRetiring(id))];
+  const work = executors(lines, id);
+  if (process.platform === "linux") {
+    const places = await Promise.all(
+      generations.map((generation) => readPlace(id, generation.gen))
+    );
+    for (const place of places) {
+      const idle = new Set(place?.idle);
+      work.push(
+        ...inTree(seen, place?.inner)
+          .map((one) => one.pid)
+          .filter((pid) => !idle.has(pid))
+      );
+    }
+    return work;
+  }
+  const runners = new Set(generations.map((generation) => generation.pid));
+  for (const { pid, command } of lines) {
+    if (command.includes(`CAWCO_WORKSPACE=${id}`) && !runners.has(pid)) {
+      work.push(pid);
+    }
+  }
+  return work;
+};
+
+/**
+ * Every process of the work of each delegation workspace on this machine,
+ * the boundary's own reading of it ({@link busyOld}): on Linux everything
+ * that descends from a generation's sandbox init and was not there when its
+ * runner was ready ({@link inTree}), on macOS everything carrying the
+ * workspace's marker but its runners; and on both every executor on its way
+ * into one ({@link executors}), which runs on the host as its session's
+ * shell's child. A place (a person's own folder) is left out: its sessions
+ * are the person's own.
+ */
+const workers = async (): Promise<Map<number, Worker>> => {
+  const ids = (
+    await readdir(workspacesDir()).catch(() => [] as string[])
+  ).filter((id) => !isPlace(id));
+  const [lineage, lines] = await Promise.all([
+    processLineage(),
+    commandLines({ environment: process.platform !== "linux" }),
+  ]);
+  const rows = new Map(lineage.map((row) => [row.pid, row]));
+  const seen: Seen[] = lineage.map((row) => ({
+    pid: row.pid,
+    ppid: row.ppid,
+    command: "",
+  }));
+  const work = new Set(
+    (await Promise.all(ids.map((id) => workOf(id, seen, lines)))).flat()
+  );
+  const found = new Map<number, Worker>();
+  for (const pid of work) {
+    const row = rows.get(pid);
+    if (row && pid !== process.pid) {
+      found.set(pid, row);
+    }
+  }
+  return found;
+};
+
+/**
+ * What session `instanceId` left running in the work of every delegation
+ * workspace on this machine ({@link workers}): each process whose
+ * environment names the session (`CAWCO_INSTANCE_ID`, which every harness
+ * sets in its session's shell and the executor hands every command, core
+ * `CAWCO_ENV.instanceId`), the process group each of those is in, which its
+ * command's launch leads ({@link LAUNCH}: the command's own shell, whose
+ * environment is the runner's), and everything below any of them. A
+ * `setsid` or double-forked process keeps the environment it was started
+ * with, so it is found however far it moved. What runs there for another
+ * session, or for the hub (a landing's push), is not this session's.
+ */
+const sessionWork = async (instanceId: string): Promise<Worker[]> => {
+  const work = await workers();
+  const mark = `${CAWCO_ENV.instanceId}=${instanceId}`;
+  const named = await Promise.all(
+    [...work.keys()].map(async (pid) => ({
+      pid,
+      marked: ((await processArgs(pid))?.env ?? []).includes(mark),
+    }))
+  );
+  const taken = new Set(
+    named.filter((one) => one.marked).map((one) => one.pid)
+  );
+  for (const pid of [...taken]) {
+    const leader = work.get(pid)?.pgid;
+    if (leader !== undefined && work.has(leader)) {
+      taken.add(leader);
+    }
+  }
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [pid, one] of work) {
+      if (!taken.has(pid) && taken.has(one.ppid)) {
+        taken.add(pid);
+        grew = true;
+      }
+    }
+  }
+  return [...work.values()].filter((one) => taken.has(one.pid));
+};
+
+/** Of `ones`, those still running as the same process. */
+const stillRunning = async (ones: readonly Worker[]): Promise<Worker[]> => {
+  const now = new Map(
+    (await processLineage()).map((row) => [row.pid, row.started])
+  );
+  return ones.filter((one) => now.get(one.pid) === one.started);
+};
+
+/**
+ * ENDS EVERYTHING SESSION `instanceId` LEFT RUNNING IN A WORKSPACE, AND
+ * NOTHING ELSE: its commands in the foreground and the background, what
+ * they left behind with `&`, `nohup`, `setsid` or a double fork, and the
+ * executors still on their way in ({@link sessionWork}). The boundary runs
+ * on, and the session keeps its transcript, clone and files, so a later
+ * message resumes it there. What an interrupt and a stop of a session do
+ * (session.ts), on every harness: Claude Code ends a command it cuts off by
+ * killing its own shell, which reaches the executor and never the command
+ * inside the boundary, and a background command outlived the interrupt that
+ * was to stop it (two delegates on the Mac, 2026-10-20, holding its one
+ * heavy-run slot: a slot is a `flock`, let go as its holder ends).
+ *
+ * Each is told to end (SIGTERM), so a keeper's trap frees what it holds,
+ * and given {@link WORK_GRACE_MS}; then everything of the session's still
+ * there, what it started meanwhile included, is killed. Answers what was
+ * ended and what was still running {@link KILL_WAIT_MS} after the kill.
+ */
+export const endSessionWork = async (
+  instanceId: string
+): Promise<{ ended: number[]; left: number[] }> => {
+  const first = await sessionWork(instanceId);
+  if (first.length === 0) {
+    return { ended: [], left: [] };
+  }
+  for (const one of first) {
+    signalPid(listedPid(one.pid), "SIGTERM");
+  }
+  let ending = first;
+  const graceEnds = Date.now() + WORK_GRACE_MS;
+  while (ending.length > 0 && Date.now() < graceEnds) {
+    // biome-ignore lint/performance/noAwaitInLoops: polls the process table until the session's work has ended or its grace is spent
+    await Bun.sleep(50);
+    ending = await stillRunning(ending);
+  }
+  const last = await sessionWork(instanceId);
+  for (const one of last) {
+    signalPid(listedPid(one.pid), "SIGKILL");
+  }
+  let left = last;
+  const killEnds = Date.now() + KILL_WAIT_MS;
+  while (left.length > 0 && Date.now() < killEnds) {
+    // biome-ignore lint/performance/noAwaitInLoops: polls the process table until the kill has landed or its wait is spent
+    await Bun.sleep(50);
+    left = await stillRunning(left);
+  }
+  return {
+    ended: [...new Set([...first, ...last].map((one) => one.pid))],
+    left: left.map((one) => one.pid),
+  };
 };
 
 /**
