@@ -476,14 +476,17 @@
 </main>
 
 <style>
+  /* The column stands at c-pair-top from the screen's top, never centred:
+     centred, it re-centred as the key's places folded, and Caw and the
+     words slid down the screen. */
   .pairing {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: start;
     gap: var(--space-4);
     min-block-size: 100dvh;
-    padding: var(--space-8) var(--space-5);
+    padding: var(--c-pair-top) var(--space-5) var(--space-8);
     background: var(--background);
     transition:
       opacity var(--dur-fade) var(--ease-out),

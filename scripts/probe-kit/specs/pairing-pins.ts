@@ -649,7 +649,37 @@ const spec: Spec = {
       pin: "12",
       caw: "idle",
     });
+    await page.close();
+    await onScreen(kit, stage);
   },
 };
+
+/**
+ * Pin 3 on the whole screen: Denied's fold on the panel's own 100dvh
+ * column (DeniedOnScreen), at a desk's 1440×900 and a phone's 390×844,
+ * each page at its own size (never fitted to the page's height, so 100dvh
+ * is the screen's). Caw and the words must move 0px while the places fold.
+ */
+async function onScreen(kit: Kit, stage: string): Promise<void> {
+  for (const view of ["desk", "phone"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one screen at a time
+    const page = await kit.page(view, { theme: "light", init: [slowTimers] });
+    await open(
+      page,
+      `${stage}/@cawco/canvas?file=${encodeURIComponent(STORIES)}&by=embed&story=DeniedOnScreen&scheme=light`,
+      '[data-cawco-story="DeniedOnScreen"] [data-slot="pairing"]'
+    );
+    await settle(page);
+    await breakUp(kit, page, await Clock.on(page), {
+      name: "DeniedOnScreen",
+      label: "Play: denied",
+      act: "burst",
+      out: "Start again",
+      pin: `11, the whole screen at ${view === "desk" ? "1440×900" : "390×844"}`,
+      caw: "needs-you",
+    });
+    await page.close();
+  }
+}
 
 export default spec;

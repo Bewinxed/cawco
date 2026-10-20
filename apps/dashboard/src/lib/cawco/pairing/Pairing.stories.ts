@@ -56,6 +56,12 @@ export const ExpiredParked = { args: { stop: "expired", expired: "park" } };
 /** The hub refused: no code, Caw, why, Try again, and the hub's own words. */
 export const Failed = { args: { stop: "failed" } };
 
+/** Denied on the whole screen, as the browser shows it: Caw and the words stay put while the code folds away. */
+export const DeniedOnScreen = {
+  args: { stop: "denied", screen: true },
+  parameters: { viewport: "desk" },
+};
+
 /** The phone's scanner, looking. */
 export const Scanner = {
   parameters: { viewport: "phone" },
