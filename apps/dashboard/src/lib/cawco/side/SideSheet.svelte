@@ -546,13 +546,13 @@
 <Portal
   ><div
     data-slot="preview-sheet-host"
-    class="fixed top-(--host-top) inset-x-0 z-(--layer-sheet) overflow-clip pointer-events-none"
+    class="fixed top-(--host-top) inset-x-0 z-(--layer-sheet) overflow-clip pointer-events-none clip-path-(--host-clip)"
     data-active-snap={stop}
     style:--host-top="env(safe-area-inset-top, 0px)"
-    style:height="{hostHeight}px"
-    style:clip-path={onComposer && composerRoom > 0
+    style:--host-clip={onComposer && composerRoom > 0
       ? `inset(0 0 ${composerRoom}px 0)`
-      : undefined}
+      : "none"}
+    style:height="{hostHeight}px"
     bind:this={host}
   ></div></Portal
 >
