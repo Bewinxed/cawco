@@ -143,6 +143,25 @@ const STARTS_WITH_MACHINE = /^This session starts once its machine/;
 /** A preview drawn in its frame, the pane's pin list, and the page's where-to-start (MachinesEmpty's title). */
 const PREVIEW_READY = "iframe[data-ready=true]";
 const PIN_LIST = 'section[data-slot=pin-list][aria-label="Comments"]';
+/** A row of the Comments panel: the comment, one press. */
+const PIN_ROW = "button[data-slot=pin-row]";
+/** The Comments panel's popover; a pin's card, by its number. */
+const PIN_POP = "[data-pin-list-pop]";
+const pinCard = (n: number) => `[data-slot=pin-card][data-pin-card="${n}"]`;
+/** A pin's card placed: beside what its pin stands on (by the element's box), or the foot sheet. */
+const PIN_CARD_PLACED =
+  "[data-slot=pin-card]:is([data-sheet], [data-side=end], [data-side=start], [data-side=below])";
+/** The card's notice for a pin whose element is gone, and its line while the next tap places it. */
+const GONE_SAYS = /^Its element is gone from the page/;
+const PLACING_SAYS = /^Tap the page where it goes/;
+const TAB_RESOLVED = /^Resolved/;
+/** The panel's empty lines, each tab's. */
+const NO_OPEN = /^No open comments/;
+const NO_RESOLVED = /^No resolved comments/;
+/** The pane's Comment mode, as its compact mode menu names it. */
+const COMMENT_MODE = /^Comment/;
+/** The pane's artifact doc socket on the hub. */
+const ARTIFACT_DOC_SOCKET = /\/ws\/artifact\//;
 const MACHINES_EMPTY = "h1[data-slot=title]";
 /** Jump's popover (its glass card), the needs panel's, and an ask's peek sheet. */
 const JUMP = `${OPEN_POPOVER}[aria-label="Jump to"]`;
@@ -755,12 +774,25 @@ const askPlace = async (page: Page) => {
  * the page's doc, which the pane's doc hears, and its card opens.
  */
 const dropPin = async (page: Page) => {
-  await page
+  const segment = page
     .locator("button[aria-keyshortcuts='C']")
-    .filter({ visible: true })
-    .first()
-    .focus();
-  await page.keyboard.press("c");
+    .filter({ visible: true });
+  if ((await segment.count()) > 0) {
+    await segment.first().focus();
+    await page.keyboard.press("c");
+  } else {
+    // A phone's head stands the mode as one menu (`Mode: Interact`): Comment chosen from it.
+    await page
+      .locator('button[aria-label^="Mode:"]')
+      .filter({ visible: true })
+      .first()
+      .click();
+    await page
+      .getByRole("menuitemradio", { name: COMMENT_MODE })
+      .filter({ visible: true })
+      .first()
+      .click();
+  }
   const frame = page.frameLocator(PREVIEW_FRAME);
   await frame
     .locator("cawco-overlay .layer.comment")
@@ -770,6 +802,206 @@ const dropPin = async (page: Page) => {
     throw new Error("the preview's heading has no box");
   }
   await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
+  // Its card stands clear of the heading it pins: beside it where the well
+  // allows, else the foot sheet. Placed once the page has said where the pin
+  // stands (its overlay's `cawco:pin-at`, the element's box with it).
+  const card = page
+    .locator(`${PIN_CARD_PLACED}[aria-label="Pin 1"]`)
+    .filter({ visible: true })
+    .first();
+  await card.waitFor();
+  const placed = await card.boundingBox();
+  const heading = await frame.locator("h1").boundingBox();
+  if (
+    placed &&
+    heading &&
+    placed.x < heading.x + heading.width &&
+    heading.x < placed.x + placed.width &&
+    placed.y < heading.y + heading.height &&
+    heading.y < placed.y + placed.height
+  ) {
+    throw new Error(
+      `pin 1's card ${JSON.stringify(placed)} stands over the heading it pins ${JSON.stringify(heading)}`
+    );
+  }
+};
+
+/** A comment of 48 words: its row wraps to four lines and is cut there. */
+const LONG_COMMENT =
+  "This heading reads too heavy for the page it opens, and the buttons under it start before the eye has settled, so the whole block feels crowded; give the heading more room above, set the buttons a step lighter, and check that the spacing still holds at a phone's width.";
+
+/**
+ * The preview's pins as its overlay writes them, in the page's own doc, which
+ * the tape relays to the pane's (hub-tape.ts, the artifact socket): 1 a
+ * six-word comment the agent answered, 2 the 48-word one, 3 on an element the
+ * page doesn't have (its overlay moves it aside: gone), 4 to 9 resolved, long
+ * enough that Resolved scrolls, 10 resolved and gone (its row under
+ * Resolved). The pane's rows stand once it has them.
+ */
+const seedPins = async (page: Page) => {
+  await page.frameLocator(PREVIEW_FRAME).locator("h1").waitFor();
+  const handle = await page.locator(PREVIEW_FRAME).first().elementHandle();
+  const inner = await handle?.contentFrame();
+  if (!inner) {
+    throw new Error("the preview's frame has no document");
+  }
+  await inner.waitForFunction(
+    () =>
+      !!(window as unknown as { cawcoArtifact?: { doc?: unknown } })
+        .cawcoArtifact?.doc
+  );
+  await inner.evaluate((long) => {
+    const { doc } = (
+      window as unknown as {
+        cawcoArtifact: {
+          doc: {
+            getMap: (n: string) => { set: (k: string, v: object) => void };
+            transact: (f: () => void) => void;
+          };
+        };
+      }
+    ).cawcoArtifact;
+    const at = "2026-10-18T09:00:00.000Z";
+    const pin = (
+      number: number,
+      selector: string,
+      thread: [string, string][],
+      resolved = false
+    ) => ({
+      // A pin's id as the overlay makes one (wire.ts `PIN_ID`, 36 of hex and dashes).
+      id: `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`,
+      number,
+      kind: "comment",
+      // Anchored as a tap writes it: by its selector and the words it stood
+      // on then (a gone pin keeps the words of the element the page dropped).
+      anchor: {
+        selector,
+        text:
+          selector === "h1"
+            ? "Three ways a long chip wraps"
+            : "Truncate the chip",
+      },
+      at,
+      by: "person",
+      elements: [],
+      point: { x: 0.3, y: 0.5 },
+      ...(resolved ? { resolvedAt: at } : {}),
+      thread: thread.map(([by, text], i) => ({
+        id: `seed-entry-${number}-${i}`,
+        by,
+        text,
+        at,
+      })),
+    });
+    doc.transact(() => {
+      const pins = doc.getMap("pins");
+      pins.set(
+        "00000000-0000-4000-8000-000000000001",
+        pin(1, "h1", [
+          ["person", "Make this heading a bit bigger"],
+          ["agent", "Done: the heading is a step larger now."],
+        ])
+      );
+      pins.set(
+        "00000000-0000-4000-8000-000000000002",
+        pin(2, "h1", [["person", long]])
+      );
+      pins.set(
+        "00000000-0000-4000-8000-000000000003",
+        pin(3, "#a-card-the-page-dropped", [
+          ["person", "This card's label should sit on one line"],
+        ])
+      );
+      // 10: gone too, and resolved: its row under Resolved.
+      // A resolved pin stands on no page, so its loss is the one the overlay wrote when it went.
+      pins.set("00000000-0000-4000-8000-000000000010", {
+        ...pin(
+          10,
+          "#a-card-the-page-dropped",
+          [["person", "Resolved before the card left the page"]],
+          true
+        ),
+        movedAt: at,
+      });
+      for (let n = 4; n <= 9; n += 1) {
+        pins.set(
+          `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+          pin(n, "h1", [["person", long]], true)
+        );
+      }
+    });
+  }, LONG_COMMENT);
+};
+
+/** The Comments panel open (its open state is kept across the walk's loads, so pressed only when it is shut). */
+const panelUp = async (page: Page) => {
+  const list = page.locator(PIN_LIST).filter({ visible: true });
+  if ((await list.count()) === 0) {
+    await headControl("comments", "Comments")(page);
+  }
+  await page.locator(PIN_LIST).first().waitFor();
+};
+
+/** The Comments panel open, its pins seeded and drawn, on its Open tab. */
+const commentsOpen = async (page: Page) => {
+  await seedPins(page);
+  await panelUp(page);
+  await page.locator(`${PIN_LIST} ${PIN_ROW}[data-moved]`).first().waitFor();
+};
+
+/** The panel's tab named `name` chosen. */
+const pinsTab = (name: "Open" | "Resolved") => (page: Page) =>
+  page
+    .locator(`${PIN_LIST} [role=tab]`)
+    .filter({ hasText: name })
+    .first()
+    .click();
+
+/** Pin `n`'s row pressed: its card opens (beside the panel, or as the foot sheet). */
+const openRow = (n: number) => (page: Page) =>
+  page.locator(`${PIN_LIST} ${PIN_ROW}[data-pin-row="${n}"]`).click();
+
+/** The open card's Close. */
+const closePinCard = (page: Page) =>
+  page
+    .locator("[data-slot=pin-card]")
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+
+/** The pane expanded over the split: its head's Expand, pressed where it stands or chosen from More. */
+const expandPane = headControl("expand", "Expand");
+
+/** Every state of the panel starts from its seeded pins, then runs `steps`. */
+const inComments =
+  (...steps: ((page: Page) => Promise<unknown>)[]) =>
+  async (page: Page) => {
+    await commentsOpen(page);
+    for (const step of steps) {
+      // biome-ignore lint/performance/noAwaitInLoops: one step of the panel at a time
+      await step(page);
+    }
+  };
+
+/**
+ * The pane's doc socket held (`hold`: open and never answered, so the panel
+ * reads and then draws its skeleton) or refused before it ever synced
+ * (`refuse`: the hub's own 4404 and its reason, so the panel says it
+ * couldn't read the comments), the page loaded again under it and the panel
+ * opened. The route stays on the page, so these states stand last on their
+ * surface (each surface walks its own page), refuse after hold (the later
+ * route answers first).
+ */
+const docSocket = (mode: "hold" | "refuse") => async (page: Page) => {
+  await page.routeWebSocket(ARTIFACT_DOC_SOCKET, (ws) => {
+    if (mode === "refuse") {
+      ws.close({ code: 4404, reason: "No such artifact on this hub." });
+    }
+  });
+  await page.reload();
+  await page.locator(PREVIEW_FRAME).first().waitFor();
+  if ((await page.locator(PIN_LIST).filter({ visible: true }).count()) === 0) {
+    await headControl("comments", "Comments")(page);
+  }
 };
 
 /**
@@ -2514,32 +2746,328 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: (s) => ({ shows: on(s.art, PREVIEW_READY) }),
       },
+      // No pins yet: each tab says so, with how to make one. First of the
+      // panel's states: the pins a later state seeds stay in the page's doc
+      // across its loads.
+      {
+        name: "comments-empty",
+        route: (s) => `/session/${s.art}`,
+        act: panelUp,
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_LIST} [data-slot=pin-list-empty]`),
+          says: NO_OPEN,
+        }),
+      },
+      {
+        name: "comments-empty-resolved",
+        route: (s) => `/session/${s.art}`,
+        act: async (page) => {
+          await panelUp(page);
+          await pinsTab("Resolved")(page);
+        },
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_LIST} [data-slot=pin-list-empty]`),
+          says: NO_RESOLVED,
+        }),
+      },
       // A pin on the preview, its card open (the desk's pane stands beside the transcript).
       {
         name: "pin",
         route: (s) => `/session/${s.art}`,
         act: dropPin,
         root: "body",
-        widths: ["desk"],
-        ready: (s) => ({ shows: on(s.art, '[aria-label="Pin 1"]') }),
+        widths: ["desk", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_CARD_PLACED}[aria-label="Pin 1"]`),
+        }),
       },
-      // The pane's Comments panel: its pins' list.
+      // The pane's Comments panel, its pins seeded: a short comment the agent
+      // answered (its reply in meta), a 48-word one cut at four lines, and a
+      // gone pin's row beside them, its disc recessed.
       {
         name: "comments",
         route: (s) => `/session/${s.art}`,
-        act: headControl("comments", "Comments"),
+        act: inComments(),
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_LIST} ${PIN_ROW}[data-pin-row="2"]`),
+        }),
+      },
+      // The Resolved tab holding its pins, scrolled.
+      {
+        name: "comments-resolved",
+        route: (s) => `/session/${s.art}`,
+        act: inComments(pinsTab("Resolved")),
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_LIST} ${PIN_ROW}[data-pin-row="4"]`),
+        }),
+      },
+      // A row pressed: its card, which at the default split's well (and on a
+      // phone) rises as the foot sheet while the panel stands aside.
+      {
+        name: "comments-row-card",
+        route: (s) => `/session/${s.art}`,
+        act: inComments(openRow(1)),
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({ shows: on(s.art, pinCard(1)), not: PIN_POP }),
+      },
+      // Words in its field: Reply, the card's one primary, enabled.
+      {
+        name: "comments-reply",
+        route: (s) => `/session/${s.art}`,
+        act: inComments(openRow(1), (page) =>
+          page
+            .locator(`${pinCard(1)} textarea[data-field]`)
+            .filter({ visible: true })
+            .first()
+            .fill("Make it a step larger still.")
+        ),
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(
+            s.art,
+            `${pinCard(1)} footer[data-slot=actions] button:enabled`
+          ),
+        }),
+      },
+      // Its Close: the panel back on the tab it stood on (Resolved).
+      {
+        name: "comments-row-back",
+        route: (s) => `/session/${s.art}`,
+        act: inComments(pinsTab("Resolved"), openRow(5), closePinCard),
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_LIST} [role=tab][aria-selected=true]`),
+          says: TAB_RESOLVED,
+        }),
+      },
+      // A gone pin's row opens its card: the loss said once, Pin it somewhere else.
+      {
+        name: "comments-gone",
+        route: (s) => `/session/${s.art}`,
+        act: inComments(openRow(3)),
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${pinCard(3)} [data-slot=gone]`),
+          says: GONE_SAYS,
+        }),
+      },
+      // Pin it somewhere else pressed: the card says where to tap, beside Cancel.
+      {
+        name: "comments-placing",
+        route: (s) => `/session/${s.art}`,
+        act: inComments(openRow(3), (page) =>
+          page
+            .locator(pinCard(3))
+            .getByRole("button", { name: "Pin it somewhere else" })
+            .click()
+        ),
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${pinCard(3)} [data-slot=gone]`),
+          says: PLACING_SAYS,
+        }),
+      },
+      // The pane expanded: the well holds the panel and a card side by side, a
+      // gone pin's card at the top-right of the room the panel leaves.
+      {
+        name: "comments-beside",
+        route: (s) => `/session/${s.art}`,
+        act: async (page) => {
+          await expandPane(page);
+          await inComments(openRow(3))(page);
+        },
         root: "body",
         widths: ["desk"],
-        ready: (s) => ({ shows: on(s.art, PIN_LIST) }),
+        ready: (s) => ({
+          shows: on(s.art, `${pinCard(3)}:not([data-sheet])`),
+        }),
       },
-      // The page asking for a place: the pane's place picker.
+      // A row under the keyboard's focus, the pointer's hover, and a press held.
+      {
+        name: "comments-row-focus",
+        route: (s) => `/session/${s.art}`,
+        act: inComments(async (page) => {
+          await page
+            .locator(`${PIN_LIST} [role=tab][aria-selected=true]`)
+            .focus();
+          await page.keyboard.press("Tab");
+        }),
+        root: "body",
+        widths: ["desk"],
+        ready: (s) => ({ shows: on(s.art, `${PIN_ROW}:focus-visible`) }),
+      },
+      {
+        name: "comments-row-hover",
+        route: (s) => `/session/${s.art}`,
+        act: inComments((page) =>
+          page.locator(`${PIN_LIST} ${PIN_ROW}[data-pin-row="2"]`).hover()
+        ),
+        root: "body",
+        widths: ["desk"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_ROW}[data-pin-row="2"]:hover`),
+        }),
+      },
+      {
+        name: "comments-row-press",
+        route: (s) => `/session/${s.art}`,
+        act: inComments(async (page) => {
+          await page
+            .locator(`${PIN_LIST} ${PIN_ROW}[data-pin-row="2"]`)
+            .hover();
+          await page.mouse.down();
+        }),
+        root: "body",
+        widths: ["desk"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_ROW}[data-pin-row="2"]:active`),
+        }),
+      },
+      // A gone pin's row under Resolved, its disc recessed.
+      {
+        name: "comments-gone-resolved",
+        route: (s) => `/session/${s.art}`,
+        act: inComments(pinsTab("Resolved")),
+        root: "body",
+        inView: `${PIN_LIST} ${PIN_ROW}[data-pin-row="10"]`,
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(
+            s.art,
+            `${PIN_LIST} ${PIN_ROW}[data-pin-row="10"][data-moved]`
+          ),
+        }),
+      },
+      // A gone pin's row under the pointer, and pressed.
+      {
+        name: "comments-gone-hover",
+        route: (s) => `/session/${s.art}`,
+        act: inComments((page) =>
+          page.locator(`${PIN_LIST} ${PIN_ROW}[data-pin-row="3"]`).hover()
+        ),
+        root: "body",
+        widths: ["desk"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_ROW}[data-pin-row="3"][data-moved]:hover`),
+        }),
+      },
+      {
+        name: "comments-gone-press",
+        route: (s) => `/session/${s.art}`,
+        act: inComments(async (page) => {
+          await page
+            .locator(`${PIN_LIST} ${PIN_ROW}[data-pin-row="3"]`)
+            .hover();
+          await page.mouse.down();
+        }),
+        root: "body",
+        widths: ["desk"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_ROW}[data-pin-row="3"][data-moved]:active`),
+        }),
+      },
+      // Beside, at the widest the 1440 desk gives it (0.3 of the expanded
+      // well, under c-pin-list-max), a long Resolved list scrolled.
+      {
+        name: "comments-beside-scrolled",
+        route: (s) => `/session/${s.art}`,
+        act: async (page) => {
+          await expandPane(page);
+          await inComments(pinsTab("Resolved"), (page2) =>
+            page2.locator(`${PIN_LIST} [data-slot=rows]`).evaluate((el) => {
+              el.scrollTop = el.scrollHeight;
+            })
+          )(page);
+        },
+        root: "body",
+        widths: ["desk"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_LIST} ${PIN_ROW}[data-pin-row="9"]`),
+        }),
+      },
+      // Placing tapped through: the next tap on the page pins the gone pin
+      // anew, and its card says no loss.
+      {
+        name: "comments-placed",
+        route: (s) => `/session/${s.art}`,
+        act: inComments(
+          openRow(3),
+          (page) =>
+            page
+              .locator(pinCard(3))
+              .getByRole("button", { name: "Pin it somewhere else" })
+              .click(),
+          async (page) => {
+            const frame = page.frameLocator(PREVIEW_FRAME);
+            await frame
+              .locator("cawco-overlay .layer.comment")
+              .waitFor({ state: "attached" });
+            const box = await frame.locator("h1").boundingBox();
+            if (!box) {
+              throw new Error("the preview's heading has no box");
+            }
+            await page.mouse.click(
+              box.x + box.width * 0.7,
+              box.y + box.height / 2
+            );
+          }
+        ),
+        root: "body",
+        widths: ["desk", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${pinCard(3)}:not(:has([data-slot=gone]))`),
+        }),
+      },
+      // The page asking for a place, with the Comments panel open: the picker
+      // takes the well and the panel stands aside (The Open Page Rule).
       {
         name: "place-pick",
         route: (s) => `/session/${s.art}`,
-        act: askPlace,
+        act: async (page) => {
+          await commentsOpen(page);
+          await askPlace(page);
+        },
         root: "body",
-        widths: ["desk"],
-        ready: (s) => ({ shows: on(s.art, "form[data-slot=place-pick]") }),
+        widths: ["desk", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, "form[data-slot=place-pick]"),
+          not: PIN_POP,
+        }),
+      },
+      // The doc not read yet: past the wait's grace, skeleton rows at the rows' size.
+      {
+        name: "comments-reading",
+        route: (s) => `/session/${s.art}`,
+        act: docSocket("hold"),
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_LIST} [data-slot=pin-list-reading]`),
+        }),
+      },
+      // The doc refused before it ever synced: the fault on the rows' line, with Try again.
+      {
+        name: "comments-fault",
+        route: (s) => `/session/${s.art}`,
+        act: docSocket("refuse"),
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_LIST} [data-pin-list-failed]`),
+        }),
       },
     ],
   },
@@ -2718,6 +3246,21 @@ export const SURFACES: Surface[] = [
     route: () => path,
     states: [{ name: "rest", root: "body", ready: { shows: draws } }],
   })),
+  {
+    // The Comments panel on the chosen-hover bench, read whole: its section
+    // at its own height (the bench's page runs past the viewport).
+    name: "bench-pins",
+    serve: "dev",
+    route: () => "/motion/chosen-hover",
+    states: [
+      {
+        name: "rest",
+        root: "[data-bench] section[data-probe=pins]",
+        inView: "[data-bench] section[data-probe=pins]",
+        ready: { shows: `[data-probe=pins] ${PIN_ROW}` },
+      },
+    ],
+  },
 ];
 
 /** The surfaces `--surfaces=a,b` names (every one when none is named); an unknown name throws. */

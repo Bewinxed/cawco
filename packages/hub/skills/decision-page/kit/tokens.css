@@ -713,6 +713,8 @@
     --c-pin: 20px;
     /* A pin's card over the page, at its widest: the anchor line with Resolve, ⋯ and Close, the thread, the reply field (DESIGN.md Artifact panel, canvas and ink). Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px is the narrowest that keeps the anchor line beside its four controls. */
     --c-pin-card-w: 280px;
+    /* A pin's card at its narrowest beside the Comments panel: its head (disc, what it stands on, Resolve, ⋯ and Close) on one line and the reply field. Where the well holds the panel, a gutter, this and the card's two edges, the card stands beside the panel; below that it rises as the foot sheet while the panel goes. */
+    --c-pin-card-min: 240px;
     /* A sheet's inspector beside the page on a desk (live components spec §5): a prop's name over its control, a five-segment variant or a field at the body size, and the story row's list with its four 30px buttons. */
     --c-sheet-inspector-w: 296px;
     /* An inspector as a phone's sheet over the page's foot: at most 60% of the screen, the page above it live (DESIGN.md, A sheet's inspector: "at most 60% of the well"; the workflow editor's inspector). */
@@ -727,12 +729,12 @@
     --c-graph-edge: 1.5px;
     /* A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink). */
     --c-map-node-w: 264px;
-    /* The preview's Comments panel, floating over the page's top-right: its share of the pane's width (Magnific's floating panel, about 22%), held between c-pin-list-min and c-pin-list-max. */
-    --c-pin-list-share: 0.22;
-    /* The Comments panel at its narrowest: a row's disc, anchor line and last reply's first line. */
-    --c-pin-list-min: 260px;
-    /* The Comments panel at its widest. */
-    --c-pin-list-max: 340px;
+    /* The preview's Comments panel, floating over the well's top-right: its share of the well's width, held between c-pin-list-min and c-pin-list-max. At 0.3 a desk well past about 930px gives the rows more than the floor's 225px text column, so a longer comment wraps to fewer lines. */
+    --c-pin-list-share: 0.3;
+    /* The Comments panel at its narrowest: a row's text column of 225px beside its disc, where a six-word comment in the body role stands on one line and a 48-word one wraps to its four-line cut. */
+    --c-pin-list-min: 280px;
+    /* The Comments panel at its widest: the house floating-panel width (c-panel-w), as Caw's panel and the usage popover stand. */
+    --c-pin-list-max: var(--c-panel-w);
     /* A task's review on a page wide enough for two columns: the session's words, what to check and its attachments, beside the artifact it presented (TaskReview). */
     --c-review-words: 320px;
     --c-mark: 26px;

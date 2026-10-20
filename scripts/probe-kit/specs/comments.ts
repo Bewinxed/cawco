@@ -30,7 +30,9 @@
  * 5. A re-publish that moves and rewords the paragraph re-anchors pin 1 by
  *    its source's file:line; one that renames it and drops its source,
  *    keeping its text, re-anchors it by text; one that removes it marks pin 1
- *    moved in its own row under Open, and Place again with a tap pins it anew.
+ *    moved in its own row under Open, which opens its card like any other;
+ *    the card says the element is gone, and its Pin it somewhere else with a
+ *    tap pins it anew.
  * 6. No `selection.md`, `SelectionChip` or `SelectionPopover` is left in
  *    apps/dashboard/src or packages.
  *
@@ -323,10 +325,18 @@ const rowsOf = async (on: On) => {
   const button = on.page.locator(
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
   );
+  const list = on.page.locator('[data-pin-list-pop] [data-slot="pin-list"]');
   if ((await button.getAttribute("aria-expanded")) !== "true") {
     await button.click();
+  } else if ((await list.count()) === 0) {
+    // Stacked, the panel stands aside under an open card: its Close brings the panel back.
+    const close = on.page
+      .locator('[data-slot="pin-card"]')
+      .getByRole("button", { name: "Close", exact: true });
+    if ((await close.count()) > 0) {
+      await close.click();
+    }
   }
-  const list = on.page.locator('[data-pin-list-pop] [data-slot="pin-list"]');
   await list.waitFor({ timeout: 5000 }).catch(() => undefined);
   return list;
 };
@@ -418,6 +428,7 @@ const run = async (kit: Kit) => {
     () => mapPressChecks(on),
     () => insertChecks(on),
     () => listChecks(on),
+    () => panelChecks(on),
   ]) {
     // biome-ignore lint/performance/noAwaitInLoops: the checks run in order, one after another
     await shutList(on);
@@ -508,14 +519,40 @@ const commentChecks = async (on: On, frame: Frame) => {
     .boundingBox({ timeout: 2000 })
     .catch(() => null);
   const cardBox = await card.boundingBox({ timeout: 2000 }).catch(() => null);
+  // Beside what the pin stands on, the gap `--space-3` (11): its end side,
+  // its start side or below it, on the side PinCard says (`data-side`).
+  const para = await frame
+    .locator("#para")
+    .boundingBox({ timeout: 2000 })
+    .catch(() => null);
+  const side = await card.getAttribute("data-side").catch(() => null);
+  const GAP = 11;
+  const at = {
+    end: (c: Rect, p: Rect) => Math.abs(c.x - (p.x + p.w + GAP)) <= 3,
+    start: (c: Rect, p: Rect) => Math.abs(c.x + c.w - (p.x - GAP)) <= 3,
+    below: (c: Rect, p: Rect) => Math.abs(c.y - (p.y + p.h + GAP)) <= 3,
+  } as const;
+  const asRect = (bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) =>
+    ({
+      x: bounds.x,
+      y: bounds.y,
+      w: bounds.width,
+      h: bounds.height,
+    }) as Rect;
   const beside =
     !!disc &&
     !!cardBox &&
-    (Math.abs(cardBox.x - (disc.x + disc.width + 12)) <= 3 ||
-      Math.abs(cardBox.x + cardBox.width - (disc.x - 12)) <= 3) &&
-    Math.abs(cardBox.y - disc.y) <= 3;
+    !!para &&
+    (side === "end" || side === "start" || side === "below") &&
+    at[side](asRect(cardBox), asRect(para)) &&
+    !meets(asRect(cardBox), asRect(para));
   on.kit.check(
-    "1: a tap writes pin 1 with the paragraph's selector, source and text, and opens its card beside the pin",
+    "1: a tap writes pin 1 with the paragraph's selector, source and text, and opens its card beside the paragraph it stands on, never over it",
     pin?.kind === "comment" &&
       pin.by === "person" &&
       pin.anchor.selector === "#para" &&
@@ -525,7 +562,7 @@ const commentChecks = async (on: On, frame: Frame) => {
       Array.isArray(pin.thread) &&
       pin.thread.length === 0 &&
       beside,
-    `pin ${JSON.stringify(pin && { kind: pin.kind, anchor: pin.anchor, thread: pin.thread })}; disc ${JSON.stringify(disc)}; card ${JSON.stringify(cardBox)}; said ${on.said.slice(0, 3).join(" | ") || "nothing"}`
+    `pin ${JSON.stringify(pin && { kind: pin.kind, anchor: pin.anchor, thread: pin.thread })}; disc ${JSON.stringify(disc)}; paragraph ${JSON.stringify(para)}; card ${JSON.stringify(cardBox)} on side ${side}; said ${on.said.slice(0, 3).join(" | ") || "nothing"}`
   );
   if (!(pin && cardBox)) {
     return null;
@@ -774,13 +811,15 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   );
 
   const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
+  // The live dot stands on the row of the pin the last delivery carried. The
+  // rows are read with the panel in view: stacked, the open card stands over
+  // it, and rowsOf brings it back with the card's Close.
+  const rows = await rowsOf(on);
   let live = false;
   // Polls the list while the agent's turn runs.
   const watch = setInterval(async () => {
     if (
-      (await (
-        await rowsOf(on)
-      )
+      (await rows
         .locator(
           ':is([data-task-card-live], [data-slot="live"], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
         )
@@ -796,6 +835,10 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     files: ["src/Hero.svelte"],
   });
   const done = answeredAt.get(lastMarker) ?? Date.now();
+  if ((await card.count()) === 0) {
+    // Stacked: pin 1's card opens from its row.
+    await rows.locator('[data-slot="pin-row"][data-pin-row="1"]').click();
+  }
   const shown = await until(
     "the agent's reply in the card",
     () => card.locator('[data-slot="entry"][data-by="agent"]').count(),
@@ -809,7 +852,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     () =>
       on.page
         .locator(
-          '[data-pin-list-pop] :is([data-task-card-live], [data-slot="live"], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
+          ':is([data-pin-list-pop], [data-slot="pin-card"]) :is([data-task-card-live], [data-slot="live"], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
         )
         .count(),
     (count) => count === 0,
@@ -926,7 +969,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     (pin) => !pin?.resolvedAt,
     5000
   ).catch(() => null);
-  await on.page.getByRole("tab", { name: OPEN_TAB }).click();
+  await (await rowsOf(on)).getByRole("tab", { name: OPEN_TAB }).click();
   const back = await on.page
     .locator('[data-slot="pin-list"] [data-slot="pin-row"][data-pin-row="1"]')
     .count();
@@ -1038,7 +1081,7 @@ const hostChecks = async (on: On, frame: Frame, one: string) => {
   );
 };
 
-/** 5. Re-anchoring by file:line, by text, the moved tray and Place again. */
+/** 5. Re-anchoring by file:line, by text, a gone pin's row and its card's Pin it somewhere else. */
 const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
   const discY = () =>
     frame
@@ -1093,26 +1136,44 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
     (pin) => !!pin.movedAt,
     10_000
   ).catch(anchorOf);
-  const tray = (await rowsOf(on)).locator(
-    '[data-slot="moved-row"][data-moved-row="1"]'
+  const goneRow = (await rowsOf(on)).locator(
+    '[data-slot="pin-row"][data-pin-row="1"][data-moved]'
   );
-  await tray.waitFor({ timeout: 5000 }).catch(() => undefined);
-  const inTray = await tray.count();
+  await goneRow.waitFor({ timeout: 5000 }).catch(() => undefined);
+  const inOpen = await goneRow.count();
   on.kit.check(
     "5: one that removes it marks pin 1 moved, its row under Open",
-    !!gone.movedAt && inTray === 1,
-    `movedAt ${String(gone.movedAt)}; moved rows ${inTray}`
+    !!gone.movedAt && inOpen === 1,
+    `movedAt ${String(gone.movedAt)}; moved rows ${inOpen}`
   );
 
   const commentButton = on.page.locator(
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   const modeBefore = await commentButton.getAttribute("aria-selected");
-  await tray.getByRole("button", { name: "Place again" }).click();
+  // Its row opens its card like any other; the card says the loss and offers Pin it somewhere else.
+  await goneRow.click();
+  const card = on.page.locator('[data-pin-card="1"]');
+  await card.waitFor({ timeout: 5000 }).catch(() => undefined);
+  const notice = card.locator('[data-slot="gone"]');
+  const said = (await notice.textContent().catch(() => null))?.trim() ?? null;
+  await notice.getByRole("button", { name: "Pin it somewhere else" }).click();
   await pageInComment(frame, true);
   const during = await commentButton.getAttribute("aria-selected");
+  const placingSaid =
+    (await notice.textContent().catch(() => null))?.trim() ?? null;
+  const cancel = await notice.getByRole("button", { name: "Cancel" }).count();
+  on.kit.check(
+    "5: the gone pin's row opens its card, which says the element is gone; Pin it somewhere else turns Comment on with the card still open, saying where to tap beside Cancel",
+    said?.startsWith("Its element is gone from the page") === true &&
+      during === "true" &&
+      placingSaid?.startsWith("Tap the page where it goes") === true &&
+      cancel === 1,
+    `said ${JSON.stringify(said)}; Comment ${during}; then ${JSON.stringify(placingSaid)}; Cancel ${cancel}`
+  );
+  // The tap lands at #third's leading edge, clear of the card at the room's top-right and the panel.
   const b = await screenBox(on, frame, "#third");
-  await on.page.mouse.click(b.x + b.w * 0.5, b.y + b.h / 2);
+  await on.page.mouse.click(b.x + Math.min(24, b.w / 4), b.y + b.h / 2);
   const placed = await until(
     "pin 1 placed again",
     anchorOf,
@@ -1122,7 +1183,7 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
   await settle(on.page, 300);
   const mode = await commentButton.getAttribute("aria-selected");
   on.kit.check(
-    "5: Place again turns Comment on for one tap, which pins it anew out of the tray, and Comment goes back off",
+    "5: the next tap pins it anew, no longer moved, and Comment goes back off",
     modeBefore === "false" &&
       during === "true" &&
       !placed.movedAt &&
@@ -3388,16 +3449,30 @@ const listLeg = async (
   await list.waitFor({ timeout: 5000 }).catch(() => undefined);
   const row = (number: number) =>
     list.locator(`[data-slot="pin-row"][data-pin-row="${number}"]`);
+  // Beside, the card and the disc stand clear of the panel; stacked (a
+  // phone, a desk well under the beside threshold), the card is the foot
+  // sheet, the panel stands aside, and the disc stands clear of the card.
   const clear = (seen: Awaited<ReturnType<typeof listedBoxes>>) =>
-    !!seen.list &&
     !!seen.card &&
     !!seen.disc &&
-    !meets(seen.card, seen.list) &&
-    !meets(seen.disc, seen.list) &&
-    (view === "desk" || !meets(seen.disc, seen.card));
+    (seen.list
+      ? view === "desk" &&
+        !meets(seen.card, seen.list) &&
+        !meets(seen.disc, seen.list)
+      : !meets(seen.disc, seen.card));
   const opened = async (pin: { id: string; number: number }) => {
     await settle(screen, 1200);
     return listedBoxes(screen, frame, pin.id);
+  };
+  const cardClose = screen
+    .locator('[data-slot="pin-card"]')
+    .getByRole("button", { name: "Close", exact: true });
+  /** Stacked, the panel stands aside under the open card: its Close brings the panel back for the next row. */
+  const shutCard = async () => {
+    if (!(await list.isVisible())) {
+      await cardClose.click();
+      await settle(screen, 400);
+    }
   };
   await row(pins.low.number).click();
   const fromRow = await opened(pins.low);
@@ -3406,6 +3481,7 @@ const listLeg = async (
     clear(fromRow),
     JSON.stringify(fromRow)
   );
+  await shutCard();
   await row(pins.corner.number).click();
   const atTop = await opened(pins.corner);
   kit.check(
@@ -3413,7 +3489,16 @@ const listLeg = async (
     clear(atTop),
     JSON.stringify(atTop)
   );
-  // J and K from the panel's rows, its card open: the next pin, then back.
+  if (view === "phone") {
+    // A phone has no J and K.
+    await shutCard();
+    if ((await button.getAttribute("aria-expanded")) === "true") {
+      await button.click();
+    }
+    return;
+  }
+  // J and K, its card open: the next pin, then back. Beside, from the
+  // panel's rows; stacked, the panel aside, from the card.
   const stepped: {
     key: string;
     seen: Awaited<ReturnType<typeof listedBoxes>>;
@@ -3423,9 +3508,13 @@ const listLeg = async (
     ["k", pins.corner],
   ] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one key at a time, each read where it lands
-    await row(
-      pin === pins.left ? pins.corner.number : pins.left.number
-    ).focus();
+    if (await list.isVisible()) {
+      await row(
+        pin === pins.left ? pins.corner.number : pins.left.number
+      ).focus();
+    } else {
+      await cardClose.focus();
+    }
     await screen.keyboard.press(key);
     stepped.push({ key, seen: await opened(pin) });
   }
@@ -3437,6 +3526,784 @@ const listLeg = async (
   await screen.keyboard.press("Escape");
   if ((await button.getAttribute("aria-expanded")) === "true") {
     await button.click();
+  }
+};
+
+const PANEL_PAGE = `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { margin: 0; padding: 24px; font: 16px/1.5 system-ui; }</style></head>
+<body><h1 id="a">A heading the comments stand on</h1><p id="b">A paragraph under it.</p></body></html>`;
+/** A comment of 48 words: the row cuts it at four lines. */
+const LONG_COMMENT =
+  "This heading reads too heavy for the page it opens, and the paragraph under it starts before the eye has settled, so the whole block feels crowded; give the heading more room above, set the paragraph a step lighter, and check that the spacing still holds at a phone's width.";
+/** A comment of six words: one line at the panel's floor. */
+const SHORT_COMMENT = "Make this heading a bit bigger";
+const PANE_SEL = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
+
+/** A colour drawn fully clear, as getComputedStyle writes it: `rgba(…, 0)` or `oklch(… / 0)`. */
+const CLEAR_COLOUR = /(,|\/)\s*0\)$/;
+
+/** Until the panel's own entrance has ended (it scales the panel): read at rest. Its infinite pulses are not waited on. */
+const still = (screen: Page) =>
+  screen
+    .waitForFunction(
+      () =>
+        !document
+          .querySelector("[data-pin-list-pop]")
+          ?.getAnimations({ subtree: true })
+          .some(
+            (a) =>
+              a.playState === "running" &&
+              a.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY &&
+              (a.effect?.getComputedTiming().progress ?? 1) < 1
+          ),
+      undefined,
+      { timeout: 2000 }
+    )
+    // A panel still moving after 2 s is read as it stands; the spill read says so.
+    .catch(() => undefined);
+
+/** Every box in the panel that stands past its row or the panel side to side, and every text box whose words run past its edge. */
+const panelSpills = (screen: Page) =>
+  screen.evaluate(() => {
+    const pop = document.querySelector<HTMLElement>("[data-pin-list-pop]");
+    const popBox = pop?.getBoundingClientRect();
+    if (!(pop && popBox)) {
+      return [];
+    }
+    const within = (r: DOMRect, outer: DOMRect) =>
+      r.left >= outer.left - 0.5 && r.right <= outer.right + 0.5;
+    // A text box's words past its edge; a control's touch area reaching past its drawn box is the 44 Touch Rule, not a spill.
+    const spillsText = (el: HTMLElement) =>
+      [...el.childNodes].some(
+        (node) => node.nodeType === Node.TEXT_NODE && !!node.textContent?.trim()
+      ) &&
+      getComputedStyle(el).overflowX === "visible" &&
+      el.clientWidth > 0 &&
+      el.scrollWidth > el.clientWidth + 1;
+    return [...pop.querySelectorAll<HTMLElement>("*")]
+      .filter((el) => {
+        const r = el.getBoundingClientRect();
+        const row = el.closest("[data-pin-row]")?.getBoundingClientRect();
+        return (
+          r.width > 0 &&
+          (!within(r, popBox) || (row && !within(r, row)) || spillsText(el))
+        );
+      })
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return `${el.localName}[${el.dataset.slot ?? ""}] ${Math.round(r.left)}–${Math.round(r.right)} in panel ${Math.round(popBox.left)}–${Math.round(popBox.right)}`;
+      });
+  });
+
+/** Each row of the panel: whether it is one button, its title's lines, cut and one-line width, its text column, its last line. */
+const panelRows = (screen: Page) =>
+  screen.evaluate(() => {
+    /** The title's lines, its clamp, whether it is cut, and its words laid on one line (a Range over its text; NaN once they wrap). */
+    const titleOf = (title: HTMLElement | null) => {
+      if (!title) {
+        return { lines: 0, clamp: null, cut: false, natural: Number.NaN };
+      }
+      const t = getComputedStyle(title);
+      const range = document.createRange();
+      range.selectNodeContents(title);
+      const rects = [...range.getClientRects()];
+      return {
+        lines: Math.round(title.clientHeight / Number.parseFloat(t.lineHeight)),
+        clamp: t.webkitLineClamp,
+        cut: title.scrollHeight > title.clientHeight + 1,
+        natural: rects.length === 1 ? (rects[0]?.width ?? 0) : Number.NaN,
+      };
+    };
+    return [
+      ...document.querySelectorAll<HTMLElement>(
+        "[data-pin-list-pop] [data-pin-row]"
+      ),
+    ].map((row) => ({
+      n: Number(row.dataset.pinRow),
+      button: row.localName === "button",
+      inside: row.querySelectorAll("button").length,
+      h: Math.round(row.getBoundingClientRect().height * 10) / 10,
+      ...titleOf(row.querySelector<HTMLElement>('[data-slot="title"]')),
+      column:
+        row.querySelector('[data-slot="words"]')?.getBoundingClientRect()
+          .width ?? 0,
+      last: !!row.querySelector('[data-slot="last"]'),
+    }));
+  });
+
+/** The buttons in the panel and the open card, each by its variant as drawn: primary (the kit's fill), outline (a drawn edge on no fill) or ghost. */
+const panelButtons = (screen: Page) =>
+  screen.evaluate(() => {
+    const kind = (b: HTMLElement) => {
+      if (b.classList.contains("bg-action-solid")) {
+        return "primary";
+      }
+      const s = getComputedStyle(b);
+      const clear =
+        s.borderTopColor === "transparent" ||
+        s.borderTopColor.endsWith(", 0)") ||
+        s.borderTopColor.endsWith("/ 0)");
+      return Number.parseFloat(s.borderTopWidth) > 0 && !clear
+        ? "outline"
+        : "ghost";
+    };
+    const of = (selector: string) =>
+      [...document.querySelectorAll<HTMLElement>(`${selector} button`)]
+        .filter((b) => !b.hasAttribute("data-pin-row") && b.role !== "tab")
+        .map((b) => ({
+          name: (b.getAttribute("aria-label") ?? b.textContent ?? "").trim(),
+          kind: kind(b),
+        }));
+    return {
+      panel: of("[data-pin-list-pop]"),
+      card: of('[data-slot="pin-card"]'),
+    };
+  });
+
+/** The Comments panel and the open card as the engine lays them out: boxes, surface, tab, scroll and the width tokens. */
+const panelRead = async (screen: Page) => {
+  const laid = await screen.evaluate(() => {
+    const box = (el: Element | null | undefined) => {
+      const r = el?.getBoundingClientRect();
+      return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+    };
+    const root = getComputedStyle(document.documentElement);
+    const px = (name: string) => Number.parseFloat(root.getPropertyValue(name));
+    const pop = document.querySelector<HTMLElement>("[data-pin-list-pop]");
+    const card = document.querySelector<HTMLElement>('[data-slot="pin-card"]');
+    const popStyle = pop ? getComputedStyle(pop) : null;
+    const scroller = pop?.querySelector<HTMLElement>('[data-slot="rows"]');
+    return {
+      tokens: {
+        min: px("--c-pin-list-min"),
+        max: px("--c-pin-list-max"),
+        share: px("--c-pin-list-share"),
+        card: px("--c-pin-card-min"),
+      },
+      room: box(document.querySelector('[data-slot="pin-room"]')),
+      pop: box(pop),
+      surface: popStyle
+        ? {
+            fill: popStyle.backgroundColor,
+            edge: `${popStyle.borderTopWidth} ${popStyle.borderTopColor}`,
+            shadow: popStyle.boxShadow,
+            padding: popStyle.paddingTop,
+          }
+        : null,
+      away: !pop,
+      tab:
+        pop
+          ?.querySelector('[role="tab"][aria-selected="true"]')
+          ?.textContent?.trim() ?? null,
+      scrollTop: scroller?.scrollTop ?? null,
+      scrolls: scroller ? scroller.scrollHeight > scroller.clientHeight : false,
+      card: card
+        ? {
+            box: box(card),
+            sheet: card.hasAttribute("data-sheet"),
+            gone: !!card.querySelector('[data-slot="gone"]'),
+          }
+        : null,
+    };
+  });
+  const buttons = await panelButtons(screen);
+  return {
+    ...laid,
+    card: laid.card ? { ...laid.card, buttons: buttons.card } : null,
+    panelButtons: buttons.panel,
+  };
+};
+
+type PanelCheck = (what: string, ok: boolean, detail: unknown) => void;
+
+/** The panel at rest on Open: its width beside or stacked, its rows, its cut, nothing spilling, its surface and buttons. Answers whether it stacks. */
+const panelRestChecks = async (
+  screen: Page,
+  check: PanelCheck,
+  layout: "stacked" | "beside"
+) => {
+  await still(screen);
+  const rest = await panelRead(screen);
+  const rows = await panelRows(screen);
+  const spills = await panelSpills(screen);
+  const { min } = rest.tokens;
+  const p = rest.pop;
+  const r = rest.room;
+  // Stacked, the panel spans the well less its two gutters; beside, it hangs
+  // at the well's right and leaves the room beside it to the card.
+  const stands =
+    !!(p && r) &&
+    Math.abs(p.x + p.w - (r.x + r.w - 8)) <= 1 &&
+    (layout === "stacked" ? Math.abs(p.x - (r.x + 8)) <= 1 : p.x > r.x + 8 + 1);
+  check(
+    layout === "stacked"
+      ? "stacked: the panel spans the well less its two gutters"
+      : "beside: the panel hangs at the well's right, the room beside it left to the card",
+    stands,
+    { panel: p, well: r }
+  );
+  check(
+    "every row is one button holding none, a gone pin's too",
+    rows.length === 3 &&
+      rows.every((one) => one.button && one.inside === 0) &&
+      rows.some((one) => one.n === 3),
+    rows
+  );
+  const longRow = rows.find((one) => one.n === 1);
+  const shortRow = rows.find((one) => one.n === 2);
+  // The text column the panel's floor gives: this column less what the panel is past its floor.
+  const floorColumn =
+    shortRow && rest.pop ? shortRow.column - (rest.pop.w - min) : 0;
+  check(
+    `the 48-word comment wraps to at most four lines under line-clamp 4; the six-word one stands on one line here and fits the floor's ${Math.round(floorColumn * 10) / 10}px column, the thread's last line under it`,
+    !!longRow &&
+      longRow.clamp === "4" &&
+      longRow.lines <= 4 &&
+      !longRow.last &&
+      !!shortRow &&
+      shortRow.lines === 1 &&
+      shortRow.natural <= floorColumn &&
+      shortRow.last,
+    { long: longRow, short: shortRow, panel: rest.pop?.w, floorColumn }
+  );
+  check("no box spills its row or the panel", spills.length === 0, spills);
+  check(
+    "the panel is the kit's floating surface: a raised fill, a 1px edge, a shadow",
+    !!rest.surface &&
+      !CLEAR_COLOUR.test(rest.surface.fill) &&
+      rest.surface.edge.startsWith("1px") &&
+      rest.surface.shadow !== "none",
+    rest.surface
+  );
+  check(
+    "the panel holds no outline button",
+    rest.panelButtons.every((b) => b.kind !== "outline"),
+    rest.panelButtons
+  );
+};
+
+const closeCard = async (screen: Page, wait: number) => {
+  await screen
+    .locator('[data-slot="pin-card"]')
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  await settle(screen, wait);
+};
+
+/** A gone pin's row opens its card: one primary, Reply; beside at the narrowed room's top-right, or stacked as the foot sheet. */
+const goneCardChecks = async (
+  screen: Page,
+  list: Locator,
+  stacked: boolean,
+  check: PanelCheck
+) => {
+  await list.locator('[data-pin-row="3"]').click();
+  await settle(screen, 800);
+  const gone = await panelRead(screen);
+  const primaries = gone.card?.buttons.filter((b) => b.kind === "primary");
+  check(
+    "the card holds one primary, Reply, and nothing outline",
+    primaries?.length === 1 &&
+      primaries[0]?.name === "Reply" &&
+      !!gone.card?.buttons.every((b) => b.kind !== "outline"),
+    gone.card?.buttons
+  );
+  // Reply with nothing written is disabled for real (shadcn's and the HIG's
+  // pattern), the kit's disabled opacity over its own fill; a word enables it.
+  const cardEl = screen.locator('[data-slot="pin-card"]');
+  const reply = cardEl.getByRole("button", { name: "Reply", exact: true });
+  const replyState = () =>
+    reply.evaluate((b) => ({
+      disabled: (b as HTMLButtonElement).disabled,
+      opacity: getComputedStyle(b).opacity,
+      fill: getComputedStyle(b).backgroundColor,
+    }));
+  const field = cardEl
+    .locator("textarea[data-field]")
+    .filter({ visible: true })
+    .first();
+  const empty = await replyState();
+  await field.fill("A word");
+  const filled = await replyState();
+  await field.fill("");
+  check(
+    "Reply is disabled while the field is empty (the kit's disabled opacity over its own fill), enabled at full opacity once a word is written",
+    empty.disabled &&
+      !filled.disabled &&
+      filled.opacity === "1" &&
+      empty.fill === filled.fill,
+    { empty, filled }
+  );
+  // The head's words wrap to two lines and are cut there, never cut on one.
+  const name = await cardEl.locator('[data-slot="name"]').evaluate((el) => ({
+    clamp: getComputedStyle(el).webkitLineClamp,
+    wrap: getComputedStyle(el).whiteSpace,
+    lines: Math.round(
+      el.clientHeight / Number.parseFloat(getComputedStyle(el).lineHeight)
+    ),
+  }));
+  check(
+    "the card's head words wrap, cut at two lines",
+    name.clamp === "2" && name.wrap !== "nowrap" && name.lines <= 2,
+    name
+  );
+  const c = gone.card?.box;
+  const p = gone.pop;
+  const r = gone.room;
+  if (stacked) {
+    check(
+      "stacked: the gone pin's card is the foot sheet, saying the loss, and the panel stands aside",
+      !!gone.card?.sheet && gone.card.gone && gone.away,
+      { card: gone.card, away: gone.away }
+    );
+  } else {
+    check(
+      "beside: the gone pin's card says the loss and stands at the narrowed room's top-right, clear of the panel",
+      !!(c && p && r) &&
+        !gone.card?.sheet &&
+        !!gone.card?.gone &&
+        !meets(c, p) &&
+        Math.abs(c.x + c.w - (p.x - 8)) <= 1.5 &&
+        Math.abs(c.y - (r.y + 8)) <= 1.5,
+      { card: c, panel: p, room: r }
+    );
+  }
+  await closeCard(screen, 400);
+};
+
+/** Resolved, scrolled, a row's card: beside, clear of the panel; stacked, the foot sheet, and its Close brings the panel back on its tab at its scroll. */
+const resolvedCardChecks = async (
+  screen: Page,
+  list: Locator,
+  stacked: boolean,
+  check: PanelCheck
+) => {
+  await list.locator('[role="tab"]', { hasText: "Resolved" }).click();
+  await settle(screen, 400);
+  await list.locator('[data-slot="rows"]').evaluate((el) => {
+    el.scrollTop = 60;
+  });
+  await settle(screen, 200);
+  const fifth = list.locator('[data-pin-row="5"]');
+  await fifth.scrollIntoViewIfNeeded();
+  const before = await panelRead(screen);
+  await fifth.click();
+  await settle(screen, 800);
+  const opened = await panelRead(screen);
+  await closeCard(screen, 600);
+  const back = await panelRead(screen);
+  if (!stacked) {
+    check(
+      "beside: a resolved row's card stands clear of the panel",
+      !!(opened.card?.box && opened.pop) &&
+        !opened.card.sheet &&
+        !meets(opened.card.box, opened.pop),
+      { card: opened.card?.box, panel: opened.pop }
+    );
+    return;
+  }
+  check(
+    "stacked: a row's card is the foot sheet while the panel stands aside; its Close brings the panel back on the same tab at the same scroll",
+    !!opened.card?.sheet &&
+      opened.away &&
+      !back.away &&
+      back.tab === before.tab &&
+      back.tab?.startsWith("Resolved") === true &&
+      back.scrollTop === before.scrollTop,
+    {
+      before: {
+        tab: before.tab,
+        scrollTop: before.scrollTop,
+        scrolls: before.scrolls,
+      },
+      opened: { sheet: opened.card?.sheet, away: opened.away },
+      back: { away: back.away, tab: back.tab, scrollTop: back.scrollTop },
+    }
+  );
+};
+
+/** One size: the panel opened and read on Open, a gone pin's card, a resolved pin's card from a scrolled Resolved. */
+/**
+ * Pin 1's card, opened from its row: it stands beside the heading the pin
+ * stands on where the well allows (its end side, its start side, below it),
+ * never over it; as the foot sheet where the well stacks. Both rects on the
+ * dashboard's screen, the heading's read in the page's own frame.
+ */
+const pinnedCardChecks = async (
+  screen: Page,
+  frame: Frame,
+  list: Locator,
+  check: PanelCheck
+) => {
+  await list.locator('[data-pin-row="1"]').click();
+  await settle(screen, 800);
+  // Beside, the card stands once the page has said where its pin stands (`cawco:pin-at`).
+  await until(
+    "pin 1's card placed",
+    () =>
+      screen
+        .locator('[data-slot="pin-card"]')
+        .evaluate(
+          (el) => el.hasAttribute("data-sheet") || el.dataset.side !== "room"
+        ),
+    Boolean,
+    3000
+  ).catch(() => undefined);
+  const card = await screen.locator('[data-slot="pin-card"]').evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return {
+      rect: { x: r.x, y: r.y, w: r.width, h: r.height },
+      side: el.getAttribute("data-side") ?? "sheet",
+    };
+  });
+  const offset = await screen
+    .locator(FRAME)
+    .first()
+    .evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { x: r.x + el.clientLeft, y: r.y + el.clientTop };
+    });
+  const inPage = await frame.locator("#a").evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  });
+  const heading = { ...inPage, x: inPage.x + offset.x, y: inPage.y + offset.y };
+  check(
+    `pin 1's card stands clear of the heading it pins (side: ${card.side})`,
+    !meets(card.rect, heading),
+    { card: card.rect, side: card.side, heading }
+  );
+  await closeCard(screen, 400);
+};
+
+/**
+ * A row under the pointer, then held down: press takes the step past hover
+ * (`surface-pressed`), never the hover's own fill. A row under the
+ * keyboard's focus: the house's one focus indicator (app.css), a 2px
+ * `--focus-ring` outline inset on the row, no box-shadow ring, and no other
+ * element drawing focus beside it.
+ */
+const rowStateChecks = async (
+  on: On,
+  screen: Page,
+  list: Locator,
+  name: string
+) => {
+  const row = list.locator('[data-pin-row="2"]');
+  const fill = () => row.evaluate((el) => getComputedStyle(el).backgroundColor);
+  await row.hover();
+  await settle(screen, 300);
+  const hover = await fill();
+  await screen.mouse.down();
+  await settle(screen, 300);
+  const press = await fill();
+  // Let go away from the row, so the press never becomes a click.
+  await screen.mouse.move(0, 0);
+  await screen.mouse.up();
+  on.kit.check(
+    `k (${name}): a row held down takes a step past its hover`,
+    hover !== press,
+    JSON.stringify({ hover, press })
+  );
+  await list.locator('[role="tab"][aria-selected="true"]').focus();
+  await screen.keyboard.press("Tab");
+  await settle(screen, 300);
+  const ring = await screen.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    const s = el ? getComputedStyle(el) : null;
+    return {
+      on: el?.dataset.slot ?? el?.localName ?? null,
+      outline: s
+        ? `${s.outlineWidth} ${s.outlineStyle} ${s.outlineColor}`
+        : null,
+      offset: s?.outlineOffset ?? null,
+      shadow: s?.boxShadow ?? null,
+      ring: getComputedStyle(document.documentElement)
+        .getPropertyValue("--focus-ring")
+        .trim(),
+      drawn: document.querySelectorAll(":focus-visible").length,
+    };
+  });
+  on.kit.check(
+    `k (${name}): a focused row draws the one focus indicator: a 2px outline inset on the row, no box-shadow ring, nothing else focused`,
+    ring.on === "pin-row" &&
+      ring.outline?.startsWith("2px solid") === true &&
+      ring.offset === "-2px" &&
+      (ring.shadow === "none" || ring.shadow === "") &&
+      ring.drawn === 1,
+    JSON.stringify(ring)
+  );
+};
+
+const panelLeg = async (
+  on: On,
+  screen: Page,
+  frame: Frame,
+  name: string,
+  layout: "stacked" | "beside"
+) => {
+  const check: PanelCheck = (what, ok, detail) =>
+    on.kit.check(`k (${name}): ${what}`, ok, JSON.stringify(detail));
+  const comments = screen.locator(`${PANE_SEL} button[data-slot="comments"]`);
+  if ((await comments.getAttribute("aria-expanded")) !== "true") {
+    await comments.click();
+  }
+  const list = screen.locator('[data-pin-list-pop] [data-slot="pin-list"]');
+  await list.waitFor({ timeout: 5000 }).catch(() => undefined);
+  await list.locator('[role="tab"]', { hasText: "Open" }).click();
+  // The pane holds the hub's copy of the pins, a beat after the page wrote them.
+  await list
+    .locator('[data-pin-row="3"]')
+    .waitFor({ timeout: 15_000 })
+    .catch(() => undefined);
+  await settle(screen, 600);
+  await panelRestChecks(screen, check, layout);
+  const stacked = layout === "stacked";
+  if (name === "1440 default split") {
+    await rowStateChecks(on, screen, list, `${name}, light`);
+  }
+  await pinnedCardChecks(screen, frame, list, check);
+  await goneCardChecks(screen, list, stacked, check);
+  await resolvedCardChecks(screen, list, stacked, check);
+  if ((await comments.getAttribute("aria-expanded")) === "true") {
+    await comments.click();
+  }
+};
+
+/** The page in a device's pane once it shows the panel page; null while it does not. */
+const panelFrameOn = async (screen: Page): Promise<Frame | null> => {
+  try {
+    const handle = await screen
+      .locator('iframe[title="Preview"]')
+      .first()
+      .elementHandle({ timeout: 1000 });
+    const inner = await handle?.contentFrame();
+    return (await inner?.evaluate(() => !!document.querySelector("#b")))
+      ? (inner ?? null)
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+/** The pins as the overlay writes them, in the page's own doc. */
+const writePanelPins = (frame: Frame) =>
+  frame.evaluate(
+    ({ long, short }) => {
+      const { doc } = (
+        window as unknown as {
+          cawcoArtifact: {
+            doc: {
+              getMap: (n: string) => { set: (k: string, v: object) => void };
+              transact: (f: () => void) => void;
+            };
+          };
+        }
+      ).cawcoArtifact;
+      const now = new Date().toISOString();
+      const pin = (
+        number: number,
+        selector: string,
+        thread: [string, string][],
+        resolved = false
+      ) => ({
+        // A pin's id as the overlay makes one (wire.ts `PIN_ID`, 36 of hex and dashes).
+        id: `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`,
+        number,
+        kind: "comment",
+        // The words it stood on at pin time: a gone pin's head names them.
+        anchor: {
+          selector,
+          text:
+            selector === "#nowhere-on-this-page"
+              ? "A card the page dropped"
+              : "",
+        },
+        at: now,
+        by: "person",
+        elements: [],
+        point: { x: 0.5, y: 0.5 },
+        ...(resolved ? { resolvedAt: now } : {}),
+        thread: thread.map(([by, text], i) => ({
+          id: `panel-entry-${number}-${i}`,
+          by,
+          text,
+          at: now,
+        })),
+      });
+      doc.transact(() => {
+        const pins = doc.getMap("pins");
+        pins.set(
+          "00000000-0000-4000-8000-000000000001",
+          pin(1, "#a", [["person", long]])
+        );
+        pins.set(
+          "00000000-0000-4000-8000-000000000002",
+          pin(2, "#b", [
+            ["person", short],
+            ["person", "And keep its weight as it is."],
+          ])
+        );
+        pins.set(
+          "00000000-0000-4000-8000-000000000003",
+          pin(3, "#nowhere-on-this-page", [["person", "On a card it dropped"]])
+        );
+        for (let n = 4; n <= 9; n += 1) {
+          pins.set(
+            `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+            pin(n, "#b", [["person", long]], true)
+          );
+        }
+      });
+    },
+    { long: LONG_COMMENT, short: SHORT_COMMENT }
+  );
+
+/**
+ * The Comments panel (owner, 2026-10-20: "what is this "place again"
+ * pattern … ur also misuisng primary/seconday buttons and why i can't click
+ * a comment to view the thread? … such a small panel that most coments are
+ * trimmed"), at 1440 in the default split, 1440 expanded, 820 by touch and
+ * 390: the panel is its share of the well between its floor and ceiling, or
+ * stacked the well less two gutters; every row, a gone pin's too, is one
+ * button holding none and opens its card; a 48-word comment is cut at four
+ * lines and a six-word one stands on one; nothing spills its row or the
+ * panel. Beside, the card and the panel don't meet, a gone pin's card at the
+ * narrowed room's top-right; stacked, the card is the foot sheet, the panel
+ * stands aside, and the card's Close brings it back on its tab at its
+ * scroll. The card holds one primary, Reply; nothing in either is outline.
+ */
+const panelChecks = async (on: On) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "panel",
+    html: PANEL_PAGE,
+  });
+  if (!made.match(ANSWERED_ID)) {
+    on.kit.check("k: the page is made", false, made.slice(0, 300));
+    return;
+  }
+  const frame = (await until(
+    "the panel page in the pane",
+    async () => {
+      const one = await pageFrame(on);
+      const ready = await one
+        .evaluate(
+          () =>
+            !!document.querySelector("#b") &&
+            !!(window as unknown as { cawcoArtifact?: { doc?: unknown } })
+              .cawcoArtifact?.doc
+        )
+        .catch(() => false);
+      return ready ? one : null;
+    },
+    Boolean,
+    60_000
+  )) as Frame;
+  // The pins as the overlay writes them (the agent's entries are
+  // comment_reply's, never the page's): 1 the long comment, 2 the short one
+  // and a second word of the person's, 3 on an element the page doesn't have
+  // (the overlay moves it aside), 4 to 9 long and resolved, so Resolved scrolls.
+  await writePanelPins(frame);
+  await until(
+    "pin 3 moved aside by the overlay",
+    async () =>
+      (await docOf(frame)).pins["00000000-0000-4000-8000-000000000003"] as {
+        movedAt?: string;
+      },
+    (pin) => !!pin?.movedAt,
+    10_000
+  ).catch(() => undefined);
+
+  await settle(on.page, 600);
+  // The default split: an earlier leg may have left the pane expanded, its head's Expand become the way back (Esc).
+  const collapse = on.page
+    .locator(PANE_SEL)
+    .locator('button[aria-keyshortcuts="Escape"][aria-label^="Back to"]');
+  if ((await collapse.count()) === 1) {
+    await collapse.click();
+    await settle(on.page, 800);
+  }
+  // The default split's well is under beside's room: the card rises as the foot sheet.
+  await panelLeg(on, on.page, frame, "1440 default split", "stacked");
+  const expand = on.page
+    .locator(PANE_SEL)
+    .getByRole("button", { name: "Expand", exact: true });
+  if ((await expand.count()) === 1) {
+    await expand.click();
+    await settle(on.page, 800);
+    await panelLeg(on, on.page, frame, "1440 expanded", "beside");
+    await on.page.keyboard.press("Escape");
+    await settle(on.page, 600);
+  } else {
+    on.kit.check(
+      "k (1440 expanded): the head's Expand",
+      false,
+      "no Expand in the pane's head"
+    );
+  }
+
+  const base = await on.fleet.dashboard();
+  // The same row states in the dark.
+  const dark = await on.kit.page("desk", { theme: "dark" });
+  await open(dark, `${base}/session/${on.session}`, COMPOSER);
+  if (
+    await until(
+      "the panel page in the dark",
+      () => panelFrameOn(dark),
+      Boolean,
+      60_000
+    ).catch(() => null)
+  ) {
+    await settle(dark, 600);
+    const toggle = dark.locator(`${PANE_SEL} button[data-slot="comments"]`);
+    if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+      await toggle.click();
+    }
+    const darkList = dark.locator('[data-pin-list-pop] [data-slot="pin-list"]');
+    await darkList
+      .locator('[data-pin-row="2"]')
+      .waitFor({ timeout: 15_000 })
+      .catch(() => undefined);
+    await rowStateChecks(on, dark, darkList, "1440 default split, dark");
+  } else {
+    on.kit.check(
+      "k (1440 dark): the panel page in the pane",
+      false,
+      "not shown"
+    );
+  }
+  await dark.close();
+  for (const [view, name, size] of [
+    ["tablet", "820 touch", { width: 820, height: 1180 }],
+    ["phone", "390", null],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one device after another, each read where it lands
+    const screen = await on.kit.page(view);
+    if (size) {
+      await screen.setViewportSize(size);
+    }
+    await open(screen, `${base}/session/${on.session}`, COMPOSER);
+    const shown = await until(
+      `the panel page at ${name}`,
+      () => panelFrameOn(screen),
+      Boolean,
+      60_000
+    ).catch(() => null);
+    if (shown) {
+      await settle(screen, 600);
+      await panelLeg(on, screen, shown, name, "stacked");
+    } else {
+      on.kit.check(
+        `k (${name}): the panel page in the pane`,
+        false,
+        "not shown"
+      );
+    }
+    await screen.close();
   }
 };
 

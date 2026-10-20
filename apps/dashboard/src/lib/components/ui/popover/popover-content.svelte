@@ -96,6 +96,7 @@
     portalProps,
     morphs,
     bare = false,
+    ownWidth = false,
     width,
     height,
     overflow,
@@ -118,6 +119,8 @@
       morphs?: Morph;
       /** It draws no surface (padding, edge, fill, shadow): what it holds is the surface. */
       bare?: boolean;
+      /** Its site frames its width under the phone line too (the Comments panel, the well less its gutters). */
+      ownWidth?: boolean;
     } = $props();
 
   // Never flush with the screen's edge: it keeps the pages' gutter from it,
@@ -132,9 +135,9 @@
         ? numberOf(phone.current ? "--c-screen-margin" : "--space-5")
         : 0)
   );
-  /* A hanging card (motion `hang`) frames its own width, and a bare one is
-     what it holds. */
-  const phoneWide = $derived(motion !== "hang" && !bare);
+  /* A hanging card (motion `hang`) frames its own width, a bare one is what
+     it holds, and an `ownWidth` site sizes it to its own room. */
+  const phoneWide = $derived(motion !== "hang" && !bare && !ownWidth);
 
   // A popover whose content changes (a list arrives, an error appears)
   // tweens to its new height instead of jumping.

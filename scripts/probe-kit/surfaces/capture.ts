@@ -44,7 +44,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { entrySlug, ROOT, Run, type Spec } from "../kit";
-import { type State, SURFACES, type Surface } from "./catalogue";
+import { type State, SURFACES, type Surface, type Width } from "./catalogue";
 import { reachOf } from "./reach";
 import { outline } from "./ready";
 import { PASSES, type Pass, walkTapes } from "./walk";
@@ -90,14 +90,24 @@ const wanted = new Set(all ? ENTRIES.keys() : named);
 /** The surfaces walked, each with only the states named. */
 const surfaces: Surface[] = SURFACES.map((surface) => ({
   ...surface,
-  states: surface.states.filter((state) =>
-    wanted.has(`${surface.name}-${state.name}`)
-  ),
+  states: surface.states
+    .filter((state) => wanted.has(`${surface.name}-${state.name}`))
+    // A state's captures are 1440 and 390; 820 only where it names `tablet`.
+    .map((state) =>
+      state.widths ? state : { ...state, widths: ["desk", "phone"] as Width[] }
+    ),
 })).filter((surface) => surface.states.length > 0);
 
-/** 1440 and 390, light and dark. */
+/** 1440 and 390, light and dark; 820 too where a state names `tablet` in its `widths` (the walk takes each state at its own widths). */
 const CAPTURED = PASSES.filter(
-  (pass) => !pass.reduced && (pass.width === "desk" || pass.width === "phone")
+  (pass) =>
+    !pass.reduced &&
+    (pass.width === "desk" ||
+      pass.width === "phone" ||
+      (pass.width === "tablet" &&
+        surfaces.some((surface) =>
+          surface.states.some((state) => state.widths?.includes("tablet"))
+        )))
 );
 const PIXELS: Record<Pass["width"], number> = {
   desk: 1440,

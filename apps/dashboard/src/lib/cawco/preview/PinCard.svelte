@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { artifactWords as words } from "@cawco/core";
   /**
    * A pin's card (Projects spec §5.7; tsk-3; DESIGN.md Artifact panel, canvas
    * and ink), over the page beside its pin: the raised card recipe (12px,
-   * control edge, hairline shadow, 11px padding), on a phone standing at the
-   * well's foot as the house drawer does. What the pin stands on, in words
+   * control edge, hairline shadow, 11px padding), standing at the well's
+   * foot as the house drawer does on a phone and wherever the well can't
+   * hold it beside the open Comments panel. What the pin stands on, in words
    * (pin-name.ts), its file:line dim under it and its selector only in the
    * tooltip; no picture: the pin it would show stands beside the card. Its
    * thread in the transcript's two voices (its turn/ pieces: Turn, Well,
@@ -17,6 +19,10 @@
    * before it runs (The Open Page Rule: AskHere under the footer, the page
    * still live). What goes wrong is said under the field, a refused delete
    * under its question.
+   *
+   * A pin whose element is gone says so under its head, with Pin it
+   * somewhere else: the next tap on the page pins it anew, Cancel puts the
+   * offer back. Reply is the card's one primary; everything else is ghost.
    *
    * A column: the head over it, the field and its actions at its foot, both
    * always in view, and between them the thread, the only
@@ -51,6 +57,7 @@
   import LiveDot from "./LiveDot.svelte";
   import PinDisc from "./PinDisc.svelte";
   import { pinName, pinSelector } from "./pin-name";
+  import type { PreviewPinAt } from "./wire";
 
   let {
     pin,
@@ -60,11 +67,13 @@
     room,
     sheet = false,
     live = false,
+    placing = false,
     problem,
     draft = $bindable(""),
     onreply,
     onresolve,
     ondelete,
+    onplace,
     onclose,
   }: {
     pin: Pin;
@@ -72,14 +81,16 @@
     agentName: string;
     /** The pin's own address: its artifact's page, opening this pin's card. */
     link: string;
-    /** The pin's disc in the well, px; null while it is not on screen. */
-    at: { r: number; x: number; y: number } | null;
-    /** The well's size, px. */
+    /** The pin's disc and the box of what it stands on, in the well, px; null while it is not on screen. */
+    at: PreviewPinAt | null;
+    /** The card's room in the well, px: the well beside the Comments panel when it is open. */
     room: { h: number; w: number };
-    /** On a phone: at the well's foot, full width. */
+    /** Where the well can't hold the card beside the panel, and on a phone: at the well's foot, full width. */
     sheet?: boolean;
     /** The agent is working on this pin. */
     live?: boolean;
+    /** Its element gone, the next tap on the page pins it anew. */
+    placing?: boolean;
     /** What went wrong with the last reply, resolve or send, in the error formula. */
     problem: string | null;
     /** What the person has written and not yet said: the pin's, kept by the pane. */
@@ -89,6 +100,8 @@
     onresolve: (resolved: boolean) => void;
     /** Deletes the pin once the person confirmed; rejects with the refusal's sentence. */
     ondelete: () => Promise<void>;
+    /** Pin it somewhere else (true), or Cancel (false). */
+    onplace: (placing: boolean) => void;
     onclose: () => void;
   } = $props();
 
@@ -221,22 +234,52 @@
     });
   });
 
-  /** The card's gap from its pin and from the well's edge, px: the space scale's. */
-  const GAP = 12;
+  /** The card's gap from what it stands beside (`--space-3`, the ladder's step at the card's own padding), and from its room's edge, px. */
+  const GAP = 11;
   const EDGE = 8;
 
-  /** Beside its pin, on the side with room; inside the well. */
+  /** The card's top beside a span from `y`: inside its room. */
+  const topFrom = (y: number) =>
+    Math.max(EDGE, Math.min(y, room.h - height - EDGE));
+  /** The card's left over a span from `x`: inside its room. */
+  const leftFrom = (x: number) =>
+    Math.max(EDGE, Math.min(x, room.w - width - EDGE));
+
+  /**
+   * Beside what its pin stands on, where its room allows: the element's end
+   * side, else its start side, else below it; else beside the pin itself,
+   * on the side with room. A pin not on the page (its element gone) stands
+   * at its room's top-right.
+   */
   const place = $derived.by(() => {
-    if (sheet || !at) {
+    if (sheet) {
       return null;
+    }
+    if (!at) {
+      return {
+        left: Math.max(EDGE, room.w - width - EDGE),
+        top: EDGE,
+        side: "room",
+      };
+    }
+    const { box } = at;
+    const end = box.x + box.w + GAP;
+    if (end + width <= room.w - EDGE) {
+      return { left: end, top: topFrom(box.y), side: "end" };
+    }
+    const start = box.x - GAP - width;
+    if (start >= EDGE) {
+      return { left: start, top: topFrom(box.y), side: "start" };
+    }
+    const below = box.y + box.h + GAP;
+    if (below + height <= room.h - EDGE) {
+      return { left: leftFrom(box.x), top: below, side: "below" };
     }
     let left = at.x + at.r + GAP;
     if (left + width > room.w - EDGE) {
       left = at.x - at.r - GAP - width;
     }
-    left = Math.max(EDGE, Math.min(left, room.w - width - EDGE));
-    const top = Math.max(EDGE, Math.min(at.y - at.r, room.h - height - EDGE));
-    return { left, top };
+    return { left: leftFrom(left), top: topFrom(at.y - at.r), side: "pin" };
   });
 
   const source = $derived(
@@ -309,11 +352,11 @@
   data-sheet={sheet || undefined}
   data-slot="pin-card"
   aria-label={`Pin ${pin.number}`}
-  class="group/pin pointer-events-auto absolute z-2 motion-safe:animate-pin-card-in flex flex-col gap-space-2 w-(--card-w) max-h-(--card-max) overflow-y-auto overscroll-contain p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-hairline not-data-sheet:not-data-placed:top-space-2 not-data-sheet:not-data-placed:right-space-2 not-data-placed:data-sheet:start-0 data-sheet:end-0 data-sheet:bottom-0 data-sheet:w-full data-sheet:max-h-7/10 data-sheet:border-x-0 data-sheet:border-b-0 data-sheet:rounded-b-none data-sheet:pb-(--sheet-pb)"
+  class="group/pin pointer-events-auto absolute z-2 motion-safe:animate-pin-card-in flex flex-col gap-space-2 coarse:gap-space-5 w-(--card-w) max-h-(--card-max) overflow-y-auto overscroll-contain p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-hairline data-sheet:inset-x-0 data-sheet:bottom-0 data-sheet:w-full data-sheet:max-h-7/10 data-sheet:border-x-0 data-sheet:border-b-0 data-sheet:rounded-b-none data-sheet:pb-(--sheet-pb)"
   data-pin-card={pin.number}
-  data-placed={place ? "" : undefined}
   role="dialog"
   bind:this={card}
+  data-side={place?.side}
   style:left={place ? `${place.left}px` : undefined}
   style:top={place ? `${place.top}px` : undefined}
   style:max-width={sheet ? undefined : `${Math.max(0, room.w - 2 * EDGE)}px`}
@@ -326,7 +369,7 @@
 >
   <header
     data-slot="head"
-    class="flex shrink-0 items-center gap-space-2"
+    class="flex shrink-0 items-center gap-space-2 coarse:gap-space-5"
     bind:this={head}
   >
     <PinDisc number={pin.number} resolved={!!pin.resolvedAt} />
@@ -335,7 +378,10 @@
       class="flex flex-1 min-w-0 flex-col"
       title={selector ?? undefined}
     >
-      <span data-slot="name" class="truncate text-ink-strong type-label"
+      <!-- What it stands on, whole to two lines and cut there: the card's head is never cut to a word. -->
+      <span
+        data-slot="name"
+        class="line-clamp-2 wrap-anywhere text-ink-strong type-label"
         >{pinName(pin)}</span
       >
       {#if source}
@@ -396,6 +442,35 @@
       variant="ghost"
     />
   </header>
+  {#if pin.movedAt}
+    <!-- Its element is gone: said once, and pinned anew with the next tap on the page. -->
+    <div
+      data-slot="gone"
+      class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
+    >
+      <!-- One sentence and its action in one row; wrapped, the action's words stand under the sentence's. -->
+      <p class="m-0 min-w-0 text-ink-muted" role="status">
+        {placing ? "Tap the page where it goes." : words.pinElementGone}
+      </p>
+      {#if placing}
+        <Button
+          label="Cancel"
+          onclick={() => onplace(false)}
+          pad="none"
+          size="sm"
+          variant="link"
+        />
+      {:else}
+        <Button
+          label="Pin it somewhere else"
+          onclick={() => onplace(true)}
+          pad="none"
+          size="sm"
+          variant="link"
+        />
+      {/if}
+    </div>
+  {/if}
   <!-- What the pin holds, the one part that scrolls: the head stands over it
        and the field and its actions under it, never a scroll away; the
        house edge fade says there is more above or below. -->

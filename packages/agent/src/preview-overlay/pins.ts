@@ -140,6 +140,8 @@ const showsAt = (el: Element | null, at: [number, number]): boolean => {
 /** Where a pin stands: its disc's centre in the page, its element, and whether its frames show that point now. */
 interface Standing {
   at: [number, number];
+  /** What the pin stands on, in the page's coordinates: its element's box, or its ink's. */
+  box: Box;
   el: Element | null;
   shown: boolean;
 }
@@ -191,7 +193,7 @@ export function startPins(deps: PinsDeps): Pins {
     if (pin.ink) {
       const box = deps.groupBox(pin.ink);
       return box
-        ? { at: [box.x + box.w, box.y], el: anchoredEl(pin), shown: true }
+        ? { at: [box.x + box.w, box.y], box, el: anchoredEl(pin), shown: true }
         : null;
     }
     if (!("selector" in pin.anchor)) {
@@ -207,7 +209,7 @@ export function startPins(deps: PinsDeps): Pins {
       box.x + point.x * box.w,
       box.y + point.y * box.h,
     ];
-    return { at, el: found.el, shown: showsAt(found.el, at) };
+    return { at, box, el: found.el, shown: showsAt(found.el, at) };
   };
 
   /**
@@ -350,16 +352,32 @@ export function startPins(deps: PinsDeps): Pins {
     tell();
   }
 
-  /** The tracked pin's disc in the viewport, for the host's card; `stuck` while no scroll brings it out from under the host's chrome. */
+  /**
+   * The tracked pin's disc in the viewport, and the box of what it stands
+   * on, for the host's card, which stands beside that box where it has room;
+   * `stuck` while no scroll brings it out from under the host's chrome.
+   */
   const tell = () => {
     if (!tracked) {
       return;
     }
     const where = placed.get(tracked);
-    const at = where?.shown ? where.at : undefined;
+    const shown = where?.shown ? where : undefined;
     deps.post("cawco:pin-at", {
       id: tracked,
-      ...(at ? { x: at[0] - scrollX, y: at[1] - scrollY, r: PIN_R } : {}),
+      ...(shown
+        ? {
+            x: shown.at[0] - scrollX,
+            y: shown.at[1] - scrollY,
+            r: PIN_R,
+            box: {
+              x: shown.box.x - scrollX,
+              y: shown.box.y - scrollY,
+              w: shown.box.w,
+              h: shown.box.h,
+            },
+          }
+        : {}),
       ...(stuck.has(tracked) ? { stuck: true } : {}),
     });
   };
