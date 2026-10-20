@@ -90,10 +90,18 @@ None added: every value is an existing token (`c-row-h`, `c-artifact-row-h`, `c-
 
 ## Theme additions
 
+theme.css is generated (`bun run tokens`, scripts/build-tokens.ts), so the hand-added block at theme.css:1183 is for integration to fold into the generator. `bun scripts/build-tokens.ts --check` fails on that block alone: regenerated, the only difference is its 12 lines (`theme.css | 12 ------------`). `bun scripts/build-variants.ts --check`: `variants: 490 named variants, byte for byte the committed file` (exit 0). Each name, with the keyframes it runs (app.css, unchanged):
+
 theme: animate dialog-in
 ```css
 @theme inline {
   --animate-dialog-in: kit-dialog-in var(--dur-panel) var(--ease-out) both;
+}
+@keyframes kit-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 ```
 theme: animate dialog-out
@@ -101,11 +109,22 @@ theme: animate dialog-out
 @theme inline {
   --animate-dialog-out: kit-dialog-out var(--dur-exit) var(--ease-out) both;
 }
+@keyframes kit-dialog-out {
+  to {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
 ```
 theme: animate scrim-in
 ```css
 @theme inline {
   --animate-scrim-in: kit-fade-in var(--dur-panel) var(--ease-out) both;
+}
+@keyframes kit-fade-in {
+  from {
+    opacity: 0;
+  }
 }
 ```
 theme: animate tip-fade
@@ -113,14 +132,24 @@ theme: animate tip-fade
 @theme inline {
   --animate-tip-fade: kit-tip-fade var(--dur-fade) var(--ease-out) both;
 }
+@keyframes kit-tip-fade {
+  from {
+    opacity: 0;
+  }
+}
 ```
 theme: animate tip-in
 ```css
 @theme inline {
   --animate-tip-in: kit-tip-in var(--dur-fade) var(--ease-out) both;
 }
+@keyframes kit-tip-in {
+  from {
+    opacity: 0;
+    translate: var(--kit-tip-from);
+  }
+}
 ```
-(theme.css:1183, one block. The keyframes are app.css's own, unchanged.)
 
 theme: utility kit-sheet-scroll
 ```css
@@ -195,7 +224,12 @@ Equality with the start sha: 38 of 42 element reads equal after folding two no-o
 
 ui-observer (`observer.browser.js` on each open surface, both widths): popover, dropdown, drawer: 0 observations. Dialog: `horizontal-overflow` / `text-clipped` on the Close's `sr-only` label (intended), 2 `near-miss-alignment`, 1 `sibling-padding-differs` (the Close button, kit dialog-content, unchanged). Sheet: the same `sr-only` label, 1 `sibling-padding-differs`, 1 `sibling-gaps-differ` (the bench's own content).
 
-Not rendered on a bench: HangCard `tab` (the session card and the tab menu) needs a session tab from a live hub: route `/` with a session open, PaneTabs; the radio dot (the overlays bench's dropdown holds no radio item): any dropdown with `RadioGroup`, e.g. the session card's account picker.
+Radio dot (`radioDot`), drawn in a scratch route (`/motion/w5-radio`, one dropdown-menu and one context-menu RadioGroup, each with a chosen and an unchosen item; deleted after), same session, 1440×900 and 390×844, all eight reads alike apart from the row's width:
+- chosen: `6px×6px`, `border-radius: 999px` (pill), `background-color: oklch(0.295 0.01 70)` = the item's own `color` `oklch(0.295 0.01 70)` (DESIGN.md :793 "A chosen item shows its tick or dot in the item's own ink, with no fill"), `opacity: 1`, `scale: 1`.
+- unchosen: the same box and ink, `opacity: 0`, `scale: 0.6` (DESIGN.md :795 "A radio dot grows from 0.6 as it fades in"), `transition: opacity, scale 0.12s` (`--dur-control`, :795 "120ms in a menu").
+- place: centred (within 0.6px) in its 16×16 cell, the cell's end 8px in from the row's end; rows 32px tall (:793 "32px tall"), dropdown 1162 / 340px wide, context menu 178px. The kit sets the dot in the row's trailing cell (`absolute right-2`, unchanged by this lane); DESIGN.md :793 names its ink and no side.
+
+Not rendered on a bench: HangCard `tab` (the session card and the tab menu) needs a session tab from a live hub: route `/` with a session open, PaneTabs (phase 2's render map).
 
 ## Findings
 
@@ -203,7 +237,18 @@ fixed: apps/dashboard/src/lib/components/ui/dialog/dialog-title.svelte, drawer-t
 fixed: apps/dashboard/src/lib/components/ui/popover/popover-content.svelte floatingSurface — house/variant-order flagged `data-closed:duration-(--dur-exit)` against `motion-safe:transition-[…]` (both set the duration); the motion-safe list is now `[transition-property:…]`, durations from the base and the closed state alone.
 fixed: apps/dashboard/src/routes/(app)/motion/overlays/+page.svelte:232 the bench's page control was `fixed inset-0 z-0`, the whole viewport over the shell, so at 680px the burger could not be pressed ("<button data-page …> subtree intercepts pointer events") — now `absolute inset-0` in the bench's own `<main>` (:78, `relative grow`): the content area alone. Playwright at 680×900: page `[0,89,680,811]`, `elementFromPoint` at the burger's centre is the burger, its press opens the rail sheet (`data-state="open"`), a press on the page counts ("The page · 1"); 390×844: page `[0,120,390,724]`, the same; 1440×900: page `[228,89,1212,811]`, clear of the rail.
 gap: apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte:38 `motion-reduce:transition-none!` (vaul writes its transition inline) — the relic regex does not see it (no `class=` on the line); it fights a third party's inline transition, which only an important declaration outranks: DESIGN.md's reduced-motion sheet fade; kept, not mine to clear without a vaul change.
-gap: apps/dashboard/src/lib/cawco/preview/ArtifactMenu.svelte:223 and apps/dashboard/src/lib/cawco/side/SideSurface.svelte:423 `mark-line` and type/colour on DropdownMenuTrigger — no-restyle on a trigger (another lane's part).
-gap: `scripts/build-variants.ts --check` — not run (not in the brief's proof); this lane added no `[data-x="y"]` selector the generator would turn into a new variant name it does not already have, but the arbitrary `data-[…]` variants in kit recipes are not on its list.
+gap: apps/dashboard/src/lib/cawco/preview/ArtifactMenu.svelte:223 and apps/dashboard/src/lib/cawco/side/SideSurface.svelte:423 `mark-line` and type/colour on DropdownMenuTrigger — no-restyle on a trigger (another lane's part) → W2-triggers d4e2b7007 (`face="title"`, `face="count"`).
 
-Counts: kit-swap 34 · removed 9 · fixed 3 · token 0 · theme 7 · gap 3.
+## Boolean variants (the `false`-key sweep)
+
+tailwind-variants applies a boolean variant's `false` key when its prop is omitted. Every `tv()` this lane owns or touched (ui/alert, context-menu, dialog, drawer, dropdown-menu, hang-card, popover, sheet, alert-dialog, select-content, tooltip-content, sonner), every `true:`/`false:` key:
+- dialog/dialog-title.svelte:14 `visible: { true: "", false: "sr-only" }` — bug (every title drawn `sr-only` when `visible` was omitted), fixed: `defaultVariants: { visible: true }`.
+- drawer/drawer-title.svelte:10 `visible` — the same bug, fixed the same.
+- drawer/drawer-description.svelte:11 `visible` — the same bug, fixed the same.
+- sheet/sheet-header.svelte:9 `visible` — the same bug, fixed the same.
+- hang-card/hang-card.svelte:45–48 `tab: { true: …, false: … }` — deliberate (a card that is not a tab's slides from behind its cut), explicit `defaultVariants: { tab: false }`.
+- hang-card/hang-card.svelte:50 `glass: { true: … }` — no `false` key: omitted applies nothing.
+- sheet/sheet-content.svelte:11 `narrow: { true: … }` — no `false` key: omitted applies nothing.
+Every other variant in these recipes is keyed by name (`motion`, `height`, `overflow`, `pad`, `gap`, `frame`, `width`, `min`, `row`, `marks`, `look`, `kind`, `lead`, `body`, `bodyPad`, `layout`, `surface`, `box`, `text`, `variant`), none by `true`/`false`.
+
+Counts: kit-swap 34 · removed 9 · fixed 3 · token 0 · theme 7 · gap 2.
