@@ -551,6 +551,9 @@ public enum Size {
     public static let cOtpCellH: Double = 52
     /// The pairing screen's one width: the code's six cells in two groups of three (space-2 between cells, space-5 at the hyphen), and the QR card above them, square, its edges on the cells' edges. Made from the cell's width, so the two never drift apart.
     public static let cPairW: Double = 286
+    /// Where the pairing screen's column starts: a fixed inset from the screen's top, 12% of its height between space-8 and 160px (108px on a 900px screen). Anchored, not centred, so Caw and the words stay put while the code's places open and fold under them.
+    /// Fluid on the web (clamp); its bounds in points.
+    public static let cPairTop: ClosedRange<Double> = 32...160
     /// A ledger's toolbar zone, holding 32px controls 11px in.
     public static let cToolbarZone: Double = 55
     public static let cToolbarCtl: Double = 32

@@ -299,6 +299,7 @@ export type TokenSize =
   | "size.c-otp-cell-w"
   | "size.c-otp-cell-h"
   | "size.c-pair-w"
+  | "size.c-pair-top"
   | "size.c-toolbar-zone"
   | "size.c-toolbar-ctl"
   | "size.c-find-w"
