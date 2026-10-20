@@ -16,6 +16,7 @@ import { MACHINE } from "../../scratch-fleet";
 import { COMPOSER_FIELD } from "../kit";
 import {
   DELEGATE_TITLE,
+  MEDIA_PAGE,
   type Scene,
   STUDIO_HOST,
   STUDIO_MACHINE,
@@ -147,7 +148,6 @@ const START_SIGN_IN = /^Start sign-in/;
 const GROWN_DRAFT =
   /Wrap the chip's label at the badge\.\s*Keep the count whole\.\s*Then measure it on a phone\./;
 const CATCHING_UP_LINE = /^Catching up…$/;
-const STARTS_WITH_MACHINE = /^This session starts once its machine/;
 /** A preview drawn in its frame, the pane's pin list, and the page's where-to-start (MachinesEmpty's title). */
 const PREVIEW_READY = "iframe[data-ready=true]";
 const PIN_LIST = 'section[data-slot=pin-list][aria-label="Comments"]';
@@ -156,9 +156,8 @@ const MACHINES_EMPTY = "h1[data-slot=title]";
 const JUMP = `${OPEN_POPOVER}[aria-label="Jump to"]`;
 const NEEDS_PANEL = `${OPEN_POPOVER}[aria-label="Needs you"]`;
 const PEEK_SHEET = "[data-peek-sheet][data-state=open]";
-/** A graph step's settings in the inspector: its harness, one chosen (the kit's single ToggleGroup, whose items are radios). */
-const STEP_SETTINGS =
-  "fieldset:has(> legend) [data-slot=toggle-group-item][data-state=on]";
+/** A graph step's settings in the inspector: its harness, one chosen. */
+const STEP_SETTINGS = "fieldset:has(> legend) button[aria-pressed=true]";
 /** A workflow page's tab, chosen. */
 const workflowTab = (value: string) =>
   `[role=tablist][aria-label="Workflow views"] [role=tab][data-value=${value}][aria-selected=true]`;
@@ -274,6 +273,23 @@ const JUMP_BUTTON = /Jump|Search/;
 const FETCH_SKILL = /Fetch|Add skill|New skill/;
 /** Svelte's keyed each meeting a key twice, as the dashboard reports it. */
 const EACH_KEY_DUPLICATE = /each_key_duplicate/;
+/**
+ * Recent unfolded, unless it stands open already: the page keeps it as the
+ * person left it (an earlier state of the pass opened it).
+ */
+const recentOpen = async (page: Page) => {
+  const disclosure = page
+    .locator("[data-slot=recent] [data-slot=disclosure]")
+    .filter({ visible: true })
+    .first();
+  if ((await disclosure.getAttribute("aria-expanded")) !== "true") {
+    await disclosure.click();
+  }
+  await page.locator("[data-slot=home-recent-session-tree] li").first().waitFor();
+};
+
+/** Connect a machine's title, which its dialog and drawer open with. */
+const CONNECT_A_MACHINE = /^Connect a machine/;
 /** The stored transcript's title, as its row says it. */
 const STORED_TITLE = /Sketch the tray's empty state/;
 /** The usage page's project filter, opened. */
@@ -289,9 +305,10 @@ const usageProjects = async (page: Page) => {
     .waitFor();
 };
 
-/** How many projects the many-projects fleet holds beside the scene's own, and the last one's name. */
+/** How many projects the many-projects fleet holds beside the scene's own. */
 const MORE_PROJECTS = 40;
-const LAST_PROJECT = new RegExp(`^Project ${MORE_PROJECTS}$`);
+/** The first of them, which the open list stands in view (the rest run past it). */
+const FIRST_MORE_PROJECT = /^Project 1$/;
 
 /**
  * The fleet's projects read with {@link MORE_PROJECTS} more, each the
@@ -1172,7 +1189,12 @@ const dropPin = async (page: Page) => {
  */
 const PINS = "[data-slot=pin-list]";
 const PIN_ROW = `${PINS} [data-slot=pin-row]`;
-const MOVED_ROW = `${PINS} [data-slot=moved-row]`;
+/**
+ * A pin whose element is gone, in the panel. X8: its row is the pin's own
+ * row marked moved (`data-moved`); this base draws a row of its own with
+ * Place again (`moved-row`), which goes once X8's branch lands.
+ */
+const MOVED_ROW = `${PINS} :is([data-slot=pin-row][data-moved], [data-slot=moved-row])`;
 const PIN_CARD = "[data-slot=pin-card]";
 /** The preview page's elements a pin is dropped on (scene.ts ARTIFACT_PAGE), and the words each pin says. */
 /** 48 words. */
@@ -1898,11 +1920,7 @@ export const SURFACES: Surface[] = [
         // Recent unfolded: the sessions and the stored ones, newest first.
         name: "recent",
         act: async (page) => {
-          await page
-            .locator("[data-slot=recent] [data-slot=disclosure][aria-expanded=false]")
-            .filter({ visible: true })
-            .first()
-            .click();
+          await recentOpen(page);
         },
         root: "body",
         inView: "[data-slot=home-recent-session-tree]",
@@ -2019,13 +2037,7 @@ export const SURFACES: Surface[] = [
             (message) => message,
             machineAnswer("listSessions", [STORED_SESSION])
           )(page);
-          await page
-            .locator(
-              "[data-slot=recent] [data-slot=disclosure][aria-expanded=false]"
-            )
-            .filter({ visible: true })
-            .first()
-            .click();
+          await recentOpen(page);
         },
         root: "body",
         inView: "[data-slot=home-recent-session-tree]",
@@ -2050,7 +2062,7 @@ export const SURFACES: Surface[] = [
   },
   {
     // The top bar alone, its glass group included (Shell's
-    // `data-slot="top"`): on the home, and over a conversation's tabs
+    // `data-slot="top"`): on a phone's home, and over a conversation's tabs
     // (hosting them on a desk, floating over them on a phone). The bar
     // glass's own compare against the base reads it at both widths.
     name: "top-bar",
@@ -2058,10 +2070,13 @@ export const SURFACES: Surface[] = [
     route: () => "/",
     states: [
       {
+        // The home is the page under the drawer's width alone: `/` goes on
+        // to `/session` (routes/(app)/+page.server.ts), which a desk opens
+        // on the workspace's conversation (top-bar/session's).
         name: "home",
-        widths: ["desk", "phone"],
+        widths: ["phone"],
         root: TOP_BAR,
-        ready: { shows: TOP_BAR, path: /^\/$/ },
+        ready: { shows: `body:has(${HOME}) ${TOP_BAR}`, path: /^\/session$/ },
       },
       {
         name: "session",
@@ -2884,9 +2899,10 @@ export const SURFACES: Surface[] = [
         root: MAIN,
         ready: { shows: DECISION_PAGE, path: /[?&]page=pricing\b/ },
       },
-      // Its two pages still open for picks, each its program drawn in its
-      // frame by the decision host (decision-host.ts).
-      ...["landing", "onboarding"].map(
+      // Its pages still open for picks, each its program drawn in its frame
+      // by the decision host (decision-host.ts); the media page's card
+      // draws every media part of the library (scene.ts `mediaProgram`).
+      ...["landing", "onboarding", MEDIA_PAGE].map(
         (name): State => ({
           name,
           route: (s) => `/project/${s.decisions}?view=decisions&page=${name}`,
@@ -3030,7 +3046,7 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: {
           shows: "[data-slot=select-content][data-state=open] [role=option]",
-          says: LAST_PROJECT,
+          says: FIRST_MORE_PROJECT,
         },
       },
     ],
@@ -3474,7 +3490,11 @@ export const SURFACES: Surface[] = [
         route: (s) => `/session/${s.art}`,
         act: async (page) => {
           await machinesOpen(page);
-          await page.keyboard.press("Enter");
+          // The list stands in its own layer, over the pane: pressed there.
+          await page
+            .locator("[data-slot=select-content][data-state=open] [role=option]")
+            .first()
+            .click();
           // Browse: the machine's folders, from the keyboard as the machine was.
           await page
             .locator(`${PLACE_PICK} [data-slot=collapsible-trigger]`)
@@ -3501,6 +3521,30 @@ export const SURFACES: Surface[] = [
             .click(),
         root: LAYER,
         ready: { shows: "[data-artifact-list][data-state=open] [data-artifact-row]" },
+      },
+      {
+        // The pane narrowed to its least share (the split's separator, End):
+        // its head has no room for the ask's line, and the artifact menu
+        // says it first (ArtifactMenu's line, SideSurface `subtitleStands`).
+        name: "menu-narrow",
+        route: (s) => `/session/${s.art}`,
+        widths: ["desk"],
+        act: async (page) => {
+          await page
+            .locator("[data-slot=side-split] [role=separator]")
+            .first()
+            .focus();
+          await page.keyboard.press("End");
+          await page
+            .locator("[data-artifact-trigger]")
+            .filter({ visible: true })
+            .first()
+            .click();
+        },
+        root: LAYER,
+        ready: {
+          shows: "[data-artifact-list][data-state=open] [data-slot=menu-line]",
+        },
       },
     ],
   },
@@ -3561,7 +3605,7 @@ export const SURFACES: Surface[] = [
     ],
   },
   {
-    // A pin whose element a revision took away: its row, Place again in it.
+    // A pin whose element a revision took away: its row, marked so.
     name: "comments-gone",
     serve: "built",
     route: (s) => `/session/${s.art}`,
@@ -3574,7 +3618,10 @@ export const SURFACES: Surface[] = [
         },
         root: "body",
         ready: (s) => ({
-          shows: on(s.art, `${MOVED_ROW} button`),
+          shows: on(
+            s.art,
+            `${PINS} :is([data-slot=pin-row][data-moved], [data-slot=moved-row] button)`
+          ),
           not: PIN_CARD,
         }),
       },
@@ -3809,8 +3856,9 @@ export const SURFACES: Surface[] = [
         },
         root: "body",
         ready: {
-          shows:
-            '[role=dialog][data-state=open][aria-label="Connect a machine"], [data-slot=drawer-content][data-state=open][aria-label="Connect a machine"]',
+          // The dialog is named by its title; the drawer by its label.
+          shows: `${OPEN_DIALOG}, [data-slot=drawer-content][data-state=open]`,
+          says: CONNECT_A_MACHINE,
         },
       },
       // A session on the machine that went away: what its pane can still show.
@@ -3819,9 +3867,13 @@ export const SURFACES: Surface[] = [
         hub: "machineless",
         route: (s) => `/session/${s.chips}`,
         root: MAIN,
+        // Its transcript, all its pane has with nothing to run it (the
+        // hub's machines all offline: its `machineless` state). The note
+        // this asserted, "This session starts once its machine has memory
+        // for it", was the recording host's own memory pressure, not this.
         ready: (s) => ({
-          shows: on(s.chips, "[data-slot=ftitle]"),
-          says: STARTS_WITH_MACHINE,
+          shows: on(s.chips, "[role=log][aria-label='Session transcript']"),
+          not: STOP_AGENT,
         }),
       },
     ],

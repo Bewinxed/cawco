@@ -275,6 +275,7 @@ const spec: Spec = {
   },
 };
 
+await mkdir(OUT, { recursive: true });
 const run = new Run();
 try {
   await run.spec(spec, null);
@@ -282,7 +283,6 @@ try {
   await run.close();
 }
 
-await mkdir(OUT, { recursive: true });
 const kept: Drawn =
   named.length > 0 && existsSync(DRAWN)
     ? (JSON.parse(await readFile(DRAWN, "utf8")) as Drawn)

@@ -15,7 +15,9 @@
  * midpoint between them stands in for the box's edge. Menu items and nav
  * rows are also held to a 44px drawn height. Beside them, every element
  * that spills its own box sideways, or stands past the viewport's right
- * edge, for a layout's symptom.
+ * edge, for a layout's symptom: never what is no spill (an SVG's insides,
+ * a visually hidden region, a box passed by a hit area's `::after` alone,
+ * a scroller's content).
  *
  * `reachOf` runs in the page (`page.evaluate`): self-contained. Written by
  * capture.ts `--reach`, a TSV per capture.
@@ -233,9 +235,49 @@ export function reachOf(): string {
     );
   }
   // What spills sideways: its content wider than its box where it shows
-  // the spill, or its box past the viewport's right edge.
+  // the spill, or its box past the viewport's right edge. Neither is a
+  // layout's symptom where:
+  // - it is drawn inside an SVG (a diagram's words, a glyph's paths): it
+  //   has no CSS box, so its scroll and client widths say nothing of one
+  //   (CSSOM View's `clientWidth` is a CSS layout box's); the `<svg>`
+  //   itself is read;
+  // - it is a visually hidden region (`sr-only`: a 1px box that clips),
+  //   which holds its words wider than itself by design;
+  // - what passes its edge is a pseudo-element alone (a control's
+  //   transparent hit area, The 44 Touch Rule's `::after`): its contents,
+  //   its text and its elements' boxes (a Range's rects, which never take
+  //   generated content), stand inside it, or it has none;
+  // - it stands past the window inside a box that clips and stands in the
+  //   window (a scroller's content, under its edge fade): never past the page.
+  const SVG = "http://www.w3.org/2000/svg";
+  const inSvg = (el: Element) =>
+    el.namespaceURI === SVG && el.localName !== "svg";
+  const hidden = (el: Element, s: CSSStyleDeclaration) =>
+    el.clientWidth <= 1 &&
+    el.clientHeight <= 1 &&
+    (s.overflowX === "hidden" || s.overflowX === "clip");
+  const pseudoAlone = (el: Element, r: DOMRect) => {
+    const contents = document.createRange();
+    contents.selectNodeContents(el);
+    if (contents.getClientRects().length === 0) {
+      return true;
+    }
+    const c = contents.getBoundingClientRect();
+    return c.left >= r.left - 1 && c.right <= r.right + 1;
+  };
+  const heldInWindow = (el: Element) => {
+    for (let up = el.parentElement; up; up = up.parentElement) {
+      if (
+        getComputedStyle(up).overflowX !== "visible" &&
+        up.getBoundingClientRect().right <= innerWidth + 0.5
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
   for (const el of document.body.getElementsByTagName("*")) {
-    if (!visible(el)) {
+    if (!visible(el) || inSvg(el)) {
       continue;
     }
     const r = el.getBoundingClientRect();
@@ -245,8 +287,11 @@ export function reachOf(): string {
       el.clientWidth > 0 &&
       (s.overflowX === "visible" ||
         s.overflowX === "hidden" ||
-        s.overflowX === "clip");
-    const past = r.right > innerWidth + 0.5 && s.position !== "fixed";
+        s.overflowX === "clip") &&
+      !hidden(el, s) &&
+      !pseudoAlone(el, r);
+    const past =
+      r.right > innerWidth + 0.5 && s.position !== "fixed" && !heldInWindow(el);
     if (spills || past) {
       lines.push(
         [

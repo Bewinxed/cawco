@@ -351,6 +351,54 @@ async function snapshot(kit: Kit, surfaces: Surface[]): Promise<void> {
   await report(kit, surfaces, pairs);
 }
 
+/** The scene's machine on its tailnet, as the stand-in says it (`onTailnet`). */
+const TAILNET_IP = "100.101.102.103";
+const TAILNET_NAME = "scratch-fleet.tail0000.ts.net";
+
+/**
+ * The recorded fleet on a tailnet, wherever it is recorded: a `tailscale`
+ * first on the fleet's PATH (scratch-fleet.ts hands its children this
+ * process's PATH) that answers as a signed-in node does, so the hub lists a
+ * join address another machine reaches it on (hub join.ts `joinAddresses`:
+ * Tailscale, then each non-internal IPv4) and its pages say the same on a
+ * host and in a workspace, whose boundary holds loopback alone (the spawn
+ * sheet's install command, new-session/machines-pair). It answers
+ * `ip -4`, `status --json` (its own node offline to discovery, so no
+ * agent looks for a hub there) and `funnel status --json` (nothing
+ * funneled); anything else fails, as a CLI asked what it won't say.
+ */
+async function onTailnet(): Promise<void> {
+  const dir = join(process.env.TMPDIR ?? join(ROOT, ".probe"), "tailnet-stand-in");
+  await mkdir(dir, { recursive: true });
+  const status = JSON.stringify({
+    BackendState: "Running",
+    TUN: true,
+    CurrentTailnet: { MagicDNSEnabled: true },
+    CertDomains: [TAILNET_NAME],
+    Self: {
+      DNSName: `${TAILNET_NAME}.`,
+      HostName: "scratch-fleet",
+      TailscaleIPs: [TAILNET_IP],
+      Online: false,
+    },
+    Peer: {},
+  });
+  const bin = join(dir, "tailscale");
+  await writeFile(
+    bin,
+    `#!/bin/sh
+case "$1 $2" in
+  "ip -4") echo ${TAILNET_IP} ;;
+  "status --json") echo '${status}' ;;
+  "funnel status") echo '{}' ;;
+  *) echo "tailscale stand-in: $*" >&2; exit 1 ;;
+esac
+`,
+    { mode: 0o755 }
+  );
+  process.env.PATH = `${dir}:${process.env.PATH ?? ""}`;
+}
+
 /**
  * The fleet the surfaces read, stood up and recorded onto a tape: the
  * scene's (scene.ts `seedScene`), or with `--tape=sheet` the sheet's alone
@@ -369,6 +417,7 @@ async function record(kit: Kit, surfaces: Surface[]): Promise<void> {
     return;
   }
   let repo = "";
+  await onTailnet();
   const fleet = await kit.fleet(scriptedReply(() => repo));
   ({ repo } = fleet);
   const stopHeard = sheet ? () => undefined : sceneHub(fleet);
