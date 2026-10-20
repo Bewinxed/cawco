@@ -22,9 +22,3 @@ apps/dashboard/src/lib/components/features/workflows/pane-slide.ts
 apps/dashboard/src/lib/components/features/workflows/workflow-ui.ts
 apps/dashboard/src/routes/(app)/workflows/+page.svelte
 apps/dashboard/src/routes/(app)/workflows/[id]/+page.svelte
-design/tokens/cawco.tokens.json
-apps/dashboard/src/lib/tokens/theme.css
-apps/dashboard/src/lib/tokens/tokens.css
-apps/dashboard/src/lib/tokens/tokens.ts
-packages/hub/skills/decision-page/kit/tokens.css
-apps/apple/Packages/CawCoKit/Sources/CawCoDesign/Generated/Tokens.swift

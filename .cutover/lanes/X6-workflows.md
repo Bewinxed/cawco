@@ -42,7 +42,7 @@ corrected: workflows-rest L641 "the actions at the end" main Run behind an "Acti
 
 ## Tokens
 
-removed: `c-workflow-name-col`, `c-workflow-row-h` (the hand-built table's, no user left), `bun run tokens` outputs on the list.
+ask: delete `c-workflow-name-col` and `c-workflow-row-h` from design/tokens/cawco.tokens.json at integration: the hand-built table was their only user. Removed here, `bun run tokens` rewrites Tokens.swift, which holds the lane on a Mac's iOS build (none online), so it is left to integration's one regeneration.
 
 ## Interface-craft critique (Design Critique, from the engine reads)
 
@@ -56,4 +56,4 @@ gap: none found in the list's files that this lane can fix; the four asks above 
 
 ## Not run
 
-No capture or re-audit (the brief's next round). No iOS build (the token removal regenerates Tokens.swift; the landing gate builds it).
+No capture or re-audit (the brief's next round). No iOS build: the lane leaves Tokens.swift untouched.
