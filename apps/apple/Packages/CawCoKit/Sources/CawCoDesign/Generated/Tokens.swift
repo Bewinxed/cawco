@@ -818,8 +818,6 @@ public enum Size {
     public static let cMeasureShort: Double = 480
     /// A meta line's measure under the thing it qualifies: a pending control's failure reason, an editor head's machines line.
     public static let cMeasureMeta: Double = 256
-    /// A wrapping command's room before Copy drops under it (CopyBox).
-    public static let cCopyBoxLine: Double = 160
     /// A count's box keeps one digit's width, so a lone digit does not collapse it.
     public static let cCountDigit: Double = 8
     /// The Configure rail's count column: three digits, so the dash and the figure hold one box.

@@ -982,8 +982,6 @@
     --c-measure-short: 60ch;
     /* A meta line's measure under the thing it qualifies: a pending control's failure reason, an editor head's machines line. */
     --c-measure-meta: 32ch;
-    /* A wrapping command's room before Copy drops under it (CopyBox). */
-    --c-copy-box-line: 20ch;
     /* A count's box keeps one digit's width, so a lone digit does not collapse it. */
     --c-count-digit: 1ch;
     /* The Configure rail's count column: three digits, so the dash and the figure hold one box. */

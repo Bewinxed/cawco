@@ -34,14 +34,15 @@ export const CHALLTESTSRV_CONTAINER = "cawco-probe-challtestsrv";
 
 /**
  * pebble's own test config (test/config/pebble-config.json) with HTTP-01 on
- * port 80; its certificate and key paths are the image's own.
+ * port 80; its certificate and key are the image's own, at `/test/certs`,
+ * named whole so pebble's working folder doesn't matter.
  */
 const CONFIG = {
   pebble: {
     listenAddress: "0.0.0.0:14000",
     managementListenAddress: "0.0.0.0:15000",
-    certificate: "test/certs/localhost/cert.pem",
-    privateKey: "test/certs/localhost/key.pem",
+    certificate: "/test/certs/localhost/cert.pem",
+    privateKey: "/test/certs/localhost/key.pem",
     httpPort: 80,
     tlsPort: 5001,
     ocspResponderURL: "",
@@ -52,6 +53,8 @@ const CONFIG = {
 export interface Pebble {
   /** The ACME directory, on the scratch network. */
   directory: string;
+  /** Every container's `podman logs` (pebble's, its DNS's, the caller's), each written to `<dir>/<name>.log`. */
+  keepLogs: () => Promise<void>;
   /** pebble's management interface, where its intermediate is read (`/intermediates/0`). */
   management: string;
   /** Every container and the network gone, by name. */
@@ -177,8 +180,9 @@ export const startPebble = async (
       "/probe/pebble-config.json",
       "-dnsserver",
       `${ACME_NETWORK.dns}:8053`,
-      "-strict",
-      "false",
+      // No `-strict`: a bool flag, false by default. `-strict false` leaves
+      // "false" as an argument, and pebble exits on it ("invalid command line
+      // arguments", cmd/pebble/main.go).
     ],
   ];
   for (const step of steps) {
@@ -194,6 +198,17 @@ export const startPebble = async (
   return {
     directory: `https://${ACME_NETWORK.pebble}:14000/dir`,
     management: `https://${ACME_NETWORK.pebble}:15000`,
+    async keepLogs() {
+      await Promise.all(
+        made.containers.map(async (name) => {
+          const logs = await podmanRun(podman, ["logs", name]);
+          writeFileSync(
+            join(dir, `${name}.log`),
+            `exit ${logs.code}\n${logs.out}\n`
+          );
+        })
+      );
+    },
     stop,
   };
 };

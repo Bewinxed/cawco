@@ -38,8 +38,8 @@
    * The stream relay's journey is the journey's own card (RelayJourney,
    * `row`), drawn whole in the row's place.
    *
-   * HTTPS on the tailnet is an onboarding row of the same kind: one line,
-   * then every step on the path in order, each with its control (Tailscale's
+   * HTTPS on the tailnet is an onboarding row of the same kind: one line and
+   * its meta, then every step on the path in order, each with its control (Tailscale's
    * DNS page to open, its command to copy, the docs) and its own tick as the
    * hub finds it taken; once HTTPS is on, the row's tick with the https
    * dashboard to open.
@@ -904,6 +904,13 @@
         {/if}
       </span>
     {:else if item.kind === "tailnet" || item.kind === "local-name"}
+      <!-- Where it comes from, under what it wants, as every row's meta
+           stands; its steps follow. -->
+      <span
+        data-slot="meta"
+        class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+        >{meta}</span
+      >
       {#if todos.length > 0}
         <!-- Every step on the path, in order: a step that stands says what to
              do, where or why, and its control; a step taken is its tick and
@@ -911,7 +918,7 @@
         <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
         <ol
           data-slot="steps"
-          class="relative col-start-2 col-end-4 row-3 mx-0 my-space-3 grid list-none gap-space-3 p-0"
+          class="relative col-start-2 col-end-4 row-4 mx-0 my-space-3 grid list-none gap-space-3 p-0"
           role="list"
         >
           <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
@@ -993,11 +1000,6 @@
           {/each}
         </ol>
       {/if}
-      <span
-        data-slot="meta"
-        class="pointer-events-none relative col-start-2 col-end-4 row-4 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
-        >{meta}</span
-      >
     {:else if item.kind === "task"}
       <span
         data-where

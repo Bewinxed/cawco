@@ -5300,19 +5300,6 @@
         }
       }
     },
-    "c-copy-box-line": {
-      "$type": "dimension",
-      "$value": {
-        "value": 160,
-        "unit": "px"
-      },
-      "$description": "A wrapping command's room before Copy drops under it (CopyBox).",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "20ch"
-        }
-      }
-    },
     "c-count-digit": {
       "$type": "dimension",
       "$value": {

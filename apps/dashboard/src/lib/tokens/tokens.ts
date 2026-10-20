@@ -438,7 +438,6 @@ export type TokenSize =
   | "size.c-measure"
   | "size.c-measure-short"
   | "size.c-measure-meta"
-  | "size.c-copy-box-line"
   | "size.c-count-digit"
   | "size.c-rail-count-min"
   | "size.c-skeleton-x-height"

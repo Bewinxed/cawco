@@ -8,9 +8,11 @@
    *
    * The line truncates to fit; what is copied is always the whole of it, and
    * the whole of it is the box's title. A command the person reads before
-   * running it (`wrap`) wraps between its words instead, never inside one
-   * (`--operator=name` stays whole), and the box grows; where the box is too
-   * narrow for both, Copy stands under the command.
+   * running it (`wrap`) takes the box's whole width and wraps only between
+   * its words, never inside one (`net.ipv4.ip_unprivileged_port_start=80`
+   * stays whole); a word wider than the box scrolls the command sideways.
+   * Copy stands under it, at the trailing edge, so it never narrows the
+   * command.
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
@@ -22,7 +24,7 @@
     wrap = false,
   }: { text: string; label: string; wrap?: boolean } = $props();
 
-  /** The command's words, for `wrap`: each one breaks only where it alone is wider than the box. */
+  /** The command's words, for `wrap`: the line breaks between them, never inside one. */
   const words = $derived(text.split(" "));
 
   const clipboard = new UseClipboard();
@@ -40,14 +42,15 @@
 >
   <span class="sr-only">{label}:</span>
   {#if wrap}
-    <!-- Read whole: a word breaks between words, never inside one, unless
-         it alone is wider than the line. -->
+    <!-- Read whole, on the box's whole width: the line breaks between
+         words and never inside one; a word wider than the box scrolls the
+         command sideways. -->
     <code
-      class="min-w-0 grow basis-c-copy-box-line overflow-hidden text-meta text-ellipsis whitespace-normal text-ink-strong"
+      class="min-w-0 basis-full overflow-x-auto overscroll-x-contain text-meta whitespace-normal text-ink-strong"
       title={text}
       >{#each words as word, index (index)}{#if index > 0}{" "}{/if}<span
           data-slot="word"
-          class="inline-block max-w-full wrap-anywhere">{word}</span
+          class="inline-block whitespace-nowrap">{word}</span
         >{/each}</code
     >
   {:else}

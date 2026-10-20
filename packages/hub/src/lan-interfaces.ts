@@ -23,6 +23,11 @@
  * - POINTOPOINT: the one peer is the tunnel's far end (netdevice(7):
  *   "IFF_POINTOPOINT Interface is a point-to-point link"). Tailscale,
  *   WireGuard, OpenVPN's tun, PPP; macOS `utun`.
+ * - No address another device reaches: only a link-local one (169.254/16,
+ *   fe80::/10) or none. A Mac's peer-to-peer and standby links are such:
+ *   AWDL (`awdl0`), low-latency WLAN (`llw0`), NAN (`nan0`), the access
+ *   point (`ap1`), `anpi*`, and the Thunderbolt bridge (`bridge0` and its
+ *   `en` members), where a hub's answer reaches nobody who typed its name.
  *
  * On Linux the crosstalk runs between the shared interfaces too: with the
  * Ethernet on one network and the Wi-Fi on another, a question from the
@@ -35,15 +40,31 @@
 import { networkInterfaces } from "node:os";
 import { reachableLinks } from "@cawco/core/reachable-links";
 
+const LINK_LOCAL_V4 = /^169\.254\./;
+const LINK_LOCAL_V6 = /^fe[89ab]/i;
+
+/** Whether `name` holds an address another device can reach: an IPv4 one outside 169.254/16, or an IPv6 one outside fe80::/10. */
+const reachablyAddressed = (name: string): boolean =>
+  (networkInterfaces()[name] ?? []).some(
+    (entry) =>
+      !entry.internal &&
+      (entry.family === "IPv4"
+        ? !LINK_LOCAL_V4.test(entry.address)
+        : !LINK_LOCAL_V6.test(entry.address))
+  );
+
 /**
  * The reachable links (core reachable-links.ts) mDNS can run on: those that
- * carry multicast and have more than one peer.
+ * carry multicast, have more than one peer, and hold an address another
+ * device reaches.
  */
 const mdnsLinks = async (): Promise<string[]> =>
   (await reachableLinks())
     .filter(
       (link) =>
-        link.flags.includes("MULTICAST") && !link.flags.includes("POINTOPOINT")
+        link.flags.includes("MULTICAST") &&
+        !link.flags.includes("POINTOPOINT") &&
+        reachablyAddressed(link.name)
     )
     .map((link) => link.name);
 
@@ -84,25 +105,22 @@ const defaultRoute = async (): Promise<string | undefined> => {
 };
 
 /**
- * Of the shared interfaces holding an address now, those on one network:
- * all of them when they share it, else the default route's. Throws when they
- * span networks and no default route names this machine's.
+ * Of the shared interfaces (each holding an address now, `mdnsLinks`), those
+ * on one network: all of them when they share it, else the default route's.
+ * Throws when they span networks and no default route names this machine's.
  */
 const oneNetwork = async (shared: string[]): Promise<string[]> => {
-  const addressed = shared.filter((name) =>
-    (networkInterfaces()[name] ?? []).some((entry) => !entry.internal)
-  );
-  const networks = new Set(addressed.map(networkOf));
+  const networks = new Set(shared.map(networkOf));
   if (networks.size <= 1) {
-    return addressed;
+    return shared;
   }
   const dev = await defaultRoute();
-  if (!(dev && addressed.includes(dev))) {
+  if (!(dev && shared.includes(dev))) {
     throw new Error(
-      `${addressed.join(", ")} are on different networks and no default route says which is this machine's`
+      `${shared.join(", ")} are on different networks and no default route says which is this machine's`
     );
   }
-  return addressed.filter((name) => networkOf(name) === networkOf(dev));
+  return shared.filter((name) => networkOf(name) === networkOf(dev));
 };
 
 /**

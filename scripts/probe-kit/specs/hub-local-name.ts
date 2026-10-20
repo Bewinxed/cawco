@@ -56,7 +56,16 @@
  *    network (the tailnet's, when there is one) is a 404; nothing else
  *    listens on port 80.
  *
- * Legs 5 to 7 run on Linux, leg 8 on macOS; legs 1 to 4 on both.
+ * 9. macOS only, what decides legs 1 to 4 there: one question for the name
+ *    obelisk's hub holds (`cawco.local`), asked of the LAN three ways, and
+ *    who answered from another device: the system's own responder
+ *    (`dns-sd -G v4`), a Bun dgram socket joined to the LAN address, and a
+ *    node one running the same code. macOS gates LAN multicast behind Local
+ *    Network privacy ("Receiving an incoming UDP multicast | yes", TN3179),
+ *    which it grants to "Command-line tools run from Terminal or over SSH"
+ *    but not to a launchd agent.
+ *
+ * Legs 5 to 7 run on Linux, legs 8 and 9 on macOS; legs 1 to 4 on both.
  *
  * Multicast needs an interface that carries it: inside a workspace there is
  * only loopback, and leg 5 makes namespaces, so this runs on the host. A hub
@@ -521,10 +530,15 @@ console.log(JSON.stringify(name.state()));
 setInterval(() => name.hold(["eth0"]), 10_000);
 `;
 
-/** `url` read from pebble's network, its TLS unchecked (pebble's own test CA): the body, or undefined. */
+/**
+ * `url` read from pebble's network, its TLS unchecked (pebble's own test
+ * CA): the body, or undefined. What the last read said, an error or the
+ * body, is written to `said` when given.
+ */
 const readOnAcme = async (
   podman: string,
-  url: string
+  url: string,
+  said?: string
 ): Promise<string | undefined> => {
   const read = await podmanRun(podman, [
     "run",
@@ -538,6 +552,9 @@ const readOnAcme = async (
     "import ssl,sys,urllib.request;print(urllib.request.urlopen(sys.argv[1],context=ssl._create_unverified_context(),timeout=5).read().decode())",
     url,
   ]);
+  if (said) {
+    writeFileSync(said, `GET ${url}: exit ${read.code}\n${read.out}\n`);
+  }
   return read.code === 0 ? read.out : undefined;
 };
 
@@ -704,7 +721,12 @@ const acmeLeg = async (kit: Kit, sandbox: string): Promise<void> => {
     );
     await until(
       "pebble's directory answering",
-      () => readOnAcme(podman, pebble?.directory ?? ""),
+      () =>
+        readOnAcme(
+          podman,
+          pebble?.directory ?? "",
+          join(dir, "directory-read.txt")
+        ),
       (body) => body?.includes("newOrder") ?? false,
       60_000
     );
@@ -793,14 +815,112 @@ const acmeLeg = async (kit: Kit, sandbox: string): Promise<void> => {
       certbotSeen && published.length === 0,
       `certbot ${certbotSeen ? "seen" : "never seen"}; port 80 published by: ${published.join("; ") || "none"}`
     );
-    const hubLog = (await podmanRun(podman, ["logs", ACME_HUB])).out;
-    writeFileSync(join(dir, "hub.log"), hubLog);
   } catch (error) {
     kit.check("7: the scratch ACME leg ran to its end", false, String(error));
   } finally {
     console.info = info;
+    // Every container's own words, kept before they go: pebble's, its DNS's, the hub's.
+    await pebble?.keepLogs();
     await pebble?.stop();
-    kit.note(`leg 7's config, webroot, certificate and hub log: ${dir}`);
+    kit.note(
+      `leg 7's config, webroot, certificate, each container's log and the directory's last read: ${dir}`
+    );
+  }
+};
+
+/**
+ * Leg 9's question, the same code under bun and node (`-e`): one mDNS A
+ * question for the name, sent from the LAN address on a socket bound to
+ * 5353 beside the system's responder and joined to the group there; every
+ * source heard for 4 s, and what refused (the membership, the send).
+ */
+const ASK_LAN = `const dgram = require("node:dgram");
+const [name, from] = process.argv.slice(-2);
+const heard = new Set();
+let refused = "";
+const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
+socket.on("message", (_message, remote) => heard.add(remote.address));
+socket.on("error", (error) => { refused = "socket: " + (error.code || error.message); });
+socket.bind(5353, () => {
+  try {
+    socket.addMembership("224.0.0.251", from);
+    socket.setMulticastInterface(from);
+  } catch (error) {
+    refused = "membership: " + (error.code || error.message);
+  }
+  const labels = name.split(".").map((label) => Buffer.concat([Buffer.from([label.length]), Buffer.from(label)]));
+  const question = Buffer.concat([Buffer.from([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]), ...labels, Buffer.from([0, 0, 1, 0, 1])]);
+  socket.send(question, 5353, "224.0.0.251", (error) => { if (error) refused = "send: " + (error.code || error.message); });
+});
+setTimeout(() => { console.log(JSON.stringify({ refused, heard: [...heard] })); process.exit(0); }, 4000);
+`;
+
+/** What leg 9's question heard under `runtime`, or why it didn't run. */
+const askedBy = async (
+  runtime: string,
+  name: string,
+  from: string
+): Promise<{ refused: string; heard: string[] }> => {
+  const ran = await Bun.$`${runtime} -e ${ASK_LAN} ${name} ${from}`
+    .nothrow()
+    .quiet();
+  try {
+    return JSON.parse(ran.stdout.toString().trim().split("\n").at(-1) ?? "");
+  } catch {
+    return {
+      refused: `exit ${ran.exitCode}: ${ran.stderr.toString().trim().slice(-300)}`,
+      heard: [],
+    };
+  }
+};
+
+/** What the system's responder answers for `name` within 4 s: `dns-sd -G v4`'s address column. */
+const systemAnswers = async (name: string): Promise<string[]> => {
+  const asked = Bun.spawn(["dns-sd", "-G", "v4", name], {
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  const timer = setTimeout(() => asked.kill(), 4000);
+  const said = await new Response(asked.stdout).text();
+  clearTimeout(timer);
+  return said
+    .split("\n")
+    .filter((line) => line.includes(" Add "))
+    .map((line) => line.trim().split(SPACES).at(-2) ?? "");
+};
+
+/** Leg 9: who on the LAN answers `cawco.local` here, asked by the system, by Bun and by node. */
+const lanMdnsLeg = async (kit: Kit): Promise<void> => {
+  const own = await answerable();
+  const from = [...own.lan].find((address) => !address.includes(":"));
+  const version = (
+    await Bun.$`sw_vers -productVersion`.nothrow().text()
+  ).trim();
+  if (!from) {
+    kit.check("9: this Mac has a LAN IPv4 address", false, "none");
+    return;
+  }
+  const mine = new Set(own.holder.keys());
+  const others = (addresses: string[]) =>
+    addresses.filter((address) => address && !mine.has(address));
+  const system = await systemAnswers("cawco.local");
+  kit.check(
+    `9: macOS ${version}: the system's responder hears cawco.local from another device on the LAN`,
+    others(system).length > 0,
+    `answers: ${system.join(", ") || "none"}`
+  );
+  for (const runtime of [process.execPath, Bun.which("node")]) {
+    if (!runtime) {
+      kit.note("9: no node on PATH: its question is not asked");
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one 5353 socket at a time
+    const asked = await askedBy(runtime, "cawco.local", from);
+    kit.check(
+      `9: ${runtime.includes("node") ? "node" : "bun"}'s dgram socket on ${from} hears mDNS from another device on the LAN`,
+      asked.refused === "" && others(asked.heard).length > 0,
+      `refused: ${asked.refused || "nothing"}; heard from ${asked.heard.join(", ") || "nobody"}`
+    );
   }
 };
 
@@ -1007,6 +1127,8 @@ const spec: Spec = {
     if (platform() === "darwin") {
       // 8. The wildcard port 80 as a user, the first hub's.
       await macLeg(kit, first, fleet.env.CAWCO_DASHBOARD_PORT);
+      // 9. Who answers on the LAN here: the system, Bun, node.
+      await lanMdnsLeg(kit);
       return;
     }
     // 5. A device on the LAN hears the LAN's addresses alone, and typing the name opens the dashboard.
