@@ -4,16 +4,11 @@
  * - **delegates**: use CawCo's delegates instead of each harness's own
  *   subagents — kept on the denied-tools baseline
  *   (`fleet_denied_tools`): Claude Code's `Task`/`Agent`,
- *   OpenCode's `subagent`.
- * - **todos**: use CawCo's to-dos instead of each harness's own list — its
- *   own flag (`supervisor_config.cawco_todos`), never names in the baseline.
- *   On, every session is denied at spawn Claude Code's
- *   `TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet` (OpenCode 2.0 has no list),
- *   and each one's built-in plan mode (Claude Code's
- *   `EnterPlanMode`/`ExitPlanMode`, OpenCode's `plan` agent), which the
- *   session's spec replaces; a delegate
- *   type can turn it on for its own sessions (`cawcoTodos`). pi has neither,
- *   so neither choice changes it.
+ *   OpenCode's `subagent`. pi has none, so the choice does not change it.
+ *
+ * A session's plan is no choice: it is CawCo's list on every harness, and
+ * each harness's own list and plan mode are denied to every session (core
+ * `OWN_LIST_DENIED`), never stored in the baseline.
  * - **upstream**: whether sessions may post to repositories that are not
  *   their project's (core upstream-guard.ts), where a project sets nothing
  *   (`upstream_settings`, upstream.ts): `off`, `ask` (each post waits for
@@ -55,9 +50,15 @@ export interface FleetChoices {
   deniedTools: string[];
   /** When someone last set the choices here (ms epoch); null while nobody has, so a new project's setup asks. */
   setAt: number | null;
-  /** Use CawCo's to-dos instead of each harness's own list and plan mode. */
-  todos: boolean;
-  /** What each choice denies, per harness. */
+  /**
+   * Always true: every session keeps CawCo's list. Still sent, with
+   * `tools.todos` (what every session is denied for it), because the apps on
+   * TestFlight 20261015 through 20261018 decode both as required (hub
+   * openapi.ts's wire check); they go in the change that expires those
+   * builds.
+   */
+  todos: true;
+  /** What each denies, per harness. */
   tools: Record<"delegates" | "todos", Record<string, readonly string[]>>;
   /** Sessions may post to other people's repositories; null while nobody has answered. */
   upstream: UpstreamPosts | null;
@@ -65,8 +66,6 @@ export interface FleetChoices {
 
 /** What the fleet's choices are stored as. */
 export interface StoredChoices {
-  /** "CawCo's to-dos". */
-  cawcoTodos: boolean;
   /** When a PUT last set them; null while nobody has. */
   choicesSetAt: Date | null;
   /** The baseline. */
@@ -94,14 +93,13 @@ const delegatesChange = (on: boolean): DeniedToolsChange => {
 
 export const readChoices = ({
   deniedTools,
-  cawcoTodos,
   choicesSetAt,
   upstreamPosts,
 }: StoredChoices): FleetChoices => ({
   delegates: NATIVE_TOOLS.subagents.claude.every((name) =>
     deniedTools.includes(name)
   ),
-  todos: cawcoTodos,
+  todos: true,
   setAt: choicesSetAt?.getTime() ?? null,
   deniedTools,
   tools: { delegates: NATIVE_TOOLS.subagents, todos: NATIVE_TOOLS.todos },
@@ -114,12 +112,8 @@ export interface FleetChoicesStore {
   /** Keeps the upstream answer; every machine hears it with its next beat (upstream.ts). */
   setUpstream: (posts: UpstreamPosts) => void;
   synced: () => void;
-  /** Stores the choices named, the baseline's change with them, in one transaction. */
-  write: (choices: {
-    denied?: DeniedToolsChange;
-    cawcoTodos?: boolean;
-    choicesSetAt: Date;
-  }) => void;
+  /** Stores the baseline's change and when it was set, in one transaction. */
+  write: (choices: { denied: DeniedToolsChange; choicesSetAt: Date }) => void;
 }
 
 /**
@@ -127,24 +121,21 @@ export interface FleetChoicesStore {
  * (`synced`), so the next session on each starts under them and each
  * machine's own harness config follows at once: the PUT, and a new
  * project's setup page when the person sends it (setup.ts). The upstream
- * answer is kept on its own: naming only it leaves the other two unasked
- * where nobody set them.
+ * answer is kept on its own: naming only it leaves the delegates choice
+ * unasked where nobody set it.
  */
 export const setFleetChoices = (
   store: FleetChoicesStore,
-  choices: { delegates?: boolean; todos?: boolean; upstream?: UpstreamPosts }
+  choices: { delegates?: boolean; upstream?: UpstreamPosts }
 ): FleetChoices => {
   if (choices.upstream !== undefined) {
     store.setUpstream(choices.upstream);
   }
-  if (choices.delegates === undefined && choices.todos === undefined) {
+  if (choices.delegates === undefined) {
     return readChoices(store.read());
   }
   store.write({
-    ...(choices.delegates === undefined
-      ? {}
-      : { denied: delegatesChange(choices.delegates) }),
-    ...(choices.todos === undefined ? {} : { cawcoTodos: choices.todos }),
+    denied: delegatesChange(choices.delegates),
     choicesSetAt: new Date(),
   });
   store.synced();
@@ -160,7 +151,6 @@ export const fleetChoicesRoutes = (store: FleetChoicesStore) =>
       {
         body: t.Object({
           delegates: t.Optional(t.Boolean()),
-          todos: t.Optional(t.Boolean()),
           upstream: t.Optional(UPSTREAM_POSTS_SCHEMA),
         }),
       },

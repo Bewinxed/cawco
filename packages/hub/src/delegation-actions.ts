@@ -121,16 +121,12 @@ export async function fetchDelegateTypes(
 const namedTypeSettings = (
   type: DelegateType | undefined,
   projectId: string | undefined
-): Pick<
-  SpawnPayload,
-  "cawcoTodos" | "delegateType" | "denyTools" | "role"
-> => ({
+): Pick<SpawnPayload, "delegateType" | "denyTools" | "role"> => ({
   denyTools: type?.denyTools,
   // Kept on the row, so the type's word reads the same for every session.
   ...(type
     ? { delegateType: { name: type.name, ...(projectId ? { projectId } : {}) } }
     : {}),
-  ...(type?.cawcoTodos ? { cawcoTodos: true } : {}),
   ...(type?.role ? { role: type.role } : {}),
 });
 

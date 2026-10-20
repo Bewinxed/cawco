@@ -578,7 +578,6 @@ import { accountForecasts, carrySequence } from "./forecast";
 import { createForgePosts } from "./forge-posts";
 import { gateRoutes, projectCawEdits } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
-import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
 import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
@@ -9362,35 +9361,6 @@ export const createServer = (
     );
   };
 
-  /** A session's list as its harness keeps it, asked of its machine (harness-plans.ts). */
-  const planControl: HarnessPlanDeps["control"] = async (
-    machineId,
-    method,
-    args,
-    harness
-  ) => {
-    const response = await callAgent(
-      machineId,
-      method,
-      args,
-      READ_TIMEOUT_MS,
-      harness
-    );
-    switch (response.kind) {
-      case "unanswered":
-        throw new Error(
-          `The plan could not be read: ${unansweredFault(machineId, response)}`
-        );
-      case "answered":
-        if (response.value.error) {
-          throw new Error(String(response.value.error));
-        }
-        return response.value.result;
-      default:
-        throw unreachable(response);
-    }
-  };
-
   /**
    * A row from before `cwd` was pinned to the launch directory may hold a
    * folder its CLI wandered into. Its conversation names where it started —
@@ -11150,7 +11120,6 @@ export const createServer = (
       const config = db.getSupervisorConfig();
       return {
         deniedTools: config.deniedTools,
-        cawcoTodos: config.cawcoTodos,
         choicesSetAt: config.choicesSetAt,
         upstreamPosts: db.upstreamPosts(),
       };
@@ -19670,12 +19639,12 @@ export const createServer = (
   const projectTypes = makeProjectDelegateTypes(delegateTypes);
   /**
    * What the delegate type on a row adds to a session brought back (a wake,
-   * a restore): the same denials and "CawCo's to-dos" its first spawn had,
-   * read from the type as it stands now.
+   * a restore): the same denials its first spawn had, read from the type as
+   * it stands now.
    */
   function typeSettingsOf(
     row: Pick<InstanceRow, "delegateType" | "delegateTypeProject">
-  ): Pick<SpawnPayload, "cawcoTodos" | "delegateType" | "denyTools"> {
+  ): Pick<SpawnPayload, "delegateType" | "denyTools"> {
     if (!row.delegateType) {
       return {};
     }
@@ -19691,7 +19660,6 @@ export const createServer = (
           : {}),
       },
       ...(type?.denyTools?.length ? { denyTools: type.denyTools } : {}),
-      ...(type?.cawcoTodos ? { cawcoTodos: true } : {}),
     };
   }
   /**
@@ -21291,12 +21259,7 @@ export const createServer = (
   // live to the session's followers (plans.ts).
   const plans = createPlans({
     db,
-    lifetime,
     tasks,
-    online: (machineId) => Boolean(registry.agent(machineId)),
-    control: planControl,
-    typeTodos: (projectId, type) =>
-      projectTypes.resolveTypeFor(projectId, type)?.cawcoTodos === true,
     publish: (instanceId, message) =>
       streams.planToFollowers(instanceId, message),
   });
@@ -31098,10 +31061,6 @@ export const createServer = (
               // dashboards do; a turn's end is answered above.
               if (kind === "frame" && message.instanceId && !internal) {
                 ruleEngine.observe(
-                  message.instanceId,
-                  (message.payload as FramePayload & { kind: "frame" }).message
-                );
-                plans.observe(
                   message.instanceId,
                   (message.payload as FramePayload & { kind: "frame" }).message
                 );

@@ -939,7 +939,6 @@ export interface DbShape {
   /** The fleet's choices row (`supervisor_config`) and its tool denials. */
   readonly getSupervisorConfig: () => {
     deniedTools: string[];
-    cawcoTodos: boolean;
     choicesSetAt: Date | null;
     updatedAt: Date;
   };
@@ -1696,7 +1695,6 @@ export interface DbShape {
       add: readonly string[];
       remove: readonly string[];
     };
-    cawcoTodos?: boolean;
     /** When the fleet's choices were set through `PUT /api/fleet/choices`. */
     choicesSetAt?: Date | null;
   }) => void;
@@ -6168,7 +6166,6 @@ const make = async (path: string): Promise<DbShape> => {
           .map(hookOf),
         // Always sent: a machine spawns nothing until it has heard it.
         deniedTools: deniedToolNames(),
-        cawcoTodos: supervisorChoices().cawcoTodos,
       };
     },
     putMcpServer: ({ name, config, enabled, projectId, platforms, shared }) => {
@@ -9428,7 +9425,6 @@ const make = async (path: string): Promise<DbShape> => {
       const row = supervisorChoices();
       return {
         deniedTools: deniedToolNames(),
-        cawcoTodos: row.cawcoTodos,
         choicesSetAt: row.choicesSetAt,
         updatedAt: row.updatedAt,
       };
@@ -9438,9 +9434,6 @@ const make = async (path: string): Promise<DbShape> => {
       db.transaction((tx) => {
         tx.update(supervisorConfig)
           .set({
-            ...(config.cawcoTodos === undefined
-              ? {}
-              : { cawcoTodos: config.cawcoTodos }),
             ...(config.choicesSetAt === undefined
               ? {}
               : { choicesSetAt: config.choicesSetAt }),

@@ -258,12 +258,6 @@ export interface SpawnPayload {
    * on a session nobody delegated (a mainline session may always delegate).
    */
   canDelegate?: boolean;
-  /**
-   * "CawCo's to-dos" for this session whatever the fleet says: its delegate
-   * type's `cawcoTodos`. The agent adds {@link cawcoTodosDenied} when this or
-   * the fleet's choice is on.
-   */
-  cawcoTodos?: boolean;
   cwd: string;
   /**
    * The delegate type it was started as: its name, and the project whose

@@ -621,7 +621,7 @@ export interface CawDeps {
   >;
   /** Ends a session (the lead, when Caw moves harness or model). */
   readonly end: (instanceId: string) => void;
-  /** Whether the fleet's two choices were ever set (the setup page asks for them until they are). */
+  /** Whether the fleet's delegates choice was ever set (the setup page asks for it until it is). */
   readonly fleetChoicesSet: () => boolean;
   /** The project's folder changed under its tasks (stages.md, a task file). */
   readonly folderChanged: (projectId: string) => void;

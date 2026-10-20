@@ -634,7 +634,6 @@ await Bun.write(
 // this probe does not run.
 const { syncFleetConfig } = await import("../packages/agent/src/fleet");
 await syncFleetConfig({
-  cawcoTodos: false,
   deniedTools: [],
   hooks: [],
   hubOnlyMarketplaces: [],

@@ -37,7 +37,7 @@ export const filingPrompt = (then: "compacted" | "continued"): string =>
   [
     `Before this conversation is ${then === "compacted" ? "compacted" : "continued in a new session"}, file everything still open into your records, so it outlives the ${then === "compacted" ? "compaction" : "move"}: the hub lists those records word for word ${then === "compacted" ? "after it" : "in the new session's opening"}. This turn does only that.`,
     "",
-    "- Every open step, every promise made, and every question still waiting on an answer: your plan, `todo_write` with `steps`, one line each, pending or in_progress (where CawCo's to-dos are off for you, your harness's own task list).",
+    "- Every open step, every promise made, and every question still waiting on an answer: your plan, `todo_write` with `steps`, one line each, pending or in_progress.",
     "- Every decision taken and its reason, every constraint the person set (in their words), every approach ruled out and why, and the files, paths, commands, ids and links to read again: your spec, `todo_write` with `spec`, the whole document.",
     "- In a project: work that must outlive this conversation, `task_create`; your task's to-dos, `todo_write` with `task`; a lasting fact for the project's later sessions (a convention, a decision), `memory_note`.",
     "",

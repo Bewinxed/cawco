@@ -7,14 +7,13 @@
  *   (https://agentclientprotocol.com/protocol/v1/agent-plan: `content`,
  *   `status` "pending, in_progress, and completed", `priority`), plus our `id`
  *   and `depth` for nesting by indent. ACP requires `priority`; it is kept
- *   here only where the source has one (OpenCode's todos, a `todo_write`
- *   that names it). Every write replaces the list whole, as ACP has it: "the
+ *   here only where the `todo_write` that wrote it names one. Every write replaces the list whole, as ACP has it: "the
  *   Client must replace the current plan completely".
  * - **The spec** is the session's own document, written through CawCo
  *   (`todo_write`'s `spec`) on any harness and replaced whole: what `grill`
  *   interviews to and `to-tasks` turns into tasks with edges and checks
- *   (§5.4). It stands in for each harness's built-in plan mode, which
- *   "CawCo's to-dos" denies along with the native lists (`NATIVE_TOOLS`).
+ *   (§5.4). It stands in for each harness's built-in plan mode, which every
+ *   session is denied along with its own list (`OWN_LIST_DENIED`).
  *
  * Live, a session's followers hear it as AG-UI's state events
  * (https://docs.ag-ui.com/spec/1.0/basic): a snapshot when they subscribe or
@@ -38,7 +37,7 @@ export interface PlanStep {
   content: string;
   /** Nesting by indent: 0 for a top-level step, one more than its parent's for a sub-step. */
   depth: number;
-  /** Stable within one list: the writer's, the ledger's file number, or the step's place. */
+  /** Stable within one list: the writer's, or the step's place. */
   id: string;
   priority?: PlanStepPriority;
   status: PlanStepStatus;
@@ -74,14 +73,15 @@ export interface TaskTodo {
  */
 export interface SessionPlan {
   /**
-   * Where the steps come from: CawCo's own list (`todo_write`'s session
-   * scope), when the session's native to-do tools are denied ("CawCo's
-   * to-dos" on, and always on pi, which has none); else the harness's own
-   * list (Claude Code's task ledger, OpenCode's todos).
+   * Always `cawco`: the steps are CawCo's list on every harness. Still sent
+   * because the apps on TestFlight 20261015 through 20261018 decode it as
+   * required (hub openapi.ts's wire check); it goes in the change that
+   * expires those builds.
    */
-  source: "cawco" | "harness";
+  source: "cawco";
   /** The session's spec, once it has written one. */
   spec?: PlanSpec;
+  /** CawCo's list: `todo_write`'s session scope, on every harness. */
   steps: PlanStep[];
   /** On a task attempt: the task. */
   taskId?: string;

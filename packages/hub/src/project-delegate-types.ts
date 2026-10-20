@@ -21,9 +21,8 @@
  * description (what a calling model routes by) unless the front matter gives
  * one. A type is a preset: there is no persona text. `deny` (Claude's tool
  * names) and `can_delegate` mean what a fleet type's `denyTools` and
- * `canDelegate` mean, `cawco_todos: true` turns "CawCo's to-dos" on for its
- * sessions as a fleet type's `cawcoTodos` does, and `account:` names the
- * account its sessions prefer (an account id).
+ * `canDelegate` mean, and `account:` names the account its sessions prefer
+ * (an account id).
  *
  * Files are the truth: the catalog is read from the folder each time it is
  * asked for, synchronously (a handful of small files), so the work-item path
@@ -108,7 +107,6 @@ const KNOWN_FIELDS = new Set([
   "lands",
   "deny",
   "can_delegate",
-  "cawco_todos",
   "account",
   "description",
 ]);
@@ -182,7 +180,7 @@ const projectFieldsOf = (
   | string
   | Pick<
       CatalogType,
-      "budget" | "lands" | "connections" | "role" | "canDelegate" | "cawcoTodos"
+      "budget" | "lands" | "connections" | "role" | "canDelegate"
     > => {
   const role = fields.scalar("role");
   if (!oneOf(role, TYPE_ROLES)) {
@@ -195,10 +193,6 @@ const projectFieldsOf = (
   const canDelegate = fields.scalar("can_delegate");
   if (!oneOf(canDelegate, ["true", "false"])) {
     return `can_delegate is true or false, not “${canDelegate}”`;
-  }
-  const cawcoTodos = fields.scalar("cawco_todos");
-  if (!oneOf(cawcoTodos, ["true", "false"])) {
-    return `cawco_todos is true or false, not “${cawcoTodos}”`;
   }
   const budgetLine = fields.line("budget");
   const budget = budgetLine ? budgetOf(budgetLine) : undefined;
@@ -214,7 +208,6 @@ const projectFieldsOf = (
     ...(budget && Object.keys(budget).length > 0 ? { budget } : {}),
     ...(lands ? { lands: lands as DelegateLands } : {}),
     ...(canDelegate ? { canDelegate: canDelegate === "true" } : {}),
-    ...(cawcoTodos === "true" ? { cawcoTodos: true } : {}),
   };
 };
 
@@ -287,7 +280,7 @@ const parseTypeFile = (
 
 /** The words naming the fields a type file had no use for. */
 const ignoredWords = (ignored: string[]): string =>
-  `ignored ${ignored.map((key) => `“${key}”`).join(", ")}: a type reads harness, model, effort, skills, mcp, role, budget, lands, deny, can_delegate, cawco_todos, account and description`;
+  `ignored ${ignored.map((key) => `“${key}”`).join(", ")}: a type reads harness, model, effort, skills, mcp, role, budget, lands, deny, can_delegate, account and description`;
 
 /**
  * Why `content` written at `path` (`delegates/<name>.md`) would not make a

@@ -73,7 +73,6 @@ import {
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_CONTEXT_USAGE,
   CONTROL_FORGET_ACCOUNT,
-  CONTROL_GET_TODOS,
   CONTROL_JOIN_ACCOUNT_LOGIN,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
@@ -147,7 +146,7 @@ import {
   removeMcpConfigsOf,
   sweepMcpConfigs,
 } from "../claude-mcp-config";
-import { carrySessions, readTaskList, transcriptIn } from "../claude-sessions";
+import { carrySessions, transcriptIn } from "../claude-sessions";
 import {
   claudeHostVersion,
   claudeToStart,
@@ -2000,7 +1999,7 @@ class ClaudeSession implements HarnessSession {
         // All three layers union: every layer can only add, never remove
         // another layer's entries. Resolved once through `sessionFleetDenials()`
         // so this path and `convergeDeniedTools` read the same value; it adds
-        // the to-do and plan-mode set when "CawCo's to-dos" is on for it.
+        // the harness's own list and plan mode, which every session is denied.
         disallowedTools: [
           ...new Set([
             ...((options as { disallowedTools?: string[] } | undefined)
@@ -4147,7 +4146,7 @@ export class ClaudeHarness implements Harness {
       subtype: SESSION_DIR_READ,
       account_id: place.accountId,
     } as NeutralMessage);
-    const fleetDenyList = await sessionFleetDenials(spec.cawcoTodos);
+    const fleetDenyList = await sessionFleetDenials();
     // What this process has scheduled is known from its start: nothing until
     // a turn of it ends and says otherwise. Kept, so an agent that attaches
     // to it later knows too, though no turn of it has ended since (one its
@@ -4619,11 +4618,6 @@ export class ClaudeHarness implements Harness {
           )
         );
         return { forgotten: true };
-      case CONTROL_GET_TODOS:
-        return readTaskList(
-          { accountId: (args[2] as string | null | undefined) ?? null },
-          args[0] as string
-        );
       case CONTROL_PROBE_ACCOUNT:
         return probeAccount(args[0] as string);
       case CONTROL_READ_HOME_LOGIN:

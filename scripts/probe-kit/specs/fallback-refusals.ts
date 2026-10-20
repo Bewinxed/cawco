@@ -10,8 +10,9 @@
  *     harness's spawn reads) refuse with the parse error and the file's
  *     path. Main answered the compiled four names.
  * (b) A machine with no sidecar yet: the spawn's denials wait for the first
- *     fleet sync and answer the list it wrote. Main answered the compiled
- *     four names at once.
+ *     fleet sync and answer the list it wrote, with the harness's own list
+ *     and plan mode every session is denied (core `OWN_LIST_DENIED`). Main
+ *     answered the compiled four names at once.
  * (c) A fleet marketplace whose ssh URL git refuses: the sync runs
  *     `claude plugin marketplace add` once, with the row's URL and no git
  *     config of its own, and the row's detail is git's own refusal. Main ran
@@ -25,7 +26,7 @@
  */
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { clockWords } from "../../../packages/core/src/index";
+import { clockWords, OWN_LIST_DENIED } from "../../../packages/core/src/index";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
 import {
   type PlacementInput,
@@ -84,7 +85,7 @@ const spec: Spec = {
       corrupt,
       `import { sessionFleetDenials } from ${JSON.stringify(join(AGENT, "denied-tools.ts"))};
 try {
-  console.log(JSON.stringify({ denied: await sessionFleetDenials(false) }));
+  console.log(JSON.stringify({ denied: await sessionFleetDenials() }));
 } catch (error) {
   console.log(JSON.stringify({ refused: error instanceof Error ? error.message : String(error) }));
 }`
@@ -104,7 +105,7 @@ try {
       `import { writeFile } from "node:fs/promises";
 import * as denials from ${JSON.stringify(join(AGENT, "denied-tools.ts"))};
 const started = performance.now();
-const asked = denials.sessionFleetDenials(false);
+const asked = denials.sessionFleetDenials();
 setTimeout(async () => {
   await writeFile(${JSON.stringify(projectClaudeDir(fresh, SIDECAR))}, JSON.stringify({ deniedTools: ["WebSearch"] }));
   // What the fleet sync calls once it has written the sidecar (absent on main).
@@ -118,9 +119,10 @@ try {
 }`
     );
     check(
-      "(b) a machine that never synced waits for its first sync and answers the list it wrote",
+      "(b) a machine that never synced waits for its first sync and answers the list it wrote, with the own-list set",
       "denied" in b &&
-        JSON.stringify(b.denied) === JSON.stringify(["WebSearch"]) &&
+        JSON.stringify(b.denied) ===
+          JSON.stringify(["WebSearch", ...OWN_LIST_DENIED]) &&
         (b.waitedMs ?? 0) >= 250,
       JSON.stringify(b)
     );
@@ -146,7 +148,6 @@ exit 128
       cloning,
       `import { syncFleetConfig } from ${JSON.stringify(join(AGENT, "fleet.ts"))};
 const report = await syncFleetConfig({
-  cawcoTodos: false,
   deniedTools: [],
   hooks: [],
   hubOnlyMarketplaces: [],

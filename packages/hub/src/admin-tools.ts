@@ -292,12 +292,6 @@ export function adminTools() {
           .describe(
             "Whether delegates of this type may themselves delegate. Default false."
           ),
-        cawcoTodos: z
-          .boolean()
-          .optional()
-          .describe(
-            "True: its sessions use CawCo's to-dos and spec, never their harness's own list or plan mode."
-          ),
         connections: z
           .array(z.string())
           .optional()
@@ -315,7 +309,6 @@ export function adminTools() {
         skills,
         denyTools,
         canDelegate,
-        cawcoTodos,
         connections,
       }) => {
         if (action === "list") {
@@ -348,7 +341,6 @@ export function adminTools() {
               skills,
               denyTools,
               canDelegate,
-              cawcoTodos: cawcoTodos || undefined,
               connections,
             }),
           })

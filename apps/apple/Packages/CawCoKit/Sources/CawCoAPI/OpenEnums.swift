@@ -4449,47 +4449,6 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/NeutralTaskPriority`.
-    public enum NeutralTaskPriority: OpenEnum {
-        case high
-        case low
-        case medium
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "high": self = .high
-            case "low": self = .low
-            case "medium": self = .medium
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .high: "high"
-            case .low: "low"
-            case .medium: "medium"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.high, .low, .medium]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
     /// `#/components/schemas/OnCap`.
     public enum OnCap: OpenEnum {
         case both
@@ -5006,25 +4965,28 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/PlanSnapshotSource`.
-    public enum PlanSnapshotSource: OpenEnum {
-        case cawco
-        case harness
+    /// `#/components/schemas/PlanStepPriority`.
+    public enum PlanStepPriority: OpenEnum {
+        case high
+        case low
+        case medium
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
         public init(rawValue: String) {
             switch rawValue {
-            case "cawco": self = .cawco
-            case "harness": self = .harness
+            case "high": self = .high
+            case "low": self = .low
+            case "medium": self = .medium
             default: self = .unrecognized(rawValue)
             }
         }
 
         public var rawValue: String {
             switch self {
-            case .cawco: "cawco"
-            case .harness: "harness"
+            case .high: "high"
+            case .low: "low"
+            case .medium: "medium"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -5033,7 +4995,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.cawco, .harness]
+        public static let allCases: [Self] = [.high, .low, .medium]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

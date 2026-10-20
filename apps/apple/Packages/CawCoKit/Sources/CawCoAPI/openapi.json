@@ -805,9 +805,6 @@
                   "canDelegate": {
                     "type": "boolean"
                   },
-                  "cawcoTodos": {
-                    "type": "boolean"
-                  },
                   "account": {
                     "type": "string"
                   },
@@ -959,9 +956,6 @@
                 "type": "object",
                 "properties": {
                   "delegates": {
-                    "type": "boolean"
-                  },
-                  "todos": {
                     "type": "boolean"
                   },
                   "upstream": {
@@ -32211,10 +32205,6 @@
             "description": "Whether this session may spawn sessions of its own (`delegate` and\n`start_session`). Set by the `delegate` tool's `can_delegate` param; a\ndelegate that is not granted it is a leaf: claude and pi never give it the\nspawning tools, and the hub refuses any spawn naming it as parent. Absent\non a session nobody delegated (a mainline session may always delegate).",
             "type": "boolean"
           },
-          "cawcoTodos": {
-            "description": "\"CawCo's to-dos\" for this session whatever the fleet says: its delegate\ntype's `cawcoTodos`. The agent adds {@link cawcoTodosDenied} when this or\nthe fleet's choice is on.",
-            "type": "boolean"
-          },
           "cwd": {
             "type": "string"
           },
@@ -32992,50 +32982,6 @@
           "unreadable-credentials"
         ]
       },
-      "NeutralTask": {
-        "description": "One task of a session's plan, as every harness can express. Claude Code keeps\na ledger file per task; opencode has a native `todo` list; pi has neither.\nThe dashboard renders this one shape regardless of which answered.",
-        "type": "object",
-        "properties": {
-          "blockedBy": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "blocks": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "description": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          },
-          "priority": {
-            "$ref": "#/components/schemas/NeutralTaskPriority",
-            "description": "opencode's todos carry one; Claude Code's ledger does not."
-          },
-          "status": {
-            "$ref": "#/components/schemas/PlanStepStatus"
-          },
-          "subject": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "blockedBy",
-          "blocks",
-          "id",
-          "status",
-          "subject"
-        ]
-      },
       "ToolStatus": {
         "type": "object",
         "properties": {
@@ -33346,7 +33292,8 @@
             "type": "boolean"
           },
           "cawcoTodos": {
-            "description": "\"CawCo's to-dos\" for this type's sessions, whatever the fleet says\n(§5.2, \"changeable later in Settings and per delegate type\"). Denied\nlists only union, so a type can turn the choice on, never off: absent or\nfalse leaves it to the fleet. A project type file says `cawco_todos: true`.",
+            "description": "Always true: every session keeps CawCo's list, whatever its type. Still\nsent because the apps on TestFlight 20261015 through 20261018 read it\n(hub openapi.ts's wire check) and send it back on a save, which the hub\nignores; nothing reads it here. It goes in the change that expires those\nbuilds.",
+            "const": true,
             "type": "boolean"
           },
           "connections": {
@@ -33544,8 +33491,11 @@
             ]
           },
           "todos": {
-            "description": "Use CawCo's to-dos instead of each harness's own list and plan mode.",
-            "type": "boolean"
+            "description": "Always true: every session keeps CawCo's list. Still sent, with\n`tools.todos` (what every session is denied for it), because the apps on\nTestFlight 20261015 through 20261018 decode both as required (hub\nopenapi.ts's wire check); they go in the change that expires those\nbuilds.",
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           },
           "tools": {
             "type": "object",
@@ -33561,7 +33511,7 @@
               "delegates",
               "todos"
             ],
-            "description": "What each choice denies, per harness."
+            "description": "What each denies, per harness."
           },
           "upstream": {
             "$ref": "#/components/schemas/FleetChoicesUpstream",
@@ -39475,14 +39425,18 @@
         "type": "object",
         "properties": {
           "source": {
-            "$ref": "#/components/schemas/PlanSnapshotSource",
-            "description": "Where the steps come from: CawCo's own list (`todo_write`'s session\nscope), when the session's native to-do tools are denied (\"CawCo's\nto-dos\" on, and always on pi, which has none); else the harness's own\nlist (Claude Code's task ledger, OpenCode's todos)."
+            "description": "Always `cawco`: the steps are CawCo's list on every harness. Still sent\nbecause the apps on TestFlight 20261015 through 20261018 decode it as\nrequired (hub openapi.ts's wire check); it goes in the change that\nexpires those builds.",
+            "type": "string",
+            "enum": [
+              "cawco"
+            ]
           },
           "spec": {
             "$ref": "#/components/schemas/PlanSpec",
             "description": "The session's spec, once it has written one."
           },
           "steps": {
+            "description": "CawCo's list: `todo_write`'s session scope, on every harness.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PlanStep"
@@ -39534,11 +39488,11 @@
             "type": "number"
           },
           "id": {
-            "description": "Stable within one list: the writer's, the ledger's file number, or the step's place.",
+            "description": "Stable within one list: the writer's, or the step's place.",
             "type": "string"
           },
           "priority": {
-            "$ref": "#/components/schemas/NeutralTaskPriority"
+            "$ref": "#/components/schemas/PlanStepPriority"
           },
           "status": {
             "$ref": "#/components/schemas/PlanStepStatus"
@@ -52486,14 +52440,18 @@
             ]
           },
           "source": {
-            "$ref": "#/components/schemas/PlanSnapshotSource",
-            "description": "Where the steps come from: CawCo's own list (`todo_write`'s session\nscope), when the session's native to-do tools are denied (\"CawCo's\nto-dos\" on, and always on pi, which has none); else the harness's own\nlist (Claude Code's task ledger, OpenCode's todos)."
+            "description": "Always `cawco`: the steps are CawCo's list on every harness. Still sent\nbecause the apps on TestFlight 20261015 through 20261018 decode it as\nrequired (hub openapi.ts's wire check); it goes in the change that\nexpires those builds.",
+            "type": "string",
+            "enum": [
+              "cawco"
+            ]
           },
           "spec": {
             "$ref": "#/components/schemas/PlanSpec",
             "description": "The session's spec, once it has written one."
           },
           "steps": {
+            "description": "CawCo's list: `todo_write`'s session scope, on every harness.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PlanStep"
@@ -58297,14 +58255,6 @@
           "lfs"
         ]
       },
-      "NeutralTaskPriority": {
-        "type": "string",
-        "enum": [
-          "high",
-          "low",
-          "medium"
-        ]
-      },
       "PageAnchorScheme": {
         "type": "string",
         "enum": [
@@ -58362,11 +58312,12 @@
           "comment"
         ]
       },
-      "PlanSnapshotSource": {
+      "PlanStepPriority": {
         "type": "string",
         "enum": [
-          "cawco",
-          "harness"
+          "high",
+          "low",
+          "medium"
         ]
       },
       "PreviewFrameState": {

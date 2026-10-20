@@ -71,7 +71,6 @@ export const FRAMES: Record<string, string[]> = {
     "McpServerStatus",
     "SupportedCommands",
     "AuthState",
-    "NeutralTask",
   ],
   "tools.ts": ["ToolStatus"],
 };

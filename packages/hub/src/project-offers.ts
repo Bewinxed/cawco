@@ -8,8 +8,7 @@
  * - `delegates`: it started a delegate;
  * - `days`: it has been going for more than a day, so it was active on two;
  * - `plan`: its plan still has {@link PLAN_ITEMS} or more open steps as a turn
- *   ends, read as its plan panel reads it (plans.ts): CawCo's own steps where
- *   "CawCo's to-dos" is on, else its harness's list;
+ *   ends, read as its plan panel reads it (plans.ts): CawCo's list;
  * - `repo`: its folder belongs to no project, and another session is working
  *   in the same repository (normalised `origin`, projects.ts) on any machine.
  *
@@ -78,8 +77,8 @@ export interface ProjectOffersDeps {
   moved: (machineIds: string[]) => void;
   online: (machineId: string) => boolean;
   /**
-   * The session's plan steps as its plan panel reads them (plans.ts): CawCo's
-   * own list where "CawCo's to-dos" is on for it, else its harness's.
+   * The session's plan steps as its plan panel reads them (plans.ts):
+   * CawCo's list.
    */
   planSteps: (instanceId: string) => Promise<PlanStep[]>;
   /** To every dashboard: the session's standing offer, or null once answered. */

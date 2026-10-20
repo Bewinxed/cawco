@@ -14,25 +14,14 @@
  * the way Claude Code sets a transcript aside (`.superseded-<ms>`).
  */
 import type { Dirent } from "node:fs";
-import {
-  cp,
-  lstat,
-  mkdir,
-  readdir,
-  readFile,
-  rename,
-  rm,
-  rmdir,
-} from "node:fs/promises";
+import { cp, lstat, mkdir, readdir, rename, rm, rmdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import type { NeutralTask } from "@cawco/core";
 import {
   claudeConfigDirs,
   projectSlug,
   SESSION_ENTRIES,
   type SessionEntry,
   sessionConfigDir,
-  sessionTasksDir,
 } from "@cawco/core/paths";
 
 /** Claude Code names every session by a UUID; a name that starts with one is that session's. */
@@ -396,67 +385,4 @@ export const transcriptIn = async (
     }
   }
   return null;
-};
-
-const statusOf = (raw: unknown): NeutralTask["status"] =>
-  raw === "in_progress" || raw === "completed" ? raw : "pending";
-
-const strings = (raw: unknown): string[] =>
-  Array.isArray(raw)
-    ? raw.filter((one): one is string => typeof one === "string")
-    : [];
-
-/** One file of the task list, if it is one. */
-const taskOf = (id: string, text: string): NeutralTask | undefined => {
-  try {
-    const raw = JSON.parse(text) as Record<string, unknown>;
-    if (typeof raw.subject !== "string") {
-      return;
-    }
-    return {
-      id,
-      subject: raw.subject,
-      status: statusOf(raw.status),
-      blocks: strings(raw.blocks),
-      blockedBy: strings(raw.blockedBy),
-      ...(typeof raw.description === "string" && raw.description.trim()
-        ? { description: raw.description }
-        : {}),
-      ...(typeof raw.owner === "string" ? { owner: raw.owner } : {}),
-    };
-  } catch {
-    // A half-written file is not a reason to lose the list.
-  }
-};
-
-/**
- * A session's task list, as Claude Code's task tools keep it: one JSON file
- * per task in `tasks/<session>/` of the session's own dir, in id order.
- * None when it never made one.
- */
-export const readTaskList = async (
-  row: { accountId?: string | null },
-  sessionId: string
-): Promise<NeutralTask[]> => {
-  if (!(
-    TOKEN.test(sessionId) &&
-    (!row.accountId || TOKEN.test(row.accountId))
-  )) {
-    throw new Error(`not a session and account to read: ${sessionId}`);
-  }
-  const dir = sessionTasksDir(row, sessionId);
-  const files = (await entriesOf(dir)).filter(
-    (entry) => entry.isFile() && entry.name.endsWith(".json")
-  );
-  const tasks = await Promise.all(
-    files.map(async (file) =>
-      taskOf(
-        file.name.slice(0, -".json".length),
-        await readFile(join(dir, file.name), "utf8").catch(() => "")
-      )
-    )
-  );
-  return tasks
-    .filter((task): task is NeutralTask => task !== undefined)
-    .sort((a, b) => (Number(a.id) || 0) - (Number(b.id) || 0));
 };

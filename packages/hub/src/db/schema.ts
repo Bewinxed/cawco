@@ -1166,7 +1166,7 @@ export const instances = sqliteTable("instances", {
   role: text("role").$type<import("@cawco/core").SessionRole>(),
   /**
    * The delegate type its spawn named (a fleet type, or its project's), so
-   * what the type says — "CawCo's to-dos" — reads the same for every session
+   * what the type says (its denied tools) reads the same for every session
    * however it started. Null: none.
    */
   delegateType: text("delegate_type"),
@@ -2864,17 +2864,9 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
   /** Always `'supervisor'`: the hub has one, and a table with a key says so cheaply. */
   id: text("id").primaryKey(),
   /**
-   * The fleet's "CawCo's to-dos" choice (§5.2): every session is denied its
-   * harness's own list and plan mode, added at spawn (`cawcoTodosDenied`),
-   * never stored in `fleet_denied_tools`.
-   */
-  cawcoTodos: integer("cawco_todos", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  /**
-   * When the fleet's two choices (delegates, CawCo's to-dos) were last set
-   * through `PUT /api/fleet/choices`; null while nobody has set them, which
-   * is when a new project's setup page asks for them.
+   * When the fleet's delegates choice was last set through
+   * `PUT /api/fleet/choices`; null while nobody has set it, which is when a
+   * new project's setup page asks for it.
    */
   choicesSetAt: timestamp("choices_set_at"),
   /**

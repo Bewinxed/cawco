@@ -110,7 +110,6 @@ typeOverrides:
     MoveStage: OpenEnums.MoveStage
     MoveStep: OpenEnums.MoveStep
     NeutralStatus: OpenEnums.NeutralStatus
-    NeutralTaskPriority: OpenEnums.NeutralTaskPriority
     OnCap: OpenEnums.OnCap
     PageAnchorFramework: OpenEnums.PageAnchorFramework
     PageAnchorScheme: OpenEnums.PageAnchorScheme
@@ -123,7 +122,7 @@ typeOverrides:
     PinKind: OpenEnums.PinKind
     PlaceKind: OpenEnums.PlaceKind
     PlacementStrategy: OpenEnums.PlacementStrategy
-    PlanSnapshotSource: OpenEnums.PlanSnapshotSource
+    PlanStepPriority: OpenEnums.PlanStepPriority
     PlanStepStatus: OpenEnums.PlanStepStatus
     PostApiInstancesByIdAccount200State: OpenEnums.PostApiInstancesByIdAccount200State
     PreviewFrameState: OpenEnums.PreviewFrameState

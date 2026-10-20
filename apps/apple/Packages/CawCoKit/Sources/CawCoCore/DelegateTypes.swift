@@ -101,7 +101,7 @@ public final class FleetDelegateTypes {
         // Every field the row holds goes back, so a save keeps what this editor does not show (its account, its connections).
         let payload = Payload(description: type.description, harness: harness, model: type.model,
                               effort: type.effort.flatMap { Payload.EffortPayload(rawValue: $0.rawValue) }, skills: type.skills,
-                              denyTools: type.denyTools, canDelegate: type.canDelegate, cawcoTodos: type.cawcoTodos,
+                              denyTools: type.denyTools, canDelegate: type.canDelegate,
                               account: type.account, connections: type.connections)
         let output = try await client.putApiDelegateTypesByName(path: .init(name: type.name), body: .json(payload))
         guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }

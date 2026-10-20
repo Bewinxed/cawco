@@ -878,9 +878,9 @@ export interface WorkItemDeps {
     task: { projectId: string | null; taskId?: string }
   ) => ItemPlacement;
   /**
-   * The session's plan steps as its plan panel reads them (plans.ts): CawCo's
-   * own list where "CawCo's to-dos" is on for it, else its harness's (Claude
-   * Code's ledger, OpenCode's todos). The plan ↔ to-do link reads these.
+   * The session's plan steps as its plan panel reads them (plans.ts):
+   * CawCo's list, `todo_write`'s session scope. The plan ↔ to-do link reads
+   * these.
    */
   readonly planSteps: (instanceId: string) => Promise<PlanStep[]>;
   readonly publish: (item: WorkItemSummary) => void;
@@ -1106,7 +1106,6 @@ const sessionOf = (
         },
       }
     : {}),
-  ...(type?.cawcoTodos ? { cawcoTodos: true } : {}),
   // Its type's toolset (§5.3), kept on its row: a web-facing type's
   // sessions never see posting or admin tools. The hub's own role for it
   // (a curator run's) stands over the type's.
