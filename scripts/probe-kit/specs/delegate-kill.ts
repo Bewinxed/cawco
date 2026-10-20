@@ -25,12 +25,27 @@
  * i3. A handoff from its parent wakes it, and it runs the three again.
  * s1. Stopped with stop_delegate: within 8 s none of the three is alive.
  *
+ * The hub's landing push is never cut by a delegate's interrupt (on macOS a
+ * sweep cannot tell the push's Apple binaries from the delegate's, and
+ * waits for it: agent boundary.ts `besideAgentCommands`). A second delegate
+ * commits a file, leaves a `sleep 600.031` double-forked into a session of
+ * its own, and finishes. The hub's repository holds every push in a
+ * `pre-receive` hook for {@link PUSH_HELD_S} s; once the hook runs, its
+ * parent interrupts the delegate:
+ *
+ * l1. 10 s after interrupt_delegate, every process whose command names the
+ *     push's ref (its executor, its git) is still alive.
+ * l2. The item lands: done, the hub's main holds its commit, and the push
+ *     was never cut off.
+ * l3. Within 15 s of the landing, the `sleep` it left is not alive.
+ *
  *   bun scripts/probe-kit/run.ts delegate-kill
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { commandLines } from "../../../packages/core/src/process-identity";
 import {
+  isAlive,
   listedPid,
   signal as signalPid,
 } from "../../../packages/core/src/signal";
@@ -46,6 +61,14 @@ type Command = keyof typeof TOOLS;
 const CMD = /PROBE-CMD (\d+) (interrupt|stop|handoff) (\S+)(?: (.*))?/g;
 const BRIEF = "PROBE-KILL-D";
 const WAKE = "PROBE-WAKE-D";
+const LAND_BRIEF = "PROBE-LAND-L";
+const FINISH = "mcp__cawco__finish_item";
+/** What the landing delegate leaves running: its `sleep`'s argument. */
+const LANDED_LEFT = "600.031";
+/** How long the hub's repository holds a push before it takes it. */
+const PUSH_HELD_S = 30;
+/** The ref the landing pushes, as the push's command names it (hub landing.ts `attempt`). */
+const PUSHED_REF = "HEAD:refs/heads/main";
 
 /** Each leg's markers: the background, foreground and escaped `sleep`'s argument. */
 const markers = (leg: "1" | "2") => ({
@@ -54,7 +77,7 @@ const markers = (leg: "1" | "2") => ({
   escaped: `600.0${leg}3`,
 });
 type Markers = ReturnType<typeof markers>;
-const MARKER = /\bsleep (600\.0[12][123])\b/;
+const MARKER = /\bsleep (600\.0[123][123])\b/;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({
@@ -136,6 +159,39 @@ const delegateReply = (request: Seen): Reply => {
     : legReply("1", markers("1"));
 };
 
+/** How far the landing delegate is: its commit, its finish_item found, then called. */
+const landing: Record<"committed" | "finished" | "searched", boolean> = {
+  committed: false,
+  finished: false,
+  searched: false,
+};
+
+/** The landing delegate: commits, leaves its `sleep`, then finishes. */
+const landReply = (request: Seen): Reply => {
+  if (!landing.committed) {
+    landing.committed = true;
+    return useTool("Bash", {
+      command: `printf 'L\\n' > l.txt && git add l.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate commit L' && ( perl -MPOSIX -e 'fork and exit; POSIX::setsid(); exec @ARGV' sleep ${LANDED_LEFT} & )`,
+      description: "Commit, and leave a server running",
+    });
+  }
+  if (!landing.finished && request.toolNames.includes(FINISH)) {
+    landing.finished = true;
+    return useTool(FINISH, {
+      headline: "Committed L.",
+      summary: "Committed L.\n\nNot run: none.",
+    });
+  }
+  if (
+    !(landing.finished || landing.searched) &&
+    request.toolNames.includes("ToolSearch")
+  ) {
+    landing.searched = true;
+    return useTool("ToolSearch", { query: `select:${FINISH}`, max_results: 1 });
+  }
+  return text("done");
+};
+
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
@@ -143,8 +199,22 @@ const respond = (request: Seen): Reply => {
   if (request.all.includes("PROBE-CMD")) {
     return parentReply(request);
   }
+  if (request.all.includes(LAND_BRIEF)) {
+    return landReply(request);
+  }
   return request.all.includes(BRIEF) ? delegateReply(request) : text("ok");
 };
+
+/** The processes whose command names the landing's pushed ref: its executor and its git, inside the boundary and out. */
+const pushes = async (): Promise<number[]> =>
+  (await commandLines())
+    .filter(
+      ({ pid, command }) =>
+        pid !== process.pid &&
+        command.includes(PUSHED_REF) &&
+        !command.includes("pre-receive")
+    )
+    .map(({ pid }) => pid);
 
 /** Each marker alive now, by its marker, with its pids. */
 const alive = async (): Promise<Map<string, number[]>> => {
@@ -299,6 +369,99 @@ const run = async (kit: Kit) => {
       "s1: within 8 s of stop_delegate none of its three commands is alive",
       of(afterStop, legTwo).length === 0,
       `${Math.round((Date.now() - stoppedAt) / 1000)} s after: ${said(afterStop)}`
+    );
+
+    // l1: the hub's repository holds every push in its pre-receive hook.
+    const landDir = join(fleet.sandbox, "land");
+    await mkdir(landDir, { recursive: true });
+    const bare = join(fleet.sandbox, "hub", "git", `${project.id}.git`);
+    await mkdir(join(bare, "hooks"), { recursive: true });
+    const hook = join(bare, "hooks", "pre-receive");
+    const pushStarted = join(landDir, "push-started");
+    const pushTaken = join(landDir, "push-taken");
+    await writeFile(
+      hook,
+      `#!/bin/sh\n: > '${pushStarted}'\nsleep ${PUSH_HELD_S}\n: > '${pushTaken}'\n`
+    );
+    await chmod(hook, 0o755);
+    const there = (path: string) =>
+      readFile(path, "utf8").then(
+        () => true,
+        () => false
+      );
+    const landed = await fleet.api<{
+      instanceId: string | null;
+      workItemId: string | null;
+    }>("/api/work-items", {
+      parentInstanceId: parent,
+      title: "Land",
+      prompt: `${LAND_BRIEF}: commit, then finish.`,
+      harness: "claude",
+      model: "claude-haiku-4-5",
+      cwd: repo,
+    });
+    const lId = landed.instanceId as string;
+    await until(
+      "its landing's push held by the hub's repository",
+      () => there(pushStarted),
+      Boolean,
+      600_000
+    );
+    const pushing = await pushes();
+    const leftAtInterrupt = (await alive()).get(LANDED_LEFT) ?? [];
+    const landInterruptedAt = Date.now();
+    await command("interrupt", lId);
+    await Bun.sleep(Math.max(0, landInterruptedAt + 10_000 - Date.now()));
+    const cut = pushing.filter((pid) => !isAlive(listedPid(pid)));
+    const takenEarly = await there(pushTaken);
+    check(
+      "l1: 10 s after interrupt_delegate, every process of its landing's push is still alive",
+      pushing.length > 0 && cut.length === 0 && !takenEarly,
+      `the push: ${pushing.join(", ") || "never found"}; gone: ${cut.join(", ") || "none"}; the hub had ${takenEarly ? "already" : "not yet"} taken it; what it left running at the interrupt: ${leftAtInterrupt.join(", ") || "nothing"}`
+    );
+
+    // l2
+    const landRow = await until(
+      "its item ended",
+      () =>
+        fleet.query<{
+          state: string;
+          error: string | null;
+          result: string | null;
+        }>(
+          "SELECT state, error, result FROM work_items WHERE id = ?",
+          landed.workItemId as string
+        )[0],
+      (row) => ["done", "failed", "cancelled"].includes(row?.state ?? ""),
+      600_000
+    );
+    const landEndedAt = Date.now();
+    const main = (
+      await Bun.$`git log --format=%s main`.cwd(bare).nothrow().quiet().text()
+    )
+      .trim()
+      .split("\n");
+    const words = `${landRow?.error ?? ""}\n${landRow?.result ?? ""}`;
+    check(
+      "l2: the item lands: done, the hub's main holds its commit, and its push was never cut off",
+      landRow?.state === "done" &&
+        main.includes("Delegate commit L") &&
+        !words.includes("cut off") &&
+        (await there(pushTaken)),
+      `${landRow?.state} ${words.slice(0, 1500)}\nmain: ${main.join(" | ")}`
+    );
+
+    // l3
+    const afterLanding = await until(
+      `${LANDED_LEFT} not alive`,
+      alive,
+      (found) => !found.has(LANDED_LEFT),
+      15_000
+    ).catch(() => alive());
+    check(
+      "l3: within 15 s of the landing, what it left running is not alive",
+      leftAtInterrupt.length > 0 && !afterLanding.has(LANDED_LEFT),
+      `at the interrupt: ${leftAtInterrupt.join(", ") || "nothing"}; ${Math.round((Date.now() - landEndedAt) / 1000)} s after the landing: ${said(afterLanding)}`
     );
   } finally {
     // What a failing leg left: the probe's own markers, and nothing else.

@@ -15,7 +15,7 @@ import {
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
-import { ensureBoundary } from "./boundary";
+import { asAgentCommand, ensureBoundary } from "./boundary";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
@@ -355,9 +355,32 @@ export async function runWorkflowCommand(
     throw new Error("runCommand's workspace must be { id, path }.");
   }
   const [file, args] = await commandLine(cmd, workspace, named);
-  // Cancelled while it waited its turn or its boundary: it never starts.
+  // Never a session's: in a workspace, no session's sweep runs beside it
+  // (boundary.ts `asAgentCommand`).
+  return isWorkspaceRef(workspace)
+    ? asAgentCommand(workspace.id, () =>
+        runCommand(file, args, cwd, cmd, timeoutMs, named)
+      )
+    : runCommand(file, args, cwd, cmd, timeoutMs, named);
+}
+
+/** {@link runWorkflowCommand}'s run of `file` with `args` in `cwd`, `cmd` as the hub named it. */
+const runCommand = (
+  file: string,
+  args: string[],
+  cwd: string,
+  cmd: string,
+  timeoutMs: unknown,
+  named: CommandRun | undefined
+): Promise<CommandResult> => {
+  // Cancelled while it waited its turn, its boundary or a sweep: it never starts.
   if (named && cancelledEarly.delete(named.id)) {
-    return { cancelled: true, exitCode: 143, stdout: "", stderr: "" };
+    return Promise.resolve({
+      cancelled: true,
+      exitCode: 143,
+      stdout: "",
+      stderr: "",
+    });
   }
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, {
@@ -473,4 +496,4 @@ export async function runWorkflowCommand(
       });
     });
   });
-}
+};
