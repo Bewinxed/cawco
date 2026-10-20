@@ -16,8 +16,10 @@
  * 4. No embed shows the canvas's working chrome, each is as tall as what it
  *    draws, and no console error.
  * 5. The page's own capture, window by window as CawCo shows it
- *    (decision-embeds.ts `capturePage`), paints every embed. The four
- *    captures and their manifest go to .probe/decision-pages/.
+ *    (decision-embeds.ts `capturePage`), paints every embed, and is files a
+ *    delegate can hand over: RGB, each within the hub's 1 MiB (a tall page
+ *    in numbered sections cut between its cards), read back pixel for
+ *    pixel. The captures and their manifest go to .probe/decision-pages/.
  *
  *   bun scripts/probe-kit/run.ts web pairing-page
  */
@@ -26,8 +28,10 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
+import { FOLDER_FILE_LIMIT } from "../../../../packages/hub/src/project-folder";
 import {
   blankEmbeds,
+  captureFaults,
   capturePage,
   EMBED_FRAME,
   type EmbedPaint,
@@ -67,7 +71,11 @@ const spec: Spec = {
     mkdirSync(PAGES, { recursive: true });
     const captures: {
       embeds: EmbedPaint[];
-      file: string;
+      files: {
+        bytes: number;
+        file: string;
+        rows: { from: number; to: number };
+      }[];
       height: number;
       theme: string;
       viewport: { height: number; width: number };
@@ -152,7 +160,14 @@ const spec: Spec = {
 
           const viewport = page.viewportSize() ?? { width: 0, height: 0 };
           const file = join(PAGES, `pairing-${viewport.width}-${theme}.png`);
-          const paints = await capturePage(page, file);
+          const capture = await capturePage(page, file);
+          const { paints } = capture;
+          const captured = captureFaults(capture);
+          kit.check(
+            `${leg}: the page's capture is files a delegate can hand over, each RGB and at most ${FOLDER_FILE_LIMIT / 1024 / 1024} MiB, its whole picture pixel for pixel (${capture.files.map((f) => `${relative(ROOT, f.path)} ${(f.bytes / 1024).toFixed(0)} KiB, rows ${f.rows.from}–${f.rows.to}`).join(", ")}; ${capture.picture.width}×${capture.picture.height})`,
+            capture.files.length > 0 && captured.length === 0,
+            captured.join("\n    ")
+          );
           const blank = blankEmbeds(paints);
           kit.check(
             `${leg}: the page's own capture paints every embed (${relative(ROOT, file)}; ${paints.map((one) => `“${one.embed}” ${Math.round(one.flat * 1000) / 10}%`).join(", ")} its commonest colour)`,
@@ -160,7 +175,11 @@ const spec: Spec = {
             blank.join("\n    ")
           );
           captures.push({
-            file: relative(PAGES, file),
+            files: capture.files.map((f) => ({
+              bytes: f.bytes,
+              file: relative(PAGES, f.path),
+              rows: f.rows,
+            })),
             theme,
             viewport,
             height: await page.evaluate(
@@ -202,7 +221,7 @@ const spec: Spec = {
       )}\n`
     );
     kit.note(
-      `captures: ${captures.map((one) => relative(ROOT, join(PAGES, one.file))).join(", ")}, ${relative(ROOT, join(PAGES, "manifest.json"))}`
+      `captures: ${captures.flatMap((one) => one.files.map((f) => relative(ROOT, join(PAGES, f.file)))).join(", ")}, ${relative(ROOT, join(PAGES, "manifest.json"))}`
     );
   },
 };
