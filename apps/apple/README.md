@@ -82,7 +82,9 @@ The simulator ("CawCo slot 1" or "2") is cloned and booted for the command,
 which starts once its Accessibility answers `axe describe-ui` (180 s at most:
 axe gives a cold iOS 27 simulator's Accessibility a fixed 5 s), and is
 then shut down and deleted when it ends, or when its caller dies (SIGKILL
-too). It is a clone of a template ("CawCo template <device type> <runtime
+too). One whose slot's keeper was killed (a stopped delegate's workspace ends
+it with SIGKILL) is deleted by the next mac-slot.sh to start, build or
+simulator, once no live keeper holds that slot. It is a clone of a template ("CawCo template <device type> <runtime
 build> v<n>", kept shut down) that has already booted once and sat through
 iOS's first-boot work (Photos, widgets, asset downloads) until its data
 folder stopped changing, so the clone starts without that work. The first

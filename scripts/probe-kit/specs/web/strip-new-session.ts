@@ -319,9 +319,12 @@ async function popoverPage(
   kit: Kit,
   base: string,
   source: string,
-  theme: "light" | "dark"
+  theme: "light" | "dark",
+  /** Run on the page before it loads (a socket watcher). */
+  before?: (page: Page) => void
 ): Promise<Page> {
   const page = await kit.page("desk", { theme });
+  before?.(page);
   await page.addInitScript(
     (tree) => {
       localStorage.setItem("cawco-workspace", tree);
@@ -360,63 +363,96 @@ const misfits = (page: Page, w: number | null) =>
           const name = (el: Element) =>
             `${el.tagName.toLowerCase()}${el.getAttribute("data-slot") ? `[${el.getAttribute("data-slot")}]` : ""}.${[...el.classList].slice(0, 2).join(".")} "${(el.textContent ?? "").trim().slice(0, 24)}"`;
           const shown = (el: Element) => el.getClientRects().length > 0;
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() => {
-              const all = [...pop.querySelectorAll<HTMLElement>("*")].filter(
-                shown
-              );
-              const rows = all
-                .filter((el) => {
-                  const style = getComputedStyle(el);
-                  if (
-                    el.matches('[data-slot="chips"]') ||
-                    !style.display.includes("flex") ||
-                    style.flexWrap !== "wrap" ||
-                    style.flexDirection.startsWith("column")
-                  ) {
-                    return false;
-                  }
-                  // On one line every item's box overlaps the first's
-                  // height band, however the row aligns them.
-                  const boxes = [...el.children]
-                    .filter(shown)
-                    .map((child) => child.getBoundingClientRect());
-                  const [first] = boxes;
-                  return boxes.some(
-                    (box) =>
-                      first !== undefined &&
-                      (box.top >= first.bottom - 1 ||
-                        box.bottom <= first.top + 1)
-                  );
-                })
-                .map(name);
-              const words = all
-                .filter((el) => el.matches("button, [role='radio']"))
-                .filter((el) => {
-                  const range = document.createRange();
-                  range.selectNodeContents(el);
-                  const lines = new Set(
-                    [...range.getClientRects()]
-                      .filter((r) => r.width > 0 && r.height > 0)
-                      .map((r) => Math.round(r.bottom))
-                  );
-                  return (
-                    getComputedStyle(el).whiteSpace === "normal" &&
-                    lines.size > 1 &&
-                    el.getBoundingClientRect().height > 48
-                  );
-                })
-                .map(name);
-              const cut = all
-                .filter(
-                  (el) =>
-                    getComputedStyle(el).textOverflow === "ellipsis" &&
-                    el.scrollWidth > el.clientWidth + 0.5
-                )
-                .map(name);
-              resolve({ rows, words, cut });
-            })
-          );
+          const read = (unsteady: boolean) => {
+            const all = [...pop.querySelectorAll<HTMLElement>("*")].filter(
+              shown
+            );
+            const rows = all
+              .filter((el) => {
+                const style = getComputedStyle(el);
+                if (
+                  el.matches('[data-slot="chips"]') ||
+                  !style.display.includes("flex") ||
+                  style.flexWrap !== "wrap" ||
+                  style.flexDirection.startsWith("column")
+                ) {
+                  return false;
+                }
+                // On one line every item's box overlaps the first's
+                // height band, however the row aligns them.
+                const boxes = [...el.children]
+                  .filter(shown)
+                  .map((child) => child.getBoundingClientRect());
+                const [first] = boxes;
+                return boxes.some(
+                  (box) =>
+                    first !== undefined &&
+                    (box.top >= first.bottom - 1 || box.bottom <= first.top + 1)
+                );
+              })
+              .map(name);
+            const words = all
+              .filter((el) => el.matches("button, [role='radio']"))
+              .filter((el) => {
+                const range = document.createRange();
+                range.selectNodeContents(el);
+                const lines = new Set(
+                  [...range.getClientRects()]
+                    .filter((r) => r.width > 0 && r.height > 0)
+                    .map((r) => Math.round(r.bottom))
+                );
+                return (
+                  getComputedStyle(el).whiteSpace === "normal" &&
+                  lines.size > 1 &&
+                  el.getBoundingClientRect().height > 48
+                );
+              })
+              .map(name);
+            const cut = all
+              .filter(
+                (el) =>
+                  getComputedStyle(el).textOverflow === "ellipsis" &&
+                  el.scrollWidth > el.clientWidth + 0.5
+              )
+              .map(name);
+            resolve({
+              rows: unsteady ? ["the layout never held still", ...rows] : rows,
+              words,
+              cut,
+            });
+          };
+          // Read once the fonts have loaded and the layout holds still: every
+          // box the same across two frames, the popover at the width asked
+          // (its size tween, morph(), landed). A layout that never settles
+          // says so rather than being read mid-move.
+          const boxes = () =>
+            [pop, ...pop.querySelectorAll("*")]
+              .map((el) => {
+                const box = el.getBoundingClientRect();
+                return `${box.x},${box.y},${box.width},${box.height}`;
+              })
+              .join("|");
+          let last = "";
+          let frame = 0;
+          const wait = () => {
+            const now = boxes();
+            const sized =
+              width === null ||
+              Math.abs(pop.getBoundingClientRect().width - width) < 0.5;
+            if (now === last && sized) {
+              read(false);
+              return;
+            }
+            frame += 1;
+            if (frame > 600) {
+              read(true);
+              return;
+            }
+            last = now;
+            requestAnimationFrame(wait);
+          };
+          // biome-ignore lint/complexity/noVoid: the read resolves the promise
+          void document.fonts.ready.then(() => requestAnimationFrame(wait));
         }
       ),
     { selector: POPOVER, width: w }
@@ -1166,6 +1202,103 @@ async function reviveLeg(
   await page.close();
 }
 
+/** The spawns a page sends on its socket, as sent: whether each names a permission mode. */
+function watchSpawns(page: Page): { mode: string | null }[] {
+  const spawns: { mode: string | null }[] = [];
+  page.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => {
+      if (typeof payload !== "string" || !payload.includes('"spawn"')) {
+        return;
+      }
+      try {
+        const frame = JSON.parse(payload) as {
+          verb?: string;
+          payload?: { permissionMode?: string };
+        };
+        if (frame.verb === "spawn") {
+          spawns.push({ mode: frame.payload?.permissionMode ?? null });
+        }
+      } catch {
+        // Not one frame of JSON: not a spawn.
+      }
+    });
+  });
+  return spawns;
+}
+
+/**
+ * Ctrl+Enter in the form with no mode picked, once its folder check has
+ * landed (so no press is held for it): the key starts exactly when Start
+ * would, so no spawn goes out on the socket. With a mode picked, the same
+ * key sends one, on that mode: the watcher sees what the page sends.
+ */
+async function keyStartLeg(kit: Kit, base: string, source: string) {
+  let spawns: { mode: string | null }[] = [];
+  const page = await popoverPage(kit, base, source, "light", (one) => {
+    spawns = watchSpawns(one);
+  });
+  await plusOf(page).click();
+  await page.waitForSelector(POPOVER, { state: "visible", timeout: 15_000 });
+  // The folder read: a press then goes or not at once, never held for it.
+  await page.waitForFunction(
+    (card) => {
+      const line = document.querySelector(`${card} .reading`);
+      return line !== null && line.textContent?.trim() !== "Reading…";
+    },
+    POPOVER,
+    { timeout: 30_000 }
+  );
+  await settle(page, 300);
+  const before = await readForm(page, POPOVER);
+  await page.keyboard.press("Control+Enter");
+  await page.waitForTimeout(5000);
+  const unpicked = {
+    startDisabled: before.startDisabled,
+    chip: before.chip,
+    spawns: spawns.length,
+    open: (await readForm(page, POPOVER)).open,
+    said: await page
+      .locator(`${POPOVER} .reading`)
+      .textContent()
+      .then((text) => text?.trim() ?? ""),
+  };
+  await page
+    .locator(POPOVER)
+    .locator('[aria-label^="Permission mode"]')
+    .first()
+    .click();
+  await page
+    .locator(`[data-perm="${MODE}"]`)
+    .filter({ visible: true })
+    .first()
+    .click();
+  await page.waitForFunction(
+    ({ card, start }) =>
+      document.querySelector<HTMLButtonElement>(`${card} ${start}`)
+        ?.disabled === false,
+    { card: POPOVER, start: START },
+    { timeout: 30_000 }
+  );
+  await page.locator(POPOVER).locator('[aria-label="First prompt"]').click();
+  await page.keyboard.press("Control+Enter");
+  const picked = await until(
+    "a spawn on the socket",
+    () => spawns.at(unpicked.spawns),
+    Boolean,
+    30_000
+  ).catch(() => undefined);
+  kit.check(
+    "1440 (fine): Ctrl+Enter with no mode picked sends no spawn (the key waits as Start does); with one picked it sends one on it",
+    unpicked.startDisabled === true &&
+      unpicked.chip === "Choose a mode" &&
+      unpicked.spawns === 0 &&
+      unpicked.open &&
+      picked?.mode === MODE,
+    JSON.stringify({ unpicked, picked })
+  );
+  await page.close();
+}
+
 const respond = (): Reply => ({ everyMs: 20, words: ["Ready."] });
 
 const spec: Spec = {
@@ -1196,6 +1329,7 @@ const spec: Spec = {
       await runLeg(kit, base, source, each, rows, row);
     }
     await dialogLeg(kit, base);
+    await keyStartLeg(kit, base, source);
     await spawnLinkLeg(kit, base, row(source)?.machine_id ?? "");
     await sizeLeg(kit, base, source);
     await depthLeg(kit, base, source, "light");

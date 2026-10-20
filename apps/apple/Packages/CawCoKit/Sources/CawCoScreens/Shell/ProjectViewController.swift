@@ -75,8 +75,6 @@ final class ProjectViewController: ObservedViewController {
     private var places: UIButton!
     private var startButton: UIButton!
     private var spinOff: UIButton!
-    private let spinOffProblem = TaskSheetController.problemLabel()
-    private var spinning = false
     /// The hub's refusal of a move, on the card it refused, until that card moves again.
     private var refusals: [String: (reason: String, stage: String)] = [:]
     private var more: UIButton!
@@ -284,18 +282,18 @@ final class ProjectViewController: ObservedViewController {
         who.spacing = Space.space1
         who.alignment = .leading
 
-        // New session opens its popover from the button's end; Spin off starts one at once.
-        // With no checkout yet, New session is the New Session form, which asks for the machine and folder.
+        // New session and Spin off open the New Session form on the project:
+        // at its primary checkout, or, with none yet, asking for the machine
+        // and folder. Spin off opens it as a spin-off. Harness, model and mode
+        // are the form's own, and Start waits for a mode.
         startButton = KitButton.make("New session", variant: .action) { [weak self] in
             guard let self else { return }
-            guard project?.primaryPlace != nil else {
-                context.startSession(nil, nil, projectId)
-                return
-            }
-            KitPopover.present(ProjectStartController { [weak self] prompt in try await self?.start(scratch: false, prompt: prompt) },
-                               from: startButton, in: self, align: .end)
+            context.startSession(nil, nil, projectId, false)
         }
-        spinOff = KitButton.make("Spin off", variant: .outline) { [weak self] in self?.spinOffNow() }
+        spinOff = KitButton.make("Spin off", variant: .outline) { [weak self] in
+            guard let self else { return }
+            context.startSession(nil, nil, projectId, true)
+        }
         more = KitButton.make("", glyph: .more, variant: .ghost) {}
         more.showsMenuAsPrimaryAction = true
         more.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in done(self?.moreMenu() ?? []) }])
@@ -307,10 +305,6 @@ final class ProjectViewController: ObservedViewController {
             button.setContentHuggingPriority(.required, for: .horizontal)
             button.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
-        // A refused Spin off says why under the row it was asked from.
-        let actions = UIStackView(arrangedSubviews: [acts, spinOffProblem])
-        actions.axis = .vertical
-        actions.spacing = Space.space1
         // Caw on the head's leading edge (ProjectHead.svelte): his panel on a tap.
         seat.addAction(UIAction { [weak self] _ in self?.openCaw() }, for: .touchUpInside)
         let identity = UIStackView(arrangedSubviews: [seat, who])
@@ -322,7 +316,7 @@ final class ProjectViewController: ObservedViewController {
         cawWords.isHidden = true
         who.addArrangedSubview(cawWords)
         head.addArrangedSubview(identity)
-        head.addArrangedSubview(actions)
+        head.addArrangedSubview(acts)
         head.isLayoutMarginsRelativeArrangement = true
     }
 
@@ -435,7 +429,7 @@ final class ProjectViewController: ObservedViewController {
         decisionsPane.openCaw = { [weak self] from, words in self?.openCaw(from: from, ask: words) }
         decisionsPane.newSession = { [weak self] in
             guard let self else { return }
-            context.startSession(nil, nil, projectId)
+            context.startSession(nil, nil, projectId, false)
         }
         decisionsPane.openTask = { [weak self] id in self?.open(id) }
         decisionsPane.taskOf = { [weak self] id in
@@ -546,7 +540,7 @@ final class ProjectViewController: ObservedViewController {
         let checkouts = project.places.filter { $0.kind != .hub }.count
         places.isHidden = checkouts <= 1
         places.configuration?.attributedTitle = AttributedString("· \(checkouts) places", attributes: TypeScale.typeLabel.container(color: Palette.inkMuted))
-        // Spin off starts in the primary checkout at once: only a project with one offers it.
+        // Spin off runs in the primary checkout: only a project with one offers it.
         spinOff.isHidden = primary == nil
         more.accessibilityLabel = "More for \(project.name)"
         showCaw()
@@ -1104,44 +1098,6 @@ final class ProjectViewController: ObservedViewController {
             return (host, each.path)
         })
         KitPopover.present(list, from: places, in: self, align: .start)
-    }
-
-    /// "New session" and "Spin off": a session here on what the new-session
-    /// form was last set to, opened in its tab as soon as the hub has it.
-    /// The hub's refusal is thrown to whoever asked, which says it where it was asked.
-    private func start(scratch: Bool, prompt: String?) async throws {
-        guard let project, let home = project.primaryPlace else { return }
-        let id = try await context.hub.spawnSession(machineId: home.machineId, cwd: home.path, projectId: project.id, prompt: prompt, scratch: scratch)
-        context.openSession(id)
-    }
-
-    /// Spin off, at once: the button says it is starting, and a refusal stands
-    /// under the head's action row until the next Spin off answers.
-    private func spinOffNow() {
-        guard !spinning else { return }
-        spinning = true
-        KitButton.setTitle("Spinning off…", of: spinOff, variant: .outline, height: .standard)
-        spinOff.configuration?.showsActivityIndicator = true
-        spinOff.isEnabled = false
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            var refused: String?
-            do {
-                try await start(scratch: true, prompt: nil)
-            } catch {
-                refused = error.localizedDescription
-            }
-            spinning = false
-            KitButton.setTitle("Spin off", of: spinOff, variant: .outline, height: .standard)
-            spinOff.configuration?.showsActivityIndicator = false
-            spinOff.isEnabled = true
-            spinOffProblem.text = refused
-            Motion.easeDrawer.animator(Motion.durMorph) {
-                self.spinOffProblem.isHidden = refused == nil
-                self.view.layoutIfNeeded()
-            }.startAnimation()
-            if let refused { UIAccessibility.post(notification: .announcement, argument: refused) }
-        }
     }
 
     #if DEBUG

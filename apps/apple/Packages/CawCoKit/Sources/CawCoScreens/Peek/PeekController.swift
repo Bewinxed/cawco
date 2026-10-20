@@ -24,8 +24,10 @@ enum Peek {
         presenter.traitCollection.userInterfaceIdiom != .mac || (presenter.view.window?.bounds.width ?? 0) <= 640
     }
 
-    /// `open`: dives into the session, as its row does.
-    static func show(_ target: PeekTarget, hub: HubConnection, home: HomeModel, from presenter: UIViewController, open: @escaping (String) -> Void) {
+    /// `open`: dives into the session, as its row does. `fork`: a Fork whose
+    /// source carries no mode, which the New Session sheet asks for once the peek is away.
+    static func show(_ target: PeekTarget, hub: HubConnection, home: HomeModel, from presenter: UIViewController,
+                     open: @escaping (String) -> Void, fork: @escaping (ForkSource) -> Void) {
         let bottom = rises(in: presenter)
         let pane = PeekController(hub: hub, home: home, target: target, fills: bottom ? .sheet : .side)
         let sheet = HouseSheetController(pane, style: bottom ? .card : .side, scroller: pane.scroller)
@@ -35,6 +37,10 @@ enum Peek {
             open(id)
         }
         pane.onClose = { [weak sheet] in sheet?.dismiss(animated: true) }
+        pane.onForkUnchosen = { [weak sheet] source in
+            guard let sheet else { return fork(source) }
+            sheet.dismiss(animated: true) { fork(source) }
+        }
         presenter.present(sheet, animated: true)
     }
 }
@@ -65,6 +71,8 @@ final class PeekController: ObservedViewController {
     /// Puts the peek away and opens a session: the one peeked, or its fork.
     var onDive: (String) -> Void = { _ in }
     var onClose: () -> Void = {}
+    /// A Fork whose source carries no mode to start on: the New Session sheet asks for one.
+    var onForkUnchosen: (ForkSource) -> Void = { _ in }
 
     private func onOpen() { onDive(target.viewId) }
 
@@ -294,9 +302,11 @@ final class PeekController: ObservedViewController {
         var first: [UIMenuElement] = [
             UIAction(title: "Open", image: Glyph.external.image) { [weak self] _ in self?.onOpen() },
             SessionMenus.pending("Fork", running: "Forking…", image: Glyph.fork.image, verb: .fork, id: id, status: status,
-                                 host: host, hub: hub, enabled: forkable != nil && machine != nil) { [hub] in
+                                 host: host, hub: hub, enabled: forkable != nil && machine != nil) { [weak self, hub] in
                 guard let session, let key = forkable else { return nil }
-                return try await hub.fork(machineId: session.machineId, cwd: session.cwd, sessionKey: key, harness: session.harness)
+                return try await hub.fork(ForkSource(machineId: session.machineId, cwd: session.cwd, sessionKey: key, harness: session.harness)) { source in
+                    host.whenClosed { self?.onForkUnchosen(source) }
+                }
             } then: { [weak self] forked in
                 if let forked { self?.onDive(forked) }
             },

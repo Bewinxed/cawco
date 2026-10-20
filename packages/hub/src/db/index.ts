@@ -2300,6 +2300,7 @@ export interface DbShape {
         | "held"
         | "acceptedAt"
         | "delivery"
+        | "envelope"
       >
     >
   ) => SentMessageRow | undefined;
@@ -2350,6 +2351,7 @@ export interface DbShape {
         | "head"
         | "heldAt"
         | "holding"
+        | "recutUntold"
         | "state"
         | "tmp"
       >

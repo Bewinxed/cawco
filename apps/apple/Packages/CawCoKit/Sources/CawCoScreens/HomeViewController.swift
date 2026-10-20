@@ -566,7 +566,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// Glance → peek → dive: the tail of this one, without leaving home.
     private func peek(_ content: SessionRowView.Content) {
         guard let id = content.peek else { return }
-        Peek.show(PeekTarget(viewId: id, title: content.title), hub: hub, home: home, from: self, open: onOpen)
+        Peek.show(PeekTarget(viewId: id, title: content.title), hub: hub, home: home, from: self, open: onOpen) { [weak self] source in
+            self?.sessionMenus?()?.fork(source)
+        }
     }
 
     // MARK: What a row draws

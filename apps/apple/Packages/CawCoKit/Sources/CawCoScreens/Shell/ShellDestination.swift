@@ -100,8 +100,8 @@ public struct ShellContext {
     let openConfigure: (String) -> Void
     /// Asks to forget a project (the confirm, then the hub).
     let forgetProject: (_ project: ProjectRow, _ from: UIView?) -> Void
-    /// Starts a session, at a place when one is given (the New Session flow).
-    let startSession: (_ machineId: String?, _ cwd: String?, _ projectId: String?) -> Void
+    /// Opens the New Session form, at a place when one is given; `spinOff` opens it as a spin-off.
+    let startSession: (_ machineId: String?, _ cwd: String?, _ projectId: String?, _ spinOff: Bool) -> Void
     /// What a session's context menu needs from the shell.
     let sessionMenus: SessionMenuContext
 }

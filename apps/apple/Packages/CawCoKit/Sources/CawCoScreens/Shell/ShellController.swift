@@ -98,7 +98,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                      openTask: { [weak self] projectId, taskId in self?.openTask(projectId: projectId, taskId: taskId) },
                      openConfigure: { [weak self] slug in self?.openConfigure(slug) },
                      forgetProject: { [weak self] project, source in self?.forgetProject(project, from: source) },
-                     startSession: { [weak self] machineId, cwd, projectId in self?.startSession(machineId: machineId, cwd: cwd, projectId: projectId) },
+                     startSession: { [weak self] machineId, cwd, projectId, spinOff in
+                         self?.startSession(machineId: machineId, cwd: cwd, projectId: projectId, spinOff: spinOff)
+                     },
                      sessionMenus: sessionMenus)
     }
 
@@ -110,6 +112,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             continueInNewSession: panes.continueHandler.map { _ in { [weak self] id in self?.panes.continueInNewSession(id) } },
             continueStored: { [weak self] source in self?.newSession.continueSession(source) },
             cancelContinuation: { [weak self] row in self?.newSession.cancelDetached(row: row) },
+            fork: { [weak self] source in self?.newSession.fork(source) },
             asks: sessionAsks
         )
     }
@@ -1673,11 +1676,18 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     /// The New Session form, with what the caller knows filled in (Sidebar.svelte `newSession`).
     func startSession(machineId: String?, cwd: String?, projectId: String?) {
+        startSession(machineId: machineId, cwd: cwd, projectId: projectId, spinOff: false)
+    }
+
+    /// The form as above; `spinOff` opens it as a spin-off (a project's Spin off).
+    func startSession(machineId: String?, cwd: String?, projectId: String?, spinOff: Bool) {
         // The phone's rail sheet steps aside first: the form opens over the page, not over the sheet.
         if let sheet = railSheet {
-            sheet.dismiss(animated: true) { [weak self] in self?.newSession.start(machineId: machineId, cwd: cwd, projectId: projectId) }
+            sheet.dismiss(animated: true) { [weak self] in
+                self?.newSession.start(machineId: machineId, cwd: cwd, projectId: projectId, spinOff: spinOff)
+            }
         } else {
-            newSession.start(machineId: machineId, cwd: cwd, projectId: projectId)
+            newSession.start(machineId: machineId, cwd: cwd, projectId: projectId, spinOff: spinOff)
         }
     }
 

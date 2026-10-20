@@ -75,8 +75,12 @@ final class ToolChipsView: UIStackView {
         effort.isUserInteractionEnabled = picker
         effort.accessibilityLabel = "Effort"
         effort.accessibilityValue = off.map { "\($0.label): \($0.reason)" } ?? tools.effort?.capitalized ?? "Default"
-        // A session with no mode (its harness has none) shows nothing here.
-        if let mode = tools.permission, !tools.modes.isEmpty {
+        // A harness with no modes shows nothing here; one with modes and
+        // none chosen yet (a form with nothing remembered) says so.
+        if tools.modes.isEmpty {
+            permission.grant = false
+            permission.isHidden = true
+        } else if let mode = tools.permission {
             let look = PermissionLook.of(mode, harness: tools.harness)
             permission.show(look.glyph.image, tint: look.hue, label: look.name)
             // Full Send says so on its chip, editable or not, in the
@@ -86,10 +90,16 @@ final class ToolChipsView: UIStackView {
             permission.accessibilityValue = look.desc.isEmpty ? look.name : "\(look.name): \(look.desc)"
             permission.isHidden = false
         } else {
+            permission.show(Glyph.shield.image, tint: Palette.inkSubtle, label: Self.unchosenMode)
             permission.grant = false
-            permission.isHidden = true
+            permission.accessibilityLabel = "Permission mode"
+            permission.accessibilityValue = Self.unchosenMode
+            permission.isHidden = false
         }
     }
+
+    /// The permission chip while no mode is chosen (ToolChips.svelte `UNCHOSEN_MODE`).
+    private static let unchosenMode = "Choose a mode"
 
     private func openEffort() {
         guard let tools, let presenter else { return }
@@ -113,8 +123,8 @@ final class ToolChipsView: UIStackView {
     }
 
     private func openPermission() {
-        guard let tools, let mode = tools.permission, let presenter else { return }
-        let picker = PermissionPopover(modes: tools.modes, value: mode, harness: tools.harness,
+        guard let tools, let presenter else { return }
+        let picker = PermissionPopover(modes: tools.modes, value: tools.permission, harness: tools.harness,
                                        restarts: tools.restartsOnFullSend) { [weak self] picked in
             self?.tools?.onPermission(picked)
             self?.popover?.dismiss(animated: true)
