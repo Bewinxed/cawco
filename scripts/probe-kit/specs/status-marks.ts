@@ -158,7 +158,7 @@ const showGlyph = async (page: Page, selector: string) => {
     dispatchEvent(new CustomEvent("cawco:canvas-go", { detail: { key } }));
     // A flight the canvas cancels for a newer one rejects its `finished`
     // (AbortError): each is waited out settled, until none is left.
-    for (let flights = world.getAnimations(); flights.length > 0; ) {
+    for (let flights = world.getAnimations(); flights.length > 0;) {
       await Promise.allSettled(flights.map((one) => one.finished));
       flights = world.getAnimations();
     }

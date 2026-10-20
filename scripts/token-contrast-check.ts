@@ -124,7 +124,8 @@ const S = {
   week: "DESIGN.md:779 The week",
   spent: "DESIGN.md:780 The cell; token ring-track-spent",
   notes: "DESIGN.md:829 Release notes; token note-new-ink",
-  solid: "DESIGN.md:925 Solar Duotone Rule (a status mark is the solid bold cut)",
+  solid:
+    "DESIGN.md:925 Solar Duotone Rule (a status mark is the solid bold cut)",
   ring: "DESIGN.md:927 One Ring Rule (non-text 3:1, WCAG 2.2 SC 1.4.11)",
   glyphs: "token status-live-glyph",
   breath: "DESIGN.md:511 Live work breathes; token breath-floor",
