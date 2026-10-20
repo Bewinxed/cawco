@@ -38,11 +38,11 @@
       The program is the workflow. It saves as you type.
     {/if}
   </p>
-  <!-- The signature move: the program sits in a recessed well inside a raised
-       card, not flat on the page. -->
+  <!-- The program is one code surface on the page's field: the well
+       (CodeView) is its only frame. -->
   <div
     data-slot="code"
-    class="mx-space-5 mt-space-4 mb-space-5 min-h-c-editor-well-min min-w-0 flex-1 rounded-md bg-surface-raised p-space-2 shadow-tile max-wide:mx-space-4"
+    class="mx-space-5 mt-space-4 mb-space-5 min-h-c-editor-well-min min-w-0 flex-1 max-wide:mx-space-4"
   >
     <CodeView
       {editable}

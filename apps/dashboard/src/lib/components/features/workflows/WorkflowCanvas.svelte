@@ -182,7 +182,11 @@
         style:--xy-handle-border-color="var(--surface-raised)"
       >
         {#if mounted}
+          <!-- The attribution stands at the top right: the canvas tools
+               float at the bottom centre, and on a phone they run under
+               the bottom corner. -->
           <SvelteFlow
+            attributionPosition="top-right"
             colorMode={theme.current}
             deleteKey={null}
             {edgeTypes}

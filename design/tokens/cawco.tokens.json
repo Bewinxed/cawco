@@ -6457,14 +6457,6 @@
       },
       "$description": "A filed task card's least track in a reply."
     },
-    "c-workflow-name-col": {
-      "$type": "dimension",
-      "$value": {
-        "value": 180,
-        "unit": "px"
-      },
-      "$description": "The workflow list's name column floor."
-    },
     "c-workflow-when-col": {
       "$type": "dimension",
       "$value": {
@@ -6488,14 +6480,6 @@
         "unit": "px"
       },
       "$description": "The workflow list's actions column."
-    },
-    "c-workflow-row-h": {
-      "$type": "dimension",
-      "$value": {
-        "value": 64,
-        "unit": "px"
-      },
-      "$description": "The workflow list's row floor, the height its loading rows stand at so nothing moves when they swap."
     },
     "c-atts-max-h": {
       "$type": "dimension",

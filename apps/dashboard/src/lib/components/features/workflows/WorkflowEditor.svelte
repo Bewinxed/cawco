@@ -47,7 +47,7 @@
   import WorkflowLaunch from "./WorkflowLaunch.svelte";
   import WorkflowProgram from "./WorkflowProgram.svelte";
   import WorkflowStatus from "./WorkflowStatus.svelte";
-  import { duration, kinds, newNode } from "./workflow-ui";
+  import { duration, inspectorTitle, kinds, newNode } from "./workflow-ui";
 
   let { id }: { id: string } = $props();
   const narrow = new MediaQuery("(max-width: 1023px)");
@@ -483,7 +483,7 @@
         {#each kinds.filter((entry) => entry.group === group) as entry (entry.kind)}
           <button
             data-slot="palette-item"
-            class="press-tint flex min-h-c-btn-h-lg items-center gap-space-3 rounded-sm p-space-2 text-start"
+            class="press-tint -mx-space-2 flex min-h-c-btn-h-lg items-center gap-space-3 rounded-sm p-space-2 text-start"
             onclick={() => add(entry.kind)}
             title={entry.meaning}
             type="button"
@@ -511,7 +511,7 @@
         {#each types as type (type.name)}
           <button
             data-slot="palette-item"
-            class="press-tint flex min-h-c-btn-h-lg items-center gap-space-3 rounded-sm p-space-2 text-start"
+            class="press-tint -mx-space-2 flex min-h-c-btn-h-lg items-center gap-space-3 rounded-sm p-space-2 text-start"
             onclick={() => add("step", type)}
             type="button"
           >
@@ -527,8 +527,9 @@
     {/if}
   </div>
 {/snippet}
-{#snippet inspector()}
+{#snippet inspector(sheet = false)}
   <WorkflowInspector
+    {sheet}
     {description}
     {edge}
     editBody={(key) => {
@@ -856,12 +857,16 @@
        back out. -->
   <Drawer.Root direction={inspectorSide} bind:open={inspectorOpen}>
     <Drawer.Content height="shrink">
-      <Drawer.Title visible={false}>Workflow inspector</Drawer.Title>
+      <Drawer.Header>
+        <Drawer.Title>{inspectorTitle(node, edge)}</Drawer.Title>
+      </Drawer.Header>
       <Drawer.Description visible={false}
         >Edit the selected node or workflow settings.</Drawer.Description
       >
-      <div class="min-h-0 touch-pan-y overflow-y-auto">
-        {@render inspector()}
+      <div
+        class="kit-edge-fade-block min-h-0 touch-pan-y overflow-y-auto overscroll-contain"
+      >
+        {@render inspector(true)}
       </div>
     </Drawer.Content>
   </Drawer.Root>

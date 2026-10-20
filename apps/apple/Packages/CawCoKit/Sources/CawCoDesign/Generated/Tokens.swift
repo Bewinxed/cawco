@@ -1093,16 +1093,12 @@ public enum Size {
     public static let cUsagePctW: Double = 32
     /// A filed task card's least track in a reply.
     public static let cFiledTaskW: Double = 224
-    /// The workflow list's name column floor.
-    public static let cWorkflowNameCol: Double = 180
     /// The workflow list's last-run and started columns.
     public static let cWorkflowWhenCol: Double = 110
     /// The workflow list's run count column.
     public static let cWorkflowCountCol: Double = 60
     /// The workflow list's actions column.
     public static let cWorkflowActionsCol: Double = 70
-    /// The workflow list's row floor, the height its loading rows stand at so nothing moves when they swap.
-    public static let cWorkflowRowH: Double = 64
     /// The composer's attachments row before it scrolls.
     public static let cAttsMaxH: Double = 180
     /// How far the settle's text clip reaches past a word's box, so ascenders and descenders survive.

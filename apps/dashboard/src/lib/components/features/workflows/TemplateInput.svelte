@@ -117,8 +117,9 @@
     for={fieldId}
     >{label}
     {#if multiline}
+      <!-- A multiline template is a prompt or a question: sentences, in the
+           field's own body face; a one-line one is a command or a path. -->
       <Textarea
-        face="mono"
         id={fieldId}
         onclick={() => {
           cursor = field?.selectionStart ?? 0;
@@ -126,7 +127,6 @@
         oninput={changed}
         onkeydown={key}
         rows={7}
-        text="label"
         {value}
         bind:ref={textareaField}
       />

@@ -8,6 +8,7 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { NativeSelect } from "#lib/components/ui/native-select/index.js";
   import JsonField from "./JsonField.svelte";
+  import { ENTRY } from "./workflow-ui";
 
   let {
     value,
@@ -79,11 +80,7 @@
           />
         {:else}
           {#each fields as [name, schema], index (index)}
-            <div
-              class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
-              in:unfold
-              out:unfold
-            >
+            <div class={ENTRY} in:unfold out:unfold>
               <div
                 class="grid grid-cols-2 gap-space-3 max-wide:grid-cols-1 coarse:grid-cols-1"
               >

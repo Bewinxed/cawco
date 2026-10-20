@@ -94,6 +94,25 @@ export default async function (w: Workflow<typeof inputs>) {
 }
 `;
 
+/**
+ * One entry of a list the inspector edits (a node's inputs, rules, cases,
+ * options, questions, outputs, ports, a schema's fields): ruled off the one
+ * above on the inspector's own surface, never a well of its own inside it.
+ */
+export const ENTRY =
+  "flex flex-col gap-space-3 border-t border-t-border-hairline pt-space-3";
+
+/** What the inspector holds, by name: the node's kind, the edge, or the workflow's settings. */
+export function inspectorTitle(
+  node?: WorkflowNode,
+  edge?: WorkflowGraph["edges"][number]
+): string {
+  if (node) {
+    return `${kinds.find((entry) => entry.kind === node.kind)?.title ?? node.kind} inspector`;
+  }
+  return edge ? "Edge inspector" : "Workflow settings";
+}
+
 const LINE_PREFIX = /^Line \d+:\s*/;
 /**
  * The hub prefixes a typecheck diagnostic with its line number. The gutter and

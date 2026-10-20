@@ -191,9 +191,7 @@
             >
           {/each}
         {/if}
-        <div
-          class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
-        >
+        <div class="flex flex-col gap-space-3">
           <h3 class="type-label">Workspace</h3>
           <label class="flex flex-col gap-space-2 type-label text-ink-muted"
             >Project<NativeSelect
