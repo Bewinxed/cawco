@@ -883,6 +883,11 @@ export type SendState =
  * - `item-superseded`: finished delegated work whose workspace has moved on
  *   to a newer item, the one to message instead.
  * - `workspace-archived`: finished delegated work whose clone is gone.
+ *
+ * A send whose session has no permission mode to start again on is not one
+ * of these: it is a question the page asks ({@link ModeAsk}). The apps in
+ * people's hands read this union closed, so a new kind here would break
+ * them (hub scripts/wire-compat.ts).
  */
 export type SendRefusal =
   | { kind: "account-signed-out"; accountId: string; machineId: string }
@@ -895,6 +900,18 @@ export type SendRefusal =
       latest: { id: string; title: string; instanceId: string | null };
     }
   | { kind: "workspace-archived"; itemId: string; workspaceId: string };
+
+/**
+ * A send or a start that has to start its session again (a wake, a rewind)
+ * and finds no permission mode to start it on: its row records none, and
+ * none was ever chosen for its harness on its machine (the hub's
+ * `reviveMode`). Not a refusal to show: the page asks for a mode where the
+ * person acted, starts the session again on it, and does what was asked.
+ */
+export interface ModeAsk {
+  harness: HarnessKind;
+  machineId: string;
+}
 
 /**
  * THE ONE RECORD OF A SEND. The hub writes it when it accepts the send and is
@@ -928,6 +945,8 @@ export interface SendRecord {
   instanceId: string;
   keepAlive?: true;
   mode: SendMode;
+  /** No permission mode to wake its session on: the page asks for one, and it goes again ({@link ModeAsk}). */
+  modeAsk?: ModeAsk;
   /** Why it failed, in the harness's words or the hub's. */
   reason?: string;
   /**

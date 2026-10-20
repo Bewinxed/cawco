@@ -45,6 +45,7 @@ import type {
   LfsOfferState,
   MachineHarnessReport,
   McpServerStatus,
+  ModeAsk,
   MoveJob,
   NamedSpawn,
   NeutralSessionInfo,
@@ -3407,9 +3408,11 @@ function handleFrame(frame: FramePayload): void {
   }
 
   if (frame.kind === "error") {
-    const { instanceId, message } = frame;
+    const { instanceId, message, modeAsk } = frame;
     if (
-      settle(frame.requestId, (waiter) => waiter.reject(new Error(message)))
+      settle(frame.requestId, (waiter) =>
+        waiter.reject(modeAsk ? new ModeUnchosen(modeAsk) : new Error(message))
+      )
     ) {
       return;
     }
@@ -7096,6 +7099,22 @@ function ask<T>(
         }
       })
   );
+}
+
+/**
+ * A start the hub refused because no permission mode is named for it (a
+ * revive or a rewind of a row with none, and none chosen for its harness on
+ * its machine; core `ModeAsk`). Not words for the person: the page asks for
+ * a mode where they acted (transcript/ModePick), starts the session again on
+ * it ({@link relaunchSession}), and does what was asked.
+ */
+export class ModeUnchosen extends Error {
+  readonly ask: ModeAsk;
+  constructor(wanted: ModeAsk) {
+    super("No permission mode is named for this session.");
+    this.name = "ModeUnchosen";
+    this.ask = wanted;
+  }
 }
 
 /** A read no answer came back to in time. */
