@@ -5004,6 +5004,29 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
     },
 
+    /**
+     * Canvas `id`'s stage answered its page through the hub's relay (preview.ts
+     * `relay`, core `PREVIEW_SERVED_HEADER`): whatever hop a read found down
+     * is back, so its doc lets `meta.unreached` go, as a reached read's
+     * `stageWritten` does. Asked on every answer the page gets: a doc that
+     * says nothing of it is left as it is.
+     */
+    stageAnswered: (id: string): void => {
+      const row = db.get(id);
+      if (!(row && row.kind === "component")) {
+        return;
+      }
+      if (!docs.doc(id).getMap("meta").has("unreached")) {
+        return;
+      }
+      docs.transact(id, "hub", (doc) => {
+        doc.getMap("meta").delete("unreached");
+      });
+      if (inPanel(row)) {
+        relistOf(row);
+      }
+    },
+
     staged: (machineId: string, frame: StageFrame): void => {
       // A port preview naming the workspace; no folder matches "//".
       const rows = db.previewing({

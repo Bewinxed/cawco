@@ -16,6 +16,7 @@ import {
   folderWeight,
   IMMUTABLE,
   injectOverlay,
+  PREVIEW_SERVED_HEADER,
   type PreviewSocket,
   previewFailed,
   previewWebSocket,
@@ -874,6 +875,8 @@ async function start(
       // `no-store`.
       cachePreview(headers, response.status, true);
       if ("port" in source) {
+        // The preview's own port answered (every refusal of this listener returned above).
+        headers.set(PREVIEW_SERVED_HEADER, "1");
         const location = headers.get("location");
         if (location) {
           // A redirect back to the app itself, under any loopback name, has

@@ -30,6 +30,7 @@ import {
   OVERLAY_KEY,
   OVERLAY_PATH,
   overlayResponse,
+  PREVIEW_SERVED_HEADER,
   type PreviewSocket,
   previewFailed,
   previewWebSocket,
@@ -442,6 +443,8 @@ export interface PreviewListenerDeps {
     artifactId: string
   ) => Promise<Response>;
   socket: ReturnType<typeof artifactSocket>;
+  /** Artifact `artifactId`'s stage answered its page through the relay (core `PREVIEW_SERVED_HEADER`): it is reachable. */
+  stageAnswered: (artifactId: string) => void;
   /** A page artifact's doc as one base64 Yjs update, embedded in its overlay tag. */
   state: (artifactId: string) => string;
   /** The machine's listener at `upstream` refused a connection: the next request reaches the preview again. */
@@ -678,7 +681,9 @@ async function relay(
   instanceId: string,
   at: NonNullable<PreviewTarget["upstream"]>,
   deps: PreviewListenerDeps,
-  direct: boolean
+  direct: boolean,
+  /** The preview's own port answered, as the machine's listener marks it. */
+  answered?: () => void
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
   const address = at.address.includes(":") ? `[${at.address}]` : at.address;
@@ -715,9 +720,14 @@ async function relay(
     deps.unreachable(instanceId, at);
     return downResponse("machine");
   }
+  const down = downstreamHeaders(response, direct);
+  if (down.get(PREVIEW_SERVED_HEADER) === "1") {
+    answered?.();
+  }
+  down.delete(PREVIEW_SERVED_HEADER);
   return new Response(response.body, {
     status: response.status,
-    headers: downstreamHeaders(response, direct),
+    headers: down,
   });
 }
 
@@ -820,7 +830,19 @@ async function serveSession(
       reached.down === "reach" ? reached.error : undefined
     );
   }
-  return relay(request, server, instanceId, reached.upstream, deps, direct);
+  // A canvas's stage answering its page is the stage reached again.
+  const { artifact } = target;
+  return relay(
+    request,
+    server,
+    instanceId,
+    reached.upstream,
+    deps,
+    direct,
+    artifact.kind === "component"
+      ? () => deps.stageAnswered(artifact.id)
+      : undefined
+  );
 }
 
 /**

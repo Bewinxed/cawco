@@ -719,6 +719,15 @@ export function versionAssets(
  */
 export const RELAY_HEADER = "x-cawco-relay";
 
+/**
+ * The machine's listener marks an answer that came from the preview's own
+ * port (its stage or server), never one of its own (`downResponse`, a
+ * sleeping stage's cover): the hub's relay reads it, so a stage the hub
+ * found unreached is known back the first time it answers the page, and
+ * takes it off before the browser sees it.
+ */
+export const PREVIEW_SERVED_HEADER = "x-cawco-served";
+
 // The DOM ambient declaration hides Bun's headers-and-protocols overload.
 const ProxyWebSocket = WebSocket as typeof WebSocket & {
   new (url: string, options: Bun.WebSocketOptions): WebSocket;

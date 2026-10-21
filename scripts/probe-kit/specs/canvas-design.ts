@@ -95,6 +95,11 @@
  *    unreached (a workspace's waits for its stage's word), and the pane on
  *    such a doc stands no down card and no "Not reached since" at any
  *    sample until its page has drawn. (`CANVAS_DESIGN=refused` too.)
+ * 17. `reach` on a stage that never dropped (seeded after the machine
+ *    registered, on the live stage), shown in a session's panel on the
+ *    dashboard with no read and no frame: the page's own requests answered
+ *    by the stage through the hub's relay take it away by the time the page
+ *    has drawn, and the pane stands no card at any sample.
  *    (`CANVAS_DESIGN=refused` runs 13 and 14 alone.)
  *
  * The bench head swept every px from 300 to 800, light, desk pointer, for a
@@ -125,7 +130,7 @@ import type {
 } from "../../../packages/core/src/stage";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { MACHINE, until } from "../../scratch-fleet";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { type Kit, open as openPage, ROOT, type Spec } from "../kit";
 
 const DASHBOARD = join(ROOT, "apps/dashboard");
 /** The artifact's live doc on the dashboard's own origin (artifact-doc.ts `joinArtifact`). */
@@ -2553,6 +2558,7 @@ async function backLeg(kit: Kit, bench: string, stage: Stage): Promise<void> {
   await fleet.sessiondUp();
   fleet.launch("hub");
   await fleet.hubUp();
+  fleet.fileAccount();
   const Y = (await import(Bun.resolveSync("yjs", DASHBOARD))) as {
     applyUpdate: (doc: unknown, update: Uint8Array) => void;
     Doc: new () => {
@@ -2627,6 +2633,8 @@ async function backLeg(kit: Kit, bench: string, stage: Stage): Promise<void> {
       (after[0]?.stage as { status?: string } | undefined)?.status === "live",
     `seeded ${seeded}; after: ${JSON.stringify(after.map((one) => one.unreached ?? null))}`
   );
+  await fleet.accountSignedIn();
+  await answeredLeg(kit, fleet, stage, store, Y, metaOf);
   store.close();
   // The pane on the doc as the hub keeps it now: no down card while its page loads.
   const meta = after[0] ?? {};
@@ -2702,6 +2710,118 @@ async function backLeg(kit: Kit, bench: string, stage: Stage): Promise<void> {
     );
     await page.close();
   }
+}
+
+/** Leg 17's canvas: seeded `reach` after its machine registered, on the live stage. */
+const ANSWERED_ROW = "00000000-0000-4000-8000-0000000000b4";
+/** The session page's artifact panel (session-sheet `PANE`). */
+const SESSION_PANE =
+  ':is([data-slot="preview-pane"], [data-side-card="preview"])';
+
+/**
+ * Leg 17: `reach` on a stage that never dropped. On leg 16's scratch hub,
+ * after the machine's agent registered (so no register can clear it), a
+ * session's canvas on the live stage is seeded with `meta.unreached`
+ * (reach) and shown in its panel on the dashboard. Nothing reads it and the
+ * stage sends no frame: the page's own requests through the hub's preview
+ * relay, answered by the stage (core `PREVIEW_SERVED_HEADER`), are the hop
+ * back. By the time the page has drawn, the doc no longer says unreached,
+ * and the pane stands no card then.
+ */
+async function answeredLeg(
+  kit: Kit,
+  fleet: Awaited<ReturnType<Kit["fleet"]>>,
+  stage: Stage,
+  store: Database,
+  Y: {
+    Doc: new () => {
+      getMap: (name: string) => { set: (key: string, value: unknown) => void };
+    };
+    encodeStateAsUpdate: (doc: unknown) => Uint8Array;
+  },
+  metaOf: (id: string) => Record<string, unknown>
+): Promise<void> {
+  const session = await fleet.spawn("claude", "Canvas answered");
+  const now = Date.now();
+  const path = `/@cawco/canvas?file=${encodeURIComponent(FILES[0] as string)}&spec=${encodeURIComponent(JSON.stringify({ name: "answered" }))}`;
+  store
+    .query(
+      "INSERT INTO artifacts (id, instance_id, made_by, kind, name, ask, machine_id, source_port, source_path, source_stage_dir, source_stage_file, seq, created_at, updated_at) VALUES (?, ?, ?, 'component', 'answered', 'Judge the stat tile', ?, ?, ?, 'apps/dashboard', ?, 1, ?, ?)"
+    )
+    .run(
+      ANSWERED_ROW,
+      session,
+      session,
+      MACHINE,
+      stage.port,
+      path,
+      FILES[0] as string,
+      now,
+      now
+    );
+  const doc = new Y.Doc();
+  doc.getMap("meta").set("stage", liveStage());
+  doc.getMap("meta").set("unreached", {
+    down: "reach",
+    since: new Date(now - 60_000).toISOString(),
+    why: "The stage did not read src/lib/cawco/StatTile.stories.ts's stories within 15 s.",
+  });
+  store
+    .query(
+      'INSERT INTO artifact_updates (artifact_id, seq, "update") VALUES (?, 1, ?)'
+    )
+    .run(ANSWERED_ROW, Y.encodeStateAsUpdate(doc));
+  const seeded = (
+    metaOf(ANSWERED_ROW).unreached as { down?: string } | undefined
+  )?.down;
+  const page = await kit.page("desk", { theme: "light" });
+  await openPage(
+    page,
+    `${await fleet.dashboard()}/session/${session}`,
+    '[data-slot="pane"]'
+  );
+  const showing = fetch(
+    `${fleet.base}/api/instances/${session}/artifacts/${ANSWERED_ROW}/show`,
+    { method: "POST" }
+  ).then((response) => response.status);
+  const opened = Date.now();
+  const samples: { card: boolean; drawn: boolean; unreached: boolean }[] = [];
+  for (;;) {
+    const canvas = page
+      .frames()
+      .find((frame) => frame.url().includes("/@cawco/canvas"));
+    const sample = {
+      // biome-ignore lint/performance/noAwaitInLoops: a sample, one read at a time against the leg's clock
+      card: await page
+        .locator(`${SESSION_PANE} [data-slot="down"]`)
+        .count()
+        .then((count) => count > 0),
+      drawn: canvas
+        ? await canvas
+            .evaluate(() => !!document.querySelector("[data-cawco-story]"))
+            .catch(() => false)
+        : false,
+      unreached: !!metaOf(ANSWERED_ROW).unreached,
+    };
+    samples.push(sample);
+    if (sample.drawn || Date.now() - opened > 60_000) {
+      break;
+    }
+    await page.waitForTimeout(100);
+  }
+  const last = samples.at(-1);
+  const cardAt = samples.findIndex((one) => one.card);
+  kit.check(
+    "17: reach on a stage that never dropped: shown in the panel with no read and no frame, the doc no longer says unreached by the time its page has drawn, and the pane stands no card then",
+    seeded === "reach" && last?.drawn === true && !last.unreached && !last.card,
+    `seeded ${seeded}; show answered ${await showing}; ${samples.length} samples over ${Date.now() - opened}ms; card at ${cardAt}, unreached first gone at ${samples.findIndex((one) => !one.unreached)}, drawn ${last?.drawn}`
+  );
+  kit.check(
+    '17: the pane stands no "isn\'t answering" card at any sample while that page loads',
+    cardAt === -1,
+    `card at sample ${cardAt} of ${samples.length}`
+  );
+  await page.close();
 }
 
 /** The hub's words for a read that couldn't reach a stage, as its relay refuses one (hub server.ts `onStage`). */

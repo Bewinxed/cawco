@@ -37,10 +37,11 @@
  *    the file written again, the page draws the section by itself (no
  *    reopen, no reload), and `artifact_read` answers no problem and its
  *    frames drawn.
- * 5d. Its stage host stopped (SIGSTOP): `artifact_read` answers the doc's
- *    last stage beside `unreached` (which hop, why, since when), never a
- *    stale `live` alone; continued, the next reads reach it and `unreached`
- *    is gone.
+ * 5d. Its stage host stopped (SIGSTOP) and never continued: `artifact_read`
+ *    answers `unreached` (which hop, why, since when) beside the doc's last
+ *    stage, never a stale `live` alone; the daemon ends the stopped host
+ *    before its replacement starts, and the next reads find a new host
+ *    live, `unreached` gone.
  *
  * Then a second session, in a checkout of its own whose node_modules the
  * session's boundary holds read-only, as `~/cockpit` is: a SvelteKit project
@@ -1565,33 +1566,51 @@ const run = async (kit: Kit) => {
       `page before ${JSON.stringify(failedFirst)}, after ${JSON.stringify(onPage)}; read ${short(drawnAgain)}`
     );
 
-    // 5d. The stage the read asks stopped (SIGSTOP): the read answers the doc's last stage with `unreached`, why and since when.
+    await stoppedHostLeg(read);
+  }
+
+  /** Leg 5d, on leg 5b's canvas, read by `read`. */
+  async function stoppedHostLeg(
+    read: (n: string, input?: object) => Promise<string>
+  ): Promise<void> {
+    // 5d. The stage the read asks stopped (SIGSTOP) and never continued:
+    // the read answers `unreached` (which hop, why, since when) beside the
+    // doc's last stage, whatever it says (a restart's `starting` is the
+    // truth); the daemon ends the hung host (its health look, then the
+    // runner's TERM and KILL) before it starts its replacement, which binds
+    // the port and goes live with nothing resuming.
     const placeClone = await stageCloneIn(fleet.env.HOME as string, fleet.repo);
     const host = placeClone ? await stageHostIn(placeClone.path) : undefined;
     if (host) {
       signal(listedPid(host.pid), "SIGSTOP");
     }
     const stopped = await read("5d");
-    if (host) {
-      signal(listedPid(host.pid), "SIGCONT");
-    }
     const unreached = stopped.match(UNREACHED)?.[1];
     const reached = await until(
-      "the stage reached again",
+      "the stage live again on a new host",
       () => read("5d"),
-      (said) => !said.includes('"unreached"'),
-      120_000
+      (said) =>
+        !said.includes('"unreached"') && said.match(STATUS)?.[1] === "live",
+      180_000
     ).catch(() => read("5d"));
+    const oldGone = host ? !existsSync(`/proc/${host.pid}`) : false;
+    const now = placeClone ? await stageHostIn(placeClone.path) : undefined;
+    if (host && !oldGone) {
+      // Never left behind stopped: the fleet's own host, ended here when the daemon didn't.
+      signal(listedPid(host.pid), "SIGKILL");
+    }
     kit.check(
-      "5d: its stage host stopped, artifact_read answers the doc's last stage beside unreached (which hop, why, since when); reached again, unreached is gone",
+      "5d: its stage host stopped, artifact_read answers unreached (which hop, why, since when) beside the doc's last stage; with no SIGCONT, the daemon ends the stopped host and a new one goes live, unreached gone",
       !!host &&
         !!unreached &&
         unreached.includes('"since":"') &&
         unreached.includes('"why":"') &&
-        stopped.match(STATUS)?.[1] === "live" &&
+        oldGone &&
+        !!now &&
+        now.pid !== host.pid &&
         !reached.includes('"unreached"') &&
         reached.match(STATUS)?.[1] === "live",
-      `host ${host ? `${host.pid} (${host.argv.join(" ")})` : "not found"} in ${placeClone?.path ?? "no clone"}; stopped: ${short(stopped)}; again: ${short(reached).slice(0, 200)}`
+      `host ${host ? `${host.pid} (${host.argv.join(" ")})` : "not found"} in ${placeClone?.path ?? "no clone"}, ${oldGone ? "gone" : "still there"}; now ${now ? now.pid : "no host"}; stopped: ${short(stopped)}; again: ${short(reached).slice(0, 200)}`
     );
   }
 

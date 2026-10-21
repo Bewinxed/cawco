@@ -120,6 +120,14 @@ const SERVE_ASK_MS = 2000;
 const SERVE_BEAT_S = 5;
 /** How long a start waits for a server its last daemon left to let go of the port: past its beat. Ours. */
 const SERVE_LET_GO_MS = (SERVE_BEAT_S + 7) * 1000;
+/**
+ * How long a sheet's start waits for the host before it to let go of the
+ * port: past the runner's KILL of one this daemon ended, 4 s after its TERM
+ * (boundary.ts RUNNER `cancel`), and past the beat (stage-host host.ts
+ * `BEAT_MS`, 15 s) at which one an earlier daemon left finds no one reading
+ * it and ends. Ours.
+ */
+const HOST_LET_GO_MS = 20_000;
 
 /**
  * A preview server's command as the executor runs it: in the background of
@@ -1021,6 +1029,17 @@ async function start(stage: Stage): Promise<void> {
       await installStage(stage.workspace, clone, stage.root);
     }
     await writeHost(stage);
+    // The host a failed health look ended (`crashed` → `kill`: its
+    // executor's TERM has the boundary's runner TERM the host's group, then
+    // KILL it 4 s on, boundary.ts RUNNER `cancel`) lets go of the port
+    // first: one hung there holds it, and a replacement started beside it
+    // only says "Port … is already in use" until its restarts are spent.
+    if (!(await letGo(stage, HOST_LET_GO_MS))) {
+      refusedStart(
+        stage,
+        `port ${stage.port} in this workspace is still held ${HOST_LET_GO_MS / 1000}s after its stage was ended, so its host wasn't started again. Stop what holds it, then show the canvas again.`
+      );
+    }
   } else if (!(await letGo(stage, SERVE_LET_GO_MS))) {
     refusedStart(
       stage,

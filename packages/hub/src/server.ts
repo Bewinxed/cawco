@@ -12762,6 +12762,7 @@ export const createServer = (
       return !!row && !ENDED_STATUSES.has(row.status);
     },
     reach: reachPreview,
+    stageAnswered: (artifactId) => artifacts.stageAnswered(artifactId),
     unreachable: previewUnreachable,
     picture: artifactPicture(ARTIFACTS_ROOT, artifactDocs),
     pictures: artifactPictures(artifacts.pictures),
