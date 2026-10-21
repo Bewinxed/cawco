@@ -1713,13 +1713,32 @@
 }
 /* A row of a mark and its words: every run of words in it is trimmed. What
    is centred as a box is left alone: an svg or img, the kit's cells
-   (.rail-cell, .icon-swap, a button's icon slot among them, .mark-cell), and
-   anything that says so with `data-box` (a keycap among them). A run that
-   truncates clips with `overflow: clip`: Gecko does not trim a scroll
-   container. */
+   (.rail-cell, .icon-swap, a button's icon slot among them, .mark-cell),
+   anything that says so with `data-box` (a keycap among them), and a
+   control or cell holding nothing but those (an icon-only button or link:
+   trimmed and padded as words, its glyph stood below the line, the
+   attachment chip's ✕ 4.17px). A selector sees no text node: a child whose
+   only elements are marks is taken for a box whatever words stand bare
+   beside them, so a control's words are an element of their own and a line
+   setting a mark in running text says `mark-text`. A run that truncates
+   clips with `overflow: clip`: Gecko does not trim a scroll container. */
 @utility mark-line {
   :where(&)
-    > :where(:not(svg, img, .rail-cell, .icon-swap, .mark-cell, [data-box])) {
+    > :where(
+      :not(
+        svg,
+        img,
+        .rail-cell,
+        .icon-swap,
+        .mark-cell,
+        [data-box],
+        :has(
+          > :is(svg, img, .rail-cell, .icon-swap, .mark-cell, [data-box])
+        ):not(
+          :has(> :not(svg, img, .rail-cell, .icon-swap, .mark-cell, [data-box]))
+        )
+      )
+    ) {
     @apply mark-text;
   }
 }

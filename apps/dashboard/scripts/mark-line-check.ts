@@ -20,7 +20,8 @@
  *    kit part given a look that draws it (LOOKS).
  * And on every mark line, each child is one the recipe can tell: words (an
  * element holding text, which it trims), what it leaves alone (an svg, an
- * img, an icon component, the kit's cells), or a box that says so with
+ * img, an icon component, the kit's cells, and a control or cell holding
+ * nothing else, such as an icon-only button), or a box that says so with
  * `data-box` (a mark's tile, a chevron's cell, a pill). A component that is
  * none of these takes `data-box` (it passes it to its root) or stands in a
  * `<span data-box>`. An unmarked box would take the words' padding and grow.
@@ -119,6 +120,8 @@ const BOX_COMPONENT = /^(?:AccountName)$/;
 /** Components that draw only the child they are given. */
 const WRAPPER_COMPONENT =
   /^(?:Tip|Tooltip\.Root|Tooltip\.Trigger|Popover\.Root|Popover\.Trigger)$/;
+/** Kit controls whose root holds the children they are given (ui/button with no icon or label, ui/toggle). */
+const CHILDREN_AT_ROOT = new Set(["Button", "Toggle"]);
 /** Components that draw words, which the recipe trims. */
 const WORDS_COMPONENT =
   /^(?:MorphText|JumpMatch|PendingContent|DropdownMenu\.Shortcut|ContextMenu\.Shortcut)$/;
@@ -172,6 +175,34 @@ function children(nodes: Node[] | undefined): Node[] {
     } else {
       out.push(node);
     }
+  }
+  return out;
+}
+
+/** The most child lists `rendered` reads of one node. */
+const RENDERED_MAX = 64;
+
+/**
+ * Each list of children the DOM can hold at once: an `{#if}` is its
+ * consequent or its alternate, never both (as `children` flattens them).
+ */
+function rendered(nodes: Node[] | undefined): Node[][] {
+  let out: Node[][] = [[]];
+  for (const node of nodes ?? []) {
+    let options: Node[][];
+    if (node.type === "IfBlock") {
+      options = [
+        ...rendered(node.consequent?.nodes),
+        ...rendered(node.alternate?.nodes),
+      ];
+    } else if (node.type === "EachBlock" || node.type === "KeyBlock") {
+      options = rendered(node.body?.nodes);
+    } else {
+      options = [[node]];
+    }
+    out = out
+      .flatMap((before) => options.map((option) => [...before, ...option]))
+      .slice(0, RENDERED_MAX);
   }
   return out;
 }
@@ -246,12 +277,57 @@ const holdsWords = (node: Node): boolean =>
   isBare(node) ||
   (node.type === "Component" && WORDS_COMPONENT.test(node.name ?? ""));
 
+/** Whether the recipe leaves a node alone as it stands (app.css): an svg, an img, the kit's cells, a box that says so, a component drawing one. */
+function leftAlone(node: Node, source: string, icons: Set<string>): boolean {
+  if (hasAttribute(node, "data-box")) {
+    return true;
+  }
+  if (node.type === "Component") {
+    const name = node.name ?? "";
+    return (
+      icons.has(name) ||
+      SVG_COMPONENT.test(name) ||
+      MARK_COMPONENT.test(name) ||
+      BOX_COMPONENT.test(name)
+    );
+  }
+  return (
+    isElement(node) &&
+    (node.name === "svg" ||
+      node.name === "img" ||
+      classes(node, source).some((c) => LEFT_ALONE_CLASS.test(c)))
+  );
+}
+
+/**
+ * A control or cell with no words of its own (app.css): every child it
+ * holds is one the recipe leaves alone, so it is centred as a box. A kit
+ * button given an icon and no label holds only its icon slot.
+ */
+function holdsOnlyMarks(
+  node: Node,
+  source: string,
+  icons: Set<string>
+): boolean {
+  const inside = children(node.fragment?.nodes).filter(visible);
+  if (node.type === "Component") {
+    if (node.name === "Button" && hasAttribute(node, "icon")) {
+      return inside.length === 0 && !hasAttribute(node, "label");
+    }
+    // Only the kit's controls whose root holds their children as given.
+    if (!CHILDREN_AT_ROOT.has(node.name ?? "")) {
+      return false;
+    }
+  }
+  return inside.length > 0 && inside.every((n) => leftAlone(n, source, icons));
+}
+
 /** Whether the recipe can tell what a mark line's child is (see the header). */
-function told(node: Node, source: string): boolean {
+function told(node: Node, source: string, icons: Set<string>): boolean {
   if (!visible(node) || isBare(node)) {
     return true;
   }
-  if (hasAttribute(node, "data-box")) {
+  if (hasAttribute(node, "data-box") || holdsOnlyMarks(node, source, icons)) {
     return true;
   }
   if (node.type === "Component") {
@@ -384,9 +460,34 @@ function checkBeside(r: Reading, node: Node, kids: Node[]): void {
 /** Every child of a mark line that the recipe cannot tell apart says data-box. */
 function checkBoxes(r: Reading, kids: Node[]): void {
   for (const kid of kids.filter(
-    (k) => !(told(k, r.source) || r.icons.has(k.name ?? ""))
+    (k) => !(told(k, r.source, r.icons) || r.icons.has(k.name ?? ""))
   )) {
     hit(r, kid, "a box on a mark line that does not say so: add data-box");
+  }
+  // A selector sees no text: a child whose elements are all marks is taken
+  // for a box, and words written bare beside them lose their trim.
+  for (const kid of kids.filter(
+    (k) => isElement(k) || k.type === "Component"
+  )) {
+    const takenForBox = rendered(kid.fragment?.nodes).some((drawn) => {
+      const inside = drawn.filter(visible);
+      const elements = inside.filter((n) => !isBare(n));
+      return (
+        inside.some(isBare) &&
+        elements.length > 0 &&
+        elements.every((n) => leftAlone(n, r.source, r.icons))
+      );
+    });
+    const saysWhich =
+      hasAttribute(kid, "data-box") ||
+      classes(kid, r.source).includes("mark-text");
+    if (!saysWhich && takenForBox) {
+      hit(
+        r,
+        kid,
+        "words written bare beside a mark in a mark line's child: put them in an element or give the child mark-text, or the recipe takes it for a box"
+      );
+    }
   }
 }
 

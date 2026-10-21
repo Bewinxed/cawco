@@ -504,7 +504,6 @@
         ><span>{word}</span><button
           class="select-none grid place-items-center size-icon-lg border-none border-current rounded-pill bg-transparent"
           aria-label={`Stop narrowing to ${word}`}
-          data-box
           onclick={() => finder.removeWords([word])}
           type="button"><IconClose class="size-icon-sm" /></button
         ></span
@@ -518,7 +517,6 @@
         ><span>{time}</span><button
           class="select-none grid place-items-center size-icon-lg border-none border-current rounded-pill bg-transparent"
           aria-label={`Stop narrowing to ${time}`}
-          data-box
           onclick={() => finder.removeWords(time.split(" "))}
           type="button"><IconClose class="size-icon-sm" /></button
         ></span

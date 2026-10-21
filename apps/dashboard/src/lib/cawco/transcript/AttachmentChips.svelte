@@ -143,7 +143,6 @@
             class:
               "select-none grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit pointer-hit",
           })}
-          data-box
           onclick={() => removeImage(i)}
           type="button"
         >

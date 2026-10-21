@@ -635,7 +635,6 @@
         class="touch-hit flex-none -my-space-1 ms-auto"
         margin="beside-num"
         tone="muted"
-        data-box
         onclick={onminimize}
         size="icon-xs"
         title="Minimize"

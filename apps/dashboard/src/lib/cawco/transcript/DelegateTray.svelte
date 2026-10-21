@@ -1317,7 +1317,6 @@
       <a
         aria-label="Open {item.title} in its own view"
         class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
-        data-box
         href={hrefOf(item)}
         title="Open {item.title} in its own view"
       >
@@ -1478,7 +1477,6 @@
         <a
           aria-label="Open {item.title} in its own view"
           class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
-          data-box
           href={hrefOf(item)}
           title="Open {item.title} in its own view"
         >
@@ -1776,7 +1774,6 @@
                 <a
                   aria-label="Open {item.title} in its own view"
                   class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
-                  data-box
                   href={hrefOf(item)}
                   title="Open {item.title} in its own view"
                 >

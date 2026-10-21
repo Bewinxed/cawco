@@ -374,9 +374,11 @@
     {/if}
     {#if !compact}
       <!-- mark-line: a line of text, trimmed by the words; the account dot
-           stands in it on vertical-align: middle, the x-height's middle -->
+           stands in it on vertical-align: middle, the x-height's middle.
+           It says mark-text: its only element may be the dot's svg, which
+           the mark line alone would take for a box. -->
       <span
-        class="block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted group-data-current/session-row:text-selected-ink"
+        class="mark-text block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted group-data-current/session-row:text-selected-ink"
       >
         {#if pending || renaming !== null}
           <!-- What is on its way, in the meta line's place: the spinner, then
