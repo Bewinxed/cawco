@@ -22,9 +22,12 @@
  * (b) its gated browser (the gate, as the session's door names it) loads
  *     that url and draws the page and the canvas's toggle inside the
  *     Preview;
- * (c) a real mouse click on the toggle (Input.dispatchMouseEvent at the
- *     top page, its place summed through every frame) turns it on, read
- *     back from the embed's own DOM;
+ * (c) the session's own browser tool (the fleet's chrome-devtools,
+ *     launched through its door) opens the page and clicks the toggle by
+ *     the uid its snapshot gives inside the Preview, as the session's model
+ *     would: the embed's own document hears the pointerdown and the click
+ *     on the toggle (where, against its box), and reads it on, as the
+ *     tool's next snapshot does;
  * (d) a session outside the page's tree (no project) gets a refusal from
  *     `artifact_browse` for that page;
  * (e) the same browser, holding the session's pass, is refused that
@@ -46,6 +49,12 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Runtime } from "../../../packages/agent/src/browser/runtime";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  browserTool,
+  called,
+  type SessionEntry,
+  selected,
+} from "../browser-tool";
 import { cloudflareTo, scratchCertificate } from "../cloudflare-front";
 import type { Kit, Spec } from "../kit";
 import { PASS_DOMAIN, storeHostMode } from "../pass-legs";
@@ -245,11 +254,17 @@ interface FrameAt {
   url: string;
 }
 
-/** A page of the session's own in the gate's browser, attached flat, its frames' targets attached too. */
-const pageIn = async (gate: Gate) => {
-  const { targetId } = await gate.send("Target.createTarget", {
-    url: "about:blank",
-  });
+/**
+ * A page of the session's own in the gate's browser, attached flat, its
+ * frames' targets attached too: a new one, or page `existing` (one the
+ * session's browser tool opened).
+ */
+const pageIn = async (gate: Gate, existing?: string) => {
+  const targetId =
+    existing ??
+    String(
+      (await gate.send("Target.createTarget", { url: "about:blank" })).targetId
+    );
   const { sessionId } = await gate.send("Target.attachToTarget", {
     targetId,
     flatten: true,
@@ -275,18 +290,35 @@ const pageIn = async (gate: Gate) => {
   };
   await prepare(top);
 
-  /** Every frame of the page, each with the session that holds its document. */
-  const frames = async (): Promise<FrameAt[]> => {
-    const children = gate.events
-      .filter(
-        (event) =>
+  /** This page's sessions: its own, and each out-of-process frame's attached under it, however deep. */
+  const sessionsOf = (): string[] => {
+    const own = [top];
+    // An array's iterator reads its length at each step: a session pushed is walked too.
+    for (const session of own) {
+      for (const event of gate.events) {
+        if (
           event.method === "Target.attachedToTarget" &&
+          event.sessionId === session &&
           (event.params.targetInfo as { type?: string } | undefined)?.type ===
             "iframe"
-      )
-      .map((event) => String(event.params.sessionId));
+        ) {
+          own.push(String(event.params.sessionId));
+        }
+      }
+    }
+    return own;
+  };
+
+  /**
+   * Every frame of the page, each with the session that holds its
+   * document. A frame in a process of its own is its own target's root,
+   * and stands in no parent's tree (Chromium leaves remote children out:
+   * "if (!child_local_frame) { continue; }", inspector_page_agent.cc
+   * `BuildObjectForFrameTree`), so it names no parent here.
+   */
+  const frames = async (): Promise<FrameAt[]> => {
     const all = new Map<string, FrameAt>();
-    for (const session of [top, ...children]) {
+    for (const session of sessionsOf()) {
       await prepare(session).catch(() => undefined);
       const tree = await gate
         .send("Page.getFrameTree", {}, session)
@@ -339,63 +371,19 @@ const pageIn = async (gate: Gate) => {
     return (result as { value?: unknown }).value;
   };
 
-  /** Where frame `at`'s viewport stands in the top page's, summed through every iframe that holds it. */
-  const offset = async (
-    at: FrameAt,
-    all: FrameAt[]
-  ): Promise<{ x: number; y: number }> => {
-    const parent = all.find((one) => one.id === at.parent);
-    if (!parent) {
-      return { x: 0, y: 0 };
-    }
-    const { backendNodeId } = await gate.send(
-      "DOM.getFrameOwner",
-      { frameId: at.id },
-      parent.session
-    );
-    const { object } = await gate.send(
-      "DOM.resolveNode",
-      { backendNodeId },
-      parent.session
-    );
-    await gate.send(
-      "Runtime.callFunctionOn",
-      {
-        objectId: (object as { objectId: string }).objectId,
-        functionDeclaration:
-          "function () { this.scrollIntoView({ block: 'center', inline: 'center' }); }",
-      },
-      parent.session
-    );
-    const { model } = await gate.send(
-      "DOM.getBoxModel",
-      { backendNodeId },
-      parent.session
-    );
-    const [x = 0, y = 0] = (model as { content: number[] }).content;
-    const above = await offset(parent, all);
-    return { x: above.x + x, y: above.y + y };
-  };
+  /** The page's own top frame: its target's root. */
+  const topFrame = async (): Promise<FrameAt | undefined> =>
+    (await frames()).find((at) => at.session === top && !at.parent);
 
   return {
-    top,
+    targetId,
     frames,
     evaluate,
-    offset,
+    topFrame,
     /** Loads `url` in the page; the top document's URL once it commits, or why it didn't. */
     navigate: async (url: string) => {
       const { errorText } = await gate.send("Page.navigate", { url }, top);
       return errorText ? String(errorText) : null;
-    },
-    /** A real click at the top page's `x`, `y`: moved, pressed, released. */
-    click: async (x: number, y: number) => {
-      for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) {
-        await gate.send(
-          "Input.dispatchMouseEvent",
-          { type, x, y, button: "left", clickCount: 1 },
-          top
-        );
-      }
     },
     close: () =>
       gate.send("Target.closeTarget", { targetId }).catch(() => undefined),
@@ -424,7 +412,7 @@ const toggleIn = async (page: PageIn) => {
 
 /** Whether the top document is the locked page (preview-access.ts `lockedResponse`). */
 const locked = async (page: PageIn): Promise<boolean> => {
-  const [top] = (await page.frames()).filter((at) => !at.parent);
+  const top = await page.topFrame();
   return top
     ? (await page
         .evaluate(
@@ -437,12 +425,140 @@ const locked = async (page: PageIn): Promise<boolean> => {
 
 /** Whether the top document is the decision page with its card. */
 const decisionShown = async (page: PageIn): Promise<boolean> => {
-  const [top] = (await page.frames()).filter((at) => !at.parent);
+  const top = await page.topFrame();
   return top
     ? (await page
         .evaluate(top, `!!document.getElementById("decision-lamp")`)
         .catch(() => false)) === true
     : false;
+};
+
+/**
+ * In the embed's own document: a listener keeping each pointerdown and
+ * click it hears (where, and on what), kept on its root element, which
+ * every world's view of the document shares; and the toggle's box there.
+ */
+const LISTEN = `(() => {
+  const heard = [];
+  for (const type of ["pointerdown", "click"]) {
+    document.addEventListener(type, (event) => {
+      const on = event.target instanceof Element ? event.target : null;
+      heard.push({ type, x: Math.round(event.clientX), y: Math.round(event.clientY), on: on?.closest(${JSON.stringify(TOGGLE)}) ? "toggle" : (on?.tagName.toLowerCase() ?? "none") });
+      document.documentElement.setAttribute("data-probe-heard", JSON.stringify(heard));
+    }, true);
+  }
+  const box = document.querySelector(${JSON.stringify(TOGGLE)}).getBoundingClientRect();
+  return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) };
+})()`;
+
+/** What the embed's own document says of the toggle, and what its listener heard. */
+const STATE = `({
+  pressed: document.querySelector(${JSON.stringify(TOGGLE)})?.getAttribute("aria-pressed") ?? null,
+  words: document.querySelector(${JSON.stringify(TOGGLE)})?.textContent ?? null,
+  heard: JSON.parse(document.documentElement.getAttribute("data-probe-heard") ?? "[]"),
+})`;
+
+interface ToggleState {
+  heard: { on: string; type: string; x: number; y: number }[];
+  pressed: string | null;
+  words: string | null;
+}
+
+/** The toggle's line in the browser tool's snapshot, off: its uid. */
+const TOGGLE_OFF = /uid=(\S+) \S+ "Lamp: off"/;
+/** The toggle's line in the browser tool's snapshot, either way. */
+const TOGGLE_LINE = /^.*"Lamp: (?:off|on)".*$/m;
+
+/**
+ * The session's own browser tool (the fleet's chrome-devtools, launched
+ * through its door as the machine launches it, agent browser/door.ts)
+ * opens the page at `pageUrl` and clicks the story's toggle by the uid its
+ * snapshot gives it inside the Preview, as the session's model would. The
+ * gate's raw link `gate` reads the embed's own document around it: the
+ * toggle's box and a listener there before, its state and what the
+ * listener heard after. The scratch front's certificate is taken on the
+ * tool's page as (b)'s tab takes it.
+ */
+const clickThroughTool = async (
+  gate: Gate,
+  entry: SessionEntry,
+  doorFile: string,
+  writer: string,
+  pageUrl: string
+) => {
+  const report: {
+    after: string;
+    before?: string;
+    box?: unknown;
+    click?: string;
+    error?: string;
+    state?: ToggleState;
+    uid?: string;
+  } = { after: "" };
+  const pages = async () =>
+    (
+      (await gate.send("Target.getTargets")).targetInfos as {
+        targetId: string;
+        type: string;
+      }[]
+    ).filter((one) => one.type === "page");
+  const browser = await browserTool(entry, [`--config=${doorFile}`], writer);
+  try {
+    const had = new Set((await pages()).map((one) => one.targetId));
+    const pageId = selected(
+      (await called(browser, "new_page", { url: "about:blank" })).text
+    );
+    const made = (await pages()).find((one) => !had.has(one.targetId));
+    if (!made) {
+      report.error = "the tool's new_page opened no page the gate shows";
+      return report;
+    }
+    const page = await pageIn(gate, made.targetId);
+    await called(browser, "navigate_page", {
+      pageId,
+      type: "url",
+      url: pageUrl,
+    });
+    const found = await until(
+      "the toggle in the tool's page",
+      () => toggleIn(page),
+      Boolean,
+      180_000
+    ).catch(() => undefined);
+    if (!found) {
+      report.error = `no toggle drawn in the tool's page: ${(await page.frames()).map((frame) => frame.url).join(" | ")}`;
+      return report;
+    }
+    report.box = await page.evaluate(found.at, LISTEN);
+    const snapshot = await until(
+      "the toggle in the tool's snapshot",
+      async () => (await called(browser, "take_snapshot", { pageId })).text,
+      (text) => TOGGLE_OFF.test(text),
+      60_000
+    ).catch((error: Error) => error.message);
+    report.uid = TOGGLE_OFF.exec(snapshot)?.[1];
+    report.before = TOGGLE_LINE.exec(snapshot)?.[0] ?? snapshot.slice(-600);
+    if (!report.uid) {
+      return report;
+    }
+    report.click = (
+      await called(browser, "click", { pageId, uid: report.uid })
+    ).text.slice(0, 300);
+    report.state = (await until(
+      "the toggle on",
+      () => page.evaluate(found.at, STATE) as Promise<ToggleState>,
+      (state) => state.pressed === "true",
+      20_000
+    ).catch(() => page.evaluate(found.at, STATE))) as ToggleState;
+    report.after =
+      TOGGLE_LINE.exec(
+        (await called(browser, "take_snapshot", { pageId })).text
+      )?.[0] ?? "";
+    await page.close();
+    return report;
+  } finally {
+    await browser.close();
+  }
 };
 
 /** `{ url, expiresAt }` from an artifact_browse result, or why not. */
@@ -588,7 +704,7 @@ const run = async (kit: Kit) => {
     }),
   });
   kit.check("the fleet runs chrome-devtools-mcp", put.ok, String(put.status));
-  await until(
+  const tool = (await until(
     "the machine's sync set the fleet's chrome-devtools",
     async () =>
       (
@@ -597,11 +713,11 @@ const run = async (kit: Kit) => {
             join(home, ".local", "share", "cawco", "fleet-mcp-set.json"),
             "utf8"
           ).catch(() => "{}")
-        ) as { servers?: Record<string, { command?: string }> }
+        ) as { servers?: Record<string, SessionEntry> }
       ).servers?.["chrome-devtools"],
     (found) => found?.command !== undefined,
     180_000
-  );
+  )) as SessionEntry;
 
   // Host mode, its names behind an https front on every address.
   const range = await fleet.api<{ ports: string }>("/api/preview-settings");
@@ -714,35 +830,21 @@ const run = async (kit: Kit) => {
     })
   );
 
-  // (c) A real click on the toggle, read back from the embed's DOM.
-  let after: unknown = null;
-  if (shown) {
-    const rect = (await tab.evaluate(
-      shown.at,
-      `(() => { const el = document.querySelector(${JSON.stringify(TOGGLE)}); el.scrollIntoView({ block: "center", inline: "center" }); const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`
-    )) as { x: number; y: number };
-    const place = await tab.offset(shown.at, shown.all);
-    await tab.click(place.x + rect.x, place.y + rect.y);
-    after = await until(
-      "the toggle on",
-      () =>
-        tab.evaluate(
-          shown.at,
-          `document.querySelector(${JSON.stringify(TOGGLE)})?.getAttribute("aria-pressed") + " " + document.querySelector(${JSON.stringify(TOGGLE)})?.textContent`
-        ),
-      (said) => String(said).startsWith("true") && String(said).includes("on"),
-      20_000
-    ).catch(async () =>
-      tab.evaluate(
-        shown.at,
-        `document.querySelector(${JSON.stringify(TOGGLE)})?.outerHTML`
-      )
-    );
-  }
+  // (c) The session's own browser tool clicks the story's toggle by its uid.
+  const pageUrl = new URL(
+    new URL(entry.url).searchParams.get("next") ?? "/",
+    new URL(entry.url).origin
+  ).href;
+  const clicked = await clickThroughTool(gate, tool, doorFile, writer, pageUrl);
   kit.check(
-    "(c) a real mouse click inside the Preview's story turns the toggle on, read back from the embed's own DOM",
-    String(after).startsWith("true") && String(after).includes("on"),
-    String(after)
+    "(c) the session's own chrome-devtools (launched through its door) clicks the toggle by its uid inside the Preview: the embed's own document hears the pointerdown and click on the toggle, and reads it on",
+    clicked.state?.pressed === "true" &&
+      clicked.state.words === "Lamp: on" &&
+      clicked.state.heard.some(
+        (event) => event.type === "click" && event.on === "toggle"
+      ) &&
+      clicked.after.includes('"Lamp: on"'),
+    JSON.stringify(clicked)
   );
 
   // (d) A session outside the tree is refused.
@@ -772,10 +874,6 @@ const run = async (kit: Kit) => {
   );
 
   // (f) Its end passed, the pass is refused; a new one opens it again.
-  const pageUrl = new URL(
-    new URL(entry.url).searchParams.get("next") ?? "/",
-    new URL(entry.url).origin
-  ).href;
   fleet.write(
     "UPDATE preview_passes SET expires_at = ? WHERE instance_id = ?",
     Date.now() - 1000,

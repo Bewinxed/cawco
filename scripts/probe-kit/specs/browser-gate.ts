@@ -66,6 +66,13 @@ import {
   SHIELD_WORDS,
 } from "../../../packages/core/src/browser";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  type BrowserTool,
+  browserTool,
+  called,
+  type SessionEntry,
+  selected,
+} from "../browser-tool";
 import type { Kit, Spec } from "../kit";
 
 /**
@@ -322,94 +329,24 @@ const respond = (request: Seen): Reply => {
   return { everyMs: 5, words: ["done"] };
 };
 
-interface McpClient {
-  callTool: (call: {
-    name: string;
-    arguments: object;
-  }) => Promise<{ content: { type: string; text?: string }[] }>;
-  close: () => Promise<void>;
-}
-
 const DELEGATE = /PROBE-GATE-(A|B):/;
-const SELECTED = /(\d+):[^\n]*\[selected\]/;
 const TEXTBOX = /uid=(\S+) textbox/;
 
-/** The fleet's chrome-devtools entry as the machine's fleet sync set it for its sessions: what every session launches. */
-interface SessionEntry {
-  args?: string[];
-  command: string;
-  env?: Record<string, string>;
-}
-
 /** chrome-devtools-mcp at the gate as workspace `id`, launched as `entry` says, with the gate's own arguments. */
-const mcpAs = async (
+const mcpAs = (
   port: number,
   id: string,
   token: string,
   entry: SessionEntry
-): Promise<McpClient> => {
-  const sdk =
-    "../../../packages/hub/node_modules/@modelcontextprotocol/sdk/dist/esm/client";
-  const { Client } = await import(`${sdk}/index.js`);
-  const { StdioClientTransport } = await import(`${sdk}/stdio.js`);
-  const transport = new StdioClientTransport({
-    command: entry.command,
-    args: [
-      ...(entry.args ?? []),
+): Promise<BrowserTool> =>
+  browserTool(
+    entry,
+    [
       `--wsEndpoint=ws://127.0.0.1:${port}/${id}`,
       `--wsHeaders=${JSON.stringify({ Authorization: `Bearer ${token}` })}`,
     ],
-    env: {
-      ...(process.env as Record<string, string>),
-      ...entry.env,
-    },
-    // Kept: a server that exits ("Connection closed") says why only here.
-    stderr: "pipe",
-  });
-  let said = "";
-  (
-    transport as unknown as {
-      stderr: NodeJS.ReadableStream | null;
-    }
-  ).stderr?.on("data", (chunk: Buffer) => {
-    said = `${said}${chunk.toString()}`.slice(-4000);
-  });
-  /** An error with what the server wrote to stderr: the reason it closed. */
-  const withStderr = (error: unknown): Error =>
-    new Error(
-      `chrome-devtools-mcp as ${id}: ${error instanceof Error ? error.message : String(error)}; its stderr: ${said.trim().slice(-1500) || "(nothing)"}`
-    );
-  const client = new Client({
-    name: "browser-gate",
-    version: "1",
-  }) as McpClient & {
-    connect: (transport: unknown) => Promise<void>;
-  };
-  await client.connect(transport).catch((error: unknown) => {
-    throw withStderr(error);
-  });
-  return {
-    callTool: (call) =>
-      client.callTool(call).catch((error: unknown) => {
-        throw withStderr(error);
-      }),
-    close: () => client.close(),
-  };
-};
-
-const called = async (
-  client: McpClient,
-  name: string,
-  args: object = {}
-): Promise<{ text: string; image: boolean }> => {
-  const result = await client.callTool({ name, arguments: args });
-  return {
-    text: result.content.map((part) => part.text ?? "").join("\n"),
-    image: result.content.some((part) => part.type === "image"),
-  };
-};
-
-const selected = (list: string): number => Number(SELECTED.exec(list)?.[1]);
+    id
+  );
 
 interface Raw {
   closed: Promise<{ code: number; reason: string }>;
