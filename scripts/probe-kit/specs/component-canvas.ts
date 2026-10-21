@@ -29,7 +29,10 @@
  * 8. Sections load one states file at a time: the far one's modules are
  *    requested only once the canvas is moved to it.
  * 9. The stage keeps the report: drawn by the panel, `unseen` once the
- *    states file changes, drawn again on the next load.
+ *    states file changes, drawn again on the next load; and with a page
+ *    open, an edit to the component alone (Badge.svelte, which Card
+ *    imports) redraws both sections, every frame current again with the
+ *    new text and no states file touched.
  * 10. A mount that throws is `failed`, with its message and its place in
  *     the source, mapped through Vite's sourcemap (the throw's own line, not
  *     the compiled one).
@@ -84,6 +87,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -838,6 +842,64 @@ async function kept(kit: Kit, stage: Stage): Promise<void> {
       framesOf(edited).every((one) => one.state === "unseen") &&
       storiesOf(redrawn) === "Fresh:drawn,Old:drawn",
     `drawn ${storiesOf(drawn)}; edited ${storiesOf(edited)}; redrawn ${storiesOf(redrawn)}`
+  );
+
+  // 9b: only the component changes; the states files are never touched.
+  const sheets = ["src/Badge.stories.js", "src/Card.stories.js"];
+  const readAll = async (): Promise<RenderReport> =>
+    (
+      await fetch(
+        `${stage.base}/__cawco/report?${sheets.map((one) => `file=${encodeURIComponent(one)}`).join("&")}`
+      )
+    ).json() as Promise<RenderReport>;
+  const live = await kit.page("desk", { init: [BRIDGE] });
+  await live.goto(canvasUrl(stage, sheets, { name: "Badge and Card" }));
+  await reportOn(live);
+  const statesTimes = () =>
+    sheets.map((one) => statSync(join(stage.dir, one)).mtimeMs).join(",");
+  const timesBefore = statesTimes();
+  const component = join(stage.dir, "src/Badge.svelte");
+  const plain = readFileSync(component, "utf8");
+  writeFileSync(component, plain.replace("{text}</span>", "{text}+</span>"));
+  // Current: every frame drawn, each showing the edited badge ("New+" in Badge's, "Live+" in Card's).
+  const current = (report: RenderReport) =>
+    framesOf(report).length > 0 &&
+    framesOf(report).every((one) => one.state === "drawn") &&
+    framesOf(report, "src/Badge.stories.js").every((one) =>
+      one.text.includes("New+")
+    ) &&
+    framesOf(report, "src/Card.stories.js").every((one) =>
+      one.text.includes("Live+")
+    );
+  let stageNow = await readAll();
+  stageNow = await until(
+    "the stage's report of the edited component",
+    readAll,
+    current,
+    15_000
+  ).catch(() => stageNow);
+  const pageNow = await live.evaluate(
+    () =>
+      (window as unknown as { __cawcoCanvas: { report: RenderReport } })
+        .__cawcoCanvas.report
+  );
+  writeFileSync(component, plain);
+  await live.waitForTimeout(1500);
+  await live.close();
+  const hashes = (report: RenderReport) =>
+    report.sections.map((one) => `${one.file}@${one.hash}`).join(",");
+  const framesSaid = (report: RenderReport) =>
+    framesOf(report)
+      .map(
+        (one) => `${one.story}/${one.interaction}:${one.state} "${one.text}"`
+      )
+      .join("; ");
+  kit.check(
+    "9b: an edit to the component alone (Badge.svelte, which Card imports) redraws both sections and every frame reads current with the new text, the page's hash the stage's, no states file touched",
+    current(stageNow) &&
+      hashes(stageNow) === hashes(pageNow) &&
+      statesTimes() === timesBefore,
+    `stage ${framesSaid(stageNow)}; stage hashes ${hashes(stageNow)}; page hashes ${hashes(pageNow)}; states files ${statesTimes() === timesBefore ? "untouched" : "touched"}`
   );
 
   const broken = await kit.page("desk", { init: [BRIDGE] });

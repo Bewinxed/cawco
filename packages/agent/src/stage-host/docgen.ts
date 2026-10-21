@@ -793,9 +793,3 @@ export async function propsOf(
   kept.set(`${file}#${name}`, { doc, hash });
   return doc;
 }
-
-/** The names `file`'s props are kept under: an HMR update of it reads each again. */
-export const propsNames = (file: string): string[] =>
-  [...kept.keys()]
-    .filter((key) => key.startsWith(`${file}#`))
-    .map((key) => key.slice(file.length + 1));

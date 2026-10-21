@@ -90,7 +90,7 @@ import {
   type SourceMapInput,
   TraceMap,
 } from "@jridgewell/trace-mapping";
-import { propsNames, propsOf } from "./docgen";
+import { propsOf } from "./docgen";
 import {
   readStoryFile,
   StoryRefusal,
@@ -404,18 +404,80 @@ async function mountedFiles(abs: string, text: string): Promise<string[]> {
   return files.filter((file): file is string => !!file);
 }
 
+/** A source file's imports of other files, as it writes them: `import … from "…"` and `import "…"`, never a dynamic `import()`. Ours: no parser, a module's imports are its first lines. */
+const IMPORT_FROM = /\bimport\s+(?:[\w*{}\s,$]+\s+from\s+)?["']([^"']+)["']/g;
+/** A file whose imports the stage reads: a component or a script. */
+const SOURCE_FILE = /\.(?:svelte|vue|[cm]?[jt]sx?)$/;
+/** Each source file's resolved imports, kept by the file's time. */
+const importsKept = new Map<string, { at: number; to: string[] }>();
+
+/** The files source file `file` imports (absolute), resolved as Vite resolves them; none for a file that is no source (a stylesheet, an image). */
+async function sourceImports(file: string): Promise<string[]> {
+  if (!SOURCE_FILE.test(file)) {
+    return [];
+  }
+  const at = statTime(file);
+  const kept = importsKept.get(file);
+  if (kept?.at === at) {
+    return kept.to;
+  }
+  const text = readFileSync(file, "utf8");
+  const sources = [
+    ...new Set([...text.matchAll(IMPORT_FROM)].map((one) => one[1] as string)),
+  ];
+  const to = (
+    await Promise.all(sources.map((source) => resolved(source, file)))
+  ).filter((one): one is string => !!one);
+  importsKept.set(file, { at, to });
+  return to;
+}
+
+/** A file of the project's own: inside the toolchain root, not a package. */
+const ownFile = (file: string): boolean =>
+  file.startsWith(`${root}${sep}`) &&
+  !file.includes(`${sep}node_modules${sep}`);
+
 /**
- * A states file's content hash with the components it mounts: a report is
- * kept under it, and any edit to either makes its frames `unseen` until a
- * browser draws them again.
+ * Every file a states file's frames are drawn from (absolute, sorted): the
+ * states file, the components it mounts, and the project's own files those
+ * import, all the way down. Its section's hash is of these files, and an
+ * edit to any of them loads its section again (the plugin's `hotUpdate`).
+ */
+async function drawnFrom(abs: string, text: string): Promise<string[]> {
+  const files = new Set<string>([abs]);
+  let level = await mountedFiles(abs, text).catch(() => []);
+  while (level.length > 0) {
+    const fresh = [
+      ...new Set(
+        level.filter(
+          (one) => !files.has(one) && ownFile(one) && existsSync(one)
+        )
+      ),
+    ];
+    for (const one of fresh) {
+      files.add(one);
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one level of imports at a time, each level's files read at once
+    level = (await Promise.all(fresh.map(sourceImports))).flat();
+  }
+  return [...files].sort();
+}
+
+/**
+ * A states file's content hash: of every file its frames are drawn from
+ * ({@link drawnFrom}). Its section's module carries it (`HASH`), a report is
+ * kept under it, and an edit to any of those files makes its frames `unseen`
+ * until a browser draws them again.
  */
 async function contentHash(file: string): Promise<string> {
   const abs = resolve(root, file);
-  const text = readFileSync(abs, "utf8");
-  const hash = createHash("sha256").update(text);
-  const mounted = await mountedFiles(abs, text).catch(() => []);
-  for (const one of mounted.sort()) {
-    hash.update("\0").update(readFileSync(one));
+  const hash = createHash("sha256");
+  for (const one of await drawnFrom(abs, readFileSync(abs, "utf8"))) {
+    hash
+      .update(relative(root, one))
+      .update("\0")
+      .update(readFileSync(one))
+      .update("\0");
   }
   return hash.digest("hex").slice(0, 16);
 }
@@ -615,8 +677,9 @@ async function svelteProps(): Promise<string> {
  * the canvas runtime (canvas/runtime.ts, bundled into this host), which
  * loads each section's module as it comes into view. Vite's HMR words
  * reach the runtime as window events: `cawco:after-update` after any
- * update (a component's own edit redraws through its framework's HMR, and
- * the canvas reads its frames again).
+ * update (a component's own edit redraws through its framework's HMR and
+ * loads again each section drawn from it, and the canvas reads its frames
+ * again).
  */
 function entryModule(): string {
   const styles = globalStyles()
@@ -644,9 +707,10 @@ if (import.meta.hot) {
  * One section's module: its states file, the sheet as the stage reads it
  * (stories with their labels, forms and moves; the meta; each component's
  * props), and the content hash its report is kept under. It accepts itself:
- * a states file's edit loads it again and the runtime remounts that section
- * alone (`cawco:section`); a component's changed props reach the inspector
- * (`cawco:props`).
+ * an edit to any file its frames are drawn from (the plugin's `hotUpdate`)
+ * loads it again, with its sheet and hash read anew, and the runtime
+ * remounts that section alone (`cawco:section`) and hands the inspector the
+ * new sheet.
  */
 async function sectionModule(file: string): Promise<string> {
   const abs = resolve(root, file);
@@ -659,13 +723,6 @@ export { module };
 if (import.meta.hot) {
   import.meta.hot.accept((next) => {
     if (next) dispatchEvent(new CustomEvent("cawco:section", { detail: next }));
-  });
-  import.meta.hot.on("cawco:props", (doc) => {
-    const at = SHEET.components.findIndex((one) => one.file === doc.file && one.name === doc.name);
-    if (at === -1) return;
-    SHEET.components[at] = doc;
-    window.__cawcoSheetOnPage = SHEET;
-    dispatchEvent(new CustomEvent("cawco:sheet", { detail: SHEET }));
   });
 }
 `;
@@ -1356,31 +1413,11 @@ async function discovered(under: string): Promise<Found[]> {
   });
 }
 
-/** A component file's imports of other files, as it writes them: its script's `import … from "…"` and `import "…"`. Ours: no parser, a component's imports are its first lines. */
-const IMPORT_FROM = /\bimport\s+(?:[\w*{}\s,$]+\s+from\s+)?["']([^"']+)["']/g;
-/** Each component file's resolved imports of other component files, kept by the file's time. */
-const importsKept = new Map<string, { at: number; to: string[] }>();
-
 /** The component files `file` imports (absolute), resolved as Vite resolves them. */
-async function componentImports(file: string): Promise<string[]> {
-  const at = statTime(file);
-  const kept = importsKept.get(file);
-  if (kept?.at === at) {
-    return kept.to;
-  }
-  const text = readFileSync(file, "utf8");
-  const sources = [
-    ...new Set([...text.matchAll(IMPORT_FROM)].map((one) => one[1] as string)),
-  ];
-  const to = (
-    await Promise.all(sources.map((source) => resolved(source, file)))
-  ).filter(
-    (one): one is string =>
-      !!one && COMPONENT_FILE.test(one) && !STORY_FILE.test(one)
+const componentImports = async (file: string): Promise<string[]> =>
+  (await sourceImports(file)).filter(
+    (one) => COMPONENT_FILE.test(one) && !STORY_FILE.test(one)
   );
-  importsKept.set(file, { at, to });
-  return to;
-}
 
 /** A component's name from its file. */
 const nameOf = (file: string): string => fileName(file);
@@ -1977,6 +2014,8 @@ function watchStory(file: string): void {
  */
 function cawcoStage() {
   const errors = new Map<string, StageError>();
+  /** Each states file whose section module a page has loaded (from the root), with that module's id. */
+  const sections = new Map<string, string>();
   const tell = () => say("errors", { errors: [...errors.values()] });
 
   /** The story files (from the root) whose sheets import `file`, read up Vite's module graph. */
@@ -2040,32 +2079,39 @@ function cawcoStage() {
       if (toolchain === "nuxt") {
         watchStory(resolve(root, file));
       }
+      sections.set(file, id);
       return sectionModule(file);
     },
-    // A story file's edit runs its sheet's module again from a fresh load: its stories' places may have moved.
-    // A component's edit reads its props again, and every sheet's page hears them (`cawco:props`).
-    hotUpdate({ file }: { file: string }) {
-      if (!server) {
+    /**
+     * An edit to a file a loaded section is drawn from ({@link drawnFrom}:
+     * its states file, a component it mounts, a file those import) loads
+     * that section's module again, with its sheet and hash read anew. Vite's
+     * own propagation stops at a component that accepts itself (Svelte's,
+     * React's, Vue's), so the section's module is added to the update here;
+     * Vite invalidates it and sends it once (`updateModules` skips a module
+     * its propagation already reached, as through a states file).
+     */
+    async hotUpdate(
+      this: { environment: { name: string } },
+      { file, modules }: { file: string; modules: ModuleNode[] }
+    ) {
+      const graph = server?.environments.client.moduleGraph;
+      if (!graph || this.environment.name !== "client") {
         return;
       }
-      if (!STORY_FILE.test(file)) {
-        const { hot } = server.environments.client;
-        for (const name of propsNames(file)) {
-          propsOf(file, name)
-            .then((doc) =>
-              hot.send({ type: "custom", event: "cawco:props", data: doc })
-            )
-            .catch(() => undefined);
-        }
-        return;
-      }
-      const rel = relative(root, file);
-      const sheet = server.environments.client.moduleGraph.getModuleById(
-        `\0${VIRTUAL}${encodeURIComponent(rel)}.js`
+      const reached = await Promise.all(
+        [...sections].map(async ([sheet, id]) => {
+          const mod = graph.getModuleById(id);
+          const abs = resolve(root, sheet);
+          if (!(mod && existsSync(abs))) {
+            return null;
+          }
+          const files = await drawnFrom(abs, readFileSync(abs, "utf8"));
+          return files.includes(file) ? mod : null;
+        })
       );
-      if (sheet) {
-        server.environments.client.moduleGraph.invalidateModule(sheet);
-      }
+      const redrawn = reached.filter((mod): mod is ModuleNode => !!mod);
+      return redrawn.length > 0 ? [...modules, ...redrawn] : undefined;
     },
     // A good compile of a module clears the error it had.
     transform: {
