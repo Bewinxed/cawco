@@ -13,6 +13,9 @@
  *
  * - the machine's row reads `probefleet` applied for Claude Code, OpenCode
  *   and pi alike;
+ * - up to the first fleet change, the starting agent got one fleet sync
+ *   (every harness's first report merged into it) and its location was
+ *   evicted by fleet MCP status at most once;
  * - a session on each harness calls `probefleet`'s `whoami`, and the answer
  *   names a process of the fleet's;
  * - the same sessions call `his` `whoami`, answered by a process of his;
@@ -243,6 +246,8 @@ interface Row {
   mcpByHarness?: Record<string, Record<string, { state?: string }> | undefined>;
 }
 
+/** The agent's line for each location a fleet MCP status read booted and let go (opencode.ts `#releaseDirectory`). */
+const EVICTED = "location evicted by fleet MCP status";
 /** A fleet sync the agent took, and how many servers it carried. */
 const SYNC_LINE = /\[fleet\] sync from the hub: (.*)$/;
 
@@ -629,6 +634,23 @@ const run = async (kit: Kit): Promise<void> => {
       JSON.stringify({ answered: his[harness], own })
     );
   }
+
+  // The agent's start, up to the first fleet change: one sync, merged from
+  // every harness's first report (hub server.ts `sendFleetSync`), and one
+  // read of the fleet's servers for it.
+  const startUp = {
+    syncs: (await fleet.logs("hub"))
+      .split("\n")
+      .filter((line) => line.includes("[fleet] sync → ")),
+    evicted: (await fleet.logs("agent"))
+      .split("\n")
+      .filter((line) => line.includes(EVICTED)).length,
+  };
+  kit.check(
+    `the agent's start-up got ${startUp.syncs.length} fleet sync(s) before the first fleet change, and its location was evicted by fleet MCP status ${startUp.evicted} time(s)`,
+    startUp.syncs.length === 1 && startUp.evicted <= 1,
+    startUp.syncs.join("\n")
+  );
 
   // The fleet's row moves to another config; the running sessions take it.
   const spawnsBefore = fleet.query<{ n: number }>(

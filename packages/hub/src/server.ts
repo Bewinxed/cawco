@@ -1183,6 +1183,14 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
+/**
+ * How long a fleet sync asked of a machine waits for the next one asked, to
+ * go out as one (`sendFleetSync`), and how long from the first it waits at
+ * most. A starting agent's harness reports land within a second of each
+ * other; CawCo's own call, not a measured bound.
+ */
+const FLEET_SYNC_SETTLE_MS = 1500;
+const FLEET_SYNC_SETTLE_MAX_MS = 5000;
 /** How long an approved post may take its machine (agent upstream-posts.ts makes it within five minutes). */
 const UPSTREAM_POST_MS = 6 * 60_000;
 
@@ -17581,14 +17589,61 @@ export const createServer = (
       .map((report) => report.harness)
       .sort()
       .join(",");
-  /** Each machine's connection a fleet sync last went out on, by its id ({@link sendFleetSync}). */
+  /**
+   * Each machine's connection a fleet sync last went out on, or is queued to
+   * go out on, by its id ({@link sendFleetSync}).
+   */
   const fleetSyncedLinks = new Map<string, string>();
+  /** The syncs asked of each machine that have not gone out yet: merged into one ({@link sendFleetSync}). */
+  const queuedFleetSyncs = new Map<
+    string,
+    { agent: HubSocket; at: number; timer: HubTimer; whys: string[] }
+  >();
 
+  /**
+   * One sync for each settled state of what the hub knows of a machine. A
+   * sync asked for waits {@link FLEET_SYNC_SETTLE_MS} for the next, and every
+   * one asked meanwhile merges into it, up to {@link FLEET_SYNC_SETTLE_MAX_MS}
+   * from the first: a starting agent's harnesses report one beat each (agent
+   * daemon.ts `reannounce`), each moving what the hub knows, and each sync
+   * boots every fleet server in OpenCode's location again. The sync that goes
+   * out reads the fleet then, so it carries every change merged into it
+   * (`mcpChanges.ride` copies what is pending, it takes nothing). A harness
+   * that reports after it gets its own.
+   */
   const sendFleetSync = (
     machineId: string,
     agent: HubSocket,
     why: string
   ): void => {
+    const queued = queuedFleetSyncs.get(machineId);
+    const at = queued?.at ?? Date.now();
+    lifetime.cancel(queued?.timer);
+    fleetSyncedLinks.set(machineId, agent.id);
+    queuedFleetSyncs.set(machineId, {
+      agent,
+      at,
+      whys: [...new Set([...(queued?.whys ?? []), why])],
+      timer: lifetime.after(
+        Math.max(
+          0,
+          Math.min(
+            FLEET_SYNC_SETTLE_MS,
+            at + FLEET_SYNC_SETTLE_MAX_MS - Date.now()
+          )
+        ),
+        () => flushFleetSync(machineId)
+      ),
+    });
+  };
+
+  /** The machine's queued sync, out on the connection last asked for ({@link sendFleetSync}). */
+  const flushFleetSync = (machineId: string): void => {
+    const queued = queuedFleetSyncs.get(machineId);
+    if (!queued) {
+      return;
+    }
+    queuedFleetSyncs.delete(machineId);
     // Fleet sync converges each harness's own files. The register's sync goes
     // before the machine's harnesses have reported (they follow on its first
     // beat); only a report with no fleet-capable harness is a machine with
@@ -17606,9 +17661,10 @@ export const createServer = (
 
     // Always sent, a fleet with no rows too: it carries the denied tools, and
     // a machine spawns nothing until it has heard them.
-    console.info(`[fleet] sync → ${machineName(machineId)}: ${why}`);
-    fleetSyncedLinks.set(machineId, agent.id);
-    pushFleetConfig(machineId, agent, db.fleetConfig());
+    console.info(
+      `[fleet] sync → ${machineName(machineId)}: ${queued.whys.join("; ")}`
+    );
+    pushFleetConfig(machineId, queued.agent, db.fleetConfig());
   };
 
   /**
@@ -29945,10 +30001,12 @@ export const createServer = (
                     unread: claudeReport?.unreadAccounts ?? [],
                   });
                 }
-                // A connection no sync has gone out on yet is sent one once
-                // its harnesses are known: the register no longer carries
+                // A connection no sync has been asked for on yet is sent one
+                // once its harnesses are known: the register no longer carries
                 // them (aca170f8f), and a sync's content needs none of them,
-                // so one sent already (a fleet change) is that sync. A later
+                // so one asked already (a fleet change) is that sync. Each
+                // harness's first report moves the set below, and those of a
+                // starting agent merge into its first sync (sendFleetSync). A later
                 // report (Claude's sign-ins read again and changed, one per
                 // harness on a re-announce) syncs only when it moved which
                 // harnesses here converge the fleet: one installed since,
