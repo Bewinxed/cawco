@@ -82,11 +82,10 @@ here.navigated = () => navigated();
 
 const host = document.createElement("cawco-overlay");
 host.style.cssText =
-  "all:initial!important;position:fixed!important;inset:0!important;z-index:2147483647!important;pointer-events:none!important";
+  "all:initial!important;position:fixed!important;inset:0!important;z-index:2147483647!important;pointer-events:none!important;color-scheme:light dark!important";
 const shadow = host.attachShadow({ mode: "open" });
 const sheet = document.createElement("style");
 sheet.textContent = `
-  :host { color-scheme: light dark; }
   .layer { position:fixed; inset:0; pointer-events:none; cursor:crosshair; }
   .layer.comment { pointer-events:auto; }
   .layer.draw { pointer-events:auto; touch-action:none; }
@@ -555,9 +554,15 @@ function themeRoot(root: HTMLElement, scheme: Scheme) {
   }
 }
 
+/**
+ * The host's theme said: the page drawn in it where it takes the host's
+ * ({@link themed}), and the overlay's own marks in it always, never the OS's.
+ * Until a host says one the overlay follows the OS (`light dark` on its host).
+ */
 function takeTheme(said: unknown) {
   if (said === "light" || said === "dark") {
     hostTheme = said;
+    host.style.setProperty("color-scheme", said, "important");
     themed();
   }
 }
@@ -2068,6 +2073,8 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:focus-pin": (message) =>
       pins.focus(idOf(message), message.scroll === true),
     // The card open on a pin: its element is the one target while it stands; closed, the pointer's leads again.
+    // The pointer or the keyboard on a pin's row in the host's list: its element chosen while it rests there.
+    "cawco:hover-pin": (message) => pins.hover(idOf(message)),
     "cawco:track-pin": (message) => {
       const id = idOf(message);
       composing = id !== null;

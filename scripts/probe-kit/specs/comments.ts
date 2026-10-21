@@ -3242,7 +3242,7 @@ const lineContrast = (on: On) =>
 
 /** 7c. The One Target Rule: rest, the page's root, chosen, the one coral mark, the composer's ring. */
 const targetChecks = async (on: On) => {
-  await on.call(CREATE, {
+  const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
     ask: "Judge this page: pin anything that reads wrong",
@@ -3321,9 +3321,8 @@ const targetChecks = async (on: On) => {
     (seen) => !!seen && !seen.rest && seen.style === "solid",
     5000
   ).catch(() => targetOf(frame));
-  const field = on.page
-    .locator('[data-slot="pin-card"][data-pin-card="1"]')
-    .getByRole("textbox");
+  // The one card open at a time: its field.
+  const field = on.page.locator('[data-slot="pin-card"]').getByRole("textbox");
   const readRing = () =>
     field.evaluate((el) => {
       const style = getComputedStyle(el);
@@ -3487,8 +3486,158 @@ const targetChecks = async (on: On) => {
       clearance.least >= 2 - 0.01,
     JSON.stringify(clearance)
   );
+
+  // The bare pin kept (words in its field), its card closed: its row in the list.
+  await field.fill("Keep this one.");
+  await on.page.keyboard.press("Escape");
+  const row = (await rowsOf(on)).locator('[data-slot="pin-row"]').first();
+  await row.hover();
+  const rowHovered = await until(
+    "the row's pin chosen",
+    () => targetOf(frame),
+    (seen) => !!seen?.shown && !seen.rest && seen.style === "solid",
+    3000
+  ).catch(() => targetOf(frame));
+  const bareBox = await boxIn(frame, "#bare");
+  await on.page.mouse.move(2, 2);
+  const rowLeft = await until(
+    "the row's pin let go",
+    () => targetOf(frame),
+    (seen) => !seen?.shown || seen.rest,
+    3000
+  ).catch(() => targetOf(frame));
+  on.kit.check(
+    "7c: resting on a pin's row in the list chooses its element on the page (a 1px brand-solid line), and leaving the row lets it go",
+    !!rowHovered &&
+      rowHovered.shown &&
+      !rowHovered.rest &&
+      rowHovered.style === "solid" &&
+      rowHovered.width === "1px" &&
+      near(rowHovered.box, bareBox, 1) &&
+      !!rowLeft &&
+      (!rowLeft.shown || rowLeft.rest),
+    JSON.stringify({ rowHovered, rowLeft })
+  );
+
+  // Opened from the keyboard (Enter on its row), the card's field draws its ring; opened by a press, none.
+  await row.focus();
+  await on.page.keyboard.press("Enter");
+  const keyOpened = await until(
+    "the key-opened card's field",
+    readRing,
+    (seen) => seen.focused,
+    5000
+  ).catch(() => null);
+  on.kit.check(
+    "7c: a card opened from the keyboard (Enter on its pin's row) focuses its field with the ring (2px focus-ring, inset)",
+    !!keyOpened &&
+      keyOpened.focused &&
+      !keyOpened.quiet &&
+      keyOpened.style === "solid" &&
+      keyOpened.width === "2px" &&
+      keyOpened.color === keyOpened.ring,
+    JSON.stringify(keyOpened)
+  );
+  await on.page.keyboard.press("Escape");
+  await (await rowsOf(on)).locator('[data-slot="pin-row"]').first().click();
+  const pressOpened = await until(
+    "the press-opened card's field",
+    readRing,
+    (seen) => seen.focused,
+    5000
+  ).catch(() => null);
+  on.kit.check(
+    "7c: the same card opened by a press on its row focuses its field with no ring",
+    !!pressOpened &&
+      pressOpened.focused &&
+      pressOpened.quiet &&
+      pressOpened.style === "none",
+    JSON.stringify(pressOpened)
+  );
   await on.page.keyboard.press("Escape");
   await on.page.keyboard.press("Escape");
+  await shutList(on);
+  const id = made.match(ANSWERED_ID)?.[1];
+  if (id) {
+    await overlayThemeChecks(on, id);
+  }
+};
+
+/**
+ * 7c. The overlay's marks draw in the host's theme, never the OS's: the
+ * dashboard at night on a day OS reads night's `brand-solid` in the overlay
+ * (its line's colour and its tint), and the reverse.
+ */
+const overlayThemeChecks = async (on: On, id: string) => {
+  const { origin } = new URL(on.page.url());
+  for (const [dashboard, system] of [
+    ["dark", "light"],
+    ["light", "dark"],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one theme at a time, each its own page
+    const desk = await on.kit.page("desk", { theme: dashboard });
+    await desk.emulateMedia({ colorScheme: system });
+    await open(desk, `${origin}/artifact/${id}`, FRAME);
+    const frame = (await until(
+      `the targets page, dashboard ${dashboard}`,
+      async () => {
+        const found = await (
+          await desk.locator(FRAME).elementHandle()
+        )?.contentFrame();
+        return found && (await found.locator("#target").count()) === 1
+          ? found
+          : null;
+      },
+      Boolean,
+      60_000
+    )) as Frame;
+    const read = await until(
+      `the overlay in the ${dashboard} theme`,
+      () =>
+        frame.evaluate((want) => {
+          const overlay = document.querySelector("cawco-overlay");
+          const shadow = overlay?.shadowRoot;
+          const rect = shadow?.querySelector<HTMLElement>(".rect");
+          if (!(overlay && shadow && rect)) {
+            return null;
+          }
+          // Each scheme's brand-solid, read with the scheme said outright.
+          const brandIn = (scheme: string) => {
+            const probe = document.createElement("span");
+            probe.style.cssText = `color-scheme: ${scheme}; color: var(--brand-solid)`;
+            shadow.append(probe);
+            const { color } = getComputedStyle(probe);
+            probe.remove();
+            return color;
+          };
+          const drawn = getComputedStyle(rect);
+          const tint = document.createElement("span");
+          tint.style.color = "var(--c-target-tint)";
+          shadow.append(tint);
+          const { color: tinted } = getComputedStyle(tint);
+          tint.remove();
+          return {
+            scheme: getComputedStyle(overlay).colorScheme,
+            line: drawn.outlineColor,
+            tint: tinted,
+            wanted: brandIn(want),
+            other: brandIn(want === "dark" ? "light" : "dark"),
+          };
+        }, dashboard),
+      (seen) => !!seen && seen.scheme === dashboard,
+      10_000
+    ).catch(() => null);
+    on.kit.check(
+      `7c: the dashboard ${dashboard} on a ${system} OS: the overlay draws in ${dashboard} (its line ${read?.line}, ${dashboard === "dark" ? "night" : "day"}'s brand-solid ${read?.wanted}, not ${read?.other}), its tint the same coral`,
+      !!read &&
+        read.scheme === dashboard &&
+        read.wanted !== read.other &&
+        read.line === read.wanted &&
+        read.tint.startsWith(read.wanted.replace(")", "")),
+      JSON.stringify(read)
+    );
+    await desk.close();
+  }
 };
 
 /**

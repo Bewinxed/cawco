@@ -1498,8 +1498,14 @@
    */
   let madePin: string | null = null;
 
-  /** Pin `id`'s card opens; `made`, for the pin the person just made. Another pin's card is dismissed first. */
-  function openCard(id: string, made = false) {
+  /** How the open card was opened: a key's draws its field's ring, a press's none (The One Target Rule). */
+  let cardVia = $state<"key" | "pointer">("pointer");
+  /** Pin `id`'s card opens; `made`, for the pin the person just made; `via`, a key or a press. Another pin's card is dismissed first. */
+  function openCard(
+    id: string,
+    made = false,
+    via: "key" | "pointer" = "pointer"
+  ) {
     if (openPin && openPin !== id) {
       closeCard();
     }
@@ -1507,6 +1513,7 @@
       madePin = id;
     }
     openPin = id;
+    cardVia = via;
     focusedPin = id;
     cardError = null;
     pinAt = null;
@@ -1554,7 +1561,7 @@
     focusedPin = next.id;
     post({ type: "cawco:focus-pin", id: next.id, scroll: true });
     if (openPin) {
-      openCard(next.id);
+      openCard(next.id, false, "key");
     }
   }
   /** A pin's own address (its card's Copy link): its artifact's tab, opening the pin's card. */
@@ -1694,7 +1701,7 @@
     } else if (name === "k") {
       step(-1);
     } else if (name === "Enter" && focusedPin) {
-      openCard(focusedPin);
+      openCard(focusedPin, false, "key");
     } else if (name === "Escape") {
       if (openPin) {
         closeCard();
@@ -1864,7 +1871,11 @@
         ) {
           pageSays(id, message.pin);
         }
-        openCard(id, message.made === true);
+        openCard(
+          id,
+          message.made === true,
+          message.via === "key" ? "key" : "pointer"
+        );
         break;
       }
       // What the page said of a write the pane sent it for a pin it holds alone.
@@ -2575,7 +2586,8 @@
         {live}
         hold={listHold}
         onclose={() => showList(false)}
-        onopen={openCard}
+        onhover={(id) => post({ type: "cawco:hover-pin", id })}
+        onopen={(id, via) => openCard(id, false, via)}
         onretry={relink}
         {pins}
         bind:filter={listFilter}
@@ -2997,6 +3009,7 @@
         onplace={placeElsewhere}
         onresolve={resolvePin}
         onring={(on) => post({ type: "cawco:composer-ring", on })}
+        via={cardVia}
         pin={cardPin}
         placing={placing === cardPin.id}
         problem={cardError}

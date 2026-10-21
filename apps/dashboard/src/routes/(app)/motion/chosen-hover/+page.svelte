@@ -229,6 +229,7 @@
       hold="ready"
       live={new Set(["pin-2"])}
       onclose={noop}
+      onhover={noop}
       onopen={noop}
       onretry={noop}
       {pins}

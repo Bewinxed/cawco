@@ -109,10 +109,12 @@ export interface Pins {
   draw: () => void;
   /** The pin the host focused (J, K, its row), outlined and brought into view out from under the host's chrome; or none. */
   focus: (id: string | null, scroll: boolean) => void;
+  /** The pin whose row in the host's list the pointer or the keyboard rests on, its element chosen; none gives the focused pin's back. */
+  hover: (id: string | null) => void;
   /** After a re-publish or an HMR update: the open card's pin, if it now stands under the host's chrome, brought out again. */
   keepClear: () => void;
   layer: SVGSVGElement;
-  /** Pin `id`'s card opened in the host (`cawco:pin-open`), the pin as this page holds it with it; `made`, for one just made. */
+  /** Pin `id`'s card opened in the host (`cawco:pin-open`) by a press on the page, the pin as this page holds it with it; `made`, for one just made. */
   open: (id: string, made?: boolean) => void;
   /** A pin on an ink group (Annotate, Comment); a comment's card opened. */
   pinInk: (
@@ -184,6 +186,8 @@ export function startPins(deps: PinsDeps): Pins {
     const pin = pinsMap().get(id);
     deps.post("cawco:pin-open", {
       id,
+      // Every open the page makes is a press: the card's field draws no ring.
+      via: "pointer",
       ...(made ? { made: true } : {}),
       ...(pin ? { pin } : {}),
     });
@@ -585,6 +589,13 @@ export function startPins(deps: PinsDeps): Pins {
         reveal(id);
       }
       deps.outline(el, true);
+    },
+    hover: (id) => {
+      if (id) {
+        deps.outline(placed.get(id)?.el ?? null, true);
+      } else {
+        deps.outline(focused ? (placed.get(focused)?.el ?? null) : null, false);
+      }
     },
     cover: (boxes) => {
       covered = boxes;

@@ -45,6 +45,7 @@
     focused,
     live,
     onopen,
+    onhover,
     onretry,
     onclose,
     filter = $bindable("open"),
@@ -59,7 +60,10 @@
     focused: string | null;
     /** Pins the agent is working on now: each wears the live dot. */
     live: ReadonlySet<string>;
-    onopen: (id: string) => void;
+    /** Opens the pin's card; `via` says whether a key or a press opened it (the card's field rings for a key alone). */
+    onopen: (id: string, via: "key" | "pointer") => void;
+    /** The pointer or the keyboard rests on a pin's row (its element chosen on the page), or leaves it (null). */
+    onhover: (id: string | null) => void;
     /** Try again after the comments couldn't be read, or while their link stands lost. */
     onretry: () => void;
     onclose: () => void;
@@ -128,7 +132,12 @@
       data-moved={pin.movedAt ? "" : undefined}
       class="select-none flex items-start gap-space-2 w-full min-h-c-artifact-row-h px-space-2 py-space-2 border-none border-current rounded-sm bg-transparent text-ink-row type-body text-start transition-[background-color] duration-(--dur-control) ease-out not-active:not-aria-current:hover:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-selected-bg focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
       data-pin-row={pin.number}
-      onclick={() => onopen(pin.id)}
+      onblur={() => onhover(null)}
+      onclick={(event) =>
+        onopen(pin.id, event.detail === 0 ? "key" : "pointer")}
+      onfocus={() => onhover(pin.id)}
+      onpointerenter={() => onhover(pin.id)}
+      onpointerleave={() => onhover(null)}
       type="button"
     >
       <span class="mark-cell">

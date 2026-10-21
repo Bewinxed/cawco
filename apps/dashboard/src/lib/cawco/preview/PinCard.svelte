@@ -77,6 +77,7 @@
     onplace,
     onclose,
     onring,
+    via = "pointer",
   }: {
     pin: Pin;
     /** Who answers in the thread: the session the artifact belongs to, as its transcript names it. */
@@ -107,6 +108,8 @@
     onclose: () => void;
     /** The field's keyboard ring shows (true) or goes (false): the page's target drops its line while it shows (DESIGN.md, The One Target Rule). */
     onring?: (shown: boolean) => void;
+    /** How the card was opened: by a key its field's focus draws the ring, by a press none. */
+    via?: "key" | "pointer";
   } = $props();
 
   /**
@@ -349,13 +352,14 @@
    * Target Rule): a browser matches `:focus-visible` on a text field however
    * it was focused, so a focus that came by a pointer (the house's last
    * input, `lastInput`) marks the field `data-pointer-focus` and draws no
-   * ring. So does the card's own focus on open: the person pressed the page,
-   * whose presses this document never hears.
+   * ring. The card's own focus on open takes how the card was opened
+   * (`via`): a press on the page, whose presses this document never hears,
+   * draws none; a key (Enter on a pin, J and K, a row) draws it.
    */
   let focused = $state(false);
   let quiet = $state(false);
-  /** The card is focusing its own field. */
-  let opening = false;
+  /** How the card's own focus on open came: set while it focuses its field. */
+  let openedBy: "key" | "pointer" | null = null;
   const ringShown = $derived(focused && !quiet);
   $effect(() => {
     onring?.(ringShown);
@@ -365,9 +369,9 @@
   $effect(() => {
     // A new pin's card takes the keyboard: the person tapped to say something.
     if (pin.thread.length === 0 && field) {
-      opening = true;
+      openedBy = untrack(() => via);
       field.focus({ preventScroll: true });
-      opening = false;
+      openedBy = null;
     }
   });
 </script>
@@ -556,7 +560,7 @@
       data-field
       data-pointer-focus={quiet || undefined}
       onfocus={() => {
-        quiet = opening || lastInput.current === "pointer";
+        quiet = (openedBy ?? lastInput.current) === "pointer";
         focused = true;
       }}
       onblur={() => {
