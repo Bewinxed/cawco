@@ -26,9 +26,9 @@ const SHOTS = [
   ["phone-landscape", "Phone landscape", 844, 390, "touch", "A side sheet at half the pane: a clip's editor unfolds inline, Hide folds the sheet to an edge tab.", ""],
   ["tablet-landscape", "Tablet landscape", 1180, 820, "touch", "The desk layout by touch: the dock's 44px top band sets its height, the page column takes the rest.", ""],
   ["desk", "Desk", 1440, 900, "fine", "The dock's height edge, lit under the pointer, replaces stack mode; a hover still previews a state.", ""],
-  ["wide", "Wide", 1920, 1080, "fine", "A 640px panel stands two machines side by side; the lanes run about 900px.", ""],
-  ["ultrawide-2560", "Ultrawide", 2560, 1080, "fine", "One layout, capped at 2000px and centred, the dock at its foot.", "ds-full"],
-  ["ultrawide-3440", "Ultrawide", 3440, 1440, "fine", "The same 2000px column at 3440: a state kept, then its move played.", "ds-full"],
+  ["wide", "Wide", 1920, 1080, "fine", "Both pages in one row, their graphs stacked in the 448 panel; the dock edits whichever was kept last.", ""],
+  ["ultrawide-2560", "Ultrawide", 2560, 1080, "fine", "Past 2450 the two graphs stand side by side; a state kept on each, the dock turns to the last.", "ds-full"],
+  ["ultrawide-3440", "Ultrawide", 3440, 1440, "fine", "The same at 3440: the row paused, its move played, then the form kept again.", "ds-full"],
 ];
 const shot = ([id, name, w, h, input, line, cls]) => `<figure class="ds-shot ${cls}" data-loop="${id}" data-input="${input}" data-w="${w}" data-h="${h}" style="--ds-w: ${w}; --ds-h: ${h}"><div class="ds-device"><div class="ds-screen"><iframe title="${name}, ${w} by ${h}" width="${w}" height="${h}" tabindex="-1" aria-hidden="true" inert></iframe><div class="ds-layer" style="inline-size: ${w}px; block-size: ${h}px"><span class="ds-dot"></span></div></div></div><figcaption><span class="ds-name"><b>${name}</b><code>${w} × ${h}</code><span>${input === "fine" ? "pointer" : "touch"}</span></span><span>${line}</span></figcaption></figure>`;
 const fragment = `<style>

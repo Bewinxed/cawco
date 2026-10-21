@@ -1,7 +1,8 @@
 // The round-22 proof for the design-graph mockup: engine first (computed styles, boxes, the CDP Animation
 // domain), pixels only for what drawing alone decides (mask-composite). Every screen class of
 // responsive-design.md at its own size: the desk family (desk 1440 light and dark, desk 1024, tablet
-// landscape by touch and by trackpad, wide 1920, ultrawide 2560 and 3440) runs the whole suite; the compact
+// landscape by touch and by trackpad, wide 1920 and ultrawide 2560 and 3440 with both components at once
+// (all-components-design.md), and the same three with one component under review) runs the whole suite; the compact
 // classes (phone portrait, phone landscape, tablet portrait, a short desk window) run the same sweep on each
 // face and stop of their drawer or sheet, plus their own input. Then it saves the reviewer's captures.
 //   node .mockups/design-graph/check.mjs        (CHROME=<path> to point at another Chromium)
@@ -71,9 +72,15 @@ function install() {
   };
   K.controls = () => [...document.querySelectorAll("button, input, [role=button], [role=tab], .edge-pill, .corner-l, .badge")].filter((el) => K.vis(el) && !el.closest(".tip")).map((el) => ({ el, r: el.getBoundingClientRect(), kind: "control" }));
   K.compact = () => document.documentElement.dataset.layout !== "desk";
+  // The graphs and pages on screen: one each below the line, every component's from it.
+  K.graphs = () => [...document.querySelectorAll(".graph")].filter((g) => K.vis(g));
+  K.graph = () => K.graphs()[0] || document.querySelector(".gsec[data-current] .graph");
+  K.stages = () => [...document.querySelectorAll(".stage")].filter((s) => K.vis(s));
   // Overlaps: no text or control over another in the same layer (the page, the panel, the dock, the popover,
   // the menu); the base layers never overlap each other at all.
-  K.clipTo = (el, r) => { let { left, top, right, bottom } = r; for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) { const cs = getComputedStyle(e); if (cs.overflowX !== "visible" || cs.overflowY !== "visible") { const b = e.getBoundingClientRect(); left = Math.max(left, b.left); top = Math.max(top, b.top); right = Math.min(right, b.right); bottom = Math.min(bottom, b.bottom); } } return { left, top, right, bottom }; };
+  // What shows of a box: clipped by every scrolling or clipping ancestor, and in the timeline by its sticky
+  // ruler, which the rows scroll under.
+  K.clipTo = (el, r) => { let { left, top, right, bottom } = r; for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) { const cs = getComputedStyle(e); if (cs.overflowX !== "visible" || cs.overflowY !== "visible") { const b = e.getBoundingClientRect(); left = Math.max(left, b.left); top = Math.max(top, b.top); right = Math.min(right, b.right); bottom = Math.min(bottom, b.bottom); if (e.classList.contains("tl") && !el.closest(".ruler-row")) { const rr = e.querySelector(".ruler-row"); if (rr) top = Math.max(top, rr.getBoundingClientRect().bottom); } } } return { left, top, right, bottom }; };
   K.overlaps = () => {
     const items = K.textItems().concat(K.controls()).map((it) => ({ ...it, r: K.clipTo(it.el, it.r) })).filter((it) => it.r.right - it.r.left > 0.5 && it.r.bottom - it.r.top > 0.5), out = [];
     const hit = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
@@ -86,8 +93,7 @@ function install() {
       if (hit(a.r, b.r)) out.push(name(a) + " × " + name(b));
     }
     const base = ["panel", "dock", "page", "tools"].map((id) => document.getElementById(id)).filter((e) => e && K.vis(e) && getComputedStyle(e).display !== "contents");
-    const stageBox = K.clipTo(document.getElementById("stage"), document.getElementById("stage").getBoundingClientRect());
-    for (const t of base.filter((e) => e.id !== "page")) if (hit(t.getBoundingClientRect(), stageBox) && getComputedStyle(t).position === "fixed") out.push(t.id + " covers the component");
+    for (const st of K.stages()) { const stageBox = K.clipTo(st, st.getBoundingClientRect()); for (const t of base.filter((e) => e.id !== "page")) if (hit(t.getBoundingClientRect(), stageBox) && getComputedStyle(t).position === "fixed") out.push(t.id + " covers the " + st.dataset.comp + " component"); }
     const p = document.getElementById("panel"), d = document.getElementById("dock");
     if (K.vis(p) && K.vis(d) && hit(p.getBoundingClientRect(), d.getBoundingClientRect())) out.push("panel × dock");
     return [...new Set(out)];
@@ -140,7 +146,7 @@ function install() {
   K.underTool = () => {
     const tools = ["dock", "panel", "show", "tools"].map((id) => document.getElementById(id)).filter((t) => t && K.vis(t) && getComputedStyle(t).position === "fixed" && getComputedStyle(t).display !== "contents");
     // What the page column clips (scrolled out of its room) is not under the tool: only what shows.
-    const items = K.textItems().concat(K.controls()).filter((it) => it.el.closest("#stage")).map((it) => ({ ...it, r: K.clipTo(it.el, it.r) })).filter((it) => it.r.right - it.r.left > 0.5 && it.r.bottom - it.r.top > 0.5);
+    const items = K.textItems().concat(K.controls()).filter((it) => it.el.closest(".stage")).map((it) => ({ ...it, r: K.clipTo(it.el, it.r) })).filter((it) => it.r.right - it.r.left > 0.5 && it.r.bottom - it.r.top > 0.5);
     const hit = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
     const out = [];
     for (const t of tools) { const tb = t.getBoundingClientRect(); for (const it of items) if (hit(it.r, tb)) out.push(t.id + " over \"" + (it.el.textContent || it.el.tagName).trim().slice(0, 24) + "\""); }
@@ -160,9 +166,10 @@ function install() {
   };
   // c. no state's text cut by the graph's edge at the view it opens on;
   K.graphCuts = () => {
-    const g = document.getElementById("graph"), gb = g.getBoundingClientRect(), cs = getComputedStyle(g);
-    const v = { left: gb.left + parseFloat(cs.borderLeftWidth), top: gb.top + parseFloat(cs.borderTopWidth) }; v.right = v.left + g.clientWidth; v.bottom = v.top + g.clientHeight;
     const out = [];
+    for (const g of K.graphs()) {
+    const gb = g.getBoundingClientRect(), cs = getComputedStyle(g);
+    const v = { left: gb.left + parseFloat(cs.borderLeftWidth), top: gb.top + parseFloat(cs.borderTopWidth) }; v.right = v.left + g.clientWidth; v.bottom = v.top + g.clientHeight;
     for (const el of g.querySelectorAll(".node, .region-name")) {
       const b = el.getBoundingClientRect();
       const showsX = b.right > v.left + 0.5 && b.left < v.right - 0.5, showsY = b.bottom > v.top + 0.5 && b.top < v.bottom - 0.5;
@@ -170,16 +177,19 @@ function install() {
       const cutX = b.left < v.left - 0.5 || b.right > v.right + 0.5, cutY = b.top < v.top - 0.5 || b.bottom > v.bottom + 0.5;
       if (cutX || cutY) out.push((el.dataset.state || el.textContent.slice(0, 16)) + " cut " + (cutX ? "across" : "") + (cutX && cutY ? " and " : "") + (cutY ? "down" : ""));
     }
+    }
     return out;
   };
-  // d. no line (a graph edge, a tie, the playhead, the move's end edge) runs through a text box.
+  // d. no line (a graph edge, a tie, the playhead) runs through a text box. The move's end has no edge now
+  // (the r21 ruling: the tint alone).
   K.linesOverText = () => {
     // A floating popover or menu stands over the dock's lines: its text is on another layer.
     const texts = K.textItems().filter((t) => !t.el.closest("svg, .pop:not(.inline), .menu")).map((t) => ({ el: t.el, r: K.clipTo(t.el, t.r) })).filter((t) => t.r.right - t.r.left > 0.5 && t.r.bottom - t.r.top > 0.5);
     const inside = (x, y, r) => x > r.left + 0.5 && x < r.right - 0.5 && y > r.top + 0.5 && y < r.bottom - 0.5;
     const out = [];
-    const g = document.getElementById("graph").getBoundingClientRect();
     for (const pl of document.querySelectorAll(".world svg polyline")) {
+      const g = pl.closest(".graph").getBoundingClientRect();
+      if (!g.width) continue;
       const m = pl.getScreenCTM(), pts = pl.getAttribute("points").split(" ").map((p) => { const [x, y] = p.split(",").map(Number); return new DOMPoint(x, y).matrixTransform(m); });
       for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i], n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y)); for (let k = 0; k <= n; k++) { const x = a.x + ((b.x - a.x) * k) / (n || 1), y = a.y + ((b.y - a.y) * k) / (n || 1); if (!inside(x, y, g)) continue; const t = texts.find((t) => inside(x, y, t.r)); if (t) { out.push("graph edge " + pl.dataset.from + "→" + pl.dataset.to + " through \"" + t.el.textContent.trim().slice(0, 20) + "\""); k = n; i = pts.length; } } }
     }
@@ -187,8 +197,6 @@ function install() {
     for (const t of document.querySelectorAll(".tie")) rects.push(["tie", t.getBoundingClientRect()]);
     const ph = document.getElementById("playhead");
     if (ph && K.vis(document.getElementById("dock")) && getComputedStyle(ph, "::after").display !== "none") { const b = ph.getBoundingClientRect(), a = getComputedStyle(ph, "::after"); rects.push(["playhead", { left: b.left - 0.5, right: b.left + 0.5, top: b.top + parseFloat(a.top), bottom: b.bottom }]); }
-    const area = document.getElementById("endArea");
-    if (area && K.vis(document.getElementById("dock")) && K.vis(area)) { const b = area.getBoundingClientRect(), tl = document.getElementById("tl").getBoundingClientRect(); const rr = document.querySelector(".ruler-row").getBoundingClientRect(); rects.push(["move's end edge", { left: b.left, right: b.left + 1, top: Math.max(b.top, tl.top, rr.bottom), bottom: Math.min(b.bottom, tl.bottom) }]); }
     for (const s of document.querySelectorAll(".snap")) rects.push(["snap line", s.getBoundingClientRect()]);
     const ruler = document.querySelector(".ruler-row") && document.querySelector(".ruler-row").getBoundingClientRect();
     for (const [name, r] of rects) for (const t of texts) {
@@ -205,55 +213,46 @@ function install() {
     for (let i = 0; i < ls.length; i++) for (let j = i + 1; j < ls.length; j++) { const a = ls[i].b, b = ls[j].b; if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0) out.push(ls[i].t + "×" + ls[j].t); }
     return { labels: ls.map((l) => l.t).join(" "), overlaps: out };
   };
-  // A wash and its 1px edge stand --space-1 clear of the text they mark.
-  K.washGaps = () => {
-    const pad = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-1")), wrap = document.getElementById("stage").getBoundingClientRect();
+  // One Target (the r21 ruling): a wash on an element that draws a box is that box; on a bare one it stands
+  // --c-target-gap (2px) outside. Its target is the live element for what came in or changed, the kept
+  // snapshot's box for what went. No wash runs past its target's box plus 2px.
+  K.washGeometry = () => {
+    const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--c-target-gap"));
     return [...document.querySelectorAll(".wash")].map((w) => {
-      const wb = w.getBoundingClientRect(), edge = K.shadow(w).spread || 0;
-      const inner = { left: wb.left + edge, top: wb.top + edge, right: wb.right - edge, bottom: wb.bottom - edge };
-      let tb = null;
-      const el = w.dataset.wash === "add" && document.querySelector('#stage [data-key="' + w.dataset.of + '"]');
-      if (el) { const rg = document.createRange(); rg.selectNodeContents(el); const rs = [...rg.getClientRects()].filter((r) => r.width > 0.5 && r.height > 0.5); if (rs.length) tb = { left: Math.min(...rs.map((r) => r.left)), top: Math.min(...rs.map((r) => r.top)), right: Math.max(...rs.map((r) => r.right)), bottom: Math.max(...rs.map((r) => r.bottom)) }; }
-      else if (w.dataset.tx) { const [x, y, ww, hh] = w.dataset.tx.split(",").map(Number); tb = { left: wrap.left + x, top: wrap.top + y, right: wrap.left + x + ww, bottom: wrap.top + y + hh }; }
-      if (!tb) return { of: w.dataset.of, kind: w.dataset.wash, gap: null };
-      const gap = Math.min(tb.left - inner.left, tb.top - inner.top, inner.right - tb.right, inner.bottom - tb.bottom);
-      return { of: w.dataset.of, kind: w.dataset.wash, gap: Math.round(gap * 100) / 100, pass: gap >= pad - 0.5 };
+      const wb = w.getBoundingClientRect(), wrap = w.closest(".stage-wrap"), st = wrap.querySelector(".stage").getBoundingClientRect();
+      const live = w.dataset.wash === "add" && wrap.querySelector('.stage [data-key="' + w.dataset.of + '"]');
+      let tb;
+      if (live) tb = live.getBoundingClientRect();
+      else { const [x, y, ww, hh] = w.dataset.box.split(",").map(Number); tb = { left: st.left + x, top: st.top + y, right: st.left + x + ww, bottom: st.top + y + hh }; }
+      const out = Math.max(tb.left - wb.left, tb.top - wb.top, wb.right - tb.right, wb.bottom - tb.bottom), inn = Math.min(tb.left - wb.left, tb.top - wb.top, wb.right - tb.right, wb.bottom - tb.bottom);
+      const boxed = +w.dataset.pad === 0, r = (n) => Math.round(n * 100) / 100;
+      return { of: w.dataset.of, kind: w.dataset.wash, boxed, pad: +w.dataset.pad, over: r(out), under: r(inn), pass: out <= gap + 0.5 && (boxed ? Math.abs(out) <= 0.5 && Math.abs(inn) <= 0.5 : Math.abs(out - gap) <= 0.5 && Math.abs(inn - gap) <= 0.5) };
     });
   };
   // Every animation and transition on the page finished.
   K.settled = async () => { await Promise.all(document.getAnimations().map((a) => (a.playState === "running" ? a.finished.catch(() => {}) : null))); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); };
-  // Per frame, every chip's and node's text against what stands behind it: a chip's base layer where its tier
-  // layer (::after) doesn't cover it, and the tier layer where it does.
+  // Every chip's and node's text against what stands behind it: a chip's tier is its own fill and ink now (the
+  // r21 ruling), so its ground is the chip itself over the node.
   K.tierFrame = () => {
     const out = [];
     for (const c of document.querySelectorAll(".var")) {
       if (!K.vis(c)) continue;
-      const w = c.getBoundingClientRect().width, cs = getComputedStyle(c), base = K.bgOf(c), a = getComputedStyle(c, "::after");
-      let cover = 0;
-      if (a.content && a.content !== "none" && a.content !== "normal") {
-        const m = (a.clipPath || "").match(/inset\(([^)]*)\)/);
-        const v = m ? m[1].split(/\s+/).map((x) => (x.endsWith("%") ? (parseFloat(x) / 100) * w : parseFloat(x) || 0)) : [0, 0, 0, 0];
-        const [t, r, b, l] = v.length === 1 ? [v[0], v[0], v[0], v[0]] : v.length === 2 ? [v[0], v[1], v[0], v[1]] : v.length === 3 ? [v[0], v[1], v[2], v[1]] : v;
-        cover = a.clipPath === "none" ? w : Math.max(0, w - l - r);
-        void t; void b;
-        if (cover > 0.5) { const fill = K.over(K.rgba(a.backgroundColor), base), ink = K.rgba(a.color); out.push({ text: c.textContent, layer: "tier", r: K.ratio(K.over(ink, fill), fill) }); }
-      }
-      if (cover < w - 0.5) { const ink = K.rgba(cs.color); out.push({ text: c.textContent, layer: "base", r: K.ratio(K.over(ink, base), base) }); }
+      const bg = K.bgOf(c), ink = K.rgba(getComputedStyle(c).color);
+      out.push({ text: c.textContent, layer: "chip", r: K.ratio(K.over(ink, bg), bg) });
     }
     for (const t of document.querySelectorAll(".node > b, .node > p")) { if (!K.vis(t)) continue; const bg = K.bgOf(t), ink = K.rgba(getComputedStyle(t).color); out.push({ text: t.textContent.slice(0, 20), layer: "node", r: K.ratio(K.over(ink, bg), bg) }); }
     return out;
   };
   K.chipRatio = (c) => { const rows = []; for (const f of K.tierFrame()) if (f.text === c.textContent) rows.push(f.r); return rows.length ? Math.min(...rows) : null; };
-  K.sampleTiers = (ms) => new Promise((res) => { const t0 = performance.now(), frames = []; const tick = () => { const t = Math.round(performance.now() - t0); for (const f of K.tierFrame()) frames.push({ t, ...f, r: Math.round(f.r * 100) / 100 }); if (performance.now() - t0 < ms) requestAnimationFrame(tick); else res(frames); }; tick(); });
   K.radius = (el, pseudo) => { const cs = getComputedStyle(el, pseudo); return parseFloat(cs.borderBottomLeftRadius) || 0; };
   K.box = (el) => { const b = el.getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom, w: b.width, h: b.height }; };
   // The page's boxes: every element of the component, and the outer boxes of the tool.
   // The component's own boxes alone, in the viewport: what "nothing moves the preview" means where the
   // tool's own size changes (a drawer stop, the dock's height edge).
-  K.stageSnap = () => [...document.querySelectorAll("#stage, #stage *")].map((el) => { const b = el.getBoundingClientRect(); return [b.x, b.y, b.width, b.height].map((v) => Math.round(v * 100) / 100).join(","); });
+  K.stageSnap = () => [...document.querySelectorAll(".stage, .stage *")].filter((el) => !el.closest("[hidden]")).map((el) => { const b = el.getBoundingClientRect(); return [b.x, b.y, b.width, b.height].map((v) => Math.round(v * 100) / 100).join(","); });
   K.snap = () => {
     const out = [];
-    for (const el of document.querySelectorAll("#page, #page *")) { if (el.closest("#marks")) continue; const b = el.getBoundingClientRect(); out.push([b.x + scrollX, b.y + scrollY, b.width, b.height].map((v) => Math.round(v * 100) / 100).join(",")); }
+    for (const el of document.querySelectorAll("#page, #page *")) { if (el.closest(".marks")) continue; const b = el.getBoundingClientRect(); out.push([b.x + scrollX, b.y + scrollY, b.width, b.height].map((v) => Math.round(v * 100) / 100).join(",")); }
     for (const s of ["#panel", ".graph", "#dock"]) { const e = document.querySelector(s); const b = e.getBoundingClientRect(); let fixed = false; for (let x = e; x; x = x.parentElement) if (getComputedStyle(x).position === "fixed") fixed = true; out.push(s + ":" + [b.x + (fixed ? 0 : scrollX), b.y + (fixed ? 0 : scrollY), b.width, b.height].map((v) => Math.round(v * 100) / 100).join(",")); }
     return out;
   };
@@ -270,9 +269,15 @@ const views = [
   // emulation reports no hover, so this browser is started with Blink's pointer settings (ui::PointerType
   // fine 4, coarse|fine 6; HoverType hover 2).
   { id: "1180-trackpad", screen: "tablet-landscape", input: "touch-hover", viewport: { width: 1180, height: 820 }, colorScheme: "light", args: ["--blink-settings=primaryPointerType=4,availablePointerTypes=6,primaryHoverType=2,availableHoverTypes=2"] },
-  { id: "1920", screen: "wide", viewport: { width: 1920, height: 1080 }, colorScheme: "light" },
-  { id: "2560", screen: "ultrawide", viewport: { width: 2560, height: 1080 }, colorScheme: "dark" },
-  { id: "3440", screen: "ultrawide", viewport: { width: 3440, height: 1440 }, colorScheme: "light" },
+  // Both components at once from 1800 (all-components-design.md): the pages in one row, the graphs stacked
+  // in the 448 panel, side by side in twice it past 2450.
+  { id: "1920", screen: "wide", multi: "stack", viewport: { width: 1920, height: 1080 }, colorScheme: "light" },
+  { id: "2560", screen: "ultrawide", multi: "row", viewport: { width: 2560, height: 1080 }, colorScheme: "dark" },
+  { id: "3440", screen: "ultrawide", multi: "row", viewport: { width: 3440, height: 1440 }, colorScheme: "light" },
+  // One component under review (#review=form): the 800 panel at 1920, the centred 2000 column past 2450.
+  { id: "1920-single", screen: "wide", hash: "#review=form", viewport: { width: 1920, height: 1080 }, colorScheme: "light" },
+  { id: "2560-single", screen: "ultrawide", hash: "#review=form", viewport: { width: 2560, height: 1080 }, colorScheme: "light" },
+  { id: "3440-single", screen: "ultrawide", hash: "#review=form", viewport: { width: 3440, height: 1440 }, colorScheme: "dark" },
 ];
 const compactViews = [
   { id: "390-phone", screen: "phone-portrait", layout: "drawer", stacked: true, viewport: { width: 390, height: 844 }, colorScheme: "light", hasTouch: true, isMobile: true, touch: true },
@@ -290,6 +295,23 @@ await browser.close();
 console.log("\n" + passes + " passed, " + fails + " failed");
 process.exit(fails ? 1 : 0);
 
+// Checks both runners share.
+function mkHelpers(V, ev) {
+  // Fault 5: Hide is the kit's sm icon button (30px, the button outline) with its glyph at --icon-md (16px),
+  // its ink 3:1 or better on the panel, labelled "Hide graph".
+  const hideGlyph = async (sel) => {
+    const h = await ev((sel) => { const K = __k, b = document.querySelector(sel), g = b.querySelector("svg"), bb = b.getBoundingClientRect(), gb = g.getBoundingClientRect(), cs = getComputedStyle(b), bg = K.bgOf(b.parentElement), ink = K.rgba(cs.color), r = (n) => Math.round(n * 100) / 100; return { btn: r(bb.width) + "×" + r(bb.height), glyph: r(gb.width) + "×" + r(gb.height), edge: cs.borderTopWidth + " " + cs.borderTopStyle, ink: r(K.ratio(K.over(ink, bg), bg)), label: b.getAttribute("aria-label"), centred: Math.abs(gb.left + gb.width / 2 - (bb.left + bb.width / 2)) <= 0.5 && Math.abs(gb.top + gb.height / 2 - (bb.top + bb.height / 2)) <= 0.5 }; }, sel);
+    ok(V, "9 fault 5: " + sel + " is the kit's 30px icon button with a 16px glyph, centred, its ink ≥ 3:1, \"Hide graph\"", h.btn === "30×30" && h.glyph === "16×16" && h.edge === "1px solid" && h.ink >= 3 && h.centred && h.label === "Hide graph", JSON.stringify(h));
+  };
+  // Fault 3: under Original every row's readouts (their text, their tint, their free edge) are the original
+  // move's, drawn from it, never the edited values.
+  const origChips = async (label) => {
+    const o = await ev(() => { const km = keptMove(), rows = [...document.querySelectorAll(".clip")]; return { view: km.e.view, rows: rows.map((row) => { const c = km.e.orig.find((x) => x.key === row.dataset.key), want = document.createElement("div"); want.innerHTML = readoutsHtml(km.e, c); const got = row.querySelector(".readouts"); return { key: row.dataset.key, got: got.textContent, want: want.textContent, changed: got.querySelectorAll(".badge.changed").length, free: [...got.querySelectorAll(".badge")].map((b) => b.classList.contains("free")).join(","), wantFree: [...want.querySelectorAll(".badge")].map((b) => b.classList.contains("free")).join(",") }; }), edited: editCount(km.e) }; });
+    ok(V, "9 fault 3: under Original every chip's text and state is the original move's (" + label + ")", o.view === "original" && o.edited > 0 && o.rows.every((r) => r.got === r.want && r.changed === 0 && r.free === r.wantFree), o.rows.map((r) => r.key + ": \"" + r.got + "\"" + (r.got === r.want ? "" : " ≠ \"" + r.want + "\"") + (r.changed ? " " + r.changed + " tinted" : "")).join("; ") + " (" + o.edited + " edits)");
+  };
+  return { hideGlyph, origChips };
+}
+
 async function runView(view) {
   const V = view.id, touch = !!view.touch;
   const own = view.args ? await chromium.launch({ executablePath: CHROME, args: view.args }) : null;
@@ -299,7 +321,8 @@ async function runView(view) {
   page.on("pageerror", (e) => errors.push(String(e)));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   const ev = (fn, arg) => page.evaluate(fn, arg);
-  const load = async () => { await page.goto(URL_); await page.waitForTimeout(700); await ev(install); };
+  const { hideGlyph, origChips } = mkHelpers(V, ev);
+  const load = async () => { await page.goto(URL_ + (view.hash || "")); await page.reload(); await page.waitForTimeout(700); await ev(install); };
   const settle = (ms = 450) => page.waitForTimeout(ms);
   const center = async (sel) => { const b = await page.locator(sel).first().boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2, b }; };
   const click = async (sel) => { await page.locator(sel).first().scrollIntoViewIfNeeded(); const c = await center(sel); if (touch) await page.touchscreen.tap(c.x, c.y); else await page.mouse.click(c.x, c.y); };
@@ -363,12 +386,11 @@ async function runView(view) {
       add("ghost edge", K.tokenColor("--border-contrast"), ["dock", dockBg]);
       add("tie", K.tokenColor("--border-contrast"), ["dock", dockBg]);
       add("playhead", K.rgba(getComputedStyle(document.getElementById("playhead"), "::after").backgroundColor), ["dock", dockBg], ["end area", K.tokenColor("--surface-recess-deep")]);
-      add("move's end edge", K.rgba(getComputedStyle(document.getElementById("endArea")).borderLeftColor), ["dock", dockBg]);
       add("free dashed edge", K.tokenColor("--border-row-outline"), ["dock", dockBg], ["badge", K.tokenColor("--surface-recess")]);
       add("curve glyph", K.tokenColor("--ink-muted"), ["badge", K.tokenColor("--surface-recess")]);
       add("transport glyph", K.rgba(getComputedStyle(document.getElementById("play")).color), ["dock", dockBg]);
     }
-    const well = K.bgOf(document.getElementById("graph"));
+    const well = K.bgOf(K.graph());
     add("kept edge", K.tokenColor("--brand-solid"), ["well", well]);
     add("graph disc", K.tokenColor("--brand-ink-strong"), ["well", well]);
     add("zoom glyph", K.rgba(getComputedStyle(document.getElementById("zoomIn")).color), ["panel", raised]);
@@ -377,7 +399,7 @@ async function runView(view) {
   });
   const badMarks = marks.filter((m) => m.r < 3);
   ok(V, "7 non-text marks ≥ 3:1", badMarks.length === 0, (badMarks.length ? "FAILING " + badMarks.map((m) => m.name + " " + m.r).join(", ") + "; " : "") + marks.map((m) => m.name + " " + m.r).join(", "));
-  const kit = await ev(() => { const K = __k, raised = K.bgOf(document.getElementById("panel")), well = K.bgOf(document.getElementById("graph")); return { control: Math.round(K.ratio(K.tokenColor("--border-control"), raised) * 100) / 100, card: Math.round(K.ratio(K.tokenColor("--border-card"), well) * 100) / 100, fill: Math.round(K.ratio(K.tokenColor("--surface-fill"), raised) * 100) / 100, deep: Math.round(K.ratio(K.tokenColor("--surface-recess-deep"), raised) * 100) / 100 }; });
+  const kit = await ev(() => { const K = __k, raised = K.bgOf(document.getElementById("panel")), well = K.bgOf(K.graph()); return { control: Math.round(K.ratio(K.tokenColor("--border-control"), raised) * 100) / 100, card: Math.round(K.ratio(K.tokenColor("--border-card"), well) * 100) / 100, fill: Math.round(K.ratio(K.tokenColor("--surface-fill"), raised) * 100) / 100, deep: Math.round(K.ratio(K.tokenColor("--surface-recess-deep"), raised) * 100) / 100 }; });
   note(V, "7 measured, not this round's marks", "kit control edge (fields, nodes) " + kit.control + ":1, region dashed edge (border-card on the well) " + kit.card + ":1, bar fill alone " + kit.fill + ":1 (hence its 3:1 edge), end-area fill alone " + kit.deep + ":1 (hence its 3:1 start edge)");
 
   // ---- 5. The lane and the bar ----
@@ -423,8 +445,8 @@ async function runView(view) {
       for (const b of document.querySelectorAll(".zoom .icon-btn")) pair("zoom group ⊃ button", b.closest(".zoom"), b);
       for (const t of document.querySelectorAll(".t-tabs")) pair("tabs track ⊃ pill", t, t.querySelector(".t-tabs-pill"));
       for (const f of document.querySelectorAll(".fld")) { const b = f.querySelector(".badge"); if (b) pair("field ⊃ token badge", f, b); }
-      for (const m of document.querySelectorAll(".menu .mi")) pair("menu ⊃ item", m.closest(".menu"), m);
-      for (const w of document.querySelectorAll(".wash")) { const k = w.dataset.of; const el = k && document.querySelector('#stage [data-key="' + k + '"]'); if (el) out.push({ name: "wash ⊃ field", R: K.radius(w), r: K.radius(el), gap: Math.round((el.getBoundingClientRect().left - w.getBoundingClientRect().left) * 100) / 100, even: true, pass: Math.abs(K.radius(w) - (K.radius(el) + (el.getBoundingClientRect().left - w.getBoundingClientRect().left))) <= 0.5 }); }
+      // The menu is the kit's (12px surface, 6px pad, 5px items: the r21 ruling), not a concentric pair.
+      for (const w of document.querySelectorAll(".wash")) { const k = w.dataset.of; const el = k && w.closest(".stage-wrap").querySelector('.stage [data-key="' + k + '"]'); if (el) out.push({ name: "wash ⊃ field", R: K.radius(w), r: K.radius(el), gap: Math.round((el.getBoundingClientRect().left - w.getBoundingClientRect().left) * 100) / 100, even: true, pass: Math.abs(K.radius(w) - (K.radius(el) + (el.getBoundingClientRect().left - w.getBoundingClientRect().left))) <= 0.5 }); }
       return out;
     });
     const bad = pairs.filter((p) => !p.pass), names = [...new Set(pairs.map((p) => p.name))];
@@ -441,11 +463,11 @@ async function runView(view) {
   const G = grips;
   console.log("INFO [" + V + "] 3 grips, drawn and hit boxes relative to the panel's border box: " + JSON.stringify({ pillW: G.pillW, pillH: G.pillH, L: G.L, sashW: G.sashW, sashH: G.sashH, sashC: G.sashC }));
   if (G.pillW) ok(V, "3 width pill: 6×36, centred on the left border and on the run", G.pillW.w === 6 && G.pillW.h === 36 && Math.abs(G.pillW.x + 3 - 0.5) <= 0.01 && Math.abs(G.pillW.y + 18 - G.panel.h / 2) <= 0.5, JSON.stringify(G.pillW));
-  ok(V, "3 foot pill: 36×6, centred on the bottom border and on the run", G.pillH.w === 36 && G.pillH.h === 6 && Math.abs(G.pillH.b + 3 - 0.5) <= 0.01 && Math.abs(G.pillH.x + 18 - G.panel.w / 2) <= 0.5, JSON.stringify(G.pillH));
+  if (G.pillH) ok(V, "3 foot pill: 36×6, centred on the bottom border and on the run", G.pillH.w === 36 && G.pillH.h === 6 && Math.abs(G.pillH.b + 3 - 0.5) <= 0.01 && Math.abs(G.pillH.x + 18 - G.panel.w / 2) <= 0.5, JSON.stringify(G.pillH));
   if (G.L) ok(V, "3 corner L: 12×12, 6px in from the corner", G.L.w === 12 && G.L.h === 12 && G.L.x === 6 && G.L.b === 6, JSON.stringify(G.L));
   const band = G.coarse ? 44 : 11;
   if (G.sashW) ok(V, "3 width band: " + band + "px straddling the edge, stopping short of the curves, never over content", Math.abs(G.sashW.w - band) < 0.01 && (G.coarse ? Math.abs(G.sashW.x + 22 - 0.5) < 0.01 : G.sashW.x === -4 && G.sashW.x + G.sashW.w <= G.panel.padL) && G.sashW.y >= 16, JSON.stringify(G.sashW));
-  ok(V, "3 foot band: " + band + "px straddling the foot, never over content", Math.abs(G.sashH.h - band) < 0.01 && (G.coarse ? Math.abs(G.sashH.b + 22 - 0.5) < 0.01 : G.sashH.b === -4 && G.sashH.b + G.sashH.h <= G.panel.padB) && G.sashH.x >= 16, JSON.stringify(G.sashH));
+  if (G.sashH) ok(V, "3 foot band: " + band + "px straddling the foot, never over content", Math.abs(G.sashH.h - band) < 0.01 && (G.coarse ? Math.abs(G.sashH.b + 22 - 0.5) < 0.01 : G.sashH.b === -4 && G.sashH.b + G.sashH.h <= G.panel.padB) && G.sashH.x >= 16, JSON.stringify(G.sashH));
   if (G.sashC) ok(V, "3 corner square: " + (G.coarse ? "44" : "20") + "px from " + (G.coarse ? "the corner, straddling" : "4px outside"), G.coarse ? G.sashC.w === 44 : G.sashC.w === 20 && G.sashC.h === 20 && G.sashC.x === -4 && G.sashC.b === -4, JSON.stringify(G.sashC));
   const lit = await ev(() => { const P = document.getElementById("panel"), a = getComputedStyle(P, "::after"), p = getComputedStyle(P); return { radius: a.borderTopLeftRadius, panelRadius: p.borderTopLeftRadius, inset: a.top, stroke: __k.shadow(P, "::after").spread, opacity: a.opacity }; });
   ok(V, "3 lit edge: a 1.5px stroke centred on the 1px border, on the panel's own radius (+0.25), invisible at rest", parseFloat(lit.radius) === parseFloat(lit.panelRadius) + 0.25 && parseFloat(lit.inset) === -1.25 && lit.stroke === 1.5 && lit.opacity === "0", JSON.stringify(lit));
@@ -458,6 +480,8 @@ async function runView(view) {
   const shot = async () => (await page.screenshot({ type: "png" })).toString("base64");
   const sample = (b64, pts) => ev(async ({ b64, pts }) => { const img = new Image(); img.src = "data:image/png;base64," + b64; await img.decode(); const c = document.createElement("canvas"); c.width = img.width; c.height = img.height; const x = c.getContext("2d"); x.drawImage(img, 0, 0); return pts.map(([px, py]) => [...x.getImageData(Math.floor(px), Math.floor(py), 1, 1).data.slice(0, 3)]); }, { b64, pts });
   const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+  // Pixels that differ by more than 24 (of 765) between two captures, over one clip.
+  const regionDiff = (a, b, clip) => ev(async ({ a, b, clip }) => { const load = async (s) => { const img = new Image(); img.src = "data:image/png;base64," + s; await img.decode(); const c = document.createElement("canvas"); c.width = clip.width; c.height = clip.height; const x = c.getContext("2d"); x.drawImage(img, -clip.x, -clip.y); return x.getImageData(0, 0, clip.width, clip.height).data; }; const A = await load(a), B = await load(b); let n = 0; for (let i = 0; i < A.length; i += 4) if (Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2]) > 24) n++; return n; }, { a, b, clip });
   const cdp = await ctx.newCDPSession(page);
   await cdp.send("Animation.enable");
   const anims = [];
@@ -470,9 +494,9 @@ async function runView(view) {
     const c = await center("#" + sashId);
     await page.mouse.move(pb.l - 200, pb.t + 40);
     await settle(300);
-    if (edge === "w") await page.screenshot({ path: join(CAPS, V + "-grip-width-rest.jpg"), type: "jpeg", quality: 85, clip: { x: pb.l - 30, y: pb.t, width: 80, height: pb.h } });
-    if (edge === "h") await page.screenshot({ path: join(CAPS, V + "-grip-foot-rest.jpg"), type: "jpeg", quality: 85, clip: { x: pb.l, y: pb.b - 60, width: pb.w, height: 80 } });
-    if (edge === "wh") await page.screenshot({ path: join(CAPS, V + "-grip-corner-rest.jpg"), type: "jpeg", quality: 85, clip: { x: pb.l - 30, y: pb.b - 130, width: 160, height: 150 } });
+    if (edge === "w") await page.screenshot({ path: join(CAPS, V + "-grip-width-rest.jpg"), type: "jpeg", quality: 92, clip: { x: pb.l - 30, y: pb.t, width: 80, height: pb.h } });
+    if (edge === "h") await page.screenshot({ path: join(CAPS, V + "-grip-foot-rest.jpg"), type: "jpeg", quality: 92, clip: { x: pb.l, y: pb.b - 60, width: pb.w, height: 80 } });
+    if (edge === "wh") await page.screenshot({ path: join(CAPS, V + "-grip-corner-rest.jpg"), type: "jpeg", quality: 92, clip: { x: pb.l - 30, y: pb.b - 130, width: 160, height: 150 } });
     const restShot = await shot();
     const before = await ev(() => __k.snap());
     anims.length = 0;
@@ -484,6 +508,15 @@ async function runView(view) {
       await cdp.send("Animation.setPaused", { animations: [tr.id], paused: true });
       const delay = tr.source.delay, dur = tr.source.duration, readings = [];
       for (const t of [0, delay - 1, delay, delay + dur / 2, delay + dur]) { await cdp.send("Animation.seekAnimations", { animations: [tr.id], currentTime: t }); await ev(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); readings.push([t, Number(await ev(() => getComputedStyle(document.getElementById("panel"), "::after").opacity)).toFixed(3)]); }
+      // The lit capture is taken here, held by the Animation domain at the fade's end (opacity 1), and the
+      // check proves it differs from the rest capture over the same clip (r22's lit captures were taken a
+      // settle later and the reviewer read them as unchanged).
+      await page.waitForTimeout(200);
+      const clip = edge === "w" ? { x: pb.l - 30, y: pb.t, width: 80, height: pb.h } : edge === "h" ? { x: pb.l, y: pb.b - 60, width: pb.w, height: 80 } : { x: pb.l - 30, y: pb.b - 130, width: 160, height: 150 };
+      const litNow = await shot();
+      await page.screenshot({ path: join(CAPS, V + "-grip-" + { w: "width", h: "foot", wh: "corner" }[edge] + "-lit.jpg"), type: "jpeg", quality: 92, clip });
+      const changed = await regionDiff(restShot, litNow, clip);
+      ok(V, "3 " + edge + ": the lit capture shows the lit edge (held at the fade's end, " + changed + " pixels differ from the rest capture over its clip)", changed >= 40, changed + " px changed by more than 24 (of 765) in " + clip.width + "×" + clip.height);
       await cdp.send("Animation.setPaused", { animations: [tr.id], paused: false });
       ok(V, "3 " + edge + ": lit edge 0 at rest, through the --dur-pop delay, 1 at its end (CDP scrub)", delay === 260 && dur === 120 && +readings[0][1] === 0 && +readings[1][1] === 0 && +readings[4][1] === 1, "delay " + delay + "ms, duration " + dur + "ms, opacity at " + readings.map(([t, o]) => t + "ms=" + o).join(", "));
     } else ok(V, "3 " + edge + ": lit edge transition caught on the CDP Animation domain", false, "no CSSTransition on opacity started; got " + anims.map((a) => a.type + ":" + a.name).join(","));
@@ -505,14 +538,11 @@ async function runView(view) {
       : edge === "h" ? litAt("footMid") && darkAt("leftMid") && darkAt("topMid") && darkAt("rightMid")
       : litAt("leftNearCorner") && litAt("footNearCorner") && darkAt("topMid") && darkAt("rightMid") && d.leftMid < d.leftNearCorner;
     ok(V, "3 mask-composite live in Chromium (" + edge + "): lights its arm round the curve and fades, leaves the rest", expect, "pixel change by point: " + JSON.stringify(d));
-    if (edge === "w") await page.screenshot({ path: join(CAPS, V + "-grip-width-lit.jpg"), type: "jpeg", quality: 85, clip: { x: pb.l - 30, y: pb.t, width: 80, height: pb.h } });
-    if (edge === "h") await page.screenshot({ path: join(CAPS, V + "-grip-foot-lit.jpg"), type: "jpeg", quality: 85, clip: { x: pb.l, y: pb.b - 60, width: pb.w, height: 80 } });
-    if (edge === "wh") await page.screenshot({ path: join(CAPS, V + "-grip-corner-lit.jpg"), type: "jpeg", quality: 85, clip: { x: pb.l - 30, y: pb.b - 130, width: 160, height: 150 } });
     await page.mouse.move(pb.l - 200, pb.t + 40);
     await settle(250);
   }
   // Keys: the APG window splitter.
-  for (const [sashId, key, measure, sign] of [["sashW", "ArrowLeft", "#panel", "w"], ["sashH", "ArrowDown", ".graph", "h"]]) {
+  for (const [sashId, key, measure, sign] of [["sashW", "ArrowLeft", "#panel", "w"], ["sashH", "ArrowDown", ".gsec[data-current] .graph", "h"]]) {
     if (!(await page.locator("#" + sashId).isVisible())) continue;
     const size = () => ev(([s, m]) => { const b = document.querySelector(s).getBoundingClientRect(); return m === "w" ? b.width : b.height; }, [measure, sign]);
     await ev((id) => document.getElementById(id).focus(), sashId);
@@ -536,23 +566,63 @@ async function runView(view) {
   await load();
   {
     const W = view.viewport.width, H = view.viewport.height;
-    const geo = await ev(() => { const b = (id) => __k.box(document.getElementById(id)), cs = getComputedStyle(document.documentElement); return { page: b("page"), panel: b("panel"), dock: b("dock"), s5: parseFloat(cs.getPropertyValue("--space-5")), maxW: parseFloat(cs.getPropertyValue("--c-review-max-w")), stack: document.querySelectorAll("[data-stack]").length, lane: document.querySelector(".lane").getBoundingClientRect().width }; });
-    const g0 = Math.max(0, (W - geo.maxW) / 2);
-    ok(V, "9 page, panel and dock stand inside " + (g0 ? "the centred " + geo.maxW + "px column (" + g0 + "px either side)" : "the pane") + "; the dock at the foot under the page column, whose room ends above it; no stack mode", Math.abs(geo.page.l - g0) <= 0.5 && Math.abs(geo.panel.r - (W - g0 - geo.s5)) <= 0.5 && Math.abs(geo.dock.l - (g0 + geo.s5)) <= 0.5 && Math.abs(geo.dock.b - (H - geo.s5)) <= 0.5 && Math.abs(geo.page.b - (geo.dock.t - geo.s5)) <= 0.5 && Math.abs(geo.dock.r - geo.page.r) <= 0.5 && geo.stack === 0, JSON.stringify(geo));
-    const wantW = view.screen === "wide" || view.screen === "ultrawide" ? 640 : 448;
-    ok(V, "9 the panel defaults to " + wantW + "px", Math.abs(geo.panel.w - wantW) <= 0.5, geo.panel.w + "px");
-    if (wantW === 640) {
-      const two = await ev(() => { const rs = [...document.querySelectorAll(".region")].map((r) => ({ m: r.dataset.machine, b: r.getBoundingClientRect() })), out = []; for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) { const a = rs[i].b, b = rs[j].b; if (Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0 && (a.right <= b.left || b.right <= a.left)) out.push(rs[i].m + " | " + rs[j].m); } return out; });
-      ok(V, "9 two machines stand side by side in the 640px panel", two.length > 0, two.join(", "));
-      ok(V, "9 the lanes grow to about 900px", geo.lane >= 850, Math.round(geo.lane) + "px");
+    const geo = await ev(() => { const b = (id) => __k.box(document.getElementById(id)), cs = getComputedStyle(document.documentElement); return { page: b("page"), panel: b("panel"), dock: b("dock"), s5: parseFloat(cs.getPropertyValue("--space-5")), maxW: parseFloat(cs.getPropertyValue("--c-review-max-w")), floorH: parseFloat(cs.getPropertyValue("--c-page-h-floor")), stack: document.querySelectorAll("[data-stack]").length, lane: document.querySelector(".lane").getBoundingClientRect().width, multi: document.documentElement.hasAttribute("data-multi"), graphs: document.documentElement.dataset.graphs || null, nodeW: getComputedStyle(document.querySelector(".gsec[data-current] .world")).getPropertyValue("--node-w").trim(), two: document.querySelector(".gsec[data-current] .graph").dataset.two }; });
+    const capped = view.screen === "ultrawide" && !view.multi, g0 = capped ? Math.max(0, (W - geo.maxW) / 2) : 0, near = (a, b) => Math.abs(a - b) <= 0.5;
+    ok(V, "9 the layout is " + (view.multi ? "every component at once, graphs " + view.multi : "one component") + " (html[data-multi], [data-graphs])", geo.multi === !!view.multi && geo.graphs === (view.multi || null), JSON.stringify({ multi: geo.multi, graphs: geo.graphs }));
+    if (capped) ok(V, "9 fault 4: one component past 2450: page, panel and dock stand in the centred " + geo.maxW + "px column (" + g0 + "px either side), the dock spanning it at the foot, the panel down to it, the page above it", near(geo.page.l, g0) && near(geo.page.r, geo.panel.l - geo.s5) && near(geo.panel.r, W - g0 - geo.s5) && near(geo.panel.b, geo.dock.t - geo.s5) && near(geo.dock.l, g0 + geo.s5) && near(geo.dock.r, W - g0 - geo.s5) && near(geo.dock.b, H - geo.s5) && near(geo.page.b, geo.dock.t - geo.s5) && geo.stack === 0, JSON.stringify({ page: geo.page, panel: geo.panel, dock: geo.dock }));
+    else ok(V, "9 page, panel and dock stand inside the pane; the dock at the foot under the page column, whose room ends above it; no stack mode", near(geo.page.l, 0) && near(geo.panel.r, W - geo.s5) && near(geo.dock.l, geo.s5) && near(geo.dock.b, H - geo.s5) && near(geo.page.b, geo.dock.t - geo.s5) && near(geo.dock.r, geo.page.r) && geo.stack === 0, JSON.stringify({ page: geo.page, panel: geo.panel, dock: geo.dock }));
+    const wantW = view.multi === "row" ? 896 : view.multi ? 448 : view.screen === "wide" || view.screen === "ultrawide" ? 800 : 448;
+    ok(V, "9 the panel defaults to " + wantW + "px" + (view.multi === "row" ? " (two 448 graphs side by side)" : view.multi ? " (the graphs stacked)" : wantW === 800 ? " (c-graph-panel-w-wide, one component)" : ""), Math.abs(geo.panel.w - wantW) <= 0.5, geo.panel.w + "px");
+    // The r22 ruling: nodes are always 168 here; two regions side by side only where the graph holds both at 168
+    // (778px), as the 800 panel does.
+    const wideGraph = wantW === 800;
+    ok(V, "9 nodes at their full 168px; two machines side by side " + (wideGraph ? "(the graph is 778px or wider)" : "never (the graph is narrower than 778px)"), geo.nodeW === "168px" && geo.two === String(wideGraph), "node " + geo.nodeW + ", two-up " + geo.two);
+    if (wideGraph) {
+      const two = await ev(() => { const rs = [...document.querySelectorAll(".gsec[data-current] .region")].map((r) => ({ m: r.dataset.machine, b: r.getBoundingClientRect() })), out = []; for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) { const a = rs[i].b, b = rs[j].b; if (Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0 && (a.right <= b.left || b.right <= a.left)) out.push(rs[i].m + " | " + rs[j].m); } return out; });
+      ok(V, "9 two machines stand side by side in the 800px panel", two.length > 0, two.join(", "));
+      if (view.screen === "wide") ok(V, "9 one component at 1920: a 1066px page column (the dock under it) and lanes of about 740px", near(geo.dock.w, 1066) && geo.lane >= 700 && geo.lane <= 780, "dock " + geo.dock.w + "px, page box " + geo.page.w + "px with its margins, lanes " + Math.round(geo.lane) + "px");
       await ev(() => document.getElementById("sashW").focus());
       await page.keyboard.press("ArrowLeft"); await page.keyboard.press("ArrowLeft"); await settle(300);
       await ev(() => dispatchEvent(new Event("resize"))); await settle(300);
       const dragged = await ev(() => document.getElementById("panel").offsetWidth);
-      ok(V, "9 the person's dragged width still wins over the class's default (through a resize)", dragged === 656, dragged + "px");
+      ok(V, "9 the person's dragged width still wins over the class's default (through a resize)", dragged === wantW + 16, dragged + "px");
+      await load();
+    }
+    if (view.multi) {
+      const m = await ev(() => { const r = (e) => __k.box(e); return { pages: [...document.querySelectorAll(".stage-wrap")].filter((e) => __k.vis(e)).map((e) => ({ c: e.dataset.comp, ...r(e) })), secs: [...document.querySelectorAll(".gsec")].map((sec) => ({ c: sec.dataset.comp, head: __k.vis(sec.querySelector(".gsec-head")), name: sec.querySelector(".gsec-name").textContent, zoom: __k.vis(sec.querySelector(".gsec-head .zoom")), g: r(sec.querySelector(".graph")) })), tabs: __k.vis(document.getElementById("tabs")), barZoom: __k.vis(document.querySelector(".toolbar .zoom")), kept: document.querySelectorAll(".node.kept").length, title: document.querySelector(".dock-title").textContent }; });
+      const [p1, p2] = m.pages, [s1, s2] = m.secs;
+      ok(V, "9 both pages stand in one row at their real 600px, " + geo.s5 + "px apart", m.pages.length === 2 && near(p1.t, p2.t) && near(p1.w, 600) && near(p2.w, 600) && near(p2.l - p1.r, geo.s5), JSON.stringify(m.pages));
+      ok(V, "9 the tab strip goes; each graph stands under its component's name, with its own zoom group", !m.tabs && !m.barZoom && m.secs.every((x) => x.head && x.zoom) && s1.name === "Create routine form" && s2.name === "Routine row", JSON.stringify(m.secs.map((x) => ({ c: x.c, head: x.head, zoom: x.zoom }))) + ", tabs " + m.tabs);
+      ok(V, view.multi === "stack" ? "9 the two graphs stack, one under the other" : "9 past 2450 the two graphs stand side by side in the 896 panel", view.multi === "stack" ? s2.g.t >= s1.g.b && near(s1.g.l, s2.g.l) : near(s1.g.t, s2.g.t) && s2.g.l >= s1.g.r, JSON.stringify([s1.g, s2.g]));
+      ok(V, "9 two coral kept states on screen, one per component", m.kept === 2, m.kept + " kept");
+      await sweep("every component at once"); await breakage("every component at once"); await contrast("every component at once");
+      if (view.screen === "wide") ok(V, "9 the dock's lanes run about 1000px", geo.lane >= 950 && geo.lane <= 1150, Math.round(geo.lane) + "px");
+      await click('.gsec[data-comp="row"] [data-z="in"]'); await settle(150);
+      const z = await ev(() => ({ form: G.form.zoom, row: G.row.zoom }));
+      ok(V, "9 each graph keeps its own zoom: zooming the row's graph leaves the form's", z.row === 1.2 && z.form === 1, JSON.stringify(z));
+      ok(V, "9 the dock edits the last-kept component's move and names it", m.title === "Create routine form · Saving → Save failed", m.title);
+      await click('.gsec[data-comp="row"] .node[data-machine="runs"][data-state="running"]'); await settle(400);
+      const t2 = await ev(() => ({ title: document.querySelector(".dock-title").textContent, tab, kept: document.querySelectorAll(".node.kept").length }));
+      await ev(() => document.activeElement && document.activeElement.blur());
+      await page.keyboard.press(" "); await settle(80);
+      const sp = await ev(() => ({ playing: !!playing, tab, rowFrame: !!document.querySelector('.stage[data-comp="row"]')._drewFrame, formFrame: !!document.querySelector('.stage[data-comp="form"]')._drewFrame }));
+      await settle((await playLen()) + 300);
+      ok(V, "9 keeping a state on the row makes it the last kept: the dock turns to its move, titled with it; Space plays its page alone", t2.title === "Routine row · Waiting → Running" && t2.tab === "row" && t2.kept === 2 && sp.playing && sp.rowFrame && !sp.formFrame, JSON.stringify(t2) + " " + JSON.stringify(sp));
+      await click('.gsec[data-comp="form"] .node[data-machine="save"][data-state="failed"]'); await settle(400);
+      ok(V, "9 a keep back on the form turns the dock back to it", (await ev(() => document.querySelector(".dock-title").textContent)) === "Create routine form · Saving → Save failed");
+      if (view.multi === "stack") {
+        const hs = () => ev(() => splitGraphs().map((g) => g.offsetHeight));
+        const h0 = await hs(), sb = await center("#sashS");
+        await page.mouse.move(sb.x, sb.y); await page.mouse.down(); await page.mouse.move(sb.x, sb.y + 60, { steps: 6 }); await page.mouse.up(); await settle(300);
+        const h1 = await hs();
+        await ev(() => document.getElementById("sashS").focus()); await page.keyboard.press("ArrowDown");
+        const h2 = await hs();
+        ok(V, "9 the foot edge between the stacked graphs splits their heights: dragged 60px down, the first gains what the second gives; a key steps 8px", Math.abs(h1[0] - h0[0] - 60) <= 1 && Math.abs(h1[0] + h1[1] - h0[0] - h0[1]) <= 1 && h2[0] - h1[0] === 8, JSON.stringify([h0, h1, h2]));
+      }
+      await load();
     }
     const d = await ev(() => ({ h: document.getElementById("dock").offsetHeight, floor: dockFloor(), ceil: dockCeil(), shown: __k.vis(document.getElementById("sashD")) }));
-    ok(V, "9 the dock has its own height edge: floor head + ruler + one row (" + d.floor + "px), ceiling the room (" + d.ceil + "px)", d.shown && d.floor > 100 && d.floor <= d.h && d.ceil === H - 2 * geo.s5, JSON.stringify(d));
+    ok(V, "9 the dock has its own height edge: floor head + ruler + one row (" + d.floor + "px), ceiling the room less the 240px page floor (" + d.ceil + "px)", d.shown && d.floor > 100 && d.floor <= d.h && d.ceil === H - 2 * geo.s5 - geo.floorH, JSON.stringify(d));
     const st0 = await ev(() => __k.stageSnap());
     const sd = await center("#sashD");
     await page.mouse.move(sd.x, sd.y); await page.mouse.down(); await page.mouse.move(sd.x, sd.y - 60, { steps: 6 }); await page.mouse.up(); await settle(300);
@@ -562,7 +632,7 @@ async function runView(view) {
     await ev(() => document.getElementById("sashD").focus());
     const keyH = async (k) => { await page.keyboard.press(k); return ev(() => document.getElementById("dock").offsetHeight); };
     const k1 = await keyH("ArrowUp"), k2 = await keyH("Shift+ArrowDown"), kEnd = await keyH("End"), kHome = await keyH("Home");
-    ok(V, "9 the dock's edge by keys: Up 8px, Shift+Down 32px, End the room, Home the floor", k1 - d1.h === 8 && k1 - k2 === 32 && kHome === d.floor && kEnd === d.ceil, [d1.h, k1, k2, kEnd, kHome].join(" → "));
+    ok(V, "9 the dock's edge by keys: Up 8px, Shift+Down 32px, End the room less the page floor, Home the floor", k1 - d1.h === 8 && k1 - k2 === 32 && kHome === d.floor && kEnd === d.ceil, [d1.h, k1, k2, kEnd, kHome].join(" → "));
     await settle(300);
     await sweep("the dock at its floor"); await breakage("the dock at its floor");
     await page.screenshot({ path: join(CAPS, V + "-dock-floor.jpg"), type: "jpeg", quality: 82 });
@@ -682,6 +752,20 @@ async function runView(view) {
   await page.screenshot({ path: join(CAPS, V + "-popover-on-spring.jpg"), type: "jpeg", quality: 85 });
   await page.keyboard.press("Escape"); await page.keyboard.press("Escape"); await settle(350);
 
+  // A freed `with` drag (the r21 ruling): during the drag the pill shows the absolute start; after the drop
+  // Starts' meta line reads "from the start".
+  if (!touch) {
+    const fb = await page.locator('.bar[data-key="fade"]').boundingBox();
+    await page.mouse.move(fb.x + fb.width / 2, fb.y + 12); await page.mouse.down(); await page.mouse.move(fb.x + fb.width / 2 + 30, fb.y + 12, { steps: 5 });
+    const during = await ev(() => { const p = document.querySelector(".drag-pill"), b = document.querySelector('.bar[data-key="fade"]').getBoundingClientRect(), l = document.querySelector('.lane[data-key="fade"]').getBoundingClientRect(); return { pill: p && p.textContent, shown: Math.round(((b.left - l.left) / l.width) * rulerEndOf(keptMove())) }; });
+    await page.mouse.up(); await settle((await playLen()) + 300);
+    await click('.bar[data-key="fade"]'); await settle(450);
+    const sub = await ev(() => { const s = document.querySelector(".pop .pop-sub"); return { sub: s && s.textContent, at: JSON.stringify(keptMove().e.cur.find((c) => c.key === "fade").at) }; });
+    const ms = during.pill && +during.pill.replace(/\D+/g, "");
+    ok(V, "9 a freed with-drag: the pill shows the absolute start during the drag, and after the drop Starts' meta line reads \"from the start\"", /^starts \d+ ms$/.test(during.pill || "") && Math.abs(ms - during.shown) <= 12 && sub.sub === "from the start", JSON.stringify(during) + " " + JSON.stringify(sub));
+    await page.keyboard.press("Escape"); await settle(300);
+  }
+
   // Replay, and the Original | Edited switch.
   await snapDiff("a replay", async () => { await click("#play"); await settle((await playLen()) + 300); });
   const dockBox = await page.locator("#dock").boundingBox();
@@ -690,6 +774,7 @@ async function runView(view) {
     await snapDiff("toggling to Original", async () => { await click('#compare [data-view="original"]'); await settle((await playLen()) + 300); });
     const orig = await ev(() => ({ view: document.getElementById("dock").dataset.view, bars: [...document.querySelectorAll(".bar")].map((b) => getComputedStyle(b).borderTopStyle) }));
     ok(V, "4/5 under Original the bars dim to the ghost style", orig.view === "original" && orig.bars.every((s) => s === "dashed"), JSON.stringify(orig));
+    await origChips("Original picked");
     const ob = await page.locator("#dock").boundingBox();
     await page.screenshot({ path: join(CAPS, V + "-dock-original.jpg"), type: "jpeg", quality: 85, clip: { x: Math.max(0, ob.x - 4), y: Math.max(0, ob.y - 4), width: Math.min(ob.width + 8, view.viewport.width), height: ob.height + 8 } });
     await snapDiff("toggling back to Edited", async () => { await click('#compare [data-view="edited"]'); await settle((await playLen()) + 300); });
@@ -703,11 +788,11 @@ async function runView(view) {
     await page.locator('.node[data-machine="when"][data-state="hour"]').scrollIntoViewIfNeeded();
     await page.hover('.node[data-machine="when"][data-state="hour"]');
     await settle(300);
-    const w = await ev(() => { const K = __k, r = (n) => Math.round(n * 100) / 100; return [...document.querySelectorAll(".wash")].map((x) => { const of = x.dataset.of && document.querySelector('#stage [data-key="' + x.dataset.of + '"]'); const field = K.bgOf(of ? of.parentElement : document.getElementById("stage")), fill = K.rgba(getComputedStyle(x).backgroundColor), washed = K.over(fill, field), edge = K.shadow(x).color, ink = getComputedStyle(x).boxShadow.split(")")[0] + ")"; return { kind: x.dataset.wash, of: x.dataset.of, fill: r(K.ratio(washed, field)), edgeOnField: r(K.ratio(K.over(edge, field), field)), edgeOnWash: r(K.ratio(K.over(edge, washed), washed)), edgeWidth: K.shadow(x).spread }; }); });
+    const w = await ev(() => { const K = __k, r = (n) => Math.round(n * 100) / 100; return [...document.querySelectorAll(".wash")].map((x) => { const of = x.dataset.of && x.closest(".stage-wrap").querySelector('.stage [data-key="' + x.dataset.of + '"]'); const field = K.bgOf(of ? of.parentElement : x.closest(".stage-wrap")), fill = K.rgba(getComputedStyle(x).backgroundColor), washed = K.over(fill, field), edge = K.shadow(x).color, ink = getComputedStyle(x).boxShadow.split(")")[0] + ")"; return { kind: x.dataset.wash, of: x.dataset.of, fill: r(K.ratio(washed, field)), edgeOnField: r(K.ratio(K.over(edge, field), field)), edgeOnWash: r(K.ratio(K.over(edge, washed), washed)), edgeWidth: K.shadow(x).spread }; }); });
     ok(V, "clarity §3 B: hovering Every hour washes what changes (green) and where something went (red)", w.some((x) => x.kind === "add") && w.some((x) => x.kind === "del"), JSON.stringify(w.map((x) => x.kind + ":" + x.of)));
     ok(V, "7 every wash's 1px edge in its hue's ink holds 3:1 against the field and against its own fill", w.length > 0 && w.every((x) => x.edgeWidth === 1 && x.edgeOnField >= 3 && x.edgeOnWash >= 3), w.map((x) => x.kind + ":" + x.of + " fill " + x.fill + ", edge " + x.edgeOnField + " on the field / " + x.edgeOnWash + " on the wash").join("; "));
-    const gaps = await ev(() => __k.washGaps());
-    ok(V, "every wash and its edge stand --space-1 clear of the text they mark", gaps.length > 0 && gaps.every((g) => g.pass), gaps.map((g) => g.kind + ":" + g.of + " " + g.gap + "px").join(", "));
+    const geom = await ev(() => __k.washGeometry());
+    ok(V, "9 fault 7: One Target washes: on a boxed target the wash is its box, on a bare one 2px outside; none runs past its target's box plus 2px", geom.length > 0 && geom.every((g) => g.pass), geom.map((g) => g.kind + ":" + g.of + (g.boxed ? " boxed" : " bare") + " +" + g.over + "px").join(", "));
     await ev(() => __k.settled());
     await page.screenshot({ path: join(CAPS, V + "-page-washes.jpg"), type: "jpeg", quality: 85 });
     await conc("washes shown");
@@ -724,11 +809,12 @@ async function runView(view) {
   await click("#show");
   await settle(400);
   ok(V, "Hide hides the panel and Show brings it back", hid.panel === "false" && hid.show && (await ev(() => document.getElementById("panel").dataset.open)) === "true", JSON.stringify(hid));
+  await hideGlyph("#hide");
 
   // Every chip tier the graph can show, its ink against its fill: kept, current (another machine's), hovered
   // (previewed), at rest; and the state a full-page capture draws (the viewport grown to the page's height, the
   // graph rebuilt), read at once and settled.
-  const chipRead = (label) => ev((label) => [...document.querySelectorAll(".var")].filter((c) => __k.vis(c)).map((c) => { const cs = getComputedStyle(c), fg = __k.rgba(cs.color), bg = __k.bgOf(c); let op = 1; for (let e = c; e; e = e.parentElement) op *= +getComputedStyle(e).opacity; const layer = c.matches(".kept, .cur") ? getComputedStyle(c, "::after") : cs; void fg; void bg; void op; return { label, text: c.textContent, tier: c.classList.contains("kept") ? "kept" : c.classList.contains("cur") ? "current" : c.classList.contains("peek") || c.matches(":hover") ? "hovered" : "rest", ink: layer.color, fill: layer.backgroundColor, r: Math.round(__k.chipRatio(c) * 100) / 100 }; }), label);
+  const chipRead = (label) => ev((label) => [...document.querySelectorAll(".var")].filter((c) => __k.vis(c)).map((c) => { const cs = getComputedStyle(c), fg = __k.rgba(cs.color), bg = __k.bgOf(c); let op = 1; for (let e = c; e; e = e.parentElement) op *= +getComputedStyle(e).opacity; const layer = cs; void fg; void bg; void op; return { label, text: c.textContent, tier: c.classList.contains("kept") ? "kept" : c.classList.contains("cur") ? "current" : c.classList.contains("peek") || c.matches(":hover") ? "hovered" : "rest", ink: layer.color, fill: layer.backgroundColor, r: Math.round(__k.chipRatio(c) * 100) / 100 }; }), label);
   const chipOk = (name, rows, tiers) => { const bad = rows.filter((c) => c.r < 4.5); const seen = [...new Set(rows.map((c) => c.tier))]; ok(V, "7 chips read 4.5:1 or better: " + name, bad.length === 0 && tiers.every((t) => seen.includes(t)), (bad.length ? "UNDER 4.5 " + bad.map((c) => c.text + " (" + c.tier + ") " + c.r + " ink " + c.ink + " on " + c.fill).join("; ") + "; " : "") + rows.filter((c) => c.tier !== "rest").map((c) => c.text + " (" + c.tier + ") " + c.r).join(", ") + "; lowest " + Math.min(...rows.map((c) => c.r))); };
   await ev(() => __k.settled());
   chipOk("kept and at rest, settled", await chipRead("rest"), ["kept", "rest"]);
@@ -743,31 +829,20 @@ async function runView(view) {
     chipOk("a hovered (previewed) chip", await chipRead("hovered"), ["kept", "hovered"]);
     await page.mouse.move(5, 5); await settle(250);
   }
-  // A keep and a hover on a graph already drawn: every frame of their tier fades, the lowest reading.
-  if (!touch) {
-    const sampleDuring = async (name, act) => {
-      await ev(() => { window.__tiers = null; __k.sampleTiers(450).then((f) => { window.__tiers = f; }); });
-      await act();
-      await page.waitForFunction(() => window.__tiers !== null, null, { timeout: 3000 });
-      const f = await ev(() => window.__tiers);
-      const low = f.slice().sort((a, b) => a.r - b.r)[0];
-      const frames = new Set(f.map((x) => x.t)).size;
-      ok(V, "7 every frame of " + name + " reads 4.5:1 or better (chips and states)", frames > 5 && low.r >= 4.5, frames + " frames, lowest " + low.r + " (" + low.text + ", " + low.layer + " layer, at " + low.t + "ms)");
-    };
-    await page.locator('.var[data-machine="save"][data-state="failed"][data-vary="1"]').scrollIntoViewIfNeeded();
-    await sampleDuring("a keep (one chip to its sibling)", () => page.locator('.var[data-machine="save"][data-state="failed"][data-vary="1"]').click());
+  // A keep on a graph already drawn: the chip's tier is its own fill, edge and ink fading over
+  // --transition-control (the r21 ruling; the mid-fade frame accepted), no ::after layer, no clip-path.
+  {
+    const chip = '.gsec[data-current] .var[data-machine="save"][data-state="failed"][data-vary="1"]';
+    await page.locator(chip).scrollIntoViewIfNeeded();
+    await click(chip); await page.waitForTimeout(40);
+    const fade = await ev((sel) => { const c = document.querySelector(sel); return { props: c.getAnimations().map((a) => a.transitionProperty).sort().join(","), after: getComputedStyle(c, "::after").content, clip: getComputedStyle(c).clipPath, kept: c.classList.contains("kept") }; }, chip);
+    ok(V, "7 a chip's tier change fades its own fill, edge and ink (no ::after layer, no clip-path)", fade.kept && /background-color/.test(fade.props) && /color/.test(fade.props) && fade.after === "none" && fade.clip === "none", JSON.stringify(fade));
     await settle(300);
-    await sampleDuring("a keep on another machine (kept to current)", () => page.locator('.var[data-machine="when"][data-vary="0"]').click());
-    await settle(300);
-    await sampleDuring("a keep back (current to kept)", () => page.locator('.var[data-machine="save"][data-state="failed"][data-vary="0"]').click());
-    await settle(300);
-    await sampleDuring("a hover on a chip", () => page.locator('.var[data-machine="save"][data-state="filled"][data-vary="2"]').hover());
-    await sampleDuring("a hover on a state", () => page.locator('.node[data-machine="save"][data-state="empty"]').hover());
-    await page.mouse.move(5, 5); await settle(300);
+    await click('.gsec[data-current] .var[data-machine="save"][data-state="failed"][data-vary="0"]'); await settle(300);
   }
 
-  // Right after a redraw (the graph drawn anew, as a capture's resize or a tab does), every chip's tier layer
-  // stands at its final clip and nothing on the chip or its pseudo-elements runs: the wipe is for a real keep.
+  // Right after a redraw (the graph drawn anew, as a capture's resize or a tab does), every chip takes its tier
+  // at once: nothing runs on any chip; the fade is for a real keep.
   const redraw = await ev(() => new Promise((res) => {
     render();
     const frames = []; let n = 0;
@@ -775,16 +850,15 @@ async function runView(view) {
       const anims = document.getAnimations();
       for (const c of document.querySelectorAll(".var")) {
         if (!__k.vis(c)) continue;
-        const clip = getComputedStyle(c, "::after").clipPath, want = c.matches(".kept, .cur") ? "inset(0px)" : "inset(0px 100% 0px 0px)";
         const running = anims.filter((a) => a.effect && a.effect.target === c && a.playState === "running").map((a) => (a.effect.pseudoElement || "") + ":" + (a.transitionProperty || "keyframes"));
-        frames.push({ frame: n, text: c.textContent, clip, want, running });
+        frames.push({ frame: n, text: c.textContent, running });
       }
       if (++n < 4) requestAnimationFrame(read); else res(frames);
     };
     read();
   }));
-  const wrong = redraw.filter((f) => f.clip !== f.want || f.running.length);
-  ok(V, "7 right after a redraw every chip's tier layer stands at its final clip, nothing running on the chip or its ::after", redraw.length > 0 && wrong.length === 0, (wrong.length ? "WRONG " + wrong.slice(0, 3).map((f) => f.text + " frame " + f.frame + " clip " + f.clip + " (want " + f.want + ") running " + JSON.stringify(f.running)).join("; ") + "; " : "") + redraw.length + " chip-frames over 4 frames");
+  const wrong = redraw.filter((f) => f.running.length);
+  ok(V, "7 right after a redraw every chip takes its tier at once, nothing running on any chip", redraw.length > 0 && wrong.length === 0, (wrong.length ? "WRONG " + wrong.slice(0, 3).map((f) => f.text + " frame " + f.frame + " running " + JSON.stringify(f.running)).join("; ") + "; " : "") + redraw.length + " chip-frames over 4 frames");
   await settle(300);
 
   // The state a full-page capture draws: the viewport grown to the page's height (which rebuilds the graph),
@@ -793,12 +867,11 @@ async function runView(view) {
   // land on any of them.
   const fullH = await ev(() => Math.max(document.documentElement.scrollHeight, innerHeight));
   if (fullH <= view.viewport.height) note(V, "7 chips through a full-page capture", "the page fits the viewport (" + fullH + "px), so a full-page capture resizes and redraws nothing");
-  else await ev(() => { window.__frames = []; const t0 = performance.now(); addEventListener("resize", () => { const tick = () => { for (const c of document.querySelectorAll(".var.kept, .var.cur")) { const a = getComputedStyle(c, "::after"); window.__frames.push({ t: Math.round(performance.now() - t0), text: c.textContent, tier: c.classList.contains("kept") ? "kept" : "current", r: Math.round(__k.chipRatio(c) * 100) / 100, ink: a.color, fill: a.backgroundColor, clip: a.clipPath }); } if (performance.now() - t0 < 400) requestAnimationFrame(tick); }; tick(); }, { once: true }); });
+  else await ev(() => { window.__frames = []; const t0 = performance.now(); addEventListener("resize", () => { const tick = () => { for (const c of document.querySelectorAll(".var.kept, .var.cur")) { const a = getComputedStyle(c); window.__frames.push({ t: Math.round(performance.now() - t0), text: c.textContent, tier: c.classList.contains("kept") ? "kept" : "current", r: Math.round(__k.chipRatio(c) * 100) / 100, ink: a.color, fill: a.backgroundColor }); } if (performance.now() - t0 < 400) requestAnimationFrame(tick); }; tick(); }, { once: true }); });
   await page.setViewportSize({ width: view.viewport.width, height: fullH });
   await settle(500);
   const frames = await ev(() => window.__frames || []);
   const low = frames.filter((f) => f.r < 4.5);
-  if (fullH > view.viewport.height) { const split = frames.filter((f) => f.clip !== "inset(0px)"); ok(V, "7 on every frame of the redraw a full-page capture causes, each kept and current chip is whole (no wipe mid-way)", frames.length > 0 && split.length === 0, (split.length ? "MID-WIPE " + split.slice(0, 3).map((f) => f.text + " at " + f.t + "ms clip " + f.clip).join("; ") + "; " : "") + frames.length + " readings"); }
   if (fullH > view.viewport.height) ok(V, "7 chips read 4.5:1 or better on every frame of the redraw a full-page capture causes (" + view.viewport.width + "×" + fullH + ")", frames.length > 0 && low.length === 0, (low.length ? "UNDER 4.5 " + low.slice(0, 3).map((f) => f.text + " (" + f.tier + ") at " + f.t + "ms " + f.r + " ink " + f.ink + " on " + f.fill).join("; ") + "; " : "") + frames.length + " readings, lowest " + Math.min(...frames.map((f) => f.r)));
   chipOk("as a full-page capture draws them, settled", await chipRead("capture settled"), ["kept"]);
   await page.setViewportSize(view.viewport); await settle(300);
@@ -828,6 +901,7 @@ async function runClass(view) {
   page.on("pageerror", (e) => errors.push(String(e)));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   const ev = (fn, arg) => page.evaluate(fn, arg);
+  const { hideGlyph, origChips } = mkHelpers(V, ev);
   const settle = (ms = 450) => page.waitForTimeout(ms);
   const load = async () => { await page.goto(URL_); await page.waitForTimeout(700); await ev(install); };
   const cdp = await ctx.newCDPSession(page);
@@ -852,7 +926,7 @@ async function runClass(view) {
   // ---- 9. Its class ----
   const cls = await ev(() => ({ screen: document.documentElement.dataset.screen, layout: document.documentElement.dataset.layout, input: document.documentElement.dataset.input, face: document.getElementById("tools").dataset.face }));
   ok(V, "9 the pane is the " + view.screen + " class, the " + view.layout + " layout, input " + (touch ? "touch" : "fine") + "; it opens on the Graph face", cls.screen === view.screen && cls.layout === view.layout && cls.input === (touch ? "touch" : "fine") && cls.face === "graph", JSON.stringify(cls));
-  const kept = await ev(() => { const v = views[tab], g = document.getElementById("graph").getBoundingClientRect(), n = document.querySelector(".node.kept").getBoundingClientRect(); return { inView: n.top >= g.top - 0.5 && n.bottom <= g.bottom + 0.5, head: document.getElementById("sheetState").textContent, state: stateOf(machineOf(comp(), v.last), v.cur[v.last].state).name }; });
+  const kept = await ev(() => { const v = views[tab], g = __k.graph().getBoundingClientRect(), n = document.querySelector(".node.kept").getBoundingClientRect(); return { inView: n.top >= g.top - 0.5 && n.bottom <= g.bottom + 0.5, head: document.getElementById("sheetState").textContent, state: stateOf(machineOf(comp(), v.last), v.cur[v.last].state).name }; });
   ok(V, "9 the graph opens on the kept state, in view, and the head names it", kept.inView && kept.head === kept.state, JSON.stringify(kept));
   const wantZoom = !["phone-portrait", "phone-landscape"].includes(view.screen);
   ok(V, "9 zoom buttons " + (wantZoom ? "shown (tablet up, or a mouse)" : "gone: a phone pinches"), (await ev(() => __k.vis(document.querySelector(".zoom")))) === wantZoom);
@@ -896,6 +970,16 @@ async function runClass(view) {
     await settle(500);
     const afterDrag = await ev(() => ({ stop, h: __k.box(document.getElementById("tools")).h }));
     ok(V, "9 a tap on the head steps peek to full; a drag down from full settles on peek", afterTap === "full" && afterDrag.stop === "peek" && Math.abs(afterDrag.h - H * 0.45) <= 1, "tap → " + afterTap + ", drag → " + JSON.stringify(afterDrag));
+    // The r22 ruling: a tap toggles peek and full; the head stop comes by a drag down or Hide, and a tap there
+    // goes to peek.
+    await ev(() => setStop("full")); await settle(500);
+    await ev(() => $("sheetHead").dispatchEvent(new MouseEvent("click", { bubbles: true }))); await settle(500);
+    const fromFull = await ev(() => stop);
+    await ev(() => setOpen(false)); await settle(500);
+    const hidden = await ev(() => stop);
+    await ev(() => $("sheetHead").dispatchEvent(new MouseEvent("click", { bubbles: true }))); await settle(500);
+    const fromHead = await ev(() => stop);
+    ok(V, "9 a tap toggles full back to peek; Hide drops to the head stop, and a tap there goes to peek", fromFull === "peek" && hidden === "head" && fromHead === "peek", "full → " + fromFull + "; Hide → " + hidden + "; head → " + fromHead);
   } else {
     const g = await ev(() => ({ tools: __k.box(document.getElementById("tools")), page: __k.box(document.getElementById("page")), m: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--c-screen-margin")) }));
     ok(V, "9 the side sheet stands at the trailing edge at half the pane; the page takes the other half", Math.abs(g.tools.l - W / 2) <= 0.5 && Math.abs(g.tools.r - (W - g.m)) <= 0.5 && Math.abs(g.page.r - W / 2) <= 0.5 && Math.abs(g.tools.h - (H - 2 * g.m)) <= 0.5, JSON.stringify(g));
@@ -903,13 +987,16 @@ async function runClass(view) {
     const hidden = await ev(() => ({ tools: __k.vis(document.getElementById("tools")), tab: __k.box(document.getElementById("show")), page: __k.box(document.getElementById("page")) }));
     ok(V, "9 Hide folds the sheet to a 32px edge tab at the trailing edge; the page takes the room", !hidden.tools && Math.abs(hidden.tab.w - 32) <= 0.5 && Math.abs(hidden.tab.r - W) <= 0.5 && Math.abs(hidden.page.r - (W - 32)) <= 0.5, JSON.stringify(hidden));
     await sweepAll("the sheet folded to its tab");
+    await tap("#show"); await settle(450);
+    await hideGlyph("#sheetHide");
+    await tap("#sheetHide"); await settle(450);
     await shot("sheet-folded");
     await tap("#show"); await settle(450);
     ok(V, "9 the edge tab brings the sheet back", await ev(() => __k.vis(document.getElementById("tools")) && document.getElementById("show").hidden));
   }
 
   // ---- Input: previews and keeps ----
-  const target = () => ev(() => { const g = document.getElementById("graph").getBoundingClientRect(); const n = [...document.querySelectorAll(".node:not(.kept):not(.cur)")].find((n) => { const b = n.querySelector("b").getBoundingClientRect(); return b.top > g.top + 4 && b.bottom < g.bottom - 4 && b.left > g.left + 4 && b.right < g.right - 4; }); if (!n) return null; const b = n.querySelector("b").getBoundingClientRect(); return { m: n.dataset.machine, s: n.dataset.state, x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
+  const target = () => ev(() => { const g = __k.graph().getBoundingClientRect(); const n = [...document.querySelectorAll(".node:not(.kept):not(.cur)")].find((n) => { const b = n.querySelector("b").getBoundingClientRect(); return b.top > g.top + 4 && b.bottom < g.bottom - 4 && b.left > g.left + 4 && b.right < g.right - 4; }); if (!n) return null; const b = n.querySelector("b").getBoundingClientRect(); return { m: n.dataset.machine, s: n.dataset.state, x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
   const keptNow = () => ev(() => views[tab].last + ":" + views[tab].cur[views[tab].last].state + "|" + JSON.stringify(views[tab].cur));
   const peekNow = () => ev(() => ({ peek: peek ? peek.machine + ":" + peek.state : null, washes: document.querySelectorAll(".wash").length, peeked: document.querySelectorAll(".node.peek").length }));
   let t1 = await target();
@@ -919,6 +1006,8 @@ async function runClass(view) {
     await touchAt("touchStart", [[t1.x, t1.y]]);
     await page.waitForTimeout(200); const early = await peekNow();
     await page.waitForTimeout(300); const held = await peekNow();
+    const geom = await ev(() => __k.washGeometry());
+    ok(V, "9 fault 7: the held preview's washes keep to One Target: a boxed target's box exactly, a bare one's plus 2px, none past", geom.every((g) => g.pass), geom.length + " washes: " + geom.map((g) => g.kind + ":" + g.of + (g.boxed ? " boxed" : " bare") + " +" + g.over + "px").join(", "));
     await shot("hold-preview");
     await touchAt("touchEnd", []); await settle(300);
     const after = await peekNow(), k1 = await keptNow();
@@ -932,8 +1021,8 @@ async function runClass(view) {
     const k2 = await ev(() => views[tab].last + ":" + views[tab].cur[views[tab].last].state);
     ok(V, "9 touch: a tap keeps the state", k2 === t1.m + ":" + t1.s, k2 + " (tapped " + t1.m + ":" + t1.s + ")");
     // Pinch: out to the 1.6 ceiling, in to the 0.5 floor.
-    const gb = await page.locator("#graph").boundingBox(), cx = gb.x + gb.width / 2, cy = gb.y + gb.height / 2;
-    const pinchTo = async (from, to) => { await touchAt("touchStart", [[cx - from / 2, cy], [cx + from / 2, cy]]); for (let i = 1; i <= 6; i++) { const d = from + ((to - from) * i) / 6; await touchAt("touchMove", [[cx - d / 2, cy], [cx + d / 2, cy]]); } await touchAt("touchEnd", []); await settle(150); return ev(() => zoom); };
+    const gb = await page.locator(".gsec[data-current] .graph").boundingBox(), cx = gb.x + gb.width / 2, cy = gb.y + gb.height / 2;
+    const pinchTo = async (from, to) => { await touchAt("touchStart", [[cx - from / 2, cy], [cx + from / 2, cy]]); for (let i = 1; i <= 6; i++) { const d = from + ((to - from) * i) / 6; await touchAt("touchMove", [[cx - d / 2, cy], [cx + d / 2, cy]]); } await touchAt("touchEnd", []); await settle(150); return ev(() => G[tab].zoom); };
     const zOut = await pinchTo(80, 200), zIn = await pinchTo(200, 20);
     ok(V, "9 a pinch zooms the graph, from the 0.5 floor to the 1.6 ceiling", zOut === 1.6 && zIn === 0.5, "out → " + zOut + ", in → " + zIn);
     await load();
@@ -952,10 +1041,18 @@ async function runClass(view) {
   if (view.stacked) ok(V, "9 rows stack: the name and readouts, then a lane across the face (about 340px)", rows.stacked && rows.rows.every((r) => r.below && r.full && r.lane >= 320), JSON.stringify(rows));
   else ok(V, "9 rows keep the desk's two columns: name 280, the lanes beside", !rows.stacked && rows.rows.every((r) => r.name === 280 && !r.below), JSON.stringify(rows));
   const st0 = await ev(() => __k.stageSnap());
-  await tap('.bar[data-key="reveal"]'); await settle(600);
-  const ed = await ev(() => { const p = document.querySelector(".pop"), bar = document.querySelector('.bar[data-key="reveal"]'); if (!p) return null; const pb = p.getBoundingClientRect(), bb = bar.getBoundingClientRect(), row = bar.closest(".clip").getBoundingClientRect(); return { inline: p.classList.contains("inline"), after: p.previousElementSibling && p.previousElementSibling.dataset.key, top: Math.round(pb.top), rowBottom: Math.round(row.bottom), above: Math.abs(pb.bottom - (bb.top - 4)) <= 0.5, w: Math.round(pb.width), rowW: Math.round(row.width) }; });
+  await page.locator('.bar[data-key="reveal"]').scrollIntoViewIfNeeded();
+  await tap('.bar[data-key="reveal"]'); await settle(700);
+  const ed = await ev(() => { const p = document.querySelector(".pop"), bar = document.querySelector('.bar[data-key="reveal"]'); if (!p) return null; const pb = p.getBoundingClientRect(), bb = bar.getBoundingClientRect(), row = bar.closest(".clip").getBoundingClientRect(); return { inline: p.classList.contains("inline"), after: p.previousElementSibling && p.previousElementSibling.dataset.key, top: Math.round(pb.top), rowBottom: Math.round(row.bottom), above: Math.abs(pb.bottom - (bb.top - 4)) <= 0.5, below: Math.abs(pb.top - (Math.max(bb.bottom, row.bottom) + 4)) <= 0.5, covers: Math.min(pb.right, bb.right) > Math.max(pb.left, bb.left) && Math.min(pb.bottom, bb.bottom) > Math.max(pb.top, bb.top), w: Math.round(pb.width), rowW: Math.round(row.width) }; });
   if (view.stacked) ok(V, "9 a clip's editor unfolds inline, under its row, the row's width", !!ed && ed.inline && ed.after === "reveal" && Math.abs(ed.top - ed.rowBottom) <= 1 && Math.abs(ed.w - ed.rowW) <= 1, JSON.stringify(ed));
-  else ok(V, "9 a clip's editor stays a popover, 4px above its bar", !!ed && !ed.inline && ed.above, JSON.stringify(ed));
+  else ok(V, "9 a clip's editor stays a popover beside its bar (4px above, or below where the room above is short), never covering it", !!ed && !ed.inline && (ed.above || ed.below) && !ed.covers, JSON.stringify(ed));
+  // Faults 2 and 6: the editor stands where it can be seen. Inline, it has scrolled into the rows' view (under
+  // the sticky ruler, above the face's foot); as a popover, inside the surface it opens in (the Move face,
+  // under the sheet's head) and the viewport.
+  const seen = await ev(() => { const p = document.querySelector(".pop").getBoundingClientRect(), t = document.getElementById("tl").getBoundingClientRect(), ruler = document.querySelector(".ruler-row").getBoundingClientRect(), face = document.getElementById("dock").getBoundingClientRect(), tools = document.getElementById("tools").getBoundingClientRect(), head = document.getElementById("sheetHead").getBoundingClientRect(), r = (n) => Math.round(n * 100) / 100; return { pop: [r(p.left), r(p.top), r(p.right), r(p.bottom)], rowsView: [r(t.left), r(ruler.bottom), r(t.right), r(t.bottom)], face: [r(face.left), r(face.top), r(face.right), r(face.bottom)], tools: [r(tools.left), r(tools.top), r(tools.right), r(tools.bottom)], headBottom: r(head.bottom), vp: [innerWidth, innerHeight] }; });
+  const inside = (a, b) => a[0] >= b[0] - 0.5 && a[1] >= b[1] - 0.5 && a[2] <= b[2] + 0.5 && a[3] <= b[3] + 0.5;
+  if (view.stacked) ok(V, "9 fault 2: the inline editor scrolls into view as it opens: inside the rows' visible box and the " + view.layout, inside(seen.pop, seen.rowsView) && inside(seen.pop, seen.tools), JSON.stringify(seen));
+  else ok(V, "9 fault 6: the popover stands inside the surface it opens in (the Move face, under the head with its Graph | Move and Hide) and the viewport", inside(seen.pop, seen.face) && seen.pop[1] >= seen.headBottom && inside(seen.pop, [0, 0, seen.vp[0], seen.vp[1]]), JSON.stringify(seen));
   ok(V, "2 nothing moves the preview: opening the clip's editor", same(st0, await ev(() => __k.stageSnap())));
   await sweepAll("the clip's editor open");
   await shot("editor");
@@ -966,6 +1063,7 @@ async function runClass(view) {
   await sweepAll("after a typed edit");
   await page.keyboard.press("Escape"); await settle(500);
   ok(V, "9 Esc closes the editor", (await page.locator(".pop").count()) === 0);
+
   if (touch) {
     // The selected bar's 44px end handle: a press 15px past its end, on the bare lane, drags the end.
     const b = await page.locator('.bar[data-key="reveal"]').boundingBox(), y = b.y + b.height / 2;
@@ -976,6 +1074,11 @@ async function runClass(view) {
     const d1 = await ev(() => resolve(keptMove().e.cur).reveal.dur);
     ok(V, "9 touch: the selected bar's transparent 44px end handle drags its end, from beside the bar", d1 > d0, d0 + " → " + d1 + " ms");
   }
+  // Fault 3 on a compact face: Original redraws the rows from the original move.
+  await page.locator('#compare [data-view="original"]').scrollIntoViewIfNeeded();
+  await tap('#compare [data-view="original"]'); await settle(500);
+  await origChips("on the " + view.layout + "'s Move face");
+  await tap('#compare [data-view="edited"]'); await settle(500);
   const before = await ev(() => __k.snap());
   await tap("#play"); await settle((await ev(() => playLengthOf(keptMove().r))) + 400);
   const after = await ev(() => __k.snap());
