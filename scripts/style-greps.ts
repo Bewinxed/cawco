@@ -10,11 +10,11 @@
  *  - a class-keyed `has-[.x]`: a `:has()` keyed on a class restyles its
  *    element whenever any descendant's class changes; it is keyed on an
  *    attribute the child carries (`has-data-needs:`).
- *  - a pointer cursor (`cursor-pointer`, `cursor: pointer`): a control keeps
- *    the platform's arrow; only a link's own UA pointer stands. Tailwind v4
- *    (https://tailwindcss.com/docs/upgrade-guide): "Buttons now use `cursor:
- *    default` instead of `cursor: pointer` to match the default browser
- *    behavior."
+ *  - a pointer cursor set on an element (`cursor-pointer`, `cursor: pointer`
+ *    outside design.css): design.css's one base rule gives every enabled
+ *    button and `role="button"` the hand, as Tailwind v4's upgrade guide
+ *    gives it (https://tailwindcss.com/docs/upgrade-guide, "Buttons use the
+ *    default cursor").
  *  - a house `dur-*` class: it set only `transition-duration`, so Tailwind's
  *    own `transition-[…]` sorted after it reset the duration to the default
  *    through `--tw-duration`. A transition's duration is Tailwind's
@@ -25,7 +25,12 @@
 import { resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dir, "..");
-const RULES: { name: string; pattern: string; fixed?: boolean }[] = [
+const RULES: {
+  name: string;
+  pattern: string;
+  fixed?: boolean;
+  exclude?: string;
+}[] = [
   {
     name: "transition-all is banned: name the properties (transition-[a,b])",
     pattern: "(^|[^-[:alnum:]])transition-all([^-[:alnum:]]|$)",
@@ -41,9 +46,10 @@ const RULES: { name: string; pattern: string; fixed?: boolean }[] = [
     fixed: true,
   },
   {
-    name: "a pointer cursor is banned: a control keeps the default arrow (Tailwind v4 upgrade guide, Buttons use the default cursor)",
+    name: "a pointer cursor is never set per element: design.css's base rule gives every enabled button the hand",
     pattern:
       "(^|[^-[:alnum:]])cursor-pointer([^-[:alnum:]]|$)|cursor[[:space:]]*:[[:space:]]*pointer",
+    exclude: ":!apps/dashboard/src/design.css",
   },
   {
     name: "a dur-* class is banned: a transition's duration is duration-(--dur-*), which sets --tw-duration for a transition-[…] after it",
@@ -53,7 +59,7 @@ const RULES: { name: string; pattern: string; fixed?: boolean }[] = [
 
 const outs = await Promise.all(
   RULES.map((rule) =>
-    Bun.$`git grep --untracked -n ${rule.fixed ? "-F" : "-E"} -e ${rule.pattern} -- apps/dashboard/src`
+    Bun.$`git grep --untracked -n ${rule.fixed ? "-F" : "-E"} -e ${rule.pattern} -- apps/dashboard/src ${rule.exclude ? [rule.exclude] : []}`
       .cwd(ROOT)
       .nothrow()
       .quiet()
@@ -74,7 +80,7 @@ for (const [i, rule] of RULES.entries()) {
 }
 console.log(
   found === 0
-    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no pointer cursor, no dur-* class"
+    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no per-element pointer cursor, no dur-* class"
     : `style greps: ${found} match${found === 1 ? "" : "es"}`
 );
 process.exit(found === 0 ? 0 : 1);

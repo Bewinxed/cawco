@@ -1,13 +1,14 @@
 /**
  * Two house rules read off the rendered page, on the benches (no hub):
  *
- * - A control keeps the platform's arrow; only a link takes the pointer
- *   hand (Tailwind v4's Preflight, tailwindcss.com/docs/upgrade-guide:
- *   "Buttons now use `cursor: default` instead of `cursor: pointer` to match
- *   the default browser behavior"; style-greps bans the utility and the
- *   declaration). Computed `cursor` is `default` on a kit Button, a setting
- *   chip, a tray chip, the usage strip and a transcript's disclosure head,
- *   and `pointer` on an `a[href]`.
+ * - An enabled button takes the pointer hand and a disabled one the arrow
+ *   (design.css's base rule, as tailwindcss.com/docs/upgrade-guide gives it
+ *   under "Buttons use the default cursor"; style-greps bans setting it per
+ *   element). Computed `cursor` is `pointer` on a kit Button, a setting
+ *   chip, a tray chip, the usage strip, a transcript tool row's collapsible
+ *   head (the `aria-expanded` button that opens its Collapsible) and an
+ *   `a[href]`, and `default` on the kit Button
+ *   once it is disabled.
  * - A transition's duration is its token through Tailwind's own
  *   `duration-(--dur-*)`, which sets `--tw-duration`, so a `transition-[…]`
  *   sorted after it keeps it: the new-session dialog's project and machine
@@ -74,7 +75,7 @@ const spec: Spec = {
       );
     }
 
-    const defaults: [string, string, string][] = [
+    const hands: [string, string, string][] = [
       [
         "/motion/chosen-hover",
         '[data-probe="lifetime"] button',
@@ -90,27 +91,37 @@ const spec: Spec = {
       [
         "/motion/head-tint",
         'button[data-slot="trow"]',
-        "a transcript's tool row head",
+        "a transcript tool row's collapsible head",
       ],
+      ["/motion/head-tint", "a[href]", "a link"],
     ];
-    for (const [route, selector, what] of defaults) {
+    for (const [route, selector, what] of hands) {
       // biome-ignore lint/performance/noAwaitInLoops: one bench at a time on one page
       await open(page, `${bench}${route}`, selector);
       await settle(page, 200);
       const cursor = await cursorOf(page, selector);
       kit.check(
-        `${what} keeps the arrow`,
-        cursor === "default",
+        `${what} takes the pointer hand`,
+        cursor === "pointer",
         String(cursor)
       );
     }
 
-    await open(page, `${bench}/motion/head-tint`, "a[href]");
-    const link = await cursorOf(page, "a[href]");
+    await open(page, `${bench}/motion/button-pending`, '[data-slot="button"]');
+    const disabled = await page.evaluate(() => {
+      const press = document.querySelector<HTMLButtonElement>(
+        'button[data-slot="button"]'
+      );
+      if (!press) {
+        return null;
+      }
+      press.disabled = true;
+      return getComputedStyle(press).cursor;
+    });
     kit.check(
-      "a link takes the pointer hand",
-      link === "pointer",
-      String(link)
+      "a disabled kit Button keeps the arrow",
+      disabled === "default",
+      String(disabled)
     );
   },
 };

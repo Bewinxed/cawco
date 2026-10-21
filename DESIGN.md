@@ -740,6 +740,8 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 
 **The Press Rule.** The hand feels a control before release, in one of two ways chosen by size. A compact standalone control (a button, an icon button, a chip, a switch, about 44px tall at most) scales to 0.97 over 160ms on ease-out. Anything wide, large or grouped (rows, cards, card heads, tabs in a strip, segments) tints to `surface-pressed` and moves nothing, because a 0.97 scale pulls a 300px row's edge in by 4.5px; `surface-pressed` is the kit Toggle's on step, the step past the hover (by day the hover step is `surface-fill`'s own, so a press in `surface-fill` would read as the hover; night keeps `surface-fill`). A text link dims to 72% opacity. The scale only runs with motion allowed; the tint always runs. The tint outranks a control's own background by specificity (an id's weight through `:is()`), never by an important declaration, which keeps its fade off the compositor.
 
+**The cursor.** An enabled button or `role="button"` control shows the pointer (hand) cursor and a disabled one the arrow, from one base style in `design.css` and nothing per element (tailwindcss.com/docs/upgrade-guide, "Buttons use the default cursor": "If you'd like to continue using `cursor: pointer` by default, add these base styles to your CSS").
+
 ### Inputs and fields
 - **Style:** 36px tall, 10px radius, raised surface, 1px control edge, the extra-small shadow, body text, `ink-strong` text, muted placeholder, coral caret (`brand-solid`).
 - **Focus:** the focus ring drawn over the field's own border (inset offset), so the border becomes the ring and nothing stacks on it.

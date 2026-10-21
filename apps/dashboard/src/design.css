@@ -192,6 +192,15 @@
     scrollbar-width: thin;
   }
 
+  /* An enabled button takes the pointer hand, a disabled one the arrow
+     (tailwindcss.com/docs/upgrade-guide, "Buttons use the default cursor"). */
+  button,
+  [role="button"] {
+    &:not(:disabled) {
+      cursor: pointer;
+    }
+  }
+
   /* Inherited, so it is set once here rather than worked out on every
      element. */
   :root {
