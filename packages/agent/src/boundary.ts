@@ -1271,15 +1271,12 @@ const rearmOne = async (id: string): Promise<boolean> => {
   if (stale && (await running(id, held))) {
     // Handed over now, behind the gate: a command waits at the gate and runs
     // through the new boundary rather than through one of another form.
-    await writeStateFile(gateOf(id), String(process.pid));
     try {
-      await ensureNow(ref);
+      await behindGate(id, () => ensureNow(ref));
       return true;
     } catch (error) {
       said("its older boundary could not be handed over yet")(error);
       replaceSoon(ref);
-    } finally {
-      await rm(gateOf(id), { force: true });
     }
   }
   try {
@@ -2256,20 +2253,28 @@ const replaceOlder = async (
   // over at the first look after the last of it ends ({@link
   // handOverStale}); one nothing holds closes once quiet ({@link
   // sweepQuiet}), with what runs in it, and its next start is of this form.
-  const work = await workLeft(ref.id, held);
-  if (work) {
-    replaceSoon(ref);
-    if (keptRunning.get(ref.id) !== work) {
-      keptRunning.set(ref.id, work);
-      console.info(
-        `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work ${work}, and handed over once that ends`
-      );
-    }
-    return armHook(ref.id, held);
+  // Whether it is idle is read again behind the gate, and the handover
+  // follows under the same gate ({@link handOverWhenIdle}): read with the
+  // gate down, a command could start between an idle reading and the
+  // handover (nightly f4b526231, 2026-10-21: twice an idle look, then "kept
+  // as it is while its work runs a command (executor 6824)").
+  const found = await workLeft(ref.id, held);
+  const tried = found
+    ? { kept: found }
+    : await handOverWhenIdle(client, ref, held);
+  if ("fresh" in tried) {
+    forgetStale(ref.id);
+    return tried.fresh;
   }
-  const fresh = await handOver(client, ref, held);
-  forgetStale(ref.id);
-  return fresh;
+  const work = tried.kept;
+  replaceSoon(ref);
+  if (keptRunning.get(ref.id)?.said !== work.words) {
+    console.info(
+      `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work ${work.words}, and handed over once that ends`
+    );
+  }
+  keptRunning.set(ref.id, { said: work.words, commands: work.commands });
+  return armHook(ref.id, held);
 };
 
 /**
@@ -2325,6 +2330,55 @@ const stopUnvouched = async (
  * new one ({@link execScript}).
  */
 const gateOf = (id: string): string => join(stateDir(id), "replacing");
+
+/** Each workspace's gate this agent holds up: how many of its steps hold it, and its write ({@link behindGate}). */
+const gates = new Map<string, { count: number; readonly up: Promise<void> }>();
+/** Each workspace's gate on its way down ({@link behindGate}): a step after it waits for it, then puts it up again. */
+const gatesDown = new Map<string, Promise<void>>();
+
+/**
+ * Runs `step` with workspace `id`'s gate up ({@link gateOf}): an executor that
+ * looks at it meanwhile waits, then runs through whichever boundary is
+ * current once it is down ({@link execScript}). Counted: a step inside
+ * another (the start-up rewrite's ensure, {@link rearmOne}, handing a
+ * boundary over) leaves it up for the outer one, and it comes down once the
+ * last of them ends, never while one still runs.
+ */
+const behindGate = async <T>(
+  id: string,
+  step: () => Promise<T>
+): Promise<T> => {
+  let hold = gates.get(id);
+  if (hold) {
+    hold.count += 1;
+  } else {
+    const down = gatesDown.get(id);
+    hold = {
+      count: 1,
+      up: (async () => {
+        await down;
+        await writeStateFile(gateOf(id), String(process.pid));
+      })(),
+    };
+    gates.set(id, hold);
+  }
+  try {
+    await hold.up;
+    return await step();
+  } finally {
+    hold.count -= 1;
+    if (hold.count === 0 && gates.get(id) === hold) {
+      gates.delete(id);
+      const down = rm(gateOf(id), { force: true }).finally(() => {
+        if (gatesDown.get(id) === down) {
+          gatesDown.delete(id);
+        }
+      });
+      gatesDown.set(id, down);
+      await down;
+    }
+  }
+};
 
 /**
  * The runner: reads request directories off its FIFO and runs each in its
@@ -3382,11 +3436,11 @@ const busyOld = async (
 
 /**
  * Where each executor marks the command it runs in generation `gen` of
- * workspace `id`: a file named for its pid, made before it looks at the gate
- * and removed as it exits, or as it goes through to a newer generation
- * ({@link execScript}), holding its request's dir once it has one, written
- * before it hands the request to the runner ({@link agentWork}). In the
- * generation's own dir, which nothing inside the boundary writes.
+ * workspace `id`: a file named for its pid, made before it looks at the gate,
+ * removed while it waits there and as it exits ({@link execScript}), holding
+ * its request's dir once it has one, written before it hands the request to
+ * the runner ({@link agentWork}). In the generation's own dir, which nothing
+ * inside the boundary writes.
  */
 const commandsOf = (id: string, gen: string): string =>
   join(generationDir(id, gen), "commands");
@@ -3459,6 +3513,88 @@ export const workspacesWithCommands = async (): Promise<string[]> => {
 };
 
 /**
+ * Hands workspace `ref`'s boundary `held`, of an older form or on a retiring
+ * keeper, over to one of this build's form ({@link handOver}) if nothing runs
+ * in it, decided and done behind one gate ({@link behindGate}): its work is
+ * read once with the gate up ({@link workLeft}), and with none left it is
+ * handed over under the same gate, so no command starts in it between that
+ * reading and the handover; each command that arrived meanwhile waits at the
+ * gate and runs through the new one. Answers the new boundary, or the work
+ * that keeps this one: a command running, a listener, a process a command
+ * left.
+ */
+const handOverWhenIdle = (
+  client: SessiondClient,
+  ref: WorkspaceRef,
+  held: Held
+): Promise<{ readonly fresh: Boundary } | { readonly kept: Work }> =>
+  behindGate(ref.id, async () => {
+    const work = await workLeft(ref.id, held);
+    return work ? { kept: work } : { fresh: await handOver(client, ref, held) };
+  });
+
+/**
+ * How long a look at a kept boundary holds the gate up for the commands
+ * already past it to end ({@link commandsEnded}), each command arriving
+ * meanwhile waiting at it. Our call: a session's quick commands (a read, a
+ * `git status`, one test file) end well within it, and a command that
+ * arrives then waits no longer than this beyond the handover's own start.
+ */
+const COMMAND_DRAIN_MS = 3000;
+
+/** How often {@link commandsEnded} reads whether the commands it waits on have ended. */
+const COMMAND_DRAIN_LOOK_MS = 100;
+
+/**
+ * Waits, with workspace `id`'s gate up (its caller's, {@link behindGate}),
+ * for the commands past it in generation `gen` to end: each command arriving
+ * meanwhile waits at the gate with no mark ({@link execScript}), so only
+ * those marked are waited on, for {@link COMMAND_DRAIN_MS} at most. It stops
+ * waiting at once when an executor this agent started waits at the gate (a
+ * preview's server the stage starts, a workflow's step): a command past the
+ * gate may be waiting on it (the tool call that serves the preview), and
+ * neither would end. Answers the commands still running then; none once
+ * they all ended.
+ */
+const commandsEnded = async (id: string, gen: string): Promise<number[]> => {
+  const deadline = Date.now() + COMMAND_DRAIN_MS;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: reads again until the commands past the gate end, or the wait is given up
+    const seen = await snapshot();
+    const past = await commandsIn(seen, id, gen);
+    const ours = executors(
+      seen.filter((one) => one.ppid === process.pid),
+      id
+    );
+    if (
+      past.length === 0 ||
+      ours.some((pid) => !past.includes(pid)) ||
+      Date.now() >= deadline
+    ) {
+      return past;
+    }
+    await Bun.sleep(COMMAND_DRAIN_LOOK_MS);
+  }
+};
+
+/**
+ * Whether the work `work` found in workspace `id`'s kept boundary is worth a
+ * look's wait at the gate ({@link commandsEnded}): commands alone, none of
+ * them running at the look before, which kept it ({@link keptRunning}). One
+ * seen then has run a look or more (a build, a test run), and is waited for
+ * with the gate down; a listener is no command, and ends when its work stops
+ * it.
+ */
+const drainable = (id: string, work: Work): boolean => {
+  const before = keptRunning.get(id)?.commands ?? [];
+  return (
+    work.ports.length === 0 &&
+    work.commands.length > 0 &&
+    !work.commands.some((pid) => before.includes(pid))
+  );
+};
+
+/**
  * Linux: the ports the work of the older boundary `old` listens on, when a
  * newer generation of the workspace whose sandbox runs ({@link sandboxes})
  * listens on every one of them: its work was started again there (a
@@ -3518,18 +3654,25 @@ const workPorts = async (seen: Seen[], place: Place): Promise<number[]> => {
   ].sort((a, b) => a - b);
 };
 
+/** What {@link workLeft} found running in a boundary. */
+interface Work {
+  /** Its commands, by executor pid ({@link commandsIn}). */
+  readonly commands: readonly number[];
+  /** The ports its work listens on ({@link workPorts}). */
+  readonly ports: readonly number[];
+  /** Both in words ("runs a command (executor 6824)", "listens on 5222", "runs"). */
+  readonly words: string;
+}
+
 /**
- * What the work of workspace `id`'s running boundary `held` still runs, in
- * words ("listens on 5222", "runs"); nothing once nothing does. Its work is
- * every process in it its runner did not start with ({@link busyOld}), what
- * a command left behind with `&`, `nohup`, `setsid` or a double fork among
- * them, whatever its session or process group: on Linux each descends from
- * the sandbox's init, on macOS each answers to its generation's name.
+ * What the work of workspace `id`'s running boundary `held` still runs;
+ * nothing once nothing does. Its work is every process in it its runner did
+ * not start with ({@link busyOld}), what a command left behind with `&`,
+ * `nohup`, `setsid` or a double fork among them, whatever its session or
+ * process group: on Linux each descends from the sandbox's init, on macOS
+ * each answers to its generation's name.
  */
-const workLeft = async (
-  id: string,
-  held: Held
-): Promise<string | undefined> => {
+const workLeft = async (id: string, held: Held): Promise<Work | undefined> => {
   const seen = await snapshot();
   if (!(await busyOld(seen, id, held))) {
     return;
@@ -3546,7 +3689,11 @@ const workLeft = async (
       : []),
     ...(ports.length > 0 ? [`listens on ${ports.join(", ")}`] : []),
   ];
-  return words.length > 0 ? words.join(" and ") : "runs";
+  return {
+    commands,
+    ports,
+    words: words.length > 0 ? words.join(" and ") : "runs",
+  };
 };
 
 /**
@@ -3979,11 +4126,15 @@ const endWork = async (
 /**
  * The workspaces whose boundary of an older form, or on a retiring keeper,
  * is kept as it is because its work still runs ({@link replaceOlder}), each
- * with what it runs as last said ({@link workLeft}): said once per change.
- * Each stays {@link stale}, looked at until the last of its work ends, then
- * handed over.
+ * with what it runs as last said ({@link workLeft}), said once per change,
+ * and the commands running at the last look that kept it ({@link
+ * drainable}). Each stays {@link stale}, looked at until the last of its
+ * work ends, then handed over.
  */
-const keptRunning = new Map<string, string>();
+const keptRunning = new Map<
+  string,
+  { readonly said: string; readonly commands: readonly number[] }
+>();
 
 /** Whether `path` is `dir` or lies under it. */
 const lies = (path: string, dir: string): boolean =>
@@ -4301,10 +4452,8 @@ const replaceNarrowed = async (
   held: Held,
   narrowed: Narrowed,
   owed: boolean
-): Promise<Boundary> => {
-  const gate = gateOf(ref.id);
-  await writeStateFile(gate, String(process.pid));
-  try {
+): Promise<Boundary> =>
+  behindGate(ref.id, async () => {
     const stopping: Held[] = [
       ...(narrowed.current.length > 0 ? [held] : []),
       ...narrowed.older.map((one) => one.boundary),
@@ -4341,10 +4490,7 @@ const replaceNarrowed = async (
       `[workspace] ${ref.id}: its boundary ${stopping.map((one) => one.pid).join(", ")} (form ${held.form ?? "none"}) is stopped now, as its access narrowed, and ${runs.pid} runs: ${line ?? `nothing ran in it (${why.slice(0, REASONS_SAID).join("; ")})`}`
     );
     return runs;
-  } finally {
-    await rm(gate, { force: true });
-  }
-};
+  });
 
 /**
  * How often the boundaries in use are looked at for a narrowing no event
@@ -4576,10 +4722,9 @@ const readRetiring = async (id: string): Promise<Retiring[]> => {
 
 /**
  * Hands workspace `ref`'s boundary `old`, of an older form, over to a new
- * one of this build's form, started beside it. The gate goes up first, so an
- * executor on its way in either waits and then runs through the new one, or
- * is already past it, its mark in the older generation ({@link
- * commandsIn}), which it may still hand its command. The older one is recorded before the new one
+ * one of this build's form, started beside it, behind the gate its caller
+ * holds ({@link handOverWhenIdle}): an executor on its way in waits and then
+ * runs through the new one. The older one is recorded before the new one
  * replaces its record, so no agent loses it, and runs on untouched with every
  * process in it; it closes once nothing runs in it ({@link closeIdle}).
  */
@@ -4588,24 +4733,18 @@ const handOver = async (
   ref: WorkspaceRef,
   old: Held
 ): Promise<Boundary> => {
-  const gate = gateOf(ref.id);
-  await writeStateFile(gate, String(process.pid));
-  try {
-    const record = retiringFileOf(ref.id, old);
-    const retiring: Retiring = old;
-    await writeWhole(record, `${JSON.stringify(retiring)}\n`, 0o644);
-    const fresh = await start(client, ref).catch(async (error: unknown) => {
-      await rm(record, { force: true });
-      throw error;
-    });
-    console.info(
-      `[workspace] ${ref.id}: its boundary ${old.pid} (form ${old.form ?? "none"}) is handed over to ${fresh.pid}; it closes once nothing runs in it`
-    );
-    closeWhenIdle(ref.id);
-    return fresh;
-  } finally {
-    await rm(gate, { force: true });
-  }
+  const record = retiringFileOf(ref.id, old);
+  const retiring: Retiring = old;
+  await writeWhole(record, `${JSON.stringify(retiring)}\n`, 0o644);
+  const fresh = await start(client, ref).catch(async (error: unknown) => {
+    await rm(record, { force: true });
+    throw error;
+  });
+  console.info(
+    `[workspace] ${ref.id}: its boundary ${old.pid} (form ${old.form ?? "none"}) is handed over to ${fresh.pid}; it closes once nothing runs in it`
+  );
+  closeWhenIdle(ref.id);
+  return fresh;
 };
 
 /**
@@ -4766,10 +4905,8 @@ const restartStubbed = async (): Promise<void> => {
 const restartIfIdle = async (
   ref: WorkspaceRef,
   held: Held
-): Promise<Boundary> => {
-  const gate = gateOf(ref.id);
-  await writeStateFile(gate, String(process.pid));
-  try {
+): Promise<Boundary> =>
+  behindGate(ref.id, async () => {
     const seen = await snapshot();
     if (
       executors(seen, ref.id).length > 0 ||
@@ -4791,10 +4928,7 @@ const restartIfIdle = async (
       `[workspace] ${ref.id}: its boundary ${held.pid} held an srt mount point where a dir stands in, had nothing running and is replaced by ${fresh.pid}`
     );
     return fresh;
-  } finally {
-    await rm(gate, { force: true });
-  }
-};
+  });
 
 /**
  * Hands over each {@link stale} boundary that still runs. Not while this
@@ -4819,10 +4953,32 @@ const handOverStale = async (): Promise<void> => {
       // One kept while its work runs ({@link replaceOlder}) is only looked
       // at, not ensured: an ensure is a use, and its quiet time must run.
       // A narrowing meanwhile is the narrowing look's ({@link recheckNarrowed}).
-      if (keptRunning.has(ref.id) && (await workLeft(ref.id, held))) {
+      const kept = keptRunning.get(ref.id);
+      if (!kept) {
+        await ensureBoundary(ref);
         continue;
       }
-      await ensureBoundary(ref);
+      const work = await workLeft(ref.id, held);
+      if (work && !drainable(ref.id, work)) {
+        keptRunning.set(ref.id, { ...kept, commands: work.commands });
+        continue;
+      }
+      // Idle, or its commands alone, each new since the look before: a
+      // session's, a second apart, leave a look little moment between them,
+      // and one starting while the ensure reads it again kept it (nightly
+      // f4b526231, 2026-10-21: kept "while its work runs a command" for 60 s
+      // after its listener stopped). So the gate goes up first: those past
+      // it are let end, the next ones wait at it, and the ensure reads it
+      // and hands it over under the same gate ({@link handOverWhenIdle}).
+      // An ensure under way meanwhile, a tool call's, never waits on it.
+      await behindGate(ref.id, async () => {
+        const past = await commandsEnded(ref.id, held.gen);
+        if (past.length > 0) {
+          keptRunning.set(ref.id, { ...kept, commands: past });
+          return;
+        }
+        await ensureBoundary(ref);
+      });
     } catch (error) {
       console.warn(
         `[workspace] ${ref.id}: its older boundary could not be handed over yet: ${error instanceof Error ? error.message : String(error)}`
@@ -5248,9 +5404,7 @@ const closeNow = async (id: string, why: string): Promise<void> => {
   if (!held) {
     return;
   }
-  const gate = gateOf(id);
-  await writeStateFile(gate, String(process.pid));
-  try {
+  await behindGate(id, async () => {
     if (executors(await commandLines(), id).length > 0) {
       liveAt.set(id, Date.now());
       return;
@@ -5286,9 +5440,7 @@ const closeNow = async (id: string, why: string): Promise<void> => {
     console.info(
       `[workspace] ${id}: nothing holds it (no session attached, no live work item, no preview, no command) and ${why}, so its boundary ${boundaries.map((boundary) => boundary.pid).join(", ")} and its ${judges.length} judge(s) are closed; its clone and state stay, and its next command starts it again`
     );
-  } finally {
-    await rm(gate, { force: true });
-  }
+  });
 };
 
 /**
@@ -5834,10 +5986,15 @@ mark="$marks/$$"
 mkdir -p "$marks" 2>/dev/null && : > "$mark"
 trap 'rm -f "$mark"' EXIT
 # While the agent replaces the boundary, wait, then run through the new one.
+# Waiting runs nothing in this generation, so the mark goes meanwhile: the
+# agent's handover holds the gate up for the marked commands to end, and one
+# waiting here is none of them.
 gate=${shellQuote(gateOf(id))}
 if [ -e "$gate" ]; then
+  rm -f "$mark"
   while [ -e "$gate" ] && kill -0 "$(cat "$gate" 2>/dev/null)" 2>/dev/null; do sleep 0.1; done
-  [ -e "$gate" ] || { rm -f "$mark"; PATH=$caller_path exec "$0" "$@"; }
+  [ -e "$gate" ] || PATH=$caller_path exec "$0" "$@"
+  : > "$mark"
 fi
 fifo=${shellQuote(fifoOf(id, held.gen))}
 if ! [ -p "$fifo" ] || ! kill -0 ${pid} 2>/dev/null; then
