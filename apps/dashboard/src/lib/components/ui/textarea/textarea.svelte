@@ -76,6 +76,9 @@
       "text-body placeholder:text-ink-muted",
       "disabled:cursor-not-allowed disabled:opacity-50",
       "aria-invalid:border-error-9",
+      // Focused by a pointer (its caller says so: a browser matches
+      // :focus-visible on any focus of a text field), it draws no ring.
+      "data-pointer-focus:outline-off",
       "dark:aria-invalid:border-error-9/50",
       textareaVariants({ face, text, height, resize, fill, look }),
       placement

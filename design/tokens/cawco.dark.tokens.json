@@ -807,6 +807,19 @@
         }
       }
     },
+    "c-target-tint": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.665, 0.17, 33],
+        "alpha": 0.08
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.brand-solid} l c h / 0.08)"
+        }
+      }
+    },
     "brand-ink-strong": {
       "$type": "color",
       "$value": {

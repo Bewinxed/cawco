@@ -6,7 +6,7 @@
  * from the engine: the page's doc (`window.cawcoArtifact.doc`), the pane's
  * DOM, the overlay's shadow root, and what the model was sent.
  *
- * 1. `C` turns Comment on (its segment `aria-selected`, the well's accent edge); a tap on
+ * 1. `C` turns Comment on (its segment `aria-selected`, the well's 1px `seam` edge); a tap on
  *    a paragraph writes pin 1 with its selector, source and text and opens
  *    its card beside the pin; Esc closes the card, and Esc again leaves the
  *    mode.
@@ -134,6 +134,23 @@
  *    of its shapes handed to the library alone).
  * k4. 61 whole parts ahead of the graph in the crop (one past the picture's
  *    60): the picture is drawn with no part failed and the hull not black.
+ *
+ * And the owner's pins (2026-10-21: "this line is too tihck and too
+ * prominent, why is it so thick?", "why use such thick and solid lines?"),
+ * The One Target Rule (DESIGN.md):
+ * 7c. In Comment mode, resting on an element tints it (`c-target-tint`)
+ *    with no line; the page's root takes a 1px dashed `brand-solid` line
+ *    inset `space-1`, no tint, its tag "Whole page"; a tap chooses the
+ *    element: a 1px `brand-solid` line at offset 0, the tint and no label,
+ *    its text 4.5:1 under the tint by day and night, the composer opened by
+ *    the press with no ring; the
+ *    pointer moved elsewhere leaves it the one target. With the composer
+ *    open, the frame's every outline, border and box-shadow holds exactly one
+ *    coral mark, the target's, 1px. Tab onto the composer's field draws its
+ *    inset ring, and the target drops its line and keeps its tint. The line's
+ *    contrast on the page field and on raised, by day and by night, is read
+ *    and said. A bare text element chosen takes its line 2px outside, 2px or
+ *    more from its glyphs.
  */
 import { join } from "node:path";
 import type { Frame, Locator, Page } from "playwright-core";
@@ -445,6 +462,7 @@ const run = async (kit: Kit) => {
     () => roomChecks(on),
     () => wordlessChecks(on),
     () => cornerChecks(on),
+    () => targetChecks(on),
     () => documentChecks(on),
     () => mapPressChecks(on),
     () => svgPictureChecks(on),
@@ -470,17 +488,17 @@ const commentChecks = async (on: On, frame: Frame) => {
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.focus();
-  // DESIGN.md, The mode: "Comment and Draw turn the well's own edge the
-  // accent, 2px, inside its box": brand-solid, 2px solid, offset -2px.
+  // DESIGN.md, The mode: "Comment and Draw mark the well's edge with a 1px
+  // `seam` inside its box": seam, 1px solid, offset -1px.
   const readEdge = () =>
     on.page.evaluate(() => {
       const well = document.querySelector(
         ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-side-well]'
       );
       const probe = document.createElement("span");
-      probe.style.color = "var(--brand-solid)";
+      probe.style.color = "var(--seam)";
       document.body.append(probe);
-      const accent = getComputedStyle(probe).color;
+      const seam = getComputedStyle(probe).color;
       probe.remove();
       const style = well ? getComputedStyle(well) : null;
       return {
@@ -488,22 +506,22 @@ const commentChecks = async (on: On, frame: Frame) => {
         width: style?.outlineWidth ?? null,
         style: style?.outlineStyle ?? null,
         offset: style?.outlineOffset ?? null,
-        accent,
+        seam,
       };
     });
   type Edge = Awaited<ReturnType<typeof readEdge>>;
-  const accentEdge = (read: Edge) =>
-    read.color === read.accent &&
-    read.width === "2px" &&
+  const seamEdge = (read: Edge) =>
+    read.color === read.seam &&
+    read.width === "1px" &&
     read.style === "solid" &&
-    read.offset === "-2px";
+    read.offset === "-1px";
   // The edge comes in over --dur-control: read once it has.
   await on.page.keyboard.press("d");
   await settle(on.page, 300);
   const drawEdge = await readEdge();
   on.kit.check(
-    "1: D turns Draw on: the well's edge is the brand accent (brand-solid), 2px, inside its box",
-    accentEdge(drawEdge),
+    "1: D turns Draw on: the well's edge is a 1px seam line, solid, inside its box (never 2px brand-solid)",
+    seamEdge(drawEdge),
     JSON.stringify(drawEdge)
   );
   await on.page.keyboard.press("c");
@@ -512,8 +530,8 @@ const commentChecks = async (on: On, frame: Frame) => {
   const edge = await readEdge();
   const pressed = await comment.getAttribute("aria-selected");
   on.kit.check(
-    "1: C turns Comment on: its segment chosen (aria-selected), the well's edge the brand accent (brand-solid), 2px, inside its box",
-    pressed === "true" && accentEdge(edge),
+    "1: C turns Comment on: its segment chosen (aria-selected), the well's edge a 1px seam line, solid, inside its box (never 2px brand-solid)",
+    pressed === "true" && seamEdge(edge),
     `aria-selected ${pressed}; ${JSON.stringify(edge)}`
   );
   // The mode's segments draw their glyphs alone (TabItem `glyphOnly`): the
@@ -2883,7 +2901,7 @@ const wordlessChecks = async (on: On) => {
 
 /** Four corners of `px`, as computed styles read them clockwise from the top left. */
 const fourCorners = (px: string) => `${px} ${px} ${px} ${px}`;
-/** Each element's own corners, and the outline's over it: its own, or the overlay's `--radius-xs` (5px) for a square block. */
+/** Each element's own corners, and the overlay's over it: its own, or the overlay's `--radius-xs` (5px) for a square block. */
 const CORNERS_WANTED: Record<string, { element: string; outline: string }> = {
   "#field": { element: fourCorners("10px"), outline: fourCorners("10px") },
   "#pill": { element: fourCorners("9999px"), outline: fourCorners("9999px") },
@@ -2892,10 +2910,10 @@ const CORNERS_WANTED: Record<string, { element: string; outline: string }> = {
 
 /**
  * 7b. The owner's report (2026-10-21: "non-round selection rectangles? is
- * this 1995?"): Comment mode's hover outline takes each element's own
- * corners, concentric with them: a 10px field, a pill, and a 0-radius block
- * (the house's smallest radius, never a square); the outline's offset is
- * the sheet's 2px throughout.
+ * this 1995?"): Comment mode's mark takes each element's own corners: a 10px
+ * field, a pill, and a 0-radius block (the house's smallest radius, never a
+ * square); its line sits at offset 0 on the border box (The One Target Rule),
+ * so the line's corners are the element's own.
  */
 const cornerChecks = async (on: On) => {
   await on.call(CREATE, {
@@ -2960,13 +2978,516 @@ const cornerChecks = async (on: On) => {
     }, selector);
     const { element, outline } = CORNERS_WANTED[selector];
     on.kit.check(
-      `7b: hovering ${selector} (corners ${element}) in Comment mode outlines it with corners ${outline}, the outline offset 2px`,
+      `7b: hovering ${selector} (corners ${element}) in Comment mode marks it with corners ${outline}, its line's offset 0`,
       seen?.element === element &&
         seen.outline === outline &&
-        seen.offset === "2px",
+        seen.offset === "0px",
       JSON.stringify(seen)
     );
   }
+  await on.page.keyboard.press("Escape");
+};
+
+/** The overlay's one target as the frame computes it, with the tokens it should read, resolved in the overlay's own shadow root. */
+const targetOf = (frame: Frame) =>
+  frame.evaluate(() => {
+    const shadow = document.querySelector("cawco-overlay")?.shadowRoot;
+    const rect = shadow?.querySelector<HTMLElement>(".rect");
+    const label = shadow?.querySelector<HTMLElement>(".label");
+    if (!(shadow && rect)) {
+      return null;
+    }
+    const token = (name: string) => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(${name})`;
+      shadow.append(probe);
+      const { color } = getComputedStyle(probe);
+      probe.remove();
+      return color;
+    };
+    /** The overlay's tint, `c-target-tint` (the opaque brand-wash would hide the element's words). */
+    const tinted = () => {
+      const probe = document.createElement("span");
+      probe.style.color = "var(--c-target-tint)";
+      shadow.append(probe);
+      const { color } = getComputedStyle(probe);
+      probe.remove();
+      return color;
+    };
+    const drawn = getComputedStyle(rect);
+    const r = rect.getBoundingClientRect();
+    return {
+      shown: !rect.hidden,
+      rest: rect.hasAttribute("data-rest"),
+      root: rect.hasAttribute("data-root"),
+      style: drawn.outlineStyle,
+      width: drawn.outlineWidth,
+      color: drawn.outlineColor,
+      offset: drawn.outlineOffset,
+      background: drawn.backgroundColor,
+      box: { x: r.x, y: r.y, w: r.width, h: r.height },
+      label: label && !label.hidden ? label.textContent : null,
+      brand: token("--brand-solid"),
+      tint: tinted(),
+    };
+  });
+
+/**
+ * Every coral mark in the frame's document and the overlay's shadow root: an
+ * outline, a border side or a box-shadow whose colour is coral (hue within
+ * 0–40° or past 345°, saturated, mid-light, not clear), with its width.
+ */
+const coralMarks = (frame: Frame) =>
+  frame.evaluate(() => {
+    const paint = document.createElement("canvas").getContext("2d", {
+      willReadFrequently: true,
+    });
+    const rgbOf = (color: string) => {
+      paint?.clearRect(0, 0, 1, 1);
+      if (paint) {
+        paint.fillStyle = "#000";
+        paint.fillStyle = color;
+        paint.fillRect(0, 0, 1, 1);
+      }
+      const [r, g, b, a] = paint?.getImageData(0, 0, 1, 1).data ?? [0, 0, 0, 0];
+      return { r: r / 255, g: g / 255, b: b / 255, a };
+    };
+    const hueOf = (r: number, g: number, b: number, max: number, d: number) => {
+      if (max === r) {
+        return (360 + 60 * (((g - b) / d) % 6)) % 360;
+      }
+      return max === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
+    };
+    const coral = (color: string): boolean => {
+      const { r, g, b, a } = rgbOf(color);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const l = (max + min) / 2;
+      const d = max - min;
+      if (a === 0 || d === 0) {
+        return false;
+      }
+      const sat = d / (1 - Math.abs(2 * l - 1));
+      const hue = hueOf(r, g, b, max, d);
+      return (hue <= 40 || hue >= 345) && sat > 0.35 && l > 0.25 && l < 0.85;
+    };
+    const shadowRoot = document.querySelector("cawco-overlay")?.shadowRoot;
+    const all = [
+      ...document.querySelectorAll("*"),
+      ...(shadowRoot ? shadowRoot.querySelectorAll("*") : []),
+    ];
+    const marks: { el: string; kind: string; width: number }[] = [];
+    const COLOR =
+      /(rgba?\([^)]*\)|oklch\([^)]*\)|oklab\([^)]*\)|color\([^)]*\)|#[0-9a-f]{3,8})/gi;
+    const nameOf = (el: Element) =>
+      [
+        el.localName,
+        el.id ? `#${el.id}` : "",
+        ...[...el.classList].map((c) => `.${c}`),
+      ].join("");
+    const sides = (style: CSSStyleDeclaration, name: string) => {
+      for (const side of ["Top", "Right", "Bottom", "Left"] as const) {
+        const width = Number.parseFloat(style[`border${side}Width`]) || 0;
+        if (
+          style[`border${side}Style`] !== "none" &&
+          width > 0 &&
+          coral(style[`border${side}Color`])
+        ) {
+          marks.push({ el: name, kind: `border-${side.toLowerCase()}`, width });
+        }
+      }
+    };
+    const marksOf = (el: Element) => {
+      const style = getComputedStyle(el);
+      const name = nameOf(el);
+      const outlineWidth = Number.parseFloat(style.outlineWidth) || 0;
+      if (
+        style.outlineStyle !== "none" &&
+        outlineWidth > 0 &&
+        coral(style.outlineColor)
+      ) {
+        marks.push({ el: name, kind: "outline", width: outlineWidth });
+      }
+      sides(style, name);
+      if (
+        style.boxShadow !== "none" &&
+        (style.boxShadow.match(COLOR) ?? []).some(coral)
+      ) {
+        marks.push({ el: name, kind: "box-shadow", width: Number.NaN });
+      }
+    };
+    for (const el of all) {
+      if (!(el instanceof HTMLElement && el.hidden)) {
+        marksOf(el);
+      }
+    }
+    return marks;
+  });
+
+/**
+ * The chosen element's text against its background under the overlay's tint,
+ * by day and by night: the tint blended over the element's own background,
+ * then WCAG 2 contrast with its text (the page's root drawn in each scheme).
+ */
+const textUnderTint = (frame: Frame, selector: string) =>
+  frame.evaluate((sel) => {
+    const shadow = document.querySelector("cawco-overlay")?.shadowRoot;
+    const el = document.querySelector(sel);
+    const paint = document.createElement("canvas").getContext("2d", {
+      willReadFrequently: true,
+    });
+    if (!(shadow && el && paint)) {
+      return null;
+    }
+    const pixel = (...layers: string[]) => {
+      paint.clearRect(0, 0, 1, 1);
+      for (const layer of layers) {
+        paint.fillStyle = "#000";
+        paint.fillStyle = layer;
+        paint.fillRect(0, 0, 1, 1);
+      }
+      const [r, g, b] = paint.getImageData(0, 0, 1, 1).data;
+      return { r, g, b };
+    };
+    const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
+      const lin = (c: number) => {
+        const v = c / 255;
+        return v <= 0.040_45 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    };
+    const root = document.documentElement;
+    const was = root.style.colorScheme;
+    const out: Record<string, number> = {};
+    for (const scheme of ["light", "dark"] as const) {
+      root.style.colorScheme = scheme;
+      const own = getComputedStyle(el);
+      const probe = document.createElement("span");
+      probe.style.colorScheme = scheme;
+      probe.style.color = "var(--c-target-tint)";
+      shadow.append(probe);
+      const { color: tint } = getComputedStyle(probe);
+      probe.remove();
+      const text = lum(pixel(own.backgroundColor, own.color));
+      const ground = lum(pixel(own.backgroundColor, tint));
+      out[scheme === "light" ? "day" : "night"] =
+        Math.round(
+          ((Math.max(text, ground) + 0.05) / (Math.min(text, ground) + 0.05)) *
+            100
+        ) / 100;
+    }
+    root.style.colorScheme = was;
+    return out;
+  }, selector);
+
+/** WCAG 2 contrast of `brand-solid` on the page field (`surface-page`) and on raised (`surface-raised`), by day and by night, in the dashboard's own tokens. */
+const lineContrast = (on: On) =>
+  on.page.evaluate(() => {
+    const paint = document.createElement("canvas").getContext("2d", {
+      willReadFrequently: true,
+    });
+    const rgba = (color: string) => {
+      paint?.clearRect(0, 0, 1, 1);
+      if (paint) {
+        paint.fillStyle = "#000";
+        paint.fillStyle = color;
+        paint.fillRect(0, 0, 1, 1);
+      }
+      const [r, g, b, a] = paint?.getImageData(0, 0, 1, 1).data ?? [0, 0, 0, 0];
+      return { r, g, b, a };
+    };
+    const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
+      const lin = (c: number) => {
+        const v = c / 255;
+        return v <= 0.040_45 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    };
+    const ratio = (a: number, b: number) =>
+      Math.round(((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)) * 100) /
+      100;
+    const root = document.documentElement;
+    const was = {
+      dark: root.classList.contains("dark"),
+      scheme: root.style.colorScheme,
+    };
+    const out: Record<
+      string,
+      { field: number; raised: number; alphas: number[] }
+    > = {};
+    for (const scheme of ["light", "dark"] as const) {
+      root.classList.toggle("dark", scheme === "dark");
+      root.style.colorScheme = scheme;
+      const read = (name: string) => {
+        const probe = document.createElement("span");
+        probe.style.color = `var(${name})`;
+        document.body.append(probe);
+        const { color } = getComputedStyle(probe);
+        probe.remove();
+        return rgba(color);
+      };
+      const line = read("--brand-solid");
+      const field = read("--surface-page");
+      const raised = read("--surface-raised");
+      out[scheme === "light" ? "day" : "night"] = {
+        field: ratio(lum(line), lum(field)),
+        raised: ratio(lum(line), lum(raised)),
+        alphas: [line.a, field.a, raised.a],
+      };
+    }
+    root.classList.toggle("dark", was.dark);
+    root.style.colorScheme = was.scheme;
+    return out;
+  });
+
+/** 7c. The One Target Rule: rest, the page's root, chosen, the one coral mark, the composer's ring. */
+const targetChecks = async (on: On) => {
+  await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "targets",
+    html: `<!doctype html><html><head><style>body { margin: 0; font: 16px/1.5 system-ui; } main { padding: 24px; } #bare { width: 320px; margin: 16px 0 0; } #target { width: 320px; margin: 0; padding: 8px 12px; border-radius: 10px; color: light-dark(#1d1b18, #ece8e1); background: light-dark(#f1ede6, #2a2724); } .space { height: 1400px; }</style></head>
+<body><main>
+  <p id="target">A paragraph to choose as the one target.</p>
+  <p id="bare">Bare words, no box of their own.</p>
+  <div class="space"></div>
+</main></body></html>`,
+  });
+  const frame = (await until(
+    "the targets page in the pane",
+    async () => {
+      const shown = await pageFrame(on);
+      return (await shown
+        .locator("#target")
+        .count()
+        .catch(() => 0)) === 1
+        ? shown
+        : null;
+    },
+    Boolean,
+    60_000
+  )) as Frame;
+  await settle(on.page, 400);
+  await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
+    )
+    .click();
+  await pageInComment(frame, true);
+
+  const b = await screenBox(on, frame, "#target");
+  await on.page.mouse.move(b.x + b.w / 2, b.y + b.h / 2);
+  await settle(on.page, 150);
+  const rest = await targetOf(frame);
+  const own = await boxIn(frame, "#target");
+  on.kit.check(
+    "7c: resting on an element in Comment mode tints it (c-target-tint) and draws no line, its label shown",
+    !!rest &&
+      rest.shown &&
+      rest.rest &&
+      !rest.root &&
+      rest.style === "none" &&
+      rest.background === rest.tint &&
+      !!rest.label &&
+      near(rest.box, own, 1),
+    JSON.stringify(rest)
+  );
+
+  const ground = await screenBox(on, frame, ".space");
+  await on.page.mouse.move(ground.x + ground.w / 2, ground.y + 300);
+  await settle(on.page, 150);
+  const root = await targetOf(frame);
+  on.kit.check(
+    "7c: the page's root takes a 1px dashed brand-solid line, its outer edge 4px (space-1) inside the page's edge (offset -5px), no background, and keeps its tag, which reads \"Whole page\"",
+    !!root &&
+      root.shown &&
+      root.root &&
+      root.style === "dashed" &&
+      root.width === "1px" &&
+      root.offset === "-5px" &&
+      root.color === root.brand &&
+      root.background === "rgba(0, 0, 0, 0)" &&
+      root.label === "Whole page",
+    JSON.stringify(root)
+  );
+
+  await on.page.mouse.click(b.x + b.w / 2, b.y + b.h / 2);
+  const opened = await focusedCard(on, 1);
+  await settle(on.page, 300);
+  const chosen = await until(
+    "the target chosen",
+    () => targetOf(frame),
+    (seen) => !!seen && !seen.rest && seen.style === "solid",
+    5000
+  ).catch(() => targetOf(frame));
+  const field = on.page
+    .locator('[data-slot="pin-card"][data-pin-card="1"]')
+    .getByRole("textbox");
+  const readRing = () =>
+    field.evaluate((el) => {
+      const style = getComputedStyle(el);
+      const probe = document.createElement("span");
+      probe.style.color = "var(--focus-ring)";
+      document.body.append(probe);
+      const ring = getComputedStyle(probe).color;
+      probe.remove();
+      return {
+        focused: document.activeElement === el,
+        quiet: el.hasAttribute("data-pointer-focus"),
+        style: style.outlineStyle,
+        width: style.outlineWidth,
+        offset: style.outlineOffset,
+        color: style.outlineColor,
+        ring,
+      };
+    });
+  const pointerRing = await readRing().catch(() => null);
+  on.kit.check(
+    "7c: a tap chooses the element: a 1px brand-solid line at offset 0 on its box, the tint kept, no label",
+    opened.shown &&
+      !!chosen &&
+      chosen.shown &&
+      !chosen.rest &&
+      chosen.style === "solid" &&
+      chosen.width === "1px" &&
+      chosen.offset === "0px" &&
+      chosen.color === chosen.brand &&
+      chosen.background === chosen.tint &&
+      chosen.label === null &&
+      near(chosen.box, own, 1),
+    JSON.stringify({ opened, chosen })
+  );
+  on.kit.check(
+    "7c: the composer opened by a press shows no ring (its field focused, quiet)",
+    !!pointerRing &&
+      pointerRing.focused &&
+      pointerRing.quiet &&
+      pointerRing.style === "none",
+    JSON.stringify(pointerRing)
+  );
+
+  await on.page.mouse.move(ground.x + ground.w / 2, ground.y + 400);
+  await settle(on.page, 150);
+  const held = await targetOf(frame);
+  on.kit.check(
+    "7c: one target at a time: with the composer open, the pointer moved elsewhere leaves the chosen element the one mark, no tint under the pointer",
+    !!held && held.shown && !held.rest && !held.root && near(held.box, own, 1),
+    JSON.stringify(held)
+  );
+
+  const legible = await textUnderTint(frame, "#target");
+  on.kit.check(
+    `7c: under the tint the chosen element's text holds 4.5:1 or better against the blended ground: day ${legible?.day}:1, night ${legible?.night}:1`,
+    !!legible && legible.day >= 4.5 && legible.night >= 4.5,
+    JSON.stringify(legible)
+  );
+
+  const marks = await coralMarks(frame);
+  on.kit.check(
+    "7c: with the composer open, the frame's outlines, borders and box-shadows hold exactly one coral mark, the target's 1px line, and none wider than 1px",
+    marks.length === 1 &&
+      marks[0].el.includes("rect") &&
+      marks[0].kind === "outline" &&
+      marks[0].width === 1,
+    JSON.stringify(marks)
+  );
+
+  // Keyboard: ⇧Tab to the card's Close, Tab back onto the field.
+  await on.page.keyboard.press("Shift+Tab");
+  await on.page.keyboard.press("Tab");
+  const keyRing = await until(
+    "the field's keyboard ring",
+    readRing,
+    (seen) => seen.focused && !seen.quiet,
+    3000
+  ).catch(() => readRing());
+  const dropped = await until(
+    "the target's line dropped",
+    () => targetOf(frame),
+    (seen) => !!seen?.rest,
+    3000
+  ).catch(() => targetOf(frame));
+  on.kit.check(
+    "7c: Tab onto the composer's field draws its ring, 2px focus-ring inset on its own box (offset -2px)",
+    keyRing.focused &&
+      !keyRing.quiet &&
+      keyRing.style === "solid" &&
+      keyRing.width === "2px" &&
+      keyRing.offset === "-2px" &&
+      keyRing.color === keyRing.ring,
+    JSON.stringify(keyRing)
+  );
+  on.kit.check(
+    "7c: while the composer's ring shows, the target drops its line and keeps its tint",
+    !!dropped &&
+      dropped.shown &&
+      dropped.rest &&
+      dropped.style === "none" &&
+      dropped.background === dropped.tint &&
+      near(dropped.box, own, 1),
+    JSON.stringify(dropped)
+  );
+
+  const contrast = await lineContrast(on);
+  on.kit.check(
+    `7c: the chosen line's contrast (brand-solid), measured: day ${contrast.day?.field}:1 on the field, ${contrast.day?.raised}:1 on raised; night ${contrast.night?.field}:1 on the field, ${contrast.night?.raised}:1 on raised; each 3:1 or more`,
+    [contrast.day, contrast.night].every(
+      (one) => !!one && one.field >= 3 && one.raised >= 3
+    ),
+    JSON.stringify(contrast)
+  );
+
+  // A bare element (no border, no background): the line stands c-target-gap (2px) outside, clear of its glyphs.
+  await on.page.keyboard.press("Escape");
+  const bare = await screenBox(on, frame, "#bare");
+  await on.page.mouse.click(bare.x + 20, bare.y + bare.h / 2);
+  await until(
+    "the bare element chosen",
+    () => targetOf(frame),
+    (seen) => !!seen && !seen.rest && seen.style === "solid",
+    5000
+  ).catch(() => null);
+  const clearance = await frame.evaluate(() => {
+    const rect = document
+      .querySelector("cawco-overlay")
+      ?.shadowRoot?.querySelector<HTMLElement>(".rect");
+    const words = document.querySelector("#bare")?.firstChild;
+    if (!(rect && words)) {
+      return null;
+    }
+    const drawn = getComputedStyle(rect);
+    const offset = Number.parseFloat(drawn.outlineOffset);
+    const box = rect.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(words);
+    const glyphs = range.getBoundingClientRect();
+    // The line's inner edge stands `offset` outside the box.
+    const gaps = {
+      left: glyphs.left - (box.left - offset),
+      top: glyphs.top - (box.top - offset),
+      bottom: box.bottom + offset - glyphs.bottom,
+    };
+    return {
+      bare: rect.hasAttribute("data-bare"),
+      style: drawn.outlineStyle,
+      width: drawn.outlineWidth,
+      offset: drawn.outlineOffset,
+      gaps,
+      least: Math.min(gaps.left, gaps.top, gaps.bottom),
+    };
+  });
+  on.kit.check(
+    `7c: a bare text element chosen takes its 1px line 2px outside (c-target-gap), the line's least gap to its glyphs ${clearance?.least}px, 2px or more`,
+    !!clearance &&
+      clearance.bare &&
+      clearance.style === "solid" &&
+      clearance.width === "1px" &&
+      clearance.offset === "2px" &&
+      clearance.least >= 2 - 0.01,
+    JSON.stringify(clearance)
+  );
+  await on.page.keyboard.press("Escape");
   await on.page.keyboard.press("Escape");
 };
 

@@ -7,8 +7,8 @@
  * mode; an ink's pin at its group's top-right. A resolved pin leaves the
  * page (Figma: resolving "will hide the comment from both the right sidebar
  * and the canvas"), drawn again, at 40%, only while the host has its card
- * open. Resting on a pin outlines its element and peeks its first
- * line beside it; the host focusing it (J and K) outlines it; a press on it
+ * open. Resting on a pin chooses its element (the overlay's one target) and
+ * peeks its first line beside it; the host focusing it (J and K) chooses it; a press on it
  * opens its card in the host. ⇧C hides every pin, and shows them again.
  *
  * A pin on an element inside a same-origin frame (frames.ts) is drawn here
@@ -82,8 +82,12 @@ export interface PinsDeps {
   groupBox: (id: string) => Box | null;
   /** Where a page's anchor stands now, and by what; null when nothing on the page matches it. */
   locate: (anchor: PageAnchor) => AnchorFound<Element> | null;
-  /** The overlay's highlight round `el` (its box in the viewport), or none. */
-  outline: (el: Element | null) => void;
+  /**
+   * Pin `el`'s element chosen in the overlay (The One Target Rule), or none;
+   * `lead`, whether it leads the pointer's in Comment mode (a disc rested
+   * on, a pin stepped to), left out to keep the lead as it was.
+   */
+  outline: (el: Element | null, lead?: boolean) => void;
   /** Pin `pin`'s first line beside its disc, at the viewport's `x`, `y`, radius `r`; none hides it. */
   peek: (pin: Pin | null, x?: number, y?: number, r?: number) => void;
   post: (type: string, payload?: object) => void;
@@ -288,11 +292,11 @@ export function startPins(deps: PinsDeps): Pins {
     number.textContent = String(pin.number);
     g.append(circle, number);
     g.addEventListener("pointerenter", () => {
-      deps.outline(where.el);
+      deps.outline(where.el, true);
       deps.peek(pin, where.at[0] - scrollX, where.at[1] - scrollY, PIN_R);
     });
     g.addEventListener("pointerleave", () => {
-      deps.outline(focused ? (placed.get(focused)?.el ?? null) : null);
+      deps.outline(focused ? (placed.get(focused)?.el ?? null) : null, false);
       deps.peek(null);
     });
     g.addEventListener("click", (event) => {
@@ -580,7 +584,7 @@ export function startPins(deps: PinsDeps): Pins {
       if (scroll && id) {
         reveal(id);
       }
-      deps.outline(el);
+      deps.outline(el, true);
     },
     cover: (boxes) => {
       covered = boxes;

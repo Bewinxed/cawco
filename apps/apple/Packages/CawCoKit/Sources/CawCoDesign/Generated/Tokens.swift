@@ -202,6 +202,8 @@ public enum Palette {
     public static let brandSolid = Palette.named("brand-solid")
     public static let brandHover = Palette.named("brand-hover")
     public static let brandWash = Palette.named("brand-wash")
+    /// The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash.
+    public static let cTargetTint = Palette.named("c-target-tint")
     public static let brandInk = Palette.named("brand-ink")
     /// Brand ink under the pointer: the most saturated vermillion a word can take and still hold 4.5:1 on the pane (4.78:1 by day, 7.65:1 at night). brand-hover measures 3.9:1 by day and is for fills.
     public static let brandInkStrong = Palette.named("brand-ink-strong")
@@ -548,6 +550,10 @@ public enum Size {
     public static let cPinCardW: Double = 280
     /// A pin's card at its narrowest beside the Comments panel: its head (disc, what it stands on, Resolve, ⋯ and Close) on one line and the reply field. Where the well holds the panel, a gutter, this and the card's two edges, the card stands beside the panel; below that it rises as the foot sheet while the panel goes.
     public static let cPinCardMin: Double = 240
+    /// The overlay's line round a chosen target and the page's root in Comment mode: the content's own edge weight, never the focus ring's (DESIGN.md, The One Target Rule).
+    public static let cTargetStroke: Double = 1
+    /// How far outside a bare chosen target (no border and no background of its own: a bare text container, a label-and-field group) the overlay's line stands, so it never touches the glyphs; its corners grow with it. A target that draws its own box takes the line on its border box, at 0 (DESIGN.md, The One Target Rule).
+    public static let cTargetGap: Double = 2
     /// A sheet's inspector beside the page on a desk (live components spec §5): a prop's name over its control, a five-segment variant or a field at the body size, and the story row's list with its four 30px buttons.
     public static let cSheetInspectorW: Double = 296
     /// An inspector as a phone's sheet over the page's foot: at most 60% of the screen, the page above it live (DESIGN.md, A sheet's inspector: "at most 60% of the well"; the workflow editor's inspector).

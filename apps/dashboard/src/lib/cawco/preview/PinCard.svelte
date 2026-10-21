@@ -38,6 +38,7 @@
   import { type Component, tick, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
     IconClose,
@@ -75,6 +76,7 @@
     ondelete,
     onplace,
     onclose,
+    onring,
   }: {
     pin: Pin;
     /** Who answers in the thread: the session the artifact belongs to, as its transcript names it. */
@@ -103,6 +105,8 @@
     /** Pin it somewhere else (true), or Cancel (false). */
     onplace: (placing: boolean) => void;
     onclose: () => void;
+    /** The field's keyboard ring shows (true) or goes (false): the page's target drops its line while it shows (DESIGN.md, The One Target Rule). */
+    onring?: (shown: boolean) => void;
   } = $props();
 
   /**
@@ -340,10 +344,30 @@
     }
   });
 
+  /*
+   * The field's ring is keyboard focus's alone (The One Ring Rule; The One
+   * Target Rule): a browser matches `:focus-visible` on a text field however
+   * it was focused, so a focus that came by a pointer (the house's last
+   * input, `lastInput`) marks the field `data-pointer-focus` and draws no
+   * ring. So does the card's own focus on open: the person pressed the page,
+   * whose presses this document never hears.
+   */
+  let focused = $state(false);
+  let quiet = $state(false);
+  /** The card is focusing its own field. */
+  let opening = false;
+  const ringShown = $derived(focused && !quiet);
+  $effect(() => {
+    onring?.(ringShown);
+  });
+  $effect(() => () => onring?.(false));
+
   $effect(() => {
     // A new pin's card takes the keyboard: the person tapped to say something.
     if (pin.thread.length === 0 && field) {
+      opening = true;
       field.focus({ preventScroll: true });
+      opening = false;
     }
   });
 </script>
@@ -530,6 +554,15 @@
   >
     <Textarea
       data-field
+      data-pointer-focus={quiet || undefined}
+      onfocus={() => {
+        quiet = opening || lastInput.current === "pointer";
+        focused = true;
+      }}
+      onblur={() => {
+        focused = false;
+        quiet = false;
+      }}
       aria-describedby={problem ? `pin-error-${pin.id}` : undefined}
       aria-invalid={problem ? true : undefined}
       aria-label={pin.thread.length > 0 ? "Reply" : "Comment"}

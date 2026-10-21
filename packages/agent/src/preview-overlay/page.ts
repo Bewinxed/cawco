@@ -91,7 +91,10 @@ sheet.textContent = `
   .layer.comment { pointer-events:auto; }
   .layer.draw { pointer-events:auto; touch-action:none; }
   .peek { position:fixed; pointer-events:none; max-width:240px; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm); background:var(--surface-raised); color:var(--ink-row); font:var(--type-meta); border:1px solid var(--border-control); box-shadow:var(--shadow-tile); }
-  .rect { position:fixed; pointer-events:none; outline:var(--focus-ring-width, 2px) solid var(--brand-solid); outline-offset:2px; border-radius:var(--radius-xs); background:color-mix(in srgb, var(--brand-solid) 8%, transparent); }
+  .rect { position:fixed; pointer-events:none; outline:var(--c-target-stroke) solid var(--brand-solid); outline-offset:0; border-radius:var(--radius-xs); background:var(--c-target-tint); }
+  .rect[data-bare] { outline-offset:var(--c-target-gap); }
+  .rect[data-rest] { outline-style:none; }
+  .rect[data-root] { outline-style:dashed; outline-offset:calc(-1 * (var(--space-1) + var(--c-target-stroke))); background:none; }
   .label { position:fixed; pointer-events:none; max-width:100%; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:var(--space-1) var(--space-2); border-radius:var(--radius-xs); background:var(--surface-raised); color:var(--ink-strong); font:var(--type-meta); border:1px solid var(--border-control); box-shadow:var(--shadow-tile); }
 `;
 const layer = document.createElement("div");
@@ -126,16 +129,92 @@ function peek(pin: Pin | null, x = 0, y = 0, r = 0) {
   peekLabel.style.top = `${Math.max(0, y - peekLabel.offsetHeight / 2)}px`;
 }
 
-/** The overlay's outline round `el`, the pin's element the person rests on or the host focuses; none hides it. */
-function outline(el: Element | null) {
-  if (commenting()) {
+/*
+ * The One Target Rule (DESIGN.md): the overlay draws one target at a time.
+ * At rest (Comment mode, the element under the pointer) it is a see-through
+ * coral tint (`c-target-tint`; the opaque `brand-wash` would hide the element's words)
+ * and the label; chosen (a pin's element: its thread open, its disc
+ * rested on, stepped to with J and K) it adds a 1px `brand-solid` line on its
+ * border box (`c-target-stroke`), `c-target-gap` outside a bare element, and no label; the page's root takes a 1px dashed line
+ * `space-1` inside its edge, and no tint. While a composer stands, the
+ * pointer's tint is off and the chosen element alone is drawn; while the
+ * composer's field shows its keyboard ring, the target drops its line and
+ * keeps its tint.
+ */
+/** The element under the pointer in Comment mode. */
+let hovered: Element | null = null;
+/** The pin's element pins.ts names: the open thread's, a rested-on disc's, the stepped-to pin's. */
+let pinEl: Element | null = null;
+/** In Comment mode, whether the pinned element leads the pointer's: until the pointer leaves a disc, or a card closes. */
+let pinLeads = false;
+/** The host's card stands open on a pin (`cawco:track-pin`). */
+let composing = false;
+/** The card's field shows its keyboard ring (`cawco:composer-ring`). */
+let ringed = false;
+
+/**
+ * Pin `el`'s element chosen, or none; `lead` says whether it leads the
+ * pointer's in Comment mode (a disc rested on, a pin stepped to), and left
+ * out keeps the lead as it was (the same pin drawn again where it stands).
+ */
+function outline(el: Element | null, lead?: boolean) {
+  pinEl = el;
+  if (lead !== undefined) {
+    pinLeads = lead;
+  }
+  paint();
+}
+
+/** A computed colour with no alpha: the element paints nothing with it. */
+const CLEAR = /^(?:transparent|rgba\(.*,\s*0\)|.*\/\s*0\))$/;
+
+/**
+ * Whether `el` draws a box of its own (a computed border, a background
+ * colour or image): the chosen line sits on its border box. A bare element
+ * (a text container, a label-and-field group) takes the line `c-target-gap`
+ * outside, so it never touches the glyphs; the outline's corners grow with
+ * the offset.
+ */
+function drawsBox(el: Element): boolean {
+  const own = (el.ownerDocument.defaultView ?? window).getComputedStyle(el);
+  const sides = ["Top", "Right", "Bottom", "Left"] as const;
+  return (
+    !CLEAR.test(own.backgroundColor) ||
+    own.backgroundImage !== "none" ||
+    sides.some(
+      (side) =>
+        (Number.parseFloat(own[`border${side}Width`]) || 0) > 0 &&
+        !["none", "hidden"].includes(own[`border${side}Style`])
+    )
+  );
+}
+
+/** The one target drawn: the chosen pin's element, else the element under the pointer in Comment mode; and its label in Comment mode. */
+function paint() {
+  const chosen =
+    pinEl?.isConnected && (!commenting() || composing || pinLeads)
+      ? pinEl
+      : null;
+  const target = chosen ?? (commenting() && !composing ? hovered : null);
+  highlight.hidden = !target;
+  const doc = target?.ownerDocument;
+  const root =
+    !!target && (target === doc?.body || target === doc?.documentElement);
+  // The label names what rests under the pointer; a chosen element carries none, the page's root keeps its own.
+  label.hidden = !(target && commenting() && (!chosen || root));
+  if (!target) {
     return;
   }
-  highlight.hidden = !el;
-  label.hidden = true;
-  if (el) {
-    outlineOver(el);
+  const rect = outlineOver(target);
+  highlight.toggleAttribute("data-root", root);
+  highlight.toggleAttribute("data-bare", !(root || drawsBox(target)));
+  highlight.toggleAttribute("data-rest", !root && (!chosen || ringed));
+  if (label.hidden) {
+    return;
   }
+  label.textContent = labelOf(target);
+  label.style.left = `${Math.max(0, Math.min(rect.x, innerWidth - label.offsetWidth))}px`;
+  label.style.top = `${Math.max(0, rect.y - label.offsetHeight)}px`;
 }
 
 const CORNERS = [
@@ -149,9 +228,9 @@ const CORNERS = [
  * Lays the highlight over `el`, in the top viewport's px, its corners
  * concentric with `el`'s: each corner takes `el`'s own computed radius
  * (scaled as a frame or a transform draws it), `--radius-xs` its floor, so a
- * square block is never a hard square; the outline, offset round that, grows
- * its radius by the offset (outer radius = inner radius + gap). The page as
- * a whole (its root or body) keeps the sheet's own corners. Returns the box.
+ * square block is never a hard square; the line, at offset 0 on the border
+ * box, follows those corners exactly. The page as a whole (its root or body)
+ * keeps the sheet's own corners. Returns the box.
  */
 function outlineOver(el: Element): DOMRect {
   const rect = rectOf(el);
@@ -251,8 +330,8 @@ function framesChanged() {
   framesFrame = requestAnimationFrame(() => {
     framesFrame = 0;
     ink.replace();
-    if (commenting() && hovered) {
-      hover(hovered);
+    if (!highlight.hidden) {
+      paint();
     }
   });
 }
@@ -789,8 +868,8 @@ function mode(next: PreviewMode, again: string | null = null) {
   layer.classList.toggle("comment", next === "comment");
   layer.classList.toggle("draw", next === "draw");
   hovered = null;
-  highlight.hidden = true;
-  label.hidden = true;
+  pinLeads = false;
+  paint();
   peek(null);
 }
 
@@ -1472,14 +1551,18 @@ async function thumbnail(): Promise<{
   };
 }
 
-/** The element Comment mode last outlined under the pointer. */
-let hovered: Element | null = null;
+/** The page's root's tag in Comment mode: the word the design and the commenting page use. */
+const WHOLE_PAGE = "Whole page";
 
 /**
- * What the hover label says of `el`: its tag, id, first class and dev
+ * What the hover label says of `el` (the page's root: {@link WHOLE_PAGE}): its tag, id, first class and dev
  * source; a frame of another origin, which cannot be read into, by its origin.
  */
 function labelOf(el: Element): string {
+  const doc = el.ownerDocument;
+  if (el === doc.body || el === doc.documentElement) {
+    return WHOLE_PAGE;
+  }
   const named = `${el.localName}${el.id ? `#${el.id}` : ""}${el.classList.length ? `.${el.classList[0]}` : ""}`;
   if (isFrame(el) && !frameDocument(el)) {
     return `${named} — ${frameOrigin(el)}`;
@@ -1488,18 +1571,10 @@ function labelOf(el: Element): string {
   return `${named}${source?.file ? ` — ${source.file}:${source.line ?? "?"}` : ""}`;
 }
 
-/** Comment mode's outline and label over `el`, mapped to the top viewport; none hides them. */
+/** The element under the pointer in Comment mode, drawn at rest unless a chosen one stands ({@link paint}); none clears it. */
 function hover(el: Element | null) {
   hovered = el?.isConnected ? el : null;
-  highlight.hidden = !hovered;
-  label.hidden = !hovered;
-  if (!hovered) {
-    return;
-  }
-  const rect = outlineOver(hovered);
-  label.textContent = labelOf(hovered);
-  label.style.left = `${Math.max(0, Math.min(rect.x, innerWidth - label.offsetWidth))}px`;
-  label.style.top = `${Math.max(0, rect.y - label.offsetHeight)}px`;
+  paint();
 }
 
 window.addEventListener(
@@ -1992,7 +2067,22 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:reconnect": () => artifact.reconnect(),
     "cawco:focus-pin": (message) =>
       pins.focus(idOf(message), message.scroll === true),
-    "cawco:track-pin": (message) => pins.track(idOf(message)),
+    // The card open on a pin: its element is the one target while it stands; closed, the pointer's leads again.
+    "cawco:track-pin": (message) => {
+      const id = idOf(message);
+      composing = id !== null;
+      if (!composing) {
+        pinLeads = false;
+        ringed = false;
+      }
+      pins.track(id);
+      paint();
+    },
+    // The card's field shows its keyboard ring: the target drops its line and keeps its tint.
+    "cawco:composer-ring": (message) => {
+      ringed = message.on === true;
+      paint();
+    },
     // What the host's chrome covers of the page (its Comments list, a
     // phone's card): a pin it opens is brought out from under it.
     "cawco:covered": (message) => pins.cover(coveredOf(message.boxes)),

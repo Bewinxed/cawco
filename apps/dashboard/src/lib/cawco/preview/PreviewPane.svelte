@@ -2996,6 +2996,7 @@
         onreply={reply}
         onplace={placeElsewhere}
         onresolve={resolvePin}
+        onring={(on) => post({ type: "cawco:composer-ring", on })}
         pin={cardPin}
         placing={placing === cardPin.id}
         problem={cardError}

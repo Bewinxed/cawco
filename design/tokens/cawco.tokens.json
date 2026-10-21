@@ -1284,6 +1284,20 @@
       "$type": "color",
       "$value": "{color.coral-3}"
     },
+    "c-target-tint": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.645, 0.175, 33],
+        "alpha": 0.08
+      },
+      "$description": "The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.brand-solid} l c h / 0.08)"
+        }
+      }
+    },
     "brand-ink": {
       "$type": "color",
       "$value": "{color.coral-11}"
@@ -4136,6 +4150,22 @@
         "unit": "px"
       },
       "$description": "A pin's card at its narrowest beside the Comments panel: its head (disc, what it stands on, Resolve, ⋯ and Close) on one line and the reply field. Where the well holds the panel, a gutter, this and the card's two edges, the card stands beside the panel; below that it rises as the foot sheet while the panel goes."
+    },
+    "c-target-stroke": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1,
+        "unit": "px"
+      },
+      "$description": "The overlay's line round a chosen target and the page's root in Comment mode: the content's own edge weight, never the focus ring's (DESIGN.md, The One Target Rule)."
+    },
+    "c-target-gap": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "How far outside a bare chosen target (no border and no background of its own: a bare text container, a label-and-field group) the overlay's line stands, so it never touches the glyphs; its corners grow with it. A target that draws its own box takes the line on its border box, at 0 (DESIGN.md, The One Target Rule)."
     },
     "c-sheet-inspector-w": {
       "$type": "dimension",
