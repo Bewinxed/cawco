@@ -34,6 +34,7 @@
   } from "./client.svelte";
   import { resolveSessionTitle } from "./links";
   import { pauseChoices } from "./machine-pause";
+  import { sessionPlace } from "./session-names.svelte";
   import { cawOf, sessionStatus, statusWord } from "./session-status";
   import UnlockKeychain from "./UnlockKeychain.svelte";
   import { updates } from "./updates/updates.svelte";
@@ -76,7 +77,7 @@
           }),
           lead: {
             kind: "session" as const,
-            place: row.cwd || row.machineId,
+            place: sessionPlace(row.id),
             status,
             caw: cawOf(row.id),
           },
