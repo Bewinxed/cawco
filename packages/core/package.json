@@ -58,6 +58,7 @@
     "./ink": "./src/ink.ts",
     "./shapes": "./src/shapes.ts",
     "./comments": "./src/comments.ts",
+    "./doc-link": "./src/doc-link.ts",
     "./stage": "./src/stage.ts",
     "./canvas-host": "./src/canvas-host.ts",
     "./decision-host": "./src/decision-host.ts",

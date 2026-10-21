@@ -20,6 +20,7 @@ import {
   choiceEntryProblem,
 } from "@cawco/core/choices";
 import type { MarkPictures } from "@cawco/core/comments";
+import { RESYNC_MS, reopenStalled } from "@cawco/core/doc-link";
 import { WebsocketProvider } from "y-websocket";
 import {
   applyUpdate,
@@ -36,20 +37,6 @@ import { here } from "./boot";
 /** The hub's close code for an update it would not keep (hub artifacts/sync.ts). */
 const REFUSED = 4400;
 
-/**
- * How often the client asks the hub for its state: the hub serves no
- * awareness, so this keeps the socket heard from inside y-websocket's 30s
- * reconnect window. Our choice, as the pane's.
- */
-const RESYNC_MS = 10_000;
-
-/**
- * How long one attempt at the socket may stand connecting before it is
- * closed and tried again, ms. y-websocket (3.1.0, its latest) watches only
- * an open socket (its 30 s `messageReconnectTimeout`), so an upgrade that
- * is never answered would stand connecting for ever. Our call.
- */
-const OPEN_WITHIN_MS = 10_000;
 /** Attempts in a row that never opened, after which the link is said lost. */
 const STALLS_LOST = 2;
 
@@ -340,40 +327,16 @@ const connect = () => {
     state: link.state === "lost" ? "lost" : "connecting",
     error: link.error,
   });
-  // An attempt that hasn't opened within OPEN_WITHIN_MS is closed and tried
-  // again through y-websocket's own disconnect and connect; the second in a
-  // row that never opened says the link is lost.
-  let stalls = 0;
-  let stallTimer: ReturnType<typeof setTimeout> | undefined;
-  let closingStalled = false;
-  const watchAttempt = () => {
-    clearTimeout(stallTimer);
-    const attempt = own.ws;
-    stallTimer = setTimeout(() => {
-      if (own !== provider || own.ws !== attempt || !own.wsconnecting) {
-        return;
-      }
-      stalls += 1;
-      closingStalled = true;
-      own.disconnect();
-      closingStalled = false;
-      own.connect();
-    }, OPEN_WITHIN_MS);
-  };
-  own.on("status", ({ status: attempt }) => {
-    if (attempt === "connecting") {
-      watchAttempt();
-      return;
-    }
-    clearTimeout(stallTimer);
-    if (attempt === "connected") {
-      stalls = 0;
+  // An attempt that never opens is tried again (core doc-link.ts); the
+  // second in a row that never opened says the link is lost.
+  const stalls = reopenStalled(own, (inRow) => {
+    if (own === provider && inRow >= STALLS_LOST) {
+      linked({
+        state: "lost",
+        error: `Its link to ${location.host} didn't open`,
+      });
     }
   });
-  // The first attempt began in the constructor, before anything heard it.
-  if (own.wsconnecting) {
-    watchAttempt();
-  }
   own.on("sync", (isSynced: boolean) => {
     if (!isSynced || own !== provider) {
       return;
@@ -386,16 +349,7 @@ const connect = () => {
     }
   });
   own.on("connection-close", (event) => {
-    if (own !== provider) {
-      return;
-    }
-    if (closingStalled) {
-      if (stalls >= STALLS_LOST) {
-        linked({
-          state: "lost",
-          error: `Its link to ${location.host} didn't open`,
-        });
-      }
+    if (own !== provider || stalls.reopening()) {
       return;
     }
     if (event?.code !== REFUSED) {
