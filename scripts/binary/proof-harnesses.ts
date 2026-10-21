@@ -15,7 +15,7 @@
  * list, no account changes to take).
  */
 
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -105,15 +105,23 @@ const toolCalls = async (procId: string, text: string): Promise<string[]> => {
  * its words>`), whichever agent process took it: what reached the session,
  * read by the proof on the machine itself. The hub's transcript is no record
  * of it here, for this harness reads no history back once the hub restarts.
+ *
+ * Written synchronously, in the same tick as the read it goes with
+ * ({@link session}'s `send`). The read is the agent's mark that the send was
+ * taken (taken-sends.ts `noteTaken`, written as the frame passes), and the
+ * agent refuses a second turn on a taken send. A line written after the read,
+ * in a later tick, is lost when the agent stops in between: the send is
+ * taken, the turn is not in the log, and the proof reads a delivered message
+ * as one that never arrived (nightly e9ff155d6, keeperheld:
+ * `outcome-1-midupdate-9`, read by agent 1064 at 08:57:45.5 and stopped at
+ * 45.766, and "handed over again, taken already: no turn" on agent 1377). A
+ * stop runs on the event loop, so it cannot fall between two writes made in
+ * one tick.
  */
-const tookTurn = async (
-  instanceId: string,
-  uuid: string,
-  text: string
-): Promise<void> => {
+const tookTurn = (instanceId: string, uuid: string, text: string): void => {
   const dir = join(homedir(), ".cawco-proof");
-  await mkdir(dir, { recursive: true });
-  await appendFile(
+  mkdirSync(dir, { recursive: true });
+  appendFileSync(
     join(dir, "turns.log"),
     `${Date.now()} ${instanceId} ${uuid} ${text.split("\n")[0]}\n`
   );
@@ -152,12 +160,14 @@ function session(
       client
         .write(procId, `${text}\n`)
         .then(() => {
+          // One tick: the turn's line, then the read that marks it taken
+          // ({@link tookTurn}).
+          tookTurn(instanceId, message.uuid, text);
           ctx.frame({
             type: "system",
             subtype: MESSAGES_READ,
             read: [message.uuid],
           });
-          return tookTurn(instanceId, message.uuid, text);
         })
         .then(() => toolCalls(procId, text))
         .then(
