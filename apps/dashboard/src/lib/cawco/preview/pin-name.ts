@@ -1,4 +1,12 @@
-import type { PageAnchor, Pin, PinnedElement } from "@cawco/core/comments";
+import {
+  type PageAnchor,
+  type Pin,
+  type PinnedElement,
+  wholePage,
+} from "@cawco/core/comments";
+
+/** A pin on the page as a whole (core `wholePage`), by name. Our call. */
+const PAGE_WORDS = "The page";
 
 /** Words for a tag no text, id or class names: what the element is. Our call. */
 const TAG_WORDS: Record<string, string> = {
@@ -77,12 +85,16 @@ function elementWords(element: PinnedElement | undefined): string {
  * What a pin stands on, in words, as its row and its card name it: the
  * component it is written in and the element's own text ("Subagent card ·
  * Coconut cover take 3"); either alone; else the element by its id, class or
- * kind. The selector is never the name: it is the head's tooltip.
+ * kind. A pin on the page as a whole is the page. The selector is never the
+ * name: it is the head's tooltip.
  */
 export function pinName(pin: Pin): string {
   const { anchor } = pin;
   if (!("selector" in anchor)) {
     return `Element ${anchor.element}`;
+  }
+  if (wholePage(anchor)) {
+    return PAGE_WORDS;
   }
   const text = anchor.text?.replace(SPACES, " ").trim();
   const component = componentOf(anchor);

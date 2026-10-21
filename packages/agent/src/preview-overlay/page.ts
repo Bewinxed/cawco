@@ -1129,7 +1129,9 @@ const NEAR_WAYS = [
  * What a press at the viewport's `x`, `y` names: the smallest element under
  * it; when that is the page's own box (a press in the gap between two
  * paragraphs, or in the page's padding), the nearest content round it within
- * {@link NEAR_RINGS}. The page's box only when nothing else stands there.
+ * {@link NEAR_RINGS}. With nothing else there, the page as a whole: its
+ * document's body (core `wholePage`), never a page-sized container, which
+ * holds every word the page says and names none of them.
  */
 function contentAt(x: number, y: number): Element | null {
   const [hit = null] = elementsAt([[x, y]]);
@@ -1139,7 +1141,11 @@ function contentAt(x: number, y: number): Element | null {
   const round = NEAR_RINGS.flatMap((r) =>
     NEAR_WAYS.map(([dx, dy]): [number, number] => [x + dx * r, y + dy * r])
   );
-  return elementsAt(round).find((near) => !!near && !pageSized(near)) ?? hit;
+  return (
+    elementsAt(round).find((near) => !!near && !pageSized(near)) ??
+    hit.ownerDocument.body ??
+    hit
+  );
 }
 
 /** The selectors of the frames `el` stands in, outermost first, each in its parent's document. */
@@ -1209,16 +1215,23 @@ function wordsOf(el: Element): string {
   return text.replace(/\s+/g, " ").trim().slice(0, COMMENT_LIMITS.anchorText);
 }
 
-/** What a page's mark stands on, read from `el` as it is now: inside a frame, the frames it stands in too. */
+/**
+ * What a page's mark stands on, read from `el` as it is now: inside a frame,
+ * the frames it stands in too. A mark on the page as a whole (its root or
+ * body) is named by that alone and keeps none of its words, which change
+ * from one state of the page to the next and say nothing of where it stands.
+ */
 function anchorOf(el: Element): PageAnchor {
   const { x, y, width, height } = rectOf(el);
   const frames = frameSelectors(el);
+  const doc = el.ownerDocument;
+  const whole = el === doc.body || el === doc.documentElement;
   return {
     ...(frames.length > 0 ? { frames } : {}),
-    selector: selectorOf(el),
+    selector: whole ? el.localName : selectorOf(el),
     source: sourceOf(el),
     ...(sheetChain(el) ?? {}),
-    text: textOf(el),
+    ...(whole ? {} : { text: textOf(el) }),
     box: {
       x: Math.round(x + scrollX),
       y: Math.round(y + scrollY),

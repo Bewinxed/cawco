@@ -750,7 +750,11 @@ export function startInk(deps: InkDeps): Ink {
       const [centre] = deps.elementsAt([
         [reach.x + reach.w / 2 - scrollX, reach.y + reach.h / 2 - scrollY],
       ]);
-      const el = centre ?? document.body;
+      // Over no content: the ink stands on the page as a whole, its document's body (core `wholePage`).
+      const el =
+        centre && !deps.pageSized(centre)
+          ? centre
+          : (centre?.ownerDocument.body ?? document.body);
       return { anchor: el, over: [el] };
     }
     const marked = over.slice(0, MARKED_MAX);

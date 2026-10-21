@@ -20,7 +20,8 @@
  * Every pin is placed again from its anchor whenever the page changes (core
  * `findAnchor`: source file:line, then selector, then text). A page's pin
  * whose element none of them finds goes to the moved tray (`movedAt`) until
- * the person places it again.
+ * the person places it again. A pin on the page as a whole stands on its
+ * body (core `wholePage`), whatever the page says now, and never goes there.
  *
  * The host (the dashboard's pane) draws the card and the list; this tells it
  * where the card's pin stands as the page scrolls, and where each pin's
@@ -454,11 +455,14 @@ export function startPins(deps: PinsDeps): Pins {
     doc.transact(() => pinsMap().set(pin.id, pin));
   };
 
+  /** Where the viewport's `x`, `y` is on `el`'s box, as fractions; 0 along an extent it has none of (a body whose content is all fixed). */
   const pointOn = (el: Element, x: number, y: number) => {
     const box = pageBox(el);
+    const along = (at: number, from: number, extent: number) =>
+      extent > 0 ? round(Math.min(1, Math.max(0, (at - from) / extent))) : 0;
     return {
-      x: round(Math.min(1, Math.max(0, (x + scrollX - box.x) / box.w))),
-      y: round(Math.min(1, Math.max(0, (y + scrollY - box.y) / box.h))),
+      x: along(x + scrollX, box.x, box.w),
+      y: along(y + scrollY, box.y, box.h),
     };
   };
 

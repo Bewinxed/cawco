@@ -19,7 +19,8 @@
  * its text, or its text and more as it streams on), then the first element
  * holding its text; none of them,
  * and it waits in the moved tray (`movedAt`) until the person places it
- * again.
+ * again. A mark on the page as a whole stands on its body ({@link wholePage}),
+ * which every revision has: it never waits there.
  *
  * Every entry is a plain JSON value in its map.
  *
@@ -527,13 +528,25 @@ export const ANCHOR_IDENTITIES = [
 ] as const;
 
 /**
+ * The selectors of a document's own root and body: a mark on one stands on
+ * the page as a whole (a press in its padding with no content near), which
+ * is there whatever the page says from one state to the next.
+ */
+const PAGE_ROOTS = new Set(["html", "body"]);
+
+/** Whether a mark stands on the page as a whole ({@link PAGE_ROOTS}), not on an element of it. */
+export const wholePage = (anchor: PageAnchor): boolean =>
+  PAGE_ROOTS.has(anchor.selector);
+
+/**
  * Whether a selector names its element by identity: it starts at an id or
- * one of {@link ANCHOR_IDENTITIES}, so it finds the same element however
- * the page moved round it. A path of places from the page's root
- * (`body > section:nth-of-type(2) > h2:nth-of-type(1)`) names whatever
- * stands there now.
+ * one of {@link ANCHOR_IDENTITIES}, or it is the page's root or body, so it
+ * finds the same element however the page moved round it. A path of places
+ * from the page's root (`body > section:nth-of-type(2) > h2:nth-of-type(1)`)
+ * names whatever stands there now.
  */
 export const stableSelector = (selector: string): boolean =>
+  PAGE_ROOTS.has(selector) ||
   selector.startsWith("#") ||
   ANCHOR_IDENTITIES.some((name) => selector.startsWith(`[${name}=`));
 
@@ -634,7 +647,7 @@ const standsOn = (pin: Pin, url: string): string[] => {
       : "";
   const chain = chainWords(anchor);
   return [
-    `## ${pin.number}. ${pin.kind} on ${anchor.selector}`,
+    `## ${pin.number}. ${pin.kind} on ${wholePage(anchor) ? "the page as a whole" : anchor.selector}`,
     ...(anchor.frames?.length
       ? [`- Inside the frame: ${anchor.frames.join(" › ")}`]
       : []),
@@ -709,7 +722,7 @@ export function inkSection(
   const lines =
     "selector" in anchor
       ? [
-          `## ${what} over ${anchor.selector}`,
+          `## ${what} over ${wholePage(anchor) ? "the page as a whole" : anchor.selector}`,
           ...(over.length > 1 ? ["- Encloses:", ...over] : []),
           ...(anchor.frames?.length
             ? [`- Inside the frame: ${anchor.frames.join(" › ")}`]

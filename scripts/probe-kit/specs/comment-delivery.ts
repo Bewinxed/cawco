@@ -38,6 +38,10 @@
  *    comments line "not sent" with why. Live, the pin is stamped heard. 7b, the rule through the tool:
  *    a session that is not the project's lead is refused the pin; once the
  *    hub's record names it the lead, its comment_reply lands in the thread.
+ * 9. A comment on the page as a whole (a tap in its padding, no content
+ *    within reach) stands on the page's body and keeps none of its words;
+ *    the page's words changing twice leaves it on the page, never moved
+ *    aside nor said gone, and it is delivered once, as the page's comment.
  *
  *   bun scripts/probe-kit/run.ts comment-delivery
  */
@@ -94,6 +98,9 @@ const REPLY_TOOL = "mcp__cawco__comment_reply";
 const READ_TOOL = "mcp__cawco__comment_read";
 /** Step 8's pin, read before the quiet period ends, and the person's later word on it. */
 const FIRST_WORDS = "Read this before it goes.";
+/** Step 9's pin, on the page as a whole (after pins 1–4), and the person's words in it. */
+const WHOLE_PIN = 5;
+const WHOLE_WORDS = "So much useless copy everywhere.";
 const LATER_WORDS = "And one more word after you read it.";
 /** The delivery routed to Caw: the writer's page, a pin's id, and that it comes to him. */
 const ROUTED =
@@ -415,6 +422,106 @@ const readFirstChecks = async (
       words.includes(`- I wrote: ${JSON.stringify(LATER_WORDS)}`) &&
       !words.includes(`- I wrote: ${JSON.stringify(FIRST_WORDS)}`),
     words.slice(0, 500) || "no delivery"
+  );
+};
+
+/**
+ * 9. The owner's report (2026-10-21: "if i make a comment on the whole page
+ * it keeps saying "the element is gone" ... and doesn't tel lthe gaent i
+ * commented"): a tap in the page's own padding, no content within reach,
+ * pins the page as a whole. The page's words then change twice, as a
+ * mockup's do from state to state: the pin stays on the page, its disc
+ * drawn and its card never saying its element is gone, and it reaches the
+ * session once, as the page's comment.
+ */
+const wholePageChecks = async (on: On, frame: Frame) => {
+  const { kit, page } = on;
+  const before = heard.length;
+  const comment = page.locator(
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
+  );
+  await comment.focus();
+  await page.keyboard.press("c");
+  await pageInComment(frame);
+  await frame.locator("#c").scrollIntoViewIfNeeded();
+  await settle(page, 300);
+  // Beside #c, past the paragraphs' 70% and far from any of them: the page's own box.
+  const pageBox = await screenBox(on, frame, "main");
+  const c = await screenBox(on, frame, "#c");
+  await page.mouse.click(pageBox.x + pageBox.w * 0.95, c.y + c.h / 2);
+  const card = page.locator(
+    `[data-slot="pin-card"][data-pin-card="${WHOLE_PIN}"]`
+  );
+  await card.waitFor({ timeout: 5000 });
+  await card.getByRole("textbox").fill(WHOLE_WORDS);
+  await card.getByRole("button", { name: "Reply" }).click();
+  await until(
+    `pin ${WHOLE_PIN}'s words in the doc`,
+    () => docOf(frame),
+    (now) => (numbered(now.pins, WHOLE_PIN)?.thread.length ?? 0) === 1,
+    5000
+  );
+  const keptAt = Date.now();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  const made = numbered((await docOf(frame)).pins, WHOLE_PIN) as
+    | (ReturnType<typeof numbered> & {
+        anchor?: { selector?: string; text?: string };
+      })
+    | undefined;
+  kit.check(
+    "9: a tap in the page's padding, no content within reach, pins the page as a whole: its anchor is the page's body, keeping none of the page's words",
+    made?.anchor?.selector === "body" && !made.anchor.text,
+    JSON.stringify(made?.anchor)
+  );
+  // The page's words change, twice, as a mockup's do from state to state.
+  for (const words of ["Showing state two", "Showing state three"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one state after the other, each drawn
+    await frame.evaluate((said) => {
+      const main = document.querySelector("main");
+      const line =
+        document.querySelector("#state-line") ?? document.createElement("p");
+      line.id = "state-line";
+      line.textContent = said;
+      main?.prepend(line);
+    }, words);
+    await settle(page, 1000);
+  }
+  const after = numbered((await docOf(frame)).pins, WHOLE_PIN);
+  const disc = await frame
+    .locator(`svg[data-cawco-pins] g[data-pin="${WHOLE_PIN}"]`)
+    .count();
+  await openRow(page, WHOLE_PIN);
+  const opened = page.locator(
+    `[data-slot="pin-card"][data-pin-card="${WHOLE_PIN}"]`
+  );
+  await opened.waitFor({ timeout: 5000 });
+  const gone = await opened.locator('[data-slot="gone"]').count();
+  await page.keyboard.press("Escape");
+  await shutList(page);
+  kit.check(
+    "9: after the page's words change twice the page's pin stays on the page: never moved aside, its disc drawn, its card not saying its element is gone",
+    !!after && !after.movedAt && disc === 1 && gone === 0,
+    `movedAt ${String(after?.movedAt)}; discs ${disc}; gone lines ${gone}`
+  );
+  await Bun.sleep(
+    Math.max(0, keptAt + QUIET_MS + REACH_MS + STILL_MS - Date.now())
+  );
+  const went = deliveries(before).filter((one) =>
+    one.last.includes(`## ${WHOLE_PIN}.`)
+  );
+  const words = went[0]?.last ?? "";
+  const stamped = numbered((await docOf(frame)).pins, WHOLE_PIN);
+  kit.check(
+    "9: the page's comment reaches the session exactly once, as a comment on the page with the person's words and its id, never as gone, and is stamped sent",
+    went.length === 1 &&
+      words.includes(`## ${WHOLE_PIN}. comment on the page as a whole`) &&
+      words.includes(`- I wrote: ${JSON.stringify(WHOLE_WORDS)}`) &&
+      words.includes(`- Pin: ${stamped?.id}`) &&
+      !words.includes("gone from the page") &&
+      !!stamped?.sentAt &&
+      stamped.thread.every((entry) => !!entry.sentAt),
+    `${went.length} deliveries of pin ${WHOLE_PIN}; stamped ${String(stamped?.sentAt)}; heard ${words.slice(0, 500) || "nothing"}`
   );
 };
 
@@ -876,6 +983,9 @@ const run = async (kit: Kit) => {
     `groups ${Object.keys(inked.ink).length}; pictures ${ink ? ownImages(ink) : "-"}; heard ${words5.slice(0, 500)}`
   );
   await page.screenshot({ path: join(kit.out, "comment-delivery-last.png") });
+
+  // 9. A comment on the page as a whole, whose words then change.
+  await wholePageChecks(on, frame);
 
   // 6. Still no Send control.
   const atEnd = await sendControls();
