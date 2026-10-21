@@ -18,7 +18,8 @@
   import Server from "~icons/solar/server-square-bold-duotone";
   import CheckInStatus from "../join/CheckInStatus.svelte";
   import CopyBox from "../join/CopyBox.svelte";
-  import { CheckIn, installCommand, joinInfo } from "../join/join.svelte";
+  import { CheckIn, joinInfo } from "../join/join.svelte";
+  import { installCommand } from "../join/ways";
   import { machineRowRadius } from "./machine-rows";
   import NsPopover from "./NsPopover.svelte";
   import type { MachineItem } from "./ns-types";

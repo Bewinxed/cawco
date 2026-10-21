@@ -6,6 +6,7 @@
   "exports": {
     "./runtime": "./src/runtime.ts",
     "./find-match": "./src/find-match.ts",
+    "./join": "./src/join.ts",
     "./bundle-css-guard": "./src/bundle-css-guard.ts",
     "./bundled": "./src/bundled.ts",
     "./css-target": "./src/css-target.ts",

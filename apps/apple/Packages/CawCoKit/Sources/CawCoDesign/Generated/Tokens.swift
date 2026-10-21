@@ -908,6 +908,10 @@ public enum Size {
     public static let cDetailMax: Double = 96
     /// The longest a pre of command or fault output grows before it scrolls.
     public static let cOutputMax: Double = 192
+    /// Two lines of body text: a box that holds its height while its words change (Connect a machine's status card sentence on a phone).
+    public static let cBodyTwoLines: Double = 40.6
+    /// Two lines of meta text: the status card's waiting line on a phone, its height held while the words change.
+    public static let cMetaTwoLines: Double = 32.4
     /// A markdown editor's well, so it never collapses to its toolbar.
     public static let cEditorWellMin: Double = 320
     /// A fetched skill's choice list before it scrolls.

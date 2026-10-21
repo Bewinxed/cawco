@@ -39,6 +39,7 @@ import {
   type JoinAddress,
   type JoinInfo,
   SSH_ADD_RUNNING_HEADER,
+  SSH_STEP,
   type SshJoinJob,
   type SshJoinProblem,
 } from "@cawco/core";
@@ -273,26 +274,14 @@ const askpass = (): string => {
 const PUBLIC_KEY = /^(\S+ [A-Za-z0-9+/]+=*)(?: (.*))?$/;
 const PLAIN_COMMENT = /^[\w@.:,+=/ -]*$/;
 
-/** The trust command's step line, worded as the install script words its own. */
-const TRUST_STEP = "adding this hub's SSH key";
-
 /**
- * The step the remote command prints before it fetches the install script,
- * which tells the dialog the install runs on the machine now.
+ * The hub's own step lines, in core so the dialog's rail reads the same
+ * words (core join.ts `SSH_STEP`, `INSTALL_PHASES`).
  */
-const DOWNLOAD_STEP = "downloading the install script from ";
-
-/**
- * The step the hub says once its own connection carries a port on the
- * machine to it: the first line of an add whose connection has signed in.
- */
-const CARRY_STEP = "carrying this hub to the machine on its port ";
-
-/**
- * The step the hub says as it gives the machine its key over its own
- * connection (ssh-tunnels.ts `admit`): the add is the person admitting it.
- */
-const KEY_STEP = "giving the machine its key to this hub";
+const TRUST_STEP = SSH_STEP.trust;
+const DOWNLOAD_STEP = SSH_STEP.download;
+const CARRY_STEP = SSH_STEP.carry;
+const KEY_STEP = SSH_STEP.key;
 
 /**
  * The steps a machine fails on when it will not do what its forward needs,
@@ -414,7 +403,7 @@ const remoteCommand = (body: string): string =>
  * the sign-in, most often; but `ssh` exits 255 for every failure of its own
  * (ssh(1) EXIT STATUS), so which one is in ssh's words, shown below it.
  */
-const SIGN_IN_STEP = "signing in over SSH";
+const SIGN_IN_STEP = SSH_STEP.signIn;
 
 /**
  * What went wrong once `ssh` ran, off its exit and the lines the remote

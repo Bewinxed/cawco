@@ -116,7 +116,7 @@ const cardState = () => {
       card?.querySelector('[data-slot="cmd-text"]')?.textContent?.length ?? 0,
     fields: [
       ...(card?.querySelectorAll(
-        ':is([data-slot="new-page-field"], [data-slot="add-machine-dialog-field"], [data-slot="project-chip-field"], [data-slot="location-section-field"], [data-slot="task-fields-field"], [data-slot="task-activity-field"], [data-slot="task-labels-field"], [data-slot="field-field"], [data-slot="project-spend-field"], [data-slot="mk-input-field"], [data-field], [data-slot="tool-group-field"], [data-slot="composer-field"], [data-slot="prompt-field"], [data-slot="finder-field"], [data-slot="workflow-run-view-field"])'
+        ':is([data-slot="new-page-field"],[data-slot="project-chip-field"], [data-slot="location-section-field"], [data-slot="task-fields-field"], [data-slot="task-activity-field"], [data-slot="task-labels-field"], [data-slot="field-field"], [data-slot="project-spend-field"], [data-slot="mk-input-field"], [data-field], [data-slot="tool-group-field"], [data-slot="composer-field"], [data-slot="prompt-field"], [data-slot="finder-field"], [data-slot="workflow-run-view-field"])'
       ) ?? []),
     ].map((field) => field.textContent?.replace(/\s+/g, " ").trim() ?? ""),
   };

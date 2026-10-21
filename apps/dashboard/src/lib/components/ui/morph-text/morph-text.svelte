@@ -82,6 +82,9 @@
    *
    * `still`: this change lands without a morph (a figure that changed because
    * the clock moved, not because something happened).
+   *
+   * `delay`: the letters hold the old words this long (ms) before they move,
+   * for a swap that lands on a beat of a sequence (the join's sentence).
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
@@ -92,7 +95,13 @@
     text,
     wrap = false,
     still = false,
-  }: { text: string; wrap?: boolean; still?: boolean } = $props();
+    delay = 0,
+  }: {
+    text: string;
+    wrap?: boolean;
+    still?: boolean;
+    delay?: number;
+  } = $props();
 
   let host = $state<HTMLElement | null>(null);
 
@@ -126,6 +135,7 @@
         duration: morphMs,
         easing: CURVE.out,
         fade: !motionOk.current,
+        delay,
       });
       drawn.show(swap.from, swap);
       morph = drawn;

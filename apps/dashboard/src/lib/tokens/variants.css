@@ -461,6 +461,7 @@
 @custom-variant slot-instruction (&[data-slot="instruction"]);
 @custom-variant slot-item (&[data-slot="item"]);
 @custom-variant slot-join (&[data-slot="join"]);
+@custom-variant slot-join-actions (&[data-slot="join-actions"]);
 @custom-variant slot-knob (&[data-slot="knob"]);
 @custom-variant slot-launch (&[data-slot="launch"]);
 @custom-variant slot-layer (&[data-slot="layer"]);

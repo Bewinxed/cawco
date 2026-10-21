@@ -449,6 +449,8 @@
   --spacing-c-row-h-two: var(--c-row-h-two);
   --spacing-c-detail-max: var(--c-detail-max);
   --spacing-c-output-max: var(--c-output-max);
+  --spacing-c-body-two-lines: var(--c-body-two-lines);
+  --spacing-c-meta-two-lines: var(--c-meta-two-lines);
   --spacing-c-editor-well-min: var(--c-editor-well-min);
   --spacing-c-choice-list-max-h: var(--c-choice-list-max-h);
   --spacing-c-setup-rail-w: var(--c-setup-rail-w);

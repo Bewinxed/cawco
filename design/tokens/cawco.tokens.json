@@ -4844,7 +4844,11 @@
       "$type": "dimension",
       "$value": "{size.c-row-mark}",
       "$description": "An inline chip's line (ui/chip `inline`): its label's line-height, the mark's own height, so no mark beside the label is taller than the label's line. Web only: the dashboard's inline chip recipe.",
-      "$extensions": { "dev.cawco": { "platforms": ["web"] } }
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
     },
     "c-inline-chip-pad": {
       "$type": "dimension",
@@ -4853,7 +4857,11 @@
         "unit": "px"
       },
       "$description": "An inline chip's fill past its line, above and below, given back by an equal negative margin: the chip draws 22px tall and lays out as its 18px line, inside any line of text from 13px up. Web only.",
-      "$extensions": { "dev.cawco": { "platforms": ["web"] } }
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
     },
     "c-peek-glyph": {
       "$type": "dimension",
@@ -5765,6 +5773,32 @@
         "unit": "rem"
       },
       "$description": "The longest a pre of command or fault output grows before it scrolls."
+    },
+    "c-body-two-lines": {
+      "$type": "dimension",
+      "$value": {
+        "value": 40.6,
+        "unit": "px"
+      },
+      "$description": "Two lines of body text: a box that holds its height while its words change (Connect a machine's status card sentence on a phone).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({type.text-body} * {type.leading-body} * 2)"
+        }
+      }
+    },
+    "c-meta-two-lines": {
+      "$type": "dimension",
+      "$value": {
+        "value": 32.4,
+        "unit": "px"
+      },
+      "$description": "Two lines of meta text: the status card's waiting line on a phone, its height held while the words change.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({type.text-meta} * {type.leading-meta} * 2)"
+        }
+      }
     },
     "c-editor-well-min": {
       "$type": "dimension",

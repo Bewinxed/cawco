@@ -20,7 +20,8 @@
   import { home } from "./home/home-state.svelte";
   import { answerMachine, hubAuth } from "./hub-auth.svelte";
   import { failureWords } from "./hub-read";
-  import { addMachine, JOIN_WAYS } from "./join/join.svelte";
+  import { addMachine } from "./join/join.svelte";
+  import { JOIN_WAYS } from "./join/ways";
   import MachineMenu from "./MachineMenu.svelte";
   import { pausedWords } from "./machine-pause";
   import RowFault from "./RowFault.svelte";

@@ -120,6 +120,8 @@ function go(el: HTMLElement, opacity: number, run: Run, fade: boolean): void {
 export class Morph {
   readonly #root: HTMLElement;
   readonly #duration: number;
+  /** How long after a step starts its letters move (ms): a morph on a storyboard's beat. */
+  readonly #delay: number;
   readonly #easing: string;
   /** Less motion: the old words fade out and the new ones in, in place. */
   readonly #fade: boolean;
@@ -135,10 +137,11 @@ export class Morph {
 
   constructor(
     root: HTMLElement,
-    options: { duration: number; easing: string; fade: boolean }
+    options: { duration: number; easing: string; fade: boolean; delay?: number }
   ) {
     this.#root = root;
     this.#duration = options.duration;
+    this.#delay = options.delay ?? 0;
     this.#easing = options.easing;
     this.#fade = options.fade;
   }
@@ -366,6 +369,7 @@ export class Morph {
   ): Animation[] {
     const timing: KeyframeAnimationOptions = {
       duration: this.#duration,
+      delay: this.#delay,
       easing: this.#easing,
       fill: "both",
     };

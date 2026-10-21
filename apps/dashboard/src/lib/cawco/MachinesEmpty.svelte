@@ -23,7 +23,8 @@
   } from "#lib/components/ui/icon-card/index.js";
   import { barGlass } from "./bar-glass.svelte";
   import Caw from "./home/Caw.svelte";
-  import { addMachine, JOIN_WAYS } from "./join/join.svelte";
+  import { addMachine } from "./join/join.svelte";
+  import { JOIN_WAYS } from "./join/ways";
   import { crossIn, crossOut } from "./motion/curves.svelte";
   import { ListSwap } from "./motion/list-swap.svelte";
   import CardFace from "./project/CardFace.svelte";

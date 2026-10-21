@@ -1,77 +1,56 @@
 <script lang="ts">
   /**
    * Connect a machine: the one dialog every "add a machine" entry opens,
-   * mounted once in the shell.
+   * mounted once in the shell. It holds the tray (join/JoinTray) and feeds it
+   * the live stores: the SSH add as the hub holds it (`sshJoin`), what the
+   * Command way saw check in (`CheckIn`, `hubAuth.waiting`), and the joined
+   * machine's readiness.
    *
    * Two ways in, one install. SSH has the hub run its install script on the
    * machine over `ssh` and follows it step by step; Command hands over the
    * same script as a one-liner to run there by hand and waits for the machine
-   * to check in. Either way the script installs Bun if needed, clones CawCo
-   * and ends in `cawco binary-install agent`, and the fleet is what says it worked.
-   * Both end on the same view: the title, the joined row and Close.
+   * to check in. Both end on the same status card: the machine by name,
+   * Open machine and Start session.
    */
-  import type { SshJoinJob } from "@cawco/core";
-  import { INSTALL_STEP_PREFIX, machineLabel } from "@cawco/core";
+  import { machineLabel } from "@cawco/core";
   import { MediaQuery } from "svelte/reactivity";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Alert from "#lib/components/ui/alert/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Drawer from "#lib/components/ui/drawer/index.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "#lib/components/ui/fluid-tabs/index.js";
-  import { Input } from "#lib/components/ui/input/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as InputGroup from "#lib/components/ui/input-group/index.js";
-  import { Label } from "#lib/components/ui/label/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as NativeSelect from "#lib/components/ui/native-select/index.js";
-  import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { followTail } from "#lib/hooks/follow-tail.js";
-  import {
-    IconChevronRight,
-    IconError,
-    IconEye,
-    IconEyeClosed,
-    IconSuccess,
-  } from "#lib/icons.js";
+  import { barGlass } from "./bar-glass.svelte";
   import { cawco } from "./client.svelte";
   import { answerMachine, hubAuth } from "./hub-auth.svelte";
   import { failureWords } from "./hub-read";
-  import CheckInStatus from "./join/CheckInStatus.svelte";
-  import CopyBox from "./join/CopyBox.svelte";
-  import JoinedRow from "./join/JoinedRow.svelte";
+  import JoinTray, { JOIN_DESCRIPTION } from "./join/JoinTray.svelte";
+  import { addMachine, CheckIn, joinInfo, sshJoin } from "./join/join.svelte";
   import {
-    addMachine,
-    CheckIn,
-    installCommand,
-    JOIN_WAYS,
-    type JoinWay,
-    joinInfo,
-    sshJoin,
-  } from "./join/join.svelte";
-  import { macReadiness } from "./join/readiness.svelte";
+    cardOf,
+    factsOf,
+    hostOf,
+    type Joined,
+    stepsOf,
+  } from "./join/join-view";
+  import { macReadiness, readinessLine } from "./join/readiness.svelte";
+  import type { JoinWay } from "./join/ways";
+  import { machineOs } from "./machine";
+  import { newSession } from "./spawn/new-session.svelte";
 
   /** Under 640px the dialog is a bottom sheet (DESIGN.md, Breakpoints). */
   const phone = new MediaQuery("(max-width: 640px)");
-  /** The way in shown, which every entry can name as it opens the dialog. */
-  const tab = $derived(addMachine.way);
+  const way = $derived(addMachine.way);
   let target = $state("");
   let port = $state("");
   /** Sent with the one add it is typed for, then cleared: nothing here keeps it. */
   let password = $state("");
-  /** The password shown as typed; masked again each time one is sent. */
-  let passwordShown = $state(false);
+  /** Whether the add in flight was sent a password, for a refused sign-in's words. */
+  let sentPassword = $state(false);
   let hubUrl = $state("");
-  let keyOpen = $state(false);
   let checkIn = $state<CheckIn | null>(null);
   let starting = $state(false);
   let stopping = $state(false);
+  /** Change details: the form again, the failure or stop said over its fields. */
+  let changing = $state(false);
   /** A waiting machine's Admit on its way, and the hub's refusal of the last. */
   let admitting = $state<string | null>(null);
   let admitRefused = $state<string | null>(null);
@@ -97,7 +76,7 @@
   /**
    * Set when the dialog closes on a joined machine, so the next opening starts
    * on the form. Cleared at that opening rather than at close, so the closing
-   * dialog fades out on the row it showed.
+   * dialog fades out on the card it showed.
    */
   let closedJoined = false;
   $effect.pre(() => {
@@ -111,6 +90,7 @@
     opened = true;
     if (closedJoined) {
       closedJoined = false;
+      changing = false;
       sshJoin.reset();
     }
     checkIn = new CheckIn();
@@ -139,69 +119,128 @@
     return () => clearInterval(timer);
   });
 
-  /** The install script's and `cawco binary-install agent`'s steps, in the order they ran. */
-  const stepsOf = (run: SshJoinJob): string[] =>
-    run.lines
-      .filter((line) => line.startsWith(INSTALL_STEP_PREFIX))
-      .map((line) => line.slice(INSTALL_STEP_PREFIX.length));
-
-  const portNumber = $derived(port.trim() === "" ? undefined : Number(port));
-  const portValid = $derived(
-    portNumber === undefined ||
-      (Number.isInteger(portNumber) && portNumber >= 1 && portNumber <= 65_535)
-  );
-  const canStart = $derived(target.trim() !== "" && portValid && !starting);
-
-  async function start(event: SubmitEvent) {
-    event.preventDefault();
-    if (!canStart) {
-      return;
+  /** When the step on screen began: each new step line restarts it. */
+  let stepSince = $state<number | null>(null);
+  let stepKey = "";
+  $effect.pre(() => {
+    const key = job ? `${job.id}:${stepsOf(job.lines).length}` : "";
+    if (key !== stepKey) {
+      stepKey = key;
+      stepSince = job ? Date.now() : null;
     }
-    starting = true;
-    const typed = password;
-    password = "";
-    passwordShown = false;
-    try {
-      await sshJoin.start({
-        target: target.trim(),
-        ...(portNumber === undefined ? {} : { port: portNumber }),
-        ...(typed === "" ? {} : { password: typed }),
-      });
-    } finally {
-      starting = false;
-    }
-  }
+  });
 
-  const joinedName = (machineId: string | null): string => {
-    const row = cawco.machines.find((entry) => entry.machineId === machineId);
-    return row ? machineLabel(row.hostname) : (machineId ?? "The machine");
-  };
+  /** The machine as the fleet lists it, once it is there. */
+  const rowOf = (machineId: string | null) =>
+    cawco.machines.find((entry) => entry.machineId === machineId);
 
   /**
    * The machine this way in added, once the fleet has it: the SSH run that
    * finished, or the machine that checked in while the command showed.
    */
-  const joined = $derived.by(() => {
-    if (tab === "ssh") {
-      return job?.state === "done"
-        ? { machineId: job.machineId, name: joinedName(job.machineId) }
-        : null;
+  /** Which machine joined: the SSH add's once it is done, or the one that checked in. */
+  const joinedId = $derived.by((): string | null => {
+    if (way !== "ssh") {
+      return checkIn?.joined?.machineId ?? null;
     }
-    const machine = checkIn?.joined;
-    return machine
-      ? { machineId: machine.machineId, name: machineLabel(machine.hostname) }
-      : null;
+    return job?.state === "done" ? job.machineId : null;
   });
 
-  /** The SSH form shows while nothing runs, and again after a failure or a stop so it can be fixed. */
-  const view = $derived(job?.state === "running" ? "running" : "form");
+  const joined = $derived.by((): Joined | null => {
+    const machineId = joinedId;
+    if (!machineId) {
+      return null;
+    }
+    const machine =
+      rowOf(machineId) ?? (way === "ssh" ? null : checkIn?.joined) ?? null;
+    const name = machine ? machineLabel(machine.hostname) : machineId;
+    const said = readinessLine(macReadiness.of(machineId), true);
+    return {
+      sentence: `${name} ${said.rest}`,
+      line:
+        said.instruction ??
+        factsOf(
+          machine ? machineOs(machine.os).label : null,
+          way === "ssh" && job ? hostOf(job.target) : null,
+          machine?.build?.version ?? null
+        ),
+      machineId,
+      glyph: said.glyph,
+      hue: said.hue,
+      kind: macReadiness.of(machineId).kind,
+    };
+  });
 
-  /**
-   * Whether the run has signed in: the remote command prints a step line
-   * before anything else it does. Until then nothing has run on the machine,
-   * so closing the dialog leaves only a sign-in going.
-   */
-  const signedIn = $derived(job ? stepsOf(job).length > 0 : false);
+  const card = $derived(
+    changing
+      ? null
+      : cardOf({
+          job: way === "ssh" ? job : null,
+          refused: sshJoin.refused,
+          stepSince,
+          joined,
+          passwordTried: sentPassword,
+        })
+  );
+
+  /** The form's alert: what Change details brought back, or a start the hub refused. */
+  const formAlert = $derived.by(() => {
+    if (card !== null) {
+      return null;
+    }
+    if (sshJoin.refused && job?.state !== "failed") {
+      return { text: sshJoin.refused, tone: "fail" as const };
+    }
+    const was = changing
+      ? cardOf({ job, refused: sshJoin.refused, stepSince, joined: null })
+      : null;
+    if (!was) {
+      return null;
+    }
+    return {
+      text: [was.sentence, was.line].filter(Boolean).join(" "),
+      tone: was.tone === "stopped" ? ("status" as const) : ("fail" as const),
+    };
+  });
+
+  async function start() {
+    const portNumber = port.trim() === "" ? undefined : Number(port);
+    starting = true;
+    const typed = password;
+    password = "";
+    sentPassword = typed !== "";
+    try {
+      await sshJoin.start({
+        target: target.trim() || (job?.target ?? ""),
+        ...(portNumber === undefined ? {} : { port: portNumber }),
+        ...(typed === "" ? {} : { password: typed }),
+      });
+      changing = false;
+    } finally {
+      starting = false;
+    }
+  }
+
+  /** The form's target and port from the add it came back from, unless typed already. */
+  function carryTarget() {
+    if (!job || target.trim() !== "") {
+      return;
+    }
+    ({ target } = job);
+    port = job.port && job.port !== 22 ? String(job.port) : "";
+  }
+
+  /** Retry from the card: the same target and port, and a password typed into it. */
+  function retry() {
+    carryTarget();
+    // biome-ignore lint/complexity/noVoid: the card follows sshJoin.job
+    void start();
+  }
+
+  function change() {
+    carryTarget();
+    changing = true;
+  }
 
   async function stop() {
     stopping = true;
@@ -212,16 +251,6 @@
     }
   }
 
-  /** A stopped run, said once the hub has ended its `ssh`. */
-  const stopped = $derived.by(() => {
-    if (job?.state !== "stopped") {
-      return null;
-    }
-    return signedIn
-      ? `Stopped the install on ${job.target}. Retry starts it again.`
-      : `Stopped before signing in to ${job.target}. Nothing on that machine changed.`;
-  });
-
   const close = () => {
     if (joined) {
       closedJoined = true;
@@ -229,393 +258,59 @@
     addMachine.open = false;
   };
 
-  /** `ssh`'s "host" in the run's target, for the host-key fix. */
-  const hostOf = (value: string): string => value.split("@").at(-1) ?? value;
+  function openMachine() {
+    const machineId = joined?.machineId;
+    close();
+    if (machineId) {
+      barGlass.showMachine(machineId);
+    }
+  }
 
-  /**
-   * A failed run, said with the error formula: what happened, why, how to fix
-   * it, what next. The key and the output ride along where they are the fix.
-   */
-  const failure = $derived.by(() => {
-    if (job?.state !== "failed") {
-      return null;
-    }
-    const where = job.target;
-    const { problem } = job;
-    if (!problem) {
-      return { text: sshJoin.refused ?? "", tail: [] as string[] };
-    }
-    switch (problem.kind) {
-      case "host-key":
-        return {
-          text: `${where} answered with a different SSH host key than this hub saw before, so the hub stopped. If the machine was reinstalled, remove the old key on the hub with ssh-keygen -R ${hostOf(where)}, then Retry.`,
-          tail: [],
-        };
-      case "unreachable":
-        return {
-          text: `${where} did not answer on port ${job.port ?? 22} (${problem.detail}). Check the address and that SSH is running there, then Retry.`,
-          tail: [],
-        };
-      case "download":
-        return {
-          text: `${hostOf(where)} signed in, but the install script didn't come through this hub's SSH connection. Its last output is below. Retry.`,
-          tail: job.lines.slice(-20),
-        };
-      case "step":
-        return {
-          text: `The step "${problem.step}" failed on ${where}. Its last output is below. Fix what it names, then Retry.`,
-          tail: job.lines.slice(-20),
-        };
-      case "unregistered":
-        return {
-          text: `CawCo installed on ${where}, but the machine never came online on this hub through its SSH connection. Its last output is below. Retry.`,
-          tail: job.lines.slice(-20),
-        };
-      default:
-        return null;
-    }
-  });
+  function startSession() {
+    const machineId = joined?.machineId;
+    close();
+    newSession(machineId ? { machineId } : undefined);
+  }
 </script>
 
-<!-- The address the machine is told to reach this hub on, for the command run
-     by hand: the script is downloaded from it and `join` saves it. An SSH add
-     needs none, the hub's own connection carries the machine to it. -->
-{#snippet addressField(id: string)}
-  <div
-    data-slot="add-machine-dialog-field"
-    class="flex min-w-0 flex-col gap-space-2 text-ink-strong"
-  >
-    <Label for={id}>Hub address this machine should use</Label>
-    <NativeSelect.Root
-      class="w-full"
-      disabled={addresses.length === 0}
-      {id}
-      bind:value={hubUrl}
-    >
-      {#each addresses as address (address.url)}
-        <NativeSelect.Option value={address.url}
-          >{address.label}
-          · {address.url}</NativeSelect.Option
-        >
-      {/each}
-    </NativeSelect.Root>
-    <span class="type-meta text-ink-subtle">
-      The machine downloads the install script from here, so it has to be able
-      to reach it. The .local name reaches machines on the same network, or on a
-      VPN that carries it like ZeroTier; Tailscale and WireGuard don't.
-    </span>
-  </div>
-{/snippet}
-
-<!-- What the dialog and the phone's sheet both hold. -->
-{#snippet body()}
-  {#if joined}
-    <JoinedRow
-      name={joined.name}
-      readiness={macReadiness.of(joined.machineId)}
-    />
-  {:else}
-    <Tabs
-      onValueChange={(value) => {
-        addMachine.way = value as JoinWay;
-      }}
-      value={tab}
-    >
-      <TabsList aria-label="How to connect the machine">
-        {#each JOIN_WAYS as way (way.way)}
-          <TabItem icon={way.icon} label={way.name} value={way.way} />
-        {/each}
-      </TabsList>
-    </Tabs>
-
-    {#if joinInfo.error}
-      <Alert.Root variant="destructive">
-        <Alert.Description>{joinInfo.error}</Alert.Description>
-      </Alert.Root>
-    {/if}
-
-    {#if hubAuth.waiting.length > 0}
-      <!-- This hub requires paired devices: the machine that just connected
-           waits here for its Admit (hub hub-auth.ts). -->
-      <ul
-        aria-label="Machines waiting to be admitted"
-        class="m-0 flex list-none flex-col gap-space-2 rounded-md bg-surface-recess p-space-3"
-      >
-        {#each hubAuth.waiting as machine (machine.machineId)}
-          <li class="flex items-center gap-space-3">
-            <span data-slot="who" class="flex min-w-0 flex-auto flex-col">
-              <span
-                data-slot="name"
-                class="type-body text-ink-strong wrap-anywhere"
-                >{machine.hostname ?? machine.machineId} waits to be admitted</span
-              >
-              {#if machine.address}
-                <span class="type-meta text-ink-subtle">{machine.address}</span>
-              {/if}
-            </span>
-            <Button
-              aria-label="Admit {machine.hostname ?? machine.machineId}"
-              disabled={admitting !== null}
-              label="Admit"
-              onclick={() => admit(machine.machineId)}
-              pending={admitting === machine.machineId}
-              size="sm"
-              variant="secondary"
-            />
-          </li>
-        {/each}
-      </ul>
-      {#if admitRefused}
-        <Alert.Root role="alert" variant="destructive">
-          <IconError aria-hidden="true" />
-          <Alert.Description>{admitRefused}</Alert.Description>
-        </Alert.Root>
-      {/if}
-    {/if}
-
-    {#if tab === "ssh"}
-      {#if view === "running" && job}
-        {@const steps = stepsOf(job)}
-        <div class="flex flex-col gap-space-3">
-          <p class="text-body text-ink-muted">
-            {#if signedIn}
-              Adding {job.target}. It keeps installing if you close this.
-            {:else}
-              Signing in to {job.target} over SSH.
-            {/if}
-          </p>
-          <ol
-            aria-live="polite"
-            class="m-0 flex list-none flex-col gap-space-2 p-0"
-          >
-            {#each steps as step, index (index)}
-              <li
-                class="mark-line flex min-w-0 items-center gap-space-3 type-body text-ink-muted data-current:text-ink-strong"
-                data-current={index === steps.length - 1 || undefined}
-              >
-                {#if index === steps.length - 1}
-                  <Spinner />
-                {:else}
-                  <IconSuccess
-                    data-add-machine-dialog-done
-                    aria-hidden="true"
-                    class="size-icon-md flex-none text-status-done-ink"
-                  />
-                {/if}
-                <span
-                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                  >{step}</span
-                >
-              </li>
-            {:else}
-              <li
-                class="mark-line flex min-w-0 items-center gap-space-3 type-body text-ink-muted data-current:text-ink-strong"
-                data-current
-              >
-                <Spinner /><span
-                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                  >Connecting over SSH</span
-                >
-              </li>
-            {/each}
-          </ol>
-          <details class="group">
-            <summary
-              class="mark-line inline-flex list-none items-center gap-space-2 rounded-xs type-label text-ink-muted details-marker:hidden hover:text-ink-strong"
-            >
-              <IconChevronRight
-                data-chev
-                aria-hidden="true"
-                class="size-icon-md flex-none motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-open:rotate-90"
-              /><span>Output</span>
-            </summary>
-            <pre
-              class="mx-0 mb-0 mt-space-2 max-h-c-output-max overflow-auto border border-border-control rounded-md bg-surface-hover p-space-3 text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong"
-              {@attach followTail()}>{job.lines.join("\n")}</pre>
-          </details>
-          {#if sshJoin.refused}
-            <Alert.Root role="alert" variant="destructive">
-              <IconError aria-hidden="true" />
-              <Alert.Description>{sshJoin.refused}</Alert.Description>
-            </Alert.Root>
-          {/if}
-        </div>
-      {:else}
-        <form class="flex flex-col gap-space-4" id="ssh-join" onsubmit={start}>
-          <div
-            data-slot="grid"
-            class="grid grid-cols-(--grid-cols) gap-space-3"
-            style:--grid-cols="minmax(0, 1fr) var(--c-port-field-w)"
-          >
-            <div
-              data-slot="add-machine-dialog-field"
-              class="flex min-w-0 flex-col gap-space-2 text-ink-strong"
-            >
-              <Label for="join-target">SSH target</Label>
-              <Input
-                autocapitalize="off"
-                autocomplete="off"
-                id="join-target"
-                placeholder="user@host or SSH alias"
-                spellcheck="false"
-                bind:value={target}
-              />
-            </div>
-            <div
-              data-slot="add-machine-dialog-field"
-              class="flex min-w-0 flex-col gap-space-2 text-ink-strong"
-            >
-              <Label for="join-port">Port</Label>
-              <Input
-                aria-invalid={portValid ? undefined : "true"}
-                id="join-port"
-                inputmode="numeric"
-                placeholder="22"
-                bind:value={port}
-              />
-            </div>
-            <div
-              data-slot="add-machine-dialog-field"
-              class="col-span-full flex min-w-0 flex-col gap-space-2 text-ink-strong"
-            >
-              <Label for="join-password">Password (optional)</Label>
-              <InputGroup.Root>
-                <InputGroup.Input
-                  aria-describedby="join-password-hint"
-                  autocapitalize="off"
-                  autocomplete="current-password"
-                  id="join-password"
-                  spellcheck="false"
-                  type={passwordShown ? "text" : "password"}
-                  bind:value={password}
-                />
-                <InputGroup.Addon align="inline-end">
-                  <InputGroup.Button
-                    aria-controls="join-password"
-                    aria-label={passwordShown
-                      ? "Hide password"
-                      : "Show password"}
-                    aria-pressed={passwordShown}
-                    onclick={() => {
-                      passwordShown = !passwordShown;
-                    }}
-                    size="icon-xs"
-                  >
-                    {#if passwordShown}
-                      <IconEyeClosed />
-                    {:else}
-                      <IconEye />
-                    {/if}
-                  </InputGroup.Button>
-                </InputGroup.Addon>
-              </InputGroup.Root>
-              <span id="join-password-hint" class="type-meta text-ink-subtle">
-                Used once to add this hub's key to the machine, and not kept.
-                Leave it empty if the machine already accepts the key.
-              </span>
-            </div>
-          </div>
-
-          {#if failure}
-            <div class="flex flex-col gap-space-2" role="alert">
-              <Alert.Root variant="destructive">
-                <IconError aria-hidden="true" />
-                <Alert.Description>{failure.text}</Alert.Description>
-              </Alert.Root>
-              {#if failure.tail.length > 0}
-                <pre
-                  class="m-0 max-h-c-output-max overflow-auto border border-border-control rounded-md bg-surface-hover p-space-3 text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong">{failure.tail.join(
-                    "\n"
-                  )}</pre>
-              {/if}
-            </div>
-          {:else if sshJoin.refused}
-            <Alert.Root role="alert" variant="destructive">
-              <IconError aria-hidden="true" />
-              <Alert.Description>{sshJoin.refused}</Alert.Description>
-            </Alert.Root>
-          {:else if stopped}
-            <Alert.Root role="status">
-              <Alert.Description>{stopped}</Alert.Description>
-            </Alert.Root>
-          {/if}
-
-          <details class="group" bind:open={keyOpen}>
-            <summary
-              class="mark-line inline-flex list-none items-center gap-space-2 rounded-xs type-label text-ink-muted details-marker:hidden hover:text-ink-strong"
-            >
-              <IconChevronRight
-                data-chev
-                aria-hidden="true"
-                class="size-icon-md flex-none motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-open:rotate-90"
-              />
-              <span>This hub's SSH key</span>
-            </summary>
-            <div class="flex flex-col gap-space-2 pt-space-2">
-              {#if joinInfo.value?.sshPublicKey}
-                <p class="type-meta text-ink-subtle">
-                  The machine has to accept this key: it goes in
-                  ~/.ssh/authorized_keys for the user you sign in as.
-                </p>
-                <CopyBox
-                  label="This hub's SSH public key"
-                  text={joinInfo.value.sshPublicKey}
-                />
-              {:else if joinInfo.value}
-                <p class="type-meta text-ink-subtle">
-                  This hub has no SSH key yet. Create one on
-                  {joinInfo.value.hubHostname}
-                  with ssh-keygen -t ed25519, then reopen this.
-                </p>
-              {/if}
-            </div>
-          </details>
-        </form>
-      {/if}
-    {:else}
-      <div class="flex flex-col gap-space-3">
-        {@render addressField("join-address-command")}
-        <p class="text-body text-ink-muted">
-          Run this on the machine you want to add. It installs Bun if needed,
-          clones CawCo and starts the agent.
-        </p>
-        {#if hubUrl}
-          <CopyBox label="Install command" text={installCommand(hubUrl)} />
-        {/if}
-        <CheckInStatus />
-      </div>
-    {/if}
-  {/if}
-{/snippet}
-
-<!-- Close dismisses; it is never the task's act, so it is never coral. -->
-{#snippet actions()}
-  {#if tab === "ssh" && view === "form" && !joined}
-    <Button onclick={close} variant="outline">Cancel</Button>
-    <Button disabled={!canStart} form="ssh-join" type="submit">
-      {#if starting}
-        <Spinner />
-      {/if}
-      <span
-        >{job?.state === "failed" || job?.state === "stopped"
-          ? "Retry"
-          : "Add machine"}</span
-      >
-    </Button>
-  {:else if tab === "ssh" && view === "running" && !joined}
-    <Button label="Stop" onclick={stop} pending={stopping} variant="outline" />
-    <Button onclick={close} variant="outline">Close</Button>
-  {:else}
-    <Button onclick={close} variant="outline">Close</Button>
-  {/if}
-{/snippet}
-
-{#snippet description()}
-  Install the CawCo agent on a machine and it joins this fleet.
+{#snippet tray()}
+  <JoinTray
+    {addresses}
+    {admitRefused}
+    {admitting}
+    arrival={job?.id ?? null}
+    {card}
+    {formAlert}
+    hubHostname={joinInfo.value?.hubHostname ?? null}
+    joinError={joinInfo.error}
+    onadmit={admit}
+    onchange={change}
+    onclose={close}
+    onopenmachine={openMachine}
+    onretry={retry}
+    onstart={start}
+    onstartsession={startSession}
+    onstop={stop}
+    onway={(value: JoinWay) => {
+      addMachine.way = value;
+    }}
+    phone={phone.current}
+    retry={job?.state === "failed" || job?.state === "stopped"}
+    sshKey={joinInfo.value?.sshPublicKey ?? null}
+    {starting}
+    {stopping}
+    waiting={way === "command" ? hubAuth.waiting : []}
+    {way}
+    bind:target
+    bind:port
+    bind:password
+    bind:hubUrl
+  />
 {/snippet}
 
 {#if phone.current}
-  <!-- On a phone the dialog is the kit's bottom sheet. -->
+  <!-- On a phone the dialog is the kit's bottom sheet; its head's Close is
+       the sheet's way out, as on every kit sheet. -->
   <Drawer.Root
     noBodyStyles
     onOpenChange={(value) => {
@@ -628,24 +323,16 @@
     open={addMachine.open}
     shouldScaleBackground={false}
   >
-    <!-- The head's Close is the sheet's way out, as on every kit sheet, so
-         joined it is the only one: the done view is the head, then the row. -->
     <Drawer.Content title="Connect a machine">
       <div
-        class="kit-sheet-scroll flex min-h-0 flex-col gap-space-7 overflow-y-auto overscroll-contain"
+        class="kit-sheet-scroll flex min-h-0 flex-col gap-space-6 overflow-y-auto overscroll-contain"
       >
-        {#if !joined}
-          <Drawer.Description text="body">
-            {@render description()}
-          </Drawer.Description>
+        {#if card === null}
+          <Drawer.Description text="body">{JOIN_DESCRIPTION}</Drawer.Description
+          >
         {/if}
-        {@render body()}
+        {@render tray()}
       </div>
-      {#if !joined}
-        <Drawer.Footer pad="flush">
-          {@render actions()}
-        </Drawer.Footer>
-      {/if}
     </Drawer.Content>
   </Drawer.Root>
 {:else}
@@ -661,16 +348,14 @@
       }
     }
   >
-    <!-- Joined, Close is the one act the dialog offers, so it is the one button. -->
-    <Dialog.Content showCloseButton={!joined} width="form">
+    <Dialog.Content width="form">
       <Dialog.Header>
         <Dialog.Title>Connect a machine</Dialog.Title>
-        {#if !joined}
-          <Dialog.Description>{@render description()}</Dialog.Description>
+        {#if card === null}
+          <Dialog.Description>{JOIN_DESCRIPTION}</Dialog.Description>
         {/if}
       </Dialog.Header>
-      {@render body()}
-      <Dialog.Footer>{@render actions()}</Dialog.Footer>
+      {@render tray()}
     </Dialog.Content>
   </Dialog.Root>
 {/if}

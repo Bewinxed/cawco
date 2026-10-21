@@ -1086,6 +1086,10 @@
     --c-detail-max: 6rem;
     /* The longest a pre of command or fault output grows before it scrolls. */
     --c-output-max: 12rem;
+    /* Two lines of body text: a box that holds its height while its words change (Connect a machine's status card sentence on a phone). */
+    --c-body-two-lines: calc(var(--text-body) * var(--leading-body) * 2);
+    /* Two lines of meta text: the status card's waiting line on a phone, its height held while the words change. */
+    --c-meta-two-lines: calc(var(--text-meta) * var(--leading-meta) * 2);
     /* A markdown editor's well, so it never collapses to its toolbar. */
     --c-editor-well-min: 320px;
     /* A fetched skill's choice list before it scrolls. */

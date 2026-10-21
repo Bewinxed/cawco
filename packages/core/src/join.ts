@@ -20,6 +20,82 @@ export const SSH_ADD_RUNNING_HEADER = "x-cawco-ssh-add";
 export const INSTALL_JOINED = `${INSTALL_STEP_PREFIX}joined as `;
 
 /**
+ * The step lines the hub itself says during an SSH add (hub join.ts), each
+ * without {@link INSTALL_STEP_PREFIX}. `trust` is a password add's one
+ * connection adding the hub's key, worded as the install script words its
+ * own; `carry`, the first line of an add whose connection has signed in,
+ * once that connection carries a port on the machine to the hub (the port
+ * follows); `key`, the hub giving the machine its key over that connection
+ * (ssh-tunnels.ts `admit`), the add being the person admitting it;
+ * `download`, printed by the remote command before it fetches the install
+ * script (the hub's address follows), which says the install runs on the
+ * machine now. `signIn` is never printed: it is the step an add fails on
+ * when `ssh` ended before the remote command said anything.
+ */
+export const SSH_STEP = {
+  trust: "adding this hub's SSH key",
+  carry: "carrying this hub to the machine on its port ",
+  key: "giving the machine its key to this hub",
+  download: "downloading the install script from ",
+  signIn: "signing in over SSH",
+} as const;
+
+/**
+ * The five phases an add is drawn as (Connect a machine's rail), in the
+ * order they run, each with the step lines it covers by their starts: the
+ * hub's own ({@link SSH_STEP}), the install script's `say` lines
+ * (install-script.ts) and `cawco binary-install agent`'s noted ones (cli
+ * binary-install.ts and service.ts `requireLinger`: only a note ending in
+ * "…" is a step line). `joining` precedes the service because the script
+ * says it before it hands over to `binary-install`, whose first step line is
+ * `checking for systemd…` on Linux; a Mac says none, so its Service phase
+ * fills as the add finishes. `waiting to be admitted` and `joined as` come
+ * after the service, so they stand in its phase.
+ */
+export const INSTALL_PHASES = [
+  {
+    phase: "sign-in",
+    name: "Sign in",
+    steps: [SSH_STEP.trust, SSH_STEP.carry, SSH_STEP.key, SSH_STEP.signIn],
+  },
+  {
+    phase: "fetch",
+    name: "Fetch",
+    steps: [
+      SSH_STEP.download,
+      "turned on persistent user services",
+      "persistent user services are off",
+      "installing openssl",
+      "finding the newest",
+      "verifying the release signature",
+      "downloading CawCo",
+    ],
+  },
+  { phase: "install", name: "Install", steps: ["installing CawCo"] },
+  {
+    phase: "join",
+    name: "Join",
+    steps: ["joining ", "moving this machine from"],
+  },
+  {
+    phase: "service",
+    name: "Service",
+    steps: ["checking for systemd", "waiting to be admitted", "joined as "],
+  },
+] as const;
+
+export type InstallPhase = (typeof INSTALL_PHASES)[number]["phase"];
+
+/**
+ * The phase a step line (without its prefix) belongs to, as its index in
+ * {@link INSTALL_PHASES}; -1 for a line no phase names.
+ */
+export const installPhaseOf = (step: string): number =>
+  INSTALL_PHASES.findIndex((each) =>
+    each.steps.some((start) => step.startsWith(start))
+  );
+
+/**
  * What a machine the fleet has forgotten is called wherever its history still
  * shows — spend it ran up before it was removed stays, under this name.
  */
