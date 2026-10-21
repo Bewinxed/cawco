@@ -9,11 +9,15 @@
  *    (Firefox, its headless window 2px per css px wide at 2 dppx, the one
  *    engine here that lays a page out at a fractional width), on the
  *    delegate-tray bench: the rail or the burger, the composer's width, the
- *    transcript's rail and its inset, the stat tile's figure (the real
- *    StatTile, mounted there: no bench draws one without a hub) and the hub
- *    band's place (its slot's `order`, over the bar under the line) each read
+ *    transcript's rail and its inset and the stat tile's figure (the real
+ *    StatTile, mounted there: no bench draws one without a hub) each read
  *    the side `DRAWER_QUERY` names, against the drawer's own reading
- *    (390px) and the desk's (1440px).
+ *    (390px) and the desk's (1440px). The composer's foot and the hub band
+ *    stand alike on both sides, so the line moves neither: DESIGN.md,
+ *    Composer column, "docked 14px above the bottom plus the safe area"
+ *    at every width (d71708ddd); the band stands under the bar at every
+ *    width (61fb44982, d71708ddd: Reconnect "never pushes a phone's bar
+ *    down").
  * 2. At the same widths, every `@media` rule in the built dashboard's CSS that
  *    names the drawer's line (899, 900 or 901px) matches as `DRAWER_QUERY`
  *    does, its drawer side or its desk side.
@@ -127,7 +131,6 @@ const readParts = (page: Page): Promise<Reading> =>
     const composer = document
       .querySelector('form[data-slot="cin"]')
       ?.closest('[data-slot="composer"]');
-    const dock = composer?.closest('[data-slot="dock"]');
     const tr = document.querySelector('[data-slot="tr"]');
     // The stat tile's figure: its type role by its line height's share of
     // its size (--type-title 1.25, --type-kpi 1); the size itself is fluid.
@@ -150,14 +153,9 @@ const readParts = (page: Page): Promise<Reading> =>
           ? String(Math.round(rail.getBoundingClientRect().width))
           : "absent",
         "composer align-self": css(composer, "align-self"),
-        "composer dock bottom": css(dock, "bottom"),
         "transcript --x-rail": css(tr, "--x-rail"),
         "transcript padding-inline-start": css(tr, "padding-inline-start"),
         "stat tile value type": statType,
-        "hub band order": css(
-          document.querySelector('[data-slot="hub-band-slot"]'),
-          "order"
-        ),
       },
     };
   }, DRAWER_QUERY);
