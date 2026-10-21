@@ -115,9 +115,19 @@
  *    page scrolled under the panel, then one at the page's very top-right,
  *    opened from its row, then J and K: each card and each disc stand clear
  *    of the panel (and on a phone, the disc clear of the card at the foot).
+ *
+ * And the owner's report (2026-10-21: on a state-machine graph drawn in
+ * inline SVG, his pin pictures drew the edges as black filled wedges and the
+ * edge labels in a large serif face):
+ * k. A pin on an inline `<svg>` whose `<polyline>`s, `<marker>` and `<text>`
+ *    the page's stylesheet styles: in its picture, read by pixel, a point
+ *    inside the wedge polyline's hull is the page's ground (never black),
+ *    the marker's inside is its colour, and the label's ink is as wide as
+ *    the page's own rendering of it (an element screenshot), within 3px.
  */
 import { join } from "node:path";
 import type { Frame, Locator, Page } from "playwright-core";
+import { PNG } from "pngjs";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { traceMain } from "../frames";
@@ -426,6 +436,7 @@ const run = async (kit: Kit) => {
     () => wordlessChecks(on),
     () => documentChecks(on),
     () => mapPressChecks(on),
+    () => svgPictureChecks(on),
     () => insertChecks(on),
     () => listChecks(on),
     () => panelChecks(on),
@@ -2982,6 +2993,207 @@ const mapPressChecks = async (on: On) => {
         scale <= 2.01 &&
         Math.abs(onText.size.h / scale - crop.h) <= 2,
       `picture ${JSON.stringify(onText.size)}; crop ${JSON.stringify(crop)} at ${scale.toFixed(3)}×`
+    );
+  } finally {
+    pictures.stop();
+    await on.page.keyboard.press("Escape");
+  }
+};
+
+/** (k)'s colours, as the page's stylesheet gives them: its ground, the edges, the label, the marker. */
+const SVG_GROUND = [255, 255, 255];
+const SVG_MARKER = [200, 40, 40];
+/** How far (k)'s label ink in the picture may stand from the page's own, px. Our call: 0.5px measured on Chromium at 1×, room for hinting at another scale; the default serif was 15.5px off. */
+const LABEL_SLACK = 3;
+/** A pixel as ink: any channel under it. Our call: the label's colour is 90, the ground 255. */
+const INK_BELOW = 200;
+/**
+ * (k)'s page: a graph as the mockup draws it, an inline `<svg>` whose shapes
+ * the stylesheet alone styles, standing in a world wider than any pin's crop,
+ * so the `<svg>` is the picture's part and not the world round it.
+ * The `<svg>`'s user space is its px (its viewBox its own size).
+ */
+const SVG_PAGE = `<!doctype html><html><head><style>
+  :root { --border-contrast: rgb(40, 110, 200); --ink-muted: rgb(90, 90, 90); --edge-head: rgb(${SVG_MARKER.join(", ")}); --font-sans: "DejaVu Sans"; }
+  body { margin: 0; background: rgb(${SVG_GROUND.join(", ")}); }
+  .world { position: relative; width: 1400px; height: 900px; }
+  .world svg { position: absolute; left: 40px; top: 40px; overflow: visible; }
+  .world svg polyline { fill: none; stroke: var(--border-contrast); stroke-width: 1.5; }
+  .world svg text { font: 500 11px var(--font-sans), system-ui, sans-serif; fill: var(--ink-muted); }
+</style></head><body><div class="world"><svg id="graph" width="480" height="260" viewBox="0 0 480 260">
+  <defs><marker id="head" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="20" markerHeight="20" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--edge-head)"/></marker></defs>
+  <polyline id="wedge" points="40,40 240,170 440,40"/>
+  <polyline id="edge" points="60,220 300,220" marker-end="url(#head)"/>
+  <text id="label" x="320" y="224">Waiting to scanning</text>
+</svg></div></body></html>`;
+/** (k)'s points in the `<svg>`'s px: inside the wedge's hull, inside the marker's triangle (its scale 20/10 × the 1.5 stroke, 6px off the edge's stroke). */
+const IN_HULL = { x: 240, y: 90 };
+const IN_MARKER = { x: 280, y: 213 };
+
+/** The columns of `png` in rows `top`..`bottom` and from column `from` on holding ink: the first and the last, -1 for none. */
+const inkSpan = (png: PNG, top: number, bottom: number, from: number) => {
+  let first = -1;
+  let last = -1;
+  for (let x = Math.max(0, from); x < png.width; x += 1) {
+    for (
+      let y = Math.max(0, top);
+      y <= Math.min(png.height - 1, bottom);
+      y += 1
+    ) {
+      const at = (y * png.width + x) * 4;
+      if (
+        Math.min(png.data[at], png.data[at + 1], png.data[at + 2]) < INK_BELOW
+      ) {
+        if (first < 0) {
+          first = x;
+        }
+        last = x;
+        break;
+      }
+    }
+  }
+  return { first, last };
+};
+
+/** (k) A pin on an inline SVG styled by the page's stylesheet: its picture, read by pixel. */
+const svgPictureChecks = async (on: On) => {
+  await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "svg-graph",
+    html: SVG_PAGE,
+  });
+  const frame = (await until(
+    "the svg-graph page in the pane",
+    async () => {
+      const shown = await pageFrame(on);
+      return (await shown
+        .locator("#graph")
+        .count()
+        .catch(() => 0)) === 1
+        ? shown
+        : null;
+    },
+    Boolean,
+    60_000
+  )) as Frame;
+  await settle(on.page, 400);
+  await frame.evaluate(() => scrollTo(0, 0));
+  // The page's own rendering of the label, before any of the overlay's layers stand over it.
+  const ownLabel = PNG.sync.read(await frame.locator("#label").screenshot());
+  const own = inkSpan(ownLabel, 0, ownLabel.height - 1, 0);
+  const geometry = await frame.evaluate(() => {
+    const box = (el: Element | null) => {
+      const r = el?.getBoundingClientRect();
+      return r
+        ? { x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height }
+        : null;
+    };
+    return {
+      svg: box(document.querySelector("#graph")),
+      label: box(document.querySelector("#label")),
+    };
+  });
+  if (!(geometry.svg && geometry.label)) {
+    on.kit.check("k: the svg-graph page has its graph", false, "none");
+    return;
+  }
+  const { svg, label } = geometry;
+  await paneMode(on, frame, "C");
+  const pictures = watchPictures(on.page);
+  try {
+    const before = new Set(Object.keys((await docOf(frame)).pins));
+    const b = await screenBox(on, frame, "#graph");
+    await on.page.mouse.click(b.x + IN_HULL.x, b.y + IN_HULL.y);
+    const pin = await until(
+      "the pin on the graph",
+      async () => {
+        const { pins } = await docOf(frame);
+        const id = Object.keys(pins).find((one) => !before.has(one));
+        return id
+          ? {
+              id,
+              ...(pins[id] as {
+                anchor: { selector: string };
+                number: number;
+              }),
+            }
+          : null;
+      },
+      Boolean,
+      5000
+    ).catch(() => null);
+    if (!pin) {
+      on.kit.check("k: a press on the graph makes a pin", false, "none");
+      return;
+    }
+    await writeIn(on, pin.number, "These edges.");
+    await on.page.keyboard.press("Escape");
+    const posted = await until(
+      "the graph pin's picture at the hub",
+      () => pictures.posted.find((one) => one.mark === pin.id),
+      Boolean,
+      10_000
+    ).catch(() => undefined);
+    const anchor = await frame.evaluate((selector) => {
+      const r = document.querySelector(selector)?.getBoundingClientRect();
+      return r
+        ? { x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height }
+        : null;
+    }, pin.anchor.selector);
+    if (!(posted && anchor)) {
+      on.kit.check(
+        "k: the graph pin's picture reaches the hub",
+        false,
+        `picture ${Boolean(posted)}; anchor ${pin.anchor.selector} ${JSON.stringify(anchor)}`
+      );
+      return;
+    }
+    const png = PNG.sync.read(Buffer.from(posted.png, "base64"));
+    // The crop as pins.ts `padded` and picture.ts `onPage` make it: the anchor's box with its pad, from the page's origin on.
+    const crop = {
+      x: Math.max(0, anchor.x - CROP_PAD),
+      y: Math.max(0, anchor.y - CROP_PAD),
+    };
+    const scale = png.width / (anchor.x + anchor.w + CROP_PAD - crop.x);
+    const at = (x: number, y: number) => {
+      const px = Math.round((svg.x + x - crop.x) * scale);
+      const py = Math.round((svg.y + y - crop.y) * scale);
+      const i = (py * png.width + px) * 4;
+      return px >= 0 && py >= 0 && px < png.width && py < png.height
+        ? [png.data[i], png.data[i + 1], png.data[i + 2]]
+        : null;
+    };
+    const close = (rgb: number[] | null, want: number[], slack: number) =>
+      !!rgb && rgb.every((c, i) => Math.abs(c - want[i]) <= slack);
+    const hull = at(IN_HULL.x, IN_HULL.y);
+    const head = at(IN_MARKER.x, IN_MARKER.y);
+    const where = `anchor ${pin.anchor.selector}; picture ${png.width}×${png.height} at ${scale.toFixed(3)}×`;
+    on.kit.check(
+      "k: in a pin's picture over an inline SVG, a point inside the CSS-styled polyline's hull is the page's ground, never black (fill: none kept)",
+      close(hull, SVG_GROUND, 8),
+      `hull ${JSON.stringify(hull)}; ${where}`
+    );
+    on.kit.check(
+      "k: the marker the stylesheet colours through a var() is drawn in its colour",
+      close(head, SVG_MARKER, 24),
+      `marker ${JSON.stringify(head)}, wanted ${JSON.stringify(SVG_MARKER)}; ${where}`
+    );
+    // The label's band in the picture, its ink read from its own left edge on.
+    const top = Math.floor((label.y - crop.y) * scale) - 2;
+    const bottom = Math.ceil((label.y + label.h - crop.y) * scale) + 2;
+    const left = Math.floor((label.x - crop.x) * scale) - 2;
+    const drawn = inkSpan(png, top, bottom, left);
+    const ownScale = ownLabel.width / label.w;
+    const ownWidth = (own.last - own.first + 1) / ownScale;
+    const drawnWidth = (drawn.last - drawn.first + 1) / scale;
+    on.kit.check(
+      `k: the CSS-styled <text>'s ink in the picture is as wide as the page's own rendering of it (within ${LABEL_SLACK}px): its 11px sans face, never the default serif`,
+      own.first >= 0 &&
+        drawn.first >= 0 &&
+        Math.abs(drawnWidth - ownWidth) <= LABEL_SLACK,
+      `picture ${drawnWidth.toFixed(1)}px, page ${ownWidth.toFixed(1)}px (its box ${label.w.toFixed(1)}px); ${where}`
     );
   } finally {
     pictures.stop();

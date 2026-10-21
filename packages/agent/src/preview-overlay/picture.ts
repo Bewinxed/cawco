@@ -514,6 +514,108 @@ function slimChildren(node: Node, defaults: UaDefaults) {
   }
 }
 
+/**
+ * What an `<svg>` part's copy carries of the page's computed style: what
+ * changes how SVG paints a shape or sets its words. modern-screenshot draws an
+ * `<svg>` root as it stands, never cloned or styled ("Skip processing for SVG
+ * elements that don't have external resources to embed",
+ * dom-to-foreign-object-svg.ts in 4.7.0), and that image holds none of the
+ * page's stylesheet: a `fill: none` polyline drew as a black wedge, an 11px
+ * sans label in the image's own serif. Our list.
+ */
+const SVG_STYLES = [
+  "fill",
+  "fill-opacity",
+  "fill-rule",
+  "stroke",
+  "stroke-width",
+  "stroke-dasharray",
+  "stroke-dashoffset",
+  "stroke-linecap",
+  "stroke-linejoin",
+  "stroke-opacity",
+  "opacity",
+  "visibility",
+  "display",
+  "font-family",
+  "font-size",
+  "font-weight",
+  "font-style",
+  "letter-spacing",
+  "text-anchor",
+  "dominant-baseline",
+  "color",
+  "marker-start",
+  "marker-mid",
+  "marker-end",
+];
+/**
+ * modern-screenshot's own test for an `<svg>` it clones and styles itself
+ * rather than drawing it as it stands: one naming a resource to embed
+ * (dom-to-foreign-object-svg.ts `SVG_EXTERNAL_RESOURCE_REGEX`, 4.7.0).
+ */
+const SVG_EMBEDS = /\bx?link:?href\s*=\s*["'](?!data:)[^"']+["']/i;
+
+/**
+ * The node a part standing on `el` at `at` hands modern-screenshot. An `<svg>`
+ * it would draw as it stands is a detached copy, at its box's size, each of
+ * whose elements (a `<marker>`'s in its `<defs>` too) says inline the
+ * {@link SVG_STYLES} it computes on the page; any other element is itself. A
+ * value is said only where the copy would not come to it alone: one the
+ * element sets by attribute always, else an inherited one unlike its
+ * parent's, a non-inherited one (and the root's every one) unlike its tag's
+ * default, as {@link slim} measures. A breath between elements.
+ */
+async function partRoot(
+  el: Element,
+  at: Box,
+  view: Window,
+  defaults: UaDefaults,
+  breathe: () => Promise<void>
+): Promise<Element> {
+  if (
+    !(el.namespaceURI === SVG_NS && el.localName === "svg") ||
+    SVG_EMBEDS.test(el.innerHTML)
+  ) {
+    return el;
+  }
+  const copy = el.cloneNode(true) as SVGSVGElement;
+  const live = [el, ...el.querySelectorAll("*")];
+  const copied = [copy, ...copy.querySelectorAll("*")];
+  const computed = new Map<Element, CSSStyleDeclaration>();
+  const styleOf = (one: Element) => {
+    let style = computed.get(one);
+    if (!style) {
+      style = view.getComputedStyle(one);
+      computed.set(one, style);
+    }
+    return style;
+  };
+  for (const [i, one] of live.entries()) {
+    const style = styleOf(one);
+    const parent = one === el ? null : one.parentElement;
+    const fallback = defaults.of(one);
+    const target = (copied[i] as SVGElement).style;
+    for (const name of SVG_STYLES) {
+      const value = style.getPropertyValue(name);
+      const reached =
+        parent && !NON_INHERITED.has(name)
+          ? styleOf(parent).getPropertyValue(name)
+          : fallback(name);
+      if (value !== reached || one.hasAttribute(name)) {
+        target.setProperty(name, value);
+      }
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: a slice of the page's thread at a time
+    await breathe();
+  }
+  copy.setAttribute("width", String(at.w));
+  copy.setAttribute("height", String(at.h));
+  copy.style.setProperty("width", `${at.w}px`);
+  copy.style.setProperty("height", `${at.h}px`);
+  return copy;
+}
+
 const PNG_PREFIX = /^data:image\/png;base64,/;
 /** What a picture never draws: the overlay's own UI and layers, and what has no box. */
 export const SKIPPED =
@@ -809,11 +911,17 @@ export async function cropPicture(
       if (!context) {
         continue;
       }
-      context.node = step.el;
       context.width = step.box.w;
       context.height = step.box.h;
       try {
         // biome-ignore lint/performance/noAwaitInLoops: one part at a time, in paint order, on one context
+        context.node = await partRoot(
+          step.el,
+          step.box,
+          view,
+          defaults,
+          breathe
+        );
         const part = await domToCanvas(context);
         ctx.drawImage(part, step.box.x, step.box.y, step.box.w, step.box.h);
       } catch (reason) {
