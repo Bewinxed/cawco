@@ -1858,15 +1858,28 @@ html[data-stack] .dock { position: relative; inset: auto; max-block-size: none; 
 .node.cur { background: var(--surface-pressed); border-color: var(--border-contrast); }
 .node.kept { background: var(--selected-bg); border-color: var(--brand-solid); box-shadow: var(--selected-shadow); }
 .node.kept b { color: var(--selected-ink); }
+/* A state's fill fades between tiers; its words never do. The darker ink comes in at once, the lighter only
+   once the fill has finished, so no frame sets an ink on a fill it doesn't hold 4.5:1 on. */
+.node b, .node p { transition: color 0s linear var(--dur-control); }
+.node.cur b, .node:is(.kept, .cur) p { transition: color 0s; }
+.world[data-instant] :is(.node b, .node p) { transition: none; }
+@media (prefers-reduced-motion: reduce) { .node b, .node p { transition: none; } }
 .node.kept p, .node.cur p { color: var(--ink-row); }
 .vars { display: flex; flex-direction: column; gap: var(--space-1); margin-block-start: var(--space-2); }
 .var { all: unset; display: block; padding: var(--space-row) var(--space-2); border-radius: var(--radius-xs); font: var(--type-meta); color: var(--ink-row); border: 1px solid var(--border-control); background: var(--surface-raised); cursor: pointer; transition: var(--transition-control); }
 @media (hover: hover) { .var:not(.kept, .cur):hover, .var.peek:not(.kept, .cur) { background: var(--surface-hover); } }
-.var.cur { background: var(--surface-pressed); border-color: var(--border-contrast); color: var(--ink-strong); }
-.var.kept { background: var(--chip-chosen-bg); border-color: var(--chip-chosen-bg); color: var(--chip-chosen-ink); }
+/* A chip's tier (kept, current) is a second chip laid over it, each readable on its own fill, and a change of
+   tier wipes it in or out from the leading edge over --dur-control. No frame puts an ink on a fill half-way
+   between the two: a colour fade from the raised fill to coral passes through fills no ink holds 4.5:1 on. */
+.var { position: relative; }
+.var::after { content: attr(data-label) / ""; position: absolute; inset: -1px; padding: inherit; border: 1px solid var(--tier-edge, transparent); border-radius: inherit; background: var(--tier-fill, transparent); color: var(--tier-ink, inherit); font: inherit; pointer-events: none; clip-path: inset(0 100% 0 0); transition: clip-path var(--dur-control) var(--ease-out); }
+.var[data-tier="kept"] { --tier-fill: var(--chip-chosen-bg); --tier-edge: var(--chip-chosen-bg); --tier-ink: var(--chip-chosen-ink); }
+.var[data-tier="cur"] { --tier-fill: var(--surface-pressed); --tier-edge: var(--border-contrast); --tier-ink: var(--ink-strong); }
+.var:is(.kept, .cur)::after { clip-path: inset(0); }
+@media (prefers-reduced-motion: reduce) { .var::after { transition: none; } }
 /* A graph drawn anew (a tab, a resize, a relayout) takes its tiers at once: only a change of state on a graph
    already drawn fades between them. */
-.world[data-instant] :is(.node, .var) { transition: none; }
+.world[data-instant] :is(.node, .var, .var::after) { transition: none; }
 .var:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 
 /* The zoom group: 24px items in a 30px group, 2px in, so 5px + 3px = the group's 8px (The Concentric Rule). */
@@ -5861,7 +5874,7 @@ function stateNode(m, it) {
   if (it.vars) {
     const list = document.createElement("div"); list.className = "vars";
     it.vars.forEach((vv, i) => {
-      const ch = document.createElement("button"); ch.className = "var"; ch.dataset.machine = m.id; ch.dataset.state = it.id; ch.dataset.vary = i; ch.textContent = vv.name;
+      const ch = document.createElement("button"); ch.className = "var"; ch.dataset.machine = m.id; ch.dataset.state = it.id; ch.dataset.vary = i; ch.dataset.label = vv.name; ch.textContent = vv.name;
       ch.onmouseenter = () => enter(i);
       ch.onclick = (e) => { e.stopPropagation(); keep(m.id, it.id, i); };
       list.append(ch);
@@ -5968,6 +5981,8 @@ function mark() {
   document.querySelectorAll(".var").forEach((el) => {
     const k = v.cur[el.dataset.machine], i = +el.dataset.vary, on = k.state === el.dataset.state && k.vary === i;
     el.classList.toggle("kept", on && el.dataset.machine === v.last); el.classList.toggle("cur", on && el.dataset.machine !== v.last);
+    // The tier layer keeps its last look while it wipes out.
+    if (on) el.dataset.tier = el.dataset.machine === v.last ? "kept" : "cur";
     el.classList.toggle("peek", peeked(el) && peek.vary === i);
   });
   // The lit edge: the edge into the kept state, drawn last, in coral. Edges between machines never light.
