@@ -10,7 +10,12 @@ import { hostname } from "node:os";
 import { type AgentRow, INSTALL_STEP_PREFIX } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { machineId } from "@cawco/core/machine-id";
-import { machineFetch, refusalSince } from "@cawco/core/machine-key";
+import {
+  machineFetch,
+  machineKeyPath,
+  readMachineKey,
+  refusalSince,
+} from "@cawco/core/machine-key";
 
 const JOIN_TIMEOUT_MS = 90_000;
 const LOCAL_NETWORK_URL =
@@ -48,14 +53,16 @@ const readOwnRow = (
  * admitted) is waited on for as long as the person takes: the wait says so
  * once, and ends when they admit the machine (it comes online) or refuse it
  * (the agent keeps the hub's words, core machine-key.ts `refusalSince`). A
- * machine the hub added over SSH holds the key its add gave it, and is
- * never held.
+ * machine that holds a key (an SSH add wrote it one) is no machine admission
+ * applies to: a hub that will not take its key is said as that, after the
+ * join's own deadline, never as a wait for an Admit nobody is shown.
  */
 export async function awaitJoined(hubUrl: string): Promise<void> {
   const id = await machineId();
   const since = Date.now();
   const deadline = since + JOIN_TIMEOUT_MS;
   let waiting = false;
+  let keyNotTaken = false;
   while (waiting || Date.now() < deadline) {
     // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the hub after the previous one
     const answer = await readOwnRow(hubUrl, id).catch(() => undefined);
@@ -65,7 +72,9 @@ export async function awaitJoined(hubUrl: string): Promise<void> {
       case "unanswered":
         break;
       case "answered":
-        if (answer.value.pairing === "required" && !waiting) {
+        if (answer.value.pairing === "required" && readMachineKey()) {
+          keyNotTaken = true;
+        } else if (answer.value.pairing === "required" && !waiting) {
           waiting = true;
           console.log(
             `${INSTALL_STEP_PREFIX}waiting to be admitted: this hub requires paired devices. Admit ${hostname()} on the dashboard's Machines list.`
@@ -87,6 +96,11 @@ export async function awaitJoined(hubUrl: string): Promise<void> {
       );
     }
     await Bun.sleep(1000);
+  }
+  if (keyNotTaken) {
+    throw new Error(
+      `The agent started, but ${hubUrl} did not take this machine's key (${machineKeyPath()}) and has not listed it online after ${JOIN_TIMEOUT_MS / 1000}s. Add the machine again from the hub's dashboard.`
+    );
   }
   const lan = process.platform === "darwin" && LOCAL_NETWORK_URL.test(hubUrl);
   throw new Error(

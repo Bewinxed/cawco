@@ -69,10 +69,10 @@ export CLAUDE_LATE_S
 
 # ---------------------------------------------------------------- which rigs run
 # A rig is a function rig_<name> below; its checks are its `check "<name>" …` lines.
-RIGS=(install held3455 spare hubself rollback migration swapkill agentdown keeperheld keeperkilled handover drain retry pins workspace runaway memory capped)
+RIGS=(install sshadd held3455 spare hubself rollback migration swapkill agentdown keeperheld keeperkilled handover drain retry pins workspace runaway memory capped)
 # How many systemd machines each rig boots (its `machines` refuses any other count): what it holds of the host user's
 # inotify instances while it runs.
-declare -A RIG_MACHINES=([install]=2 [held3455]=1 [spare]=1 [hubself]=1 [rollback]=1 [migration]=1 [swapkill]=1
+declare -A RIG_MACHINES=([install]=2 [sshadd]=3 [held3455]=1 [spare]=1 [hubself]=1 [rollback]=1 [migration]=1 [swapkill]=1
   [agentdown]=1 [keeperheld]=1 [keeperkilled]=1 [handover]=2 [drain]=2 [retry]=2 [pins]=1 [workspace]=2 [runaway]=1
   [memory]=1 [capped]=2)
 # THE HOST USER'S INOTIFY INSTANCES are every rig's to share. The kernel charges an instance to its user in each user
@@ -171,7 +171,7 @@ RUN apt-get update \\
 FROM $BASE_LOCAL
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \\
- && apt-get install -y --no-install-recommends systemd systemd-sysv dbus dbus-user-session curl sudo socat bubblewrap \\
+ && apt-get install -y --no-install-recommends systemd systemd-sysv dbus dbus-user-session curl sudo socat bubblewrap openssh-server openssh-client \\
  && apt-get install -y --download-only openssl git \\
  && mkdir /debs && cp /var/cache/apt/archives/*.deb /debs/ \\
  && apt-get install -y --no-install-recommends dpkg-dev \\
@@ -520,8 +520,9 @@ P=$(podman_instance "$RIG-$$" "$rigdir/storage" "$PROOF_STORE")
 export P
 export prefix="cawco-proof-$RIG-$$"
 export net="$prefix-net" hubc="$prefix-hub" joinerc="$prefix-joiner" freshc="$prefix-fresh" releasec="$prefix-release"
+export sshrootc="$prefix-sshroot" sshuserc="$prefix-sshuser"
 subnet="10.231.$((10 + RIG_NUMBER))"
-export release_ip=$subnet.2 hub_ip=$subnet.3 joiner_ip=$subnet.4 fresh_ip=$subnet.5
+export release_ip=$subnet.2 hub_ip=$subnet.3 joiner_ip=$subnet.4 fresh_ip=$subnet.5 sshroot_ip=$subnet.6 sshuser_ip=$subnet.7
 # The hub's first preview port, its port's next (hub config.ts PREVIEW_PORTS, no CAWCO_PREVIEW_PORTS here), and the
 # host-mode name its Settings save checks resolves (preview.ts probePattern): the rig's network has no DNS, so the hub
 # machine's hosts file answers it as localtest.me's public DNS does, 127.0.0.1 ("The entire domain name
@@ -543,7 +544,7 @@ rig_done() {
   echo $((SECONDS - RIG_STARTED)) > "$rigdir/seconds"
   pids=$(jobs -p)
   [[ -z $pids ]] || { kill $pids 2> /dev/null; wait 2> /dev/null; }
-  $P rm -f -t 0 "$hubc" "$joinerc" "$freshc" "$releasec" > /dev/null 2>&1 || true
+  $P rm -f -t 0 "$hubc" "$joinerc" "$freshc" "$sshrootc" "$sshuserc" "$releasec" > /dev/null 2>&1 || true
   $P network rm -f "$net" > /dev/null 2>&1 || true
   podman_instance_gone "$RIG-$$" "$rigdir/storage" || { echo "rig $RIG: its cleanup failed: something it started may still be running"; (( rc != 0 )) || rc=1; }
   exit "$rc"
@@ -575,7 +576,7 @@ setup() {
 setup_done() {
   local c
   echo $((SECONDS - RIG_STARTED)) > "$rigdir/setup-seconds"
-  for c in "$hubc" "$joinerc" "$freshc"; do
+  for c in "$hubc" "$joinerc" "$freshc" "$sshrootc" "$sshuserc"; do
     $P container exists "$c" 2> /dev/null || continue
     echo "inotify ${c##*-}: $(inotify_on "$c") with the rig set up"
   done
@@ -648,7 +649,7 @@ diagnose() {
   echo
   echo "================ diagnostics after the failure ================"
   echo "host disk: $(df -h --output=avail "$out" | tail -n 1 | tr -d ' ') free where $out is"
-  for c in "$hubc" "$joinerc" "$freshc"; do
+  for c in "$hubc" "$joinerc" "$freshc" "$sshrootc" "$sshuserc"; do
     $P container exists "$c" 2> /dev/null || continue
     echo
     echo "################ $c"
@@ -987,6 +988,10 @@ machines() {
       hub) boot "$hubc" "$hub_ip" hub linger --add-host "$preview_name:127.0.0.1" & ;;
       joiner) boot "$joinerc" "$joiner_ip" joiner linger --security-opt unmask=ALL & ;;
       fresh) boot "$freshc" "$fresh_ip" fresh nolinger & ;;
+      # A machine the hub adds over SSH: its sshd serves root and the user, by key; the installer turns lingering on
+      # for root itself, and the user's is on as a person's own machine has it.
+      sshroot) boot "$sshrootc" "$sshroot_ip" sshroot nolinger & ;;
+      sshuser) boot "$sshuserc" "$sshuser_ip" sshuser linger & ;;
     esac
     pids+=($!)
   done
@@ -1250,6 +1255,125 @@ rig_install() {
   check "pristine container installs the hub, and the hub answers" "install_hub $BASE"
   check "a second container joins the hub" join_machine 600 "pristine container installs the hub, and the hub answers"
   check "the joined machine's localhost:3455 is the hub's dashboard, carried by its agent; the hub's own agent carries nothing" loopback_carried 300 "a second container joins the hub"
+}
+
+# ---------------------------------------------------------------- sshadd: Connect a machine › Over SSH, the real way
+# The hub adds machines over SSH as the dashboard's dialog does (`POST /api/machines/ssh`, hub join.ts): its own
+# connection to the machine, the key it writes there (ssh-tunnels.ts `admit`), the hub's own install.sh fetched
+# through its forward, the release from this rig's feed, a real systemd --user install, and the agent joining through
+# the forward. One machine is added as root, one as a normal user, each its own container (one machine id each).
+# On nightly 4839 a fresh root machine (uwucloud, 2026-10-21) registered with no key and was held for an Admit; after
+# the Admit its heartbeats were refused "register first" every 15 s. Nothing here is a stand-in: only the machines
+# are containers, and no address outside the rig's internal network is touched.
+
+# The hub's journal, whole, or since epoch seconds $1.
+hub_journal() { as_user "$hubc" sh -c "journalctl --user --no-pager -o cat -u cawco-hub.service ${1:+--since @$1} || true"; }
+# The hub's SSH key, made for the hub's user, written for root on sshroot and for the user on sshuser.
+ssh_trust() {
+  as_user "$hubc" sh -c 'mkdir -p -m 700 ~/.ssh && [ -f ~/.ssh/id_ed25519 ] || ssh-keygen -q -t ed25519 -N "" -C cawco-proof-hub -f ~/.ssh/id_ed25519'
+  local pub
+  pub=$(as_user "$hubc" cat /home/cawco/.ssh/id_ed25519.pub)
+  [[ -n $pub ]]
+  $P exec "$sshrootc" sh -c 'mkdir -p -m 700 /root/.ssh && printf "%s\n" "$1" >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys' sh "$pub"
+  $P exec --user cawco "$sshuserc" sh -c 'mkdir -p -m 700 /home/cawco/.ssh && printf "%s\n" "$1" >> /home/cawco/.ssh/authorized_keys && chmod 600 /home/cawco/.ssh/authorized_keys' sh "$pub"
+  local c
+  for c in "$sshrootc" "$sshuserc"; do
+    $P exec "$c" sh -c 'systemctl enable --now ssh.service 2> /dev/null || systemctl start ssh.socket'
+  done
+  # The hub's user signs in to each by key, as the add will.
+  wait_until 60 'as_user "$hubc" ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "root@$sshroot_ip" true'
+  wait_until 60 'as_user "$hubc" ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "cawco@$sshuser_ip" true'
+  # Neither machine has CawCo yet.
+  if $P exec "$sshrootc" test -e /root/.local/share/cawco; then echo "ASSERTION FAILED: root on sshroot has CawCo before the add"; return 1; fi
+  [[ "$(untouched "$sshuserc")" == untouched ]]
+}
+# What a failed SSH add check is read by: the add's lines, the hub's journal, and on the machine its agent's journal
+# and where its key is.
+ssh_add_said() {
+  local c=$1 user=$2 job=$3
+  echo "== the add"; hub_api "/api/machines/ssh/$job" || true; echo
+  echo "== the hub's journal (last 120)"; hub_journal | tail -n 120
+  echo "== the machine's agent journal and key ($user)"
+  if [[ $user == root ]]; then
+    $P exec "$c" sh -c 'XDG_RUNTIME_DIR=/run/user/0 journalctl --user --no-pager -o cat -n 80 -u cawco-agent.service; ls -la /root/.config/cawco 2>&1; systemctl --user -M root@ show -p Environment cawco-agent.service 2>&1 | head -c 600' || true
+  else
+    as_user "$c" sh -c 'journalctl --user --no-pager -o cat -n 80 -u cawco-agent.service; ls -la ~/.config/cawco 2>&1' || true
+  fi
+}
+# Adds `user@ip` (machine container $1, hostname $2) over SSH and waits for the add to end; then: done, no Admit
+# asked of anyone (no "waits to be admitted", no row), the machine online, its first register proved the add's key
+# (no hold at all), and over 40 s, past two heartbeats, none of its heartbeats refused.
+ssh_add_joins() {
+  local c=$1 name=$2 user=$3 ip=$4 since job state id refused rows
+  need_hub
+  since=$(date +%s)
+  job=$(hub_api /api/machines/ssh -X POST -H 'content-type: application/json' -d "{\"target\":\"$user@$ip\"}" | json 'd => d.id')
+  [[ -n $job ]]
+  echo "$job" > "$rigdir/ssh-add-$name.job"
+  wait_until 900 '[[ "$(hub_api /api/machines/ssh/'"$job"' | json "d => d.state")" != running ]]' || { ssh_add_said "$c" "$user" "$job"; return 1; }
+  state=$(hub_api "/api/machines/ssh/$job" | json 'd => d.state')
+  [[ $state == done ]] || { echo "ASSERTION FAILED: the SSH add of $user@$ip ended $state"; ssh_add_said "$c" "$user" "$job"; return 1; }
+  id=$(machine_id "$name")
+  [[ -n $id ]] || { echo "ASSERTION FAILED: no machine named $name on the hub"; ssh_add_said "$c" "$user" "$job"; return 1; }
+  echo "$id" > "$rigdir/ssh-id-$name"
+  if hub_journal "$since" | grep -F "machine $id (" | grep -q "waits to be admitted"; then
+    echo "ASSERTION FAILED: the hub held $user@$ip for an Admit"; ssh_add_said "$c" "$user" "$job"; return 1
+  fi
+  rows=$(hub_api /api/machines/waiting | json 'd => d.length')
+  [[ $rows == 0 ]] || { echo "ASSERTION FAILED: $rows machine(s) wait to be admitted: $(hub_api /api/machines/waiting)"; return 1; }
+  [[ "$(hub_api "/api/agents/$id" | json 'd => d.status')" == online ]] || { echo "ASSERTION FAILED: $name is not online"; ssh_add_said "$c" "$user" "$job"; return 1; }
+  if hub_journal "$since" | grep -F "machine $id (" | grep -q "held, unlisted"; then
+    echo "ASSERTION FAILED: $name's agent registered without the add's key and was held for the add (no Admit row, but its first register proved nothing)"
+    ssh_add_said "$c" "$user" "$job"; return 1
+  fi
+  sleep 40
+  refused=$(hub_journal "$since" | grep -cF "not machine $id's registered one" || true)
+  [[ $refused == 0 ]] || { echo "ASSERTION FAILED: $refused of $name's frames were refused \"register first\""; hub_journal "$since" | grep -F "$id" | tail -n 20; return 1; }
+  [[ "$(hub_api "/api/agents/$id" | json 'd => d.status')" == online ]]
+}
+# A machine that joins by itself, on a hub that requires paired devices, is held; the person admits it, and from
+# then on it is the machine's registered connection: online, and over 40 s none of its frames refused "register
+# first". The user machine is taken off the hub first (its agent stopped, its key gone on both sides), then joins
+# the hub's own address with the hub's install.sh, as the dialog's one command hands it out.
+owner_api() { as_user "$hubc" curl -fsS -H "Authorization: Owner $(cat "$rigdir/owner-token")" "http://127.0.0.1:3456$1" "${@:2}"; }
+admitted_heartbeats() {
+  local id since out rc=0 refused
+  need_hub
+  id=$(cat "$rigdir/ssh-id-sshuser")
+  [[ -n $id ]]
+  as_user "$sshuserc" systemctl --user stop cawco-agent.service
+  as_user "$sshuserc" rm -f /home/cawco/.config/cawco/machine-key
+  wait_until 60 '[[ "$(hub_api /api/agents/'"$id"' | json "d => d.status")" != online ]]'
+  hub_api "/api/agents/$id" -X DELETE > /dev/null
+  hub_api /api/auth/pairing -X PUT -H 'content-type: application/json' -d '{"required":true,"kind":"app","name":"stage2 proof"}' | json 'd => d.token' > "$rigdir/owner-token"
+  [[ -s "$rigdir/owner-token" ]]
+  since=$(date +%s)
+  as_user "$sshuserc" curl -fsS "http://$hub_ip:3456/install.sh" -o /tmp/join.sh
+  out="$rigdir/held-join.out"
+  as_user "$sshuserc" sh /tmp/join.sh > "$out" 2>&1 &
+  local joining=$!
+  wait_until 180 '[[ "$(owner_api /api/machines/waiting | json "d => d.some(m => m.machineId === \"'"$id"'\")")" == true ]]' || { cat "$out"; hub_journal "$since" | tail -n 60; return 1; }
+  owner_api "/api/machines/waiting/$id/admit" -X POST > /dev/null
+  wait "$joining" || rc=$?
+  cat "$out"
+  [[ $rc == 0 ]] || { echo "ASSERTION FAILED: the join exited $rc"; hub_journal "$since" | tail -n 60; return 1; }
+  grep -q 'waiting to be admitted' "$out"
+  [[ "$(owner_api "/api/agents/$id" | json 'd => d.status')" == online ]]
+  sleep 40
+  refused=$(hub_journal "$since" | grep -cF "not machine $id's registered one" || true)
+  [[ $refused == 0 ]] || { echo "ASSERTION FAILED: after the Admit, $refused of the machine's frames were refused \"register first\""; hub_journal "$since" | grep -F "$id" | tail -n 30; return 1; }
+  [[ "$(owner_api "/api/agents/$id" | json 'd => d.status')" == online ]]
+}
+export -f hub_journal ssh_trust ssh_add_said ssh_add_joins owner_api admitted_heartbeats
+rig_sshadd() {
+  use_feed base
+  setup "boot the machines: hub sshroot sshuser" machines hub sshroot sshuser
+  setup "install the hub from $BASE" install_hub "$BASE"
+  setup "give the hub's SSH key to root on sshroot and the user on sshuser" ssh_trust
+  setup_done
+  check "an SSH add of a fresh machine as root installs CawCo for root under systemd and joins: no Admit asked or listed, its first register proves the add's key, online, its heartbeats taken" "ssh_add_joins $sshrootc sshroot root $sshroot_ip" 1200
+  check "an SSH add of a fresh machine as a normal user installs and joins the same way" "ssh_add_joins $sshuserc sshuser cawco $sshuser_ip" 1200
+  check "a machine that joins a hub requiring paired devices by itself is held, the person admits it, and it is the machine's registered connection: online, none of its frames refused register first" admitted_heartbeats 900 "an SSH add of a fresh machine as a normal user installs and joins the same way"
 }
 
 # ---------------------------------------------------------------- held3455: something else holds 127.0.0.1:3455

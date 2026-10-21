@@ -13,7 +13,11 @@ import { join } from "node:path";
 import { MACHINE_PROOF_HEADER } from "./hub-auth";
 import { machineId as hostMachineId } from "./machine-id";
 import { cawcoConfigDir } from "./paths";
-import { readTextRecordSync, writeStateFile } from "./state-file";
+import {
+  readTextRecordSync,
+  writeStateFile,
+  writeStateFileSync,
+} from "./state-file";
 
 /** Where a machine keeps its key. */
 export const machineKeyPath = (): string =>
@@ -65,6 +69,16 @@ export const writeMachineKey = (
   key: string,
   path = machineKeyPath()
 ): Promise<void> => writeStateFile(path, `${key}\n`, { mode: KEY_MODE });
+
+/**
+ * {@link writeMachineKey}, done before it returns: the agent keeps the key
+ * the person's Admit hands it before it reads anything more off the socket,
+ * and the hub closes that socket next (agent daemon.ts `admission`).
+ */
+export const writeMachineKeySync = (
+  key: string,
+  path = machineKeyPath()
+): void => writeStateFileSync(path, `${key}\n`, { mode: KEY_MODE });
 
 const mac = (key: string, text: string): string =>
   createHmac("sha256", Buffer.from(key, "base64url"))

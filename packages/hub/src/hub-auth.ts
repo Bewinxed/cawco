@@ -233,6 +233,15 @@ interface Waiting extends WaitingMachine {
   admit: (key: string) => void;
   /** Ends the connection with nothing granted: its machine connects again, and proves what it holds then. */
   close: (reason: string) => void;
+  /**
+   * Held for an SSH add of its machine that is still proving the key it
+   * wrote there (server.ts `holdWaiting`): listed nowhere, never the
+   * person's to admit or refuse. The add is the person's consent; the key's
+   * proof, on any call of the machine's, closes it so it connects again with
+   * that key ({@link proves}), and the add's end closes it with the add's
+   * forward.
+   */
+  quiet: boolean;
   /** The person refused the machine: said on the connection, which then ends. */
   refuse: (reason: string) => void;
   /** Which connection holds this place, so a closing older one leaves a newer one be. */
@@ -358,15 +367,15 @@ export const createHubAuth = ({
           name,
           userCode: code,
         })),
-      waiting: [...waiting.values()].map(
-        ({ address, hostname, machineId, platform, since }) => ({
+      waiting: [...waiting.values()]
+        .filter((one) => !one.quiet)
+        .map(({ address, hostname, machineId, platform, since }) => ({
           address,
           hostname,
           machineId,
           platform,
           since,
-        })
-      ),
+        })),
     };
   };
 
@@ -812,7 +821,9 @@ export const createHubAuth = ({
     }
     waiting.set(entry.machineId, entry);
     console.log(
-      `[hub-auth] machine ${entry.machineId} (${entry.hostname ?? "no hostname"}, ${entry.address ?? "no address"}) waits to be admitted`
+      entry.quiet
+        ? `[hub-auth] machine ${entry.machineId} (${entry.hostname ?? "no hostname"}, ${entry.address ?? "no address"}) connected through its SSH add's forward before proving the key the add gave it: held, unlisted, until it proves it`
+        : `[hub-auth] machine ${entry.machineId} (${entry.hostname ?? "no hostname"}, ${entry.address ?? "no address"}) waits to be admitted`
     );
     changed();
   };
@@ -827,7 +838,7 @@ export const createHubAuth = ({
 
   const admit = (machineId: string): boolean => {
     const entry = waiting.get(machineId);
-    if (!entry) {
+    if (!entry || entry.quiet) {
       return false;
     }
     waiting.delete(machineId);
@@ -840,7 +851,7 @@ export const createHubAuth = ({
 
   const refuse = (machineId: string): boolean => {
     const entry = waiting.get(machineId);
-    if (!entry) {
+    if (!entry || entry.quiet) {
       return false;
     }
     waiting.delete(machineId);

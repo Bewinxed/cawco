@@ -107,7 +107,7 @@ import {
   machineRefusalPath,
   readMachineKey,
   socketProof,
-  writeMachineKey,
+  writeMachineKeySync,
   writeMachineRefusal,
 } from "@cawco/core/machine-key";
 import { userLayerPath } from "@cawco/core/paths";
@@ -1541,6 +1541,18 @@ const attach = (
     }
     const reading = sessions();
     const { socket, challenge } = yield* connection(url);
+    // Every frame from here on is kept until the socket's line reads them
+    // (below): the hub answers the register within milliseconds, and its
+    // answer to a register it holds (`admission` `waiting`) came while this
+    // connection was still setting up, with nothing listening. Dropped, the
+    // agent never knew it waited, heartbeated into "register first" refusals,
+    // and on Admit wrote its key and stayed on the held socket (uwucloud,
+    // nightly 4839).
+    const early: string[] = [];
+    const keepEarly = (event: MessageEvent): void => {
+      early.push(String(event.data));
+    };
+    socket.addEventListener("message", keepEarly);
     // The hub this socket reached, by its own word: what this machine's HTTP
     // proofs name (hub-proof.ts).
     setConnectedHub(challenge.hubId);
@@ -2750,27 +2762,30 @@ const attach = (
       if (said.kind !== "admitted") {
         return;
       }
-      writeMachineKey(said.key).then(
-        () => {
-          Effect.runFork(
-            Effect.logInfo(
-              `[admission] admitted: this machine's key is kept at ${machineKeyPath()}`
-            )
-          );
-          if (waitingAdmission && socket.readyState === WebSocket.OPEN) {
-            socket.close(
-              4000,
-              "admitted: connecting again with this machine's key"
-            );
-          }
-        },
-        (error: unknown) =>
-          Effect.runFork(
-            Effect.logError(
-              `[admission] the key could not be written to ${machineKeyPath()}: ${error instanceof Error ? error.message : String(error)}`
-            )
+      // Written before anything else is read off the socket: the hub closes
+      // a waiting connection right after it admits it (server.ts
+      // `holdWaiting`), and the next connection proves this key.
+      try {
+        writeMachineKeySync(said.key);
+      } catch (error) {
+        Effect.runFork(
+          Effect.logError(
+            `[admission] the key could not be written to ${machineKeyPath()}: ${error instanceof Error ? error.message : String(error)}`
           )
+        );
+        return;
+      }
+      Effect.runFork(
+        Effect.logInfo(
+          `[admission] admitted: this machine's key is kept at ${machineKeyPath()}`
+        )
       );
+      if (waitingAdmission && socket.readyState === WebSocket.OPEN) {
+        socket.close(
+          4000,
+          "admitted: connecting again with this machine's key"
+        );
+      }
     };
 
     const onEnvelope = (envelope: Envelope): void => {
@@ -2820,6 +2835,10 @@ const attach = (
     // When anything last came from the hub, a frame or a pong: what the
     // link's deadline reads.
     let lastHeard = Date.now();
+    socket.removeEventListener("message", keepEarly);
+    for (const data of early.splice(0)) {
+      line.receive(data);
+    }
     socket.addEventListener("message", (event) => {
       lastHeard = Date.now();
       line.receive(String(event.data));

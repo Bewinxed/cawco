@@ -784,6 +784,7 @@ import {
   CLIENT_ADDRESS_HEADER,
   createSshDoor,
   SSH_FORWARD_HEADER,
+  SSH_RECORD_HEADER,
   viaSshForward,
 } from "./ssh-door";
 import { createSshTunnels } from "./ssh-tunnels";
@@ -16663,7 +16664,17 @@ export const createServer = (
       os?: unknown;
     };
     waitingSockets.set(ws.id, message.machineId);
+    // Through an SSH add's forward while that add's key is still unproven,
+    // the connection is the machine the add is joining: held for the add, not
+    // the person (hub-auth.ts `Waiting.quiet`). The add's own key proof, the
+    // agent's next register or the install's check over HTTP, ends the wait.
+    const record = viaSshForward(ws.headers?.[SSH_FORWARD_HEADER])
+      ? ws.headers?.[SSH_RECORD_HEADER]
+      : undefined;
+    const quiet =
+      record !== undefined && Boolean(db.sshMachines.get(record)?.pendingKey);
     hubAuth.hold({
+      quiet,
       machineId: message.machineId,
       hostname:
         typeof identity.hostname === "string" ? identity.hostname : null,
@@ -16671,12 +16682,19 @@ export const createServer = (
       address: socketAddress(ws),
       since: Date.now(),
       socket: ws.id,
-      admit: (key) =>
+      // The key, then the connection closed: the admitted connection is
+      // never the machine's registered one, its next connection is, proving
+      // the key. An agent that missed its `waiting` (nightly 4839 dropped it
+      // while setting up) never closed its own, and heartbeated into "register
+      // first" refusals on it until its register lapsed.
+      admit: (key) => {
         sendFrame(ws, {
           verb: "admission",
           machineId: message.machineId,
           payload: { kind: "admitted", key },
-        } satisfies Envelope<AdmissionPayload>),
+        } satisfies Envelope<AdmissionPayload>);
+        ws.close(4000, "admitted: connect again with this machine's key");
+      },
       close: (reason) => ws.close(4403, reason),
       refuse: (reason) => refuseSocket(ws, message.machineId, reason),
     });
@@ -16685,8 +16703,9 @@ export const createServer = (
       machineId: message.machineId,
       payload: {
         kind: "waiting",
-        message:
-          "This hub requires paired devices: this machine waits until the person admits it on the dashboard's Machines list.",
+        message: quiet
+          ? "This machine's SSH add is proving the key it gave it: it connects again once it has."
+          : "This hub requires paired devices: this machine waits until the person admits it on the dashboard's Machines list.",
       },
     } satisfies Envelope<AdmissionPayload>);
   };

@@ -48,6 +48,13 @@ export const SSH_FORWARD_HEADER = "x-cawco-ssh-forward";
  */
 export const CLIENT_ADDRESS_HEADER = "x-cawco-client-address";
 
+/**
+ * Which SSH add's forward a request came through: the record's id
+ * (ssh-tunnels.ts), set by the door beside its mark and read only with it,
+ * so the hub knows a connection is the machine an add is joining.
+ */
+export const SSH_RECORD_HEADER = "x-cawco-ssh-record";
+
 const HOP = "ssh door";
 
 const secret = randomBytes(32).toString("base64url");
@@ -77,9 +84,10 @@ const unreachable = (cause: string): Response =>
   });
 
 /** A request's headers as the hub reads them from the door: marked, and named by `address`, nothing the machine said in either's place. */
-const marked = (from: Headers, address: string): Headers => {
+const marked = (from: Headers, address: string, record: string): Headers => {
   const headers = proxyHeaders(from);
   headers.set(CLIENT_ADDRESS_HEADER, address);
+  headers.set(SSH_RECORD_HEADER, record);
   headers.set(SSH_FORWARD_HEADER, secret);
   return headers;
 };
@@ -99,7 +107,7 @@ export const createSshDoor = (lifetime: HubLifetimeShape): SshDoor => {
   const listeners = new Map<string, Server<PreviewSocket>>();
   const hub = `127.0.0.1:${HUB_PORT}`;
 
-  const open = (address: string): Server<PreviewSocket> =>
+  const open = (address: string, record: string): Server<PreviewSocket> =>
     Bun.serve<PreviewSocket>({
       hostname: "127.0.0.1",
       port: 0,
@@ -107,7 +115,7 @@ export const createSshDoor = (lifetime: HubLifetimeShape): SshDoor => {
       async fetch(request, door) {
         const url = new URL(request.url);
         const at = `${url.pathname}${url.search}`;
-        const headers = marked(request.headers, address);
+        const headers = marked(request.headers, address, record);
         if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
           return upgradePreview(request, door, `ws://${hub}${at}`, headers, {
             hop: HOP,
@@ -158,7 +166,7 @@ export const createSshDoor = (lifetime: HubLifetimeShape): SshDoor => {
       if (held?.port) {
         return held.port;
       }
-      const made = open(targetHost(target));
+      const made = open(targetHost(target), id);
       listeners.set(id, made);
       if (!made.port) {
         throw new Error("The hub's door for SSH forwards opened on no port.");
