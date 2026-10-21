@@ -171,7 +171,7 @@ RUN apt-get update \\
 FROM $BASE_LOCAL
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \\
- && apt-get install -y --no-install-recommends systemd systemd-sysv dbus dbus-user-session curl sudo socat bubblewrap openssh-server openssh-client \\
+ && apt-get install -y --no-install-recommends systemd systemd-sysv dbus dbus-user-session curl sudo socat bubblewrap openssh-server openssh-client iproute2 \\
  && apt-get install -y --download-only openssl git \\
  && mkdir /debs && cp /var/cache/apt/archives/*.deb /debs/ \\
  && apt-get install -y --no-install-recommends dpkg-dev \\
@@ -1267,7 +1267,7 @@ rig_install() {
 # are containers, and no address outside the rig's internal network is touched.
 
 # The hub's journal, whole, or since epoch seconds $1.
-hub_journal() { as_user "$hubc" sh -c "journalctl --user --no-pager -o cat -u cawco-hub.service ${1:+--since @$1} || true"; }
+hub_journal() { as_user "$hubc" sh -c "journalctl --user --no-pager -o cat -u cawco-hub.service ${1:+--since @$1} ${2:+--until @$2} || true"; }
 # The hub's SSH key, made for the hub's user, written for root on sshroot and for the user on sshuser.
 ssh_trust() {
   as_user "$hubc" sh -c 'mkdir -p -m 700 ~/.ssh && [ -f ~/.ssh/id_ed25519 ] || ssh-keygen -q -t ed25519 -N "" -C cawco-proof-hub -f ~/.ssh/id_ed25519'
@@ -1310,6 +1310,11 @@ ssh_add_joins() {
   job=$(hub_api /api/machines/ssh -X POST -H 'content-type: application/json' -d "{\"target\":\"$user@$ip\"}" | json 'd => d.id')
   [[ -n $job ]]
   echo "$job" > "$rigdir/ssh-add-$name.job"
+  # A second add of the same target while this one runs is refused, naming it, and nothing new starts.
+  local again
+  again=$(as_user "$hubc" curl -sS -o /dev/null -D - -X POST -H 'content-type: application/json' -d "{\"target\":\"$user@$ip\"}" http://127.0.0.1:3456/api/machines/ssh | tr -d '\r')
+  grep -q '^HTTP/[0-9.]* 409' <<< "$again" || { echo "ASSERTION FAILED: a second add of $user@$ip while one ran answered: $(head -n 1 <<< "$again")"; return 1; }
+  grep -qi "^x-cawco-ssh-add: $job\$" <<< "$again" || { echo "ASSERTION FAILED: the refusal does not name the running add $job: $again"; return 1; }
   wait_until 900 '[[ "$(hub_api /api/machines/ssh/'"$job"' | json "d => d.state")" != running ]]' || { ssh_add_said "$c" "$user" "$job"; return 1; }
   state=$(hub_api "/api/machines/ssh/$job" | json 'd => d.state')
   [[ $state == done ]] || { echo "ASSERTION FAILED: the SSH add of $user@$ip ended $state"; ssh_add_said "$c" "$user" "$job"; return 1; }
@@ -1353,6 +1358,10 @@ admitted_heartbeats() {
   as_user "$sshuserc" sh /tmp/join.sh > "$out" 2>&1 &
   local joining=$!
   wait_until 180 '[[ "$(owner_api /api/machines/waiting | json "d => d.some(m => m.machineId === \"'"$id"'\")")" == true ]]' || { cat "$out"; hub_journal "$since" | tail -n 60; return 1; }
+  local admitted_at
+  admitted_at=$(date +%s)
+  refused=$(hub_journal "$since" "$admitted_at" | grep -cF "not machine $id's registered one" || true)
+  [[ $refused == 0 ]] || { echo "ASSERTION FAILED: while held, $refused of the machine's frames were refused \"register first\""; hub_journal "$since" "$admitted_at" | grep -F "$id" | tail -n 30; return 1; }
   owner_api "/api/machines/waiting/$id/admit" -X POST > /dev/null
   wait "$joining" || rc=$?
   cat "$out"
@@ -1371,9 +1380,9 @@ rig_sshadd() {
   setup "install the hub from $BASE" install_hub "$BASE"
   setup "give the hub's SSH key to root on sshroot and the user on sshuser" ssh_trust
   setup_done
-  check "an SSH add of a fresh machine as root installs CawCo for root under systemd and joins: no Admit asked or listed, its first register proves the add's key, online, its heartbeats taken" "ssh_add_joins $sshrootc sshroot root $sshroot_ip" 1200
+  check "an SSH add of a fresh machine as root installs CawCo for root under systemd and joins: a second add of it while it runs is refused 409 naming it, no Admit asked or listed, its first register proves the add's key, online, its heartbeats taken" "ssh_add_joins $sshrootc sshroot root $sshroot_ip" 1200
   check "an SSH add of a fresh machine as a normal user installs and joins the same way" "ssh_add_joins $sshuserc sshuser cawco $sshuser_ip" 1200
-  check "a machine that joins a hub requiring paired devices by itself is held, the person admits it, and it is the machine's registered connection: online, none of its frames refused register first" admitted_heartbeats 900 "an SSH add of a fresh machine as a normal user installs and joins the same way"
+  check "a machine that joins a hub requiring paired devices by itself is held with none of its frames refused register first, the person admits it, and it is the machine's registered connection: online, none refused after either" admitted_heartbeats 900 "an SSH add of a fresh machine as a normal user installs and joins the same way"
 }
 
 # ---------------------------------------------------------------- held3455: something else holds 127.0.0.1:3455

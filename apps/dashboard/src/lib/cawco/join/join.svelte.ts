@@ -4,7 +4,12 @@
  * popover's pairing panel — so they read the same addresses, show the same
  * command, and notice a new machine the same way.
  */
-import type { JoinInfo, SshJoinJob, SshJoinRequest } from "@cawco/core";
+import {
+  type JoinInfo,
+  SSH_ADD_RUNNING_HEADER,
+  type SshJoinJob,
+  type SshJoinRequest,
+} from "@cawco/core";
 import type { Component } from "svelte";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { IconServer, IconTerminal } from "#lib/icons.js";
@@ -166,6 +171,23 @@ export const sshJoin = {
     if (!response) {
       ssh.refused =
         "The hub did not answer, so nothing was started. Check that it is running, then try again.";
+      return;
+    }
+    // An add of that machine already runs (this dialog's own, from before a
+    // reload, or another screen's): its progress is shown, nothing new starts.
+    const running = response.headers.get(SSH_ADD_RUNNING_HEADER);
+    if (response.status === 409 && running) {
+      await response.body?.cancel();
+      const read = await fetch(
+        `/api/machines/ssh/${encodeURIComponent(running)}`
+      ).catch(() => undefined);
+      if (read?.ok) {
+        ssh.job = (await read.json()) as SshJoinJob;
+        return;
+      }
+      ssh.refused = read
+        ? (await hubRefusal(read)).message
+        : "The hub did not answer, so the add already running could not be shown. Check that it is running, then try again.";
       return;
     }
     if (!response.ok) {

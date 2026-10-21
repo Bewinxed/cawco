@@ -1091,6 +1091,13 @@ const closeReason = (event: CloseEvent): string =>
   event.reason || `close code ${event.code}`;
 
 /**
+ * The connections the hub said it holds until the person admits this
+ * machine, or its SSH add proves its key (hub hub-auth.ts `hold`): they end
+ * by the hub's close, or by this agent's once it is admitted.
+ */
+const heldSockets = new WeakSet<WebSocket>();
+
+/**
  * The one way anything leaves for the hub: no session credential does
  * ({@link outbound}), and nothing holds this loop. The hub's server offers
  * permessage-deflate to every socket, so this client deflates each `send()`
@@ -1100,6 +1107,11 @@ const closeReason = (event: CloseEvent): string =>
  * turn of the loop, in order, never dropped.
  */
 const send = (socket: WebSocket, envelope: Envelope): void => {
+  // A connection the hub holds (`admission` `waiting`) carries a register and
+  // nothing else: every other frame on it the hub refuses ("register first").
+  if (heldSockets.has(socket) && envelope.verb !== "register") {
+    return;
+  }
   const line = clientLine(socket);
   for (const message of outbound(envelope)) {
     line.sendPieces(message.pieces, message.chars, envelope);
@@ -2238,8 +2250,6 @@ const attach = (
      * straight through.
      */
     const heldSpawns: Envelope<NamedSpawn>[] = [];
-    /** The hub holds this connection until the person admits the machine ({@link admission}). */
-    let waitingAdmission = false;
     /**
      * WHAT IS SENT TO A SESSION WHILE ITS CUSTODY IS TAKEN WAITS FOR IT, AND
      * FOR NOTHING ELSE.
@@ -2739,7 +2749,7 @@ const attach = (
      */
     const admission = (said: AdmissionPayload): void => {
       if (said.kind === "waiting") {
-        waitingAdmission = true;
+        heldSockets.add(socket);
         Effect.runFork(Effect.logWarning(`[admission] ${said.message}`));
         return;
       }
@@ -2780,7 +2790,7 @@ const attach = (
           `[admission] admitted: this machine's key is kept at ${machineKeyPath()}`
         )
       );
-      if (waitingAdmission && socket.readyState === WebSocket.OPEN) {
+      if (heldSockets.has(socket) && socket.readyState === WebSocket.OPEN) {
         socket.close(
           4000,
           "admitted: connecting again with this machine's key"
@@ -2910,8 +2920,9 @@ const attach = (
               ? { binaryUpdate: latestBinaryUpdate() }
               : {}),
           } satisfies HeartbeatPayload;
-          // A connection waiting to be admitted says nothing more until it is.
-          if (socket.readyState !== WebSocket.OPEN || waitingAdmission) {
+          // A connection waiting to be admitted says nothing more until it is
+          // (`send`).
+          if (socket.readyState !== WebSocket.OPEN) {
             return;
           }
           send(socket, {

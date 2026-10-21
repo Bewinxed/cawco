@@ -38,6 +38,7 @@ import {
   INSTALL_STEP_PREFIX,
   type JoinAddress,
   type JoinInfo,
+  SSH_ADD_RUNNING_HEADER,
   type SshJoinJob,
   type SshJoinProblem,
 } from "@cawco/core";
@@ -1042,12 +1043,30 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
           password: t.Optional(t.String()),
         }),
       },
-      ({ body, status }) => {
+      ({ body, set, status }) => {
         const target = body.target.trim();
         if (!TARGET.test(target)) {
           return status(
             422,
             "Enter the SSH target as user@host or a Host from ~/.ssh/config, with no spaces and no leading dash."
+          );
+        }
+        // One add of a machine at a time: two share its record and its
+        // connection, and each writes the machine a new key and runs the
+        // install over the other's (ssh-tunnels.ts `admit`), so the key the
+        // hub keeps and the one on the machine can differ. The running one's
+        // id goes with the refusal, for the dialog to show its progress.
+        const running = [...jobs.values()].find(
+          (job) =>
+            job.state === "running" &&
+            job.target === target &&
+            job.port === (body.port ?? null)
+        );
+        if (running) {
+          set.headers[SSH_ADD_RUNNING_HEADER] = running.id;
+          return status(
+            409,
+            `An SSH add of ${target} is already running (${running.id}): it goes on, and a new one can start once it has ended.`
           );
         }
         const password = body.password ?? "";

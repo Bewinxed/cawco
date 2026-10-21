@@ -9,6 +9,13 @@
 /** Every line of progress the install script and `cawco binary-install` print starts with this. */
 export const INSTALL_STEP_PREFIX = "cawco-install: ";
 
+/**
+ * The header a refused SSH add's answer (409) names the add already running
+ * for that target in: its id, which `GET /api/machines/ssh/:id` reads, so the
+ * dialog shows that add's progress rather than starting another.
+ */
+export const SSH_ADD_RUNNING_HEADER = "x-cawco-ssh-add";
+
 /** The line `cawco binary-install agent` ends a successful run on, followed by the machine id. */
 export const INSTALL_JOINED = `${INSTALL_STEP_PREFIX}joined as `;
 

@@ -16617,6 +16617,7 @@ export const createServer = (
         )
       : "unknown";
     if (verdict === "proven" || socketMode(ws) === "trusted") {
+      unhold(ws, message.machineId);
       socketMachines.set(ws.id, message.machineId);
       return true;
     }
@@ -16641,6 +16642,17 @@ export const createServer = (
       holdWaiting(ws, message);
     }
     return false;
+  };
+
+  /**
+   * A held connection that registers again proving the key (its register
+   * lapsed and went again once the key was there) is held no more.
+   */
+  const unhold = (ws: AuthSocket, machineId: string): void => {
+    if (waitingSockets.get(ws.id) === machineId) {
+      waitingSockets.delete(ws.id);
+      hubAuth.released(machineId, ws.id);
+    }
   };
 
   /** The person's refusal, said on `ws` before the hub closes it, so the machine's install ends with it. */
@@ -29965,6 +29977,15 @@ export const createServer = (
           // superseded, unregistered or unproven one is not acted on, and is
           // told so. A connection speaks for the one machine it registered
           // as, never another.
+          // A connection held for its machine's admission was told it waits
+          // (`holdWaiting`); what it sent before it heard that is not acted
+          // on, and not refused either: it is no machine's yet.
+          if (
+            message.verb !== "register" &&
+            waitingSockets.get(ws.id) === message.machineId
+          ) {
+            return;
+          }
           if (
             message.verb !== "register" &&
             (socketMachines.get(ws.id) !== message.machineId ||
