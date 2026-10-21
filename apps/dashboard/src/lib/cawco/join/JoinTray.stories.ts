@@ -6,14 +6,15 @@
  * on a phone's bottom sheet at 390. The tray is the live dialog's own
  * (JoinTray), fed the add as the hub holds it through its fixture
  * (preview/JoinTrayFrame). The meta's args are every story's; a story's
- * own args are what it changes. Flows play on the live instance: the add
- * running on through its steps, then joining, failing or stopping.
+ * own args are what it changes. The two sequences play by themselves as
+ * their frame is drawn and rest on their end (the fixture's `replay`): the
+ * add running through its ten step lines, and the join.
  */
+import { alertOf, type CardView, cardOf } from "./join-view";
 import JoinTrayFrame from "./preview/JoinTrayFrame.svelte";
 import {
   ADDRESSES,
   doneJob,
-  HOST,
   hostKeyChanged,
   JOINED,
   runningAt,
@@ -22,8 +23,18 @@ import {
   signInRefused,
   stoppedJob,
   TARGET,
+  unreachable,
   WAITING,
 } from "./preview/join-fixtures";
+
+/** The card a failed add draws, as the dialog builds it. */
+const failedCard = (job: Parameters<typeof cardOf>[0]["job"]): CardView => {
+  const card = cardOf({ job, refused: null, joined: null });
+  if (!card) {
+    throw new Error("a failed add draws a card");
+  }
+  return card;
+};
 
 export default {
   title: "Connect a machine/States",
@@ -86,33 +97,19 @@ export const SigningInPhone = {
 
 /** E. Installing, the long middle: the service step 42s in, still going. */
 export const Installing = {
-  args: { job: runningAt(10), stepElapsed: 42_000 },
+  args: { job: runningAt(10, 42_000) },
   parameters: { viewport: 640 },
 };
 /** E. Installing on the phone. */
 export const InstallingPhone = {
-  args: { ...phone, job: runningAt(10), stepElapsed: 42_000 },
+  args: { ...phone, job: runningAt(10, 42_000) },
   parameters: { viewport: 390 },
 };
 
-/** E, played: signed in, the add runs through its ten step lines. */
+/** E, played: signed in, the add runs through its ten step lines, then rests on the last. */
 export const InstallingLive = {
-  args: { job: runningAt(0) },
+  args: { replay: "steps" },
   parameters: { viewport: 640 },
-  from: "SigningIn",
-  play: async ({
-    update,
-    userEvent,
-  }: {
-    update: (next: Record<string, unknown>) => Promise<void>;
-    userEvent: { wait: (ms: number) => Promise<void> };
-  }) => {
-    for (let count = 1; count <= 10; count += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: one step line at a time, as the hub reports them
-      await update({ job: runningAt(count) });
-      await userEvent.wait(400);
-    }
-  },
 };
 
 /** F. The machine refused the hub's key: asked for a password in place, Retry. */
@@ -120,7 +117,7 @@ export const NeedsYou = {
   args: { job: signInRefused() },
   parameters: { viewport: 640 },
 };
-/** F. Needs you on the phone: Retry in the foot, Change details over it. */
+/** F. Needs you on the phone: Retry in the foot, Change target over it. */
 export const NeedsYouPhone = {
   args: { ...phone, job: signInRefused() },
   parameters: { viewport: 390 },
@@ -148,18 +145,10 @@ export const JoinedPhone = {
   parameters: { viewport: 390 },
 };
 
-/** G, played: the last step, then the join (the rail closes, Caw, the ways on). */
+/** G, played: the last step, then the join (the rail closes, Caw, the ways on), resting on it. */
 export const JoinMoment = {
-  args: { job: runningAt(10) },
+  args: { replay: "join" },
   parameters: { viewport: 640 },
-  from: "Installing",
-  play: async ({
-    update,
-  }: {
-    update: (next: Record<string, unknown>) => Promise<void>;
-  }) => {
-    await update({ job: doneJob(), joined: JOINED });
-  },
 };
 
 /** H. Failed on the release check: its output opened by itself, Retry. */
@@ -189,28 +178,30 @@ export const StoppedBeforeSignIn = {
   parameters: { viewport: 640 },
 };
 
-/** Change details from H: the form again, the failure over its fields. */
-export const ChangeDetails = {
+/** H. The machine did not answer: the hub's words in the sentence, its code under Show details. */
+export const Unreachable = {
+  args: { job: unreachable("connecting failed: ECONNRESET") },
+  parameters: { viewport: 640 },
+};
+
+/** Change target from H: the form again, the failure over its fields. */
+export const ChangeTarget = {
   args: {
     target: TARGET,
     retry: true,
-    formAlert: {
-      text: `The step “verifying the release signature” failed on ${TARGET}. Fix what it names, then Retry.`,
-      tone: "fail",
-    },
+    formAlert: alertOf(failedCard(signatureFailed())),
   },
   parameters: { viewport: 640 },
 };
-/** Change details on the phone. */
-export const ChangeDetailsPhone = {
+/** Change target on the phone, from a machine that did not answer: its code under Show details. */
+export const ChangeTargetPhone = {
   args: {
     ...phone,
     target: TARGET,
     retry: true,
-    formAlert: {
-      text: `${HOST} did not answer on port 22 (ECONNREFUSED). Check the address and that SSH is running there, then Retry.`,
-      tone: "fail",
-    },
+    formAlert: alertOf(
+      failedCard(unreachable("connecting failed: ECONNRESET"))
+    ),
   },
   parameters: { viewport: 390 },
 };

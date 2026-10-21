@@ -55,6 +55,11 @@ export interface CardView {
   copy: { label: string; text: string } | null;
   /** The phase in progress while it runs, else -1. */
   current: number;
+  /**
+   * What refused it in its own code, where the sentence says it in words (a
+   * connect's errno): folded under Show details.
+   */
+  details: string | null;
   /** Joined: the machine's readiness, its glyph and hue on the card. */
   joined: Joined | null;
   /** The fix's or the result's line under the rail, or the waiting line. */
@@ -68,7 +73,10 @@ export interface CardView {
   segments: Segment[];
   /** The one sentence, the current step in words while it runs. */
   sentence: string;
-  /** When the current step began, for "Still going" (ms), while it runs. */
+  /**
+   * When the current step began on the hub's clock (the job's `stepAt`), for
+   * "Still going", while it runs.
+   */
   stepSince: number | null;
   /** Each step line said so far, without its prefix. */
   steps: string[];
@@ -118,7 +126,7 @@ const rail = (length: number, of: (index: number) => Segment): Segment[] =>
 const RAIL = INSTALL_PHASES.length;
 
 /** The add while it runs (states D and E). */
-function running(job: SshJoinJob, stepSince: number | null): CardView {
+function running(job: SshJoinJob): CardView {
   const steps = stepsOf(job.lines);
   const at = phaseOf(steps);
   const step = steps.at(-1);
@@ -137,10 +145,11 @@ function running(job: SshJoinJob, stepSince: number | null): CardView {
     line: step
       ? "It keeps installing if you close this."
       : "Nothing has run on the machine yet.",
-    stepSince: step ? stepSince : null,
+    stepSince: step ? (job.stepAt ?? null) : null,
     steps,
     lines: job.lines,
     outputOpen: false,
+    details: null,
     joined: null,
     password: false,
     copy: null,
@@ -197,6 +206,7 @@ function failed(
     steps,
     lines: job.lines,
     outputOpen: false,
+    details: null,
     joined: null,
     password: false,
     copy: null,
@@ -214,12 +224,15 @@ function failed(
           text: `ssh-keygen -R ${host}`,
         },
       };
-    case "unreachable":
+    case "unreachable": {
+      const said = detailWords(problem.detail);
       return {
         ...base,
-        sentence: `${where} did not answer on port ${job.port ?? 22} (${problem.detail}).`,
+        sentence: `${where} did not answer on port ${job.port ?? 22}: ${said.words}.`,
         line: "Check the address and that SSH is running there, then Retry.",
+        details: said.code,
       };
+    }
     case "download":
       return {
         ...base,
@@ -260,6 +273,25 @@ function failed(
   }
 }
 
+/** A code the hub's words end on (`connecting failed: ECONNRESET`), errno-shaped. */
+const TRAILING_CODE = /:\s*([A-Z][A-Z0-9_]{2,})$/;
+
+/**
+ * The hub's words for a failed reach, and the code they end on, if any: the
+ * sentence says the words, the code stands under Show details (the error
+ * formula: what happened in words; a code only as its support reference).
+ */
+export function detailWords(detail: string): {
+  code: string | null;
+  words: string;
+} {
+  const code = TRAILING_CODE.exec(detail)?.[1] ?? null;
+  return {
+    code,
+    words: code ? detail.replace(TRAILING_CODE, "") : detail,
+  };
+}
+
 /** A stopped add (state I): the rail as far as it got, nothing breathing. */
 function stopped(job: SshJoinJob): CardView {
   const steps = stepsOf(job.lines);
@@ -279,6 +311,7 @@ function stopped(job: SshJoinJob): CardView {
     steps,
     lines: job.lines,
     outputOpen: false,
+    details: null,
     joined: null,
     password: false,
     copy: null,
@@ -312,6 +345,7 @@ function done(job: SshJoinJob | null, joined: Joined): CardView {
     steps: stepsOf(lines),
     lines,
     outputOpen: false,
+    details: null,
     joined,
     password: false,
     copy: null,
@@ -326,13 +360,11 @@ function done(job: SshJoinJob | null, joined: Joined): CardView {
 export function cardOf({
   job,
   refused,
-  stepSince,
   joined,
   passwordTried = false,
 }: {
   job: SshJoinJob | null;
   refused: string | null;
-  stepSince: number | null;
   joined: Joined | null;
   passwordTried?: boolean;
 }): CardView | null {
@@ -344,7 +376,7 @@ export function cardOf({
   }
   switch (job.state) {
     case "running":
-      return running(job, stepSince);
+      return running(job);
     case "failed":
       return failed(job, refused, passwordTried);
     case "stopped":
@@ -372,3 +404,17 @@ export const factsOf = (
   [os, host, version ? `CawCo ${version}` : null]
     .filter((part): part is string => Boolean(part))
     .join(" · ");
+
+/** The form's alert, brought back by Change target: the card's words, its code folded. */
+export interface FormAlert {
+  details: string | null;
+  text: string;
+  tone: "fail" | "status";
+}
+
+/** What the card said, as the form's alert over its fields. */
+export const alertOf = (card: CardView): FormAlert => ({
+  text: [card.sentence, card.line].filter(Boolean).join(" "),
+  tone: card.tone === "stopped" ? "status" : "fail",
+  details: card.details,
+});

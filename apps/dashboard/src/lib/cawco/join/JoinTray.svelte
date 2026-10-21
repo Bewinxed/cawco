@@ -55,7 +55,12 @@
   import { arriveAt } from "./arrive";
   import CheckInStatus from "./CheckInStatus.svelte";
   import CopyBox from "./CopyBox.svelte";
-  import { type CardView, type JoinTaste, TASTE } from "./join-view";
+  import {
+    type CardView,
+    type FormAlert,
+    type JoinTaste,
+    TASTE,
+  } from "./join-view";
   import StatusCard from "./StatusCard.svelte";
   import { installCommand, JOIN_WAYS, type JoinWay } from "./ways";
 
@@ -100,8 +105,8 @@
     target?: string;
     port?: string;
     password?: string;
-    /** A failure or a stop brought back to the form by Change details, or a refused start. */
-    formAlert?: { text: string; tone: "fail" | "status" } | null;
+    /** A failure or a stop brought back to the form by Change target, or a refused start. */
+    formAlert?: FormAlert | null;
     /** The form's act reads Retry: it is brought back from a failure or a stop. */
     retry?: boolean;
     starting?: boolean;
@@ -162,6 +167,8 @@
   let passwordOpen = $state(untrack(() => passwordFirstOpen));
   let passwordShown = $state(false);
   let keyOpen = $state(false);
+  /** The form alert's code stands unfolded (Show details). */
+  let alertDetails = $state(false);
 
   const body = $derived(card ? "card" : "form");
   const settled = $derived(
@@ -178,7 +185,7 @@
 
   /**
    * The body swaps under the press that started it (Add machine, Retry,
-   * Change details go as the card or the form comes): focus goes to the
+   * Change target go as the card or the form comes): focus goes to the
    * new foot's first act, never to the page.
    */
   let trayEl = $state<HTMLElement | null>(null);
@@ -280,7 +287,29 @@
         variant={formAlert.tone === "fail" ? "destructive" : "default"}
       >
         {#if formAlert.tone === "fail"}<IconError aria-hidden="true" />{/if}
-        <Alert.Description>{formAlert.text}</Alert.Description>
+        <Alert.Description>
+          <span class="block">{formAlert.text}</span>
+          {#if formAlert.details}
+            <!-- The code it ended on, word for word, as RowFault folds one. -->
+            <Button
+              aria-controls="{id}-alert-details"
+              aria-expanded={alertDetails}
+              label={alertDetails ? "Hide details" : "Show details"}
+              onclick={() => {
+                alertDetails = !alertDetails;
+              }}
+              size="xs"
+              variant="ghost"
+            />
+            {#if alertDetails}
+              <span
+                id="{id}-alert-details"
+                class="block type-meta font-mono wrap-anywhere"
+                >{formAlert.details}</span
+              >
+            {/if}
+          {/if}
+        </Alert.Description>
       </Alert.Root>
     {/if}
     <div
@@ -435,7 +464,7 @@
 {#snippet actions()}
   {#if card === null && way === "ssh"}
     {#if !phone}
-      <Button onclick={onclose} variant="outline">Cancel</Button>
+      <Button label="Cancel" onclick={onclose} variant="outline" />
     {/if}
     <Button
       disabled={!canStart}
@@ -455,7 +484,7 @@
         pending={admitting === machine.machineId}
       />
     {:else if !phone}
-      <Button onclick={onclose} variant="outline">Close</Button>
+      <Button label="Close" onclick={onclose} variant="outline" />
     {/if}
   {:else if card.tone === "running"}
     <Button
@@ -465,21 +494,21 @@
       variant="outline"
     />
     {#if !phone}
-      <Button onclick={onclose} variant="outline">Close</Button>
+      <Button label="Close" onclick={onclose} variant="outline" />
     {/if}
   {:else if card.tone === "done"}
     {#if phone}
-      <Button onclick={onstartsession}>Start session</Button>
-      <Button onclick={onopenmachine} variant="outline">Open machine</Button>
+      <Button label="Start session" onclick={onstartsession} />
+      <Button label="Open machine" onclick={onopenmachine} variant="outline" />
     {:else}
-      <Button onclick={onopenmachine} variant="outline">Open machine</Button>
-      <Button onclick={onstartsession}>Start session</Button>
+      <Button label="Open machine" onclick={onopenmachine} variant="outline" />
+      <Button label="Start session" onclick={onstartsession} />
     {/if}
   {:else if settled}
     {#if phone}
       <Button label="Retry" onclick={onretry} pending={starting} />
     {:else}
-      <Button onclick={onchange} variant="outline">Change details</Button>
+      <Button label="Change target" onclick={onchange} variant="outline" />
       <Button label="Retry" onclick={onretry} pending={starting} />
     {/if}
   {/if}
@@ -544,13 +573,13 @@
     <!-- The sheet's head Close is its way out: the command has no act here. -->
   {:else if phone}
     {#if settled}
-      <!-- On the sheet Retry takes the foot; Change details stands over it as words. -->
+      <!-- On the sheet Retry takes the foot; Change target stands over it as words. -->
       <Button
         class="self-center"
         onclick={onchange}
         size="sm"
         tone="quiet"
-        variant="link">Change details</Button
+        variant="link">Change target</Button
       >
     {/if}
     {#key joinedFoot}

@@ -908,6 +908,8 @@ public enum Size {
     public static let cDetailMax: Double = 96
     /// The longest a pre of command or fault output grows before it scrolls.
     public static let cOutputMax: Double = 192
+    /// Nine whole lines of output (meta text at the root leading): the scroller inside an output's padded box, so its tail, followed to the end, starts on a whole line.
+    public static let cOutputTail: Double = 162
     /// Two lines of body text: a box that holds its height while its words change (Connect a machine's status card sentence on a phone).
     public static let cBodyTwoLines: Double = 40.6
     /// Two lines of meta text: the status card's waiting line on a phone, its height held while the words change.

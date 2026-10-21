@@ -5774,6 +5774,19 @@
       },
       "$description": "The longest a pre of command or fault output grows before it scrolls."
     },
+    "c-output-tail": {
+      "$type": "dimension",
+      "$value": {
+        "value": 162,
+        "unit": "px"
+      },
+      "$description": "Nine whole lines of output (meta text at the root leading): the scroller inside an output's padded box, so its tail, followed to the end, starts on a whole line.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({type.text-meta} * {type.leading-root} * 9)"
+        }
+      }
+    },
     "c-body-two-lines": {
       "$type": "dimension",
       "$value": {

@@ -197,5 +197,12 @@ export interface SshJoinJob {
    * `stopped`, that the person stopped it and its `ssh` is gone.
    */
   state: "running" | "failed" | "done" | "stopped";
+  /**
+   * When the newest step line ({@link INSTALL_STEP_PREFIX}) arrived, ms since
+   * the epoch on the hub's clock; absent before the first. The dialog times
+   * "Still going" from it, so a dialog opened onto a long step shows how long
+   * it has run at once.
+   */
+  stepAt?: number;
   target: string;
 }

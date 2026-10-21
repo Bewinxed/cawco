@@ -1086,6 +1086,8 @@
     --c-detail-max: 6rem;
     /* The longest a pre of command or fault output grows before it scrolls. */
     --c-output-max: 12rem;
+    /* Nine whole lines of output (meta text at the root leading): the scroller inside an output's padded box, so its tail, followed to the end, starts on a whole line. */
+    --c-output-tail: calc(var(--text-meta) * var(--leading-root) * 9);
     /* Two lines of body text: a box that holds its height while its words change (Connect a machine's status card sentence on a phone). */
     --c-body-two-lines: calc(var(--text-body) * var(--leading-body) * 2);
     /* Two lines of meta text: the status card's waiting line on a phone, its height held while the words change. */

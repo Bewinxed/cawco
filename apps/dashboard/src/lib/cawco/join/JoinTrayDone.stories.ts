@@ -12,7 +12,7 @@ import JoinTrayFrame from "./preview/JoinTrayFrame.svelte";
 export default {
   title: "Connect a machine/The done moment",
   component: JoinTrayFrame,
-  args: { layout: "desk", way: "ssh", replay: true },
+  args: { layout: "desk", way: "ssh", replay: "join" },
 };
 
 /** One done bar, and Caw's done loop once beside the name. */

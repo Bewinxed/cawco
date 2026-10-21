@@ -734,6 +734,9 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
     if (clean.startsWith(INSTALL_JOINED)) {
       job.machineId = clean.slice(INSTALL_JOINED.length).trim();
     }
+    if (clean.startsWith(INSTALL_STEP_PREFIX)) {
+      job.stepAt = Date.now();
+    }
     job.lines.push(clean);
     if (job.lines.length > MAX_LINES) {
       job.lines.splice(0, job.lines.length - MAX_LINES);

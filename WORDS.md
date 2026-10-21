@@ -2,7 +2,7 @@
 
 **UI wordmark:** “Caw&Co”, set in the landing's Nunito Variable face. Product names in sentences, page titles and notices remain “CawCo”.
 
-**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work) · 2026-10-13 (artifacts, §5.10: *artifact*, *page*, *pin*; *canvas* now means a drawing) · 2026-10-16 (hub auth: *paired device*, *Require paired devices*, *code*, *admit*; Admit and Require join the button verbs) · 2026-10-18 (browser take-over, projects §5.11: *browser*, *take over*, *private*, *hand back*, *browser ask*, *stream relay*, *container runtime* / *local browser*; Take over and Hand back join the button verbs) · 2026-10-18 (Ask joins the button verbs: the project head's Ask Caw) · 2026-10-19 (the stream relay's guided journey: Set up, Done for now and Use ("Use this name") join the button verbs)
+**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work) · 2026-10-13 (artifacts, §5.10: *artifact*, *page*, *pin*; *canvas* now means a drawing) · 2026-10-16 (hub auth: *paired device*, *Require paired devices*, *code*, *admit*; Admit and Require join the button verbs) · 2026-10-18 (browser take-over, projects §5.11: *browser*, *take over*, *private*, *hand back*, *browser ask*, *stream relay*, *container runtime* / *local browser*; Take over and Hand back join the button verbs) · 2026-10-18 (Ask joins the button verbs: the project head's Ask Caw) · 2026-10-19 (the stream relay's guided journey: Set up, Done for now and Use ("Use this name") join the button verbs) · 2026-10-21 (Connect a machine: *Show* and *Hide* join the button verbs as the disclosure pair, each naming what it folds ("Show steps" / "Hide steps", "Show output" / "Hide output", the shipped "Show details" / "Hide details"); *Change* joins for a form brought back with its fields kept ("Change target", the shipped "Change budget"))
 **Doctorate authority:** `content-design` (design-for-ai 4.2.0) — voice/tone per Podmajersky (2019), error
 formula per Yifrah (2017), plain language per Redish (2007), destructive confirmation per Nielsen
 #5 (1994) and the microcopy-patterns catalog. **Pairs with DESIGN.md** (visual tokens, LOCKED) and
@@ -285,7 +285,7 @@ Every button parses as **[Verb] + [Object]** and stays comprehensible with surro
 Allowlisted imperative verbs for the gate: *Start, Create, Add, Save, Cancel, Delete, Remove,
 Approve, Deny, Allow, Deny, Reconnect, Retry, Export, Filter, Manage, Open, Stop, Interrupt, Send,
 Attach, Refresh, Install, Fetch, Restore, Redirect, Skip, Switch, Check, Configure, Copy, Draw, Dock, Undock, Annotate,
-Comment, Illustrate, Erase, Done, Admit, Require, Ask, Use*, and the phrasal *Take over*, *Hand back*, *Set up*
+Comment, Illustrate, Erase, Done, Admit, Require, Ask, Use, Show, Hide, Change*, and the phrasal *Take over*, *Hand back*, *Set up*
 and *Done for now* (each [Verb]+[Object] read as one act: the browser; "Set up the stream relay", the
 relay's journey begun; "Done for now", the journey's Needs you row put away while the relay is proven only
 from inside). "Ask" takes its object by name: "Ask Caw", the project

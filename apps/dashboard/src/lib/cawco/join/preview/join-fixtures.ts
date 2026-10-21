@@ -70,9 +70,15 @@ const job = (over: Partial<SshJoinJob>): SshJoinJob => ({
   ...over,
 });
 
-/** Running, `count` step lines in (0: signing in). */
-export const runningAt = (count: number): SshJoinJob =>
-  job({ lines: linesTo(count) });
+/**
+ * Running, `count` step lines in (0: signing in), its newest step begun
+ * `elapsed` ms ago on the hub's clock (`stepAt`).
+ */
+export const runningAt = (count: number, elapsed = 0): SshJoinJob =>
+  job({
+    lines: linesTo(count),
+    ...(count > 0 ? { stepAt: Date.now() - elapsed } : {}),
+  });
 
 /** Finished: every step, the agent installed, the machine online. */
 export const doneJob = (): SshJoinJob =>
@@ -108,6 +114,14 @@ export const signInRefused = (): SshJoinJob =>
 
 export const hostKeyChanged = (): SshJoinJob =>
   failedJob({ kind: "host-key" }, []);
+
+/**
+ * The hub's TCP connect to the machine failed (hub join.ts `reach`): a
+ * refused port in the hub's own words, or an errno it has no words for,
+ * which it names by its code.
+ */
+export const unreachable = (detail = "connection refused"): SshJoinJob =>
+  failedJob({ kind: "unreachable", detail }, []);
 
 export const stoppedJob = (count: number): SshJoinJob =>
   job({ state: "stopped", exitCode: 143, lines: linesTo(count) });

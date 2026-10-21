@@ -112,10 +112,13 @@
     }
   });
 
+  let detailsOpen = $state(false);
   const hasSteps = $derived(card.steps.length > 0);
   const hasOutput = $derived(card.lines.length > 0);
   /** Settled states fold only what they have; a running card keeps the row. */
-  const foldRow = $derived(running || hasSteps || hasOutput);
+  const foldRow = $derived(
+    running || hasSteps || hasOutput || card.details !== null
+  );
   const joined = $derived(card.tone === "done");
   /** The joined glyph: the readiness's own, the plain check before one is known. */
   const ReadinessGlyph = $derived.by(() => {
@@ -125,7 +128,7 @@
 </script>
 
 {#snippet fold(
-  label: string,
+  what: string,
   open: boolean,
   shown: boolean,
   controls: string,
@@ -150,7 +153,22 @@
         data-open={open || undefined}
         data-box><IconChevronRight class="size-icon-sm" /></span
       >
-      <span>{label}</span>
+      <!-- "Show steps" and "Hide steps" in one cell as wide as the wider
+           (The Steady Swap Rule): the fold never changes width. The cell
+           stands as a box on the line; each wording trims itself to its
+           x-height (mark-text), as a grid cell's label does. -->
+      <span class="grid *:col-start-1 *:row-start-1" data-box>
+        <span
+          class="mark-text"
+          aria-hidden={open || undefined}
+          class:invisible={open}>Show {what}</span
+        >
+        <span
+          class="mark-text"
+          aria-hidden={!open || undefined}
+          class:invisible={!open}>Hide {what}</span
+        >
+      </span>
     </Button>
   </span>
 {/snippet}
@@ -253,11 +271,10 @@
               class="m-0 min-w-0 flex-1 type-meta text-pretty text-ink-muted data-running:h-lh data-running:data-phone:h-c-meta-two-lines data-running:overflow-clip not-data-phone:data-running:truncate"
             >
               {#if stillGoing}<span class="text-ink-strong"
-                  >Still going · <span class="num">{elapsedWords(elapsed)}</span
+                  >Still going{" · "}<span class="num"
+                    >{elapsedWords(elapsed)}</span
                   ></span
-                >
-                ·
-              {/if}{card.line}
+                >{" · "}{/if}{card.line}
             </p>
           {/if}
           {#if joined && caw}
@@ -276,17 +293,11 @@
             data-slot="folds"
             class="flex h-c-btn-h-xs min-w-0 flex-wrap items-center gap-x-space-4"
           >
+            {@render fold("steps", stepsOpen, hasSteps, `${id}-steps`, () => {
+              stepsOpen = !stepsOpen;
+            })}
             {@render fold(
-              "Show steps",
-              stepsOpen,
-              hasSteps,
-              `${id}-steps`,
-              () => {
-                stepsOpen = !stepsOpen;
-              }
-            )}
-            {@render fold(
-              "Show output",
+              "output",
               outputOpen,
               hasOutput,
               `${id}-output`,
@@ -294,6 +305,17 @@
                 outputOpen = !outputOpen;
               }
             )}
+            {#if card.details}
+              {@render fold(
+                "details",
+                detailsOpen,
+                true,
+                `${id}-details`,
+                () => {
+                  detailsOpen = !detailsOpen;
+                }
+              )}
+            {/if}
           </div>
         {/if}
       </div>
@@ -393,13 +415,34 @@
     </Collapsible.Root>
   {/if}
 
+  {#if card.details}
+    <Collapsible.Root open={detailsOpen}>
+      <Collapsible.Content fade id="{id}-details" reveal>
+        <p
+          data-slot="details"
+          class="m-0 pt-space-4 type-meta font-mono wrap-anywhere text-ink-muted"
+        >
+          {card.details}
+        </p>
+      </Collapsible.Content>
+    </Collapsible.Root>
+  {/if}
+
   {#if hasOutput}
     <Collapsible.Root open={outputOpen}>
       <Collapsible.Content fade id="{id}-output" reveal>
         <div class="pt-space-4">
-          <pre
-            class="m-0 max-h-c-output-max overflow-auto overscroll-contain rounded-md border border-border-control bg-surface-hover p-space-3 text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong"
-            {@attach followTail()}>{card.lines.join("\n")}</pre>
+          <!-- The box's padding stands outside the scroller, and the scroller
+               is whole lines tall: its tail, followed to the end, starts on a
+               whole line with the padding above it. -->
+          <div
+            data-slot="output"
+            class="rounded-md border border-border-control bg-surface-hover p-space-3"
+          >
+            <pre
+              class="m-0 max-h-c-output-tail overflow-auto overscroll-contain text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong"
+              {@attach followTail()}>{card.lines.join("\n")}</pre>
+          </div>
         </div>
       </Collapsible.Content>
     </Collapsible.Root>

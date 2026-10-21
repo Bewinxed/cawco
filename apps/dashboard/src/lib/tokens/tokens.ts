@@ -487,6 +487,7 @@ export type TokenSize =
   | "size.c-row-h-two"
   | "size.c-detail-max"
   | "size.c-output-max"
+  | "size.c-output-tail"
   | "size.c-body-two-lines"
   | "size.c-meta-two-lines"
   | "size.c-editor-well-min"

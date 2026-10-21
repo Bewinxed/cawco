@@ -44014,6 +44014,10 @@
             "$ref": "#/components/schemas/SshJoinJobState",
             "description": "`done` means the script exited 0 and the hub has the machine online;\n`stopped`, that the person stopped it and its `ssh` is gone."
           },
+          "stepAt": {
+            "description": "When the newest step line ({@link INSTALL_STEP_PREFIX}) arrived, ms since\nthe epoch on the hub's clock; absent before the first. The dialog times\n\"Still going\" from it, so a dialog opened onto a long step shows how long\nit has run at once.",
+            "type": "number"
+          },
           "target": {
             "type": "string"
           }

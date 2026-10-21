@@ -1,7 +1,7 @@
 root = Decisions("Connect a machine, reworked", [flow, taste])
 flow = Decision("flow", "Does the reworked flow read right?", [looksright, notyet], "You asked for this with “10 thousand steps and 10 thousand layout shifts and it's been stuck on this for a while” and “family benji guidelines for the rework of this machine onboarding flow”: the tray now holds one card from signing in to the join, five phases drawn instead of ten rows written, and the card keeps its box through all ten step lines at 512 and at 390.", [flowmedia])
 flowmedia = Preview("193a7b2a-8e15-4c77-be18-e54c84290349", null, ["SigningIn", "SigningInPhone", "Installing", "InstallingPhone", "Joined", "JoinedPhone", "Failed", "FailedPhone"])
-looksright = Option("looks-right", "Looks right", "The build lands as drawn: one card, five phases, nothing moving while it runs.", true, [], "The ten step rows and the log move behind Show steps and Show output, closed by default.")
+looksright = Option("looks-right", "Looks right", "The build lands as drawn: one card, five phases, nothing moving while it runs.", true, [], "The ten step rows and the log move behind Show steps and Show output, closed by default; a failure's way back is Change target.")
 notyet = Option("not-yet", "Not yet", "Say what reads wrong in a note and the next round answers it.", false, [], "The rework waits on another round before it lands.")
 taste = Section("Three taste choices", [password, done, names])
 password = Decision("password", "Where does the password live on the form?", [behindline, alwaysshown, whenrefused], "The designer's pick: a person whose machine already trusts the hub's key never sees a field they must decide to leave empty, and nobody needs a failed attempt to find it.", [], ["flow"])

@@ -25,11 +25,12 @@
   import JoinTray, { JOIN_DESCRIPTION } from "./join/JoinTray.svelte";
   import { addMachine, CheckIn, joinInfo, sshJoin } from "./join/join.svelte";
   import {
+    alertOf,
     cardOf,
+    type FormAlert,
     factsOf,
     hostOf,
     type Joined,
-    stepsOf,
   } from "./join/join-view";
   import { macReadiness, readinessLine } from "./join/readiness.svelte";
   import type { JoinWay } from "./join/ways";
@@ -49,7 +50,7 @@
   let checkIn = $state<CheckIn | null>(null);
   let starting = $state(false);
   let stopping = $state(false);
-  /** Change details: the form again, the failure or stop said over its fields. */
+  /** Change target: the form again, the failure or stop said over its fields. */
   let changing = $state(false);
   /** A waiting machine's Admit on its way, and the hub's refusal of the last. */
   let admitting = $state<string | null>(null);
@@ -119,26 +120,14 @@
     return () => clearInterval(timer);
   });
 
-  /** When the step on screen began: each new step line restarts it. */
-  let stepSince = $state<number | null>(null);
-  let stepKey = "";
-  $effect.pre(() => {
-    const key = job ? `${job.id}:${stepsOf(job.lines).length}` : "";
-    if (key !== stepKey) {
-      stepKey = key;
-      stepSince = job ? Date.now() : null;
-    }
-  });
-
   /** The machine as the fleet lists it, once it is there. */
   const rowOf = (machineId: string | null) =>
     cawco.machines.find((entry) => entry.machineId === machineId);
 
   /**
-   * The machine this way in added, once the fleet has it: the SSH run that
+   * Which machine this way in added, once the fleet has it: the SSH run that
    * finished, or the machine that checked in while the command showed.
    */
-  /** Which machine joined: the SSH add's once it is done, or the one that checked in. */
   const joinedId = $derived.by((): string | null => {
     if (way !== "ssh") {
       return checkIn?.joined?.machineId ?? null;
@@ -177,30 +166,23 @@
       : cardOf({
           job: way === "ssh" ? job : null,
           refused: sshJoin.refused,
-          stepSince,
           joined,
           passwordTried: sentPassword,
         })
   );
 
-  /** The form's alert: what Change details brought back, or a start the hub refused. */
-  const formAlert = $derived.by(() => {
+  /** The form's alert: what Change target brought back, or a start the hub refused. */
+  const formAlert = $derived.by((): FormAlert | null => {
     if (card !== null) {
       return null;
     }
     if (sshJoin.refused && job?.state !== "failed") {
-      return { text: sshJoin.refused, tone: "fail" as const };
+      return { text: sshJoin.refused, tone: "fail", details: null };
     }
     const was = changing
-      ? cardOf({ job, refused: sshJoin.refused, stepSince, joined: null })
+      ? cardOf({ job, refused: sshJoin.refused, joined: null })
       : null;
-    if (!was) {
-      return null;
-    }
-    return {
-      text: [was.sentence, was.line].filter(Boolean).join(" "),
-      tone: was.tone === "stopped" ? ("status" as const) : ("fail" as const),
-    };
+    return was ? alertOf(was) : null;
   });
 
   async function start() {

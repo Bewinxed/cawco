@@ -41,16 +41,18 @@
   import { morph } from "../../motion/morph.svelte";
   import {
     cardOf,
+    type FormAlert,
     type Joined,
     type JoinTaste,
-    stepsOf,
     TASTE,
   } from "../join-view";
   import type { JoinWay } from "../ways";
   import { doneJob, JOINED, runningAt, STEPS } from "./join-fixtures";
 
-  /** How long the replay holds the service step before the join. */
+  /** How long the join's replay holds the service step before the join. */
   const REPLAY_RUNNING_MS = 1600;
+  /** Each step line of the steps' replay, apart. */
+  const REPLAY_STEP_MS = 400;
 
   import JoinTray, { JOIN_DESCRIPTION } from "../JoinTray.svelte";
 
@@ -60,7 +62,6 @@
     job = null,
     refused = null,
     joined = null,
-    stepElapsed = 0,
     passwordTried = false,
     taste = {},
     target = "",
@@ -80,13 +81,11 @@
     job?: SshJoinJob | null;
     refused?: string | null;
     joined?: Joined | null;
-    /** How long the current step has run as the frame mounts, ms. */
-    stepElapsed?: number;
     passwordTried?: boolean;
     taste?: Partial<JoinTaste>;
     target?: string;
     port?: string;
-    formAlert?: { text: string; tone: "fail" | "status" } | null;
+    formAlert?: FormAlert | null;
     retry?: boolean;
     waiting?: WaitingMachine[];
     admitRefused?: string | null;
@@ -94,37 +93,47 @@
     sshKey?: string | null;
     hubHostname?: string | null;
     /**
-     * Plays the join by itself as it mounts: the service step, then the add
-     * done, so a frame shows the moment wherever it is drawn (a decision
-     * page's Preview included), then rests on it.
+     * Plays a sequence by itself as it mounts, so a frame shows it wherever
+     * it is drawn (a decision page's Preview included), then rests on its
+     * end, said by `data-replayed` on the frame: `join`, the service step and
+     * then the add done; `steps`, signing in and then the ten step lines one
+     * by one.
      */
-    replay?: boolean;
+    replay?: "join" | "steps" | false;
     /** "Sign in with a password" stands open. */
     passwordOpen?: boolean;
   } = $props();
 
-  /** Whether the replay has reached the join; it plays once per mount, then rests on it. */
-  let playedDone = $state(false);
+  /** The replay's place: the step lines in (`steps`), or whether the join came (`join`). */
+  let played = $state(0);
+  const replayEnd = $derived(replay === "steps" ? STEPS.length : 1);
   $effect(() => {
-    if (!replay || playedDone) {
+    if (!replay || played >= replayEnd) {
       return;
     }
-    const timer = setTimeout(() => {
-      playedDone = true;
-    }, REPLAY_RUNNING_MS);
+    const timer = setTimeout(
+      () => {
+        played += 1;
+      },
+      replay === "steps" ? REPLAY_STEP_MS : REPLAY_RUNNING_MS
+    );
     return () => clearTimeout(timer);
   });
+  const replayed = $derived(Boolean(replay) && played >= replayEnd);
   const shownJob = $derived.by(() => {
-    if (!replay) {
-      return job;
+    if (replay === "steps") {
+      return runningAt(played);
     }
-    return playedDone ? doneJob() : runningAt(STEPS.length);
+    if (replay === "join") {
+      return played > 0 ? doneJob() : runningAt(STEPS.length, 3000);
+    }
+    return job;
   });
   const shownJoined = $derived.by(() => {
-    if (!replay) {
-      return joined;
+    if (replay === "join") {
+      return played > 0 ? JOINED : null;
     }
-    return playedDone ? JOINED : null;
+    return replay ? null : joined;
   });
 
   const phone = $derived(layout === "phone");
@@ -138,24 +147,10 @@
   let typedPassword = $state("");
   let hubUrl = $state(untrack(() => addresses[0]?.url ?? ""));
 
-  /** When the step on screen began: the story's elapsed time, then each new step's own. */
-  let stepSince = $state(untrack(() => Date.now() - stepElapsed));
-  let stepCount = untrack(() =>
-    shownJob ? stepsOf(shownJob.lines).length : 0
-  );
-  $effect.pre(() => {
-    const count = shownJob ? stepsOf(shownJob.lines).length : 0;
-    if (count !== stepCount) {
-      stepCount = count;
-      stepSince = Date.now();
-    }
-  });
-
   const card = $derived(
     cardOf({
       job: shownJob,
       refused,
-      stepSince,
       joined: shownJoined,
       passwordTried,
     })
@@ -253,6 +248,7 @@
 <div
   data-slot="join-frame"
   data-layout={layout}
+  data-replayed={replayed || undefined}
   class="relative flex min-h-full min-w-0 flex-col bg-surface-recess"
 >
   <div
