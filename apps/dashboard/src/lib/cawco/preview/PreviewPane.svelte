@@ -1688,26 +1688,26 @@
   }
   /** The page's answer to Comment: written, the composer goes; refused, the words are back in it with why. */
   function heardComment(message: Record<string, unknown>) {
-    const draft = nextDraft;
-    if (!(composing && draft)) {
-      return;
-    }
+    // Written, it is heard whether or not its composer still stands: an Esc
+    // that came before the page's answer closed the composer, not the
+    // comment, which the page wrote.
     if (message.ok === true) {
       const { pin } = message;
-      if (
-        pin &&
-        pinProblem(pin) === null &&
-        !view?.pins.some((one) => one.id === (pin as Pin).id)
-      ) {
+      const written = !!pin && pinProblem(pin) === null;
+      if (written && !view?.pins.some((one) => one.id === (pin as Pin).id)) {
         pageSays((pin as Pin).id, pin);
       }
       composing = null;
       // The newest comment is the one J and K step from.
-      if (pin && pinProblem(pin) === null) {
+      if (written) {
         focusedPin = (pin as Pin).id;
       }
       drafts?.discard(NEXT_COMMENT);
       post({ type: "cawco:composer-ring", on: false });
+      return;
+    }
+    const draft = nextDraft;
+    if (!(composing && draft)) {
       return;
     }
     if (draft.unsent) {
@@ -1918,6 +1918,9 @@
       : null
   );
 
+  /** What holds the focus as a control: a key it takes is its own. */
+  const PANE_CONTROL =
+    'button, a[href], summary, [role="button"], [role="tab"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"]';
   /** A key's mode: V Interact, C Comment, D Draw (Figma's V and C). */
   const MODE_KEYS = { v: "interact", c: "comment", d: "draw" } as const;
   /**
@@ -1935,7 +1938,12 @@
       step(1);
     } else if (name === "k") {
       step(-1);
-    } else if (name === "Enter" && focusedPin) {
+    } else if (
+      name === "Enter" &&
+      focusedPin &&
+      pins.some((pin) => pin.id === focusedPin)
+    ) {
+      // Only a pin of this page: one J and K stood on elsewhere opens nothing.
       openCard(focusedPin, "key");
     } else if (name === "/" && listOpen) {
       rail?.focusSearch();
@@ -1953,7 +1961,12 @@
       }
     }
   }
-  /** A key pressed inside the pane, outside a field: the page's are heard as `cawco:key`. */
+  /**
+   * A key pressed inside the pane, outside a field: the page's are heard as
+   * `cawco:key`. Enter on a focused control is the control's own (a rail's
+   * row opens its own thread, a button presses): the pane's Enter, the pin
+   * J and K stand on, is for where no control has the focus.
+   */
   function paneKey(event: KeyboardEvent) {
     const { target } = event;
     if (
@@ -1965,7 +1978,10 @@
       !(target instanceof Node && section?.contains(target)) ||
       (target instanceof HTMLElement &&
         (target.isContentEditable ||
-          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)))
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) ||
+      (event.key === "Enter" &&
+        target instanceof Element &&
+        !!target.closest(PANE_CONTROL))
     ) {
       return;
     }

@@ -429,6 +429,8 @@
       probe.remove();
     };
   };
+  /** How many frames a focus request asks again before it lets go. */
+  const FOCUS_TRIES = 10;
   /** The suggestion row, for Tab and Shift+Tab. */
   let chips = $state<ReturnType<typeof SuggestionChips>>();
 
@@ -442,17 +444,38 @@
    * attachments come back with them, and the row that holds those folds
    * open above the field. The caret waits for the tick: the field draws the
    * words in its own effect, and drawing them drops any selection.
+   *
+   * The request holds until the focus has landed: asked before the field is
+   * drawn, it waits for it; refused (the field not yet focusable as its
+   * card comes in), it asks again each frame, a few frames at most.
    */
   $effect(() => {
-    if (draft.focusWanted) {
-      field?.focus();
+    const el = field;
+    if (!(draft.focusWanted && el)) {
+      return;
+    }
+    let frame = 0;
+    let tries = 0;
+    const land = () => {
+      el.focus();
+      if (
+        document.activeElement !== el &&
+        el.isConnected &&
+        tries < FOCUS_TRIES
+      ) {
+        tries += 1;
+        frame = requestAnimationFrame(land);
+        return;
+      }
       tick().then(() => mentionField?.select(draft.text.length));
-      field?.animate([{ opacity: 0 }, { opacity: 1 }], {
+      el.animate([{ opacity: 0 }, { opacity: 1 }], {
         duration: dur("--dur-control"),
         easing: ease("--ease-out"),
       });
       draft.focusWanted = false;
-    }
+    };
+    land();
+    return () => cancelAnimationFrame(frame);
   });
 
   /**

@@ -598,6 +598,8 @@ const runOn = async (kit: Kit, on: On) => {
     () => insertChecks(on),
     () => mintedIdChecks(on),
     () => listChecks(on),
+    // Last: it loads the desk again, which gives the split its kept width.
+    () => keyOpenChecks(on),
   ]) {
     // biome-ignore lint/performance/noAwaitInLoops: the checks run in order, one after another
     await shutList(on);
@@ -3734,11 +3736,11 @@ const targetChecks = async (on: On) => {
   const field = on.page
     .locator(':is([data-slot="pin-composer"], [data-slot="pin-card"])')
     .getByRole("combobox");
-  const readRing = () =>
+  const readRing = (
+    holder = ':is([data-slot="pin-composer"], [data-slot="pin-card"])'
+  ) =>
     on.page
-      .locator(
-        ':is([data-slot="pin-composer"], [data-slot="pin-card"]) .field-shell'
-      )
+      .locator(`${holder} .field-shell`)
       .first()
       .evaluate((el) => {
         const style = getComputedStyle(el);
@@ -3814,7 +3816,7 @@ const targetChecks = async (on: On) => {
   await on.page.keyboard.press("Tab");
   const keyRing = await until(
     "the field's keyboard ring",
-    readRing,
+    () => readRing(),
     (seen) => seen.focused && !seen.quiet,
     3000
   ).catch(() => readRing());
@@ -3946,9 +3948,10 @@ const targetChecks = async (on: On) => {
   // Opened from the keyboard (Enter on its row), the card's field draws its ring; opened by a press, none.
   await row.focus();
   await on.page.keyboard.press("Enter");
+  // Read on the thread's own field: a composer still going out is not it.
   const keyOpened = await until(
     "the key-opened card's field",
-    readRing,
+    () => readRing('[data-slot="pin-card"]'),
     (seen) => seen.focused,
     5000
   ).catch(() => null);
@@ -3966,7 +3969,7 @@ const targetChecks = async (on: On) => {
   await (await rowsOf(on)).locator('[data-slot="pin-row"]').first().click();
   const pressOpened = await until(
     "the press-opened card's field",
-    readRing,
+    () => readRing('[data-slot="pin-card"]'),
     (seen) => seen.focused,
     5000
   ).catch(() => null);
@@ -4780,6 +4783,159 @@ const mintedIdChecks = async (on: On) => {
     `pin 1 tail ${JSON.stringify(react.tail)} on ${JSON.stringify(react.own)}; pin 2 tail ${JSON.stringify(radix.tail)} on ${JSON.stringify(radix.own)}`
   );
   await on.page.keyboard.press("Escape");
+};
+
+/**
+ * 7g. A thread opened from the keyboard ends with its reply focused and
+ * ringed, whatever the timing: Enter on a rail row is the row's own (the
+ * pane's Enter, the pin J and K stand on, only where no control has the
+ * focus), a comment whose Esc came before the page's answer is still the
+ * one J and K stand on, and the focus request holds until it lands. Read
+ * on the opened thread's own field: a comment Esc'd at once, a fresh load
+ * (neither the comment kit nor MessageBody loaded) and its first opening,
+ * a reopening, and a row other than the pin J and K stand on.
+ */
+const keyOpenChecks = async (on: On) => {
+  await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "key-open",
+    html: `<!doctype html><html><head><style>body { margin: 0; font: 16px/1.5 system-ui; } main { padding: 24px; } p { width: 50%; margin: 0 0 48px; }</style></head>
+<body><main><p id="one">The first paragraph a comment stands on.</p><p id="two">The second paragraph, commented on and Esc'd at once.</p></main></body></html>`,
+  });
+  const frameOf = async () =>
+    (await until(
+      "the key-open page in the pane",
+      async () => {
+        const shown = await pageFrame(on);
+        return (await shown
+          .locator("#two")
+          .count()
+          .catch(() => 0)) === 1
+          ? shown
+          : null;
+      },
+      Boolean,
+      60_000
+    )) as Frame;
+  let frame = await frameOf();
+  await settle(on.page, 400);
+  await shutList(on);
+  await on.page.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
+  await pageInComment(frame, true);
+  const one = await screenBox(on, frame, "#one");
+  await commentAt(on, one.x + 40, one.y + one.h / 2, "The first, written.");
+  // The second: Comment, and Esc at once, before the page's answer lands.
+  const two = await screenBox(on, frame, "#two");
+  await commentAt(on, two.x + 40, two.y + two.h / 2, null);
+  await on.page
+    .locator(COMPOSE)
+    .getByRole("combobox")
+    .fill("The second, Esc'd at once.");
+  await on.page.keyboard.press("Enter");
+  await on.page.keyboard.press("Escape");
+  const written = await until(
+    "both comments in the doc",
+    async () => Object.keys((await docOf(frame)).pins).length,
+    (count) => count === 2,
+    10_000
+  ).catch(() => 0);
+  await settle(on.page, 600);
+
+  /** Pin `n`'s thread's reply field: focused, and how its ring draws; null while it isn't drawn. */
+  const ringRead = async (n: number) => {
+    const shell = on.page.locator(
+      `[data-slot="pin-card"][data-pin-card="${n}"] .field-shell`
+    );
+    try {
+      return await shell.evaluate(
+        (el) => {
+          const style = getComputedStyle(el);
+          const probe = document.createElement("span");
+          probe.style.color = "var(--focus-ring)";
+          document.body.append(probe);
+          const ring = getComputedStyle(probe).color;
+          probe.remove();
+          const active = document.activeElement as HTMLElement | null;
+          return {
+            focused: !!active?.isContentEditable && el.contains(active),
+            quiet: el.hasAttribute("data-pointer-focus"),
+            style: style.outlineStyle,
+            width: style.outlineWidth,
+            ringed: style.outlineColor === ring,
+          };
+        },
+        undefined,
+        { timeout: 500 }
+      );
+    } catch {
+      return null;
+    }
+  };
+  /** Pin `n`'s thread's reply, once it holds the focus (5 s). */
+  const ringOf = (n: number) =>
+    until(
+      `pin ${n}'s thread's reply focused`,
+      () => ringRead(n),
+      (seen) => !!seen?.focused,
+      5000
+    ).catch(() => ringRead(n));
+  const keyed = (seen: Awaited<ReturnType<typeof ringOf>>) =>
+    !!seen &&
+    seen.focused &&
+    !seen.quiet &&
+    seen.style === "solid" &&
+    seen.width === "2px" &&
+    seen.ringed;
+  /** Enter on pin `n`'s row, the row itself holding the focus. */
+  const enterOn = async (n: number) => {
+    const row = (await rowsOf(on)).locator(
+      `[data-slot="pin-row"][data-pin-row="${n}"]`
+    );
+    await row.waitFor({ timeout: 10_000 });
+    await row.focus();
+    await on.page.keyboard.press("Enter");
+    return ringOf(n);
+  };
+  const closeThread = async () => {
+    await on.page.keyboard.press("Escape");
+    await on.page
+      .locator('[data-slot="pin-card"]')
+      .waitFor({ state: "detached", timeout: 3000 })
+      .catch(() => undefined);
+  };
+
+  // A fresh load: neither the comment kit nor MessageBody is loaded yet.
+  await on.page.keyboard.press("Escape");
+  await on.page.reload();
+  frame = await frameOf();
+  const first = await enterOn(2);
+  await closeThread();
+  const again = await enterOn(2);
+  await closeThread();
+  // J and K stand on pin 2 (its thread was the last opened); Enter on pin 1's row opens pin 1's.
+  const other = await enterOn(1);
+  const wrongCard = await on.page
+    .locator('[data-slot="pin-card"][data-pin-card="2"]')
+    .count();
+  await closeThread();
+  on.kit.check(
+    "7g: a comment Esc'd before the page's answer is written all the same; after a fresh load (the comment kit and MessageBody not loaded), Enter on its row opens its thread with the reply focused and ringed",
+    written === 2 && keyed(first),
+    JSON.stringify({ written, first })
+  );
+  on.kit.check(
+    "7g: reopened from the keyboard, the thread focuses its reply with the ring again",
+    keyed(again),
+    JSON.stringify(again)
+  );
+  on.kit.check(
+    "7g: Enter on a row is that row's: pin 1's row opens pin 1's thread, focused and ringed, while J and K stand on pin 2",
+    keyed(other) && wrongCard === 0,
+    JSON.stringify({ other, wrongCard })
+  );
+  await shutList(on);
 };
 
 const insertChecks = async (on: On) => {
