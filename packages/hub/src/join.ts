@@ -189,13 +189,30 @@ export const sshPublicKey = (): string | null => {
  */
 const HOST_HEADER = /^[A-Za-z0-9.\-[\]:]+$/;
 
-/** The hub and the public site render the same installer body. */
-export const installScript = (hub: string, releaseHost?: string): string =>
+/**
+ * The hub and the public site render the same installer body. An SSH add's
+ * (`sshAdd`) joins this hub again on a machine that already has CawCo
+ * (core install-script.ts).
+ */
+export const installScript = (
+  hub: string,
+  releaseHost?: string,
+  sshAdd = false
+): string =>
   generateInstallScript({
     hub,
     origin: `https://github.com/${RELEASE_REPOSITORY}`,
     releaseHost,
+    sshAdd,
   });
+
+/**
+ * The query an SSH add's install command fetches the script with
+ * ({@link installCommand}): the script that joins this hub again on a
+ * machine that already has CawCo. Read off the URL, never a route schema:
+ * the route stays one plain script for everyone else.
+ */
+const SSH_ADD_QUERY = "add=ssh";
 
 /** How long a finished SSH add stays readable, for a dialog opened late. */
 const JOB_TTL_MS = 60 * 60 * 1000;
@@ -338,7 +355,7 @@ const CURL_EXIT = "cawco-curl-exit: ";
  * joins at that address too. It holds no single quote ({@link remoteCommand}).
  */
 export const installCommand = (hubUrl: string): string =>
-  `echo "${INSTALL_STEP_PREFIX}${DOWNLOAD_STEP}${hubUrl}" && if script=$(curl -fsSL --connect-timeout ${CONNECT_S} --max-time ${DOWNLOAD_MAX_S} ${hubUrl}/install.sh); then printf "%s\\n" "$script" | sh; else echo "${CURL_EXIT}$?"; false; fi`;
+  `echo "${INSTALL_STEP_PREFIX}${DOWNLOAD_STEP}${hubUrl}" && if script=$(curl -fsSL --connect-timeout ${CONNECT_S} --max-time ${DOWNLOAD_MAX_S} "${hubUrl}/install.sh?${SSH_ADD_QUERY}"); then printf "%s\\n" "$script" | sh; else echo "${CURL_EXIT}$?"; false; fi`;
 
 /**
  * What `ssh-copy-id` does on the machine, run by a password add's one
@@ -1002,7 +1019,11 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
       }
       const installation = await readInstallation();
       set.headers["content-type"] = "text/x-shellscript; charset=utf-8";
-      return installScript(`http://${host}`, installation?.releaseHost);
+      return installScript(
+        `http://${host}`,
+        installation?.releaseHost,
+        new URL(request.url).search === `?${SSH_ADD_QUERY}`
+      );
     })
     .get("/api/join", async (): Promise<JoinInfo> => ({
       addresses: await joinAddresses(),

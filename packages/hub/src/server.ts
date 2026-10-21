@@ -11418,7 +11418,13 @@ export const createServer = (
    */
   const relayMachines = () =>
     db.listAgents().map((agent) => {
-      const seen = registry.address(agent.machineId);
+      // A machine the hub reaches through its own SSH forward is seen at no
+      // address of its own: its agent's connection comes from this hub's
+      // loopback, and what the registry names it by is the SSH target the
+      // person typed, not where the internet reaches a relay on it.
+      const seen = sshTunnels.holds(agent.machineId)
+        ? undefined
+        : registry.address(agent.machineId);
       return {
         machineId: agent.machineId,
         name: machineName(agent.machineId),
@@ -16620,10 +16626,34 @@ export const createServer = (
       ws.close(4403, "machine key not proven");
       return false;
     }
+    // One the person refused is refused again at once, in the same words,
+    // never held for them a second time (hub-auth.ts `refusals`).
+    const refused = hubAuth.refusalOf(message.machineId);
+    if (refused) {
+      console.warn(
+        `[hub-auth] register refused: the person refused machine ${message.machineId} (from ${socketAddress(ws)})`
+      );
+      refuseSocket(ws, message.machineId, refused);
+      return false;
+    }
     if (waitingSockets.get(ws.id) !== message.machineId) {
       holdWaiting(ws, message);
     }
     return false;
+  };
+
+  /** The person's refusal, said on `ws` before the hub closes it, so the machine's install ends with it. */
+  const refuseSocket = (
+    ws: AuthSocket,
+    machineId: string,
+    reason: string
+  ): void => {
+    sendFrame(ws, {
+      verb: "admission",
+      machineId,
+      payload: { kind: "refused", message: reason },
+    } satisfies Envelope<AdmissionPayload>);
+    ws.close(4403, reason);
   };
 
   /** A connection that proved no key, from a machine never admitted: held, told it waits, listed for the person. */
@@ -16648,14 +16678,7 @@ export const createServer = (
           payload: { kind: "admitted", key },
         } satisfies Envelope<AdmissionPayload>),
       close: (reason) => ws.close(4403, reason),
-      refuse: (reason) => {
-        sendFrame(ws, {
-          verb: "admission",
-          machineId: message.machineId,
-          payload: { kind: "refused", message: reason },
-        } satisfies Envelope<AdmissionPayload>);
-        ws.close(4403, reason);
-      },
+      refuse: (reason) => refuseSocket(ws, message.machineId, reason),
     });
     sendFrame(ws, {
       verb: "admission",
@@ -29958,7 +29981,13 @@ export const createServer = (
                   heldSessions.delete(id);
                 }
               }
-              registry.registerAgent(message.machineId, ws, ws.remoteAddress);
+              // Named as the hub names it: through an SSH add's forward, the
+              // address the person gave the add (`socketAddress`).
+              const from = socketAddress(ws);
+              registry.registerAgent(message.machineId, ws, from ?? undefined);
+              console.info(
+                `[hub] machine ${message.machineId} registered from ${from ?? "an unknown address"}`
+              );
               awaitHarnesses(
                 message.machineId,
                 ws,

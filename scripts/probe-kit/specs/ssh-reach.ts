@@ -63,6 +63,18 @@
  *     joining by itself, is still held; its Admit row names the SSH target's
  *     host, never 127.0.0.1; refused, it hears the refusal, then the close.
  * (l) A failing CLI command prints `cawco: <message>`, no source frame.
+ * (m) Refused while its installer waits, the machine's installer ends with
+ *     the person's refusal in the hub's words, which its agent kept.
+ * (n) Then nothing knocks: no row for 10 s, and a keyless register as that
+ *     machine is refused at once, never held.
+ * (o) A new SSH add of the refused machine clears the refusal.
+ * (p) Added by a public IP literal, the machine is recorded by that host,
+ *     and the stream relay's candidates are as before the box joined.
+ *
+ * The stand-in runs the installer's own wait (`awaitJoined`); what it cannot
+ * run is the service manager: a first install's restart of an agent already
+ * running (binary-install.ts `bringUp`, systemd) has no leg here, nor in any
+ * spec, which runs no real install.
  *
  * It makes namespaces, so it runs on the host, outside every workspace:
  *
@@ -108,6 +120,17 @@ const ADD_MS = 150_000;
 const BACK_MS = 90_000;
 /** How long a silently dropped machine may be away: the hub's 10 s keepalive asked three times, and its next connection. */
 const SILENT_MS = 60_000;
+/** How long the installer's wait may run on the box before the spec calls it hung. */
+const WAIT_BOUND_MS = 140_000;
+/** How long a refused machine is watched for a row it should never get again. */
+const REFUSED_QUIET_MS = 10_000;
+/**
+ * An SSH target named by a public IP literal, as the owner's was. The box's
+ * ssh config sends every host through its ProxyCommand to the box's socket,
+ * so nothing is ever sent to this address; it is only the name the hub
+ * records the machine by ({@link relayUnchanged}).
+ */
+const PUBLIC_TARGET_HOST = "1.1.1.1";
 
 const PROCESS_ID = /^\d+$/;
 /** The hub's connection to a machine: the master of its control socket (ssh-tunnels.ts `master`). */
@@ -166,12 +189,12 @@ const seen = (job: SshJoinJob) =>
  * The box's `cawco`: `binary-rejoin --hub <url>` does what rejoin does
  * (packages/cli/src/binary-install.ts `rejoinBinary`) with the agent's
  * unit, on a box with no service manager: the hub is recorded, the agent
- * (this checkout's, only its own pid ended) restarted against it, and
- * `joined as` said once the hub, asked with the machine's key as
- * `awaitJoined` asks, lists the machine online. When it does not, the
+ * (this checkout's, only its own pid ended) restarted against it, then the
+ * installer's own wait (`awaitJoined`, run by `wait.ts`), and `joined as`
+ * once it ends with the machine online. When it does not, its words and the
  * agent's last lines go to stderr, into the add's output.
  */
-const standIn = (root: string, agentEnv: string, ask: string): string => {
+const standIn = (root: string, agentEnv: string, wait: string): string => {
   const agent = join(root, "packages/agent/src/cli.ts");
   return `#!/bin/sh
 set -u
@@ -196,13 +219,8 @@ else
   CAWCO_HUB_URL="ws://\${hub#http://}/ws" /usr/bin/setsid ${quoted(process.execPath)} ${quoted(agent)} </dev/null >>"$binary/agent.log" 2>&1 &
   echo $! > "$binary/agent.pid"
 fi
-i=0
-while [ $i -lt 120 ]; do
-  ASK="$hub/api/agents/${BOX}" ${quoted(process.execPath)} ${quoted(ask)} && { echo "cawco-install: joined as ${BOX}"; exit 0; }
-  i=$((i + 1))
-  /usr/bin/sleep 1
-done
-echo "cawco: the agent did not come online at $hub; its last lines:" >&2
+${quoted(process.execPath)} ${quoted(wait)} "$hub" && { echo "cawco-install: joined as ${BOX}"; exit 0; }
+echo "cawco (ssh-reach stand-in): the agent did not come online at $hub; its last lines:" >&2
 /usr/bin/tail -n 40 "$binary/agent.log" >&2
 exit 1
 `;
@@ -231,6 +249,8 @@ interface Box {
   /** The agent's environment sourced, as a shell's first command: its HOME, its runtime dir, its machine id. */
   sourced: string;
   user: string;
+  /** The installer's wait, run on the box as its machine (`wait.ts <hub>`). */
+  wait: string;
 }
 
 /** The box's files: the hub's key and `ssh`, the box's sshds, password target, CawCo stand-in, its machine's scripts and its own script. */
@@ -311,13 +331,14 @@ async function furnish(fleet: KitFleet): Promise<Box> {
       .map(([name, value]) => `export ${name}=${quoted(value)}\n`)
       .join("")
   );
-  // What the machine asks the hub with its key (core machine-key.ts
-  // `machineFetch`, as the agent and its install do): whether it is online,
-  // and a file's bytes.
-  const ask = join(dir, "ask-online.ts");
+  // The installer's own wait for the machine to be online (CLI
+  // binary-install.ts `awaitJoined`), bounded for the spec, its failure in
+  // the CLI's words; and what the machine asks the hub with its key (core
+  // machine-key.ts `machineFetch`): a file's bytes.
+  const wait = join(dir, "wait.ts");
   writeFileSync(
-    ask,
-    `import { machineFetch } from ${JSON.stringify(join(root, "packages/core/src/machine-key.ts"))};\nconst answer = await machineFetch(process.env.ASK ?? "").catch(() => undefined);\nconst row = answer?.ok ? ((await answer.json()) as { status?: string }) : undefined;\nprocess.exit(row?.status === "online" ? 0 : 1);\n`
+    wait,
+    `import { awaitJoined } from ${JSON.stringify(join(root, "packages/cli/src/binary-install.ts"))};\nsetTimeout(() => {\n  console.error("cawco (ssh-reach): still waiting after ${WAIT_BOUND_MS / 1000} s");\n  process.exit(3);\n}, ${WAIT_BOUND_MS});\ntry {\n  await awaitJoined(process.argv[2] ?? "");\n} catch (error) {\n  console.error(\`cawco: \${error instanceof Error ? error.message : String(error)}\`);\n  process.exit(1);\n}\nprocess.exit(0);\n`
   );
   writeFileSync(
     join(dir, "ask-file.ts"),
@@ -355,7 +376,10 @@ socket.addEventListener("close", (event) => {
     join(binary, "installation.json"),
     '{"role":"agent","hubUrl":"http://not-joined.invalid","installedVersion":"ssh-reach"}\n'
   );
-  writeFileSync(join(binary, "current", "cawco"), standIn(root, agentEnv, ask));
+  writeFileSync(
+    join(binary, "current", "cawco"),
+    standIn(root, agentEnv, wait)
+  );
   chmodSync(join(binary, "current", "cawco"), 0o755);
   const boxScript = join(dir, "box.sh");
   writeFileSync(
@@ -417,6 +441,7 @@ wait
     hubPort,
     root,
     user,
+    wait,
   };
 }
 
@@ -645,24 +670,12 @@ async function joins(
 async function heldAgentAdd(
   fleet: KitFleet,
   box: Box,
-  { check, add, status, tunnels, waiting }: Readers
+  read: Readers
 ): Promise<void> {
+  const { check, add, status, waiting } = read;
   const name =
-    "j: an SSH add whose machine's agent already runs, held for the person since before the add wrote its key, ends done and online with no Admit click, its held connection closed by the key's first proof, and no Admit row stands";
-  rmSync(join(box.home, ".config", "cawco", "machine-key"), { force: true });
-  fleet.write("DELETE FROM machine_keys WHERE machine_id = ?", BOX);
-  const [master] = tunnels();
-  if (!master) {
-    await check(name, false, "the hub held no connection to the machine");
-    return;
-  }
-  signalOwn(listedPid(master.pid), "SIGKILL");
-  const heldRow = await until(
-    "the machine's agent held for the person",
-    () => waiting(),
-    (rows) => rows.some((row) => row.machineId === BOX),
-    BACK_MS
-  ).catch(() => waiting());
+    'j: an SSH add whose machine already has CawCo and whose agent already runs, held for the person since before the add wrote its key, joins this hub again (no "Nothing was changed"), ends done and online with no Admit click, its held connection closed by the key\'s first proof, and no Admit row stands';
+  const heldRow = await holdBox(fleet, box, read);
   writeFileSync(join(box.binary, "keep-running"), "");
   try {
     const job = await add(`${box.user}@ssh-reach-box`, OPEN);
@@ -672,6 +685,12 @@ async function heldAgentAdd(
       name,
       heldRow.some((row) => row.machineId === BOX) &&
         job.state === "done" &&
+        job.lines.some((line) =>
+          line.startsWith(
+            `cawco-install: joining the hub at ${job.hubUrl} again`
+          )
+        ) &&
+        !job.lines.some((line) => line.includes("Nothing was changed")) &&
         job.lines.some((line) => line.includes("is left running")) &&
         (await status()) === "online" &&
         after.length === 0 &&
@@ -681,6 +700,204 @@ async function heldAgentAdd(
   } finally {
     rmSync(join(box.binary, "keep-running"), { force: true });
   }
+}
+
+/**
+ * The box's agent held for the person: its key gone on both sides and its
+ * connection killed, so it comes back through the forward with nothing to
+ * prove, as the owner's did. Answers the waiting rows once it is held.
+ */
+function holdBox(
+  fleet: KitFleet,
+  box: Box,
+  { tunnels, waiting }: Readers
+): Promise<{ address: string | null; machineId: string }[]> {
+  rmSync(join(box.home, ".config", "cawco", "machine-key"), { force: true });
+  fleet.write("DELETE FROM machine_keys WHERE machine_id = ?", BOX);
+  const [master] = tunnels();
+  if (master) {
+    signalOwn(listedPid(master.pid), "SIGKILL");
+  }
+  return until(
+    "the machine's agent held for the person",
+    () => waiting(),
+    (rows) => rows.some((row) => row.machineId === BOX),
+    BACK_MS
+  ).catch(() => waiting());
+}
+
+/** The hub's log lines, counted, for what a leg said after a point. */
+const logLines = async (fleet: KitFleet): Promise<string[]> =>
+  (await fleet.logs("hub").catch((error: Error) => error.message)).split("\n");
+
+/**
+ * (m) A refusal ends the install that waits on it, end to end: the box's
+ * agent held for the person, the installer's own wait (`awaitJoined`) run on
+ * the box says it waits to be admitted; the person refuses; the agent keeps
+ * the hub's words (`admission-refused.json`) and the wait ends with them,
+ * exit 1.
+ *
+ * (n) Then the knocking ends: for {@link REFUSED_QUIET_MS} no row comes
+ * back for the machine and the hub holds nothing of it, its agent saying it
+ * waits for a key; and a register as that machine from a build that knocks
+ * regardless (the knock script, no key) is refused at once, in the same
+ * words, closed 4403, never held.
+ */
+async function refusalEnds(
+  fleet: KitFleet,
+  box: Box,
+  read: Readers,
+  port: number
+): Promise<void> {
+  const { check, waiting } = read;
+  const held = await holdBox(fleet, box, read);
+  const before = (await logLines(fleet)).length;
+  const asked = `[hub-auth] refused anonymous GET /api/agents/${BOX}`;
+  const waitingRun = box.enter(
+    OPEN,
+    `${box.asMachine} ${quoted(box.wait)} http://127.0.0.1:${port}`
+  );
+  const polling = await until(
+    "the installer's wait asking the hub",
+    async () =>
+      (await logLines(fleet))
+        .slice(before)
+        .some((line) => line.includes(asked)),
+    Boolean,
+    30_000
+  ).catch(() => false);
+  const refused = await fetch(
+    `${fleet.base}/api/machines/waiting/${BOX}/refuse`,
+    { method: "POST" }
+  ).then((r) => r.status);
+  const ended = await waitingRun;
+  const kept = join(box.home, ".config", "cawco", "admission-refused.json");
+  const stored = existsSync(kept) ? readFileSync(kept, "utf8") : "";
+  await check(
+    "m: a machine held for the person, its installer waiting: the person refuses, the agent keeps the hub's words, and the installer's wait ends with them, exit 1",
+    held.some((row) => row.machineId === BOX) &&
+      polling === true &&
+      refused === 200 &&
+      ended.code === 1 &&
+      ended.out.includes("cawco-install: waiting to be admitted") &&
+      ended.err.includes("The person refused this machine.") &&
+      ended.err.includes("Nothing joined.") &&
+      stored.includes("The person refused this machine."),
+    `held ${JSON.stringify(held)}; the wait asked the hub: ${polling}; refuse answered ${refused}; the wait ${JSON.stringify(ended)}; kept ${JSON.stringify(stored)}`
+  );
+
+  // (n) Quiet for 10 s, then a knock that knocks regardless.
+  const quietFrom = (await logLines(fleet)).length;
+  const seenRows: string[] = [];
+  const until10 = Date.now() + REFUSED_QUIET_MS;
+  while (Date.now() < until10) {
+    // biome-ignore lint/performance/noAwaitInLoops: a watch; each read must see the hub after the previous wait
+    const rows = await waiting();
+    if (rows.some((row) => row.machineId === BOX)) {
+      seenRows.push(JSON.stringify(rows));
+    }
+    await Bun.sleep(500);
+  }
+  const quietLines = (await logLines(fleet)).slice(quietFrom);
+  const agentLog = existsSync(join(box.binary, "agent.log"))
+    ? readFileSync(join(box.binary, "agent.log"), "utf8")
+    : "";
+  const knocked = await box.enter(
+    OPEN,
+    `${box.asMachine} ${quoted(join(box.dir, "knock.ts"))} ws://127.0.0.1:${port}/ws ${BOX}`
+  );
+  const words = knocked.out.split("\n");
+  const after = await logLines(fleet);
+  await check(
+    "n: after the refusal no row comes back for the machine for 10 s and its agent waits for a key; a keyless register as it is refused at once in the same words, closed 4403, never held",
+    seenRows.length === 0 &&
+      !quietLines.some(
+        (line) =>
+          line.includes(`machine ${BOX} (`) &&
+          line.includes("waits to be admitted")
+      ) &&
+      agentLog.includes("connects again once it is given a key") &&
+      words[0] === "refused The person refused this machine." &&
+      words.at(-1) === "closed 4403" &&
+      after.some((line) =>
+        line.includes(`register refused: the person refused machine ${BOX}`)
+      ) &&
+      !(await waiting()).some((row) => row.machineId === BOX),
+    `rows seen ${JSON.stringify(seenRows)}; hub lines while quiet ${JSON.stringify(quietLines.filter((line) => line.includes(BOX)))}; the agent said it waits: ${agentLog.includes("connects again once it is given a key")}; the knock heard ${JSON.stringify(knocked)}`
+  );
+}
+
+/**
+ * (o) A new SSH add of the refused machine clears the refusal: its agent,
+ * still running and waiting for a key, takes the one the add writes and
+ * proves it; the add is done, the machine online, no row.
+ */
+async function refusedReAdd(
+  fleet: KitFleet,
+  box: Box,
+  { check, add, status, waiting }: Readers
+): Promise<void> {
+  writeFileSync(join(box.binary, "keep-running"), "");
+  try {
+    const job = await add(`${box.user}@ssh-reach-box`, OPEN);
+    const agentLog = existsSync(join(box.binary, "agent.log"))
+      ? readFileSync(join(box.binary, "agent.log"), "utf8")
+      : "";
+    await check(
+      "o: a new SSH add of the refused machine clears the refusal: its waiting agent takes the add's key and connects, the add is done, the machine online, no row",
+      job.state === "done" &&
+        job.lines.some((line) => line.includes("is left running")) &&
+        agentLog.includes("this machine holds a new key: connecting again") &&
+        (await status()) === "online" &&
+        (await waiting()).length === 0,
+      `${seen(job)}; the agent took the new key: ${agentLog.includes("this machine holds a new key: connecting again")}; machine ${await status()}; waiting ${JSON.stringify(await waiting())}; hub ${(
+        await logLines(fleet)
+      )
+        .filter((line) => line.includes(BOX))
+        .slice(-6)
+        .join(" | ")}`
+    );
+  } finally {
+    rmSync(join(box.binary, "keep-running"), { force: true });
+  }
+}
+
+/** How many machines could run the stream relay, as `GET /api/stream-relay` says. */
+const relayCandidates = (fleet: KitFleet): Promise<number | undefined> =>
+  fetch(`${fleet.base}/api/stream-relay`)
+    .then((r) => r.json() as Promise<{ candidates?: number }>)
+    .then((view) => view.candidates);
+
+/**
+ * (p) The machine's record names the SSH target: added as
+ * `user@<public IP>`, the hub records it by that host (its register line),
+ * and the stream relay's choice is as it was before the box ever joined: a
+ * machine reached through the hub's own forward is no relay candidate,
+ * whatever address names it.
+ */
+async function relayUnchanged(
+  fleet: KitFleet,
+  box: Box,
+  { check, add, status }: Readers,
+  candidatesBefore: number | undefined
+): Promise<void> {
+  const from = (await logLines(fleet)).length;
+  const job = await add(`${box.user}@${PUBLIC_TARGET_HOST}`, OPEN);
+  const lines = (await logLines(fleet)).slice(from);
+  const candidatesAfter = await relayCandidates(fleet);
+  await check(
+    `p: added as ${box.user}@${PUBLIC_TARGET_HOST}, the hub records the machine by that host, and the stream relay's candidates are as they were before the box joined`,
+    job.state === "done" &&
+      (await status()) === "online" &&
+      lines.some((line) =>
+        line.includes(
+          `[hub] machine ${BOX} registered from ${PUBLIC_TARGET_HOST}`
+        )
+      ) &&
+      candidatesBefore !== undefined &&
+      candidatesAfter === candidatesBefore,
+    `${seen(job)}; register lines ${JSON.stringify(lines.filter((line) => line.includes(`machine ${BOX} registered`)))}; relay candidates before ${candidatesBefore}, after ${candidatesAfter}`
+  );
 }
 
 /** The id the keyless knock of (k) registers as. */
@@ -1088,14 +1305,19 @@ async function run(kit: Kit): Promise<void> {
       return;
     }
     const read = readers(kit, fleet, box);
+    // Before the box ever joins: what (p) compares the relay's choice with.
+    const candidatesBefore = await relayCandidates(fleet);
     const port = await joins(fleet, box, read);
     await reconnects(fleet, box, read, port);
     await silentDrop(fleet, box, read, port);
     await credentials(fleet, box, read, port);
     await refusals(box, read);
     await heldAgentAdd(fleet, box, read);
+    await refusalEnds(fleet, box, read, port);
+    await refusedReAdd(fleet, box, read);
     await strangerHeld(fleet, box, read, port);
     await cliFailure(fleet, box, read);
+    await relayUnchanged(fleet, box, read, candidatesBefore);
   } finally {
     await keepLogs(kit, fleet, box);
     sweep(box);

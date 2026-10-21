@@ -20,7 +20,11 @@ const shellQuote = (value: string): string =>
  * signature and checksums) happens before the first file is placed; from then
  * on any failure removes what this run created. Run on a machine that already
  * has CawCo it reports the installed version and changes nothing, except that
- * the hub's own script moves a machine joined to a different hub.
+ * the hub's own script moves a machine joined to a different hub, and the
+ * script an SSH add runs (`sshAdd`) joins this hub again whatever the
+ * machine was joined to: the add is the person asking for exactly that, and
+ * it has just given the machine a key to prove (hub ssh-tunnels.ts `admit`),
+ * which only a rejoin's restarted agent and its check prove.
  *
  * `origin` is the GitHub repository releases are published to. `releaseHost`
  * and `publicKey` exist so a proof can stand a local folder and a throwaway
@@ -31,11 +35,14 @@ export const generateInstallScript = ({
   hub,
   publicKey = RELEASE_PUBLIC_KEY,
   releaseHost,
+  sshAdd = false,
 }: {
   origin: string;
   hub?: string;
   publicKey?: string;
   releaseHost?: string;
+  /** The script an SSH add of this hub runs on the machine (hub join.ts `installCommand`). */
+  sshAdd?: boolean;
 }): string => {
   if (!publicKey) {
     throw new Error(
@@ -120,7 +127,14 @@ ${
       "$ROOT/current/$EXE" binary-rejoin --hub "$HUB" </dev/null
       return 0
     fi
+${
+  sshAdd
+    ? `    say "joining the hub at $HUB again"
+    "$ROOT/current/$EXE" binary-rejoin --hub "$HUB" </dev/null
+    return 0
 `
+    : ""
+}`
     : ""
 }    printf 'CawCo %s is already installed on this machine (channel: %s).\\n' "\${installed:-unknown}" "\${channel:-not reported yet}"
     printf 'Updates are installed from the CawCo app, automatically when this machine is idle or with Install now. Nothing was changed.\\n'

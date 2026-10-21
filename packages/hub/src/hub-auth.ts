@@ -175,6 +175,8 @@ const POLL_INTERVAL_S = 5;
 const PAIRINGS_HELD = 20;
 /** How often a device's last use is written, at most. */
 const TOUCH_EVERY_MS = 60_000;
+/** What a machine the person refused hears, then and at every register after. */
+const MACHINE_REFUSED = "The person refused this machine.";
 /** How long one approved CLI run may act as the person. */
 const CLI_RUN_MS = 15 * 60_000;
 
@@ -299,6 +301,15 @@ export const createHubAuth = ({
   let hooks: HubAuthHooks | undefined;
   const pairings = new Map<string, Pairing>();
   const waiting = new Map<string, Waiting>();
+  /**
+   * Machines the person refused, by id, with the words they were refused
+   * in: a register of one that proves no key is refused at once in those
+   * words, never held again, until the person admits it or an SSH add of
+   * it gives it a key it proves ({@link proves}). Kept in memory: an agent
+   * that heard the refusal waits for a new key on its own side (agent
+   * daemon.ts `awaitNewKey`); this covers a build from before that.
+   */
+  const refusals = new Map<string, string>();
   const touched = new Map<string, number>();
   /** CLI runs the person approved, by their token's sha256, until they expire. */
   const runs = new Map<
@@ -395,6 +406,7 @@ export const createHubAuth = ({
     console.log(
       `[hub-auth] machine ${machineId} proved the key its SSH add gave it: admitted`
     );
+    refusals.delete(machineId);
     const held = waiting.get(machineId);
     if (held && held.socket !== socket) {
       waiting.delete(machineId);
@@ -819,6 +831,7 @@ export const createHubAuth = ({
       return false;
     }
     waiting.delete(machineId);
+    refusals.delete(machineId);
     entry.admit(mintMachineKey(machineId));
     console.log(`[hub-auth] machine ${machineId} admitted`);
     changed();
@@ -831,11 +844,16 @@ export const createHubAuth = ({
       return false;
     }
     waiting.delete(machineId);
-    entry.refuse("The person refused this machine.");
+    refusals.set(machineId, MACHINE_REFUSED);
+    entry.refuse(MACHINE_REFUSED);
     console.log(`[hub-auth] machine ${machineId} refused`);
     changed();
     return true;
   };
+
+  /** The words the person refused `machineId` in, while that refusal stands. */
+  const refusalOf = (machineId: string): string | undefined =>
+    refusals.get(machineId);
 
   /**
    * The caller of a route handler: as the gate classified its request (the
@@ -1055,6 +1073,7 @@ export const createHubAuth = ({
     modeFor,
     provesFormer,
     proveSocket,
+    refusalOf,
     released,
     routes,
     /** The server's side of a mode change or a device's removal, set once at start. */

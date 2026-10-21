@@ -1236,6 +1236,37 @@ const open = (url: string) =>
   );
 
 /**
+ * The key this machine held when the person refused it (`key` undefined: it
+ * held none), from that refusal until it holds another: its connections
+ * wait for one rather than knock again ({@link awaitNewKey}).
+ */
+let refusedWith: { key: string | undefined } | undefined;
+
+/** How often a refused machine reads its key file for a new key. Our choice. */
+const NEW_KEY_POLL_MS = 5000;
+
+/**
+ * After the person refused this machine, its next connection waits until
+ * it holds a key other than the one it was refused with: one an SSH add of
+ * it from the hub's dashboard writes (hub ssh-tunnels.ts `admit`). A new
+ * install restarts the agent, which starts unrefused. The hub refuses a
+ * refused machine's register by itself too (hub-auth.ts `refusals`); this
+ * is the machine's side, so it stops knocking at all.
+ */
+const awaitNewKey = async (): Promise<boolean> => {
+  const refused = refusedWith;
+  if (!refused) {
+    return false;
+  }
+  while (readMachineKey() === refused.key) {
+    // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the key file after the previous wait
+    await Bun.sleep(NEW_KEY_POLL_MS);
+  }
+  refusedWith = undefined;
+  return true;
+};
+
+/**
  * The register's answer to the hub's challenge: `HMAC(machineKey, nonce ‖
  * hubId ‖ machineId)` (core machine-key.ts), when the person admitted this
  * machine; nothing before then. The key itself never leaves the machine.
@@ -1503,6 +1534,11 @@ const attach = (
   Effect.gen(function* () {
     // Started before the socket, so it runs while the hub is still booting:
     // see {@link sessionsReader}.
+    if (yield* Effect.promise(awaitNewKey)) {
+      yield* Effect.logInfo(
+        "[admission] this machine holds a new key: connecting again"
+      );
+    }
     const reading = sessions();
     const { socket, challenge } = yield* connection(url);
     // The hub this socket reached, by its own word: what this machine's HTTP
@@ -2696,7 +2732,12 @@ const attach = (
         return;
       }
       if (said.kind === "refused") {
-        Effect.runFork(Effect.logWarning(`[admission] ${said.message}`));
+        refusedWith = { key: readMachineKey() };
+        Effect.runFork(
+          Effect.logWarning(
+            `[admission] ${said.message} This machine connects again once it is given a key: add it over SSH from the hub's dashboard, or install it again.`
+          )
+        );
         writeMachineRefusal(said.message).catch((error: unknown) =>
           Effect.runFork(
             Effect.logError(

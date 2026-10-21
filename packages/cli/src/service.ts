@@ -2143,6 +2143,12 @@ const restartSystemdUnit = async (
   note(`restarted ${unitName(spec.name)}`);
 };
 
+/** Whether systemd runs service `id` now (`systemctl --user is-active`). */
+export const systemdActive = async (id: ServiceId): Promise<boolean> =>
+  (await run(["systemctl", "--user", "is-active", unitName(id)])).stdout
+    .toString()
+    .trim() === "active";
+
 /** Stops one installed service and leaves it stopped. */
 export const stopService = async (id: ServiceId): Promise<void> => {
   const stopped =

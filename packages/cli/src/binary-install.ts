@@ -41,6 +41,7 @@ import {
   dashboardUrl,
   requireLinger,
   service,
+  systemdActive,
 } from "./service";
 
 /** Tools offered at install: what CawCo uses, none of it required to start. */
@@ -101,7 +102,7 @@ const readOwnRow = (
  * machine the hub added over SSH holds the key its add gave it, and is
  * never held.
  */
-async function awaitJoined(hubUrl: string): Promise<void> {
+export async function awaitJoined(hubUrl: string): Promise<void> {
   const id = await machineId();
   const since = Date.now();
   const deadline = since + JOIN_TIMEOUT_MS;
@@ -247,6 +248,14 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
   // Saved the way `up` saves a hub it was told, so the agent unit finds it.
   await discoverHub({ hub: options.hubUrl });
   process.env[CAWCO_ENV.hubUrl] = options.hubUrl;
+  // An agent already running here (an earlier install whose files a failed
+  // run removed, its unit left up) is left running by systemd's `enable
+  // --now`: on the build it started with, and on a connection the hub may
+  // be holding for the person. It is restarted once its unit names this
+  // build. launchd's install boots a loaded agent out and bootstraps it again
+  // (service.ts `loadLaunchAgent`); sessiond is never restarted here, its
+  // restart ends every session.
+  const agentRan = platform() === "linux" && (await systemdActive("agent"));
   await service("install", {
     ids:
       options.role === "hub"
@@ -260,6 +269,17 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
     // The installer's `keeper` link names this build: its keeper is the machine's from the start.
     binaryLayout: binaryLayout(runtimeVersion),
   });
+  if (agentRan) {
+    await service("restart", {
+      ids: ["agent"],
+      mode: "prod",
+      follow: false,
+      force: true,
+      whenIdle: false,
+      note,
+      binaryLayout: binaryLayout(runtimeVersion),
+    });
+  }
   if (options.role === "hub") {
     await awaitFirstMachineReady(options.hubUrl, note);
     const saved = await fetch(`${options.hubUrl}/api/binary-updates/settings`, {
