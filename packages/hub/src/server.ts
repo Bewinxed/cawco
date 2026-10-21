@@ -17938,8 +17938,10 @@ export const createServer = (
    * with different code and both report `applied`.
    *
    * So the bytes are resolved here and stored, and sync carries them. What
-   * cannot be resolved keeps its sentence on the row and is left to the old
-   * path, which is the only one that still needs a machine to reach github.
+   * cannot be resolved keeps its sentence on the row, and the last files that
+   * worked when it had some (`putPluginPayload`); one that never had files is
+   * left to the old path, which is the only one that still needs a machine to
+   * reach github.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: groups ids by marketplace, resolves each group, and stores every outcome (resolved or errored) in one place; splitting it would scatter the per-marketplace fallback this depends on.
   const resolvePlugins = async (ids: readonly string[]): Promise<void> => {
@@ -18532,7 +18534,12 @@ export const createServer = (
         Date.now() - row.checkedAt >= UPDATE_CHECK_MS
     );
 
-  db.versionStoredOnce();
+  const versioned = db.versionStoredOnce();
+  if (versioned) {
+    console.log(
+      `[hub] versions read off the stored files: ${versioned.skills.versioned} of ${versioned.skills.of} skill(s), ${versioned.plugins.versioned} of ${versioned.plugins.of} plugin(s)`
+    );
+  }
   // Named first, so a plugin re-resolved below is looked up under its row's
   // current name. An update check follows when one is due, then one every
   // six hours.

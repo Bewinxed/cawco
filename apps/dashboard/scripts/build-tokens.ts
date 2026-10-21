@@ -341,6 +341,12 @@ const CONTAINERS = {
   // (c-panel-w and its space-6 end margin), the pane's inline padding
   // (space-7, space-6), two 240px board columns and the space-3 between.
   "project-dock": "938px",
+  // A section row on a phone (config/SectionRow.svelte) holds its controls
+  // beside its name from here: the padding (2 × space-2), the mark (c-mark,
+  // 26px), two space-3 gaps and the controls under a finger (a rollout chip
+  // of "1/1 machines", the switch and the ⋯ at space-4 apart, 195px) leave
+  // the name 3rem (48px). Narrower, the controls take a line of their own.
+  "section-row": "312px",
 };
 const APPLE_DIR = "../apple/Packages/CawCoKit/Sources/CawCoDesign/";
 /** The decision-page skill CawCo ships (packages/hub/src/bundled-skills.ts): its pages wear the same tokens. */

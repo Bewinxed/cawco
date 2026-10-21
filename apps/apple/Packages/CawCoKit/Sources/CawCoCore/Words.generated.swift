@@ -2619,12 +2619,20 @@ public enum Words {
             "Update available · \(from) → \(to)"
         }
 
-        public static func fetchUpdate(to: String) -> String {
+        /// The update badge's action, and its tooltip naming what it fetches.
+        public static let fetchUpdate = "Fetch update"
+
+        public static func fetchVersion(to: String) -> String {
             "Fetch \(to)"
         }
 
         public static func updated(from: String, to: String) -> String {
             "Updated \(from) → \(to)"
+        }
+
+        /// A refresh's outcome and how long ago it landed (lib/utils/time.ts `formatAgeShort`).
+        public static func outcomeAge(outcome: String, age: String) -> String {
+            "\(outcome) · \(age == "now" ? "just now" : "\(age) ago")"
         }
 
         public static func alreadyLatest(version: String) -> String {

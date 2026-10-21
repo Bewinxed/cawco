@@ -33,6 +33,7 @@
   --container-media-split: 640px;
   --container-decisions-900px: 900px;
   --container-project-dock: 938px;
+  --container-section-row: 312px;
 }
 
 @theme inline {

@@ -1695,7 +1695,9 @@ export interface DbShape {
    * What one plugin's resolve came to: the files the hub fetched, or the
    * sentence it failed with. The mirror of {@link putSkill}, and the write that
    * turns a plugin from a name every machine must fetch for itself into bytes
-   * the fleet carries.
+   * the fleet carries. A resolve that failed keeps the last files that
+   * worked, as a skill's does: the machines are serving them, and a source
+   * unreachable for a minute is no reason to take a working plugin off them.
    */
   readonly putPluginPayload: (payload: {
     id: string;
@@ -2284,9 +2286,10 @@ export interface DbShape {
     machineId: string
   ) => { id: string; sessionId: string; harness: HarnessKind }[];
   /**
-   * Enabled plugins with no resolved files, whether never tried or failed —
-   * what a resolve at boot is for. A failed one is tried again so its sentence
-   * is this hub's, and a source that came back heals without a refresh.
+   * Enabled plugins with no resolved files or whose last resolve failed
+   * (keeping the files before it) — what a resolve at boot is for. A failed
+   * one is tried again so its sentence is this hub's, and a source that came
+   * back heals without a refresh.
    */
   readonly unresolvedPlugins: () => string[];
   /** A plan's changes its own session has not written its steps over since. */
@@ -2447,9 +2450,13 @@ export interface DbShape {
   }) => UsageSummary;
   /**
    * Once per database (`data_migrations`): each stored skill's and plugin's
-   * declared version, read off the files it already holds.
+   * declared version, read off the files it already holds. How many of each
+   * it read a version off, of how many; null when it had run already.
    */
-  readonly versionStoredOnce: () => void;
+  readonly versionStoredOnce: () => {
+    plugins: { of: number; versioned: number };
+    skills: { of: number; versioned: number };
+  } | null;
   /** Stored waits, including any that elapsed while the hub was stopped. */
   readonly waitingWorkItems: () => WorkItemRow[];
   /** The fleet-watch lines kept on the session's row, oldest first. */
@@ -6414,13 +6421,17 @@ const make = async (path: string): Promise<DbShape> => {
       }),
     putPluginPayload: ({ id, hash, bytes, error, files, version }) => {
       db.update(plugins)
-        .set({
-          hash: hash ?? null,
-          bytes: bytes ?? null,
-          error: error ?? null,
-          files: files ?? null,
-          version: version ?? null,
-        })
+        .set(
+          error === undefined
+            ? {
+                hash: hash ?? null,
+                bytes: bytes ?? null,
+                error: null,
+                files: files ?? null,
+                version: version ?? null,
+              }
+            : { error }
+        )
         .where(eq(plugins.id, id))
         .run();
     },
@@ -6445,43 +6456,53 @@ const make = async (path: string): Promise<DbShape> => {
             .where(eq(dataMigrations.name, name))
             .get()
         ) {
-          return;
+          return null;
         }
-        for (const row of tx
-          .select({ name: skills.name, files: skills.files })
+        const skillRows = tx
+          .select({ key: skills.name, files: skills.files })
           .from(skills)
-          .all()) {
-          const version = skillVersion(row.files);
+          .all()
+          .map((row) => ({ key: row.key, version: skillVersion(row.files) }));
+        // The marketplace entry's version is not stored; the next fetch or
+        // update check reads it.
+        const pluginRows = tx
+          .select({ key: plugins.id, files: plugins.files })
+          .from(plugins)
+          .all()
+          .map((row) => ({
+            key: row.key,
+            version: pluginVersion(row.files, undefined),
+          }));
+        for (const { key, version } of skillRows) {
           if (version) {
             tx.update(skills)
               .set({ version })
-              .where(eq(skills.name, row.name))
+              .where(eq(skills.name, key))
               .run();
           }
         }
-        for (const row of tx
-          .select({ id: plugins.id, files: plugins.files })
-          .from(plugins)
-          .all()) {
-          // The marketplace entry's version is not stored; the next fetch
-          // or update check reads it.
-          const version = pluginVersion(row.files, undefined);
+        for (const { key, version } of pluginRows) {
           if (version) {
             tx.update(plugins)
               .set({ version })
-              .where(eq(plugins.id, row.id))
+              .where(eq(plugins.id, key))
               .run();
           }
         }
         tx.insert(dataMigrations).values({ name, at: new Date() }).run();
+        const counted = (rows: { version?: string }[]) => ({
+          of: rows.length,
+          versioned: rows.filter((row) => row.version).length,
+        });
+        return { skills: counted(skillRows), plugins: counted(pluginRows) };
       }),
     unresolvedPlugins: () =>
       db
-        .select({ id: plugins.id, hash: plugins.hash })
+        .select({ id: plugins.id, hash: plugins.hash, error: plugins.error })
         .from(plugins)
         .where(eq(plugins.enabled, true))
         .all()
-        .flatMap(({ id, hash }) => (hash ? [] : [id])),
+        .flatMap(({ id, hash, error }) => (hash && !error ? [] : [id])),
     listPlugins: () =>
       db
         .select({
