@@ -988,7 +988,7 @@
       case "asleep":
         return sheetWords.waking;
       case "live":
-        return connected || served ? null : sheetWords.compiling;
+        return compiling ? sheetWords.compiling : null;
       case "error":
       case undefined:
         break;
@@ -997,6 +997,12 @@
   });
   const compileErrors = $derived(
     staged?.status === "live" ? staged.errors : []
+  );
+  /** A sheet's page still compiling: its stage serves, the page hasn't said it is ready, and no compile error has ended the compile. */
+  const compiling = $derived(
+    staged?.status === "live" &&
+      !(connected || served) &&
+      compileErrors.length === 0
   );
   /**
    * How long the cover may stand: the time the daemon gives a stage to serve
@@ -1018,7 +1024,7 @@
       case "asleep":
         return STAGE_READY_MS;
       case "live":
-        return connected || served ? null : STAGE_READY_MS;
+        return compiling ? STAGE_READY_MS : null;
       case "error":
       case undefined:
         return null;

@@ -69,6 +69,15 @@
  *    imported from /$bunfs/root/cawco") says so where the page would be:
  *    its title, the plain line and Try again, the stage's own words under
  *    Show details only, folded until pressed and then whole; never blank.
+ * 13. A canvas whose states file doesn't exist, its doc's stage `live` as
+ *    the hub keeps it (the owner's delegate canvas, stuck on "Compiling…"):
+ *    within 5 s the canvas says its section didn't load, the stage's words
+ *    ("… does not exist …") under Show details, and the pane never says
+ *    "Compiling…". The frame says `cawco:ready` only for an HTML answer, as
+ *    the hub's proxy injects the overlay only into one.
+ * 14. The same for a states file that doesn't compile: Vite's compile error
+ *    under Show details, not the browser's "Failed to fetch dynamically
+ *    imported module". (`CANVAS_DESIGN=refused` runs 13 and 14 alone.)
  *
  * The bench head swept every px from 300 to 800, light, desk pointer, for a
  * component canvas and a plain preview, with Send picks standing and
@@ -1919,9 +1928,11 @@ async function artifactSwitchLeg(
       );
       page.on("console", (message) => {
         const text = message.text();
+        // The canvas page's own words (Vite's client saying the missing states file's module failed) are its section's to show, not the panel's throws.
         if (
           message.type() === "error" &&
-          !text.startsWith("Failed to load resource")
+          !text.startsWith("Failed to load resource") &&
+          !message.location().url.startsWith(stage.base)
         ) {
           errors.push(text.split("\n")[0] ?? "");
         }
@@ -2152,6 +2163,152 @@ async function stageDownLeg(
     `folded ${JSON.stringify(folded)}; open ${JSON.stringify(open)}`
   );
   await page.close();
+}
+
+/** Leg 13's states file: named by the canvas, never written. */
+const GONE_FILE = ".cawco/probe/Gone.stories.ts";
+/** Leg 14's states file: written with a syntax error, so its module doesn't compile. */
+const BROKEN_FILE = ".cawco/probe/Broken.stories.ts";
+const BROKEN_SOURCE = `import StatTile from "../../src/lib/cawco/StatTile.svelte";
+export default { component: StatTile, args: { label: "Spend" ; } };
+export const One = { args: {} };
+`;
+/** How long a refused states file has to say so in the panel (the brief's 5 s). */
+const REFUSED_MS = 5000;
+/** The stage as the hub keeps it while it serves: `live`, no errors (owner's delegate canvas, 2026-10-21). */
+const liveStage = (): StageState => ({
+  runs: "sheet",
+  toolchain: "vite",
+  status: "live",
+  dir: "apps/dashboard",
+  at: new Date().toISOString(),
+  errors: [],
+});
+
+/**
+ * Legs 13 and 14: a canvas whose states file the stage can't load, its doc's
+ * stage `live` as the hub keeps it. The hub's preview proxy injects the
+ * overlay only into an HTML answer (agent preview.ts), so the frame here
+ * says `cawco:ready` only where the stage answered HTML. Within
+ * {@link REFUSED_MS} of the panel opening, no "Compiling…" stands in the
+ * pane and the canvas says the section didn't load, the stage's own words
+ * under Show details: a missing file named as missing (13), a file that
+ * doesn't compile with Vite's compile error (14).
+ */
+async function refusedLeg(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  theme: "light" | "dark"
+): Promise<void> {
+  writeFileSync(join(DASHBOARD, BROKEN_FILE), BROKEN_SOURCE);
+  const legs = [
+    {
+      leg: "13",
+      file: GONE_FILE,
+      what: "a canvas whose states file doesn't exist",
+      said: (words: string) =>
+        words.includes(GONE_FILE) && words.includes("does not exist"),
+    },
+    {
+      leg: "14",
+      file: BROKEN_FILE,
+      what: "a canvas whose states file doesn't compile",
+      said: (words: string) =>
+        words.includes(BROKEN_FILE) &&
+        !words.includes("Failed to fetch dynamically imported module"),
+    },
+  ];
+  for (const { leg, file, what, said } of legs) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+    const page = await kit.page("desk", { theme, scale: 2 });
+    await page.setViewportSize({ width: 760, height: 900 });
+    await page.route(`${stage.base}/__cawco/ping`, (route) =>
+      route.fulfill({
+        status: 204,
+        headers: { "access-control-allow-origin": "*" },
+      })
+    );
+    await serveDoc(page, { [BENCH_ARTIFACT]: liveStage() }, false);
+    await page.addInitScript(() => {
+      if (
+        window.top !== window &&
+        location.pathname.includes("/@cawco/") &&
+        document.contentType === "text/html"
+      ) {
+        addEventListener("load", () =>
+          parent.postMessage(
+            { type: "cawco:ready", url: location.href, title: document.title },
+            "*"
+          )
+        );
+      }
+    });
+    const path = `/@cawco/canvas?file=${encodeURIComponent(file)}&spec=${encodeURIComponent(JSON.stringify({ name: "refused" }))}`;
+    const opened = Date.now();
+    await page.goto(
+      `${bench}/motion/artifact-head?w=720&port=${stage.port}&path=${encodeURIComponent(path)}&ask=${encodeURIComponent(ASK)}`
+    );
+    const read = async () => {
+      const compiling = await page.evaluate(
+        () =>
+          document
+            .querySelector("[data-bench-pane]")
+            ?.textContent?.includes("Compiling…") ?? false
+      );
+      const canvas = page
+        .frames()
+        .find((frame) => frame.url().includes("/@cawco/canvas"));
+      const failed = canvas
+        ? await canvas
+            .evaluate(() => {
+              const box = document.querySelector(".cawco-section-failed");
+              return box
+                ? {
+                    line:
+                      box.querySelector(".cawco-section-failed-line")
+                        ?.textContent ?? "",
+                    summary: box.querySelector("summary")?.textContent ?? "",
+                    details: box.querySelector("pre")?.textContent ?? "",
+                  }
+                : null;
+            })
+            .catch(() => null)
+        : null;
+      return { compiling, failed };
+    };
+    let seen = await read();
+    while (
+      Date.now() - opened < REFUSED_MS &&
+      (seen.compiling || !seen.failed)
+    ) {
+      // biome-ignore lint/performance/noAwaitInLoops: a poll, one read at a time against the leg's clock
+      await page.waitForTimeout(100);
+      seen = await read();
+    }
+    const took = Date.now() - opened;
+    kit.check(
+      `${leg}: ${theme}: ${what} says so within ${REFUSED_MS / 1000}s, the stage's own words under Show details, and the pane never says "Compiling…"`,
+      !seen.compiling &&
+        !!seen.failed &&
+        seen.failed.summary === "Show details" &&
+        said(seen.failed.details),
+      `after ${took}ms: ${JSON.stringify(seen)}`
+    );
+    // For a reviewer: the pane with the section folded, then its details open.
+    mkdirSync(CAPS, { recursive: true });
+    const pane = page.locator("[data-bench-pane]");
+    await pane.screenshot({ path: join(CAPS, `refused-${leg}-${theme}.png`) });
+    const canvas = page
+      .frames()
+      .find((frame) => frame.url().includes("/@cawco/canvas"));
+    await canvas?.locator(".cawco-section-failed summary").click();
+    await page.waitForTimeout(300);
+    await pane.screenshot({
+      path: join(CAPS, `refused-${leg}-${theme}-open.png`),
+    });
+    await page.close();
+  }
 }
 
 /** A pin as the overlay writes one: open, on the page's body. */
@@ -2897,6 +3054,20 @@ const spec: Spec = {
         }
         return;
       }
+      if (only === "refused") {
+        const bench = await kit.bench();
+        // The stage's and the bench's first compiles, outside the legs' clock.
+        const warm = await kit.page("desk", { theme: "light" });
+        await warm.goto(`${stage.base}${canvasPath()}`);
+        await drawn(warm);
+        await warm.close();
+        (await openBench(kit, bench, stage, 720, "light", ""))?.close();
+        for (const theme of ["light", "dark"] as const) {
+          // biome-ignore lint/performance/noAwaitInLoops: one theme at a time
+          await refusedLeg(kit, bench, stage, theme);
+        }
+        return;
+      }
       if (only === "sweep") {
         await sweeps(kit, await kit.bench(), stage);
         return;
@@ -2942,6 +3113,7 @@ const spec: Spec = {
         await mapLeg(kit, bench, stage, 720, theme);
         await mapLeg(kit, bench, stage, 390, theme);
         await stageDownLeg(kit, bench, stage, theme);
+        await refusedLeg(kit, bench, stage, theme);
         await ownTabLeg(kit, bench, stage, theme);
         await switchLeg(kit, bench, stage, theme);
         await artifactSwitchLeg(kit, bench, stage, theme);

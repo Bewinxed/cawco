@@ -43,6 +43,7 @@ import {
   deltaOf,
   drew,
   firstWords,
+  fromRoot,
   pageError,
   partsOf,
   readAnimation,
@@ -90,6 +91,16 @@ export interface SectionModule {
   module: Record<string, unknown>;
   SHEET: SheetOnPage;
 }
+
+/** Vite's error as its server sends it to pages (`prepareError`): its message, the module's id and its place. */
+interface ViteError {
+  id?: string;
+  loc?: { column?: number; file?: string; line?: number };
+  message: string;
+}
+
+/** How long a section's failed import waits for the stage's words. Our call: Vite sends them before it answers the request. */
+const STAGE_SAYS_MS = 1000;
 
 export interface BootOptions {
   adapter: Adapter;
@@ -376,6 +387,60 @@ export function boot(options: BootOptions): void {
     }
     later();
   };
+  /*
+   * What the stage said of a module it couldn't serve: Vite's error, which
+   * its server sends every page as it answers that request 500 (its
+   * `logError`), here as the entry's `cawco:stage-error`. The browser's own
+   * error for the failed import names only the URL ("Failed to fetch
+   * dynamically imported module"), so a section that didn't load says the
+   * stage's words.
+   */
+  let stageSaid: { at: number; error: PageError } | null = null;
+  const stageHeard = new Set<() => void>();
+  window.addEventListener("cawco:stage-error", (event) => {
+    const err = (event as CustomEvent<ViteError | undefined>).detail;
+    if (!err?.message) {
+      return;
+    }
+    const at = (err.loc?.file ?? err.id ?? "").split("?")[0] ?? "";
+    const own = at.startsWith(`${root}/`);
+    stageSaid = {
+      at: performance.now(),
+      error: {
+        message: err.message.trim(),
+        file: own ? fromRoot(at, root) : null,
+        line: own ? (err.loc?.line ?? null) : null,
+        // Vite's (Rollup's) column is 0-based.
+        column:
+          own && typeof err.loc?.column === "number"
+            ? err.loc.column + 1
+            : null,
+      },
+    };
+    for (const done of stageHeard) {
+      done();
+    }
+  });
+  const saidSince = (since: number): PageError | null =>
+    stageSaid && stageSaid.at >= since ? stageSaid.error : null;
+  /** Why a section's import that began at `since` failed: the stage's words heard since, or within {@link STAGE_SAYS_MS}; else the page's own error. */
+  async function loadFailure(
+    error: unknown,
+    since: number
+  ): Promise<PageError> {
+    if (!saidSince(since)) {
+      await new Promise<void>((done) => {
+        const finish = () => {
+          clearTimeout(timer);
+          stageHeard.delete(finish);
+          done();
+        };
+        const timer = setTimeout(finish, STAGE_SAYS_MS);
+        stageHeard.add(finish);
+      });
+    }
+    return saidSince(since) ?? pageError(error, root, base);
+  }
   /** A promise the page does not wait on: what it throws is a page error, never lost. */
   const quietly = (promise: Promise<unknown>) => {
     promise.catch(heard);
@@ -1311,11 +1376,12 @@ export function boot(options: BootOptions): void {
   /** Loads a section's states file and mounts its stories. */
   function loadSection(section: Section): Promise<void> {
     section.loading ??= (async () => {
+      const since = performance.now();
       try {
         section.mod = await options.load(section.file);
       } catch (error) {
         heard(error);
-        failedSection(section, pageError(error, root, base));
+        failedSection(section, await loadFailure(error, since));
         section.loading = undefined;
         return;
       }

@@ -679,7 +679,8 @@ async function svelteProps(): Promise<string> {
  * reach the runtime as window events: `cawco:after-update` after any
  * update (a component's own edit redraws through its framework's HMR and
  * loads again each section drawn from it, and the canvas reads its frames
- * again).
+ * again), and `cawco:stage-error` with Vite's error for a module it
+ * couldn't serve, which a section that didn't load says.
  */
 function entryModule(): string {
   const styles = globalStyles()
@@ -699,6 +700,7 @@ boot({
 });
 if (import.meta.hot) {
   import.meta.hot.on("vite:afterUpdate", () => dispatchEvent(new CustomEvent("cawco:after-update")));
+  import.meta.hot.on("vite:error", (payload) => dispatchEvent(new CustomEvent("cawco:stage-error", { detail: payload.err })));
 }
 `;
 }
@@ -1920,15 +1922,20 @@ async function serveStage(
     return;
   }
   const named = url.searchParams.getAll("file");
+  // The canvas's page is its viewer's: each section says what is wrong with
+  // its file where its frames would stand (its module's load, `sectionProblem`),
+  // never a refusal no page shows.
+  if (path === CANVAS_PATH && named.length > 0) {
+    await serveCanvas(dev, req, res, next);
+    return;
+  }
   const files = named.map(storyFile);
   if (named.length === 0 || files.some((one) => !one)) {
     json(res, 404, {
-      error: `${named.find((_, at) => !files[at]) ?? "No file"} is no states file in ${root}: a states file is a .stories.ts (or .js, .tsx, .jsx) file inside the toolchain root.`,
+      error:
+        (named.map(sectionProblem).find(Boolean) as string | undefined) ??
+        "No file is named: a canvas names its states files as file=<path from the toolchain root>.",
     });
-    return;
-  }
-  if (path === CANVAS_PATH) {
-    await serveCanvas(dev, req, res, next);
     return;
   }
   if (path === REPORT_PATH) {
@@ -1958,12 +1965,44 @@ async function serveStage(
 
 /** A story file the request names, from the toolchain root, when it is one inside it; null otherwise. */
 function storyFile(named: string | null): string | null {
-  if (!(named && STORY_FILE.test(named))) {
-    return null;
+  return named && !sectionProblem(named)
+    ? relative(root, resolve(root, named))
+    : null;
+}
+
+/** A parser's trailing place in its message: Babel's ` (2:61)`. */
+const PLACE_SUFFIX = / \(\d+:\d+\)$/;
+
+/**
+ * A states file's read that threw (Babel's syntax error: its message and a
+ * `loc`, 1-based line, 0-based column), placed in `file` (from the toolchain
+ * root) as Vite places a plugin's error: its `loc.file`, from which Vite
+ * draws the frame and names the module. Any other error as it was.
+ */
+function placedAt(error: unknown, file: string): unknown {
+  const loc = (error as { loc?: { column?: unknown; line?: unknown } } | null)
+    ?.loc;
+  if (!(error instanceof Error && typeof loc?.line === "number")) {
+    return error;
   }
+  return Object.assign(new Error(error.message.replace(PLACE_SUFFIX, "")), {
+    loc: {
+      file: resolve(root, file),
+      line: loc.line,
+      column: typeof loc.column === "number" ? loc.column : 0,
+    },
+  });
+}
+
+/** Why `named` (from the toolchain root) can't be a canvas's section, in the stage's words; null when it can. */
+function sectionProblem(named: string): string | null {
   const abs = resolve(root, named);
-  const inside = relative(root, abs);
-  return inside.startsWith("..") || !existsSync(abs) ? null : inside;
+  if (!STORY_FILE.test(named) || relative(root, abs).startsWith("..")) {
+    return `${named} is no states file in ${root}: a states file is a .stories.ts (or .js, .tsx, .jsx) file inside the toolchain root.`;
+  }
+  return existsSync(abs)
+    ? null
+    : `${named} does not exist in ${root}. The canvas draws it once its session writes it and shows the canvas again.`;
 }
 
 /** The folders whose story files the stage watches itself, and each story file's pending change. */
@@ -2076,11 +2115,18 @@ function cawcoStage() {
       const file = decodeURIComponent(
         id.slice(VIRTUAL.length + 1, -".js".length)
       );
+      const problem = sectionProblem(file);
+      if (problem) {
+        // Vite sends the page these words (`vite:error`), which its section says.
+        throw new Error(problem);
+      }
       if (toolchain === "nuxt") {
         watchStory(resolve(root, file));
       }
       sections.set(file, id);
-      return sectionModule(file);
+      return sectionModule(file).catch((error: unknown) => {
+        throw placedAt(error, file);
+      });
     },
     /**
      * An edit to a file a loaded section is drawn from ({@link drawnFrom}:
