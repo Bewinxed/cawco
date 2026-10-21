@@ -9,6 +9,8 @@
  *   the credential store, and no workspace is cut.
  * - An input that doesn't exist is refused as "there's no file at <path>",
  *   and no workspace is cut.
+ * - A missing path in `~/.ssh`, and a dangling link to one, get the store's
+ *   refusal: neither says the file is missing, nor names the link's target.
  * - A parent delegates a leaf with an input file. The leaf's brief names the
  *   input, and its Bash reads it from `$TMPDIR/inputs/`.
  * - A handoff from the parent adds an input while the leaf works: it lands in
@@ -21,7 +23,7 @@
  *
  *   bun scripts/probe-kit/run.ts delegate-inputs
  */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -197,6 +199,45 @@ const refusesMissing = async (
   );
 };
 
+/**
+ * A missing path in a credential store, and a dangling link to one, get the
+ * store's refusal: neither says whether the file exists, nor where the link
+ * leads. Runs after {@link refusesKeys}, which makes `~/.ssh`.
+ */
+const refusesHiddenMissing = async (
+  { check }: Kit,
+  fleet: Fleet,
+  home: string,
+  delegate: (inputs: string[]) => Promise<Started>
+): Promise<void> => {
+  const store = join(home, ".ssh");
+  const missing = join(store, "not-written-yet");
+  const refusal = (inputs: string[]) =>
+    delegate(inputs).then(
+      () => "started",
+      (error: unknown) => String(error)
+    );
+  const hidden = await refusal([missing]);
+  check(
+    "a missing path in a credential store gets the store's refusal, not \"there's no file\"",
+    hidden.includes(": 400 ") &&
+      hidden.includes(`in ${store}`) &&
+      !hidden.includes("there's no file"),
+    hidden.slice(0, 400)
+  );
+  const target = join(store, "gone-key");
+  const link = join(fleet.sandbox, "dangling-to-store");
+  await symlink(target, link);
+  const linked = await refusal([link]);
+  check(
+    "a dangling link into a credential store gets the store's refusal, and doesn't name its target",
+    linked.includes(": 400 ") &&
+      linked.includes(`in ${store}`) &&
+      !linked.includes(target),
+    linked.slice(0, 400)
+  );
+};
+
 /** The parent's own credential, as its tools call the hub with it. */
 const credentialOf = async (fleet: Fleet, parent: string): Promise<string> =>
   (await Bun.file(`/proc/${await fleet.sessionPid(parent)}/environ`).text())
@@ -307,6 +348,7 @@ const spec: Spec = {
       });
     await refusesKeys(kit, fleet, home, delegate);
     await refusesMissing(kit, fleet, delegate);
+    await refusesHiddenMissing(kit, fleet, home, delegate);
 
     const outside = join(fleet.sandbox, "parent-files");
     await mkdir(outside, { recursive: true });

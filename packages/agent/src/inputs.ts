@@ -19,7 +19,7 @@ import {
   rm,
   stat,
 } from "node:fs/promises";
-import { basename, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
   INPUTS_DIR,
   INPUTS_LIMIT_BYTES,
@@ -30,7 +30,7 @@ import {
 } from "@cawco/core";
 import { workspaceScratchDir } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
-import { inputDenial } from "@cawco/core/workspace-policy";
+import { inputDenial, resolveAsFar } from "@cawco/core/workspace-policy";
 import { isWorkspaceRef } from "./workflow-command";
 
 /** Inputs one delegation may name (the outputs' limit, work-items.ts `OUTPUTS_LIMIT`). */
@@ -53,13 +53,36 @@ interface Admitted {
 }
 
 /**
+ * The policy refusal for `named` resolving to `real`, or nothing when the
+ * caller may name it: outside what every boundary hides (workspace-policy.ts
+ * `inputDenial`) and, for a parent bound to a workspace, inside its `roots`.
+ */
+const gate = (
+  named: string,
+  real: string,
+  roots: string[] | undefined
+): string | undefined =>
+  inputDenial(named, real) ??
+  (roots && !roots.some((root) => within(real, root))
+    ? `${named} is outside your clone and your $TMPDIR; you run inside a workspace's boundary, so you hand on only files of your own`
+    : undefined);
+
+/**
  * Why `realpath(named)` failed, from its error code: no file there, a link
  * to nothing, a folder on the way that can't be entered, or a link loop.
+ * Said only of a path the caller may name ({@link gate}); any other gets the
+ * refusal it would get if it existed, so a refusal tells no one whether a
+ * path they may not read exists, nor where a link outside their reach leads.
  */
 const unresolved = async (
   named: string,
-  error: NodeJS.ErrnoException
+  error: NodeJS.ErrnoException,
+  roots: string[] | undefined
 ): Promise<string> => {
+  const denied = gate(named, resolveAsFar(named), roots);
+  if (denied) {
+    return denied;
+  }
   if (error.code === "ENOENT") {
     const link = await lstat(named).then(
       (info) => info.isSymbolicLink(),
@@ -67,7 +90,15 @@ const unresolved = async (
     );
     if (link) {
       const target = await readlink(named);
-      return `${named} is a link to ${target}, which doesn't exist; name the file itself, or point the link at a file that exists`;
+      const deniedTarget = gate(
+        named,
+        resolveAsFar(resolve(resolveAsFar(dirname(named)), target)),
+        roots
+      );
+      return (
+        deniedTarget ??
+        `${named} is a link to ${target}, which doesn't exist; name the file itself, or point the link at a file that exists`
+      );
     }
     return `there's no file at ${named}; check the path, or write the file before naming it`;
   }
@@ -99,14 +130,11 @@ const admit = async (
     (error: NodeJS.ErrnoException) => error
   );
   if (typeof real !== "string") {
-    return unresolved(named, real);
+    return unresolved(named, real, roots);
   }
-  const denied = inputDenial(named, real);
+  const denied = gate(named, real, roots);
   if (denied) {
     return denied;
-  }
-  if (roots && !roots.some((root) => within(real, root))) {
-    return `${named} is outside your clone and your $TMPDIR; you run inside a workspace's boundary, so you hand on only files of your own`;
   }
   const info = await stat(real);
   if (!info.isFile()) {

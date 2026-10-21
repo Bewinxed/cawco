@@ -859,6 +859,21 @@ const LINUX_HOST_PRIVATE = [
 ];
 
 /**
+ * {@link resolveDenied} for a path that may not resolve at all (a link loop,
+ * a `..` past a folder that doesn't exist): what it can't resolve, its parent
+ * resolved and its last name kept as written. Only ever judged against what
+ * a boundary hides, so a path kept as written can only deny more.
+ */
+export const resolveAsFar = (path: string): string => {
+  try {
+    return resolveDenied(path);
+  } catch {
+    const parent = dirname(path);
+    return parent === path ? path : join(resolveAsFar(parent), basename(path));
+  }
+};
+
+/**
  * Why a file may not leave its machine as a delegate's input (a `delegate`
  * or `handoff`'s `inputs`, copied into the delegate's `$TMPDIR/inputs/`),
  * or nothing when it may: what every boundary hides from every workspace,
@@ -872,7 +887,7 @@ export const inputDenial = (
   named: string,
   real: string
 ): string | undefined => {
-  const paths = [resolveDenied(named), real];
+  const paths = [resolveAsFar(named), real];
   const inside = (roots: readonly string[]): string | undefined =>
     roots
       .map(resolveDenied)
