@@ -608,6 +608,39 @@ async function runView(view) {
   await settle(400);
   ok(V, "Hide hides the panel and Show brings it back", hid.panel === "false" && hid.show && (await ev(() => document.getElementById("panel").dataset.open)) === "true", JSON.stringify(hid));
 
+  // Every chip tier the graph can show, its ink against its fill: kept, current (another machine's), hovered
+  // (previewed), at rest; and the state a full-page capture draws (the viewport grown to the page's height, the
+  // graph rebuilt), read at once and settled.
+  const chipRead = (label) => ev((label) => [...document.querySelectorAll(".var")].filter((c) => __k.vis(c)).map((c) => { const cs = getComputedStyle(c), fg = __k.rgba(cs.color), bg = __k.bgOf(c); let op = 1; for (let e = c; e; e = e.parentElement) op *= +getComputedStyle(e).opacity; return { label, text: c.textContent, tier: c.classList.contains("kept") ? "kept" : c.classList.contains("cur") ? "current" : c.classList.contains("peek") || c.matches(":hover") ? "hovered" : "rest", ink: cs.color, fill: cs.backgroundColor, r: Math.round(__k.ratio(__k.over([fg[0], fg[1], fg[2], fg[3] * op], bg), bg) * 100) / 100 }; }), label);
+  const chipOk = (name, rows, tiers) => { const bad = rows.filter((c) => c.r < 4.5); const seen = [...new Set(rows.map((c) => c.tier))]; ok(V, "7 chips read 4.5:1 or better: " + name, bad.length === 0 && tiers.every((t) => seen.includes(t)), (bad.length ? "UNDER 4.5 " + bad.map((c) => c.text + " (" + c.tier + ") " + c.r + " ink " + c.ink + " on " + c.fill).join("; ") + "; " : "") + rows.filter((c) => c.tier !== "rest").map((c) => c.text + " (" + c.tier + ") " + c.r).join(", ") + "; lowest " + Math.min(...rows.map((c) => c.r))); };
+  await ev(() => __k.settled());
+  chipOk("kept and at rest, settled", await chipRead("rest"), ["kept", "rest"]);
+  // A current chip: When it runs kept on Custom › Readable, then Save failed › The hub didn't answer kept again.
+  await click('.var[data-machine="when"][data-vary="0"]'); await settle(350);
+  await click('.var[data-machine="save"][data-state="failed"][data-vary="0"]'); await settle(350);
+  await ev(() => __k.settled());
+  chipOk("with another machine's current chip", await chipRead("current"), ["kept", "current"]);
+  if (!touch) {
+    await page.locator('.var[data-machine="save"][data-state="filled"][data-vary="1"]').hover(); await settle(250);
+    await ev(() => __k.settled());
+    chipOk("a hovered (previewed) chip", await chipRead("hovered"), ["kept", "hovered"]);
+    await page.mouse.move(5, 5); await settle(250);
+  }
+  // The state a full-page capture draws: the viewport grown to the page's height (which rebuilds the graph),
+  // read at once, then settled.
+  // Every frame for 400ms after the resize, the kept and current chips' ink against their fill; a capture can
+  // land on any of them.
+  const fullH = await ev(() => Math.max(document.documentElement.scrollHeight, innerHeight));
+  if (fullH <= view.viewport.height) note(V, "7 chips through a full-page capture", "the page fits the viewport (" + fullH + "px), so a full-page capture resizes and redraws nothing");
+  else await ev(() => { window.__frames = []; const t0 = performance.now(); addEventListener("resize", () => { const tick = () => { for (const c of document.querySelectorAll(".var.kept, .var.cur")) { const cs = getComputedStyle(c), fg = __k.rgba(cs.color), bg = __k.bgOf(c); window.__frames.push({ t: Math.round(performance.now() - t0), text: c.textContent, tier: c.classList.contains("kept") ? "kept" : "current", r: Math.round(__k.ratio(__k.over(fg, bg), bg) * 100) / 100, ink: cs.color, fill: cs.backgroundColor }); } if (performance.now() - t0 < 400) requestAnimationFrame(tick); }; tick(); }, { once: true }); });
+  await page.setViewportSize({ width: view.viewport.width, height: fullH });
+  await settle(500);
+  const frames = await ev(() => window.__frames || []);
+  const low = frames.filter((f) => f.r < 4.5);
+  if (fullH > view.viewport.height) ok(V, "7 chips read 4.5:1 or better on every frame of the redraw a full-page capture causes (" + view.viewport.width + "×" + fullH + ")", frames.length > 0 && low.length === 0, (low.length ? "UNDER 4.5 " + low.slice(0, 3).map((f) => f.text + " (" + f.tier + ") at " + f.t + "ms " + f.r + " ink " + f.ink + " on " + f.fill).join("; ") + "; " : "") + frames.length + " readings, lowest " + Math.min(...frames.map((f) => f.r)));
+  chipOk("as a full-page capture draws them, settled", await chipRead("capture settled"), ["kept"]);
+  await page.setViewportSize(view.viewport); await settle(300);
+
   // Whole-page captures, once every animation has finished; the kept chip's ink at rest.
   await page.mouse.move(5, 5); await settle(300);
   await ev(() => __k.settled());

@@ -1864,6 +1864,9 @@ html[data-stack] .dock { position: relative; inset: auto; max-block-size: none; 
 @media (hover: hover) { .var:not(.kept, .cur):hover, .var.peek:not(.kept, .cur) { background: var(--surface-hover); } }
 .var.cur { background: var(--surface-pressed); border-color: var(--border-contrast); color: var(--ink-strong); }
 .var.kept { background: var(--chip-chosen-bg); border-color: var(--chip-chosen-bg); color: var(--chip-chosen-ink); }
+/* A graph drawn anew (a tab, a resize, a relayout) takes its tiers at once: only a change of state on a graph
+   already drawn fades between them. */
+.world[data-instant] :is(.node, .var) { transition: none; }
 .var:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 
 /* The zoom group: 24px items in a 30px group, 2px in, so 5px + 3px = the group's 8px (The Concentric Rule). */
@@ -5873,6 +5876,9 @@ function drawGraph() {
   graph.innerHTML = "";
   const zoomer = document.createElement("div"); zoomer.className = "zoomer";
   const world = document.createElement("div"); world.className = "world";
+  // Drawn anew, its states take their tiers (mark) without a transition; two frames on, changes fade again.
+  world.dataset.instant = "";
+  requestAnimationFrame(() => requestAnimationFrame(() => delete world.dataset.instant));
   zoomer.append(world); graph.append(zoomer);
   const margin = 10, room = graph.clientWidth - 2 * margin;
   // Two states side by side, the gap between them and their region's edges fit the graph's width, so the
