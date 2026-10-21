@@ -3578,21 +3578,17 @@ const commandsEnded = async (id: string, gen: string): Promise<number[]> => {
 };
 
 /**
- * Whether the work `work` found in workspace `id`'s kept boundary is worth a
- * look's wait at the gate ({@link commandsEnded}): commands alone, none of
- * them running at the look before, which kept it ({@link keptRunning}). One
- * seen then has run a look or more (a build, a test run), and is waited for
- * with the gate down; a listener is no command, and ends when its work stops
- * it.
+ * Whether the work `work` found in a boundary a look waits to replace is
+ * worth the look's wait at the gate ({@link commandsEnded}): commands alone,
+ * none of them among `before`, those running at the look before ({@link
+ * keptRunning}, {@link stubbed}). One seen then has run a look or more (a
+ * build, a test run), and is waited for with the gate down; a listener is no
+ * command, and ends when its work stops it.
  */
-const drainable = (id: string, work: Work): boolean => {
-  const before = keptRunning.get(id)?.commands ?? [];
-  return (
-    work.ports.length === 0 &&
-    work.commands.length > 0 &&
-    !work.commands.some((pid) => before.includes(pid))
-  );
-};
+const drainable = (work: Work, before: readonly number[]): boolean =>
+  work.ports.length === 0 &&
+  work.commands.length > 0 &&
+  !work.commands.some((pid) => before.includes(pid));
 
 /**
  * Linux: the ports the work of the older boundary `old` listens on, when a
@@ -4823,13 +4819,20 @@ const lookAtStale = async (): Promise<void> => {
  * where a dir stands in (`stand-ins.ts`): left by a sandbox started before
  * the stand-ins, or covered again by one started beside it. Unlinking it on
  * the host would drop the deny inside that sandbox, so the boundary is
- * replaced once nothing runs in it, and its new host makes the dir.
+ * replaced once nothing runs in it, and its new host makes the dir. Each
+ * with the commands running at the last look that left it as it is
+ * ({@link drainable}).
  */
-const stubbed = new Map<string, WorkspaceRef>();
+const stubbed = new Map<
+  string,
+  { readonly ref: WorkspaceRef; commands: readonly number[] }
+>();
 
 /** Replaces workspace `ref`'s boundary once nothing runs in it ({@link stubbed}). */
 const restartWhenIdle = (ref: WorkspaceRef): void => {
-  stubbed.set(ref.id, ref);
+  if (!stubbed.has(ref.id)) {
+    stubbed.set(ref.id, { ref, commands: [] });
+  }
   lookSoon();
 };
 
@@ -4855,19 +4858,27 @@ const sandboxesGone = async (inners: readonly number[]): Promise<boolean> => {
 
 /**
  * Replaces each {@link stubbed} workspace's boundary when nothing runs in it:
- * no older boundary beside it, no executor on its way in, nothing in its
- * sandbox but what was there when its runner was ready. The gate goes up
- * first, as for a handover, so a command arriving meanwhile waits and runs
- * through the new one. A workspace with no boundary running, or no such
- * mount point left, is forgotten: its next start makes the stand-in. Not
- * while this build's keeper is owed the machine's endpoint ({@link
- * ownKeeperOwed}): the new one starts on the keeper that stays.
+ * no older boundary beside it, no command past its gate, nothing in its
+ * sandbox but what was there when its runner was ready. As a look at a kept
+ * boundary does ({@link handOverStale}): one idle, or running commands alone,
+ * each new since the look before, has the gate put up first; those past it
+ * are let end ({@link commandsEnded}), the next ones wait at it, and it is
+ * read and replaced under the same gate ({@link restartIfIdle}), each
+ * waiting command then running through the new one. A session's commands a
+ * second apart would leave a look with the gate down little moment between
+ * them. A command seen at the look before runs long and is waited for with
+ * the gate down; so are a listener and a process a command left. A workspace
+ * with no boundary running, or no such mount point left, is forgotten: its
+ * next start makes the stand-in. Not while this build's keeper is owed the
+ * machine's endpoint ({@link ownKeeperOwed}): the new one starts on the
+ * keeper that stays.
  */
 const restartStubbed = async (): Promise<void> => {
   if (await ownKeeperOwed()) {
     return;
   }
-  for (const ref of [...stubbed.values()]) {
+  for (const entry of [...stubbed.values()]) {
+    const { ref } = entry;
     try {
       // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time
       const held = await readHeld(ref.id);
@@ -4886,9 +4897,37 @@ const restartStubbed = async (): Promise<void> => {
         // An older boundary closes first, once idle ({@link closeIdle}).
         continue;
       }
-      const restart = restartIfIdle(ref, held);
-      starting.set(ref.id, restart);
-      await restart.finally(() => starting.delete(ref.id));
+      const work = await workLeft(ref.id, held);
+      if (work && !drainable(work, entry.commands)) {
+        entry.commands = work.commands;
+        continue;
+      }
+      // The wait is outside `starting`: an ensure under way meanwhile, a
+      // tool call's from a command past the gate, never waits on it.
+      await behindGate(ref.id, async () => {
+        const past = await commandsEnded(ref.id, held.gen);
+        if (past.length > 0) {
+          entry.commands = past;
+          return;
+        }
+        // Read again: what waited may have replaced it meanwhile.
+        const now = await readHeld(ref.id);
+        if (starting.has(ref.id) || now?.gen !== held.gen) {
+          return;
+        }
+        const restart = restartIfIdle(ref, now);
+        // An ensure meanwhile gets the boundary that runs once it settles.
+        const runs = restart.then((settled) =>
+          "fresh" in settled ? settled.fresh : now
+        );
+        // Its failure is said below; an ensure awaiting it gets it too.
+        runs.catch(() => undefined);
+        starting.set(ref.id, runs);
+        const tried = await restart.finally(() => starting.delete(ref.id));
+        if ("kept" in tried) {
+          entry.commands = tried.kept.commands;
+        }
+      });
     } catch (error) {
       console.warn(
         `[workspace] ${ref.id}: its boundary could not be started again around its harness config yet: ${error instanceof Error ? error.message : String(error)}`
@@ -4898,21 +4937,20 @@ const restartStubbed = async (): Promise<void> => {
 };
 
 /**
- * {@link restartStubbed}'s one workspace: its boundary as it is while
- * anything runs in it, else a new one on the current keeper, the one before
- * stopped on whichever keeper runs it.
+ * {@link restartStubbed}'s one workspace, behind the gate: its work read once
+ * ({@link workLeft}: the commands past the gate, never one waiting at it, and
+ * what its sandbox runs), and with none left a new boundary on the current
+ * keeper, the one before stopped on whichever keeper runs it. Answers the new
+ * boundary, or the work that keeps this one.
  */
-const restartIfIdle = async (
+const restartIfIdle = (
   ref: WorkspaceRef,
   held: Held
-): Promise<Boundary> =>
+): Promise<{ readonly fresh: Boundary } | { readonly kept: Work }> =>
   behindGate(ref.id, async () => {
-    const seen = await snapshot();
-    if (
-      executors(seen, ref.id).length > 0 ||
-      (await busyOld(seen, ref.id, held))
-    ) {
-      return held;
+    const work = await workLeft(ref.id, held);
+    if (work) {
+      return { kept: work };
     }
     const place = await readPlace(ref.id, held.gen);
     await stopBoundary(ref.id, held);
@@ -4927,7 +4965,7 @@ const restartIfIdle = async (
     console.info(
       `[workspace] ${ref.id}: its boundary ${held.pid} held an srt mount point where a dir stands in, had nothing running and is replaced by ${fresh.pid}`
     );
-    return fresh;
+    return { fresh };
   });
 
 /**
@@ -4959,7 +4997,7 @@ const handOverStale = async (): Promise<void> => {
         continue;
       }
       const work = await workLeft(ref.id, held);
-      if (work && !drainable(ref.id, work)) {
+      if (work && !drainable(work, kept.commands)) {
         keptRunning.set(ref.id, { ...kept, commands: work.commands });
         continue;
       }
