@@ -65,6 +65,13 @@ const bridge = () => {
   window.cawco = { choose, on: (ev, f) => { subs.push(f); f(copy()); return () => {}; }, note: (id, t) => { (picks[id] ||= { options: [] }).note = t; return Promise.resolve(); }, set: () => Promise.resolve(), send: () => Promise.resolve(), _picks: picks };
 };
 
+// A whole page goes out as JPEG slices 4,000 CSS px tall at one pixel per CSS px, each well under the hub's 1 MiB per output.
+const capPage = async (p, base) => {
+  const h = await p.evaluate(() => document.documentElement.scrollHeight), w = await p.evaluate(() => document.documentElement.scrollWidth);
+  for (let i = 0, y = 0; y < h; i++, y += 4000) {
+    await p.screenshot({ path: join(here, "captures", `${base}-${i + 1}.jpg`), type: "jpeg", quality: 80, scale: "css", fullPage: true, clip: { x: 0, y, width: w, height: Math.min(4000, h - y) } });
+  }
+};
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 const errors = [];
 const open = async (scheme, reduced, vp = {}) => {
@@ -292,7 +299,7 @@ for (const scheme of ["light", "dark"]) {
   console.log(`sweep ${scheme}: ${res.length} drawings, each at 6 loop moments, its still and its key frames, overlays every 100ms; page ${page.sw}px wide in ${page.w}px; findings ${n}`);
   for (const [id, f] of res) if (f.length) for (const [k, v] of f) console.log(`  ${id}: ${k} — ${v}`);
   // Captures: the page whole, each card, and each drawing at its still.
-  await p.screenshot({ path: join(here, "captures", `page-${scheme}.png`), fullPage: true });
+  await capPage(p, `page-${scheme}`);
   for (const sel of await p.evaluate(() => [...document.querySelectorAll(".dp-card")].map((c, i) => c.id || "settled"))) {
     await p.locator(sel === "settled" ? ".gd-ctx" : "#" + sel).screenshot({ path: join(here, "captures", `card-${sel}-${scheme}.png`) });
   }
@@ -373,10 +380,12 @@ for (const [name, vp] of VIEWS) {
   viewTotal += n;
   console.log(`view ${name}: page ${pageW.sw}px wide in ${pageW.w}px, ${pageW.scrollers} drawings scroll sideways in their pane, sweep ${res.reduce((s, [, f]) => s + f.length, 0)}, chrome ${ch}; findings ${n}`);
   for (const [id, f] of res) for (const [k, v] of f) console.log(`  ${id}: ${k} — ${v}`);
-  await p.screenshot({ path: join(here, "captures", `page-${name.split(" ")[0].replace("%", "pct").replace("×", "x")}-light.png`), fullPage: true });
+  await capPage(p, `page-${name.split(" ")[0].replace("%", "pct").replace("×", "x")}-light`);
   await p.close();
 }
 console.log(`views total: ${viewTotal}`);
 console.log(total + chromeTotal + viewTotal ? "CHECK FAILED" : "CHECK PASSED");
 console.log(errors.length ? "script errors:\n" + errors.join("\n") : "script errors: none");
+const big = readdirSync(join(here, "captures")).map((f) => [f, readFileSync(join(here, "captures", f)).length]).sort((a, b) => b[1] - a[1]);
+console.log(`captures: ${big.length} files, largest ${big[0][0]} ${(big[0][1] / 1048576).toFixed(2)} MiB, ${big.filter(([, n]) => n > 1048576).length} over 1 MiB`);
 await browser.close();
