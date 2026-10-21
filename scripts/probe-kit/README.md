@@ -2,8 +2,9 @@
 
 Every UI and fleet proof runs here, read from the engine, not the picture
 (the fleet's rule 7): state and geometry first (`geom.ts`), motion by seeking
-the clock (`anim.ts`), regressions by pixel diff against an approved baseline
-(`diff.ts`), ink (`ink.ts`) only for what drawing alone decides.
+the clock (`anim.ts`), a changed look caught by pixel diff against an
+approved baseline and handed to review, never failing a run (`diff.ts`), ink
+(`ink.ts`) only for what drawing alone decides.
 
 ```sh
 bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>]   # specs/web/
@@ -79,8 +80,10 @@ scratch copy, to prove an approve on.
 
 ## Showing the owner what changed
 
-`--review <dir>` (say `.probe-review/<spec>`) writes the owner's review page
-when a capture differs from its baseline: one phone page, one decision per
+A capture that differs from its baseline is a NOTE, never a FAIL: UI is
+judged by its look and its correctness against DESIGN.md, not by sameness with
+older screens. `--review <dir>` (say `.probe-review/<spec>`) writes the
+owner's review page when a capture differs from its baseline: one phone page, one decision per
 surface, "Approved look" or "New look" on the same cropped pictures
 (`review.ts`, `scripts/probe-review/README.md`). The run prints the
 `--approve` command each "New look" pick runs; the manifest carries it too.
