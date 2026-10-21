@@ -499,15 +499,15 @@ public enum Space {
 public enum Radius {
     /// Hair: chart swatches, a tooltip's arrow.
     public static let radiusHair: Double = 2
-    /// Marks, tiles, badges, kbd.
+    /// Marks, tiles, badges, kbd; a menu's items, concentric in its 12px surface (less its 1px edge and 6px pad).
     public static let radiusXs: Double = 5
-    /// Controls inside a surface, nav rows, menu items.
+    /// Controls inside a surface, nav rows.
     public static let radiusSm: Double = 8
     /// Buttons, inputs, the segmented groove.
     public static let radiusMd: Double = 10
     /// Cards, menus, popovers.
     public static let radiusLg: Double = 12
-    /// The stat tile's recessed well.
+    /// The stat tile's recessed well; the segmented control's thumb and segments, concentric in its 10px groove (less its 3px pad).
     public static let radiusWell: Double = 7
     /// A panel's shell: the paywall's hero, a decision page's panels.
     public static let radiusPanel: Double = 16
@@ -520,6 +520,10 @@ public enum Radius {
     public static let rowMarkR: Double = 4.6
     /// The tab icon's tile, at the 16px a tab draws it; its bitmap scales the corner with its side.
     public static let tabIconR: Double = 4
+    /// A control standing in a composer shell (Attach, Send/Stop, a view bar's controls): concentric with the shell (The Concentric Rule), its 12px less its inset and its 1px edge.
+    public static let composerControlR: Double = 4
+    /// A transcript's well inside a row (a subagent's, an inline transcript's): concentric round its rows (The Concentric Rule), their radius-xs plus its space-1 padding.
+    public static let innerWellR: Double = 9
 }
 
 public enum Size {
@@ -806,7 +810,7 @@ public enum Size {
     public static let rowCompactPadEnd: Double = 8
     /// A two-line session row's height, in the home's lists: its two lines at the lead column's 18px and a 4px pad above and below (SessionRow). The "N older" row among them stands at it (OlderRows, the sidebar sub-button's `compact-tall` row).
     public static let rowTallH: Double = 44
-    /// A segmented control's groove round its lifted thumb (DESIGN.md, Segmented: "a recess-deep groove with a 10px radius and 3px padding"): the groove's 10px less the thumb's 8px, plus a pixel of air, so the corners stay concentric.
+    /// A segmented control's groove round its lifted thumb (DESIGN.md, Segmented: "a recess-deep groove with a 10px radius and 3px padding"): the thumb and the segments inside it take the groove's 10px less this pad, radius-well's 7px, so the corners stay concentric (The Concentric Rule).
     public static let cSegmentedPad: Double = 3
     /// A segment's glyph to its label, and its label to its count (Tabs, single toggle groups).
     public static let cSegmentGap: Double = 6

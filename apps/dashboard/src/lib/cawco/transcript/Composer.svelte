@@ -3349,7 +3349,7 @@
          (the wheel comes up under it); the field being typed in keeps its
          touches. -->
       <!-- One shape, always. --radius-lg outside, --space-2 of inset, and the
-           controls inside carry (panel − inset) so the curves are concentric
+           controls inside carry (panel − inset − edge) so the curves are concentric
            rather than two unrelated roundings stacked. The shell is the text
            field (app.css field-shell): keyboard focus in the textarea draws
            the ring over the shell's own border, an outline that moves

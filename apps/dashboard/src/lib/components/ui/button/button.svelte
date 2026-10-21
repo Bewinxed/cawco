@@ -56,7 +56,7 @@
         sm: "h-c-btn-h-sm in-form-compact:min-w-c-btn-h-sm gap-(--btn-gap) in-form-compact:px-[calc((var(--c-btn-h-sm)-var(--btn-icon))/2-1px)] px-space-3 text-label [--btn-gap:var(--space-2)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         /* A control standing in a composer shell (DESIGN.md, Composer:
-           "34px Attach … and Send/Stop … each at the concentric 5px
+           "34px Attach … and Send/Stop … each at the concentric 4px
            radius"): the default's recipe at the composer field's height. */
         composer:
           "h-c-composer-field gap-(--btn-gap) px-space-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
@@ -102,8 +102,11 @@
           "gap-(--btn-gap) rounded-sm px-space-4 font-medium text-label",
         "square-24": "h-6 w-6",
       },
-      /** A control inset in a field takes the field's tighter corner. */
-      shape: { inset: "rounded-xs" },
+      /** A control inset in a composer shell takes its concentric corner:
+          the shell's radius less its inset and its edge. */
+      shape: {
+        inset: "rounded-composer-control",
+      },
       /** In a view's bar (ViewBar, `data-bar`): the composer field's height,
           at least as wide, as wide as its glyph and count make it, never
           shrinking, at the bar's control corner. */

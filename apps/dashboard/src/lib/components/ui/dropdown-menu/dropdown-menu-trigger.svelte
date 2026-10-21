@@ -11,7 +11,7 @@
    * `count`: a glyph and the count it holds on one line (a pane head's
    * More). `look`: the trigger by its role.
    * `attach`: the composer's Attach (DESIGN.md, Composer: "34px Attach
-   * (raised, control edge) … at the concentric 5px radius. They scale to
+   * (raised, control edge) … at the concentric 4px radius. They scale to
    * 0.97 on press"); while the composer's controls are inert under an ask
    * (`group/ctrls`), its edge is the outline button's and it lifts.
    */
@@ -24,7 +24,7 @@
       },
       look: {
         attach:
-          "hit-edge-hair grid size-c-composer-field place-items-center rounded-xs border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:text-ink-strong group-inert/ctrls:not-aria-invalid:border-border-button-outline group-inert/ctrls:shadow-xs motion-safe:pressed:scale-(--press-scale) motion-safe:transition-[background-color,color,scale]",
+          "hit-edge-hair grid size-c-composer-field place-items-center rounded-composer-control border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:text-ink-strong group-inert/ctrls:not-aria-invalid:border-border-button-outline group-inert/ctrls:shadow-xs motion-safe:pressed:scale-(--press-scale) motion-safe:transition-[background-color,color,scale]",
       },
     },
   });

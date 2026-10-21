@@ -683,15 +683,15 @@
     --space-row: 2px;
     /* Hair: chart swatches, a tooltip's arrow. */
     --radius-hair: 2px;
-    /* Marks, tiles, badges, kbd. */
+    /* Marks, tiles, badges, kbd; a menu's items, concentric in its 12px surface (less its 1px edge and 6px pad). */
     --radius-xs: 5px;
-    /* Controls inside a surface, nav rows, menu items. */
+    /* Controls inside a surface, nav rows. */
     --radius-sm: 8px;
     /* Buttons, inputs, the segmented groove. */
     --radius-md: 10px;
     /* Cards, menus, popovers. */
     --radius-lg: 12px;
-    /* The stat tile's recessed well. */
+    /* The stat tile's recessed well; the segmented control's thumb and segments, concentric in its 10px groove (less its 3px pad). */
     --radius-well: 7px;
     /* A panel's shell: the paywall's hero, a decision page's panels. */
     --radius-panel: 16px;
@@ -704,6 +704,12 @@
     --row-mark-r: 4.6px;
     /* The tab icon's tile, at the 16px a tab draws it; its bitmap scales the corner with its side. */
     --tab-icon-r: 4px;
+    /* A control standing in a composer shell (Attach, Send/Stop, a view bar's controls): concentric with the shell (The Concentric Rule), its 12px less its inset and its 1px edge. */
+    --composer-control-r: calc(
+      var(--radius-lg) - var(--c-composer-inset) - var(--border-width)
+    );
+    /* A transcript's well inside a row (a subagent's, an inline transcript's): concentric round its rows (The Concentric Rule), their radius-xs plus its space-1 padding. */
+    --inner-well-r: calc(var(--radius-xs) + var(--space-1));
     /* Caw's 512 box on the channel cards: he stands behind the chosen card and looks over its top edge. */
     --caw-peek: 160px;
     /* How far that box rises above the cards (56.84% of caw-peek): clear room kept above them. */
@@ -984,7 +990,7 @@
     --row-compact-pad-end: 8px;
     /* A two-line session row's height, in the home's lists: its two lines at the lead column's 18px and a 4px pad above and below (SessionRow). The "N older" row among them stands at it (OlderRows, the sidebar sub-button's `compact-tall` row). */
     --row-tall-h: calc(2 * var(--space-5) + 2 * var(--space-1));
-    /* A segmented control's groove round its lifted thumb (DESIGN.md, Segmented: "a recess-deep groove with a 10px radius and 3px padding"): the groove's 10px less the thumb's 8px, plus a pixel of air, so the corners stay concentric. */
+    /* A segmented control's groove round its lifted thumb (DESIGN.md, Segmented: "a recess-deep groove with a 10px radius and 3px padding"): the thumb and the segments inside it take the groove's 10px less this pad, radius-well's 7px, so the corners stay concentric (The Concentric Rule). */
     --c-segmented-pad: 3px;
     /* A segment's glyph to its label, and its label to its count (Tabs, single toggle groups). */
     --c-segment-gap: 6px;

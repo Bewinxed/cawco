@@ -3,8 +3,9 @@ import { tv } from "#lib/utils.js";
 /**
  * A row inside a floating surface (DESIGN.md, Navigation, menus and floating
  * surfaces): the kit's menu, select and command items, and the app's own
- * rows in a popover. The radius of an item inside a surface (DESIGN.md,
- * Shapes: "8px for items inside a surface"), the control transition, and a
+ * rows in a popover. Its radius is concentric with the floating surface
+ * that holds it (DESIGN.md, The Concentric Rule): the surface's 12px less
+ * its 1px edge and 6px pad, `radius-xs`. The control transition, and a
  * floor of `c-menu-item-h`: 32px under a fine pointer, 44px under a finger
  * (the token's coarse mode; The 44 Touch Rule: "Menu items and nav rows are
  * 44px tall on touch"). A mark line: its mark and words share one centre
@@ -24,5 +25,5 @@ import { tv } from "#lib/utils.js";
  * row's tick or dot in the row's own ink, stand over it.
  */
 export const menuItemVariants = tv({
-  base: "mark-line min-h-c-menu-item-h rounded-sm transition-control [&>:where(svg,.icon-swap):first-child]:text-ink-muted",
+  base: "mark-line min-h-c-menu-item-h rounded-xs transition-control [&>:where(svg,.icon-swap):first-child]:text-ink-muted",
 });

@@ -5,7 +5,7 @@
    * (`ComposerDraft.add`). A session's composer and New session's first
    * prompt both carry it. Its box is the composer's control size,
    * `--c-composer-field`, concentric with a shell inset by
-   * `--c-composer-inset`.
+   * `--c-composer-inset` inside its 1px edge.
    *
    * Where a session can draw (`ondraw`), Attach is a menu: Files and photos,
    * and Draw, which opens the composer's canvas (The pen's swipe: Draw is
@@ -77,7 +77,7 @@
   <button
     data-att-btn
     aria-label="Attach a file or image"
-    class="select-none touch-hit hit-edge-hair size-c-composer-field flex-none grid place-items-center rounded-xs border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out motion-safe:transition-[background-color,color,scale] hover:bg-surface-hover hover:text-ink-strong motion-safe:active:scale-(--press-scale) group-inert/ctrls:border-border-button-outline group-inert/ctrls:shadow-xs"
+    class="select-none touch-hit hit-edge-hair size-c-composer-field flex-none grid place-items-center rounded-composer-control border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out motion-safe:transition-[background-color,color,scale] hover:bg-surface-hover hover:text-ink-strong motion-safe:active:scale-(--press-scale) group-inert/ctrls:border-border-button-outline group-inert/ctrls:shadow-xs"
     onclick={() => input?.click()}
     type="button"
   >

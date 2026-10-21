@@ -1,5 +1,9 @@
 <script lang="ts">
-  /** The `@` / `/` menu (§2.3): caret-anchored, keyboard-driven, 300px wide. */
+  /**
+   * The `@` / `/` menu (§2.3): caret-anchored, keyboard-driven, 300px wide.
+   * Its rows and their fill are concentric with the snug surface (The
+   * Concentric Rule): its 12px less its 1px edge and 4px pad, `radius-well`.
+   */
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import NsPopover from "./NsPopover.svelte";
   import type { MenuItem } from "./ns-types";
@@ -37,7 +41,7 @@
 >
   <span
     aria-hidden="true"
-    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-c-btn-h translate-y-(--fill-y) rounded-sm bg-surface-fill opacity-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--dur-control) motion-safe:ease-in-out"
+    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-c-btn-h translate-y-(--fill-y) rounded-well bg-surface-fill opacity-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--dur-control) motion-safe:ease-in-out"
     data-shown={items.length > 0 || undefined}
     style:--fill-y={`calc(${index} * (var(--c-btn-h) + var(--space-row)))`}
   ></span>
@@ -45,7 +49,7 @@
     {@const Icon = item.icon}
     <button
       data-slot="row"
-      class="select-none press-tint transition-control relative flex h-c-btn-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start text-ink-strong"
+      class="select-none press-tint transition-control relative flex h-c-btn-h w-full items-center gap-space-3 rounded-well border-none border-current bg-transparent px-space-2 text-start text-ink-strong"
       data-fh="1"
       onmousedown={(event) => {
         event.preventDefault();

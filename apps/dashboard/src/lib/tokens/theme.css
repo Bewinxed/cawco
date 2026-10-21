@@ -628,6 +628,8 @@
   --radius-well-r: var(--well-r);
   --radius-row-mark: var(--row-mark-r);
   --radius-tab-icon: var(--tab-icon-r);
+  --radius-composer-control: var(--composer-control-r);
+  --radius-inner-well: var(--inner-well-r);
 
   --duration-stagger: var(--dur-stagger);
   --duration-cascade: var(--dur-cascade);

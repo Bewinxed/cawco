@@ -133,7 +133,8 @@
   {#snippet children(limit)}
     {@const drawn = shown.slice(0, limit)}
     {@const runs = wellRuns(drawn)}
-    <!-- The transcript, in a well of its own — concentric with what it holds.
+    <!-- The transcript, in a well of its own — concentric with what it holds:
+         its radius is its rows' --radius-xs plus its --space-1 padding.
          Its own x=0 is the host's text column: the well reaches out past it by
          its padding, and every row inside repeats the columns from there. Its
          rows draw their own rails and start their own line: the well publishes
@@ -142,7 +143,7 @@
          row above it. -->
     <div
       data-slot="inner"
-      class="mt-space-2 mb-0 ms-(--well-start) me-0 p-space-1 rounded-sm bg-surface-recess"
+      class="mt-space-2 mb-0 ms-(--well-start) me-0 p-space-1 rounded-inner-well bg-surface-recess"
       style:--well-start="var(--well-at, 0)"
       style:--rail-head="var(--rail)"
       style:--rail-gap="var(--space-4)"

@@ -33,9 +33,12 @@
     class="type-label line-clamp-2 min-w-0 flex-auto wrap-anywhere text-ink-strong"
     >{node.name}</span
   >
+  <!-- Its ring is an inset ring, not a border: a ring's spread keeps
+       --c-graph-edge's 1.5px on every screen, where a border's is snapped to
+       whole device pixels. -->
   <span
     aria-hidden="true"
-    class="size-icon-sm flex-none rounded-pill border-(length:--c-graph-edge) border-ink-muted group-data-picked:border-status-done-glyph group-data-picked:bg-status-done-glyph"
+    class="size-icon-sm flex-none rounded-pill inset-ring-(length:--c-graph-edge) inset-ring-ink-muted group-data-picked:inset-ring-status-done-glyph group-data-picked:bg-status-done-glyph"
   ></span>
   <span class="sr-only">{node.picked ? "Picked" : "Not picked"}</span>
   <Handle

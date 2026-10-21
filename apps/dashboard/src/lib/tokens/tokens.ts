@@ -283,6 +283,8 @@ export type TokenSize =
   | "radius.well-r"
   | "radius.row-mark-r"
   | "radius.tab-icon-r"
+  | "radius.composer-control-r"
+  | "radius.inner-well-r"
   | "size.caw-peek"
   | "size.caw-peek-rise"
   | "size.channel-card-max"
