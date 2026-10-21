@@ -7,6 +7,8 @@
  *
  * - An input under the fleet's `~/.ssh` is refused at delegate time, naming
  *   the credential store, and no workspace is cut.
+ * - An input that doesn't exist is refused as "there's no file at <path>",
+ *   and no workspace is cut.
  * - A parent delegates a leaf with an input file. The leaf's brief names the
  *   input, and its Bash reads it from `$TMPDIR/inputs/`.
  * - A handoff from the parent adds an input while the leaf works: it lands in
@@ -170,6 +172,31 @@ const refusesKeys = async (
   );
 };
 
+/** An input that hasn't been written yet is refused as missing, not as on another machine. */
+const refusesMissing = async (
+  { check }: Kit,
+  fleet: Fleet,
+  delegate: (inputs: string[]) => Promise<Started>
+): Promise<void> => {
+  const missing = join(fleet.sandbox, "not-written-yet.png");
+  const before = workspaceCount(fleet);
+  const refused = await delegate([missing]).then(
+    () => "started",
+    (error: unknown) => String(error)
+  );
+  check(
+    "an input that doesn't exist is refused as no file at its path",
+    refused.includes(": 400 ") &&
+      refused.includes(`there's no file at ${missing}`),
+    refused.slice(0, 400)
+  );
+  check(
+    "the refused delegate cut no workspace",
+    workspaceCount(fleet) === before,
+    `${before} before, ${workspaceCount(fleet)} after`
+  );
+};
+
 /** The parent's own credential, as its tools call the hub with it. */
 const credentialOf = async (fleet: Fleet, parent: string): Promise<string> =>
   (await Bun.file(`/proc/${await fleet.sessionPid(parent)}/environ`).text())
@@ -279,6 +306,7 @@ const spec: Spec = {
         inputs,
       });
     await refusesKeys(kit, fleet, home, delegate);
+    await refusesMissing(kit, fleet, delegate);
 
     const outside = join(fleet.sandbox, "parent-files");
     await mkdir(outside, { recursive: true });

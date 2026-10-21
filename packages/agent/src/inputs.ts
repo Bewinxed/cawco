@@ -8,7 +8,17 @@
  * them: copied there by this machine when the workspace is on it too, read
  * here and written by the workspace's machine when it is on another.
  */
-import { lstat, mkdir, readFile, realpath, rm, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import {
+  access,
+  lstat,
+  mkdir,
+  readFile,
+  readlink,
+  realpath,
+  rm,
+  stat,
+} from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
 import {
   INPUTS_DIR,
@@ -43,6 +53,36 @@ interface Admitted {
 }
 
 /**
+ * Why `realpath(named)` failed, from its error code: no file there, a link
+ * to nothing, a folder on the way that can't be entered, or a link loop.
+ */
+const unresolved = async (
+  named: string,
+  error: NodeJS.ErrnoException
+): Promise<string> => {
+  if (error.code === "ENOENT") {
+    const link = await lstat(named).then(
+      (info) => info.isSymbolicLink(),
+      () => false
+    );
+    if (link) {
+      const target = await readlink(named);
+      return `${named} is a link to ${target}, which doesn't exist; name the file itself, or point the link at a file that exists`;
+    }
+    return `there's no file at ${named}; check the path, or write the file before naming it`;
+  }
+  const why: Record<string, string> = {
+    ENOTDIR: `there's no file at ${named}: part of its path is a file, not a folder; check the path`,
+    EACCES: `${named} can't be reached: a folder on its path doesn't let you in (permission denied); name a file in a folder you can read`,
+    ELOOP: `${named} goes through links that loop back on themselves; name the file itself`,
+  };
+  return (
+    why[error.code ?? ""] ??
+    `${named} can't be resolved (${error.code ?? error.message}); check the path`
+  );
+};
+
+/**
  * Why `named` may not go as an input, or what it is when it may: a file
  * that exists, outside what every boundary hides (workspace-policy.ts
  * `inputDenial`), and, for a parent that runs in a workspace, inside its own
@@ -55,9 +95,11 @@ const admit = async (
   if (!isAbsolute(named)) {
     return `${named} is not an absolute path; name each input by its absolute path on your machine`;
   }
-  const real = await realpath(named).catch(() => undefined);
-  if (!real) {
-    return `${named} is not on your machine`;
+  const real = await realpath(named).catch(
+    (error: NodeJS.ErrnoException) => error
+  );
+  if (typeof real !== "string") {
+    return unresolved(named, real);
   }
   const denied = inputDenial(named, real);
   if (denied) {
@@ -69,6 +111,13 @@ const admit = async (
   const info = await stat(real);
   if (!info.isFile()) {
     return `${named} is ${info.isDirectory() ? "a folder; name the files in it" : "not a file"}`;
+  }
+  const unreadable = await access(real, constants.R_OK).then(
+    () => false,
+    (error: NodeJS.ErrnoException) => error.code === "EACCES"
+  );
+  if (unreadable) {
+    return `${named} exists but its permissions don't let you read it; make it readable (chmod u+r), or copy it somewhere you can read and name the copy`;
   }
   // biome-ignore lint/suspicious/noBitwiseOperators: a mode's permission bits
   return { named, real, name: basename(named), mode: info.mode & 0o777 };
