@@ -332,13 +332,14 @@ async function furnish(fleet: KitFleet): Promise<Box> {
       .join("")
   );
   // The installer's own wait for the machine to be online (CLI
-  // binary-install.ts `awaitJoined`), bounded for the spec, its failure in
-  // the CLI's words; and what the machine asks the hub with its key (core
+  // await-joined.ts `awaitJoined`, which binary-install.ts runs), bounded
+  // for the spec, loaded inside its try so any failure, its import's too,
+  // is said in the CLI's words; and what the machine asks the hub with its key (core
   // machine-key.ts `machineFetch`): a file's bytes.
   const wait = join(dir, "wait.ts");
   writeFileSync(
     wait,
-    `import { awaitJoined } from ${JSON.stringify(join(root, "packages/cli/src/binary-install.ts"))};\nsetTimeout(() => {\n  console.error("cawco (ssh-reach): still waiting after ${WAIT_BOUND_MS / 1000} s");\n  process.exit(3);\n}, ${WAIT_BOUND_MS});\ntry {\n  await awaitJoined(process.argv[2] ?? "");\n} catch (error) {\n  console.error(\`cawco: \${error instanceof Error ? error.message : String(error)}\`);\n  process.exit(1);\n}\nprocess.exit(0);\n`
+    `setTimeout(() => {\n  console.error("cawco (ssh-reach): still waiting after ${WAIT_BOUND_MS / 1000} s");\n  process.exit(3);\n}, ${WAIT_BOUND_MS});\ntry {\n  const { awaitJoined } = await import(${JSON.stringify(join(root, "packages/cli/src/await-joined.ts"))});\n  await awaitJoined(process.argv[2] ?? "");\n} catch (error) {\n  console.error(\`cawco: \${error instanceof Error ? error.message : String(error)}\`);\n  process.exit(1);\n}\nprocess.exit(0);\n`
   );
   writeFileSync(
     join(dir, "ask-file.ts"),
