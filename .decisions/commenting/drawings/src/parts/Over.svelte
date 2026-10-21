@@ -8,8 +8,10 @@
   Its corners are the element's own computed radii, `--radius-xs` at the
   least. Chosen (`outlined`: the composer open on it, or its pin's thread),
   it marks the element as the overlay's `.rect` does under The One Target
-  Rule: the `brand-wash` fill and a `--c-target-stroke` (1px) `brand-solid`
-  line on its border box, offset 0, so concentric by construction.
+  Rule: the live overlay's own tint (8% coral, `color-mix` in oklch, by day
+  and night, see-through, so the element's words show under it) and a
+  `--c-target-stroke` (1px) `brand-solid` line on its border box, offset 0,
+  so concentric by construction.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
@@ -58,7 +60,7 @@
   <div
     class={[
       "pointer-events-none absolute z-10",
-      outlined && "bg-brand-wash outline-(length:--c-target-stroke) outline-solid outline-offset-0 outline-brand-solid",
+      outlined && "bg-[color-mix(in_oklch,var(--brand-solid)_8%,transparent)] outline-(length:--c-target-stroke) outline-solid outline-offset-0 outline-brand-solid",
     ]}
     data-anchor={name}
     data-over-box
