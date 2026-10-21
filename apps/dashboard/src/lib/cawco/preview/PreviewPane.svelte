@@ -1623,6 +1623,7 @@
   /** Pin `id`'s thread opens; `via`, a key or a press. A composer standing goes, and another thread closes. */
   function openCard(id: string, via: "key" | "pointer" = "pointer") {
     loadKit();
+    dropPeek();
     if (composing) {
       cancelComposer();
     }
@@ -1877,7 +1878,8 @@
     clearTimeout(peekTimer);
     const id = previewPinId(message.id);
     const mark = previewBox(message.mark);
-    if (!(id && mark) || coarse.current) {
+    // None under a finger, and none while a thread or a composer stands.
+    if (!(id && mark) || coarse.current || openPin || composing) {
       if (peekAt) {
         peekWent = performance.now();
       }
@@ -1893,8 +1895,14 @@
       peekAt = { id, mark };
     }, wait);
   }
+  /** Every peek goes as a thread or a composer opens: one left up would stand over what it opens on. */
+  function dropPeek() {
+    clearTimeout(peekTimer);
+    peekAt = null;
+  }
+  /** No peek while a thread or a composer stands: the card is what the person reads then. */
   const peekPin = $derived(
-    peekAt && peekAt.id !== openPin
+    peekAt && !openPin && !composing
       ? (pins.find((pin) => pin.id === peekAt?.id) ?? null)
       : null
   );
@@ -2108,6 +2116,7 @@
           closeCard();
         }
         loadKit();
+        dropPeek();
         // The press was the page's: the composer's field draws no ring.
         lastInput.current = message.via === "key" ? "key" : "pointer";
         composing = {

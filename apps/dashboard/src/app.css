@@ -388,6 +388,11 @@
     & :is(p, li, h1, h2, h3, h4, h5, h6) {
       text-wrap-style: stable;
     }
+    /* Settled words (a comment's thread, MessageBody `wrap`): no word alone
+       on a last line. */
+    &[data-wrap="pretty"] :is(p, li) {
+      text-wrap-style: pretty;
+    }
     & p,
     & ul,
     & ol,

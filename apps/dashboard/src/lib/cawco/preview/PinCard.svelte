@@ -1,3 +1,18 @@
+<script lang="ts" module>
+  import type { Component } from "svelte";
+
+  /**
+   * The thread's words as the transcript sets them (MessageBody and its
+   * markdown), loaded the first time a thread opens (an artifact's own tab
+   * never draws one before then) and held for every thread after it, so a
+   * thread opened again draws its entries in its first frame.
+   */
+  let loadedBody: Component<{
+    source: string;
+    wrap?: "stable" | "pretty";
+  }> | null = null;
+</script>
+
 <script lang="ts">
   import { artifactWords as words } from "@cawco/core";
   /**
@@ -11,7 +26,9 @@
    * each with its way back. Then the thread, the one part that scrolls: the
    * transcript's own turns (turn/: Turn, Well, Who), the person's words in
    * the reader's well and the agent's bare under its mark and the session's
-   * name, each speaker line ending in its turn's age at rest; what an entry
+   * name, each speaker line ending in its turn's age at rest, a later
+   * entry's age at the end of its words' first line on their baseline, the
+   * words wrapping as prose does (no word alone on a last line); what an entry
    * carries under its words in the transcript's gallery (a picture as the
    * 48px Shot, a text or a file as its DocThumb); "Working on it…" while
    * the agent works on it. At its foot the chat composer as the reply, with
@@ -22,7 +39,7 @@
    * by a press on the page. Delete is asked in the card itself.
    */
   import type { CommentAttachment, Pin } from "@cawco/core/comments";
-  import { type Component, tick, untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -101,15 +118,12 @@
     ondraft?: () => void;
   } = $props();
 
-  /**
-   * The thread's words as the transcript sets them (MessageBody and its
-   * markdown), loaded once a thread opens: an artifact's own tab never
-   * draws one before then.
-   */
-  let Body = $state<Component<{ source: string }> | null>(null);
+  /** The thread's words' component ({@link loadedBody}): at hand from the second thread on. */
+  let Body = $state<typeof loadedBody>(loadedBody);
   $effect(() => {
     if (!Body) {
       import("../MessageBody.svelte").then((loaded) => {
+        loadedBody = loaded.default;
         Body = loaded.default;
       });
     }
@@ -304,7 +318,7 @@
   </span>
   <button
     data-slot="name"
-    class="flex-1 min-w-0 p-0 border-none bg-transparent text-start text-ink-strong type-label overflow-clip text-ellipsis whitespace-nowrap rounded-xs hover:text-ink-row focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+    class="flex-1 min-w-0 px-0 border-none bg-transparent text-start text-ink-strong type-label overflow-clip text-ellipsis whitespace-nowrap rounded-xs hover:text-ink-row focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
     onclick={onfind}
     title={name}
     type="button">{name}</button
@@ -417,6 +431,20 @@
      there is more above or below. -->
 {#if Body}
   {@const Words = Body}
+  <!-- A later entry of one speaker's run: its words, and its age at the end
+       of their first line, on its baseline (a row's meta on its words' line,
+       The Row Dress Rule), the words wrapping in their own column as prose
+       does. -->
+  {#snippet later(text: string, at: string, who: string, you: boolean)}
+    <div class="flex items-baseline" data-slot="later">
+      <div class="min-w-0 flex-1">
+        {#if text.trim()}
+          <Words source={text} wrap="pretty" />
+        {/if}
+      </div>
+      <Who grouped name={who} shown timestamp={at} {you} />
+    </div>
+  {/snippet}
   <div
     class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain data-whole:shrink-0"
     data-whole={squeezed || undefined}
@@ -439,18 +467,21 @@
               {/if}
               <Well {grouped} {runsOn}>
                 {#if grouped}
-                  <Who grouped name="You" shown timestamp={entry.at} you />
-                {/if}
-                {#if entry.text.trim()}
-                  <Words source={entry.text} />
+                  {@render later(entry.text, entry.at, "You", true)}
+                {:else if entry.text.trim()}
+                  <Words source={entry.text} wrap="pretty" />
                 {/if}
                 {@render gallery(entry.attachments)}
               </Well>
             </Turn>
           {:else}
             <Turn class="group-first/entry:mt-0" {grouped}>
-              <Who {grouped} name={agentName} shown timestamp={entry.at} />
-              <Words source={entry.text} />
+              {#if grouped}
+                {@render later(entry.text, entry.at, agentName, false)}
+              {:else}
+                <Who name={agentName} shown timestamp={entry.at} />
+                <Words source={entry.text} wrap="pretty" />
+              {/if}
               {#if entry.files?.length}
                 <p class="flex flex-wrap gap-space-1 mt-space-1 mx-0 mb-0">
                   {#each entry.files as file (file)}

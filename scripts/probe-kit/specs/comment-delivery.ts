@@ -1044,16 +1044,26 @@ const endedWriterChecks = async (
     !now.sentAt &&
     !now.heard &&
     now.thread.every((entry) => entry.by !== "person" || !entry.sentAt);
-  const readCard = async () => {
+  /**
+   * Pin 1's thread opened from its row, read once it draws the agent's
+   * `words` (its entries draw as the thread does, the card coming in
+   * beside its pill): what the agent's entries say, or what they said when
+   * the wait ran out.
+   */
+  const readCard = async (words: string) => {
     await openRow(tab, 1);
-    const said = await tab
-      .locator(
-        '[data-slot="pin-card"][data-pin-card="1"] [data-slot="entry"][data-by="agent"]'
-      )
-      .allInnerTexts();
+    const entries = tab.locator(
+      '[data-slot="pin-card"][data-pin-card="1"] [data-slot="entry"][data-by="agent"]'
+    );
+    const said = await until(
+      "the agent's words in pin 1's thread",
+      async () => (await entries.allInnerTexts()).join(" | "),
+      (now) => now.includes(words),
+      5000
+    ).catch(async () => (await entries.allInnerTexts()).join(" | "));
     await tab.keyboard.press("Escape");
     await shutList(tab);
-    return said.join(" | ");
+    return said;
   };
   if (outcome.nested) {
     kit.note(
@@ -1099,7 +1109,7 @@ const endedWriterChecks = async (
         lead !== writer,
       `pin ${pin?.id}; Caw heard pin ${caw.pin}; lead ${lead}; writer's comment events ${writerEvents}; heard ${caw.heard?.slice(0, 500)}; hub ${(await hubLines()).slice(-8).join(" | ")}`
     );
-    const inCard = await readCard();
+    const inCard = await readCard(CAW_WORDS);
     kit.check(
       "7a: Caw's comment_reply lands in that pin's thread, by the agent, and the person reads it in the pin's card; the pin is stamped heard",
       agentSaid?.text === CAW_WORDS &&
@@ -1140,7 +1150,7 @@ const endedWriterChecks = async (
     10_000
   ).catch(() => numbered({}, 1));
   await settle(tab, 600);
-  const card = await readCard();
+  const card = await readCard(LEAD_WORDS);
   kit.check(
     "7b: a session that is not the project's lead is refused the writer's pin, and no word of it lands",
     refused.includes(`No artifact of this session holds pin ${pin.id}`) &&

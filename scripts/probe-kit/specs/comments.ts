@@ -178,7 +178,17 @@
  *   thread beside its pill, clear of the rail; the toggle's count only
  *   while the rail is shut.
  * - At 390, light and dark: the rail the well's foot sheet (60% at most), a
- *   row's thread the foot sheet with the rail aside.
+ *   row's thread the foot sheet with the rail aside, its list scrolled to
+ *   its end standing wholly above its Send bar.
+ *
+ * And the review of the captures (2026-10-21):
+ * - A thread's title stands whole: its glyphs no taller than the box that
+ *   clips them, at the label role's line-height (desk and 390).
+ * - The rail's fixture page reads in both schemes: its top strip's words
+ *   4.5:1 or better on its ground, as the page draws in the host's theme.
+ * - A thread opening takes every peek down: none stands while it does.
+ * - A thread's entries wrap pretty, and a later entry's age stands on its
+ *   words' first baseline (0.5px).
  * The captures for the reviewer (light and dark, desk and 390) are written
  * under `.probe/commenting/`; nothing here opens them.
  */
@@ -799,6 +809,12 @@ const commentChecks = async (on: On, frame: Frame) => {
       head.shown.includes("Bolder, perhaps.") &&
       (await card.locator('[data-slot="chain"]').count()) === 0,
     JSON.stringify(head)
+  );
+  const title = await titleFits(card);
+  on.kit.check(
+    "1: the thread's title stands whole: its glyphs no taller than the box that clips them, none cut above or below, at the label role's line-height or more",
+    titleWhole(title),
+    JSON.stringify(title)
   );
 
   // Esc unwinds one at a time: the thread, then Comment for Interact.
@@ -3044,6 +3060,109 @@ const roomChecks = async (on: On) => {
 };
 
 /**
+ * A thread's title as drawn: its glyphs' box (the text's own range) against
+ * the box that clips it (the name control's padding box), and its
+ * line-height against the label role's (a probe set in `type-label`). The
+ * head is a mark line, which trims each run of words to its x-height and
+ * pads the room back: a run whose padding is taken from it clips its
+ * ascenders and descenders.
+ */
+const titleFits = (card: Locator) =>
+  card.evaluate((el) => {
+    const name = el.querySelector<HTMLElement>(
+      '[data-slot="head"] [data-slot="name"]'
+    );
+    const text = name?.firstChild;
+    if (!(name && text)) {
+      return null;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(name);
+    const glyphs = range.getBoundingClientRect();
+    const clip = name.getBoundingClientRect();
+    const probe = document.createElement("span");
+    probe.className = "type-label";
+    probe.textContent = "x";
+    document.body.append(probe);
+    const role = Number.parseFloat(getComputedStyle(probe).lineHeight);
+    probe.remove();
+    const style = getComputedStyle(name);
+    return {
+      text: name.textContent?.trim() ?? "",
+      glyphs: Math.round(glyphs.height * 100) / 100,
+      clip: name.clientHeight,
+      top: Math.round((glyphs.top - clip.top) * 100) / 100,
+      bottom: Math.round((clip.bottom - glyphs.bottom) * 100) / 100,
+      lineHeight: Number.parseFloat(style.lineHeight),
+      role,
+      overflow: style.overflowY,
+    };
+  });
+type TitleRead = Awaited<ReturnType<typeof titleFits>>;
+/** The title stands whole in its box: its glyphs inside what clips them, at the label role's line-height or more. */
+const titleWhole = (read: TitleRead) =>
+  !!read &&
+  read.glyphs <= read.clip + 0.5 &&
+  read.top >= -0.5 &&
+  read.bottom >= -0.5 &&
+  read.lineHeight >= read.role - 0.01;
+
+/**
+ * Entry `index` of a thread as its words wrap: its words' \`text-wrap\`, its
+ * lines (the words' range's line boxes), and the baselines of its first
+ * line and of its age (each a zero-size inline mark set at its baseline).
+ */
+const entryRead = (card: Locator, index: number) =>
+  card.evaluate((el, at) => {
+    const entry = el.querySelectorAll('[data-slot="entry"]')[at];
+    const words = entry?.querySelector(".max-w-c-measure");
+    const age = entry?.querySelector('[data-turn-who] [data-slot="when"]');
+    if (!(entry && words && age)) {
+      return null;
+    }
+    const baseline = (host: Element, first: boolean) => {
+      const mark = document.createElement("span");
+      mark.style.cssText =
+        "display:inline-block;width:0;height:0;vertical-align:baseline";
+      const block = first ? (host.querySelector("p") ?? host) : host;
+      if (first) {
+        block.prepend(mark);
+      } else {
+        block.append(mark);
+      }
+      const y = mark.getBoundingClientRect().top;
+      mark.remove();
+      return y;
+    };
+    const firstLine = baseline(words, true);
+    const ageLine = baseline(age, false);
+    const range = document.createRange();
+    range.selectNodeContents(words);
+    const tops = [
+      ...new Set(
+        [...range.getClientRects()]
+          .filter((r) => r.width > 0)
+          .map((r) => Math.round(r.top))
+      ),
+    ];
+    // The wrap its paragraph takes (the transcript's words keep `stable`).
+    const style = getComputedStyle(words.querySelector("p") ?? words);
+    const lastLine = [...range.getClientRects()].filter(
+      (r) => r.width > 0 && Math.round(r.top) === tops.at(-1)
+    );
+    return {
+      text: words.textContent?.trim() ?? "",
+      wrap:
+        (style as CSSStyleDeclaration & { textWrapStyle?: string })
+          .textWrapStyle ?? style.getPropertyValue("text-wrap"),
+      lines: tops.length,
+      lastLineWidth: Math.round(lastLine.reduce((sum, r) => sum + r.width, 0)),
+      baselines: Math.round(Math.abs(firstLine - ageLine) * 100) / 100,
+      age: age.textContent?.trim() ?? "",
+    };
+  }, index);
+
+/**
  * A card's head as it reads: the name, the file:line under it, the tooltip,
  * the words a reader sees in the whole card, and the pictures it draws.
  */
@@ -4845,11 +4964,13 @@ const RAIL_PAGE = (withDrop: boolean) => `<!doctype html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   body { margin: 0; font: 16px/1.5 system-ui; }
-  #top { height: 18px; background: #e8e4dc; }
+  /* Its grounds and inks in both schemes: the overlay draws a page artifact
+     in the host's theme (page.ts \`themeRoot\`), its root's color-scheme. */
+  #top { height: 18px; background: light-dark(#e8e4dc, #3a3631); color: light-dark(#1f1d1a, #f2efe9); }
   main { padding: 24px; }
   h1 { margin: 0 0 24px; font-size: 28px; }
   p { width: 55%; margin: 0 0 40px; }
-  #drop { width: 240px; height: 60px; margin: 0 0 40px; background: #d8d4cc; }
+  #drop { width: 240px; height: 60px; margin: 0 0 40px; background: light-dark(#d8d4cc, #45413b); color: light-dark(#1f1d1a, #f2efe9); }
   #edge { position: absolute; right: 0; top: 200px; width: 140px; height: 44px; }
   .space { height: 900px; }
 </style></head>
@@ -5542,6 +5663,29 @@ const railUseChecks = async (
   await railNow.getByRole("button", { name: "Sort" }).click();
   await on.page.getByRole("menuitemradio", { name: "Newest first" }).click();
 
+  // The pointer rests on a pill: its peek stands; then a row opens another
+  // comment's thread, and no peek stands while it does.
+  const peek = on.page.locator('[data-slot="pin-peek"]');
+  const pageFrameNow = await pageFrame(on);
+  const pill = await pageFrameNow
+    .locator("svg[data-cawco-pins] g[data-pin] [data-face]")
+    .first()
+    .boundingBox()
+    .catch(() => null);
+  if (pill) {
+    await on.page.mouse.move(
+      pill.x + pill.width / 2,
+      pill.y + pill.height / 2,
+      {
+        steps: 3,
+      }
+    );
+  }
+  const peeked = await peek
+    .waitFor({ timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
+
   // A row opens its thread beside its pill, in the well, never under the rail.
   await railNow.locator(`[data-slot="pin-row"][data-pin-row="${onB}"]`).click();
   const thread = on.page.locator(
@@ -5549,6 +5693,32 @@ const railUseChecks = async (
   );
   await thread.waitFor({ timeout: 5000 }).catch(() => undefined);
   await settle(on.page, 600);
+  const peeksWithCard = await peek.count();
+  on.kit.check(
+    "a thread opening takes every peek down: a pill's peek stood under the pointer, and none stands while the thread does",
+    peeked && (await thread.count()) === 1 && peeksWithCard === 0,
+    JSON.stringify({ peeked, peeksWithCard })
+  );
+  // The person's second entry ("And keep them in that order."): prose's
+  // wrap, no word alone on its last line, its age on its first line's
+  // baseline (The Row Dress Rule's meta on its words' line).
+  const second = await entryRead(thread, 1);
+  on.kit.check(
+    "the thread's entries wrap pretty (no word left alone on a last line), and a grouped entry's age stands on its first line's baseline (within 0.5px)",
+    !!second &&
+      second.text === "And keep them in that order." &&
+      second.wrap === "pretty" &&
+      (second.lines === 1 || second.lastLineWidth > 60) &&
+      second.baselines <= 0.5 &&
+      second.age === "now",
+    JSON.stringify(second)
+  );
+  const railTitle = await titleFits(thread);
+  on.kit.check(
+    "the row's thread's title stands whole, at the label role's line-height or more",
+    titleWhole(railTitle),
+    JSON.stringify(railTitle)
+  );
   const threadBox = await thread.boundingBox().catch(() => null);
   const gallery = await thread
     .locator(
@@ -5629,6 +5799,49 @@ const railScenes = async (on: On, artifactId: string) => {
       continue;
     }
     await settle(screen, 800);
+    // The fixture page reads in both schemes: its top strip's ink on its
+    // ground, as the page draws in the host's theme (page.ts `themeRoot`).
+    const strip = await shown.evaluate(() => {
+      const el = document.querySelector("#top");
+      if (!el) {
+        return null;
+      }
+      const paint = document.createElement("canvas").getContext("2d", {
+        willReadFrequently: true,
+      });
+      const rgb = (color: string) => {
+        if (!paint) {
+          return [0, 0, 0];
+        }
+        paint.clearRect(0, 0, 1, 1);
+        paint.fillStyle = color;
+        paint.fillRect(0, 0, 1, 1);
+        return [...paint.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+      };
+      const lum = ([r, g, b]: number[]) => {
+        const lin = (c: number) => {
+          const v = c / 255;
+          return v <= 0.040_45 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+        };
+        return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+      };
+      const style = getComputedStyle(el);
+      const ink = lum(rgb(style.color));
+      const ground = lum(rgb(style.backgroundColor));
+      const hi = Math.max(ink, ground);
+      const lo = Math.min(ink, ground);
+      return {
+        scheme: getComputedStyle(document.documentElement).colorScheme,
+        ink: style.color,
+        ground: style.backgroundColor,
+        ratio: Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100,
+      };
+    });
+    on.kit.check(
+      `the rail page on the ${view} at ${theme}: its top strip reads, its words ${strip?.ratio}:1 on its ground (4.5:1 or better) in the page's ${strip?.scheme} scheme`,
+      !!strip && strip.ratio >= 4.5 && strip.scheme === theme,
+      JSON.stringify(strip)
+    );
     const toggle = screen.locator(COMMENTS_TOGGLE);
     if ((await toggle.getAttribute("aria-expanded")) !== "true") {
       await toggle.click();
@@ -5662,6 +5875,44 @@ const railScenes = async (on: On, artifactId: string) => {
           Math.abs(read.rail.w - read.well.w) <= 2,
         JSON.stringify(read)
       );
+      // Its list scrolls wholly above its foot: scrolled to its end, the
+      // last row stands whole inside the rows' box, over the Send bar.
+      const end = await rail.evaluate((el) => {
+        const rows = el.querySelector<HTMLElement>('[data-slot="rows"]');
+        const bar = el.querySelector('[data-slot="send-bar"]');
+        if (!rows) {
+          return null;
+        }
+        rows.scrollTop = rows.scrollHeight;
+        const last = [...rows.querySelectorAll('[data-slot="pin-row"]')].at(-1);
+        const box = (one: Element | null | undefined) => {
+          const r = one?.getBoundingClientRect();
+          return r ? { top: r.top, bottom: r.bottom } : null;
+        };
+        return {
+          scrolled: rows.scrollTop,
+          overflows: rows.scrollHeight > rows.clientHeight,
+          rows: box(rows),
+          last: box(last),
+          bar: box(bar),
+        };
+      });
+      on.kit.check(
+        `phone (${theme}): the rail's list scrolls wholly above its Send bar and note: scrolled to its end, the last row stands whole inside the list, over the bar`,
+        !!end?.rows &&
+          !!end.last &&
+          !!end.bar &&
+          end.last.bottom <= end.rows.bottom + 0.5 &&
+          end.last.top >= end.rows.top - 0.5 &&
+          end.last.bottom <= end.bar.top + 0.5,
+        JSON.stringify(end)
+      );
+      await rail.evaluate((el) => {
+        const rows = el.querySelector<HTMLElement>('[data-slot="rows"]');
+        if (rows) {
+          rows.scrollTop = 0;
+        }
+      });
       const row = rail.locator('[data-slot="pin-row"]').first();
       const number = Number(await row.getAttribute("data-pin-row"));
       await row.click();
@@ -5695,6 +5946,12 @@ const railScenes = async (on: On, artifactId: string) => {
           !!sheet.card &&
           (!pill || pill.y + pill.height <= sheet.card.y + 1),
         JSON.stringify({ ...sheet, pill })
+      );
+      const sheetTitle = await titleFits(card);
+      on.kit.check(
+        `phone (${theme}): the thread's title stands whole in its foot sheet, at the label role's line-height or more`,
+        titleWhole(sheetTitle),
+        JSON.stringify(sheetTitle)
       );
       await capture(screen, `p1-card-thread-${tag}`, screen.locator(PANE));
       await screen.keyboard.press("Escape");

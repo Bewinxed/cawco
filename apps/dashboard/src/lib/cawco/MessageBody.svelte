@@ -19,6 +19,7 @@
     streaming = false,
     fades = false,
     said = false,
+    wrap = "stable",
   }: {
     source: string;
     streaming?: boolean;
@@ -26,11 +27,18 @@
     fades?: boolean;
     /** The person's own words: a skill they name is its chip, and so is every session they mention. */
     said?: boolean;
+    /**
+     * How its lines break: `stable` in a transcript, whose words may still be
+     * landing (no line moves as the next words come); `pretty` for words that
+     * are settled (a comment's thread), no word alone on a last line.
+     */
+    wrap?: "stable" | "pretty";
   } = $props();
 </script>
 
 <div
   data-slot="msg"
+  data-wrap={wrap === "pretty" ? "pretty" : undefined}
   class="max-w-c-measure text-size-body leading-body font-normal text-ink-strong"
 >
   <Markdown {fades} {said} {source} {streaming} />
