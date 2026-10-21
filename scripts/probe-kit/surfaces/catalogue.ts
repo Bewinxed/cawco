@@ -16,8 +16,11 @@ import { MACHINE } from "../../scratch-fleet";
 import type { CapturePage } from "../decision-embeds";
 import { COMPOSER_FIELD } from "../kit";
 import {
+  ANSWERED_PIN,
+  commentPins,
   DELEGATE_TITLE,
   MEDIA_PAGE,
+  PIN_ANSWER,
   type Scene,
   STUDIO_HOST,
   STUDIO_MACHINE,
@@ -61,11 +64,14 @@ export interface State {
    */
   heldFrame?: true;
   /**
-   * It stands on the scene's delegate, which only a host records (a
-   * workspace has no user namespaces): read only from a tape whose scene
-   * holds one (`split`), and left out, with a NOTE, from any other.
+   * It stands on what only a host's recording holds, and is left out, with
+   * a NOTE saying which, from a tape that holds none (walk.ts `lacks`):
+   * `delegate`, the scene's delegate (a workspace has no user namespaces to
+   * make its workspace in; the scene's `split`); `join`, an address the
+   * hub lists for another machine to join it at (a workspace's machine has
+   * loopback alone; the scene's `joinable`, "" then).
    */
-  hostOnly?: true;
+  hostOnly?: "delegate" | "join";
   /**
    * The hub state it reads, when not the scene's own: one the scene moves
    * the fleet into after the main recording (scene.ts `VARIANTS`), recorded
@@ -87,6 +93,15 @@ export interface State {
   name: string;
   /** What only this state draws (`Ready`, with the scene's ids where it names one): the walk holds it before every read and capture. */
   ready: Ready | ((scene: Scene) => Ready);
+  /**
+   * What puts back what its act took from the fleet, once the state is read
+   * (or has failed): a recording's fleet is live and every later state's,
+   * and the hub trashes a deleted item at once (config deletes.ts), so a
+   * delete left standing failed the passes and surfaces read after it
+   * (config-skills/removed took `tray-check` from New Session's `/` menu).
+   * On a tape it asks what the recording asked.
+   */
+  restore?: (page: Page) => Promise<unknown>;
   /**
    * What is read: a selector, the largest visible match when several match
    * (the open layer over its own trigger). `body` reads the whole page.
@@ -118,6 +133,9 @@ export interface Surface {
 /** An open layer: a dialog, sheet, drawer, menu or popover standing open. */
 export const LAYER =
   "[role=dialog][data-state=open], [role=menu][data-state=open], [data-slot$='-content'][data-state=open]";
+/** A workflow branch's case compared with a value: the value's JSON field. */
+const COMPARE_FIELD =
+  "[data-slot=when] [data-slot=when] textarea, [data-slot=when] [data-slot=when] input";
 /** A menu standing open: a dropdown's or a context menu's content. */
 const OPEN_MENU = "[role=menu][data-state=open]";
 /** A dialog standing open: a sheet, a drawer, a modal. */
@@ -523,6 +541,20 @@ const deletedFrom = (more: RegExp, item: string) => async (page: Page) => {
     .filter({ has: page.getByRole("button", { name: UNDO }) })
     .first();
   await toast.hover();
+};
+/**
+ * A delete's Undo pressed in its toast, and `row` back in its list: the hub
+ * puts the item back from its trash (config undo.ts), so what the delete took
+ * stands again for every state read after it (State `restore`).
+ */
+const undoDelete = (row: string) => async (page: Page) => {
+  await page
+    .locator(TOAST)
+    .filter({ has: page.getByRole("button", { name: UNDO }) })
+    .first()
+    .getByRole("button", { name: UNDO })
+    .click();
+  await page.locator(row).first().waitFor();
 };
 /** What runs in a project, which its forget reads first (client.svelte.ts `projectRunning`). */
 const PROJECT_RUNNING = "**/api/projects/*/running";
@@ -1343,19 +1375,21 @@ const dropPin = async (page: Page) => {
   }
 };
 
-/** A comment of 48 words: its row wraps to four lines and is cut there. */
-const LONG_COMMENT =
-  "This heading reads too heavy for the page it opens, and the buttons under it start before the eye has settled, so the whole block feels crowded; give the heading more room above, set the buttons a step lighter, and check that the spacing still holds at a phone's width.";
-
 /**
- * The preview's pins as its overlay writes them, in the page's own doc, which
- * the tape relays to the pane's (hub-tape.ts, the artifact socket): 1 a
- * six-word comment the agent answered, 2 the 48-word one, 3 on an element the
- * page doesn't have (its overlay moves it aside: gone), 4 to 9 resolved, long
- * enough that Resolved scrolls, 10 resolved and gone (its row under
- * Resolved). The pane's rows stand once it has them.
+ * The preview's pins `seeds` as its overlay writes them, in the page's own
+ * doc, which the hub (or the tape, by the hub's rules, hub-tape.ts) carries
+ * to the pane's; and no others ({} clears them all): a comment an earlier
+ * state wrote (the "pin" state's), or a pass before this one seeded, stays
+ * in the doc across its loads, under the same number. The agent's entries
+ * stay as the doc holds them, whatever the seed: a page that writes or
+ * drops one is refused whole (core comments.ts `pinsProblem`: "The agent's
+ * replies are written by comment_reply, not by the page"). Whether pin 1
+ * holds the agent's answer, after.
  */
-const seedPins = async (page: Page) => {
+const writePins = async (
+  page: Page,
+  seeds: Record<string, object>
+): Promise<boolean> => {
   await page.frameLocator(PREVIEW_FRAME).locator("h1").waitFor();
   const handle = await page.locator(PREVIEW_FRAME).first().elementHandle();
   const inner = await handle?.contentFrame();
@@ -1367,100 +1401,82 @@ const seedPins = async (page: Page) => {
       !!(window as unknown as { cawcoArtifact?: { doc?: unknown } })
         .cawcoArtifact?.doc
   );
-  await inner.evaluate((long) => {
-    const { doc } = (
-      window as unknown as {
-        cawcoArtifact: {
-          doc: {
-            getMap: (n: string) => {
-              delete: (k: string) => void;
-              keys: () => IterableIterator<string>;
-              set: (k: string, v: object) => void;
+  return await inner.evaluate(
+    ({ seeds: wanted, answered }) => {
+      interface Entry {
+        by: string;
+      }
+      const { doc } = (
+        window as unknown as {
+          cawcoArtifact: {
+            doc: {
+              getMap: (n: string) => {
+                delete: (k: string) => void;
+                get: (k: string) => { thread?: Entry[] } | undefined;
+                keys: () => IterableIterator<string>;
+                set: (k: string, v: object) => void;
+              };
+              transact: (f: () => void) => void;
             };
-            transact: (f: () => void) => void;
           };
-        };
-      }
-    ).cawcoArtifact;
-    const at = "2026-10-18T09:00:00.000Z";
-    const pin = (
-      number: number,
-      selector: string,
-      thread: [string, string][],
-      resolved = false
-    ) => ({
-      // A pin's id as the overlay makes one (wire.ts `PIN_ID`, 36 of hex and dashes).
-      id: `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`,
-      number,
-      kind: "comment",
-      // Anchored as a tap writes it: by its selector and the words it stood
-      // on then (a gone pin keeps the words of the element the page dropped).
-      anchor: {
-        selector,
-        text:
-          selector === "h1"
-            ? "Three ways a long chip wraps"
-            : "Truncate the chip",
-      },
-      at,
-      by: "person",
-      elements: [],
-      point: { x: 0.3, y: 0.5 },
-      ...(resolved ? { resolvedAt: at } : {}),
-      thread: thread.map(([by, text], i) => ({
-        id: `seed-entry-${number}-${i}`,
-        by,
-        text,
-        at,
-      })),
-    });
-    doc.transact(() => {
-      const pins = doc.getMap("pins");
-      // Only the seeded pins: a comment an earlier state wrote (the "pin"
-      // state's, with its words) would stand beside them under the same
-      // number.
-      for (const id of [...pins.keys()]) {
-        if (!id.startsWith("00000000-0000-4000-8000-")) {
-          pins.delete(id);
         }
-      }
-      pins.set(
-        "00000000-0000-4000-8000-000000000001",
-        pin(1, "h1", [
-          ["person", "Make this heading a bit bigger"],
-          ["agent", "Done: the heading is a step larger now."],
-        ])
-      );
-      pins.set(
-        "00000000-0000-4000-8000-000000000002",
-        pin(2, "h1", [["person", long]])
-      );
-      pins.set(
-        "00000000-0000-4000-8000-000000000003",
-        pin(3, "#a-card-the-page-dropped", [
-          ["person", "This card's label should sit on one line"],
-        ])
-      );
-      // 10: gone too, and resolved: its row under Resolved.
-      // A resolved pin stands on no page, so its loss is the one the overlay wrote when it went.
-      pins.set("00000000-0000-4000-8000-000000000010", {
-        ...pin(
-          10,
-          "#a-card-the-page-dropped",
-          [["person", "Resolved before the card left the page"]],
-          true
-        ),
-        movedAt: at,
+      ).cawcoArtifact;
+      const pins = doc.getMap("pins");
+      const agents = (id: string) =>
+        (pins.get(id)?.thread ?? []).filter((entry) => entry.by === "agent");
+      doc.transact(() => {
+        for (const key of [...pins.keys()]) {
+          if (!(key in wanted)) {
+            pins.delete(key);
+          }
+        }
+        for (const [id, seed] of Object.entries(wanted)) {
+          const { thread } = seed as { thread: Entry[] };
+          pins.set(id, { ...seed, thread: [...thread, ...agents(id)] });
+        }
       });
-      for (let n = 4; n <= 9; n += 1) {
-        pins.set(
-          `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
-          pin(n, "h1", [["person", long]], true)
-        );
-      }
-    });
-  }, LONG_COMMENT);
+      return agents(answered).length > 0;
+    },
+    { seeds, answered: ANSWERED_PIN }
+  );
 };
+
+/**
+ * The Comments' pins seeded (scene.ts `commentPins`), and pin 1 answered as
+ * its session answers one, by comment_reply's route, where the doc holds no
+ * answer (a pass before this one, on a live fleet, cleared it): once pin 1's
+ * row stands in the open rail, the hub has the page's write and the route
+ * finds the pin, so its first answer is the one a tape keeps. The session
+ * is the pane's, as the state's route names it.
+ */
+const seedPins = async (page: Page) => {
+  if (await writePins(page, commentPins())) {
+    return;
+  }
+  await page
+    .locator(`${PIN_LIST} ${PIN_ROW}[data-pin-row="1"]`)
+    .first()
+    .waitFor();
+  const session = new URL(page.url()).pathname.split("/")[2] ?? "";
+  const path = `/api/instances/${session}/artifacts/comments/${ANSWERED_PIN}/reply`;
+  const said = await page.evaluate(
+    async ({ url, text }) =>
+      (
+        await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        })
+      ).status,
+    { url: path, text: PIN_ANSWER }
+  );
+  if (said >= 300) {
+    throw new Error(`pin 1 was not answered: the hub said ${said} to ${path}`);
+  }
+};
+
+/** The page's pins cleared (`writePins`, none): what a state that reads no pin, or makes pin 1, starts from. */
+const clearPins = (page: Page) => writePins(page, {});
 
 /**
  * The Comments rail open (its open state is kept across the walk's loads,
@@ -1483,8 +1499,8 @@ const panelUp = async (page: Page) => {
 
 /** The Comments rail open, its pins seeded and drawn, on its Open tab. */
 const commentsOpen = async (page: Page) => {
-  await seedPins(page);
   await panelUp(page);
+  await seedPins(page);
   await page.locator(`${PIN_LIST} ${PIN_ROW}[data-moved]`).first().waitFor();
 };
 
@@ -2059,6 +2075,7 @@ const EDITORS: Record<string, State[]> = {
       // Undo in its toast (no ask: deletes.ts).
       name: "removed",
       act: deletedFrom(MORE_FOR_SKILL, "Remove everywhere"),
+      restore: undoDelete('[aria-label="More for tray-check"]'),
       root: "body",
       ready: {
         shows: TOAST,
@@ -2107,6 +2124,8 @@ const EDITORS: Record<string, State[]> = {
       hub: "unregistered",
       route: () => "/config/memory/CLAUDE.md",
       root: "body",
+      // On a phone the editor's sections stack, and where it lands is the last, past the fold.
+      inView: "[data-slot=empty]",
       // The shared kit EmptyState (NoMachines), its title saying it.
       ready: {
         shows: "[data-slot=empty]",
@@ -2119,6 +2138,7 @@ const EDITORS: Record<string, State[]> = {
       // toast (no ask: deletes.ts).
       name: "deleted",
       act: deletedFrom(MORE_FOR_MEMORY, "Delete everywhere"),
+      restore: undoDelete('[aria-label$="CLAUDE.md"][aria-label^="More for"]'),
       root: "body",
       ready: {
         shows: TOAST,
@@ -2775,7 +2795,7 @@ export const SURFACES: Surface[] = [
         route: (s) => `/session/${s.split}`,
         act: press(DELEGATE_CARD),
         root: MAIN,
-        hostOnly: true,
+        hostOnly: "delegate",
         ready: (s) => ({
           shows: on(s.split, "button[aria-expanded=true]"),
           says: DELEGATE_CARD,
@@ -2824,11 +2844,12 @@ export const SURFACES: Surface[] = [
               buffer: Buffer.from("The badge is cut at 390px.\n"),
             }),
         root: MAIN,
-        // Its chip in the composer's attachments, over the field.
+        // Its chip in the composer's attachments, over the field: the chip's
+        // body opens the text (AttachmentChips, one pill for every kind).
         ready: (s) => ({
           shows: on(
             s.chips,
-            '[data-slot=composer] [data-atts] button[data-slot=doc][aria-label="Open chip-notes.txt"]'
+            '[data-slot=composer] [data-atts] button[aria-label="Open chip-notes.txt"]'
           ),
         }),
       },
@@ -3639,6 +3660,7 @@ export const SURFACES: Surface[] = [
         // `joinAddresses`: Tailscale, then each non-internal IPv4), which a
         // host's tape holds and a workspace's (loopback alone) does not.
         name: "machines-pair",
+        hostOnly: "join",
         act: inSheet(
           press(PROJECT_CHIP),
           (page) =>
@@ -3898,10 +3920,9 @@ export const SURFACES: Surface[] = [
             .selectOption("eq");
         },
         root: "body",
-        ready: {
-          shows:
-            "[data-slot=when] [data-slot=when] textarea, [data-slot=when] [data-slot=when] input",
-        },
+        // On a phone the inspector stands under the graph, the field past the fold.
+        inView: COMPARE_FIELD,
+        ready: { shows: COMPARE_FIELD },
       },
       // The finished run in its own pane: its steps.
       {
@@ -3954,54 +3975,6 @@ export const SURFACES: Surface[] = [
         route: (s) => `/session/${s.art}`,
         root: "body",
         ready: (s) => ({ shows: on(s.art, PREVIEW_READY) }),
-      },
-      // No pins yet: each tab says so, with how to make one. First of the
-      // rail's states: the pins a later state seeds stay in the page's doc
-      // across its loads.
-      {
-        name: "comments-empty",
-        route: (s) => `/session/${s.art}`,
-        act: panelUp,
-        root: "body",
-        widths: ["desk", "tablet", "phone"],
-        ready: (s) => ({
-          shows: on(s.art, `${PIN_LIST} [data-slot=pin-list-empty]`),
-          says: NO_OPEN,
-        }),
-      },
-      {
-        name: "comments-empty-resolved",
-        route: (s) => `/session/${s.art}`,
-        act: async (page) => {
-          await panelUp(page);
-          await pinsTab("Resolved")(page);
-        },
-        root: "body",
-        widths: ["desk", "tablet", "phone"],
-        ready: (s) => ({
-          shows: on(s.art, `${PIN_LIST} [data-slot=pin-list-empty]`),
-          says: NO_RESOLVED,
-        }),
-      },
-      // A press on the preview in Comment: the composer at the element, beside its hollow pill.
-      {
-        name: "pin-compose",
-        route: (s) => `/session/${s.art}`,
-        act: composeOn,
-        root: "body",
-        widths: ["desk", "phone"],
-        ready: (s) => ({ shows: on(s.art, COMPOSER_PLACED) }),
-      },
-      // A comment written, its thread open beside its pill (the desk's pane stands beside the transcript).
-      {
-        name: "pin",
-        route: (s) => `/session/${s.art}`,
-        act: dropPin,
-        root: "body",
-        widths: ["desk", "phone"],
-        ready: (s) => ({
-          shows: on(s.art, `${PIN_CARD_PLACED}[aria-label="Comment 1"]`),
-        }),
       },
       // The pane's Comments rail, its pins seeded: a short comment the agent
       // answered (its reply in meta, after the agent's glyph), a 48-word one
@@ -4267,26 +4240,64 @@ export const SURFACES: Surface[] = [
           not: PIN_POP,
         }),
       },
-      // The doc not read yet: past the wait's grace, skeleton rows at the rows' size.
+      // No pins yet: each tab says so, with how to make one. After every
+      // state that reads the scene's pins (scene.ts `seedComments`), each of
+      // these clears the page's doc first; the clear stays in it across the
+      // pass's loads (the overlay keeps the doc on the device), as on a live
+      // fleet it stays on the hub.
       {
-        name: "comments-reading",
+        name: "comments-empty",
         route: (s) => `/session/${s.art}`,
-        act: docSocket("hold"),
+        act: async (page) => {
+          await clearPins(page);
+          await panelUp(page);
+        },
         root: "body",
         widths: ["desk", "tablet", "phone"],
         ready: (s) => ({
-          shows: on(s.art, `${PIN_LIST} [data-slot=pin-list-reading]`),
+          shows: on(s.art, `${PIN_LIST} [data-slot=pin-list-empty]`),
+          says: NO_OPEN,
         }),
       },
-      // The doc refused before it ever synced: the fault on the rows' line, with Try again.
       {
-        name: "comments-fault",
+        name: "comments-empty-resolved",
         route: (s) => `/session/${s.art}`,
-        act: docSocket("refuse"),
+        act: async (page) => {
+          await clearPins(page);
+          await panelUp(page);
+          await pinsTab("Resolved")(page);
+        },
         root: "body",
         widths: ["desk", "tablet", "phone"],
         ready: (s) => ({
-          shows: on(s.art, `${PIN_LIST} [data-pin-list-failed]`),
+          shows: on(s.art, `${PIN_LIST} [data-slot=pin-list-empty]`),
+          says: NO_RESOLVED,
+        }),
+      },
+      // A press on the preview in Comment: the composer at the element, beside its hollow pill.
+      {
+        name: "pin-compose",
+        route: (s) => `/session/${s.art}`,
+        act: async (page) => {
+          await clearPins(page);
+          await composeOn(page);
+        },
+        root: "body",
+        widths: ["desk", "phone"],
+        ready: (s) => ({ shows: on(s.art, COMPOSER_PLACED) }),
+      },
+      // A comment written, its thread open beside its pill (the desk's pane stands beside the transcript).
+      {
+        name: "pin",
+        route: (s) => `/session/${s.art}`,
+        act: async (page) => {
+          await clearPins(page);
+          await dropPin(page);
+        },
+        root: "body",
+        widths: ["desk", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_CARD_PLACED}[aria-label="Comment 1"]`),
         }),
       },
       {
@@ -4376,6 +4387,32 @@ export const SURFACES: Surface[] = [
         ready: {
           shows: "[data-artifact-list][data-state=open] [data-slot=menu-line]",
         },
+      },
+      // Last on the surface, refuse after hold (docSocket): their route on
+      // the doc's socket stays on the page, so every state after them read a
+      // doc held or refused (menu-narrow's pin, once it stood after them,
+      // was never made). A new state of the surface goes above them.
+      // The doc not read yet: past the wait's grace, skeleton rows at the rows' size.
+      {
+        name: "comments-reading",
+        route: (s) => `/session/${s.art}`,
+        act: docSocket("hold"),
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_LIST} [data-slot=pin-list-reading]`),
+        }),
+      },
+      // The doc refused before it ever synced: the fault on the rows' line, with Try again.
+      {
+        name: "comments-fault",
+        route: (s) => `/session/${s.art}`,
+        act: docSocket("refuse"),
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_LIST} [data-pin-list-failed]`),
+        }),
       },
     ],
   },
@@ -4714,10 +4751,12 @@ export const SURFACES: Surface[] = [
             .first()
             .click(),
         root: "[data-ns-popover][data-state=open]",
+        // The popover is a dialog itself (NewSessionPopover's `role="dialog"`,
+        // one that holds nothing): any other dialog open is the sheet.
         ready: {
           shows:
             '[data-ns-popover][data-state=open] [aria-label="First prompt"]',
-          not: OPEN_DIALOG,
+          not: `${OPEN_DIALOG}:not([data-ns-popover])`,
         },
       },
     ],

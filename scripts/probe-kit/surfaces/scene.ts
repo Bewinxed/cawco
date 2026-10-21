@@ -39,11 +39,13 @@
  */
 import { createHash } from "node:crypto";
 import { cp, mkdir, truncate, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import {
   CLAUDE_DIR_NAME,
   CLAUDE_JSON_NAME,
 } from "../../../packages/core/src/claude-dirs";
+import type { JoinInfo } from "../../../packages/core/src/join";
 import { LARGE_FILE_BYTES } from "../../../packages/core/src/move";
 import { seedDecisions } from "../../decisions-preview/seed";
 import type { Machine, Reply, Seen } from "../../scratch-fleet";
@@ -848,6 +850,204 @@ const ARTIFACT_PAGE = `<!doctype html>
   </body>
 </html>`;
 
+/** A comment of 48 words: its row wraps to four lines and is cut there. */
+const LONG_COMMENT =
+  "This heading reads too heavy for the page it opens, and the buttons under it start before the eye has settled, so the whole block feels crowded; give the heading more room above, set the buttons a step lighter, and check that the spacing still holds at a phone's width.";
+/** A pin's id as the overlay makes one (wire.ts `PIN_ID`, 36 of hex and dashes), by its number. */
+const pinId = (n: number) =>
+  `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+/** Pin 1, the one the agent answers (`seedComments`, catalogue `seedPins`), and its answer. */
+export const ANSWERED_PIN = pinId(1);
+export const PIN_ANSWER = "Done: the heading is a step larger now.";
+
+/**
+ * The art page's pins as its overlay writes them, by id, every word in them
+ * the person's: 1 a six-word comment (the agent's answer to it is the
+ * hub's to write, by comment_reply's route: {@link PIN_ANSWER}), 2 the
+ * 48-word one, 3 on an element the page doesn't have (its overlay moves it
+ * aside: gone), 4 to 9 resolved, long enough that Resolved scrolls, 10
+ * resolved and gone (its row under Resolved). The scene writes them on the
+ * hub's doc (`seedComments`), and each Comments state's seed again on the
+ * page's (catalogue `seedPins`).
+ */
+export function commentPins(): Record<string, object> {
+  const at = "2026-10-18T09:00:00.000Z";
+  const pin = (
+    number: number,
+    selector: string,
+    words: string,
+    resolved = false
+  ) => ({
+    id: pinId(number),
+    number,
+    kind: "comment",
+    // Anchored as a tap writes it: by its selector and the words it stood
+    // on then (a gone pin keeps the words of the element the page dropped).
+    anchor: {
+      selector,
+      text:
+        selector === "h1"
+          ? "Three ways a long chip wraps"
+          : "Truncate the chip",
+    },
+    at,
+    by: "person",
+    elements: [],
+    point: { x: 0.3, y: 0.5 },
+    ...(resolved ? { resolvedAt: at } : {}),
+    thread: [{ id: `seed-entry-${number}-0`, by: "person", text: words, at }],
+  });
+  const pins = [
+    pin(1, "h1", "Make this heading a bit bigger"),
+    pin(2, "h1", LONG_COMMENT),
+    pin(
+      3,
+      "#a-card-the-page-dropped",
+      "This card's label should sit on one line"
+    ),
+    // A resolved pin stands on no page, so its loss is the one the overlay wrote when it went.
+    {
+      ...pin(
+        10,
+        "#a-card-the-page-dropped",
+        "Resolved before the card left the page",
+        true
+      ),
+      movedAt: at,
+    },
+    ...[4, 5, 6, 7, 8, 9].map((n) => pin(n, "h1", LONG_COMMENT, true)),
+  ];
+  return Object.fromEntries(pins.map((one) => [one.id, one]));
+}
+
+/** What the scene takes from the hub's packages: Yjs and its sync protocol, as the hub runs them. */
+interface YSync {
+  createDecoder: (bytes: Uint8Array) => unknown;
+  createEncoder: () => unknown;
+  Doc: new () => {
+    getMap: (name: string) => { set: (key: string, value: object) => void };
+    on: (
+      event: "update",
+      listener: (update: Uint8Array, origin: unknown) => void
+    ) => void;
+    transact: (work: () => void, origin?: unknown) => void;
+  };
+  length: (encoder: unknown) => number;
+  readSyncMessage: (
+    decoder: unknown,
+    encoder: unknown,
+    doc: unknown,
+    origin: unknown
+  ) => number;
+  readVarUint: (decoder: unknown) => number;
+  toUint8Array: (encoder: unknown) => Uint8Array<ArrayBuffer>;
+  writeSyncStep1: (encoder: unknown, doc: unknown) => void;
+  writeUpdate: (encoder: unknown, update: Uint8Array) => void;
+  writeVarUint: (encoder: unknown, value: number) => void;
+}
+
+/** A hub address's scheme, which its socket's `ws` takes the place of. */
+const HTTP_SCHEME = /^http/;
+/** y-protocols' sync message, and its step 2 (the other side's doc). */
+const MESSAGE_SYNC = 0;
+const SYNC_STEP_2 = 1;
+
+/** Yjs, its sync protocol and lib0's codec, from the hub's own packages (the kit has none). */
+const ySync = async (): Promise<YSync> => {
+  const from = createRequire(join(ROOT, "packages/hub/package.json"));
+  const load = (name: string) => import(from.resolve(name));
+  const [yjs, sync, decoding, encoding] = await Promise.all([
+    load("yjs"),
+    load("y-protocols/sync"),
+    load("lib0/decoding"),
+    load("lib0/encoding"),
+  ]);
+  return { ...decoding, ...encoding, ...sync, Doc: yjs.Doc } as YSync;
+};
+
+/**
+ * The art page's Comments as the hub holds them before any state reads it:
+ * its pins ({@link commentPins}) written on the artifact's doc as the pane
+ * writes the person's (its doc socket), then pin 1 answered as its session
+ * answers one (comment_reply's route). A page may not write the agent's
+ * words (core comments.ts `pinsProblem`), so the Comments states' seed
+ * keeps the answer the doc holds (catalogue `writePins`), and a tape's
+ * every load of the doc starts from this one (hub-tape.ts: a connection
+ * plays the first).
+ */
+async function seedComments(
+  fleet: KitFleet,
+  instance: string,
+  artifact: string
+): Promise<void> {
+  const y = await ySync();
+  const doc = new y.Doc();
+  const socket = new WebSocket(
+    `${fleet.base.replace(HTTP_SCHEME, "ws")}/ws/artifact/${instance}/${artifact}`
+  );
+  socket.binaryType = "arraybuffer";
+  const frame = (write: (encoder: unknown) => void) => {
+    const encoder = y.createEncoder();
+    y.writeVarUint(encoder, MESSAGE_SYNC);
+    write(encoder);
+    socket.send(y.toUint8Array(encoder));
+  };
+  await new Promise<void>((done, fail) => {
+    socket.onopen = () => frame((encoder) => y.writeSyncStep1(encoder, doc));
+    socket.onerror = () => fail(new Error("the art page's doc socket failed"));
+    socket.onclose = (event) =>
+      fail(
+        new Error(
+          `the art page's doc socket closed: ${event.code} ${event.reason}`
+        )
+      );
+    socket.onmessage = (event) => {
+      const decoder = y.createDecoder(
+        new Uint8Array(event.data as ArrayBuffer)
+      );
+      if (y.readVarUint(decoder) !== MESSAGE_SYNC) {
+        return;
+      }
+      const encoder = y.createEncoder();
+      y.writeVarUint(encoder, MESSAGE_SYNC);
+      const kind = y.readSyncMessage(decoder, encoder, doc, "hub");
+      if (y.length(encoder) > 1) {
+        socket.send(y.toUint8Array(encoder));
+      }
+      if (kind === SYNC_STEP_2) {
+        done();
+      }
+    };
+  });
+  doc.on("update", (update, origin) => {
+    if (origin !== "hub") {
+      frame((encoder) => y.writeUpdate(encoder, update));
+    }
+  });
+  doc.transact(() => {
+    const pins = doc.getMap("pins");
+    for (const [id, pin] of Object.entries(commentPins())) {
+      pins.set(id, pin);
+    }
+  }, "scene");
+  // Its route finds pin 1 once the hub holds the pins.
+  await until(
+    "pin 1 answered by the art session",
+    () =>
+      fleet
+        .api(
+          `/api/instances/${instance}/artifacts/comments/${ANSWERED_PIN}/reply`,
+          { text: PIN_ANSWER }
+        )
+        .then(() => true)
+        .catch(() => false),
+    Boolean,
+    30_000
+  );
+  socket.onclose = null;
+  socket.close();
+}
+
 /** The media page's name (its route's `page=`), a picture beside its program (1px coral PNG), and its diagram. */
 export const MEDIA_PAGE = "chip-media";
 /** A page with a short name, the media writer's newest (`menu-narrow`). */
@@ -984,6 +1184,13 @@ export interface Scene {
   /** The task whose one attempt failed. */
   failed: string;
   graph: string;
+  /**
+   * The first address the hub lists for another machine to join it at
+   * (`GET /api/join`'s `addresses`); "" on a workspace's hub, whose machine
+   * has loopback alone, so a state that pairs a machine stands on a host's
+   * tape only (catalogue `hostOnly: "join"`).
+   */
+  joinable: string;
   /** The decision project's session that made the media page and, newest, the short-named page. */
   media: string;
   permission: string;
@@ -1655,6 +1862,7 @@ export async function seedScene(
     Boolean,
     60_000
   );
+  await seedComments(fleet, art, artifact as string);
   for (const parked of [ask, permission]) {
     // biome-ignore lint/performance/noAwaitInLoops: one parked ask at a time
     await until(
@@ -2391,7 +2599,9 @@ export async function seedScene(
   kit.note(
     `scene: sessions ${chips}, ${ask}, ${permission}, ${art}, ${answered}, ${split}, ${runner}; artifact ${artifact}; project ${project.id} with ${tasks.length + 1} tasks; tray ${tray.id}; decisions ${decisions.projectId}`
   );
+  const joinable = await joinAddressOf(fleet);
   seeded = {
+    joinable,
     chips,
     ask,
     permission,
@@ -2429,6 +2639,12 @@ export async function seedScene(
     memoryDoc: MODEL_DOC,
   };
   return seeded;
+}
+
+/** The first address the hub lists for another machine to join it at (`GET /api/join`); "" when it lists none (scene `joinable`). */
+async function joinAddressOf(fleet: KitFleet): Promise<string> {
+  const { addresses } = await fleet.api<JoinInfo>("/api/join");
+  return addresses[0]?.url ?? "";
 }
 
 /**

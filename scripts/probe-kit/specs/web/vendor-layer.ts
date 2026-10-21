@@ -180,8 +180,7 @@ const spec: Spec = {
         } else if (at === "home/rest" && pass.width === "desk") {
           await machines(kit, page, pass.name);
         }
-      },
-      (what, why) => kit.check(`${what}: opens`, false, why)
+      }
     );
   },
 };

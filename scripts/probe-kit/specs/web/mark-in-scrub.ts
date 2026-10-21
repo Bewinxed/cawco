@@ -179,8 +179,7 @@ const spec: Spec = {
             })
             .join("; ")
         );
-      },
-      (what, why) => kit.check(`${what}: opens`, false, why)
+      }
     );
   },
 };

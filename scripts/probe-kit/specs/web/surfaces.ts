@@ -131,8 +131,7 @@ const spec: Spec = {
             JSON.stringify(dump)
           );
         }
-      },
-      (what, why) => kit.check(`${what}: opens`, false, why)
+      }
     );
     if (misses.length > 0) {
       kit.note(

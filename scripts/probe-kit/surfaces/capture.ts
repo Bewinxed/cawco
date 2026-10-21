@@ -248,11 +248,14 @@ const spec: Spec = {
         const slug = entrySlug(`${entry} ${width} ${theme}`);
         // The capture an earlier run took under this name shows another state now.
         await rm(join(OUT, `${slug}.png`), { force: true });
-        const wrote = await writeOutline(page, `${slug}.outline.txt`).then(
-          () => `; its outline: ${join(kit.out, `${slug}.outline.txt`)}`,
-          () => ""
+        // Its FAIL is the walk's (walk.ts `walkTapes`); here, where to look.
+        await writeOutline(page, `${slug}.outline.txt`).then(
+          () =>
+            kit.note(
+              `${entry} ${px} ${theme}: its outline as it stood: ${join(kit.out, `${slug}.outline.txt`)}`
+            ),
+          () => undefined
         );
-        kit.check(`${entry} ${px} ${theme}`, false, `${why}${wrote}`);
       }
     );
     // Each error the dashboard hit, against the entry and pass on screen

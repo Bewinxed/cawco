@@ -147,7 +147,6 @@ async function readAll(
     (what, why) => {
       const [surface, rest] = what.split("/");
       writer(surface as string).add(rest as string, null, why);
-      kit.note(`${what}: did not open or read (${why})`);
     }
   );
   const snaps = new Map(
@@ -395,6 +394,10 @@ async function record(kit: Kit, surfaces: Surface[]): Promise<void> {
   // what the page asks the hub for. A read asks nothing (a forced state
   // fires no event), so none is made; a theme or reduced motion asks for
   // nothing a width does not.
+  // `counted`: a miss fails the recording. A hub state that holds back what
+  // its states read (scene.ts `HOLDS`) is recorded answered and held only at
+  // play, so its states never stand while it records; its misses are said,
+  // and the walks over the tape fail any that doesn't open (walk.ts `walkTapes`).
   const recordOn = async (into: TapeHub, on: Surface[], counted = true) => {
     const rec = recorder(fleet.base, into);
     const servers = new Servers(kit, rec);
@@ -408,8 +411,14 @@ async function record(kit: Kit, surfaces: Surface[]): Promise<void> {
         async () => undefined,
         (what, why) => {
           fails += counted ? 1 : 0;
-          kit.note(`${what}: did not open (${why})`);
-        }
+          kit.note(
+            `${what}: did not open (${why})${counted ? "" : ", not counted: its hub state is held only at play, or the walk is off the tape"}`
+          );
+        },
+        // One pass at a time: the fleet is live and every pass's, so a pass's
+        // act (a delete, a pin cleared or dropped, a pick) is what the passes
+        // beside it read. On the tape each pass reads its own.
+        1
       );
     } finally {
       await servers.close();
@@ -440,7 +449,7 @@ async function record(kit: Kit, surfaces: Surface[]): Promise<void> {
         sockets: [],
         ...(held ? { held } : {}),
       };
-      await recordOn(section, on);
+      await recordOn(section, on, !held);
       tape.variants = { ...tape.variants, [hub]: section };
     }
   } finally {
@@ -688,8 +697,7 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
           `${JSON.stringify({ url: page.url(), ...read }, null, 2)}\n`
         );
       }
-    },
-    (what, why) => kit.note(`${what}: did not open (${why})`)
+    }
   );
   // A walk that names one element, or lists a state's ids, counts nothing:
   // the map stays as it was.

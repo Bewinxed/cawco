@@ -518,8 +518,7 @@ const spec: Spec = {
             await readIn(page, pass.theme)
           );
         }
-      },
-      (what, why) => kit.note(`${what}: did not open (${why})`)
+      }
     );
     await readTray(kit, surfaces);
     kit.note(

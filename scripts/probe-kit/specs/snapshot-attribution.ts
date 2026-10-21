@@ -214,8 +214,7 @@ const spec: Spec = {
         (map[surface.name] as Record<string, Record<string, string[]>>)[
           `${state.name} · ${pass.name}`
         ] = keys;
-      },
-      (what, why) => kit.note(`${what}: did not open (${why})`)
+      }
     );
     await writeFile(out, JSON.stringify(map));
     kit.check(

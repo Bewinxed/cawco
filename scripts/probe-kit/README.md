@@ -97,10 +97,14 @@ bun scripts/probe-kit/run.ts style-snapshot --record --without-delegate     # in
 ```
 
 The scene's delegate needs a workspace of its own, which only the host can
-make (a workspace has no user namespaces). A tape recorded with
-`--without-delegate` holds none, and every walk over it leaves out the states
-that stand on it (`hostOnly` in the catalogue), each said once in a `NOTE`:
-`session/delegate: host only, not in this tape`.
+make (a workspace has no user namespaces), and pairing a machine needs an
+address the hub lists for it, which a workspace's machine (loopback alone)
+has none of. A tape recorded in a workspace (`--without-delegate`) holds
+neither, and every walk over it leaves out the states that stand on them
+(`hostOnly: "delegate" | "join"` in the catalogue), each said once in a
+`NOTE`: `session/delegate: host only, not in this tape: it holds no delegate
+(recorded --without-delegate)`. The tape the repository keeps is
+a host's.
 
 `style-snapshot` reads every element of every surface (`surfaces/catalogue.ts`)
 at desk 1440, tablet 820 and phone 390, light and dark, and the desk once
@@ -117,6 +121,13 @@ fleet stands up, so both run inside any workspace, and two runs read the
 same. A request the tape never saw is answered 404 and named in a `NOTE`.
 Record again (`--record`) when the scene or the dashboard's reads change,
 then approve again.
+
+Every spec that walks the surfaces (`walkTapes`) FAILs a state the
+catalogue lists and the walk does not open: `<surface>/<state> · <pass>:
+opens`, with what stopped it. A tape that falls behind the scene or the
+hub's answers shows there, never as a skipped state. A state left out on
+purpose is left out by the catalogue itself, with its reason: its `widths`,
+`hostOnly`, or a sheet tape not recorded here.
 
 ## A spec that delegates runs on the host
 

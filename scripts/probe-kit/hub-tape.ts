@@ -519,6 +519,15 @@ export function recorder(target: string, tape: TapeHub) {
    * recorded through this proxy, answer it.
    */
   const attach: Attach = async (context, isPreview) => {
+    // A page this route fulfils stands on no address of its own, so
+    // Chromium takes it for a public one and refuses it loopback (Local
+    // Network Access, which gates WebSockets too: blink-dev "Intent to
+    // Ship: Local network access restrictions for WebSockets"). Its doc
+    // socket to its own origin closed 1006 before it opened, so no page
+    // wrote to the hub on any recording: no pin, no pick, no seed. A
+    // person's browser loads the page from its loopback origin itself, and
+    // the permission gives the routed page that network again.
+    await context.grantPermissions(["local-network-access"]);
     await context.route(isPreview, async (route) => {
       const request = route.request();
       const response = await route.fetch();

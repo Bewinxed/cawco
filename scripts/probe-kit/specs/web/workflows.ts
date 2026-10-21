@@ -254,8 +254,7 @@ const spec: Spec = {
             JSON.stringify(read)
           );
         }
-      },
-      (what, why) => kit.check(`${what} opens`, false, why)
+      }
     );
   },
 };

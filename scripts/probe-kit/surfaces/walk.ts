@@ -1058,12 +1058,24 @@ async function walkState(
       page
     );
   }
+  // What the act took from the fleet, put back (State `restore`): read or
+  // failed, the states after it read the scene.
+  const { restore } = state;
+  if (restore) {
+    await acting(page, restore).catch((error: unknown) => {
+      console.log(
+        `  restore: ${surface.name}/${state.name} · ${pass.name}: ${saidOf(error)}`
+      );
+    });
+  }
 }
 
 /**
  * Walks `surfaces` at `passes`, handing each state to `visit` once it
  * stands still. A state that cannot open (its control gone) is reported to
- * `failed` and the walk goes on. Returns each surface's seconds.
+ * `failed` and the walk goes on. `passesAtOnce`: how many of a surface's
+ * passes walk side by side (a recording's, one: its fleet is live and
+ * shared). Returns each surface's seconds.
  */
 export async function walk(
   kit: Kit,
@@ -1072,16 +1084,28 @@ export async function walk(
   surfaces: Surface[],
   passes: Pass[],
   visit: (v: Visit) => Promise<void>,
-  failed: Failed
+  failed: Failed,
+  passesAtOnce = PARALLEL
 ): Promise<Map<string, number>> {
   const seconds = new Map<string, number>();
   const scene = tape.scene as Scene;
-  // A tape recorded without the delegate (`--record --without-delegate`)
-  // holds nothing for a state that stands on it: said once, then left out.
-  const hostOnly = (state: State) => state.hostOnly === true && !scene.split;
+  // A tape recorded in a workspace holds nothing for a state that stands on
+  // what only a host records: said once, with what it lacks, then left out.
+  const lacks = (state: State): string | null => {
+    if (state.hostOnly === "delegate" && !scene.split) {
+      return "delegate (recorded --without-delegate)";
+    }
+    if (state.hostOnly === "join" && scene.joinable === "") {
+      return "address the hub lists to join it at (its machine had loopback alone)";
+    }
+    return null;
+  };
+  const hostOnly = (state: State) => lacks(state) !== null;
   for (const surface of surfaces) {
     for (const state of surface.states.filter(hostOnly)) {
-      kit.note(`${surface.name}/${state.name}: host only, not in this tape`);
+      kit.note(
+        `${surface.name}/${state.name}: host only, not in this tape: it holds no ${lacks(state)}`
+      );
     }
   }
   // Surfaces side by side (`PROBE_SURFACES`, else one at a time): each
@@ -1094,7 +1118,7 @@ export async function walk(
       const started = performance.now();
       const base = await servers.base(surface.serve);
       // A surface's passes side by side, each on its own page and context.
-      await pool(passes, PARALLEL, async (pass) => {
+      await pool(passes, passesAtOnce, async (pass) => {
         const states = surface.states.filter(
           (s) => !(hostOnly(s) || (s.widths && !s.widths.includes(pass.width)))
         );
@@ -1206,14 +1230,26 @@ async function walkTape(
  * scene's, then the sheet's (catalogue `tape`). The sheet's is a host's
  * alone: where it was never recorded, its surfaces are left out with a
  * NOTE.
+ *
+ * A state the walk lists and does not open FAILs the run
+ * (`<surface>/<state> · <pass>: opens`), whatever spec walks it: a spec that
+ * only noted it skipped the state on every run without a word (seven of
+ * them at the desk, unseen). A state left out on purpose is left out by the
+ * list itself, with its reason: its `widths`, `hostOnly`, or the sheet's
+ * tape not recorded here. `failed` is what a spec does with a miss besides
+ * (its snapshot's line, its outline).
  */
 export async function walkTapes(
   kit: Kit,
   surfaces: Surface[],
   passes: Pass[],
   visit: (v: Visit) => Promise<void>,
-  failed: Failed
+  failed?: Failed
 ): Promise<Walked> {
+  const missed: Failed = async (what, why, page) => {
+    kit.check(`${what}: opens`, false, why);
+    await failed?.(what, why, page);
+  };
   const into: Walked = { misses: [], seconds: new Map() };
   for (const [file, reading] of [
     [TAPE, surfaces.filter((s) => !s.tape)],
@@ -1231,7 +1267,7 @@ export async function walkTapes(
       continue;
     }
     // biome-ignore lint/performance/noAwaitInLoops: one tape at a time
-    await walkTape(kit, file, reading, passes, visit, failed, into);
+    await walkTape(kit, file, reading, passes, visit, missed, into);
   }
   return into;
 }
