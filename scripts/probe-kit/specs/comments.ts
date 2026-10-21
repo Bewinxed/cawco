@@ -469,29 +469,51 @@ const commentChecks = async (on: On, frame: Frame) => {
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.focus();
+  // DESIGN.md, The mode: "Comment and Draw turn the well's own edge the
+  // accent, 2px, inside its box": brand-solid, 2px solid, offset -2px.
+  const readEdge = () =>
+    on.page.evaluate(() => {
+      const well = document.querySelector(
+        ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-side-well]'
+      );
+      const probe = document.createElement("span");
+      probe.style.color = "var(--brand-solid)";
+      document.body.append(probe);
+      const accent = getComputedStyle(probe).color;
+      probe.remove();
+      const style = well ? getComputedStyle(well) : null;
+      return {
+        color: style?.outlineColor ?? null,
+        width: style?.outlineWidth ?? null,
+        style: style?.outlineStyle ?? null,
+        offset: style?.outlineOffset ?? null,
+        accent,
+      };
+    });
+  type Edge = Awaited<ReturnType<typeof readEdge>>;
+  const accentEdge = (read: Edge) =>
+    read.color === read.accent &&
+    read.width === "2px" &&
+    read.style === "solid" &&
+    read.offset === "-2px";
+  // The edge comes in over --dur-control: read once it has.
+  await on.page.keyboard.press("d");
+  await settle(on.page, 300);
+  const drawEdge = await readEdge();
+  on.kit.check(
+    "1: D turns Draw on: the well's edge is the brand accent (brand-solid), 2px, inside its box",
+    accentEdge(drawEdge),
+    JSON.stringify(drawEdge)
+  );
   await on.page.keyboard.press("c");
   await pageInComment(frame, true);
-  // The edge comes in over --dur-control: read once it has.
   await settle(on.page, 300);
-  const edge = await on.page.evaluate(() => {
-    const well = document.querySelector(
-      ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-side-well]'
-    );
-    const probe = document.createElement("span");
-    probe.style.color = "var(--accent)";
-    document.body.append(probe);
-    const accent = getComputedStyle(probe).color;
-    probe.remove();
-    return {
-      outline: well ? getComputedStyle(well).outlineColor : null,
-      accent,
-    };
-  });
+  const edge = await readEdge();
   const pressed = await comment.getAttribute("aria-selected");
   on.kit.check(
-    "1: C turns Comment on: its segment chosen (aria-selected), the well's accent edge",
-    pressed === "true" && edge.outline === edge.accent,
-    `aria-selected ${pressed}; outline ${edge.outline}, accent ${edge.accent}`
+    "1: C turns Comment on: its segment chosen (aria-selected), the well's edge the brand accent (brand-solid), 2px, inside its box",
+    pressed === "true" && accentEdge(edge),
+    `aria-selected ${pressed}; ${JSON.stringify(edge)}`
   );
   // The mode's segments draw their glyphs alone (TabItem `glyphOnly`): the
   // name is sr-only, still the tab's accessible name.
