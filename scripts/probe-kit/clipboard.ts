@@ -14,6 +14,8 @@ export interface Copied {
   clipboard: string | null;
   /** The copy or cut event's `text/plain` once the page's handlers ran. */
   event: string | null;
+  /** Its `text/html`, likewise: what a rich paste gets. */
+  html: string | null;
 }
 
 export async function pressCopy(
@@ -27,10 +29,15 @@ export async function pressCopy(
       .grantPermissions(["clipboard-read", "clipboard-write"]);
   }
   await page.evaluate(() => {
-    const seen = globalThis as unknown as { __copied: string | null };
-    seen.__copied = null;
+    const seen = globalThis as unknown as {
+      __copied: { text: string | null; html: string | null };
+    };
+    seen.__copied = { text: null, html: null };
     const read = (copied: ClipboardEvent) => {
-      seen.__copied = copied.clipboardData?.getData("text/plain") ?? null;
+      seen.__copied = {
+        text: copied.clipboardData?.getData("text/plain") ?? null,
+        html: copied.clipboardData?.getData("text/html") ?? null,
+      };
       window.removeEventListener("copy", read);
       window.removeEventListener("cut", read);
     };
@@ -38,12 +45,17 @@ export async function pressCopy(
     window.addEventListener("cut", read);
   });
   await page.keyboard.press(`ControlOrMeta+${key}`);
-  const event = await page.evaluate(
-    () => (globalThis as unknown as { __copied: string | null }).__copied
+  const { text: event, html } = await page.evaluate(
+    () =>
+      (
+        globalThis as unknown as {
+          __copied: { text: string | null; html: string | null };
+        }
+      ).__copied
   );
   const clipboard =
     engine === "chromium"
       ? await page.evaluate(() => navigator.clipboard.readText())
       : null;
-  return { event, clipboard };
+  return { event, html, clipboard };
 }

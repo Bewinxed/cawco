@@ -40,6 +40,14 @@ const chipAt = (node: Node): Element | null =>
     `[${COPIES}]`
   ) ?? null;
 
+/** A chip without the display the read gave it, and no `style` left empty. */
+function unstyle(chip: HTMLElement): void {
+  chip.style.removeProperty("display");
+  if (!chip.getAttribute("style")) {
+    chip.removeAttribute("style");
+  }
+}
+
 function oncopy(event: ClipboardEvent): void {
   const picked = getSelection();
   if (
@@ -101,8 +109,13 @@ function oncopy(event: ClipboardEvent): void {
   for (const [words, was] of swapped) {
     words.data = was;
   }
-  for (const chip of chips) {
-    (chip as HTMLElement).style.removeProperty("display");
+  // The display was the read's alone: neither the page's chips nor the
+  // markup pasted elsewhere keep it.
+  for (const chip of [
+    ...chips,
+    ...holder.querySelectorAll<HTMLElement>(`[${COPIES}]`),
+  ]) {
+    unstyle(chip as HTMLElement);
   }
   const back = document.createRange();
   back.setStart(...start);

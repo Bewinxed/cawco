@@ -27,8 +27,9 @@
  *   one opens the house hover panel with its description and source, and
  *   Escape puts it away. Copying the two turns puts each skill chip on the
  *   clipboard as its `/name`, the chips still showing their names and the
- *   selection where it was; copying words inside one chip gives its
- *   `/name` whole.
+ *   selection where it was, and its markup holds no display style the
+ *   copy gave the chips; copying words inside one chip gives its `/name`
+ *   whole.
  * - A kit popover over a sticky table head (the overlays bench, desk): a
  *   sticky head on `--layer-sticky` set under the popover's place, and the
  *   popover first at that point.
@@ -719,6 +720,12 @@ async function skillChips(
       before > 0 &&
       before === after,
     JSON.stringify({ copy, labels, before, after })
+  );
+  kit.check(
+    `skill-chip on ${engine}: the copy's markup (a rich paste) holds each chip as its /name and no display style the copy gave it`,
+    (copy.html ?? "").includes("/clean-copy") &&
+      !(copy.html ?? "").includes('style="display'),
+    JSON.stringify({ html: copy.html })
   );
   // Words inside one chip copy as all it stands for.
   await agent
