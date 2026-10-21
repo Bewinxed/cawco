@@ -672,17 +672,39 @@ async function runView(view) {
     await page.mouse.move(5, 5); await settle(300);
   }
 
+  // Right after a redraw (the graph drawn anew, as a capture's resize or a tab does), every chip's tier layer
+  // stands at its final clip and nothing on the chip or its pseudo-elements runs: the wipe is for a real keep.
+  const redraw = await ev(() => new Promise((res) => {
+    render();
+    const frames = []; let n = 0;
+    const read = () => {
+      const anims = document.getAnimations();
+      for (const c of document.querySelectorAll(".var")) {
+        if (!__k.vis(c)) continue;
+        const clip = getComputedStyle(c, "::after").clipPath, want = c.matches(".kept, .cur") ? "inset(0px)" : "inset(0px 100% 0px 0px)";
+        const running = anims.filter((a) => a.effect && a.effect.target === c && a.playState === "running").map((a) => (a.effect.pseudoElement || "") + ":" + (a.transitionProperty || "keyframes"));
+        frames.push({ frame: n, text: c.textContent, clip, want, running });
+      }
+      if (++n < 4) requestAnimationFrame(read); else res(frames);
+    };
+    read();
+  }));
+  const wrong = redraw.filter((f) => f.clip !== f.want || f.running.length);
+  ok(V, "7 right after a redraw every chip's tier layer stands at its final clip, nothing running on the chip or its ::after", redraw.length > 0 && wrong.length === 0, (wrong.length ? "WRONG " + wrong.slice(0, 3).map((f) => f.text + " frame " + f.frame + " clip " + f.clip + " (want " + f.want + ") running " + JSON.stringify(f.running)).join("; ") + "; " : "") + redraw.length + " chip-frames over 4 frames");
+  await settle(300);
+
   // The state a full-page capture draws: the viewport grown to the page's height (which rebuilds the graph),
   // read at once, then settled.
   // Every frame for 400ms after the resize, the kept and current chips' ink against their fill; a capture can
   // land on any of them.
   const fullH = await ev(() => Math.max(document.documentElement.scrollHeight, innerHeight));
   if (fullH <= view.viewport.height) note(V, "7 chips through a full-page capture", "the page fits the viewport (" + fullH + "px), so a full-page capture resizes and redraws nothing");
-  else await ev(() => { window.__frames = []; const t0 = performance.now(); addEventListener("resize", () => { const tick = () => { for (const c of document.querySelectorAll(".var.kept, .var.cur")) { const a = getComputedStyle(c, "::after"); window.__frames.push({ t: Math.round(performance.now() - t0), text: c.textContent, tier: c.classList.contains("kept") ? "kept" : "current", r: Math.round(__k.chipRatio(c) * 100) / 100, ink: a.color, fill: a.backgroundColor }); } if (performance.now() - t0 < 400) requestAnimationFrame(tick); }; tick(); }, { once: true }); });
+  else await ev(() => { window.__frames = []; const t0 = performance.now(); addEventListener("resize", () => { const tick = () => { for (const c of document.querySelectorAll(".var.kept, .var.cur")) { const a = getComputedStyle(c, "::after"); window.__frames.push({ t: Math.round(performance.now() - t0), text: c.textContent, tier: c.classList.contains("kept") ? "kept" : "current", r: Math.round(__k.chipRatio(c) * 100) / 100, ink: a.color, fill: a.backgroundColor, clip: a.clipPath }); } if (performance.now() - t0 < 400) requestAnimationFrame(tick); }; tick(); }, { once: true }); });
   await page.setViewportSize({ width: view.viewport.width, height: fullH });
   await settle(500);
   const frames = await ev(() => window.__frames || []);
   const low = frames.filter((f) => f.r < 4.5);
+  if (fullH > view.viewport.height) { const split = frames.filter((f) => f.clip !== "inset(0px)"); ok(V, "7 on every frame of the redraw a full-page capture causes, each kept and current chip is whole (no wipe mid-way)", frames.length > 0 && split.length === 0, (split.length ? "MID-WIPE " + split.slice(0, 3).map((f) => f.text + " at " + f.t + "ms clip " + f.clip).join("; ") + "; " : "") + frames.length + " readings"); }
   if (fullH > view.viewport.height) ok(V, "7 chips read 4.5:1 or better on every frame of the redraw a full-page capture causes (" + view.viewport.width + "×" + fullH + ")", frames.length > 0 && low.length === 0, (low.length ? "UNDER 4.5 " + low.slice(0, 3).map((f) => f.text + " (" + f.tier + ") at " + f.t + "ms " + f.r + " ink " + f.ink + " on " + f.fill).join("; ") + "; " : "") + frames.length + " readings, lowest " + Math.min(...frames.map((f) => f.r)));
   chipOk("as a full-page capture draws them, settled", await chipRead("capture settled"), ["kept"]);
   await page.setViewportSize(view.viewport); await settle(300);
