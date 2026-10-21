@@ -8,6 +8,7 @@ import type { ForgeWrite } from "@cawco/core/upstream-post";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
+  artifactBrowse,
   artifactCreate,
   artifactCreateToParent,
   artifactDelete,
@@ -1345,6 +1346,24 @@ export function handoffTools(deps: HandoffDeps) {
             `/${encodeURIComponent(id)}/show?by=agent`
           )
         )
+    ),
+    tool(
+      artifactBrowse.name,
+      artifactBrowse.description,
+      artifactBrowse.input,
+      async ({ id }) =>
+        json(
+          await actions.artifactCall(
+            "POST",
+            `/${encodeURIComponent(id)}/browse`
+          )
+        ),
+      {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      }
     ),
     tool(
       artifactPromote.name,

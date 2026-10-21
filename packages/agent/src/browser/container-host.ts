@@ -59,6 +59,7 @@ import {
   slotAddress,
   slotHost,
 } from "./media-network";
+import { containerHostRules, MACHINE_HOST } from "./preview-names";
 import { relayKeyOf, relayUrlsFor } from "./relay-urls";
 import type { Runtime } from "./runtime";
 import {
@@ -253,14 +254,20 @@ const relayExpiry = (relay: BrowserRelay): number | undefined => {
  * Whether `record`'s container was made as a start asks now: the same image,
  * published on the record's ports, the media port published for what the
  * runtime forwards now, at its slot's address on the media network, made
- * with the STUN server named now, and its relay credential, for the same
- * relay, good for a day more (or no relay asked for). Otherwise a new one is
- * made on the same volume, with the credential just minted. One made before
- * it named its STUN server has neko's own default in it, and is made again.
+ * with the STUN server named now and the preview names' rules found now
+ * (preview-names.ts), and its relay credential, for the same relay, good
+ * for a day more (or no relay asked for). Otherwise a new one is made on the
+ * same volume, with the credential just minted. One made before it named
+ * its STUN server has neko's own default in it, and is made again.
  */
 const keptAsAsked = (
   record: BrowserRecord,
-  now: { image: string; media: MediaPath; address: string },
+  now: {
+    image: string;
+    media: MediaPath;
+    address: string;
+    hostRules: string | undefined;
+  },
   relay: BrowserRelay | undefined
 ): boolean => {
   const kept = record.container;
@@ -278,6 +285,7 @@ const keptAsAsked = (
     kept.ports?.devtools === published.devtools &&
     kept.ports?.media === published.media &&
     kept.stun === stunServer() &&
+    kept.hostRules === now.hostRules &&
     relayHolds
   );
 };
@@ -396,8 +404,10 @@ export class ContainerHost implements BrowserHost {
       throw new Error(`${record.key} has no slot on the container host.`);
     }
     const address = slotAddress(network, record.slot);
+    const hostRules = await containerHostRules();
     let reuse =
-      kept && keptAsAsked(record, { image, media, address }, options.relay)
+      kept &&
+      keptAsAsked(record, { image, media, address, hostRules }, options.relay)
         ? await this.#docker
             .getContainer(kept.id)
             .inspect()
@@ -437,6 +447,7 @@ export class ContainerHost implements BrowserHost {
           owner,
           network,
           address,
+          hostRules,
         });
       }
       await this.#live(container.id, ports);
@@ -526,9 +537,12 @@ export class ContainerHost implements BrowserHost {
       network: MediaNetwork;
       /** Its slot's address on the media network. */
       address: string;
+      /** Chromium's resolver rules for the preview names (preview-names.ts); none to map. */
+      hostRules: string | undefined;
     }
   ): Promise<NonNullable<BrowserRecord["container"]>> {
-    const { image, volume, relay, media, owner, network, address } = made;
+    const { image, volume, relay, media, owner, network, address, hostRules } =
+      made;
     const { http, devtools, media: port } = portsOf(record);
     const passwords = { admin: password(), user: password() };
     const stun = stunServer();
@@ -548,14 +562,18 @@ export class ContainerHost implements BrowserHost {
       name: nameOf(owner, record.key),
       Image: image,
       Labels: labelsOf(owner, record.key),
-      Env: nekoEnv(
-        record,
-        passwords,
-        neko,
-        media,
-        await machineAddresses(),
-        stun
-      ),
+      Env: [
+        ...nekoEnv(
+          record,
+          passwords,
+          neko,
+          media,
+          await machineAddresses(),
+          stun
+        ),
+        // chromium.conf passes it to Chromium's --host-resolver-rules.
+        ...(hostRules ? [`CAWCO_HOST_RULES=${hostRules}`] : []),
+      ],
       NetworkingConfig: placed.NetworkingConfig,
       ExposedPorts: {
         "8080/tcp": {},
@@ -565,6 +583,10 @@ export class ContainerHost implements BrowserHost {
         ),
       },
       HostConfig: {
+        // The machine, as the rules name it: asked for only where a rule
+        // needs it, since a runtime that can't find the host's address
+        // refuses the container.
+        ...(hostRules ? { ExtraHosts: [`${MACHINE_HOST}:host-gateway`] } : {}),
         NetworkMode: placed.NetworkMode,
         PortBindings: {
           "8080/tcp": [{ HostIp: "127.0.0.1", HostPort: String(http) }],
@@ -595,6 +617,7 @@ export class ContainerHost implements BrowserHost {
       ports: { http, devtools, media: port },
       runtime: { kind: this.#runtime.kind, endpoint: this.#runtime.endpoint },
       stun,
+      ...(hostRules ? { hostRules } : {}),
       volume,
       adminPassword: passwords.admin,
       userPassword: passwords.user,

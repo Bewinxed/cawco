@@ -35,7 +35,14 @@
  *    changing nothing, a pattern whose names stand under an ending the
  *    Public Suffix List doesn't know (`.cawco.localhost`: Chromium takes
  *    each such name for a site of its own, so no frame carries the pass),
- *    one under a public suffix (`ts.net`), and an http:// one.
+ *    one under a public suffix (`ts.net`), and an http:// one;
+ * 7. a session's own pass (`artifact_browse`): its ticket entered on a name
+ *    of its scope sets `__Secure-cawco-session-pass-<session>` for 15
+ *    minutes, beside the person's pass and never in its place; it opens
+ *    that name, and answers another session's name and a name nobody holds
+ *    as a stranger is answered; a ticket spent outside its scope, or once
+ *    its session ended, sets nothing; past its end it opens nothing; and
+ *    revoking by the session takes it.
  *
  * The names are localtest.me's, which resolve to 127.0.0.1 ("The entire
  * domain name localtest.me—and all wildcard entries—point to 127.0.0.1",
@@ -59,6 +66,10 @@ const FORMS = [
   "/src/lib/cawco/Sidebar.svelte?svelte&type=style&lang.css",
 ];
 const INSTANCE = "00000000-0000-4000-8000-0000000a0e71";
+/** Another session the hub holds a name for, showing nothing. */
+const OTHER = "00000000-0000-4000-8000-0000000a0e72";
+/** The sessions that still run, as the hub reads them (preview.ts `sessionLive`). */
+const live = new Set([INSTANCE, OTHER]);
 const TOKEN = "preview-query-probe-relay-token-0";
 
 /** Each request line the server read, its target alone. */
@@ -137,6 +148,7 @@ const rawGet = async (...args: Parameters<typeof rawText>): Promise<string[]> =>
 const DOMAIN = "localtest.me";
 const PATTERN = `https://p-{session}.${DOMAIN}:${HOST_PORT}`;
 const NAME = `p-${INSTANCE}.${DOMAIN}:${HOST_PORT}`;
+const OTHER_NAME = `p-${OTHER}.${DOMAIN}:${HOST_PORT}`;
 /** A name of the pattern no origin holds. */
 const UNHELD = `p-00000000-0000-4000-8000-00000000dead.${DOMAIN}:${HOST_PORT}`;
 /** The patterns Settings' save refuses, and a phrase of each refusal. */
@@ -158,6 +170,158 @@ const LOCKED_PAGE = '<meta name="cawco-preview-locked" content="1">';
 const COOKIE_LINE = /^cookie:.*$/im;
 /** The pass's whole `Set-Cookie`, its attributes after its value. */
 const PASS_ATTRIBUTES = /^set-cookie:\s*__Secure-cawco-pass=[^;]+;(.*)$/im;
+/** A session's pass's whole `Set-Cookie`, its attributes after its value. */
+const SESSION_ATTRIBUTES =
+  /^set-cookie:\s*__Secure-cawco-session-pass-[^=]+=[^;]+;(.*)$/im;
+
+/** What leg 7 reads of the hub: its tickets, its passes as kept, and a status line's reader. */
+interface SessionLegHub {
+  /** core `PREVIEW_ENTER_PATH`. */
+  enterPath: string;
+  mintSessionTicket: (
+    instanceId: string,
+    scope: string[]
+  ) => { ticket: string };
+  mintTicket: (deviceId: string | null) => { ticket: string };
+  passRows: Map<
+    string,
+    { expiresAt: Date; instanceId: string | null; scope: string[] | null }
+  >;
+  revoke: (by: { instanceId: string }) => number;
+  sessionPassCookie: (instanceId: string) => string;
+  status: (text: string) => string;
+}
+
+/** 7. A session's own pass (artifact_browse) on host mode's names, beside the person's. */
+const sessionPassLegs = async (kit: Kit, hub: SessionLegHub) => {
+  const { mintSessionTicket, mintTicket, passRows, sessionPassCookie, status } =
+    hub;
+  const enterWith = (ticket: string, name: string, cookie = "") =>
+    rawGet(
+      HOST_PORT,
+      `${hub.enterPath}?ticket=${encodeURIComponent(ticket)}&next=%2F`,
+      name,
+      cookie ? `cookie: ${cookie}\r\n` : ""
+    );
+  const person = (await enterWith(mintTicket(null).ticket, NAME))
+    .join("\n")
+    .match(PASS)?.[1];
+  const sessionEntry = await enterWith(
+    mintSessionTicket(INSTANCE, [INSTANCE]).ticket,
+    NAME,
+    person
+  );
+  const sessionPass = sessionEntry.join("\n").match(PASS)?.[1] ?? "";
+  const sessionAttributes = (
+    sessionEntry.join("\n").match(SESSION_ATTRIBUTES)?.[1] ?? ""
+  )
+    .split(";")
+    .map((one) => one.trim())
+    .filter(Boolean);
+  const maxAge = Number(
+    sessionAttributes.find((one) => one.startsWith("Max-Age="))?.slice(8)
+  );
+  kit.check(
+    "7a: a session's ticket entered on a name of its scope: 302, its own cookie __Secure-cawco-session-pass-<session> on the names' domain, Secure, HttpOnly, SameSite=Lax, for 15 minutes",
+    sessionEntry[0]?.startsWith("HTTP/1.1 302") === true &&
+      sessionPass.startsWith(`${sessionPassCookie(INSTANCE)}=`) &&
+      sessionAttributes.includes(`Domain=${DOMAIN}`) &&
+      sessionAttributes.includes("Secure") &&
+      sessionAttributes.includes("HttpOnly") &&
+      sessionAttributes.includes("SameSite=Lax") &&
+      maxAge > 890 &&
+      maxAge <= 900,
+    `answered ${JSON.stringify(sessionEntry[0] ?? "")}; ${sessionPass.split("=")[0]}; attributes ${sessionAttributes.join("; ")}`
+  );
+  const reached = arrived.length;
+  const own = await rawText(
+    HOST_PORT,
+    FORMS[2] as string,
+    NAME,
+    `cookie: ${sessionPass}\r\n`
+  );
+  const other = await rawText(
+    HOST_PORT,
+    "/",
+    OTHER_NAME,
+    `cookie: ${sessionPass}\r\n`
+  );
+  const nobody = await rawText(
+    HOST_PORT,
+    "/",
+    UNHELD,
+    `cookie: ${sessionPass}\r\n`
+  );
+  kit.check(
+    "7b: the session's pass opens its own name (the server behind reads the request), and answers another session's name and a name nobody holds 401 with the locked page, as a stranger is",
+    status(own).startsWith("HTTP/1.1 200") &&
+      arrived.length === reached + 1 &&
+      status(other).startsWith("HTTP/1.1 401") &&
+      other.includes(LOCKED_PAGE) &&
+      status(nobody).startsWith("HTTP/1.1 401") &&
+      nobody.includes(LOCKED_PAGE),
+    `own: ${status(own)}; another session's: ${status(other)}; nobody's: ${status(nobody)}`
+  );
+  const personAfter = await rawText(
+    HOST_PORT,
+    "/",
+    OTHER_NAME,
+    `cookie: ${person}; ${sessionPass}\r\n`
+  );
+  kit.check(
+    "7c: the session's entry, made in a browser holding the person's pass, leaves it: the person's pass still opens another session's name",
+    !!person && status(personAfter).startsWith("HTTP/1.1 404"),
+    `the person's pass beside the session's on another session's name: ${status(personAfter)}`
+  );
+  const outside = await enterWith(
+    mintSessionTicket(INSTANCE, [INSTANCE]).ticket,
+    OTHER_NAME
+  );
+  kit.check(
+    "7d: a session's ticket spent on a name outside its scope sets nothing and answers the locked page",
+    outside[0]?.startsWith("HTTP/1.1 401") === true &&
+      !outside.join("\n").match(PASS),
+    `answered ${JSON.stringify(outside[0] ?? "")}`
+  );
+  const sessionToken = createHash("sha256")
+    .update(sessionPass.slice(`${sessionPassCookie(INSTANCE)}=`.length))
+    .digest("hex");
+  const sessionRow = passRows.get(sessionToken);
+  if (sessionRow) {
+    passRows.set(sessionToken, {
+      ...sessionRow,
+      expiresAt: new Date(Date.now() - 1000),
+    });
+  }
+  const lapsed = await rawText(
+    HOST_PORT,
+    FORMS[2] as string,
+    NAME,
+    `cookie: ${sessionPass}\r\n`
+  );
+  kit.check(
+    "7e: the session's pass past its end: its own name answers 401 with the locked page",
+    sessionRow?.instanceId === INSTANCE &&
+      JSON.stringify(sessionRow.scope) === JSON.stringify([INSTANCE]) &&
+      status(lapsed).startsWith("HTTP/1.1 401") &&
+      lapsed.includes(LOCKED_PAGE),
+    `row ${JSON.stringify({ instanceId: sessionRow?.instanceId, scope: sessionRow?.scope })}; answered ${status(lapsed)}`
+  );
+  live.delete(INSTANCE);
+  const endedEntry = await enterWith(
+    mintSessionTicket(INSTANCE, [INSTANCE]).ticket,
+    NAME
+  );
+  const gone = hub.revoke({ instanceId: INSTANCE });
+  kit.check(
+    "7f: once the session ends its ticket enters nowhere (401, nothing set), and revoking by the session takes its passes",
+    endedEntry[0]?.startsWith("HTTP/1.1 401") === true &&
+      !endedEntry.join("\n").match(PASS) &&
+      gone === 1 &&
+      ![...passRows.values()].some((row) => row.instanceId === INSTANCE),
+    `answered ${JSON.stringify(endedEntry[0] ?? "")}; revoked ${gone}`
+  );
+};
 
 const run = async (kit: Kit) => {
   // The names as DNS answers them, for the hub's check that one resolves.
@@ -177,7 +341,7 @@ const run = async (kit: Kit) => {
     await import("../../../packages/agent/src/preview");
   const { createPreviewListeners, previewTargets } =
     await import("../../../packages/hub/src/preview");
-  const { mintTicket } =
+  const { mintSessionTicket, mintTicket, sessionPassCookie } =
     await import("../../../packages/hub/src/preview-access");
   const { PREVIEW_ENTER_PATH, PREVIEW_PASS_COOKIE } =
     await import("../../../packages/core/src/frames");
@@ -207,6 +371,7 @@ const run = async (kit: Kit) => {
     ownerOf: () => undefined,
     kindOf: () => undefined,
     state: () => "",
+    sessionLive: (id: string) => live.has(id),
   } as unknown as Deps;
   // The ports the hub keeps, as its db does: host mode finds an origin by
   // the label of one it keeps (preview.ts `sessionOfHost`). Every origin
@@ -240,9 +405,14 @@ const run = async (kit: Kit) => {
       return true;
     },
     revoke: (by) => {
-      const gone = [...passRows].filter(([hash, row]) =>
-        "deviceId" in by ? row.deviceId === by.deviceId : hash === by.tokenHash
-      );
+      const gone = [...passRows].filter(([hash, row]) => {
+        if ("deviceId" in by) {
+          return row.deviceId === by.deviceId;
+        }
+        return "instanceId" in by
+          ? row.instanceId === by.instanceId
+          : hash === by.tokenHash;
+      });
       for (const [hash] of gone) {
         passRows.delete(hash);
       }
@@ -380,6 +550,17 @@ const run = async (kit: Kit) => {
         `${refused.status}: ${refused.message}; settings ${JSON.stringify(now)}`
       );
     }
+    // 7. A session's own pass (artifact_browse): its origins alone, beside the person's.
+    listeners.address(OTHER);
+    await sessionPassLegs(kit, {
+      enterPath: PREVIEW_ENTER_PATH,
+      mintSessionTicket,
+      mintTicket,
+      passRows,
+      revoke: passes.revoke,
+      sessionPassCookie,
+      status,
+    });
   } finally {
     await listeners.set({ mode: "port" });
     listeners.release(INSTANCE);

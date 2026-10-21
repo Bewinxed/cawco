@@ -297,11 +297,18 @@ import type { Tasks } from "./tasks";
  * folders. About 16 tokens for the worker and the lead (worker 27,551, lead
  * 18,354 measured beside the tree's reads); the worker fits. Raised
  * deliberately, by that, for the lead.
+ * 2026-10-21, after it: `artifact_browse` (the owner found no agent could
+ * open its own decision page or preview and click it, so every proof asked
+ * him to): a session's own browser into one
+ * artifact it may read and its embeds, behind a pass of its own. Two
+ * sentences and the artifact tools' one `id`, about 225 tokens for the
+ * worker, the delegate and the lead (worker 27,776, delegate 10,215, lead
+ * 18,580 measured beside `outputs`). Raised deliberately, by that, for each.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 27_580,
-  delegate: 10_000,
-  lead: 18_354,
+  worker: 27_805,
+  delegate: 10_224,
+  lead: 18_580,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

@@ -3383,7 +3383,9 @@ export const ownerDevices = sqliteTable("owner_devices", {
  * one-way verifier instead"). A pass names the paired device whose ticket
  * opened it and goes with that device: unpaired, or every device forgotten
  * as pairing turns off. One with no device is a trusted hub's browser,
- * known by its pass alone; those go as pairing turns on.
+ * known by its pass alone; those go as pairing turns on. A session's own
+ * pass (`artifact_browse`) names its session and the origins it opens
+ * (`scope`), and goes with that session.
  */
 export const previewPasses = sqliteTable(
   "preview_passes",
@@ -3394,12 +3396,21 @@ export const previewPasses = sqliteTable(
     deviceId: text("device_id").references(() => ownerDevices.id, {
       onDelete: "cascade",
     }),
+    /** The session a scoped pass was given to; null for the person's own. */
+    instanceId: text("instance_id").references(() => instances.id, {
+      onDelete: "cascade",
+    }),
+    /** The preview origins (their keys) a session's pass opens; null for the person's, which opens every one. */
+    scope: text("scope", { mode: "json" }).$type<string[]>(),
     createdAt: timestamp("created_at").notNull(),
     lastSeenAt: timestamp("last_seen_at").notNull(),
     /** Its absolute end, from its entry: never moved by use. */
     expiresAt: timestamp("expires_at").notNull(),
   },
-  (table) => [index("preview_passes_device_id_idx").on(table.deviceId)]
+  (table) => [
+    index("preview_passes_device_id_idx").on(table.deviceId),
+    index("preview_passes_instance_id_idx").on(table.instanceId),
+  ]
 );
 
 /**

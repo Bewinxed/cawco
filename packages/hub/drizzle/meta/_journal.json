@@ -1954,6 +1954,13 @@
       "when": 1792589840402,
       "tag": "0286_workspace_moved_untold",
       "breakpoints": true
+    },
+    {
+      "idx": 287,
+      "version": "6",
+      "when": 1792590940828,
+      "tag": "0287_preview_pass_scope",
+      "breakpoints": true
     }
   ]
 }

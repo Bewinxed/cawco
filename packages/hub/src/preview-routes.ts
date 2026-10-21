@@ -7,6 +7,7 @@
  * the preview's, so the pane joins the doc and sends here, never on the
  * preview origin.
  */
+import { PREVIEW_NAMES_PATH, type PreviewNames } from "@cawco/core/browser";
 import type { ServerWebSocket } from "bun";
 import { Elysia, t } from "elysia";
 import type { ArtifactSocket } from "./artifacts/sync";
@@ -30,6 +31,8 @@ export const previewRoutes = (deps: {
   listener: PreviewListenerDeps;
   listeners: PreviewListeners;
   passes: PreviewPassesDb;
+  /** Port mode's names: the host the hub's links name, which every session's port stands on; null for an IP. */
+  portNames: () => PreviewNames["names"];
   /** Every shown preview again, at its address now: the mode changed. */
   republish: () => void;
 }) => {
@@ -74,6 +77,13 @@ export const previewRoutes = (deps: {
           return refused(error);
         }
       })
+      // The names a session's browser opens previews on (artifact_browse),
+      // for its machine's browser container to resolve (agent
+      // container-host.ts): host mode's domain, else the host the hub's
+      // links name, which port mode's origins stand on.
+      .get(PREVIEW_NAMES_PATH, hidden, (): PreviewNames => ({
+        names: deps.listeners.names() ?? deps.portNames(),
+      }))
       // A ticket into host mode's previews (preview-access.ts), bound to
       // the device that asks: the dashboard spends it once per browser, the
       // app once per web view's load. Only a client this API already trusts

@@ -35,6 +35,7 @@ export const ARTIFACT_TOOLS = [
   "artifact_update",
   "artifact_read",
   "artifact_show",
+  "artifact_browse",
   "artifact_promote",
   "artifact_delete",
   "comment_read",
@@ -327,6 +328,16 @@ export const artifactShow = {
   description:
     "Bring an artifact, yours or your delegation tree's, to the front of your panel. Answers `opened` as " +
     "artifact_create does.",
+  input: { id },
+};
+
+export const artifactBrowse = {
+  name: "artifact_browse",
+  description:
+    "Open an artifact in your own browser to click through it as the person would, before you report that it " +
+    "works: yours, your delegation tree's, or your project's pages, any kind. Answers `url` and `expiresAt`: " +
+    "load `url` once in your browser tool. It lets that browser into this artifact and the previews and canvases it shows " +
+    "until `expiresAt` (15 minutes; null: no pass needed) or this session ends; call again for a fresh one.",
   input: { id },
 };
 

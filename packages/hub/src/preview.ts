@@ -433,6 +433,8 @@ export interface PreviewListenerDeps {
    * pages' Canvas pieces show inside them.
    */
   servedOn: (artifactId: string, key: string) => boolean;
+  /** Whether session `instanceId` still runs: a session's ticket enters host mode's names only while it does (preview-access.ts). */
+  sessionLive: (instanceId: string) => boolean;
   /** An artifact of the session's brought to the front of its panel from a page (`/show`: a decision page's Canvas, Open to draw). */
   showFrom: (
     request: Request,
@@ -827,11 +829,13 @@ async function serveSession(
  * session's, a project's, an embed's), or undefined when none does: the
  * answer that stops the request, or undefined when it goes on.
  *
- * A live pass goes through on every held name, whichever origin holds it.
+ * The person's live pass goes through on every held name, whichever origin
+ * holds it; a session's (`artifact_browse`) on the names of its scope
+ * alone, and any other name answers it as it answers a stranger.
  * A stranger learns nothing of which names are held: without a pass, a name
  * nobody holds answers exactly as a held one does, the locked page, and an
- * entry there is refused as one with a spent ticket would be. Only a live
- * pass, which proves the owner, learns that a name is closed (404). The
+ * entry there is refused as one with a spent ticket would be. Only the
+ * person's live pass learns that a name is closed (404). The
  * ping answers on every name, so the dashboard learns the origin is
  * reachable and nobody learns more.
  */
@@ -848,7 +852,7 @@ const atTheLock = (
     if (!instanceId) {
       return lockedResponse();
     }
-    const entered = enter(request, lock);
+    const entered = enter(request, lock, instanceId);
     if (entered.refused) {
       previewFailed(
         HOP,
@@ -858,7 +862,7 @@ const atTheLock = (
     }
     return entered.response;
   }
-  if (!passOf(request, lock)) {
+  if (!passOf(request, lock, instanceId)) {
     return lockedResponse();
   }
   if (instanceId) {
@@ -1004,6 +1008,15 @@ const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/g;
 const literal = (text: string): string =>
   text.replaceAll(REGEX_SPECIAL, "\\$&");
 
+/** One name of the pattern's, its port left off: a made-up session's, or the range's first port's. */
+const sampleName = (pattern: HostPattern): string =>
+  hostFor(
+    pattern,
+    pattern.key === "port"
+      ? PREVIEW_PORTS.first
+      : "00000000-0000-4000-8000-000000000000"
+  ).replace(PORT_SUFFIX, "");
+
 /**
  * Whether a host pattern's names reach anything: one generated name has to
  * resolve, a made-up session's or the range's first port's, in the DNS, its
@@ -1011,12 +1024,7 @@ const literal = (text: string): string =>
  * the hub or the proxy in front of it.
  */
 const probePattern = async (pattern: HostPattern): Promise<string | null> => {
-  const name = hostFor(
-    pattern,
-    pattern.key === "port"
-      ? PREVIEW_PORTS.first
-      : "00000000-0000-4000-8000-000000000000"
-  ).replace(PORT_SUFFIX, "");
+  const name = sampleName(pattern);
   try {
     await Bun.dns.lookup(name);
     return null;
@@ -1369,7 +1377,7 @@ export function createPreviewListeners(
       byHost = listen(
         PREVIEW_PORTS.first,
         (request) => sessionOfHost(pattern, request.headers.get("host")),
-        { domain: pattern.domain, passes }
+        { domain: pattern.domain, passes, sessionLive: deps.sessionLive }
       );
       hostPattern = pattern;
       return null;
@@ -1533,15 +1541,17 @@ export function createPreviewListeners(
     },
 
     /**
-     * An embedded preview's origin (`key`, {@link embedKey}) for session
-     * `owner`'s decision page: its listener on a free preview port of its
-     * own, started when it has none, which that session's origins may
-     * frame; in host mode its whole origin too, named by its key or port.
+     * An embedded preview's origin (`key`, {@link embedKey}) for origin
+     * `owner`'s decision page (`pageAt`, where the browser reached it), or
+     * for a session's own browser opening it at the top (`artifact_browse`,
+     * no page): its listener on a free preview port of its own, started when
+     * it has none, which the page's origin may frame; in host mode its whole
+     * origin too, named by its key or port.
      */
-    embed(key: string, owner: string, pageAt: URL): PreviewAddress {
+    embed(key: string, owner: string, pageAt?: URL): PreviewAddress {
       const held = embeds.get(key) ?? openEmbed(key, owner);
       // The page that shows it, as the browser reached it: that exact origin may frame it.
-      const framer = pageOrigin(owner, pageAt);
+      const framer = pageAt && pageOrigin(owner, pageAt);
       if (framer) {
         held.ancestors.add(framer);
       }
@@ -1570,6 +1580,22 @@ export function createPreviewListeners(
 
     /** The origin's owner ended (a session, a project): its listener stops and its port is free again. */
     release,
+
+    /**
+     * Host mode's names as a browser's resolver takes them (Chromium's
+     * `--host-resolver-rules` patterns: every name under the domain, and
+     * the domain), with one name of theirs to resolve: null in port mode,
+     * or while host mode doesn't stand.
+     */
+    names(): { patterns: string[]; sample: string } | null {
+      if (!hostPattern) {
+        return null;
+      }
+      return {
+        patterns: [`*.${hostPattern.domain}`, hostPattern.domain],
+        sample: sampleName(hostPattern),
+      };
+    },
 
     settings(): PreviewSettings {
       return settings.mode === "host"

@@ -4,7 +4,11 @@ import { ownerDevices, previewPasses } from "./schema";
 
 export type PreviewPassRow = typeof previewPasses.$inferSelect;
 
-/** Host mode's passes (preview-access.ts), one row per browser that entered. */
+/**
+ * Host mode's passes (preview-access.ts), one row per browser that entered:
+ * the person's (no `scope`), and each session's own from `artifact_browse`
+ * (its `instanceId` and `scope`).
+ */
 export interface PreviewPassesDb {
   /** The live pass whose token hashes to `tokenHash`; undefined once it lapsed, was revoked, or never was. */
   readonly live: (tokenHash: string, now: Date) => PreviewPassRow | undefined;
@@ -14,11 +18,29 @@ export interface PreviewPassesDb {
    * it. False, and nothing kept, when its device is no longer paired.
    */
   readonly open: (row: PreviewPassRow, replacing: string | null) => boolean;
-  /** Every pass of paired device `deviceId`, or the one whose token hashes to `tokenHash`, is gone; how many went. */
-  readonly revoke: (by: { deviceId: string } | { tokenHash: string }) => number;
+  /**
+   * Every pass of paired device `deviceId`, every pass of session
+   * `instanceId`, or the one whose token hashes to `tokenHash`, is gone; how
+   * many went.
+   */
+  readonly revoke: (
+    by: { deviceId: string } | { instanceId: string } | { tokenHash: string }
+  ) => number;
   /** The pass was used at `at`. */
   readonly touch: (id: string, at: Date) => void;
 }
+
+/** The column `by` names, and its value. */
+const revoked = (
+  by: { deviceId: string } | { instanceId: string } | { tokenHash: string }
+) => {
+  if ("deviceId" in by) {
+    return eq(previewPasses.deviceId, by.deviceId);
+  }
+  return "instanceId" in by
+    ? eq(previewPasses.instanceId, by.instanceId)
+    : eq(previewPasses.tokenHash, by.tokenHash);
+};
 
 export const previewPassesDb = (db: BunSQLiteDatabase): PreviewPassesDb => ({
   live: (tokenHash, now) =>
@@ -58,11 +80,7 @@ export const previewPassesDb = (db: BunSQLiteDatabase): PreviewPassesDb => ({
   revoke: (by) =>
     db
       .delete(previewPasses)
-      .where(
-        "deviceId" in by
-          ? eq(previewPasses.deviceId, by.deviceId)
-          : eq(previewPasses.tokenHash, by.tokenHash)
-      )
+      .where(revoked(by))
       .returning({ id: previewPasses.id })
       .all().length,
   touch: (id, at) => {

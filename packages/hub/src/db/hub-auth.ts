@@ -1,4 +1,4 @@
-import { asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   machineKeys,
@@ -28,7 +28,8 @@ export interface HubAuthDb {
    * the device that turns it on and the machines connected then. Every
    * preview pass goes with the mode it was given in: a device's with its
    * device (`preview_passes` cascades), a trusted hub's browser's, which
-   * names no device, as the requirement turns on.
+   * names no device, as the requirement turns on. A session's own pass
+   * goes with its session, whatever the mode.
    */
   readonly setPairingRequired: (required: boolean) => void;
   readonly touchDevice: (id: string, at: Date, address: string | null) => void;
@@ -92,7 +93,14 @@ export const hubAuthDb = (db: BunSQLiteDatabase): HubAuthDb => ({
         })
         .run();
       if (required) {
-        tx.delete(previewPasses).where(isNull(previewPasses.deviceId)).run();
+        tx.delete(previewPasses)
+          .where(
+            and(
+              isNull(previewPasses.deviceId),
+              isNull(previewPasses.instanceId)
+            )
+          )
+          .run();
       } else {
         tx.delete(ownerDevices).run();
         tx.delete(machineKeys).run();

@@ -109,6 +109,9 @@ const RULES: readonly [string, RegExp, Access][] = [
   // A file a reader attached, by the hash a send names: the session's
   // machine fetches it (agent attachments.ts).
   ["GET", /^\/api\/files\/[0-9a-f]{64}$/, "machine"],
+  // The names previews stand on, which a machine's browser containers map
+  // when they resolve to its loopback (agent container-host.ts).
+  ["GET", /^\/api\/preview-names$/, "machine"],
   // A machine's own row and busy count; the fleet's list stays the person's.
   ["GET", /^\/api\/agents\/[^/]+$/, "machine"],
   ["GET", /^\/api\/agents\/[^/]+\/busy$/, "machine"],

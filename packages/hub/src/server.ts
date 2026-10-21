@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { isIP } from "node:net";
 import { networkInterfaces, hostname as osHostname } from "node:os";
 import { join, posix } from "node:path";
 import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
@@ -66,6 +67,7 @@ import type {
   PermissionMode,
   PermissionRequestFrame,
   PermissionResult,
+  PreviewAddress,
   PreviewDown,
   PreviewSource,
   RegisterAckPayload,
@@ -284,6 +286,8 @@ import {
   parseArtifactComments,
   parseArtifactResponses,
   pauseClock,
+  previewEnterUrl,
+  previewRoute,
   providerChoices,
   pushOnlyProvider,
   QUESTION_DISMISSED,
@@ -437,6 +441,7 @@ import {
   ArtifactRefusal,
   type ArtifactServiceDeps,
   type Artifacts,
+  type Browsed,
   createArtifacts,
   type MarksDelivery,
   type MarksOutcome,
@@ -706,6 +711,7 @@ import {
   shownArtifact,
   targetsOf,
 } from "./preview";
+import { mintSessionTicket } from "./preview-access";
 import { previewRoutes } from "./preview-routes";
 import { createCaps } from "./project-caps";
 import {
@@ -847,6 +853,8 @@ const PAGE_SOURCE =
 const NOT_NAME = /[^a-z0-9]+/g;
 const NAME_ENDS = /^-+|-+$/g;
 const NAME_TAIL = /-+$/;
+/** A URL's IPv6 host in its brackets, as `URL.hostname` keeps it. */
+const IPV6_BRACKETS = /^\[|\]$/g;
 
 /** The frame a forwarded `control` comes back as, whoever asked for it. */
 type ControlResult = Extract<FramePayload, { kind: "control_result" }>;
@@ -10590,10 +10598,14 @@ export const createServer = (
     }
   };
 
-  /** A session ended: its preview closes, and its preview origin's port is free again. */
+  /**
+   * A session ended: its preview closes, its preview origin's port is free
+   * again, and every pass its browser was given (`artifact_browse`) is gone.
+   */
   const endPreviews = (instanceId: string): void => {
     closePreview(instanceId).catch(console.error);
     previewListeners.release(instanceId);
+    db.previewPasses.revoke({ instanceId });
     // Its decision pages' embedded previews go with it, their machines'
     // listeners too.
     for (const key of previewListeners.releaseEmbeds(instanceId)) {
@@ -12172,19 +12184,9 @@ export const createServer = (
         workItems.settleShown(row.machineId);
       }
     },
-    previewAddress: (instanceId) => {
-      let refusal: PreviewRefusal;
-      try {
-        return previewListeners.address(instanceId);
-      } catch (error) {
-        if (!(error instanceof PreviewRefusal)) {
-          throw error;
-        }
-        refusal = error;
-      }
-      // Every port is taken: the artifact's refusal, in the listeners' words.
-      throw new ArtifactRefusal(503, refusal.message, { cause: refusal });
-    },
+    browse: (instance, row) => browseAt(instance, row),
+    previewAddress: (instanceId) =>
+      onPreviewPort(() => previewListeners.address(instanceId)),
     // Its parent's, or its project's lead's, as stop_delegate decides.
     delegatesIn: (instance, workspaceId) =>
       db
@@ -12518,6 +12520,121 @@ export const createServer = (
   };
 
   /**
+   * Machine-served artifact `row`'s target under its own key ({@link
+   * embedKey}), on `machineId`: kept as it is while its source and machine
+   * stand, else made anew. Its key.
+   */
+  const keepEmbedTarget = (row: ArtifactRow, machineId: string): string => {
+    const key = embedKey(row.id);
+    const now = embedTargets.get(key);
+    if (
+      !now ||
+      previewSourceKey(now.source) !== previewSourceKey(row.source) ||
+      now.machineId !== machineId
+    ) {
+      embedTargets.set(key, {
+        artifact: { id: row.id, kind: row.kind, name: row.name },
+        machineId,
+        source: row.source,
+        revision: crypto.randomUUID(),
+      });
+    }
+    return key;
+  };
+
+  /**
+   * What `open` answers of a preview origin, its listener started when it
+   * has none; every port taken is the artifact's refusal, in the listeners'
+   * words.
+   */
+  const onPreviewPort = <T>(open: () => T): T => {
+    let refusal: PreviewRefusal;
+    try {
+      return open();
+    } catch (error) {
+      if (!(error instanceof PreviewRefusal)) {
+        throw error;
+      }
+      refusal = error;
+    }
+    throw new ArtifactRefusal(503, refusal.message, { cause: refusal });
+  };
+
+  /**
+   * The origin that serves artifact `row` to a browser of its own, by its
+   * key, its listener started when it has none, and its address there: a
+   * page or a canvas on the origin that serves it, a machine's component or
+   * preview on its embed origin ({@link keepEmbedTarget}). Refused when no
+   * session or machine holds it, or every preview port is taken.
+   */
+  const browsedOrigin = (
+    row: ArtifactRow
+  ): { address: PreviewAddress; key: string; path: string } => {
+    const owner = originKeyOf(row.id);
+    if (!owner) {
+      throw new ArtifactRefusal(404, `No session holds ${row.name} now.`);
+    }
+    if (row.kind === "page" || row.kind === "canvas") {
+      return {
+        key: owner,
+        address: onPreviewPort(() => previewListeners.address(owner)),
+        path: `/__cawco/${row.kind}/${row.id}/`,
+      };
+    }
+    if (!row.machineId || "page" in row.source) {
+      throw new ArtifactRefusal(
+        409,
+        `${row.name} is served by no machine now, so it has no address to open.`
+      );
+    }
+    const key = keepEmbedTarget(row, row.machineId);
+    return {
+      key,
+      address: onPreviewPort(() => previewListeners.embed(key, owner)),
+      path: row.source.path ?? "/",
+    };
+  };
+
+  /**
+   * Where session `instance`'s own browser opens artifact `row`
+   * (`artifact_browse`), and the origins it needs: a page or a canvas at
+   * its own address on the origin that serves it, a component or a
+   * preview on an embed origin of its own (as a decision page's Preview
+   * shows it), and a decision page's embeds besides. In host mode, a
+   * one-time entry on that name, which sets the session's own pass on those
+   * origins alone (preview-access.ts); in port mode, its own port on the
+   * host the hub's links name, which takes no pass.
+   */
+  const browseAt = (instance: InstanceRow, row: ArtifactRow): Browsed => {
+    const { key, address, path } = browsedOrigin(row);
+    // A decision page's Preview of a dev server or a sheet stands on an
+    // embed origin of its own (embedAt); its Canvas and Preview of a page
+    // stand on the page's own.
+    const embeds = Object.entries(
+      artifacts.programServed(row.id)?.media ?? {}
+    ).flatMap(([id, held]) =>
+      held?.kind === "preview" || held?.kind === "component"
+        ? [embedKey(id)]
+        : []
+    );
+    if (address.origin) {
+      const entry = mintSessionTicket(instance.id, [key, ...embeds]);
+      return {
+        url: previewEnterUrl(address.origin, entry.ticket, path),
+        expiresAt: new Date(entry.expiresAt).toISOString(),
+      };
+    }
+    const route = previewRoute(address, new URL(dashboardUrl(registry)));
+    if (!route) {
+      throw new ArtifactRefusal(
+        503,
+        `${row.name}'s preview origin has no address this hub can name.`
+      );
+    }
+    return { url: `${route.origin}${path}`, expiresAt: null };
+  };
+
+  /**
    * A decision page's Preview of a dev-server preview or a sheet of its
    * session's: its target kept under its own key ({@link embedKey}), its
    * origin's listener started, and its address as the page reached it, the
@@ -12538,20 +12655,7 @@ export const createServer = (
     if (!(row?.machineId && owner && "port" in row.source)) {
       return {};
     }
-    const key = embedKey(artifactId);
-    const now = embedTargets.get(key);
-    if (
-      !now ||
-      previewSourceKey(now.source) !== previewSourceKey(row.source) ||
-      now.machineId !== row.machineId
-    ) {
-      embedTargets.set(key, {
-        artifact: { id: row.id, kind: row.kind, name: row.name },
-        machineId: row.machineId,
-        source: row.source,
-        revision: crypto.randomUUID(),
-      });
-    }
+    const key = keepEmbedTarget(row, row.machineId);
     let at: ReturnType<typeof previewListeners.embed>;
     let ownPort: number;
     try {
@@ -12600,6 +12704,10 @@ export const createServer = (
     ownerOf: (artifactId: string) =>
       db.artifacts.get(artifactId)?.instanceId ?? undefined,
     kindOf: (artifactId: string) => db.artifacts.get(artifactId)?.kind,
+    sessionLive: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      return !!row && !ENDED_STATUSES.has(row.status);
+    },
     reach: reachPreview,
     unreachable: previewUnreachable,
     picture: artifactPicture(ARTIFACTS_ROOT, artifactDocs),
@@ -24891,6 +24999,12 @@ export const createServer = (
           listener: artifactListener,
           listeners: previewListeners,
           passes: db.previewPasses,
+          portNames: () => {
+            const host = new URL(dashboardUrl(registry)).hostname;
+            return isIP(host.replace(IPV6_BRACKETS, ""))
+              ? null
+              : { patterns: [host], sample: host };
+          },
           republish: () => {
             for (const [instanceId, target] of previewTargets) {
               const moved = { ...target, revision: crypto.randomUUID() };

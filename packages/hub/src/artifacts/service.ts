@@ -579,6 +579,16 @@ export interface Created {
  */
 export type Opened = { opened: true } | { opened: false; why: string };
 
+/**
+ * What `artifact_browse` answers: the address the session's own browser
+ * loads, and when it stops opening (ISO); null where previews are reached
+ * by port, with no pass to lapse.
+ */
+export interface Browsed {
+  expiresAt: string | null;
+  url: string;
+}
+
 /** How long a show waits for a view to say it has the artifact on screen. The spec's number. */
 export const SHOWN_WAIT_MS = 10_000;
 
@@ -973,6 +983,12 @@ export type PageFrom =
   | { folder: true };
 
 export interface ArtifactServiceDeps {
+  /**
+   * Where session `instance`'s own browser opens artifact `row`, which it
+   * may read (`artifact_browse`, server.ts `browseAt`): its address, behind
+   * a one-time entry and a pass of the session's own in host mode.
+   */
+  browse: (instance: InstanceRow, row: ArtifactRow) => Browsed;
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
   close: (instanceId: string) => Promise<void>;
   db: ArtifactsDb;
@@ -4920,6 +4936,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         throw new ArtifactRefusal(503, shown.why);
       }
       return openedOf(shown);
+    },
+
+    /**
+     * `artifact_browse`: where session `instanceId`'s own browser opens
+     * artifact `id`, for any artifact `artifact_read` reads ({@link
+     * readTarget}): its maker opens what it changed, the next version held
+     * for its parent. A browser artifact is the browser itself, and opens
+     * nothing.
+     */
+    browse: (instanceId: string, id: string): Browsed => {
+      const instance = sessionOf(instanceId);
+      const row = readTarget(instance, id);
+      if (row.kind === "browser") {
+        throw new ArtifactRefusal(
+          409,
+          `${row.name} is a browser: it is the browser your browser tool drives, so open its pages there.`
+        );
+      }
+      return deps.browse(instance, row);
     },
 
     /**

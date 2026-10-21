@@ -734,6 +734,19 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
+    // Where the session's own browser opens the artifact (artifact_browse):
+    // a one-time address, and when it stops opening. The tool alone calls it.
+    .post(
+      "/api/instances/:id/artifacts/:artifact/browse",
+      { detail: { hide: true } },
+      ({ params }) => {
+        try {
+          return artifacts.browse(params.id, params.artifact);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
     // A view (a dashboard tab, the app) has the artifact on screen at the
     // open frame's revision, or could not load it: the waiting show answers.
     .post(

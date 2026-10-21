@@ -53,6 +53,12 @@ export interface BrowserRecord {
     image: string;
     /** What its media port was published, and neko's candidates advertised, for. */
     media: MediaPath;
+    /**
+     * Chromium's `--host-resolver-rules` it was made with: the hub's preview
+     * names that resolve to this machine's loopback, mapped to the machine
+     * (preview-names.ts). One made for other rules is made again.
+     */
+    hostRules?: string;
     /** The ports it was published on: one made for other ports is made again. */
     ports?: BrowserPorts;
     /** The runtime it was made on, as the record names it while that runtime is away. */
