@@ -32,9 +32,15 @@
  *    answers its stage `live`, as the panel's doc has it, and the section's
  *    problem as a typed entry, kind `missing`, in the stage's words ("<file>
  *    does not exist in <root>. The canvas draws it once its session writes
- *    it and shows the canvas again."), never a stage in `error`.
- * 5c. The file written again: `artifact_read({ render: true })` answers no
- *    problem, and its frames drawn.
+ *    it."), never a stage in `error`.
+ * 5c. The canvas open through the session's preview, its section failed;
+ *    the file written again, the page draws the section by itself (no
+ *    reopen, no reload), and `artifact_read` answers no problem and its
+ *    frames drawn.
+ * 5d. Its stage host stopped (SIGSTOP): `artifact_read` answers the doc's
+ *    last stage beside `unreached` (which hop, why, since when), never a
+ *    stale `live` alone; continued, the next reads reach it and `unreached`
+ *    is gone.
  *
  * Then a second session, in a checkout of its own whose node_modules the
  * session's boundary holds read-only, as `~/cockpit` is: a SvelteKit project
@@ -151,6 +157,7 @@ import {
 import { dirname, join, relative } from "node:path";
 import type { Page } from "playwright-core";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { listedPid, signal } from "../../../packages/core/src/signal";
 import {
   type CanvasMap,
   STAGE_ENSURE,
@@ -163,8 +170,7 @@ const STORY = "src/Card.stories.js";
 /** Legs 5b and 5c: a states file a canvas is made on, then taken away and written again. */
 const LATER = "src/Later.stories.js";
 /** The stage's words for a states file that isn't written (stage-host host.ts `missingWords`), past its root. */
-const MISSING_TAIL =
-  "The canvas draws it once its session writes it and shows the canvas again.";
+const MISSING_TAIL = "The canvas draws it once its session writes it.";
 /** A story file whose stories are built four ways (legs 16 and 17). */
 const MIXED = "src/Mixed.stories.js";
 const REFUSAL = "this session runs in no workspace";
@@ -390,6 +396,32 @@ const stageCloneIn = async (
       .catch(() => undefined);
     if (kept?.repo === repo && typeof made?.path === "string") {
       return { id, path: made.path };
+    }
+  }
+};
+
+/** A process's folder under /proc. */
+const PID = /^\d+$/;
+/** A read's `unreached` (hub service.ts `unreachedWritten`), whole. */
+const UNREACHED = /"unreached":(\{[^}]*\})/;
+
+/** The stage host serving from `clone` (agent stage.ts `HOST_FILE`, run with its toolchain root as its working dir): its pid as the host sees it. */
+const stageHostIn = async (clone: string): Promise<number | undefined> => {
+  const real = await realpath(clone);
+  for (const entry of await readdir("/proc")) {
+    if (!PID.test(entry)) {
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one process at a time, until the host
+    const cmdline = await readFile(`/proc/${entry}/cmdline`, "utf8").catch(
+      () => ""
+    );
+    if (!cmdline.includes(".cawco/stage/host.mjs")) {
+      continue;
+    }
+    const cwd = await realpath(`/proc/${entry}/cwd`).catch(() => "");
+    if (cwd === real || cwd.startsWith(`${real}/`)) {
+      return Number(entry);
     }
   }
 };
@@ -1413,7 +1445,7 @@ const run = async (kit: Kit) => {
     );
   }
 
-  /** Legs 5b and 5c: a canvas whose states file is taken away, read as the panel's doc has it, then written again. */
+  /** Legs 5b to 5d: a canvas whose states file is taken away, read as the panel's doc has it, written again, then its stage stopped. */
   async function missingLegs(): Promise<void> {
     const laterPath = join(fleet.repo, LATER);
     await writeFile(laterPath, PROJECT[STORY] as string);
@@ -1453,21 +1485,89 @@ const run = async (kit: Kit) => {
         entry.includes(MISSING_TAIL),
       short(missing)
     );
+    // 5c. The canvas open through the session's preview, its section failed; the file written, it draws there by itself.
+    const { port } = (await (
+      await fetch(`${fleet.base}/api/instances/${session}/preview-address`, {
+        method: "POST",
+      })
+    ).json()) as { port?: number };
+    const page = await kit.page("desk");
+    await page.goto(
+      `http://127.0.0.1:${port ?? 0}/@cawco/canvas?file=${encodeURIComponent(LATER)}`,
+      { waitUntil: "domcontentloaded" }
+    );
+    const sectionNow = (): Promise<{
+      drawn: boolean;
+      failed: boolean;
+      stayed: boolean;
+    }> =>
+      page
+        .evaluate(() => ({
+          drawn: !!document.querySelector(
+            '[data-cawco-story="One"] [data-probe="title"]'
+          ),
+          failed: !!document.querySelector(".cawco-section-failed"),
+          stayed:
+            (window as unknown as { __stayed?: boolean }).__stayed === true,
+        }))
+        .catch(() => ({ drawn: false, failed: false, stayed: false }));
+    const failedFirst = await until(
+      "the section failed",
+      sectionNow,
+      (seen) => seen.failed,
+      60_000
+    ).catch(() => sectionNow());
+    await page.evaluate(() => {
+      (window as unknown as { __stayed: boolean }).__stayed = true;
+    });
     await writeFile(laterPath, PROJECT[STORY] as string);
     const drawnAgain = await until(
       "the written states file drawn",
-      () => read("5c", { render: true }),
+      () => read("5c"),
       (said) =>
         !said.includes('"kind":"missing"') && said.includes('"state":"drawn"'),
       90_000
-    ).catch(() => read("5c", { render: true }));
+    ).catch(() => read("5c"));
+    const onPage = await sectionNow();
+    await page.close();
     kit.check(
-      "5c: written again, artifact_read with render answers no problem and its frames drawn",
-      drawnAgain.match(STATUS)?.[1] === "live" &&
+      "5c: written again, the open canvas draws the section by itself (no reopen, no reload), and artifact_read answers no problem and its frames drawn",
+      failedFirst.failed &&
+        onPage.drawn &&
+        onPage.stayed &&
+        drawnAgain.match(STATUS)?.[1] === "live" &&
         !drawnAgain.includes('"kind":"missing"') &&
-        drawnAgain.includes('"errors":[]') &&
         drawnAgain.includes('"state":"drawn"'),
-      short(drawnAgain)
+      `page before ${JSON.stringify(failedFirst)}, after ${JSON.stringify(onPage)}; read ${short(drawnAgain)}`
+    );
+
+    // 5d. The stage the read asks stopped (SIGSTOP): the read answers the doc's last stage with `unreached`, why and since when.
+    const placeClone = await stageCloneIn(fleet.env.HOME as string, fleet.repo);
+    const host = placeClone ? await stageHostIn(placeClone.path) : undefined;
+    if (host) {
+      signal(listedPid(host), "SIGSTOP");
+    }
+    const stopped = await read("5d");
+    if (host) {
+      signal(listedPid(host), "SIGCONT");
+    }
+    const unreached = stopped.match(UNREACHED)?.[1];
+    const reached = await until(
+      "the stage reached again",
+      () => read("5d"),
+      (said) => !said.includes('"unreached"'),
+      120_000
+    ).catch(() => read("5d"));
+    kit.check(
+      "5d: its stage host stopped, artifact_read answers the doc's last stage beside unreached (which hop, why, since when); reached again, unreached is gone",
+      !!host &&
+        !!unreached &&
+        unreached.includes('"since":"') &&
+        unreached.includes('"why":"') &&
+        stopped.match(STATUS)?.[1] === "live" &&
+        !reached.includes('"unreached"') &&
+        reached.match(STATUS)?.[1] === "live",
+      `host ${host ?? "not found"} in ${placeClone?.path ?? "no clone"}; stopped: ${short(stopped)}; again: ${short(reached).slice(0, 200)}`
     );
   }
 

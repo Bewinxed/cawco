@@ -104,6 +104,7 @@ import {
   type StageFrame,
   type StageOpened,
   type StageState,
+  type StageUnreached,
   type StoryOp,
 } from "@cawco/core/stage";
 import { writeStateFileSync } from "@cawco/core/state-file";
@@ -440,6 +441,8 @@ export interface ArtifactRead {
   stage?: StageState;
   /** Every key, or with `since` only those changed after it. */
   state: Record<string, ReadEntry>;
+  /** A component canvas's stage the read couldn't reach: which hop, why, and since when; `stage` is then the doc's last word of it. */
+  unreached?: StageUnreached;
   /** A component canvas's design system round, as `verify: true` asked it: what the ask did. */
   verify?: string;
   /** What a sheet loads, from its stage's module graph; null until a view has loaded it. */
@@ -3484,6 +3487,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const meta = doc.getMap("meta");
       const mine = sheetState(row, state);
       meta.set("stage", mine);
+      // The stage was reached: by a read, or by the daemon's word of it.
+      meta.delete("unreached");
       if (sheet) {
         meta.set("sheet", sheet);
       }
@@ -3492,6 +3497,35 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         meta.delete("errorsHeard");
       }
     });
+
+  /**
+   * A read that couldn't reach the canvas's stage, kept in its doc (core
+   * `StageUnreached`) for the panel and the agent's read alike: the hop that
+   * failed, by the hub's refusal (a workspace gone or on no machine, a
+   * machine not connected or not answering, else the way to the stage), its
+   * words, and since the first such read.
+   */
+  const unreachedWritten = (row: ArtifactRow, error: unknown) => {
+    const status = error instanceof ArtifactRefusal ? error.status : null;
+    let down: StageUnreached["down"] = "reach";
+    if (status === 409) {
+      down = "workspace";
+    } else if (status === 503 || status === 504) {
+      down = "machine";
+    }
+    docs.transact(row.id, "hub", (doc) => {
+      const meta = doc.getMap("meta");
+      const had = meta.get("unreached") as StageUnreached | undefined;
+      meta.set("unreached", {
+        down,
+        why: error instanceof Error ? error.message : String(error),
+        since: had?.since ?? new Date().toISOString(),
+      } satisfies StageUnreached);
+    });
+    if (inPanel(row)) {
+      relistOf(row);
+    }
+  };
 
   /** The sheet's compile errors the session has not heard. */
   const errorsOwed = (row: ArtifactRow, doc: Doc): StageError[] => {
@@ -3813,8 +3847,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * computed-style delta, a fresh draw on the daemon, a picture. Read
    * afresh on the workspace it was made in: a use that keeps the stage
    * awake. Its stage and each section's problem are the doc's (`meta.stage`),
-   * as the panel reads them; a stage that can't be reached is read as the
-   * doc last had it. Its owner's read when `ownersRead`.
+   * as the panel reads them; a stage the read can't reach is the doc's last
+   * stage with `unreached` beside it (`meta.unreached`: why, since when),
+   * never a stale `live` alone. Its owner's read when `ownersRead`.
    */
   const readSheet = async (
     row: ArtifactRow,
@@ -3837,8 +3872,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ));
         writeStage(row, opened.state, opened.sheet);
         ({ report } = opened);
-      } catch {
-        // Read as the doc has it: the daemon states a stage that failed there.
+      } catch (error) {
+        unreachedWritten(row, error);
       }
       // A draw asked of a stage that answered: refused in its own words when it can't be made.
       if (opened && (ask.render || ask.png)) {
@@ -3852,6 +3887,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const meta = docs.doc(row.id).getMap("meta");
     const stage = meta.get("stage") as StageState | undefined;
+    const unreached = meta.get("unreached") as StageUnreached | undefined;
     const sheetNow = meta.get("sheet") as SheetRead | undefined;
     const base = read(row, since, ownersRead);
     const {
@@ -3873,6 +3909,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...base,
       state: picks,
       ...(stage ? { stage: { ...stage, errors: [] } } : {}),
+      ...(unreached ? { unreached } : {}),
       errors: errorsSaid(stage?.errors ?? []),
       ...(report
         ? {

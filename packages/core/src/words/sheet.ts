@@ -24,6 +24,9 @@ export const sheetWords = {
   /** The foot under a missing states file, whose own words say what draws it. */
   missingNext: (more: number) =>
     `${more > 0 ? `${more} more besides. ` : ""}The session is told.`,
+  /** Under the down card, when the hub's last read couldn't reach the stage (core `StageUnreached`): since when, and why in the hub's words. */
+  unreachedSince: (since: string, why: string) =>
+    `Not reached since ${since}: ${why}`,
   /** Where the page would be, when the stage did not start or failed its restarts. */
   downTitle: (dir: string) => `The stage for ${dir} didn't start`,
   /** Each dev toolchain a sheet's stage runs (core stage.ts `StageToolchain`), by its own name. */

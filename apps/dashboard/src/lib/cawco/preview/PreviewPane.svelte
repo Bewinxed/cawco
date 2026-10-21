@@ -61,6 +61,7 @@
     IconWarningTriangle,
   } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
+  import { formatTimestamp } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
   import AskHere from "../AskHere.svelte";
   import {
@@ -671,7 +672,7 @@
   );
   const downPort = $derived(source && "port" in source ? source.port : null);
   const downTitle = $derived.by(() => {
-    switch (down) {
+    switch (shownDown) {
       case "server":
         return "The page's server stopped answering";
       case "workspace":
@@ -994,6 +995,16 @@
   const staged = $derived(
     artifact?.kind === "component" || served ? (view?.stage ?? null) : null
   );
+  /**
+   * The hub's last read couldn't reach the stage (the doc's `meta.unreached`,
+   * which the agent's read says too): said as the proxy's own down is, while
+   * no page here has connected, with its why and since when.
+   */
+  const docDown = $derived(
+    staged && !connected && view?.unreached ? view.unreached : null
+  );
+  const shownDown = $derived(down ?? docDown?.down ?? null);
+  const shownWhy = $derived(down ? downWhy : (docDown?.why ?? null));
   /** A down stage's own words stand unfolded (Show details). */
   let stageDetails = $state(false);
   const stageDetailsId = `${paneId}-stage-details`;
@@ -3190,7 +3201,7 @@
       </EmptyState>
     </div>
   {/if}
-  {#if down && staged?.status !== "error" && !neverDrawn}
+  {#if shownDown && staged?.status !== "error" && !neverDrawn}
     <!-- What happened, why and the way back, where the page would be; a stage in error says it above. -->
     <div
       data-slot="down"
@@ -3200,10 +3211,10 @@
     >
       <EmptyState icon={IconAlert} title={downTitle}>
         {#snippet line()}
-          {#if down === "workspace"}
+          {#if shownDown === "workspace"}
             Its server can't be reached until the workspace runs again. Once a
             session there is back, try again.
-          {:else if down === "server"}
+          {:else if shownDown === "server"}
             {downPort
               ? `Nothing is running on port ${downPort} on ${ownerMachine}, so the page can't load.`
               : `The page's server on ${ownerMachine} isn't running, so the page can't load.`}
@@ -3214,17 +3225,27 @@
             {:else}
               Start it again, then try again.
             {/if}
-          {:else if down === "reach"}
-            The way to the page's server on {ownerMachine} didn't open{downWhy
-              ? `: ${downWhy}`
+          {:else if shownDown === "reach"}
+            The way to the page's server on {ownerMachine} didn't open{shownWhy
+              ? `: ${shownWhy}`
               : "."}
             Try again; if it fails again, start the server again from its session.
-          {:else if down === "closed"}
+          {:else if shownDown === "closed"}
             Its session shows something else now, or has ended, so there is no
             page here. Open its session to show it again.
           {:else}
             The preview comes from {ownerMachine}, which isn't connected to the
             hub right now. Once it's back, try again.
+          {/if}
+          {#if !down && docDown}
+            <span
+              class="block mt-space-2 text-ink-muted type-meta"
+              data-slot="unreached"
+              >{sheetWords.unreachedSince(
+                formatTimestamp(new Date(docDown.since)),
+                docDown.why
+              )}</span
+            >
           {/if}
         {/snippet}
         {#snippet action()}

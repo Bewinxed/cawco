@@ -1180,6 +1180,11 @@ public enum Words {
             "\(more > 0 ? "\(more) more besides. " : "")The session is told."
         }
 
+        /// Under the down card, when the hub's last read couldn't reach the stage (core `StageUnreached`): since when, and why in the hub's words.
+        public static func unreachedSince(since: String, why: String) -> String {
+            "Not reached since \(since): \(why)"
+        }
+
         /// Where the page would be, when the stage did not start or failed its restarts.
         public static func downTitle(dir: String) -> String {
             "The stage for \(dir) didn't start"

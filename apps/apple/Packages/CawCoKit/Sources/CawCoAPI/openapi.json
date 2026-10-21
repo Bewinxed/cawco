@@ -37954,6 +37954,10 @@
             "type": "object",
             "description": "Every key, or with `since` only those changed after it."
           },
+          "unreached": {
+            "$ref": "#/components/schemas/StageUnreached",
+            "description": "A component canvas's stage the read couldn't reach: which hop, why, and since when; `stage` is then the doc's last word of it."
+          },
           "verify": {
             "description": "A component canvas's design system round, as `verify: true` asked it: what the ask did.",
             "type": "string"
@@ -37983,6 +37987,37 @@
           "sentAt",
           "seq",
           "state"
+        ]
+      },
+      "StageUnreached": {
+        "description": "The hub's word that a canvas's stage couldn't be reached by its last read\n(the doc's `meta.unreached`, which the panel and the agent's read both\nsay): the hop that failed, in the preview proxy's kinds; why, in the hub's\nwords; and since when, the first read that failed since one that reached\nit. A read that reaches the stage, or the daemon's next word of it, takes\nit away.",
+        "type": "object",
+        "properties": {
+          "down": {
+            "$ref": "#/components/schemas/PreviewDown"
+          },
+          "since": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "down",
+          "since",
+          "why"
+        ]
+      },
+      "PreviewDown": {
+        "description": "A preview whose page nothing serves: the hop that did not answer, as the\nproxy's own page names it in a `<meta name=\"cawco-preview-down\">` (core\n`preview-proxy` `downResponse`), so the pane beside the conversation can\ndraw what happened instead of the proxy's page. `server`: the dev server\non the session's machine is not answering its port. `machine`: the\nmachine's preview listener is not answering the hub, or the machine is\naway. `workspace`: the port is a workspace's, and no boundary of that\nworkspace runs, so nothing in its network can answer. `reach`: the\nmachine could not open the way to the server (its listener did not start,\nor the bridge into the workspace's network did not open); the page names\nwhy in {@link PREVIEW_WHY_META}. `closed`: the session shows no preview\nnow (it was closed, or the session ended).",
+        "type": "string",
+        "enum": [
+          "closed",
+          "machine",
+          "reach",
+          "server",
+          "workspace"
         ]
       },
       "SheetWeight": {

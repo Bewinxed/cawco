@@ -5337,6 +5337,53 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/PreviewDown`.
+    public enum PreviewDown: OpenEnum {
+        case closed
+        case machine
+        case reach
+        case server
+        case workspace
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "closed": self = .closed
+            case "machine": self = .machine
+            case "reach": self = .reach
+            case "server": self = .server
+            case "workspace": self = .workspace
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .closed: "closed"
+            case .machine: "machine"
+            case .reach: "reach"
+            case .server: "server"
+            case .workspace: "workspace"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.closed, .machine, .reach, .server, .workspace]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/PreviewFrameState`.
     public enum PreviewFrameState: OpenEnum {
         case closed

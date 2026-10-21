@@ -13,6 +13,8 @@
  * supervision, and its preview's doc keeps its state the same way.
  */
 
+import type { PreviewDown } from "./index";
+
 /**
  * Where a stage serves a component canvas: `?file=<states file, from the
  * toolchain root>`, once per section, and `spec=<CanvasSpec JSON>`. Outside
@@ -430,6 +432,14 @@ export const AS_PAGE =
  */
 export const SECTION_MISSING = "cawco-section-missing";
 
+/**
+ * The stage's word to its pages (Vite's `hot.send`, a custom event) that a
+ * states file a section found missing is written now, with its file from
+ * the toolchain root: the page loads that section again. Vite has no module
+ * of it to update, its load having failed.
+ */
+export const SECTION_WRITTEN = "cawco:section-written";
+
 /** A CSF story file: `Who.stories.ts`, `Card.stories.tsx`, `Page.stories.js`. */
 export const STORY_FILE = /\.stories\.[cm]?[jt]sx?$/;
 
@@ -739,6 +749,20 @@ export interface DesignMap {
   /** What to do when the page was cut, one sentence. */
   steer?: string;
   total: number;
+}
+
+/**
+ * The hub's word that a canvas's stage couldn't be reached by its last read
+ * (the doc's `meta.unreached`, which the panel and the agent's read both
+ * say): the hop that failed, in the preview proxy's kinds; why, in the hub's
+ * words; and since when, the first read that failed since one that reached
+ * it. A read that reaches the stage, or the daemon's next word of it, takes
+ * it away.
+ */
+export interface StageUnreached {
+  down: PreviewDown;
+  since: string;
+  why: string;
 }
 
 /** What every stage's state says: where it is, where it runs, why it failed when it did, the compile errors standing now. */

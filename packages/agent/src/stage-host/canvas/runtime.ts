@@ -33,6 +33,7 @@ import {
   type RenderReport,
   type Scheme,
   SECTION_MISSING,
+  SECTION_WRITTEN,
   type SectionPlan,
   type SectionRender,
   type SheetOnPage,
@@ -132,7 +133,8 @@ export interface BootOptions {
   /** The house faces' `@font-face` rules (Figtree, JetBrains Mono), their files served beside the canvas. */
   faces: string;
   /** How to load each section's module, by its states file. */
-  load: (file: string) => Promise<SectionModule>;
+  /** A section's module; `fresh`, past whatever the browser kept of an import of it that failed. */
+  load: (file: string, fresh?: boolean) => Promise<SectionModule>;
   /** The toolchain root, absolute: dev paths are made relative to it. */
   root: string;
   /** CawCo's tokens (DESIGN.md), `:root` scoped by the chrome to its own. */
@@ -208,6 +210,8 @@ interface Probe {
 
 export interface Section {
   el: HTMLElement;
+  /** Its module didn't load, and it says why where its frames would stand. */
+  failed: boolean;
   file: string;
   frames: Map<string, Frame>;
   grid: HTMLElement;
@@ -857,6 +861,7 @@ export function boot(options: BootOptions): void {
       grid,
       name,
       standIns: [],
+      failed: false,
       frames: new Map(),
       interactions: new Map(),
       loaded: false,
@@ -969,6 +974,7 @@ export function boot(options: BootOptions): void {
     failed.append(line, details);
     section.head.after(failed);
     section.standIns = [failed];
+    section.failed = true;
   }
 
   const sectionOf = (file: string) => sections.find((one) => one.file === file);
@@ -1429,7 +1435,7 @@ export function boot(options: BootOptions): void {
     section.loading ??= (async () => {
       const since = performance.now();
       try {
-        section.mod = await options.load(section.file);
+        section.mod = await options.load(section.file, section.failed);
       } catch (error) {
         heard(error);
         failedSection(section, await loadFailure(error, since));
@@ -1445,6 +1451,7 @@ export function boot(options: BootOptions): void {
   function showSection(section: Section): void {
     const mod = section.mod as SectionModule;
     section.loaded = true;
+    section.failed = false;
     clearStandIns(section);
     section.name = sectionName(
       mod.SHEET.meta.title,
@@ -2650,6 +2657,18 @@ export function boot(options: BootOptions): void {
     section.probes.clear();
     showSection(section);
     dispatchEvent(new CustomEvent("cawco:hmr"));
+  });
+  // A states file it found missing is written: its section loads again, with no reload of the canvas.
+  window.addEventListener(SECTION_WRITTEN, (event) => {
+    const section = sectionOf((event as CustomEvent<string>).detail ?? "");
+    if (!section || section.loaded || section.loading) {
+      return;
+    }
+    quietly(
+      loadSection(section).then(() => {
+        dispatchEvent(new CustomEvent("cawco:hmr"));
+      })
+    );
   });
   window.addEventListener("cawco:after-update", () => {
     for (const section of sections) {

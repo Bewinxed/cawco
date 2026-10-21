@@ -84,7 +84,12 @@
  *    `missing` in its words and the broken one as kind `compile` at its
  *    place, each filed under its own states file; the pane, its doc carrying
  *    the missing one, titles it "Not written yet:", never "Doesn't
- *    compile:"; written, the problem goes, and taken away again it is back.
+ *    compile:"; written, the open canvas draws the section within 5 s with
+ *    no reopen or reload and the problem goes; taken away again it is back.
+ * 15. A canvas whose stage the hub's last read couldn't reach (the doc's
+ *    `meta.unreached` beside a `live` stage) says so where the page would
+ *    be: the machine isn't answering, "Not reached since <when>: <why>", and
+ *    Try again. (`CANVAS_DESIGN=refused` runs it after 13 and 14.)
  *    (`CANVAS_DESIGN=refused` runs 13 and 14 alone.)
  *
  * The bench head swept every px from 300 to 800, light, desk pointer, for a
@@ -2408,7 +2413,7 @@ async function keptLeg(
     missing?.kind === "missing" &&
       missing.message.startsWith(`${GONE_FILE} does not exist in `) &&
       missing.message.endsWith(
-        "The canvas draws it once its session writes it and shows the canvas again."
+        "The canvas draws it once its session writes it."
       ) &&
       JSON.stringify(missing.sheets) === JSON.stringify([GONE_FILE]) &&
       missing.line === null,
@@ -2460,15 +2465,49 @@ async function keptLeg(
       !said.join(" ").includes(sheetWords.errorTitle),
     JSON.stringify(said)
   );
-  await page.close();
-  // Written, its problem goes; taken away again (its section loaded), it is back.
+  // Written, the open canvas draws its section within 5 s, with no reopen
+  // or reload, and the stage lets its problem go.
+  const canvas = page
+    .frames()
+    .find((frame) => frame.url().includes("/@cawco/canvas"));
+  await canvas?.evaluate(() => {
+    (window as unknown as { __stayed: boolean }).__stayed = true;
+  });
+  const written = Date.now();
   writeFileSync(join(DASHBOARD, GONE_FILE), GONE_SOURCE);
+  const sectionNow = () =>
+    canvas
+      ? canvas
+          .evaluate(() => ({
+            drawn: !!document.querySelector(
+              '.cawco-section [data-cawco-story="One"]'
+            ),
+            failed: !!document.querySelector(".cawco-section-failed"),
+            stayed:
+              (window as unknown as { __stayed?: boolean }).__stayed === true,
+          }))
+          .catch(() => ({ drawn: false, failed: true, stayed: false }))
+      : Promise.resolve({ drawn: false, failed: true, stayed: false });
+  let section = await sectionNow();
+  while (Date.now() - written < REFUSED_MS && !section.drawn) {
+    // biome-ignore lint/performance/noAwaitInLoops: a poll, one read at a time against the leg's clock
+    await page.waitForTimeout(100);
+    section = await sectionNow();
+  }
+  const took = Date.now() - written;
+  kit.check(
+    `13: ${theme}: the states file written, the open canvas draws its section within ${REFUSED_MS / 1000}s, with no reopen and no reload`,
+    section.drawn && !section.failed && section.stayed,
+    `after ${took}ms: ${JSON.stringify(section)}`
+  );
+  await page.close();
   const cleared = await until(
     "the missing problem let go",
     () => (keptOf(GONE_FILE) ? undefined : true),
     Boolean,
     REFUSED_MS
   ).catch(() => false);
+  // Taken away again (its section loaded), it is back.
   rmSync(join(DASHBOARD, GONE_FILE), { force: true });
   const back = await until(
     "the missing problem back",
@@ -2481,6 +2520,71 @@ async function keptLeg(
     cleared === true && back?.kind === "missing",
     `cleared ${cleared}; after the file went: ${JSON.stringify(stage.errors())}`
   );
+  await unreachedLeg(kit, bench, stage, theme);
+}
+
+/** The hub's words for a read that couldn't reach a stage, as its relay refuses one (hub server.ts `onStage`). */
+const UNREACHED_WHY =
+  "The workspace's machine isn't connected to the hub, so its stage can't be reached.";
+
+/**
+ * Leg 15: a canvas whose stage the hub's last read couldn't reach (its doc's
+ * `meta.unreached`, as artifact_read answers it beside the doc's last stage,
+ * still `live`) says so where the page would be, in the pane's recipe for a
+ * machine that isn't answering, with since when and why under it; never a
+ * live canvas alone.
+ */
+async function unreachedLeg(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  theme: "light" | "dark"
+): Promise<void> {
+  const page = await kit.page("desk", { theme, scale: 2 });
+  await page.setViewportSize({ width: 760, height: 900 });
+  await page.route(`${stage.base}/__cawco/ping`, (route) =>
+    route.fulfill({
+      status: 204,
+      headers: { "access-control-allow-origin": "*" },
+    })
+  );
+  const since = new Date(Date.now() - 120_000).toISOString();
+  await serveDoc(page, { [BENCH_ARTIFACT]: liveStage() }, false, {
+    [BENCH_ARTIFACT]: {
+      unreached: { down: "machine", since, why: UNREACHED_WHY },
+    },
+  });
+  const path = `/@cawco/canvas?file=${encodeURIComponent(FILES[0] as string)}&spec=${encodeURIComponent(JSON.stringify({ name: "unreached" }))}`;
+  await page.goto(
+    `${bench}/motion/artifact-head?w=720&port=${stage.port}&path=${encodeURIComponent(path)}&ask=${encodeURIComponent(ASK)}`
+  );
+  const card = page.locator('[data-bench-pane] [data-slot="down"]').first();
+  await card.waitFor({ timeout: REFUSED_MS }).catch(() => undefined);
+  const said = await card
+    .evaluate((el) => ({
+      text: el.textContent?.replace(/\s+/g, " ").trim() ?? "",
+      unreached:
+        el
+          .querySelector('[data-slot="unreached"]')
+          ?.textContent?.replace(/\s+/g, " ")
+          .trim() ?? null,
+      retry: [...el.querySelectorAll("button")].some(
+        (one) =>
+          one.getAttribute("aria-label") === "Try again" ||
+          !!one.textContent?.trim().startsWith("Try again")
+      ),
+    }))
+    .catch(() => null);
+  kit.check(
+    `15: ${theme}: a canvas whose stage the hub's last read couldn't reach says so where the page would be: the machine isn't answering, since when and why, and Try again`,
+    !!said &&
+      said.text.includes("isn't answering") &&
+      said.retry &&
+      !!said.unreached?.startsWith("Not reached since ") &&
+      said.unreached.endsWith(`: ${UNREACHED_WHY}`),
+    JSON.stringify(said)
+  );
+  await page.close();
 }
 
 /** A pin as the overlay writes one: open, on the page's body. */
@@ -2512,7 +2616,9 @@ const pinOf = (number: number, at: string) => ({
 async function serveDoc(
   page: Page,
   stages: Record<string, StageState> = {},
-  pick = true
+  pick = true,
+  /** More of each artifact's `meta`, by key: the hub's `unreached`. */
+  metas: Record<string, Record<string, unknown>> = {}
 ) {
   const yws = Bun.resolveSync("y-websocket", DASHBOARD);
   // The dashboard's own yjs (the probe kit depends on none): the part of it this serves with.
@@ -2547,6 +2653,9 @@ async function serveDoc(
     const stageState = stages[artifact];
     if (stageState) {
       doc.getMap("meta").set("stage", stageState);
+    }
+    for (const [key, value] of Object.entries(metas[artifact] ?? {})) {
+      doc.getMap("meta").set(key, value);
     }
     if (pick) {
       doc.getMap("state").set("pick", {

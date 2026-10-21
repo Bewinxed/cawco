@@ -14,7 +14,7 @@ import {
   tendDeviceDocs,
   watchSilence,
 } from "@cawco/core/doc-link";
-import type { StageState } from "@cawco/core/stage";
+import type { StageState, StageUnreached } from "@cawco/core/stage";
 import { IndexeddbPersistence } from "y-indexeddb";
 import { WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
@@ -58,6 +58,8 @@ export interface ArtifactView extends ArtifactChoices {
   revisedAt: string | null;
   /** A sheet's stage, as the hub keeps it (live components): its status and the errors in the modules the sheet imports. */
   stage: StageState | null;
+  /** The hub's last read couldn't reach the stage (`meta.unreached`): which hop, why, since when. */
+  unreached: StageUnreached | null;
 }
 
 /**
@@ -135,6 +137,7 @@ const viewOf = (doc: Doc): ArtifactView => {
     revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
     looseInk,
     stage: (meta.get("stage") as StageState | undefined) ?? null,
+    unreached: (meta.get("unreached") as StageUnreached | undefined) ?? null,
   };
 };
 

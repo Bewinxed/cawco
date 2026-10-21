@@ -70,6 +70,7 @@ import {
   type RenderReport,
   type ReportAnswer,
   SECTION_MISSING,
+  SECTION_WRITTEN,
   type SectionPlan,
   type SectionRender,
   type SheetImport,
@@ -688,8 +689,10 @@ async function svelteProps(): Promise<string> {
  * reach the runtime as window events: `cawco:after-update` after any
  * update (a component's own edit redraws through its framework's HMR and
  * loads again each section drawn from it, and the canvas reads its frames
- * again), and `cawco:stage-error` with Vite's error for a module it
- * couldn't serve, which a section that didn't load says.
+ * again), `cawco:stage-error` with Vite's error for a module it couldn't
+ * serve, which a section that didn't load says, and {@link SECTION_WRITTEN}
+ * with a states file found missing that is written now, whose section loads
+ * again, fresh (`?t=`: its failed import is never the browser's to reuse).
  */
 function entryModule(): string {
   const styles = globalStyles()
@@ -705,11 +708,12 @@ boot({
   tokens: ${JSON.stringify(CANVAS_TOKENS)},
   edgeFade: ${JSON.stringify(CANVAS_EDGE_FADE)},
   faces: ${JSON.stringify(CANVAS_FACES)},
-  load: (file) => import(/* @vite-ignore */ BASE + "/@id/__x00__${VIRTUAL}" + encodeURIComponent(file) + ".js"),
+  load: (file, fresh) => import(/* @vite-ignore */ BASE + "/@id/__x00__${VIRTUAL}" + encodeURIComponent(file) + ".js" + (fresh ? "?t=" + Date.now() : "")),
 });
 if (import.meta.hot) {
   import.meta.hot.on("vite:afterUpdate", () => dispatchEvent(new CustomEvent("cawco:after-update")));
   import.meta.hot.on("vite:error", (payload) => dispatchEvent(new CustomEvent("cawco:stage-error", { detail: payload.err })));
+  import.meta.hot.on(${JSON.stringify(SECTION_WRITTEN)}, (data) => dispatchEvent(new CustomEvent(${JSON.stringify(SECTION_WRITTEN)}, { detail: data.file })));
 }
 `;
 }
@@ -2031,7 +2035,11 @@ const missingError = (file: string): StageError => ({
   sheets: [file],
 });
 
-/** Each of `files` (from the toolchain root) kept missing while it isn't written, and let go once it is; the daemon told of a change. */
+/**
+ * Each of `files` (from the toolchain root) kept missing while it isn't
+ * written, and let go once it is: the daemon told of a change, and every
+ * page told to load a written one's section again ({@link SECTION_WRITTEN}).
+ */
 function keepMissing(files: string[]): void {
   let changed = false;
   for (const file of files) {
@@ -2040,6 +2048,11 @@ function keepMissing(files: string[]): void {
     if (existsSync(abs)) {
       if (kept?.kind === "missing") {
         stageErrors.delete(abs);
+        server?.environments.client.hot.send({
+          type: "custom",
+          event: SECTION_WRITTEN,
+          data: { file },
+        });
         changed = true;
       }
     } else if (kept?.kind !== "missing") {
@@ -2145,7 +2158,7 @@ function notStatesFile(named: string): string | null {
 
 /** The stage's words for states file `named` (from the toolchain root) that isn't written: the page's section and the agent's read say them alike. */
 const missingWords = (named: string): string =>
-  `${named} does not exist in ${root}. The canvas draws it once its session writes it and shows the canvas again.`;
+  `${named} does not exist in ${root}. The canvas draws it once its session writes it.`;
 
 /** Why `named` (from the toolchain root) can't be a canvas's section, in the stage's words; null when it can. */
 function sectionProblem(named: string): string | null {
@@ -2377,18 +2390,25 @@ function cawcoStage() {
       };
       // A states file written lets its missing problem go; one a loaded section draws from, taken away, is missing.
       const nowWritten = (abs: string) => {
-        if (stageErrors.get(abs)?.kind === "missing" && existsSync(abs)) {
-          stageErrors.delete(abs);
-          tellErrors();
+        if (stageErrors.get(abs)?.kind === "missing") {
+          keepMissing([relative(root, abs)]);
         }
       };
       dev.watcher.on("add", nowWritten);
       dev.watcher.on("change", nowWritten);
       dev.watcher.on("unlink", (abs: string) => {
         const file = relative(root, abs);
-        if (sections.has(file)) {
-          keepMissing([file]);
+        const id = sections.get(file);
+        if (id === undefined) {
+          return;
         }
+        // Its section module's transform is kept: the next page's load must ask `sectionLoad` again, which refuses it.
+        const graph = dev.environments.client.moduleGraph;
+        const mod = graph.getModuleById(id);
+        if (mod) {
+          graph.invalidateModule(mod);
+        }
+        keepMissing([file]);
       });
       // Here, not in a returned post hook: before Vite's own middlewares and SvelteKit's handler.
       dev.middlewares.use((req, res, next) => {
