@@ -723,6 +723,8 @@
     --c-pin: 20px;
     /* A pin's card over the page, at its widest: the anchor line with Resolve, ⋯ and Close, the thread, the reply field (DESIGN.md Artifact panel, canvas and ink). Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px is the narrowest that keeps the anchor line beside its four controls. */
     --c-pin-card-w: 280px;
+    /* The overlay's line round a chosen target and the page's root in Comment mode: the content's own edge weight, never the focus ring's (DESIGN.md, The One Target Rule). */
+    --c-target-stroke: 1px;
     /* A pin's card at its narrowest beside the Comments panel: its head (disc, what it stands on, Resolve, ⋯ and Close) on one line and the reply field. Where the well holds the panel, a gutter, this and the card's two edges, the card stands beside the panel; below that it rises as the foot sheet while the panel goes. */
     --c-pin-card-min: 240px;
     /* A sheet's inspector beside the page on a desk (live components spec §5): a prop's name over its control, a five-segment variant or a field at the body size, and the story row's list with its four 30px buttons. */
