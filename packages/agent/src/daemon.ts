@@ -3459,15 +3459,21 @@ export const startDaemon = (rediscover = false) =>
     setStageCloneSink((frame) =>
       supervisor.emit({ verb: "frames", machineId: "", payload: frame })
     );
-    // A canvas's first states file, and (`{ file, files }`) every states file whose report it reads.
+    // A canvas's first states file, and (`{ file, files }`) every states file whose report it reads; `opening` as the canvas is made.
     supervisor.registerDaemonFunction(STAGE_ENSURE, (ref, file) => {
       if (fenced()) {
         return Promise.reject(new Error(AGENT_RESTARTING));
       }
-      const named = file as { file?: string; files?: string[] } | string;
+      const named = file as
+        { file?: string; files?: string[]; opening?: boolean } | string;
       return typeof named === "string"
         ? ensureStage(ref as WorkspaceRef, named)
-        : ensureStage(ref as WorkspaceRef, String(named.file), named.files);
+        : ensureStage(
+            ref as WorkspaceRef,
+            String(named.file),
+            named.files,
+            named.opening === true
+          );
     });
     // A sheet's story file written by its stage: a story's args, a story added, duplicated, removed or moved.
     supervisor.registerDaemonFunction(STAGE_WRITE, (ref, write) =>

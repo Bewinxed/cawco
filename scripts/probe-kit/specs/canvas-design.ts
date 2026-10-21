@@ -79,7 +79,13 @@
  * 14. The same for a states file that doesn't compile: "<Name> doesn't
  *    compile, …", Vite's compile error under Show details (not the
  *    browser's "Failed to fetch dynamically imported module"), its place
- *    whole on one line with its full text as a title, and Vite's code frame. (`CANVAS_DESIGN=refused` runs 13 and 14 alone.)
+ *    whole on one line with its full text as a title, and Vite's code frame.
+ *    The doc's side of both: the stage keeps the missing file as kind
+ *    `missing` in its words and the broken one as kind `compile` at its
+ *    place, each filed under its own states file; the pane, its doc carrying
+ *    the missing one, titles it "Not written yet:", never "Doesn't
+ *    compile:"; written, the problem goes, and taken away again it is back.
+ *    (`CANVAS_DESIGN=refused` runs 13 and 14 alone.)
  *
  * The bench head swept every px from 300 to 800, light, desk pointer, for a
  * component canvas and a plain preview, with Send standing and
@@ -103,8 +109,10 @@ import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import type {
   CanvasMap,
   CanvasSpec,
+  StageError,
   StageState,
 } from "../../../packages/core/src/stage";
+import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -158,6 +166,8 @@ const ARROWS = /[→›←‹◀▶]/;
 
 interface Stage {
   base: string;
+  /** The host's last `errors` word to the daemon (stage-host host.ts `tellErrors`): every section problem it keeps; null before it said one. */
+  errors: () => StageError[] | null;
   port: number;
   stop: () => void;
 }
@@ -224,6 +234,15 @@ export const Two = {
   );
   return {
     base: `http://127.0.0.1:${port}`,
+    errors: () => {
+      const said = words
+        .split("\n")
+        .filter((line) => line.startsWith('{"cawco":"errors"'))
+        .at(-1);
+      return said
+        ? (JSON.parse(said) as { errors: StageError[] }).errors
+        : null;
+    },
     port,
     stop: () => {
       child.kill("SIGTERM");
@@ -2350,6 +2369,118 @@ async function refusedLeg(
     });
     await page.close();
   }
+  await keptLeg(kit, bench, stage, theme);
+}
+
+/** A states file as leg 13's session would write it: one story. */
+const GONE_SOURCE = `import StatTile from "../../src/lib/cawco/StatTile.svelte";
+export default { component: StatTile, args: { label: "Spend", value: "1.00" } };
+export const One = { args: {} };
+`;
+
+/**
+ * Legs 13 and 14, the doc's side: what the stage host keeps of each and tells
+ * the daemon (its `errors` word), which the hub carries into the canvas's doc
+ * (`meta.stage.errors`) for the panel and the agent's read alike. The
+ * missing file is kind `missing` in the stage's words, filed under that file
+ * alone; the file that doesn't compile is kind `compile` at its place with
+ * Vite's frame, filed under itself (its section module's id no longer mangles
+ * the key). The pane, its doc's stage `live` carrying the missing one as the
+ * hub keeps it, titles it by its kind, never "Doesn't compile:". Written,
+ * the missing one goes; taken away again, it is back.
+ */
+async function keptLeg(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  theme: "light" | "dark"
+): Promise<void> {
+  const keptOf = (file: string) =>
+    stage.errors()?.find((one) => one.file === file);
+  const missing = await until(
+    "the host's missing problem",
+    () => keptOf(GONE_FILE),
+    Boolean,
+    REFUSED_MS
+  ).catch(() => undefined);
+  kit.check(
+    `13: ${theme}: the stage keeps the missing states file as its section's problem: kind missing, the stage's words, filed under it alone`,
+    missing?.kind === "missing" &&
+      missing.message.startsWith(`${GONE_FILE} does not exist in `) &&
+      missing.message.endsWith(
+        "The canvas draws it once its session writes it and shows the canvas again."
+      ) &&
+      JSON.stringify(missing.sheets) === JSON.stringify([GONE_FILE]) &&
+      missing.line === null,
+    JSON.stringify(stage.errors())
+  );
+  const broken = keptOf(BROKEN_FILE);
+  kit.check(
+    `14: ${theme}: the stage keeps the file that doesn't compile as kind compile, at its place with Vite's frame, filed under it`,
+    broken?.kind === "compile" &&
+      broken.line === 2 &&
+      !!broken.frame &&
+      JSON.stringify(broken.sheets) === JSON.stringify([BROKEN_FILE]),
+    JSON.stringify(broken)
+  );
+  if (!missing) {
+    return;
+  }
+  const page = await kit.page("desk", { theme, scale: 2 });
+  await page.setViewportSize({ width: 760, height: 900 });
+  await page.route(`${stage.base}/__cawco/ping`, (route) =>
+    route.fulfill({
+      status: 204,
+      headers: { "access-control-allow-origin": "*" },
+    })
+  );
+  await serveDoc(
+    page,
+    { [BENCH_ARTIFACT]: { ...liveStage(), errors: [missing] } },
+    false
+  );
+  const path = `/@cawco/canvas?file=${encodeURIComponent(GONE_FILE)}&spec=${encodeURIComponent(JSON.stringify({ name: "refused" }))}`;
+  await page.goto(
+    `${bench}/motion/artifact-head?w=720&port=${stage.port}&path=${encodeURIComponent(path)}&ask=${encodeURIComponent(ASK)}`
+  );
+  const card = page.locator('[data-bench-pane] [data-slot="sheet-error"]');
+  await card.waitFor({ timeout: REFUSED_MS }).catch(() => undefined);
+  const said = await card
+    .evaluate((el) =>
+      [...el.querySelectorAll("p")].map(
+        (one) => one.textContent?.replace(/\s+/g, " ").trim() ?? ""
+      )
+    )
+    .catch(() => [] as string[]);
+  kit.check(
+    `13: ${theme}: the pane titles the missing file "${sheetWords.missingTitle}" with its file, the stage's words under it and "${sheetWords.missingNext(0)}", never "${sheetWords.errorTitle}"`,
+    said[0] === `${sheetWords.missingTitle} ${GONE_FILE}` &&
+      said[1] === missing.message &&
+      said[2] === sheetWords.missingNext(0) &&
+      !said.join(" ").includes(sheetWords.errorTitle),
+    JSON.stringify(said)
+  );
+  await page.close();
+  // Written, its problem goes; taken away again (its section loaded), it is back.
+  writeFileSync(join(DASHBOARD, GONE_FILE), GONE_SOURCE);
+  const cleared = await until(
+    "the missing problem let go",
+    () => (keptOf(GONE_FILE) ? undefined : true),
+    Boolean,
+    REFUSED_MS
+  ).catch(() => false);
+  rmSync(join(DASHBOARD, GONE_FILE), { force: true });
+  const back = await until(
+    "the missing problem back",
+    () => keptOf(GONE_FILE),
+    Boolean,
+    REFUSED_MS
+  ).catch(() => undefined);
+  kit.check(
+    `13: ${theme}: the states file written, the stage lets its problem go; taken away again, it is kept missing again`,
+    cleared === true && back?.kind === "missing",
+    `cleared ${cleared}; after the file went: ${JSON.stringify(stage.errors())}`
+  );
 }
 
 /** A pin as the overlay writes one: open, on the page's body. */

@@ -56,7 +56,7 @@ import {
   type DesignQuery,
   HEALTH_PATH,
   REPORT_PATH,
-  type RenderReport,
+  type ReportAnswer,
   SERVE_COMMAND_LIMIT,
   type ServeSpec,
   type SheetRead,
@@ -407,21 +407,30 @@ const inTree = (tree: Tree, path: string, what: string): string => {
   return join(tree.folder, inside);
 };
 
-/** The story file a sheet names, in the tree the stage serves, absolute; refused when it is no story file there. */
+/**
+ * The story file a sheet names, in the tree the stage serves, absolute;
+ * refused when it is no story file there. One that isn't written (yet, or
+ * any more) is its section's problem, which the stage host keeps (kind
+ * `missing`) and the canvas and the agent's read both say.
+ */
 const storyPath = (tree: Tree, file: string): string => {
   const abs = inTree(tree, file, "a sheet is a story file in it.");
-  const inside = relative(tree.folder, abs);
   if (!STORY_FILE.test(abs)) {
     throw new StageRefusal(
       `${file} is no story file: a sheet is a CSF 3 file named like Card.stories.ts beside its component.`
     );
   }
-  if (!existsSync(abs)) {
+  return abs;
+};
+
+/** A canvas opened on nothing is refused: each of `stories` (absolute) must be written first. */
+const writtenFirst = (tree: Tree, stories: string[]): void => {
+  const unwritten = stories.find((story) => !existsSync(story));
+  if (unwritten) {
     throw new StageRefusal(
-      `${inside} does not exist in ${tree.ref.path}. Write it, then call again.`
+      `${relative(tree.folder, unwritten)} does not exist in ${tree.ref.path}. Write it, then call again.`
     );
   }
-  return abs;
 };
 
 /** The toolchain whose root `dir` is, by its config file; null when it is none's. */
@@ -1159,21 +1168,27 @@ async function stageAtRoot(
  * waited on: its port, root and state, the sheet as it reads (its stories,
  * args and props) and what it loads ({@link sheetWeight}). An agent's use:
  * its idle time starts again.
- * Refused with why, when the sheet cannot run.
+ * Refused with why, when the sheet cannot run; and, as a canvas is
+ * `opening`, when a states file it names isn't written.
  */
 export async function ensureStage(
   workspace: WorkspaceRef,
   file: string,
   /** Every states file of the canvas (from the clone's root), whose report is read; omitted, `file` alone. */
-  files: string[] = [file]
+  files: string[] = [file],
+  opening = false
 ): Promise<StageOpened> {
   const tree = await treeOf(workspace);
   const story = storyPath(tree, file);
+  const stories = files.map((one) => storyPath(tree, one));
+  if (opening) {
+    writtenFirst(tree, [story, ...stories]);
+  }
   await installedFor(tree, dirname(story));
   const stage = await stageAtRoot(stageFor(tree, story), "a sheet's read");
   const rel = relative(stage.root, story);
-  const all = files.map((one) => relative(stage.root, storyPath(tree, one)));
-  const [sheet, weight, report] = await Promise.all([
+  const all = stories.map((one) => relative(stage.root, one));
+  const [sheet, weight, { errors, ...report }] = await Promise.all([
     answerOf<SheetRead>(
       stage,
       `${STORIES_PATH}?file=${encodeURIComponent(rel)}`,
@@ -1181,13 +1196,20 @@ export async function ensureStage(
       `read ${rel}'s stories`
     ),
     sheetWeight(stage, rel),
-    answerOf<RenderReport>(
+    answerOf<ReportAnswer>(
       stage,
       `${REPORT_PATH}?${all.map((one) => `file=${encodeURIComponent(one)}`).join("&")}`,
       READ_WAIT_MS,
       "read what a browser drew"
     ),
   ]);
+  // The host's problems as of this answer (a states file it found missing
+  // just now among them), so the state read here says them; its `errors`
+  // word on stdout says the same, and may land after.
+  if (JSON.stringify(errors) !== JSON.stringify(stage.errors)) {
+    stage.errors = errors;
+    tell(stage);
+  }
   return {
     port: stage.port,
     dir: stage.dir,

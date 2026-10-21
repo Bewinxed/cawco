@@ -66,6 +66,7 @@ typeOverrides:
     DiscoveredSkillScope: OpenEnums.DiscoveredSkillScope
     EffortLevel: OpenEnums.EffortLevel
     ErrorFrameLastErrorKind: OpenEnums.ErrorFrameLastErrorKind
+    ErrorSaidKind: OpenEnums.ErrorSaidKind
     Exclude: OpenEnums.Exclude
     FindConversationOutcome: OpenEnums.FindConversationOutcome
     FindConversationRole: OpenEnums.FindConversationRole

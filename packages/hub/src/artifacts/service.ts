@@ -919,15 +919,22 @@ const servedSource = (
   };
 };
 
-/** A compile error as a delivery has heard it: the same error again is not news. */
+/** A section's problem as a delivery has heard it: the same one again is not news. */
 const errorKey = (error: StageError): string =>
-  `${error.file}:${error.line}:${error.column}:${error.message}`;
+  `${error.kind}:${error.file}:${error.line}:${error.column}:${error.message}`;
 
-/** One compile error's part of a delivery: where, what Vite said, and its code frame. */
+/** Each problem's heading in a delivery, by its kind, before its place. */
+const ERROR_HEADING: Record<NonNullable<StageError["kind"]>, string> = {
+  missing: "States file missing:",
+  compile: "Compile error at",
+  page: "Didn't load at",
+};
+
+/** One section's problem in a delivery: what and where, the stage's or Vite's words, and its code frame. */
 const errorSection = (error: StageError): string => {
   const at = `${error.file}${error.line ? `:${error.line}` : ""}${error.column ? `:${error.column}` : ""}`;
   return [
-    `## Compile error at ${at}`,
+    `## ${ERROR_HEADING[error.kind ?? "compile"]} ${at}`,
     `- ${error.message.split("\n")[0]}`,
     ...(error.frame ? ["```", error.frame, "```"] : []),
   ].join("\n");
@@ -1240,12 +1247,14 @@ export interface ArtifactServiceDeps {
    * The stage story file `file` runs on in a workspace (agent stage.ts
    * `ensureStage`), started or woken there and waited on: its port, root and
    * state, the sheet's stories, with the workspace and its machine. Throws
-   * an {@link ArtifactRefusal} saying why it can't run.
+   * an {@link ArtifactRefusal} saying why it can't run, and, `opening` a
+   * canvas, naming a states file that isn't written.
    */
   stage: (
     at: StageAt,
     file: string,
-    files?: string[]
+    files?: string[],
+    opening?: boolean
   ) => Promise<{ machineId: string; opened: StageOpened; workspace: string }>;
   /** The design map of session `instance`'s workspace (agent stage.ts `stageComponents`): its components, paged, or one's card. */
   stageComponents: (at: StageAt, ask: DesignQuery) => Promise<DesignMap>;
@@ -3436,11 +3445,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** The stage's state as sheet `row` has it: only the errors in the modules it imports. */
   const sheetState = (row: ArtifactRow, state: StageState): StageState => {
-    const file = sheetOf(row)?.file;
+    const sheet = sheetOf(row);
+    // Every section's states file, from the toolchain root as the host names them.
+    const mine = new Set(
+      sheet?.files.map((one) => relative(sheet.dir, one)) ?? []
+    );
     return {
       ...state,
       errors: state.errors.filter((error) =>
-        file ? error.sheets.includes(file) : false
+        error.sheets.some((one) => mine.has(one))
       ),
     };
   };
@@ -3717,10 +3730,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       throw new ArtifactRefusal(400, problem);
     }
     const at: StageAt = { session: maker };
+    // A canvas opened on nothing is refused: "Write it, then call again."
     const { machineId, opened, workspace } = await deps.stage(
       at,
       asked[0] as string,
-      asked
+      asked,
+      true
     );
     const spec = specOf(input.name, input);
     const files = opened.report.sections.map((one) => one.file);
@@ -3797,8 +3812,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * and tuned motion; on asking, one story's args and code, one frame's
    * computed-style delta, a fresh draw on the daemon, a picture. Read
    * afresh on the workspace it was made in: a use that keeps the stage
-   * awake. A stage that can't be reached is read as the doc last had it,
-   * `error` with why. Its owner's read when `ownersRead`.
+   * awake. Its stage and each section's problem are the doc's (`meta.stage`),
+   * as the panel reads them; a stage that can't be reached is read as the
+   * doc last had it. Its owner's read when `ownersRead`.
    */
   const readSheet = async (
     row: ArtifactRow,
@@ -3808,7 +3824,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: a canvas's read joins its stage, its report, the person's picks and each optional ask in one answer
   ): Promise<ArtifactRead> => {
     const sheet = sheetOf(row);
-    let failure: string | null = null;
     let opened: StageOpened | undefined;
     let report: RenderReport | undefined;
     let png: string | undefined;
@@ -3822,17 +3837,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ));
         writeStage(row, opened.state, opened.sheet);
         ({ report } = opened);
-        if (ask.render || ask.png) {
-          const drawn = await deps.stageRender(at, {
-            files: sheet.files,
-            spec: sheet.spec,
-            ...(ask.state ? { state: ask.state } : {}),
-            ...(ask.png ? { png: true } : {}),
-          });
-          ({ report, png } = drawn);
-        }
-      } catch (error) {
-        failure = error instanceof Error ? error.message : String(error);
+      } catch {
+        // Read as the doc has it: the daemon states a stage that failed there.
+      }
+      // A draw asked of a stage that answered: refused in its own words when it can't be made.
+      if (opened && (ask.render || ask.png)) {
+        ({ report, png } = await deps.stageRender(at, {
+          files: sheet.files,
+          spec: sheet.spec,
+          ...(ask.state ? { state: ask.state } : {}),
+          ...(ask.png ? { png: true } : {}),
+        }));
       }
     }
     const meta = docs.doc(row.id).getMap("meta");
@@ -3857,18 +3872,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return {
       ...base,
       state: picks,
-      ...(stage
-        ? {
-            stage: failure
-              ? {
-                  ...stage,
-                  status: "error" as const,
-                  message: failure,
-                  errors: [],
-                }
-              : { ...stage, errors: [] },
-          }
-        : {}),
+      ...(stage ? { stage: { ...stage, errors: [] } } : {}),
       errors: errorsSaid(stage?.errors ?? []),
       ...(report
         ? {

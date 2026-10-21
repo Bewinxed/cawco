@@ -2417,6 +2417,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/ErrorSaidKind`.
+    public enum ErrorSaidKind: OpenEnum {
+        case compile
+        case missing
+        case page
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "compile": self = .compile
+            case "missing": self = .missing
+            case "page": self = .page
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .compile: "compile"
+            case .missing: "missing"
+            case .page: "page"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.compile, .missing, .page]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/Exclude`.
     public enum Exclude: OpenEnum {
         case opencode

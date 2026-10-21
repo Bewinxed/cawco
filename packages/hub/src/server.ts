@@ -12252,11 +12252,11 @@ export const createServer = (
     ownWorkspace: (instance) => workItems.workspaceOf(instance)?.id,
     workspaces: (needle) => db.workspacesNamed(needle),
     // A sheet runs on its workspace's stage, on that workspace's machine.
-    stage: async (at, file, files) => {
+    stage: async (at, file, files, opening) => {
       const { machineId, workspace, result } = await onStage(
         at,
         STAGE_ENSURE,
-        files ? { file, files } : file
+        files ? { file, files, opening } : file
       );
       return { machineId, workspace, opened: result as StageOpened };
     },

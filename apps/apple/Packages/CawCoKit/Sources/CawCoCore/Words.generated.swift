@@ -1164,9 +1164,20 @@ public enum Words {
         /// The compile error card's title, before the error's `file:line:column`.
         public static let errorTitle = "Doesn't compile:"
 
+        /// The card's title for a states file that isn't there (core `StageError` kind `missing`), before its file.
+        public static let missingTitle = "Not written yet:"
+
+        /// The card's title for a section whose code threw in the page (kind `page`), before its place.
+        public static let pageTitle = "Didn't load:"
+
         /// The card's foot: how many errors stand besides the first, and what happens next.
         public static func errorNext(more: Int) -> String {
             "\(more > 0 ? "\(more) more besides. " : "")The session is told; the sheet redraws once it compiles."
+        }
+
+        /// The foot under a missing states file, whose own words say what draws it.
+        public static func missingNext(more: Int) -> String {
+            "\(more > 0 ? "\(more) more besides. " : "")The session is told."
         }
 
         /// Where the page would be, when the stage did not start or failed its restarts.

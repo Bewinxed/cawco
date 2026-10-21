@@ -19,8 +19,9 @@
  * `CAWCO_STAGE_TOOLCHAIN`, which toolchain it starts.
  *
  * It speaks to the daemon in JSON lines on stdout, each `{"cawco": <word>}`:
- * `ready` with its port once it serves, `errors` with every compile error
- * standing whenever that changes, `beat` every {@link BEAT_MS}, and `fatal`
+ * `ready` with its port once it serves, `errors` with every section's
+ * problem standing (a states file that isn't written, a compile error)
+ * whenever that changes, `beat` every {@link BEAT_MS}, and `fatal`
  * with why it could not start. Vite's own words go to stderr (its logger at
  * "warn"). Once nothing reads its stdout (the daemon is gone), a beat's
  * write fails and the stage ends. Astro's and Nuxt's own words go to stderr
@@ -67,6 +68,7 @@ import {
   RENDERED_PATH,
   REPORT_PATH,
   type RenderReport,
+  type ReportAnswer,
   SECTION_MISSING,
   type SectionPlan,
   type SectionRender,
@@ -150,7 +152,13 @@ interface DevServer {
     originalUrl?: string
   ) => Promise<string>;
   /** Vite's file watcher (chokidar): a `change` on it is what Vite's HMR runs on. */
-  watcher: { emit: (event: "change", file: string) => boolean };
+  watcher: {
+    emit: (event: "change", file: string) => boolean;
+    on: (
+      event: "add" | "change" | "unlink",
+      listener: (file: string) => void
+    ) => unknown;
+  };
 }
 
 /** What the stage uses of a Vite logger (vite.dev/guide/api-javascript `createLogger`). */
@@ -884,6 +892,18 @@ async function reportOf(files: string[]): Promise<RenderReport> {
   } | null = null;
   for (const file of files) {
     const abs = resolve(root, file);
+    // Not written: nothing to draw; its problem is kept beside (`keepMissing`).
+    if (!existsSync(abs)) {
+      sections.push({
+        file,
+        title: file,
+        hash: "",
+        frames: [],
+        moves: [],
+        notForced: [],
+      });
+      continue;
+    }
     const read = readStoryFile(abs, readFileSync(abs, "utf8"));
     unnamed.push(
       ...read.stories
@@ -1934,24 +1954,35 @@ async function serveStage(
   if (named.length === 0 || files.some((one) => !one)) {
     json(res, 404, {
       error:
-        (named.map(sectionProblem).find(Boolean) as string | undefined) ??
+        (named.map(notStatesFile).find(Boolean) as string | undefined) ??
         "No file is named: a canvas names its states files as file=<path from the toolchain root>.",
     });
     return;
   }
+  // A states file that isn't written is its section's problem, kept as the page's load keeps it: the read answers, the problem with it.
+  keepMissing(files as string[]);
   if (path === REPORT_PATH) {
     await reportOf(files as string[]).then(
-      (report) => json(res, 200, report),
+      (report) =>
+        json(res, 200, {
+          ...report,
+          errors: [...stageErrors.values()],
+        } satisfies ReportAnswer),
       (error) => refusedWith(res, error)
     );
     return;
   }
   const file = files[0] as string;
+  const onDisk = existsSync(resolve(root, file));
   if (path === WEIGHT_PATH) {
-    await weightOf(file).then(
+    await (onDisk ? weightOf(file) : Promise.resolve(null)).then(
       (weight) => json(res, 200, { weight }),
       (error) => refusedWith(res, error)
     );
+    return;
+  }
+  if (!onDisk) {
+    json(res, 200, UNWRITTEN_SHEET);
     return;
   }
   await sheetRead(file).then(
@@ -1964,11 +1995,61 @@ async function serveStage(
   );
 }
 
-/** A story file the request names, from the toolchain root, when it is one inside it; null otherwise. */
+/** A states file the request names, from the toolchain root, when it is one inside it (written or not); null otherwise. */
 function storyFile(named: string | null): string | null {
-  return named && !sectionProblem(named)
+  return named && !notStatesFile(named)
     ? relative(root, resolve(root, named))
     : null;
+}
+
+/** A states file that isn't written, as its read answers it: nothing in it yet. */
+const UNWRITTEN_SHEET: SheetRead = {
+  components: [],
+  meta: { args: {}, code: {}, component: null, title: null },
+  stories: [],
+};
+
+/**
+ * Every section's problem the stage keeps, by the file it is of (absolute):
+ * a states file that isn't written (`missing`, keyed by itself), or a module
+ * that doesn't compile (`compile`, keyed by that module; one a section's
+ * own load refused, by its states file). Told to the daemon on each change,
+ * which carries it into each canvas's doc (`meta.stage.errors`): the panel
+ * and the agent's read say it from there.
+ */
+const stageErrors = new Map<string, StageError>();
+const tellErrors = () => say("errors", { errors: [...stageErrors.values()] });
+
+/** A states file (from the toolchain root) that isn't written, as the stage keeps it: the stage's words, filed under its own section. */
+const missingError = (file: string): StageError => ({
+  kind: "missing",
+  file,
+  line: null,
+  column: null,
+  message: missingWords(file),
+  frame: null,
+  sheets: [file],
+});
+
+/** Each of `files` (from the toolchain root) kept missing while it isn't written, and let go once it is; the daemon told of a change. */
+function keepMissing(files: string[]): void {
+  let changed = false;
+  for (const file of files) {
+    const abs = resolve(root, file);
+    const kept = stageErrors.get(abs);
+    if (existsSync(abs)) {
+      if (kept?.kind === "missing") {
+        stageErrors.delete(abs);
+        changed = true;
+      }
+    } else if (kept?.kind !== "missing") {
+      stageErrors.set(abs, missingError(file));
+      changed = true;
+    }
+  }
+  if (changed) {
+    tellErrors();
+  }
 }
 
 /**
@@ -1977,14 +2058,25 @@ function storyFile(named: string | null): string | null {
  * code tells a file that isn't there from one that won't compile.
  */
 function sectionLoad(file: string): Promise<string> {
+  const abs = resolve(root, file);
+  // Nuxt's watcher passes states files by: the stage's own sees this one written.
+  if (
+    toolchain === "nuxt" &&
+    !notStatesFile(file) &&
+    existsSync(dirname(abs))
+  ) {
+    watchStory(abs);
+  }
   const problem = sectionProblem(file);
   if (problem) {
+    const missing = !(notStatesFile(file) || existsSync(abs));
+    // Kept here: Vite sends this refusal with no id or place to file it by.
+    if (missing) {
+      keepMissing([file]);
+    }
     throw Object.assign(new Error(problem), {
-      pluginCode: existsSync(resolve(root, file)) ? undefined : SECTION_MISSING,
+      pluginCode: missing ? SECTION_MISSING : undefined,
     });
-  }
-  if (toolchain === "nuxt") {
-    watchStory(resolve(root, file));
   }
   return sectionModule(file).catch((error: unknown) => {
     throw placedAt(error, file);
@@ -2043,15 +2135,40 @@ function codeFrame(abs: string, line: number, column: number): string | null {
   return rows.join("\n");
 }
 
+/** Why `named` (from the toolchain root) can be no section at all, in the stage's words; null when it is a states file inside the root, written or not. */
+function notStatesFile(named: string): string | null {
+  const abs = resolve(root, named);
+  return !STORY_FILE.test(named) || relative(root, abs).startsWith("..")
+    ? `${named} is no states file in ${root}: a states file is a .stories.ts (or .js, .tsx, .jsx) file inside the toolchain root.`
+    : null;
+}
+
+/** The stage's words for states file `named` (from the toolchain root) that isn't written: the page's section and the agent's read say them alike. */
+const missingWords = (named: string): string =>
+  `${named} does not exist in ${root}. The canvas draws it once its session writes it and shows the canvas again.`;
+
 /** Why `named` (from the toolchain root) can't be a canvas's section, in the stage's words; null when it can. */
 function sectionProblem(named: string): string | null {
-  const abs = resolve(root, named);
-  if (!STORY_FILE.test(named) || relative(root, abs).startsWith("..")) {
-    return `${named} is no states file in ${root}: a states file is a .stories.ts (or .js, .tsx, .jsx) file inside the toolchain root.`;
-  }
-  return existsSync(abs)
-    ? null
-    : `${named} does not exist in ${root}. The canvas draws it once its session writes it and shows the canvas again.`;
+  return (
+    notStatesFile(named) ??
+    (existsSync(resolve(root, named)) ? null : missingWords(named))
+  );
+}
+
+/** The states file (from the toolchain root) a section module's id (`\0cawco:sheet/<file>.js`) stands for; null for any other module. */
+function sectionOfId(id: string): string | null {
+  const bare = id.split("?")[0] as string;
+  return bare.startsWith(`\0${VIRTUAL}`)
+    ? decodeURIComponent(bare.slice(VIRTUAL.length + 1, -".js".length))
+    : null;
+}
+
+/** The key a module's problem is kept under: a section module's, its states file's (absolute); any other's, its own file. */
+function errorKeyOf(id: string): string {
+  const section = sectionOfId(id);
+  return section === null
+    ? (id.split("?")[0] as string)
+    : resolve(root, section);
 }
 
 /** The folders whose story files the stage watches itself, and each story file's pending change. */
@@ -2093,6 +2210,15 @@ function watchStory(file: string): void {
   }).unref();
 }
 
+/** A compile error as Vite's server sends it the pages (`hot.send`, type `error`). */
+interface SentError {
+  frame?: string;
+  id?: string;
+  loc?: { column?: number; file?: string; line?: number };
+  message: string;
+  pluginCode?: string;
+}
+
 /**
  * The plugin: the sheet's page, its virtual module and its stories; every
  * compile error the client is sent, kept until its module compiles again
@@ -2101,10 +2227,8 @@ function watchStory(file: string): void {
  * anyone who can view the preview.
  */
 function cawcoStage() {
-  const errors = new Map<string, StageError>();
   /** Each states file whose section module a page has loaded (from the root), with that module's id. */
   const sections = new Map<string, string>();
-  const tell = () => say("errors", { errors: [...errors.values()] });
 
   /** The story files (from the root) whose sheets import `file`, read up Vite's module graph. */
   const sheetsOf = (file: string): string[] => {
@@ -2137,6 +2261,40 @@ function cawcoStage() {
     return [...found];
   };
 
+  /**
+   * A compile error Vite sends the pages, kept under its module. A section's
+   * own load refusal comes with neither the section module's id nor a place
+   * when its states file isn't written: that one its load keeps
+   * (`sectionLoad`), and it is passed by here. A states file that doesn't
+   * compile stops its own section, which no module graph links it to while
+   * its load fails.
+   */
+  const keepSent = (err: SentError) => {
+    if (err.pluginCode === SECTION_MISSING) {
+      return;
+    }
+    // The module's id is Vite's absolute path; a plugin's `loc.file` may be
+    // its own (vite-plugin-svelte's is the bare file name).
+    const at = resolve(
+      root,
+      (err.id ?? err.loc?.file ?? "").split("?")[0] as string
+    );
+    const file = relative(root, at);
+    stageErrors.set(at, {
+      kind: "compile",
+      file,
+      line: err.loc?.line ?? null,
+      // Vite's (Rollup's) column is 0-based.
+      column: typeof err.loc?.column === "number" ? err.loc.column + 1 : null,
+      message: err.message,
+      frame: err.frame ?? null,
+      sheets: notStatesFile(file)
+        ? sheetsOf(at)
+        : [...new Set([file, ...sheetsOf(at)])],
+    });
+    tellErrors();
+  };
+
   return {
     name: "cawco:stage",
     resolveId(id: string) {
@@ -2161,9 +2319,7 @@ function cawcoStage() {
       if (!id.startsWith(`\0${VIRTUAL}`)) {
         return null;
       }
-      const file = decodeURIComponent(
-        id.slice(VIRTUAL.length + 1, -".js".length)
-      );
+      const file = sectionOfId(id) as string;
       sections.set(file, id);
       return sectionLoad(file);
     },
@@ -2202,8 +2358,8 @@ function cawcoStage() {
     transform: {
       order: "post" as const,
       handler(_code: string, id: string) {
-        if (errors.delete(id.split("?")[0] as string)) {
-          tell();
+        if (stageErrors.delete(errorKeyOf(id))) {
+          tellErrors();
         }
         return null;
       },
@@ -2213,39 +2369,27 @@ function cawcoStage() {
       const { hot } = dev.environments.client;
       const send = hot.send.bind(hot);
       hot.send = (payload: unknown, ...rest: unknown[]) => {
-        const sent = payload as
-          | {
-              err?: {
-                frame?: string;
-                id?: string;
-                loc?: { column?: number; file?: string; line?: number };
-                message: string;
-              };
-              type?: string;
-            }
-          | undefined;
+        const sent = payload as { err?: SentError; type?: string } | undefined;
         if (sent?.type === "error" && sent.err) {
-          const { err } = sent;
-          // The module's id is Vite's absolute path; a plugin's `loc.file`
-          // may be its own (vite-plugin-svelte's is the bare file name).
-          const file = resolve(
-            root,
-            (err.id ?? err.loc?.file ?? "").split("?")[0] as string
-          );
-          errors.set(file, {
-            file: relative(root, file),
-            line: err.loc?.line ?? null,
-            // Vite's (Rollup's) column is 0-based.
-            column:
-              typeof err.loc?.column === "number" ? err.loc.column + 1 : null,
-            message: err.message,
-            frame: err.frame ?? null,
-            sheets: sheetsOf(file),
-          });
-          tell();
+          keepSent(sent.err);
         }
         return send(payload, ...rest);
       };
+      // A states file written lets its missing problem go; one a loaded section draws from, taken away, is missing.
+      const nowWritten = (abs: string) => {
+        if (stageErrors.get(abs)?.kind === "missing" && existsSync(abs)) {
+          stageErrors.delete(abs);
+          tellErrors();
+        }
+      };
+      dev.watcher.on("add", nowWritten);
+      dev.watcher.on("change", nowWritten);
+      dev.watcher.on("unlink", (abs: string) => {
+        const file = relative(root, abs);
+        if (sections.has(file)) {
+          keepMissing([file]);
+        }
+      });
       // Here, not in a returned post hook: before Vite's own middlewares and SvelteKit's handler.
       dev.middlewares.use((req, res, next) => {
         serveStage(dev, req, res, next).catch(next);

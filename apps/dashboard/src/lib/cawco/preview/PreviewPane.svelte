@@ -21,7 +21,11 @@
     pinUnsent,
     previewMode,
   } from "@cawco/core/comments";
-  import { STAGE_CLONE_MS, STAGE_READY_MS } from "@cawco/core/stage";
+  import {
+    STAGE_CLONE_MS,
+    STAGE_READY_MS,
+    type StageErrorKind,
+  } from "@cawco/core/stage";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
@@ -1131,6 +1135,18 @@
     line: number | null;
   }) =>
     `${error.file}${error.line ? `:${error.line}` : ""}${error.column ? `:${error.column}` : ""}`;
+  /** The error card's title by its kind (core `StageError`): a missing states file is no compile error. */
+  const errorTitle = (kind: StageErrorKind | undefined) => {
+    switch (kind) {
+      case "missing":
+        return sheetWords.missingTitle;
+      case "page":
+        return sheetWords.pageTitle;
+      case "compile":
+      case undefined:
+        return sheetWords.errorTitle;
+    }
+  };
   /**
    * The head's Comments count: the rail's Open tab, every pin not resolved,
    * a moved one too, as the hub counts them. Drawn only above 0 (The Earned
@@ -3027,7 +3043,7 @@
         transition:appear
       >
         <p class="m-0 text-data-bad text-size-body font-medium">
-          {sheetWords.errorTitle}
+          {errorTitle(first.kind)}
           <code class="type-code">{errorPlace(first)}</code>
         </p>
         <p class="m-0 text-ink-muted type-meta">
@@ -3038,7 +3054,9 @@
             class="m-0 overflow-x-auto p-space-2 rounded-sm bg-surface-recess text-ink-strong type-code">{first.frame}</pre>
         {/if}
         <p class="m-0 text-ink-muted type-meta">
-          {sheetWords.errorNext(compileErrors.length - 1)}
+          {first.kind === "missing"
+            ? sheetWords.missingNext(compileErrors.length - 1)
+            : sheetWords.errorNext(compileErrors.length - 1)}
         </p>
       </div>
     {/if}

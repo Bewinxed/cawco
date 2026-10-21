@@ -28,6 +28,13 @@
  * 5. The sheet through the session's preview origin mounts `One`; the
  *    session rewrites `Card.svelte` with its shell, and the open sheet shows
  *    the edit in place, with no reload.
+ * 5b. A canvas made on a states file that is then taken away: `artifact_read`
+ *    answers its stage `live`, as the panel's doc has it, and the section's
+ *    problem as a typed entry, kind `missing`, in the stage's words ("<file>
+ *    does not exist in <root>. The canvas draws it once its session writes
+ *    it and shows the canvas again."), never a stage in `error`.
+ * 5c. The file written again: `artifact_read({ render: true })` answers no
+ *    problem, and its frames drawn.
  *
  * Then a second session, in a checkout of its own whose node_modules the
  * session's boundary holds read-only, as `~/cockpit` is: a SvelteKit project
@@ -138,6 +145,7 @@ import {
   readdir,
   readFile,
   realpath,
+  rm,
   writeFile,
 } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
@@ -152,6 +160,11 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { buttonNames, type Kit, open, ROOT, type Spec } from "../kit";
 
 const STORY = "src/Card.stories.js";
+/** Legs 5b and 5c: a states file a canvas is made on, then taken away and written again. */
+const LATER = "src/Later.stories.js";
+/** The stage's words for a states file that isn't written (stage-host host.ts `missingWords`), past its root. */
+const MISSING_TAIL =
+  "The canvas draws it once its session writes it and shows the canvas again.";
 /** A story file whose stories are built four ways (legs 16 and 17). */
 const MIXED = "src/Mixed.stories.js";
 const REFUSAL = "this session runs in no workspace";
@@ -253,8 +266,8 @@ const EDITED = `<script>\n  let { title } = $props();\n</script>\n\n<h2 data-pro
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
-/** A call's marker: its leg's number, and the letter of a leg's later calls (2c). */
-const COMMAND = /PROBE-CALL:(\d+[a-z]?)/g;
+/** A call's marker: its leg's number, the letter of a leg's later calls (2c), and the count of a leg's repeated read (5b2). */
+const COMMAND = /PROBE-CALL:(\d+[a-z]?\d*)/g;
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
@@ -1213,6 +1226,7 @@ const run = async (kit: Kit) => {
   if (id) {
     await readAndEdit(id);
   }
+  await missingLegs();
 
   // 6. A session in a checkout whose node_modules its boundary holds read-only, as ~/cockpit's are.
   const status = () =>
@@ -1396,6 +1410,64 @@ const run = async (kit: Kit) => {
         afterWrite.startsWith(prefix) &&
         afterWrite.endsWith(suffix),
       `prettier --check exit ${pretty.exitCode}; the file after: ${JSON.stringify(afterWrite.slice(statement)).slice(0, 300)}; the write answered ${short(wrote).slice(0, 200)}`
+    );
+  }
+
+  /** Legs 5b and 5c: a canvas whose states file is taken away, read as the panel's doc has it, then written again. */
+  async function missingLegs(): Promise<void> {
+    const laterPath = join(fleet.repo, LATER);
+    await writeFile(laterPath, PROJECT[STORY] as string);
+    const laterMade = await call("5b", "mcp__cawco__artifact_create", {
+      kind: "component",
+      name: "later",
+      file: LATER,
+      does: "judge",
+      ask: "Judge the card written later",
+    });
+    const laterId = laterMade.match(ID)?.[1];
+    // Taken away in the session's folder: the place's stage clone follows it (stage-clone.ts `syncStageClone`).
+    await rm(laterPath, { force: true });
+    let reads = 0;
+    const read = (n: string, input: object = {}) => {
+      reads += 1;
+      return laterId
+        ? call(`${n}${reads}`, "mcp__cawco__artifact_read", {
+            id: laterId,
+            ...input,
+          })
+        : Promise.resolve(`no canvas: ${short(laterMade)}`);
+    };
+    const missing = await until(
+      "the missing states file's problem",
+      () => read("5b"),
+      (said) => said.includes('"kind":"missing"'),
+      90_000
+    ).catch(() => read("5b"));
+    const entry = missing.slice(missing.indexOf('{"kind":"missing"'));
+    kit.check(
+      "5b: artifact_read of a canvas whose states file was taken away answers its stage live, and the section's problem as kind missing in the stage's words, never a stage in error",
+      missing.match(STATUS)?.[1] === "live" &&
+        !missing.includes('"status":"error"') &&
+        entry.startsWith(`{"kind":"missing","file":"${LATER}"`) &&
+        entry.includes(`${LATER} does not exist in `) &&
+        entry.includes(MISSING_TAIL),
+      short(missing)
+    );
+    await writeFile(laterPath, PROJECT[STORY] as string);
+    const drawnAgain = await until(
+      "the written states file drawn",
+      () => read("5c", { render: true }),
+      (said) =>
+        !said.includes('"kind":"missing"') && said.includes('"state":"drawn"'),
+      90_000
+    ).catch(() => read("5c", { render: true }));
+    kit.check(
+      "5c: written again, artifact_read with render answers no problem and its frames drawn",
+      drawnAgain.match(STATUS)?.[1] === "live" &&
+        !drawnAgain.includes('"kind":"missing"') &&
+        drawnAgain.includes('"errors":[]') &&
+        drawnAgain.includes('"state":"drawn"'),
+      short(drawnAgain)
     );
   }
 

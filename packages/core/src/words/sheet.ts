@@ -14,9 +14,16 @@ export const sheetWords = {
   compiling: "Compiling…",
   /** The compile error card's title, before the error's `file:line:column`. */
   errorTitle: "Doesn't compile:",
+  /** The card's title for a states file that isn't there (core `StageError` kind `missing`), before its file. */
+  missingTitle: "Not written yet:",
+  /** The card's title for a section whose code threw in the page (kind `page`), before its place. */
+  pageTitle: "Didn't load:",
   /** The card's foot: how many errors stand besides the first, and what happens next. */
   errorNext: (more: number) =>
     `${more > 0 ? `${more} more besides. ` : ""}The session is told; the sheet redraws once it compiles.`,
+  /** The foot under a missing states file, whose own words say what draws it. */
+  missingNext: (more: number) =>
+    `${more > 0 ? `${more} more besides. ` : ""}The session is told.`,
   /** Where the page would be, when the stage did not start or failed its restarts. */
   downTitle: (dir: string) => `The stage for ${dir} didn't start`,
   /** Each dev toolchain a sheet's stage runs (core stage.ts `StageToolchain`), by its own name. */

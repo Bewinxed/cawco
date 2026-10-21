@@ -18,6 +18,7 @@ import {
   type SheetRead,
   type SheetWeight,
   type StageError,
+  type StageErrorKind,
 } from "@cawco/core/stage";
 
 /** What a component canvas's create or update names beyond its files. */
@@ -214,13 +215,25 @@ export const weightSaid = (weight: SheetWeight | null | undefined) =>
       }
     : null;
 
-/** Compile errors as an answer says them: file, place, message. */
-export const errorsSaid = (errors: StageError[]) =>
+/** One section's problem in an answer (`errorsSaid`). */
+export interface ErrorSaid {
+  column: number | null;
+  file: string;
+  frame?: string;
+  kind?: StageErrorKind;
+  line: number | null;
+  message: string | undefined;
+}
+
+/** Each section's problem as an answer says it: its kind (optional on the wire, as `StageError` has it), file, place, message, and its code frame when it has one. */
+export const errorsSaid = (errors: StageError[]): ErrorSaid[] =>
   errors.map((one) => ({
+    ...(one.kind ? { kind: one.kind } : {}),
     file: one.file,
     line: one.line,
     column: one.column,
     message: one.message.split("\n")[0]?.slice(0, 300),
+    ...(one.frame ? { frame: one.frame } : {}),
   }));
 
 /** What a component canvas's answers point at next. */

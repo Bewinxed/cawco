@@ -21,6 +21,7 @@ import {
   type Interaction,
   REPORT_PATH,
   type RenderReport,
+  type ReportAnswer,
   STAGE_RENDER_MS,
 } from "@cawco/core/stage";
 import type { Socket, TCPSocketListener } from "bun";
@@ -223,7 +224,9 @@ export async function renderCanvas(
         `The stage did not answer its report (${answer.status}).`
       );
     }
-    const report = (await answer.json()) as RenderReport;
+    // The host's problems ride with it for the daemon's read (`ensureStage`); a draw answers the report.
+    const { errors: _errors, ...report } =
+      (await answer.json()) as ReportAnswer;
     if (!ask.png) {
       return { report };
     }

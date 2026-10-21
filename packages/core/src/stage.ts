@@ -213,6 +213,16 @@ export interface RenderReport {
 }
 
 /**
+ * The stage's answer at {@link REPORT_PATH}: the report, and every problem
+ * the stage host keeps as of answering (a states file the ask named and
+ * found missing among them), which the daemon keeps as the stage's
+ * `errors` before it states the stage.
+ */
+export interface ReportAnswer extends RenderReport {
+  errors: StageError[];
+}
+
+/**
  * A frame's body as it stands on its canvas's page, read for its picture:
  * what the canvas answers (stage-host canvas runtime.ts `picture`) and the
  * agent's frame-picture.ts holds a picture to.
@@ -431,19 +441,33 @@ export const STORY_FILE = /\.stories\.[cm]?[jt]sx?$/;
 export type StageStatus = "starting" | "waking" | "live" | "error" | "asleep";
 
 /**
- * A compile error the stage's Vite sent its pages, as the plugin keeps it
- * until the module compiles again: the module's file from the toolchain root,
- * 1-based line and column when Vite's payload has them, Vite's message and
- * code frame, and the story files that import the module, which the hub
- * files it under.
+ * What a canvas's section can't draw for, as the stage host keeps it until
+ * it clears: the canvas page's own failure kinds (stage-host canvas
+ * runtime.ts `SectionFailure`). `missing`: the states file isn't there,
+ * cleared once it is written. `compile`: a module the stage couldn't
+ * compile, cleared once it compiles again. `page`: its code threw in the
+ * page.
+ */
+export type StageErrorKind = "missing" | "compile" | "page";
+
+/**
+ * A section's problem as the stage host keeps it (its kind), and the doc's
+ * `meta.stage.errors` carries it to the panel and the agent's read alike:
+ * the file from the toolchain root (a missing states file, or the module
+ * that doesn't compile), 1-based line and column when Vite's payload has
+ * them, the stage's words (a missing file's) or Vite's message and code
+ * frame, and the states files whose section it stops, which the hub files
+ * it under.
  */
 export interface StageError {
   column: number | null;
   file: string;
   frame: string | null;
+  /** Always sent; optional on the wire, so an app built from this reads a hub from before it. */
+  kind?: StageErrorKind;
   line: number | null;
   message: string;
-  /** The story files (from the toolchain root) whose sheet imports the module. */
+  /** The states files (from the toolchain root) whose section it stops: a missing one itself, else each whose sheet imports the module. */
   sheets: string[];
 }
 
