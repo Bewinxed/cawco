@@ -106,7 +106,7 @@ const S = {
   chips: "DESIGN.md:557 status chips",
   syntax: "DESIGN.md:561 Syntax; token code-ink",
   outline: "DESIGN.md:566 Edges; token border-button-outline",
-  contrastEdge: "token border-contrast",
+  contrastEdge: "DESIGN.md:566 Edges; token border-contrast",
   inks: "DESIGN.md:567 Inks",
   subtle: "DESIGN.md:567 Inks; token ink-subtle",
   identity: "DESIGN.md:573 Project identity; token identity-ink",
@@ -248,6 +248,28 @@ const PAIRS: Pair[] = [
     bg: ["surface-raised"],
     floor: UI,
     source: S.contrastEdge,
+  },
+  {
+    label: "border-contrast on surface-shelf (the bar holding the tabs)",
+    fg: "border-contrast",
+    bg: ["surface-shelf"],
+    floor: UI,
+    source: S.contrastEdge,
+  },
+  // The quiet control edge: no 3:1 floor, held to the figures DESIGN.md states.
+  {
+    label: "border-control on surface-raised",
+    fg: "border-control",
+    bg: ["surface-raised"],
+    floor: { light: 1.36, dark: 1.43 },
+    source: "DESIGN.md:688 Borders are graded; token border-button-outline",
+  },
+  {
+    label: "border-button-outline on surface-recess",
+    fg: "border-button-outline",
+    bg: ["surface-recess"],
+    floor: { light: 2.95, dark: UI },
+    source: S.rowOutline,
   },
   ...["surface-raised", "surface-recess"].map((bg) => ({
     label: `border-row-outline on ${bg}`,

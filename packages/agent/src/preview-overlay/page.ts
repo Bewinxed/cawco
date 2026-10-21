@@ -199,8 +199,8 @@ function paint() {
   const doc = target?.ownerDocument;
   const root =
     !!target && (target === doc?.body || target === doc?.documentElement);
-  // The label names what rests under the pointer; a chosen element carries none, the page's root keeps its own.
-  label.hidden = !(target && commenting() && (!chosen || root));
+  // The label names what rests under the pointer; a chosen target carries none.
+  label.hidden = !(target && commenting() && !chosen);
   if (!target) {
     return;
   }

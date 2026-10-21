@@ -809,6 +809,7 @@
     },
     "c-target-tint": {
       "$type": "color",
+      "$description": "The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash; drawn by the overlay over the element, not under it, so it must stay see-through.",
       "$value": {
         "colorSpace": "oklch",
         "components": [0.665, 0.17, 33],

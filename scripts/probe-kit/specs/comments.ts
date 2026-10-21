@@ -140,7 +140,8 @@
  * The One Target Rule (DESIGN.md):
  * 7c. In Comment mode, resting on an element tints it (`c-target-tint`)
  *    with no line; the page's root takes a 1px dashed `brand-solid` line
- *    inset `space-1`, no tint, its tag "Whole page"; a tap chooses the
+ *    inset `space-1`, no tint, its tag "Whole page" at rest and none once
+ *    chosen, as any target; a tap chooses the
  *    element: a 1px `brand-solid` line at offset 0, the tint and no label,
  *    its text 4.5:1 under the tint by day and night, the composer opened by
  *    the press with no ring; the
@@ -3300,7 +3301,7 @@ const targetChecks = async (on: On) => {
   await settle(on.page, 150);
   const root = await targetOf(frame);
   on.kit.check(
-    "7c: the page's root takes a 1px dashed brand-solid line, its outer edge 4px (space-1) inside the page's edge (offset -5px), no background, and keeps its tag, which reads \"Whole page\"",
+    "7c: the page's root takes a 1px dashed brand-solid line, its outer edge 4px (space-1) inside the page's edge (offset -5px), no background",
     !!root &&
       root.shown &&
       root.root &&
@@ -3308,10 +3309,42 @@ const targetChecks = async (on: On) => {
       root.width === "1px" &&
       root.offset === "-5px" &&
       root.color === root.brand &&
-      root.background === "rgba(0, 0, 0, 0)" &&
-      root.label === "Whole page",
+      root.background === "rgba(0, 0, 0, 0)",
     JSON.stringify(root)
   );
+  on.kit.check(
+    '7c: at rest the page\'s root shows its label, which reads "Whole page"',
+    !!root && root.root && root.label === "Whole page",
+    JSON.stringify(root)
+  );
+
+  // The page's root chosen: its line kept, its label gone, as any target's.
+  await on.page.mouse.click(ground.x + ground.w / 2, ground.y + 300);
+  const rootCard = await focusedCard(on, 1);
+  const rootChosen = await until(
+    "the page's root chosen",
+    () => targetOf(frame),
+    (seen) => !!seen?.root && seen.label === null,
+    5000
+  ).catch(() => targetOf(frame));
+  on.kit.check(
+    "7c: the page's root chosen keeps its dashed line and carries no label",
+    rootCard.shown &&
+      !!rootChosen &&
+      rootChosen.shown &&
+      rootChosen.root &&
+      rootChosen.style === "dashed" &&
+      rootChosen.width === "1px" &&
+      rootChosen.label === null,
+    JSON.stringify({ rootCard, rootChosen })
+  );
+  await on.page.keyboard.press("Escape");
+  await until(
+    "the root's empty card closed",
+    () => on.page.locator('[data-slot="pin-card"]').count(),
+    (count) => count === 0,
+    5000
+  ).catch(() => null);
 
   await on.page.mouse.click(b.x + b.w / 2, b.y + b.h / 2);
   const opened = await focusedCard(on, 1);

@@ -223,19 +223,19 @@
     /* The edge of a well (surface-well): the hairline by day; at night the control edge, the hairline being all but invisible on the deep recess. */
     --border-well: light-dark(var(--border-hairline), var(--neutral-6));
     --border-control: light-dark(var(--neutral-5), var(--neutral-6));
-    /* The top bar's glass, solid under Increase Contrast or Reduce Transparency: its edge holds 3:1 against the bar and against the raised surface it encloses (5.4 and 4.0 by day, 3.8 and 4.7 at night). */
+    /* The top bar's glass, solid under Increase Contrast or Reduce Transparency: its edge holds 3:1 against the bar's shelf (surface-shelf) and against the raised surface it encloses (surface-raised): 4.0:1 and 5.4:1 by day, 4.6:1 and 3.8:1 at night. Figures from bun scripts/token-contrast-check.ts --table. */
     --border-contrast: light-dark(
       var(--neutral-9),
       color-mix(in oklab, var(--neutral-9), var(--neutral-11) 25%)
     );
     /* An icon card's edge (New project's templates, the empty fleet's ways in) on the recess: the control edge by day; at night a step past it, the control edge all but meeting the recess. */
     --border-card: light-dark(var(--neutral-5), var(--neutral-7));
-    /* The outline button's edge, 3:1 against the raised surface it stands on, where the control edge measures 1.37:1 by day and 1.43:1 at night (the owner's pick, 'Strengthen to 3:1', WCAG 1.4.11): #958E84 on #FEFDFA, 3.19:1, by day; #766F66 on #23211E, 3.26:1, at night. */
+    /* The outline button's edge, 3:1 against the raised surface it stands on (surface-raised), where the control edge measures 1.36:1 by day and 1.43:1 at night on that surface (the owner's pick, 'Strengthen to 3:1', WCAG 1.4.11): #958E84 on #FEFDFA, 3.19:1, by day; #766F66 on #23211E, 3.26:1, at night. Figures from bun scripts/token-contrast-check.ts --table. */
     --border-button-outline: light-dark(
       color-mix(in oklab, var(--neutral-8), var(--neutral-9) 40%),
       color-mix(in oklab, var(--neutral-9), var(--neutral-11) 10%)
     );
-    /* A suggestion row's edge (StarterCards in Caw's panel): an outline button standing on the recess rather than the raised surface, 3:1 against the recess as the outline button's edge is against raised (WCAG 1.4.11): 3.22:1 on the recess and 3.47:1 on raised by day, where the outline button's edge measures 2.95:1 on the recess; at night the outline button's own, 3.47:1 on the recess. */
+    /* A suggestion row's edge (StarterCards in Caw's panel): an outline button standing on the recess rather than the raised surface, 3:1 against the recess as the outline button's edge is against raised (WCAG 1.4.11): 3.22:1 on the recess (surface-recess, #F7F4EE) and 3.47:1 on raised (surface-raised, #FEFDFA) by day, where the outline button's edge measures 2.95:1 on the recess; at night the outline button's own, 3.49:1 on the recess (#1D1B18) and 3.26:1 on raised (#23211E). Figures from bun scripts/token-contrast-check.ts --table. */
     --border-row-outline: light-dark(
       color-mix(in oklab, var(--neutral-8), var(--neutral-9) 50%),
       color-mix(in oklab, var(--neutral-9), var(--neutral-11) 10%)
@@ -271,7 +271,7 @@
       var(--coral-3),
       oklch(from var(--coral-9) l c h / 0.16)
     );
-    /* The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash. */
+    /* The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash; drawn by the overlay over the element, not under it, so it must stay see-through. */
     --c-target-tint: oklch(from var(--brand-solid) l c h / 0.08);
     --brand-ink: var(--coral-11);
     /* Brand ink under the pointer: the most saturated vermillion a word can take and still hold 4.5:1 on the pane (4.78:1 by day, 7.65:1 at night). brand-hover measures 3.9:1 by day and is for fills. */

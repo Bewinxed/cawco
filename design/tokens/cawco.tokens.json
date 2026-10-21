@@ -1178,7 +1178,7 @@
     "border-contrast": {
       "$type": "color",
       "$value": "{color.neutral-9}",
-      "$description": "The top bar's glass, solid under Increase Contrast or Reduce Transparency: its edge holds 3:1 against the bar and against the raised surface it encloses (5.4 and 4.0 by day, 3.8 and 4.7 at night)."
+      "$description": "The top bar's glass, solid under Increase Contrast or Reduce Transparency: its edge holds 3:1 against the bar's shelf (surface-shelf) and against the raised surface it encloses (surface-raised): 4.0:1 and 5.4:1 by day, 4.6:1 and 3.8:1 at night. Figures from bun scripts/token-contrast-check.ts --table."
     },
     "border-card": {
       "$type": "color",
@@ -1191,7 +1191,7 @@
         "colorSpace": "oklab",
         "components": [0.649, 0.003669, 0.016187]
       },
-      "$description": "The outline button's edge, 3:1 against the raised surface it stands on, where the control edge measures 1.37:1 by day and 1.43:1 at night (the owner's pick, 'Strengthen to 3:1', WCAG 1.4.11): #958E84 on #FEFDFA, 3.19:1, by day; #766F66 on #23211E, 3.26:1, at night.",
+      "$description": "The outline button's edge, 3:1 against the raised surface it stands on (surface-raised), where the control edge measures 1.36:1 by day and 1.43:1 at night on that surface (the owner's pick, 'Strengthen to 3:1', WCAG 1.4.11): #958E84 on #FEFDFA, 3.19:1, by day; #766F66 on #23211E, 3.26:1, at night. Figures from bun scripts/token-contrast-check.ts --table.",
       "$extensions": {
         "dev.cawco": {
           "css": "color-mix(in oklab, {color.neutral-8}, {color.neutral-9} 40%)"
@@ -1204,7 +1204,7 @@
         "colorSpace": "oklab",
         "components": [0.6275, 0.003703, 0.016077]
       },
-      "$description": "A suggestion row's edge (StarterCards in Caw's panel): an outline button standing on the recess rather than the raised surface, 3:1 against the recess as the outline button's edge is against raised (WCAG 1.4.11): 3.22:1 on the recess and 3.47:1 on raised by day, where the outline button's edge measures 2.95:1 on the recess; at night the outline button's own, 3.47:1 on the recess.",
+      "$description": "A suggestion row's edge (StarterCards in Caw's panel): an outline button standing on the recess rather than the raised surface, 3:1 against the recess as the outline button's edge is against raised (WCAG 1.4.11): 3.22:1 on the recess (surface-recess, #F7F4EE) and 3.47:1 on raised (surface-raised, #FEFDFA) by day, where the outline button's edge measures 2.95:1 on the recess; at night the outline button's own, 3.49:1 on the recess (#1D1B18) and 3.26:1 on raised (#23211E). Figures from bun scripts/token-contrast-check.ts --table.",
       "$extensions": {
         "dev.cawco": {
           "css": "color-mix(in oklab, {color.neutral-8}, {color.neutral-9} 50%)"
@@ -1291,7 +1291,7 @@
         "components": [0.645, 0.175, 33],
         "alpha": 0.08
       },
-      "$description": "The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash.",
+      "$description": "The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash; drawn by the overlay over the element, not under it, so it must stay see-through.",
       "$extensions": {
         "dev.cawco": {
           "css": "oklch(from {color.brand-solid} l c h / 0.08)"

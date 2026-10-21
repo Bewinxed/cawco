@@ -178,13 +178,13 @@ public enum Palette {
     /// The edge of a well (surface-well): the hairline by day; at night the control edge, the hairline being all but invisible on the deep recess.
     public static let borderWell = Palette.named("border-well")
     public static let borderControl = Palette.named("border-control")
-    /// The top bar's glass, solid under Increase Contrast or Reduce Transparency: its edge holds 3:1 against the bar and against the raised surface it encloses (5.4 and 4.0 by day, 3.8 and 4.7 at night).
+    /// The top bar's glass, solid under Increase Contrast or Reduce Transparency: its edge holds 3:1 against the bar's shelf (surface-shelf) and against the raised surface it encloses (surface-raised): 4.0:1 and 5.4:1 by day, 4.6:1 and 3.8:1 at night. Figures from bun scripts/token-contrast-check.ts --table.
     public static let borderContrast = Palette.named("border-contrast")
     /// An icon card's edge (New project's templates, the empty fleet's ways in) on the recess: the control edge by day; at night a step past it, the control edge all but meeting the recess.
     public static let borderCard = Palette.named("border-card")
-    /// The outline button's edge, 3:1 against the raised surface it stands on, where the control edge measures 1.37:1 by day and 1.43:1 at night (the owner's pick, 'Strengthen to 3:1', WCAG 1.4.11): #958E84 on #FEFDFA, 3.19:1, by day; #766F66 on #23211E, 3.26:1, at night.
+    /// The outline button's edge, 3:1 against the raised surface it stands on (surface-raised), where the control edge measures 1.36:1 by day and 1.43:1 at night on that surface (the owner's pick, 'Strengthen to 3:1', WCAG 1.4.11): #958E84 on #FEFDFA, 3.19:1, by day; #766F66 on #23211E, 3.26:1, at night. Figures from bun scripts/token-contrast-check.ts --table.
     public static let borderButtonOutline = Palette.named("border-button-outline")
-    /// A suggestion row's edge (StarterCards in Caw's panel): an outline button standing on the recess rather than the raised surface, 3:1 against the recess as the outline button's edge is against raised (WCAG 1.4.11): 3.22:1 on the recess and 3.47:1 on raised by day, where the outline button's edge measures 2.95:1 on the recess; at night the outline button's own, 3.47:1 on the recess.
+    /// A suggestion row's edge (StarterCards in Caw's panel): an outline button standing on the recess rather than the raised surface, 3:1 against the recess as the outline button's edge is against raised (WCAG 1.4.11): 3.22:1 on the recess (surface-recess, #F7F4EE) and 3.47:1 on raised (surface-raised, #FEFDFA) by day, where the outline button's edge measures 2.95:1 on the recess; at night the outline button's own, 3.49:1 on the recess (#1D1B18) and 3.26:1 on raised (#23211E). Figures from bun scripts/token-contrast-check.ts --table.
     public static let borderRowOutline = Palette.named("border-row-outline")
     public static let input = Palette.named("input")
     /// Inks. Subtle is the weakest mix that holds 4.5:1 on fill, hover and raised.
@@ -202,7 +202,7 @@ public enum Palette {
     public static let brandSolid = Palette.named("brand-solid")
     public static let brandHover = Palette.named("brand-hover")
     public static let brandWash = Palette.named("brand-wash")
-    /// The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash.
+    /// The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash; drawn by the overlay over the element, not under it, so it must stay see-through.
     public static let cTargetTint = Palette.named("c-target-tint")
     public static let brandInk = Palette.named("brand-ink")
     /// Brand ink under the pointer: the most saturated vermillion a word can take and still hold 4.5:1 on the pane (4.78:1 by day, 7.65:1 at night). brand-hover measures 3.9:1 by day and is for fills.
