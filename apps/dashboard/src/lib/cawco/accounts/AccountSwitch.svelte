@@ -26,7 +26,11 @@
     size = "regular",
   }: {
     instance: BoardRow;
-    /** The session cannot take changes now (ended, or the hub is away). */
+    /**
+     * No move can be asked now: the hub is away. A session's state never
+     * locks it: the account is the session's, and a sleeping, stopped or
+     * machine-away session moves too (switch.svelte.ts).
+     */
     readonly: boolean;
     /** The chip's size: the session card's settings group is `compact`. */
     size?: ChipSize;

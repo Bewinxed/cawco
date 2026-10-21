@@ -42,6 +42,7 @@
   import { standsOpen } from "../motion/hang";
   import { morph } from "../motion/morph.svelte";
   import { bypasses, permissionModesFor } from "../permission-modes";
+  import { sessionAct } from "../session-acts.svelte";
   import ModelSection from "../spawn/ModelSection.svelte";
   import { modelName } from "../spawn/model-entries";
   import NsPopover from "../spawn/NsPopover.svelte";
@@ -186,11 +187,27 @@
         )
       : []
   );
+  /**
+   * The live process's controls (effort, permission, a running session's
+   * model) take changes: its machine is connected and the session runs.
+   * The account is the session's, not its process's: it moves whenever the
+   * hub is reachable ({@link accountOpen}).
+   */
+  const machineAway = $derived(!(machineId && machineConnected(machineId)));
   const editable = $derived(
-    !!machineId &&
-      machineConnected(machineId) &&
-      cawco.runningInstances.some((item) => item.id === sessionId)
+    !machineAway && cawco.runningInstances.some((item) => item.id === sessionId)
   );
+  /** A move can be asked: the hub takes it in any state of the session (accounts/switch.svelte.ts). */
+  const accountOpen = $derived(cawco.status === "connected");
+  /** Why the live controls are locked, and until when. */
+  const lockedWords = $derived.by(() => {
+    const what = kept
+      ? "Effort and permission"
+      : "Model, effort and permission";
+    return machineAway
+      ? `${what} unlock once ${machine?.hostname || machineId || "its machine"} is connected again.`
+      : `${what} unlock while the session is running.`;
+  });
   const harnessNames: Record<HarnessKind, string> = accountsWords.harnesses;
   /** `~/…/leaf`: the folder name is what tells sessions apart. */
   const shortPath = (path: string) => {
@@ -407,7 +424,15 @@
     model: () => "Model changed",
     effort: () => "Effort changed",
     permission: () => "Permission changed",
-    account: () => `Moved to ${accountName(row?.accountId)}`,
+    account: () => {
+      const moved = `Moved to ${accountName(row?.accountId)}`;
+      if (row?.status === "sleeping") {
+        return `${moved}. It wakes there.`;
+      }
+      return row?.status === "stopped" || row?.status === "error"
+        ? `${moved}. It runs there when it starts again.`
+        : moved;
+    },
   };
   let done = $state<Record<Slot, boolean>>({
     model: false,
@@ -557,8 +582,10 @@
       in:crossIn
       out:crossOut
     >
+      <!-- A move says when it takes effect, in its rows' words (switch.svelte.ts). -->
       {slot === "account" && row
-        ? `Moving to ${accountName(movingTo(row))}…`
+        ? (sessionAct(row.id)?.pending ??
+          `Moving to ${accountName(movingTo(row))}…`)
         : "Applying change…"}
     </p>
   {:else if done[slot]}
@@ -784,7 +811,11 @@
           <!-- The account the session bills: the group's fourth setting,
                wrapping with the others when the row runs out. -->
           {#if row?.accountId}
-            <AccountSwitch instance={row} readonly={!editable} size="compact" />
+            <AccountSwitch
+              instance={row}
+              readonly={!accountOpen}
+              size="compact"
+            />
           {/if}
         </div>
         <!-- One line is always held for what a change says, so its pending,
@@ -798,14 +829,17 @@
           {@render feedback("effort")}
           {@render feedback("permission")}
           {@render feedback("account")}
-          {#if !editable}
+          <!-- The held line says one thing: a change's own line outranks
+               why the live controls are locked. -->
+          {#if !(editable || SLOTS.some((slot) => failure(slot) || pending(slot) || done[slot]))}
             <p
               data-slot="feedback"
+              data-locked
               class="mt-space-2 text-size-body font-normal leading-body wrap-anywhere text-ink-muted"
+              in:crossIn
+              out:crossOut
             >
-              {kept
-                ? "Effort and permission unlock while the session is running."
-                : "Controls unlock while the session is running."}
+              {lockedWords}
             </p>
           {/if}
         </div>

@@ -9578,11 +9578,19 @@ export const createServer = (
    * account its row runs on, for the machine to carry into that account's
    * dir as its agent starts ({@link RegisterAckPayload.sessions}). Rows that
    * share one conversation and disagree on its account are left out: their
-   * data cannot be in both dirs.
+   * data cannot be in both dirs. So is one whose row owes a move to another
+   * account ({@link relaunchAtTurnEnd}): the move carries it, behind this
+   * ack ({@link takeUpMovesOn}), and a machine refuses a carry of a
+   * conversation another carry is moving, so the sweep's would drop the
+   * move (2026-10-21, a sleeping session moved while its machine was away).
    */
   const claudeSessionsOn = (machineId: string): CarrySessionRequest[] => {
     const bySession = new Map<string, CarrySessionRequest | null>();
     for (const row of db.claudeConversationsOn(machineId)) {
+      if (relaunchAtTurnEnd.get(row.id)?.to !== undefined) {
+        bySession.set(row.sessionId, null);
+        continue;
+      }
       const accountId = row.accountId ?? null;
       const seen = bySession.get(row.sessionId);
       if (seen === undefined) {
