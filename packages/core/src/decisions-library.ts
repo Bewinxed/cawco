@@ -238,7 +238,7 @@ export const decisionLibrary = <C>(
         .string()
         .optional()
         .describe(
-          'What the note is for, in the person\'s words ("a reason for the rollback"): its button reads "Add <note>" and its field asks for it.'
+          'What the note is for, a noun phrase its button finishes ("Add <note>") and its field asks for. Left out, it reads "Add a note".'
         ),
     })
   );
@@ -313,5 +313,7 @@ export const decisionPromptOptions = (): PromptOptions => ({
     "Media sits in a card: an option's design drawn live in its Option's media, what the whole question shows in its Decision's media. No legends, no size or id captions.",
     "after names what a decision depends on, and a Section groups decisions; both draw the project's decision graph. Leave them out when the decisions stand alone.",
     "Plain words everywhere: no URLs or markup. Canvas and Preview name an artifact by its id; Image names a file.",
+    'Every character is one the house face (Figtree) draws: name an icon in words ("Attach", "a paperclip"), never as a symbol or an emoji. The hub refuses a program holding a character Figtree lacks, naming its card and string.',
+    'A Decision\'s note is what its note field asks for, a noun phrase its button finishes: "Add <note>". Leave it out for the plain "Add a note"; give it only when the pick needs a particular note ("a reason for the rollback").',
   ],
 });

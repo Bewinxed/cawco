@@ -167,6 +167,13 @@ export interface PageOptions {
    * origin to a process of its own (preview-bound's 2).
    */
   oneProcess?: boolean;
+  /**
+   * An HTTP proxy every request of the page's context goes through, its
+   * loopback ones included (Playwright bypasses none unless told): a
+   * spec's stand-in for what stands between the owner's browser and his
+   * hub (idle-proxy.ts). `http://127.0.0.1:<port>`.
+   */
+  proxy?: string;
   /** Device pixels per css px, when a spec reads another device (an iPhone's 3). */
   scale?: number;
   /**
@@ -195,6 +202,12 @@ export interface PageOptions {
    */
   wholeRaster?: boolean;
 }
+
+/** What a page's context takes of `options` on how it reaches its origins: a certificate of the run's own, a proxy. */
+const networkOf = (options: PageOptions) => ({
+  ...(options.ignoreHTTPSErrors ? { ignoreHTTPSErrors: true } : {}),
+  ...(options.proxy ? { proxy: { server: options.proxy } } : {}),
+});
 
 /**
  * WebKit 2359 (playwright-core 1.63.0's) hangs its web process on a blur
@@ -1051,7 +1064,7 @@ export class Run {
           // not supported in Firefox"): a touch screen at the size alone.
           isMobile: v.touch && options.engine !== "firefox",
           colorScheme: options.theme ?? "light",
-          ...(options.ignoreHTTPSErrors ? { ignoreHTTPSErrors: true } : {}),
+          ...networkOf(options),
           ...(v.touch && v.width < PHONE_MAX_WIDTH && phoneAgent
             ? { userAgent: phoneAgent }
             : {}),

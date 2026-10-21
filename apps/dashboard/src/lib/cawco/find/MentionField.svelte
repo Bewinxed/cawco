@@ -13,6 +13,17 @@
    * `SERIALISED`): one this tab made as it was made, any other once the
    * hub's names say what it is.
    *
+   * A skill the session has, named whole (`/name`, skill-chips.ts), is its
+   * chip (SkillChip) anywhere in the message: put in from outside (a command
+   * picked from the / menu, a draft restored) or typed, once a space follows
+   * it. It is sent as exactly `/name`, so the string is byte for byte what
+   * was written, and a command at its start still runs as one. Every chip
+   * sits in its line as a word does (ui/chip `inline`).
+   *
+   * Copying or cutting puts the selection's serialised string on the
+   * clipboard, each chip as what it stands for, while the chip shows its
+   * label.
+   *
    * The host reads and puts the caret in the string's own offsets
    * (`selection`, `select`), and has first claim on the field's keys, paste
    * and drop: what it handles (`defaultPrevented`) the field leaves. Any
@@ -29,10 +40,14 @@
   import { Portal } from "bits-ui";
   import { type Component, mount, unmount, untrack } from "svelte";
   import type { ClassValue, HTMLAttributes } from "svelte/elements";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { cn } from "#lib/utils.js";
   import Idle from "~icons/solar/pause-circle-bold-duotone";
   import Machine from "~icons/solar/server-bold-duotone";
+  import { copyChips } from "../chip-copy";
   import { CURVE, dur, motionOk } from "../motion/curves.svelte.js";
+  import SkillChip from "../SkillChip.svelte";
+  import { type Skill, skillWords } from "../skill-chips";
   import type { FindResult } from "./find-client";
   import { rowOf } from "./find-rows";
   import MentionMenu from "./MentionMenu.svelte";
@@ -54,6 +69,7 @@
     value = $bindable(""),
     here = null,
     names = true,
+    skills = new Map(),
     phone = false,
     placeholder = "Message the agent…",
     label = "Message the agent",
@@ -75,6 +91,8 @@
     here?: string | null;
     /** Whether "@" names anything here; off, an "@" is only text. */
     names?: boolean;
+    /** The session's skills by name: each named whole is its chip. */
+    skills?: ReadonlyMap<string, Skill>;
     phone?: boolean;
     placeholder?: string;
     label?: string;
@@ -90,6 +108,10 @@
     > = $props();
 
   const SPACE = /\s/;
+  const CHIP = "[data-mention-chip]";
+  // A copy that reaches past the field (the page selected whole) gives each
+  // chip as what it stands for too (chip-copy.ts).
+  copyChips();
   const uid = $props.id();
   const menuId = `${uid}-menu`;
   const mention = new MentionState(() => here);
@@ -213,15 +235,11 @@
         string,
       ];
       const start = match.index ?? 0;
-      if (start > from) {
-        parts.push(document.createTextNode(text.slice(from, start)));
-      }
+      parts.push(...wordsOf(text.slice(from, start)));
       parts.push(drawnChip(whole, name, handle));
       from = start + whole.length;
     }
-    if (from < text.length) {
-      parts.push(document.createTextNode(text.slice(from)));
-    }
+    parts.push(...wordsOf(text.slice(from)));
     editor.replaceChildren(...parts);
     at = null;
     dismissed = null;
@@ -230,6 +248,102 @@
     empty = text.length === 0;
     tail();
   }
+
+  /** Plain words as the field holds them: each skill named whole in them its chip. */
+  function wordsOf(text: string): Node[] {
+    const out: Node[] = [];
+    const pattern = skillWords(skills.keys());
+    let from = 0;
+    for (const match of pattern ? text.matchAll(pattern) : []) {
+      const skill = skills.get(match[1] as string);
+      const start = match.index ?? 0;
+      if (!skill) {
+        continue;
+      }
+      if (start > from) {
+        out.push(document.createTextNode(text.slice(from, start)));
+      }
+      out.push(skillChip(skill));
+      from = start + match[0].length;
+    }
+    if (from < text.length) {
+      out.push(document.createTextNode(text.slice(from)));
+    }
+    return out;
+  }
+
+  /**
+   * A skill's chip, drawn by SkillChip and moved into the field. Its holder
+   * keeps what Svelte leaves beside it (its block's anchor) out of the
+   * message, and takes the chip back to be unmounted where it was mounted.
+   */
+  function skillChip(skill: Skill): HTMLElement {
+    const holder = document.createElement("span");
+    const mounted = mount(SkillChip, {
+      target: holder,
+      props: { skill, field: true },
+    });
+    const chip = holder.querySelector<HTMLElement>("[data-skill-chip]");
+    if (!chip) {
+      throw new Error(`SkillChip drew no chip for /${skill.name}`);
+    }
+    chips.set(chip, () => {
+      holder.prepend(chip);
+      unmount(mounted);
+    });
+    return chip;
+  }
+
+  /**
+   * Whether the field's own words (outside its chips) name a skill whole:
+   * followed by a space, or with `ends` "end" also at the text's end.
+   */
+  function namesSkill(ends: "end" | "space"): boolean {
+    const pattern = skillWords(skills.keys(), ends);
+    if (!(pattern && editor)) {
+      return false;
+    }
+    const walk = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+      pattern.lastIndex = 0;
+      if (
+        !node.parentElement?.closest(CHIP) &&
+        pattern.test((node as Text).data)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** The field drawn again from its own string, the selection kept where it was. */
+  function redraw() {
+    const [from, to] = selection();
+    const focused = document.activeElement === editor;
+    draw(written ?? "");
+    if (focused) {
+      select(from, to);
+    }
+  }
+
+  /** A skill typed whole, a space after it, becomes its chip where it stands. */
+  function chipTyped() {
+    if (namesSkill("space")) {
+      redraw();
+    }
+  }
+
+  // The session's skills arrive after its draft (its / menu is asked for
+  // once it opens): a skill already in the draft becomes its chip then.
+  $effect(() => {
+    // biome-ignore lint/complexity/noVoid: a new list of skills is what re-runs this.
+    void skills;
+    untrack(() => {
+      if (editor && written && namesSkill("end")) {
+        redraw();
+      }
+    });
+  });
 
   /** A chip put back: as this tab made it, or drawn now and told its facts once the hub says. */
   function drawnChip(serialised: string, name: string, handle: string) {
@@ -327,8 +441,24 @@
     return out;
   }
 
-  /** Where a point in the field stands in the string. */
-  function offsetOf(container: Node, offset: number, list: Atom[]): number {
+  /**
+   * Where a point in the field stands in the string. A point inside a chip
+   * (its label's words) stands at the chip's start, or its end for the end
+   * of a selection (`side`): a chip is one atom.
+   */
+  function offsetOf(
+    container: Node,
+    offset: number,
+    list: Atom[],
+    side: "start" | "end" = "start"
+  ): number {
+    const within = (
+      container instanceof Element ? container : container.parentElement
+    )?.closest(CHIP);
+    const chip = list.find((a) => a.node === within);
+    if (chip) {
+      return side === "end" ? chip.end : chip.start;
+    }
     if (container.nodeType === Node.TEXT_NODE) {
       const atom = list.find((a) => a.node === container);
       return atom ? atom.start + Math.min(offset, atom.end - atom.start) : 0;
@@ -377,8 +507,13 @@
     const range = picked.getRangeAt(0);
     return [
       offsetOf(range.startContainer, range.startOffset, list),
-      offsetOf(range.endContainer, range.endOffset, list),
+      offsetOf(range.endContainer, range.endOffset, list, "end"),
     ];
+  }
+
+  /** Whether a chip of the field starts at offset `n` of the string. */
+  export function chipAt(n: number): boolean {
+    return atoms().some((a) => !a.text && a.start === n && a.end > n);
   }
 
   /** Puts the selection at offsets `from` to `to` of the string (a caret, with one). */
@@ -445,6 +580,7 @@
 
   function oninput(event: Event & { currentTarget: HTMLDivElement }) {
     sync();
+    chipTyped();
     look();
     hostInput?.(event as Parameters<NonNullable<Handlers["oninput"]>>[0]);
   }
@@ -485,13 +621,17 @@
     glyph: Component;
   }): HTMLElement {
     const span = document.createElement("span");
-    span.className = "mention-chip";
+    span.className = chipVariants({
+      variant: "inline",
+      class: "cursor-default select-all",
+    });
     // Its own attribute, not `data-slot`: the composer hides it under a
     // state (a flight, an ask), and Chrome keys an attribute selector there
     // to the attribute's name alone.
     span.setAttribute("data-mention-chip", "");
     span.contentEditable = "false";
     span.dataset.mention = chip.serialised;
+    span.dataset.copies = chip.serialised;
     span.dataset.tip = chip.tip;
     span.dataset.handle = chip.handle;
     span.dataset.tone = chip.tone;
@@ -504,7 +644,11 @@
       "inline-grid place-items-center text-status-idle-glyph [&_svg]:size-icon-md [[data-tone=live]>&]:text-status-live-glyph [[data-tone=attn]>&]:text-status-attn-glyph [[data-tone=fail]>&]:text-status-fail-glyph";
     glyph.setAttribute("data-mention-glyph", "");
     glyph.setAttribute("aria-hidden", "true");
-    span.append(glyph, document.createTextNode(chip.label));
+    glyph.setAttribute("data-box", "");
+    const words = document.createElement("span");
+    words.dataset.slot = "label";
+    words.textContent = chip.label;
+    span.append(glyph, words);
     const mounted = mount(chip.glyph, { target: glyph });
     chips.set(span, () => unmount(mounted));
     return span;
@@ -584,6 +728,7 @@
     picked.removeAllRanges();
     picked.addRange(range);
     sync();
+    chipTyped();
     look();
     editor.dispatchEvent(new Event("input", { bubbles: true }));
   }
@@ -620,6 +765,36 @@
     insertPlain(event.clipboardData?.getData("text/plain") ?? "");
   }
 
+  /**
+   * Copying or cutting from the field puts the selection's serialised
+   * string on the clipboard: each chip as what it stands for (`/name`, a
+   * mention's `@<title> <handle>`), never the label it shows. A cut takes
+   * whole chips with the words.
+   */
+  function oncopy(event: ClipboardEvent) {
+    const [from, to] = selection();
+    if (from === to || !event.clipboardData) {
+      return;
+    }
+    event.preventDefault();
+    event.clipboardData.setData("text/plain", (written ?? "").slice(from, to));
+  }
+
+  function oncut(event: ClipboardEvent) {
+    oncopy(event);
+    const picked = getSelection();
+    if (!(event.defaultPrevented && editor && picked)) {
+      return;
+    }
+    const [from, to] = selection();
+    select(from, to);
+    picked.getRangeAt(0).deleteContents();
+    select(from);
+    sync();
+    look();
+    editor.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
   /** Text dropped on the field lands where it was let go, as plain text. */
   function ondrop(event: DragEvent & { currentTarget: HTMLDivElement }) {
     hostDrop?.(event);
@@ -652,6 +827,7 @@
     y: number;
     text: string;
     handle: string;
+    of: HTMLElement;
   } | null>(null);
   let tipTimer: ReturnType<typeof setTimeout> | null = null;
   const showTip = (chip: HTMLElement) => {
@@ -661,6 +837,7 @@
       y: box.top,
       text: chip.dataset.tip ?? "",
       handle: chip.dataset.handle ?? "",
+      of: chip,
     };
   };
   const hideTip = () => {
@@ -671,9 +848,7 @@
     tip = null;
   };
   function onpointerover(event: PointerEvent) {
-    const chip = (event.target as Element).closest<HTMLElement>(
-      ".mention-chip"
-    );
+    const chip = (event.target as Element).closest<HTMLElement>(CHIP);
     if (!chip || event.pointerType !== "mouse") {
       return;
     }
@@ -683,18 +858,16 @@
     tipTimer = setTimeout(() => showTip(chip), tip ? 0 : 350);
   }
   function onpointerout(event: PointerEvent) {
-    const chip = (event.target as Element).closest(".mention-chip");
+    const chip = (event.target as Element).closest(CHIP);
     if (chip && !chip.contains(event.relatedTarget as Node)) {
       hideTip();
     }
   }
   function onpointerdown(event: PointerEvent) {
-    const chip = (event.target as Element).closest<HTMLElement>(
-      ".mention-chip"
-    );
+    const chip = (event.target as Element).closest<HTMLElement>(CHIP);
     if (chip) {
       event.preventDefault();
-      if (tip && tip.handle === chip.dataset.handle) {
+      if (tip?.of === chip) {
         hideTip();
       } else {
         showTip(chip);
@@ -769,6 +942,8 @@
     hostKeyup?.(event);
   }}
   {ondrop}
+  {oncopy}
+  {oncut}
   {onpaste}
   {onpointerdown}
   {onpointerout}

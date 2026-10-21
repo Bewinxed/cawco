@@ -4771,6 +4771,21 @@
       },
       "$description": "The delegate tray's row: a chip, and the step down to the pill."
     },
+    "c-inline-chip-line": {
+      "$type": "dimension",
+      "$value": "{size.c-row-mark}",
+      "$description": "An inline chip's line (ui/chip `inline`): its label's line-height, the mark's own height, so no mark beside the label is taller than the label's line. Web only: the dashboard's inline chip recipe.",
+      "$extensions": { "dev.cawco": { "platforms": ["web"] } }
+    },
+    "c-inline-chip-pad": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "An inline chip's fill past its line, above and below, given back by an equal negative margin: the chip draws 22px tall and lays out as its 18px line, inside any line of text from 13px up. Web only.",
+      "$extensions": { "dev.cawco": { "platforms": ["web"] } }
+    },
     "c-peek-glyph": {
       "$type": "dimension",
       "$value": "{size.icon-md}",

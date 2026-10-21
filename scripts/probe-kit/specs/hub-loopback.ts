@@ -31,7 +31,8 @@
 import { join } from "node:path";
 import { $ } from "bun";
 import { type Reply, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, ROOT, type Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../kit";
+import { freePort, publishBuild, serveUnder } from "../socket-served";
 
 const SPACES = /\s+/;
 const NOT_WORD = /\W/g;
@@ -203,17 +204,6 @@ export const devServerOn3000 = async (
   return { ok, said };
 };
 
-const freePort = async (): Promise<number> => {
-  const lease = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch: () => new Response(null),
-  });
-  const port = lease.port as number;
-  await lease.stop(true);
-  return port;
-};
-
 /**
  * The dashboard's socket as `cawco service install` writes it on the hub's
  * computer (cli service.ts `dashboardSocketTexts`), its network address at
@@ -311,33 +301,6 @@ async function nothingOnTheHubsComputer(
 const listensOf = (text: string): string[] =>
   [...text.matchAll(LISTEN_STREAM)].map((match) => match[1] as string);
 
-/**
- * serve.js on the published build under systemd's own socket activation:
- * `systemd-socket-activate`, one `--listen` per address, each descriptor
- * named as its unit's `FileDescriptorName=` names it. Its output goes to `log`.
- */
-const serveUnder = (
-  fleet: KitFleet,
-  sockets: { address: string; name: string }[],
-  log: string
-) =>
-  Bun.spawn(
-    [
-      "systemd-socket-activate",
-      ...sockets.map(({ address }) => `--listen=${address}`),
-      `--fdname=${sockets.map(({ name }) => name).join(":")}`,
-      `--setenv=CAWCO_HUB_URL=${fleet.base}`,
-      "node",
-      join(ROOT, "apps/dashboard/serve.js"),
-    ],
-    {
-      cwd: join(ROOT, "apps/dashboard"),
-      env: { ...process.env, CAWCO_HUB_URL: fleet.base },
-      stdout: Bun.file(log),
-      stderr: Bun.file(`${log}.err`),
-    }
-  );
-
 /** What each of `addresses` answers once it does: `<address> 200 (the dashboard)`, or what came instead. */
 const dashboardAt = (addresses: string[], host: string) =>
   Promise.all(
@@ -406,7 +369,7 @@ async function hubComputer(
   kit.note(
     `9: the socket units as written:\n${texts.systemd.map((one) => `# ${one.unit}\n${one.text}`).join("\n")}`
   );
-  await $`bun ${join(ROOT, "apps/dashboard/scripts/publish-build.ts")}`.quiet();
+  await publishBuild();
   const serveLog = join(kit.out, "serve.log");
   const both = serveUnder(
     fleet,

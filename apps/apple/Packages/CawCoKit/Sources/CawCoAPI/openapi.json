@@ -22759,6 +22759,23 @@
         }
       }
     },
+    "/api/fleet/updates/check": {
+      "post": {
+        "operationId": "postApiFleetUpdatesCheck",
+        "responses": {
+          "200": {
+            "description": "postApiFleetUpdatesCheck 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFleetUpdatesCheck200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/fleet/skills/{name}/refresh": {
       "post": {
         "parameters": [
@@ -29619,6 +29636,17 @@
         },
         "required": [
           "notices"
+        ]
+      },
+      "postApiFleetUpdatesCheck200": {
+        "type": "object",
+        "properties": {
+          "fetching": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "fetching"
         ]
       },
       "getApiFleetSkillsHistory200": {
@@ -50381,11 +50409,72 @@
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
             "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
+          },
+          "checkError": {
+            "description": "Why the last read of the source for what it holds failed.",
+            "type": "string"
+          },
+          "checkedAt": {
+            "description": "When the source was last read for what it holds, epoch ms.",
+            "type": "number"
+          },
+          "lastRefresh": {
+            "$ref": "#/components/schemas/FleetRefresh",
+            "description": "What the last fetch of a row that had files came to."
+          },
+          "latestHash": {
+            "description": "The content hash the source held when last read.",
+            "type": "string"
+          },
+          "latestVersion": {
+            "description": "The version the source's copy declared when last read.",
+            "type": "string"
+          },
+          "updateAvailable": {
+            "description": "The source holds other content than the fleet's copy.",
+            "type": "boolean"
+          },
+          "version": {
+            "description": "The version the fleet's copy declares: a skill's SKILL.md front matter\n`version`, a plugin's `plugin.json` `version` (else its marketplace\nentry's).",
+            "type": "string"
           }
         },
         "required": [
           "enabled",
           "id"
+        ]
+      },
+      "FleetRefresh": {
+        "description": "What a fetch of a row that already had files came to: its source moved on\n(`updated`), held what the fleet already has (`unchanged`), or could not be\nfetched (`failed`, the machines keeping the copy they had). The versions\nare the ones each copy declares, when it declares one; the hashes are the\ncopies' content hashes.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When it landed, epoch ms.",
+            "type": "number"
+          },
+          "error": {
+            "description": "Why it failed.",
+            "type": "string"
+          },
+          "fromHash": {
+            "type": "string"
+          },
+          "fromVersion": {
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/FleetRefreshOutcome"
+          },
+          "toHash": {
+            "type": "string"
+          },
+          "toVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "outcome"
         ]
       },
       "FleetSkillMeta": {
@@ -50439,6 +50528,34 @@
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
             "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
+          },
+          "checkError": {
+            "description": "Why the last read of the source for what it holds failed.",
+            "type": "string"
+          },
+          "checkedAt": {
+            "description": "When the source was last read for what it holds, epoch ms.",
+            "type": "number"
+          },
+          "lastRefresh": {
+            "$ref": "#/components/schemas/FleetRefresh",
+            "description": "What the last fetch of a row that had files came to."
+          },
+          "latestHash": {
+            "description": "The content hash the source held when last read.",
+            "type": "string"
+          },
+          "latestVersion": {
+            "description": "The version the source's copy declared when last read.",
+            "type": "string"
+          },
+          "updateAvailable": {
+            "description": "The source holds other content than the fleet's copy.",
+            "type": "boolean"
+          },
+          "version": {
+            "description": "The version the fleet's copy declares: a skill's SKILL.md front matter\n`version`, a plugin's `plugin.json` `version` (else its marketplace\nentry's).",
+            "type": "string"
           }
         },
         "required": [
@@ -57562,6 +57679,18 @@
         "description": "Hub-originated: a download at the hub began (`fetching`) or landed. A fetch\nruns after the request that asked for it has answered, so this is how\nevery dashboard learns what came of it. Exactly one of the four is set:\n- `skill`, `plugin`: a fetch of a fleet row's files, the row whole as\n  `/api/fleet` reads it (files, or the sentence it failed with);\n- `marketplace`: a read of a marketplace source (its name and offers);\n- `link`: a link of a marketplace source, linked or refused.",
         "type": "object",
         "properties": {
+          "check": {
+            "description": "The check of every skill's and plugin's source for what it holds now:\nunder way, or done (each row it read came as its own frame).",
+            "type": "object",
+            "properties": {
+              "fetching": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "fetching"
+            ]
+          },
           "kind": {
             "type": "string",
             "enum": [
@@ -58788,6 +58917,14 @@
           "failed",
           "needs-auth",
           "signed-in"
+        ]
+      },
+      "FleetRefreshOutcome": {
+        "type": "string",
+        "enum": [
+          "failed",
+          "unchanged",
+          "updated"
         ]
       },
       "FolderEntryKind": {

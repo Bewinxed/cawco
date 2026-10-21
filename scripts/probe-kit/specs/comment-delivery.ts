@@ -42,17 +42,34 @@
  *    within reach) stands on the page's body and keeps none of its words;
  *    the page's words changing twice leaves it on the page, never moved
  *    aside nor said gone, and it is delivered once, as the page's comment.
+ * 10. The page's own doc socket dropped: once it has stood lost 15 s the
+ *    Comments control and its panel say the comments aren't reaching the
+ *    agent, with Try again; a comment tapped then opens its card at once
+ *    and keeps its words in the page's doc; it and an annotation made then
+ *    survive a frame reload from the device, the page lets go of another
+ *    artifact's stale copy, and with the link back and Try again the
+ *    session hears each once.
+ * 11. Pins kept on a page-sized container by its place (one moved aside)
+ *    stand on the page as a whole again, written back on its body, and the
+ *    session is told nothing new of them.
  *
  *   bun scripts/probe-kit/run.ts comment-delivery
  */
 import { Database } from "bun:sqlite";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Frame, Page } from "playwright-core";
+import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
-import { docOf, type On, pageFrame, screenBox, strokeOver } from "./ink";
+import {
+  docOf,
+  dragFromIcon,
+  type On,
+  pageFrame,
+  screenBox,
+  strokeOver,
+} from "./ink";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -101,6 +118,46 @@ const FIRST_WORDS = "Read this before it goes.";
 /** Step 9's pin, on the page as a whole (after pins 1–4), and the person's words in it. */
 const WHOLE_PIN = 5;
 const WHOLE_WORDS = "So much useless copy everywhere.";
+/** Step 10's pin, an annotation made while the page's link is down. */
+const DOWN_PIN = 6;
+/** Step 10's comment, tapped while the page's link is down, and the person's words in it. */
+const DOWN_COMMENT = 7;
+const DOWN_WORDS = "Written while the link was down.";
+/** Step 11's pins, kept on the page-sized container. */
+const OLD_PINS = [8, 9] as const;
+/** The page's own doc socket (overlay artifact.ts), never the pane's `/ws/artifact/`. */
+const PAGE_SOCKET = /\/__cawco\/artifact\/[0-9a-f-]{36}/;
+/** How long a lost link stands before the pane says it (artifact-doc.ts `LINK_DOWN_MS`). */
+const LINK_DOWN_MS = 15_000;
+/** …and room for it to. */
+const SAID_WITHIN_MS = LINK_DOWN_MS + 4000;
+/** A device copy of an artifact no one opened there (core doc-link.ts `deviceDocName`, no `cawco-artifact-used:` note): let go on the next join. */
+const STALE_COPY = "cawco-artifact:00000000-0000-4000-8000-000000000000";
+/** The pane's words while it stands lost (artifact-doc.ts `LINK_DROPPED`). */
+const LINK_DROPPED =
+  "Comments aren't reaching the agent. The link to the hub dropped.";
+
+/**
+ * The page's doc socket, routed through the probe so step 10 can drop it:
+ * passed through to the hub while `down` is false, every attempt closed at
+ * once while it is true.
+ */
+const pageLink: { down: boolean; open: Set<WebSocketRoute> } = {
+  down: false,
+  open: new Set(),
+};
+const routePageLink = (page: Page) =>
+  page.routeWebSocket(PAGE_SOCKET, (ws) => {
+    if (pageLink.down) {
+      ws.close({ code: 1011, reason: "The probe dropped the page's link." });
+      return;
+    }
+    ws.connectToServer();
+    pageLink.open.add(ws);
+    ws.onClose(() => {
+      pageLink.open.delete(ws);
+    });
+  });
 const LATER_WORDS = "And one more word after you read it.";
 /** The delivery routed to Caw: the writer's page, a pin's id, and that it comes to him. */
 const ROUTED =
@@ -525,6 +582,331 @@ const wholePageChecks = async (on: On, frame: Frame) => {
   );
 };
 
+/**
+ * 10. The owner's report (2026-10-21: his Comments panel read "The hub
+ * closed the link (1006)" while his page drew pins 23 and 24 the hub never
+ * had): the page's own doc socket dropped; within the lost link's wait the
+ * Comments control and its panel say the comments aren't reaching the
+ * agent; an annotation made then, the frame reloaded while still down,
+ * comes back from the device; Try again with the link back takes it to the
+ * hub, and the session hears it once.
+ */
+const linkDownChecks = async (on: On, frame: Frame) => {
+  const { kit, page } = on;
+  const before = heard.length;
+  const control = page.locator(
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
+  );
+  pageLink.down = true;
+  for (const ws of pageLink.open) {
+    // biome-ignore lint/performance/noAwaitInLoops: each socket the page holds, closed
+    await ws.close({
+      code: 1011,
+      reason: "The probe dropped the page's link.",
+    });
+  }
+  const droppedAt = Date.now();
+  const told = await until(
+    "the Comments control saying the link is down",
+    async () =>
+      (await control.getAttribute("data-link-down")) === ""
+        ? await control.getAttribute("aria-label")
+        : undefined,
+    Boolean,
+    SAID_WITHIN_MS + 5000
+  ).catch(() => null);
+  const saidIn = Date.now() - droppedAt;
+  await rowsOf(page);
+  const line = page.locator("[data-pin-list-down]");
+  const lineWords = (await line.count()) > 0 ? await line.innerText() : "";
+  kit.check(
+    "10: the page's link dropped: once it has stood lost, the Comments control says the comments aren't reaching the agent, and its panel says why with Try again",
+    !!told?.includes("Comments aren't reaching the agent") &&
+      saidIn >= LINK_DOWN_MS - 1000 &&
+      lineWords.includes(LINK_DROPPED) &&
+      lineWords.includes("Try again"),
+    `control ${String(told)} after ${saidIn} ms; panel ${JSON.stringify(lineWords)}`
+  );
+  await shutList(page);
+
+  // An annotation, made on the page while its link is down.
+  await frame.locator("#c").scrollIntoViewIfNeeded();
+  await settle(page, 300);
+  await strokeOver(on, frame, "#c");
+  await page.waitForTimeout(350);
+  await dragFromIcon(on, frame, -90, 40);
+  const made = await until(
+    `pin ${DOWN_PIN}, an annotation, in the page's doc`,
+    () => docOf(frame),
+    (now) => numbered(now.pins, DOWN_PIN)?.kind === "annotation",
+    5000
+  ).catch(() => null);
+  const madeId = made ? numbered(made.pins, DOWN_PIN)?.id : undefined;
+
+  // A comment tapped while the link is down: its card opens at once, drawn
+  // from the page's pin, and the person's words are kept in the page's doc.
+  const comment = page.locator(
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
+  );
+  await comment.focus();
+  await page.keyboard.press("c");
+  await pageInComment(frame);
+  await frame.locator("#b").scrollIntoViewIfNeeded();
+  await settle(page, 300);
+  const b = await screenBox(on, frame, "#b");
+  const tappedAt = Date.now();
+  await page.mouse.click(b.x + b.w * 0.75, b.y + b.h / 2);
+  const card = page.locator(
+    `[data-slot="pin-card"][data-pin-card="${DOWN_COMMENT}"]`
+  );
+  const opened = await card
+    .waitFor({ timeout: 2000 })
+    .then(() => true)
+    .catch(() => false);
+  const openedIn = Date.now() - tappedAt;
+  if (opened) {
+    await card.getByRole("textbox").fill(DOWN_WORDS);
+    await card.getByRole("button", { name: "Reply" }).click();
+  }
+  const written = await until(
+    `pin ${DOWN_COMMENT}'s words in the page's doc`,
+    () => docOf(frame),
+    (now) => numbered(now.pins, DOWN_COMMENT)?.thread[0]?.text === DOWN_WORDS,
+    5000
+  ).catch(() => null);
+  const shown = opened
+    ? await card
+        .locator('[data-slot="thread"]')
+        .innerText()
+        .catch(() => "")
+    : "";
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  const commentId = written
+    ? numbered(written.pins, DOWN_COMMENT)?.id
+    : undefined;
+  kit.check(
+    "10: a comment tapped while the link is down opens its card at once, and the person's words are kept in the page's doc and drawn in the card",
+    opened && !!commentId && shown.includes(DOWN_WORDS),
+    `card ${opened ? `open in ${openedIn} ms` : "never opened"}; words in the page's doc ${written ? "yes" : "no"}; card thread ${JSON.stringify(shown.slice(0, 120))}`
+  );
+
+  // Its write to the device lands, and a copy of another artifact no one
+  // opened there stands beside it (no note of its use); then the frame
+  // reloads, the link still down.
+  await page.waitForTimeout(1000);
+  await frame.evaluate(
+    (name) =>
+      new Promise<void>((resolve) => {
+        const request = indexedDB.open(name);
+        request.onsuccess = () => {
+          request.result.close();
+          resolve();
+        };
+        request.onerror = () => resolve();
+      }),
+    STALE_COPY
+  );
+  await frame.evaluate(() => location.reload());
+  const back = await until(
+    `pin ${DOWN_PIN} back in the reloaded page's doc`,
+    () => docOf(frame),
+    (now) =>
+      numbered(now.pins, DOWN_PIN)?.id === madeId &&
+      numbered(now.pins, DOWN_COMMENT)?.thread[0]?.text === DOWN_WORDS,
+    20_000
+  ).catch(() => null);
+  const early = deliveries(before).filter(
+    (one) =>
+      one.last.includes(`## ${DOWN_PIN}.`) ||
+      one.last.includes(`## ${DOWN_COMMENT}.`)
+  ).length;
+  const copies = await until(
+    "the stale copy let go",
+    () =>
+      frame.evaluate(async () =>
+        (await indexedDB.databases()).map((one) => one.name ?? "")
+      ),
+    (names) => !names.includes(STALE_COPY),
+    10_000
+  ).catch(() => null);
+  kit.check(
+    "10: an annotation and a comment's words made while the link is down, the frame reloaded with the link still down: the page's doc holds both again, from the device, and the session has heard nothing of them",
+    !!madeId && !!back && early === 0,
+    `made ${String(madeId)}; back ${back ? "yes" : "no"}; heard early ${early}`
+  );
+  kit.check(
+    "10: the page keeps its own artifact's copy on the device, and lets go of another artifact's no one has opened there lately",
+    !!copies &&
+      copies.some(
+        (name) => name.startsWith("cawco-artifact:") && name !== STALE_COPY
+      ) &&
+      !copies.includes(STALE_COPY),
+    JSON.stringify(copies)
+  );
+
+  // The link back, and the panel's Try again.
+  pageLink.down = false;
+  const backAt = Date.now();
+  await rowsOf(page);
+  await page
+    .locator("[data-pin-list-down]")
+    .getByRole("button", { name: "Try again" })
+    .click()
+    .catch(() => undefined);
+  const cleared = await until(
+    "the Comments control clear again",
+    async () =>
+      (await control.getAttribute("data-link-down")) === null
+        ? true
+        : undefined,
+    Boolean,
+    15_000
+  ).catch(() => false);
+  await shutList(page);
+  await Bun.sleep(
+    Math.max(0, backAt + QUIET_MS + REACH_MS + STILL_MS - Date.now())
+  );
+  const went = deliveries(before).filter((one) =>
+    one.last.includes(`## ${DOWN_PIN}.`)
+  );
+  const words = went[0]?.last ?? "";
+  const said = deliveries(before).filter((one) =>
+    one.last.includes(`## ${DOWN_COMMENT}.`)
+  );
+  const saidWords = said[0]?.last ?? "";
+  const after = (await docOf(frame)).pins;
+  const stamped = numbered(after, DOWN_PIN);
+  const stampedComment = numbered(after, DOWN_COMMENT);
+  kit.check(
+    "10: with the link back and Try again, the annotation reaches the hub and the session hears it exactly once, stamped sent, and the control says nothing more",
+    cleared === true &&
+      went.length === 1 &&
+      words.includes(`## ${DOWN_PIN}. annotation on #c`) &&
+      words.includes(`- Pin: ${madeId}`) &&
+      !!stamped?.sentAt,
+    `cleared ${String(cleared)}; ${went.length} deliveries of pin ${DOWN_PIN}; stamped ${String(stamped?.sentAt)}; heard ${words.slice(0, 400) || "nothing"}`
+  );
+  kit.check(
+    "10: the comment written while the link was down reaches the session exactly once, with the person's words and its id, stamped sent",
+    said.length === 1 &&
+      saidWords.includes(`## ${DOWN_COMMENT}. comment on #b`) &&
+      saidWords.includes(`- I wrote: ${JSON.stringify(DOWN_WORDS)}`) &&
+      saidWords.includes(`- Pin: ${commentId}`) &&
+      !!stampedComment?.sentAt,
+    `${said.length} deliveries of pin ${DOWN_COMMENT}; stamped ${String(stampedComment?.sentAt)}; heard ${saidWords.slice(0, 400) || "nothing"}`
+  );
+};
+
+/**
+ * 11. Pins kept before a press in the page's padding named its body (the
+ * owner's #10 and #21 on 729b1a67): each on the page-sized container by its
+ * place, with the words that container said then and its page-sized box,
+ * one of them in the moved tray. Both stand on the page as a whole again,
+ * written back on its body, out of the tray, each disc drawn, and the
+ * session is told nothing new of either.
+ */
+const oldPageAnchorChecks = async (on: On, frame: Frame) => {
+  const { kit } = on;
+  const before = heard.length;
+  const ids = await frame.evaluate(
+    ({ numbers }) => {
+      const main = document.querySelector("main");
+      const r = main?.getBoundingClientRect();
+      const { doc } = (
+        window as unknown as {
+          cawcoArtifact: {
+            doc: {
+              getMap: (n: string) => { set: (k: string, v: unknown) => void };
+              transact: (f: () => void) => void;
+            };
+          };
+        }
+      ).cawcoArtifact;
+      const at = new Date().toISOString();
+      const made = numbers.map((number, i) => ({
+        id: crypto.randomUUID(),
+        number,
+        kind: "comment",
+        anchor: {
+          selector: "body > main:nth-of-type(1)",
+          source: null,
+          text: "Words the page said in a state long gone.",
+          box: {
+            x: Math.round(r?.x ?? 0),
+            y: Math.round((r?.y ?? 0) + scrollY),
+            w: Math.round(r?.width ?? 0),
+            h: Math.round(r?.height ?? 0),
+          },
+        },
+        at,
+        by: "person",
+        elements: [],
+        point: { x: 0.9, y: 0.2 + i * 0.1 },
+        thread: [
+          {
+            id: crypto.randomUUID(),
+            by: "person",
+            text: `An old page comment ${number}.`,
+            at,
+            sentAt: at,
+          },
+        ],
+        sentAt: at,
+        ...(i === 0 ? { movedAt: at } : {}),
+      }));
+      doc.transact(() => {
+        for (const pin of made) {
+          doc.getMap("pins").set(pin.id, pin);
+        }
+      });
+      return made.map((pin) => pin.id);
+    },
+    { numbers: [OLD_PINS[0], OLD_PINS[1]] }
+  );
+  const stood = await until(
+    "both old page pins standing on the body",
+    () => docOf(frame),
+    (now) =>
+      [OLD_PINS[0], OLD_PINS[1]].every((number) => {
+        const pin = numbered(now.pins, number) as
+          | (ReturnType<typeof numbered> & {
+              anchor?: { selector?: string };
+              movedAt?: string;
+            })
+          | undefined;
+        return pin?.anchor?.selector === "body" && !pin.movedAt;
+      }),
+    10_000
+  ).catch(() => null);
+  const discs = await frame
+    .locator(
+      `svg[data-cawco-pins] :is(g[data-pin="${OLD_PINS[0]}"], g[data-pin="${OLD_PINS[1]}"])`
+    )
+    .count();
+  await Bun.sleep(QUIET_MS + REACH_MS);
+  const told = deliveries(before).filter(
+    (one) =>
+      one.last.includes(`## ${OLD_PINS[0]}.`) ||
+      one.last.includes(`## ${OLD_PINS[1]}.`)
+  ).length;
+  kit.check(
+    "11: pins kept on a page-sized container by its place, its old words and box (one in the moved tray) stand on the page as a whole again: written back on body, out of the tray, both discs drawn, nothing new told",
+    ids.length === 2 && !!stood && discs === 2 && told === 0,
+    `stood ${stood ? "yes" : "no"}; discs ${discs}; told ${told}; pins ${JSON.stringify(
+      [OLD_PINS[0], OLD_PINS[1]].map((number) => {
+        const pin = stood && numbered(stood.pins, number);
+        return (
+          pin && {
+            anchor: (pin as { anchor?: unknown }).anchor,
+            movedAt: (pin as { movedAt?: unknown }).movedAt,
+          }
+        );
+      })
+    )}`
+  );
+};
+
 /** 7. A writer that has ended: its page's pin goes to the project's Caw, whose reply lands in the pin's thread. */
 const endedWriterChecks = async (
   desk: On,
@@ -773,6 +1155,7 @@ const run = async (kit: Kit) => {
   }
   const base = await fleet.dashboard();
   const page = await kit.page("desk");
+  await routePageLink(page);
   const said: string[] = [];
   page.on("pageerror", (error) => said.push(`pageerror: ${error.message}`));
   await open(page, `${base}/session/${session}`, "[data-artifact-trigger]");
@@ -986,6 +1369,12 @@ const run = async (kit: Kit) => {
 
   // 9. A comment on the page as a whole, whose words then change.
   await wholePageChecks(on, frame);
+
+  // 10. A pin made while the page's link is down, the frame reloaded, the link back.
+  await linkDownChecks(on, frame);
+
+  // 11. Pins kept on the page-sized container before the body was the page's.
+  await oldPageAnchorChecks(on, frame);
 
   // 6. Still no Send control.
   const atEnd = await sendControls();

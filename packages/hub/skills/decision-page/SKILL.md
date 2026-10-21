@@ -14,13 +14,13 @@ The page is a **page** artifact whose source is a program in OpenUI Lang over Ca
 - **Question**: the choice in the person's plain words ("How dense is the task row?"), never a component, story or id.
 - **Options**: 2–5 real answers. Each Option's `line` is what it gets them and its `cost` what it costs them, one line each.
 - **One Recommended**: exactly one option `recommended`, and the Decision's `why` is the one sentence that says why it.
-- **Pick plus note**: the card gives both; it asks nothing else. When the pick needs a reason, give the Decision's `note` what the note is for ("a reason for the rollback"); its button and field ask for that.
+- **Pick plus note**: the card gives both; it asks nothing else. Leave the Decision's `note` out and its button reads "Add a note". When the pick needs a particular note, give `note` a noun phrase the button finishes ("a reason for the rollback" reads "Add a reason for the rollback").
 - **The same facts for every option**: each line and each cost answers the same question in the same units, the Recommended option's cost included.
 - **A reason that can be checked**: the `why` names the fact that makes the Recommended option right (a number, a limit, what breaks), never only that it is better.
 - **A stable order**: options stand in their own order (today first, small to large); never move the Recommended one to the top.
 - **Say what it changes**: the question or the `why` says what the pick changes. Where something stands today, mark that option `current`.
 - **Restate what it rests on**: a card that depends on an earlier pick names that pick in its question or `why` ("With Astro picked, …").
-- **Words first**: the question, lines and costs carry the meaning; media shows it and never replaces it.
+- **Words first**: the question, lines and costs carry the meaning; media shows it and never replaces it. Name an icon in words ("Attach"), never as a stand-in symbol or emoji: the house faces draw neither, and the hub refuses a program holding a character they lack.
 - **Few options**: around five at most; split a bigger choice into two cards.
 - **Diagrams that fit the card**: a diagram reads without scrolling either way. Draw fewer steps, or split it into two; a long chain of steps reads left to right (`flowchart LR`).
 - **Dials** only for values on a picked option (its radius, its duration): add them to that card's media once it is decided.

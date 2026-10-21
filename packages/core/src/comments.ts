@@ -510,9 +510,19 @@ export interface AnchorLookup<E, D> {
   bySource: (within: D, file: string, line: number) => E[];
   byText: (within: D, text: string) => E | null;
   frame: (within: D, selector: string) => D | null;
+  /** The document's page as a whole: its body; null when it has none. */
+  page: (within: D) => E | null;
+  /** Whether a box in the page (an anchor's, as it was kept) is nearly as wide and as tall as the document's page now: the page's own box. */
+  pageSized: (within: D, box: NonNullable<PageAnchor["box"]>) => boolean;
   textOf: (el: E) => string;
   /** The top document, where an anchor's frames start. */
   top: D;
+}
+
+/** Where an anchor stands now, and by which part of it ({@link findAnchor}). */
+export interface AnchorFound<E> {
+  by: "source" | "selector" | "text" | "page";
+  el: E;
 }
 
 /**
@@ -555,13 +565,17 @@ export const stableSelector = (selector: string): boolean =>
  * its frames, then its source's file:line, then its selector, then its text.
  * A selector of places alone finds its element only while that element
  * still reads the anchor's text, or that text and more: one put in ahead
- * of it stands at its place now, and is never the mark's. Null when none of them finds it: the mark
- * goes to the moved tray.
+ * of it stands at its place now, and is never the mark's. A selector of
+ * places whose kept box was the page's own (a press in its padding, kept on
+ * the page-sized container that held it, before such a press named the
+ * body) stands on the page as a whole, as {@link wholePage} does, whatever
+ * its container says now. Null when none of them finds it: the mark goes to
+ * the moved tray.
  */
 export function findAnchor<E, D>(
   anchor: PageAnchor,
   lookup: AnchorLookup<E, D>
-): { by: "source" | "selector" | "text"; el: E } | null {
+): AnchorFound<E> | null {
   let within: D | null = lookup.top;
   for (const frame of anchor.frames ?? []) {
     within = lookup.frame(within, frame);
@@ -596,6 +610,13 @@ export function findAnchor<E, D>(
       return among;
     }
   }
+  const page =
+    !stable && anchor.box && lookup.pageSized(doc, anchor.box)
+      ? lookup.page(doc)
+      : null;
+  if (page) {
+    return { by: "page", el: page };
+  }
   if (named && holds(named)) {
     return { by: "selector", el: named };
   }
@@ -617,7 +638,7 @@ function amongWritten<E, D>(
   named: { el: E | null; holds: (el: E) => boolean },
   text: string,
   lookup: AnchorLookup<E, D>
-): { by: "selector" | "text"; el: E } | null {
+): AnchorFound<E> | null {
   const reads = (one: E) => !!text && lookup.textOf(one) === text;
   const el = named.el && written.includes(named.el) ? named.el : null;
   if (el && reads(el)) {

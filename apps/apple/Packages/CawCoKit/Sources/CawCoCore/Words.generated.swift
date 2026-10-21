@@ -2610,6 +2610,43 @@ public enum Words {
 
         public static let noBytes = "No bytes resolved yet"
 
+        /// A row's version against what its source holds now.
+        public static let checkForUpdates = "Check for updates"
+
+        public static let checking = "Checking…"
+
+        public static func updateAvailable(from: String, to: String) -> String {
+            "Update available · \(from) → \(to)"
+        }
+
+        /// The update badge's action, and its tooltip naming what it fetches.
+        public static let fetchUpdate = "Fetch update"
+
+        public static func fetchVersion(to: String) -> String {
+            "Fetch \(to)"
+        }
+
+        public static func updated(from: String, to: String) -> String {
+            "Updated \(from) → \(to)"
+        }
+
+        /// A refresh's outcome and how long ago it landed (lib/utils/time.ts `formatAgeShort`).
+        public static func outcomeAge(outcome: String, age: String) -> String {
+            "\(outcome) · \(age == "now" ? "just now" : "\(age) ago")"
+        }
+
+        public static func alreadyLatest(version: String) -> String {
+            "Already on latest (\(version))"
+        }
+
+        public static func updateFailed(why: String) -> String {
+            "Couldn't update: \(why)"
+        }
+
+        public static func checkFailed(why: String) -> String {
+            "Couldn't check for updates: \(why)"
+        }
+
         /// A marketplace's listing.
         public static let browse = "Browse"
 

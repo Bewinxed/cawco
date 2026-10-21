@@ -74,7 +74,7 @@
    * each chip in its serialised form (`@<title> <handle>`), so a send, a
    * queued edit, recall and the drafts store carry it as text.
    */
-  import { type Snippet, tick, untrack } from "svelte";
+  import { flushSync, type Snippet, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
@@ -120,6 +120,7 @@
   import { newId } from "../id";
   import { carriesFiles } from "../internal-drag";
   import { minimizedAsks } from "../minimized-asks.svelte";
+  import { skillsOf } from "../skill-chips";
   import {
     loadSuggestSetting,
     type SuggestCandidate,
@@ -349,6 +350,8 @@
   /** The field (MentionField's editable box), and the MentionField, whose caret is in the draft's offsets. */
   let field = $state<HTMLDivElement | null>(null);
   let mentionField = $state<ReturnType<typeof MentionField>>();
+  /** The session's skills, which its field draws as chips. */
+  const skills = $derived(skillsOf(commands));
   /** A phone's @ menu: its rows wrap, and it drags down to go. */
   const phone = new MediaQuery(NARROW_QUERY);
 
@@ -1019,7 +1022,8 @@
     const start =
       Math.max(before.lastIndexOf(" "), before.lastIndexOf("\n")) + 1;
     const word = before.slice(start);
-    if (!word.startsWith("/")) {
+    // A skill already drawn as its chip is no longer being typed.
+    if (!word.startsWith("/") || mentionField?.chipAt(start)) {
       return null;
     }
     const query = word.slice(1);
@@ -1168,12 +1172,13 @@
     draft.text = `${draft.text.slice(0, active.from)}${entry.insert} ${draft.text.slice(end)}`;
     const next = active.from + entry.insert.length + 1;
     dismissed = true;
-    // After the field has drawn the new text, so the caret is set in it.
-    tick().then(() => {
-      field?.focus();
-      mentionField?.select(next);
-      caret = next;
-    });
+    // The field draws the new text now, and the caret is set in it before
+    // the next key: set a tick later, a key typed straight after the pick
+    // landed at the field's start.
+    flushSync();
+    field?.focus();
+    mentionField?.select(next);
+    caret = next;
   }
 
   function step(by: number): void {
@@ -3583,6 +3588,7 @@
             {onpaste}
             phone={phone.current}
             placeholder={hint}
+            {skills}
             tabindex={0}
             bind:this={mentionField}
             bind:editor={field}

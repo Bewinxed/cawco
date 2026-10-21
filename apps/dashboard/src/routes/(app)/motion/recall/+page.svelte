@@ -8,8 +8,11 @@
    *
    * The conversation is the client's own state, as the hub's frames would
    * have set it (dev's `__cawcoDebug`, set when client.svelte.ts loads,
-   * which Composer imports ahead of this script).
+   * which Composer imports ahead of this script). Its / menu holds two
+   * skills and a built-in, which the field draws as chips (composer-chips);
+   * `window.__recall` holds the draft, and what was sent, in order.
    */
+  import type { AvailableCommand } from "@cawco/core";
   import { blankSession, type SessionState } from "#lib/cawco/client.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
@@ -49,7 +52,28 @@
   );
   debug.state.sessions[ID] = { ...blankSession(ID), messages };
 
+  /** The session's `/` menu: skills (a plugin's among them) and a built-in. */
+  const COMMANDS: AvailableCommand[] = [
+    {
+      name: "clean-copy",
+      type: "skill",
+      description: "Cut interface copy that shouldn't exist.",
+    },
+    {
+      name: "interfaces:better-typography",
+      type: "skill",
+      source: "interfaces",
+      description: "Sets and reviews how text renders in your product.",
+    },
+    { name: "compact", type: "builtin", description: "Compact the context." },
+  ];
+
   const draft = new ComposerDraft();
+  /** What the composer sent, in order: the words exactly as they left. */
+  const sent: string[] = [];
+
+  // The probes write the draft as a restore does, and read what was sent.
+  Object.assign(globalThis, { __recall: { draft, sent } });
 </script>
 
 <svelte:head>
@@ -62,9 +86,12 @@
      width with 11px margins under 900px. -->
 <div data-slot="dock" class="relative h-full">
   <Composer
+    commands={COMMANDS}
     {draft}
     onstop={() => undefined}
-    onsubmit={() => undefined}
+    onsubmit={(text) => {
+      sent.push(text);
+    }}
     recallOf={ID}
   />
 </div>

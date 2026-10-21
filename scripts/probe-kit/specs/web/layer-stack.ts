@@ -14,7 +14,22 @@
  *   id the board does not hold, and a kind the dashboard does not know, read
  *   as their labels; pressing the chip opens the house hover panel with
  *   "Open session" to the session, on the floating layer over the bench;
- *   Escape puts it away.
+ *   Escape puts it away. On Chromium and WebKit, the chip sits in its line
+ *   as a word does: its label on the text's baseline (within 1px), every
+ *   line of its paragraph its line-height, no space of its own (geom.ts
+ *   `inlineFit`), on a paragraph's first line and inside one.
+ * - A skill named in the transcript (head-tint, the shown session holding
+ *   two skills): the person's `/clean-copy` and `/interfaces:better-
+ *   typography` draw as the skill's chip, an unknown `/nope-skill` and a
+ *   path stay text; the agent's code spans naming a skill exactly, with or
+ *   without its slash, draw as its chip and any other stays code; every
+ *   chip sits in its line as a word does, on Chromium and WebKit; pressing
+ *   one opens the house hover panel with its description and source, and
+ *   Escape puts it away. Copying the two turns puts each skill chip on the
+ *   clipboard as its `/name`, the chips still showing their names and the
+ *   selection where it was, and its markup holds no display style the
+ *   copy gave the chips; copying words inside one chip gives its `/name`
+ *   whole.
  * - A kit popover over a sticky table head (the overlays bench, desk): a
  *   sticky head on `--layer-sticky` set under the popover's place, and the
  *   popover first at that point.
@@ -32,7 +47,9 @@ import type { Page } from "playwright-core";
 import type { InstancesFrame } from "../../../../packages/core/src/frames";
 import type { Envelope } from "../../../../packages/core/src/index";
 import { WIRE_PROTOCOL } from "../../../../packages/core/src/stream";
-import { type Kit, open, type Spec, settle } from "../../kit";
+import { pressCopy } from "../../clipboard";
+import { fitsLine, inlineFit } from "../../geom";
+import { type Engine, type Kit, open, type Spec, settle } from "../../kit";
 
 /**
  * With `PROBE_UI_OBSERVER=<observer.browser.js>` (the ui-observer skill's
@@ -187,7 +204,11 @@ const SAID_ID = "reference-chip-said";
 const MESSAGE = `[data-pane="${SHOWN}"] [data-slot="md"]:has([data-session-chip])`;
 /** The answer's box (the markdown root is `display: contents`). */
 const MESSAGE_BOX = `[data-pane="${SHOWN}"] [data-slot="msg"]:has([data-session-chip])`;
-const SAID = `Handed the cap to [the tray chip work](cawco:session/${NAMED}). The earlier run, [an earlier try](cawco:session/${GONE}), is gone, and [a pin](cawco:pin/p1) is a kind of its own.`;
+const SAID = `Handed the cap to [the tray chip work](cawco:session/${NAMED}). The earlier run, [an earlier try](cawco:session/${GONE}), is gone, and [a pin](cawco:pin/p1) is a kind of its own.
+
+The cap lands in three places, and each reads the pane it stands in rather than the window, so a split pane keeps its own measure while the other half grows. The work itself sits with [the tray chip work](cawco:session/${NAMED}) for now, and its notes say the label truncates at its end while the count stays whole, the figures tabular, the glyph untouched, and nothing reaching the pane's edge at the narrowest width the shell allows.`;
+/** The second paragraph: lines enough for the chip to stand inside, not at an end. */
+const LONG = `${MESSAGE} p:nth-of-type(2) [data-session-chip]`;
 
 /**
  * The hub's board, as its first frame on the socket says it: one session
@@ -223,8 +244,12 @@ const BOARD: Envelope<InstancesFrame> = {
   },
 };
 
-async function sessionChip(kit: Kit, base: string): Promise<void> {
-  const page = await kit.page("desk");
+async function sessionChip(
+  kit: Kit,
+  base: string,
+  engine: Engine = "chromium"
+): Promise<void> {
+  const page = await kit.page("desk", { engine });
   await page.routeWebSocket(
     (url) => url.pathname === "/ws/dashboard",
     (hubSide) => {
@@ -297,7 +322,7 @@ async function sessionChip(kit: Kit, base: string): Promise<void> {
         lineHeight,
         lineCount: lines.length,
         title:
-          button?.querySelector('[data-slot="title"]')?.textContent?.trim() ??
+          button?.querySelector('[data-slot="label"]')?.textContent?.trim() ??
           null,
         tag: button?.tagName.toLowerCase() ?? null,
         height: button?.getBoundingClientRect().height ?? 0,
@@ -348,9 +373,31 @@ async function sessionChip(kit: Kit, base: string): Promise<void> {
     !read.blockedText && read.blockedEls === 0,
     JSON.stringify({ text: read.blockedText, elements: read.blockedEls })
   );
+  for (const [where, selector] of [
+    ["its first line", chip],
+    ["inside a paragraph's lines", LONG],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: two reads of one page
+    const fit = await page.locator(selector).first().evaluate(inlineFit);
+    kit.note(`session chip on ${engine}, ${where}: ${JSON.stringify(fit)}`);
+    kit.check(
+      `session-chip on ${engine}, ${where}: the label on the text's baseline (within 1px), every line its line-height, no space of the chip's own`,
+      fitsLine(fit),
+      JSON.stringify({
+        delta: fit.delta,
+        pitches: fit.pitches,
+        lineHeight: fit.lineHeight,
+        before: fit.before,
+        after: fit.after,
+      })
+    );
+  }
 
-  await page.locator(chip).click();
-  const panelId = await page.locator(chip).getAttribute("aria-controls");
+  await page.locator(chip).first().click();
+  const panelId = await page
+    .locator(chip)
+    .first()
+    .getAttribute("aria-controls");
   const panel = `[id="${panelId}"]`;
   await page.waitForSelector(panel, { timeout: 5000 });
   await settle(page, 400);
@@ -422,6 +469,284 @@ async function sessionChip(kit: Kit, base: string): Promise<void> {
     "session-chip: Escape puts the panel away and focus goes back to the chip",
     !shut.panel && shut.expanded === "false" && shut.focused,
     JSON.stringify(shut)
+  );
+  await page.close();
+}
+
+/** The shown session's skills, as its / menu lists them. */
+const SKILLS = [
+  {
+    name: "clean-copy",
+    description: "Cut interface copy that shouldn't exist.",
+  },
+  {
+    name: "interfaces:better-typography",
+    description: "Sets and reviews how text renders in your product.",
+  },
+];
+const PERSON_SAID =
+  "Run /clean-copy over the empty states the shell draws, then /interfaces:better-typography on every heading the settings pages set, and tell me what each one cut; /nope-skill is no skill of this session and src/clean-copy is a path, so both stay as written.";
+const AGENT_SAID =
+  "I ran `clean-copy` over the empty states and `/interfaces:better-typography` over the headings, while `not-a-skill` stays code. The captions that restated their labels are gone, the hints nobody needed went with them, and every heading now sits on the scale the settings pages share, at the weight its level takes.";
+
+async function skillChips(
+  kit: Kit,
+  base: string,
+  engine: Engine
+): Promise<void> {
+  const page = await kit.page("desk", { engine });
+  await open(page, `${base}/motion/head-tint`, "[data-head-tint]", 120_000);
+  await page.waitForFunction(() => "__ht" in window);
+  // The session's / menu and the turn, as the hub's frames would set them.
+  await page.evaluate(
+    ([shown, skills, personWords, agentWords]) => {
+      const debug = (
+        globalThis as unknown as {
+          __cawcoDebug: {
+            state: {
+              sessions: Record<
+                string,
+                {
+                  commands: {
+                    at: number;
+                    detailed: Map<string, unknown> | null;
+                    names: string[];
+                    skills: string[];
+                  };
+                  messages: Record<string, unknown>[];
+                }
+              >;
+            };
+          };
+        }
+      ).__cawcoDebug;
+      const session = debug.state.sessions[shown];
+      const names = skills.map((s) => s.name);
+      session.commands = {
+        at: Date.now(),
+        names: [...names, "compact"],
+        skills: names,
+        detailed: new Map(
+          skills.map((s) => [s.name, { ...s, argumentHint: "", kind: "skill" }])
+        ),
+      };
+      const at = new Date().toISOString();
+      session.messages = [
+        ...session.messages,
+        {
+          id: "skill-chip-person",
+          instanceId: shown,
+          type: "user",
+          content: personWords,
+          timestamp: at,
+        },
+        {
+          id: "skill-chip-agent",
+          instanceId: shown,
+          type: "assistant",
+          content: agentWords,
+          timestamp: at,
+        },
+      ];
+    },
+    [SHOWN, SKILLS, PERSON_SAID, AGENT_SAID] as const
+  );
+  const pane = `[data-pane="${SHOWN}"]`;
+  const person = page
+    .locator(`${pane} [data-slot="msg"]`)
+    .filter({ hasText: "nope-skill" });
+  const agent = page
+    .locator(`${pane} [data-slot="msg"]`)
+    .filter({ hasText: "not-a-skill" });
+  await person.locator("[data-skill-chip]").first().waitFor({
+    timeout: 15_000,
+  });
+  await agent.locator("[data-skill-chip]").first().waitFor({
+    timeout: 15_000,
+  });
+  await settle(page, 300);
+  const read = (row: typeof person) =>
+    row.evaluate((el) => ({
+      chips: [...el.querySelectorAll("[data-skill-chip]")].map((c) => ({
+        tag: c.tagName.toLowerCase(),
+        skill: (c as HTMLElement).dataset.skillChip ?? "",
+        label: c.textContent?.trim() ?? "",
+      })),
+      codes: [...el.querySelectorAll("code")].map((c) => c.textContent ?? ""),
+      words: el.textContent?.replace(/\s+/g, " ").trim() ?? "",
+    }));
+  const personRead = await read(person);
+  const agentRead = await read(agent);
+  const both = ["clean-copy", "interfaces:better-typography"];
+  const named = (chips: { tag: string; skill: string; label: string }[]) =>
+    chips.length === 2 &&
+    chips.every(
+      (c, i) => c.tag === "button" && c.skill === both[i] && c.label === both[i]
+    );
+  kit.check(
+    `skill-chip on ${engine}: the person's /clean-copy and /interfaces:better-typography draw as the skill's chip; /nope-skill and a path stay text`,
+    named(personRead.chips) &&
+      personRead.words.includes("/nope-skill is no skill") &&
+      personRead.words.includes("src/clean-copy is a path"),
+    JSON.stringify(personRead)
+  );
+  kit.check(
+    `skill-chip on ${engine}: the agent's \`clean-copy\` and \`/interfaces:better-typography\` draw as the skill's chip; \`not-a-skill\` stays code`,
+    named(agentRead.chips) &&
+      agentRead.codes.length === 1 &&
+      agentRead.codes[0] === "not-a-skill",
+    JSON.stringify(agentRead)
+  );
+  for (const [who, row] of [
+    ["the person's", person],
+    ["the agent's", agent],
+  ] as const) {
+    for (const skill of both) {
+      // biome-ignore lint/performance/noAwaitInLoops: one page, read in turn
+      const fit = await row
+        .locator(`[data-skill-chip="${skill}"]`)
+        .evaluate(inlineFit);
+      kit.note(
+        `skill chip /${skill} in ${who} words on ${engine}: ${JSON.stringify(fit)}`
+      );
+      kit.check(
+        `skill-chip /${skill} in ${who} words on ${engine}: the label on the text's baseline (within 1px), every line its line-height, the paragraph its lines × its line-height, no space of the chip's own`,
+        fitsLine(fit) &&
+          fit.lines.length >= 2 &&
+          Math.abs(fit.blockHeight - fit.lines.length * fit.lineHeight) < 0.5,
+        JSON.stringify({
+          delta: fit.delta,
+          lines: fit.lines.length,
+          pitches: fit.pitches,
+          lineHeight: fit.lineHeight,
+          blockHeight: fit.blockHeight,
+          before: fit.before,
+          after: fit.after,
+        })
+      );
+    }
+  }
+  mkdirSync(kit.out, { recursive: true });
+  await person.screenshot({
+    path: join(kit.out, `skill-chip-person-${engine}.png`),
+  });
+  await agent.screenshot({
+    path: join(kit.out, `skill-chip-agent-${engine}.png`),
+  });
+
+  const chip = agent.locator('[data-skill-chip="clean-copy"]');
+  await chip.click();
+  const panelId = await chip.getAttribute("aria-controls");
+  const panel = `[id="${panelId}"]`;
+  await page.waitForSelector(panel, { timeout: 5000 });
+  await settle(page, 400);
+  const opened = await page.evaluate((p) => {
+    const el = document.querySelector(p);
+    const text = (slot: string) =>
+      el?.querySelector(`[data-slot="${slot}"]`)?.textContent?.trim() ?? null;
+    return {
+      role: el?.getAttribute("role") ?? null,
+      title: text("title"),
+      description: text("description"),
+      source: text("source"),
+    };
+  }, panel);
+  kit.check(
+    `skill-chip on ${engine}: pressed, it opens the house hover panel with the skill's name, description and source`,
+    opened.role === "dialog" &&
+      opened.title === "clean-copy" &&
+      opened.description === SKILLS[0].description &&
+      opened.source === "Skill",
+    JSON.stringify(opened)
+  );
+  await page.keyboard.press("Escape");
+  await settle(page, 400);
+  const shut = await page.evaluate(
+    ([p, focusedSkill]) => ({
+      panel: document.querySelector(p) !== null,
+      focused:
+        (document.activeElement as HTMLElement | null)?.dataset.skillChip ===
+        focusedSkill,
+    }),
+    [panel, "clean-copy"] as const
+  );
+  kit.check(
+    `skill-chip on ${engine}: Escape puts the panel away and focus goes back to the chip`,
+    !shut.panel && shut.focused,
+    JSON.stringify(shut)
+  );
+
+  // From the person's first word to the agent's last.
+  const picked = () =>
+    page.evaluate(() => {
+      const range = getSelection()?.getRangeAt(0);
+      return range ? range.toString().length : -1;
+    });
+  await page.evaluate(
+    ([from, to]) => {
+      const rows = [...document.querySelectorAll('[data-slot="msg"] p')];
+      const first = rows.find((p) => p.textContent?.includes(from));
+      const last = rows.find((p) => p.textContent?.includes(to));
+      if (!(first && last)) {
+        throw new Error("the two turns' paragraphs are not drawn");
+      }
+      const range = document.createRange();
+      range.setStartBefore(first);
+      range.setEndAfter(last);
+      getSelection()?.removeAllRanges();
+      getSelection()?.addRange(range);
+    },
+    ["nope-skill", "not-a-skill"] as const
+  );
+  const before = await picked();
+  const copy = await pressCopy(page, engine);
+  const after = await picked();
+  const labels = await agent
+    .locator("[data-skill-chip]")
+    .evaluateAll((els) => els.map((el) => el.textContent?.trim() ?? ""));
+  const wants = [
+    "Run /clean-copy over the empty states",
+    "then /interfaces:better-typography on every heading",
+    "/nope-skill is no skill",
+    "I ran /clean-copy over the empty states and /interfaces:better-typography over the headings, while not-a-skill stays code.",
+  ];
+  kit.check(
+    `skill-chip on ${engine}: copying the two turns puts each skill chip on the clipboard as its /name, the chips still showing their names and the selection where it was`,
+    [copy.event, copy.clipboard].every(
+      (text) => text === null || wants.every((w) => text.includes(w))
+    ) &&
+      copy.event !== null &&
+      labels.join("|") === "clean-copy|interfaces:better-typography" &&
+      before > 0 &&
+      before === after,
+    JSON.stringify({ copy, labels, before, after })
+  );
+  kit.check(
+    `skill-chip on ${engine}: the copy's markup (a rich paste) holds each chip as its /name and no display style the copy gave it`,
+    (copy.html ?? "").includes("/clean-copy") &&
+      !(copy.html ?? "").includes('style="display'),
+    JSON.stringify({ html: copy.html })
+  );
+  // Words inside one chip copy as all it stands for.
+  await agent
+    .locator(
+      '[data-skill-chip="interfaces:better-typography"] [data-slot="label"]'
+    )
+    .evaluate((label) => {
+      const words = label.firstChild as Text;
+      const range = document.createRange();
+      range.setStart(words, 3);
+      range.setEnd(words, 9);
+      getSelection()?.removeAllRanges();
+      getSelection()?.addRange(range);
+    });
+  const part = await pressCopy(page, engine);
+  kit.check(
+    `skill-chip on ${engine}: words copied from inside a chip give its /name whole`,
+    part.event === "/interfaces:better-typography" &&
+      (part.clipboard === null ||
+        part.clipboard === "/interfaces:better-typography"),
+    JSON.stringify(part)
   );
   await page.close();
 }
@@ -546,6 +871,15 @@ const spec: Spec = {
     for (const scene of [
       headTint,
       sessionChip,
+      function sessionChipWebkit(k: Kit, b: string) {
+        return sessionChip(k, b, "webkit");
+      },
+      function skillChipsChromium(k: Kit, b: string) {
+        return skillChips(k, b, "chromium");
+      },
+      function skillChipsWebkit(k: Kit, b: string) {
+        return skillChips(k, b, "webkit");
+      },
       popoverOverSticky,
       skipLink,
       railSheet,

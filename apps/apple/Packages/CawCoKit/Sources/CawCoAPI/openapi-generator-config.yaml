@@ -74,6 +74,7 @@ typeOverrides:
     FleetFaultCause: OpenEnums.FleetFaultCause
     FleetMcpServerMode: OpenEnums.FleetMcpServerMode
     FleetMcpServerState: OpenEnums.FleetMcpServerState
+    FleetRefreshOutcome: OpenEnums.FleetRefreshOutcome
     FleetScope: OpenEnums.FleetScope
     FolderEntryKind: OpenEnums.FolderEntryKind
     FormName: OpenEnums.FormName

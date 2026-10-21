@@ -459,27 +459,6 @@
     margin-block-start: 0;
   }
 
-  /* A mention chip in Find's field (`[data-mention-chip]`, which
-     MentionField's script makes; its glyph and the new-session prompt's
-     reference chip carry their own utilities). */
-  [data-editor] [data-mention-chip] {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    max-inline-size: 100%;
-    margin-inline: 1px;
-    padding: 0 var(--space-2) 0 var(--space-1);
-    border-radius: var(--radius-xs);
-    background: var(--surface-recess);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    vertical-align: baseline;
-    white-space: nowrap;
-    cursor: default;
-    user-select: all;
-  }
-
   /* A divider's summary reads in a note's muted ink, not a turn's
      (MessageBody's words). */
   [data-slot="transcript-brief"] {

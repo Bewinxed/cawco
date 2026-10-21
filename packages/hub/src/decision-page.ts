@@ -9,7 +9,9 @@
  * `artifact_create` with the name alone), and inline `html` publish the same
  * way.
  *
- * - `{{KIT_CSS}}`: the kit's tokens.css and page.css.
+ * - `{{KIT_CSS}}`: the house faces (an `@import` of the sheet the hub serves
+ *   on every preview origin, core decision-host.ts), then the kit's
+ *   tokens.css and page.css.
  * - `{{KIT_JS}}`: the kit's page.js.
  * - `{{DIALS}}`: DialKit (vendored, MIT) and dials.js.
  * - `{{MK:<id>}}`: `mockups/<id>.html` beside page.html, one mockup fragment.
@@ -19,6 +21,7 @@
  * A built page stops at {@link PAGE_LIMIT}.
  */
 import { bundledSkills } from "./bundled-skills";
+import { FACES_SHEET } from "./decision-program";
 
 /** The largest page the hub publishes. */
 export const PAGE_LIMIT = 512 * 1024;
@@ -101,7 +104,8 @@ export const buildDecisionPage = async (
   let page = source
     .replaceAll(
       "{{KIT_CSS}}",
-      () => kitText("tokens.css") + kitText("page.css")
+      () =>
+        `@import url("${FACES_SHEET}");\n${kitText("tokens.css")}${kitText("page.css")}`
     )
     .replaceAll("{{KIT_JS}}", () => kitText("page.js"))
     .replaceAll(

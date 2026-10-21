@@ -31,6 +31,13 @@
   } from "svelte-streamdown";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { referenceOf } from "#lib/cawco/references.js";
+  import SkillChip from "#lib/cawco/SkillChip.svelte";
+  import {
+    markSkills,
+    skillNamed,
+    skillsHere,
+    skillWords,
+  } from "#lib/cawco/skill-chips.js";
   import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
   import { PROSE } from "#lib/prose.js";
   import { cn } from "#lib/utils.js";
@@ -41,6 +48,7 @@
     invert = false,
     streaming = false,
     fades = false,
+    said = false,
     look,
     class: className,
   }: MarkdownLooks & {
@@ -57,7 +65,19 @@
      * the virtualiser remounted — is never replayed.
      */
     fades?: boolean;
+    /**
+     * The person's own words: each `/name` of a skill the session has is
+     * drawn as its chip (skill-chips.ts `markSkills`).
+     */
+    said?: boolean;
   } = $props();
+
+  /**
+   * The skills of the session whose words these are (SessionPane): a code
+   * span that is exactly one's name, with or without its slash, is its
+   * chip, in anyone's words.
+   */
+  const skills = skillsHere();
 
   // Streamdown's stock themes hardcode a Tailwind palette (bg-gray-100,
   // text-blue-600, marker:hidden) that would out-shout PROSE. Blank every
@@ -137,8 +157,13 @@
    * message settles is drawn then, faded in like one more chunk.
    */
   const drawn = $derived(
-    streaming ? source.slice(0, source.search(/\S*$/)) : source
+    marked(streaming ? source.slice(0, source.search(/\S*$/)) : source)
   );
+
+  /** Words as drawn: the person's own with their skills marked. */
+  function marked(words: string): string {
+    return said ? markSkills(words, skillWords(skills().keys())) : words;
+  }
 
   /** A fence's opening or closing line: three or more backticks or tildes. */
   const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
@@ -182,7 +207,7 @@
     )
   );
   const content = $derived(
-    upto >= source.length ? drawn : source.slice(0, upto)
+    upto >= source.length ? drawn : marked(source.slice(0, upto))
   );
   $effect(() => {
     if (untrack(() => upto >= source.length)) {
@@ -322,6 +347,22 @@
       <div class="not-prose my-3">
         <OutputBlock language={token.lang} text={token.text} />
       </div>
+    {/snippet}
+    <!-- A code span naming a skill of this session, exactly, is that
+         skill's chip (SkillChip); any other is code. -->
+    {#snippet codespan({
+      token,
+      children,
+    }: {
+      token: { text: string };
+      children: Snippet;
+    })}
+      {@const skill = skillNamed(skills(), token.text)}
+      {#if skill}
+        <SkillChip {skill} />
+      {:else}
+        <code>{@render children()}</code>
+      {/if}
     {/snippet}
     <!-- A link: a `cawco:` reference is drawn as its kind's element (a
          session as its chip), or as its label alone when the dashboard

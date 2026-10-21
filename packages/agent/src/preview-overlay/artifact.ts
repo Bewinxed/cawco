@@ -11,6 +11,13 @@
  * A page the hub serves carries its doc in the overlay's tag
  * (`data-artifact`, `data-state`), so the page is filled from it before it
  * paints, and the socket only catches up.
+ *
+ * The doc is kept on the device too, per artifact (y-indexeddb, its
+ * IndexedDB provider): what the person marks while the link is down stays
+ * through a reload and goes to the hub as the socket syncs again (the hub
+ * asks for what it lacks on every open, artifacts/sync.ts). A write the hub
+ * refused is cleared from the device with the doc that held it. A browser
+ * that keeps no IndexedDB keeps nothing on the device.
  */
 import {
   CHOICE_LIMITS,
@@ -20,6 +27,14 @@ import {
   choiceEntryProblem,
 } from "@cawco/core/choices";
 import type { MarkPictures } from "@cawco/core/comments";
+import {
+  ARTIFACT_GONE,
+  deviceDocName,
+  RESYNC_MS,
+  reopenStalled,
+  tendDeviceDocs,
+} from "@cawco/core/doc-link";
+import { IndexeddbPersistence } from "y-indexeddb";
 import { WebsocketProvider } from "y-websocket";
 import {
   applyUpdate,
@@ -36,20 +51,6 @@ import { here } from "./boot";
 /** The hub's close code for an update it would not keep (hub artifacts/sync.ts). */
 const REFUSED = 4400;
 
-/**
- * How often the client asks the hub for its state: the hub serves no
- * awareness, so this keeps the socket heard from inside y-websocket's 30s
- * reconnect window. Our choice, as the pane's.
- */
-const RESYNC_MS = 10_000;
-
-/**
- * How long one attempt at the socket may stand connecting before it is
- * closed and tried again, ms. y-websocket (3.1.0, its latest) watches only
- * an open socket (its 30 s `messageReconnectTimeout`), so an upgrade that
- * is never answered would stand connecting for ever. Our call.
- */
-const OPEN_WITHIN_MS = 10_000;
 /** Attempts in a row that never opened, after which the link is said lost. */
 const STALLS_LOST = 2;
 
@@ -180,6 +181,10 @@ export interface ArtifactGlobal {
 let watchers: Watchers | null = null;
 let doc = new Doc();
 let provider: WebsocketProvider | null = null;
+/** The doc kept on the device, once the artifact is joined. */
+let kept: IndexeddbPersistence | null = null;
+/** The device gave the doc marks back (a reload while they hadn't reached the hub): their pictures are drawn once it syncs. */
+let restored = false;
 /** The artifact the page's doc is: told by the host, or embedded by the hub before that. */
 let joined: ArtifactRef | null = null;
 let seeded: string | null = null;
@@ -287,16 +292,43 @@ const observe = (own: Doc) => {
         if (name !== "moved" && event.transaction.local) {
           watchers?.marked();
         }
+        if (name !== "moved" && kept && event.transaction.origin === kept) {
+          restored = true;
+        }
       }
     });
   }
 };
 observe(doc);
 
-/** Starts a fresh doc in place of the one held (another artifact's, or one the hub refused). */
+/**
+ * The joined artifact's doc kept on the device from now on, and what the
+ * device kept of it merged in; the device's copies of artifacts no one has
+ * opened lately let go (core `tendDeviceDocs`). Nothing is kept where the
+ * browser keeps no IndexedDB (a sandboxed frame, storage refused).
+ */
+const keepOnDevice = () => {
+  if (!joined) {
+    return;
+  }
+  try {
+    if (!globalThis.indexedDB) {
+      return;
+    }
+  } catch {
+    return;
+  }
+  tendDeviceDocs(joined.id);
+  kept = new IndexeddbPersistence(deviceDocName(joined.id), doc);
+};
+
+/** Starts a fresh doc in place of the one held (another artifact's, or one the hub refused); the device keeps the old one's no longer. */
 const replaceDoc = () => {
   provider?.destroy();
   provider = null;
+  kept = null;
+  restored = false;
+  // Its device copy lets go with it (y-indexeddb destroys on the doc's destroy).
   doc.destroy();
   doc = new Doc();
   generation += 1;
@@ -340,40 +372,16 @@ const connect = () => {
     state: link.state === "lost" ? "lost" : "connecting",
     error: link.error,
   });
-  // An attempt that hasn't opened within OPEN_WITHIN_MS is closed and tried
-  // again through y-websocket's own disconnect and connect; the second in a
-  // row that never opened says the link is lost.
-  let stalls = 0;
-  let stallTimer: ReturnType<typeof setTimeout> | undefined;
-  let closingStalled = false;
-  const watchAttempt = () => {
-    clearTimeout(stallTimer);
-    const attempt = own.ws;
-    stallTimer = setTimeout(() => {
-      if (own !== provider || own.ws !== attempt || !own.wsconnecting) {
-        return;
-      }
-      stalls += 1;
-      closingStalled = true;
-      own.disconnect();
-      closingStalled = false;
-      own.connect();
-    }, OPEN_WITHIN_MS);
-  };
-  own.on("status", ({ status: attempt }) => {
-    if (attempt === "connecting") {
-      watchAttempt();
-      return;
-    }
-    clearTimeout(stallTimer);
-    if (attempt === "connected") {
-      stalls = 0;
+  // An attempt that never opens is tried again (core doc-link.ts); the
+  // second in a row that never opened says the link is lost.
+  const stalls = reopenStalled(own, (inRow) => {
+    if (own === provider && inRow >= STALLS_LOST) {
+      linked({
+        state: "lost",
+        error: `Its link to ${location.host} didn't open`,
+      });
     }
   });
-  // The first attempt began in the constructor, before anything heard it.
-  if (own.wsconnecting) {
-    watchAttempt();
-  }
   own.on("sync", (isSynced: boolean) => {
     if (!isSynced || own !== provider) {
       return;
@@ -384,28 +392,38 @@ const connect = () => {
       whenSynced();
       watchers?.synced();
     }
+    // Marks the device gave back are on the hub now: their pictures go for the delivery that carries them.
+    if (restored) {
+      restored = false;
+      watchers?.marked();
+    }
   });
   own.on("connection-close", (event) => {
-    if (own !== provider) {
+    if (own !== provider || stalls.reopening()) {
       return;
     }
-    if (closingStalled) {
-      if (stalls >= STALLS_LOST) {
-        linked({
-          state: "lost",
-          error: `Its link to ${location.host} didn't open`,
-        });
-      }
-      return;
+    // The artifact was removed: nothing of it is kept on the device.
+    if (event?.code === ARTIFACT_GONE) {
+      kept?.clearData().catch(() => undefined);
+      kept = null;
     }
     if (event?.code !== REFUSED) {
       linked({ state: "lost", error: closedBecause(event) });
       return;
     }
-    // What this page wrote the hub would not keep: start again from the hub's.
+    // What this page wrote the hub would not keep: start again from the
+    // hub's, the device's copy of it cleared first so it never comes back.
+    const refusedCopy = kept;
     replaceDoc();
     watchers?.refused(event.reason);
-    connect();
+    (refusedCopy?.clearData() ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => {
+        if (own === provider || provider === null) {
+          keepOnDevice();
+          connect();
+        }
+      });
   });
 };
 
@@ -460,9 +478,16 @@ export const artifact = {
     joined = { id: raw.id, kind: raw.kind, name: raw.name.slice(0, 200) };
     syncPath = sync as string;
     status = "joined";
+    keepOnDevice();
     connect();
     handed();
     return joined;
+  },
+
+  /** The host's Try again (`cawco:reconnect`): the socket closed and opened again now, not at its backoff's next turn. */
+  reconnect: () => {
+    provider?.disconnect();
+    provider?.connect();
   },
 
   /** The kind of artifact this page is, once known. */

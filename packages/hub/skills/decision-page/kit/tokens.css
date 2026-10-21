@@ -873,6 +873,10 @@
     --c-block-drop-dot: 6px;
     /* The delegate tray's row: a chip, and the step down to the pill. */
     --c-tray-chip: 28px;
+    /* An inline chip's line (ui/chip `inline`): its label's line-height, the mark's own height, so no mark beside the label is taller than the label's line. Web only: the dashboard's inline chip recipe. */
+    --c-inline-chip-line: var(--c-row-mark);
+    /* An inline chip's fill past its line, above and below, given back by an equal negative margin: the chip draws 22px tall and lays out as its 18px line, inside any line of text from 13px up. Web only. */
+    --c-inline-chip-pad: 2px;
     /* A needs card's peek glyph (NeedsCard): the icon's medium size, its large one under a finger. */
     --c-peek-glyph: var(--icon-md);
     --c-tray-gap: var(--space-2);

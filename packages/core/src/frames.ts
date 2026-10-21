@@ -804,6 +804,11 @@ export interface LocalNameFrame {
  * - `link`: a link of a marketplace source, linked or refused.
  */
 export interface FleetFetchFrame {
+  /**
+   * The check of every skill's and plugin's source for what it holds now:
+   * under way, or done (each row it read came as its own frame).
+   */
+  check?: { fetching: boolean };
   instanceId?: undefined;
   kind: "fleet.fetch";
   link?: MarketplaceLink;

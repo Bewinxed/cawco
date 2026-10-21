@@ -21,6 +21,7 @@ import type {
   EndedBy,
   Envelope,
   FleetMcpConfig,
+  FleetRefresh,
   FleetScope,
   FleetSyncReport,
   HarnessKind,
@@ -1970,6 +1971,17 @@ export const plugins = sqliteTable("plugins", {
   /** Why the last resolve failed. Kept, so the dashboard can say so. */
   error: text("error"),
   files: text("files", { mode: "json" }).$type<SkillFile[]>(),
+  /**
+   * What the source held when last read (latest_*, checked_at) and why that
+   * read failed (check_error), the version the stored files declare, and
+   * what the last fetch of a row that had files came to (FleetVersioned).
+   */
+  version: text("version"),
+  lastRefresh: text("last_refresh", { mode: "json" }).$type<FleetRefresh>(),
+  latestHash: text("latest_hash"),
+  latestVersion: text("latest_version"),
+  checkedAt: timestamp("checked_at"),
+  checkError: text("check_error"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -1993,6 +2005,17 @@ export const skills = sqliteTable("skills", {
   /** Why the last resolve failed. A failed row is kept so the dashboard can say so. */
   error: text("error"),
   files: text("files", { mode: "json" }).$type<SkillFile[]>(),
+  /**
+   * What the source held when last read (latest_*, checked_at) and why that
+   * read failed (check_error), the version the stored files declare, and
+   * what the last fetch of a row that had files came to (FleetVersioned).
+   */
+  version: text("version"),
+  lastRefresh: text("last_refresh", { mode: "json" }).$type<FleetRefresh>(),
+  latestHash: text("latest_hash"),
+  latestVersion: text("latest_version"),
+  checkedAt: timestamp("checked_at"),
+  checkError: text("check_error"),
   /**
    * Bound to one project (`project`: `<checkout>/.claude/skills/<name>/`);
    * null for every machine (`~/.claude/skills/`). Placed at every checkout

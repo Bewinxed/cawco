@@ -444,6 +444,7 @@ const run = async (kit: Kit) => {
     () => dismissChecks(on),
     () => roomChecks(on),
     () => wordlessChecks(on),
+    () => cornerChecks(on),
     () => documentChecks(on),
     () => mapPressChecks(on),
     () => svgPictureChecks(on),
@@ -469,29 +470,51 @@ const commentChecks = async (on: On, frame: Frame) => {
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.focus();
+  // DESIGN.md, The mode: "Comment and Draw turn the well's own edge the
+  // accent, 2px, inside its box": brand-solid, 2px solid, offset -2px.
+  const readEdge = () =>
+    on.page.evaluate(() => {
+      const well = document.querySelector(
+        ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-side-well]'
+      );
+      const probe = document.createElement("span");
+      probe.style.color = "var(--brand-solid)";
+      document.body.append(probe);
+      const accent = getComputedStyle(probe).color;
+      probe.remove();
+      const style = well ? getComputedStyle(well) : null;
+      return {
+        color: style?.outlineColor ?? null,
+        width: style?.outlineWidth ?? null,
+        style: style?.outlineStyle ?? null,
+        offset: style?.outlineOffset ?? null,
+        accent,
+      };
+    });
+  type Edge = Awaited<ReturnType<typeof readEdge>>;
+  const accentEdge = (read: Edge) =>
+    read.color === read.accent &&
+    read.width === "2px" &&
+    read.style === "solid" &&
+    read.offset === "-2px";
+  // The edge comes in over --dur-control: read once it has.
+  await on.page.keyboard.press("d");
+  await settle(on.page, 300);
+  const drawEdge = await readEdge();
+  on.kit.check(
+    "1: D turns Draw on: the well's edge is the brand accent (brand-solid), 2px, inside its box",
+    accentEdge(drawEdge),
+    JSON.stringify(drawEdge)
+  );
   await on.page.keyboard.press("c");
   await pageInComment(frame, true);
-  // The edge comes in over --dur-control: read once it has.
   await settle(on.page, 300);
-  const edge = await on.page.evaluate(() => {
-    const well = document.querySelector(
-      ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-side-well]'
-    );
-    const probe = document.createElement("span");
-    probe.style.color = "var(--accent)";
-    document.body.append(probe);
-    const accent = getComputedStyle(probe).color;
-    probe.remove();
-    return {
-      outline: well ? getComputedStyle(well).outlineColor : null,
-      accent,
-    };
-  });
+  const edge = await readEdge();
   const pressed = await comment.getAttribute("aria-selected");
   on.kit.check(
-    "1: C turns Comment on: its segment chosen (aria-selected), the well's accent edge",
-    pressed === "true" && edge.outline === edge.accent,
-    `aria-selected ${pressed}; outline ${edge.outline}, accent ${edge.accent}`
+    "1: C turns Comment on: its segment chosen (aria-selected), the well's edge the brand accent (brand-solid), 2px, inside its box",
+    pressed === "true" && accentEdge(edge),
+    `aria-selected ${pressed}; ${JSON.stringify(edge)}`
   );
   // The mode's segments draw their glyphs alone (TabItem `glyphOnly`): the
   // name is sr-only, still the tab's accessible name.
@@ -2855,6 +2878,95 @@ const wordlessChecks = async (on: On) => {
     JSON.stringify(head)
   );
   await on.page.keyboard.press("Escape");
+  await on.page.keyboard.press("Escape");
+};
+
+/** Four corners of `px`, as computed styles read them clockwise from the top left. */
+const fourCorners = (px: string) => `${px} ${px} ${px} ${px}`;
+/** Each element's own corners, and the outline's over it: its own, or the overlay's `--radius-xs` (5px) for a square block. */
+const CORNERS_WANTED: Record<string, { element: string; outline: string }> = {
+  "#field": { element: fourCorners("10px"), outline: fourCorners("10px") },
+  "#pill": { element: fourCorners("9999px"), outline: fourCorners("9999px") },
+  "#block": { element: fourCorners("0px"), outline: fourCorners("5px") },
+};
+
+/**
+ * 7b. The owner's report (2026-10-21: "non-round selection rectangles? is
+ * this 1995?"): Comment mode's hover outline takes each element's own
+ * corners, concentric with them: a 10px field, a pill, and a 0-radius block
+ * (the house's smallest radius, never a square); the outline's offset is
+ * the sheet's 2px throughout.
+ */
+const cornerChecks = async (on: On) => {
+  await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "corners",
+    html: `<!doctype html><html><head><style>body { margin: 0; } main { padding: 24px; display: grid; gap: 32px; justify-items: start; }</style></head>
+<body><main>
+  <input id="field" placeholder="A field" style="width: 240px; height: 40px; border: 1px solid #888; border-radius: 10px">
+  <button id="pill" style="padding: 8px 20px; border: 0; border-radius: 9999px; background: #d8d4cc">A pill</button>
+  <div id="block" style="width: 200px; height: 80px; background: #d8d4cc">A block</div>
+</main></body></html>`,
+  });
+  const frame = (await until(
+    "the corners page in the pane",
+    async () => {
+      const shown = await pageFrame(on);
+      return (await shown
+        .locator("#block")
+        .count()
+        .catch(() => 0)) === 1
+        ? shown
+        : null;
+    },
+    Boolean,
+    60_000
+  )) as Frame;
+  await settle(on.page, 400);
+  await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
+    )
+    .click();
+  await pageInComment(frame, true);
+  for (const selector of ["#field", "#pill", "#block"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one element hovered after the other
+    const b = await screenBox(on, frame, selector);
+    await on.page.mouse.move(b.x + b.w / 2, b.y + b.h / 2);
+    await settle(on.page, 150);
+    const seen = await frame.evaluate((sel) => {
+      const corners = (of: CSSStyleDeclaration) =>
+        [
+          of.borderTopLeftRadius,
+          of.borderTopRightRadius,
+          of.borderBottomRightRadius,
+          of.borderBottomLeftRadius,
+        ].join(" ");
+      const rect = document
+        .querySelector("cawco-overlay")
+        ?.shadowRoot?.querySelector<HTMLElement>(".rect");
+      const el = document.querySelector(sel);
+      if (!(rect && el) || rect.hidden) {
+        return null;
+      }
+      const drawn = getComputedStyle(rect);
+      return {
+        element: corners(getComputedStyle(el)),
+        outline: corners(drawn),
+        offset: drawn.outlineOffset,
+      };
+    }, selector);
+    const { element, outline } = CORNERS_WANTED[selector];
+    on.kit.check(
+      `7b: hovering ${selector} (corners ${element}) in Comment mode outlines it with corners ${outline}, the outline offset 2px`,
+      seen?.element === element &&
+        seen.outline === outline &&
+        seen.offset === "2px",
+      JSON.stringify(seen)
+    );
+  }
   await on.page.keyboard.press("Escape");
 };
 

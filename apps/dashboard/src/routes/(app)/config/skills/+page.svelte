@@ -2,7 +2,9 @@
   import {
     type FleetMarketplace,
     type FleetPlugin,
+    type FleetRefresh,
     type FleetSkillMeta,
+    type FleetVersioned,
     type MarketplacePluginInfo,
     machineLabel,
     skillsWords as words,
@@ -23,10 +25,13 @@
   import RowFaults from "#lib/cawco/config/RowFaults.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
-  import SectionRow from "#lib/cawco/config/SectionRow.svelte";
+  import SectionRow, {
+    type RowNote,
+  } from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
   import {
+    checkForUpdates,
     formatBytes,
     installPlugin,
     marketplaceCatalog,
@@ -36,12 +41,16 @@
     skillHistory,
     switchPlugin,
     switchSkill,
+    versionLabel,
+    versionPair,
   } from "#lib/cawco/fleet.js";
   import { hubFaults } from "#lib/cawco/fleet-faults.js";
+  import { clock } from "#lib/cawco/home/home-state.svelte.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -55,6 +64,7 @@
     IconShop,
     IconTrash,
   } from "#lib/icons.js";
+  import { formatAgeShort } from "#lib/utils/time.js";
 
   /**
    * Two ways to the same thing: fetch a skill and the hub downloads its files
@@ -95,11 +105,75 @@
     void store.fleet.load();
   };
 
-  const sized = (row: { bytes?: number; hash?: string }) =>
+  /** A row's version (else its short hash) and size, for its meta line. */
+  const sized = (row: { bytes?: number; hash?: string; version?: string }) =>
     [
+      versionLabel(row.version, row.hash) || null,
       row.bytes === undefined ? null : formatBytes(row.bytes),
-      row.hash ? row.hash.slice(0, 7) : null,
     ].filter((part): part is string => part !== null);
+
+  /**
+   * What a row's last fetch came to and how long ago, said under it until
+   * the next update check reads its source again: "Updated 4.6.0 → 4.7.0 ·
+   * 2h ago", "Already on latest (4.7.0) · just now", or why it failed where
+   * no hub fault under the row says so already. Else why the last check
+   * could not read its source.
+   */
+  function outcomeOf(
+    row: FleetVersioned & { fetching?: boolean },
+    faulted: boolean
+  ): RowNote | undefined {
+    if (row.fetching) {
+      return;
+    }
+    const last = row.lastRefresh;
+    if (last && (row.checkedAt === undefined || last.at >= row.checkedAt)) {
+      const said = refreshSaid(last, faulted);
+      return (
+        said && {
+          ...said,
+          text: words.outcomeAge(said.text, formatAgeShort(last.at, clock.now)),
+        }
+      );
+    }
+    return row.checkError
+      ? { tone: "fail", text: words.checkFailed(row.checkError) }
+      : undefined;
+  }
+
+  /** A refresh's outcome in words; a failure a hub fault already says, none. */
+  function refreshSaid(
+    last: FleetRefresh,
+    faulted: boolean
+  ): RowNote | undefined {
+    const from = { version: last.fromVersion, hash: last.fromHash };
+    const to = { version: last.toVersion, hash: last.toHash };
+    switch (last.outcome) {
+      case "updated":
+        return { tone: "done", text: words.updated(...versionPair(from, to)) };
+      case "unchanged":
+        return {
+          tone: "done",
+          text: words.alreadyLatest(versionLabel(to.version, to.hash)),
+        };
+      case "failed":
+        return faulted
+          ? undefined
+          : {
+              tone: "fail",
+              text: words.updateFailed(last.error ?? words.saidNothing),
+            };
+      default:
+        return;
+    }
+  }
+
+  /** The row's copy against what its source holds now, for its update chip. */
+  const updatePair = (row: FleetVersioned & { hash?: string }) =>
+    versionPair(
+      { version: row.version, hash: row.hash },
+      { version: row.latestVersion, hash: row.latestHash }
+    );
 
   function landedSkill(row: FleetSkillMeta) {
     if (fleet) {
@@ -170,6 +244,26 @@
       refusedOn(row.id, err, () => refetchPlugin(row));
     } finally {
       delete busy[row.id];
+    }
+  }
+
+  /** Why Check for updates did not run: said under it. */
+  let checkProblem = $state<string | null>(null);
+  let askedCheck = $state(false);
+
+  /**
+   * Has the hub read every source for what it holds now; each row it reads
+   * lands on its own, its chip appearing or going.
+   */
+  async function checkUpdates() {
+    askedCheck = true;
+    checkProblem = null;
+    try {
+      await checkForUpdates();
+    } catch (err) {
+      checkProblem = message(err);
+    } finally {
+      askedCheck = false;
     }
   }
 
@@ -332,6 +426,35 @@
   }
 </script>
 
+<!-- A row whose source holds something newer: what it is, as a status, and
+     the one action that takes it, the row's own Fetch again. The badge's words
+     wrap inside the row (a cell's tall chip); the action never shrinks. -->
+{#snippet update(
+  row: FleetVersioned & { hash?: string },
+  pending: boolean,
+  fetch: () => unknown
+)}
+  {@const [from, to] = updatePair(row)}
+  <div
+    data-slot="update"
+    class="flex min-w-0 flex-wrap items-center gap-space-2"
+  >
+    <Badge figures="tabular" size="cell-tall">
+      <span class="wrap-anywhere">{words.updateAvailable(from, to)}</span>
+    </Badge>
+    <Button
+      icon={IconRefresh}
+      label={words.fetchUpdate}
+      onclick={fetch}
+      {pending}
+      pendingLabel={FETCHING}
+      size="xs"
+      title={words.fetchVersion(to)}
+      variant="secondary"
+    />
+  </div>
+{/snippet}
+
 <!-- Link marketplace: the toolbar's, and the empty groups' one action. -->
 {#snippet linkMarketplace()}
   <LinkMarketplacePopover
@@ -381,6 +504,21 @@
       />
     {/if}
     <RowFault again={refetchAll} reason={refetchProblem} />
+    {#if skills.length + plugins.length > 0}
+      <Button
+        disabled={hubDown() !== null}
+        failed={checkProblem !== null}
+        icon={IconRefresh}
+        label={words.checkForUpdates}
+        onclick={checkUpdates}
+        pending={askedCheck || store.checkingUpdates}
+        pendingLabel={words.checking}
+        size="sm"
+        title={hubDown() ?? undefined}
+        variant="outline"
+      />
+      <RowFault again={checkUpdates} reason={checkProblem} />
+    {/if}
     {@render linkMarketplace()}
   {/snippet}
 
@@ -437,6 +575,12 @@
               ...(row.fetching ? [FETCHING] : sized(row)),
             ].join(" · ")}
             name={row.name}
+            note={outcomeOf(
+              row,
+              hubBroken.some(
+                (fault) => fault.scope === "skills" && fault.key === row.name
+              )
+            )}
             ontoggle={(next) => toggleSkill(row, next)}
             toggling={busy[row.name] === true}
           >
@@ -449,6 +593,13 @@
               />
             {/snippet}
             {#snippet below()}
+              {#if row.updateAvailable}
+                {@render update(
+                  row,
+                  busy[row.name] === true || row.fetching === true,
+                  () => refetchSkill(row)
+                )}
+              {/if}
               <RowFault
                 again={rowFaults[row.name]?.again}
                 reason={rowFaults[row.name]?.reason}
@@ -707,6 +858,12 @@
               : sized(row).join(" · ") || words.noBytes}
             mono
             name={row.id}
+            note={outcomeOf(
+              row,
+              hubBroken.some(
+                (fault) => fault.scope === "plugins" && fault.key === row.id
+              )
+            )}
             ontoggle={(next) => togglePlugin(row.id, next)}
             toggling={busy[row.id] === true}
           >
@@ -719,6 +876,13 @@
               />
             {/snippet}
             {#snippet below()}
+              {#if row.updateAvailable}
+                {@render update(
+                  row,
+                  busy[row.id] === true || row.fetching === true,
+                  () => refetchPlugin(row)
+                )}
+              {/if}
               <RowFault
                 again={rowFaults[row.id]?.again}
                 reason={rowFaults[row.id]?.reason}

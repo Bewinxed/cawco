@@ -2802,6 +2802,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/FleetRefreshOutcome`.
+    public enum FleetRefreshOutcome: OpenEnum {
+        case failed
+        case unchanged
+        case updated
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "failed": self = .failed
+            case "unchanged": self = .unchanged
+            case "updated": self = .updated
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .failed: "failed"
+            case .unchanged: "unchanged"
+            case .updated: "updated"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.failed, .unchanged, .updated]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/FleetScope`.
     public enum FleetScope: OpenEnum {
         case local

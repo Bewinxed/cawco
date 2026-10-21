@@ -18,11 +18,14 @@
     source,
     streaming = false,
     fades = false,
+    said = false,
   }: {
     source: string;
     streaming?: boolean;
     /** Mounted streaming: each chunk's words fade in as they land. */
     fades?: boolean;
+    /** The person's own words: a skill they name is its chip. */
+    said?: boolean;
   } = $props();
 </script>
 
@@ -30,5 +33,5 @@
   data-slot="msg"
   class="max-w-c-measure text-size-body leading-body font-normal text-ink-strong"
 >
-  <Markdown {fades} {source} {streaming} />
+  <Markdown {fades} {said} {source} {streaming} />
 </div>

@@ -14,6 +14,7 @@
  * replaced by one snapshot.
  */
 import type { CanvasAuthor } from "@cawco/core/canvas";
+import { RESYNC_MS } from "@cawco/core/doc-link";
 import {
   type AbstractType,
   applyUpdate,
@@ -57,6 +58,8 @@ export type ChangeOrigin = { client: ArtifactClient } | "agent" | "hub";
 
 /** A joined client: the hub sends it every update another made. */
 export interface ArtifactClient {
+  /** Sends it the hub's beat (sync.ts): a message it applies as nothing, every {@link RESYNC_MS}. */
+  beat: () => void;
   /** Ends its socket: the artifact was removed ({@link ArtifactDocs.drop}). */
   close: () => void;
   /** A canvas's host page, which can convert the agent's writes (the socket's `screen` query). */
@@ -150,6 +153,24 @@ export const createArtifactDocs = (deps: {
 }): ArtifactDocs => {
   const loaded = new Map<string, Loaded>();
   let marked: (id: string) => void = () => undefined;
+
+  /*
+   * Every joined client hears the hub every RESYNC_MS, whatever its page's
+   * timers do. A hidden tab's chained timers run once a minute (Chromium's
+   * intensive wake-up throttling, which an open WebSocket doesn't exempt:
+   * chromium commit b3ca8d2), so y-websocket's own resync goes out once a
+   * minute and its 30 s no-message check, on the same wake-up, would find
+   * the link a minute quiet and close it. Its check is a constant, not an
+   * option (y-websocket 3.1.0 `messageReconnectTimeout`), and the socket's
+   * pings never reach the page's script; a message does.
+   */
+  deps.lifetime.every(RESYNC_MS, () => {
+    for (const entry of loaded.values()) {
+      for (const client of entry.clients) {
+        client.beat();
+      }
+    }
+  });
 
   const sleep = (id: string, entry: Loaded) => {
     deps.lifetime.cancel(entry.idle);

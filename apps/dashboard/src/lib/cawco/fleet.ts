@@ -782,6 +782,41 @@ export const refreshSkill = (name: string): Promise<FleetSkillMeta> =>
       )
   );
 
+/**
+ * Asks the hub to read every skill's and plugin's source for what it holds
+ * now, nothing fetched into the fleet. Resolves once the check has ended;
+ * each row it read arrived meanwhile as its own `fleet.fetch` frame.
+ */
+export const checkForUpdates = (): Promise<{ fetching: boolean }> =>
+  untilFetched(
+    "check for updates",
+    (frame) => frame.check,
+    () =>
+      send("/api/fleet/updates/check", { method: "POST" }, "check for updates")
+  );
+
+/**
+ * What a copy is called: the version it declares, else its content hash's
+ * first seven characters.
+ */
+export const versionLabel = (
+  version: string | undefined,
+  hash: string | undefined
+): string => version ?? hash?.slice(0, 7) ?? "";
+
+/**
+ * Two copies' names side by side: their versions where those tell them
+ * apart, else their short hashes (a source that changed without bumping its
+ * version, or one that declares none).
+ */
+export const versionPair = (
+  from: { version?: string; hash?: string },
+  to: { version?: string; hash?: string }
+): [string, string] =>
+  from.version && to.version && from.version !== to.version
+    ? [from.version, to.version]
+    : [versionLabel(undefined, from.hash), versionLabel(undefined, to.hash)];
+
 export const removeSkill = (name: string): Promise<Deleted> =>
   erase(`/api/fleet/skills/${encodeURIComponent(name)}`, `remove ${name}`);
 

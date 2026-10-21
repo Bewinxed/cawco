@@ -16,7 +16,9 @@
    * Nothing Rule): the list is its plain surface inside `--dur-wait-grace`
    * (The Real Wait Rule), then skeleton rows at the rows' size, which the
    * first read replaces in one cross-fade; or the read's fault on its line,
-   * with Try again (RowFault).
+   * with Try again (RowFault). While a link of the comments' stands lost the
+   * same fault line stands over the rows, which keep their last read: the
+   * comments aren't reaching the agent, and Try again opens the links again.
    */
   import { artifactWords as words } from "@cawco/core";
   import type { Pin } from "@cawco/core/comments";
@@ -32,13 +34,14 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconClose } from "#lib/icons.js";
   import { crossIn, crossOut } from "../motion/curves.svelte";
-  import type { ListHold } from "./artifact-doc";
+  import { LINK_DROPPED, type ListHold } from "./artifact-doc";
   import LiveDot from "./LiveDot.svelte";
   import PinDisc from "./PinDisc.svelte";
 
   let {
     pins,
     hold,
+    down,
     focused,
     live,
     onopen,
@@ -50,12 +53,14 @@
     pins: Pin[];
     /** Whether the pins are read yet (artifact-doc.ts `ListHold`). */
     hold: ListHold;
+    /** What closed the comments' link to the hub, word for word, while it stands lost; null while they reach it. */
+    down: string | null;
     /** The pin J and K stand on, whose row takes the selection pill. */
     focused: string | null;
     /** Pins the agent is working on now: each wears the live dot. */
     live: ReadonlySet<string>;
     onopen: (id: string) => void;
-    /** Try again after the comments couldn't be read. */
+    /** Try again after the comments couldn't be read, or while their link stands lost. */
     onretry: () => void;
     onclose: () => void;
     /** Its tab, kept by the pane while the panel stands aside. */
@@ -184,6 +189,18 @@
       variant="ghost"
     />
   </header>
+  {#if down !== null && failed === null}
+    <!-- A link stands lost: said above the rows, which stand as last read, with what closed it under Show details. -->
+    <RowFault
+      data-pin-list-down
+      again={onretry}
+      class="shrink-0 py-space-1"
+      details={down}
+      end="var(--space-2)"
+      indent="var(--space-2)"
+      reason={LINK_DROPPED}
+    />
+  {/if}
   <div class="shrink-0 py-space-1 px-space-2">
     <Tabs
       onValueChange={(next) => {

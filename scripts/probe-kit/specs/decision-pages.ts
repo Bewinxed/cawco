@@ -59,6 +59,12 @@
  *     once ("The program has 3 problems:"); the same cards as a revision of
  *     a kept page are refused alike and change nothing; a program with every
  *     cost, one recommended and a why per card is kept.
+ * (l) Every page draws in the house faces: in a program's page and an HTML
+ *     page, `document.fonts.check('500 13px "Figtree Variable"')` holds and
+ *     the hero's heading measures as Figtree, not as the fallback stack; a
+ *     program whose option's label holds "⎘" is refused, 422, naming its
+ *     card, its string and the character, and the same program in words is
+ *     kept.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { createHash } from "node:crypto";
@@ -2466,6 +2472,108 @@ const interviewShape = async (on: On) => {
   );
 };
 
+/**
+ * (l) What the house faces come to in `frame`: whether Figtree is loaded,
+ * and the hero heading's width as drawn, as Figtree alone and as the
+ * fallback stack alone (its family list without Figtree), each a copy of
+ * the heading laid out on one line.
+ */
+const facesIn = (frame: Frame) =>
+  frame.evaluate(async () => {
+    const font = '500 13px "Figtree Variable"';
+    await document.fonts.load(font);
+    await document.fonts.ready;
+    const heading = document.querySelector("h1");
+    if (!heading) {
+      return null;
+    }
+    const family = getComputedStyle(heading).fontFamily;
+    const widthIn = (stack: string | null) => {
+      const copy = heading.cloneNode(true) as HTMLElement;
+      copy.style.cssText =
+        "position:absolute;visibility:hidden;inset-inline-start:0;width:auto;max-width:none;white-space:nowrap;display:inline-block";
+      if (stack !== null) {
+        copy.style.fontFamily = stack;
+      }
+      heading.parentElement?.append(copy);
+      const { width } = copy.getBoundingClientRect();
+      copy.remove();
+      return Math.round(width * 100) / 100;
+    };
+    const fallback = family
+      .split(",")
+      .map((name) => name.trim())
+      .filter((name) => !name.includes("Figtree"))
+      .join(", ");
+    return {
+      check: document.fonts.check(font),
+      family,
+      heading: heading.textContent?.trim() ?? "",
+      drawn: widthIn(null),
+      figtree: widthIn('"Figtree Variable"'),
+      fallback: widthIn(fallback),
+      loaded: [...document.fonts]
+        .filter((face) => face.status === "loaded")
+        .map((face) => `${face.family} ${face.unicodeRange.slice(0, 14)}`),
+    };
+  });
+
+/** (l) In `frame`, a page of kind `which`: Figtree loaded, and its heading at Figtree's metrics. */
+const facesLeg = async (on: On, frame: Frame, which: string) => {
+  const read = await facesIn(frame);
+  on.kit.check(
+    `(l) ${which}: Figtree is loaded, document.fonts.check('500 13px "Figtree Variable"') holds, and its heading measures as Figtree, not the fallback`,
+    !!read &&
+      read.check &&
+      read.loaded.some((face) => face.startsWith("Figtree Variable")) &&
+      Math.abs(read.drawn - read.figtree) < 0.5 &&
+      Math.abs(read.drawn - read.fallback) > 1,
+    JSON.stringify(read)
+  );
+};
+
+/** (l) A page whose option's label holds `label`. */
+const glyphPage = (
+  label: string
+) => `root = Decisions("Attach the brief", [attach])
+attach = Decision("attach", "How does a brief take a file?", [clip, drop], "Most briefs carry one file.")
+clip = Option("clip", "${label}", "A button beside the brief.", true, [], "One more control in the row.")
+drop = Option("drop", "Drop it in", "Drag the file onto the brief.", false, [], "Nothing shows it can be done.")`;
+
+/** (l) A stand-in glyph the house faces don't draw is refused, naming its card; the same page in words is kept. */
+const glyphLeg = async (on: On) => {
+  const { fleet, kit, writer } = on;
+  const at = `/api/instances/${writer}/artifacts`;
+  const create = (label: string) =>
+    fleet
+      .api<{ id: string }>(at, {
+        kind: "page",
+        name: "attach",
+        does: "pick",
+        ask: "Pick how a brief takes a file",
+        program: glyphPage(label),
+      })
+      .then(
+        (answer) => `kept ${JSON.stringify(answer)}`,
+        (error: Error) => error.message
+      );
+  const refused = await create("⎘ Attach a file");
+  kit.check(
+    '(l) a program whose option label holds "⎘" is refused, 422, naming its card, its string and the character',
+    refused.includes(": 422 ") &&
+      refused.includes(
+        'Decision "attach", option "clip": its label “⎘ Attach a file” holds ⎘ (U+2398), which Figtree Variable'
+      ),
+    refused.slice(0, 600)
+  );
+  const inWords = await create("Attach a file");
+  kit.check(
+    "(l) the same program with the icon named in words is kept",
+    inWords.startsWith("kept ") && inWords.includes('"id"'),
+    inWords.slice(0, 300)
+  );
+};
+
 /** A page of two cards, the first tall, for a finger's pick on the artifact's own route. */
 const TAP_STEPS = Array.from(
   { length: 9 },
@@ -2671,6 +2779,7 @@ const run = async (kit: Kit) => {
       await mediaLeg(on, view, theme);
     }
   }
+  await facesLeg(on, await frameWith(on.desk, 3), "a program's page");
   await dialChecks(on, await frameWith(on.desk, 3));
   await embedLeg(on, await frameWith(on.desk, 3));
   const first = await marks(on, await frameWith(on.desk, 3));
@@ -2684,6 +2793,22 @@ const run = async (kit: Kit) => {
   await graphChecks(on);
   await makeTasks(on);
   await htmlPage(on);
+  const html = await until(
+    "the HTML page in the panel",
+    async () => {
+      const frame = await frameAt(on.desk, FRAME);
+      return (await countIn(frame, '[data-cawco-choice="mode"]')) > 0
+        ? frame
+        : null;
+    },
+    Boolean,
+    60_000
+  ).catch(() => null);
+  if (html) {
+    await facesLeg(on, html, "an HTML page");
+  } else {
+    on.kit.check("(l) an HTML page: its frame in the panel", false, "none");
+  }
   await reachLeg(on);
   await tapLeg(on);
   await on.fleet.api(`/api/instances/${on.writer}/artifacts`, {
@@ -2700,6 +2825,7 @@ const run = async (kit: Kit) => {
   await openAsCanvas(on);
   // Last: their pages take the panel's front and join the project's graph, which (c) counts.
   await interviewShape(on);
+  await glyphLeg(on);
   await burstLeg(on);
   kit.check(
     "the pages said no error",
