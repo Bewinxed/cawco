@@ -66,7 +66,9 @@
     <span
       data-slot="name"
       class="flex min-w-0 text-size-label font-medium leading-ui whitespace-nowrap"
-      ><span data-slot="head" class="min-w-0 truncate">{parts.head}</span><span
+      >{#if parts.head}<span data-slot="head" class="min-w-0 truncate"
+          >{parts.head}</span
+        >{/if}<span
         class="flex-none">{parts.tail}</span
       ></span
     >

@@ -102,6 +102,9 @@
     }),
   ]);
 
+  /* A box centred as a box (`data-box`): the chip's mark line trims and pads
+     its runs of words to centre them, and a remove trimmed so would drop its
+     glyph below the pill's middle. */
   const REMOVE = pressVariants({
     press: "scale",
     class:
@@ -131,7 +134,11 @@
   {@const parts = nameParts(chip.name)}
   <span class="flex min-w-0 items-baseline gap-space-1">
     <span data-slot="att-name" class="flex min-w-0 whitespace-nowrap"
-      ><span class="min-w-0 truncate">{parts.head}</span><span class="flex-none"
+      ><!-- The head is drawn only when there is one: an empty clipping box has
+           no text to stand on, and the name would align on its foot, not
+           its words' baseline. -->{#if parts.head}<span class="min-w-0 truncate"
+          >{parts.head}</span
+        >{/if}<span class="flex-none"
         >{parts.tail}</span
       ></span
     >
@@ -193,6 +200,7 @@
         <button
           aria-label="Remove the canvas"
           class={REMOVE}
+          data-box
           onclick={onremovecanvas}
           type="button"
         >
@@ -232,6 +240,7 @@
         <button
           aria-label={`Remove ${chip.name}`}
           class={REMOVE}
+          data-box
           onclick={chip.onremove}
           type="button"
         >

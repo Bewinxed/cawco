@@ -3696,7 +3696,10 @@
             />
           {/if}
           <!-- Pending from the press until the hub takes the message: the glyph
-           slot turns to the kit spinner and presses are swallowed. -->
+           slot turns to the kit spinner and presses are swallowed. It sends
+           only what the hub has whole (`draft.unready`, submit's own rule): off
+           while a file is still uploading or has failed, until it is retried
+           or removed; Enter on it says which, in the send-error line. -->
           <!-- Send is the kit's (ui/button `sendVariants`). Optical centring: the
                send plane's mass sits low-left of its box, so the glyph is
                nudged up and right to look centred rather than measure
@@ -3708,11 +3711,7 @@
             aria-label={action ?? (stops ? "Stop the agent" : "Send message")}
             class={sendVariants({ class: "group/stop select-none touch-hit" })}
             title={action}
-            disabled={!(
-              busy ||
-              pending ||
-              (draft.hasContent && !draft.uploading)
-            )}
+            disabled={!(busy || pending || (draft.hasContent && !draft.unready))}
             onclick={whileIdle(() => pending, onaction)}
             type="button"
           >
