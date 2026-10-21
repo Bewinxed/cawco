@@ -1714,12 +1714,18 @@ function draftTarget(): DraftTarget | null {
  * A press chose `el` at the viewport's `x`, `y`: its composer opens in the
  * host and its hollow pill stands where the press landed. Nothing is
  * written. A comment already being written gives way to this one.
+ *
+ * The host hears the draft before its pill is drawn: drawing it tells the
+ * host where it stands (pins.ts `tell`, `cawco:compose-at`), which the host
+ * keeps only for a composer it has, so told first, the pill's place came
+ * before the composer and was dropped, and the composer stood at the
+ * well's corner, never beside its pill, until the page scrolled.
  */
 function startDraft(el: Element, x: number, y: number) {
   drafting = { chain: chainOf(el), chosen: 0, x, y };
+  tellDraft();
   pins.draft(draftTarget());
   paint();
-  tellDraft();
 }
 
 /** The radial's Comment on an ink group: its composer opens on the ink. */
@@ -1737,9 +1743,10 @@ function composeInk(target: DraftTarget, elements: PinnedElement[] | string[]) {
     y: 0,
     ink: { anchor: group.anchor as PageAnchor, elements, id: group.id },
   };
+  // The draft first, then its pill's place (`startDraft`).
+  tellDraft();
   pins.draft(draftTarget());
   paint();
-  tellDraft();
 }
 
 /** The comment being written is let go: its pill and its outline with it. */
@@ -2284,9 +2291,10 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         return;
       }
       drafting.chosen = index;
+      // The draft first, then its pill's place (`startDraft`).
+      tellDraft();
       pins.draft(draftTarget());
       paint();
-      tellDraft();
     },
     // A comment on the whole page (the rail's +): its composer opens with the page as its target.
     "cawco:compose-page": () => {
