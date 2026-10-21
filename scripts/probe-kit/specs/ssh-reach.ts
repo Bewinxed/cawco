@@ -100,6 +100,7 @@ import {
   signal,
   spawnedPid,
 } from "../../../packages/core/src/signal";
+import type { RelayAnswer } from "../../../packages/core/src/stream-relay";
 import { until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { machineBin } from "../ssh-target";
@@ -727,9 +728,21 @@ function holdBox(
   ).catch(() => waiting());
 }
 
-/** The hub's log lines, counted, for what a leg said after a point. */
+/** The hub's log lines, every launch's, whole. */
 const logLines = async (fleet: KitFleet): Promise<string[]> =>
   (await fleet.logs("hub").catch((error: Error) => error.message)).split("\n");
+
+/**
+ * The hub's log lines from now on, whichever of its launch's files they go
+ * to: a mark of each file's length (scratch-fleet `logMark`), read again
+ * with what each gained. Never a count of the joined text's lines: a line
+ * the running hub writes to its `.log` lands before its `.err` in that text,
+ * where a count from the end never looks.
+ */
+const linesFrom = async (fleet: KitFleet): Promise<() => Promise<string[]>> => {
+  const mark = await fleet.logMark("hub");
+  return async () => (await mark.since()).split("\n");
+};
 
 /**
  * (m) A refusal ends the install that waits on it, end to end: the box's
@@ -752,7 +765,7 @@ async function refusalEnds(
 ): Promise<void> {
   const { check, waiting } = read;
   const held = await holdBox(fleet, box, read);
-  const before = (await logLines(fleet)).length;
+  const sinceWait = await linesFrom(fleet);
   const asked = `[hub-auth] refused anonymous GET /api/agents/${BOX}`;
   const waitingRun = box.enter(
     OPEN,
@@ -760,10 +773,7 @@ async function refusalEnds(
   );
   const polling = await until(
     "the installer's wait asking the hub",
-    async () =>
-      (await logLines(fleet))
-        .slice(before)
-        .some((line) => line.includes(asked)),
+    async () => (await sinceWait()).some((line) => line.includes(asked)),
     Boolean,
     30_000
   ).catch(() => false);
@@ -788,7 +798,7 @@ async function refusalEnds(
   );
 
   // (n) Quiet for 10 s, then a knock that knocks regardless.
-  const quietFrom = (await logLines(fleet)).length;
+  const sinceQuiet = await linesFrom(fleet);
   const seenRows: string[] = [];
   const until10 = Date.now() + REFUSED_QUIET_MS;
   while (Date.now() < until10) {
@@ -799,7 +809,7 @@ async function refusalEnds(
     }
     await Bun.sleep(500);
   }
-  const quietLines = (await logLines(fleet)).slice(quietFrom);
+  const quietLines = await sinceQuiet();
   const agentLog = existsSync(join(box.binary, "agent.log"))
     ? readFileSync(join(box.binary, "agent.log"), "utf8")
     : "";
@@ -863,11 +873,24 @@ async function refusedReAdd(
   }
 }
 
-/** How many machines could run the stream relay, as `GET /api/stream-relay` says. */
-const relayCandidates = (fleet: KitFleet): Promise<number | undefined> =>
+/**
+ * How many machines could run the stream relay, and the one picked, as
+ * `GET /api/stream-relay` answers them (core stream-relay.ts `RelayAnswer`:
+ * its `journey`, a `RelayJourneyView`, `candidates` and `machine`).
+ */
+const relayChoice = (
+  fleet: KitFleet
+): Promise<{ candidates: number; machine: unknown } | undefined> =>
   fetch(`${fleet.base}/api/stream-relay`)
-    .then((r) => r.json() as Promise<{ candidates?: number }>)
-    .then((view) => view.candidates);
+    .then((r) => r.json() as Promise<Partial<RelayAnswer>>)
+    .then((answer) =>
+      answer.journey
+        ? {
+            candidates: answer.journey.candidates,
+            machine: answer.journey.machine,
+          }
+        : undefined
+    );
 
 /**
  * (p) The machine's record names the SSH target: added as
@@ -880,14 +903,14 @@ async function relayUnchanged(
   fleet: KitFleet,
   box: Box,
   { check, add, status }: Readers,
-  candidatesBefore: number | undefined
+  choiceBefore: Awaited<ReturnType<typeof relayChoice>>
 ): Promise<void> {
-  const from = (await logLines(fleet)).length;
+  const sinceAdd = await linesFrom(fleet);
   const job = await add(`${box.user}@${PUBLIC_TARGET_HOST}`, OPEN);
-  const lines = (await logLines(fleet)).slice(from);
-  const candidatesAfter = await relayCandidates(fleet);
+  const lines = await sinceAdd();
+  const choiceAfter = await relayChoice(fleet);
   await check(
-    `p: added as ${box.user}@${PUBLIC_TARGET_HOST}, the hub records the machine by that host, and the stream relay's candidates are as they were before the box joined`,
+    `p: added as ${box.user}@${PUBLIC_TARGET_HOST}, the hub records the machine by that host, and the stream relay's choice (its candidates and the machine picked) is as it was before the box joined`,
     job.state === "done" &&
       (await status()) === "online" &&
       lines.some((line) =>
@@ -895,9 +918,9 @@ async function relayUnchanged(
           `[hub] machine ${BOX} registered from ${PUBLIC_TARGET_HOST}`
         )
       ) &&
-      candidatesBefore !== undefined &&
-      candidatesAfter === candidatesBefore,
-    `${seen(job)}; register lines ${JSON.stringify(lines.filter((line) => line.includes(`machine ${BOX} registered`)))}; relay candidates before ${candidatesBefore}, after ${candidatesAfter}`
+      choiceBefore !== undefined &&
+      JSON.stringify(choiceAfter) === JSON.stringify(choiceBefore),
+    `${seen(job)}; register lines ${JSON.stringify(lines.filter((line) => line.includes(`machine ${BOX} registered`)))}; the relay's choice before ${JSON.stringify(choiceBefore)}, after ${JSON.stringify(choiceAfter)}`
   );
 }
 
@@ -1307,7 +1330,7 @@ async function run(kit: Kit): Promise<void> {
     }
     const read = readers(kit, fleet, box);
     // Before the box ever joins: what (p) compares the relay's choice with.
-    const candidatesBefore = await relayCandidates(fleet);
+    const choiceBefore = await relayChoice(fleet);
     const port = await joins(fleet, box, read);
     await reconnects(fleet, box, read, port);
     await silentDrop(fleet, box, read, port);
@@ -1318,7 +1341,7 @@ async function run(kit: Kit): Promise<void> {
     await refusedReAdd(fleet, box, read);
     await strangerHeld(fleet, box, read, port);
     await cliFailure(fleet, box, read);
-    await relayUnchanged(fleet, box, read, candidatesBefore);
+    await relayUnchanged(fleet, box, read, choiceBefore);
   } finally {
     await keepLogs(kit, fleet, box);
     sweep(box);
