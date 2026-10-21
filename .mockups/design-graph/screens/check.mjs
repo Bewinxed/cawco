@@ -2,7 +2,7 @@
 // class, each loop running, and each loop scrubbed to three moments on the DevTools Animation domain with
 // the frame's state read back from the mockup itself; then reduced motion, and the reviewer's captures.
 //   node .mockups/design-graph/screens/check.mjs
-import { mkdirSync, statSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
@@ -16,6 +16,8 @@ const ok = (view, name, pass, detail = "") => { pass ? passes++ : fails++; conso
 
 const size = statSync(join(here, "index.html")).size;
 ok("page", "under 512 KiB", size < 512 * 1024, (size / 1024).toFixed(1) + " KiB");
+// r24 B1: the intro names bp-ultra as it stands, 2450.
+{ const html = readFileSync(join(here, "index.html"), "utf8"), intro = (html.match(/<p class="dp-why">([^<]*)<\/p>/) || [, ""])[1]; ok("page", "B1: the intro says the layout stops growing from 2450px, never 2400", /from 2450px up/.test(intro) && !/2400/.test(intro), intro); }
 
 // Three moments of each loop (ms on its 9 s clock) and what the mockup must hold at each.
 const MOMENTS = {
