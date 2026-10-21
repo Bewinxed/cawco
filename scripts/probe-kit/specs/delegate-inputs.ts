@@ -419,8 +419,9 @@ const spec: Spec = {
     await mkdir(assets, { recursive: true });
     await writeFile(join(assets, ASSET), `${ASSET_TOKEN}\n`);
     const started = await delegate([join(outside, INPUT), join(assets, ASSET)]);
-    await landsAsset(kit, started);
 
+    // The hub answers before the inputs are in; the brief goes once they are
+    // (hub work-items.ts `spawnIn`: `handIn(...).then(brief, notIn)`).
     const brief = await until(
       "the leaf's brief",
       () =>
@@ -436,6 +437,7 @@ const spec: Spec = {
         `Your parent's inputs are in $TMPDIR/inputs/: ${INPUT} (from ${join(outside, INPUT)})`
       )
     );
+    await landsAsset(kit, started);
     const read = await until(
       "the leaf read its input",
       () => fleet.seen.find((one) => one.afterTool && one.all.includes(TOKEN)),
