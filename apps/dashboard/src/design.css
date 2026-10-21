@@ -192,11 +192,12 @@
     scrollbar-width: thin;
   }
 
-  /* An enabled button takes the pointer hand, a disabled one the arrow
+  /* An enabled button takes the pointer hand; a disabled or pending one
+     (aria-disabled, its press swallowed) the arrow
      (tailwindcss.com/docs/upgrade-guide, "Buttons use the default cursor"). */
   button,
   [role="button"] {
-    &:not(:disabled) {
+    &:not(:disabled, [aria-disabled="true"]) {
       cursor: pointer;
     }
   }

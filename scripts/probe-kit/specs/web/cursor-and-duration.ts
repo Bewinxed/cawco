@@ -1,14 +1,15 @@
 /**
  * Two house rules read off the rendered page, on the benches (no hub):
  *
- * - An enabled button takes the pointer hand and a disabled one the arrow
+ * - An enabled button takes the pointer hand and a disabled or pending one
+ *   the arrow
  *   (design.css's base rule, as tailwindcss.com/docs/upgrade-guide gives it
  *   under "Buttons use the default cursor"; style-greps bans setting it per
  *   element). Computed `cursor` is `pointer` on a kit Button, a setting
  *   chip, a tray chip, the usage strip, a transcript tool row's collapsible
  *   head (the `aria-expanded` button that opens its Collapsible) and an
- *   `a[href]`, and `default` on the kit Button
- *   once it is disabled.
+ *   `a[href]`, and `default` on the kit Button while it is pending
+ *   (`aria-disabled`) and once it is disabled.
  * - A transition's duration is its token through Tailwind's own
  *   `duration-(--dur-*)`, which sets `--tw-duration`, so a `transition-[…]`
  *   sorted after it keeps it: the new-session dialog's project and machine
@@ -106,6 +107,27 @@ const spec: Spec = {
         String(cursor)
       );
     }
+
+    await open(page, `${bench}/motion/button-pending`, '[data-slot="button"]');
+    await page.waitForFunction(() => "__buttonBench" in window);
+    const pending = await page.evaluate(() => {
+      (
+        window as unknown as { __buttonBench: { start: () => void } }
+      ).__buttonBench.start();
+      return new Promise<string | null>((done) =>
+        requestAnimationFrame(() => {
+          const press = document.querySelector<HTMLElement>(
+            '[data-case="label-cycle"][aria-disabled="true"]'
+          );
+          done(press ? getComputedStyle(press).cursor : null);
+        })
+      );
+    });
+    kit.check(
+      "a pending kit Button keeps the arrow",
+      pending === "default",
+      String(pending)
+    );
 
     await open(page, `${bench}/motion/button-pending`, '[data-slot="button"]');
     const disabled = await page.evaluate(() => {
