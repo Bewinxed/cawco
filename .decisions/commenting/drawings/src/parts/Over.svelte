@@ -16,6 +16,11 @@
   a label and its field together), so it never touches its glyphs. An
   outline's corners grow with its offset, so it stays concentric.
 -->
+<script lang="ts" module>
+  /** A fill that paints nothing. */
+  const NO_FILL = /^(transparent|rgba\(0, 0, 0, 0\))$/;
+</script>
+
 <script lang="ts">
   import type { Snippet } from "svelte";
 
@@ -34,6 +39,8 @@
   } = $props();
 
   let box = $state<{ x: number; y: number; w: number; h: number; radius: string; bare: boolean } | null>(null);
+  /** Where the line stands off the element: on a bare one, clear of its words; on one with its own box, on that box. */
+  const offset = $derived(box?.bare ? "var(--space-row)" : "0px");
 
   $effect(() => {
     const target = root.querySelector(find);
@@ -54,7 +61,7 @@
           Number.parseFloat(own.getPropertyValue(`border-${side.toLowerCase()}-width`)) > 0 &&
           own.getPropertyValue(`border-${side.toLowerCase()}-style`) !== "none"
       );
-      const filled = !/^(transparent|rgba\(0, 0, 0, 0\))$/.test(own.backgroundColor) || own.backgroundImage !== "none";
+      const filled = !NO_FILL.test(own.backgroundColor) || own.backgroundImage !== "none";
       box = {
         x: t.left - r.left - root.clientLeft,
         y: t.top - r.top - root.clientTop,
@@ -83,7 +90,7 @@
     data-over-box
     data-bare={box.bare || undefined}
     style:border-radius={box.radius}
-    style:outline-offset={outlined ? (box.bare ? "var(--space-row)" : "0px") : undefined}
+    style:outline-offset={outlined ? offset : undefined}
     style:height="{box.h}px"
     style:left="{box.x}px"
     style:top="{box.y}px"
