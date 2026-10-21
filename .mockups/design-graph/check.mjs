@@ -228,7 +228,7 @@ function install() {
       const boxed = +w.dataset.pad === 0, r = (n) => Math.round(n * 100) / 100;
       // A gone value marked in its seam (its place filled by the preview) stands in that gap, within its old
       // box's reach, no taller than it was.
-      if (w.dataset.seam !== undefined) { const reach = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-3")) + (tb.bottom - tb.top); return { of: w.dataset.of, kind: w.dataset.wash + " (seam)", boxed, pad: +w.dataset.pad, over: r(Math.max(tb.left - wb.left, wb.right - tb.right)), under: 0, pass: wb.left >= tb.left - gap - 0.5 && wb.right <= tb.right + gap + 0.5 && wb.top >= tb.top - reach - 0.5 && wb.bottom <= tb.bottom + reach + 0.5 && wb.height <= tb.bottom - tb.top + 0.5 }; }
+      if (w.dataset.seam !== undefined) { const reach = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-3")) + (tb.bottom - tb.top); return { of: w.dataset.of, kind: w.dataset.wash + " (seam)", boxed, pad: +w.dataset.pad, over: r(Math.max(tb.left - wb.left, wb.right - tb.right)), under: 0, pass: wb.left >= tb.left - gap - 0.5 && wb.right <= tb.right + gap + 0.5 && wb.top >= tb.top - reach - 0.5 && wb.bottom <= tb.bottom + reach + 0.5 && wb.height <= tb.bottom - tb.top + 0.5 && wb.height >= 4 - 0.5 && [...wrap.querySelectorAll(".stage [data-key], .stage label, .stage .btn, .stage .line, .stage .note")].filter((el) => K.vis(el)).every((el) => { const b = el.getBoundingClientRect(); if (Math.min(b.right, wb.right) - Math.max(b.left, wb.left) <= 0.5) return true; return b.bottom <= wb.top - gap + 0.5 || b.top >= wb.bottom + gap - 0.5; }) }; }
       return { of: w.dataset.of, kind: w.dataset.wash, boxed, pad: +w.dataset.pad, over: r(out), under: r(inn), pass: out <= gap + 0.5 && (boxed ? Math.abs(out) <= 0.5 && Math.abs(inn) <= 0.5 : Math.abs(out - gap) <= 0.5 && Math.abs(inn - gap) <= 0.5) };
     });
   };
@@ -276,14 +276,32 @@ function install() {
   // label, an arrow inside a machine) and stands --space-2 clear of what shows under it; only an arrow
   // between machines comes in over it. Its foot cuts no state, name or label. Across, everything stands
   // inside with a margin.
-  K.graphView = () => K.graphs().map((g) => {
+  K.graphView = (opts = {}) => K.graphs().map((g) => {
     const gb = g.getBoundingClientRect(), top = gb.top + g.clientTop, left = gb.left + g.clientLeft, H = g.clientHeight, Wd = g.clientWidth, m = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-2")), bad = [];
     const each = (sel, fn) => { for (const el of g.querySelectorAll(sel)) { const b = el.getBoundingClientRect(); fn(el, b.top - top, b.bottom - top, b.left - left, b.right - left); } };
     const name = (el) => (el.dataset && (el.dataset.state || el.dataset.machine)) || el.textContent.trim().slice(0, 16) || el.tagName;
-    each(".node, .region-name, .world svg text, .region, .regionBody svg polyline", (el, t, b, l, r) => { if (g.scrollTop > 0.5 && t < m - 0.5 && b > 0.5) bad.push(name(el) + " at the top (" + Math.round(t) + ")"); if (b > 0.5 && t < H - 0.5 && (l < -0.5 || r > Wd + 0.5)) bad.push(name(el) + " cut across"); });
+    // The top edge cuts no state, machine name or edge label and stands --space-2 clear of them (the r24 values
+    // ruling, call 4); machines' boxes and arrows may run on over it. With { margin: false } (a view the
+    // person moved to, a hover's) the top only cuts none of them.
+    const tm = opts.margin === false ? 0 : m;
+    each(".node, .region-name, .world svg text", (el, t, b, l, r) => { if (g.scrollTop > 0.5 && t < tm - 0.5 && b > 0.5) bad.push(name(el) + " at the top (" + Math.round(t) + ")"); if (b > 0.5 && t < H - 0.5 && (l < -0.5 || r > Wd + 0.5)) bad.push(name(el) + " cut across"); });
     each(".node, .region-name, .world svg text", (el, t, b) => { if (t < H - 0.5 && b > H + 0.5) bad.push(name(el) + " cut at the foot"); });
+    void tm;
     return { comp: g.closest(".gsec").dataset.comp, zoom: Math.round(G[g.closest(".gsec").dataset.comp].zoom * 100) / 100, scroll: g.scrollTop, bad };
   });
+  // r25 B2: on a drawer screen the page's room ends above the drawer and its grabber, in every state: no page
+  // element's visible box meets the drawer's box or its grabber's.
+  K.pageUnderDrawer = () => {
+    if (document.documentElement.dataset.layout !== "drawer") return [];
+    const t = document.getElementById("tools").getBoundingClientRect(), pill = document.querySelector(".edge-pill-top").getBoundingClientRect(), out = [];
+    for (const el of document.querySelectorAll("#page *")) {
+      if (!K.vis(el) || el.closest(".marks")) continue;
+      const r = K.clipTo(el, el.getBoundingClientRect());
+      if (r.right - r.left < 0.5 || r.bottom - r.top < 0.5) continue;
+      for (const [n, b] of [["drawer", t], ["grabber", pill]]) if (Math.min(r.right, b.right) - Math.max(r.left, b.left) > 0.5 && Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top) > 0.5) out.push((el.dataset.key || el.className || el.tagName) + " under the " + n);
+    }
+    return [...new Set(out)];
+  };
   // r24 B2: the timeline's marks (ties, snap and tick lines, the drag pill) stand in their lanes, never over
   // the inline editor.
   K.marksOverEditor = () => {
@@ -431,6 +449,14 @@ async function runView(view) {
   };
   await breakage("the view it opens on");
   await graphOpen(V, ev, "the view it opens on");
+  {
+    const z0 = await ev(() => G[tab].zoom);
+    for (let i = 0; i < 12; i++) await ev(() => document.getElementById("zoomOut").click());
+    const zl = await ev(() => G[tab].zoom); await ev(() => document.getElementById("zoomFit").click());
+    const zf = await ev(() => G[tab].zoom);
+    ok(V, "9 r25 call 3: the graph opens between 0.75 and 1; the zoom buttons and Fit stop at 0.5", z0 >= 0.75 - 1e-9 && z0 <= 1 && Math.abs(zl - 0.5) < 1e-9 && zf >= 0.5 - 1e-9, "opens " + z0.toFixed(3) + ", zoom out to " + zl + ", Fit " + zf.toFixed(3));
+    await load();
+  }
   const rulerAt = async (label) => { const r = await ev(() => __k.rulerOverlaps()); ok(V, "1 no two ruler labels overlap (" + label + ")", r.overlaps.length === 0, (r.overlaps.length ? "OVERLAP " + r.overlaps.slice(0, 4).join(", ") + "; " : "") + "labels " + r.labels); };
   await rulerAt("320 ms track");
 
@@ -493,6 +519,8 @@ async function runView(view) {
   ok(V, "5 no lane band", lanes.noBand);
   ok(V, "5 every bar and ghost 24px, 5px radius, nothing inside", lanes.shapes.every((s) => s.h === 24 && s.r === 5 && s.kids === 0), lanes.shapes.map((s) => s.k.split(" ")[0] + " " + s.h + "/" + s.r + "/" + s.kids).join(", "));
   ok(V, "5 end region is one area behind every row and the ruler", lanes.area.one && Math.abs(lanes.area.left - lanes.area.want) <= 1 && Math.abs(lanes.area.right - lanes.area.laneEnd) <= 1 && lanes.area.top && lanes.area.bottom && !!lanes.area.behind, JSON.stringify(lanes.area));
+  const tieGeo = await ev(() => { const out = []; const km = keptMove(); for (const c of km.clips) { if (!c.at.ref) continue; const t = document.querySelector('.tie[data-for="' + c.key + '"]'); if (!t) continue; const a = document.querySelector('.bar[data-key="' + c.at.of + '"]').getBoundingClientRect(), m = document.querySelector('.bar[data-key="' + c.key + '"]').getBoundingClientRect(), b = t.getBoundingClientRect(), f = getComputedStyle(t, "::before"), fw = parseFloat(f.width), fl = parseFloat(f.left), st = stacked(); out.push({ k: c.key, top: Math.round(b.top - (st ? m.top : a.bottom)), bottom: Math.round(b.bottom - (st ? m.bottom : m.top)), footCentred: Math.abs(fl + fw / 2 - 0.5) <= 0.01, feet: fw }); } return out; });
+  ok(V, "9 r25 B3: the hollow box under the Reason line bar is the tie of the clip anchored with it: a hairline from the anchor bar's foot to the anchored bar's top, its feet centred on it (no box's side)", tieGeo.length > 0 && tieGeo.every((t) => t.top === 0 && t.bottom === 0 && t.footCentred), JSON.stringify(tieGeo));
   ok(V, "5 each anchored start draws its tie", lanes.ties.length > 0 && lanes.ties.every((t) => t.drawn && Math.abs(t.x - t.want) <= 1), JSON.stringify(lanes.ties));
   if (view.viewport.width >= 640) ok(V, "5 each row's readouts on one line in the 280px name column", lanes.readouts.every((r) => r.oneLine && r.fits && r.col === 280), lanes.readouts.map((r) => r.right + "/" + r.col + "px").join(", "));
   else ok(V, "5 under the phone line the name column is half the dock: each readout whole on a line of its own", lanes.readouts.every((r) => r.fits), lanes.readouts.map((r) => r.right + "/" + r.col + "px").join(", "));
@@ -844,6 +872,8 @@ async function runView(view) {
   for (let i = 0; i < 6; i++) await page.keyboard.press("ArrowUp");
   await settle((await playLen()) + 400);
   const spring = await ev((k) => { const b = document.querySelector('.bar[data-key="' + k + '"]').getBoundingClientRect(), t = document.querySelector('.lane[data-key="' + k + '"] .tail'); const tb = t && !t.hidden ? t.getBoundingClientRect() : null; return { bounceRow: !!document.querySelector('.pop input[data-f="bounce"]'), bounce: document.querySelector('.pop input[data-f="bounce"]')?.value, barEnd: Math.round(b.right), tailEnd: tb ? Math.round(tb.right) : null, readout: document.querySelector('.clip[data-key="' + k + '"] .readouts .badge:nth-child(2)').textContent }; }, reveal);
+  const seamless = await ev((k) => { const bar = document.querySelector('.bar[data-key="' + k + '"]'), t = document.querySelector('.lane[data-key="' + k + '"] .tail'); if (!t || t.hidden) return null; const bb = bar.getBoundingClientRect(), tb = t.getBoundingClientRect(), sh = getComputedStyle(bar).boxShadow; return { gap: Math.round((tb.left - bb.right) * 100) / 100, shadows: sh.split(/,(?![^(]*\))/).length, shadow: sh, tailLayers: getComputedStyle(t).backgroundImage.split("linear-gradient").length - 1 }; }, reveal);
+  ok(V, "9 r25 B4a: a spring's bar runs on into its tail with no notch: the tail starts at the bar's end, the bar's stroke is its top, foot and start only, the tail carries its top and bottom edges", !!seamless && Math.abs(seamless.gap) <= 0.5 && seamless.shadows === 3 && seamless.tailLayers === 3, JSON.stringify(seamless));
   ok(V, "4 picking Spring adds the Bounce row, and the settle tail draws past the bar's end", spring.bounceRow && spring.tailEnd !== null && spring.tailEnd > spring.barEnd, JSON.stringify(spring));
   const popPos = await popGeo(reveal);
   ok(V, "4 the spring popover still stands clear of its bar", !!popPos && !popPos.covers, JSON.stringify(popPos));
@@ -884,13 +914,18 @@ async function runView(view) {
 
   // Change marks: a hover that changes the page washes what it changes.
   if (!touch) {
-    await page.locator('.node[data-machine="when"][data-state="hour"]').scrollIntoViewIfNeeded();
-    await page.hover('.node[data-machine="when"][data-state="hour"]');
+    // The state is reached by focus, so the graph brings it into view by its own rule (r25 B1), not a test scroll.
+    // Where its graph can't hold Every hour with a clean foot (the stacked 1920 panel's 425px at 0.75), the
+    // hover takes the kept state's from-state, in the view the graph opens on.
+    const hoverSel = await ev(() => { const hour = '.node[data-machine="when"][data-state="hour"]'; document.querySelector(hour).focus(); if (__k.graphView({ margin: false }).every((g) => !g.bad.length)) return hour; document.activeElement.blur(); showKept(tab); return '.node[data-machine="save"][data-state="saving"]'; });
+    await page.hover(hoverSel);
     await settle(300);
     const w = await ev(() => { const K = __k, r = (n) => Math.round(n * 100) / 100; return [...document.querySelectorAll(".wash")].map((x) => { const of = x.dataset.of && x.closest(".stage-wrap").querySelector('.stage [data-key="' + x.dataset.of + '"]'); const field = K.bgOf(of ? of.parentElement : x.closest(".stage-wrap")), fill = K.rgba(getComputedStyle(x).backgroundColor), washed = K.over(fill, field), edge = K.shadow(x).color, ink = getComputedStyle(x).boxShadow.split(")")[0] + ")"; return { kind: x.dataset.wash, of: x.dataset.of, fill: r(K.ratio(washed, field)), edgeOnField: r(K.ratio(K.over(edge, field), field)), edgeOnWash: r(K.ratio(K.over(edge, washed), washed)), edgeWidth: K.shadow(x).spread }; }); });
-    ok(V, "clarity §3 B: hovering Every hour washes what changes (green) and where something went (red)", w.some((x) => x.kind === "add") && w.some((x) => x.kind === "del"), JSON.stringify(w.map((x) => x.kind + ":" + x.of)));
+    ok(V, "clarity §3 B: hovering " + (hoverSel.includes("hour") ? "Every hour" : "Saving (Every hour can't stand clean in this graph)") + " washes what changes (green) and where something went (red)", w.some((x) => x.kind === "add") && w.some((x) => x.kind === "del"), JSON.stringify(w.map((x) => x.kind + ":" + x.of)));
     ok(V, "7 every wash's 1px edge in its hue's ink holds 3:1 against the field and against its own fill", w.length > 0 && w.every((x) => x.edgeWidth === 1 && x.edgeOnField >= 3 && x.edgeOnWash >= 3), w.map((x) => x.kind + ":" + x.of + " fill " + x.fill + ", edge " + x.edgeOnField + " on the field / " + x.edgeOnWash + " on the wash").join("; "));
     const geom = await ev(() => __k.washGeometry());
+    const gvh = await ev(() => __k.graphView({ margin: false }));
+    ok(V, "9 r25 B1: while a hover previews a state, the graph's foot cuts no state, name or label, nor does its top", gvh.length > 0 && gvh.every((g) => g.bad.length === 0), gvh.map((g) => g.comp + " at " + g.zoom + "×, scrolled " + Math.round(g.scroll) + (g.bad.length ? ": " + g.bad.slice(0, 4).join(", ") : " clear")).join("; "));
     const cover = await ev(() => __k.washCover());
     ok(V, "9 B6: no wash covers anything the preview shows but its own target", cover.length === 0, cover.join(" | ") || (await ev(() => [...document.querySelectorAll(".wash")].map((w) => w.dataset.wash + ":" + w.dataset.of + (w.dataset.seam !== undefined ? " (seam)" : "")).join(", "))));
     ok(V, "9 fault 7: One Target washes: on a boxed target the wash is its box, on a bare one 2px outside; none runs past its target's box plus 2px", geom.length > 0 && geom.every((g) => g.pass), geom.map((g) => g.kind + ":" + g.of + (g.boxed ? " boxed" : " bare") + " +" + g.over + "px").join(", "));
@@ -1051,8 +1086,14 @@ async function runClass(view) {
     // The stops, measured; the page's room ends at the drawer's top; the component never moves.
     const hs = {}, snaps = {};
     for (const st of ["head", "peek", "full"]) { await ev((s) => setStop(s), st); await settle(500); hs[st] = await ev(() => ({ tools: __k.box(document.getElementById("tools")), page: __k.box(document.getElementById("page")), head: document.getElementById("sheetHead").offsetHeight })); snaps[st] = await ev(() => __k.stageSnap()); }
-    ok(V, "9 the drawer's stops: head alone (44px and its edge), peek 45% of the height, full 85%; the page's room ends at its top", hs.head.head === 44 && Math.abs(hs.head.tools.h - 45) <= 0.5 && Math.abs(hs.peek.tools.h - H * 0.45) <= 1 && Math.abs(hs.full.tools.h - H * 0.85) <= 1 && Object.values(hs).every((x) => Math.abs(x.page.b - x.tools.t) <= 0.5 && Math.abs(x.tools.b - H) <= 0.5), Object.entries(hs).map(([k, x]) => k + " " + x.tools.h + "px, page " + x.page.h + "px").join("; "));
+    ok(V, "9 the drawer's stops: head alone (44px and its edge), peek 45% of the height, full 85%; the page's room ends at the top of its grabber (3.5px over the drawer's edge)", hs.head.head === 44 && Math.abs(hs.head.tools.h - 45) <= 0.5 && Math.abs(hs.peek.tools.h - H * 0.45) <= 1 && Math.abs(hs.full.tools.h - H * 0.85) <= 1 && Object.values(hs).every((x) => Math.abs(x.page.b - (x.tools.t - 3.5)) <= 0.5 && Math.abs(x.tools.b - H) <= 0.5), Object.entries(hs).map(([k, x]) => k + " " + x.tools.h + "px, page " + x.page.h + "px").join("; "));
     ok(V, "2 nothing moves the preview: the drawer's stops", same(snaps.head, snaps.peek) && same(snaps.peek, snaps.full), snaps.peek.length + " boxes");
+    const under = {};
+    for (const st of ["head", "peek", "full"]) { await ev((s) => setStop(s), st); await settle(500); under[st] = await ev(() => __k.pageUnderDrawer()); }
+    ok(V, "9 r25 B2: the page's room ends above the drawer and its grabber at every stop: no page element's box meets them", Object.values(under).every((u) => u.length === 0), JSON.stringify(under));
+    const cap = await ev(() => { const n = document.querySelector('.stage [data-key="note"]'); if (!n) return null; const rg = document.createRange(); rg.selectNodeContents(n); const lines = new Set([...rg.getClientRects()].map((r) => Math.round(r.top))).size; return { lines, width: Math.round(n.getBoundingClientRect().width) }; });
+    if (view.screen === "phone-portrait") ok(V, "9 r25 B2: on a phone the form's caption takes its own line over its buttons, whole on one line", !!cap && cap.lines === 1, JSON.stringify(cap));
+    await ev(() => setStop("peek")); await settle(500);
     // Play at full drops the drawer to peek. (Before the drag below: Chromium's touch emulation drops the
     // click of the next tap after a dispatched touch drag.)
     await ev(() => { setFace("move"); setStop("full"); }); await settle(500);
@@ -1108,6 +1149,10 @@ async function runClass(view) {
     await touchAt("touchStart", [[t1.x, t1.y]]);
     await page.waitForTimeout(200); const early = await peekNow();
     await page.waitForTimeout(300); const held = await peekNow();
+    const heldLook = await ev(() => { const n = document.querySelector(".node.peek"), rest = document.querySelector(".node:not(.peek):not(.kept):not(.cur)"); return n ? { peekBg: getComputedStyle(n).backgroundColor, restBg: getComputedStyle(rest).backgroundColor, hover: __k.tokenColor("--surface-hover").join(",") , got: __k.rgba(getComputedStyle(n).backgroundColor).join(",") } : null; });
+    ok(V, "9 r25 B4b: the held state peeks in the graph (its fill steps to --surface-hover) while its washes draw on the page", !!heldLook && heldLook.got === heldLook.hover && heldLook.peekBg !== heldLook.restBg, JSON.stringify(heldLook));
+    const underHeld = await ev(() => __k.pageUnderDrawer());
+    if (view.layout === "drawer") ok(V, "9 r25 B2: during the held preview the page's room still ends above the drawer and its grabber", underHeld.length === 0, underHeld.join(" | "));
     const geom = await ev(() => __k.washGeometry());
     const cover = await ev(() => __k.washCover()), list = await ev(() => [...document.querySelectorAll(".wash")].map((w) => w.dataset.wash + ":" + w.dataset.of + (w.dataset.seam !== undefined ? " (seam)" : "")).join(", "));
     ok(V, "9 B6: the held preview's washes cover nothing the preview shows but their own targets (a gone value's wash on what came in at its place is by design)", cover.length === 0, (cover.join(" | ") || "clear") + " — " + list + " (previewing " + t1.m + ":" + t1.s + ")");
