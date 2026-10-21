@@ -2,11 +2,16 @@
   The Comments rail's list (comment-design §5): its 44px head (Comments;
   sort, a whole-page comment and Close as `sm` ghost glyphs), the search
   field, the Open / Resolved segmented filter with counts only above 0, then
-  the rows, newest first by last activity. A row is one press: the same
-  marker as on the page, "You · 2h · <element>", the words on two lines, the
-  thread's last line once it has one, "Unsent" while the session hasn't heard
-  it, the live dot at its end. The foot is the caller's: the Send bar while
-  anything is unsent, or the composer (pick 4).
+  the rows, newest first by last activity. A row is one press in three lines
+  (comment-rail hierarchy, The Row Dress Rule): the same marker as on the
+  page, in its mark cell; line 1 the place, the element's name in label at
+  500 in the row ink, what it carries and its age at the line's end in meta;
+  line 2 the words in body, two lines at most; line 3 what came back, in
+  meta, the speaker's word at 500: in the strong ink while unread, "Working
+  on it…" while the agent is, "Unsent" in the brand ink while the session
+  hasn't heard it, and nothing for a comment sent and unanswered (its filled
+  pill says so). The foot is the caller's: the Send bar while anything is
+  unsent, or the composer (pick 4).
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
@@ -27,7 +32,6 @@
     shape = "tail",
     resolved = 12,
     selected = null,
-    sentLine = false,
     mark = "count",
     foot,
   }: {
@@ -35,8 +39,6 @@
     shape?: "tail" | "stem";
     resolved?: number;
     selected?: number | null;
-    /** Pick 3's "as written" way: a sent row says so. */
-    sentLine?: boolean;
     /**
      * How a row shows what its comment carries (pick 7): `count`, "⎘ 2" at
      * the meta line's end, only above 0; `strip`, a third line of 20px
@@ -73,7 +75,7 @@
   data-sweep="row"
 >
   <h2 class="min-w-0 flex-1 truncate type-label text-ink-strong">Comments</h2>
-  <Button aria-label="Newest first" size="icon-sm" variant="ghost"
+  <Button aria-label="Sort" size="icon-sm" variant="ghost"
     ><IconSort /></Button
   >
   <Button aria-label="Comment on the whole page" size="icon-sm" variant="ghost"
@@ -104,13 +106,13 @@
     <li>
       <button
         class={[
-          "flex min-h-c-artifact-row-h w-full select-none items-start gap-space-3 rounded-sm px-space-2 py-space-2 text-start can-hover:hover:bg-surface-hover",
+          "flex min-h-c-artifact-row-h w-full items-start gap-space-3 rounded-sm px-space-2 py-space-2 text-start can-hover:hover:bg-surface-hover",
           selected === row.n && "bg-surface-pressed",
         ]}
         data-row={row.n}
         type="button"
       >
-        <span class="flex-none">
+        <span class="mark-cell flex-none">
           <Marker
             dot={row.live ? "live" : null}
             n={row.n}
@@ -118,22 +120,23 @@
             tail={shape === "tail" ? "bottom-start" : "none"}
           />
         </span>
-        <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span class="flex min-w-0 items-center gap-space-1 type-meta text-ink-muted">
-            <span class="truncate">You · {row.age} · {row.on}</span>
-            {#if mark === "count" && attached.length > 0}
-              <span class="flex flex-none items-center gap-space-1" data-attach-count
-                >·<IconPaperclip aria-hidden="true" class="size-icon-sm" /><span class="num"
-                  >{attached.length}</span
-                ><span class="sr-only">attached</span></span
-              >
-            {/if}
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="flex min-w-0 items-baseline gap-space-2" data-line="place">
+            <span class="min-w-0 truncate type-label text-ink-row">{row.on}</span>
+            <span class="ms-auto flex flex-none items-center gap-space-1 type-meta num text-ink-muted">
+              {#if mark === "count" && attached.length > 0}
+                <IconPaperclip aria-hidden="true" class="size-icon-sm self-center" /><span
+                  >{attached.length}<span class="sr-only"> attached</span></span
+                ><span aria-hidden="true">·</span>
+              {/if}
+              <span>{row.age}</span>
+            </span>
           </span>
-          <span class="line-clamp-2 type-body text-ink-strong wrap-anywhere"
+          <span class="mt-space-row line-clamp-2 type-body text-pretty text-ink-strong wrap-anywhere" data-line="words"
             >{row.words || attached.map((one) => one.name).join(", ")}</span
           >
           {#if mark === "strip" && attached.length > 0}
-            <span class="flex items-center gap-space-1" data-attach-strip>
+            <span class="mt-space-1 flex items-center gap-space-1" data-attach-strip>
               {#each attached.slice(0, STRIP) as one, at (one.name)}
                 {#if one.kind === "image"}
                   <img
@@ -153,13 +156,18 @@
               {/if}
             </span>
           {/if}
-          {#if row.last}
-            <span class="truncate type-meta text-ink-muted">{row.last}</span>
-          {/if}
           {#if row.state === "unsent"}
-            <span class="type-meta text-action-solid">Unsent</span>
-          {:else if sentLine && row.state === "sent"}
-            <span class="type-meta text-ink-muted">Sent</span>
+            <span class="mt-space-1 type-meta text-brand-ink" data-line="back">Unsent</span>
+          {:else if row.last}
+            <span
+              class={["mt-space-1 truncate type-meta", row.last.unread ? "text-ink-strong" : "text-ink-muted"]}
+              data-line="back"
+              data-unread={row.last.unread || undefined}
+              ><span class="font-medium">{row.last.by === "agent" ? "Agent" : "You"}:</span>
+              {row.last.text}</span
+            >
+          {:else if row.live}
+            <span class="mt-space-1 type-meta text-ink-muted" data-line="back">Working on it…</span>
           {/if}
         </span>
       </button>
@@ -167,7 +175,7 @@
   {/each}
 </ol>
 {#if foot}
-  <div class="flex-none border-t border-border-hairline p-space-3">
+  <div class="flex-none">
     {@render foot()}
   </div>
 {/if}

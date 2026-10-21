@@ -12,9 +12,12 @@
   let {
     anchor,
     boundary = "[data-side-well]",
+    bare = false,
     children,
   }: {
     anchor: string;
+    /** It draws no card: what it holds is the surface (the composer's own pill). */
+    bare?: boolean;
     /** The box it keeps inside, flipping and sliding as the kit's popover does: the well it stands over. */
     boundary?: string;
     children: Snippet;
@@ -31,6 +34,7 @@
 <Popover.Root bind:open>
   <Popover.Content
     align="start"
+    {bare}
     collisionBoundary={room}
     collisionPadding={8}
     customAnchor={anchor}
@@ -38,7 +42,7 @@
     gap="snug"
     onInteractOutside={(event: Event) => event.preventDefault()}
     onOpenAutoFocus={(event: Event) => event.preventDefault()}
-    pad="form"
+    pad={bare ? "none" : "form"}
     side="right"
     sideOffset={8}
     style="--pop-w: var(--c-pin-card-w)"

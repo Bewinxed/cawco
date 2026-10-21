@@ -14,12 +14,21 @@ export interface Attached {
   size?: number;
 }
 
+/** A thread's last entry, as its row's third line says it: who, and their words. */
+export interface Last {
+  by: "agent" | "you";
+  text: string;
+  /** Not yet read: the line steps to the strong ink until the thread is opened. */
+  unread?: boolean;
+}
+
 export interface Comment {
+  /** The last activity's age, as the thread's turns say it ("2m"). */
   age: string;
   /** What the entry carries (attachments-design §1). */
   attachments?: Attached[];
-  /** The thread's last line once it has more than one entry. */
-  last?: string;
+  /** The thread's last entry once it has more than one. */
+  last?: Last;
   /** The agent is working on it now. */
   live?: boolean;
   n: number;
@@ -55,7 +64,7 @@ export const COMMENTS: Comment[] = [
     age: "2m",
     words: "Create should sit right under the fields, like the reference.",
     attachments: [REF, SPEC],
-    last: "Agent: Moved it up under the fields.",
+    last: { by: "agent", text: "Moved it up under the fields." },
     state: "sent",
   },
   {
@@ -71,7 +80,7 @@ export const COMMENTS: Comment[] = [
     on: "When",
     age: "1h",
     words: "Say when it runs next, under the field.",
-    last: "Agent: Added the next run under it.",
+    last: { by: "agent", text: "Added the next run under it.", unread: true },
     state: "sent",
   },
 ];
@@ -96,17 +105,24 @@ export const WITH_ATTACHMENTS: Comment[] = [
   COMMENTS[2],
 ];
 
-/** The thread of comment 14, as the transcript's turns draw it, attachments under the words. */
+const MINUTE = 60_000;
+
+/**
+ * The thread of comment 14, as the transcript's turns draw it, attachments
+ * under the words. Its times are set back from the page's own clock, so each
+ * turn's age reads as the row's does: the reply is the row's last activity,
+ * "2m".
+ */
 export const THREAD = [
   {
     by: "you" as const,
-    at: "2026-10-21T09:12:00Z",
+    at: new Date(Date.now() - 60 * MINUTE).toISOString(),
     text: COMMENTS[0].words,
     attachments: [REF, SPEC],
   },
   {
     by: "agent" as const,
-    at: "2026-10-21T09:14:00Z",
+    at: new Date(Date.now() - 2 * MINUTE).toISOString(),
     text: "Moved Create up under the fields.",
     file: "RoutineForm.svelte",
   },

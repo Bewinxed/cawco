@@ -1,27 +1,10 @@
-<script lang="ts" module>
-  const KB = 1024;
-  /** "12 lines · 2.3 KB": what the thumb says under the name. */
-  function sizeLine(content: string): string {
-    const lines = content.split("\n").length;
-    const bytes = new TextEncoder().encode(content).length;
-    let size = `${bytes} B`;
-    if (bytes >= KB * KB) {
-      size = `${(bytes / KB / KB).toFixed(1)} MB`;
-    } else if (bytes >= KB) {
-      size = `${(bytes / KB).toFixed(1)} KB`;
-    }
-    return `${lines} ${lines === 1 ? "line" : "lines"} · ${size}`;
-  }
-
-  /** The tail of a name that always stays in view: its last characters and extension. */
-  const TAIL = 8;
-</script>
-
 <script lang="ts">
   /**
    * An attached file, drawn in the thumbnail row beside the pictures a turn
    * carried: the same 48px-high box, radius, hairline and focus ring as
-   * `<Shot size="thumb">`, widened to hold the file's name.
+   * `<Shot size="thumb">`, widened to hold the file's name. The sent turn's
+   * tile and the thread gallery's; a draft's attachments are chips
+   * (AttachmentChips), with the same face (doc-face.ts).
    *
    * A text (`content`) opens in the lightbox, which flies out of this box and
    * back into it (motion/share.svelte.ts). Any other file (`size`) says its
@@ -30,22 +13,11 @@
    * the hub has it (`href`), a press downloads it.
    */
   import { humanSize } from "@cawco/core";
-  import {
-    IconDocument,
-    IconFileCode,
-    IconFileLog,
-    IconFileMarkdown,
-    IconFileTable,
-  } from "#lib/icons.js";
-  import { extensionOf } from "../lightbox/extension";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
+  import { glyphOf, nameParts, sizeLine } from "./doc-face";
+  import UploadRing from "./UploadRing.svelte";
 
-  /**
-   * `removable`: a remove ✕ stands on its trailing corner (the composer's
-   * chips), so its words end clear of it: the name gives way inside before
-   * the ✕ (DESIGN.md, The Truncate Inside Rule).
-   */
-  type Props = { removable?: boolean } & (
+  type Props =
     | { name: string; content: string }
     | {
         name: string;
@@ -57,86 +29,46 @@
         /** Why the upload failed, in the hub's words: a press calls `onretry`. */
         failed?: string;
         onretry?: () => void;
-      }
-  );
+      };
 
   const props: Props = $props();
   const { name } = $derived(props);
-  const removable = $derived(props.removable === true);
   const file = $derived("content" in props ? undefined : props);
 
   const uid = $props.id();
   /** What the lightbox flies out of and back into (motion/share.svelte.ts). */
   const share = `doc:${uid}`;
-  const extension = $derived(extensionOf(name));
-  const Glyph = $derived(
-    {
-      md: IconFileMarkdown,
-      markdown: IconFileMarkdown,
-      json: IconFileCode,
-      csv: IconFileTable,
-      log: IconFileLog,
-    }[extension] ?? IconDocument
-  );
-  const cut = $derived(Math.max(0, name.length - TAIL));
+  const Glyph = $derived(glyphOf(name));
+  const parts = $derived(nameParts(name));
   const meta = $derived(
     "content" in props ? sizeLine(props.content) : humanSize(props.size)
   );
   const uploading = $derived(
     !!file && file.progress !== undefined && !file.failed && !file.href
   );
-  /** The ring's arc: its circumference, and how much of it is still to fill. */
-  const RING = 2 * Math.PI * 9;
+  const BOX =
+    "inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out";
 </script>
 
 {#snippet face()}
-  {#if uploading}
-    <span
-      data-slot="glyph"
-      aria-hidden="true"
-      class="grid place-items-center flex-none text-ink-muted"
-    >
-      <svg
-        data-slot="ring"
-        aria-hidden="true"
-        class="size-icon-md m-space-1 -rotate-90"
-        viewBox="0 0 24 24"
-      >
-        <circle
-          class="fill-none stroke-current opacity-25"
-          stroke-width="2.5"
-          cx="12"
-          cy="12"
-          r="9"
-        />
-        <circle
-          data-slot="arc"
-          class="fill-none stroke-current motion-safe:transition-[stroke-dashoffset] motion-safe:duration-(--dur-control) motion-safe:ease-out"
-          stroke-width="2.5"
-          stroke-linecap="round"
-          cx="12"
-          cy="12"
-          r="9"
-          stroke-dasharray={RING}
-          stroke-dashoffset={RING * (1 - (file?.progress ?? 0))}
-        />
-      </svg>
-    </span>
-  {:else}
-    <span
-      data-slot="glyph"
-      aria-hidden="true"
-      class="grid place-items-center flex-none text-ink-muted"
-      ><Glyph class="size-icon-md m-space-1" /></span
-    >
-  {/if}
+  <span
+    data-slot="glyph"
+    aria-hidden="true"
+    class="grid place-items-center flex-none text-ink-muted"
+  >
+    {#if uploading}
+      <UploadRing class="size-icon-md m-space-1" progress={file?.progress ?? 0} />
+    {:else}
+      <Glyph class="size-icon-md m-space-1" />
+    {/if}
+  </span>
   <span data-slot="text" class="flex flex-col min-w-0">
     <span
       data-slot="name"
       class="flex min-w-0 text-size-label font-medium leading-ui whitespace-nowrap"
-      ><span data-slot="head" class="min-w-0 truncate"
-        >{name.slice(0, cut)}</span
-      ><span class="flex-none">{name.slice(cut)}</span></span
+      ><span data-slot="head" class="min-w-0 truncate">{parts.head}</span><span
+        class="flex-none">{parts.tail}</span
+      ></span
     >
     {#if file?.failed}
       <span
@@ -158,9 +90,8 @@
 {#if "content" in props}
   <button
     data-slot="doc"
-    data-removable={removable || undefined}
     aria-label={`Open ${name}`}
-    class="select-none press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 data-removable:pe-space-6 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out hover:bg-surface-hover"
+    class={["select-none press-tint hover:bg-surface-hover", BOX]}
     data-share={share}
     onclick={() =>
       lightbox.open({ kind: "text", name, content: props.content, share })}
@@ -172,9 +103,8 @@
 {:else if file?.href}
   <a
     data-slot="doc"
-    data-removable={removable || undefined}
     aria-label={`Download ${name}`}
-    class="press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 data-removable:pe-space-6 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out hover:bg-surface-hover"
+    class={["press-tint hover:bg-surface-hover", BOX]}
     download={name}
     href={file.href}
     title={name}
@@ -184,34 +114,27 @@
 {:else if file?.failed}
   <button
     data-slot="doc"
-    data-removable={removable || undefined}
     aria-label={`Couldn't upload ${name}: ${file.failed} Try again`}
-    class="select-none press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 data-removable:pe-space-6 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out hover:bg-surface-hover"
+    class={["select-none press-tint hover:bg-surface-hover", BOX]}
     onclick={() => file?.onretry?.()}
     title={`${name}: ${file.failed}`}
     type="button"
   >
     {@render face()}
   </button>
+{:else if uploading}
+  <span
+    data-slot="doc"
+    aria-busy="true"
+    aria-label={`Uploading ${name}`}
+    class={["cursor-default", BOX]}
+    role="status"
+    title={name}
+  >
+    {@render face()}
+  </span>
 {:else}
-  {#if uploading}
-    <span
-      data-slot="doc"
-      data-removable={removable || undefined}
-      aria-busy="true"
-      aria-label={`Uploading ${name}`}
-      class="inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 data-removable:pe-space-6 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out cursor-default"
-      role="status"
-      title={name}
-    >
-      {@render face()}
-    </span>
-  {:else}
-    <span
-      data-slot="doc"
-      data-removable={removable || undefined}
-      class="inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 data-removable:pe-space-6 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out cursor-default"
-      title={name}>{@render face()}</span
-    >
-  {/if}
+  <span data-slot="doc" class={["cursor-default", BOX]} title={name}
+    >{@render face()}</span
+  >
 {/if}

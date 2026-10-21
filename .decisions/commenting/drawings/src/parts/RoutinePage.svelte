@@ -53,7 +53,7 @@
   {#if outlined === "page"}
     <span
       aria-hidden="true"
-      class="pointer-events-none absolute inset-space-1 z-10 border-2 border-dashed border-brand-solid"
+      class="pointer-events-none absolute inset-space-1 z-10 rounded-xs border-2 border-dashed border-brand-solid"
     ></span>
     <span
       class="absolute start-(--space-row) top-(--space-row) z-10 rounded-xs bg-ink-solid px-space-1 py-0.5 type-caps text-on-ink"

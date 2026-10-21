@@ -46,7 +46,7 @@ type Region =
   | { kind: "union"; sels: string[]; pad: number };
 
 const SHOTS: { scene: string; file: string; region: Region }[] = [
-  { scene: "ctx-rail", file: "decided-rail.png", region: { kind: "right", width: 480, height: 420 } },
+  { scene: "ctx-rail", file: "decided-rail.png", region: { kind: "right", width: 480 } },
   { scene: "ctx-whole", file: "decided-whole-page.png", region: { kind: "el", sel: "[data-side-well]" } },
   { scene: "ctx-empty", file: "decided-empty.png", region: { kind: "el", sel: "[data-board]", pad: 8 } },
   { scene: "ctx-attach", file: "decided-attach.png", region: { kind: "el", sel: "[data-board]", pad: 8 } },

@@ -11,11 +11,10 @@
   import type { PendingFile, PendingImage } from "$kit/cawco/transcript/composer-draft.svelte";
   import { ComposerDraft } from "$kit/cawco/transcript/composer-draft.svelte";
   import { Button } from "$kit/components/ui/button/index.js";
-  import { floatingSurface } from "$kit/components/ui/popover/popover-content.svelte";
   import { Textarea } from "$kit/components/ui/textarea/index.js";
   import { IconSend } from "$kit/icons.js";
   import { AGENT, COMMENTS, type Comment, ELEMENTS, type PinState, screenshotData, UNSENT, WITH_ATTACHMENTS } from "./data";
-  import Composer from "./parts/Composer.svelte";
+  import Docked from "./parts/Docked.svelte";
   import Float from "./parts/Float.svelte";
   import Marker from "./parts/Marker.svelte";
   import MarkerBoard from "./parts/MarkerBoard.svelte";
@@ -67,18 +66,30 @@
     ...COMMENTS,
   ];
 
-  /** A draft holding these attachments, as the composer's chip row draws it. */
-  const draftOf = (images: PendingImage[], files: PendingFile[]) => {
-    const draft = new ComposerDraft();
+  /** A draft holding these words and attachments, as the composer draws it. */
+  const draftOf = (images: PendingImage[], files: PendingFile[], text = "", Draft = ComposerDraft) => {
+    const draft = new Draft();
     draft.images = images;
     draft.files = files;
+    draft.text = text;
     return draft;
   };
+  /**
+   * Pick 6's "Words required": a draft that has something to send only once
+   * it has words. The product has no such rule (the chat composer's
+   * `hasContent` counts attachments alone); this draws the option, and the
+   * build adds the rule only if it's picked.
+   */
+  class WordsFirstDraft extends ComposerDraft {
+    override hasContent = $derived(this.text.trim().length > 0);
+  }
+  /** What a comment on the prompt field is about: the field, then its parents. */
+  const PROMPT = { target: ELEMENTS.prompt.words, chain: ["Routine form", "Whole page"] };
   const REF: PendingImage = { name: "ref.png", mediaType: "image/png", data: screenshotData() };
   const SPEC_DONE: PendingFile = { id: "spec", name: "spec.csv", mediaType: "text/csv", progress: 1, ref: "/api/files/spec", size: 12_288 };
   const BRIEF_UPLOADING: PendingFile = { id: "brief", name: "brief.pdf", mediaType: "application/pdf", progress: 0.4, size: 2_400_000 };
   const SPEC_FAILED: PendingFile = { id: "spec", name: "spec.csv", mediaType: "text/csv", progress: 0, error: "The hub could not be reached.", size: 12_288 };
-  const WORDS = "Keep Create right under the fields, like this.";
+  const WORDS = "Put Create under the fields.";
 </script>
 
 <!-- The review's pins: 14 on Create routine, 12 on When, 13 on the whole page at the well's top-right corner. -->
@@ -105,7 +116,7 @@
 {/snippet}
 
 {#snippet sendFoot(count: number)}
-  <div class="flex flex-col gap-space-2">
+  <div class="flex flex-col gap-space-2 border-t border-border-hairline p-space-3">
     <Textarea placeholder="Add a note for the agent" rows={1} />
     <div class="flex justify-end">
       <Button size="sm"><IconSend /><span>Send</span><span class="num">{count}</span></Button>
@@ -113,10 +124,10 @@
   </div>
 {/snippet}
 
-<!-- A composer standing on its own, as it stands beside a pin: the kit's floating surface, the pin card's width. -->
+<!-- A composer standing on its own, as it stands beside a pin: the chat composer's pill, the pin card's width, no card round it. -->
 {#snippet card(caption: string, body: Snippet)}
   <figure class="flex flex-col gap-space-2">
-    <div class={[floatingSurface(), "relative w-(--c-pin-card-w) p-space-3"]} data-float>
+    <div class="relative w-(--c-pin-card-w)" data-float>
       {@render body()}
     </div>
     <figcaption class="type-meta text-ink-muted">{caption}</figcaption>
@@ -151,10 +162,10 @@
                   <!-- Pressed on the label row's free middle: the narrow field wraps its words to its last row. -->
                   <Pin n={null} state="provisional" x="45%" y="8px" />
                   <div
-                    class={[floatingSurface(), "absolute start-0 top-[calc(100%+var(--space-2))] z-20 w-(--c-pin-card-w) p-space-3"]}
+                    class="absolute start-0 top-[calc(100%+var(--space-2))] z-20 w-(--c-pin-card-w)"
                     data-float
                   >
-                    <Composer target={ELEMENTS.prompt.words} />
+                    <Docked action="Comment" placeholder="What should change here?" {...PROMPT} />
                   </div>
                 {/if}
               {/snippet}
@@ -168,13 +179,16 @@
   {:else if scene === "ctx-attach"}
     <!-- What a comment carries (attachments-design §2, §3): attached and done, one still uploading, one that couldn't. -->
     <div class="flex w-fit items-start gap-space-4" data-board>
-      {#snippet attached()}<Composer draft={draftOf([REF], [SPEC_DONE])} focus={false} value={WORDS} />{/snippet}
-      {#snippet uploading()}<Composer draft={draftOf([REF], [BRIEF_UPLOADING])} focus={false} value={WORDS} />{/snippet}
-      {#snippet failed()}<Composer
+      {#snippet attached()}<Docked action="Comment" draft={draftOf([REF], [SPEC_DONE], WORDS)} focus={false} placeholder="What should change here?" target="Create routine" chain={["Routine form", "Whole page"]} />{/snippet}
+      {#snippet uploading()}<Docked action="Comment" draft={draftOf([REF], [BRIEF_UPLOADING], WORDS)} focus={false} placeholder="What should change here?" target="Create routine" chain={["Routine form", "Whole page"]} />{/snippet}
+      {#snippet failed()}<Docked
+          action="Comment"
+          chain={["Routine form", "Whole page"]}
+          draft={draftOf([], [SPEC_FAILED], WORDS)}
           focus={false}
-          blocked="spec.csv didn’t upload. The hub could not be reached. Tap it to try again."
-          draft={draftOf([], [SPEC_FAILED])}
-          value={WORDS}
+          placeholder="What should change here?"
+          sendError="spec.csv didn’t upload. The hub could not be reached. Tap it to try again."
+          target="Create routine"
         />{/snippet}
       {@render card("A picture and a file, attached", attached)}
       {@render card("A file still uploading", uploading)}
@@ -233,21 +247,26 @@
     {@const placed = statesOf(QUIET_UNSENT)}
     <Panel comments>
       {#snippet page()}<RoutinePage>{#snippet pin(name)}{@render reviewPins(name, placed)}{/snippet}</RoutinePage>{/snippet}
-      {#snippet rail()}<RailList rows={QUIET_UNSENT} sentLine />{/snippet}
+      {#snippet rail()}<RailList rows={QUIET_UNSENT} />{/snippet}
     </Panel>
   {:else if scene === "p3-quiet-sent"}
     {@const placed = statesOf(QUIET_SENT)}
     <Panel comments>
       {#snippet page()}<RoutinePage>{#snippet pin(name)}{@render reviewPins(name, placed)}{/snippet}</RoutinePage>{/snippet}
-      {#snippet rail()}<RailList rows={QUIET_SENT} sentLine />{/snippet}
+      {#snippet rail()}<RailList rows={QUIET_SENT} />{/snippet}
     </Panel>
   {:else if scene === "p4-el-empty" || scene === "p4-el-typed"}
     {@const placed = statesOf(COMMENTS)}
     <Panel>
       {#snippet page()}<RoutinePage outlined="prompt">{#snippet pin(name)}{@render reviewPins(name, placed, "tail", "prompt")}{/snippet}</RoutinePage>{/snippet}
     </Panel>
-    <Float anchor="[data-pin='new'] [data-pin-front]">
-      <Composer target={ELEMENTS.prompt.words} value={scene === "p4-el-typed" ? "Three rows is too short; show the whole prompt." : ""} />
+    <Float anchor="[data-pin='new'] [data-pin-front]" bare>
+      <Docked
+        action="Comment"
+        draft={draftOf([], [], scene === "p4-el-typed" ? "Three rows is too short; show the whole prompt." : "")}
+        placeholder="What should change here?"
+        {...PROMPT}
+      />
     </Float>
   {:else if scene === "p4-rail-empty" || scene === "p4-rail-typed"}
     {@const placed = statesOf(COMMENTS)}
@@ -255,7 +274,12 @@
       {#snippet page()}<RoutinePage outlined="prompt">{#snippet pin(name)}{@render reviewPins(name, placed, "tail", "prompt")}{/snippet}</RoutinePage>{/snippet}
       {#snippet rail()}
         <RailList rows={COMMENTS}>
-          {#snippet foot()}<Composer target={ELEMENTS.prompt.words} value={scene === "p4-rail-typed" ? "Three rows is too short; show the whole prompt." : ""} />{/snippet}
+          {#snippet foot()}<div class="px-space-3"><Docked
+              action="Comment"
+              draft={draftOf([], [], scene === "p4-rail-typed" ? "Three rows is too short; show the whole prompt." : "")}
+              placeholder="What should change here?"
+              {...PROMPT}
+            /></div>{/snippet}
         </RailList>
       {/snippet}
     </Panel>
@@ -263,7 +287,12 @@
     <!-- Pick 6: a picture with no words. Words required, Comment stays off; attachments alone, it sends, and its row says the picture's name. -->
     {@const alone = scene === "p6-alone"}
     <div class="flex w-fit items-start gap-space-4" data-board>
-      {#snippet pictureOnly()}<Composer attachmentsAlone={alone} draft={draftOf([REF], [])} target={ELEMENTS.prompt.words} />{/snippet}
+      {#snippet pictureOnly()}<Docked
+          action="Comment"
+          draft={draftOf([REF], [], "", alone ? ComposerDraft : WordsFirstDraft)}
+          placeholder="What should change here?"
+          {...PROMPT}
+        />{/snippet}
       {@render card(alone ? "A picture, no words: Comment sends it" : "A picture, no words: Comment stays off", pictureOnly)}
       {#if alone}
         <figure class="flex flex-col gap-space-2">
@@ -273,7 +302,13 @@
           <figcaption class="type-meta text-ink-muted">Its row says the picture’s name</figcaption>
         </figure>
       {:else}
-        {#snippet withWords()}<Composer attachmentsAlone={false} draft={draftOf([REF], [])} target={ELEMENTS.prompt.words} value="Show the whole prompt, like this." />{/snippet}
+        {#snippet withWords()}<Docked
+            action="Comment"
+            draft={draftOf([REF], [], "Show the whole prompt, like this.", WordsFirstDraft)}
+            focus={false}
+            placeholder="What should change here?"
+            {...PROMPT}
+          />{/snippet}
         {@render card("With a sentence, Comment sends", withWords)}
       {/if}
     </div>

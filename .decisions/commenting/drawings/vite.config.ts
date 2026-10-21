@@ -29,6 +29,9 @@ export default defineConfig({
     // The kit's Popover reads SvelteKit's `browser`; this app is only ever a browser page.
     alias: [
       { find: "$app/env", replacement: `${here}/src/stub/env.ts` },
+      // The chat composer reaches the app's client, which reads where the page is and can navigate.
+      { find: "$app/state", replacement: `${here}/src/stub/state.ts` },
+      { find: "$app/navigation", replacement: `${here}/src/stub/navigation.ts` },
       // The dashboard's lib, by the name the drawings import it under.
       {
         find: /^\$kit\//,

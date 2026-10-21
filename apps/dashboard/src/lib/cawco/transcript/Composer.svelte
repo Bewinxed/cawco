@@ -182,6 +182,8 @@
     switchDir = 0,
     landing = { done: Promise.resolve(), ms: () => 0 },
     attach = true,
+    lead,
+    action,
   }: {
     /**
      * The conversation's half-written message. The composer draws it and
@@ -292,6 +294,22 @@
      * takes words alone (a view asked of Caw, a new project's first words).
      */
     attach?: boolean;
+    /**
+     * A row inside the pill, above the field, across its width: what the
+     * words are about (the comment composer's target chip). With it the
+     * field takes its own row too, the pill's whole width, and the controls
+     * stand at the end of the row under it: a pin card's pill is too narrow
+     * to hold the field's hint beside Attach and a worded action. None on a
+     * session's composer.
+     */
+    lead?: Snippet;
+    /**
+     * The action box says this word instead of the send glyph ("Comment",
+     * "Reply"), its own label read out: where what is written does not go
+     * to the agent at once, and so never turns into Stop. None on a
+     * session's composer.
+     */
+    action?: string;
   } = $props();
 
   /** The hub this composer reads: the live client's, or a states file's stand-in. */
@@ -3368,6 +3386,7 @@
         data-asking={askOpen || undefined}
         data-grown={!!edit || askOpen || canvasUp || undefined}
         data-hint-back={!!hintBack || undefined}
+        data-lead={!!lead || undefined}
         data-recalling={!!recall || undefined}
         data-settling={(!!recall && !wheeling) || undefined}
         data-wheeling={wheeling || undefined}
@@ -3377,7 +3396,7 @@
         aria-label={FIELD_LABEL}
         class={dockShellVariants({
           class:
-            "group/cin field-shell relative z-2 py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none data-recalling:outline-off data-grown:outline-off [&:is([data-recalling],[data-grown]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-off not-focus-within:touch-none not-focus-within:touch-callout-none",
+            "group/cin field-shell relative z-2 py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-lead:flex-wrap data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none data-recalling:outline-off data-grown:outline-off [&:is([data-recalling],[data-grown]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-off not-focus-within:touch-none not-focus-within:touch-callout-none",
         })}
         onclickcapture={onholdclick}
         oncontextmenu={onholdnative}
@@ -3464,6 +3483,19 @@
           </div>
         {/if}
 
+        {#if lead}
+          <!-- What the words are about, its own row across the pill above
+               the field, at the field's inset: the pill's top padding over
+               it, the pill's gap under it. It steps aside with the rest
+               while an ask holds the composer. -->
+          <div
+            data-slot="lead"
+            class="flex basis-full min-w-0 transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
+            inert={askOpen}
+          >
+            {@render lead()}
+          </div>
+        {/if}
         <!-- The pill's padding above and below the 34px field focuses it,
          the caret at the end: its touch area is the field's. -->
         <!-- The field's box. Its custom properties reach the field and the
@@ -3492,7 +3524,7 @@
         <div
           data-folded={folded || undefined}
           data-slot="composer-field"
-          class="group/field touch-hit relative flex flex-auto min-w-0"
+          class="group/field touch-hit relative flex flex-auto min-w-0 group-data-lead/cin:basis-full"
           inert={askOpen}
           bind:this={fieldWrap}
           style:--roll-move="0 var(--roll-y)"
@@ -3638,7 +3670,7 @@
              (`--hit-gap-x`, which .touch-hit reads) switches with it. -->
         <div
           data-slot="ctrls"
-          class="group/ctrls flex items-center gap-space-2 coarse:gap-space-3 hit-gap-x-space-2 coarse:hit-gap-x-space-3 flex-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
+          class="group/ctrls flex items-center gap-space-2 coarse:gap-space-3 hit-gap-x-space-2 coarse:hit-gap-x-space-3 flex-none group-data-lead/cin:ms-auto transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
           inert={!!recall}
           bind:this={ctrls}
         >
@@ -3658,8 +3690,13 @@
             data-slot="stop"
             aria-busy={pending || undefined}
             aria-disabled={pending || held || undefined}
-            aria-label={stops ? "Stop the agent" : "Send message"}
-            class={sendVariants({ class: "group/stop select-none touch-hit" })}
+            aria-label={action ?? (stops ? "Stop the agent" : "Send message")}
+            class={sendVariants({
+              class: [
+                "group/stop select-none touch-hit",
+                action && "w-auto px-space-3 type-button",
+              ],
+            })}
             disabled={!(
               busy ||
               pending ||
@@ -3679,14 +3716,18 @@
                    its replacement overlap there while they cross-fade. -->
               <!-- The glyph swapping in; reduced motion keeps the fade: no
                    scale, no blur. The optical nudge is on the carrier's
-                   `translate`, which the swap's `transform` does not touch. -->
+                   `translate`, which the swap's `transform` does not touch;
+                   an action's word sits centred, unnudged. -->
               <span
                 data-slot="swap"
-                class="row-start-1 col-start-1 grid place-items-center motion-safe:animate-icon-swap motion-reduce:animate-icon-swap-still group-enabled/stop:translate-x-(--optical-nudge) group-enabled/stop:-translate-y-(--optical-nudge)"
+                data-word={(action && !pending) || undefined}
+                class="row-start-1 col-start-1 grid place-items-center motion-safe:animate-icon-swap motion-reduce:animate-icon-swap-still group-enabled/stop:not-data-word:translate-x-(--optical-nudge) group-enabled/stop:not-data-word:-translate-y-(--optical-nudge)"
                 out:glyphOut
               >
                 {#if pending}
                   <Spinner aria-hidden="true" role="presentation" />
+                {:else if action}
+                  <span data-slot="action-word">{action}</span>
                 {:else if stops}
                   <IconStop />
                 {:else}

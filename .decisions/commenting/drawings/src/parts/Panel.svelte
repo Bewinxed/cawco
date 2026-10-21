@@ -4,7 +4,9 @@
   over its ask, its controls standing by the head's priority rule (Send
   with the unsent count, only above 0, comment-design §1, in the place
   PreviewPane gives Send picks; the mode; Comments with the open count;
-  Reload), Close last, and the well holding the page, ringed in Comment
+  Reload), Close last; the toggle says its count only while the rail is
+  shut, the rail's own Open filter saying it while it stands (comment-rail
+  hierarchy, finding 3), and the well holding the page, ringed in Comment
   mode as SideSurface rings it.
 
   Comment-design §1 adds the Comments rail beside the well. SideSurface has
@@ -70,7 +72,7 @@
     expanded="pressed"
     size="sm"
     variant="ghost"
-    ><IconChat /><span data-slot="comments-label">Comments</span>{#if open > 0}<span
+    ><IconChat /><span data-slot="comments-label">Comments</span>{#if open > 0 && !comments}<span
         class="min-w-c-count-digit"
         data-slot="count">{open}</span
       >{/if}</Button

@@ -3,26 +3,24 @@
   its pin (pick 1).
   - Head: in the rail Back, the marker and the element's name, Resolve and
     ⋯; as a card the same with Close in Back's place.
-  - The chain in meta, one line, then ‹ 3 / 12 › (rail only).
-  - The thread: the transcript's own turns (Turn, Who, Well), unchanged;
-    an entry's attachments under its words in the transcript's gallery
+  - The chain in meta, one line: the element's parents only, the head
+    already naming it (none for the whole page); then ‹ 3 / 12 › (rail
+    only).
+  - The thread: the transcript's own turns (Turn, Who, Well), unchanged,
+    each speaker line ending in its turn's age at rest (Who `shown`); an
+    entry's attachments under its words in the transcript's gallery
     (MessageRow's `chips`): a picture as `Shot size="thumb"`, a file as
     its DocThumb (attachments-design §4).
-  - Foot: the reply field, its chip row (none here), then Attach (the
-    dashboard's AttachButton) at the start and Reply at the end, Reply off
-    while there's nothing to send (attachments-design §2).
+  - Foot: the chat composer as the reply (Docked; commenting addendum
+    §2), no band and no card: its pill `--space-3` in from the rail's sides.
 -->
 <script lang="ts">
-  import AttachButton from "$kit/cawco/transcript/AttachButton.svelte";
-  import AttachmentChips from "$kit/cawco/transcript/AttachmentChips.svelte";
-  import { ComposerDraft } from "$kit/cawco/transcript/composer-draft.svelte";
   import DocThumb from "$kit/cawco/transcript/DocThumb.svelte";
   import Shot from "$kit/cawco/transcript/Shot.svelte";
   import Turn from "$kit/cawco/turn/Turn.svelte";
   import TurnWell from "$kit/cawco/turn/Well.svelte";
   import Who from "$kit/cawco/turn/Who.svelte";
   import { Button } from "$kit/components/ui/button/index.js";
-  import { Textarea } from "$kit/components/ui/textarea/index.js";
   import {
     IconCheck,
     IconChevronLeft,
@@ -31,14 +29,13 @@
     IconMore,
   } from "$kit/icons.js";
   import { AGENT, screenshot, THREAD } from "../data";
+  import Docked from "./Docked.svelte";
   import Marker from "./Marker.svelte";
 
   let {
     as = "rail",
     shape = "tail",
   }: { as?: "rail" | "card"; shape?: "tail" | "stem" } = $props();
-
-  const reply = new ComposerDraft();
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col" data-thread={as}>
@@ -79,7 +76,7 @@
     data-sweep="row"
   >
     <span class="min-w-0 flex-1 truncate type-meta text-ink-muted"
-      >on Routine form › Create routine</span
+      >on Routine form</span
     >
     {#if as === "rail"}
       <span class="flex flex-none items-center">
@@ -102,7 +99,7 @@
     {#each THREAD as entry (entry.at)}
       {#if entry.by === "you"}
         <Turn you>
-          <Who name="You" timestamp={entry.at} you />
+          <Who name="You" shown timestamp={entry.at} you />
           <TurnWell><p class="type-body text-ink-strong">{entry.text}</p></TurnWell>
           {#if entry.attachments?.length}
             <div class="mt-space-2 flex flex-wrap items-center gap-space-2" data-gallery data-slot="chips">
@@ -118,7 +115,7 @@
         </Turn>
       {:else}
         <Turn>
-          <Who name={AGENT} timestamp={entry.at} />
+          <Who name={AGENT} shown timestamp={entry.at} />
           <p class="type-body text-ink-strong">{entry.text}</p>
           {#if entry.file}
             <p class="mt-space-1">
@@ -131,18 +128,7 @@
       {/if}
     {/each}
   </div>
-  <div
-    class={[
-      "flex flex-none flex-col gap-space-2",
-      as === "rail" ? "border-t border-border-hairline p-space-3" : "pt-space-2",
-    ]}
-  >
-    <Textarea placeholder="Reply" rows={1} />
-    <AttachmentChips draft={reply} />
-    <div class="flex items-center gap-space-2" data-sweep="row">
-      <AttachButton draft={reply} />
-      <span class="flex-1"></span>
-      <Button disabled size="sm">Reply</Button>
-    </div>
+  <div class={["flex-none", as === "rail" && "px-space-3"]}>
+    <Docked action="Reply" focus={false} placeholder="Reply" />
   </div>
 </div>

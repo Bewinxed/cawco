@@ -5,6 +5,9 @@
   reaching into the form's own markup. It follows the element as the page
   lays out (fonts, sizes). It takes no presses and paints nothing itself
   (`data-over-box`: render.ts reads it as geometry, never as a surface).
+  Its corners are the element's own computed radii, `--radius-xs` at the
+  least, so the outline drawn round it is round where the element is, and
+  concentric through its offset (build-notes 6).
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
@@ -23,7 +26,7 @@
     children?: Snippet;
   } = $props();
 
-  let box = $state<{ x: number; y: number; w: number; h: number } | null>(null);
+  let box = $state<{ x: number; y: number; w: number; h: number; radius: string } | null>(null);
 
   $effect(() => {
     const target = root.querySelector(find);
@@ -33,7 +36,12 @@
     const measure = () => {
       const r = root.getBoundingClientRect();
       const t = target.getBoundingClientRect();
-      box = { x: t.left - r.left - root.clientLeft, y: t.top - r.top - root.clientTop, w: t.width, h: t.height };
+      const own = getComputedStyle(target);
+      const floor = Number.parseFloat(getComputedStyle(root).getPropertyValue("--radius-xs")) || 0;
+      const radius = [own.borderTopLeftRadius, own.borderTopRightRadius, own.borderBottomRightRadius, own.borderBottomLeftRadius]
+        .map((corner) => `${Math.max(Number.parseFloat(corner) || 0, floor)}px`)
+        .join(" ");
+      box = { x: t.left - r.left - root.clientLeft, y: t.top - r.top - root.clientTop, w: t.width, h: t.height, radius };
     };
     measure();
     const sizes = new ResizeObserver(measure);
@@ -52,6 +60,7 @@
     ]}
     data-anchor={name}
     data-over-box
+    style:border-radius={box.radius}
     style:height="{box.h}px"
     style:left="{box.x}px"
     style:top="{box.y}px"

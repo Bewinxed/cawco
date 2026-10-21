@@ -85,7 +85,7 @@ const roomy = (tag: HTMLElement) => {
     return false;
   }
   const room = grow(t, ROOM);
-  const parts = [...(field ?? document.body).querySelectorAll("*"), ...document.querySelectorAll("[data-float]")];
+  const parts = [...(field ?? document.body).querySelectorAll("*"), ...document.querySelectorAll("[data-float], [data-float] *")];
   return parts.every((el) => {
     // Its own element, what holds it, and the decorations drawn aria-hidden (outlines, edges, dots) are no neighbours.
     if (el === tag || tag.contains(el) || el.contains(tag) || el.closest("[aria-hidden='true']")) {
