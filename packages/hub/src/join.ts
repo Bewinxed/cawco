@@ -1043,7 +1043,7 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
           password: t.Optional(t.String()),
         }),
       },
-      ({ body, set, status }) => {
+      ({ body, status }) => {
         const target = body.target.trim();
         if (!TARGET.test(target)) {
           return status(
@@ -1063,10 +1063,17 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
             job.port === (body.port ?? null)
         );
         if (running) {
-          set.headers[SSH_ADD_RUNNING_HEADER] = running.id;
-          return status(
-            409,
-            `An SSH add of ${target} is already running (${running.id}): it goes on, and a new one can start once it has ended.`
+          // A plain answer, not a declared status: the route's typed answers
+          // are what the frozen iOS app's generated client switches over.
+          return new Response(
+            `An SSH add of ${target} is already running (${running.id}): it goes on, and a new one can start once it has ended.`,
+            {
+              status: 409,
+              headers: {
+                "content-type": "text/plain; charset=utf-8",
+                [SSH_ADD_RUNNING_HEADER]: running.id,
+              },
+            }
           );
         }
         const password = body.password ?? "";
