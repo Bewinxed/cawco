@@ -258,7 +258,7 @@
           out:leaving={i}
         >
           <span>{one.name} · {views[i]}</span>
-          <button type="button">Press</button>
+          <button class="select-none" type="button">Press</button>
         </div>
       {/key}
     </section>

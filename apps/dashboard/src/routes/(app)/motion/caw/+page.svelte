@@ -83,13 +83,16 @@
   <div data-slot="controls" class="flex gap-space-2">
     {#each STATUSES as s (s)}
       <button
+        class="select-none"
         onclick={() => (mounted ? bench.change(s) : bench.mount(s))}
         type="button"
       >
         {s}
       </button>
     {/each}
-    <button onclick={bench.leave} type="button">leave</button>
+    <button class="select-none" onclick={bench.leave} type="button"
+      >leave</button
+    >
   </div>
   <ol>
     {#each log as entry, k (k)}

@@ -69,7 +69,7 @@
     class="flex items-center gap-space-1 min-h-c-btn-h-sm min-w-0 pe-space-1 rounded-sm bg-surface-recess"
   >
     <button
-      class="flex flex-auto items-center gap-space-2 min-w-0 min-h-c-btn-h-sm px-space-2 border-none border-current rounded-sm bg-transparent text-start press-tint focus-inset"
+      class="select-none flex flex-auto items-center gap-space-2 min-w-0 min-h-c-btn-h-sm px-space-2 border-none border-current rounded-sm bg-transparent text-start press-tint focus-inset"
       onclick={() => onopen(id)}
       title={byId.get(id)?.title}
       type="button"
@@ -150,7 +150,8 @@
               <li>
                 <button
                   class={menuItemVariants({
-                    class: "flex items-center gap-space-2 w-full text-start",
+                    class:
+                      "select-none flex items-center gap-space-2 w-full text-start",
                   })}
                   data-menu-item
                   onclick={async () => {

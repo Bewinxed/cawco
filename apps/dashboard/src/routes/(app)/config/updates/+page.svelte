@@ -223,7 +223,7 @@
         <div data-slot="fold" class="type-label">
           <button
             aria-expanded={foldOpen}
-            class="group mark-line inline-flex items-center gap-space-1 text-ink-muted"
+            class="select-none group mark-line inline-flex items-center gap-space-1 text-ink-muted"
             onclick={() => {
               foldOpen = !foldOpen;
             }}

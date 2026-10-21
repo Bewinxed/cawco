@@ -103,7 +103,7 @@
               <button
                 data-slot="icon-card"
                 aria-haspopup="dialog"
-                class={iconCardVariants()}
+                class={iconCardVariants({ class: "select-none" })}
                 data-open={addMachine.open && addMachine.way === card.way
                   ? ""
                   : undefined}

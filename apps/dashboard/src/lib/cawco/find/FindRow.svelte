@@ -130,7 +130,7 @@
   </button>
   {#if peekable}
     <button
-      class="group/disclose absolute inset-y-0 end-0 grid place-items-center w-c-btn-h-lg min-h-0 p-0 border-none border-current rounded-sm bg-transparent text-ink-muted active:bg-surface-fill"
+      class="select-none group/disclose absolute inset-y-0 end-0 grid place-items-center w-c-btn-h-lg min-h-0 p-0 border-none border-current rounded-sm bg-transparent text-ink-muted active:bg-surface-fill"
       aria-controls={`${id}-peek`}
       aria-expanded={peeked}
       aria-label={peeked ? "Fold" : "Peek"}

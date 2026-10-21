@@ -195,7 +195,7 @@
                   aria-disabled={syncing || undefined}
                   aria-label="Sync {machineLabel(machine.hostname)}"
                   data-slot="sync"
-                  class="inline-flex h-c-btn-h-xs items-center gap-space-1 rounded-sm px-space-2 type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:transition-control-press motion-safe:active:enabled:not-aria-busy:scale-(--press-scale)"
+                  class="select-none inline-flex h-c-btn-h-xs items-center gap-space-1 rounded-sm px-space-2 type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:transition-control-press motion-safe:active:enabled:not-aria-busy:scale-(--press-scale)"
                   disabled={!online}
                   onclick={whileIdle(
                     () => syncing,

@@ -51,7 +51,7 @@
           <button
             data-bar-item
             aria-label="Caw"
-            class="touch-hit press-tint"
+            class="select-none touch-hit press-tint"
             type="button"
           >
             <span
@@ -64,7 +64,7 @@
         <button
           data-bar-item
           aria-label="Jump to session"
-          class="touch-hit press-tint @max-desk/shell:hidden"
+          class="select-none touch-hit press-tint @max-desk/shell:hidden"
           type="button"
         >
           <IconSearch aria-hidden="true" class="size-icon-md text-ink-muted" />
@@ -72,7 +72,7 @@
         <button
           data-bar-item
           aria-label="Machines"
-          class="touch-hit press-tint @max-desk/shell:hidden"
+          class="select-none touch-hit press-tint @max-desk/shell:hidden"
           type="button"
         >
           <IconServer data-slot="bar-symbol" aria-hidden="true" />

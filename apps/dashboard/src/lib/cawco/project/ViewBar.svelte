@@ -202,7 +202,7 @@
     <span class="flex-auto"></span>
     <button
       aria-label="Ask Caw"
-      class={sendVariants({ class: "touch-hit" })}
+      class={sendVariants({ class: "select-none touch-hit" })}
       onclick={onnewsession}
       type="button"
     >

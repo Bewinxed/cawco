@@ -305,7 +305,7 @@
                     {#each crumbs.slice(0, -1) as crumb (crumb.to)}
                       <button
                         data-slot="crumb"
-                        class="press-tint transition-control min-h-c-row-h min-w-c-row-h flex-none rounded-xs border-none border-current bg-transparent px-space-2 text-inherit hover:bg-surface-hover"
+                        class="select-none press-tint transition-control min-h-c-row-h min-w-c-row-h flex-none rounded-xs border-none border-current bg-transparent px-space-2 text-inherit hover:bg-surface-hover"
                         onclick={() => list(crumb.to)}
                         type="button"
                       >
@@ -319,7 +319,7 @@
               <button
                 data-slot="crumb"
                 aria-current="location"
-                class="press-tint transition-control min-h-c-row-h min-w-c-row-h max-w-full shrink-0 rounded-xs border-none border-current bg-surface-lift px-space-2 text-start font-medium text-ink-strong"
+                class="select-none press-tint transition-control min-h-c-row-h min-w-c-row-h max-w-full shrink-0 rounded-xs border-none border-current bg-surface-lift px-space-2 text-start font-medium text-ink-strong"
                 onclick={() => list(path)}
                 type="button"
               >
@@ -332,7 +332,7 @@
           >
             {#if canGoUp}
               <button
-                class="press-tint transition-control flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-muted hover:bg-surface-hover"
+                class="select-none press-tint transition-control flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-muted hover:bg-surface-hover"
                 onclick={goUp}
                 type="button"
               >
@@ -359,7 +359,7 @@
             {:else}
               {#each folders as folder (`${path}/${folder.name}`)}
                 <button
-                  class="press-tint transition-control flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-strong hover:bg-surface-hover"
+                  class="select-none press-tint transition-control flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-strong hover:bg-surface-hover"
                   onclick={() => enter(folder.name)}
                   title={folder.name}
                   type="button"

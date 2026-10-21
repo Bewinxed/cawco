@@ -11,7 +11,9 @@
  *  3. the same press with the grip's `select-none` lifted does extend it, so
  *     check 2 is one the bug fails;
  *  4. a drag across the reply's words still selects them: content stays
- *     selectable.
+ *     selectable;
+ *  5. a plain `<button>` with no role is a control too: New Session's dashed
+ *     custom-model row (ModelSection) computes `user-select: none`.
  *
  *   bun scripts/probe-kit/run.ts web control-select
  */
@@ -21,6 +23,12 @@ import { COMPOSER, type Kit, open, type Spec, settle } from "../../kit";
 
 const GRIP = '[aria-label="Resize sidebar"]';
 const REPLY = "Selection stays on for every word of this reply";
+/** New Session's opener, as the sidebar and the empty board name it. */
+const STARTER = /^(New session|Start session)$/;
+/** A model id no catalog holds: ModelSection offers it as the dashed custom row. */
+const CUSTOM_MODEL = "probe-custom-model-id";
+/** The custom row's name. */
+const CUSTOM_ROW = /Use custom model id/;
 
 const respond = (request: Seen): Reply =>
   request.tools
@@ -145,6 +153,30 @@ const run = async (kit: Kit) => {
     "a drag across the reply's words selects them",
     !dragged.collapsed && dragged.text.includes("stays on for every word"),
     JSON.stringify(dragged)
+  );
+
+  // 5. A plain <button> is a control too: New Session's dashed custom-model row.
+  await open(page, `${base}/session`, "body");
+  const starter = page
+    .getByRole("button", { name: STARTER })
+    .filter({ visible: true })
+    .first();
+  await starter.waitFor({ timeout: 30_000 });
+  await starter.click();
+  const dialog = page.getByRole("dialog", { name: "New Session" });
+  await dialog.waitFor({ timeout: 30_000 });
+  await dialog
+    .getByRole("textbox", { name: "Search models" })
+    .fill(CUSTOM_MODEL);
+  const custom = dialog.getByRole("button", { name: CUSTOM_ROW });
+  await custom.waitFor({ timeout: 15_000 });
+  const customSelect = await custom.evaluate(
+    (button) => getComputedStyle(button).userSelect
+  );
+  kit.check(
+    "New Session's dashed custom-model button computes user-select: none",
+    customSelect === "none",
+    customSelect
   );
 };
 

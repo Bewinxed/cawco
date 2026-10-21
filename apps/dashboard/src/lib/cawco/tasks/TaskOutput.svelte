@@ -177,7 +177,7 @@
       {:else if kind === "image"}
         <button
           aria-label={madeWords.openFile(name)}
-          class="block p-0 rounded-sm cursor-zoom-in press-tint focus-inset"
+          class="select-none block p-0 rounded-sm cursor-zoom-in press-tint focus-inset"
           onclick={openImage}
           type="button"
         >

@@ -1140,7 +1140,7 @@
         <button
           data-slot="burger"
           aria-label="Open navigation"
-          class="desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-(--burger-start) max-desk:mt-(--burger-top) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
+          class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-(--burger-start) max-desk:mt-(--burger-top) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
           onclick={() => {
             railOpen = true;
           }}
@@ -1291,7 +1291,7 @@
                   aria-expanded={barGlass.open === "jump"}
                   aria-haspopup="dialog"
                   aria-label="Jump to session"
-                  class="touch-hit press-tint @max-desk/shell:hidden"
+                  class="select-none touch-hit press-tint @max-desk/shell:hidden"
                   data-share="jump"
                   onclick={() => {
                     barGlass.toggle("jump");

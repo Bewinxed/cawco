@@ -11,7 +11,7 @@
 
 <button
   aria-haspopup="dialog"
-  class="inline rounded-xs border-none border-current bg-transparent p-0 text-link-ink underline decoration-transparent underline-offset-(--space-1) transition-[text-decoration-color] duration-(--dur-control) ease-out hover:decoration-current focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-2"
+  class="select-none inline rounded-xs border-none border-current bg-transparent p-0 text-link-ink underline decoration-transparent underline-offset-(--space-1) transition-[text-decoration-color] duration-(--dur-control) ease-out hover:decoration-current focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-2"
   onclick={() => addMachine.show()}
   type="button"
 >

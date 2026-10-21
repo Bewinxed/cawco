@@ -42,6 +42,7 @@
 <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: its role is radio or checkbox, set from the group, and both take aria-checked. -->
 <button
   class={cn(
+    "select-none",
     chipVariants({ variant: "option" }),
     "focus-inset",
     group.layout === "list" &&

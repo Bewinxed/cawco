@@ -173,7 +173,7 @@
       aria-expanded={open}
       aria-haspopup="dialog"
       aria-label={label}
-      class={cn("touch-hit", triggerClass)}
+      class={cn("touch-hit select-none", triggerClass)}
       {...triggerData}
       data-state={open ? "open" : "closed"}
       {id}
@@ -189,7 +189,7 @@
     {#if trigger}
       <PopoverPrimitive.Trigger
         aria-label={label}
-        class={cn("touch-hit", triggerClass)}
+        class={cn("touch-hit select-none", triggerClass)}
         {...triggerData}
         {id}
       >

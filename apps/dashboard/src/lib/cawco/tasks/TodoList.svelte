@@ -214,7 +214,7 @@
           {:else}
             <button
               data-slot="text"
-              class="flex flex-auto items-baseline gap-space-2 min-w-0 p-space-1 rounded-xs type-body text-ink-strong text-start hover:bg-surface-hover data-done:text-ink-subtle data-done:line-through data-done:decoration-border-control press-tint focus-inset"
+              class="select-none flex flex-auto items-baseline gap-space-2 min-w-0 p-space-1 rounded-xs type-body text-ink-strong text-start hover:bg-surface-hover data-done:text-ink-subtle data-done:line-through data-done:decoration-border-control press-tint focus-inset"
               data-done={checked ? "" : undefined}
               onclick={() => {
                 editing = ref;

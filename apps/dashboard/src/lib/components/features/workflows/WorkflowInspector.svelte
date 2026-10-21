@@ -1328,7 +1328,7 @@
     {/if}
     {#each problems as problem, index (index)}
       <button
-        class="min-h-c-btn-h-lg rounded-sm bg-surface-recess p-space-3 text-start wrap-anywhere"
+        class="select-none min-h-c-btn-h-lg rounded-sm bg-surface-recess p-space-3 text-start wrap-anywhere"
         onclick={() => onselect(problem.nodeId ?? problem.edgeId)}
         type="button"
       >

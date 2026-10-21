@@ -332,7 +332,7 @@
         {:else}
           <button
             data-slot="name"
-            class="press-tint block max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
+            class="select-none press-tint block max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
             onclick={editName}
             title="Rename {project.name}"
             type="button"
@@ -371,7 +371,7 @@
                unfold under the head. -->
           <button
             aria-expanded={details !== null}
-            class="mark-line -mx-space-1 flex min-w-0 items-center gap-space-2 rounded-xs border-none border-current bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover can-hover:aria-expanded:bg-surface-hover"
+            class="select-none mark-line -mx-space-1 flex min-w-0 items-center gap-space-2 rounded-xs border-none border-current bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover can-hover:aria-expanded:bg-surface-hover"
             data-box
             data-place-line
             onclick={() => {
@@ -399,7 +399,7 @@
                  button's to take away. `p-0` took the recipe's too, and left
                  a 7px box round a 15px line of words. -->
             <button
-              class="flex-none rounded-xs border-none border-current bg-transparent px-0 font-inherit text-ink-muted transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
+              class="select-none flex-none rounded-xs border-none border-current bg-transparent px-0 font-inherit text-ink-muted transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
               data-places-line
               onclick={() => openDetails(true)}
               type="button">· {checkouts} places</button

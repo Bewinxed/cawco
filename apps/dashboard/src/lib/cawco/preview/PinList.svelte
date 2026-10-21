@@ -121,7 +121,7 @@
       data-slot="pin-row"
       aria-current={current || undefined}
       data-moved={pin.movedAt ? "" : undefined}
-      class="flex items-start gap-space-2 w-full min-h-c-artifact-row-h px-space-2 py-space-2 border-none border-current rounded-sm bg-transparent text-ink-row type-body text-start transition-[background-color] duration-(--dur-control) ease-out not-active:not-aria-current:hover:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-selected-bg focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
+      class="select-none flex items-start gap-space-2 w-full min-h-c-artifact-row-h px-space-2 py-space-2 border-none border-current rounded-sm bg-transparent text-ink-row type-body text-start transition-[background-color] duration-(--dur-control) ease-out not-active:not-aria-current:hover:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-selected-bg focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
       data-pin-row={pin.number}
       onclick={() => onopen(pin.id)}
       type="button"

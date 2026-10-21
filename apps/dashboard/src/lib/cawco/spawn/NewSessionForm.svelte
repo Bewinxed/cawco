@@ -1899,7 +1899,7 @@
               aria-label="Back"
               class={pressVariants({
                 press: "scale",
-                class: sheetHead.close(),
+                class: ["select-none", sheetHead.close()],
               })}
               data-vaul-no-drag
               onclick={back}
@@ -1933,7 +1933,10 @@
         <button
           {...tip}
           aria-label="Close"
-          class={pressVariants({ press: "scale", class: sheetHead.close() })}
+          class={pressVariants({
+            press: "scale",
+            class: ["select-none", sheetHead.close()],
+          })}
           data-vaul-no-drag
           onclick={close}
           type="button"

@@ -172,7 +172,7 @@
               aria-expanded={asks.pending?.at === template.name}
               class={menuItemVariants({
                 class:
-                  "flex h-auto w-full flex-col items-stretch gap-space-row px-space-3 py-space-2 text-start hover:enabled:bg-surface-hover disabled:opacity-50",
+                  "select-none flex h-auto w-full flex-col items-stretch gap-space-row px-space-3 py-space-2 text-start hover:enabled:bg-surface-hover disabled:opacity-50",
               })}
               data-menu-item
               disabled={applying !== null}

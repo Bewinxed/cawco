@@ -227,7 +227,7 @@
       >
         {#each STARTERS as text (text)}
           <button
-            class={chipVariants()}
+            class={chipVariants({ class: "select-none" })}
             onclick={() => starter(text)}
             type="button"
           >

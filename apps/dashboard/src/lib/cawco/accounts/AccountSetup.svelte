@@ -635,7 +635,7 @@
           data-choice
           {...props}
           aria-disabled={free ? undefined : "true"}
-          class="mark-line grid min-h-c-btn-h-lg w-full grid-cols-(--choice-cols) items-center gap-space-3 border-none border-current bg-transparent pr-space-4 pl-space-3 text-start text-inherit active:not-aria-disabled:bg-surface-fill focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) aria-disabled:opacity-50"
+          class="select-none mark-line grid min-h-c-btn-h-lg w-full grid-cols-(--choice-cols) items-center gap-space-3 border-none border-current bg-transparent pr-space-4 pl-space-3 text-start text-inherit active:not-aria-disabled:bg-surface-fill focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) aria-disabled:opacity-50"
           onclick={(event) => {
             if (free) {
               choose(

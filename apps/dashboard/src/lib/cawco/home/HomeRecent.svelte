@@ -96,7 +96,7 @@
       aria-expanded={recentOpen}
       class={sectionHeadVariants({
         class:
-          "group/disclosure press-tint focus-inset min-h-c-btn-h w-full rounded-t-sm border-none border-current bg-transparent transition-control hover:bg-surface-hover hover:text-ink-strong",
+          "select-none group/disclosure press-tint focus-inset min-h-c-btn-h w-full rounded-t-sm border-none border-current bg-transparent transition-control hover:bg-surface-hover hover:text-ink-strong",
       })}
       onclick={toggleRecent}
       type="button"

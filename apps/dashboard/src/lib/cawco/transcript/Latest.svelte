@@ -13,7 +13,7 @@
 
 <!-- The small button's height: where it rests is measured from it. -->
 <button
-  class="mark-line pressable inline-flex items-center gap-space-2 h-c-btn-h-sm py-0 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-label font-medium text-ink-strong hover:bg-surface-hover"
+  class="select-none mark-line pressable inline-flex items-center gap-space-2 h-c-btn-h-sm py-0 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-label font-medium text-ink-strong hover:bg-surface-hover"
   onclick={onjump}
   type="button"
   in:rise={"--dur-panel"}

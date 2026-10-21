@@ -219,7 +219,7 @@
               data-slot="choice"
               class={menuItemVariants({
                 class:
-                  "px-space-3 text-start font-(family-name:--font-mono) text-size-meta text-ink-strong focus-inset",
+                  "select-none px-space-3 text-start font-(family-name:--font-mono) text-size-meta text-ink-strong focus-inset",
               })}
               data-menu-item
               disabled={busy}

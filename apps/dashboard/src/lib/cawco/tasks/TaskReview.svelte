@@ -280,7 +280,7 @@
     <button
       data-slot="attachment"
       aria-label="Open {task.id}: {nameOf(one)}"
-      class="inline-flex items-center gap-space-1 max-w-(--attach-max-w) min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-c-btn-h-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
+      class="select-none inline-flex items-center gap-space-1 max-w-(--attach-max-w) min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-c-btn-h-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
       onclick={() => onopen?.(task.id)}
       style:--attach-my="calc((1lh - var(--c-btn-h-xs)) / 2)"
       style:--attach-my-coarse="calc((1lh - var(--c-btn-h-lg)) / 2)"
@@ -423,7 +423,7 @@
             <button
               data-slot="more"
               aria-expanded={more}
-              class="flex-none ms-auto px-space-2 py-0 rounded-sm type-label text-ink-strong underline underline-offset-2 hover:bg-surface-hover hover:text-ink-strong press-tint focus-inset"
+              class="select-none flex-none ms-auto px-space-2 py-0 rounded-sm type-label text-ink-strong underline underline-offset-2 hover:bg-surface-hover hover:text-ink-strong press-tint focus-inset"
               onclick={() => {
                 more = !more;
               }}

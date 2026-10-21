@@ -48,7 +48,7 @@
   {#if value}
     <button
       data-slot="clear"
-      class="grid place-items-center flex-none size-c-btn-h border-none border-current rounded-md bg-transparent text-ink-muted hover:not-active:bg-surface-hover active:bg-surface-fill group-data-phone/field:size-c-btn-h-lg"
+      class="select-none grid place-items-center flex-none size-c-btn-h border-none border-current rounded-md bg-transparent text-ink-muted hover:not-active:bg-surface-hover active:bg-surface-fill group-data-phone/field:size-c-btn-h-lg"
       aria-label="Clear the words"
       onclick={onclear}
       type="button"

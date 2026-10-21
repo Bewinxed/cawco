@@ -277,7 +277,7 @@
           data-slot="name"
           aria-expanded={cardOpen}
           aria-haspopup="dialog"
-          class="press-tint type-label -mx-space-1 rounded-xs border-none border-current bg-transparent px-space-1 font-medium text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
+          class="select-none press-tint type-label -mx-space-1 rounded-xs border-none border-current bg-transparent px-space-1 font-medium text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
           onclick={cardPress}
           onpointerenter={(event) => {
             cardAnchor = event.currentTarget;

@@ -109,7 +109,7 @@
         >Finder bench</span
       >
       <button
-        class="inline-flex h-c-btn-h items-center gap-space-2 rounded-md border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
+        class="select-none inline-flex h-c-btn-h items-center gap-space-2 rounded-md border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
         data-jump
         onclick={() => (open ? hide() : show())}
         type="button"
@@ -148,12 +148,12 @@
       />
       <div data-slot="controls" class="flex gap-space-1">
         <button
-          class="h-c-btn-h rounded-xs border border-border-control bg-surface-raised px-space-3 type-label text-ink-strong"
+          class="select-none h-c-btn-h rounded-xs border border-border-control bg-surface-raised px-space-3 type-label text-ink-strong"
           type="button">Attach</button
         >
         <button
           data-slot="send"
-          class="h-c-btn-h rounded-xs border-none border-current bg-action-solid px-space-3 type-label text-on-action"
+          class="select-none h-c-btn-h rounded-xs border-none border-current bg-action-solid px-space-3 type-label text-on-action"
           data-send
           onclick={() => send(message)}
           type="button">Send</button
@@ -162,7 +162,7 @@
     </div>
     {#if phone}
       <button
-        class="absolute top-space-3 end-space-3 inline-flex h-c-btn-h items-center gap-space-2 rounded-md border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
+        class="select-none absolute top-space-3 end-space-3 inline-flex h-c-btn-h items-center gap-space-2 rounded-md border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
         data-jump
         onclick={() => show()}
         type="button">Jump</button

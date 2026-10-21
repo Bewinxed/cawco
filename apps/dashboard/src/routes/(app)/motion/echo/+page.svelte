@@ -45,6 +45,7 @@
         <span data-slot="controls" class="flex gap-space-2">
           {#each STATUSES as s (s)}
             <button
+              class="select-none"
               aria-pressed={status === s}
               onclick={() => bench.set(row, s)}
               type="button"

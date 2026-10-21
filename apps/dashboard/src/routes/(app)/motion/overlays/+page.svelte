@@ -235,7 +235,7 @@
        lands on it once the overlay has gone, and the shell's own chrome (the
        top bar, the burger) stays the shell's. -->
   <button
-    class="absolute inset-0 z-0 grid items-box-end justify-items-center border-none border-current bg-transparent p-space-5 text-ink-muted"
+    class="select-none absolute inset-0 z-0 grid items-box-end justify-items-center border-none border-current bg-transparent p-space-5 text-ink-muted"
     data-page
     onclick={() => {
       counts.page += 1;

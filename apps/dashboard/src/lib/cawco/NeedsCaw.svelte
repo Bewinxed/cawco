@@ -698,7 +698,7 @@
       aria-expanded={barGlass.open === "caw"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0 tap-highlight-none @max-desk/shell:coarse:after:start-auto @max-desk/shell:coarse:after:end-0 @max-desk/shell:coarse:after:top-(--caw-hit-top) @max-desk/shell:coarse:after:bottom-auto @max-desk/shell:coarse:after:size-c-btn-h-lg"
+      class="select-none touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0 tap-highlight-none @max-desk/shell:coarse:after:start-auto @max-desk/shell:coarse:after:end-0 @max-desk/shell:coarse:after:top-(--caw-hit-top) @max-desk/shell:coarse:after:bottom-auto @max-desk/shell:coarse:after:size-c-btn-h-lg"
       data-needs-caw
       style:--caw-hit-top={"calc((var(--c-bar-caw-glass-phone) - var(--c-btn-h-lg)) / 2)"}
       type="button"

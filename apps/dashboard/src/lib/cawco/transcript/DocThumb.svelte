@@ -160,7 +160,7 @@
     data-slot="doc"
     data-removable={removable || undefined}
     aria-label={`Open ${name}`}
-    class="press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 data-removable:pe-space-6 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out hover:bg-surface-hover"
+    class="select-none press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 data-removable:pe-space-6 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out hover:bg-surface-hover"
     data-share={share}
     onclick={() =>
       lightbox.open({ kind: "text", name, content: props.content, share })}
@@ -186,7 +186,7 @@
     data-slot="doc"
     data-removable={removable || undefined}
     aria-label={`Couldn't upload ${name}: ${file.failed} Try again`}
-    class="press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 data-removable:pe-space-6 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out hover:bg-surface-hover"
+    class="select-none press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 data-removable:pe-space-6 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out hover:bg-surface-hover"
     onclick={() => file?.onretry?.()}
     title={`${name}: ${file.failed}`}
     type="button"

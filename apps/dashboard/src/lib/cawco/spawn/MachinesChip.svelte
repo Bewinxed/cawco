@@ -125,7 +125,7 @@
       <button
         data-slot="row"
         aria-pressed={on}
-        class="ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color,border-radius] duration-(--dur-toggle) ease-out aria-pressed:bg-selected-bg aria-pressed:[&_:is([data-slot=name],[data-slot=meta])]:text-selected-ink disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
+        class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color,border-radius] duration-(--dur-toggle) ease-out aria-pressed:bg-selected-bg aria-pressed:[&_:is([data-slot=name],[data-slot=meta])]:text-selected-ink disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
         data-fh="1"
         disabled={!row.online}
         onclick={() => ontoggle(row.id)}
@@ -161,7 +161,7 @@
     <button
       data-slot="row"
       data-add
-      class="ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color,border-radius] duration-(--dur-toggle) ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
+      class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color,border-radius] duration-(--dur-toggle) ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
       data-fh="1"
       onclick={startPairing}
       style="--delay:140ms"

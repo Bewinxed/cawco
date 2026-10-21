@@ -388,7 +388,7 @@
             class={pressVariants({
               press: "scale",
               class:
-                "inline-flex size-space-6 items-center justify-center rounded-xs border-none border-current bg-transparent text-ink-subtle hover:text-ink-strong",
+                "select-none inline-flex size-space-6 items-center justify-center rounded-xs border-none border-current bg-transparent text-ink-subtle hover:text-ink-strong",
             })}
             onclick={() => {
               query = "";
@@ -443,7 +443,7 @@
         {#if showCustomRow}
           <button
             data-slot="row"
-            class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint transition-control border border-dashed border-neutral-8 bg-surface-raised hover:bg-surface-hover"
+            class="select-none group relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint transition-control border border-dashed border-neutral-8 bg-surface-raised hover:bg-surface-hover"
             data-fh="1"
             onclick={pickCustom}
             type="button"

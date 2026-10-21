@@ -14,5 +14,5 @@
 <svelte:head><title>New session | CawCo</title></svelte:head>
 <main class="p-space-8 text-ink-strong">
   <h1 class="text-size-title font-medium text-ink-strong">New session</h1>
-  <button onclick={open} type="button">New session</button>
+  <button class="select-none" onclick={open} type="button">New session</button>
 </main>

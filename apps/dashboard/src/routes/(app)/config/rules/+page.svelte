@@ -134,7 +134,7 @@
       <button
         aria-label="Show only rules waiting on an answer"
         aria-pressed={waitingOnly}
-        class="mark-line touch-hit pointer-hit inline-flex h-space-6 items-center gap-space-row rounded-pill border border-border-control bg-surface-raised px-space-3 type-label text-ink-muted transition-property-[background-color,color,border-color] aria-pressed:border-transparent aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover motion-safe:transition-property-[background-color,color,border-color,scale] motion-safe:active:scale-(--press-scale)"
+        class="select-none mark-line touch-hit pointer-hit inline-flex h-space-6 items-center gap-space-row rounded-pill border border-border-control bg-surface-raised px-space-3 type-label text-ink-muted transition-property-[background-color,color,border-color] aria-pressed:border-transparent aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover motion-safe:transition-property-[background-color,color,border-color,scale] motion-safe:active:scale-(--press-scale)"
         onclick={() => {
           waitingOnly = !waitingOnly;
         }}

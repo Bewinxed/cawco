@@ -978,7 +978,7 @@
                     {@const Glyph = GLYPHS[starter.glyph]}
                     <li class="flex max-w-full">
                       <button
-                        class={chipVariants()}
+                        class={chipVariants({ class: "select-none" })}
                         onclick={() => pick(starter.text)}
                         type="button"
                       >

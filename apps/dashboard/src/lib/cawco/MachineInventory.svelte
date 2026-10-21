@@ -120,7 +120,7 @@
           <button
             data-slot="head"
             aria-expanded={open[machine.machineId] === true}
-            class="mark-line focus-inset press-tint flex min-h-c-row-h items-center gap-space-2 rounded-sm px-space-2 py-space-2 text-start transition-control hover:enabled:bg-surface-hover"
+            class="select-none mark-line focus-inset press-tint flex min-h-c-row-h items-center gap-space-2 rounded-sm px-space-2 py-space-2 text-start transition-control hover:enabled:bg-surface-hover"
             disabled={machine.status !== "online" && !open[machine.machineId]}
             onclick={() => expand(machine)}
             type="button"

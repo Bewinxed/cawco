@@ -652,7 +652,7 @@
         <button
           {...props}
           aria-label="{shown}: {tip}"
-          class="grid cursor-help rounded-pill border-none border-current bg-transparent p-0"
+          class="select-none grid cursor-help rounded-pill border-none border-current bg-transparent p-0"
           data-dial-tip
           data-stale-ring={ring.state === "stale" ? "" : undefined}
           type="button"

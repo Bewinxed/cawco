@@ -484,7 +484,7 @@
         {#each kinds.filter((entry) => entry.group === group) as entry (entry.kind)}
           <button
             data-slot="palette-item"
-            class="press-tint flex min-h-c-btn-h-lg items-center gap-space-3 rounded-sm p-space-2 text-start"
+            class="select-none press-tint flex min-h-c-btn-h-lg items-center gap-space-3 rounded-sm p-space-2 text-start"
             onclick={() => add(entry.kind)}
             title={entry.meaning}
             type="button"
@@ -512,7 +512,7 @@
         {#each types as type (type.name)}
           <button
             data-slot="palette-item"
-            class="press-tint flex min-h-c-btn-h-lg items-center gap-space-3 rounded-sm p-space-2 text-start"
+            class="select-none press-tint flex min-h-c-btn-h-lg items-center gap-space-3 rounded-sm p-space-2 text-start"
             onclick={() => add("step", type)}
             type="button"
           >
@@ -771,7 +771,7 @@
                   {#each [{ value: "all", label: "All" }, { value: "waiting", label: "Needs you" }, { value: "failed", label: "Failed" }] as item (item.value)}
                     <button
                       data-slot="run-filter"
-                      class="pointer-hit touch-hit inline-flex h-space-6 items-center rounded-pill px-space-3 type-label text-ink-muted transition-colors aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover"
+                      class="select-none pointer-hit touch-hit inline-flex h-space-6 items-center rounded-pill px-space-3 type-label text-ink-muted transition-colors aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover"
                       aria-pressed={filter === item.value}
                       onclick={() => {
                         filter = item.value;

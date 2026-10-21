@@ -485,7 +485,7 @@
   >
     {#each WHO as who (who.value)}
       <button
-        class="inline-flex items-center gap-space-row h-c-pill-h px-space-3 border border-border-control rounded-pill bg-surface-raised type-label text-ink-muted transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] aria-pressed:border-transparent aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
+        class="select-none inline-flex items-center gap-space-row h-c-pill-h px-space-3 border border-border-control rounded-pill bg-surface-raised type-label text-ink-muted transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] aria-pressed:border-transparent aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
         aria-pressed={(finder.by ?? "anyone") === who.value}
         onclick={() => {
           if (finder.parsed.me && who.value !== "me") {
@@ -502,7 +502,7 @@
         class="mark-line inline-flex items-center gap-space-row h-c-pill-h ps-space-3 pe-space-row border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
         data-flip="pop"
         ><span>{word}</span><button
-          class="grid place-items-center size-icon-lg border-none border-current rounded-pill bg-transparent"
+          class="select-none grid place-items-center size-icon-lg border-none border-current rounded-pill bg-transparent"
           aria-label={`Stop narrowing to ${word}`}
           data-box
           onclick={() => finder.removeWords([word])}
@@ -516,7 +516,7 @@
         class="mark-line inline-flex items-center gap-space-row h-c-pill-h ps-space-3 pe-space-row border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
         data-flip="pop"
         ><span>{time}</span><button
-          class="grid place-items-center size-icon-lg border-none border-current rounded-pill bg-transparent"
+          class="select-none grid place-items-center size-icon-lg border-none border-current rounded-pill bg-transparent"
           aria-label={`Stop narrowing to ${time}`}
           data-box
           onclick={() => finder.removeWords(time.split(" "))}
@@ -718,7 +718,7 @@
         >
       {/if}
       <button
-        class="border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
+        class="select-none border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
         onclick={() => finder.retry()}
         type="button">Retry</button
       >
@@ -748,7 +748,7 @@
         No sessions for “{finder.text.trim()}”
       </p>
       <button
-        class="border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
+        class="select-none border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
         onclick={clear}
         type="button">Open today's sessions</button
       >
@@ -778,7 +778,7 @@
     class="flex items-center gap-space-2 flex-none h-c-row-h ps-space-1 pe-space-2 border-b border-b-border-hairline"
   >
     <button
-      class="grid place-items-center size-c-btn-h border-none border-current rounded-md bg-transparent text-ink-muted active:bg-surface-fill group-data-phone/finder:size-c-btn-h-lg"
+      class="select-none grid place-items-center size-c-btn-h border-none border-current rounded-md bg-transparent text-ink-muted active:bg-surface-fill group-data-phone/finder:size-c-btn-h-lg"
       aria-label="Back to find"
       onclick={() => finder.showFind()}
       type="button"><ChevronLeft class="size-icon-md" /></button
@@ -821,7 +821,7 @@
           Nothing waits for you
         </p>
         <button
-          class="border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
+          class="select-none border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
           onclick={() => finder.showFind()}
           type="button">Open today's sessions</button
         >
@@ -893,7 +893,7 @@
             {/if}
           </p>
           <button
-            class="border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
+            class="select-none border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
             onclick={() => finder.retry()}
             type="button">Retry</button
           >

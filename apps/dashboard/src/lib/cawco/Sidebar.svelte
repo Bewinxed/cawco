@@ -816,7 +816,7 @@
           <button
             {...tip}
             aria-label="Start session"
-            class="focus-inset touch-hit inline-grid flex-none place-items-center size-c-nav-h border-none border-current rounded-sm bg-transparent text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
+            class="select-none focus-inset touch-hit inline-grid flex-none place-items-center size-c-nav-h border-none border-current rounded-sm bg-transparent text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
             data-start-session
             onclick={(event) => newSession(undefined, event.currentTarget)}
             type="button"
@@ -843,7 +843,7 @@
         <button
           data-slot="search"
           aria-haspopup="dialog"
-          class="mark-line press-tint focus-inset flex items-center gap-space-2 w-full min-h-c-btn-h-lg px-space-3 border border-border-control rounded-sm bg-surface-raised type-body text-ink-muted text-start cursor-text"
+          class="select-none mark-line press-tint focus-inset flex items-center gap-space-2 w-full min-h-c-btn-h-lg px-space-3 border border-border-control rounded-sm bg-surface-raised type-body text-ink-muted text-start cursor-text"
           data-share="jump"
           onclick={() => onsearch()}
           type="button"
@@ -867,7 +867,7 @@
               {#snippet child({ props })}
                 <button
                   {...props}
-                  class="{props.class} mark-line"
+                  class="select-none {props.class} mark-line"
                   aria-label={count ? `Files, ${count}` : "Files"}
                   data-sidebar-files
                   onclick={() => onfiles()}

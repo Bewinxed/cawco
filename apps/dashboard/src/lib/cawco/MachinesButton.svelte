@@ -91,7 +91,7 @@
       aria-expanded={barGlass.open === "machines"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="group mark-line touch-hit press-tint"
+      class="select-none group mark-line touch-hit press-tint"
       data-counted={count > 0 || undefined}
       data-tone={tone}
       type="button"

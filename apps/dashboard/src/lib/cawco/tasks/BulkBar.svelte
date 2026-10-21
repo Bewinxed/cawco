@@ -223,7 +223,9 @@
             {#each labels as each (each)}
               <li>
                 <button
-                  class={menuItemVariants({ class: "w-full text-start" })}
+                  class={menuItemVariants({
+                    class: "select-none w-full text-start",
+                  })}
                   data-menu-item
                   onclick={() => label(each)}
                   type="button"><span>{each}</span></button

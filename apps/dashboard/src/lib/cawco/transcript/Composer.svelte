@@ -3659,7 +3659,7 @@
             aria-busy={pending || undefined}
             aria-disabled={pending || held || undefined}
             aria-label={stops ? "Stop the agent" : "Send message"}
-            class={sendVariants({ class: "group/stop touch-hit" })}
+            class={sendVariants({ class: "group/stop select-none touch-hit" })}
             disabled={!(
               busy ||
               pending ||

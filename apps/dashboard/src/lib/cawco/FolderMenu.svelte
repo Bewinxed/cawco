@@ -136,7 +136,7 @@
           <span class="text-label font-medium text-ink-muted">Colour</span>
           {#if pickedHue !== undefined}
             <button
-              class="rounded-full px-2 py-0.5 text-label text-ink-muted
+              class="select-none rounded-full px-2 py-0.5 text-label text-ink-muted
                      transition-colors duration-(--dur-control) hover:bg-accent hover:text-ink-strong"
               onclick={() => folderPrefs.setHue(cwd, undefined)}
               type="button"
@@ -154,7 +154,7 @@
             {@const on = folderPrefs.hue(cwd) === hue}
             <button
               aria-pressed={on}
-              class="focus-inset flex size-space-8 items-center justify-center rounded-full transition-colors
+              class="select-none focus-inset flex size-space-8 items-center justify-center rounded-full transition-colors
                      duration-(--dur-control)
                      aria-pressed:outline-solid aria-pressed:outline-(length:--focus-ring-width)
                      aria-pressed:outline-offset-(--focus-ring-inset) aria-pressed:outline-ink-strong

@@ -123,7 +123,7 @@
     <span data-slot="value" class="min-w-0 text-ink-muted"
       >{momentsState.machine} didn't answer<span class="px-space-1">·</span
       ><button
-        class="border-none border-current p-0 bg-transparent text-link-ink"
+        class="select-none border-none border-current p-0 bg-transparent text-link-ink"
         onclick={onretry}
         type="button">Retry</button
       ></span

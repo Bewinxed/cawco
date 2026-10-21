@@ -545,6 +545,7 @@
             {...tip}
             aria-label="Archive {title}"
             class={cn(
+              "select-none",
               ROW_ACTION,
               "no-hover:hidden can-hover:group-data-peek/session-row:end-(--archive-end)"
             )}
@@ -575,7 +576,7 @@
             data-session-row-peek
             {...tip}
             aria-label="Peek {title}"
-            class={cn(ROW_ACTION, "max-desk:hidden")}
+            class={cn("select-none", ROW_ACTION, "max-desk:hidden")}
             onclick={() => openPeek({ viewId: live.id, href, title })}
             type="button"
           >
@@ -658,7 +659,7 @@
     >
       {act.pending}
       <button
-        class="border-none border-current bg-transparent p-0 font-inherit text-ink-strong underline underline-offset-2"
+        class="select-none border-none border-current bg-transparent p-0 font-inherit text-ink-strong underline underline-offset-2"
         onclick={stopPending}
         type="button">{act.stop.label}</button
       >

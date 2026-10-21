@@ -270,7 +270,7 @@
                 />
               {:else if column.getCanSort()}
                 <button
-                  class="inline-flex items-center gap-space-1 -me-space-1 p-space-1 rounded-sm type-label tracking-caps uppercase text-ink-muted mark-line press-tint focus-inset"
+                  class="select-none inline-flex items-center gap-space-1 -me-space-1 p-space-1 rounded-sm type-label tracking-caps uppercase text-ink-muted mark-line press-tint focus-inset"
                   onclick={column.getToggleSortingHandler()}
                   type="button"
                 >

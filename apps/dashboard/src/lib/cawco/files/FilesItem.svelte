@@ -37,7 +37,7 @@
       aria-expanded={barGlass.open === "files"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="mark-line touch-hit press-tint"
+      class="select-none mark-line touch-hit press-tint"
       data-counted={counted || undefined}
       data-files-control
       type="button"
