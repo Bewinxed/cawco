@@ -134,18 +134,55 @@ function outline(el: Element | null) {
   highlight.hidden = !el;
   label.hidden = true;
   if (el) {
-    cover(highlight, rectOf(el));
+    outlineOver(el);
   }
 }
 
-/** Lays `node` over `rect`, the viewport's px. */
-function cover(node: HTMLElement, rect: DOMRect) {
-  Object.assign(node.style, {
+const CORNERS = [
+  "borderTopLeftRadius",
+  "borderTopRightRadius",
+  "borderBottomRightRadius",
+  "borderBottomLeftRadius",
+] as const;
+
+/**
+ * Lays the highlight over `el`, in the top viewport's px, its corners
+ * concentric with `el`'s: each corner takes `el`'s own computed radius
+ * (scaled as a frame or a transform draws it), `--radius-xs` its floor, so a
+ * square block is never a hard square; the outline, offset round that, grows
+ * its radius by the offset (outer radius = inner radius + gap). The page as
+ * a whole (its root or body) keeps the sheet's own corners. Returns the box.
+ */
+function outlineOver(el: Element): DOMRect {
+  const rect = rectOf(el);
+  Object.assign(highlight.style, {
     left: `${rect.x}px`,
     top: `${rect.y}px`,
     width: `${rect.width}px`,
     height: `${rect.height}px`,
   });
+  const doc = el.ownerDocument;
+  if (el === doc.body || el === doc.documentElement) {
+    for (const corner of CORNERS) {
+      highlight.style[corner] = "";
+    }
+    return rect;
+  }
+  const own = (doc.defaultView ?? window).getComputedStyle(el);
+  const laidWidth = el instanceof HTMLElement ? el.offsetWidth : 0;
+  const scale = laidWidth > 0 ? rect.width / laidWidth : 1;
+  for (const corner of CORNERS) {
+    // A computed corner is one or two lengths (px) or percentages; a percentage is of the box, which the highlight shares.
+    highlight.style[corner] = own[corner]
+      .split(" ")
+      .map((part) => {
+        const px = part.endsWith("px") ? Number.parseFloat(part) : Number.NaN;
+        const value = Number.isNaN(px) ? part : `${px * scale}px`;
+        return `max(var(--radius-xs), ${value})`;
+      })
+      .join(" ");
+  }
+  return rect;
 }
 
 /** The person's pins, drawn after the ink (pins.ts). */
@@ -1438,8 +1475,7 @@ function hover(el: Element | null) {
   if (!hovered) {
     return;
   }
-  const rect = rectOf(hovered);
-  cover(highlight, rect);
+  const rect = outlineOver(hovered);
   label.textContent = labelOf(hovered);
   label.style.left = `${Math.max(0, Math.min(rect.x, innerWidth - label.offsetWidth))}px`;
   label.style.top = `${Math.max(0, rect.y - label.offsetHeight)}px`;
