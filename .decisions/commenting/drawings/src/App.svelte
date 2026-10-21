@@ -89,7 +89,7 @@
   const SPEC_DONE: PendingFile = { id: "spec", name: "spec.csv", mediaType: "text/csv", progress: 1, ref: "/api/files/spec", size: 12_288 };
   const BRIEF_UPLOADING: PendingFile = { id: "brief", name: "brief.pdf", mediaType: "application/pdf", progress: 0.4, size: 2_400_000 };
   const SPEC_FAILED: PendingFile = { id: "spec", name: "spec.csv", mediaType: "text/csv", progress: 0, error: "The hub could not be reached.", size: 12_288 };
-  const WORDS = "Put Create under the fields.";
+  const WORDS = "Move it up, like this.";
 </script>
 
 <!-- The review's pins: 14 on Create routine, 12 on When, 13 on the whole page at the well's top-right corner. -->
@@ -165,7 +165,7 @@
                     class="absolute start-0 top-[calc(100%+var(--space-2))] z-20 w-(--c-pin-card-w)"
                     data-float
                   >
-                    <Docked action="Comment" placeholder="What should change here?" {...PROMPT} />
+                    <Docked action="Comment" placeholder="What should change?" {...PROMPT} />
                   </div>
                 {/if}
               {/snippet}
@@ -179,14 +179,14 @@
   {:else if scene === "ctx-attach"}
     <!-- What a comment carries (attachments-design §2, §3): attached and done, one still uploading, one that couldn't. -->
     <div class="flex w-fit items-start gap-space-4" data-board>
-      {#snippet attached()}<Docked action="Comment" draft={draftOf([REF], [SPEC_DONE], WORDS)} focus={false} placeholder="What should change here?" target="Create routine" chain={["Routine form", "Whole page"]} />{/snippet}
-      {#snippet uploading()}<Docked action="Comment" draft={draftOf([REF], [BRIEF_UPLOADING], WORDS)} focus={false} placeholder="What should change here?" target="Create routine" chain={["Routine form", "Whole page"]} />{/snippet}
+      {#snippet attached()}<Docked action="Comment" draft={draftOf([REF], [SPEC_DONE], WORDS)} focus={false} placeholder="What should change?" target="Create routine" chain={["Routine form", "Whole page"]} />{/snippet}
+      {#snippet uploading()}<Docked action="Comment" draft={draftOf([REF], [BRIEF_UPLOADING], WORDS)} focus={false} placeholder="What should change?" target="Create routine" chain={["Routine form", "Whole page"]} />{/snippet}
       {#snippet failed()}<Docked
           action="Comment"
           chain={["Routine form", "Whole page"]}
           draft={draftOf([], [SPEC_FAILED], WORDS)}
           focus={false}
-          placeholder="What should change here?"
+          placeholder="What should change?"
           sendError="spec.csv didn’t upload. The hub could not be reached. Tap it to try again."
           target="Create routine"
         />{/snippet}
@@ -264,7 +264,7 @@
       <Docked
         action="Comment"
         draft={draftOf([], [], scene === "p4-el-typed" ? "Three rows is too short; show the whole prompt." : "")}
-        placeholder="What should change here?"
+        placeholder="What should change?"
         {...PROMPT}
       />
     </Float>
@@ -277,7 +277,7 @@
           {#snippet foot()}<div class="px-space-3"><Docked
               action="Comment"
               draft={draftOf([], [], scene === "p4-rail-typed" ? "Three rows is too short; show the whole prompt." : "")}
-              placeholder="What should change here?"
+              placeholder="What should change?"
               {...PROMPT}
             /></div>{/snippet}
         </RailList>
@@ -290,7 +290,7 @@
       {#snippet pictureOnly()}<Docked
           action="Comment"
           draft={draftOf([REF], [], "", alone ? ComposerDraft : WordsFirstDraft)}
-          placeholder="What should change here?"
+          placeholder="What should change?"
           {...PROMPT}
         />{/snippet}
       {@render card(alone ? "A picture, no words: Comment sends it" : "A picture, no words: Comment stays off", pictureOnly)}
@@ -304,9 +304,9 @@
       {:else}
         {#snippet withWords()}<Docked
             action="Comment"
-            draft={draftOf([REF], [], "Show the whole prompt, like this.", WordsFirstDraft)}
+            draft={draftOf([REF], [], "Show it all, like this.", WordsFirstDraft)}
             focus={false}
-            placeholder="What should change here?"
+            placeholder="What should change?"
             {...PROMPT}
           />{/snippet}
         {@render card("With a sentence, Comment sends", withWords)}

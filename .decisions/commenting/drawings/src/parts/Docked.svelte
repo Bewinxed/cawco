@@ -5,7 +5,8 @@
   this host stands in the flow at the height the composer reports
   (`onfoot`) plus its dock's foot, and gives it the host's width
   (`--c-composer-w`, which the composer's column reads). `target`
-  is the lead row's chip (TargetChip); `action` the word on its action box.
+  is the lead row's chip (TargetChip); `action` the send glyph's label and
+  tooltip ("Comment", "Reply").
 -->
 <script lang="ts">
   import Composer from "$kit/cawco/transcript/Composer.svelte";
@@ -23,7 +24,8 @@
   }: {
     draft?: ComposerDraft;
     action: string;
-    placeholder: string;
+    /** The field's hint (Composer `placeholder`): one string, or its full words and the short part that fits any field. */
+    placeholder: string | { full: string; short: string };
     /** What the comment is about, its chip leading the pill; none for a reply. */
     target?: string | null;
     /** The chip's menu: the element's parents, out to the whole page. */

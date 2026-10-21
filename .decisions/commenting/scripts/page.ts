@@ -3,7 +3,8 @@
  * - the program checked by the hub's own `checkProgram` (refused in its
  *   words if the hub would refuse it);
  * - the page the hub serves (`programHost`) around the decision host bundle
- *   core builds (`buildDecisionHost`), each Image's file at its address;
+ *   core serves (`decisionHostFile`, the hub's own: the bundle, the house
+ *   faces and DialKit's files), each Image's file at its address;
  * - a bridge on `window.cawco` as the overlay puts there, so the options are
  *   live picks;
  * - at 1440×900 in playwright-core's Chromium: every card has its options
@@ -16,7 +17,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
-import { buildDecisionHost } from "../../../packages/core/src/decision-host.ts";
+import { decisionHostFile } from "../../../packages/core/src/decision-host.ts";
 import {
   checkProgram,
   programHost,
@@ -34,7 +35,6 @@ const missing = (
 if (missing.length > 0) {
   throw new Error(`No file beside page.oui for: ${missing.join(", ")}`);
 }
-const host = await buildDecisionHost();
 const BRIDGE = `<script>
   // The overlay's bridge (preview-overlay pick.ts), as far as the page reads it.
   (() => {
@@ -58,8 +58,6 @@ const html = programHost(checked.program, checked.read.title, files).replace(
   `</title>\n${BRIDGE}`
 );
 
-const TYPES: Record<string, string> = { css: "text/css", js: "text/javascript" };
-
 const server = Bun.serve({
   port: 0,
   async fetch(request) {
@@ -68,11 +66,8 @@ const server = Bun.serve({
       return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
     }
     if (path.startsWith("/__cawco/decision/")) {
-      const file = host.get(path.slice("/__cawco/decision/".length));
-      if (file) {
-        const type = TYPES[path.slice(path.lastIndexOf(".") + 1)] ?? "application/octet-stream";
-        return new Response(file, { headers: { "content-type": type } });
-      }
+      const file = await decisionHostFile(path.slice("/__cawco/decision/".length));
+      if (file) { return file; }
     }
     if (path.startsWith("/files/")) {
       const file = Bun.file(join(HERE, decodeURIComponent(path.slice("/files/".length))));

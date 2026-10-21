@@ -263,8 +263,13 @@
     planRing?: Snippet;
     /** What it stands over the transcript's foot, told to the pane it is lent to. */
     onfoot?: (foot: ComposerFoot) => void;
-    /** The field's hint, for a surface whose agent takes no `/` or `@`. */
-    placeholder?: string;
+    /**
+     * The field's hint, for a surface whose agent takes no `/` or `@`: one
+     * string where it fits every field, or its `full` words and the `short`
+     * first part that fits any field, the field showing whichever its own
+     * width holds on one line.
+     */
+    placeholder?: string | { full: string; short: string };
     /**
      * The session's skills and MCP servers, and its last reply, for the
      * suggestion chips. Absent on surfaces with no session behind them.
@@ -297,18 +302,15 @@
     attach?: boolean;
     /**
      * A row inside the pill, above the field, across its width: what the
-     * words are about (the comment composer's target chip). With it the
-     * field takes its own row too, the pill's whole width, and the controls
-     * stand at the end of the row under it: a pin card's pill is too narrow
-     * to hold the field's hint beside Attach and a worded action. None on a
-     * session's composer.
+     * words are about (the comment composer's target chip). The field and
+     * the controls stand under it as they always do. None on a session's
+     * composer.
      */
     lead?: Snippet;
     /**
-     * The action box says this word instead of the send glyph ("Comment",
-     * "Reply"), its own label read out: where what is written does not go
-     * to the agent at once, and so never turns into Stop. None on a
-     * session's composer.
+     * What the send glyph does here, as its label and its tooltip
+     * ("Comment", "Reply"): where what is written does not go to the agent
+     * at once, and so never turns into Stop. None on a session's composer.
      */
     action?: string;
   } = $props();
@@ -357,9 +359,16 @@
 
   /** The field's hint in full, and its first part, which fits any field. */
   const HINT = $derived(
-    placeholder ?? "Message the agent…  /  for commands, @ to mention"
+    typeof placeholder === "string"
+      ? placeholder
+      : (placeholder?.full ??
+          "Message the agent…  /  for commands, @ to mention")
   );
-  const HINT_SHORT = $derived(placeholder ?? "Message the agent…");
+  const HINT_SHORT = $derived(
+    typeof placeholder === "string"
+      ? placeholder
+      : (placeholder?.short ?? "Message the agent…")
+  );
   /** What the field is called, read out: its hint without the trailing ellipsis. */
   const FIELD_LABEL = $derived(HINT_SHORT.replace(/…$/, ""));
   /**
@@ -3529,7 +3538,7 @@
         <div
           data-folded={folded || undefined}
           data-slot="composer-field"
-          class="group/field touch-hit relative flex flex-auto min-w-0 group-data-lead/cin:basis-full"
+          class="group/field touch-hit relative flex flex-auto min-w-0 group-data-lead/cin:basis-0"
           inert={askOpen}
           bind:this={fieldWrap}
           style:--roll-move="0 var(--roll-y)"
@@ -3676,7 +3685,7 @@
              (`--hit-gap-x`, which .touch-hit reads) switches with it. -->
         <div
           data-slot="ctrls"
-          class="group/ctrls flex items-center gap-space-2 coarse:gap-space-3 hit-gap-x-space-2 coarse:hit-gap-x-space-3 flex-none group-data-lead/cin:ms-auto transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
+          class="group/ctrls flex items-center gap-space-2 coarse:gap-space-3 hit-gap-x-space-2 coarse:hit-gap-x-space-3 flex-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
           inert={!!recall}
           bind:this={ctrls}
         >
@@ -3697,12 +3706,8 @@
             aria-busy={pending || undefined}
             aria-disabled={pending || held || undefined}
             aria-label={action ?? (stops ? "Stop the agent" : "Send message")}
-            class={sendVariants({
-              class: [
-                "group/stop select-none touch-hit",
-                action && "w-auto px-space-3 type-button",
-              ],
-            })}
+            class={sendVariants({ class: "group/stop select-none touch-hit" })}
+            title={action}
             disabled={!(
               busy ||
               pending ||
@@ -3722,18 +3727,14 @@
                    its replacement overlap there while they cross-fade. -->
               <!-- The glyph swapping in; reduced motion keeps the fade: no
                    scale, no blur. The optical nudge is on the carrier's
-                   `translate`, which the swap's `transform` does not touch;
-                   an action's word sits centred, unnudged. -->
+                   `translate`, which the swap's `transform` does not touch. -->
               <span
                 data-slot="swap"
-                data-word={(action && !pending) || undefined}
-                class="row-start-1 col-start-1 grid place-items-center motion-safe:animate-icon-swap motion-reduce:animate-icon-swap-still group-enabled/stop:not-data-word:translate-x-(--optical-nudge) group-enabled/stop:not-data-word:-translate-y-(--optical-nudge)"
+                class="row-start-1 col-start-1 grid place-items-center motion-safe:animate-icon-swap motion-reduce:animate-icon-swap-still group-enabled/stop:translate-x-(--optical-nudge) group-enabled/stop:-translate-y-(--optical-nudge)"
                 out:glyphOut
               >
                 {#if pending}
                   <Spinner aria-hidden="true" role="presentation" />
-                {:else if action}
-                  <span data-slot="action-word">{action}</span>
                 {:else if stops}
                   <IconStop />
                 {:else}
