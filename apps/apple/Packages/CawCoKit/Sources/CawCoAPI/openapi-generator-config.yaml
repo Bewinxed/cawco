@@ -122,6 +122,7 @@ typeOverrides:
     PhoneDoneAction: OpenEnums.PhoneDoneAction
     PhoneDoneDecidedBy: OpenEnums.PhoneDoneDecidedBy
     PinKind: OpenEnums.PinKind
+    PinResolvedBy: OpenEnums.PinResolvedBy
     PlaceKind: OpenEnums.PlaceKind
     PlacementStrategy: OpenEnums.PlacementStrategy
     PlanEditKind: OpenEnums.PlanEditKind
@@ -152,7 +153,6 @@ typeOverrides:
     SendMode: OpenEnums.SendMode
     SendState: OpenEnums.SendState
     SessionAttachmentKind: OpenEnums.SessionAttachmentKind
-    SessionAttachmentWho: OpenEnums.SessionAttachmentWho
     SessionPulseActivity: OpenEnums.SessionPulseActivity
     SigninKind: OpenEnums.SigninKind
     SigninState: OpenEnums.SigninState

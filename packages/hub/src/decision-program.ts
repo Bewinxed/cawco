@@ -517,6 +517,42 @@ export const checkProgram = (raw: string): CheckedProgram => {
 export const readKept = (program: string): ProgramRead =>
   readProgram(parser.parse(program).root);
 
+/**
+ * Each Decision of a program by its card id, with its question and its
+ * print: the Decision as the page draws it, every statement it names
+ * resolved into it (its options, its media), so a revision of any of them
+ * changes the card's print. What a revision's changed cards are read from.
+ */
+export const cardPrints = (
+  program: string
+): Map<string, { print: string; question: string }> => {
+  const prints = new Map<string, { print: string; question: string }>();
+  const walk = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const each of value) {
+        walk(each);
+      }
+      return;
+    }
+    if (!(value && typeof value === "object" && "typeName" in value)) {
+      return;
+    }
+    const node = value as { props: Record<string, unknown>; typeName: string };
+    if (node.typeName === "Decision" && typeof node.props.id === "string") {
+      prints.set(node.props.id, {
+        question: String(node.props.question ?? ""),
+        print: JSON.stringify(node.props),
+      });
+      return;
+    }
+    for (const prop of Object.values(node.props)) {
+      walk(prop);
+    }
+  };
+  walk(parser.parse(program).root);
+  return prints;
+};
+
 /** Each statement of a program by its name, as written. */
 const statementsOf = (program: string): Map<string, string> => {
   const found = new Map<string, string>();
@@ -597,6 +633,10 @@ export type ImageRead = { bytes: Uint8Array } | { problem: string };
 
 const FILE_NAME = /[^A-Za-z0-9._-]+/g;
 
+/** Where the page keeps the file an Image names, the `index`th the program names: `files/<index>-<name>`, beside the page. */
+export const imagePath = (name: string, index: number): string =>
+  `files/${index}-${(name.split("/").at(-1) ?? "image").replace(FILE_NAME, "-")}`;
+
 /**
  * `raw` checked and built: each file its Images name read with `image`
  * (refused, every reason at once, when one can't be), and the host page
@@ -616,7 +656,7 @@ export const buildProgram = async (
     refuse(problems);
   }
   const files = names.map((name, index) => ({
-    path: `files/${index}-${(name.split("/").at(-1) ?? "image").replace(FILE_NAME, "-")}`,
+    path: imagePath(name, index),
     bytes: (reads[index] as { bytes: Uint8Array }).bytes,
   }));
   const addresses = Object.fromEntries(

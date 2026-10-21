@@ -14,7 +14,8 @@
  * `meta`, and its claims and results on the agent's `requests`, within the
  * canvas's bounds (core `CANVAS_LIMITS`). Either may write the person's ink,
  * its moved groups and its pins (`ink`, `moved`, `pins`), within core
- * `INK_LIMITS`. An update that breaks
+ * `INK_LIMITS`, and the person's looks at a revision's changes in `meta.seen`
+ * (core changes.ts `seenProblem`). An update that breaks
  * them is not applied: the socket is closed with {@link REFUSED} and the
  * reason, and the client joins again from the hub's doc.
  */
@@ -26,6 +27,7 @@ import {
   choiceEntryProblem,
 } from "@cawco/core";
 import { CANVAS_LIMITS } from "@cawco/core/canvas";
+import { seenProblem } from "@cawco/core/changes";
 import {
   COMMENT_LIMITS,
   type MarkPictures,
@@ -136,23 +138,39 @@ const requestsProblem = (
   return null;
 };
 
-/** Why a screen's change to a canvas's `meta` may not be kept: it keeps its pen mode there, and nothing else. */
+/**
+ * Why a person's change to the doc's `meta` may not be kept: they keep their
+ * looks at a revision's changes there (`seen`, core changes.ts), and a
+ * canvas's screen its pen mode; nothing else.
+ */
 const metaProblem = (
   before: YMap<unknown>,
-  after: YMap<unknown>
+  after: YMap<unknown>,
+  canvas: boolean
 ): string | null => {
   for (const key of new Set([...after.keys(), ...before.keys()])) {
     const value = after.get(key);
-    if (!PEN_KEYS.has(key)) {
-      if (!same(value, before.get(key))) {
-        return "A screen keeps only penMode and penDetected in a canvas's meta.";
+    if (same(value, before.get(key))) {
+      continue;
+    }
+    if (key === SEEN_KEY) {
+      const problem = seenProblem(value);
+      if (problem) {
+        return problem;
       }
+    } else if (!(canvas && PEN_KEYS.has(key))) {
+      return canvas
+        ? "A screen keeps only penMode, penDetected and the person's looks in a canvas's meta."
+        : "A page keeps only the person's looks in its artifact's meta.";
     } else if (!(value === undefined || typeof value === "boolean")) {
       return `${key} is true or false.`;
     }
   }
   return null;
 };
+
+/** Where the person's looks at a revision's changes are kept in `meta`. */
+const SEEN_KEY = "seen";
 
 /** Why one entry of a canvas's elements is not one: a map of `el` (an element with its id), `pos`, and `by` when it says who. */
 const entryProblem = (entry: unknown): string | null => {
@@ -219,7 +237,7 @@ const canvasProblem = (doc: Doc, trial: Doc): string | null => {
     return `A canvas keeps at most ${CANVAS_LIMITS.elements} elements.`;
   }
   return (
-    metaProblem(doc.getMap("meta"), trial.getMap("meta")) ??
+    metaProblem(doc.getMap("meta"), trial.getMap("meta"), true) ??
     elements
       .toArray()
       .map(entryProblem)
@@ -241,11 +259,16 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
   for (const name of MAPS) {
     if (!(
       name === "state" ||
+      name === "meta" ||
       INK_MAPS.includes(name) ||
       sameMap(trial.getMap(name), doc.getMap(name))
     )) {
       return `A page changes its artifact's state and ink only, not its ${name}.`;
     }
+  }
+  const meta = metaProblem(doc.getMap("meta"), trial.getMap("meta"), false);
+  if (meta) {
+    return meta;
   }
   const ink = inkMapsProblem(doc, trial);
   if (ink) {

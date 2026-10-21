@@ -6922,6 +6922,33 @@
         }
       }
     },
+    "/api/artifacts/{artifact}/places": {
+      "get": {
+        "parameters": [
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiArtifactsByArtifactPlaces",
+        "responses": {
+          "200": {
+            "description": "getApiArtifactsByArtifactPlaces 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactPlaces"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/artifacts/{artifact}": {
       "get": {
         "parameters": [
@@ -26874,6 +26901,9 @@
           "entry": {
             "$ref": "#/components/schemas/ThreadEntry"
           },
+          "link": {
+            "type": "string"
+          },
           "number": {
             "type": "number"
           },
@@ -26883,6 +26913,7 @@
         },
         "required": [
           "entry",
+          "link",
           "number",
           "pin"
         ]
@@ -26890,6 +26921,9 @@
       "postApiInstancesByIdArtifactsCommentsByPinResolve200": {
         "type": "object",
         "properties": {
+          "link": {
+            "type": "string"
+          },
           "number": {
             "type": "number"
           },
@@ -26901,6 +26935,7 @@
           }
         },
         "required": [
+          "link",
           "number",
           "pin",
           "resolvedAt"
@@ -36515,6 +36550,10 @@
             "$ref": "#/components/schemas/GraphBroken",
             "description": "What a decision page's program left broken on the picks and the graph; absent when nothing."
           },
+          "cards": {
+            "type": "object",
+            "description": "A decision page's cards this create changed (every card of a new page), each by its `cawco:decision` link."
+          },
           "decisions": {
             "description": "A decision page's decisions, by id, in page order.",
             "type": "array",
@@ -36579,6 +36618,10 @@
           },
           "kind": {
             "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "link": {
+            "description": "Its `cawco:artifact` link, to name it by in your words.",
+            "type": "string"
           },
           "moves": {
             "description": "A component canvas's flow moves, each with the animations it fired.",
@@ -37566,6 +37609,10 @@
           "kind": {
             "$ref": "#/components/schemas/ArtifactKind"
           },
+          "link": {
+            "description": "An update's: the artifact's `cawco:artifact` link, to name it by in your words.",
+            "type": "string"
+          },
           "missing": {
             "type": "array",
             "items": {
@@ -37842,6 +37889,10 @@
             "$ref": "#/components/schemas/GraphBroken",
             "description": "What it left broken on the picks and the graph; absent when nothing."
           },
+          "cards": {
+            "type": "object",
+            "description": "The cards it changed, each by its `cawco:decision` link."
+          },
           "decisions": {
             "description": "Its decisions now, by id, in page order.",
             "type": "array",
@@ -37861,6 +37912,10 @@
             "type": "string"
           },
           "id": {
+            "type": "string"
+          },
+          "link": {
+            "description": "The page's `cawco:artifact` link.",
             "type": "string"
           },
           "moved": {
@@ -37899,6 +37954,7 @@
         "required": [
           "decisions",
           "id",
+          "link",
           "moved",
           "pageHash",
           "revision",
@@ -38283,6 +38339,7 @@
                   "type": "string"
                 },
                 "pins": {
+                  "description": "Each pin with its `cawco:pin` link, to name it by in your words.",
                   "type": "array",
                   "items": {
                     "allOf": [
@@ -38314,8 +38371,14 @@
                               "x",
                               "y"
                             ]
+                          },
+                          "link": {
+                            "type": "string"
                           }
-                        }
+                        },
+                        "required": [
+                          "link"
+                        ]
                       }
                     ]
                   }
@@ -38410,6 +38473,14 @@
             ]
           },
           "resolvedAt": {
+            "type": "string"
+          },
+          "resolvedBy": {
+            "$ref": "#/components/schemas/PinResolvedBy",
+            "description": "Who resolved it: the agent's resolve (comment_resolve) is an answer the person has to see."
+          },
+          "seenAt": {
+            "description": "When the person last looked at it: its card opened, by a press, a chip or a step.",
             "type": "string"
           },
           "sentAt": {
@@ -38803,7 +38874,7 @@
             "type": "string"
           },
           "by": {
-            "$ref": "#/components/schemas/SessionAttachmentWho"
+            "$ref": "#/components/schemas/PinResolvedBy"
           },
           "files": {
             "description": "Files an agent's reply names as changed.",
@@ -38845,6 +38916,103 @@
         "required": [
           "commit",
           "path"
+        ]
+      },
+      "ArtifactPlaces": {
+        "description": "What a reference's chip draws of an artifact, as the hub holds it now\n(`GET /api/artifacts/:id/places`): its name and kind, the session whose\npanel holds it, each pin's state by its number, each decision card's\nquestion and whether it is picked.",
+        "type": "object",
+        "properties": {
+          "cards": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "picked": {
+                  "type": "boolean"
+                },
+                "question": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "picked",
+                "question"
+              ]
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "instanceId": {
+            "description": "The session whose panel holds it; null for a project's page no session holds.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pins": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "firstLine": {
+                  "description": "Its thread's first line, for the chip's peek; null when nothing is written.",
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "moved": {
+                  "description": "Its element is gone from the page.",
+                  "type": "boolean"
+                },
+                "name": {
+                  "description": "What it stands on, in words (core pin-name.ts).",
+                  "type": "string"
+                },
+                "number": {
+                  "type": "number"
+                },
+                "resolved": {
+                  "type": "boolean"
+                },
+                "unread": {
+                  "description": "It holds an answer the person has not looked at (core comments.ts `pinUnread`).",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "firstLine",
+                "id",
+                "moved",
+                "name",
+                "number",
+                "resolved",
+                "unread"
+              ]
+            }
+          }
+        },
+        "required": [
+          "cards",
+          "id",
+          "instanceId",
+          "kind",
+          "name",
+          "pins"
         ]
       },
       "CanvasExport": {
@@ -48510,7 +48678,7 @@
             "type": "string"
           },
           "who": {
-            "$ref": "#/components/schemas/SessionAttachmentWho",
+            "$ref": "#/components/schemas/PinResolvedBy",
             "description": "Who sent it: the person, or the session's agent."
           }
         },
@@ -59117,6 +59285,13 @@
           "comment"
         ]
       },
+      "PinResolvedBy": {
+        "type": "string",
+        "enum": [
+          "agent",
+          "person"
+        ]
+      },
       "PlanStepPriority": {
         "type": "string",
         "enum": [
@@ -59200,13 +59375,6 @@
           "file",
           "image",
           "text"
-        ]
-      },
-      "SessionAttachmentWho": {
-        "type": "string",
-        "enum": [
-          "agent",
-          "person"
         ]
       },
       "SessionPulseActivity": {

@@ -7,7 +7,9 @@
    * beside Close; Open and Resolved are a segmented filter; under them the
    * rows scroll on their own. A row is the comment: the pin's disc, the
    * person's first words wrapping to four lines, the thread's last line in
-   * meta ink, the live dot while the agent works on it; the whole row is
+   * meta ink, the live dot while the agent works on it; while an answer of
+   * the agent's is unread, the needs-you dot on its disc and the last line
+   * in `ink-strong` ("Pin N, new answer" to a screen reader); the whole row is
    * the press that opens its card. A pin whose element is gone stays under
    * its own tab, its disc recessed, and opens its card like any other: the
    * tabs count every pin the hub holds, each count drawn only above 0
@@ -44,6 +46,7 @@
     down,
     focused,
     live,
+    unread = new Set(),
     onopen,
     onretry,
     onclose,
@@ -59,6 +62,8 @@
     focused: string | null;
     /** Pins the agent is working on now: each wears the live dot. */
     live: ReadonlySet<string>;
+    /** Pins holding an answer the person has not looked at (core `pinUnread`): each disc wears the needs-you dot, its last line `ink-strong`. */
+    unread?: ReadonlySet<string>;
     onopen: (id: string) => void;
     /** Try again after the comments couldn't be read, or while their link stands lost. */
     onretry: () => void;
@@ -105,6 +110,13 @@
     }
     return pin.thread.length === 0 ? "text-ink-muted" : "text-ink-strong";
   };
+  /** The last line's ink: selected-ink on the wash, else ink-strong while its answer is unread, else ink-muted. */
+  const lastInk = (current: boolean, answered: boolean) => {
+    if (current) {
+      return "text-selected-ink";
+    }
+    return answered ? "text-ink-strong" : "text-ink-muted";
+  };
   /** The thread's last line once it runs past its first entry, which the title already shows. */
   const lastLine = (pin: Pin) => {
     const last = pin.thread.length > 1 ? pin.thread.at(-1) : undefined;
@@ -120,12 +132,14 @@
 {#snippet row(pin: Pin)}
   {@const last = lastLine(pin)}
   {@const current = pin.id === focused}
+  {@const answered = unread.has(pin.id)}
   <li>
     <!-- The row is the comment and the press that opens its card: it holds no button. -->
     <button
       data-slot="pin-row"
       aria-current={current || undefined}
       data-moved={pin.movedAt ? "" : undefined}
+      data-unread={answered || undefined}
       class="select-none flex items-start gap-space-2 w-full min-h-c-artifact-row-h px-space-2 py-space-2 border-none border-current rounded-sm bg-transparent text-ink-row type-body text-start transition-[background-color] duration-(--dur-control) ease-out not-active:not-aria-current:hover:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-selected-bg focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
       data-pin-row={pin.number}
       onclick={() => onopen(pin.id)}
@@ -136,13 +150,18 @@
           moved={!!pin.movedAt}
           number={pin.number}
           resolved={!!pin.resolvedAt}
+          unread={answered}
         />
       </span>
       <!-- One ink per word on the row: on the selected wash every word is
            selected-ink (ink-muted measures 4.49:1 on it by day, DESIGN.md
            Colors: Selected); off it, the title ink-strong, or ink-muted
-           while nothing is written yet, and the last line ink-muted. -->
+           while nothing is written yet, and the last line ink-muted, or
+           ink-strong while its answer is unread. -->
       <span data-slot="words" class="flex flex-1 min-w-0 flex-col">
+        {#if answered}
+          <span class="sr-only">Pin {pin.number}, new answer.</span>
+        {/if}
         <span
           data-slot="title"
           class={["line-clamp-4 wrap-anywhere", titleInk(pin, current)]}
@@ -153,7 +172,7 @@
             data-slot="last"
             class={[
               "flex min-w-0 gap-space-1 type-meta",
-              current ? "text-selected-ink" : "text-ink-muted",
+              lastInk(current, answered),
             ]}
             ><span class="flex-none">{last.by}</span><span
               class="min-w-0 truncate">{last.text}</span

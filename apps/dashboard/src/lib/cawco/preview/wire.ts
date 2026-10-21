@@ -337,6 +337,49 @@ export function previewSheet(value: unknown): SheetOnPage | null {
   };
 }
 
+/**
+ * One stop of the "changed since you looked" tag, as the overlay tells it
+ * (`cawco:stops`, overlay changes.ts): a change by its anchor, a pin's
+ * unread answer by its id, or both at once; a change that left the page
+ * stands by its label alone.
+ */
+export interface PreviewStop {
+  anchor?: string;
+  key: string;
+  label: string;
+  pin?: string;
+  removed?: true;
+}
+
+/** The most stops the tag takes: a revision's changes and the pins' answers (core `CHANGE_LIMITS.items`, twice). Our call. */
+const STOPS_MOST = 80;
+const STOP_TEXT = 500;
+
+/** The overlay's stops, in page order, each checked and bounded; none when it says none. */
+export function previewStops(value: unknown): PreviewStop[] {
+  return (Array.isArray(value) ? value.slice(0, STOPS_MOST) : []).flatMap(
+    (raw) => {
+      const stop = record(raw);
+      const key = text(stop?.key, STOP_TEXT);
+      const label = text(stop?.label, STOP_TEXT);
+      if (!(stop && key && label !== null)) {
+        return [];
+      }
+      const anchor = text(stop.anchor, STOP_TEXT);
+      const pin = previewPinId(stop.pin);
+      return [
+        {
+          key,
+          label,
+          ...(anchor ? { anchor } : {}),
+          ...(pin ? { pin } : {}),
+          ...(stop.removed === true ? { removed: true as const } : {}),
+        },
+      ];
+    }
+  );
+}
+
 /** The pane's keys: V, C and D its modes, `C` (⇧C) its pins shown or hidden, J and K a step, Enter and Esc. */
 export type PaneKey = "v" | "c" | "d" | "C" | "j" | "k" | "Enter" | "Escape";
 

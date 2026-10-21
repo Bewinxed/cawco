@@ -8,7 +8,8 @@
    * grip) resizes its width, both sides at once, and its height. The
    * handles are cut to the grown shape with the canvas, so they come in as
    * it grows. The page's words come here: ready, the picture drawn, its
-   * doc's link to the hub and its count, kept on its stage, and the rail's
+   * doc's link to the hub and its count, what changed on it since the
+   * person looked (the panel's changes tag stands over it), kept on its stage, and the rail's
    * Dock, Undock, Done and Remove, which go to whoever holds the slot it
    * stands in.
    */
@@ -16,7 +17,11 @@
   import { Portal } from "bits-ui";
   import { untrack } from "svelte";
   import { theme } from "#lib/theme.svelte.js";
-  import { previewShortcut, SHORTCUT_MESSAGE } from "../preview/wire";
+  import {
+    previewShortcut,
+    previewStops,
+    SHORTCUT_MESSAGE,
+  } from "../preview/wire";
   import { watchInput } from "../reload.svelte";
   import { runShellShortcut } from "../shell-shortcut";
   import { type Handle, type Stage, slotSizes, stages } from "./stage.svelte";
@@ -56,6 +61,10 @@
         break;
       case "cawco:drawn":
         stage.heardDrawn(event.data.count);
+        break;
+      // What changed on it since the person looked (overlay changes.ts): the pane that holds it steps them.
+      case "cawco:stops":
+        stage.stops = previewStops(event.data.stops);
         break;
       case "cawco:dock":
         actions?.dock?.();
@@ -152,6 +161,10 @@
         <p class="m-0 p-space-4 text-size-body text-data-bad" role="alert">
           {stage.unreached}
         </p>
+      {/if}
+      {#if stage.at === "panel" && stage.over}
+        <!-- What the pane that holds it stands over it: its changes tag. -->
+        {@render stage.over()}
       {/if}
       {#if stage.at === "composer" && stage.grab && stage.grabValue}
         {@render grip(stage, "top")}

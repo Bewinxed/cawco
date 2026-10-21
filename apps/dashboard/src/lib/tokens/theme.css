@@ -206,6 +206,7 @@
   --color-status-attn-glyph: var(--status-attn-glyph);
   --color-tab-rim-attn: var(--tab-rim-attn);
   --color-status-done-glyph: var(--status-done-glyph);
+  --color-change-wash: var(--change-wash);
   --color-status-fail-glyph: var(--status-fail-glyph);
   --color-status-idle-glyph: var(--status-idle-glyph);
   --color-nest-ink: var(--nest-ink);

@@ -162,6 +162,8 @@
   } = $props();
 
   setContext("cawco:machine", () => session.machineId);
+  // The conversation a written link's chip stands in: its panel is where a pin, a card or an artifact opens (PlaceReference).
+  setContext("cawco:panel", () => session.instanceId);
 
   /** One transcript, on screen, being read: `focused` follows `visible`. */
   const isFocused = $derived(focused ?? visible);

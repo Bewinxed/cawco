@@ -1,27 +1,18 @@
 <script lang="ts">
-  import {
-    ARTIFACT_RESPONSES,
-    type ArtifactKind,
-    MOVED_HERE,
-  } from "@cawco/core";
-  import type { Component } from "svelte";
+  import { ARTIFACT_RESPONSES, MOVED_HERE } from "@cawco/core";
   import { showArtifact } from "#lib/cawco/artifact-api.js";
+  import { ARTIFACT_GLYPHS } from "#lib/cawco/artifact-glyphs.js";
   import { revealPreview } from "#lib/cawco/client.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import {
-    IconArtifactCanvas,
-    IconArtifactPage,
-    IconArtifactSheet,
     IconChevronRight,
     IconClock,
     IconError,
-    IconGlobe,
     IconInfo,
     IconStop,
     IconSuccess,
     IconTerminal,
-    IconWindow,
   } from "#lib/icons.js";
   import MessageBody from "../MessageBody.svelte";
   import { CAW_EVENT, useVoice } from "../turn/voice";
@@ -142,14 +133,7 @@
         }
       : null
   );
-  const RESPONSE_GLYPHS: Record<ArtifactKind, Component<{ class?: string }>> = {
-    page: IconArtifactPage,
-    canvas: IconArtifactCanvas,
-    preview: IconWindow,
-    component: IconArtifactSheet,
-    browser: IconGlobe,
-  };
-  const ResponseGlyph = $derived(RESPONSE_GLYPHS[responses?.kind ?? "page"]);
+  const ResponseGlyph = $derived(ARTIFACT_GLYPHS[responses?.kind ?? "page"]);
   const responsesState = $derived.by(() => {
     if (message?.state === "failed") {
       return "not sent";

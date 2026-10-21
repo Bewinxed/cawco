@@ -59,6 +59,8 @@
     "./ink": "./src/ink.ts",
     "./shapes": "./src/shapes.ts",
     "./comments": "./src/comments.ts",
+    "./changes": "./src/changes.ts",
+    "./pin-name": "./src/pin-name.ts",
     "./doc-link": "./src/doc-link.ts",
     "./stage": "./src/stage.ts",
     "./canvas-host": "./src/canvas-host.ts",

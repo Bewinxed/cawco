@@ -367,6 +367,12 @@
     /* A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim mixed from it cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own. */
     --tab-rim-attn: light-dark(oklch(48% 0.125 78), oklch(87% 0.14 92));
     --status-done-glyph: light-dark(oklch(52% 0.14 140), oklch(76% 0.15 135));
+    /* The done wash over an element a revision changed that the person has not looked at (the preview overlay's change marks): the done glyph at 14%, drawn over the element's words, so it is never opaque. 14% is the most that keeps every house ink at 4.5:1 or better on the blend, on raised, page and recess, day and night (ink-muted on the page by day reads 4.65:1; 20% drops it to 4.29:1). */
+    --change-wash: color-mix(
+      in oklch,
+      var(--status-done-glyph) 14%,
+      transparent
+    );
     --status-fail-glyph: light-dark(oklch(53% 0.19 22), oklch(71% 0.16 20));
     --status-idle-glyph: var(--neutral-11);
     /* The nesting lines' ink (.kit-nest, WorkflowRail): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one. */

@@ -35,6 +35,7 @@
    * the field holds is the pin's draft, which the pane keeps with the pin.
    */
   import type { Pin } from "@cawco/core/comments";
+  import { pinName, pinSelector } from "@cawco/core/pin-name";
   import { type Component, tick, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -57,7 +58,6 @@
   import Who from "../turn/Who.svelte";
   import LiveDot from "./LiveDot.svelte";
   import PinDisc from "./PinDisc.svelte";
-  import { pinName, pinSelector } from "./pin-name";
   import type { PreviewPinAt } from "./wire";
 
   let {

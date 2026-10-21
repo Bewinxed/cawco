@@ -51,7 +51,11 @@ export { default as IconTranscript } from "~icons/solar/chat-round-line-bold-duo
 export { default as IconChat } from "~icons/solar/chat-square-bold-duotone";
 export { default as IconSuccess } from "~icons/solar/check-circle-bold-duotone";
 export { default as IconCheck } from "~icons/solar/check-read-bold-duotone";
-export { default as IconToolTodo } from "~icons/solar/checklist-bold-duotone";
+/** A todo list; and a decision page's card, as a written link's chip marks it. */
+export {
+  default as IconDecisionCard,
+  default as IconToolTodo,
+} from "~icons/solar/checklist-bold-duotone";
 /** A starter that files tasks: its ticks on a half-ink body, as every starter's glyph is (StarterCards). */
 export { default as IconTaskList } from "~icons/solar/checklist-minimalistic-bold-duotone";
 /** A report; and a project's decision pages (the Decisions tab's tiles and its empty state). */

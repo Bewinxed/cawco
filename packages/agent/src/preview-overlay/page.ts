@@ -27,6 +27,7 @@ import { shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import type { Map as YMap } from "yjs";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
 import { here, mark, markOf } from "./boot";
+import { startChanges } from "./changes";
 import { fillFields, trackFields } from "./fields";
 import {
   deepElementAt,
@@ -151,6 +152,14 @@ let pinLeads = false;
 let composing = false;
 /** The card's field shows its keyboard ring (`cawco:composer-ring`). */
 let ringed = false;
+/** The change the host's tag stepped onto (changes.ts): chosen as a pin's element is, while no pin's leads. */
+let stepped: Element | null = null;
+
+/** The change the host's tag stepped onto, chosen; none ends it. */
+function stepTo(el: Element | null) {
+  stepped = el;
+  paint();
+}
 
 /**
  * Pin `el`'s element chosen, or none; `lead` says whether it leads the
@@ -191,10 +200,11 @@ function drawsBox(el: Element): boolean {
 
 /** The one target drawn: the chosen pin's element, else the element under the pointer in Comment mode; and its label in Comment mode. */
 function paint() {
-  const chosen =
+  const pinned =
     pinEl?.isConnected && (!commenting() || composing || pinLeads)
       ? pinEl
       : null;
+  const chosen = pinned ?? (stepped?.isConnected ? stepped : null);
   const target = chosen ?? (commenting() && !composing ? hovered : null);
   highlight.hidden = !target;
   const doc = target?.ownerDocument;
@@ -264,11 +274,20 @@ function outlineOver(el: Element): DOMRect {
   return rect;
 }
 
+/** What changed since the person looked: the done wash under the pins, the stops the host's tag steps (changes.ts). */
+const changeMarks = startChanges({
+  chrome,
+  choose: stepTo,
+  pins: () => pins,
+  post,
+});
+
 /** The person's pins, drawn after the ink (pins.ts). */
 const pins: Pins = startPins({
   anchorOf,
   chrome,
   describe,
+  drawn: () => changeMarks.draw(),
   groupBox: (id) => ink.groupBox(id),
   locate,
   outline,
@@ -503,6 +522,8 @@ artifact.watch({
   },
   meta: () => {
     republished();
+    // A revision's changes, the person's looks and their Send mark the page anew.
+    pins.draw();
     tellDoc();
   },
   ink: () => {
@@ -1629,6 +1650,10 @@ window.addEventListener(
     ) {
       return;
     }
+    // A press in Interact on a changed element is the person's look at it.
+    if (target && modeNow === "interact") {
+      changeMarks.pressed(target);
+    }
     post("cawco:press");
   },
   { capture: true, passive: true }
@@ -2083,6 +2108,17 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       ringed = message.on === true;
       paint();
     },
+    // A chip's press asked for a decision card: scrolled to and outlined (changes.ts).
+    "cawco:card": (message) => {
+      if (typeof message.id === "string") {
+        changeMarks.card(message.id.slice(0, 200));
+      }
+    },
+    // The host's tag stepped onto a stop (changes.ts), or the step is over.
+    "cawco:step": (message) =>
+      changeMarks.step(
+        typeof message.key === "string" ? message.key.slice(0, 500) : null
+      ),
     // What the host's chrome covers of the page (its Comments list, a
     // phone's card): a pin it opens is brought out from under it.
     "cawco:covered": (message) => pins.cover(coveredOf(message.boxes)),

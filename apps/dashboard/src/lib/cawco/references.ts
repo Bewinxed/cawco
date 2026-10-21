@@ -10,11 +10,30 @@
  * kind, or naming an id the dashboard does not hold, is its label alone;
  * any other destination is a link.
  */
-import { parseReference, type ReferenceKind } from "@cawco/core";
+import { parseReference, placeOf, type ReferenceKind } from "@cawco/core";
 import type { Component } from "svelte";
+import ArtifactReference from "./ArtifactReference.svelte";
 import { cawco } from "./client.svelte";
+import DecisionReference from "./DecisionReference.svelte";
+import PinReference from "./PinReference.svelte";
+import { places } from "./preview/places.svelte";
 import SessionReference from "./SessionReference.svelte";
 import { threadTabId } from "./thread-tabs";
+
+/**
+ * A place in an artifact (`<artifact>/<place>`), as the dashboard holds it:
+ * the id itself when the artifact is held and `has` finds the place on it,
+ * else null. An artifact not read yet is asked for, and the chip stands once
+ * it is (places.svelte.ts).
+ */
+const placeIn = (
+  id: string,
+  has: (held: NonNullable<ReturnType<typeof places.of>>, at: string) => boolean
+): string | null => {
+  const place = placeOf(id);
+  const held = place ? places.of(place.artifact) : null;
+  return place && held && has(held, place.at) ? id : null;
+};
 
 interface ReferenceElement {
   /** What draws it, given the id `find` answered. */
@@ -42,6 +61,31 @@ export const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
     // imports reach the markdown that imports this registry.
     get element() {
       return SessionReference;
+    },
+  },
+  /** A pin, by its artifact and the number its disc shows: one the artifact still holds. */
+  pin: {
+    find: (id) =>
+      placeIn(id, (held, at) =>
+        held.pins.some((pin) => String(pin.number) === at)
+      ),
+    get element() {
+      return PinReference;
+    },
+  },
+  /** A decision card, by its page and its id: one the page still asks. */
+  decision: {
+    find: (id) =>
+      placeIn(id, (held, at) => held.cards.some((card) => card.id === at)),
+    get element() {
+      return DecisionReference;
+    },
+  },
+  /** An artifact the hub holds, by its id. */
+  artifact: {
+    find: (id) => (places.of(id) ? id : null),
+    get element() {
+      return ArtifactReference;
     },
   },
 };

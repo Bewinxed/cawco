@@ -33,6 +33,7 @@ import {
   heardFromHost,
   toHost as postToHost,
 } from "../preview-overlay/host-origin";
+import { ChangeMarks } from "./changes";
 import { Icon } from "./icons";
 import { guardImages } from "./images";
 import { tokenMs } from "./motion";
@@ -565,6 +566,9 @@ function Host() {
         viewModeEnabled={unlinked || EMBEDDED}
         zenModeEnabled={false}
       />
+      {api && !EMBEDDED ? (
+        <ChangeMarks api={api} reduced={lessMotion.now} />
+      ) : null}
       {api && !EMBEDDED ? (
         <Rail
           api={api}

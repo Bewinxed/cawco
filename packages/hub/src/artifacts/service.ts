@@ -13,6 +13,7 @@
  * the burst is delivered as one message carrying them
  * ({@link ArtifactServiceDeps.deliverMarks}).
  */
+import { createHash } from "node:crypto";
 import { cpSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import {
@@ -22,6 +23,7 @@ import {
   type ArtifactDoes,
   type ArtifactHit,
   type ArtifactKind,
+  type ArtifactPlaces,
   type ArtifactPromotion,
   type ArtifactSummary,
   type ArtifactThumbnail,
@@ -29,16 +31,19 @@ import {
   ASK_PATHLIKE,
   artifactCommentsNotice,
   artifactErrorsNotice,
+  artifactLink,
   artifactSavesNotice,
   type ChoiceEntry,
   choiceEntryProblem,
   DESK_CAPTURE_WIDTH,
   DESK_CAPTURES_PER_PAGE,
+  decisionLink,
   type InstanceRow,
   machineLabel,
   noteText,
   type PreviewAddress,
   type PreviewSource,
+  pinLink,
   type ShownFailure,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -50,14 +55,22 @@ import {
 } from "@cawco/core/canvas";
 import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
 import {
+  CHANGE_LIMITS,
+  type ChangeItem,
+  changeLabel,
+  changesOf,
+} from "@cawco/core/changes";
+import {
   COMMENT_LIMITS,
   inkSection,
   type MarkPictures,
   type Pin,
   pinDelivery,
+  pinFirstLine,
   pinHeard,
   pinReady,
   pinSaid,
+  pinUnread,
   pinUnsent,
   type SendBody,
   type ThreadEntry,
@@ -77,6 +90,7 @@ import {
   parse,
 } from "@cawco/core/find-match";
 import type { InkGroup } from "@cawco/core/ink";
+import { pinName } from "@cawco/core/pin-name";
 import { type FolderWeight, pageHash } from "@cawco/core/preview-proxy";
 import {
   type CanvasDial,
@@ -107,6 +121,8 @@ import type { Doc, YMapEvent } from "yjs";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
 import {
   type BuiltProgram,
+  cardPrints,
+  imagePath,
   mergeProgram,
   PROGRAM_FILE,
   ProgramRefusal,
@@ -409,6 +425,8 @@ export interface ArtifactRead {
   held?: string;
   id: string;
   kind: ArtifactKind;
+  /** An update's: the artifact's `cawco:artifact` link, to name it by in your words. */
+  link?: string;
   missing?: string[];
   name: string;
   /** A canvas, as you read it: one line per element (core `canvasOutline`). */
@@ -467,6 +485,8 @@ export interface GraphBroken {
 export interface Revised {
   /** What it left broken on the picks and the graph; absent when nothing. */
   broken?: GraphBroken;
+  /** The cards it changed, each by its `cawco:decision` link. */
+  cards?: Record<string, string>;
   /** Its decisions now, by id, in page order. */
   decisions: string[];
   /** Components the library does not have, dropped and never drawn. */
@@ -474,6 +494,8 @@ export interface Revised {
   /** Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show. */
   held?: string;
   id: string;
+  /** The page's `cawco:artifact` link. */
+  link: string;
   /** Decisions the revision added or took out, by id; a removed one's pick is kept. */
   moved: { added: string[]; removed: string[] };
   pageHash: string;
@@ -520,6 +542,8 @@ export interface ArtifactStatus {
 export interface Created {
   /** What a decision page's program left broken on the picks and the graph; absent when nothing. */
   broken?: GraphBroken;
+  /** A decision page's cards this create changed (every card of a new page), each by its `cawco:decision` link. */
+  cards?: Record<string, string>;
   /** A decision page's decisions, by id, in page order. */
   decisions?: string[];
   /** Components a decision page's program names that the library does not have: dropped, never drawn. */
@@ -534,6 +558,8 @@ export interface Created {
   host?: string;
   id: string;
   kind: ArtifactKind;
+  /** Its `cawco:artifact` link, to name it by in your words. */
+  link?: string;
   /** A component canvas's flow moves, each with the animations it fired. */
   moves?: ReturnType<typeof movesSaid>;
   name: string;
@@ -620,7 +646,8 @@ export interface CommentRead {
     id: string;
     kind: ArtifactKind;
     name: string;
-    pins: (Pin & { inkBox?: InkGroup["page"] })[];
+    /** Each pin with its `cawco:pin` link, to name it by in your words. */
+    pins: (Pin & { inkBox?: InkGroup["page"]; link: string })[];
   }[];
   at: string;
 }
@@ -731,6 +758,10 @@ const promotedJson = (value: unknown): string =>
   `${JSON.stringify(value, null, 2)}\n`;
 
 const routeOf = (id: string) => `/__cawco/artifact/${id}`;
+
+/** A file's bytes as a sha256, hex: what tells a picture replaced from one left as it was. */
+const hashOf = (bytes: Uint8Array): string =>
+  createHash("sha256").update(bytes).digest("hex");
 
 /** The doc's `state`, read as entries. */
 const stateOf = (doc: Doc): Record<string, ChoiceEntry> =>
@@ -1681,6 +1712,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const heldId = (row: ArtifactRow): { held?: string; id: string } =>
     row.heldFor === null ? { id: row.id } : { id: row.heldFor, held: row.id };
 
+  /** The artifact's `cawco:artifact` link, for the agent to name it by: a held next version's is its artifact's. */
+  const linkOf = (row: ArtifactRow): string =>
+    artifactLink(row.heldFor ?? row.id, row.name);
+
+  /** Pin `pin`'s `cawco:pin` link on `row`, labelled with what it stands on (core `pinName`), cut as a change's label is. */
+  const pinLinkOf = (row: ArtifactRow, pin: Pin): string =>
+    pinLink(row.heldFor ?? row.id, pin.number, changeLabel(pinName(pin)));
+
   /**
    * A create's show, and what readies the artifact after it (`ready`, a
    * canvas's drawing). The session's own artifact is shown in its panel,
@@ -2023,22 +2062,160 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * Writes the doc's meta for the artifact as the hub keeps it: what the
-   * person does there and its ask, which every open view's head reads, and
-   * when the session last changed it (`revisedAt`), which a Send answers.
+   * person does there and its ask, which every open view's head reads, when
+   * the session last changed it (`revisedAt`), which a Send answers, and
+   * what this revision changed (`changes`, core changes.ts), replacing the
+   * last revision's.
    */
-  const stampMeta = (row: ArtifactRow, hash: string | null) => {
+  const stampMeta = (
+    row: ArtifactRow,
+    hash: string | null,
+    changed: ChangeItem[] = []
+  ) => {
     docs.transact(row.id, "hub", (doc) => {
       const meta = doc.getMap("meta");
+      const at = new Date().toISOString();
       meta.set("kind", row.kind);
       meta.set("name", row.name);
       meta.set("does", row.does);
       meta.set("ask", row.ask);
       meta.set("revision", row.revision);
-      meta.set("revisedAt", new Date().toISOString());
+      meta.set("revisedAt", at);
+      meta.set("changes", {
+        revision: row.revision,
+        at,
+        items: changed.slice(0, CHANGE_LIMITS.items),
+      });
       if (hash !== null) {
         meta.set("pageHash", hash);
       }
     });
+  };
+
+  /** A decision page's program and its pictures' hashes, by the name each Image gives, as they stand before a revision writes over them. */
+  const pageBefore = (row: ArtifactRow) => {
+    const folder = join(deps.root, row.id);
+    const read = (file: string) => {
+      try {
+        return readFileSync(join(folder, file));
+      } catch {
+        return null;
+      }
+    };
+    const program = programOf(row);
+    const names = program ? [...new Set(readKept(program).images)] : [];
+    const pictures = new Map(
+      names.flatMap((name, index) => {
+        const bytes = read(imagePath(name, index));
+        return bytes ? [[name, hashOf(bytes)] as const] : [];
+      })
+    );
+    return { program, pictures };
+  };
+
+  /**
+   * What a revision of a decision page changed from `was` ({@link
+   * pageBefore}): its cards (each Decision's print, its options and media
+   * resolved in, against the last program's) and its pictures (an Image
+   * whose file's bytes changed, by the name it gives). Nothing on its first
+   * program: everything on it is new.
+   */
+  const programChanges = (
+    was: ReturnType<typeof pageBefore>,
+    program: BuiltProgram
+  ): ChangeItem[] => {
+    if (was.program === undefined) {
+      return [];
+    }
+    const before = cardPrints(was.program);
+    const after = cardPrints(program.program);
+    const card = (id: string, question: string) => ({
+      kind: "card" as const,
+      anchor: `#decision-${id}`,
+      label: changeLabel(question || id),
+    });
+    const names = [...new Set(program.read.images)];
+    return [
+      ...[...after]
+        .filter(([id, now]) => before.get(id)?.print !== now.print)
+        .map(([id, now]) => card(id, now.question)),
+      ...[...before]
+        .filter(([id]) => !after.has(id))
+        .map(([id, gone]) => ({
+          ...card(id, gone.question),
+          removed: true as const,
+        })),
+      ...program.files.flatMap((file, index) => {
+        const name = names[index] ?? file.path;
+        const had = was.pictures.get(name);
+        return had && had !== hashOf(file.bytes)
+          ? [
+              {
+                kind: "picture" as const,
+                anchor: `img[src="${file.path}"]`,
+                label: changeLabel(name.split("/").at(-1) || name),
+              },
+            ]
+          : [];
+      }),
+    ];
+  };
+
+  /**
+   * A create's page written into its folder (nothing for any other kind),
+   * and what it changed: a decision page made again is a revision of it, its
+   * changes against the program it replaces; `first` when it has none before.
+   */
+  const pageWritten = (
+    row: ArtifactRow,
+    before: ArtifactRow | undefined,
+    html: string | null,
+    program: BuiltProgram | undefined
+  ): { changed: ChangeItem[]; first: boolean } => {
+    const was = before && program ? pageBefore(row) : null;
+    if (html !== null) {
+      writePage(row.id, html, program);
+    }
+    return {
+      changed: was && program ? programChanges(was, program) : [],
+      first: was === null,
+    };
+  };
+
+  /** The cards a decision page's revision changed, each by its `cawco:decision` link; every card on its first. */
+  const cardLinks = (
+    row: ArtifactRow,
+    program: BuiltProgram | undefined,
+    changed: ChangeItem[],
+    first: boolean
+  ): { cards?: Record<string, string> } => {
+    if (!program) {
+      return {};
+    }
+    const asked = new Set(
+      changed.flatMap((item) =>
+        item.kind === "card" && !item.removed
+          ? [item.anchor.slice("#decision-".length)]
+          : []
+      )
+    );
+    const cards = program.read.cards.filter(
+      (card) => first || asked.has(card.id)
+    );
+    return cards.length > 0
+      ? {
+          cards: Object.fromEntries(
+            cards.map((card) => [
+              card.id,
+              decisionLink(
+                row.heldFor ?? row.id,
+                card.id,
+                card.question || card.id
+              ),
+            ])
+          ),
+        }
+      : {};
   };
 
   /** A new ask in the doc, as a revision is: every open view's head morphs to it, and a Send before it is answered. */
@@ -2732,6 +2909,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...owed.map((pin) =>
         pinDelivery(pin, {
           url,
+          link: pinLinkOf(row, pin),
           ...(pin.ink && groups[pin.ink] ? { ink: groups[pin.ink].page } : {}),
         })
       ),
@@ -3225,6 +3403,50 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /** A canvas's change: elements added or replaced by id, ids deleted, or Mermaid appended; read after as `ownersRead` says. */
+  /**
+   * What an update of canvas `row` changed, written into its doc as a
+   * revision of its drawing (`meta.changes`, the last one's replaced): the
+   * elements it wrote, each by its text or id, and those it deleted.
+   */
+  const canvasChanged = (
+    row: ArtifactRow,
+    wrote: string[],
+    deleted: string[],
+    skeletons: SkeletonElement[]
+  ) => {
+    /** A skeleton's words: its label's text, else its own text. */
+    const wordsOf = (element: SkeletonElement): unknown =>
+      (element.label as { text?: unknown } | undefined)?.text ?? element.text;
+    const said = new Map(
+      skeletons.flatMap((element) => {
+        const text = wordsOf(element);
+        return element.id && typeof text === "string" && text
+          ? [[element.id, text] as const]
+          : [];
+      })
+    );
+    const item = (id: string) => ({
+      kind: "canvas" as const,
+      anchor: id,
+      label: changeLabel(said.get(id) ?? id),
+    });
+    // The ids the agent named, when it named them: a label's own text element is its shape's, not a change of its own.
+    const ids = new Set(skeletons.flatMap((element) => element.id ?? []));
+    const kept = ids.size > 0 ? wrote.filter((id) => ids.has(id)) : wrote;
+    docs.transact(row.id, "hub", (doc) => {
+      const meta = doc.getMap("meta");
+      const was = changesOf(meta.get("changes"));
+      meta.set("changes", {
+        revision: (was?.revision ?? row.revision) + 1,
+        at: new Date().toISOString(),
+        items: [
+          ...kept.map(item),
+          ...deleted.map((id) => ({ ...item(id), removed: true as const })),
+        ].slice(0, CHANGE_LIMITS.items),
+      });
+    });
+  };
+
   const updateCanvas = async (
     row: ArtifactRow,
     change: CanvasChange,
@@ -3238,6 +3460,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         );
       }
       const { deleted, missing } = deleteElements(docs, row.id, change.delete);
+      canvasChanged(row, [], deleted, []);
       return {
         ...readCanvas(
           db.get(row.id) as ArtifactRow,
@@ -3260,6 +3483,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           )
         : [];
     const wrote = await draw(row, change);
+    canvasChanged(row, wrote, [], "elements" in change ? change.elements : []);
     return {
       ...readCanvas(
         db.get(row.id) as ArtifactRow,
@@ -4048,12 +4272,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     mediaHeld(holder(row) ?? instance, program);
     const before = new Set(readKept(existing).cards.map((card) => card.id));
     const after = program.read.cards.map((card) => card.id);
+    const was = pageBefore(row);
     const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
     writePage(moved.id, page.html, program);
     const hash = pageHash(program.program);
-    stampMeta(moved, hash);
+    const changed = programChanges(was, program);
+    stampMeta(moved, hash, changed);
     return {
       id: moved.id,
+      link: linkOf(moved),
+      ...cardLinks(moved, program, changed, false),
       revision: moved.revision,
       pageHash: hash,
       statements: merged.change,
@@ -4279,6 +4507,44 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
+     * What a reference's chip draws of artifact `id` (core `ArtifactPlaces`):
+     * its name and kind and the session holding it, each pin's state by its
+     * number, each card's question and whether it is picked.
+     */
+    places: (id: string): ArtifactPlaces => {
+      const row = db.get(id);
+      if (!row) {
+        throw new ArtifactRefusal(404, `No artifact ${id} on this hub.`);
+      }
+      const doc = docs.doc(row.id);
+      const state = stateOf(doc);
+      const { sentAt } = metaOf(doc);
+      const pins = Object.values(
+        doc.getMap("pins").toJSON() as Record<string, Pin>
+      ).sort((a, b) => a.number - b.number);
+      return {
+        id: row.id,
+        instanceId: row.instanceId,
+        kind: row.kind,
+        name: row.name,
+        pins: pins.map((pin) => ({
+          id: pin.id,
+          number: pin.number,
+          name: pinName(pin),
+          firstLine: pinFirstLine(pin),
+          resolved: !!pin.resolvedAt,
+          moved: !!pin.movedAt,
+          unread: pinUnread(pin, sentAt),
+        })),
+        cards: choicesAsked(row).map(({ card, id: cardId }) => ({
+          id: cardId,
+          question: card?.question || cardId,
+          picked: card ? pickOf(card, state[cardId]).picked : cardId in state,
+        })),
+      };
+    },
+
+    /**
      * An artifact by id with the session that made it, and whether that
      * session's panel shows it now: what its own tab opens on.
      */
@@ -4365,10 +4631,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         machineId,
       });
       await letGo(movedFrom, row);
-      if (html !== null) {
-        writePage(row.id, html, program);
-      }
-      stampMeta(row, pageHashOf(html, program));
+      const { changed, first } = pageWritten(row, before, html, program);
+      stampMeta(row, pageHashOf(html, program), changed);
       keepProgramDir(row, program, input.dir);
       // A held next version leaves the server its artifact shows up until it is opened (promote).
       keepServed(row, holding ? undefined : before, stage);
@@ -4384,6 +4648,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ...said,
         kind: row.kind,
         name: row.name,
+        link: linkOf(row),
+        ...cardLinks(row, program, changed, first),
         route: routeOf(said.id),
         ...openedOf(shown),
         ...(stage ? { stage } : {}),
@@ -4422,7 +4688,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ? pageChanged(instance, row, change, ownersRead)
           : updateCanvas(row, change, ownersRead)
       );
-      return heldAnswer(answer);
+      return heldAnswer({ ...answer, link: linkOf(found) });
     },
 
     /**
@@ -5061,7 +5327,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         }
         const answered = pins.map((pin) => {
           const inkBox = pin.ink ? groups[pin.ink]?.page : undefined;
-          return inkBox ? { ...pin, inkBox } : pin;
+          const link = pinLinkOf(row, pin);
+          return inkBox ? { ...pin, inkBox, link } : { ...pin, link };
         });
         const address =
           (doc.getMap("meta").get("sentUrl") as string | null | undefined) ??
@@ -5087,7 +5354,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       pinId: string,
       text: string,
       files?: string[]
-    ): { entry: ThreadEntry; number: number; pin: string } => {
+    ): { entry: ThreadEntry; link: string; number: number; pin: string } => {
       const { row, pin } = pinOf(sessionOf(instanceId), pinId);
       if (pin.thread.length >= COMMENT_LIMITS.entries) {
         throw new ArtifactRefusal(
@@ -5109,15 +5376,24 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           .getMap("pins")
           .set(pin.id, { ...before, thread: [...before.thread, entry] })
       );
-      return { pin: pin.id, number: pin.number, entry };
+      return {
+        pin: pin.id,
+        number: pin.number,
+        link: pinLinkOf(row, pin),
+        entry,
+      };
     },
 
-    /** The agent resolves a pin, with a last reply when given; the person can reopen it. */
+    /**
+     * The agent resolves a pin, with a last reply when given; the person can
+     * reopen it. Its resolve is an answer (`resolvedBy`), which the panel
+     * marks until the person looks.
+     */
     commentResolve: (
       instanceId: string,
       pinId: string,
       text?: string
-    ): { number: number; pin: string; resolvedAt: string } => {
+    ): { link: string; number: number; pin: string; resolvedAt: string } => {
       const { row, pin } = pinOf(sessionOf(instanceId), pinId);
       const at = new Date().toISOString();
       const thread = text
@@ -5131,7 +5407,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             },
           ].slice(-COMMENT_LIMITS.entries)
         : pin.thread;
-      const resolved: Pin = { ...pin, thread, resolvedAt: at };
+      const resolved: Pin = {
+        ...pin,
+        thread,
+        resolvedAt: at,
+        resolvedBy: "agent",
+      };
       // The agent's own resolve is not the person's to tell it of.
       docs.transact(row.id, "hub", (doc) =>
         doc.getMap("pins").set(pin.id, {
@@ -5139,7 +5420,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ...(pin.heard === undefined ? {} : { heard: pinSaid(resolved) }),
         })
       );
-      return { pin: pin.id, number: pin.number, resolvedAt: at };
+      return {
+        pin: pin.id,
+        number: pin.number,
+        link: pinLinkOf(row, pin),
+        resolvedAt: at,
+      };
     },
 
     /**

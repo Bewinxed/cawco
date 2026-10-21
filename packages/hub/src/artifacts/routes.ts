@@ -784,6 +784,14 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         return refused(error);
       }
     })
+    // What a transcript's chip for the artifact, one of its pins or one of its cards draws (core `ArtifactPlaces`).
+    .get("/api/artifacts/:artifact/places", ({ params }) => {
+      try {
+        return artifacts.places(params.artifact);
+      } catch (error) {
+        return refused(error);
+      }
+    })
     // The artifact's own tab (the dashboard's /artifact/<id>) finds its session.
     .get("/api/artifacts/:artifact", ({ params }) => {
       try {

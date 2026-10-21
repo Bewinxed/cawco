@@ -1612,6 +1612,20 @@
           "css": "oklch(from {color.action-hover} calc(l - 0.03) c h)"
         }
       }
+    },
+    "change-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.76, 0.15, 135],
+        "alpha": 0.14
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklch, {color.status-done-glyph} 14%, transparent)",
+          "platforms": ["web"]
+        }
+      }
     }
   },
   "effect": {

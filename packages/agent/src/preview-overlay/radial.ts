@@ -132,6 +132,8 @@ export interface InkChrome {
   hideIcon: () => void;
   /** A duration token in ms. */
   ms: (name: string) => number;
+  /** A unitless token's number (a scale): its custom property as the overlay's root holds it. */
+  number: (name: string) => number;
   /** One sentence in meta ink over the ink at `x`, `y`, gone after two breaths. */
   say: (message: string, x: number, y: number) => void;
   /** The icon at `x`, `y` (the viewport's px) for the group just drawn; picks come back through `onPick`. */
@@ -140,7 +142,11 @@ export interface InkChrome {
   token: (
     name: string,
     property?:
-      "color" | "font" | "transition-duration" | "transition-timing-function"
+      | "color"
+      | "font"
+      | "transition-duration"
+      | "transition-timing-function"
+      | "width"
   ) => string;
 }
 
@@ -496,6 +502,8 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
 
   return {
     token,
+    number: (name) =>
+      Number.parseFloat(getComputedStyle(probe).getPropertyValue(name)),
     ms,
     showIcon,
     hideIcon: () => {

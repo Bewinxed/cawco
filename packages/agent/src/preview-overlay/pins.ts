@@ -36,6 +36,7 @@ import {
   type PageAnchor,
   type Pin,
   type PinnedElement,
+  pinUnread,
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
 import type { Map as YMap } from "yjs";
@@ -60,6 +61,10 @@ const SVG = "http://www.w3.org/2000/svg";
 const PIN_R = 10;
 /** A resolved pin's opacity: DESIGN.md's 40%. */
 const RESOLVED_OPACITY = "0.4";
+/** How many loops the unread dot echoes before it stands still: DESIGN.md's status dot, as the working indicator. */
+const ECHOES = 3;
+/** The echo's first opacity: DESIGN.md's working indicator, "fades from 45%". */
+const ECHO_FROM = 0.45;
 /** Room round a mark's crop, px. Our call. */
 export const CROP_PAD = 24;
 /** How far a pin's crop reaches from the point it was made at, each way, px: a big element is cropped round the point. Our call. */
@@ -78,6 +83,8 @@ export interface PinsDeps {
   chrome: InkChrome;
   /** The overlay's description of `el`, its markup left out. */
   describe: (el: Element) => PinnedElement;
+  /** The pins were drawn again: what stands with them (the change marks, changes.ts) is drawn again too. */
+  drawn: () => void;
   /** A placed ink group's box in the page, px; null when it is not on the page. */
   groupBox: (id: string) => Box | null;
   /** Where a page's anchor stands now, and by what; null when nothing on the page matches it. */
@@ -122,6 +129,10 @@ export interface Pins {
   ) => void;
   /** Pin `id` placed again on `el` at the viewport's `x`, `y`: out of the moved tray. */
   placeAgain: (id: string, el: Element, x: number, y: number) => void;
+  /** Where pin `id` stands as last drawn: its element and its disc's centre in the page; null when it is not on the page. */
+  placedAt: (id: string) => { at: [number, number]; el: Element | null } | null;
+  /** `el` brought where the person sees it, out from under the host's chrome, as a pin's card brings its pin. */
+  revealElement: (el: Element) => void;
   /** Every pin shown on the page, or hidden (⇧C). */
   show: (shown: boolean) => void;
   /** The pin whose card the host shows, whose place it hears as the page scrolls; or none. */
@@ -174,6 +185,9 @@ export function startPins(deps: PinsDeps): Pins {
   document.documentElement.append(layer);
 
   const pinsMap = () => artifact.doc().getMap("pins") as YMap<Pin>;
+  /** The person's last Send (the doc's `meta.sentAt`): it clears every unread mark before it. */
+  const sentAt = () =>
+    (artifact.doc().getMap("meta").get("sentAt") as string | undefined) ?? null;
   /**
    * Pin `id`'s card opened in the host, carrying the pin as this page holds
    * it: a host whose own doc doesn't hold it yet (it reaches the host's only
@@ -196,7 +210,17 @@ export function startPins(deps: PinsDeps): Pins {
    */
   const settled = () =>
     (artifact.kind() === "page" || artifact.kind() === "component") &&
-    document.readyState !== "loading";
+    document.readyState !== "loading" &&
+    !(hostDrawing && document.getElementById("cawco-program"));
+  /**
+   * A decision page draws itself from its program (its host, `#cawco-program`)
+   * after the document has loaded, and says so with its first `cawco:hmr`:
+   * until then its cards are not on the page, and a pin on one is not gone.
+   */
+  let hostDrawing = true;
+  addEventListener("cawco:hmr", () => {
+    hostDrawing = false;
+  });
 
   /** Each placed pin: where it stands; a disc is drawn for it while its frames show it. */
   const placed = new Map<string, Standing>();
@@ -262,12 +286,98 @@ export function startPins(deps: PinsDeps): Pins {
     return moves;
   };
 
-  /** tsk-3's numbered pin at `where`: a 20px coral disc with its number, at 40% once resolved. */
+  /**
+   * When each pin's unread dot began to echo (`performance.now()`): a disc
+   * drawn again picks its echo up where it was, and one past its loops
+   * stands still.
+   */
+  const echoes = new Map<string, number>();
+
+  /**
+   * The needs-you dot on a disc whose pin holds an answer the person has not
+   * looked at (core `pinUnread`): DESIGN.md's status dot, a 6px circle in
+   * `status-attn-glyph` on the disc's top-right, the disc cut away 1.5px
+   * round it (a hole in its mask, so the page shows round the dot), echoing
+   * three loops as the working indicator's echo does, then still. Drawn in
+   * a group of its own beside the disc's (`data-pin-dot`), at the disc's
+   * place, taking no press: the disc's group holds the disc and its number.
+   */
+  const unreadDot = (
+    pin: Pin,
+    face: SVGCircleElement,
+    pinned: SVGGElement
+  ): SVGGElement => {
+    const g = document.createElementNS(SVG, "g");
+    g.setAttribute("data-pin-dot", String(pin.number));
+    g.setAttribute("transform", pinned.getAttribute("transform") ?? "");
+    g.setAttribute("opacity", pinned.getAttribute("opacity") ?? "1");
+    g.style.pointerEvents = "none";
+    const size = Number.parseFloat(chrome.token("--status-dot-size", "width"));
+    const cut = Number.parseFloat(chrome.token("--status-dot-cut", "width"));
+    const r = size / 2;
+    // Centred on the disc's rim at its top-right, as the status dot is on a tile's corner.
+    const at = PIN_R / Math.SQRT2;
+    const mask = document.createElementNS(SVG, "mask");
+    mask.id = `cawco-pin-cut-${pin.id}`;
+    const whole = document.createElementNS(SVG, "circle");
+    whole.setAttribute("r", String(PIN_R));
+    whole.setAttribute("fill", "white");
+    const hole = document.createElementNS(SVG, "circle");
+    hole.setAttribute("cx", String(at));
+    hole.setAttribute("cy", String(-at));
+    hole.setAttribute("r", String(r + cut));
+    hole.setAttribute("fill", "black");
+    mask.append(whole, hole);
+    face.setAttribute("mask", `url(#${mask.id})`);
+    const ink = chrome.token("--status-attn-glyph");
+    const dot = () => {
+      const one = document.createElementNS(SVG, "circle");
+      one.setAttribute("cx", String(at));
+      one.setAttribute("cy", String(-at));
+      one.setAttribute("r", String(r));
+      one.setAttribute("fill", ink);
+      return one;
+    };
+    const still = dot();
+    still.setAttribute("data-unread", "");
+    g.append(mask, still);
+    if (!motionOk()) {
+      return g;
+    }
+    const loop = chrome.ms("--dur-loop");
+    const began = echoes.get(pin.id) ?? performance.now();
+    echoes.set(pin.id, began);
+    const past = performance.now() - began;
+    if (past >= ECHOES * loop) {
+      return g;
+    }
+    const echo = dot();
+    echo.setAttribute("data-echo", "");
+    echo.style.transformBox = "fill-box";
+    echo.style.transformOrigin = "center";
+    g.insertBefore(echo, still);
+    const beat = echo.animate(
+      [
+        { transform: "scale(1)", opacity: ECHO_FROM },
+        { transform: `scale(${chrome.number("--echo-scale")})`, opacity: 0 },
+      ],
+      {
+        duration: loop,
+        iterations: ECHOES,
+        easing: chrome.token("--ease-out", "transition-timing-function"),
+        fill: "forwards",
+      }
+    );
+    beat.currentTime = past;
+    return g;
+  };
+
+  /** tsk-3's numbered pin at `where`: a 20px coral disc with its number, at 40% once resolved, and the needs-you dot beside it while it holds an unread answer. */
   const disc = (
     pin: Pin,
     where: Standing,
     paint: { fill: string; font: string; ink: string }
-  ) => {
+  ): SVGGElement[] => {
     const g = document.createElementNS(SVG, "g");
     g.setAttribute("data-pin", String(pin.number));
     g.setAttribute("data-pin-id", pin.id);
@@ -291,6 +401,10 @@ export function startPins(deps: PinsDeps): Pins {
     number.style.userSelect = "none";
     number.textContent = String(pin.number);
     g.append(circle, number);
+    const unread = pinUnread(pin, sentAt());
+    if (!unread) {
+      echoes.delete(pin.id);
+    }
     g.addEventListener("pointerenter", () => {
       deps.outline(where.el, true);
       deps.peek(pin, where.at[0] - scrollX, where.at[1] - scrollY, PIN_R);
@@ -304,7 +418,7 @@ export function startPins(deps: PinsDeps): Pins {
       event.stopPropagation();
       open(pin.id);
     });
-    return g;
+    return unread ? [g, unreadDot(pin, circle, g)] : [g];
   };
 
   /** Writes the pins found again by their source, text or the page, and moves aside those no anchor finds. */
@@ -354,19 +468,23 @@ export function startPins(deps: PinsDeps): Pins {
       placed.set(pin.id, where);
       // A pin in a frame scrolled away from it stands hidden until the frame shows it again.
       if (where.shown) {
-        layer.append(disc(pin, where, paintNow()));
+        layer.append(...disc(pin, where, paintNow()));
       }
     }
     return gone;
   };
 
   function draw() {
+    // The change marks' group (changes.ts) stands under the discs and keeps its own.
     for (const node of [...layer.children]) {
-      node.remove();
+      if (!node.hasAttribute("data-cawco-changes")) {
+        node.remove();
+      }
     }
     placed.clear();
     if (!(onPage() && artifact.keeps())) {
       fitToPage(layer, false);
+      deps.drawn();
       return;
     }
     const all = [...pinsMap().values()].sort((a, b) => a.number - b.number);
@@ -379,6 +497,7 @@ export function startPins(deps: PinsDeps): Pins {
       deps.outline(placed.get(focused)?.el ?? null);
     }
     tell();
+    deps.drawn();
   }
 
   /**
@@ -436,29 +555,47 @@ export function startPins(deps: PinsDeps): Pins {
   const reveal = (id: string) => {
     stuck.delete(id);
     const where = placed.get(id);
-    if (!where) {
-      return;
+    if (
+      where &&
+      !bringOut(
+        where.el,
+        where.at[0] - scrollX,
+        where.at[1] - scrollY,
+        where.shown
+      )
+    ) {
+      stuck.add(id);
     }
-    const x = where.at[0] - scrollX;
-    const y = where.at[1] - scrollY;
+  };
+
+  /**
+   * The viewport's point `x`, `y` on `el` brought where the person sees it,
+   * out from under the host's chrome (one already there stays); false when
+   * no scroll brings it out from under the chrome, though it is brought into
+   * the viewport at least.
+   */
+  const bringOut = (
+    el: Element | null,
+    x: number,
+    y: number,
+    shown: boolean
+  ): boolean => {
     const clear = bandsAt(x, covered, PIN_R);
-    if (where.shown && inBands(y, clear)) {
-      return;
+    if (shown && inBands(y, clear)) {
+      return true;
     }
-    const chain = scrollersOf(where.el);
+    const chain = scrollersOf(el);
     const landed = bringInto(chain, y, clear);
     if (landed) {
       scrollMoves(landed, motionOk() ? "smooth" : "auto");
-      return;
-    }
-    if (covered.length > 0) {
-      stuck.add(id);
+      return true;
     }
     // Out from under nothing: at least in the viewport.
-    const shown = bringInto(chain, y, bandsAt(x, [], PIN_R));
-    if (shown) {
-      scrollMoves(shown, motionOk() ? "smooth" : "auto");
+    const inView = bringInto(chain, y, bandsAt(x, [], PIN_R));
+    if (inView) {
+      scrollMoves(inView, motionOk() ? "smooth" : "auto");
     }
+    return covered.length === 0;
   };
 
   /** The open card's pin, when it stands under what the host's chrome covers, brought out again. */
@@ -510,6 +647,27 @@ export function startPins(deps: PinsDeps): Pins {
     layer,
     draw,
     open,
+    placedAt: (id) => {
+      const where = placed.get(id);
+      if (where) {
+        return { at: where.at, el: where.el };
+      }
+      // Not drawn (resolved, its card shut): where its element stands, at the element's top-right.
+      const pin = pinsMap().get(id);
+      const el = pin && !pin.movedAt ? anchoredEl(pin) : null;
+      if (!el) {
+        return null;
+      }
+      const box = pageBox(el);
+      return { at: [box.x + box.w, box.y], el };
+    },
+    revealElement: (el) => {
+      const r = rectOf(el);
+      // A point on its top band, where a card's head or a line's words stand.
+      const x = r.left + r.width / 2;
+      const y = r.top + Math.min(r.height / 2, 2 * PIN_R);
+      bringOut(el, x, y, y >= 0 && y <= innerHeight);
+    },
     cropOf: (id) => {
       const pin = pinsMap().get(id);
       const where = placed.get(id);

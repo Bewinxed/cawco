@@ -316,7 +316,7 @@ export const artifactRead = {
 export const artifactList = {
   name: "artifact_list",
   description:
-    "Your artifacts and your delegation tree's (a lead: its project's too), newest first: each with `does`, `ask`, shown, opened, open pins, unread changes, picks, `sent` (Send pressed since " +
+    "Your artifacts and your delegation tree's (a lead: its project's too), each with `does`, `ask`, shown, opened, open pins, unread changes, picks, `sent` (Send pressed since " +
     "your last change) and `waitingOn` person or " +
     "session. `waiting: true` keeps those waiting on someone.",
   input: { waiting: z.boolean().optional() },
@@ -372,13 +372,13 @@ export const designMap = {
 const pin = z
   .string()
   .regex(/^[0-9a-f-]{36}$/)
-  .describe("The pin's id, from its delivery.");
+  .describe("Its id, from its delivery.");
 
 export const commentRead = {
   name: "comment_read",
   description:
-    "Read the person's pins on your artifacts: each numbered, its anchor (selector, file:line, text, ink box), " +
-    "its thread. New ones reach you by themselves. No artifact: all of yours.",
+    "The person's pins on your artifacts, each with its anchor (selector, file:line, text), thread and link. " +
+    "New ones reach you by themselves. No artifact: all of yours.",
   input: {
     artifact: id.optional(),
     filter: z.enum(["open", "resolved", "all"]).default("open"),
@@ -393,8 +393,8 @@ export const commentRead = {
 export const commentReply = {
   name: "comment_reply",
   description:
-    "Answer a pin in its thread on the page. After a change, name the files you changed; ask a question here " +
-    "and leave the pin open.",
+    "Answer a pin in its thread, with the files a change touched; a question leaves it open. Answers the pin's " +
+    "link; name the pin by it once in your words, and leave the ordering to the panel, which marks what changed.",
   input: {
     pin,
     text: z.string().min(1).max(COMMENT_LIMITS.text),
@@ -407,7 +407,6 @@ export const commentReply = {
 
 export const commentResolve = {
   name: "comment_resolve",
-  description:
-    "Resolve a pin once your change answers it, with a last line when it helps. The person can reopen it.",
+  description: "Resolve a pin your change answers; `text` is a last line.",
   input: { pin, text: z.string().min(1).max(COMMENT_LIMITS.text).optional() },
 };

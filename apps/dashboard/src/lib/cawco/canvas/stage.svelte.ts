@@ -24,11 +24,13 @@ import {
   previewRoute,
   previewWords,
 } from "@cawco/core";
+import type { Snippet } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { theme } from "#lib/theme.svelte.js";
 import { artifactSyncPath } from "../preview/artifact-doc";
 import { enterPreviews } from "../preview/pass";
+import type { PreviewStop } from "../preview/wire";
 
 export type Slot = "composer" | "panel";
 
@@ -99,6 +101,10 @@ export class Stage {
   frame = $state<HTMLIFrameElement>();
   /** The page has said it is ready (`cawco:ready`). Whether its doc reached the hub is `link`'s to say. */
   connected = $state(false);
+  /** What changed on it since the person looked, in its scene's order, as its page last said (`cawco:stops`, overlay changes.ts). */
+  stops = $state.raw<PreviewStop[]>([]);
+  /** What the pane that holds it stands over it while it stands there: the "changed since you looked" tag. */
+  over = $state<Snippet | null>(null);
   /** The page's doc's link to the hub, as the page last said (`cawco:sync`). */
   link: Link = "connecting";
   /** Why the link was lost, the page's own clause. */

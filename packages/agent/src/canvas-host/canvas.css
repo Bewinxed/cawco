@@ -373,6 +373,41 @@ body {
   }
 }
 
+/* ---- What changed since the person looked (changes.tsx): the done wash
+   over each element a patch changed and they have not looked at, a
+   see-through tint at the house's small radius with no edge, so the
+   element's own ink reads through it; looked at, it fades off over
+   --dur-fade, by opacity alone. The step's chosen element takes the One
+   Target Rule's 1px line on its box over the target tint. Neither takes a
+   press: the scene under them keeps every one. */
+.canvas-changes {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  pointer-events: none;
+}
+
+.canvas-change,
+.canvas-chosen {
+  position: absolute;
+  border-radius: var(--radius-xs);
+}
+
+.canvas-change {
+  background: var(--change-wash);
+  transition: opacity var(--dur-fade) var(--ease-out);
+
+  &[data-leaving] {
+    opacity: 0;
+  }
+}
+
+.canvas-chosen {
+  background: var(--c-target-tint);
+  outline: var(--c-target-stroke) solid var(--brand-solid);
+  outline-offset: 0;
+}
+
 /* ---- A file the canvas wouldn't take (images.ts): one line in the error
    formula over the grid, under the rail (over it on a phone, whose rail
    stands at the foot), in the panel material's raised card. It fades in

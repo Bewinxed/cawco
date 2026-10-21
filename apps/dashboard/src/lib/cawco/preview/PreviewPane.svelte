@@ -18,6 +18,7 @@
     type Pin,
     type PreviewMode,
     pinProblem,
+    pinUnread,
     previewMode,
   } from "@cawco/core/comments";
   import { STAGE_CLONE_MS, STAGE_READY_MS } from "@cawco/core/stage";
@@ -43,6 +44,8 @@
   import {
     IconAlert,
     IconChat,
+    IconChevronLeft,
+    IconChevronRight,
     IconComment,
     IconExternal,
     IconEyeClosed,
@@ -77,7 +80,7 @@
   } from "../canvas/stage.svelte";
   import { frameObserver } from "../frame-observer";
   import { resolveSessionTitle } from "../links";
-  import { appear, dur } from "../motion/curves.svelte";
+  import { appear, dur, rise } from "../motion/curves.svelte";
   import { closeInto } from "../motion/share.svelte";
   import { watchInput } from "../reload.svelte";
   import { runShellShortcut } from "../shell-shortcut";
@@ -109,12 +112,15 @@
   import { paneFleet } from "./pane-fleet";
   import { enterPreviews } from "./pass";
   import { pinDrafts } from "./pin-drafts.svelte";
+  import { placeAsked, placeTaken } from "./place-ask.svelte";
+  import { places } from "./places.svelte";
   import SheetInspector from "./SheetInspector.svelte";
   import { isSetupPage } from "./setup-page";
   import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
   import {
     type PaneKey,
     type PreviewPinAt,
+    type PreviewStop,
     previewError,
     previewErrorOf,
     previewKey,
@@ -123,6 +129,7 @@
     previewPinId,
     previewSheet,
     previewShortcut,
+    previewStops,
     previewThumbnail,
     previewTitle,
     previewUrl,
@@ -811,6 +818,26 @@
       ? [...held, ...more].sort((a, b) => a.number - b.number)
       : held;
   });
+  /**
+   * Pins holding an answer the person has not looked at (core `pinUnread`):
+   * the agent's entry or resolve after their last look and their last Send.
+   * Each disc wears the needs-you dot, on the page, in the list and on a
+   * transcript's chip.
+   */
+  const unread = $derived(
+    new Set(
+      pins.filter((pin) => pinUnread(pin, view?.sentAt)).map((pin) => pin.id)
+    )
+  );
+  // A transcript's chips for this artifact follow its doc (preview/places.svelte.ts).
+  $effect(() => {
+    const id = artifactId;
+    const held = view?.pins;
+    const sent = view?.sentAt ?? null;
+    if (id && held) {
+      untrack(() => places.heard(id, held, sent));
+    }
+  });
   /** Whether pin `id` stands only in the page's doc yet: written through the page's own messages, as the app's are. */
   const onlyOnPage = (id: string) =>
     id in pagePins && !view?.pins.some((pin) => pin.id === id);
@@ -1187,6 +1214,9 @@
     docSync = { state: "reading" };
     pageLost = null;
     pagePins = {};
+    pageStops = [];
+    round = null;
+    readyFor = null;
     pageWords.clear();
     const joined = joinArtifact(
       session,
@@ -1514,6 +1544,18 @@
     post({ type: "cawco:track-pin", id });
     post({ type: "cawco:focus-pin", id, scroll: true });
   }
+  /*
+   * An open card is the person's look at its pin: an unread answer is seen,
+   * on every device (core `seePin`), one that lands while it stands open as
+   * well, and a look another client's write dropped is written again.
+   */
+  $effect(() => {
+    const id = openPin;
+    const pin = id ? view?.pins.find((one) => one.id === id) : undefined;
+    if (id && pin && pinUnread(pin)) {
+      untrack(() => doc?.seePin(id));
+    }
+  });
   /**
    * The card is dismissed: a press outside it, on the page or anywhere in
    * the dashboard, Esc, its Close, another pin opened. Its words stay with
@@ -1580,6 +1622,133 @@
       untrack(openLinkedPin);
     }
   });
+  /*
+   * A place a transcript's chip asked of this artifact (place-ask.svelte.ts),
+   * taken once the page is ready and its doc read, as `?pin=` is: pin N's
+   * card opened, or a decision card scrolled to and outlined for one
+   * `--dur-fade` (the overlay's `cawco:card`). A pin the doc doesn't hold
+   * yet is waited for.
+   */
+  $effect(() => {
+    const id = artifactId;
+    const asked = id ? placeAsked(id) : null;
+    // This artifact's own page said ready, and the pane's doc holds the hub's: the card opens on the page that draws it, and its look is written on the hub's pin.
+    if (!(id && asked && readyFor === id && docSync.state === "synced")) {
+      return;
+    }
+    untrack(() => {
+      if ("card" in asked) {
+        placeTaken(id);
+        post({ type: "cawco:card", id: asked.card });
+        return;
+      }
+      const pin = pins.find((one) => one.number === asked.pin);
+      if (pin) {
+        placeTaken(id);
+        openCard(pin.id);
+      }
+    });
+  });
+
+  /*
+   * What changed since the person looked (Projects spec §5.7): the overlay
+   * tells its stops in page order (`cawco:stops`, overlay changes.ts), each
+   * a change, a pin's unread answer, or both. The tag at the well's top
+   * says how many, and its ‹ › step them; a round holds the stops it began
+   * with, so "k of N" counts on as each one is looked at and leaves. A step
+   * opens a pin's card, or outlines a change as chosen; the round ends past
+   * its last stop once every one is seen, on Esc, or on a press on the page.
+   */
+  let pageStops = $state.raw<PreviewStop[]>([]);
+  /** The stops as the shown artifact's page says them: a canvas's on its stage (CanvasStages), a page's here. */
+  const stops = $derived.by(() =>
+    isCanvas ? (stage?.stops ?? []) : pageStops
+  );
+  /** The artifact whose own page last said ready in the frame: a place asked of it waits for it. */
+  let readyFor = $state<string | null>(null);
+  let round = $state.raw<{ stops: PreviewStop[]; at: number } | null>(null);
+  const tagShown = $derived(
+    stops.length > 0 || (round !== null && round.at >= 0)
+  );
+  // A canvas stands on its stage, over the well: the tag stands over it there (CanvasStages).
+  $effect(() => {
+    const one = isCanvas ? stage : undefined;
+    if (!one) {
+      return;
+    }
+    one.over = tagShown ? changesTag : null;
+    return () => {
+      one.over = null;
+    };
+  });
+  /** To the shown artifact's page: a canvas's on its stage, a page's in the frame. */
+  function postPage(message: object) {
+    if (isCanvas) {
+      stage?.post(message);
+    } else {
+      post(message);
+    }
+  }
+  // A change the round never held is the next revision's: it replaces the set, and the round starts anew.
+  $effect(() => {
+    const now = stops;
+    untrack(() => {
+      const held = new Set(round?.stops.map((one) => one.key));
+      if (round && now.some((one) => one.anchor && !held.has(one.key))) {
+        endRound();
+      }
+    });
+  });
+  const stepAt = $derived(round && round.at >= 0 ? round : null);
+  const stopNow = $derived(stepAt ? stepAt.stops[stepAt.at] : null);
+  /** ‹ (-1), › (1), or the tag's own press (0, the first stop). */
+  function stepChange(by: -1 | 0 | 1) {
+    const now = round ?? { stops, at: -1 };
+    const count = now.stops.length;
+    if (count === 0) {
+      return;
+    }
+    const left = new Set(stops.map((one) => one.key));
+    let at = by === 0 ? 0 : now.at + by;
+    if (at < 0 || at >= count) {
+      if (now.stops.every((one) => !left.has(one.key))) {
+        endRound();
+        return;
+      }
+      at = (at + count) % count;
+    }
+    round = { stops: now.stops, at };
+    const landed = now.stops[at] as PreviewStop;
+    if (landed.pin) {
+      openCard(landed.pin);
+    } else {
+      if (openPin) {
+        closeCard();
+      }
+      focusedPin = null;
+      post({ type: "cawco:focus-pin", id: null, scroll: false });
+    }
+    postPage({ type: "cawco:step", key: landed.key });
+  }
+  /** The round is over: its outline goes, and the tag with it once nothing is left to see. */
+  function endRound() {
+    if (!round) {
+      return;
+    }
+    round = null;
+    postPage({ type: "cawco:step", key: null });
+  }
+  /** J and K step the changes while the tag has the keyboard; everywhere else they step the pins. */
+  function tagKey(event: KeyboardEvent) {
+    const key = event.key.toLowerCase();
+    if (
+      (key === "j" || key === "k") &&
+      !(event.metaKey || event.ctrlKey || event.altKey)
+    ) {
+      event.preventDefault();
+      stepChange(key === "j" ? 1 : -1);
+    }
+  }
   /**
    * The open card's Pin it somewhere else: Comment mode, its card still
    * open, until the next tap on the page pins the gone pin anew; Cancel
@@ -1698,6 +1867,8 @@
     } else if (name === "Escape") {
       if (openPin) {
         closeCard();
+      } else if (round) {
+        endRound();
       } else if (mode === "interact") {
         // Heard from the page (`cawco:key`): with nothing of the pane's to
         // close, Esc gives the split back. The window's Esc is SideSplit's.
@@ -1743,7 +1914,7 @@
     ) {
       return;
     }
-    if (openPin || mode !== "interact") {
+    if (openPin || round || mode !== "interact") {
       pressKey("Escape");
       event.preventDefault();
     }
@@ -1791,6 +1962,7 @@
         }
         if (message.type === "cawco:ready") {
           connected = true;
+          readyFor = artifactId ?? null;
           refusedEntries = 0;
           // It was let in: a later turn-away is a pass lost since, which a new entry answers.
           frameSince = performance.now();
@@ -1805,7 +1977,9 @@
           }
           openLinkedPin();
           if (openPin) {
+            // A page loaded again under an open card: its pin is tracked and chosen there too.
             post({ type: "cawco:track-pin", id: openPin });
+            post({ type: "cawco:focus-pin", id: openPin, scroll: true });
           }
           if (!onScreen) {
             // Loaded while its tab is off screen: held from the start.
@@ -1816,6 +1990,10 @@
       }
       case "cawco:held":
         pageHeld = message.held === true;
+        break;
+      case "cawco:stops":
+        // What changed since the person looked, in page order (overlay changes.ts).
+        pageStops = previewStops(message.stops);
         break;
       case "cawco:captured": {
         // Both schemes in one answer, the other drawn off screen (overlay schemes.ts).
@@ -1882,6 +2060,7 @@
         if (openPin) {
           closeCard();
         }
+        endRound();
         break;
       case "cawco:pin-at": {
         if (previewPinId(message.id) === openPin) {
@@ -2573,6 +2752,7 @@
         down={linkDown}
         focused={focusedPin}
         {live}
+        {unread}
         hold={listHold}
         onclose={() => showList(false)}
         onopen={openCard}
@@ -2621,6 +2801,68 @@
     {@render framed()}
   </SideSurface>
 {/if}
+
+{#snippet changesTag()}
+  <!-- What changed since the person looked: the floating-tag recipe at the
+       well's top centre, as "Jump to latest" stands at the transcript's
+       foot. ‹ › step the stops in page order; the count is the press that
+       starts at the first. 44px under a finger. -->
+  <!-- The band it is centred in: the well's top, a gutter in from each side, taking no press itself. -->
+  <div
+    class="absolute inset-x-space-3 top-space-3 flex justify-center pointer-events-none"
+  >
+    <div
+      class="inline-flex max-w-full min-w-0 items-center gap-space-1 h-c-btn-h-sm coarse:h-c-touch-floor px-space-1 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-ink-strong pointer-events-auto"
+      data-slot="changes-tag"
+      in:rise={"--dur-panel"}
+      out:rise={"--dur-exit"}
+    >
+      <Button
+        aria-label="Previous change"
+        icon={IconChevronLeft}
+        onclick={() => stepChange(-1)}
+        onkeydown={tagKey}
+        size="icon-sm"
+        title="Previous change"
+        variant="ghost"
+      />
+      <button
+        aria-live="polite"
+        class="select-none mark-line inline-flex min-w-0 items-center gap-space-2 h-full px-space-2 border-none rounded-sm bg-transparent text-size-label font-medium text-ink-strong num can-hover:hover:bg-surface-hover"
+        data-slot="changes-count"
+        onclick={() => stepChange(0)}
+        onkeydown={tagKey}
+        title="Go to the first change"
+        type="button"
+      >
+        {#if stepAt && stopNow}
+          <span class="flex-none">{stepAt.at + 1} of {stepAt.stops.length}</span
+          >
+          {#if stopNow.removed}
+            <span
+              class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted"
+              >Removed: {stopNow.label}</span
+            >
+          {/if}
+          {#if stopNow.anchor}
+            <span class="sr-only">Changed in this revision.</span>
+          {/if}
+        {:else}
+          <span>{stops.length} changed since you looked</span>
+        {/if}
+      </button>
+      <Button
+        aria-label="Next change"
+        icon={IconChevronRight}
+        onclick={() => stepChange(1)}
+        onkeydown={tagKey}
+        size="icon-sm"
+        title="Next change"
+        variant="ghost"
+      />
+    </div>
+  </div>
+{/snippet}
 
 <!-- The page in the well, and what stands over it: the panel's and an
      inset's alike. -->
@@ -3017,6 +3259,9 @@
       />
     {/if}
   </div>
+  {#if tagShown && !isCanvas}
+    {@render changesTag()}
+  {/if}
   {#if failure}
     <div
       data-slot="failure"

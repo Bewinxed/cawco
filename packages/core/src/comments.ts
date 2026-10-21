@@ -201,6 +201,10 @@ export interface Pin {
   /** Where on its element a tapped pin stands: fractions of the element's box. */
   point?: { x: number; y: number };
   resolvedAt?: string;
+  /** Who resolved it: the agent's resolve (comment_resolve) is an answer the person has to see. */
+  resolvedBy?: "agent" | "person";
+  /** When the person last looked at it: its card opened, by a press, a chip or a step. */
+  seenAt?: string;
   /** When it was first delivered to the session. */
   sentAt?: string;
   /** Oldest first. */
@@ -345,6 +349,36 @@ export const unheardEntries = (pin: Pin): ThreadEntry[] => {
 export const pinKnown = (pin: Pin): boolean =>
   !!pin.sentAt || pin.thread.some((entry) => entry.by === "agent");
 
+/** When the agent last answered a pin: its newest entry in the thread, or its resolve; null when it never has. */
+export const pinAnsweredAt = (pin: Pin): string | null => {
+  const said = pin.thread.findLast((entry) => entry.by === "agent")?.at ?? "";
+  const resolved = pin.resolvedBy === "agent" ? (pin.resolvedAt ?? "") : "";
+  const at = resolved > said ? resolved : said;
+  return at || null;
+};
+
+/**
+ * Whether a pin holds an answer the person has not looked at: the agent's
+ * entry or resolve newer than their last look at it (`seenAt`) and than
+ * their last Send (`sentAt`, the doc's `meta.sentAt`), which clears the round.
+ */
+export const pinUnread = (pin: Pin, sentAt?: string | null): boolean => {
+  const answered = pinAnsweredAt(pin);
+  return (
+    !!answered && answered > (pin.seenAt ?? "") && answered > (sentAt ?? "")
+  );
+};
+
+/** The person looked at pin `pin` (its card opened): its answer is seen. Nothing is written for a pin with nothing unread. */
+export function seePin(doc: Doc, pin: string): void {
+  const held = pinsOf(doc).get(pin);
+  if (held && pinUnread(held)) {
+    doc.transact(() =>
+      pinsOf(doc).set(pin, { ...held, seenAt: new Date().toISOString() })
+    );
+  }
+}
+
 /** Whether a pin has something the session has not heard: itself, a person's entry since, or a change to what they said. */
 export const pinUnsent = (pin: Pin): boolean =>
   !pinKnown(pin) ||
@@ -449,11 +483,15 @@ export function resolvePin(
   if (!held) {
     return `This pin is gone from the page, so it wasn't ${resolved ? "resolved" : "reopened"}.`;
   }
-  const { resolvedAt: _was, ...rest } = held;
+  const { resolvedAt: _was, resolvedBy: _by, ...rest } = held;
+  const at = new Date().toISOString();
+  // The person's own resolve is their look at it too: whatever it held is seen.
   doc.transact(() =>
     pinsOf(doc).set(
       pin,
-      resolved ? { ...rest, resolvedAt: new Date().toISOString() } : rest
+      resolved
+        ? { ...rest, resolvedAt: at, resolvedBy: "person", seenAt: at }
+        : rest
     )
   );
   return null;
@@ -711,14 +749,18 @@ export const changedAnchor = (was: PageAnchor, now: PageAnchor): boolean =>
  */
 export function pinDelivery(
   pin: Pin,
-  context: Parameters<typeof pinSection>[1]
+  context: Parameters<typeof pinSection>[1] & {
+    /** The pin's `cawco:pin` link (core references.ts `pinLink`), for the agent to name it by. */
+    link: string;
+  }
 ): string {
   if (pinKnown(pin) && unheardEntries(pin).length === 0) {
-    return `## ${pin.number}. ${pin.resolvedAt ? "Resolved" : "Reopened"} by the person (pin ${pin.id})`;
+    return `## ${pin.number}. ${pin.resolvedAt ? "Resolved" : "Reopened"} by the person (pin ${pin.id}, ${context.link})`;
   }
   return [
     pinSection(pin, context),
     `- Pin: ${pin.id}`,
+    `- Link: ${context.link}`,
     ...(pin.resolvedAt ? ["- Resolved by the person."] : []),
   ].join("\n");
 }

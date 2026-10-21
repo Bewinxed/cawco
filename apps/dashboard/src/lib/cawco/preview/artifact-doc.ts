@@ -1,9 +1,11 @@
 import type { ArtifactChoices, ChoiceEntry } from "@cawco/core";
+import { seeChanges } from "@cawco/core/changes";
 import {
   deletePin,
   type Pin,
   replyToPin,
   resolvePin,
+  seePin,
   withdrawPin,
 } from "@cawco/core/comments";
 import {
@@ -88,6 +90,10 @@ export interface ArtifactDoc {
   resolve: (pin: string, resolved: boolean) => string | null;
   /** Try again on a link that failed or stands lost: a new socket now (reading again before the first sync). */
   retry: () => void;
+  /** The person looked at the latest revision's `anchors` (core `seeChanges`): their marks clear on every device. */
+  seeChanges: (anchors: string[]) => void;
+  /** The person looked at pin `pin` (its card opened): its unread answer is seen on every device (core `seePin`). */
+  seePin: (pin: string) => void;
   /** The person dismissed pin `pin`'s card having said nothing in it: the pin is taken back (core `withdrawPin`). */
   withdraw: (pin: string) => void;
 }
@@ -343,6 +349,8 @@ export function joinArtifact(
       provider.connect();
     },
     withdraw: (pin) => withdrawPin(doc, pin),
+    seePin: (pin) => seePin(doc, pin),
+    seeChanges: (anchors) => seeChanges(doc, anchors),
     destroy: () => {
       gone = true;
       clearDown();
