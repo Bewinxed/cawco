@@ -136,11 +136,15 @@ export interface InkChrome {
   say: (message: string, x: number, y: number) => void;
   /** The icon at `x`, `y` (the viewport's px) for the group just drawn; picks come back through `onPick`. */
   showIcon: (x: number, y: number, onPick: (pick: Pick) => void) => void;
-  /** A token's value as the page computes it (a colour, a font, a length). */
+  /** A token's value as the page computes it (a colour, a font, a length as `width` reads it). */
   token: (
     name: string,
     property?:
-      "color" | "font" | "transition-duration" | "transition-timing-function"
+      | "color"
+      | "font"
+      | "transition-duration"
+      | "transition-timing-function"
+      | "width"
   ) => string;
 }
 

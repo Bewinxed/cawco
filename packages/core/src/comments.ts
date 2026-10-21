@@ -4,12 +4,15 @@
  * numbered pin in the doc's `pins` map. An annotation stands on a stroke
  * group's ink (core ink.ts); a comment stands on the element the person
  * tapped in Comment mode, or on ink by the radial menu's Comment, and carries
- * a thread the person and the agent both write. It reaches the session by
- * itself: the hub hears every person's write on `pins` and `ink`, and once
- * they have been quiet a while delivers the burst as one message carrying
- * the pins themselves ({@link pinSection}, {@link inkSection}), then stamps
- * each pin `sentAt` and `heard` ({@link pinSaid}), each entry and stroke
- * group `sentAt`.
+ * a thread the person and the agent both write. A comment is written whole,
+ * its pin and its first entry in one transaction ({@link commentOn}): a
+ * press on the page writes nothing until there are words or attachments to
+ * keep. It reaches the session when the person presses Send: the hub
+ * delivers everything the session hasn't heard as one message carrying the
+ * pins themselves ({@link pinSection}, {@link inkSection}) and the person's
+ * note, then stamps each pin `sentAt` and `heard` ({@link pinSaid}), each
+ * entry and stroke group `sentAt`. An entry's pictures, texts and files are
+ * stored on the hub by reference ({@link CommentAttachment}).
  *
  * A pin is placed again after every revision of the page by its anchor, in
  * one order ({@link findAnchor}): the element at its source's file:line
@@ -31,6 +34,7 @@
  * `cawco:resolve` and `cawco:delete`).
  */
 import type { Doc, Map as YMap } from "yjs";
+import { humanSize } from "./attachments";
 import type { PreviewElement } from "./index";
 import type { InkGroup } from "./ink";
 
@@ -47,9 +51,19 @@ export type PreviewMode = (typeof PREVIEW_MODES)[number];
 export const previewMode = (value: unknown): PreviewMode | null =>
   PREVIEW_MODES.find((mode) => mode === value) ?? null;
 
-/** The first line a pin's thread says, cut for a peek or a row; null when nothing is written yet. */
-export const pinFirstLine = (pin: Pin): string | null =>
-  pin.thread[0]?.text.split("\n")[0]?.trim() || null;
+/**
+ * The first line a pin's thread says, cut for a peek or a row: its first
+ * words, else the names of what its first entry carries (a picture sent on
+ * its own); null when it says nothing.
+ */
+export const pinFirstLine = (pin: Pin): string | null => {
+  const [first] = pin.thread;
+  return (
+    first?.text.split("\n")[0]?.trim() ||
+    first?.attachments?.map((one) => one.name).join(", ") ||
+    null
+  );
+};
 
 export const COMMENT_LIMITS = {
   /** Pins an artifact keeps. */
@@ -58,6 +72,10 @@ export const COMMENT_LIMITS = {
   entries: 100,
   /** Characters one thread entry holds: comment_reply's bound. */
   text: 2000,
+  /** Pictures, texts and files one entry carries (attachments design §1). */
+  attachments: 10,
+  /** Characters an attachment's name holds. Our call. */
+  attachmentName: 300,
   /** Files an agent's reply names. Our call. */
   files: 20,
   /** Characters one named file holds. Our call. */
@@ -171,14 +189,39 @@ export type Anchor = PageAnchor | CanvasAnchor;
 /** An element under a pin, as the overlay describes it, without its markup. */
 export type PinnedElement = Omit<PreviewElement, "html">;
 
+/**
+ * A picture, a text or a file a person's entry carries, uploaded to the hub
+ * as it was attached (`POST /api/files`) and kept by its reference: the doc
+ * holds words, never bytes. A picture reaches the agent as an image block,
+ * a text folded into the delivery, a file on the session's machine.
+ */
+export interface CommentAttachment {
+  /** A picture's pixels, when the composer read them. */
+  height?: number;
+  kind: "image" | "text" | "file";
+  mediaType: string;
+  name: string;
+  /** The hub's reference to its bytes: `/api/files/<sha256>`. */
+  ref: string;
+  /** Its length in bytes. */
+  size: number;
+  width?: number;
+}
+
+/** A hub file reference: `/api/files/` and the bytes' sha256. */
+export const FILE_REF = /^\/api\/files\/[0-9a-f]{64}$/;
+
 export interface ThreadEntry {
   at: string;
+  /** What a person's entry carries, in the order attached. */
+  attachments?: CommentAttachment[];
   by: "person" | "agent";
   /** Files an agent's reply names as changed. */
   files?: string[];
   id: string;
   /** When it was delivered to the session; a person's entry only. */
   sentAt?: string;
+  /** Its words; empty only when it carries attachments (they alone may be the comment). */
   text: string;
 }
 
@@ -210,6 +253,38 @@ export interface Pin {
 const isObject = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 
+const ATTACHMENT_KINDS = new Set(["image", "text", "file"]);
+
+/** Why an entry's attachments may not be kept; null when they may (or it has none). */
+const attachmentsProblem = (attachments: unknown): string | null => {
+  if (attachments === undefined) {
+    return null;
+  }
+  if (!Array.isArray(attachments)) {
+    return "An entry's attachments are a list.";
+  }
+  if (attachments.length > COMMENT_LIMITS.attachments) {
+    return `A comment carries at most ${COMMENT_LIMITS.attachments} attachments.`;
+  }
+  const whole = (one: unknown) =>
+    isObject(one) &&
+    ATTACHMENT_KINDS.has(one.kind as string) &&
+    typeof one.name === "string" &&
+    one.name.length > 0 &&
+    one.name.length <= COMMENT_LIMITS.attachmentName &&
+    typeof one.ref === "string" &&
+    FILE_REF.test(one.ref) &&
+    typeof one.size === "number" &&
+    Number.isFinite(one.size) &&
+    one.size >= 0 &&
+    typeof one.mediaType === "string" &&
+    (one.width === undefined || typeof one.width === "number") &&
+    (one.height === undefined || typeof one.height === "number");
+  return attachments.every(whole)
+    ? null
+    : "An attachment names its kind, name, size, media type and the hub's /api/files reference.";
+};
+
 /** Why a thread entry may not be kept; null when it may. */
 const entryProblem = (entry: unknown): string | null => {
   if (!(
@@ -223,6 +298,17 @@ const entryProblem = (entry: unknown): string | null => {
   }
   if (entry.text.length > COMMENT_LIMITS.text) {
     return `A thread entry holds at most ${COMMENT_LIMITS.text} characters.`;
+  }
+  const attached = attachmentsProblem(entry.attachments);
+  if (attached) {
+    return attached;
+  }
+  if (
+    entry.by === "person" &&
+    !entry.text.trim() &&
+    !(Array.isArray(entry.attachments) && entry.attachments.length > 0)
+  ) {
+    return "A person's entry says something or carries an attachment.";
   }
   const { files } = entry;
   if (
@@ -352,14 +438,6 @@ export const pinUnsent = (pin: Pin): boolean =>
   (pin.heard !== undefined && pin.heard !== pinSaid(pin));
 
 /**
- * Whether an unsent pin is ready to go: a comment is made by a tap before
- * the person writes in it, and goes once they have (or resolved it). An
- * annotation stands on its ink, and goes as it is.
- */
-export const pinReady = (pin: Pin): boolean =>
-  pin.kind === "annotation" || pin.thread.length > 0 || !!pin.resolvedAt;
-
-/**
  * Pin `current` as the session heard pin `sent` at `at`: stamped sent, its
  * person's entries that went in `sent` stamped too when their words are
  * unchanged, and `heard` what `sent` said. Whatever the person changed since
@@ -406,34 +484,113 @@ const entryId = (): string => {
 
 const pinsOf = (doc: Doc) => doc.getMap("pins") as YMap<Pin>;
 
-/**
- * The person's words in pin `pin`'s thread, unsent until their Send; the
- * refusal's sentence when they were not kept, and nothing was written.
- */
-export function replyToPin(doc: Doc, pin: string, text: string): string | null {
-  const held = pinsOf(doc).get(pin);
-  if (!held) {
-    return "This pin is gone from the page, so the reply wasn't kept.";
-  }
-  if (!text.trim()) {
-    return "This reply has no words, so it wasn't kept. Write one, then reply again.";
+/** What the person said in one entry: their words, and what they attached. */
+export interface Said {
+  attachments?: CommentAttachment[];
+  text: string;
+}
+
+/** A person's entry of `said`, or why it may not be written (`what`: "comment" or "reply"). */
+function personEntry(
+  said: Said,
+  what: "comment" | "reply"
+): ThreadEntry | string {
+  const text = said.text.trim();
+  const attachments = said.attachments ?? [];
+  const again = what === "comment" ? "comment again" : "reply again";
+  if (!(text || attachments.length > 0)) {
+    return `This ${what} has no words and nothing attached, so it wasn't kept. Write something or attach a file, then ${again}.`;
   }
   if (text.length > COMMENT_LIMITS.text) {
-    return `A reply holds ${COMMENT_LIMITS.text.toLocaleString()} characters, so this one wasn't kept. Shorten it, then reply again.`;
+    return `A ${what} holds ${COMMENT_LIMITS.text.toLocaleString()} characters, so this one wasn't kept. Shorten it, then ${again}.`;
   }
-  if (held.thread.length >= COMMENT_LIMITS.entries) {
-    return `This thread holds ${COMMENT_LIMITS.entries} entries, so the reply wasn't kept. Start a new pin.`;
+  if (attachments.length > COMMENT_LIMITS.attachments) {
+    return `A ${what} takes up to ${COMMENT_LIMITS.attachments} files, so this one wasn't kept. Remove one, then ${again}.`;
   }
-  const entry: ThreadEntry = {
+  const problem = attachmentsProblem(attachments);
+  if (problem) {
+    return problem;
+  }
+  return {
     id: entryId(),
     by: "person",
     text,
     at: new Date().toISOString(),
+    ...(attachments.length > 0 ? { attachments } : {}),
   };
+}
+
+/**
+ * The person's words, and what they attached, in pin `pin`'s thread, unsent
+ * until their Send; the refusal's sentence when they were not kept, and
+ * nothing was written.
+ */
+export function replyToPin(doc: Doc, pin: string, said: Said): string | null {
+  const held = pinsOf(doc).get(pin);
+  if (!held) {
+    return "This pin is gone from the page, so the reply wasn't kept.";
+  }
+  if (held.thread.length >= COMMENT_LIMITS.entries) {
+    return `This thread holds ${COMMENT_LIMITS.entries} entries, so the reply wasn't kept. Start a new comment.`;
+  }
+  const entry = personEntry(said, "reply");
+  if (typeof entry === "string") {
+    return entry;
+  }
   doc.transact(() =>
     pinsOf(doc).set(pin, { ...held, thread: [...held.thread, entry] })
   );
   return null;
+}
+
+/**
+ * What a comment stands on before it is written: what the person pressed
+ * (or the ink whose Comment they picked), as the page reads it.
+ */
+export interface CommentTarget {
+  anchor: Anchor;
+  elements: PinnedElement[] | string[];
+  /** The stroke group it stands on, when it stands on ink. */
+  ink?: string;
+  /** Where on its element the press landed: fractions of the element's box. */
+  point?: { x: number; y: number };
+}
+
+/**
+ * The person's comment on `target`: its pin, numbered next, and its first
+ * entry, written in one transaction, so no pin ever stands with nothing
+ * said in it. The pin, or the refusal's sentence when nothing was written.
+ */
+export function commentOn(
+  doc: Doc,
+  target: CommentTarget,
+  said: Said,
+  id: string = entryId()
+): Pin | string {
+  const pins = pinsOf(doc);
+  if (pins.size >= COMMENT_LIMITS.pins) {
+    return `A page keeps ${COMMENT_LIMITS.pins} comments, so this one wasn't kept. Delete one, then comment again.`;
+  }
+  const entry = personEntry(said, "comment");
+  if (typeof entry === "string") {
+    return entry;
+  }
+  const number =
+    Math.max(0, ...[...pins.values()].map((one) => one.number)) + 1;
+  const pin: Pin = {
+    id,
+    number,
+    kind: "comment",
+    anchor: target.anchor,
+    at: entry.at,
+    by: "person",
+    elements: target.elements,
+    ...(target.ink ? { ink: target.ink } : {}),
+    ...(target.point ? { point: target.point } : {}),
+    thread: [entry],
+  };
+  doc.transact(() => pins.set(pin.id, pin));
+  return pin;
 }
 
 /**
@@ -481,19 +638,6 @@ export function deletePin(doc: Doc, pin: string): string | null {
     }
   });
   return null;
-}
-
-/**
- * The person dismissed the card of pin `pin`, which they had just made and
- * said nothing in (no thread, no draft): the pin is taken back, as if the
- * tap had not been made. Ink it stands on stays, as it was before its
- * Comment was picked. A pin that holds a thread, or is gone, is left alone.
- */
-export function withdrawPin(doc: Doc, pin: string): void {
-  const pins = pinsOf(doc);
-  if (pins.get(pin)?.thread.length === 0) {
-    doc.transact(() => pins.delete(pin));
-  }
 }
 
 /**
@@ -549,6 +693,18 @@ export const wholePage = (anchor: PageAnchor): boolean =>
   PAGE_ROOTS.has(anchor.selector);
 
 /**
+ * An id a framework mints per render, which names whatever element the next
+ * render hands it to: React's `useId` (`:r3:`, `:R1d6:` on the server) and
+ * Radix's (`radix-…`). Never an element's identity.
+ */
+const MINTED_ID = /^:r[0-9a-z]+:$|^radix-/i;
+/** A selector starting at such an id, as `CSS.escape` writes it (`#\:r3\:`, `#radix-…`). */
+const MINTED_ID_SELECTOR = /^#(?:\\:r[0-9a-z]+\\:|radix-)/i;
+
+/** Whether an element's id is one a framework minted ({@link MINTED_ID}): it anchors by its next rule. */
+export const generatedId = (id: string): boolean => MINTED_ID.test(id);
+
+/**
  * Whether a selector names its element by identity: it starts at an id or
  * one of {@link ANCHOR_IDENTITIES}, or it is the page's root or body, so it
  * finds the same element however the page moved round it. A path of places
@@ -557,7 +713,7 @@ export const wholePage = (anchor: PageAnchor): boolean =>
  */
 export const stableSelector = (selector: string): boolean =>
   PAGE_ROOTS.has(selector) ||
-  selector.startsWith("#") ||
+  (selector.startsWith("#") && !MINTED_ID_SELECTOR.test(selector)) ||
   ANCHOR_IDENTITIES.some((name) => selector.startsWith(`[${name}=`));
 
 /**
@@ -668,7 +824,7 @@ const standsOn = (pin: Pin, url: string): string[] => {
       : "";
   const chain = chainWords(anchor);
   return [
-    `## ${pin.number}. ${pin.kind} on ${wholePage(anchor) ? "the page as a whole" : anchor.selector}`,
+    `## ${pin.number}. ${pin.kind} on ${wholePage(anchor) ? "the whole page" : anchor.selector}`,
     ...(anchor.frames?.length
       ? [`- Inside the frame: ${anchor.frames.join(" › ")}`]
       : []),
@@ -767,10 +923,43 @@ export function inkSection(
   return lines.join("\n");
 }
 
+/** The person's note with their Send: the first section of its delivery. */
+export const sendNoteSection = (note: string): string =>
+  `## The person's note on this Send\n${note}`;
+
+/**
+ * How a delivery carries one attachment: a picture as the message's
+ * `picture`th image block; a text folded into the message; anything else
+ * (a picture past the message's picture caps too) as a file the session's
+ * machine keeps, named by its "Attached file" line.
+ */
+export type Carried = { picture: number } | { as: "text" } | { as: "file" };
+
+/** One attachment's line in its pin's section, as {@link Carried} carries it. */
+export const attachedLine = (
+  attachment: CommentAttachment,
+  carried: Carried
+): string => {
+  const size = humanSize(attachment.size);
+  if ("picture" in carried) {
+    const pixels =
+      attachment.width && attachment.height
+        ? `${attachment.width} × ${attachment.height}, `
+        : "";
+    return `- I attached: ${attachment.name} (picture ${carried.picture} of this message, ${pixels}${size})`;
+  }
+  if (carried.as === "text") {
+    return `- I attached: ${attachment.name}, its words below in <pasted-text name="${attachment.name}">`;
+  }
+  return `- I attached: ${attachment.name} (${size}, ${attachment.mediaType}), its "Attached file" line below`;
+};
+
 /** One pin's section: what it stands on, where, and what the session has not heard of its thread. */
 export function pinSection(
   pin: Pin,
   context: {
+    /** How the delivery carries each attachment; as a file, when it says nothing. */
+    carried?: (attachment: CommentAttachment) => Carried;
     /** The group's box in the page when it was drawn, px. */
     ink?: { h: number; w: number; x: number; y: number };
     /** The page's address. */
@@ -786,10 +975,17 @@ export function pinSection(
     lines.push("- Its element is gone from the page since a revision.");
   }
   for (const entry of unheardEntries(pin)) {
-    lines.push(`- I wrote: ${JSON.stringify(entry.text)}`);
-  }
-  if (pin.kind === "comment" && pin.thread.length === 0) {
-    lines.push("- Nothing written yet.");
+    if (entry.text.trim()) {
+      lines.push(`- I wrote: ${JSON.stringify(entry.text)}`);
+    }
+    for (const attachment of entry.attachments ?? []) {
+      lines.push(
+        attachedLine(
+          attachment,
+          context.carried?.(attachment) ?? { as: "file" }
+        )
+      );
+    }
   }
   return lines.join("\n");
 }

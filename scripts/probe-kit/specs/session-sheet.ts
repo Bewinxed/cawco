@@ -90,7 +90,7 @@
  *     at the desk, the canvas's name short of the 120px it keeps, every
  *     control stands, in head order, with no More, each in the form
  *     `standing` gives it: under a 640px head (the desk's pane is 523px)
- *     Send picks and Comments by glyph and count, their words not drawn,
+ *     Send and Comments by glyph and count, their words not drawn,
  *     every other control whole;
  *     at 390 the mode stands as its one button, More stands before Close,
  *     and More's menu holds the controls that went to it, in head order.
@@ -545,7 +545,7 @@ const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[data-scheme]`;
 /** The controls with words, which only a head 640px or wider draws (side/head.ts `WORDS_FROM`). */
 const WORDED = new Set(["send", "comments"]);
-/** DESIGN.md's head order, Send picks to Expand; Close stands after them all. */
+/** DESIGN.md's head order, Send to Expand; Close stands after them all. */
 const HEAD_ORDER = [
   "send",
   "create",
@@ -795,7 +795,7 @@ async function panelLegs(
   const keys = wide.items.map((one) => one.key);
   const worded = (wide.width ?? 0) >= 640;
   kit.check(
-    "18: at the desk every head control stands, in head order, with no More, Close last; under a 640px head Send picks and Comments by glyph and count with no word drawn, every other control whole",
+    "18: at the desk every head control stands, in head order, with no More, Close last; under a 640px head Send and Comments by glyph and count with no word drawn, every other control whole",
     wide.items.length > 0 &&
       wide.items.every(
         (one) =>

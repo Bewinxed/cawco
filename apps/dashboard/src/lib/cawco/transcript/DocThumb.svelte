@@ -57,7 +57,10 @@
     class="grid place-items-center flex-none text-ink-muted"
   >
     {#if uploading}
-      <UploadRing class="size-icon-md m-space-1" progress={file?.progress ?? 0} />
+      <UploadRing
+        class="size-icon-md m-space-1"
+        progress={file?.progress ?? 0}
+      />
     {:else}
       <Glyph class="size-icon-md m-space-1" />
     {/if}
@@ -68,9 +71,7 @@
       class="flex min-w-0 text-size-label font-medium leading-ui whitespace-nowrap"
       >{#if parts.head}<span data-slot="head" class="min-w-0 truncate"
           >{parts.head}</span
-        >{/if}<span
-        class="flex-none">{parts.tail}</span
-      ></span
+        >{/if}<span class="flex-none">{parts.tail}</span></span
     >
     {#if file?.failed}
       <span

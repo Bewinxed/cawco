@@ -28,7 +28,8 @@
  *    the id and `since` it names: the answer holds the pick and the final
  *    note as typed, its inner line break kept and no Return at its end.
  * 6. The line then says "read".
- * 7. A pick after that makes the pane's head offer "Send picks", no count.
+ * 7. A pick after that makes the pane's head offer Send again, counting the
+ *    one pick the session hasn't heard ("Send 1").
  *
  *   bun scripts/probe-kit/run.ts artifact-responses
  */
@@ -328,12 +329,12 @@ const run = async (kit: Kit) => {
       !firstSend.some((one) => one.origin === "human"),
     JSON.stringify(firstSend)
   );
-  // The pane's head offers Send picks only while the page has unsent picks: none now.
+  // The pane's head offers Send only while the page has something unsent: none now.
   const sendControl = page.locator(
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="send"]'
   );
   const afterSend = await until(
-    "the head's Send picks gone",
+    "the head's Send gone",
     () => sendControl.count(),
     (count) => count === 0,
     10_000
@@ -465,17 +466,20 @@ const run = async (kit: Kit) => {
   // 7. A pick after the Send is offered again.
   await frame.locator('[data-option="original"]').click();
   const label = sendControl.locator('[data-slot="send-label"]');
+  const figure = sendControl.locator('[data-slot="send-count"]');
   const labelNow = async () =>
-    (await label.count()) > 0 ? await label.innerText() : "no Send control";
+    (await label.count()) > 0
+      ? `${(await label.innerText()).trim()} ${(await figure.innerText()).trim()}`
+      : "no Send control";
   const afterPick = await until(
-    "the head reading Send picks",
+    "the head reading Send 1",
     labelNow,
-    (words) => words.trim() === "Send picks",
+    (words) => words === "Send 1",
     10_000
   ).catch(labelNow);
   kit.check(
-    "7: a later pick makes the pane's head offer Send picks, no count",
-    afterPick.trim() === "Send picks",
+    "7: a later pick makes the pane's head offer Send again, counting it: Send 1",
+    afterPick === "Send 1",
     afterPick
   );
 };

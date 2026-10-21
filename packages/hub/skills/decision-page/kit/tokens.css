@@ -731,12 +731,16 @@
     --c-rail-row-h: 38px;
     /* A row of the artifact panel's list: the kind's glyph, the name, its age (DESIGN.md Artifact panel, canvas and ink). */
     --c-artifact-row-h: 44px;
-    /* tsk-3's numbered pin: the coral disc on the page, in the pins list and on the card (DESIGN.md Artifact panel, canvas and ink). */
+    /* A comment's pill: its height on the page, in the Comments rail and in its thread's head, and its width at one figure (DESIGN.md, A pin's pill). */
     --c-pin: 20px;
-    /* A pin's card over the page, at its widest: the anchor line with Resolve, ⋯ and Close, the thread, the reply field (DESIGN.md Artifact panel, canvas and ink). Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px is the narrowest that keeps the anchor line beside its four controls. */
+    /* A comment's pill holding two or three figures: the room each side of them, so 7 is 20px wide, 42 about 26px and 108 about 32px (DESIGN.md, A pin's pill). */
+    --c-pin-pad: 6px;
+    /* A comment whose element is gone, in the Comments rail: its pill's dashed `border-control` ring, 2px out (DESIGN.md, The Comments rail). Whole, as every border and outline is (lint: a fractional width snaps to whole device pixels, and a dashed stroke has no inset-ring form). */
+    --c-pin-gone-ring: 1px;
+    /* The Comments rail beside the page (DESIGN.md, The Comments rail): a row's three lines beside its pill, the search field and Open and Resolved over them, and the Send bar's note at its foot. */
+    --c-comments-w: 320px;
+    /* A comment's composer and its thread, each beside its pin over the page (DESIGN.md, Placing a comment; A thread beside its pin): one width for both, so a card never changes width as it goes from composer to thread. Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px holds the thread's head beside its four controls, and a field of 178px beside Attach and the send glyph. */
     --c-pin-card-w: 280px;
-    /* A pin's card at its narrowest beside the Comments panel: its head (disc, what it stands on, Resolve, ⋯ and Close) on one line and the reply field. Where the well holds the panel, a gutter, this and the card's two edges, the card stands beside the panel; below that it rises as the foot sheet while the panel goes. */
-    --c-pin-card-min: 240px;
     /* The overlay's line round a chosen target and the page's root in Comment mode: the content's own edge weight, never the focus ring's (DESIGN.md, The One Target Rule). */
     --c-target-stroke: 1px;
     /* How far outside a bare chosen target (no border and no background of its own: a bare text container, a label-and-field group) the overlay's line stands, so it never touches the glyphs; its corners grow with it. A target that draws its own box takes the line on its border box, at 0 (DESIGN.md, The One Target Rule). */
@@ -755,7 +759,7 @@
     --c-graph-edge: 1.5px;
     /* A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink). */
     --c-map-node-w: 264px;
-    /* The preview's Comments panel, floating over the well's top-right: its share of the well's width, held between c-pin-list-min and c-pin-list-max. At 0.3 a desk well past about 930px gives the rows more than the floor's 225px text column, so a longer comment wraps to fewer lines. */
+    /* The iOS app's Comments panel (until its parity with the web's Comments rail, c-comments-w), floating over the well's top-right: its share of the well's width, held between c-pin-list-min and c-pin-list-max. At 0.3 a desk well past about 930px gives the rows more than the floor's 225px text column, so a longer comment wraps to fewer lines. */
     --c-pin-list-share: 0.3;
     /* The Comments panel at its narrowest: a row's text column of 225px beside its disc, where a six-word comment in the body role stands on one line and a 48-word one wraps to its four-line cut. */
     --c-pin-list-min: 280px;
@@ -1532,6 +1536,8 @@
     --dur-ghost: 80ms;
     --dur-control: 120ms;
     --dur-menu: 140ms;
+    /* How long the pointer rests on a comment's pill before its peek comes; one within this of the last goes at once (DESIGN.md, A pin's pill). */
+    --dur-peek: 300ms;
     /* A switch's knob and a checkbox's tick. */
     --dur-toggle: 160ms;
     --dur-exit: 160ms;

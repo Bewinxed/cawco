@@ -6,7 +6,7 @@ import {
 } from "@cawco/core/comments";
 
 /** A pin on the page as a whole (core `wholePage`), by name. Our call. */
-const PAGE_WORDS = "The page";
+const PAGE_WORDS = "Whole page";
 
 /** Words for a tag no text, id or class names: what the element is. Our call. */
 const TAG_WORDS: Record<string, string> = {

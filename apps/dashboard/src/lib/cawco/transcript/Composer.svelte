@@ -186,6 +186,7 @@
     attach = true,
     lead,
     action,
+    flush = false,
   }: {
     /**
      * The conversation's half-written message. The composer draws it and
@@ -314,6 +315,12 @@
      * at once, and so never turns into Stop. None on a session's composer.
      */
     action?: string;
+    /**
+     * It stands in a card or over a page's element, not over a transcript's
+     * foot: its dock stands in its host's flow, as tall as it lays out, with
+     * no dock foot under it, so its host is never sized from a measure.
+     */
+    flush?: boolean;
   } = $props();
 
   /** The hub this composer reads: the live client's, or a states file's stand-in. */
@@ -3027,12 +3034,16 @@
   data-drawing={canvasUp || undefined}
   data-minimized={minimized || undefined}
   data-perched={!!perch || undefined}
-  class="group/dock absolute inset-x-0 top-0 bottom-(--dock-foot) z-(--layer-dock) flex flex-col justify-end items-center pointer-events-none"
+  data-flush={flush || undefined}
+  class="group/dock not-data-flush:absolute not-data-flush:inset-x-0 not-data-flush:top-0 not-data-flush:bottom-(--dock-foot) data-flush:relative z-(--layer-dock) flex flex-col justify-end items-center pointer-events-none"
   data-keeps-draft
   data-safe-bottom
   bind:this={dockEl}
   style:--perch-rise={perch && perchHeight ? `${perchHeight}px` : null}
-  style:--dock-foot="calc(var(--space-4) + var(--safe-bottom))"
+  style:--dock-foot={flush
+    ? undefined
+    : "calc(var(--space-4) + var(--safe-bottom))"}
+  style:--c-composer-w={flush ? "100%" : undefined}
 >
   {#if offered.length > 0}
     <!-- The rest of the dock above the panel, cards stood on its bottom
@@ -3043,7 +3054,7 @@
          the desktop's step off the panel. -->
     <div
       data-slot="prompts"
-      class="grow shrink basis-0 min-h-0 w-c-composer-w flex flex-col justify-end pointer-events-none transition-fade-show group-data-perched/dock:pb-(--perch-rise) group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide max-desk:self-stretch max-desk:mx-space-3 max-desk:w-auto max-desk:mb-(--prompts-step)"
+      class="grow shrink basis-0 min-h-0 w-c-composer-w flex flex-col justify-end pointer-events-none transition-fade-show group-data-perched/dock:pb-(--perch-rise) group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto max-desk:mb-(--prompts-step)"
       inert={askRaised}
       bind:this={offers}
       {@attach reflow({ on: ["data-open", "data-railed"] })}
@@ -3087,7 +3098,7 @@
        the positioned box the suggestion chips stand on. -->
   <div
     data-slot="lift"
-    class="relative flex-none w-c-composer-w pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide max-desk:self-stretch max-desk:mx-space-3 max-desk:w-auto"
+    class="relative flex-none w-c-composer-w pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
     inert={askRaised}
     bind:clientHeight={lift}
     style:--shelf-rise={shelves[showing] ? `${shelves[showing]}px` : null}
@@ -3212,7 +3223,7 @@
        the canvas's box, do not. -->
   <div
     data-slot="composer"
-    class="relative flex-none w-c-composer-w flex flex-col gap-space-3 pointer-events-none max-desk:self-stretch max-desk:mx-space-3 max-desk:w-auto"
+    class="relative flex-none w-c-composer-w flex flex-col gap-space-3 pointer-events-none not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
     bind:this={column}
     bind:clientHeight={panel}
     in:rise
@@ -3702,6 +3713,7 @@
           {#if attach}
             <AttachButton
               {draft}
+              ghost={!!action}
               ondraw={recallOf ? () => room.open() : undefined}
             />
           {/if}
@@ -3721,7 +3733,11 @@
             aria-label={action ?? (stops ? "Stop the agent" : "Send message")}
             class={sendVariants({ class: "group/stop select-none touch-hit" })}
             title={action}
-            disabled={!(busy || pending || (draft.hasContent && !draft.unready))}
+            disabled={!(
+              busy ||
+              pending ||
+              (draft.hasContent && !draft.unready)
+            )}
             onclick={whileIdle(() => pending, onaction)}
             type="button"
           >

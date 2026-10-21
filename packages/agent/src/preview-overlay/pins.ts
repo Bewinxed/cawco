@@ -1,21 +1,29 @@
 /**
- * The person's pins on a page (Projects spec §5.7, §5.10; core comments.ts;
- * DESIGN.md, Artifact panel, canvas and ink). A pin is tsk-3's numbered pin,
- * a 20px coral disc (`action-solid`) with its number in `on-action`, drawn in
- * an `<svg>` in the page's own document like the ink, so it scrolls with the
- * page. A comment's pin stands where the person tapped its element in Comment
- * mode; an ink's pin at its group's top-right. A resolved pin leaves the
- * page (Figma: resolving "will hide the comment from both the right sidebar
- * and the canvas"), drawn again, at 40%, only while the host has its card
- * open. Resting on a pin chooses its element (the overlay's one target) and
- * peeks its first line beside it; the host focusing it (J and K) chooses it; a press on it
- * opens its card in the host. ⇧C hides every pin, and shows them again.
+ * The person's comments on a page, as their pins (Projects spec §5.7,
+ * §5.10; core comments.ts; DESIGN.md, A pin's pill). A pin is a pill with a
+ * tail corner: `--c-pin` tall, as wide as its number needs, three corners
+ * round and the fourth, the tail, a 2px corner standing on the point the
+ * person pressed. It stands up-right of that point, up-left where the page's
+ * edge leaves no room on the right, below where none is left above. Its
+ * fill says where it stands: hollow while the session hasn't heard it (no
+ * number yet while it is being written), filled once sent, recessed when
+ * resolved, which is drawn only while its thread is open. A 2px raised ring
+ * and the xs shadow lift it off the page; an open or stepped-to pin adds a
+ * second ring in the focus ink; a dot on its top end says the agent is
+ * working on it (pulsing) or has answered unread (still).
+ *
+ * Pins are drawn in an `<svg>` in the page's own document like the ink, so
+ * they scroll with the page; a pin on the page as a whole stands at the
+ * viewport's top-right corner, `--space-2` in, in a layer fixed to the
+ * viewport. Pins whose pills meet stack: the newest in front, at most two
+ * behind it, each a `--deck-step` ×2 further down-right; resting on the
+ * stack fans them into a row `--space-1` apart.
  *
  * A pin on an element inside a same-origin frame (frames.ts) is drawn here
  * too, in the top document, at the element's box mapped through its frames;
  * so is one inside a scroll container of the page's own (a transcript),
  * drawn again as it scrolls. While a frame or a container has scrolled the
- * point out of view, its disc is not drawn.
+ * point out of view, its pill is not drawn.
  *
  * Every pin is placed again from its anchor whenever the page changes (core
  * `findAnchor`: source file:line, then selector, then text). A page's pin
@@ -25,10 +33,11 @@
  * nor does one kept on a page-sized container (core `findAnchor`'s `page`),
  * which stands on the body again, out of the tray if it was put there.
  *
- * The host (the dashboard's pane) draws the card and the list; this tells it
- * where the card's pin stands as the page scrolls, and where each pin's
- * picture is cropped (`cropOf`): its ink's box, or its element's round the
- * point it was made at, with room round either.
+ * Resting on a pin chooses its element (the overlay's one target) and asks
+ * the host for its peek; a press on it opens its thread in the host. The
+ * host draws the composer, the thread and the peek; this tells it where the
+ * open pin and the one being written stand as the page scrolls, and where
+ * each pin's picture is cropped (`cropOf`).
  */
 import {
   type AnchorFound,
@@ -36,6 +45,8 @@ import {
   type PageAnchor,
   type Pin,
   type PinnedElement,
+  pinUnsent,
+  wholePage,
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
 import type { Map as YMap } from "yjs";
@@ -48,7 +59,6 @@ import type { InkChrome } from "./radial";
 import {
   bandsAt,
   bringInto,
-  discMeets,
   inBands,
   scrollersOf,
   scrollMoves,
@@ -56,14 +66,20 @@ import {
 
 const SVG = "http://www.w3.org/2000/svg";
 
-/** A pin's disc: 20px. */
-const PIN_R = 10;
-/** A resolved pin's opacity: DESIGN.md's 40%. */
-const RESOLVED_OPACITY = "0.4";
+/** A pill holding two or three figures takes this much room each side of them, px (comment design §4). */
+const PILL_PAD = 6;
+/** The ring round a pill, then the focus ring round that, px. */
+const RING = 2;
+/** The radius of a pill's tail corner: `--radius-hair`. */
+const TAIL_R = 2;
 /** Room round a mark's crop, px. Our call. */
 export const CROP_PAD = 24;
 /** How far a pin's crop reaches from the point it was made at, each way, px: a big element is cropped round the point. Our call. */
 const PIN_REACH = { x: 960, y: 640 } as const;
+/** How many pins of a stack stand behind its front one. */
+const BEHIND = 2;
+/** A finger's hit area round a pill, px. */
+const FINGER = 44;
 
 export interface Box {
   h: number;
@@ -72,10 +88,21 @@ export interface Box {
   y: number;
 }
 
+/** What a comment being written stands on: an element and the point on it, or an ink group. */
+export interface DraftTarget {
+  el: Element;
+  /** The stroke group whose Comment the person picked. */
+  ink?: string;
+  /** Where on `el` the press landed: fractions of its box. */
+  point?: { x: number; y: number };
+}
+
 export interface PinsDeps {
   /** What a page's mark stands on, read from `el` as it is now. */
   anchorOf: (el: Element) => PageAnchor;
   chrome: InkChrome;
+  /** The radial's Comment on an ink group: a comment is written on it (the page's composer opens). */
+  compose: (target: DraftTarget, elements: PinnedElement[] | string[]) => void;
   /** The overlay's description of `el`, its markup left out. */
   describe: (el: Element) => PinnedElement;
   /** A placed ink group's box in the page, px; null when it is not on the page. */
@@ -84,20 +111,16 @@ export interface PinsDeps {
   locate: (anchor: PageAnchor) => AnchorFound<Element> | null;
   /**
    * Pin `el`'s element chosen in the overlay (The One Target Rule), or none;
-   * `lead`, whether it leads the pointer's in Comment mode (a disc rested
+   * `lead`, whether it leads the pointer's in Comment mode (a pill rested
    * on, a pin stepped to), left out to keep the lead as it was.
    */
   outline: (el: Element | null, lead?: boolean) => void;
-  /** Pin `pin`'s first line beside its disc, at the viewport's `x`, `y`, radius `r`; none hides it. */
-  peek: (pin: Pin | null, x?: number, y?: number, r?: number) => void;
   post: (type: string, payload?: object) => void;
   /** Whether an anchor's frames lead to one still loading: not found yet, and not gone. */
   waiting: (anchor: PageAnchor) => boolean;
 }
 
 export interface Pins {
-  /** The person tapped `el` at the viewport's `x`, `y` in Comment mode: a comment pin there, and its card opened; its id. */
-  commentAt: (el: Element, x: number, y: number) => string;
   /** What of the page's viewport the host's chrome covers now (`cawco:covered`, the viewport's px); none when nothing does. */
   cover: (boxes: Box[]) => void;
   /**
@@ -105,18 +128,24 @@ export interface Pins {
    * (its look: a new one is drawn again); null when it is not on the page.
    */
   cropOf: (id: string) => { box: Box; look: string } | null;
+  /** The comment being written stands here (its hollow pill, no number yet), or none. */
+  draft: (target: DraftTarget | null) => void;
   /** Pins drawn again where their elements stand now. */
   draw: () => void;
+  /** The layer fixed to the viewport, where pins on the page as a whole stand. */
+  fixed: SVGSVGElement;
   /** The pin the host focused (J, K, its row), outlined and brought into view out from under the host's chrome; or none. */
   focus: (id: string | null, scroll: boolean) => void;
   /** The pin whose row in the host's list the pointer or the keyboard rests on, its element chosen; none gives the focused pin's back. */
   hover: (id: string | null) => void;
-  /** After a re-publish or an HMR update: the open card's pin, if it now stands under the host's chrome, brought out again. */
+  /** After a re-publish or an HMR update: the open thread's pin, if it now stands under the host's chrome, brought out again. */
   keepClear: () => void;
   layer: SVGSVGElement;
-  /** Pin `id`'s card opened in the host (`cawco:pin-open`) by a press on the page, the pin as this page holds it with it; `made`, for one just made. */
-  open: (id: string, made?: boolean) => void;
-  /** A pin on an ink group (Annotate, Comment); a comment's card opened. */
+  /** The pins the agent is working on (`live`) and those with an answer the person hasn't read (`unread`), each its dot. */
+  marks: (live: Set<string>, unread: Set<string>) => void;
+  /** Pin `id`'s thread opened in the host (`cawco:pin-open`) by a press on the page, the pin as this page holds it with it. */
+  open: (id: string) => void;
+  /** A pin on an ink group: an annotation is written; a comment's composer opens on it. */
   pinInk: (
     group: InkGroup,
     kind: Pin["kind"],
@@ -124,9 +153,11 @@ export interface Pins {
   ) => void;
   /** Pin `id` placed again on `el` at the viewport's `x`, `y`: out of the moved tray. */
   placeAgain: (id: string, el: Element, x: number, y: number) => void;
+  /** Where on `el`'s box the viewport's `x`, `y` lands, as fractions. */
+  pointOn: (el: Element, x: number, y: number) => { x: number; y: number };
   /** Every pin shown on the page, or hidden (⇧C). */
   show: (shown: boolean) => void;
-  /** The pin whose card the host shows, whose place it hears as the page scrolls; or none. */
+  /** The pin whose thread the host shows, whose place it hears as the page scrolls; or none. */
   track: (id: string | null) => void;
 }
 
@@ -147,14 +178,31 @@ const showsAt = (el: Element | null, at: [number, number]): boolean => {
   return x >= clip.left && x <= clip.right && y >= clip.top && y <= clip.bottom;
 };
 
-/** Where a pin stands: its disc's centre in the page, its element, and whether its frames show that point now. */
+/**
+ * Where a pin stands: the point its tail stands on in the page (or, on the
+ * page as a whole, the viewport), its element, what it stands on in the
+ * page's coordinates, and whether its frames show that point now.
+ */
 interface Standing {
   at: [number, number];
   /** What the pin stands on, in the page's coordinates: its element's box, or its ink's. */
   box: Box;
   el: Element | null;
+  /** On the page as a whole: drawn at the viewport's top-right, fixed to it. */
+  page: boolean;
   shown: boolean;
 }
+
+/** The corner a pill's tail is, standing on its point; none for a pin on the page as a whole. */
+type Tail = "bottom-start" | "bottom-end" | "top-start" | "top-end" | "none";
+
+/** One pill as drawn: its box (the page's px, or the viewport's on the page as a whole) and its tail. */
+interface Pill {
+  box: Box;
+  tail: Tail;
+}
+
+type PillState = "provisional" | "unsent" | "sent" | "resolved";
 
 const round = (n: number) => Math.round(n * 10_000) / 10_000;
 
@@ -166,6 +214,131 @@ export const padded = (box: Box): Box => ({
   h: box.h + 2 * CROP_PAD,
 });
 
+/** A box's path with each corner's own radius (top-left, top-right, bottom-right, bottom-left), each held to half the box. */
+const shapePath = (
+  { x, y, w, h }: Box,
+  [tl, tr, br, bl]: [number, number, number, number]
+): string => {
+  const most = Math.min(w, h) / 2;
+  const [a, b, c, d] = [tl, tr, br, bl].map((r) => Math.min(r, most));
+  return [
+    `M${x + a},${y}`,
+    `H${x + w - b}`,
+    `A${b},${b} 0 0 1 ${x + w},${y + b}`,
+    `V${y + h - c}`,
+    `A${c},${c} 0 0 1 ${x + w - c},${y + h}`,
+    `H${x + d}`,
+    `A${d},${d} 0 0 1 ${x},${y + h - d}`,
+    `V${y + a}`,
+    `A${a},${a} 0 0 1 ${x + a},${y}`,
+    "Z",
+  ].join(" ");
+};
+
+/** A pill's corners: round but for its tail; `by` grows each with the box, so a ring round it stays concentric. */
+const corners = (
+  h: number,
+  tail: Tail,
+  by: number
+): [number, number, number, number] => {
+  const pill = h / 2 + by;
+  const hair = TAIL_R + by;
+  return [
+    tail === "top-start" ? hair : pill,
+    tail === "top-end" ? hair : pill,
+    tail === "bottom-end" ? hair : pill,
+    tail === "bottom-start" ? hair : pill,
+  ];
+};
+
+const grow = (box: Box, by: number): Box => ({
+  x: box.x - by,
+  y: box.y - by,
+  w: box.w + 2 * by,
+  h: box.h + 2 * by,
+});
+
+const meets = (a: Box, b: Box) =>
+  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/** A pin's pill as drawn: its `<g>`, its box and tail, and its number. */
+interface DrawnPill {
+  group: SVGGElement;
+  number: number;
+  pill: Pill;
+}
+
+/** The pills that meet, grouped: each group's pills meet one another, one by one. */
+function meetingGroups(drawn: DrawnPill[]): DrawnPill[][] {
+  const groups: DrawnPill[][] = [];
+  for (const one of drawn) {
+    const meeting = groups.filter((group) =>
+      group.some((other) => meets(other.pill.box, one.pill.box))
+    );
+    for (const group of meeting) {
+      groups.splice(groups.indexOf(group), 1);
+    }
+    groups.push([...meeting.flat(), one]);
+  }
+  return groups;
+}
+
+/**
+ * One stack of pills that meet, in its own `<g>`: the newest in front, at
+ * most {@link BEHIND} behind it a `--deck-step` ×2 further down-right each,
+ * the rest left out until it fans; resting on it fans every pill into a row
+ * `--space-1` apart, over `--dur-control` where motion is welcome.
+ */
+function drawStack(
+  group: DrawnPill[],
+  look: { deck: number; gap: number; motion: string }
+): SVGGElement {
+  // Newest first: the front pill is the highest number.
+  const ordered = group.toSorted((a, b) => b.number - a.number);
+  const holder = document.createElementNS(SVG, "g");
+  holder.setAttribute("data-pin-stack", String(ordered.length));
+  holder.style.pointerEvents = "auto";
+  const front = ordered[0].pill.box;
+  let before = 0;
+  const steps = ordered.map((one, k) => {
+    const deck = Math.min(k, BEHIND) * look.deck * 2;
+    const step = {
+      one,
+      k,
+      // Where it stands stacked, and fanned, from where it was placed.
+      stacked: {
+        x: front.x + deck - one.pill.box.x,
+        y: front.y + deck - one.pill.box.y,
+      },
+      fanned: {
+        x: front.x + before - one.pill.box.x,
+        y: front.y - one.pill.box.y,
+      },
+    };
+    before += one.pill.box.w + look.gap;
+    return step;
+  });
+  const lay = (fan: boolean) => {
+    for (const { one, k, stacked, fanned } of steps) {
+      const to = fan ? fanned : stacked;
+      one.group.style.transform = `translate(${to.x}px, ${to.y}px)`;
+      one.group.style.opacity = !fan && k > BEHIND ? "0" : "1";
+      one.group.style.pointerEvents = !fan && k > 0 ? "none" : "auto";
+    }
+  };
+  for (const { one } of steps.toReversed()) {
+    one.group.style.transition = look.motion;
+    holder.append(one.group);
+  }
+  lay(false);
+  holder.addEventListener("pointerenter", () => lay(true));
+  holder.addEventListener("pointerleave", () => lay(false));
+  return holder;
+}
+
+/** Whether the page is under a finger now: a pill's hit area grows to {@link FINGER}. */
+const coarse = () => matchMedia("(pointer: coarse)").matches;
+
 export function startPins(deps: PinsDeps): Pins {
   const { chrome } = deps;
   const layer = document.createElementNS(SVG, "svg");
@@ -174,21 +347,28 @@ export function startPins(deps: PinsDeps): Pins {
   layer.style.cssText =
     "position:absolute;left:0;top:0;z-index:2147483646;overflow:visible;pointer-events:none;margin:0;padding:0;border:0";
   document.documentElement.append(layer);
+  const fixed = document.createElementNS(SVG, "svg");
+  fixed.setAttribute("data-cawco-pins-fixed", "");
+  fixed.setAttribute("aria-hidden", "true");
+  fixed.setAttribute("width", "0");
+  fixed.setAttribute("height", "0");
+  fixed.style.cssText =
+    "position:fixed;left:0;top:0;z-index:2147483646;overflow:visible;pointer-events:none;margin:0;padding:0;border:0";
+  document.documentElement.append(fixed);
 
   const pinsMap = () => artifact.doc().getMap("pins") as YMap<Pin>;
   /**
-   * Pin `id`'s card opened in the host, carrying the pin as this page holds
-   * it: a host whose own doc doesn't hold it yet (it reaches the host's only
-   * through the hub, and the page's link is down) draws the card from that,
-   * and writes its words through the page (`cawco:reply`).
+   * Pin `id`'s thread opened in the host, carrying the pin as this page
+   * holds it: a host whose own doc doesn't hold it yet (it reaches the
+   * host's only through the hub, and the page's link is down) draws the
+   * thread from that, and writes its words through the page (`cawco:reply`).
    */
-  const open = (id: string, made = false) => {
+  const open = (id: string) => {
     const pin = pinsMap().get(id);
     deps.post("cawco:pin-open", {
       id,
-      // Every open the page makes is a press: the card's field draws no ring.
+      // Every open the page makes is a press: the field draws no ring.
       via: "pointer",
-      ...(made ? { made: true } : {}),
       ...(pin ? { pin } : {}),
     });
   };
@@ -202,11 +382,16 @@ export function startPins(deps: PinsDeps): Pins {
     (artifact.kind() === "page" || artifact.kind() === "component") &&
     document.readyState !== "loading";
 
-  /** Each placed pin: where it stands; a disc is drawn for it while its frames show it. */
-  const placed = new Map<string, Standing>();
+  /** Each placed pin: where it stands, and its pill as drawn; drawn while its frames show it. */
+  const placed = new Map<string, Standing & { pill?: Pill }>();
+  /** The comment being written: where it stands, and its pill. */
+  let drafted: (DraftTarget & { standing?: Standing; pill?: Pill }) | null =
+    null;
   let focused: string | null = null;
   let tracked: string | null = null;
-  /** What of the page's viewport the host's chrome covers (`cawco:covered`): its Comments list, a phone's card. */
+  let live = new Set<string>();
+  let unread = new Set<string>();
+  /** What of the page's viewport the host's chrome covers (`cawco:covered`): a phone's card or rail. */
   let covered: Box[] = [];
   /** Pins no scroll brought out from under the host's chrome when they were last revealed. */
   const stuck = new Set<string>();
@@ -214,28 +399,51 @@ export function startPins(deps: PinsDeps): Pins {
   const anchoredEl = (pin: Pin): Element | null =>
     "selector" in pin.anchor ? (deps.locate(pin.anchor)?.el ?? null) : null;
 
+  /** Whether `el` is its document's page as a whole. */
+  const isPage = (el: Element | null) =>
+    !!el &&
+    (el === el.ownerDocument.body || el === el.ownerDocument.documentElement);
+
+  /** Where `el` stands with a pin at `point` on it, the page's px. */
+  const standingOn = (
+    el: Element,
+    point: { x: number; y: number } | undefined
+  ): Standing => {
+    const box = pageBox(el);
+    if (isPage(el)) {
+      return { at: [0, 0], box, el, page: true, shown: true };
+    }
+    const spot = point ?? { x: 1, y: 0 };
+    const at: [number, number] = [
+      box.x + spot.x * box.w,
+      box.y + spot.y * box.h,
+    ];
+    return { at, box, el, page: false, shown: showsAt(el, at) };
+  };
+
   /** Where pin `pin` stands in the page now, or null when it is not on it. */
   const standing = (pin: Pin): Standing | null => {
     if (pin.ink) {
       const box = deps.groupBox(pin.ink);
       return box
-        ? { at: [box.x + box.w, box.y], box, el: anchoredEl(pin), shown: true }
+        ? {
+            at: [box.x + box.w, box.y],
+            box,
+            el: anchoredEl(pin),
+            page: false,
+            shown: true,
+          }
         : null;
     }
     if (!("selector" in pin.anchor)) {
       return null;
     }
-    const found = deps.locate(pin.anchor);
-    if (!found) {
-      return null;
+    if (wholePage(pin.anchor)) {
+      const el = deps.locate(pin.anchor)?.el ?? document.body;
+      return el ? standingOn(el, undefined) : null;
     }
-    const box = pageBox(found.el);
-    const point = pin.point ?? { x: 1, y: 0 };
-    const at: [number, number] = [
-      box.x + point.x * box.w,
-      box.y + point.y * box.h,
-    ];
-    return { at, box, el: found.el, shown: showsAt(found.el, at) };
+    const found = deps.locate(pin.anchor);
+    return found ? standingOn(found.el, pin.point) : null;
   };
 
   /**
@@ -266,46 +474,239 @@ export function startPins(deps: PinsDeps): Pins {
     return moves;
   };
 
-  /** tsk-3's numbered pin at `where`: a 20px coral disc with its number, at 40% once resolved. */
-  const disc = (
+  /** The tokens a pill is painted with, read once per draw: a token is the page's style, read there and then. */
+  const paintOf = () => ({
+    action: chrome.token("--action-solid"),
+    onAction: chrome.token("--on-action"),
+    raised: chrome.token("--surface-raised"),
+    recessed: chrome.token("--surface-fill-strong"),
+    muted: chrome.token("--ink-muted"),
+    focus: chrome.token("--focus-ring"),
+    shadow: chrome.token("--shadow-tint"),
+    dot: chrome.token("--status-live-glyph"),
+    font: chrome.token("--type-caps", "font"),
+    height: Number.parseFloat(chrome.token("--c-pin", "width")) || 20,
+    deck: Number.parseFloat(chrome.token("--deck-step", "width")) || 1.25,
+    gap: Number.parseFloat(chrome.token("--space-1", "width")) || 4,
+    inset: Number.parseFloat(chrome.token("--space-2", "width")) || 8,
+    dotSize: Number.parseFloat(chrome.token("--status-dot-size", "width")) || 6,
+    dotCut: Number.parseFloat(chrome.token("--status-dot-cut", "width")) || 1.5,
+    loop: chrome.ms("--dur-loop"),
+    control: chrome.ms("--dur-control"),
+    ease: chrome.token("--ease-out", "transition-timing-function"),
+  });
+  type Paint = ReturnType<typeof paintOf>;
+
+  /** The figures' width in the pill's face, px. */
+  let measure: CanvasRenderingContext2D | null = null;
+  const pillWidth = (label: string, paint: Paint) => {
+    if (label.length < 2) {
+      return paint.height;
+    }
+    measure ??= document.createElement("canvas").getContext("2d");
+    if (!measure) {
+      return paint.height;
+    }
+    measure.font = paint.font;
+    // Tabular figures: every digit as wide as the widest.
+    const digit = Math.max(
+      ...[..."0123456789"].map((d) => measure?.measureText(d).width ?? 0)
+    );
+    return Math.max(
+      paint.height,
+      Math.ceil(digit * label.length + 2 * PILL_PAD)
+    );
+  };
+
+  /**
+   * Where a pill `w` wide stands on its point `at` (the page's px): up-right
+   * of it, its tail on the point; up-left where the page's width leaves no
+   * room on the right; below where its top leaves none above. One on the
+   * page as a whole stands at the viewport's top-right corner, `--space-2`
+   * in, with no tail.
+   */
+  const pillAt = (where: Standing, w: number, paint: Paint): Pill => {
+    const h = paint.height;
+    if (where.page) {
+      const right = document.documentElement.clientWidth;
+      return {
+        box: { x: right - paint.inset - w, y: paint.inset, w, h },
+        tail: "none",
+      };
+    }
+    const [px, py] = where.at;
+    const edge = RING;
+    const right = scrollX + document.documentElement.clientWidth - edge;
+    const left = px + w <= right ? px : px - w;
+    const above = py - h >= edge;
+    const top = above ? py - h : py;
+    const fromRight = left !== px;
+    let tail: Tail;
+    if (above) {
+      tail = fromRight ? "bottom-end" : "bottom-start";
+    } else {
+      tail = fromRight ? "top-end" : "top-start";
+    }
+    return { box: { x: Math.max(edge, left), y: top, w, h }, tail };
+  };
+
+  const stateOf = (pin: Pin | null): PillState => {
+    if (!pin) {
+      return "provisional";
+    }
+    if (pin.resolvedAt) {
+      return "resolved";
+    }
+    return pinUnsent(pin) ? "unsent" : "sent";
+  };
+
+  const pathEl = (d: string, fill: string) => {
+    const path = document.createElementNS(SVG, "path");
+    path.setAttribute("d", d);
+    path.setAttribute("fill", fill);
+    return path;
+  };
+
+  /**
+   * One pill drawn: its focus ring when open or stepped to, its raised ring
+   * with the xs shadow, its face by state (DESIGN.md, A pin's pill), its
+   * number, and its dot.
+   */
+  const pillShape = (
+    pin: Pin | null,
+    pill: Pill,
+    paint: Paint
+  ): SVGGElement => {
+    const g = document.createElementNS(SVG, "g");
+    const state = stateOf(pin);
+    g.setAttribute("data-state", state);
+    g.setAttribute("data-tail", pill.tail);
+    const { box, tail } = pill;
+    if (pin && (pin.id === focused || pin.id === tracked)) {
+      const focus = pathEl(
+        shapePath(grow(box, 2 * RING), corners(box.h, tail, 2 * RING)),
+        paint.focus
+      );
+      focus.setAttribute("data-focus-ring", "");
+      g.append(focus);
+    }
+    const ring = pathEl(
+      shapePath(grow(box, RING), corners(box.h, tail, RING)),
+      paint.raised
+    );
+    ring.style.filter = `drop-shadow(0 1px 1px ${paint.shadow})`;
+    g.append(ring);
+    const faces: Record<
+      PillState,
+      { edge: string; face: string; ink: string }
+    > = {
+      provisional: { edge: paint.action, face: paint.raised, ink: "" },
+      unsent: { edge: paint.action, face: paint.raised, ink: paint.action },
+      sent: { edge: paint.action, face: paint.action, ink: paint.onAction },
+      resolved: {
+        edge: paint.recessed,
+        face: paint.recessed,
+        ink: paint.muted,
+      },
+    };
+    const look = faces[state];
+    const face = pathEl(shapePath(box, corners(box.h, tail, 0)), look.edge);
+    // The pill's own box, its tail corner on the pressed point.
+    face.setAttribute("data-face", "");
+    g.append(face);
+    if (look.face !== look.edge) {
+      // Hollow: a 2px edge in the action ink, the face raised inside it.
+      g.append(
+        pathEl(
+          shapePath(grow(box, -RING), corners(box.h, tail, -RING)),
+          look.face
+        )
+      );
+    }
+    if (pin) {
+      const number = document.createElementNS(SVG, "text");
+      number.setAttribute("x", String(box.x + box.w / 2));
+      number.setAttribute("y", String(box.y + box.h / 2));
+      number.setAttribute("text-anchor", "middle");
+      number.setAttribute("dominant-baseline", "central");
+      number.setAttribute("fill", look.ink);
+      number.style.font = paint.font;
+      number.style.fontVariantNumeric = "tabular-nums";
+      number.style.userSelect = "none";
+      number.textContent = String(pin.number);
+      g.append(number);
+    }
+    const dot = pin && (live.has(pin.id) || unread.has(pin.id));
+    if (dot) {
+      const r = paint.dotSize / 2;
+      const cx = box.x + box.w - 1;
+      const cy = box.y + 1;
+      const cut = document.createElementNS(SVG, "circle");
+      cut.setAttribute("cx", String(cx));
+      cut.setAttribute("cy", String(cy));
+      cut.setAttribute("r", String(r + paint.dotCut));
+      cut.setAttribute("fill", paint.raised);
+      const mark = document.createElementNS(SVG, "circle");
+      mark.setAttribute("cx", String(cx));
+      mark.setAttribute("cy", String(cy));
+      mark.setAttribute("r", String(r));
+      mark.setAttribute("fill", paint.dot);
+      mark.setAttribute("data-dot", live.has(pin.id) ? "live" : "unread");
+      if (live.has(pin.id) && motionOk()) {
+        mark.animate([{ opacity: 1 }, { opacity: 0.35 }, { opacity: 1 }], {
+          duration: paint.loop,
+          iterations: Number.POSITIVE_INFINITY,
+          easing: "ease-in-out",
+        });
+      }
+      g.append(cut, mark);
+    }
+    return g;
+  };
+
+  /** A pin's pill, pressable, at `pill`; resting on it chooses its element and asks for its peek. */
+  const pinPill = (
     pin: Pin,
     where: Standing,
-    paint: { fill: string; font: string; ink: string }
-  ) => {
-    const g = document.createElementNS(SVG, "g");
+    pill: Pill,
+    paint: Paint
+  ): SVGGElement => {
+    const g = pillShape(pin, pill, paint);
     g.setAttribute("data-pin", String(pin.number));
     g.setAttribute("data-pin-id", pin.id);
-    g.setAttribute(
-      "transform",
-      `translate(${where.at[0].toFixed(1)} ${where.at[1].toFixed(1)})`
-    );
     g.style.pointerEvents = "auto";
     g.style.cursor = "pointer";
-    if (pin.resolvedAt) {
-      g.setAttribute("opacity", RESOLVED_OPACITY);
-    }
-    const circle = document.createElementNS(SVG, "circle");
-    circle.setAttribute("r", String(PIN_R));
-    circle.setAttribute("fill", paint.fill);
-    const number = document.createElementNS(SVG, "text");
-    number.setAttribute("text-anchor", "middle");
-    number.setAttribute("dominant-baseline", "central");
-    number.setAttribute("fill", paint.ink);
-    number.style.font = paint.font;
-    number.style.userSelect = "none";
-    number.textContent = String(pin.number);
-    g.append(circle, number);
+    // A finger's hit area: 44px round the pill, clear of nothing it draws.
+    const reach = Math.max(0, (FINGER - pill.box.h) / 2);
+    const hit = document.createElementNS(SVG, "rect");
+    const area = coarse() ? grow(pill.box, reach) : grow(pill.box, RING);
+    hit.setAttribute("x", String(area.x));
+    hit.setAttribute("y", String(area.y));
+    hit.setAttribute("width", String(area.w));
+    hit.setAttribute("height", String(area.h));
+    hit.setAttribute("fill", "transparent");
+    g.prepend(hit);
     g.addEventListener("pointerenter", () => {
       deps.outline(where.el, true);
-      deps.peek(pin, where.at[0] - scrollX, where.at[1] - scrollY, PIN_R);
+      const shown = where.page ? 0 : 1;
+      deps.post("cawco:peek", {
+        id: pin.id,
+        mark: {
+          x: pill.box.x - shown * scrollX,
+          y: pill.box.y - shown * scrollY,
+          w: pill.box.w,
+          h: pill.box.h,
+        },
+      });
     });
     g.addEventListener("pointerleave", () => {
       deps.outline(focused ? (placed.get(focused)?.el ?? null) : null, false);
-      deps.peek(null);
+      deps.post("cawco:peek", { id: null });
     });
     g.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
+      deps.post("cawco:peek", { id: null });
       open(pin.id);
     });
     return g;
@@ -332,21 +733,30 @@ export function startPins(deps: PinsDeps): Pins {
   const goneFrom = (pin: Pin) =>
     !("selector" in pin.anchor && deps.waiting(pin.anchor));
 
-  /** Places each pin on the page, drawing a disc for each its frames show; answers those that are gone. */
-  const placeAll = (all: Pin[]): Pin[] => {
+  /** Stacks the pills that meet ({@link meetingGroups}, {@link drawStack}). */
+  const stack = (into: SVGSVGElement, drawn: DrawnPill[], paint: Paint) => {
+    for (const group of meetingGroups(drawn)) {
+      into.append(
+        group.length === 1
+          ? group[0].group
+          : drawStack(group, {
+              deck: paint.deck,
+              gap: paint.gap,
+              motion: motionOk()
+                ? `transform ${paint.control}ms ${paint.ease}, opacity ${paint.control}ms ${paint.ease}`
+                : "",
+            })
+      );
+    }
+  };
+
+  /** Places each pin on the page, drawing a pill for each its frames show; answers those that are gone. */
+  const placeAll = (all: Pin[], paint: Paint): Pin[] => {
     const gone: Pin[] = [];
-    // Read for the first disc drawn: a token is the page's style, read there and then.
-    let painted: { fill: string; font: string; ink: string } | null = null;
-    const paintNow = () => {
-      painted ??= {
-        fill: chrome.token("--action-solid"),
-        ink: chrome.token("--on-action"),
-        font: chrome.token("--type-label", "font"),
-      };
-      return painted;
-    };
-    // A resolved pin stands on the page only while the host has its card open.
+    // A resolved pin stands on the page only while its thread is open.
     const onIt = (pin: Pin) => !pin.resolvedAt || pin.id === tracked;
+    const drawn: DrawnPill[] = [];
+    const drawnFixed: DrawnPill[] = [];
     for (const pin of all.filter((one) => !one.movedAt && onIt(one))) {
       const where = standing(pin);
       if (!where) {
@@ -355,17 +765,57 @@ export function startPins(deps: PinsDeps): Pins {
         }
         continue;
       }
-      placed.set(pin.id, where);
+      const pill = pillAt(where, pillWidth(String(pin.number), paint), paint);
+      placed.set(pin.id, { ...where, pill });
       // A pin in a frame scrolled away from it stands hidden until the frame shows it again.
       if (where.shown) {
-        layer.append(disc(pin, where, paintNow()));
+        (where.page ? drawnFixed : drawn).push({
+          group: pinPill(pin, where, pill, paint),
+          pill,
+          number: pin.number,
+        });
       }
     }
+    stack(layer, drawn, paint);
+    stack(fixed, drawnFixed, paint);
     return gone;
   };
 
+  /** The comment being written, drawn as its hollow pill with no number. */
+  const drawDraft = (paint: Paint) => {
+    if (!drafted) {
+      return;
+    }
+    let where: Standing | null = null;
+    if (drafted.ink) {
+      const box = deps.groupBox(drafted.ink);
+      where = box
+        ? {
+            at: [box.x + box.w, box.y],
+            box,
+            el: drafted.el,
+            page: false,
+            shown: true,
+          }
+        : null;
+    } else if (drafted.el.isConnected) {
+      where = standingOn(drafted.el, drafted.point);
+    }
+    if (!where) {
+      drafted.standing = undefined;
+      drafted.pill = undefined;
+      return;
+    }
+    const pill = pillAt(where, paint.height, paint);
+    drafted.standing = where;
+    drafted.pill = pill;
+    const g = pillShape(null, pill, paint);
+    g.setAttribute("data-pin", "new");
+    (where.page ? fixed : layer).append(g);
+  };
+
   function draw() {
-    for (const node of [...layer.children]) {
+    for (const node of [...layer.children, ...fixed.children]) {
       node.remove();
     }
     placed.clear();
@@ -374,8 +824,10 @@ export function startPins(deps: PinsDeps): Pins {
       return;
     }
     const all = [...pinsMap().values()].sort((a, b) => a.number - b.number);
-    fitToPage(layer, all.length > 0);
-    const gone = placeAll(all);
+    fitToPage(layer, all.length > 0 || !!drafted);
+    const paint = paintOf();
+    const gone = placeAll(all, paint);
+    drawDraft(paint);
     if (settled()) {
       settle(reanchor(all), gone);
     }
@@ -385,34 +837,48 @@ export function startPins(deps: PinsDeps): Pins {
     tell();
   }
 
+  /** A pill's box in the viewport, px. */
+  const shownBox = (where: Standing, pill: Pill): Box =>
+    where.page
+      ? pill.box
+      : {
+          x: pill.box.x - scrollX,
+          y: pill.box.y - scrollY,
+          w: pill.box.w,
+          h: pill.box.h,
+        };
+  /** What a pin stands on, in the viewport, px. */
+  const shownStanding = (where: Standing): Box => ({
+    x: where.box.x - scrollX,
+    y: where.box.y - scrollY,
+    w: where.box.w,
+    h: where.box.h,
+  });
+
   /**
-   * The tracked pin's disc in the viewport, and the box of what it stands
-   * on, for the host's card, which stands beside that box where it has room;
-   * `stuck` while no scroll brings it out from under the host's chrome.
+   * The open pin's pill in the viewport, and the box of what it stands on,
+   * for the host's thread card, which stands beside the pill where it has
+   * room; `stuck` while no scroll brings it out from under the host's
+   * chrome. The comment being written, the same for its composer.
    */
   const tell = () => {
-    if (!tracked) {
-      return;
+    if (tracked) {
+      const where = placed.get(tracked);
+      const shown = where?.shown && where.pill ? where : undefined;
+      deps.post("cawco:pin-at", {
+        id: tracked,
+        ...(shown?.pill
+          ? { mark: shownBox(shown, shown.pill), box: shownStanding(shown) }
+          : {}),
+        ...(stuck.has(tracked) ? { stuck: true } : {}),
+      });
     }
-    const where = placed.get(tracked);
-    const shown = where?.shown ? where : undefined;
-    deps.post("cawco:pin-at", {
-      id: tracked,
-      ...(shown
-        ? {
-            x: shown.at[0] - scrollX,
-            y: shown.at[1] - scrollY,
-            r: PIN_R,
-            box: {
-              x: shown.box.x - scrollX,
-              y: shown.box.y - scrollY,
-              w: shown.box.w,
-              h: shown.box.h,
-            },
-          }
-        : {}),
-      ...(stuck.has(tracked) ? { stuck: true } : {}),
-    });
+    if (drafted?.standing && drafted.pill) {
+      deps.post("cawco:compose-at", {
+        mark: shownBox(drafted.standing, drafted.pill),
+        box: shownStanding(drafted.standing),
+      });
+    }
   };
   let frame = 0;
   const onScroll = () => {
@@ -427,25 +893,27 @@ export function startPins(deps: PinsDeps): Pins {
     }
   };
   addEventListener("scroll", onScroll, { capture: true, passive: true });
+  // The viewport's width moves the pins on the page as a whole, and which side a pill's tail takes.
+  addEventListener("resize", () => draw(), { passive: true });
 
   /**
    * Pin `id` brought where the person sees it: inside the viewport and out
-   * from under every box the host's chrome covers the page with (its
-   * Comments list, a phone's card), each scroller round it moved as little
-   * as lands it there (scrollers.ts `bringInto`). A pin already standing
-   * there stays where the person is looking. One no scroll can bring out
-   * from under the host's chrome (the page's top under the list) is
-   * `stuck`: the host makes room for it.
+   * from under every box the host's chrome covers the page with (a phone's
+   * card or rail), each scroller round it moved as little as lands it there
+   * (scrollers.ts `bringInto`). A pin already standing there stays where the
+   * person is looking. One no scroll can bring out from under the host's
+   * chrome is `stuck`: the host makes room for it.
    */
   const reveal = (id: string) => {
     stuck.delete(id);
     const where = placed.get(id);
-    if (!where) {
+    if (!where || where.page) {
       return;
     }
+    const r = (where.pill?.box.h ?? 20) / 2;
     const x = where.at[0] - scrollX;
     const y = where.at[1] - scrollY;
-    const clear = bandsAt(x, covered, PIN_R);
+    const clear = bandsAt(x, covered, r);
     if (where.shown && inBands(y, clear)) {
       return;
     }
@@ -459,28 +927,23 @@ export function startPins(deps: PinsDeps): Pins {
       stuck.add(id);
     }
     // Out from under nothing: at least in the viewport.
-    const shown = bringInto(chain, y, bandsAt(x, [], PIN_R));
+    const shown = bringInto(chain, y, bandsAt(x, [], r));
     if (shown) {
       scrollMoves(shown, motionOk() ? "smooth" : "auto");
     }
   };
 
-  /** The open card's pin, when it stands under what the host's chrome covers, brought out again. */
+  /** The open thread's pin, when its pill stands under what the host's chrome covers, brought out again. */
   const keepClear = () => {
     const where = tracked ? placed.get(tracked) : undefined;
-    if (
-      tracked &&
-      where &&
-      covered.some((box) =>
-        discMeets(where.at[0] - scrollX, where.at[1] - scrollY, box)
-      )
-    ) {
+    if (!(tracked && where?.pill) || where.page) {
+      return;
+    }
+    const box = shownBox(where, where.pill);
+    if (covered.some((one) => meets(box, one))) {
       reveal(tracked);
     }
   };
-
-  const nextNumber = () =>
-    Math.max(0, ...[...pinsMap().values()].map((pin) => pin.number)) + 1;
 
   const write = (pin: Pin) => {
     const doc = artifact.doc();
@@ -510,10 +973,20 @@ export function startPins(deps: PinsDeps): Pins {
     };
   };
 
+  /** The viewport as it stands, in the page's px: a pin on the page as a whole is pictured by what the person saw. */
+  const viewport = (): Box => ({
+    x: scrollX,
+    y: scrollY,
+    w: document.documentElement.clientWidth,
+    h: innerHeight,
+  });
+
   return {
     layer,
+    fixed,
     draw,
     open,
+    pointOn,
     cropOf: (id) => {
       const pin = pinsMap().get(id);
       const where = placed.get(id);
@@ -526,6 +999,10 @@ export function startPins(deps: PinsDeps): Pins {
           ? { box: padded(box), look: `ink:${pin.ink}:${JSON.stringify(box)}` }
           : null;
       }
+      if (where.page) {
+        const box = viewport();
+        return { box, look: `page:${JSON.stringify(box)}` };
+      }
       if (!where.el) {
         return null;
       }
@@ -535,26 +1012,22 @@ export function startPins(deps: PinsDeps): Pins {
         look: `pin:${JSON.stringify(box)}`,
       };
     },
-    commentAt: (el, x, y) => {
-      const pin: Pin = {
-        id: newId(),
-        number: nextNumber(),
-        kind: "comment",
-        anchor: deps.anchorOf(el),
-        at: new Date().toISOString(),
-        by: "person",
-        elements: [deps.describe(el)],
-        point: pointOn(el, x, y),
-        thread: [],
-      };
-      write(pin);
-      open(pin.id, true);
-      return pin.id;
+    draft: (target) => {
+      drafted = target ? { ...target } : null;
+      draw();
     },
     pinInk: (group, kind, elements) => {
-      const pin: Pin = {
+      if (kind === "comment") {
+        const el =
+          ("selector" in group.anchor ? deps.locate(group.anchor)?.el : null) ??
+          document.body;
+        deps.compose({ el, ink: group.id }, elements);
+        return;
+      }
+      write({
         id: newId(),
-        number: nextNumber(),
+        number:
+          Math.max(0, ...[...pinsMap().values()].map((pin) => pin.number)) + 1,
         kind,
         anchor: group.anchor,
         at: new Date().toISOString(),
@@ -562,11 +1035,7 @@ export function startPins(deps: PinsDeps): Pins {
         elements,
         ink: group.id,
         thread: [],
-      };
-      write(pin);
-      if (kind === "comment") {
-        open(pin.id, true);
-      }
+      });
     },
     placeAgain: (id, el, x, y) => {
       const pin = pinsMap().get(id);
@@ -583,12 +1052,17 @@ export function startPins(deps: PinsDeps): Pins {
       open(id);
     },
     focus: (id, scroll) => {
+      const before = focused;
       focused = id;
       const el: Element | null = id ? (placed.get(id)?.el ?? null) : null;
       if (scroll && id) {
         reveal(id);
       }
       deps.outline(el, true);
+      if (before !== id) {
+        // Its pill takes, or gives back, the focus ring.
+        draw();
+      }
     },
     hover: (id) => {
       if (id) {
@@ -599,33 +1073,40 @@ export function startPins(deps: PinsDeps): Pins {
     },
     cover: (boxes) => {
       covered = boxes;
-      // What covers the page changed under an open card (its card came to a
-      // phone's foot, the panel opened or grew): its pin is brought out again.
+      // What covers the page changed under an open thread (its card came to
+      // a phone's foot, the rail opened there): its pin is brought out again.
       keepClear();
       tell();
     },
     keepClear,
+    marks: (working, answered) => {
+      const same = (a: Set<string>, b: Set<string>) =>
+        a.size === b.size && [...a].every((one) => b.has(one));
+      if (same(working, live) && same(answered, unread)) {
+        return;
+      }
+      live = working;
+      unread = answered;
+      draw();
+    },
     track: (id) => {
       const before = tracked;
       tracked = id;
-      // Only a resolved pin stands or goes with its card (`onIt`): the page is
-      // drawn again for that alone. Drawn again for an open pin, every disc
-      // is put back new under the tap that closed the card, and iOS WebKit,
-      // seeing new content as that tap lands, takes it for a hover and sends
-      // no click (the iOS probe: "dismissed by=page" and no new document).
-      const resolved = (pin: string | null) =>
-        pin !== null && !!pinsMap().get(pin)?.resolvedAt;
-      if (before !== id && (resolved(before) || resolved(id))) {
-        // Drawn again, which tells the host.
-        draw();
-      } else {
+      if (before === id) {
         tell();
+        return;
       }
+      // Drawn again: the open pin takes its focus ring, and a resolved one
+      // stands only while its thread is open. Its pills are put back under a
+      // tap that may be landing, so the page waits a frame: iOS WebKit, seeing
+      // new content as a tap lands, takes it for a hover and sends no click.
+      requestAnimationFrame(draw);
     },
     show: (shown) => {
       layer.style.display = shown ? "" : "none";
+      fixed.style.display = shown ? "" : "none";
       if (!shown) {
-        deps.peek(null);
+        deps.post("cawco:peek", { id: null });
       }
     },
   };

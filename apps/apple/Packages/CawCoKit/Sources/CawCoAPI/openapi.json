@@ -39095,6 +39095,13 @@
           "at": {
             "type": "string"
           },
+          "attachments": {
+            "description": "What a person's entry carries, in the order attached.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommentAttachment"
+            }
+          },
           "by": {
             "$ref": "#/components/schemas/SessionAttachmentWho"
           },
@@ -39113,6 +39120,7 @@
             "type": "string"
           },
           "text": {
+            "description": "Its words; empty only when it carries attachments (they alone may be the comment).",
             "type": "string"
           }
         },
@@ -39121,6 +39129,43 @@
           "by",
           "id",
           "text"
+        ]
+      },
+      "CommentAttachment": {
+        "description": "A picture, a text or a file a person's entry carries, uploaded to the hub\nas it was attached (`POST /api/files`) and kept by its reference: the doc\nholds words, never bytes. A picture reaches the agent as an image block,\na text folded into the delivery, a file on the session's machine.",
+        "type": "object",
+        "properties": {
+          "height": {
+            "description": "A picture's pixels, when the composer read them.",
+            "type": "number"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CommentAttachmentKind"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ref": {
+            "description": "The hub's reference to its bytes: `/api/files/<sha256>`.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Its length in bytes.",
+            "type": "number"
+          },
+          "width": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "mediaType",
+          "name",
+          "ref",
+          "size"
         ]
       },
       "Promoted": {
@@ -48777,7 +48822,7 @@
             "type": "string"
           },
           "kind": {
-            "$ref": "#/components/schemas/SessionAttachmentKind"
+            "$ref": "#/components/schemas/CommentAttachmentKind"
           },
           "mediaType": {
             "type": "string"
@@ -59089,6 +59134,14 @@
           "failed"
         ]
       },
+      "CommentAttachmentKind": {
+        "type": "string",
+        "enum": [
+          "file",
+          "image",
+          "text"
+        ]
+      },
       "ComponentDocTypes": {
         "type": "string",
         "enum": [
@@ -59518,14 +59571,6 @@
           "delivered",
           "failed",
           "silent"
-        ]
-      },
-      "SessionAttachmentKind": {
-        "type": "string",
-        "enum": [
-          "file",
-          "image",
-          "text"
         ]
       },
       "SessionAttachmentWho": {

@@ -71,20 +71,42 @@ export interface PendingText {
 /**
  * A file that is neither a picture nor text: uploading to the hub as soon as
  * it is attached, then ready (`ref`), or failed (`error`) and kept with its
- * bytes so a tap tries it again.
+ * bytes so a tap tries it again. A draft that keeps everything by reference
+ * (a comment's) holds its pictures and its long pastes this way too, each
+ * saying which it is (`as`).
  */
 export interface PendingFile {
+  /** What it is beside a file, in a draft that keeps everything by reference: a picture, or a long paste. */
+  as?: "image" | "text";
   /** Its bytes, while this tab may have to upload them (again). */
   blob?: Blob;
   error?: string;
+  /** A picture's pixels, read as it was attached. */
+  height?: number;
   id: string;
   mediaType: string;
   name: string;
+  /** A picture's thumb (a data URL), drawn while it uploads and after. */
+  preview?: string;
   /** How far its upload has gone, 0 to 1. */
   progress: number;
   /** The hub's reference, once it has the file. */
   ref?: string;
   size: number;
+  width?: number;
+}
+
+/** A picture's pixels, from its own bytes; none when it doesn't decode. */
+function pixelsOf(
+  src: string
+): Promise<{ height: number; width: number } | null> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () =>
+      resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
 }
 
 /**
@@ -129,6 +151,17 @@ export interface Lift {
 export const paneDrafts = new Map<string, ComposerDraft>();
 
 export class ComposerDraft {
+  /**
+   * Everything attached goes up to the hub as it is attached and rides as
+   * the hub's reference (a comment's draft: attachments design §1): a
+   * picture keeps its thumb, a long paste becomes a text file, and any file
+   * is a file, never folded in as text. A conversation's draft keeps
+   * pictures and small texts inline.
+   */
+  readonly byReference: boolean;
+  constructor({ byReference = false }: { byReference?: boolean } = {}) {
+    this.byReference = byReference;
+  }
   text = $state("");
   images = $state<PendingImage[]>([]);
   texts = $state<PendingText[]>([]);
@@ -321,6 +354,16 @@ export class ComposerDraft {
    * the hub at once and rides the send as the hub's reference.
    */
   async add(files: Iterable<File>): Promise<void> {
+    if (this.byReference) {
+      for (const file of files) {
+        // biome-ignore lint/performance/noAwaitInLoops: sequential by intent — each attachment must append in the order it was picked.
+        await this.attach(
+          file,
+          file.type.startsWith("image/") ? "image" : undefined
+        );
+      }
+      return;
+    }
     for (const file of files) {
       if (file.type.startsWith("image/")) {
         // biome-ignore lint/performance/noAwaitInLoops: sequential by intent — each attachment must append in the order it was picked, not the order its read happens to settle.
@@ -349,6 +392,40 @@ export class ComposerDraft {
         ];
       }
     }
+  }
+
+  /**
+   * One file attached by reference: its chip at once (a picture with its
+   * thumb and pixels), its bytes on their way to the hub.
+   */
+  private async attach(
+    file: Blob & { name?: string },
+    as?: "image" | "text",
+    name = file.name ?? "file"
+  ): Promise<void> {
+    const id = newId();
+    let preview: string | undefined;
+    let pixels: { height: number; width: number } | null = null;
+    if (as === "image") {
+      const read = await readImage(file as File);
+      preview = `data:${read.mediaType};base64,${read.data}`;
+      pixels = await pixelsOf(preview);
+    }
+    this.files = [
+      ...this.files,
+      {
+        id,
+        name,
+        mediaType: file.type || "application/octet-stream",
+        size: file.size,
+        progress: 0,
+        blob: file,
+        ...(as ? { as } : {}),
+        ...(preview ? { preview } : {}),
+        ...(pixels ? pixels : {}),
+      },
+    ];
+    this.upload(id);
   }
 
   /** Sends one pending file's bytes to the hub, its chip following along. */
@@ -395,6 +472,15 @@ export class ComposerDraft {
       return true;
     }
     const text = data.getData("text/plain");
+    if (text.length > LARGE_PASTE && this.byReference) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — a paste handler returns synchronously.
+      void this.attach(
+        new Blob([text], { type: "text/plain" }),
+        "text",
+        `Pasted text · ${text.length.toLocaleString()} chars`
+      );
+      return true;
+    }
     if (text.length > LARGE_PASTE) {
       this.texts = [
         ...this.texts,

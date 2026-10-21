@@ -309,8 +309,10 @@
   --spacing-c-rail-row-h: var(--c-rail-row-h);
   --spacing-c-artifact-row-h: var(--c-artifact-row-h);
   --spacing-c-pin: var(--c-pin);
+  --spacing-c-pin-pad: var(--c-pin-pad);
+  --spacing-c-pin-gone-ring: var(--c-pin-gone-ring);
+  --spacing-c-comments-w: var(--c-comments-w);
   --spacing-c-pin-card-w: var(--c-pin-card-w);
-  --spacing-c-pin-card-min: var(--c-pin-card-min);
   --spacing-c-target-stroke: var(--c-target-stroke);
   --spacing-c-target-gap: var(--c-target-gap);
   --spacing-c-sheet-inspector-w: var(--c-sheet-inspector-w);
@@ -637,6 +639,7 @@
   --duration-ghost: var(--dur-ghost);
   --duration-control: var(--dur-control);
   --duration-menu: var(--dur-menu);
+  --duration-peek: var(--dur-peek);
   --duration-toggle: var(--dur-toggle);
   --duration-exit: var(--dur-exit);
   --duration-morph: var(--dur-morph);

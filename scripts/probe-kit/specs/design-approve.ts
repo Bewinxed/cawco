@@ -658,7 +658,11 @@ interface TaskRead {
   stage: string;
 }
 
-/** Comment mode on in the pane, a tap on `selector` in the page, the person's words in pin 1's card. */
+/**
+ * Comment mode on in the pane, a tap on `selector` in the page, the
+ * person's words in its composer and Comment (pin 1 written with them),
+ * then the head's Send: comments reach the session on Send alone.
+ */
 const pinWith = async (
   on: On,
   frame: Frame,
@@ -672,10 +676,10 @@ const pinWith = async (
   await settle(on.page, 400);
   const b = await screenBox(on, frame, selector);
   await on.page.mouse.click(b.x + b.w * 0.3, b.y + b.h / 2);
-  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
-  await card.waitFor({ timeout: 10_000 });
-  await card.getByRole("textbox").fill(words);
-  await card.getByRole("button", { name: "Reply" }).click();
+  const composer = on.page.locator('[data-slot="pin-composer"]');
+  await composer.waitFor({ timeout: 10_000 });
+  await composer.getByRole("combobox").fill(words);
+  await composer.getByRole("button", { name: "Comment", exact: true }).click();
   await until(
     "pin 1's words in the doc",
     () => docOf(frame),
@@ -686,6 +690,9 @@ const pinWith = async (
     10_000
   );
   await on.page.keyboard.press("Escape");
+  await on.page
+    .locator("[data-side-card='preview'] [data-slot=\"send\"]")
+    .click({ timeout: 10_000 });
 };
 
 /** What the send-back legs read and call, from {@link run}. */
@@ -1079,7 +1086,7 @@ const run = async (kit: Kit) => {
     (rows) => rows.length > 0,
     90_000
   );
-  // Past another quiet period: a second delivery would have come by now.
+  // Long enough that a second delivery of the same comment would have come by now.
   await Bun.sleep(20_000);
   const deliveries = delivered();
   kit.check(

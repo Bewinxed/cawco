@@ -411,8 +411,9 @@ const COMMENT =
   ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']';
 
 /**
- * A pin dropped on the page's heading in Comment mode, and words written in
- * its thread: its card stays open, with a head, a thread and a foot.
+ * A comment written on the page's heading in Comment mode and sent, then
+ * its thread opened from its pill: its card stays open, with a head, a
+ * thread and a foot.
  */
 const dropPin = async (page: Page): Promise<void> => {
   await page.locator(COMMENT).first().focus();
@@ -441,15 +442,37 @@ const dropPin = async (page: Page): Promise<void> => {
   if (!box) {
     throw new Error("the page's heading has no box to pin");
   }
-  await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
-  const card = page.locator('[data-slot="pin-card"]').first();
-  await card.waitFor({ timeout: 5000 });
-  await card
-    .getByRole("textbox")
-    .fill(
-      "The chips wrap onto a second line too early: the third one drops while there is still room beside the second."
-    );
-  await card.getByRole("button", { name: "Reply" }).click();
+  // The second theme's leg finds the first's comment on the page: its pill opens its thread.
+  const written = await frame
+    .locator('svg[data-cawco-pins] g[data-pin="1"]')
+    .count();
+  if (written === 0) {
+    await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
+    // The press opens the comment's composer; Comment writes the pin, and its pill opens its thread.
+    const composer = page.locator('[data-slot="pin-composer"]');
+    await composer.waitFor({ timeout: 5000 });
+    await composer
+      .getByRole("combobox")
+      .fill(
+        "The chips wrap onto a second line too early: the third one drops while there is still room beside the second."
+      );
+    await composer
+      .getByRole("button", { name: "Comment", exact: true })
+      .click();
+    await composer.waitFor({ state: "detached", timeout: 8000 });
+    // Sent, as the person sends it: the head's Send goes, and the legs after
+    // this one see the head they saw before the comment.
+    const send = page.locator('[data-slot="side-head"] [data-slot="send"]');
+    await send.click({ timeout: 5000 });
+    await send.waitFor({ state: "detached", timeout: 15_000 });
+  }
+  const pill = await frame
+    .locator('svg[data-cawco-pins] g[data-pin="1"] [data-face]')
+    .boundingBox({ timeout: 5000 });
+  if (!pill) {
+    throw new Error("the new pin's pill has no box to press");
+  }
+  await page.mouse.click(pill.x + pill.width / 2, pill.y + pill.height / 2);
   await page
     .locator('[data-slot="pin-card"] [data-slot="entry"]')
     .first()

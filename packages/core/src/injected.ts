@@ -383,7 +383,7 @@ export function parseArtifactResponses(text: string): ArtifactResponses | null {
 
 /**
  * The person's pins, replies, resolves and ink on one of the session's
- * artifacts, delivered by themselves once they have been quiet a while (hub
+ * artifacts, delivered on their Send with their note first (hub
  * artifacts/service.ts `deliverMarks`): the sections say each pin (its
  * number, id, anchor, source and words) and each loose stroke group, so the
  * session acts on them without reading first. Sent under the system origin
@@ -408,8 +408,8 @@ export const artifactCommentsNotice = (
 
 /**
  * A sheet's compile errors from its stage (live components, core
- * `stage.ts`), delivered on the same quiet-gathered channel as the person's
- * marks when no mark goes with them; with marks, they are sections of the
+ * `stage.ts`), delivered by themselves once quiet on the person's marks'
+ * channel; riding a Send with the person's marks, they are sections of the
  * comments notice.
  */
 export const artifactErrorsNotice = (

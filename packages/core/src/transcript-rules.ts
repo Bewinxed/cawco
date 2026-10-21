@@ -1742,24 +1742,33 @@ function injectedBlock(text: string, base: BlockBase): TranscriptBlock | null {
  */
 function artifactNoticeBlock(
   text: string,
-  base: BlockBase
+  base: BlockBase,
+  message?: unknown
 ): TranscriptBlock | null {
   const notice = parseArtifactNotice(text);
-  return notice
-    ? {
-        ...base,
-        type: "ui.system_note",
-        content: "",
-        metadata: {
-          subtype: ARTIFACT_RESPONSES,
-          noteTitle: `${notice.lead} ${notice.name}`,
-          artifactId: notice.id,
-          artifactKind: notice.kind,
-          artifactLead: notice.lead,
-          artifactName: notice.name,
-        },
-      }
-    : null;
+  if (!notice) {
+    return null;
+  }
+  // What the person's comments carried (their pictures, pasted texts and
+  // files) rides the row as a turn's does, for Files' Attachments to read;
+  // the row itself draws the one quiet line.
+  const images = message ? transcriptUserImages(message) : undefined;
+  const { attachments } = pastedText(text);
+  return {
+    ...base,
+    type: "ui.system_note",
+    content: "",
+    metadata: {
+      subtype: ARTIFACT_RESPONSES,
+      noteTitle: `${notice.lead} ${notice.name}`,
+      artifactId: notice.id,
+      artifactKind: notice.kind,
+      artifactLead: notice.lead,
+      artifactName: notice.name,
+      ...(images ? { images } : {}),
+      ...(attachments ? { attachments } : {}),
+    },
+  };
 }
 
 /**
@@ -1774,7 +1783,7 @@ export function sentRow(
   base: BlockBase
 ): TranscriptBlock {
   return (
-    artifactNoticeBlock(text, base) ??
+    artifactNoticeBlock(text, base, message) ??
     injectedBlock(text, base) ?? {
       ...base,
       ...userBody(text, transcriptUserImages(message), harnessNoteOf(message)),

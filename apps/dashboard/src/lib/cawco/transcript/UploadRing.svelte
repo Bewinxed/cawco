@@ -4,7 +4,10 @@
    * --dur-control: in the sent turn's tile (DocThumb) and the composer's
    * chip (AttachmentChips), in the glyph's place.
    */
-  let { progress, class: className = "" }: { progress: number; class?: string } = $props();
+  let {
+    progress,
+    class: className = "",
+  }: { progress: number; class?: string } = $props();
 
   /** The ring's arc: its circumference, and how much of it is still to fill. */
   const RING = 2 * Math.PI * 9;

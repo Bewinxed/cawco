@@ -90,12 +90,6 @@ export interface ArtifactDocs {
    * person's picks) stays beside it.
    */
   merge: (from: string, to: string, origin: ChangeOrigin) => void;
-  /**
-   * Hears every person's change to an artifact's marks: a transaction from a
-   * joined client that changed its `pins` or `ink` (service.ts
-   * `deliverMarks`). One listener; a later call replaces it.
-   */
-  onMarks: (listener: (id: string) => void) => void;
   /** How many screens (canvas host pages) are joined to the artifact now. */
   screens: (id: string) => number;
   /** The whole doc as one base64 Yjs update: what a page's overlay starts from before it joins. */
@@ -152,7 +146,6 @@ export const createArtifactDocs = (deps: {
   lifetime: HubLifetimeShape;
 }): ArtifactDocs => {
   const loaded = new Map<string, Loaded>();
-  let marked: (id: string) => void = () => undefined;
 
   /*
    * Every joined client hears the hub every RESYNC_MS, whatever its page's
@@ -235,11 +228,6 @@ export const createArtifactDocs = (deps: {
     const state = doc.getMap("state") as unknown as AbstractType<
       YEvent<AbstractType<unknown>>
     >;
-    // The person's marks: what a delivery carries when they go quiet.
-    const marks = [
-      doc.getMap("pins"),
-      doc.getMap("ink"),
-    ] as unknown as AbstractType<YEvent<AbstractType<unknown>>>[];
     // The elements a transaction added or changed, heard before its
     // `afterTransaction` (Yjs calls observers first).
     let touched = new Map<string, CanvasAuthor>();
@@ -256,12 +244,6 @@ export const createArtifactDocs = (deps: {
         elements: touched,
       };
       touched = new Map();
-      if (
-        clientOf(transaction.origin) &&
-        marks.some((map) => transaction.changed.has(map))
-      ) {
-        marked(id);
-      }
     });
     doc.on("update", (update: Uint8Array, origin: unknown) => {
       if (origin !== "load") {
@@ -313,9 +295,6 @@ export const createArtifactDocs = (deps: {
       if (entry?.clients.delete(client)) {
         sleep(id, entry);
       }
-    },
-    onMarks: (listener) => {
-      marked = listener;
     },
     screens: (id) =>
       [...(loaded.get(id)?.clients ?? [])].filter((client) => client.screen)

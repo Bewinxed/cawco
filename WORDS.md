@@ -2,7 +2,7 @@
 
 **UI wordmark:** “Caw&Co”, set in the landing's Nunito Variable face. Product names in sentences, page titles and notices remain “CawCo”.
 
-**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work) · 2026-10-13 (artifacts, §5.10: *artifact*, *page*, *pin*; *canvas* now means a drawing) · 2026-10-16 (hub auth: *paired device*, *Require paired devices*, *code*, *admit*; Admit and Require join the button verbs) · 2026-10-18 (browser take-over, projects §5.11: *browser*, *take over*, *private*, *hand back*, *browser ask*, *stream relay*, *container runtime* / *local browser*; Take over and Hand back join the button verbs) · 2026-10-18 (Ask joins the button verbs: the project head's Ask Caw) · 2026-10-19 (the stream relay's guided journey: Set up, Done for now and Use ("Use this name") join the button verbs)
+**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work) · 2026-10-13 (artifacts, §5.10: *artifact*, *page*, *pin*; *canvas* now means a drawing) · 2026-10-16 (hub auth: *paired device*, *Require paired devices*, *code*, *admit*; Admit and Require join the button verbs) · 2026-10-18 (browser take-over, projects §5.11: *browser*, *take over*, *private*, *hand back*, *browser ask*, *stream relay*, *container runtime* / *local browser*; Take over and Hand back join the button verbs) · 2026-10-18 (Ask joins the button verbs: the project head's Ask Caw) · 2026-10-19 (the stream relay's guided journey: Set up, Done for now and Use ("Use this name") join the button verbs) · 2026-10-21 (comments: the composer at the element, the rail, Send with a note; Reply, Resolve and Reopen join the button verbs)
 **Doctorate authority:** `content-design` (design-for-ai 4.2.0) — voice/tone per Podmajersky (2019), error
 formula per Yifrah (2017), plain language per Redish (2007), destructive confirmation per Nielsen
 #5 (1994) and the microcopy-patterns catalog. **Pairs with DESIGN.md** (visual tokens, LOCKED) and
@@ -285,7 +285,7 @@ Every button parses as **[Verb] + [Object]** and stays comprehensible with surro
 Allowlisted imperative verbs for the gate: *Start, Create, Add, Save, Cancel, Delete, Remove,
 Approve, Deny, Allow, Deny, Reconnect, Retry, Export, Filter, Manage, Open, Stop, Interrupt, Send,
 Attach, Refresh, Install, Fetch, Restore, Redirect, Skip, Switch, Check, Configure, Copy, Draw, Dock, Undock, Annotate,
-Comment, Illustrate, Erase, Done, Admit, Require, Ask, Use*, and the phrasal *Take over*, *Hand back*, *Set up*
+Comment, Reply, Resolve, Reopen, Illustrate, Erase, Done, Admit, Require, Ask, Use*, and the phrasal *Take over*, *Hand back*, *Set up*
 and *Done for now* (each [Verb]+[Object] read as one act: the browser; "Set up the stream relay", the
 relay's journey begun; "Done for now", the journey's Needs you row put away while the relay is proven only
 from inside). "Ask" takes its object by name: "Ask Caw", the project
@@ -309,3 +309,20 @@ An ask the hub could not show anyone (its session or launch is no longer live) i
 way, and its line says why: **"Question withdrawn: it couldn't be shown (the session is sleeping)"**.
 The session itself is told **"This question couldn't be shown (the session is sleeping)."**, and its
 turn goes on.
+
+**The comments' words (recorded):** a comment's composer and a thread's reply are the chat composer,
+under the same exemption: no visible label, the placeholder **"What should change?"** at the element
+(not "…here?": the target chip above it names the place) and **"Reply"** in a thread, **"Reply to
+reopen"** once it is resolved. Their send glyph is labelled **Comment** or **Reply**. Nothing reaches
+the agent until **Send** ("Send 3" counts every pick, comment, reply and stroke the session hasn't
+heard), with the rail's note, **"Add a note for the agent"**. A row says **"Unsent"** while the session
+hasn't heard its comment, **"Working on it…"** while the agent works on it, and nothing once it is
+sent and unanswered (its filled pill says so). A row's place is the element's name, **"Whole page"**
+or **"Element gone"**. The rail: **"Comments"**, **"Search comments"**, **"Sort"** (**"Newest first"**,
+**"Top of page first"**), **"Comment on the whole page"**, **"Close comments"**, Open and Resolved;
+empty, **"No open comments"** with "Choose Comment, then click something on the page." ("tap" under
+a finger), **"Nothing resolved yet"**, **"Nothing matches “[query]”"**. A thread: **"Resolved 2h
+ago"** with Reopen, **"Pin it somewhere else"**, **"Copy link"**, and the confirm **"Delete comment
+14?"** with **Delete comment**. **Speakers:** a thread's speaker line names the session as its
+transcript does (Who); a row's last line marks its speaker with the speaker line's own glyph (the
+agent's ghost, the person's user glyph), read out as "Agent:" or "You:", never a name.

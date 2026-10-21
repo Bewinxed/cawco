@@ -45,7 +45,7 @@ nightly release, not per change.
 | `j4-caw-asks` | Caw asks | two asks at once: “1 of 2” answered by click, “2 of 2” by its number key; Caw's next turn carries both answers |
 | `j5-task-review` | task review | a task needing a Mac waits, never fails, while none is free (apple-gate's protection), then lands through the gate's build on the Mac; approve; send back, and the next attempt is given your words |
 | `j6-decisions` | decisions | picks kept on the hub; I'm done picking sends the page in place and tells its writer |
-| `j7-comments` | previews and comments | a pin on the session's page reaches the session by itself, with the line it was pinned on |
+| `j7-comments` | previews and comments | a comment on the session's page reaches the session on Send, with the line it was written on |
 | `j8-routines` | routines | create by hand: the form's schedule read back by the hub, the routine listed as filled, its test run started once; run now: one more run, its delegate given the instruction; pause: off on the hub, Paused on its row |
 | `j9-jump` | Jump | a word of what was said finds the moment; it opens the conversation at the machine's own record of that line, in view |
 | `j10-rules` | 5, rules | a template is live on the next session; an edit's words go out next; delete, then undo |

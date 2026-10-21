@@ -4,7 +4,7 @@ import {
   type Pin,
   replyToPin,
   resolvePin,
-  withdrawPin,
+  type Said,
 } from "@cawco/core/comments";
 import {
   ARTIFACT_GONE,
@@ -22,9 +22,9 @@ import { hubRefusal } from "#lib/cawco/hub-read.js";
 
 /**
  * The pane's hold on an artifact's live document (Projects spec §5.10): the
- * pins' threads, which the pane's list and card read and the person writes
+ * pins' threads, which the pane's rail and cards read and the person writes
  * (a reply, resolve, reopen, delete); the hub delivers them to the session
- * by themselves once quiet (artifacts/service.ts). The page in the pane joins the same doc itself
+ * on the person's Send (artifacts/service.ts). The page in the pane joins the same doc itself
  * (the overlay), on its own preview origin, which writes its picks and
  * places its pins; the pane joins it on the dashboard's origin, through the
  * hub's `/ws/artifact/<session>/<artifact>`. Each keeps the doc on its
@@ -85,14 +85,12 @@ export interface ArtifactDoc {
   /** The person deletes pin `pin`, and the ink it alone stands on; a sentence when it was not. */
   delete: (pin: string) => string | null;
   destroy: () => void;
-  /** The person's words in pin `pin`'s thread; a sentence when they were not kept. */
-  reply: (pin: string, text: string) => string | null;
+  /** The person's words, and what they attached, in pin `pin`'s thread; a sentence when they were not kept. */
+  reply: (pin: string, said: Said) => string | null;
   /** The person resolves pin `pin`, or reopens it; a sentence when it was not. */
   resolve: (pin: string, resolved: boolean) => string | null;
   /** Try again on a link that failed or stands lost: a new socket now (reading again before the first sync). */
   retry: () => void;
-  /** The person dismissed pin `pin`'s card having said nothing in it: the pin is taken back (core `withdrawPin`). */
-  withdraw: (pin: string) => void;
 }
 
 /** A sentence's last mark. */
@@ -145,25 +143,26 @@ export const artifactSyncPath = (artifactId: string): string =>
   `/__cawco/artifact/${artifactId}`;
 
 /**
- * The person sends the page's picks (the head's Send picks): the session
- * hears it has new responses to read, through the hub's send on the
- * dashboard's own origin, the one a page's `cawco.send` reaches on its
- * preview origin.
+ * The person's Send (the head's Send, the rail's): everything of the page
+ * the session hasn't heard goes with one press, their note first, through
+ * the hub's send on the dashboard's own origin, the one a page's
+ * `cawco.send` reaches on its preview origin.
  */
 export async function sendArtifact(
   instanceId: string,
-  artifactId: string
+  artifactId: string,
+  note = ""
 ): Promise<void> {
   const response = await fetch(
     `/api/instances/${encodeURIComponent(instanceId)}/artifacts/${encodeURIComponent(artifactId)}/send`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: "{}",
+      body: JSON.stringify(note.trim() ? { text: note.trim() } : {}),
     }
   );
   if (!response.ok) {
-    throw await hubRefusal(response, "so the picks weren't taken. Send again.");
+    throw await hubRefusal(response, "so nothing was sent. Send again.");
   }
 }
 
@@ -356,7 +355,7 @@ export function joinArtifact(
   }
 
   return {
-    reply: (pin, text) => replyToPin(doc, pin, text),
+    reply: (pin, said) => replyToPin(doc, pin, said),
     resolve: (pin, resolved) => resolvePin(doc, pin, resolved),
     delete: (pin) => deletePin(doc, pin),
     retry: () => {
@@ -367,7 +366,6 @@ export function joinArtifact(
       ours(() => provider.disconnect());
       provider.connect();
     },
-    withdraw: (pin) => withdrawPin(doc, pin),
     destroy: () => {
       gone = true;
       clearDown();

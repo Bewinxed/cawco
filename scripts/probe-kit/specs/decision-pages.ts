@@ -198,7 +198,16 @@ const docOf = (frame: Frame): Promise<Doc> =>
     } as Doc;
   });
 
-const SAVE_PIN = /^(Comment|Reply|Send)$/;
+/** A press in Comment opens the comment's composer; its words, then Comment, write the pin (DESIGN.md, Placing a comment). */
+const writeComment = async (desk: Page, words: string) => {
+  const composer = desk.locator('[data-slot="pin-composer"]');
+  await composer.waitFor({ timeout: 5000 });
+  await composer.getByRole("combobox").fill(words);
+  await composer.getByRole("button", { name: "Comment", exact: true }).click();
+  await composer
+    .waitFor({ state: "detached", timeout: 8000 })
+    .catch(() => undefined);
+};
 
 /** A several-pick card of three long unbroken labels, picked whole: the folded line at its longest. */
 const REACH_PAGE = `root = Decisions("Plan the reach", [reach])
@@ -1051,10 +1060,16 @@ const marks = async (on: On, frame: Frame) => {
 
   await mode(desk, frame, "C");
   await pressIn(frame, "#decision-stack h2 >> nth=0");
+  await writeComment(desk, "This stack, not the other.");
   const pinned = await until(
-    "pin 1 in the doc",
+    "pin 1 in the doc, with its words",
     () => docOf(frame),
-    (d) => Object.values(d.pins).some((one) => one.number === 1),
+    (d) =>
+      Object.values(d.pins).some(
+        (one) =>
+          one.number === 1 &&
+          ((one as { thread?: unknown[] }).thread ?? []).length > 0
+      ),
     10_000
   ).catch(() => null);
   const pin =
@@ -1064,22 +1079,6 @@ const marks = async (on: On, frame: Frame) => {
     !!pin?.anchor.selector.includes("#decision-stack"),
     JSON.stringify(pin?.anchor)
   );
-  // A pin with words stays when its card closes; an empty one is withdrawn.
-  const card = desk.locator('[data-slot="pin-card"][data-pin-card="1"]');
-  await card.getByRole("textbox").fill("This stack, not the other.");
-  await card.getByRole("button", { name: SAVE_PIN }).first().click();
-  await until(
-    "pin 1's words in its thread",
-    () => docOf(frame),
-    (d) =>
-      (
-        (
-          Object.values(d.pins).find((one) => one.number === 1) as
-            { thread?: unknown[] } | undefined
-        )?.thread ?? []
-      ).length > 0,
-    10_000
-  ).catch(() => undefined);
   await desk.keyboard.press("Escape");
 
   await mode(desk, frame, "D");
@@ -1359,6 +1358,7 @@ const commentInEmbed = async (on: On, frame: Frame) => {
   }
   await pressIn(frame.frameLocator(EMBED).first(), ".box >> nth=0");
   await desk.emulateMedia({ reducedMotion: null });
+  await writeComment(desk, "This box, inside the embed.");
   const pinned = await until(
     "a pin inside the embed in the doc",
     () => docOf(frame),
@@ -1382,8 +1382,6 @@ const commentInEmbed = async (on: On, frame: Frame) => {
       top: await topAt(desk, frame, box),
     })
   );
-  // The pin has no words: closing its card withdraws it.
-  await desk.keyboard.press("Escape");
   await desk.keyboard.press("Escape");
   await mode(desk, frame, "V");
 };
@@ -1415,7 +1413,7 @@ const insertAhead = async (on: On, first: string) => {
       .querySelector("#decision-stack")
       ?.getBoundingClientRect();
     const disc = document
-      .querySelector('svg[data-cawco-pins] g[data-pin="1"] circle')
+      .querySelector('svg[data-cawco-pins] g[data-pin="1"] [data-face]')
       ?.getBoundingClientRect();
     const astro = document.querySelector('[data-option="astro"]');
     return {

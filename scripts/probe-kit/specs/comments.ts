@@ -6,50 +6,61 @@
  * from the engine: the page's doc (`window.cawcoArtifact.doc`), the pane's
  * DOM, the overlay's shadow root, and what the model was sent.
  *
- * 1. `C` turns Comment on (its segment `aria-selected`, the well's 1px `seam` edge); a tap on
- *    a paragraph writes pin 1 with its selector, source and text and opens
- *    its card beside the pin; Esc closes the card, and Esc again leaves the
- *    mode.
- * 2. A pen stroke's radial Comment writes pin 2 on the ink, with the ink's
- *    box; the Comments panel shows two rows; J and K move the focus between the pins
- *    and the overlay's outline follows.
- * 3. A reply typed in the card is in pin 1's thread, by the person; with no
- *    Send it reaches the session by itself once quiet: the comments notice
- *    carrying pin 1, its words and its picture (pin 2, said nothing in yet,
- *    waits), drawn as one quiet line and no row of the person's, pin 1 and
- *    its entry stamped `sentAt`; the pane has no Send control. A second
- *    reply is one more delivery.
+ * 1. `C` turns Comment on (its segment `aria-selected`, the well's 1px `seam`
+ *    edge); a press on a paragraph opens the composer at the element beside
+ *    a hollow pill with no number, writing nothing (pick 5); Comment writes
+ *    pin 1 and its first entry at once, with its selector, source and text,
+ *    its pill hollow (unsent). A press on the pill opens its thread as the
+ *    280px card beside it (pick 2); Esc closes it, Esc again leaves the
+ *    mode; a press on the page closes nothing.
+ * 2. A pen stroke's radial Comment opens the composer on the ink; Comment
+ *    writes pin 2 on it, with the ink's box; the rail shows two rows; J and
+ *    K move the focus between the pins and the overlay's outline follows.
+ * 3. A reply typed in the thread is in pin 1's thread, by the person. With
+ *    no Send nothing reaches the session past the old quiet period; both
+ *    rows say Unsent and the head's Send and the rail's Send bar count 2.
+ *    One press of the rail's Send, with a note, delivers both as one
+ *    message, the note first, drawn as one quiet line and no row of the
+ *    person's; every pin and entry stamped `sentAt`, the pills filled
+ *    (pick 3). A second reply makes pin 1 unsent again; Send delivers it
+ *    alone.
  * 4. comment_read answers both pins, what pin 1 stands on and its reply, and
- *    pin 2's ink box; comment_reply on pin 1 is in its card
- *    within 2 s, the live dot showing while the agent's turn runs;
- *    comment_resolve dims pin 1 to 40% and moves it to Resolved; Reopen
- *    brings it back. A host that holds no doc (the app) posts `cawco:reply`
- *    and `cawco:resolve` into the page: pin 1's doc takes a person's entry
- *    and a resolve then a reopen, each answered ok, and a gone pin answers
- *    the refusal's sentence.
+ *    pin 2's ink box; comment_reply on pin 1 is in its thread within 2 s,
+ *    the live dot showing while the agent's turn runs; the thread speaks in
+ *    two voices; comment_resolve takes pin 1 off the page and into
+ *    Resolved, recessed while its thread is open; Reopen brings it back. A
+ *    host that holds no doc (the app) posts `cawco:reply` and
+ *    `cawco:resolve` into the page: pin 1's doc takes a person's entry and a
+ *    resolve then a reopen, each answered ok, and a gone pin answers the
+ *    refusal's sentence.
  * 5. A re-publish that moves and rewords the paragraph re-anchors pin 1 by
- *    its source's file:line; one that renames it and drops its source,
- *    keeping its text, re-anchors it by text; one that removes it marks pin 1
- *    moved in its own row under Open, which opens its card like any other;
- *    the card says the element is gone, and its Pin it somewhere else with a
- *    tap pins it anew.
- * 6. No `selection.md`, `SelectionChip` or `SelectionPopover` is left in
+ *    its source's file:line, its pill's tail on the moved paragraph; one
+ *    that renames it and drops its source, keeping its text, re-anchors it
+ *    by text; one that removes it marks pin 1 moved in its own row under
+ *    Open, which opens its thread like any other; the thread says the
+ *    element is gone, and its Pin it somewhere else with a press pins it
+ *    anew.
+ * 6. No `selection.md`, `SelectionChip` or `SelectionPopover`, and no
+ *    PinList, PinDisc, `withdrawPin`, `pinReady`, `cawco:withdraw`, pin
+ *    drafts, Comments popover or `c-pin-card-min`, is left in
  *    apps/dashboard/src or packages.
  *
  * And the owner's report (2026-10-14: the card didn't open on a new pin,
  * no delete, the whole iframe outlined):
- * a. Every tapped pin's card opens with its field focused: the first, the
- *    second, and a third tapped while the second's card is open.
+ * a. Every press opens its composer with its field focused: the first, the
+ *    second, and a third made while the second's thread is open.
  * b. A dev server's preview whose content stands in a same-origin inner
  *    frame: hovering the inner button outlines the button mapped to the top
- *    document; a tap stores an anchor with the frame chain and the button's
- *    inner selector and opens its card; a reload that moves the button finds
- *    the pin on it again; the inner frame's own scroll moves the disc.
+ *    document; a press opens its composer and Comment stores an anchor with
+ *    the frame chain and the button's inner selector; a reload that moves
+ *    the button finds the pin on it again; the inner frame's own scroll
+ *    moves the pill.
  * b2. A same-origin frame put in with its document opened (no root until it
  *    is written) says no error as the overlay reads it.
- * c. The card's head holds Resolve pin, ⋯ and Close, its foot Reply. Delete
- *    pin (its ⋯), asked in the card itself: the pin leaves the doc and the page,
- *    its card closes, the other pins keep their numbers; the app's
+ * c. The thread's head holds Resolve, ⋯ and Close beside the name, its foot
+ *    the chat composer with Attach and the Reply glyph. Delete comment (its
+ *    ⋯), asked in the thread itself: the pin leaves the doc and the page,
+ *    its thread closes, the other pins keep their numbers; the app's
  *    `cawco:delete` on a gone pin answers the refusal.
  *
  * And the owner's report (2026-10-14: scrolled down, a tap on a subagent
@@ -68,13 +79,12 @@
  *    revision that moves the card to the list's third place, and a reload:
  *    the pin stands on that card, not on the one now at its old place.
  *
- * And the owner's report (2026-10-14: "if i click away from a comment it
- * needs to dismiss the popover i don't have to keep clicking X"):
- * e. An open card closes on a press outside it: on the pane's chrome,
- *    elsewhere in the dashboard, on the page; and on Esc. A new pin with
- *    nothing written is taken back; one with words keeps them, back in its
- *    field when it opens again and after the desk reloads. A press on
- *    another pin's disc opens that pin's card in its place.
+ * And the empty-pin rule (commenting build spec): a press writes nothing.
+ * e. A composer closed by Esc, by a press on the pane's chrome or elsewhere
+ *    in the dashboard, by a mode switch or by a reload leaves no pin in the
+ *    doc; the words typed in one closed unsaid are back in the next; a press
+ *    on a pin's pill while a composer stands opens that pin's thread in its
+ *    place.
  *
  * And the owner's standing rule ("having the user have to scroll down to
  * even figure out there's stuff below is terrible UX"):
@@ -109,13 +119,6 @@
  *    it by its choice; a picture's with no words (the same image in each
  *    card) stays on it by its alt; none stands on a card the revision put in.
  *
- * And the owner's report (2026-10-18: "if i open comments and i click one of
- * the comments it opens behind the list ofcomments, not very navigateable"):
- * j. With the Comments panel open, on the desk and on a phone: a pin the
- *    page scrolled under the panel, then one at the page's very top-right,
- *    opened from its row, then J and K: each card and each disc stand clear
- *    of the panel (and on a phone, the disc clear of the card at the foot).
- *
  * And the owner's report (2026-10-21: on a state-machine graph drawn in
  * inline SVG, his pin pictures drew the edges as black filled wedges and the
  * edge labels in a large serif face):
@@ -141,7 +144,7 @@
  * 7c. In Comment mode, resting on an element tints it (`c-target-tint`)
  *    with no line; the page's root takes a 1px dashed `brand-solid` line
  *    inset `space-1`, no tint, its tag "Whole page" at rest and none once
- *    chosen, as any target; a tap chooses the
+ *    chosen (its composer open), as any target; a tap chooses the
  *    element: a 1px `brand-solid` line at offset 0, the tint and no label,
  *    its text 4.5:1 under the tint by day and night, the composer opened by
  *    the press with no ring; the
@@ -152,7 +155,34 @@
  *    contrast on the page field and on raised, by day and by night, is read
  *    and said. A bare text element chosen takes its line 2px outside, 2px or
  *    more from its glyphs.
+ * 7f. A pin on an element whose id a framework minted (React's `useId`
+ *    `:r1:`, Radix's `radix-…`) anchors by its place and words, never that
+ *    id; re-rendered with the ids handed round, each pin stays on its own
+ *    element.
+ *
+ * And the commenting redesign's picks (DESIGN.md, Placing a comment, A
+ * pin's pill, The Comments rail, A thread beside its pin, Sending
+ * comments), each a leg:
+ * - The 280px card: the composer at the element 280px wide, its field 178px
+ *   or wider, the hint "What should change?" uncut, its pill one line.
+ * - The attachment pill: one pill for every kind, a file's name and size on
+ *   one baseline (0.5px), every ✕ centred on its pill (0.5px).
+ * - Pick 6: a picture alone sends (`hasContent`), kept by reference, and
+ *   goes to the session as an image block with its line.
+ * - Pick 3's pill: up-right of its point by its bottom-start tail, turning
+ *   at the page's right edge.
+ * - The rail beside the page at `c-comments-w`, outside the well's seam;
+ *   each hierarchy row's role, weight and ink read computed (The Row Dress
+ *   Rule), the speaker's glyph bare with its sr-only "Agent:"/"You:"; pick
+ *   7's thumb strip (four 20px thumbs, then "+N"); search; sort; a row's
+ *   thread beside its pill, clear of the rail; the toggle's count only
+ *   while the rail is shut.
+ * - At 390, light and dark: the rail the well's foot sheet (60% at most), a
+ *   row's thread the foot sheet with the rail aside.
+ * The captures for the reviewer (light and dark, desk and 390) are written
+ * under `.probe/commenting/`; nothing here opens them.
  */
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
@@ -160,14 +190,7 @@ import { readWithin } from "../../../packages/core/src/bounded";
 import { houseFacePieces } from "../../../packages/core/src/house-faces";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { traceMain } from "../frames";
-import {
-  buttonNames,
-  COMPOSER,
-  type Kit,
-  open,
-  type Spec,
-  settle,
-} from "../kit";
+import { COMPOSER, type Kit, open, type Spec, settle } from "../kit";
 import {
   docOf,
   dragFromIcon,
@@ -194,10 +217,14 @@ const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 /** The person's comments, delivered by themselves (core injected.ts `artifactCommentsNotice`). */
 const NOTICE =
   /\[CawCo\] The person commented on the page "[a-z0-9-]+" \(artifact [0-9a-f-]{36}\)\./;
-/** How long a delivery may take: the hub's quiet period (10 s) and the way to the model. */
+/** How long a delivery may take: the hub's send and the way to the model. */
 const DELIVERY_MS = 30_000;
+/** How long the probe watches for a delivery that should not come: past the hub's old quiet period (10 s). Our call. */
+const STILL_MS = 14_000;
 /** An image block in a request's body. */
 const IMAGE_BLOCK = /"type":"image"/g;
+/** An attachment's reference: the hub's file by its hash (core `FILE_REF`). */
+const FILE_REF_PATH = /^\/api\/files\/[0-9a-f]{64}$/;
 const RESOLVED_TAB = /^Resolved/;
 const OPEN_TAB = /^Open/;
 const ROOT = join(import.meta.dir, "..", "..", "..");
@@ -355,41 +382,118 @@ const pageInComment = (frame: Frame, on: boolean) =>
     5000
   );
 
+/** The artifact panel, in a session's split or the artifact's own tab. */
+const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
+/** The Comments rail (DESIGN.md, The Comments rail). */
+const RAIL = '[data-slot="comment-rail"]';
+/** The composer a press on the page opens beside its hollow pill (DESIGN.md, Placing a comment). */
+const COMPOSE = '[data-slot="pin-composer"]';
+/** The head's Comments, the rail's toggle. */
+const COMMENTS_TOGGLE =
+  ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]';
+
 /**
- * The Comments panel, opened from the head's Comments when it is shut: it
- * floats over the page's top-right, so a check that presses there shuts it
- * first ({@link shutList}).
+ * The Comments rail, opened from the head's Comments when it is shut: it
+ * stands beside the page, which it narrows, so a check that measures the
+ * page at its width shuts it first ({@link shutList}).
  */
 const rowsOf = async (on: On) => {
-  const button = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
-  );
-  const list = on.page.locator('[data-pin-list-pop] [data-slot="pin-list"]');
+  const button = on.page.locator(COMMENTS_TOGGLE);
+  const list = on.page.locator(RAIL);
   if ((await button.getAttribute("aria-expanded")) !== "true") {
     await button.click();
-  } else if ((await list.count()) === 0) {
-    // Stacked, the panel stands aside under an open card: its Close brings the panel back.
-    const close = on.page
-      .locator('[data-slot="pin-card"]')
-      .getByRole("button", { name: "Close", exact: true });
-    if ((await close.count()) > 0) {
-      await close.click();
-    }
   }
   await list.waitFor({ timeout: 5000 }).catch(() => undefined);
+  // In from the well's end over --dur-panel: read once it stands.
+  await settle(on.page, 350);
   return list;
 };
 const shutList = async (on: On) => {
-  const button = on.page.locator(
-    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
-  );
+  const button = on.page.locator(COMMENTS_TOGGLE);
   if ((await button.getAttribute("aria-expanded")) === "true") {
     await button.click();
     await on.page
-      .locator("[data-pin-list-pop]")
+      .locator(RAIL)
       .waitFor({ state: "detached", timeout: 3000 })
       .catch(() => undefined);
+    await settle(on.page, 250);
   }
+};
+
+/**
+ * A press at the screen's `x`, `y` in Comment mode (DESIGN.md, Placing a
+ * comment): its composer opens beside a hollow pill, writing nothing; with
+ * `words`, they are typed in its field and Enter comments, the pin and its
+ * first entry written at once. Whether the composer opened with its field
+ * focused, and whether it went once the comment was written.
+ */
+const commentAt = async (
+  on: On,
+  x: number,
+  y: number,
+  words: string | null = "A comment, written."
+) => {
+  // The pointer comes to the spot first, as a hand's does: the preview is a
+  // frame of its own process, which the browser routes input to by where
+  // the pointer last stood.
+  await on.page.mouse.move(x, y, { steps: 4 });
+  await on.page.mouse.click(x, y);
+  const composer = on.page.locator(COMPOSE);
+  const shown = await composer
+    .waitFor({ timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  const focused = await until(
+    "the composer's field focused",
+    () =>
+      on.page.evaluate(
+        (holder) =>
+          !!document.activeElement?.closest(holder) &&
+          (document.activeElement as HTMLElement).isContentEditable,
+        COMPOSE
+      ),
+    Boolean,
+    3000
+  ).catch(() => false);
+  let gone = false;
+  if (shown && words !== null) {
+    await composer.getByRole("combobox").fill(words);
+    await on.page.keyboard.press("Enter");
+    gone = await composer
+      .waitFor({ state: "detached", timeout: 8000 })
+      .then(() => true)
+      .catch(() => false);
+  }
+  return { shown, focused, gone };
+};
+
+/** Pin `number`'s pill pressed on the page: its thread opens beside it. */
+const openThread = async (on: On, frame: Frame, number: number) => {
+  const pill = await frame
+    .locator(
+      `:is(svg[data-cawco-pins], svg[data-cawco-pins-fixed]) g[data-pin="${number}"] [data-face]`
+    )
+    .first()
+    .boundingBox({ timeout: 3000 })
+    .catch(() => null);
+  if (pill) {
+    await on.page.mouse.move(
+      pill.x + pill.width / 2,
+      pill.y + pill.height / 2,
+      {
+        steps: 2,
+      }
+    );
+    await on.page.mouse.click(
+      pill.x + pill.width / 2,
+      pill.y + pill.height / 2
+    );
+  }
+  const card = on.page.locator(
+    `[data-slot="pin-card"][data-pin-card="${number}"]`
+  );
+  await card.waitFor({ timeout: 5000 }).catch(() => undefined);
+  return card;
 };
 /** The head's Interact: Comment's way back, as the old toggle's second press was. */
 const interactTab = (on: On) =>
@@ -427,6 +531,19 @@ const near = (
 
 const run = async (kit: Kit) => {
   const on = await setUp(kit);
+  try {
+    await runOn(kit, on);
+  } finally {
+    // Said even when a check throws: the page's error is often why.
+    kit.check(
+      "the pages said no error",
+      on.said.length === 0,
+      on.said.slice(0, 6).join(" | ") || "none"
+    );
+  }
+};
+
+const runOn = async (kit: Kit, on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
@@ -469,19 +586,14 @@ const run = async (kit: Kit) => {
     () => mapPressChecks(on),
     () => svgPictureChecks(on),
     () => insertChecks(on),
+    () => mintedIdChecks(on),
     () => listChecks(on),
-    () => panelChecks(on),
   ]) {
     // biome-ignore lint/performance/noAwaitInLoops: the checks run in order, one after another
     await shutList(on);
     await checks();
   }
   await cutoverCheck(kit);
-  kit.check(
-    "the pages said no error",
-    on.said.length === 0,
-    on.said.slice(0, 6).join(" | ") || "none"
-  );
 };
 
 /** 1. C, a tap, the card at the pin, Esc and Esc. */
@@ -567,7 +679,52 @@ const commentChecks = async (on: On, frame: Frame) => {
   );
 
   const b = await screenBox(on, frame, "#para");
-  await on.page.mouse.click(b.x + b.w * 0.3, b.y + b.h / 2);
+  const pressAt = { x: b.x + b.w * 0.3, y: b.y + b.h / 2 };
+  // The press alone: the composer opens beside a hollow pill, nothing written.
+  const opened = await commentAt(on, pressAt.x, pressAt.y, null);
+  await settle(on.page, 400);
+  const composer = on.page.locator(COMPOSE);
+  const provisional = await frame
+    .locator('svg[data-cawco-pins] g[data-pin="new"]')
+    .evaluate((g) => ({
+      state: g.getAttribute("data-state"),
+      figure: g.querySelector("text")?.textContent ?? null,
+    }))
+    .catch(() => null);
+  const written = Object.keys((await docOf(frame)).pins).length;
+  const parts = await composer
+    .evaluate((el) => ({
+      width: Math.round(el.getBoundingClientRect().width),
+      chip:
+        el
+          .querySelector('[data-slot="target-chip"] [data-slot="chip-label"]')
+          ?.textContent?.trim() ?? null,
+      hint: el.querySelector('[role="combobox"]')?.getAttribute("aria-label"),
+      send: el.querySelector('[data-slot="stop"]')?.getAttribute("aria-label"),
+      sendOff: (el.querySelector('[data-slot="stop"]') as HTMLButtonElement)
+        ?.disabled,
+    }))
+    .catch(() => null);
+  on.kit.check(
+    'pick 5, the composer at the element: a press opens the chat composer beside a hollow pill with no number, its field focused, the target chip naming the paragraph, the field saying "What should change?", the send glyph labelled Comment and off while empty; the doc holds no pin',
+    opened.shown &&
+      opened.focused &&
+      provisional?.state === "provisional" &&
+      provisional.figure === null &&
+      written === 0 &&
+      parts?.width === 280 &&
+      parts.chip === "Hero · A paragraph to comment on, long enough to tap." &&
+      parts.hint === "What should change?" &&
+      parts.send === "Comment" &&
+      parts.sendOff === true,
+    `opened ${JSON.stringify(opened)}; pill ${JSON.stringify(provisional)}; pins in the doc ${written}; composer ${JSON.stringify(parts)}`
+  );
+  await composer.getByRole("combobox").fill("Bolder, perhaps.");
+  const sendOn = await composer
+    .locator('[data-slot="stop"]')
+    .isEnabled()
+    .catch(() => false);
+  await on.page.keyboard.press("Enter");
   const pins = await until(
     "pin 1 in the doc",
     async () => (await docOf(frame)).pins,
@@ -575,92 +732,101 @@ const commentChecks = async (on: On, frame: Frame) => {
     10_000
   ).catch(() => ({}) as Pins);
   const pin = pinNumbered(pins, 1);
-  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
-  await card.waitFor({ timeout: 5000 }).catch(() => undefined);
-  await settle(on.page, 500);
-  const disc = await frame
-    .locator('svg[data-cawco-pins] g[data-pin="1"] circle')
-    .boundingBox({ timeout: 2000 })
+  const closed = await composer
+    .waitFor({ state: "detached", timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  await settle(on.page, 400);
+  const pill = await frame
+    .locator('svg[data-cawco-pins] g[data-pin="1"]')
+    .evaluate((g) => ({
+      state: g.getAttribute("data-state"),
+      figure: g.querySelector("text")?.textContent ?? null,
+    }))
     .catch(() => null);
-  const cardBox = await card.boundingBox({ timeout: 2000 }).catch(() => null);
-  // Beside what the pin stands on, the gap `--space-3` (11): its end side,
-  // its start side or below it, on the side PinCard says (`data-side`).
-  const para = await frame
-    .locator("#para")
-    .boundingBox({ timeout: 2000 })
-    .catch(() => null);
-  const side = await card.getAttribute("data-side").catch(() => null);
-  const GAP = 11;
-  const at = {
-    end: (c: Rect, p: Rect) => Math.abs(c.x - (p.x + p.w + GAP)) <= 3,
-    start: (c: Rect, p: Rect) => Math.abs(c.x + c.w - (p.x - GAP)) <= 3,
-    below: (c: Rect, p: Rect) => Math.abs(c.y - (p.y + p.h + GAP)) <= 3,
-  } as const;
-  const asRect = (bounds: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }) =>
-    ({
-      x: bounds.x,
-      y: bounds.y,
-      w: bounds.width,
-      h: bounds.height,
-    }) as Rect;
-  const beside =
-    !!disc &&
-    !!cardBox &&
-    !!para &&
-    (side === "end" || side === "start" || side === "below") &&
-    at[side](asRect(cardBox), asRect(para)) &&
-    !meets(asRect(cardBox), asRect(para));
+  const railOpen = await on.page.locator(RAIL).count();
   on.kit.check(
-    "1: a tap writes pin 1 with the paragraph's selector, source and text, and opens its card beside the paragraph it stands on, never over it",
-    pin?.kind === "comment" &&
+    "1: Comment writes pin 1 and its first entry at once, with the paragraph's selector, source and text; the composer goes, the pill takes its number hollow (unsent), and the rail doesn't open",
+    sendOn &&
+      pin?.kind === "comment" &&
       pin.by === "person" &&
       pin.anchor.selector === "#para" &&
       pin.anchor.source?.file === "src/Hero.svelte" &&
       pin.anchor.source.line === 12 &&
       String(pin.anchor.text).startsWith("A paragraph to comment on") &&
       Array.isArray(pin.thread) &&
-      pin.thread.length === 0 &&
-      beside,
-    `pin ${JSON.stringify(pin && { kind: pin.kind, anchor: pin.anchor, thread: pin.thread })}; disc ${JSON.stringify(disc)}; paragraph ${JSON.stringify(para)}; card ${JSON.stringify(cardBox)} on side ${side}; said ${on.said.slice(0, 3).join(" | ") || "nothing"}`
+      pin.thread.length === 1 &&
+      pin.thread[0].by === "person" &&
+      pin.thread[0].text === "Bolder, perhaps." &&
+      closed &&
+      pill?.state === "unsent" &&
+      pill.figure === "1" &&
+      railOpen === 0,
+    `send on ${sendOn}; pin ${JSON.stringify(pin && { kind: pin.kind, anchor: pin.anchor, thread: pin.thread })}; composer gone ${closed}; pill ${JSON.stringify(pill)}; rail ${railOpen}; said ${on.said.slice(0, 3).join(" | ") || "nothing"}`
   );
-  if (!(pin && cardBox)) {
+  if (!pin) {
     return null;
   }
-  const first = await focusedCard(on, 1);
+  const card = await openThread(on, frame, 1);
+  await settle(on.page, 500);
+  const cardBox = await card.boundingBox({ timeout: 2000 }).catch(() => null);
+  const mark = await frame
+    .locator('svg[data-cawco-pins] g[data-pin="1"] [data-face]')
+    .boundingBox({ timeout: 2000 })
+    .catch(() => null);
+  const side = await card.getAttribute("data-side").catch(() => null);
+  // `--space-2` (7px) from the pill: its end side, else its start side, else below it.
+  const GAP = 7;
+  const beside =
+    !!cardBox &&
+    !!mark &&
+    ((side === "end" &&
+      Math.abs(cardBox.x - (mark.x + mark.width + GAP)) <= 3) ||
+      (side === "start" &&
+        Math.abs(cardBox.x + cardBox.width - (mark.x - GAP)) <= 3) ||
+      (side === "below" &&
+        Math.abs(cardBox.y - (mark.y + mark.height + GAP)) <= 3));
   on.kit.check(
-    "a: the first tapped pin's card is in the pane with its field focused",
-    first.shown && first.focused,
-    JSON.stringify(first)
+    "pick 2, where a thread opens: a press on pin 1's pill opens its thread as a 280px card beside the pill, --space-2 from it",
+    !!cardBox && Math.round(cardBox.width) === 280 && beside,
+    `card ${JSON.stringify(cardBox)} on side ${side}; pill ${JSON.stringify(mark)}`
   );
   const head = await headOf(card);
   on.kit.check(
-    "1: the card's head names pin 1 in words, its component and the paragraph's text, never its selector; the file:line dim under it; the selector only in the tooltip; no picture",
+    "1: the thread's head names pin 1 in words, its component and the paragraph's text, never its selector; no chain line for an element the page's root holds; its words drawn under it",
     head.name === "Hero · A paragraph to comment on, long enough to tap." &&
-      head.source === "src/Hero.svelte:12" &&
-      head.tip === "#para" &&
       !head.shown.includes("#para") &&
-      head.pictures === 0,
+      head.shown.includes("Bolder, perhaps.") &&
+      (await card.locator('[data-slot="chain"]').count()) === 0,
     JSON.stringify(head)
   );
 
-  // Words in its field, so the card's dismissal keeps the pin (the said reply comes in 3).
-  await writeIn(on, 1, "Bolder, perhaps.");
+  // Esc unwinds one at a time: the thread, then Comment for Interact.
   await on.page.keyboard.press("Escape");
-  const closed = (await card.count()) === 0;
+  const escaped = await card
+    .waitFor({ state: "detached", timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
   await on.page.keyboard.press("Escape");
   const left = await comment.getAttribute("aria-selected");
   const back = await interactTab(on).getAttribute("aria-selected");
+  // In Interact a press on the page is the page's, and closes no thread: it closes by its Close or Esc.
+  await openThread(on, frame, 1);
+  const blank = await screenBox(on, frame, ".tall");
+  await on.page.mouse.click(blank.x + 30, blank.y + 30);
+  await settle(on.page, 300);
+  const stays = (await card.count()) === 1;
+  await card.getByRole("button", { name: "Close", exact: true }).click();
+  const shut = await card
+    .waitFor({ state: "detached", timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
   on.kit.check(
-    "1: Esc closes the card, and Esc again leaves Comment for Interact",
-    closed && left === "false" && back === "true",
-    `card closed ${closed}; Comment aria-selected ${left}, Interact ${back}`
+    "pick 2's dismissal: Esc closes the thread, and Esc again leaves Comment for Interact; a press on the page leaves the thread open, and its Close closes it",
+    escaped && left === "false" && back === "true" && stays && shut,
+    `Esc closed it ${escaped}; Comment ${left}, Interact ${back}; stays after a page press ${stays}; Close shut it ${shut}`
   );
-  return pin?.id ?? null;
+  return pin.id;
 };
 
 /** 2. The radial's Comment on a stroke, the list's two rows, J and K. */
@@ -703,6 +869,18 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
     );
   }
   await dragFromIcon(on, frame, 0, 40);
+  // The radial's Comment opens the composer on the ink: nothing written until Comment.
+  const composer = on.page.locator(COMPOSE);
+  const opened = await composer
+    .waitFor({ timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  const before = Object.keys((await docOf(frame)).pins).length;
+  await composer
+    .getByRole("combobox")
+    .fill("This stroke, thicker.")
+    .catch(() => undefined);
+  await on.page.keyboard.press("Enter");
   const doc = await until(
     "pin 2 in the doc",
     () => docOf(frame),
@@ -713,15 +891,16 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
   const group = pin?.ink ? doc.ink[String(pin.ink)] : undefined;
   const box = group?.page as { w?: number; h?: number } | undefined;
   on.kit.check(
-    "2: the radial menu's Comment writes pin 2 on the ink, with the ink's box",
-    pin?.kind === "comment" &&
+    "2: the radial menu's Comment opens the composer on the ink, writing nothing; Comment writes pin 2 on the ink, with the ink's box and its words",
+    opened &&
+      before === 1 &&
+      pin?.kind === "comment" &&
       typeof pin.ink === "string" &&
+      pin.thread[0]?.text === "This stroke, thicker." &&
       !!box?.w &&
       !!box.h,
-    `pin ${JSON.stringify(pin && { kind: pin.kind, ink: pin.ink })}; box ${JSON.stringify(box)}`
+    `composer ${opened}; pins before ${before}; pin ${JSON.stringify(pin && { kind: pin.kind, ink: pin.ink, thread: pin.thread })}; box ${JSON.stringify(box)}`
   );
-  await writeIn(on, 2, "This stroke, thicker.");
-  await on.page.keyboard.press("Escape");
   const rows = await (
     await rowsOf(on)
   )
@@ -739,9 +918,7 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
     await on.page.keyboard.press(key);
     await settle(on.page, 700);
     const current = await on.page
-      .locator(
-        '[data-slot="pin-list"] [data-slot="pin-row"][aria-current="true"]'
-      )
+      .locator(`${RAIL} [data-slot="pin-row"][data-focused]`)
       .getAttribute("data-pin-row")
       .catch(() => null);
     steps.push({
@@ -750,7 +927,7 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
     });
   }
   on.kit.check(
-    "2: the list shows two rows; J, J, K focus pins 1, 2, 1 and the outline follows",
+    "2: the rail shows two rows; J, J, K step to pins 1, 2, 1 and the outline follows",
     rows === 2 &&
       steps.map((step) => step.current).join() === "1,2,1" &&
       steps.every((step) => step.outline),
@@ -759,7 +936,12 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
   return pin?.id ?? null;
 };
 
-/** 3. A reply in the card, delivered by itself once quiet; a second reply, one more delivery. */
+/**
+ * 3. Pick 3, when the agent hears: nothing reaches the session until Send.
+ * A reply in the thread, the head's and the rail's Send counting what is
+ * unsent; one press sends it all once, the note first, and the pills fill;
+ * a second reply waits for the next Send, which carries it alone.
+ */
 const sendChecks = async (on: On, frame: Frame, one: string) => {
   await (
     await rowsOf(on)
@@ -767,27 +949,65 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
     .locator('[data-slot="pin-row"][data-pin-row="1"]')
     .click();
   const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
+  await card.waitFor({ timeout: 5000 }).catch(() => undefined);
   const before = heard.length;
-  const rows = await on.page.locator('[data-slot="turn"][data-you]').count();
-  await card.getByRole("textbox").fill("Make it bolder.");
+  const rows = await on.page
+    .locator('[data-slot="turn"][data-you]:not([data-slot="pin-card"] *)')
+    .count();
+  await card.getByRole("combobox").fill("Make it bolder.");
   await card.getByRole("button", { name: "Reply" }).click();
   const replied = await until(
     "the reply in pin 1's thread",
     async () => (await docOf(frame)).pins[one] as { thread?: unknown[] },
-    (pin) => (pin?.thread?.length ?? 0) === 1,
+    (pin) => (pin?.thread?.length ?? 0) === 2,
     5000
   ).catch(() => null);
-  const entry = (replied?.thread?.[0] ?? null) as {
+  const entry = (replied?.thread?.[1] ?? null) as {
     by?: string;
     text?: string;
   } | null;
   on.kit.check(
-    "3: a reply typed in the card is in pin 1's thread, by the person",
+    "3: a reply typed in the thread is in pin 1's thread, by the person, after its first words",
     entry?.by === "person" && entry.text === "Make it bolder.",
-    JSON.stringify(entry)
+    JSON.stringify(replied?.thread)
   );
   await on.page.keyboard.press("Escape");
 
+  // A quiet period and more pass: with no Send, the session hears nothing.
+  await on.page.waitForTimeout(STILL_MS);
+  const early = heard.slice(before).filter((said) => NOTICE.test(said.last));
+  const head = on.page.locator(
+    ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="send"]'
+  );
+  const headCount = (
+    await head
+      .locator('[data-slot="send-count"]')
+      .textContent()
+      .catch(() => null)
+  )?.trim();
+  const rail = await rowsOf(on);
+  const unsentRows = await rail
+    .locator('[data-slot="pin-row"] [data-line="back"]', { hasText: "Unsent" })
+    .count();
+  const barCount = (
+    await rail
+      .locator('[data-slot="rail-send"] .num')
+      .textContent()
+      .catch(() => null)
+  )?.trim();
+  on.kit.check(
+    "pick 3, on Send: with no Send nothing reaches the session past the old quiet period; both comments' rows say Unsent, and the head's Send and the rail's Send bar count 2",
+    early.length === 0 &&
+      headCount === "2" &&
+      barCount === "2" &&
+      unsentRows === 2,
+    `delivered ${early.length}; head Send ${headCount}; rail Send ${barCount}; Unsent rows ${unsentRows}`
+  );
+
+  await rail
+    .getByRole("textbox", { name: "Add a note for the agent" })
+    .fill("Both together, please: one pass.");
+  await rail.locator('[data-slot="rail-send"]').click();
   const message = await until(
     "the comments' delivery at the model",
     () => heard.slice(before).find((said) => NOTICE.test(said.last)),
@@ -802,40 +1022,61 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
     .waitFor({ timeout: 30_000 })
     .catch(() => undefined);
   await settle(on.page, 500);
-  const ownRows = await on.page.locator('[data-slot="turn"][data-you]').count();
+  const ownRows = await on.page
+    .locator('[data-slot="turn"][data-you]:not([data-slot="pin-card"] *)')
+    .count();
   const lines = await line.count();
   const stamped = await until(
-    "sentAt on pin 1 and its entry",
+    "sentAt on both pins and their entries",
     () => docOf(frame),
-    (doc) => {
-      const pin = doc.pins[one] as
-        | { sentAt?: string; thread: { by: string; sentAt?: string }[] }
-        | undefined;
-      return (
-        !!pin?.sentAt &&
-        pin.thread.every((said) => said.by !== "person" || !!said.sentAt)
-      );
-    },
+    (doc) =>
+      [one, ...Object.keys(doc.pins)].every((id) => {
+        const pin = doc.pins[id] as
+          | { sentAt?: string; thread: { by: string; sentAt?: string }[] }
+          | undefined;
+        return (
+          !!pin?.sentAt &&
+          pin.thread.every((said) => said.by !== "person" || !!said.sentAt)
+        );
+      }),
     10_000
   ).catch(() => docOf(frame));
-  const sendControls = await on.page
-    .locator(
-      ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="send"]'
+  await settle(on.page, 400);
+  const states = await frame.evaluate(() =>
+    [...document.querySelectorAll("svg[data-cawco-pins] g[data-pin-id]")].map(
+      (g) => g.getAttribute("data-state")
     )
-    .count();
+  );
+  const sendLeft = await head.count();
+  const barLeft = await on.page.locator('[data-slot="send-bar"]').count();
   const words = message?.last ?? "";
+  // Exactly once: nothing more comes after it.
+  await on.page.waitForTimeout(STILL_MS);
+  const deliveries = heard
+    .slice(before)
+    .filter((said) => NOTICE.test(said.last)).length;
+  const noteAt = words.indexOf("## The person's note on this Send");
   on.kit.check(
-    "3: with no Send, the reply reaches the session by itself: pin 1 with its words and its picture (pin 2, said nothing in, waits); one quiet line, no row of the person's; pin 1 stamped sentAt; no Send control in the pane",
-    words.includes("## 1. comment on #para") &&
+    "pick 3: one press of the rail's Send delivers both comments once as one message, the note its first section, pin 1 with both its words and its id, pin 2 on its ink, and their two pictures; one quiet line and no row of the person's; every pin and entry stamped sentAt, the pills filled, the head's Send and the Send bar gone",
+    deliveries === 1 &&
+      noteAt >= 0 &&
+      words.indexOf("Both together, please: one pass.") > noteAt &&
+      noteAt < words.indexOf("## 1. comment on #para") &&
+      words.includes('- I wrote: "Bolder, perhaps."') &&
       words.includes('- I wrote: "Make it bolder."') &&
       words.includes(`- Pin: ${one}`) &&
-      !words.includes("## 2.") &&
-      pictures === 1 &&
+      words.includes("## 2. comment") &&
+      pictures === 2 &&
       lines === 1 &&
       ownRows === rows &&
-      sendControls === 0 &&
-      !!(stamped.pins[one] as { sentAt?: string } | undefined)?.sentAt,
-    `pictures ${pictures}; lines ${lines}; person's rows ${rows} → ${ownRows}; Send controls ${sendControls}; heard ${words.slice(0, 400)}`
+      Object.values(stamped.pins).every(
+        (pin) => !!(pin as { sentAt?: string }).sentAt
+      ) &&
+      states.length >= 2 &&
+      states.every((state) => state === "sent") &&
+      sendLeft === 0 &&
+      barLeft === 0,
+    `deliveries ${deliveries}; pictures ${pictures}; lines ${lines}; person's rows ${rows} → ${ownRows}; pills ${JSON.stringify(states)}; head Send ${sendLeft}; bar ${barLeft}; heard ${words.slice(0, 600)}`
   );
 
   const again = heard.length;
@@ -844,8 +1085,15 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
   )
     .locator('[data-slot="pin-row"][data-pin-row="1"]')
     .click();
-  await card.getByRole("textbox").fill("And a little larger.");
+  await card.getByRole("combobox").fill("And a little larger.");
   await card.getByRole("button", { name: "Reply" }).click();
+  await settle(on.page, 600);
+  const hollow = await frame
+    .locator('svg[data-cawco-pins] g[data-pin="1"]')
+    .getAttribute("data-state")
+    .catch(() => null);
+  await on.page.keyboard.press("Escape");
+  await head.click();
   const second = await until(
     "the second reply's delivery",
     () => heard.slice(again).find((said) => NOTICE.test(said.last)),
@@ -853,10 +1101,12 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
     DELIVERY_MS
   ).catch(() => undefined);
   on.kit.check(
-    "3: a second reply is one more delivery, with that reply",
-    !!second?.last.includes('- I wrote: "And a little larger."') &&
-      !second.last.includes('- I wrote: "Make it bolder."'),
-    second?.last.slice(0, 300) ?? "no delivery"
+    "3: a second reply makes pin 1 unsent again (hollow); the head's Send delivers it alone, with that reply",
+    hollow === "unsent" &&
+      !!second?.last.includes('- I wrote: "And a little larger."') &&
+      !second.last.includes('- I wrote: "Make it bolder."') &&
+      !second.last.includes("## 2."),
+    `pill ${hollow}; ${second?.last.slice(0, 300) ?? "no delivery"}`
   );
 };
 
@@ -882,13 +1132,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   let live = false;
   // Polls the list while the agent's turn runs.
   const watch = setInterval(async () => {
-    if (
-      (await rows
-        .locator(
-          ':is([data-task-card-live], [data-slot="live"], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
-        )
-        .count()) > 0
-    ) {
+    if ((await rows.locator('[data-dot="live"]').count()) > 0) {
       live = true;
     }
   }, 100);
@@ -916,7 +1160,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     () =>
       on.page
         .locator(
-          ':is([data-pin-list-pop], [data-slot="pin-card"]) :is([data-task-card-live], [data-slot="live"], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
+          ':is([data-slot="comment-rail"], [data-slot="pin-card"]) :is([data-dot="live"], [data-slot="working"])'
         )
         .count(),
     (count) => count === 0,
@@ -924,7 +1168,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   ).catch(() => undefined);
   clearInterval(watch);
   on.kit.check(
-    "4: comment_reply on pin 1 is in its card within 2 s, the live dot showing while the agent's turn runs",
+    "4: comment_reply on pin 1 is in its thread within 2 s, the pill's live dot showing on its row while the agent's turn runs",
     shown - done <= 2000 && live,
     `in the card ${shown - done} ms after the tool answered; live dot seen ${live}`
   );
@@ -979,10 +1223,10 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   const clear = (color: string | null | undefined) =>
     !color || color === "transparent" || color === "rgba(0, 0, 0, 0)";
   on.kit.check(
-    "4: the card's thread speaks in two voices: the person's two replies one well (painted, the first running on, the second grouped, no gap), the agent's reply bare under its mark and the session's name",
-    voices.people === 2 &&
+    "4: the thread speaks in two voices: the person's entries one well (painted, the first running on, the second grouped under it, no gap), the agent's reply bare under its mark and the session's name",
+    voices.people === 3 &&
       voices.personWells.every((color) => !clear(color)) &&
-      voices.personWells[0] === voices.personWells[1] &&
+      new Set(voices.personWells).size === 1 &&
       voices.runsOn === true &&
       voices.grouped === true &&
       voices.marks === 1 &&
@@ -996,16 +1240,18 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     JSON.stringify(voices)
   );
 
+  // A resolved pin leaves the page; it stands there, recessed, only while its thread is open.
+  await card
+    .getByRole("button", { name: "Close", exact: true })
+    .click()
+    .catch(() => undefined);
   await on.call(RESOLVE, { pin: one });
-  const dim = await until(
-    "pin 1 dimmed",
-    () =>
-      frame
-        .locator('svg[data-cawco-pins] g[data-pin="1"]')
-        .getAttribute("opacity"),
-    (opacity) => opacity === "0.4",
+  const left = await until(
+    "pin 1 off the page",
+    () => frame.locator('svg[data-cawco-pins] g[data-pin="1"]').count(),
+    (count) => count === 0,
     5000
-  ).catch(() => null);
+  ).catch(() => -1);
   const openRows = await (
     await rowsOf(on)
   )
@@ -1013,36 +1259,77 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     .count();
   await on.page.getByRole("tab", { name: RESOLVED_TAB }).click();
   const resolved = await on.page
-    .locator('[data-slot="pin-list"] [data-slot="pin-row"][data-pin-row="1"]')
+    .locator(`${RAIL} [data-slot="pin-row"][data-pin-row="1"]`)
     .count();
-  on.kit.check(
-    "4: comment_resolve dims pin 1 to 40% and moves it to Resolved",
-    dim === "0.4" && openRows === 1 && resolved === 1,
-    `opacity ${dim}; open rows ${openRows}; resolved row ${resolved}`
-  );
-
   await (
     await rowsOf(on)
   )
     .locator('[data-slot="pin-row"][data-pin-row="1"]')
     .click();
-  await card.getByRole("button", { name: "Reopen" }).click();
+  await card.waitFor({ timeout: 5000 }).catch(() => undefined);
+  const pillOne = frame.locator('svg[data-cawco-pins] g[data-pin="1"]');
+  const standing = await until(
+    "pin 1 recessed while its thread is open",
+    async () =>
+      (await pillOne.count()) > 0 ? pillOne.getAttribute("data-state") : null,
+    (state) => state === "resolved",
+    5000
+  ).catch(() => null);
+  const band = (
+    await card
+      .locator('[data-slot="resolved"]')
+      .textContent()
+      .catch(() => null)
+  )?.trim();
+  const hint = await card
+    .getByRole("combobox")
+    .getAttribute("aria-label")
+    .catch(() => null);
+  on.kit.check(
+    "4: comment_resolve takes pin 1 off the page and into Resolved; its row opens its thread with the pill recessed on the page, the Resolved band with Reopen, and the field saying Reply to reopen",
+    left === 0 &&
+      openRows === 1 &&
+      resolved === 1 &&
+      standing === "resolved" &&
+      !!band?.startsWith("Resolved") &&
+      hint === "Reply to reopen",
+    `pills left ${left}; open rows ${openRows}; resolved row ${resolved}; pill ${standing}; band ${JSON.stringify(band)}; field ${hint}`
+  );
+
+  await card.getByRole("button", { name: "Reopen" }).first().click();
   const reopened = await until(
     "pin 1 reopened",
     async () => (await docOf(frame)).pins[one],
     (pin) => !pin?.resolvedAt,
     5000
   ).catch(() => null);
-  await (await rowsOf(on)).getByRole("tab", { name: OPEN_TAB }).click();
+  // In a pane under 640px the rail is the well's foot sheet, which stands
+  // aside while a thread stands: the thread closed, it is back.
+  await card
+    .getByRole("button", { name: "Close", exact: true })
+    .click()
+    .catch(() => undefined);
+  await card
+    .waitFor({ state: "detached", timeout: 3000 })
+    .catch(() => undefined);
+  const tabbed = await (
+    await rowsOf(on)
+  )
+    .getByRole("tab", { name: OPEN_TAB })
+    .click({ timeout: 5000 })
+    .then(() => "pressed")
+    .catch(
+      async (error: Error) =>
+        `not pressed (${error.message.split("\n")[0]}; rails ${await on.page.locator(RAIL).count()}; toggle ${await on.page.locator(COMMENTS_TOGGLE).getAttribute("aria-expanded")}; said ${on.said.slice(0, 2).join(" | ") || "nothing"})`
+    );
   const back = await on.page
-    .locator('[data-slot="pin-list"] [data-slot="pin-row"][data-pin-row="1"]')
+    .locator(`${RAIL} [data-slot="pin-row"][data-pin-row="1"]`)
     .count();
   on.kit.check(
     "4: Reopen brings pin 1 back to Open",
     !!reopened && !reopened.resolvedAt && back === 1,
-    `resolvedAt ${String(reopened?.resolvedAt)}; open row ${back}`
+    `resolvedAt ${String(reopened?.resolvedAt)}; open tab ${tabbed}; open row ${back}`
   );
-  await on.page.keyboard.press("Escape");
 };
 
 /**
@@ -1149,12 +1436,8 @@ const hostChecks = async (on: On, frame: Frame, one: string) => {
 const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
   const discY = () =>
     frame
-      .locator('svg[data-cawco-pins] g[data-pin="1"]')
-      .evaluate(
-        (g) =>
-          (g as SVGGElement).transform.baseVal.consolidate()?.matrix.f ??
-          Number.NaN
-      )
+      .locator('svg[data-cawco-pins] g[data-pin="1"] [data-face]')
+      .evaluate((face) => face.getBoundingClientRect().top + scrollY)
       .catch(() => Number.NaN);
   const before = await discY();
   const anchorOf = async () =>
@@ -1172,12 +1455,18 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
   ).catch(anchorOf);
   await settle(on.page, 300);
   const after = await discY();
+  const tail = await discAt(frame, 1);
+  const onMoved = await boxIn(frame, "#para-moved").catch(() => null);
   on.kit.check(
-    "5: a re-publish that moves and rewords the paragraph re-anchors pin 1 by its file:line",
+    "5: a re-publish that moves and rewords the paragraph re-anchors pin 1 by its file:line, its pill moving down with it onto the moved paragraph",
     moved.anchor?.selector === "#para-moved" &&
       moved.anchor.source?.line === 12 &&
-      after - before >= 190,
-    `${JSON.stringify(moved.anchor)}; disc y ${before} → ${after}`
+      after - before >= 150 &&
+      !!tail &&
+      !!onMoved &&
+      tail.y >= onMoved.y - 2 &&
+      tail.y <= onMoved.y + onMoved.h + 2,
+    `${JSON.stringify(moved.anchor)}; pill top ${before} → ${after}; tail ${JSON.stringify(tail)} on ${JSON.stringify(onMoved)}`
   );
 
   await on.call(UPDATE, { id, html: page("renamed") });
@@ -1282,14 +1571,26 @@ const innerApp = (
 </style></head>
 <body><p>The routines, inside a frame.</p>${moved ? '<div class="band"></div>' : ""}<button type="button">Run routine</button><p class="tall">Below.</p></body></html>`;
 
-/** Where pin `number`'s disc stands in the outer page's viewport; null when it is not drawn. */
+/**
+ * Where pin `number`'s pill stands on its point in the outer page's
+ * viewport: its tail corner (DESIGN.md, A pin's pill); null when it is not
+ * drawn.
+ */
 const discAt = (outer: Frame, number: number) =>
   outer.evaluate((n) => {
     const g = document.querySelector<SVGGElement>(
       `svg[data-cawco-pins] g[data-pin="${n}"]`
     );
-    const m = g?.transform.baseVal.consolidate()?.matrix;
-    return m ? { x: m.e - scrollX, y: m.f - scrollY } : null;
+    const face = g?.querySelector("[data-face]");
+    if (!(g && face)) {
+      return null;
+    }
+    const r = face.getBoundingClientRect();
+    const tail = g.getAttribute("data-tail") ?? "bottom-start";
+    return {
+      x: tail.endsWith("end") ? r.right : r.left,
+      y: tail.startsWith("top") ? r.top : r.bottom,
+    };
   }, number);
 
 /** The outer page's inner frame, once its document has the button. */
@@ -1608,7 +1909,7 @@ const frameChecks = async (on: On) => {
     );
 
     const before = Object.keys((await docOf(outer)).pins).length;
-    await on.page.mouse.click(at.x, at.y);
+    const press = await commentAt(on, at.x, at.y, "Run it on a schedule.");
     const pins = await until(
       "the inner button's pin in the doc",
       async () => (await docOf(outer)).pins,
@@ -1634,21 +1935,18 @@ const frameChecks = async (on: On) => {
           return el?.localName === "button" && el.textContent === "Run routine";
         }, made.anchor)
       : false;
-    const card = await focusedCard(on, made?.number);
     on.kit.check(
-      "b: a tap on it stores an anchor whose frame chain names the frame and whose inner selector ends at the button, and its card opens with the field focused",
+      "b: a press on it opens its composer with the field focused, and Comment stores an anchor whose frame chain names the frame and whose inner selector ends at the button",
       !!made &&
         made.anchor.frames?.length === 1 &&
         resolves &&
-        card.shown &&
-        card.focused,
-      `anchor ${JSON.stringify(made?.anchor)}; resolves ${resolves}; card ${JSON.stringify(card)}`
+        press.shown &&
+        press.focused,
+      `anchor ${JSON.stringify(made?.anchor)}; resolves ${resolves}; press ${JSON.stringify(press)}`
     );
     if (!made) {
       return;
     }
-    await writeIn(on, made.number, "Run it on a schedule.");
-    await on.page.keyboard.press("Escape");
     await on.page.keyboard.press("Escape");
 
     await on.page
@@ -1864,7 +2162,7 @@ const scaledFrameChecks = async (on: On) => {
     };
     await on.page.mouse.move(tap.x, tap.y, { steps: 4 });
     const before = Object.keys((await docOf(outer)).pins).length;
-    await on.page.mouse.click(tap.x, tap.y);
+    await commentAt(on, tap.x, tap.y, "This desk.");
     const pins = await until(
       "the scaled transcript's pin in the doc",
       async () => (await docOf(outer)).pins,
@@ -1886,8 +2184,6 @@ const scaledFrameChecks = async (on: On) => {
       on.kit.check("h: a tap pins the scaled transcript", false, "no pin");
       return;
     }
-    await writeIn(on, made.number, "This desk.");
-    await on.page.keyboard.press("Escape");
     await on.page.keyboard.press("Escape");
     await settle(on.page, 300);
     const disc = await discAt(outer, made.number);
@@ -1896,7 +2192,7 @@ const scaledFrameChecks = async (on: On) => {
     const at = { x: tap.x - pane.x, y: tap.y - pane.y };
     const { box } = made.anchor;
     on.kit.check(
-      "h: a pin tapped on the half-scale transcript stores its box on screen (±1px) under its frame chain, and its disc stands at the tapped point (±2px)",
+      "h: a comment pressed on the half-scale transcript stores its box on screen (±1px) under its frame chain, and its pill's tail stands at the pressed point (±2px)",
       made.anchor.frames?.length === 1 &&
         near(
           box ? { ...box, x: box.x - scroll.x, y: box.y - scroll.y } : null,
@@ -1932,14 +2228,10 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
         Number(pin.number),
       ])
     );
-  /** A tap on the page at the screen's `x`, `y` in Comment mode: the new pin's number, and its card as it opens. */
+  /** A press on the page at the screen's `x`, `y` in Comment mode, written and commented: the new pin's number, and its composer as it opened. */
   const tapPin = async (x: number, y: number) => {
     const held = Object.keys(await numbersNow()).length;
-    // The pointer comes to the spot first, as a hand's does: the preview is a
-    // frame of its own process, which the browser routes input to by where
-    // the pointer last stood.
-    await on.page.mouse.move(x, y, { steps: 4 });
-    await on.page.mouse.click(x, y);
+    const press = await commentAt(on, x, y, "Keep this pin.");
     const now = await until(
       "the tapped pin in the doc",
       numbersNow,
@@ -1947,30 +2239,16 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
       10_000
     ).catch(numbersNow);
     const number = Math.max(...Object.values(now));
-    const card = await focusedCard(on, number);
-    // Words in it, so its dismissal keeps the pin.
-    await writeIn(on, number, "Keep this pin.");
-    return { number, ...card };
+    return { number, ...press };
   };
-  // The second tap of the run, then a third made while the second's card is
-  // open, on the page below that card (it stands over the paragraphs).
+  // The second press of the run, then a third made while the second's thread
+  // is open, on the page below that thread.
   const second = await screenBox(on, frame, "#second");
   const tapped = [
     await tapPin(second.x + second.w * 0.7, second.y + second.h / 2),
   ];
-  // The card stands beside its pin once the page says where the pin is
-  // (`cawco:pin-at`), a message from the preview's own process: it is read
-  // once it stands still.
-  let openCard = await on.page.locator('[data-slot="pin-card"]').boundingBox();
-  for (let reads = 0; reads < 20; reads += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: one read every 100 ms until two agree
-    await on.page.waitForTimeout(100);
-    const now = await on.page.locator('[data-slot="pin-card"]').boundingBox();
-    if (JSON.stringify(now) === JSON.stringify(openCard)) {
-      break;
-    }
-    openCard = now;
-  }
+  const thread = await openThread(on, frame, tapped[0].number);
+  const openCard = await thread.boundingBox().catch(() => null);
   const tall = await screenBox(on, frame, ".tall");
   tapped.push(
     await tapPin(
@@ -1979,10 +2257,10 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
     )
   );
   on.kit.check(
-    "a: the second tapped pin, and a third tapped while the second's card is open, each open their card with its field focused",
+    "a: the second press, and a third made while the second's thread is open, each open their composer with its field focused, and Comment writes the next numbers",
     tapped.length === 2 &&
       tapped[1].number === tapped[0].number + 1 &&
-      tapped.every((one) => one.shown && one.focused),
+      tapped.every((one) => one.shown && one.focused && one.gone),
     JSON.stringify(tapped)
   );
   await on.page.keyboard.press("Escape");
@@ -1999,34 +2277,40 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
     ([, number]) => number === target
   )?.[0];
   const card = on.page.locator(`[data-pin-card="${target}"]`);
-  // The head holds what acts on the pin (Resolve, ⋯, Close) on its row; the foot holds Reply alone.
-  const parts = {
-    ...(await card.evaluate((el) => {
-      const head = el.querySelector('[data-slot="head"]');
-      const named = [...(head?.querySelectorAll("button") ?? [])].map(
+  // The head holds the name and what acts on the pin (Resolve, ⋯, Close) on its row; the foot is the chat composer as the reply.
+  const parts = await card.evaluate((el) => {
+    const head = el.querySelector('[data-slot="head"]');
+    const named = [...(head?.querySelectorAll("button[aria-label]") ?? [])].map(
+      (button) => button.getAttribute("aria-label") ?? ""
+    );
+    const tops = [...(head?.querySelectorAll("button[aria-label]") ?? [])].map(
+      (button) => Math.round(button.getBoundingClientRect().top)
+    );
+    const foot = el.querySelector('[data-slot="foot"]');
+    return {
+      named,
+      tops,
+      foot: [...(foot?.querySelectorAll("button[aria-label]") ?? [])].map(
         (button) => button.getAttribute("aria-label") ?? ""
-      );
-      const tops = [...(head?.querySelectorAll("button") ?? [])].map((button) =>
-        Math.round(button.getBoundingClientRect().top)
-      );
-      return { named, tops };
-    })),
-    // By their accessible names: a kit Button's text holds its pending words too.
-    foot: await buttonNames(
-      card.locator(':is([data-slot="actions"], [data-actions])').first()
-    ).catch(() => [] as string[]),
-  };
+      ),
+      composer: !!foot?.querySelector(
+        '[data-slot="comment-composer"] [data-slot="dock"]'
+      ),
+    };
+  });
   on.kit.check(
-    "c: the card's head holds Resolve pin, its ⋯ and Close on one row, and its foot Reply alone",
-    parts.named[0] === "Resolve pin" &&
+    "c: the thread's head holds Resolve, its ⋯ and Close on one row with the name; its foot is the chat composer, Attach and the Reply glyph",
+    parts.named[0] === "Resolve" &&
       parts.named.at(-1) === "Close" &&
       parts.named.length === 3 &&
       new Set(parts.tops).size === 1 &&
-      parts.foot.join() === "Reply",
+      parts.composer &&
+      parts.foot.includes("Attach a file or image") &&
+      parts.foot.includes("Reply"),
     JSON.stringify(parts)
   );
-  await card.locator('[data-slot="head"] button').nth(1).click();
-  await on.page.getByRole("menuitem", { name: "Delete pin" }).click();
+  await card.locator('[data-slot="head"] button[aria-label]').nth(1).click();
+  await on.page.getByRole("menuitem", { name: "Delete comment" }).click();
   const ask = card.locator('[data-ask="delete"]');
   const asked = await ask
     .waitFor({ timeout: 3000 })
@@ -2035,7 +2319,7 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   const blocking = await on.page.evaluate(
     () => document.querySelectorAll("dialog[open], [aria-modal='true']").length
   );
-  await ask.getByRole("button", { name: "Delete pin" }).click();
+  await ask.getByRole("button", { name: "Delete comment" }).click();
   const after = await until(
     "the pin gone from the doc",
     numbersNow,
@@ -2045,10 +2329,13 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   const disc = await frame
     .locator(`svg[data-cawco-pins] g[data-pin="${target}"]`)
     .count();
+  await card
+    .waitFor({ state: "detached", timeout: 3000 })
+    .catch(() => undefined);
   const cardLeft = await card.count();
   const kept = Object.entries(before).filter(([id]) => id !== doomed);
   on.kit.check(
-    "c: Delete asks in the card itself (no blocking dialog); confirming removes the pin from the doc and its disc from the page, closes its card, and every other pin keeps its number",
+    "c: Delete asks in the thread itself (no blocking dialog); confirming removes the pin from the doc and its pill from the page, closes its thread, and every other pin keeps its number",
     asked &&
       blocking === 0 &&
       !!doomed &&
@@ -2231,7 +2518,12 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
   await settle(on.page, 200);
   const hovered = await outlineOf(frame);
   const held = Object.keys((await docOf(frame)).pins).length;
-  await on.page.mouse.click(pane.x + tap.x, pane.y + tap.y);
+  const card = await commentAt(
+    on,
+    pane.x + tap.x,
+    pane.y + tap.y,
+    "This card, not the first."
+  );
   const pins = await until(
     "the card's pin in the doc",
     async () => (await docOf(frame)).pins,
@@ -2242,11 +2534,8 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
     (a, b) => Number(b.number) - Number(a.number)
   )[0] as
     { anchor: { selector: string }; id: string; number: number } | undefined;
-  const card = await focusedCard(on, pin?.number);
-  const pinCard = on.page.locator(
-    `[data-slot="pin-card"][data-pin-card="${pin?.number}"]`
-  );
-  await pinCard.getByRole("textbox").fill("This card, not the first.");
+  const pinCard = await openThread(on, frame, pin?.number ?? 0);
+  await pinCard.getByRole("combobox").fill("And this one too.");
   await pinCard.getByRole("button", { name: "Reply" }).click();
   const kept = await until(
     "the reply on the card's pin",
@@ -2255,7 +2544,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
         (await docOf(frame)).pins[pin?.id ?? ""] as
           { thread?: unknown[] } | undefined
       )?.thread?.length ?? 0,
-    (count) => count === 1,
+    (count) => count === 2,
     5000
   ).catch(() => 0);
   // A smooth scroll the card's opening set off would land within this.
@@ -2269,12 +2558,13 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
   const end = await offsetsIn(frame);
   const now = await boxIn(frame, selector);
   on.kit.check(
-    `d (${scroller}): scrolled to the middle, the hover outline over card ${n} is its box, a tap pins it, its card opens focused and a reply is kept, and the ${scroller}'s offset never moves (0px) through it all; the outline is still the card's box`,
+    `d (${scroller}): scrolled to the middle, the hover outline over card ${n} is its box, a press opens its composer focused and Comment pins it, its thread opens from its pill and a reply is kept, and the ${scroller}'s offset never moves (0px) through it all; the outline is still the card's box`,
     near(hovered, box, 1) &&
       !!pin &&
       card.shown &&
       card.focused &&
-      kept === 1 &&
+      card.gone &&
+      kept === 2 &&
       moved === 0 &&
       end.top === start.top &&
       end.window === start.window &&
@@ -2475,204 +2765,149 @@ const inkAt = (frame: Frame) =>
   });
 
 /**
- * (e) The owner's report (2026-10-14: "if i click away from a comment it
- * needs to dismiss the popover i don't have to keep clicking X"), on the
- * cards page the pane shows last: a press outside an open card closes it,
- * on the pane's chrome, elsewhere in the dashboard and on the page; Esc
- * does; a new pin with nothing said is taken back, one with words keeps
- * them, back in its field when it opens again and after the desk reloads;
- * a press on another pin's disc opens that pin.
+ * (e) Pick 1's "nothing typed means nothing saved", on the cards page the
+ * pane shows last: a press opens a composer and writes nothing, so Esc, a
+ * press outside it (on the pane's chrome, elsewhere in the dashboard, on
+ * the page out of Comment mode), a mode switch and a reload each leave no
+ * pin; the words typed stay for the next composer, there when it opens
+ * again; a press on a pin's pill opens that pin's thread in the composer's
+ * place.
  */
 const dismissChecks = async (on: On) => {
   let frame = await pageFrame(on);
   const comment = on.page.locator(
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
-  const cards = () => on.page.locator('[data-slot="pin-card"]').count();
-  const pinsNow = async () => (await docOf(frame)).pins as Pins;
-  const field = (number: number) =>
-    on.page
-      .locator(`[data-slot="pin-card"][data-pin-card="${number}"]`)
-      .getByRole("textbox")
-      .inputValue({ timeout: 3000 })
-      .catch(() => null);
-  const shut = () =>
-    until("the card closed", cards, (count) => count === 0, 3000).catch(cards);
-  /**
-   * The card after card 8 (which holds a pin), card 8 in the middle of the
-   * view: the new pin stands below the other, so its card, which hangs down
-   * from its pin, leaves the other's disc clear to press.
-   */
-  const n = await frame.evaluate(() => {
-    const eight = document.querySelector('.card[data-n="8"]');
-    eight?.scrollIntoView({ block: "center" });
-    const next = eight?.nextElementSibling as HTMLElement | null | undefined;
-    const r = next?.getBoundingClientRect();
-    return r && r.bottom <= innerHeight - 60 ? (next?.dataset.n ?? null) : null;
-  });
-  if (!n) {
-    on.kit.check("e: a card of the page in view", false, "none");
-    return;
-  }
-  /** A Comment-mode tap on card `n`: the new pin's number. */
-  const tapNew = async () => {
-    const held = Object.keys(await pinsNow()).length;
+  const composer = on.page.locator(COMPOSE);
+  const pinsNow = async () =>
+    Object.keys((await docOf(frame)).pins as Pins).length;
+  const pressAt = async () => {
     const pane = await on.page.locator(FRAME).boundingBox();
-    const box = await boxIn(frame, `.card[data-n="${n}"]`);
-    const at = {
+    const box = await boxIn(frame, '.card[data-n="9"]');
+    return {
       x: (pane?.x ?? 0) + box.x + box.w * 0.7,
       y: (pane?.y ?? 0) + box.y + box.h * 0.5,
     };
-    await on.page.mouse.move(at.x, at.y, { steps: 4 });
-    await on.page.mouse.click(at.x, at.y);
-    const now = await until(
-      "the new pin in the doc",
-      pinsNow,
-      (all) => Object.keys(all).length > held,
-      10_000
-    ).catch(pinsNow);
-    const number = Math.max(
-      ...Object.values(now).map((pin) => Number(pin.number))
-    );
-    await focusedCard(on, number);
-    return { held, number };
   };
-
-  // A new pin, nothing said: a press on the pane's chrome (Interact, which also ends the mode).
-  await comment.click();
-  await pageInComment(frame, true);
-  const empty = await tapNew();
-  const openedEmpty = await cards();
-  await interactTab(on).click();
-  await pageInComment(frame, false);
-  const closedEmpty = await shut();
-  const takenBack = await until(
-    "the empty pin taken back",
-    async () => Object.keys(await pinsNow()).length,
-    (count) => count === empty.held,
-    5000
-  ).catch(async () => Object.keys(await pinsNow()).length);
-  on.kit.check(
-    "e: a new pin's card, nothing written in it, closes on a press on the pane's chrome, and the pin is taken back",
-    openedEmpty === 1 && closedEmpty === 0 && takenBack === empty.held,
-    `cards ${openedEmpty} → ${closedEmpty}; pins ${empty.held} → ${takenBack}`
-  );
-
-  // A new pin with words: a press elsewhere in the dashboard (the composer).
-  await comment.click();
-  await pageInComment(frame, true);
-  const kept = await tapNew();
-  await writeIn(on, kept.number, "Draft kept.");
-  await on.page.locator(COMPOSER).first().click();
-  const closedKept = await shut();
-  await interactTab(on).click();
-  await pageInComment(frame, false);
-  const stays =
-    String(kept.number) in
-    Object.fromEntries(
-      Object.values(await pinsNow()).map((pin) => [String(pin.number), true])
-    );
-  const row = (await rowsOf(on)).locator(
-    `[data-slot="pin-row"][data-pin-row="${kept.number}"]`
-  );
-  await row.click();
-  const reopened = await field(kept.number);
-  on.kit.check(
-    "e: a new pin's card with words written in it closes on a press elsewhere in the dashboard; the pin stays, and its words are back in its field when it opens again",
-    closedKept === 0 && stays && reopened === "Draft kept.",
-    `cards after the press ${closedKept}; pin ${kept.number} kept ${stays}; field ${JSON.stringify(reopened)}`
-  );
-
-  // A press on the page, outside the card (the page's header, clear of the card).
-  const pane = await on.page.locator(FRAME).boundingBox();
-  const openBox = await on.page.locator('[data-slot="pin-card"]').boundingBox();
-  const spots = [
-    { x: (pane?.x ?? 0) + 200, y: (pane?.y ?? 0) + HEADER / 2 },
-    { x: (pane?.x ?? 0) + 12, y: (pane?.y ?? 0) + HEADER / 2 },
-  ];
-  const spot =
-    spots.find(
-      (one) =>
-        !(
-          openBox &&
-          one.x >= openBox.x &&
-          one.x <= openBox.x + openBox.width &&
-          one.y >= openBox.y &&
-          one.y <= openBox.y + openBox.height
-        )
-    ) ?? spots[0];
-  await on.page.mouse.move(spot.x, spot.y, { steps: 4 });
-  await on.page.mouse.click(spot.x, spot.y);
-  const closedByPage = await shut();
-  await row.click();
-  const again = await field(kept.number);
-  await on.page.keyboard.press("Escape");
-  const closedByEsc = await shut();
-  on.kit.check(
-    "e: an open card closes on a press on the page outside it, its words still there when it opens again; Esc closes it",
-    closedByPage === 0 && again === "Draft kept." && closedByEsc === 0,
-    `after the page's press ${closedByPage} cards; field ${JSON.stringify(again)}; after Esc ${closedByEsc} cards`
-  );
-
-  // A press on another pin's disc, with this card open, opens that pin.
-  const other = Object.values(await pinsNow()).find(
-    (pin) => Number(pin.number) !== kept.number
-  ) as { number: number } | undefined;
   await frame.evaluate(() =>
     document
-      .querySelector('.card[data-n="8"]')
+      .querySelector('.card[data-n="9"]')
       ?.scrollIntoView({ block: "center" })
   );
-  await settle(on.page, 300);
-  await row.click();
-  // The card stands beside its pin once the page says where it is.
-  await settle(on.page, 600);
-  const disc = other ? await discAt(frame, other.number) : null;
-  if (disc && pane) {
-    await on.page.mouse.move(pane.x + disc.x, pane.y + disc.y, { steps: 4 });
-    await on.page.mouse.click(pane.x + disc.x, pane.y + disc.y);
-  }
-  const switched = await until(
-    "the other pin's card",
-    async () => ({
-      cards: await cards(),
-      other: await on.page
-        .locator(`[data-slot="pin-card"][data-pin-card="${other?.number}"]`)
-        .count(),
-    }),
-    (seen) => seen.cards === 1 && seen.other === 1,
-    5000
-  ).catch(() => null);
+  const held = await pinsNow();
+  const left: Record<string, { composer: number; pins: number }> = {};
+  const after = async (how: string) => {
+    await settle(on.page, 300);
+    left[how] = {
+      composer: await composer.count(),
+      pins: (await pinsNow()) - held,
+    };
+  };
+  const openComposer = async () => {
+    if ((await comment.getAttribute("aria-selected")) !== "true") {
+      await comment.click();
+      await pageInComment(frame, true);
+    }
+    const at = await pressAt();
+    return commentAt(on, at.x, at.y, null);
+  };
+  // Esc.
+  await openComposer();
+  await composer
+    .getByRole("combobox")
+    .fill("Kept for the next one.")
+    .catch(() => undefined);
+  await on.page.keyboard.press("Escape");
+  await after("Esc");
+  // The next composer has the words.
+  await openComposer();
+  const keptWords = (
+    await composer
+      .getByRole("combobox")
+      .textContent()
+      .catch(() => null)
+  )?.trim();
+  // A press on the pane's chrome (its head's name).
+  await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="name-lead"]'
+    )
+    .first()
+    .click({ trial: false })
+    .catch(() => undefined);
+  await on.page.keyboard.press("Escape").catch(() => undefined);
+  await after("a press on the pane's chrome");
+  // A press elsewhere in the dashboard.
+  await openComposer();
+  await on.page.mouse.click(4, 300);
+  await after("a press elsewhere in the dashboard");
+  // A mode switch.
+  await openComposer();
+  await on.page
+    .locator(
+      ":is([data-slot=\"preview-pane\"], [data-side-card=\"preview\"]) [role='tab'][aria-keyshortcuts='D']"
+    )
+    .click();
+  await after("a mode switch");
+  // A reload of the page.
+  await openComposer();
+  await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-label="Reload"]'
+    )
+    .click();
+  frame = (await until(
+    "the page again",
+    async () => {
+      const now = await pageFrame(on);
+      return (await now
+        .locator(".card")
+        .count()
+        .catch(() => 0)) > 0
+        ? now
+        : null;
+    },
+    Boolean,
+    30_000
+  )) as Frame;
+  await after("a reload");
   on.kit.check(
-    "e: with a pin's card open, a press on another pin's disc on the page opens that pin's card in its place",
-    !!other && !!disc && !!switched,
-    `other ${JSON.stringify(other)}; disc ${JSON.stringify(disc)}; cards ${JSON.stringify(switched)}`
+    "e: a press writes nothing: Esc, a press on the pane's chrome or elsewhere in the dashboard, a mode switch and a reload each close the composer and leave no pin",
+    Object.values(left).length === 5 &&
+      Object.values(left).every((one) => one.composer === 0 && one.pins === 0),
+    JSON.stringify(left)
+  );
+  on.kit.check(
+    "e: the words typed in a composer closed unsaid are back in the next one",
+    keptWords === "Kept for the next one.",
+    JSON.stringify(keptWords)
+  );
+  // A press on a pin's pill while a composer stands opens that pin's thread in its place.
+  const someone = Object.values((await docOf(frame)).pins as Pins)[0] as
+    { number: number } | undefined;
+  await interactTab(on).click();
+  await pageInComment(frame, false);
+  if (someone) {
+    await openComposer();
+    await openThread(on, frame, someone.number);
+  }
+  const swapped = {
+    composer: await composer.count(),
+    thread: someone
+      ? await on.page
+          .locator(`[data-slot="pin-card"][data-pin-card="${someone.number}"]`)
+          .count()
+      : 0,
+  };
+  on.kit.check(
+    "e: a press on a pin's pill while a composer stands opens that pin's thread in the composer's place",
+    !!someone && swapped.composer === 0 && swapped.thread === 1,
+    JSON.stringify({ someone, ...swapped })
   );
   await on.page.keyboard.press("Escape");
-
-  // The desk reloads: the words wait in the draft store.
-  await on.page.reload({ waitUntil: "domcontentloaded" });
-  frame = await pageFrame(on);
-  const back = on.page.locator(
-    `[data-slot="pin-list"] [data-slot="pin-row"][data-pin-row="${kept.number}"]`
-  );
-  await back.waitFor({ timeout: 30_000 }).catch(() => undefined);
-  await back.click({ timeout: 5000 }).catch(() => undefined);
-  const afterReload = await until(
-    "the words back after the reload",
-    () => field(kept.number),
-    (words) => words === "Draft kept.",
-    5000
-  ).catch(() => field(kept.number));
-  on.kit.check(
-    "e: after the desk reloads, the pin's unsaid words are back in its field",
-    afterReload === "Draft kept.",
-    `field ${JSON.stringify(afterReload)}`
-  );
   await on.page.keyboard.press("Escape");
 };
 
-/** Types `words` into pin `number`'s open card, unsaid: its draft. */
 /**
  * (f) A thread longer than the card's cap: the agent answers pin 1 twenty
  * times; its card, opened from its row, keeps its head and its foot whole
@@ -2727,10 +2962,10 @@ const roomChecks = async (on: On) => {
           }
         : null,
       entries: el.querySelectorAll('[data-slot="entry"]').length,
-      field: box(el.querySelector("textarea")),
+      field: box(el.querySelector('[role="combobox"]')),
     };
   });
-  // The head's Resolve pin and the foot's Reply by their accessible names: a
+  // The head's Resolve and the foot's Reply by their accessible names: a
   // kit Button's text holds its pending words too.
   const boxOf = async (name: string) => {
     const r = await card
@@ -2742,7 +2977,7 @@ const roomChecks = async (on: On) => {
   };
   const seen = {
     ...read,
-    resolve: await boxOf("Resolve pin"),
+    resolve: await boxOf("Resolve"),
     reply: await boxOf("Reply"),
   };
   const inside = (part: typeof seen.resolve) =>
@@ -2753,7 +2988,7 @@ const roomChecks = async (on: On) => {
     part.x + part.w <= seen.card.x + seen.card.w + 1 &&
     part.y + part.h <= seen.card.y + seen.card.h + 1;
   on.kit.check(
-    "f: with a thread longer than the card's cap, only the thread scrolls (its room overflows, the card does not), opened at its newest entry, and Resolve, Reply and the field stand inside the card's box",
+    "f: with a thread longer than the card's cap, only the thread scrolls (its room overflows, the card does not), opened at its newest entry, and Resolve, the Reply glyph and the reply's field stand inside the card's box",
     seen.entries > replies &&
       !!seen.room &&
       seen.room.scroll > seen.room.height &&
@@ -2765,13 +3000,13 @@ const roomChecks = async (on: On) => {
     JSON.stringify(seen)
   );
 
-  // Squeezed: the card's room cut to 150px, less than its head and foot
+  // Squeezed: the card's room cut to 110px, less than its head and foot
   // alone (a phone's keyboard over a short well). The thread keeps its whole
   // height in the card's own scroll, never shrunk to nothing.
   await on.page.evaluate(() => {
     const room = document.querySelector<HTMLElement>('[data-slot="pin-room"]');
     room?.style.setProperty("bottom", "auto");
-    room?.style.setProperty("height", "150px");
+    room?.style.setProperty("height", "110px");
   });
   await settle(on.page, 400);
   const squeezed = await card.evaluate((el) => {
@@ -2807,12 +3042,6 @@ const roomChecks = async (on: On) => {
   );
   await on.page.keyboard.press("Escape");
 };
-
-const writeIn = (on: On, number: number, words: string) =>
-  on.page
-    .locator(`[data-slot="pin-card"][data-pin-card="${number}"]`)
-    .getByRole("textbox")
-    .fill(words);
 
 /**
  * A card's head as it reads: the name, the file:line under it, the tooltip,
@@ -2883,19 +3112,41 @@ const wordlessChecks = async (on: On) => {
     .click();
   await pageInComment(frame, true);
   const b = await screenBox(on, frame, "[data-insp-path]");
-  await on.page.mouse.click(b.x + b.w / 2, b.y + b.h / 2);
-  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
-  await card.waitFor({ timeout: 10_000 }).catch(() => undefined);
+  await commentAt(on, b.x + b.w / 2, b.y + b.h / 2, null);
+  const chip = (
+    await on.page
+      .locator(`${COMPOSE} [data-slot="target-chip"] [data-slot="chip-label"]`)
+      .textContent()
+      .catch(() => null)
+  )?.trim();
+  await on.page
+    .locator(COMPOSE)
+    .getByRole("combobox")
+    .fill("Too pale.")
+    .catch(() => undefined);
+  await on.page.keyboard.press("Enter");
+  await until(
+    "the badge's pin in the doc",
+    async () => Object.keys((await docOf(frame)).pins).length,
+    (count) => count === 1,
+    10_000
+  ).catch(() => 0);
+  await settle(on.page, 300);
+  const card = await openThread(on, frame, 1);
   await settle(on.page, 300);
   const head = await headOf(card);
+  const selector = String(
+    (
+      Object.values((await docOf(frame)).pins)[0] as
+        { anchor?: { selector?: string } } | undefined
+    )?.anchor?.selector ?? "#none"
+  );
   on.kit.check(
-    '7: a pin on an element with no text is named by its component (StatusBadge.svelte → "Status badge"), the file:line under it, its selector only in the tooltip, no picture',
-    head.name === "Status badge" &&
-      head.source === "src/StatusBadge.svelte:4" &&
-      !!head.tip &&
-      !head.shown.includes(head.tip) &&
-      head.pictures === 0,
-    JSON.stringify(head)
+    "7: a comment on an element with no text is named by its component (StatusBadge.svelte → \"Status badge\"), in the composer's target chip and in its thread's head, never by its selector",
+    chip === "Status badge" &&
+      head.name === "Status badge" &&
+      !head.shown.includes(selector),
+    `chip ${JSON.stringify(chip)}; ${JSON.stringify(head)}; selector ${selector}`
   );
   await on.page.keyboard.press("Escape");
   await on.page.keyboard.press("Escape");
@@ -3318,9 +3569,14 @@ const targetChecks = async (on: On) => {
     JSON.stringify(root)
   );
 
-  // The page's root chosen: its line kept, its label gone, as any target's.
-  await on.page.mouse.click(ground.x + ground.w / 2, ground.y + 300);
-  const rootCard = await focusedCard(on, 1);
+  // The page's root chosen: its composer opens on the whole page, its line
+  // kept and its label gone, as any target's.
+  const rootComposer = await commentAt(
+    on,
+    ground.x + ground.w / 2,
+    ground.y + 300,
+    null
+  );
   const rootChosen = await until(
     "the page's root chosen",
     () => targetOf(frame),
@@ -3329,25 +3585,24 @@ const targetChecks = async (on: On) => {
   ).catch(() => targetOf(frame));
   on.kit.check(
     "7c: the page's root chosen keeps its dashed line and carries no label",
-    rootCard.shown &&
+    rootComposer.shown &&
       !!rootChosen &&
       rootChosen.shown &&
       rootChosen.root &&
       rootChosen.style === "dashed" &&
       rootChosen.width === "1px" &&
       rootChosen.label === null,
-    JSON.stringify({ rootCard, rootChosen })
+    JSON.stringify({ rootComposer, rootChosen })
   );
   await on.page.keyboard.press("Escape");
   await until(
-    "the root's empty card closed",
-    () => on.page.locator('[data-slot="pin-card"]').count(),
+    "the root's composer closed, nothing written",
+    () => on.page.locator(COMPOSE).count(),
     (count) => count === 0,
     5000
   ).catch(() => null);
 
-  await on.page.mouse.click(b.x + b.w / 2, b.y + b.h / 2);
-  const opened = await focusedCard(on, 1);
+  const opened = await commentAt(on, b.x + b.w / 2, b.y + b.h / 2, null);
   await settle(on.page, 300);
   const chosen = await until(
     "the target chosen",
@@ -3355,29 +3610,38 @@ const targetChecks = async (on: On) => {
     (seen) => !!seen && !seen.rest && seen.style === "solid",
     5000
   ).catch(() => targetOf(frame));
-  // The one card open at a time: its field.
-  const field = on.page.locator('[data-slot="pin-card"]').getByRole("textbox");
+  // The one composer or thread open at a time: its field, and the chat
+  // composer's pill (`field-shell`), which draws the field's ring.
+  const field = on.page
+    .locator(':is([data-slot="pin-composer"], [data-slot="pin-card"])')
+    .getByRole("combobox");
   const readRing = () =>
-    field.evaluate((el) => {
-      const style = getComputedStyle(el);
-      const probe = document.createElement("span");
-      probe.style.color = "var(--focus-ring)";
-      document.body.append(probe);
-      const ring = getComputedStyle(probe).color;
-      probe.remove();
-      return {
-        focused: document.activeElement === el,
-        quiet: el.hasAttribute("data-pointer-focus"),
-        style: style.outlineStyle,
-        width: style.outlineWidth,
-        offset: style.outlineOffset,
-        color: style.outlineColor,
-        ring,
-      };
-    });
+    on.page
+      .locator(
+        ':is([data-slot="pin-composer"], [data-slot="pin-card"]) .field-shell'
+      )
+      .first()
+      .evaluate((el) => {
+        const style = getComputedStyle(el);
+        const probe = document.createElement("span");
+        probe.style.color = "var(--focus-ring)";
+        document.body.append(probe);
+        const ring = getComputedStyle(probe).color;
+        probe.remove();
+        const active = document.activeElement as HTMLElement | null;
+        return {
+          focused: !!active?.isContentEditable && el.contains(active),
+          quiet: el.hasAttribute("data-pointer-focus"),
+          style: style.outlineStyle,
+          width: style.outlineWidth,
+          offset: style.outlineOffset,
+          color: style.outlineColor,
+          ring,
+        };
+      });
   const pointerRing = await readRing().catch(() => null);
   on.kit.check(
-    "7c: a tap chooses the element: a 1px brand-solid line at offset 0 on its box, the tint kept, no label",
+    "7c: a press chooses the element: a 1px brand-solid line at offset 0 on its box, the tint kept, no label, while its composer stands",
     opened.shown &&
       !!chosen &&
       chosen.shown &&
@@ -3426,7 +3690,7 @@ const targetChecks = async (on: On) => {
     JSON.stringify(marks)
   );
 
-  // Keyboard: ⇧Tab to the card's Close, Tab back onto the field.
+  // Keyboard: ⇧Tab to the composer's target chip, Tab back onto the field.
   await on.page.keyboard.press("Shift+Tab");
   await on.page.keyboard.press("Tab");
   const keyRing = await until(
@@ -3474,7 +3738,7 @@ const targetChecks = async (on: On) => {
   // A bare element (no border, no background): the line stands c-target-gap (2px) outside, clear of its glyphs.
   await on.page.keyboard.press("Escape");
   const bare = await screenBox(on, frame, "#bare");
-  await on.page.mouse.click(bare.x + 20, bare.y + bare.h / 2);
+  await commentAt(on, bare.x + 20, bare.y + bare.h / 2, null);
   await until(
     "the bare element chosen",
     () => targetOf(frame),
@@ -3521,8 +3785,15 @@ const targetChecks = async (on: On) => {
     JSON.stringify(clearance)
   );
 
-  // The bare pin kept (words in its field), its card closed: its row in the list.
+  // The bare comment written: its row in the rail.
   await field.fill("Keep this one.");
+  await on.page.keyboard.press("Enter");
+  await until(
+    "the bare comment in the doc",
+    async () => Object.keys((await docOf(frame)).pins).length,
+    (count) => count === 1,
+    5000
+  ).catch(() => 0);
   await on.page.keyboard.press("Escape");
   const row = (await rowsOf(on)).locator('[data-slot="pin-row"]').first();
   await row.hover();
@@ -3541,7 +3812,7 @@ const targetChecks = async (on: On) => {
     3000
   ).catch(() => targetOf(frame));
   on.kit.check(
-    "7c: resting on a pin's row in the list chooses its element on the page (a 1px brand-solid line), and leaving the row lets it go",
+    "7c: resting on a comment's row in the rail chooses its element on the page (a 1px brand-solid line), and leaving the row lets it go",
     !!rowHovered &&
       rowHovered.shown &&
       !rowHovered.rest &&
@@ -3563,7 +3834,7 @@ const targetChecks = async (on: On) => {
     5000
   ).catch(() => null);
   on.kit.check(
-    "7c: a card opened from the keyboard (Enter on its pin's row) focuses its field with the ring (2px focus-ring, inset)",
+    "7c: a thread opened from the keyboard (Enter on its row) focuses its reply with the ring (2px focus-ring, inset)",
     !!keyOpened &&
       keyOpened.focused &&
       !keyOpened.quiet &&
@@ -3581,7 +3852,7 @@ const targetChecks = async (on: On) => {
     5000
   ).catch(() => null);
   on.kit.check(
-    "7c: the same card opened by a press on its row focuses its field with no ring",
+    "7c: the same thread opened by a press on its row focuses its reply with no ring",
     !!pressOpened &&
       pressOpened.focused &&
       pressOpened.quiet &&
@@ -3756,6 +4027,20 @@ const mapPressChecks = async (on: On) => {
       await on.page.waitForTimeout(2000);
       await mark("press-after");
     });
+    // The press opened its composer, writing nothing; Comment writes the pin, and its picture goes to the hub.
+    await on.page
+      .locator(COMPOSE)
+      .getByRole("combobox")
+      .fill("This one.")
+      .catch(() => undefined);
+    await on.page.keyboard.press("Enter");
+    await until(
+      "the pressed comment in the doc",
+      async () =>
+        Object.keys((await docOf(frame)).pins).some((one) => !before.has(one)),
+      Boolean,
+      10_000
+    ).catch(() => false);
     const { pins } = await docOf(frame);
     const id = Object.keys(pins).find((one) => !before.has(one));
     const pin = id
@@ -3772,11 +4057,6 @@ const mapPressChecks = async (on: On) => {
       : { intro: false, tag: "none" };
     const at = (name: string) =>
       main.marks.find((one) => one.name === name)?.at ?? 0;
-    // Words in it, so its card's going keeps it, and its picture goes to the hub.
-    if (pin) {
-      await writeIn(on, pin.number, "This one.");
-    }
-    await on.page.keyboard.press("Escape");
     const posted = await until(
       "the pin's picture at the hub",
       () => pictures.posted.find((one) => one.mark === id),
@@ -4012,9 +4292,11 @@ const readSvgPicture = async (
   const pictures = watchPictures(on.page);
   try {
     const before = new Set(Object.keys((await docOf(frame)).pins));
-    await on.page.mouse.click(
+    await commentAt(
+      on,
       (outer?.x ?? 0) + svg.x + IN_HULL.x,
-      (outer?.y ?? 0) + svg.y + IN_HULL.y
+      (outer?.y ?? 0) + svg.y + IN_HULL.y,
+      "These edges."
     );
     const pin = await until(
       `the pin on ${leg}'s graph`,
@@ -4035,8 +4317,6 @@ const readSvgPicture = async (
       on.kit.check(`${leg}: a press on the graph makes a pin`, false, "none");
       return null;
     }
-    await writeIn(on, pin.number, "These edges.");
-    await on.page.keyboard.press("Escape");
     const posted = await until(
       `${leg}'s pin picture at the hub`,
       () => pictures.posted.find((one) => one.mark === pin.id),
@@ -4282,6 +4562,107 @@ const repeatedPage = (revised: boolean) => {
  * puts a card in ahead of each: each pin stands on its own card, or waits
  * in the moved tray, and none stands on a card the revision put in.
  */
+/**
+ * 7f. A framework's minted id is no element's identity: React's `useId`
+ * (`:r1:`) and Radix's (`radix-…`) name whatever element the next render
+ * hands them to. A pin on such an element anchors by its next rule (its
+ * place and its words), so a re-render that hands the ids round leaves each
+ * pin on its own element.
+ */
+const MINTED_PAGE = (shuffled: boolean) => {
+  const [first, second] = shuffled ? [":r2:", ":r1:"] : [":r1:", ":r2:"];
+  const [one, two] = shuffled
+    ? ["radix-:r6:", "radix-:r5:"]
+    : ["radix-:r5:", "radix-:r6:"];
+  return `<section><p id="${first}">The first paragraph, which React's useId named.</p><p id="${second}">The second paragraph, named the same way.</p></section><ul role="menu"><li id="${one}" role="menuitem">A Radix item's own words.</li><li id="${two}" role="menuitem">Another Radix item, below it.</li></ul>`;
+};
+const mintedIdChecks = async (on: On) => {
+  await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "minted-ids",
+    html: `<!doctype html><html><head><style>body { margin: 0; font: 16px/1.5 system-ui; } main { padding: 24px; } p, li { margin: 0 0 96px; min-height: 40px; } ul { padding: 0; list-style: none; }</style></head>
+<body><main>${MINTED_PAGE(false)}</main></body></html>`,
+  });
+  const frame = (await until(
+    "the minted-ids page in the pane",
+    async () => {
+      const shown = await pageFrame(on);
+      return (await shown
+        .locator("section p")
+        .count()
+        .catch(() => 0)) === 2
+        ? shown
+        : null;
+    },
+    Boolean,
+    60_000
+  )) as Frame;
+  await settle(on.page, 400);
+  await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
+    )
+    .click();
+  await pageInComment(frame, true);
+  const pressIn = async (selector: string, words: string) => {
+    const b = await screenBox(on, frame, selector);
+    return commentAt(on, b.x + 24, b.y + b.h / 2, words);
+  };
+  const reactSaid = await pressIn('[id=":r1:"]', "Tighten this paragraph.");
+  const radixSaid = await pressIn(
+    '[id="radix-:r5:"]',
+    "This item reads too loud."
+  );
+  const selectors = await until(
+    "both pins in the doc",
+    async () =>
+      Object.values((await docOf(frame)).pins)
+        .sort((a, b) => Number(a.number) - Number(b.number))
+        .map((pin) => (pin.anchor as { selector?: string }).selector ?? ""),
+    (kept) => kept.length === 2,
+    5000
+  ).catch(() => [] as string[]);
+  on.kit.check(
+    "7f: a pin on an element whose id React's useId minted (:r1:), or Radix (radix-…), never anchors by that id",
+    reactSaid.gone &&
+      radixSaid.gone &&
+      selectors.length === 2 &&
+      selectors.every(
+        (selector) =>
+          !(selector.includes("\\:r") || selector.includes("radix-"))
+      ),
+    `written ${reactSaid.gone}, ${radixSaid.gone}; selectors ${JSON.stringify(selectors)}`
+  );
+
+  // The next render hands the ids round: the same elements, their ids swapped.
+  await frame.evaluate((html) => {
+    const main = document.querySelector("main");
+    if (main) {
+      main.innerHTML = html;
+    }
+  }, MINTED_PAGE(true));
+  await settle(on.page, 600);
+  const stands = async (pin: number, selector: string) => {
+    const tail = await discAt(frame, pin);
+    const own = await boxIn(frame, selector).catch(() => null);
+    return {
+      tail,
+      own,
+      on: !!tail && !!own && tail.y >= own.y - 2 && tail.y <= own.y + own.h + 2,
+    };
+  };
+  const react = await stands(1, "section p:nth-of-type(1)");
+  const radix = await stands(2, "ul li:nth-of-type(1)");
+  on.kit.check(
+    "7f: re-rendered with the ids shuffled (the first paragraph now :r2:, the first item radix-:r6:), each pin stays on its own element",
+    react.on && radix.on,
+    `pin 1 tail ${JSON.stringify(react.tail)} on ${JSON.stringify(react.own)}; pin 2 tail ${JSON.stringify(radix.tail)} on ${JSON.stringify(radix.own)}`
+  );
+  await on.page.keyboard.press("Escape");
+};
+
 const insertChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
@@ -4337,7 +4718,7 @@ const insertChecks = async (on: On) => {
       return null;
     }
     const held = new Set(Object.keys((await docOf(frame)).pins));
-    await on.page.mouse.click(pane.x + box.x, pane.y + box.y);
+    await commentAt(on, pane.x + box.x, pane.y + box.y, `This is ${words}.`);
     const pins = await until(
       `the pin on "${words}"`,
       async () => (await docOf(frame)).pins,
@@ -4345,22 +4726,6 @@ const insertChecks = async (on: On) => {
       10_000
     ).catch(() => ({}) as Pins);
     const id = Object.keys(pins).find((one) => !held.has(one));
-    const number = id ? Number(pins[id]?.number) : undefined;
-    const card = on.page.locator(
-      `[data-slot="pin-card"][data-pin-card="${number}"]`
-    );
-    await card.getByRole("textbox").fill(`This is ${words}.`);
-    await card.getByRole("button", { name: "Reply" }).click();
-    await until(
-      `the reply on "${words}"`,
-      async () =>
-        (
-          (await docOf(frame)).pins[id ?? ""] as
-            { thread?: unknown[] } | undefined
-        )?.thread?.length ?? 0,
-      (count) => count === 1,
-      5000
-    ).catch(() => 0);
     return id ?? null;
   };
   const bravo = await pinOn("Bravo");
@@ -4409,14 +4774,18 @@ const insertChecks = async (on: On) => {
       const pins = doc.getMap("pins");
       const marks = [...document.querySelectorAll<HTMLElement>("h2, img")];
       return ids.map((id) => {
-        // The disc's centre in the page: its group's translate.
-        const at = document
-          .querySelector<SVGGElement>(
-            `svg[data-cawco-pins] [data-pin-id="${id}"]`
-          )
-          ?.transform.baseVal.consolidate()?.matrix;
-        const x = at ? at.e - scrollX : Number.NaN;
-        const y = at ? at.f - scrollY : Number.NaN;
+        // The pill's tail corner, on its point (DESIGN.md, A pin's pill).
+        const g = document.querySelector<SVGGElement>(
+          `svg[data-cawco-pins] [data-pin-id="${id}"]`
+        );
+        const face = g?.querySelector("[data-face]")?.getBoundingClientRect();
+        const tail = g?.getAttribute("data-tail") ?? "bottom-start";
+        let x = Number.NaN;
+        let y = Number.NaN;
+        if (face) {
+          x = tail.endsWith("end") ? face.right : face.left;
+          y = tail.startsWith("top") ? face.top : face.bottom;
+        }
         const mark = marks.find((one) => {
           const r = one.getBoundingClientRect();
           return (
@@ -4468,1117 +4837,875 @@ const insertChecks = async (on: On) => {
 };
 
 /**
- * (j)'s page: words at its very top-right, under where the Comments panel
- * hangs and above any scroll; words far down its right side; words on its
- * left. Tall enough to scroll.
+ * The rail's page: a strip at its very top (a pill there stands below its
+ * point), a heading, two paragraphs, a block a revision drops, and a button
+ * at the page's right edge (a pill there turns up-left).
  */
-const LISTED_PAGE = `<!doctype html>
+const RAIL_PAGE = (withDrop: boolean) => `<!doctype html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body { margin: 0; font: 16px/1.5 system-ui; height: 2400px; position: relative; }
-  p { position: absolute; width: 150px; margin: 0; }
-  #corner { top: 16px; right: 16px; }
-  #low { top: 1200px; right: 16px; }
-  #left { top: 600px; left: 16px; }
+  body { margin: 0; font: 16px/1.5 system-ui; }
+  #top { height: 18px; background: #e8e4dc; }
+  main { padding: 24px; }
+  h1 { margin: 0 0 24px; font-size: 28px; }
+  p { width: 55%; margin: 0 0 40px; }
+  #drop { width: 240px; height: 60px; margin: 0 0 40px; background: #d8d4cc; }
+  #edge { position: absolute; right: 0; top: 200px; width: 140px; height: 44px; }
+  .space { height: 900px; }
 </style></head>
-<body><p id="corner">Words in the top-right corner.</p><p id="low">Words far down the right side.</p><p id="left">Words on the left.</p></body></html>`;
+<body><div id="top">The page's top strip.</div><main>
+  <h1 id="a">A heading the comments stand on</h1>
+  <p id="b">A paragraph to carry pictures and a file.</p>
+  <p id="c">A paragraph for a picture on its own.</p>
+  ${withDrop ? '<div id="drop">A block a revision drops</div>' : ""}
+  <div class="space"></div>
+</main><button id="edge" type="button">At the edge</button></body></html>`;
 
-interface Rect {
-  h: number;
-  w: number;
-  x: number;
-  y: number;
-}
-const meets = (a: Rect, b: Rect) =>
-  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-
-/** The Comments panel's, the open card's and pin `id`'s disc's boxes in the dashboard's viewport; null for one not on screen. The disc is read in the page's own frame (another origin), its frame's offset added. */
-const listedBoxes = async (screen: Page, frame: Frame, id: string) => {
-  const chrome = await screen.evaluate(() => {
-    const box = (el: Element | null | undefined) => {
-      const r = el?.getBoundingClientRect();
-      return r && r.width > 0
-        ? { x: r.x, y: r.y, w: r.width, h: r.height }
-        : null;
-    };
-    const holder = [
-      ...document.querySelectorAll<HTMLIFrameElement>(
-        'iframe[title="Preview"]'
-      ),
-    ].find((one) => one.checkVisibility());
-    const at = holder?.getBoundingClientRect();
-    return {
-      list: box(document.querySelector("[data-pin-list-pop]")),
-      card: box(document.querySelector('[data-slot="pin-card"]')),
-      offset:
-        at && holder
-          ? { x: at.x + holder.clientLeft, y: at.y + holder.clientTop }
-          : null,
-    };
-  });
-  const disc = await frame
-    .evaluate((pin) => {
-      const r = document
-        .querySelector(`svg[data-cawco-pins] [data-pin-id="${pin}"] circle`)
-        ?.getBoundingClientRect();
-      return r && r.width > 0
-        ? { x: r.x, y: r.y, w: r.width, h: r.height }
-        : null;
-    }, id)
-    .catch(() => null);
-  return {
-    list: chrome.list,
-    card: chrome.card,
-    disc:
-      disc && chrome.offset
-        ? { ...disc, x: disc.x + chrome.offset.x, y: disc.y + chrome.offset.y }
-        : null,
-  };
+/** A small PNG of one colour, `w` by `h`: an attachment's bytes. */
+const pngOf = (w: number, h: number, rgb: [number, number, number]) => {
+  const png = new PNG({ width: w, height: h });
+  for (let i = 0; i < w * h; i += 1) {
+    png.data[i * 4] = rgb[0];
+    png.data[i * 4 + 1] = rgb[1];
+    png.data[i * 4 + 2] = rgb[2];
+    png.data[i * 4 + 3] = 255;
+  }
+  return PNG.sync.write(png);
 };
 
+/** A token's colour as the dashboard computes it. */
+const inkOf = (screen: Page, token: string) =>
+  screen.evaluate((name) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${name})`;
+    document.body.append(probe);
+    const { color } = getComputedStyle(probe);
+    probe.remove();
+    return color;
+  }, token);
+
+/** Where the captures for the separate reviewer go (they don't land). */
+const CAPTURES = join(ROOT, ".probe", "commenting");
+
+/** A capture of `what` on `screen`, kept for the reviewer as `<name>.png`. */
+const capture = async (
+  screen: Page,
+  name: string,
+  what: Locator | null = null
+) => {
+  await mkdir(CAPTURES, { recursive: true });
+  const path = join(CAPTURES, `${name}.png`);
+  await (
+    what
+      ? what.screenshot({ path, animations: "disabled" })
+      : screen.screenshot({ path, animations: "disabled" })
+  ).catch(() => undefined);
+};
+
+/** A composer at the element as it stands: its sizes, its hint, its chips' lines. */
+const composerRead = (screen: Page) =>
+  screen.locator(COMPOSE).evaluate((el) => {
+    const box = (part: Element | null) => {
+      const r = part?.getBoundingClientRect();
+      return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+    };
+    const field = el.querySelector('[role="combobox"]') as HTMLElement | null;
+    const fieldBox = el.querySelector('[data-slot="composer-field"]');
+    const style = field ? getComputedStyle(field) : null;
+    const hint = field?.getAttribute("data-placeholder") ?? "";
+    const canvas = document.createElement("canvas").getContext("2d");
+    if (canvas && style) {
+      canvas.font = style.font;
+    }
+    const room = field
+      ? field.clientWidth -
+        Number.parseFloat(style?.paddingLeft ?? "0") -
+        Number.parseFloat(style?.paddingRight ?? "0")
+      : 0;
+    // Each chip's name and meta on one baseline, and its ✕ centred.
+    const chips = [...el.querySelectorAll("[data-atts] > span")].map((chip) => {
+      const baseline = (part: Element | null) => {
+        if (!part) {
+          return null;
+        }
+        const mark = document.createElement("span");
+        mark.style.cssText =
+          "display:inline-block;width:0;height:0;vertical-align:baseline";
+        part.append(mark);
+        const y = mark.getBoundingClientRect().top;
+        mark.remove();
+        return y;
+      };
+      const nameAt = baseline(
+        chip.querySelector('[data-slot="att-name"] > span:last-child')
+      );
+      const metaAt = baseline(chip.querySelector('[data-slot="att-meta"]'));
+      const remove = chip.querySelector('button[aria-label^="Remove"]');
+      const glyph = remove?.querySelector("svg");
+      const c = chip.getBoundingClientRect();
+      const r = remove?.getBoundingClientRect();
+      const g = glyph?.getBoundingClientRect();
+      return {
+        name: chip.getAttribute("title"),
+        baselines:
+          nameAt !== null && metaAt !== null ? Math.abs(nameAt - metaAt) : null,
+        removeInChip: r
+          ? Math.abs(r.y + r.height / 2 - (c.y + c.height / 2))
+          : null,
+        glyphInRemove:
+          r && g
+            ? Math.max(
+                Math.abs(g.x + g.width / 2 - (r.x + r.width / 2)),
+                Math.abs(g.y + g.height / 2 - (r.y + r.height / 2))
+              )
+            : null,
+        height: Math.round(c.height),
+      };
+    });
+    return {
+      card: box(el),
+      pill: box(el.querySelector(".field-shell")),
+      field: box(fieldBox),
+      hint,
+      hintFits: !!canvas && canvas.measureText(hint).width <= room + 0.5,
+      send:
+        (el.querySelector('[data-slot="stop"]') as HTMLButtonElement | null)
+          ?.disabled === false,
+      chips,
+      attach: el.querySelector("[data-att-btn]")?.getAttribute("aria-label"),
+    };
+  });
+
+/** The composer's attach picker, given files as the system's picker would. */
+const attachFiles = async (
+  screen: Page,
+  files: { buffer: Buffer; mimeType: string; name: string }[]
+) => {
+  await screen
+    .locator(`${COMPOSE} input[data-slot="hidden-file"]`)
+    .setInputFiles(files);
+  await until(
+    "the attachments uploaded",
+    () =>
+      screen
+        .locator(`${COMPOSE} [data-atts] > span`)
+        .evaluateAll((chips) =>
+          chips.every((chip) => !chip.hasAttribute("aria-busy"))
+        ),
+    Boolean,
+    15_000
+  ).catch(() => false);
+  await settle(screen, 300);
+};
+
+/** One row's dress per part, read where it is drawn (The Row Dress Rule). */
+const rowDress = (screen: Page, number: number) =>
+  screen
+    .locator(`${RAIL} [data-slot="pin-row"][data-pin-row="${number}"]`)
+    .evaluate((row) => {
+      const read = (part: Element | null) => {
+        if (!part) {
+          return null;
+        }
+        const style = getComputedStyle(part);
+        return {
+          size: style.fontSize,
+          weight: style.fontWeight,
+          color: style.color,
+          text: (part as HTMLElement).innerText.trim(),
+        };
+      };
+      const back = row.querySelector('[data-line="back"]');
+      const glyph = back?.querySelector("[data-speaker]");
+      const g = glyph?.getBoundingClientRect();
+      return {
+        name: read(row.querySelector('[data-slot="title"]')),
+        words: read(row.querySelector('[data-line="words"]')),
+        age: read(row.querySelector('[data-slot="age"]')),
+        ageTabular: row.querySelector('[data-slot="age"]')
+          ? getComputedStyle(row.querySelector('[data-slot="age"]') as Element)
+              .fontVariantNumeric
+          : null,
+        back: read(back),
+        speaker: glyph
+          ? {
+              by: glyph.getAttribute("data-speaker"),
+              size: g ? Math.round(g.width) : 0,
+              color: getComputedStyle(glyph).color,
+              hidden: glyph.getAttribute("aria-hidden"),
+              said:
+                back?.querySelector(".sr-only")?.textContent?.trim() ?? null,
+            }
+          : null,
+        strip: [
+          ...row.querySelectorAll("[data-attach-strip] [data-thumb]"),
+        ].map((thumb) => Math.round(thumb.getBoundingClientRect().width)),
+        more:
+          row
+            .querySelector('[data-attach-strip] [data-slot="more"]')
+            ?.textContent?.trim() ?? null,
+      };
+    });
+
 /**
- * (j) The owner's report (2026-10-18: "if i open comments and i click one
- * of the comments it opens behind the list ofcomments, not very
- * navigateable"), as Figma's comments list keeps a chosen comment's pin and
- * card both on the part of the page the list leaves free: with the
- * Comments panel open, a pin opened from its row, then by J and by K,
- * stands with its card beside the panel, neither under it. A pin the page
- * has scrolled under the panel is scrolled out; one at the page's very top
- * (no scroll can) has the panel make room for it. On the desk, and on a
- * phone, where the card stands at the well's foot and the pin clear of it
- * too.
+ * The picks on a page of their own, at the desk (DESIGN.md, Placing a
+ * comment, A pin's pill, The Comments rail, A thread beside its pin,
+ * Sending comments): the 280px composer and its parts; attachments by
+ * reference, their pills on one baseline; a picture alone sending; the
+ * pill's tail turning at the page's edges; the rail beside the page, its
+ * rows dressed part by part, the thumb strip, search, sort and the toggle's
+ * count; a thread from a row standing in the well; the captures for the
+ * reviewer, by day and night. The phone after it ({@link phoneRailChecks}).
  */
 const listChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
     ask: "Judge this page: pin anything that reads wrong",
-    name: "listed",
-    html: LISTED_PAGE,
+    name: "rail",
+    html: RAIL_PAGE(true),
   });
   const artifactId = made.match(ANSWERED_ID)?.[1];
   if (!artifactId) {
-    on.kit.check("j: the page is made", false, made.slice(0, 300));
+    on.kit.check("the rail page is made", false, made.slice(0, 300));
     return;
   }
   const frame = (await until(
-    "the listed page in the pane",
+    "the rail page in the pane",
     async () => {
-      const one = await pageFrame(on);
-      const ready = await one
-        .evaluate(
-          () => !!document.querySelector("#corner") && "cawcoArtifact" in window
-        )
-        .catch(() => false);
-      return ready ? one : null;
+      const shown = await pageFrame(on);
+      return (await shown
+        .locator("#edge")
+        .count()
+        .catch(() => 0)) === 1
+        ? shown
+        : null;
     },
     Boolean,
     60_000
   )) as Frame;
   await settle(on.page, 400);
-  const pane = await on.page.locator(FRAME).boundingBox();
-  if (!pane) {
-    on.kit.check("j: the pane's frame has a box", false, "none");
-    return;
-  }
-  await on.page
-    .locator(
-      ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
-    )
-    .click();
+  await shutList(on);
+  const comment = on.page.locator(`${PANE} button[aria-keyshortcuts='C']`);
+  await comment.click();
   await pageInComment(frame, true);
-  /** A tap on `selector`, scrolled into view, and a reply that keeps its pin: its id and number. */
-  const pinOn = async (selector: string) => {
-    const box = await frame.evaluate((s) => {
-      const el = document.querySelector(s);
-      el?.scrollIntoView({ block: "center" });
-      const r = el?.getBoundingClientRect();
-      return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
-    }, selector);
-    if (!box) {
-      return null;
-    }
-    const held = new Set(Object.keys((await docOf(frame)).pins));
-    await on.page.mouse.click(pane.x + box.x, pane.y + box.y);
-    const pins = await until(
-      `the pin on ${selector}`,
-      async () => (await docOf(frame)).pins,
-      (all) => Object.keys(all).some((one) => !held.has(one)),
-      10_000
-    ).catch(() => ({}) as Pins);
-    const id = Object.keys(pins).find((one) => !held.has(one));
-    const number = id ? Number(pins[id]?.number) : Number.NaN;
-    await writeIn(on, number, `About ${selector}.`);
-    return id ? { id, number } : null;
+  const pinsNow = async () => (await docOf(frame)).pins as Pins;
+  const numberOn = async (selector: string) =>
+    Number(
+      (
+        Object.values(await pinsNow()).find(
+          (pin) =>
+            (pin.anchor as { selector?: string } | undefined)?.selector ===
+            selector
+        ) as { number?: number } | undefined
+      )?.number ?? 0
+    );
+  const pressOn = async (selector: string, fx = 0.4, fy = 0.5) => {
+    const b = await screenBox(on, frame, selector);
+    return commentAt(on, b.x + b.w * fx, b.y + b.h * fy, null);
   };
-  const low = await pinOn("#low");
-  const corner = await pinOn("#corner");
-  const left = await pinOn("#left");
-  await on.page.keyboard.press("Escape");
+  const submit = async (words: string) => {
+    if (words) {
+      await on.page.locator(COMPOSE).getByRole("combobox").fill(words);
+    }
+    const held = Object.keys(await pinsNow()).length;
+    await on.page.locator(`${COMPOSE} [data-slot="stop"]`).click();
+    await until(
+      "the comment in the doc",
+      async () => Object.keys(await pinsNow()).length,
+      (count) => count > held,
+      10_000
+    ).catch(() => 0);
+    await settle(on.page, 300);
+  };
+
+  const rig: RailRig = { frame, numberOn, pinsNow, pressOn, submit };
+  await pickChecks(on, rig);
+  const { onB, onC, onDrop } = await railSendChecks(on, rig, artifactId);
+  const geometry = await hierarchyChecks(on, rig, { onB, onC, onDrop });
+  await railUseChecks(on, geometry, onB);
+
+  // The same scenes at night, at the desk and on a phone.
+  await railScenes(on, artifactId);
+};
+
+/** What the rail page's checks share: its frame, its pins, and a comment written on it. */
+interface RailRig {
+  frame: Frame;
+  numberOn: (selector: string) => Promise<number>;
+  pinsNow: () => Promise<Pins>;
+  pressOn: (
+    selector: string,
+    fx?: number,
+    fy?: number
+  ) => ReturnType<typeof commentAt>;
+  submit: (words: string) => Promise<void>;
+}
+type Box4 = { x: number; y: number; w: number; h: number } | null;
+
+/** The composer's 280px card, the attachment pills, a picture alone, and the pill's tails. */
+const pickChecks = async (on: On, rig: RailRig) => {
+  const { frame, numberOn, pinsNow, pressOn, submit } = rig;
+  // The composer at the element, measured before a word (addendum §3).
+  await pressOn("#a");
+  await settle(on.page, 300);
+  const empty = await composerRead(on.page);
+  await capture(on.page, "p4-element-empty-light-desk", on.page.locator(PANE));
+  on.kit.check(
+    `the 280px card: the composer at the element is ${empty.card?.w}px wide, its field ${empty.field?.w}px (178px or wider), its hint "What should change?" uncut, its pill ${empty.pill?.h}px at one line (about 87px), Attach the ghost paperclip`,
+    Math.round(empty.card?.w ?? 0) === 280 &&
+      (empty.field?.w ?? 0) >= 178 &&
+      empty.hint === "What should change?" &&
+      empty.hintFits &&
+      (empty.pill?.h ?? 0) >= 78 &&
+      (empty.pill?.h ?? 0) <= 92 &&
+      empty.attach === "Attach a file or image" &&
+      !empty.send,
+    JSON.stringify(empty)
+  );
+  await on.page
+    .locator(COMPOSE)
+    .getByRole("combobox")
+    .fill("Make this heading a bit bigger");
+  await capture(on.page, "p4-element-typed-light-desk", on.page.locator(PANE));
+  await submit("");
+
+  // Pictures and a file by reference; their pills on one line each.
+  await pressOn("#b");
+  await attachFiles(on.page, [
+    ...[0, 1, 2, 3].map((n) => ({
+      name: `ref-${n + 1}.png`,
+      mimeType: "image/png",
+      buffer: pngOf(64, 40, [200 - n * 30, 120, 90 + n * 30]),
+    })),
+    {
+      name: "spec.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from("name,size\nheading,28\nparagraph,16\n"),
+    },
+  ]);
+  const carried = await composerRead(on.page);
+  await capture(on.page, "decided-attach-light-desk", on.page.locator(COMPOSE));
+  const fileChip = carried.chips.find((one) => one.name === "spec.csv");
+  on.kit.check(
+    `the attachment pill: five chips, each one pill; the file's name and size within 0.5px of one baseline (${fileChip?.baselines}px), every ✕ centred on its pill and its glyph on its box within 0.5px`,
+    carried.chips.length === 5 &&
+      fileChip?.baselines !== null &&
+      (fileChip?.baselines ?? 9) <= 0.5 &&
+      carried.chips.every(
+        (one) =>
+          (one.removeInChip ?? 9) <= 0.5 && (one.glyphInRemove ?? 9) <= 0.5
+      ),
+    JSON.stringify(carried.chips)
+  );
+  await submit("These two, side by side.");
+
+  // A picture with no words sends (pick 6).
+  await pressOn("#c");
+  await attachFiles(on.page, [
+    {
+      name: "ref.png",
+      mimeType: "image/png",
+      buffer: pngOf(80, 48, [90, 140, 200]),
+    },
+  ]);
+  const alone = await composerRead(on.page);
+  await capture(on.page, "p6-alone-light-desk", on.page.locator(COMPOSE));
+  await submit("");
+  const pictureOnly = Object.values(await pinsNow()).find(
+    (pin) => (pin.anchor as { selector?: string }).selector === "#c"
+  ) as
+    | {
+        thread: {
+          attachments?: { kind: string; name: string; ref: string }[];
+          text: string;
+        }[];
+      }
+    | undefined;
+  on.kit.check(
+    "pick 6, a picture with no words: its send glyph is on with no words, and Comment keeps an entry with no words and the picture by reference",
+    alone.send &&
+      pictureOnly?.thread[0]?.text === "" &&
+      pictureOnly.thread[0].attachments?.length === 1 &&
+      pictureOnly.thread[0].attachments[0].kind === "image" &&
+      FILE_REF_PATH.test(pictureOnly.thread[0].attachments[0].ref),
+    JSON.stringify({ send: alone.send, entry: pictureOnly?.thread[0] })
+  );
+
+  // The pill's tail turns at the page's edges (pick 3, the marker).
+  await pressOn("#edge", 0.97, 0.5);
+  await submit("This button, here at the edge.");
+  await pressOn("#top", 0.3, 0.5);
+  await submit("The strip at the very top.");
+  await pressOn("#drop", 0.5, 0.5);
+  await submit("This block can go.");
+  const tails = await frame.evaluate(() =>
+    Object.fromEntries(
+      [...document.querySelectorAll("svg[data-cawco-pins] g[data-pin-id]")].map(
+        (g) => [g.getAttribute("data-pin"), g.getAttribute("data-tail")]
+      )
+    )
+  );
+  const [onA, onEdge, onTop] = [
+    await numberOn("#a"),
+    await numberOn("#edge"),
+    await numberOn("#top"),
+  ];
+  const { edgeFace, pageWidth } = await frame.evaluate((n) => {
+    const r = document
+      .querySelector(`svg[data-cawco-pins] g[data-pin="${n}"] [data-face]`)
+      ?.getBoundingClientRect();
+    return {
+      edgeFace: r ? { x: r.x, width: r.width } : null,
+      pageWidth: document.documentElement.clientWidth,
+    };
+  }, onEdge);
+  on.kit.check(
+    "pick 3, the tail-corner pill: up-right of its point by its bottom-start tail; at the page's right edge it turns up-left (bottom-end), never crossing the edge; at the page's very top it stands below (top-start)",
+    tails[String(onA)] === "bottom-start" &&
+      tails[String(onEdge)] === "bottom-end" &&
+      (tails[String(onTop)] ?? "").startsWith("top") &&
+      !!edgeFace &&
+      edgeFace.x + edgeFace.width <= pageWidth + 1,
+    JSON.stringify({ tails, onA, onEdge, onTop, edgeFace, pageWidth })
+  );
+  await capture(on.page, "p2-tail-panel-light-desk", on.page.locator(PANE));
+};
+
+/** Send from the rail carries the attachments by reference; an answer, a reply and a dropped element after it. */
+const railSendChecks = async (on: On, rig: RailRig, artifactId: string) => {
+  const { frame, numberOn, pinsNow, pressOn, submit } = rig;
+  // Send, with the attachments by reference.
+  const before = heard.length;
+  const rail = await rowsOf(on);
+  await capture(on.page, "p3-send-unsent-light-desk", on.page.locator(PANE));
+  await rail.locator('[data-slot="rail-send"]').click();
+  const message = await until(
+    "the rail page's delivery",
+    () => heard.slice(before).find((said) => NOTICE.test(said.last)),
+    Boolean,
+    DELIVERY_MS
+  ).catch(() => undefined);
+  const words = message?.last ?? "";
+  const images = message?.body.match(IMAGE_BLOCK)?.length ?? 0;
+  const onC = await numberOn("#c");
+  const cSection = words.slice(
+    words.indexOf(`## ${onC}. comment`),
+    words.indexOf("- Pin:", words.indexOf(`## ${onC}. comment`))
+  );
+  on.kit.check(
+    'pick 6\'s delivery: the picture alone goes as an image block with its line ("I attached: ref.png (picture N of this message…") and no "I wrote"; the file goes by its Attached file line; every picture rides the message',
+    cSection.includes("- I attached: ref.png (picture ") &&
+      !cSection.includes("I wrote") &&
+      words.includes("- I attached: spec.csv (") &&
+      words.includes("Attached file:") &&
+      images >= 5,
+    `images ${images}; section ${JSON.stringify(cSection)}; ${words.slice(0, 500)}`
+  );
+  await settle(on.page, 600);
+  await capture(on.page, "p3-send-sent-light-desk", on.page.locator(PANE));
+
+  // The agent answers on the heading (unread); the person's own reply on the paragraph, sent; one more unsent.
+  const pinIdOn = async (selector: string) =>
+    String(
+      (
+        Object.values(await pinsNow()).find(
+          (pin) =>
+            (pin.anchor as { selector?: string } | undefined)?.selector ===
+            selector
+        ) as { id?: string } | undefined
+      )?.id ?? ""
+    );
+  await on.fleet.api(
+    `/api/instances/${on.session}/artifacts/comments/${await pinIdOn("#a")}/reply`,
+    { text: "Made it a step larger." }
+  );
+  const onB = await numberOn("#b");
+  const card = await openThread(on, frame, onB);
+  await card.getByRole("combobox").fill("And keep them in that order.");
+  await card.getByRole("button", { name: "Reply" }).click();
+  await settle(on.page, 400);
+  await card.getByRole("button", { name: "Close", exact: true }).click();
+  await (await rowsOf(on)).locator('[data-slot="rail-send"]').click();
+  await settle(on.page, 1500);
+  await pressOn("#a", 0.8, 0.5);
+  await submit("And its weight, too.");
+  // A revision drops the block: its comment's element is gone.
+  await on.call(UPDATE, { id: artifactId, html: RAIL_PAGE(false) });
+  const onDrop = Number(
+    (
+      Object.values(await pinsNow()).find(
+        (pin) => (pin.anchor as { selector?: string }).selector === "#drop"
+      ) as { number?: number } | undefined
+    )?.number ?? 0
+  );
+  await until(
+    "the dropped block's comment gone",
+    async () =>
+      Object.values(await pinsNow()).some(
+        (pin) => Number(pin.number) === onDrop && !!pin.movedAt
+      ),
+    Boolean,
+    10_000
+  ).catch(() => false);
   await interactTab(on).click();
   await pageInComment(frame, false);
-  if (!(low && corner && left)) {
-    on.kit.check(
-      "j: three pins made",
-      false,
-      JSON.stringify({ low, corner, left })
-    );
-    return;
-  }
-  await listLeg(on.kit, on.page, frame, "desk", { low, corner, left });
 
-  // The same on a phone, where the pane is the sheet over the conversation.
-  const phone = await on.kit.page("phone");
-  await open(
-    phone,
-    `${await on.fleet.dashboard()}/session/${on.session}`,
-    COMPOSER
-  );
-  /** The phone's page frame, once it shows the listed page. */
-  const listedOn = async (): Promise<Frame | null> => {
-    try {
-      const handle = await phone
-        .locator('iframe[title="Preview"]')
-        .first()
-        .elementHandle({ timeout: 1000 });
-      const inner = await handle?.contentFrame();
-      return (await inner?.evaluate(() => !!document.querySelector("#corner")))
-        ? (inner ?? null)
-        : null;
-    } catch {
-      return null;
-    }
-  };
-  const shown = await until(
-    "the listed page on the phone",
-    listedOn,
-    Boolean,
-    60_000
-  ).catch(() => null);
-  if (!shown) {
-    on.kit.check(
-      "j (phone): the listed page in the phone's pane",
-      false,
-      "not shown"
-    );
-    return;
-  }
-  await settle(phone, 600);
-  await listLeg(on.kit, phone, shown, "phone", { low, corner, left });
-  await phone.close();
+  return { onB, onC, onDrop };
 };
 
-/** (j) on one view: the panel open, pins opened from its rows, then J and K; each card and disc beside the panel. */
-const listLeg = async (
-  kit: Kit,
-  screen: Page,
-  frame: Frame,
-  view: "desk" | "phone",
-  pins: Record<"low" | "corner" | "left", { id: string; number: number }>
+/** The rail beside the page, its rows dressed part by part (The Row Dress Rule) and the thumb strip. */
+const hierarchyChecks = async (
+  on: On,
+  rig: RailRig,
+  { onB, onC, onDrop }: { onB: number; onC: number; onDrop: number }
 ) => {
-  // #low scrolled to where the panel will hang.
-  await frame.evaluate(() => {
-    const low = document.querySelector("#low");
-    if (low) {
-      scrollTo(0, low.getBoundingClientRect().top + scrollY - 40);
-    }
-  });
-  await settle(screen, 300);
-  const button = screen.locator(
-    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
-  );
-  if ((await button.getAttribute("aria-expanded")) !== "true") {
-    await button.click();
-  }
-  const list = screen.locator('[data-pin-list-pop] [data-slot="pin-list"]');
-  await list.waitFor({ timeout: 5000 }).catch(() => undefined);
-  const row = (number: number) =>
-    list.locator(`[data-slot="pin-row"][data-pin-row="${number}"]`);
-  // Beside, the card and the disc stand clear of the panel; stacked (a
-  // phone, a desk well under the beside threshold), the card is the foot
-  // sheet, the panel stands aside, and the disc stands clear of the card.
-  const clear = (seen: Awaited<ReturnType<typeof listedBoxes>>) =>
-    !!seen.card &&
-    !!seen.disc &&
-    (seen.list
-      ? view === "desk" &&
-        !meets(seen.card, seen.list) &&
-        !meets(seen.disc, seen.list)
-      : !meets(seen.disc, seen.card));
-  const opened = async (pin: { id: string; number: number }) => {
-    await settle(screen, 1200);
-    return listedBoxes(screen, frame, pin.id);
-  };
-  const cardClose = screen
-    .locator('[data-slot="pin-card"]')
-    .getByRole("button", { name: "Close", exact: true });
-  /** Stacked, the panel stands aside under the open card: its Close brings the panel back for the next row. */
-  const shutCard = async () => {
-    if (!(await list.isVisible())) {
-      await cardClose.click();
-      await settle(screen, 400);
-    }
-  };
-  await row(pins.low.number).click();
-  const fromRow = await opened(pins.low);
-  kit.check(
-    `j (${view}): a pin the page scrolled under the open Comments panel, opened from its row: its card and its disc stand clear of the panel`,
-    clear(fromRow),
-    JSON.stringify(fromRow)
-  );
-  await shutCard();
-  await row(pins.corner.number).click();
-  const atTop = await opened(pins.corner);
-  kit.check(
-    `j (${view}): a pin at the page's very top-right, under the panel, opened from its row: its card and its disc stand clear of the panel`,
-    clear(atTop),
-    JSON.stringify(atTop)
-  );
-  if (view === "phone") {
-    // A phone has no J and K.
-    await shutCard();
-    if ((await button.getAttribute("aria-expanded")) === "true") {
-      await button.click();
-    }
-    return;
-  }
-  // J and K, its card open: the next pin, then back. Beside, from the
-  // panel's rows; stacked, the panel aside, from the card.
-  const stepped: {
-    key: string;
-    seen: Awaited<ReturnType<typeof listedBoxes>>;
-  }[] = [];
-  for (const [key, pin] of [
-    ["j", pins.left],
-    ["k", pins.corner],
-  ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one key at a time, each read where it lands
-    if (await list.isVisible()) {
-      await row(
-        pin === pins.left ? pins.corner.number : pins.left.number
-      ).focus();
-    } else {
-      await cardClose.focus();
-    }
-    await screen.keyboard.press(key);
-    stepped.push({ key, seen: await opened(pin) });
-  }
-  kit.check(
-    `j (${view}): J and K with the panel open: each pin's card and disc stand clear of the panel`,
-    stepped.length === 2 && stepped.every((one) => clear(one.seen)),
-    JSON.stringify(stepped)
-  );
-  await screen.keyboard.press("Escape");
-  if ((await button.getAttribute("aria-expanded")) === "true") {
-    await button.click();
-  }
-};
-
-const PANEL_PAGE = `<!doctype html>
-<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-<style>body { margin: 0; padding: 24px; font: 16px/1.5 system-ui; }</style></head>
-<body><h1 id="a">A heading the comments stand on</h1><p id="b">A paragraph under it.</p></body></html>`;
-/** A comment of 48 words: the row cuts it at four lines. */
-const LONG_COMMENT =
-  "This heading reads too heavy for the page it opens, and the paragraph under it starts before the eye has settled, so the whole block feels crowded; give the heading more room above, set the paragraph a step lighter, and check that the spacing still holds at a phone's width.";
-/** A comment of six words: one line at the panel's floor. */
-const SHORT_COMMENT = "Make this heading a bit bigger";
-const PANE_SEL = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
-
-/** A colour drawn fully clear, as getComputedStyle writes it: `rgba(…, 0)` or `oklch(… / 0)`. */
-const CLEAR_COLOUR = /(,|\/)\s*0\)$/;
-
-/** Until the panel's own entrance has ended (it scales the panel): read at rest. Its infinite pulses are not waited on. */
-const still = (screen: Page) =>
-  screen
-    .waitForFunction(
-      () =>
-        !document
-          .querySelector("[data-pin-list-pop]")
-          ?.getAnimations({ subtree: true })
-          .some(
-            (a) =>
-              a.playState === "running" &&
-              a.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY &&
-              (a.effect?.getComputedTiming().progress ?? 1) < 1
-          ),
-      undefined,
-      { timeout: 2000 }
-    )
-    // A panel still moving after 2 s is read as it stands; the spill read says so.
+  const { pinsNow } = rig;
+  const onA = await rig.numberOn("#a");
+  // The rail, beside the page.
+  const railNow = await rowsOf(on);
+  await railNow
+    .locator(`[data-slot="pin-row"][data-pin-row="${onA}"]`)
+    .waitFor({ timeout: 10_000 })
     .catch(() => undefined);
-
-/** Every box in the panel that stands past its row or the panel side to side, and every text box whose words run past its edge. */
-const panelSpills = (screen: Page) =>
-  screen.evaluate(() => {
-    const pop = document.querySelector<HTMLElement>("[data-pin-list-pop]");
-    const popBox = pop?.getBoundingClientRect();
-    if (!(pop && popBox)) {
-      return [];
-    }
-    const within = (r: DOMRect, outer: DOMRect) =>
-      r.left >= outer.left - 0.5 && r.right <= outer.right + 0.5;
-    // A text box's words past its edge; a control's touch area reaching past its drawn box is the 44 Touch Rule, not a spill.
-    const spillsText = (el: HTMLElement) =>
-      [...el.childNodes].some(
-        (node) => node.nodeType === Node.TEXT_NODE && !!node.textContent?.trim()
-      ) &&
-      getComputedStyle(el).overflowX === "visible" &&
-      el.clientWidth > 0 &&
-      el.scrollWidth > el.clientWidth + 1;
-    return [...pop.querySelectorAll<HTMLElement>("*")]
-      .filter((el) => {
-        const r = el.getBoundingClientRect();
-        const row = el.closest("[data-pin-row]")?.getBoundingClientRect();
-        return (
-          r.width > 0 &&
-          (!within(r, popBox) || (row && !within(r, row)) || spillsText(el))
-        );
-      })
-      .map((el) => {
-        const r = el.getBoundingClientRect();
-        return `${el.localName}[${el.dataset.slot ?? ""}] ${Math.round(r.left)}–${Math.round(r.right)} in panel ${Math.round(popBox.left)}–${Math.round(popBox.right)}`;
-      });
-  });
-
-/** Each row of the panel: whether it is one button, its title's lines, cut and one-line width, its text column, its last line. */
-const panelRows = (screen: Page) =>
-  screen.evaluate(() => {
-    /** The title's lines, its clamp, whether it is cut, and its words laid on one line (a Range over its text; NaN once they wrap). */
-    const titleOf = (title: HTMLElement | null) => {
-      if (!title) {
-        return { lines: 0, clamp: null, cut: false, natural: Number.NaN };
-      }
-      const t = getComputedStyle(title);
-      const range = document.createRange();
-      range.selectNodeContents(title);
-      const rects = [...range.getClientRects()];
-      return {
-        lines: Math.round(title.clientHeight / Number.parseFloat(t.lineHeight)),
-        clamp: t.webkitLineClamp,
-        cut: title.scrollHeight > title.clientHeight + 1,
-        natural: rects.length === 1 ? (rects[0]?.width ?? 0) : Number.NaN,
+  await settle(on.page, 600);
+  const geometry = await on.page.evaluate(
+    ({ railSel, pane }) => {
+      const box = (el: Element | null) => {
+        const r = el?.getBoundingClientRect();
+        return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
       };
-    };
-    return [
-      ...document.querySelectorAll<HTMLElement>(
-        "[data-pin-list-pop] [data-pin-row]"
-      ),
-    ].map((row) => ({
-      n: Number(row.dataset.pinRow),
-      button: row.localName === "button",
-      inside: row.querySelectorAll("button").length,
-      h: Math.round(row.getBoundingClientRect().height * 10) / 10,
-      ...titleOf(row.querySelector<HTMLElement>('[data-slot="title"]')),
-      column:
-        row.querySelector('[data-slot="words"]')?.getBoundingClientRect()
-          .width ?? 0,
-      last: !!row.querySelector('[data-slot="last"]'),
-    }));
-  });
-
-/** The buttons in the panel and the open card, each by its variant as drawn: primary (the kit's fill), outline (a drawn edge on no fill) or ghost. */
-const panelButtons = (screen: Page) =>
-  screen.evaluate(() => {
-    const kind = (b: HTMLElement) => {
-      if (b.classList.contains("bg-action-solid")) {
-        return "primary";
-      }
-      const s = getComputedStyle(b);
-      const clear =
-        s.borderTopColor === "transparent" ||
-        s.borderTopColor.endsWith(", 0)") ||
-        s.borderTopColor.endsWith("/ 0)");
-      return Number.parseFloat(s.borderTopWidth) > 0 && !clear
-        ? "outline"
-        : "ghost";
-    };
-    const of = (selector: string) =>
-      [...document.querySelectorAll<HTMLElement>(`${selector} button`)]
-        .filter((b) => !b.hasAttribute("data-pin-row") && b.role !== "tab")
-        .map((b) => ({
-          name: (b.getAttribute("aria-label") ?? b.textContent ?? "").trim(),
-          kind: kind(b),
-        }));
-    return {
-      panel: of("[data-pin-list-pop]"),
-      card: of('[data-slot="pin-card"]'),
-    };
-  });
-
-/** The Comments panel and the open card as the engine lays them out: boxes, surface, tab, scroll and the width tokens. */
-const panelRead = async (screen: Page) => {
-  const laid = await screen.evaluate(() => {
-    const box = (el: Element | null | undefined) => {
-      const r = el?.getBoundingClientRect();
-      return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
-    };
-    const root = getComputedStyle(document.documentElement);
-    const px = (name: string) => Number.parseFloat(root.getPropertyValue(name));
-    const pop = document.querySelector<HTMLElement>("[data-pin-list-pop]");
-    const card = document.querySelector<HTMLElement>('[data-slot="pin-card"]');
-    const popStyle = pop ? getComputedStyle(pop) : null;
-    const scroller = pop?.querySelector<HTMLElement>('[data-slot="rows"]');
-    return {
-      tokens: {
-        min: px("--c-pin-list-min"),
-        max: px("--c-pin-list-max"),
-        share: px("--c-pin-list-share"),
-        card: px("--c-pin-card-min"),
-      },
-      room: box(document.querySelector('[data-slot="pin-room"]')),
-      pop: box(pop),
-      surface: popStyle
-        ? {
-            fill: popStyle.backgroundColor,
-            edge: `${popStyle.borderTopWidth} ${popStyle.borderTopColor}`,
-            shadow: popStyle.boxShadow,
-            padding: popStyle.paddingTop,
-          }
-        : null,
-      away: !pop,
-      tab:
-        pop
-          ?.querySelector('[role="tab"][aria-selected="true"]')
-          ?.textContent?.trim() ?? null,
-      scrollTop: scroller?.scrollTop ?? null,
-      scrolls: scroller ? scroller.scrollHeight > scroller.clientHeight : false,
-      card: card
-        ? {
-            box: box(card),
-            sheet: card.hasAttribute("data-sheet"),
-            gone: !!card.querySelector('[data-slot="gone"]'),
-          }
-        : null,
-    };
-  });
-  const buttons = await panelButtons(screen);
-  return {
-    ...laid,
-    card: laid.card ? { ...laid.card, buttons: buttons.card } : null,
-    panelButtons: buttons.panel,
+      const railEl = document.querySelector(railSel);
+      const well = document.querySelector(`${pane} [data-side-well]`);
+      return {
+        rail: box(railEl),
+        well: box(well),
+        inWell: !!railEl && !!well?.contains(railEl),
+      };
+    },
+    { railSel: RAIL, pane: PANE }
+  );
+  on.kit.check(
+    `the Comments rail stands beside the page: ${geometry.rail?.w}px wide (c-comments-w, 320), outside the well and its mode's seam, the page narrowed to meet it`,
+    Math.round(geometry.rail?.w ?? 0) === 320 &&
+      !geometry.inWell &&
+      !!geometry.well &&
+      !!geometry.rail &&
+      geometry.well.x + geometry.well.w <= geometry.rail.x + 1,
+    JSON.stringify(geometry)
+  );
+  const countOpen = await on.page
+    .locator(COMMENTS_TOGGLE)
+    .locator('[data-slot="count"]')
+    .count();
+  const ink = {
+    row: await inkOf(on.page, "--ink-row"),
+    strong: await inkOf(on.page, "--ink-strong"),
+    muted: await inkOf(on.page, "--ink-muted"),
+    subtle: await inkOf(on.page, "--ink-subtle"),
+    brand: await inkOf(on.page, "--brand-ink"),
   };
-};
-
-type PanelCheck = (what: string, ok: boolean, detail: unknown) => void;
-
-/** The panel at rest on Open: its width beside or stacked, its rows, its cut, nothing spilling, its surface and buttons. Answers whether it stacks. */
-const panelRestChecks = async (
-  screen: Page,
-  check: PanelCheck,
-  layout: "stacked" | "beside"
-) => {
-  await still(screen);
-  const rest = await panelRead(screen);
-  const rows = await panelRows(screen);
-  const spills = await panelSpills(screen);
-  const { min } = rest.tokens;
-  const p = rest.pop;
-  const r = rest.room;
-  // Stacked, the panel spans the well less its two gutters; beside, it hangs
-  // at the well's right and leaves the room beside it to the card.
-  const stands =
-    !!(p && r) &&
-    Math.abs(p.x + p.w - (r.x + r.w - 8)) <= 1 &&
-    (layout === "stacked" ? Math.abs(p.x - (r.x + 8)) <= 1 : p.x > r.x + 8 + 1);
-  check(
-    layout === "stacked"
-      ? "stacked: the panel spans the well less its two gutters"
-      : "beside: the panel hangs at the well's right, the room beside it left to the card",
-    stands,
-    { panel: p, well: r }
-  );
-  check(
-    "every row is one button holding none, a gone pin's too",
-    rows.length === 3 &&
-      rows.every((one) => one.button && one.inside === 0) &&
-      rows.some((one) => one.n === 3),
-    rows
-  );
-  const longRow = rows.find((one) => one.n === 1);
-  const shortRow = rows.find((one) => one.n === 2);
-  // The text column the panel's floor gives: this column less what the panel is past its floor.
-  const floorColumn =
-    shortRow && rest.pop ? shortRow.column - (rest.pop.w - min) : 0;
-  check(
-    `the 48-word comment wraps to at most four lines under line-clamp 4; the six-word one stands on one line here and fits the floor's ${Math.round(floorColumn * 10) / 10}px column, the thread's last line under it`,
-    !!longRow &&
-      longRow.clamp === "4" &&
-      longRow.lines <= 4 &&
-      !longRow.last &&
-      !!shortRow &&
-      shortRow.lines === 1 &&
-      shortRow.natural <= floorColumn &&
-      shortRow.last,
-    { long: longRow, short: shortRow, panel: rest.pop?.w, floorColumn }
-  );
-  check("no box spills its row or the panel", spills.length === 0, spills);
-  check(
-    "the panel is the kit's floating surface: a raised fill, a 1px edge, a shadow",
-    !!rest.surface &&
-      !CLEAR_COLOUR.test(rest.surface.fill) &&
-      rest.surface.edge.startsWith("1px") &&
-      rest.surface.shadow !== "none",
-    rest.surface
-  );
-  check(
-    "the panel holds no outline button",
-    rest.panelButtons.every((b) => b.kind !== "outline"),
-    rest.panelButtons
-  );
-};
-
-const closeCard = async (screen: Page, wait: number) => {
-  await screen
-    .locator('[data-slot="pin-card"]')
-    .getByRole("button", { name: "Close", exact: true })
-    .click();
-  await settle(screen, wait);
-};
-
-/** A gone pin's row opens its card: one primary, Reply; beside at the narrowed room's top-right, or stacked as the foot sheet. */
-const goneCardChecks = async (
-  screen: Page,
-  list: Locator,
-  stacked: boolean,
-  check: PanelCheck
-) => {
-  await list.locator('[data-pin-row="3"]').click();
-  await settle(screen, 800);
-  const gone = await panelRead(screen);
-  const primaries = gone.card?.buttons.filter((b) => b.kind === "primary");
-  check(
-    "the card holds one primary, Reply, and nothing outline",
-    primaries?.length === 1 &&
-      primaries[0]?.name === "Reply" &&
-      !!gone.card?.buttons.every((b) => b.kind !== "outline"),
-    gone.card?.buttons
-  );
-  // Reply with nothing written is disabled for real (shadcn's and the HIG's
-  // pattern), the kit's disabled opacity over its own fill; a word enables it.
-  const cardEl = screen.locator('[data-slot="pin-card"]');
-  const reply = cardEl.getByRole("button", { name: "Reply", exact: true });
-  const replyState = () =>
-    reply.evaluate((b) => ({
-      disabled: (b as HTMLButtonElement).disabled,
-      opacity: getComputedStyle(b).opacity,
-      fill: getComputedStyle(b).backgroundColor,
-    }));
-  const field = cardEl
-    .locator("textarea[data-field]")
-    .filter({ visible: true })
-    .first();
-  const empty = await replyState();
-  await field.fill("A word");
-  const filled = await replyState();
-  await field.fill("");
-  check(
-    "Reply is disabled while the field is empty (the kit's disabled opacity over its own fill), enabled at full opacity once a word is written",
-    empty.disabled &&
-      !filled.disabled &&
-      filled.opacity === "1" &&
-      empty.fill === filled.fill,
-    { empty, filled }
-  );
-  // The head's words wrap to two lines and are cut there, never cut on one.
-  const name = await cardEl.locator('[data-slot="name"]').evaluate((el) => ({
-    clamp: getComputedStyle(el).webkitLineClamp,
-    wrap: getComputedStyle(el).whiteSpace,
-    lines: Math.round(
-      el.clientHeight / Number.parseFloat(getComputedStyle(el).lineHeight)
+  const dresses = {
+    unread: await rowDress(on.page, onA),
+    you: await rowDress(on.page, onB),
+    alone: await rowDress(on.page, onC),
+    gone: await rowDress(on.page, onDrop),
+    unsent: await rowDress(
+      on.page,
+      Math.max(
+        ...Object.values(await pinsNow()).map((pin) => Number(pin.number))
+      )
     ),
-  }));
-  check(
-    "the card's head words wrap, cut at two lines",
-    name.clamp === "2" && name.wrap !== "nowrap" && name.lines <= 2,
-    name
+  };
+  const { unread, you, alone: aloneRow, gone, unsent } = dresses;
+  on.kit.check(
+    "hierarchy, line 1: the place is label 13px at 500 in ink-row (Element gone in ink-subtle), its age meta 12px at 400 in ink-muted, tabular",
+    unread.name?.size === "13px" &&
+      unread.name.weight === "500" &&
+      unread.name.color === ink.row &&
+      unread.name.text === "A heading the comments stand on" &&
+      gone.name?.text === "Element gone" &&
+      gone.name.color === ink.subtle &&
+      unread.age?.size === "12px" &&
+      unread.age.weight === "400" &&
+      unread.age.color === ink.muted &&
+      (unread.ageTabular ?? "").includes("tabular-nums"),
+    JSON.stringify({ ink, unread, gone })
   );
-  const c = gone.card?.box;
-  const p = gone.pop;
-  const r = gone.room;
-  if (stacked) {
-    check(
-      "stacked: the gone pin's card is the foot sheet, saying the loss, and the panel stands aside",
-      !!gone.card?.sheet && gone.card.gone && gone.away,
-      { card: gone.card, away: gone.away }
-    );
-  } else {
-    check(
-      "beside: the gone pin's card says the loss and stands at the narrowed room's top-right, clear of the panel",
-      !!(c && p && r) &&
-        !gone.card?.sheet &&
-        !!gone.card?.gone &&
-        !meets(c, p) &&
-        Math.abs(c.x + c.w - (p.x - 8)) <= 1.5 &&
-        Math.abs(c.y - (r.y + 8)) <= 1.5,
-      { card: c, panel: p, room: r }
-    );
-  }
-  await closeCard(screen, 400);
+  on.kit.check(
+    "hierarchy, line 2: the words are body 14px at 400 in ink-strong; a comment with no words says its attachment's name",
+    unread.words?.size === "14px" &&
+      unread.words.weight === "400" &&
+      unread.words.color === ink.strong &&
+      aloneRow.words?.text === "ref.png",
+    JSON.stringify({ unread: unread.words, alone: aloneRow.words })
+  );
+  on.kit.check(
+    'hierarchy, line 3: an unread answer is meta in ink-strong after the agent\'s ghost, a bare 12px glyph read out as "Agent:"; the person\'s sent reply in ink-muted after their glyph in brand-ink, read out as "You:"; Unsent in brand-ink; nothing at 500',
+    unread.back?.size === "12px" &&
+      unread.back.color === ink.strong &&
+      unread.speaker?.by === "agent" &&
+      unread.speaker.size === 12 &&
+      unread.speaker.hidden === "true" &&
+      unread.speaker.said === "Agent:" &&
+      you.back?.color === ink.muted &&
+      you.speaker?.by === "you" &&
+      you.speaker.color === ink.brand &&
+      you.speaker.said === "You:" &&
+      unsent.back?.text === "Unsent" &&
+      unsent.back.color === ink.brand &&
+      [unread, you, unsent].every(
+        (one) =>
+          one.words?.weight !== "500" &&
+          one.back?.weight !== "500" &&
+          one.age?.weight !== "500"
+      ),
+    JSON.stringify({
+      unread: unread.back,
+      speaker: unread.speaker,
+      you: you.back,
+      yourGlyph: you.speaker,
+      unsent: unsent.back,
+    })
+  );
+  on.kit.check(
+    `pick 7, the thumb strip: a comment carrying five shows four 20px thumbs, then "+1"; the picture alone, one`,
+    you.strip.length === 4 &&
+      you.strip.every((w) => w === 20) &&
+      you.more === "+1" &&
+      aloneRow.strip.length === 1 &&
+      aloneRow.more === null,
+    JSON.stringify({ strip: you.strip, more: you.more, alone: aloneRow.strip })
+  );
+  await capture(on.page, "decided-rail-light-desk", on.page.locator(PANE));
+
+  return { countOpen, well: geometry.well as Box4 };
 };
 
-/** Resolved, scrolled, a row's card: beside, clear of the panel; stacked, the foot sheet, and its Close brings the panel back on its tab at its scroll. */
-const resolvedCardChecks = async (
-  screen: Page,
-  list: Locator,
-  stacked: boolean,
-  check: PanelCheck
+/** Search, sort, a row's thread in the well, and the toggle's count. */
+const railUseChecks = async (
+  on: On,
+  { countOpen, well }: { countOpen: number; well: Box4 },
+  onB: number
 ) => {
-  await list.locator('[role="tab"]', { hasText: "Resolved" }).click();
-  await settle(screen, 400);
-  await list.locator('[data-slot="rows"]').evaluate((el) => {
-    el.scrollTop = 60;
-  });
-  await settle(screen, 200);
-  const fifth = list.locator('[data-pin-row="5"]');
-  await fifth.scrollIntoViewIfNeeded();
-  const before = await panelRead(screen);
-  await fifth.click();
-  await settle(screen, 800);
-  const opened = await panelRead(screen);
-  await closeCard(screen, 600);
-  const back = await panelRead(screen);
-  if (!stacked) {
-    check(
-      "beside: a resolved row's card stands clear of the panel",
-      !!(opened.card?.box && opened.pop) &&
-        !opened.card.sheet &&
-        !meets(opened.card.box, opened.pop),
-      { card: opened.card?.box, panel: opened.pop }
-    );
-    return;
-  }
-  check(
-    "stacked: a row's card is the foot sheet while the panel stands aside; its Close brings the panel back on the same tab at the same scroll",
-    !!opened.card?.sheet &&
-      opened.away &&
-      !back.away &&
-      back.tab === before.tab &&
-      back.tab?.startsWith("Resolved") === true &&
-      back.scrollTop === before.scrollTop,
-    {
-      before: {
-        tab: before.tab,
-        scrollTop: before.scrollTop,
-        scrolls: before.scrolls,
-      },
-      opened: { sheet: opened.card?.sheet, away: opened.away },
-      back: { away: back.away, tab: back.tab, scrollTop: back.scrollTop },
-    }
+  const railNow = on.page.locator(RAIL);
+  const pinsNow = async () => (await docOf(await pageFrame(on))).pins as Pins;
+  // Search on Find's engine: the matching words marked; none says so; Esc clears.
+  const search = railNow.locator('[data-slot="search"]');
+  await search.fill("heading");
+  await settle(on.page, 400);
+  const found = await railNow.locator('[data-slot="pin-row"]').count();
+  const marked = await railNow.locator('[data-slot="pin-row"] mark').count();
+  await search.fill("zzzqx");
+  await settle(on.page, 400);
+  const none = (
+    await railNow
+      .locator('[data-slot="pin-list-empty"]')
+      .textContent()
+      .catch(() => null)
+  )?.trim();
+  await search.press("Escape");
+  await settle(on.page, 400);
+  const all = await railNow.locator('[data-slot="pin-row"]').count();
+  on.kit.check(
+    'search: "heading" finds the heading\'s comments, their words marked; "zzzqx" says Nothing matches “zzzqx”; Esc clears it',
+    found >= 1 &&
+      found < all &&
+      marked >= 1 &&
+      none === "Nothing matches “zzzqx”" &&
+      (await search.inputValue()) === "",
+    JSON.stringify({ found, marked, none, all })
   );
+  // Sort: Top of page first, by the anchors' boxes.
+  await railNow.getByRole("button", { name: "Sort" }).click();
+  await on.page
+    .getByRole("menuitemradio", { name: "Top of page first" })
+    .click();
+  await settle(on.page, 300);
+  const order = await railNow
+    .locator('[data-slot="pin-row"]')
+    .evaluateAll((rows) =>
+      rows.map((row) => Number(row.getAttribute("data-pin-row")))
+    );
+  const ys = Object.fromEntries(
+    Object.values(await pinsNow()).map((pin) => [
+      Number(pin.number),
+      Number((pin.anchor as { box?: { y: number } }).box?.y ?? 0),
+    ])
+  );
+  on.kit.check(
+    "sort: Top of page first orders the rows by where they stand on the page",
+    order.length > 1 &&
+      order.every((n, i) => i === 0 || ys[order[i - 1]] <= ys[n]),
+    JSON.stringify({ order, ys })
+  );
+  await railNow.getByRole("button", { name: "Sort" }).click();
+  await on.page.getByRole("menuitemradio", { name: "Newest first" }).click();
+
+  // A row opens its thread beside its pill, in the well, never under the rail.
+  await railNow.locator(`[data-slot="pin-row"][data-pin-row="${onB}"]`).click();
+  const thread = on.page.locator(
+    `[data-slot="pin-card"][data-pin-card="${onB}"]`
+  );
+  await thread.waitFor({ timeout: 5000 }).catch(() => undefined);
+  await settle(on.page, 600);
+  const threadBox = await thread.boundingBox().catch(() => null);
+  const gallery = await thread
+    .locator(
+      '[data-slot="chips"] img, [data-slot="chips"] [data-slot="doc-thumb"], [data-slot="chips"] a, [data-slot="chips"] button'
+    )
+    .count();
+  on.kit.check(
+    "a row opens its thread as the card beside its pill, inside the well, clear of the rail; the entry's pictures and file in its gallery",
+    !!threadBox &&
+      !!well &&
+      threadBox.x >= well.x &&
+      threadBox.x + threadBox.width <= well.x + well.w + 1 &&
+      gallery >= 5,
+    JSON.stringify({ thread: threadBox, well, gallery })
+  );
+  await capture(on.page, "p1-card-panel-light-desk", on.page.locator(PANE));
+  await capture(on.page, "p1-card-thread-light-desk", thread);
+  await thread.getByRole("button", { name: "Close", exact: true }).click();
+
+  await shutList(on);
+  const countShut = await on.page
+    .locator(COMMENTS_TOGGLE)
+    .locator('[data-slot="count"]')
+    .count();
+  on.kit.check(
+    "the Comments toggle says its count only while the rail is shut",
+    countOpen === 0 && countShut === 1,
+    JSON.stringify({ countOpen, countShut })
+  );
+
+  // The same scenes at night, at the desk and on a phone.
 };
 
-/** One size: the panel opened and read on Open, a gone pin's card, a resolved pin's card from a scrolled Resolved. */
-/**
- * Pin 1's card, opened from its row: it stands beside the heading the pin
- * stands on where the well allows (its end side, its start side, below it),
- * never over it; as the foot sheet where the well stacks. Both rects on the
- * dashboard's screen, the heading's read in the page's own frame.
- */
-const pinnedCardChecks = async (
-  screen: Page,
-  frame: Frame,
-  list: Locator,
-  check: PanelCheck
-) => {
-  await list.locator('[data-pin-row="1"]').click();
-  await settle(screen, 800);
-  // Beside, the card stands once the page has said where its pin stands (`cawco:pin-at`).
-  await until(
-    "pin 1's card placed",
-    () =>
-      screen
-        .locator('[data-slot="pin-card"]')
-        .evaluate(
-          (el) => el.hasAttribute("data-sheet") || el.dataset.side !== "room"
-        ),
-    Boolean,
-    3000
-  ).catch(() => undefined);
-  const card = await screen.locator('[data-slot="pin-card"]').evaluate((el) => {
-    const r = el.getBoundingClientRect();
-    return {
-      rect: { x: r.x, y: r.y, w: r.width, h: r.height },
-      side: el.getAttribute("data-side") ?? "sheet",
-    };
-  });
-  const offset = await screen
-    .locator(FRAME)
+/** The rail page's frame on `screen`, once it has drawn its edge button; null until then. */
+const railFrameOn = async (screen: Page): Promise<Frame | null> => {
+  const handle = await screen
+    .locator('iframe[title="Preview"]')
     .first()
-    .evaluate((el) => {
-      const r = el.getBoundingClientRect();
-      return { x: r.x + el.clientLeft, y: r.y + el.clientTop };
-    });
-  const inPage = await frame.locator("#a").evaluate((el) => {
-    const r = el.getBoundingClientRect();
-    return { x: r.x, y: r.y, w: r.width, h: r.height };
-  });
-  const heading = { ...inPage, x: inPage.x + offset.x, y: inPage.y + offset.y };
-  check(
-    `pin 1's card stands clear of the heading it pins (side: ${card.side})`,
-    !meets(card.rect, heading),
-    { card: card.rect, side: card.side, heading }
-  );
-  await closeCard(screen, 400);
-};
-
-/**
- * A row under the pointer, then held down: press takes the step past hover
- * (`surface-pressed`), never the hover's own fill. A row under the
- * keyboard's focus: the house's one focus indicator (app.css), a 2px
- * `--focus-ring` outline inset on the row, no box-shadow ring, and no other
- * element drawing focus beside it.
- */
-const rowStateChecks = async (
-  on: On,
-  screen: Page,
-  list: Locator,
-  name: string
-) => {
-  const row = list.locator('[data-pin-row="2"]');
-  const fill = () => row.evaluate((el) => getComputedStyle(el).backgroundColor);
-  await row.hover();
-  await settle(screen, 300);
-  const hover = await fill();
-  await screen.mouse.down();
-  await settle(screen, 300);
-  const press = await fill();
-  // Let go away from the row, so the press never becomes a click.
-  await screen.mouse.move(0, 0);
-  await screen.mouse.up();
-  on.kit.check(
-    `k (${name}): a row held down takes a step past its hover`,
-    hover !== press,
-    JSON.stringify({ hover, press })
-  );
-  await list.locator('[role="tab"][aria-selected="true"]').focus();
-  await screen.keyboard.press("Tab");
-  await settle(screen, 300);
-  const ring = await screen.evaluate(() => {
-    const el = document.activeElement as HTMLElement | null;
-    const s = el ? getComputedStyle(el) : null;
-    return {
-      on: el?.dataset.slot ?? el?.localName ?? null,
-      outline: s
-        ? `${s.outlineWidth} ${s.outlineStyle} ${s.outlineColor}`
-        : null,
-      offset: s?.outlineOffset ?? null,
-      shadow: s?.boxShadow ?? null,
-      ring: getComputedStyle(document.documentElement)
-        .getPropertyValue("--focus-ring")
-        .trim(),
-      drawn: document.querySelectorAll(":focus-visible").length,
-    };
-  });
-  on.kit.check(
-    `k (${name}): a focused row draws the one focus indicator: a 2px outline inset on the row, no box-shadow ring, nothing else focused`,
-    ring.on === "pin-row" &&
-      ring.outline?.startsWith("2px solid") === true &&
-      ring.offset === "-2px" &&
-      (ring.shadow === "none" || ring.shadow === "") &&
-      ring.drawn === 1,
-    JSON.stringify(ring)
-  );
-};
-
-const panelLeg = async (
-  on: On,
-  screen: Page,
-  frame: Frame,
-  name: string,
-  layout: "stacked" | "beside"
-) => {
-  const check: PanelCheck = (what, ok, detail) =>
-    on.kit.check(`k (${name}): ${what}`, ok, JSON.stringify(detail));
-  const comments = screen.locator(`${PANE_SEL} button[data-slot="comments"]`);
-  if ((await comments.getAttribute("aria-expanded")) !== "true") {
-    await comments.click();
-  }
-  const list = screen.locator('[data-pin-list-pop] [data-slot="pin-list"]');
-  await list.waitFor({ timeout: 5000 }).catch(() => undefined);
-  await list.locator('[role="tab"]', { hasText: "Open" }).click();
-  // The pane holds the hub's copy of the pins, a beat after the page wrote them.
-  await list
-    .locator('[data-pin-row="3"]')
-    .waitFor({ timeout: 15_000 })
-    .catch(() => undefined);
-  await settle(screen, 600);
-  await panelRestChecks(screen, check, layout);
-  const stacked = layout === "stacked";
-  if (name === "1440 default split") {
-    await rowStateChecks(on, screen, list, `${name}, light`);
-  }
-  await pinnedCardChecks(screen, frame, list, check);
-  await goneCardChecks(screen, list, stacked, check);
-  await resolvedCardChecks(screen, list, stacked, check);
-  if ((await comments.getAttribute("aria-expanded")) === "true") {
-    await comments.click();
-  }
-};
-
-/** The page in a device's pane once it shows the panel page; null while it does not. */
-const panelFrameOn = async (screen: Page): Promise<Frame | null> => {
-  try {
-    const handle = await screen
-      .locator('iframe[title="Preview"]')
-      .first()
-      .elementHandle({ timeout: 1000 });
-    const inner = await handle?.contentFrame();
-    return (await inner?.evaluate(() => !!document.querySelector("#b")))
-      ? (inner ?? null)
-      : null;
-  } catch {
+    .elementHandle({ timeout: 1000 })
+    .catch(() => null);
+  const inner = await handle?.contentFrame();
+  if (!inner) {
     return null;
   }
+  const edges = await inner
+    .locator("#edge")
+    .count()
+    .catch(() => 0);
+  return edges === 1 ? inner : null;
 };
 
-/** The pins as the overlay writes them, in the page's own doc. */
-const writePanelPins = (frame: Frame) =>
-  frame.evaluate(
-    ({ long, short }) => {
-      const { doc } = (
-        window as unknown as {
-          cawcoArtifact: {
-            doc: {
-              getMap: (n: string) => { set: (k: string, v: object) => void };
-              transact: (f: () => void) => void;
-            };
-          };
-        }
-      ).cawcoArtifact;
-      const now = new Date().toISOString();
-      const pin = (
-        number: number,
-        selector: string,
-        thread: [string, string][],
-        resolved = false
-      ) => ({
-        // A pin's id as the overlay makes one (wire.ts `PIN_ID`, 36 of hex and dashes).
-        id: `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`,
-        number,
-        kind: "comment",
-        // The words it stood on at pin time: a gone pin's head names them.
-        anchor: {
-          selector,
-          text:
-            selector === "#nowhere-on-this-page"
-              ? "A card the page dropped"
-              : "",
-        },
-        at: now,
-        by: "person",
-        elements: [],
-        point: { x: 0.5, y: 0.5 },
-        ...(resolved ? { resolvedAt: now } : {}),
-        thread: thread.map(([by, text], i) => ({
-          id: `panel-entry-${number}-${i}`,
-          by,
-          text,
-          at: now,
-        })),
-      });
-      doc.transact(() => {
-        const pins = doc.getMap("pins");
-        pins.set(
-          "00000000-0000-4000-8000-000000000001",
-          pin(1, "#a", [["person", long]])
-        );
-        pins.set(
-          "00000000-0000-4000-8000-000000000002",
-          pin(2, "#b", [
-            ["person", short],
-            ["person", "And keep its weight as it is."],
-          ])
-        );
-        pins.set(
-          "00000000-0000-4000-8000-000000000003",
-          pin(3, "#nowhere-on-this-page", [["person", "On a card it dropped"]])
-        );
-        for (let n = 4; n <= 9; n += 1) {
-          pins.set(
-            `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
-            pin(n, "#b", [["person", long]], true)
-          );
-        }
-      });
-    },
-    { long: LONG_COMMENT, short: SHORT_COMMENT }
-  );
-
 /**
- * The Comments panel (owner, 2026-10-20: "what is this "place again"
- * pattern … ur also misuisng primary/seconday buttons and why i can't click
- * a comment to view the thread? … such a small panel that most coments are
- * trimmed"), at 1440 in the default split, 1440 expanded, 820 by touch and
- * 390: the panel is its share of the well between its floor and ceiling, or
- * stacked the well less two gutters; every row, a gone pin's too, is one
- * button holding none and opens its card; a 48-word comment is cut at four
- * lines and a six-word one stands on one; nothing spills its row or the
- * panel. Beside, the card and the panel don't meet, a gone pin's card at the
- * narrowed room's top-right; stacked, the card is the foot sheet, the panel
- * stands aside, and the card's Close brings it back on its tab at its
- * scroll. The card holds one primary, Reply; nothing in either is outline.
+ * The reviewer's captures at night on the desk, and by day and night on a
+ * 390 phone, from the artifact's own tab; and on the phone, the rail as the
+ * well's foot sheet, a row's thread rising as the foot sheet in its place
+ * with the pill clear of it.
  */
-const panelChecks = async (on: On) => {
-  const made = await on.call(CREATE, {
-    kind: "page",
-    does: "judge",
-    ask: "Judge this page: pin anything that reads wrong",
-    name: "panel",
-    html: PANEL_PAGE,
-  });
-  if (!made.match(ANSWERED_ID)) {
-    on.kit.check("k: the page is made", false, made.slice(0, 300));
-    return;
-  }
-  const frame = (await until(
-    "the panel page in the pane",
-    async () => {
-      const one = await pageFrame(on);
-      const ready = await one
-        .evaluate(
-          () =>
-            !!document.querySelector("#b") &&
-            !!(window as unknown as { cawcoArtifact?: { doc?: unknown } })
-              .cawcoArtifact?.doc
-        )
-        .catch(() => false);
-      return ready ? one : null;
-    },
-    Boolean,
-    60_000
-  )) as Frame;
-  // The pins as the overlay writes them (the agent's entries are
-  // comment_reply's, never the page's): 1 the long comment, 2 the short one
-  // and a second word of the person's, 3 on an element the page doesn't have
-  // (the overlay moves it aside), 4 to 9 long and resolved, so Resolved scrolls.
-  await writePanelPins(frame);
-  await until(
-    "pin 3 moved aside by the overlay",
-    async () =>
-      (await docOf(frame)).pins["00000000-0000-4000-8000-000000000003"] as {
-        movedAt?: string;
-      },
-    (pin) => !!pin?.movedAt,
-    10_000
-  ).catch(() => undefined);
-
-  await settle(on.page, 600);
-  // The default split: an earlier leg may have left the pane expanded, its head's Expand become the way back (Esc).
-  const collapse = on.page
-    .locator(PANE_SEL)
-    .locator('button[aria-keyshortcuts="Escape"][aria-label^="Back to"]');
-  if ((await collapse.count()) === 1) {
-    await collapse.click();
-    await settle(on.page, 800);
-  }
-  // The default split's well is under beside's room: the card rises as the foot sheet.
-  await panelLeg(on, on.page, frame, "1440 default split", "stacked");
-  const expand = on.page
-    .locator(PANE_SEL)
-    .getByRole("button", { name: "Expand", exact: true });
-  if ((await expand.count()) === 1) {
-    await expand.click();
-    await settle(on.page, 800);
-    await panelLeg(on, on.page, frame, "1440 expanded", "beside");
-    await on.page.keyboard.press("Escape");
-    await settle(on.page, 600);
-  } else {
-    on.kit.check(
-      "k (1440 expanded): the head's Expand",
-      false,
-      "no Expand in the pane's head"
+const railScenes = async (on: On, artifactId: string) => {
+  const { origin } = new URL(on.page.url());
+  for (const [view, theme] of [
+    ["desk", "dark"],
+    ["phone", "light"],
+    ["phone", "dark"],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one device and theme after another
+    const screen = await on.kit.page(view, { theme });
+    await open(screen, `${origin}/artifact/${artifactId}`, PANE).catch(
+      () => undefined
     );
-  }
-
-  const base = await on.fleet.dashboard();
-  // The same row states in the dark.
-  const dark = await on.kit.page("desk", { theme: "dark" });
-  await open(dark, `${base}/session/${on.session}`, COMPOSER);
-  if (
-    await until(
-      "the panel page in the dark",
-      () => panelFrameOn(dark),
+    const shown = await until(
+      `the rail page on the ${view} at ${theme}`,
+      () => railFrameOn(screen),
       Boolean,
-      60_000
-    ).catch(() => null)
-  ) {
-    await settle(dark, 600);
-    const toggle = dark.locator(`${PANE_SEL} button[data-slot="comments"]`);
+      30_000
+    ).catch(() => null);
+    if (!shown) {
+      on.kit.check(`the rail page on the ${view} at ${theme}`, false, "none");
+      continue;
+    }
+    await settle(screen, 800);
+    const toggle = screen.locator(COMMENTS_TOGGLE);
     if ((await toggle.getAttribute("aria-expanded")) !== "true") {
       await toggle.click();
     }
-    const darkList = dark.locator('[data-pin-list-pop] [data-slot="pin-list"]');
-    await darkList
-      .locator('[data-pin-row="2"]')
-      .waitFor({ timeout: 15_000 })
-      .catch(() => undefined);
-    await rowStateChecks(on, dark, darkList, "1440 default split, dark");
-  } else {
-    on.kit.check(
-      "k (1440 dark): the panel page in the pane",
-      false,
-      "not shown"
-    );
-  }
-  await dark.close();
-  for (const [view, name, size] of [
-    ["tablet", "820 touch", { width: 820, height: 1180 }],
-    ["phone", "390", null],
-  ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one device after another, each read where it lands
-    const screen = await on.kit.page(view);
-    if (size) {
-      await screen.setViewportSize(size);
-    }
-    await open(screen, `${base}/session/${on.session}`, COMPOSER);
-    const shown = await until(
-      `the panel page at ${name}`,
-      () => panelFrameOn(screen),
-      Boolean,
-      60_000
-    ).catch(() => null);
-    if (shown) {
-      await settle(screen, 600);
-      await panelLeg(on, screen, shown, name, "stacked");
-    } else {
-      on.kit.check(
-        `k (${name}): the panel page in the pane`,
-        false,
-        "not shown"
+    const rail = screen.locator(RAIL);
+    await rail.waitFor({ timeout: 5000 }).catch(() => undefined);
+    await settle(screen, 600);
+    const tag = `${theme}-${view === "phone" ? "390" : "desk"}`;
+    await capture(screen, `decided-rail-${tag}`, screen.locator(PANE));
+    if (view === "phone") {
+      const read = await screen.evaluate(
+        ({ railSel, pane }) => {
+          const box = (el: Element | null) => {
+            const r = el?.getBoundingClientRect();
+            return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+          };
+          return {
+            rail: box(document.querySelector(railSel)),
+            well: box(document.querySelector(`${pane} [data-side-well]`)),
+          };
+        },
+        { railSel: RAIL, pane: PANE }
       );
+      on.kit.check(
+        `phone (${theme}): the rail is the well's foot sheet, edge to edge, at most 60% of the well`,
+        !!read.rail &&
+          !!read.well &&
+          Math.abs(read.rail.y + read.rail.h - (read.well.y + read.well.h)) <=
+            2 &&
+          read.rail.h <= read.well.h * 0.6 + 1 &&
+          Math.abs(read.rail.w - read.well.w) <= 2,
+        JSON.stringify(read)
+      );
+      const row = rail.locator('[data-slot="pin-row"]').first();
+      const number = Number(await row.getAttribute("data-pin-row"));
+      await row.click();
+      const card = screen.locator(
+        `[data-slot="pin-card"][data-pin-card="${number}"]`
+      );
+      await card.waitFor({ timeout: 5000 }).catch(() => undefined);
+      await settle(screen, 900);
+      const sheet = await screen.evaluate(
+        ({ railSel, n }) => {
+          const el = document.querySelector(
+            `[data-slot="pin-card"][data-pin-card="${n}"]`
+          );
+          const r = el?.getBoundingClientRect();
+          return {
+            sheet: el?.hasAttribute("data-sheet") ?? false,
+            card: r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null,
+            rail: document.querySelectorAll(railSel).length,
+          };
+        },
+        { railSel: RAIL, n: number }
+      );
+      const pill = await shown
+        .locator(`svg[data-cawco-pins] g[data-pin="${number}"] [data-face]`)
+        .boundingBox()
+        .catch(() => null);
+      on.kit.check(
+        `phone (${theme}): a row's thread rises as the well's foot sheet, the rail standing aside, and its pill stands clear of it`,
+        sheet.sheet &&
+          sheet.rail === 0 &&
+          !!sheet.card &&
+          (!pill || pill.y + pill.height <= sheet.card.y + 1),
+        JSON.stringify({ ...sheet, pill })
+      );
+      await capture(screen, `p1-card-thread-${tag}`, screen.locator(PANE));
+      await screen.keyboard.press("Escape");
+    } else {
+      await rail.locator('[data-slot="pin-row"]').first().click();
+      await settle(screen, 700);
+      await capture(screen, `p1-card-panel-${tag}`, screen.locator(PANE));
+      await screen.keyboard.press("Escape");
     }
     await screen.close();
   }
-};
-
-/** Pin `number`'s card in the pane, and whether its field has the keyboard. */
-const focusedCard = async (on: On, number: number | undefined) => {
-  if (number === undefined) {
-    return { shown: false, focused: false };
-  }
-  const shown = await until(
-    `pin ${number}'s card`,
-    () => on.page.locator(`[data-pin-card="${number}"]`).count(),
-    (count) => count === 1,
-    5000
-  )
-    .then(() => true)
-    .catch(() => false);
-  const focused = await until(
-    `pin ${number}'s field focused`,
-    () =>
-      on.page.evaluate(
-        (n) =>
-          !!document.activeElement &&
-          document.activeElement.localName === "textarea" &&
-          !!document.activeElement.closest(`[data-pin-card="${n}"]`),
-        number
-      ),
-    Boolean,
-    3000
-  ).catch(() => false);
-  return { shown, focused };
 };
 
 /** 6. Select's chip, popover and selection.md are gone from the code. */
@@ -5595,6 +5722,21 @@ const cutoverCheck = async (kit: Kit) => {
     "6: no selection.md, SelectionChip or SelectionPopover is left in apps/dashboard/src or packages",
     found === "",
     found.split("\n").slice(0, 4).join(" | ") || "none"
+  );
+  // The commenting redesign's cutover: the old panel, disc, card foot and
+  // the write-before-words path are gone with what used them.
+  const gone = (
+    await Bun.$`git grep -n -e PinList.svelte -e PinDisc -e withdrawPin -e pinReady -e cawco:withdraw -e pin-drafts -e data-pin-list-pop -e c-pin-card-min -- apps/dashboard/src packages`
+      .cwd(ROOT)
+      .nothrow()
+      .quiet()
+  ).stdout
+    .toString()
+    .trim();
+  kit.check(
+    "6: no PinList, PinDisc, withdrawPin, pinReady, cawco:withdraw, pin drafts, Comments popover or c-pin-card-min is left in apps/dashboard/src or packages",
+    gone === "",
+    gone.split("\n").slice(0, 4).join(" | ") || "none"
   );
 };
 

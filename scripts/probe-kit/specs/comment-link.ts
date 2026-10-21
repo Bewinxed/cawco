@@ -32,12 +32,11 @@
  *    no Try again pressed.
  *    3 and 4 run at the desk on Chromium, WebKit and Firefox, and on the
  *    phone on Chromium.
- * 5. A pin the person taps with Comment while the page's link is down (cut
- *    and refused for 3 s, under the overlay's 5 s before it refuses the
- *    pen) is made in the page's doc alone; once the link is back its card
- *    opens within the backoff (the pane draws the card from its own doc,
- *    which hears of the pin through the hub), the person's words in it
- *    reach the hub, and the session hears them once.
+ * 5. A comment the person writes with Comment while the page's link is down
+ *    (cut and refused for 3 s, under the overlay's 5 s before it refuses
+ *    the pen): its composer opens and Comment writes it, words and all, in
+ *    the page's doc alone; once the link is back its words reach the hub
+ *    within the backoff, and on Send the session hears them once.
  * 6. A tab really hidden behind another (hidden-tab.ts: Chromium headed on
  *    a headless Wayland session, through the same proxy), under Chromium's
  *    intensive wake-up throttling (developer.chrome.com/blog/
@@ -53,13 +52,13 @@
  *    link busy and what it last heard fresh.
  * 7. A link gone silent (owner, 2026-10-21: DevTools offline kept the
  *    socket open and the control said nothing for some 50 s): the proxy
- *    stops forwarding both links and closes neither. A pin tapped and
- *    written in the silence is kept in the page; the Comments control says
+ *    stops forwarding both links and closes neither. A comment written in
+ *    the silence is kept in the page; the Comments control says
  *    the comments aren't reaching the agent within 30 s, from the hub's
  *    missed beats (core doc-link.ts `watchSilence`), not after
  *    y-websocket's 30 s check and the 15 s grace; forwarding again, it
- *    clears within 30 s, the words reach the hub, and the session hears
- *    them once.
+ *    clears within 30 s, the words reach the hub, and on Send the session
+ *    hears them once.
  *
  *   bun scripts/probe-kit/run.ts comment-link
  */
@@ -80,7 +79,7 @@ import { freePort, publishBuild, serveUnder } from "../socket-served";
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;
-const LIST = '[data-pin-list-pop] [data-slot="pin-list"]';
+const LIST = '[data-slot="comment-rail"]';
 const READ = `${LIST} [data-slot="pin-list-read"]`;
 const NAME = "comment-link";
 const PAGE =
@@ -112,8 +111,8 @@ const DOWN = `${PANE} button[data-slot="comments"][data-link-down]`;
 /** The comments notice (core injected.ts `artifactCommentsNotice`). */
 const NOTICE =
   /\[CawCo\] The person commented on the page "comment-link" \(artifact [0-9a-f-]{36}\)\./;
-/** The hub's quiet period, how far past it a delivery may reach the model, and how long after it no second one may come. */
-const DELIVERY_MS = 10_000 + 6000;
+/** How long a Send's delivery may take to reach the model, and how long after it no second one may come. */
+const DELIVERY_MS = 12_000;
 const STILL_MS = 12_000;
 const PANE_PATH = /^\/ws\/artifact\//;
 const OVERLAY_PATH = /\/__cawco\/artifact\/[0-9a-f-]{36}$/;
@@ -535,20 +534,23 @@ const commenting = (frame: Frame): Promise<boolean> =>
   );
 
 /**
- * The person taps `#here` with Comment on, `across` its width (each leg its
- * own spot, off the pins before it), as comment-delivery's pins are made: a
- * pin in the page's own doc.
+ * The person presses `#here` with Comment on, `across` its width (each leg
+ * its own spot, off the comments before it), and writes `words` in the
+ * composer that opens there, then Enter: a comment in the page's own doc,
+ * as comment-delivery's are made. When the composer opened and when the
+ * words were kept in the page.
  */
-const tapPin = async (
+const writeComment = async (
   page: Page,
   frame: Frame,
-  across = 0.3
-): Promise<void> => {
+  across = 0.3,
+  words = PIN_WORDS
+): Promise<{ composerAt: number; keptAt: number }> => {
   const comments = page.locator(`${PANE} button[data-slot="comments"]`);
   if ((await comments.getAttribute("aria-expanded")) === "true") {
     await comments.click();
     await page
-      .locator("[data-pin-list-pop]")
+      .locator(LIST)
       .waitFor({ state: "detached", timeout: 3000 })
       .catch(() => undefined);
   }
@@ -564,35 +566,24 @@ const tapPin = async (
   );
   await settle(page, 300);
   const b = await screenBox(page, frame, "#here");
-  await page.mouse.click(b.x + b.w * across, b.y + b.h / 2);
-};
-
-/**
- * The tapped pin's card, once it opens, and `words` written in it; when
- * the card opened and when the words were kept in the page. The pane draws
- * the card from its own doc (PreviewPane `cardPin`), or from the page's pin
- * while its own doesn't hold it yet.
- */
-const writeWords = async (
-  page: Page,
-  frame: Frame,
-  words = PIN_WORDS
-): Promise<{ cardAt: number; keptAt: number }> => {
-  const card = page.locator('[data-slot="pin-card"]').last();
-  await card.waitFor({ timeout: 15_000 });
-  const cardAt = Date.now();
-  await card.getByRole("textbox").fill(words);
-  await card.getByRole("button", { name: "Reply" }).click();
+  const x = b.x + b.w * across;
+  const y = b.y + b.h / 2;
+  await page.mouse.move(x, y, { steps: 4 });
+  await page.mouse.click(x, y);
+  const composer = page.locator('[data-slot="pin-composer"]');
+  await composer.waitFor({ timeout: 15_000 });
+  const composerAt = Date.now();
+  await composer.getByRole("combobox").fill(words);
+  await page.keyboard.press("Enter");
   await until(
-    "the pin's words in the page's doc",
+    "the comment's words in the page's doc",
     () => pagePins(frame),
     (pins) => withWords(Object.values(pins), words).length === 1,
     5000
   );
   const keptAt = Date.now();
   await page.keyboard.press("Escape");
-  await page.keyboard.press("Escape");
-  return { cardAt, keptAt };
+  return { composerAt, keptAt };
 };
 
 /** 5. A pin placed with Comment while the overlay's link is down: kept, on the hub once back, heard once. */
@@ -611,7 +602,7 @@ const pinnedWhileDown = async (at: At, proxy: Proxy, page: Page) => {
   const pinsBefore = Object.keys(await pagePins(frame)).length;
   const hubBefore = (await hubPins(at)).length;
   let failed = "";
-  await tapPin(page, frame).catch((error: unknown) => {
+  await writeComment(page, frame).catch((error: unknown) => {
     failed = `the tap: ${error instanceof Error ? error.message : String(error)}`;
   });
   const inPage = Object.keys(await pagePins(frame)).length - pinsBefore;
@@ -620,27 +611,26 @@ const pinnedWhileDown = async (at: At, proxy: Proxy, page: Page) => {
   await page.waitForTimeout(Math.max(0, cutAt + DOWN_MS - Date.now()));
   const releasedAt = Date.now();
   proxy.refuse(null);
-  const written = await writeWords(page, frame).catch((error: unknown) => {
-    failed ||= `the card: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`;
-    return null;
-  });
   const onHub = await until(
-    "the pin's words on the hub",
+    "the comment's words on the hub",
     async () => withWords(await hubPins(at)),
     (pins) => pins.length > 0,
     15_000
   ).catch(async () => withWords(await hubPins(at)));
+  const reachedIn = Date.now() - releasedAt;
   at.kit.check(
-    "5: a pin tapped with Comment while the page's link is down is made in the page alone; once the link is back its card opens, and its words reach the hub",
+    "5: a comment written with Comment while the page's link is down is made, words and all, in the page alone; once the link is back its words reach the hub within the backoff",
     down !== "synced" &&
       linkWhileDown !== "synced" &&
       inPage === 1 &&
       onHubWhileDown === 0 &&
-      written !== null &&
-      written.cardAt - releasedAt <= REOPEN_MS &&
+      !failed &&
+      reachedIn <= REOPEN_MS + 1000 &&
       onHub.length === 1,
-    `link while down ${linkWhileDown}; pins made in the page ${inPage}, on the hub ${onHubWhileDown}; card ${written ? `${written.cardAt - releasedAt} ms after the link was let through` : `never (${failed.slice(0, 400)})`}; words on the hub ${onHub.length}`
+    `link while down ${linkWhileDown}; comments made in the page ${inPage}, on the hub ${onHubWhileDown}; on the hub ${reachedIn} ms after the link was let through; ${failed.slice(0, 400)}; words on the hub ${onHub.length}`
   );
+  // Nothing goes until the person's Send.
+  await page.locator(`${PANE} [data-slot="send"]`).click();
   await until(
     "the delivery",
     () => heard.slice(heardBefore).filter((one) => NOTICE.test(one.last)),
@@ -652,7 +642,7 @@ const pinnedWhileDown = async (at: At, proxy: Proxy, page: Page) => {
     .slice(heardBefore)
     .filter((one) => NOTICE.test(one.last) && !one.afterTool);
   at.kit.check(
-    "5: the session hears the pin once",
+    "5: on Send the session hears the comment once",
     deliveries.length === 1 && deliveries[0]?.last.includes(PIN_WORDS) === true,
     `${deliveries.length} deliveries; ${deliveries.map((one) => one.last.slice(0, 300)).join(" | ")}`
   );
@@ -682,15 +672,12 @@ const silentDrop = async (at: At, proxy: Proxy, page: Page) => {
     (path) => PANE_PATH.test(path) || OVERLAY_PATH.test(path)
   );
   let failed = "";
-  await tapPin(page, frame, 0.7).catch((error: unknown) => {
-    failed = `the tap: ${error instanceof Error ? error.message : String(error)}`;
-  });
-  const written = failed
-    ? null
-    : await writeWords(page, frame, SILENT_WORDS).catch((error: unknown) => {
-        failed = `the card: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`;
-        return null;
-      });
+  const written = await writeComment(page, frame, 0.7, SILENT_WORDS).catch(
+    (error: unknown) => {
+      failed = `the comment: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`;
+      return null;
+    }
+  );
   const writtenMs = written ? written.keptAt - t0 : null;
   const saidMs = await down
     .waitFor({
@@ -745,6 +732,8 @@ const silentDrop = async (at: At, proxy: Proxy, page: Page) => {
       onHub.length === 1,
     `cleared ${clearedMs ?? "never"} ms after forwarding again; overlay ${linkNow}; words on the hub ${onHub.length}`
   );
+  // Nothing goes until the person's Send.
+  await page.locator(`${PANE} [data-slot="send"]`).click();
   await until(
     "the delivery",
     () => heard.slice(heardBefore).filter((one) => NOTICE.test(one.last)),
@@ -756,7 +745,7 @@ const silentDrop = async (at: At, proxy: Proxy, page: Page) => {
     .slice(heardBefore)
     .filter((one) => NOTICE.test(one.last) && !one.afterTool);
   at.kit.check(
-    "7: the session hears the comment written in the silence once",
+    "7: on Send the session hears the comment written in the silence once",
     deliveries.length === 1 &&
       deliveries[0]?.last.includes(SILENT_WORDS) === true,
     `${deliveries.length} deliveries; ${deliveries.map((one) => one.last.slice(0, 300)).join(" | ")}`

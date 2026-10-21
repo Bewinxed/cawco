@@ -597,7 +597,7 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
     `top ${lowTop} → ${await sheetTop(page)}`
   );
 
-  // 3. Comment on: the overlay takes the tap; it pins a comment and opens its card.
+  // 3. Comment on: the overlay takes the tap; it opens a comment's composer at the well's foot, writing nothing.
   const comment = page.locator(`${SHEET} [role="tab"][aria-keyshortcuts="C"]`);
   const interact = page.locator(`${SHEET} [role="tab"][aria-keyshortcuts="V"]`);
   const tapBox = async (
@@ -611,19 +611,44 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
     const b = box ?? { x: 0, y: 0, width: 0, height: 0 };
     await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
   };
-  await tapBox(await comment.boundingBox());
-  await page.waitForTimeout(300);
-  const pressed = await comment.getAttribute("aria-selected");
+  /**
+   * A mode chosen as the head stands it: its segment, or, where a phone's
+   * head has no room for the three, its one button (`Mode: …`) and the
+   * mode from its menu.
+   */
+  const chooseMode = async (segment: typeof comment, name: string) => {
+    if ((await segment.count()) > 0) {
+      await tapBox(await segment.boundingBox());
+    } else {
+      await tapBox(
+        await page
+          .locator(`${SHEET} button[aria-label^="Mode:"]`)
+          .first()
+          .boundingBox()
+      );
+      await page.waitForTimeout(300);
+      await tapBox(
+        await page.getByRole("menuitemradio", { name }).first().boundingBox()
+      );
+    }
+    await page.waitForTimeout(300);
+  };
+  /** Whether `name` is the chosen mode, in whichever form the head stands it. */
+  const modeIs = async (segment: typeof comment, name: string) =>
+    (await segment.count()) > 0
+      ? (await segment.getAttribute("aria-selected")) === "true"
+      : (await page
+          .locator(`${SHEET} button[aria-label="Mode: ${name}"]`)
+          .count()) > 0;
+  await chooseMode(comment, "Comment");
+  const pressed = String(await modeIs(comment, "Comment"));
   const pinning = await pageFrame(page);
   await pinning.evaluate(() => window.scrollTo(0, 0));
   const held = Number(await textIn(pinning, "#count"));
   await tapIn(on, pinning, "#count");
   const card = await until(
-    "the new pin's card",
-    () =>
-      page
-        .locator('[data-slot="pin-card"]:is([data-slot="sheet"], [data-sheet])')
-        .count(),
+    "the comment's composer",
+    () => page.locator('[data-slot="pin-composer"][data-sheet]').count(),
     (count) => count > 0,
     5000
   ).catch(() => 0);
@@ -631,28 +656,23 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
   kit.check(
     "2: Comment answers a tap and is the chosen mode",
     pressed === "true",
-    `aria-selected ${pressed}`
+    `chosen ${pressed}`
   );
   kit.check(
-    "3: with Comment on, a tap on the counter adds nothing and opens the new pin's card at the well's foot",
+    "3: with Comment on, a tap on the counter adds nothing and opens a comment's composer at the well's foot",
     unchanged && card > 0,
     `counter unchanged ${unchanged}; cards ${card}`
   );
-  await tapBox(
-    await page
-      .locator('[data-slot="pin-card"] button[aria-label="Close"]')
-      .boundingBox()
-  );
-  await tapBox(await interact.boundingBox());
-  await page.waitForTimeout(300);
+  // The mode's switch closes the composer, nothing written.
+  await chooseMode(interact, "Interact");
   const off = Number(await textIn(pinning, "#count"));
   // Its pin stands on the counter's middle, where the comment was tapped, and a press on a pin opens its card: the tap lands beside it.
   const offHit = await tapIn(on, pinning, "#count", 0.15);
   kit.check(
     "3: Interact again, a tap on the counter adds one",
     Number(await textIn(pinning, "#count")) === off + 1 &&
-      (await interact.getAttribute("aria-selected")) === "true",
-    `Interact aria-selected ${await interact.getAttribute("aria-selected")}; count ${off} → ${await textIn(pinning, "#count")}; hit ${offHit}`
+      (await modeIs(interact, "Interact")),
+    `Interact chosen ${await modeIs(interact, "Interact")}; count ${off} → ${await textIn(pinning, "#count")}; hit ${offHit}`
   );
 
   // 2. The head: the name menu, Reload, Close.

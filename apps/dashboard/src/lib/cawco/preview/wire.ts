@@ -26,7 +26,17 @@ const PNG_MAX = 4_000_000;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const PIN_ID = /^[0-9a-f-]{36}$/;
 /** The keys a page hands the pane (overlay `PANE_KEYS`). */
-const PANE_KEYS = new Set(["v", "c", "d", "C", "j", "k", "Enter", "Escape"]);
+const PANE_KEYS = new Set([
+  "v",
+  "c",
+  "d",
+  "C",
+  "j",
+  "k",
+  "/",
+  "Enter",
+  "Escape",
+]);
 
 const text = (value: unknown, max: number): string | null =>
   typeof value === "string" ? value.slice(0, max) : null;
@@ -134,26 +144,76 @@ export function previewPinId(value: unknown): string | null {
   return typeof value === "string" && PIN_ID.test(value) ? value : null;
 }
 
-/** A pin standing on the page: its disc and the box of what it stands on, in the page's viewport, px. */
-export interface PreviewPinAt {
-  box: { h: number; w: number; x: number; y: number };
-  r: number;
+/** A box in the page's viewport, px. */
+export interface ViewBox {
+  h: number;
+  w: number;
   x: number;
   y: number;
 }
 
-/** Where a pin's disc stands in the page's viewport, and the box of what it stands on, px; null when it is not on the page. */
-export function previewPinAt(value: unknown): PreviewPinAt | null {
+/** A finite box, or null. */
+export function previewBox(value: unknown): ViewBox | null {
   const raw = record(value);
-  const box = record(raw?.box);
-  const read = [raw?.x, raw?.y, raw?.r, box?.x, box?.y, box?.w, box?.h].map(
-    finite
-  );
+  const read = [raw?.x, raw?.y, raw?.w, raw?.h].map(finite);
   if (read.some((n) => n === null)) {
     return null;
   }
-  const [x, y, r, bx, by, bw, bh] = read as number[];
-  return { x, y, r, box: { x: bx, y: by, w: bw, h: bh } };
+  const [x, y, w, h] = read as number[];
+  return { x, y, w, h };
+}
+
+/** A pin standing on the page: its pill and the box of what it stands on, in the page's viewport, px. */
+export interface PreviewPinAt {
+  box: ViewBox;
+  mark: ViewBox;
+}
+
+/** Where a pin's pill (or the comment being written) stands in the page's viewport, and the box of what it stands on, px; null when it is not on the page. */
+export function previewPinAt(value: unknown): PreviewPinAt | null {
+  const raw = record(value);
+  const mark = previewBox(raw?.mark);
+  const box = previewBox(raw?.box);
+  return mark && box ? { mark, box } : null;
+}
+
+/** The most of a press's chain the page may offer (overlay page.ts `CHAIN_MOST` and the page as a whole). */
+const CHAIN_MAX = 8;
+
+/** One target the composer's chip offers: what it stands on, as a pin would hold it (named by pin-name.ts). */
+export interface ComposeTarget {
+  anchor: Record<string, unknown> & { selector: string };
+  elements: unknown[];
+}
+
+/**
+ * `cawco:compose`: a press (or a radial's Comment) opened a comment's
+ * composer: what it may stand on, innermost first, out to the whole page,
+ * and which of it stands now; null when the message holds none.
+ */
+export function previewCompose(
+  message: Record<string, unknown>
+): { chain: ComposeTarget[]; chosen: number } | null {
+  const chain = Array.isArray(message.chain)
+    ? message.chain.slice(0, CHAIN_MAX).flatMap((one) => {
+        const target = record(one);
+        const anchor = record(target?.anchor);
+        return anchor &&
+          typeof anchor.selector === "string" &&
+          Array.isArray(target?.elements)
+          ? [
+              {
+                anchor: anchor as ComposeTarget["anchor"],
+                elements: (target.elements as unknown[]).slice(0, 4),
+              },
+            ]
+          : [];
+      })
+    : [];
+  const chosen = finite(message.chosen) ?? 0;
+  return chain.length > 0
+    ? { chain, chosen: Math.max(0, Math.min(chain.length - 1, chosen)) }
+    : null;
 }
 
 /*
@@ -338,7 +398,8 @@ export function previewSheet(value: unknown): SheetOnPage | null {
 }
 
 /** The pane's keys: V, C and D its modes, `C` (⇧C) its pins shown or hidden, J and K a step, Enter and Esc. */
-export type PaneKey = "v" | "c" | "d" | "C" | "j" | "k" | "Enter" | "Escape";
+export type PaneKey =
+  "v" | "c" | "d" | "C" | "j" | "k" | "/" | "Enter" | "Escape";
 
 /** One of the pane's keys pressed while the page had the keyboard. */
 export function previewKey(value: unknown): PaneKey | null {

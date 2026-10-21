@@ -46,9 +46,9 @@
   interface Chip {
     failed?: string;
     key: string;
-    /** The lead: a picture's thumb, the kind's glyph, or the upload's ring. */
+    /** The lead: a picture's thumb (under the upload's ring while it goes up), the kind's glyph, or the upload's ring. */
     lead:
-      | { kind: "thumb"; src: string }
+      | { kind: "thumb"; src: string; progress?: number }
       | { kind: "glyph"; glyph: Component }
       | { kind: "ring"; progress: number };
     /** What it is, after its name; none for a picture. */
@@ -93,13 +93,28 @@
     })),
     ...draft.files.map((f) => {
       const uploading = !(f.ref || f.error);
+      // A picture kept by reference shows its thumb throughout, its ring over it while it goes up.
+      const glyph = uploading
+        ? { kind: "ring" as const, progress: f.progress }
+        : { kind: "glyph" as const, glyph: glyphOf(f.name) };
+      const lead = f.preview
+        ? {
+            kind: "thumb" as const,
+            src: f.preview,
+            ...(uploading ? { progress: f.progress } : {}),
+          }
+        : glyph;
+      let meta: string | undefined = humanSize(f.size);
+      if (f.error) {
+        meta = "Couldn't upload";
+      } else if (f.as === "image") {
+        meta = undefined;
+      }
       return {
         key: `file:${f.id}`,
         name: f.name,
-        lead: uploading
-          ? { kind: "ring" as const, progress: f.progress }
-          : { kind: "glyph" as const, glyph: glyphOf(f.name) },
-        meta: f.error ? "Couldn't upload" : humanSize(f.size),
+        lead,
+        meta,
         failed: f.error,
         press: f.error
           ? {
@@ -124,7 +139,7 @@
   const CHIP =
     "inline-flex items-center gap-space-2 max-w-full h-c-tray-chip ps-space-1 pe-space-1 border border-border-hairline rounded-sm bg-surface-raised shadow-tile text-size-label font-medium text-ink-strong mark-line hit-gap-x-space-2 coarse:hit-gap-x-space-3";
   const BODY =
-    "select-none inline-flex items-center gap-space-2 min-w-0 h-full p-0 border-none bg-transparent text-start text-ink-strong rounded-xs touch-hit pointer-hit";
+    "select-none inline-flex items-center gap-space-2 min-w-0 h-full p-0 border-none bg-transparent text-start text-ink-strong rounded-xs touch-hit pointer-hit mark-line";
 </script>
 
 {#snippet face(chip: Chip)}
@@ -136,9 +151,16 @@
     {#if chip.lead.kind === "thumb"}
       <img
         alt=""
-        class="size-icon-lg rounded-xs object-cover"
+        class="col-start-1 row-start-1 size-icon-lg rounded-xs object-cover data-uploading:opacity-25"
+        data-uploading={chip.lead.progress !== undefined || undefined}
         src={chip.lead.src}
       />
+      {#if chip.lead.progress !== undefined}
+        <UploadRing
+          class="col-start-1 row-start-1 size-icon-md text-ink-strong"
+          progress={chip.lead.progress}
+        />
+      {/if}
     {:else if chip.lead.kind === "ring"}
       <UploadRing class="size-icon-md" progress={chip.lead.progress} />
     {:else}
@@ -193,7 +215,7 @@
         <button
           data-slot="canvas-open"
           aria-label="Open the canvas"
-          class={pressVariants({ press: "scale", class: BODY })}
+          class={["mark-line", pressVariants({ press: "scale", class: BODY })]}
           onclick={onopencanvas}
           type="button"
         >
@@ -211,7 +233,11 @@
               <IconArtifactCanvas class="size-icon-md" />
             {/if}
           </span>
-          <span data-slot="att-name" class="min-w-0 truncate">Canvas</span>
+          <span
+            data-slot="att-name"
+            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+            >Canvas</span
+          >
         </button>
         <button
           aria-label="Remove the canvas"
@@ -226,7 +252,9 @@
     {#each chips as chip (chip.key)}
       <span
         class={CHIP}
-        aria-busy={chip.lead.kind === "ring" || undefined}
+        aria-busy={chip.lead.kind === "ring" ||
+          (chip.lead.kind === "thumb" && chip.lead.progress !== undefined) ||
+          undefined}
         data-flip="pop"
         title={chip.failed ? `${chip.name}: ${chip.failed}` : chip.name}
       >
@@ -242,7 +270,7 @@
           >
             {@render face(chip)}
           </button>
-        {:else if chip.lead.kind === "ring"}
+        {:else if chip.lead.kind === "ring" || (chip.lead.kind === "thumb" && chip.lead.progress !== undefined)}
           <span
             aria-label={`Uploading ${chip.name}`}
             class="inline-flex items-center gap-space-2 min-w-0"

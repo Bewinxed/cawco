@@ -22,7 +22,7 @@ export const artifactWords = {
   /** A row's dot, for a screen reader: the person has something to do on it. */
   waitingOnYou: "Waiting on you",
 
-  // ── The Comments list (preview/PinList.svelte; the app's PinListController) ──
+  // ── The Comments rail (preview/CommentRail.svelte; the app's PinListController) ──
   /** Its skeleton rows, for a screen reader, while the pins are read past the wait's grace. */
   readingComments: "Reading the comments",
   /** The pins couldn't be read; `why` is its own sentence (the hub's reason). */

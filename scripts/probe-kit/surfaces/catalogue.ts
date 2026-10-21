@@ -149,24 +149,27 @@ const START_SIGN_IN = /^Start sign-in/;
 const GROWN_DRAFT =
   /Wrap the chip's label at the badge\.\s*Keep the count whole\.\s*Then measure it on a phone\./;
 const CATCHING_UP_LINE = /^Catching up…$/;
-/** A preview drawn in its frame, the pane's pin list, and the page's where-to-start (MachinesEmpty's title). */
+/** A preview drawn in its frame, the pane's Comments rail, and the page's where-to-start (MachinesEmpty's title). */
 const PREVIEW_READY = "iframe[data-ready=true]";
-const PIN_LIST = 'section[data-slot=pin-list][aria-label="Comments"]';
-/** A row of the Comments panel: the comment, one press. */
+const PIN_LIST = 'aside[data-slot=comment-rail][aria-label="Comments"]';
+/** A row of the Comments rail: the comment, one press. */
 const PIN_ROW = "button[data-slot=pin-row]";
-/** The Comments panel's popover; a pin's card, by its number. */
-const PIN_POP = "[data-pin-list-pop]";
+/** The rail as the well's foot sheet (a phone, a pane under 640px), which stands aside for a thread; a thread, by its pin's number. */
+const PIN_POP = "[data-slot=comment-rail][data-layout=sheet]";
 const pinCard = (n: number) => `[data-slot=pin-card][data-pin-card="${n}"]`;
-/** A pin's card placed: beside what its pin stands on (by the element's box), or the foot sheet. */
+/** A thread placed: beside its pill (end, start or below it), or the foot sheet. */
 const PIN_CARD_PLACED =
   "[data-slot=pin-card]:is([data-sheet], [data-side=end], [data-side=start], [data-side=below])";
+/** The comment's composer, at the element (or the foot sheet), before anything is written. */
+const COMPOSER_PLACED =
+  "[data-slot=pin-composer]:is([data-sheet], [data-side=end], [data-side=start], [data-side=below])";
 /** The card's notice for a pin whose element is gone, and its line while the next tap places it. */
 const GONE_SAYS = /^Its element is gone from the page/;
 const PLACING_SAYS = /^Tap the page where it goes/;
 const TAB_RESOLVED = /^Resolved/;
 /** The panel's empty lines, each tab's. */
 const NO_OPEN = /^No open comments/;
-const NO_RESOLVED = /^No resolved comments/;
+const NO_RESOLVED = /^Nothing resolved yet/;
 /** The pane's Comment mode, as its compact mode menu names it. */
 const COMMENT_MODE = /^Comment/;
 /** The pane's artifact doc socket on the hub. */
@@ -1255,12 +1258,12 @@ const askPlace = async (page: Page) => {
 };
 
 /**
- * A pin on the preview, as a person drops one: C turns the pane's Comment
- * mode on, and once the page has heard it (its overlay's layer in comment
- * mode, comments.ts `pageInComment`), a tap on the heading writes pin 1 in
- * the page's doc, which the pane's doc hears, and its card opens.
+ * A comment's composer on the preview, as a person opens one: C turns the
+ * pane's Comment mode on, and once the page has heard it (its overlay's
+ * layer in comment mode, comments.ts `pageInComment`), a tap on the heading
+ * opens the composer beside its hollow pill, writing nothing yet.
  */
-const dropPin = async (page: Page) => {
+const composeOn = async (page: Page) => {
   const segment = page
     .locator("button[aria-keyshortcuts='C']")
     .filter({ visible: true });
@@ -1289,26 +1292,53 @@ const dropPin = async (page: Page) => {
     throw new Error("the preview's heading has no box");
   }
   await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
-  // Its card stands clear of the heading it pins: beside it where the well
-  // allows, else the foot sheet. Placed once the page has said where the pin
-  // stands (its overlay's `cawco:pin-at`, the element's box with it).
+  await page
+    .locator(COMPOSER_PLACED)
+    .filter({ visible: true })
+    .first()
+    .waitFor();
+};
+
+/**
+ * A comment on the preview, written: its composer (`composeOn`), words,
+ * Comment; then its pill pressed, and its thread opens beside it.
+ */
+const dropPin = async (page: Page) => {
+  await composeOn(page);
+  const composer = page
+    .locator("[data-slot=pin-composer]")
+    .filter({ visible: true })
+    .first();
+  await composer.getByRole("combobox").fill("Make this heading a bit bigger");
+  await composer.getByRole("button", { name: "Comment", exact: true }).click();
+  await composer.waitFor({ state: "detached" });
+  const frame = page.frameLocator(PREVIEW_FRAME);
+  const pill = await frame
+    .locator('svg[data-cawco-pins] g[data-pin="1"] [data-face]')
+    .boundingBox();
+  if (!pill) {
+    throw new Error("pin 1's pill has no box");
+  }
+  await page.mouse.click(pill.x + pill.width / 2, pill.y + pill.height / 2);
+  // Its thread stands clear of its pill: beside it where the well allows,
+  // else the foot sheet (DESIGN.md, A thread beside its pin). Placed once
+  // the page has said where the pill stands (its overlay's `cawco:pin-at`,
+  // its box with it).
   const card = page
-    .locator(`${PIN_CARD_PLACED}[aria-label="Pin 1"]`)
+    .locator(`${PIN_CARD_PLACED}[aria-label="Comment 1"]`)
     .filter({ visible: true })
     .first();
   await card.waitFor();
   const placed = await card.boundingBox();
-  const heading = await frame.locator("h1").boundingBox();
   if (
     placed &&
-    heading &&
-    placed.x < heading.x + heading.width &&
-    heading.x < placed.x + placed.width &&
-    placed.y < heading.y + heading.height &&
-    heading.y < placed.y + placed.height
+    placed.x < pill.x + pill.width &&
+    pill.x < placed.x + placed.width &&
+    placed.y < pill.y + pill.height &&
+    pill.y < placed.y + placed.height
   ) {
     throw new Error(
-      `pin 1's card ${JSON.stringify(placed)} stands over the heading it pins ${JSON.stringify(heading)}`
+      `pin 1's thread ${JSON.stringify(placed)} stands over its pill ${JSON.stringify(pill)}`
     );
   }
 };
@@ -1342,7 +1372,11 @@ const seedPins = async (page: Page) => {
       window as unknown as {
         cawcoArtifact: {
           doc: {
-            getMap: (n: string) => { set: (k: string, v: object) => void };
+            getMap: (n: string) => {
+              delete: (k: string) => void;
+              keys: () => IterableIterator<string>;
+              set: (k: string, v: object) => void;
+            };
             transact: (f: () => void) => void;
           };
         };
@@ -1382,6 +1416,14 @@ const seedPins = async (page: Page) => {
     });
     doc.transact(() => {
       const pins = doc.getMap("pins");
+      // Only the seeded pins: a comment an earlier state wrote (the "pin"
+      // state's, with its words) would stand beside them under the same
+      // number.
+      for (const id of [...pins.keys()]) {
+        if (!id.startsWith("00000000-0000-4000-8000-")) {
+          pins.delete(id);
+        }
+      }
       pins.set(
         "00000000-0000-4000-8000-000000000001",
         pin(1, "h1", [
@@ -1420,16 +1462,26 @@ const seedPins = async (page: Page) => {
   }, LONG_COMMENT);
 };
 
-/** The Comments panel open (its open state is kept across the walk's loads, so pressed only when it is shut). */
+/**
+ * The Comments rail open (its open state is kept across the walk's loads,
+ * so pressed only when it is shut). Open is a rail in the page, whatever
+ * its width: one coming in beside the page grows from none, and a press
+ * then would shut it.
+ */
 const panelUp = async (page: Page) => {
-  const list = page.locator(PIN_LIST).filter({ visible: true });
-  if ((await list.count()) === 0) {
+  const open = await page
+    .locator(PIN_LIST)
+    .first()
+    .waitFor({ state: "attached", timeout: 2000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!open) {
     await headControl("comments", "Comments")(page);
   }
-  await page.locator(PIN_LIST).first().waitFor();
+  await page.locator(PIN_LIST).filter({ visible: true }).first().waitFor();
 };
 
-/** The Comments panel open, its pins seeded and drawn, on its Open tab. */
+/** The Comments rail open, its pins seeded and drawn, on its Open tab. */
 const commentsOpen = async (page: Page) => {
   await seedPins(page);
   await panelUp(page);
@@ -1444,9 +1496,39 @@ const pinsTab = (name: "Open" | "Resolved") => (page: Page) =>
     .first()
     .click();
 
-/** Pin `n`'s row pressed: its card opens (beside the panel, or as the foot sheet). */
-const openRow = (n: number) => (page: Page) =>
-  page.locator(`${PIN_LIST} ${PIN_ROW}[data-pin-row="${n}"]`).click();
+/**
+ * Pin `n`'s row pressed: its thread opens (beside its pill, or as the foot
+ * sheet). Pressed once one rail stands, settled: a pane that crosses 640px
+ * (Expand) trades the foot sheet for the rail beside the page, the one
+ * going out as the other comes in. What the rail did while it waited is
+ * said when it never settles.
+ */
+const openRow = (n: number) => async (page: Page) => {
+  const seen = await page.evaluate(async (railSel) => {
+    const frame = () =>
+      new Promise<void>((done) => requestAnimationFrame(() => done()));
+    const layouts: string[] = [];
+    let steady = 0;
+    for (let k = 0; k < 240 && steady < 6; k += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: one frame after another
+      await frame();
+      const now = [...document.querySelectorAll(railSel)]
+        .map((one) => one.getAttribute("data-layout") ?? "?")
+        .join("+");
+      if (layouts.at(-1) !== now) {
+        layouts.push(now);
+      }
+      steady = now.split("+").length === 1 && now !== "" ? steady + 1 : 0;
+    }
+    return { settled: steady >= 6, layouts };
+  }, PIN_LIST);
+  if (!seen.settled) {
+    throw new Error(
+      `the rail never stood alone for six frames: ${seen.layouts.join(" → ")}`
+    );
+  }
+  await page.locator(`${PIN_LIST} ${PIN_ROW}[data-pin-row="${n}"]`).click();
+};
 
 /** The open card's Close. */
 const closePinCard = (page: Page) =>
@@ -1455,10 +1537,27 @@ const closePinCard = (page: Page) =>
     .getByRole("button", { name: "Close", exact: true })
     .click();
 
-/** The pane expanded over the split: its head's Expand, pressed where it stands or chosen from More. */
-const expandPane = headControl("expand", "Expand");
+/**
+ * The pane expanded over the split: its head's Expand, pressed where it
+ * stands or chosen from More, only while the split is not expanded (Expand
+ * is a toggle, kept per page across the walk's loads: pressed on a split
+ * already expanded, it would give the split back). Then the slide ends, so
+ * what follows reads the pane at its width: a pane that crosses 640px
+ * trades the rail's foot sheet for the rail beside the page as it goes.
+ */
+const expandPane = async (page: Page) => {
+  await page.evaluate(() => window.__ssReader?.frames(2));
+  if ((await page.locator("[data-split-expanded]").count()) === 0) {
+    await headControl("expand", "Expand")(page);
+  }
+  await page.locator("[data-split-expanded]").first().waitFor();
+  await page.waitForFunction(
+    () => !document.querySelector("[data-split-sliding]")
+  );
+  await page.evaluate(() => window.__ssReader?.frames(2));
+};
 
-/** Every state of the panel starts from its seeded pins, then runs `steps`. */
+/** Every state of the rail starts from its seeded pins, then runs `steps`. */
 const inComments =
   (...steps: ((page: Page) => Promise<unknown>)[]) =>
   async (page: Page) => {
@@ -1470,10 +1569,10 @@ const inComments =
   };
 
 /**
- * The pane's doc socket held (`hold`: open and never answered, so the panel
+ * The pane's doc socket held (`hold`: open and never answered, so the rail
  * reads and then draws its skeleton) or refused before it ever synced
- * (`refuse`: the hub's own 4404 and its reason, so the panel says it
- * couldn't read the comments), the page loaded again under it and the panel
+ * (`refuse`: the hub's own 4404 and its reason, so the rail says it
+ * couldn't read the comments), the page loaded again under it and the rail
  * opened. The route stays on the page, so these states stand last on their
  * surface (each surface walks its own page), refuse after hold (the later
  * route answers first).
@@ -1486,9 +1585,7 @@ const docSocket = (mode: "hold" | "refuse") => async (page: Page) => {
   });
   await page.reload();
   await page.locator(PREVIEW_FRAME).first().waitFor();
-  if ((await page.locator(PIN_LIST).filter({ visible: true }).count()) === 0) {
-    await headControl("comments", "Comments")(page);
-  }
+  await panelUp(page);
 };
 
 /**
@@ -1528,8 +1625,9 @@ const paneKey = async (page: Page, key: string) => {
 };
 
 /**
- * One pin on the preview's `target`, its words said and sent (⌘↩ in its
- * card's field), then its card closed: the pin stands with its thread.
+ * One comment on the preview's `target`: its composer opened by a press,
+ * its words written and Enter: the pin stands with its words, the composer
+ * gone.
  */
 const pinWith = async (page: Page, target: string, words: string) => {
   await commentMode(page);
@@ -1541,16 +1639,14 @@ const pinWith = async (page: Page, target: string, words: string) => {
     throw new Error(`the preview's ${target} has no box`);
   }
   await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
-  const card = page
-    .locator("[data-slot=pin-card]")
+  const composer = page
+    .locator("[data-slot=pin-composer]")
     .filter({ visible: true })
     .first();
-  const field = card.getByRole("textbox");
+  const field = composer.getByRole("combobox");
   await field.fill(words);
-  await field.press("ControlOrMeta+Enter");
-  await card.locator("[data-slot=thread]").waitFor();
-  await card.getByRole("button", { name: "Close", exact: true }).click();
-  await card.waitFor({ state: "detached" });
+  await field.press("Enter");
+  await composer.waitFor({ state: "detached" });
 };
 
 /**
@@ -3860,7 +3956,7 @@ export const SURFACES: Surface[] = [
         ready: (s) => ({ shows: on(s.art, PREVIEW_READY) }),
       },
       // No pins yet: each tab says so, with how to make one. First of the
-      // panel's states: the pins a later state seeds stay in the page's doc
+      // rail's states: the pins a later state seeds stay in the page's doc
       // across its loads.
       {
         name: "comments-empty",
@@ -3887,7 +3983,16 @@ export const SURFACES: Surface[] = [
           says: NO_RESOLVED,
         }),
       },
-      // A pin on the preview, its card open (the desk's pane stands beside the transcript).
+      // A press on the preview in Comment: the composer at the element, beside its hollow pill.
+      {
+        name: "pin-compose",
+        route: (s) => `/session/${s.art}`,
+        act: composeOn,
+        root: "body",
+        widths: ["desk", "phone"],
+        ready: (s) => ({ shows: on(s.art, COMPOSER_PLACED) }),
+      },
+      // A comment written, its thread open beside its pill (the desk's pane stands beside the transcript).
       {
         name: "pin",
         route: (s) => `/session/${s.art}`,
@@ -3895,12 +4000,12 @@ export const SURFACES: Surface[] = [
         root: "body",
         widths: ["desk", "phone"],
         ready: (s) => ({
-          shows: on(s.art, `${PIN_CARD_PLACED}[aria-label="Pin 1"]`),
+          shows: on(s.art, `${PIN_CARD_PLACED}[aria-label="Comment 1"]`),
         }),
       },
-      // The pane's Comments panel, its pins seeded: a short comment the agent
-      // answered (its reply in meta), a 48-word one cut at four lines, and a
-      // gone pin's row beside them, its disc recessed.
+      // The pane's Comments rail, its pins seeded: a short comment the agent
+      // answered (its reply in meta, after the agent's glyph), a 48-word one
+      // cut at two lines, and a gone pin's row beside them, its pill recessed.
       {
         name: "comments",
         route: (s) => `/session/${s.art}`,
@@ -3911,7 +4016,8 @@ export const SURFACES: Surface[] = [
           shows: on(s.art, `${PIN_LIST} ${PIN_ROW}[data-pin-row="2"]`),
         }),
       },
-      // The Resolved tab holding its pins, scrolled.
+      // The Resolved tab holding its pins, newest first (written at one
+      // moment, the highest number leads): 9 at the top, 10 among them gone.
       {
         name: "comments-resolved",
         route: (s) => `/session/${s.art}`,
@@ -3919,11 +4025,11 @@ export const SURFACES: Surface[] = [
         root: "body",
         widths: ["desk", "tablet", "phone"],
         ready: (s) => ({
-          shows: on(s.art, `${PIN_LIST} ${PIN_ROW}[data-pin-row="4"]`),
+          shows: on(s.art, `${PIN_LIST} ${PIN_ROW}[data-pin-row="9"]`),
         }),
       },
-      // A row pressed: its card, which at the default split's well (and on a
-      // phone) rises as the foot sheet while the panel stands aside.
+      // A row pressed: its thread, beside its pill; on a phone the foot
+      // sheet, the rail's sheet standing aside.
       {
         name: "comments-row-card",
         route: (s) => `/session/${s.art}`,
@@ -3932,13 +4038,13 @@ export const SURFACES: Surface[] = [
         widths: ["desk", "tablet", "phone"],
         ready: (s) => ({ shows: on(s.art, pinCard(1)), not: PIN_POP }),
       },
-      // Words in its field: Reply, the card's one primary, enabled.
+      // Words in its composer: its send glyph, Reply, on.
       {
         name: "comments-reply",
         route: (s) => `/session/${s.art}`,
         act: inComments(openRow(1), (page) =>
           page
-            .locator(`${pinCard(1)} textarea[data-field]`)
+            .locator(`${pinCard(1)} [role=combobox]`)
             .filter({ visible: true })
             .first()
             .fill("Make it a step larger still.")
@@ -3946,13 +4052,10 @@ export const SURFACES: Surface[] = [
         root: "body",
         widths: ["desk", "tablet", "phone"],
         ready: (s) => ({
-          shows: on(
-            s.art,
-            `${pinCard(1)} footer[data-slot=actions] button:enabled`
-          ),
+          shows: on(s.art, `${pinCard(1)} button[aria-label="Reply"]:enabled`),
         }),
       },
-      // Its Close: the panel back on the tab it stood on (Resolved).
+      // Its Close: the rail back on the tab it stood on (Resolved).
       {
         name: "comments-row-back",
         route: (s) => `/session/${s.art}`,
@@ -3964,7 +4067,7 @@ export const SURFACES: Surface[] = [
           says: TAB_RESOLVED,
         }),
       },
-      // A gone pin's row opens its card: the loss said once, Pin it somewhere else.
+      // A gone pin's row opens its thread: the loss said once, Pin it somewhere else.
       {
         name: "comments-gone",
         route: (s) => `/session/${s.art}`,
@@ -3976,7 +4079,7 @@ export const SURFACES: Surface[] = [
           says: GONE_SAYS,
         }),
       },
-      // Pin it somewhere else pressed: the card says where to tap, beside Cancel.
+      // Pin it somewhere else pressed: the thread says where to tap, beside Cancel.
       {
         name: "comments-placing",
         route: (s) => `/session/${s.art}`,
@@ -3993,8 +4096,8 @@ export const SURFACES: Surface[] = [
           says: PLACING_SAYS,
         }),
       },
-      // The pane expanded: the well holds the panel and a card side by side, a
-      // gone pin's card at the top-right of the room the panel leaves.
+      // The pane expanded: the rail beside the page, a gone pin's thread at
+      // the top-right of the page's well.
       {
         name: "comments-beside",
         route: (s) => `/session/${s.art}`,
@@ -4049,7 +4152,7 @@ export const SURFACES: Surface[] = [
           shows: on(s.art, `${PIN_ROW}[data-pin-row="2"]:active`),
         }),
       },
-      // A gone pin's row under Resolved, its disc recessed.
+      // A gone pin's row under Resolved, its pill recessed.
       {
         name: "comments-gone-resolved",
         route: (s) => `/session/${s.art}`,
@@ -4092,8 +4195,8 @@ export const SURFACES: Surface[] = [
           shows: on(s.art, `${PIN_ROW}[data-pin-row="3"][data-moved]:active`),
         }),
       },
-      // Beside, at the widest the 1440 desk gives it (0.3 of the expanded
-      // well, under c-pin-list-max), a long Resolved list scrolled.
+      // Beside the expanded pane's page, at its one width (c-comments-w), a
+      // long Resolved list scrolled to its end, its oldest (4) last.
       {
         name: "comments-beside-scrolled",
         route: (s) => `/session/${s.art}`,
@@ -4106,13 +4209,15 @@ export const SURFACES: Surface[] = [
           )(page);
         },
         root: "body",
+        // The walk reads every scroller at its start: the end is scrolled back into view.
+        inView: `${PIN_LIST} ${PIN_ROW}[data-pin-row="4"]`,
         widths: ["desk"],
         ready: (s) => ({
-          shows: on(s.art, `${PIN_LIST} ${PIN_ROW}[data-pin-row="9"]`),
+          shows: on(s.art, `${PIN_LIST} ${PIN_ROW}[data-pin-row="4"]`),
         }),
       },
       // Placing tapped through: the next tap on the page pins the gone pin
-      // anew, and its card says no loss.
+      // anew, and its thread says no loss.
       {
         name: "comments-placed",
         route: (s) => `/session/${s.art}`,
@@ -4132,8 +4237,10 @@ export const SURFACES: Surface[] = [
             if (!box) {
               throw new Error("the preview's heading has no box");
             }
+            // Left of the heading's pills (pressed at 0.3) and clear of the
+            // gone pin's thread at the well's top-right.
             await page.mouse.click(
-              box.x + box.width * 0.7,
+              box.x + box.width * 0.12,
               box.y + box.height / 2
             );
           }
@@ -4144,8 +4251,8 @@ export const SURFACES: Surface[] = [
           shows: on(s.art, `${pinCard(3)}:not(:has([data-slot=gone]))`),
         }),
       },
-      // The page asking for a place, with the Comments panel open: the picker
-      // takes the well and the panel stands aside (The Open Page Rule).
+      // The page asking for a place, with the Comments rail open: the picker
+      // takes the well and the rail's sheet stands aside (The Open Page Rule).
       {
         name: "place-pick",
         route: (s) => `/session/${s.art}`,
@@ -4512,7 +4619,7 @@ export const SURFACES: Surface[] = [
     ],
   })),
   {
-    // The Comments panel on the chosen-hover bench, read whole: its section
+    // The Comments rail on the chosen-hover bench, read whole: its section
     // at its own height (the bench's page runs past the viewport).
     name: "bench-pins",
     serve: "dev",

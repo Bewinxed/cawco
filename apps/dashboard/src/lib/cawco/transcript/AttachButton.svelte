@@ -10,14 +10,22 @@
    * Where a session can draw (`ondraw`), Attach is a menu: Files and photos,
    * and Draw, which opens the composer's canvas (The pen's swipe: Draw is
    * how a finger, a mouse and a phone get there).
+   *
+   * In a comment's composer and a thread's reply (`ghost`) it is the kit's
+   * `sm` ghost icon button with Solar's duotone paperclip at `--icon-md`,
+   * 44px under a finger (commenting build note 1).
    */
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconArtifactCanvas, IconPaperclip, IconPlus } from "#lib/icons.js";
   import type { ComposerDraft } from "./composer-draft.svelte";
 
-  let { draft, ondraw }: { draft: ComposerDraft; ondraw?: () => void } =
-    $props();
+  let {
+    draft,
+    ondraw,
+    ghost = false,
+  }: { draft: ComposerDraft; ondraw?: () => void; ghost?: boolean } = $props();
 
   let input = $state<HTMLInputElement>();
 
@@ -51,7 +59,18 @@
   type="file"
   bind:this={input}
 />
-{#if ondraw}
+{#if ghost}
+  <Button
+    data-att-btn
+    aria-label="Attach a file or image"
+    class="flex-none touch-hit"
+    icon={IconPaperclip}
+    onclick={() => input?.click()}
+    size="icon-sm"
+    title="Attach a file or image"
+    variant="ghost"
+  />
+{:else if ondraw}
   <DropdownMenu.Root>
     <DropdownMenu.Trigger
       data-att-btn

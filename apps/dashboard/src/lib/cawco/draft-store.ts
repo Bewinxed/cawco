@@ -1,10 +1,10 @@
 /**
  * Where a conversation's unsent message waits out a reload: IndexedDB, one
  * record per session id, holding everything the composer holds — the text,
- * the images, the file attachments and the canvas. A pin's unsaid words
- * wait here too (preview/pin-drafts.svelte.ts), so it stands outside the
- * transcript: an artifact's own tab, which loads none of the transcript's
- * modules, keeps its pins' drafts through it.
+ * the images, the file attachments and the canvas. A comment's unsaid words
+ * and chips wait here too (preview/comment-drafts.svelte.ts), so it stands
+ * outside the transcript: an artifact's own tab, which loads none of the
+ * transcript's modules, keeps its comments' drafts through it.
  *
  * IndexedDB rather than localStorage because the attachments are binary and
  * large: images are stored as Blobs, not as base64 strings in a 5 MB string

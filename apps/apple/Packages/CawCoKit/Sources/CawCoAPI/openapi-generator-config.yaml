@@ -44,6 +44,7 @@ typeOverrides:
     ClaudeLimitsErrorKind: OpenEnums.ClaudeLimitsErrorKind
     CommandAckOutcome: OpenEnums.CommandAckOutcome
     CommandAckStage: OpenEnums.CommandAckStage
+    CommentAttachmentKind: OpenEnums.CommentAttachmentKind
     ComponentDocTypes: OpenEnums.ComponentDocTypes
     ConnectionAuth: OpenEnums.ConnectionAuth
     ConnectionState: OpenEnums.ConnectionState
@@ -152,7 +153,6 @@ typeOverrides:
     RuleWatch: OpenEnums.RuleWatch
     SendMode: OpenEnums.SendMode
     SendState: OpenEnums.SendState
-    SessionAttachmentKind: OpenEnums.SessionAttachmentKind
     SessionAttachmentWho: OpenEnums.SessionAttachmentWho
     SessionPulseActivity: OpenEnums.SessionPulseActivity
     SigninKind: OpenEnums.SigninKind

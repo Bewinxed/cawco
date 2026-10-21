@@ -73,6 +73,7 @@ import type {
   RegisterAckPayload,
   Rule,
   RuleDraft,
+  SendAttachment,
   SendMode,
   SendPayload,
   SendRecord,
@@ -929,6 +930,8 @@ const BYTE_RANGE = /^bytes=(\d*)-(\d*)$/;
 
 /** What splits a model id into words (`deepseek-v4.1-flash`: `deepseek`, …). */
 const MODEL_ID_WORD = /[-.]/;
+/** A picture's number in a comments delivery's words (core comments.ts `attachedLine`). */
+const PICTURE_NUMBER = /\(picture (\d+) of this message/g;
 
 /** How many offered models a refused model's refusal names. Ours: enough to choose from, short enough to read. */
 const MODELS_NAMED = 12;
@@ -11599,7 +11602,7 @@ export const createServer = (
    * The person's word on an artifact, to its session: one event of origin
    * {@link ARTIFACT_ORIGIN}, never their bubble. Their picks' Send is a
    * notice to read them (core `artifactResponsesNotice`); their pins, replies,
-   * resolves and ink go by themselves as a notice that carries them (core
+   * resolves and ink go on the same Send as a notice that carries them (core
    * `artifactCommentsNotice`). A session hears one of each per artifact at a
    * time: one it has not read yet is withdrawn and the new one stands in its
    * place ({@link withdrawPending}, `replaces`), what the withdrawn one said
@@ -11637,10 +11640,15 @@ export const createServer = (
             : []
         );
   };
+  /** The texts and files a stored send carried (`SendPayload.attachments`). */
+  const attachmentsOf = (whole: string | null): SendAttachment[] =>
+    whole
+      ? ((JSON.parse(whole) as Envelope<SendPayload>).payload.attachments ?? [])
+      : [];
   /**
    * Withdraws each of the session's unread artifact events `same` names
-   * (by its words), in order: the words and pictures of each one withdrawn,
-   * and the last one's uuid, which the new event `replaces`.
+   * (by its words), in order: the words, pictures, texts and files of each
+   * one withdrawn, and the last one's uuid, which the new event `replaces`.
    */
   const withdrawArtifactEvents = async (
     instance: InstanceRow,
@@ -11649,12 +11657,14 @@ export const createServer = (
   ): Promise<{
     replaces?: string;
     withdrawn: {
+      attachments: SendAttachment[];
       images: { data: string; mediaType: string }[];
       text: string;
     }[];
   }> => {
     let replaces: string | undefined;
     const withdrawn: {
+      attachments: SendAttachment[];
       images: { data: string; mediaType: string }[];
       text: string;
     }[] = [];
@@ -11671,6 +11681,7 @@ export const createServer = (
       }
       // Read before the withdrawal, which clears what the record held.
       const images = picturesOf(row.owed ?? row.envelope);
+      const attachments = attachmentsOf(row.owed ?? row.envelope);
       // biome-ignore lint/performance/noAwaitInLoops: each withdrawal is the harness's atomic answer, taken one at a time so what each carried is folded in order
       const outcome = await withdrawPending(row, instance.machineId).catch(
         (error: unknown) => {
@@ -11681,20 +11692,22 @@ export const createServer = (
         }
       );
       if (outcome === "withdrawn") {
-        withdrawn.push({ text, images });
+        withdrawn.push({ text, images, attachments });
         replaces = row.uuid;
       }
     }
     return { withdrawn, ...(replaces ? { replaces } : {}) };
   };
-  /** An artifact event's payload to `instance`: its words, its pictures first, and the unread event it replaces. */
+  /** An artifact event's payload to `instance`: its words, its pictures first, the texts and files it carries, and the unread event it replaces. */
   const artifactEventPayload = (
     instance: InstanceRow,
     text: string,
     images: { data: string; mediaType: string }[],
-    replaces: string | undefined
+    replaces: string | undefined,
+    attachments: SendAttachment[] = []
   ): SendPayload => ({
     instanceId: instance.id,
+    ...(attachments.length > 0 ? { attachments } : {}),
     message: {
       type: "user",
       uuid: crypto.randomUUID(),
@@ -11725,13 +11738,20 @@ export const createServer = (
     instance: InstanceRow,
     text: string,
     images: { data: string; mediaType: string }[],
-    replaces: string | undefined
+    replaces: string | undefined,
+    attachments: SendAttachment[] = []
   ): SentMessageRow | undefined =>
     deliverSend({
       verb: "send",
       machineId: instance.machineId,
       instanceId: instance.id,
-      payload: artifactEventPayload(instance, text, images, replaces),
+      payload: artifactEventPayload(
+        instance,
+        text,
+        images,
+        replaces,
+        attachments
+      ),
     });
   /**
    * An artifact event that reached no one, kept in the session's
@@ -11742,9 +11762,16 @@ export const createServer = (
     instance: InstanceRow,
     text: string,
     images: { data: string; mediaType: string }[],
-    reason: string
+    reason: string,
+    attachments: SendAttachment[] = []
   ) => {
-    const payload = artifactEventPayload(instance, text, images, undefined);
+    const payload = artifactEventPayload(
+      instance,
+      text,
+      images,
+      undefined,
+      attachments
+    );
     publishSend(
       db.recordSend({
         uuid: payload.message.uuid,
@@ -11847,7 +11874,7 @@ export const createServer = (
   const deliverArtifactMarks: ArtifactServiceDeps["deliverMarks"] = (
     instance,
     artifact,
-    { text, images }
+    delivery
   ) =>
     artifactInOrder(`${artifact.id}:marks`, () => {
       const refused = inputRefusal(instance.id, {
@@ -11855,11 +11882,14 @@ export const createServer = (
         name: ARTIFACT_ORIGIN,
       });
       return refused && artifact.projectId && lead
-        ? marksToCaw(lead, instance, artifact.projectId, refused.reason, {
-            text,
-            images,
-          })
-        : marksToSession(instance, artifact, { text, images });
+        ? marksToCaw(
+            lead,
+            instance,
+            artifact.projectId,
+            refused.reason,
+            delivery
+          )
+        : marksToSession(instance, artifact, delivery);
     });
   /** {@link deliverArtifactMarks} to the project's Caw: woken with them, or the writer's transcript says why not. */
   const marksToCaw = async (
@@ -11867,13 +11897,20 @@ export const createServer = (
     instance: InstanceRow,
     projectId: string,
     why: string,
-    { text, images }: MarksDelivery
+    { text, images, attachments }: MarksDelivery
   ): Promise<MarksOutcome> => {
     const woke = await their
       .wakeOnce(projectId, {
         by: "you",
         text: `${text}\n\nThe session that made it, ${sessionName(instance)}, takes no input now (${why.replace(CLOSING_STOP, "")}), so these come to you: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
-        ...(images.length > 0 ? { carried: { images } } : {}),
+        ...(images.length > 0 || attachments.length > 0
+          ? {
+              carried: {
+                ...(images.length > 0 ? { images } : {}),
+                ...(attachments.length > 0 ? { attachments } : {}),
+              },
+            }
+          : {}),
       })
       .catch((error: unknown) => ({
         woke: false as const,
@@ -11883,20 +11920,22 @@ export const createServer = (
       return { ok: true };
     }
     const reason = `This session takes no input now, and the project's Caw couldn't take them: ${woke.why.words.replace(CLOSING_STOP, "")}.`;
-    recordUndelivered(instance, text, images, reason);
+    recordUndelivered(instance, text, images, reason, attachments);
     return { ok: false, reason };
   };
   /** {@link deliverArtifactMarks} to the session itself, an unread earlier delivery folded in: whether it took them. */
   const marksToSession = async (
     instance: InstanceRow,
     artifact: ArtifactRow,
-    { text, images }: MarksDelivery
+    { text, images, attachments }: MarksDelivery
   ): Promise<MarksOutcome> => {
     const { withdrawn, replaces } = await withdrawArtifactEvents(
       instance,
       artifact,
       (said) => parseArtifactComments(said)?.id === artifact.id
     );
+    // The earlier event's pictures lead, so this one's are numbered after them.
+    const before = withdrawn.reduce((n, one) => n + one.images.length, 0);
     const words =
       withdrawn.length === 0
         ? text
@@ -11905,19 +11944,26 @@ export const createServer = (
               const earlier = parseArtifactComments(one.text);
               return earlier ? [earlier.sections] : [];
             }),
-            parseArtifactComments(text)?.sections ?? "",
+            (parseArtifactComments(text)?.sections ?? "").replace(
+              PICTURE_NUMBER,
+              (_, n: string) => `(picture ${Number(n) + before} of this message`
+            ),
           ]);
     const pictures = [
       ...withdrawn.flatMap((one) => one.images),
       ...images,
     ].slice(0, COMMENT_LIMITS.pictures);
+    const carried = [
+      ...withdrawn.flatMap((one) => one.attachments),
+      ...attachments,
+    ];
     let record: SentMessageRow | undefined;
     try {
-      record = sendArtifactEvent(instance, words, pictures, replaces);
+      record = sendArtifactEvent(instance, words, pictures, replaces, carried);
     } catch (error) {
       // A refusal the send path throws (a conversation gone) keeps no record of its own.
       const reason = error instanceof Error ? error.message : String(error);
-      recordUndelivered(instance, words, pictures, reason);
+      recordUndelivered(instance, words, pictures, reason, carried);
       return { ok: false, reason };
     }
     return record && record.state !== "failed"
@@ -11954,8 +12000,8 @@ export const createServer = (
   };
 
   // Artifacts (Projects spec §5.10): one Yjs doc each, synced on the preview
-  // listener; the person's picks' Send tells the session to read them, and
-  // their marks go to it by themselves (artifacts/).
+  // listener; the person's Send tells the session to read their picks, and
+  // carries their marks to it (artifacts/).
   const artifactDocs = createArtifactDocs({
     db: db.artifacts,
     lifetime,
@@ -12088,7 +12134,7 @@ export const createServer = (
     // Caw's decision page is his to read, never a thread line.
     signal: (instance, artifact, responses) =>
       signalResponses(instance, artifact, responses),
-    // Your pins, replies, resolves and ink go by themselves once quiet.
+    // Your pins, replies, resolves and ink go on your Send, with your note.
     deliverMarks: (instance, artifact, delivery) =>
       deliverArtifactMarks(instance, artifact, delivery),
     // A delegate's artifact handed to its parent unopened: the parent hears it once.

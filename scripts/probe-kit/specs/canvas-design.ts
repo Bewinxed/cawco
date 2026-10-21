@@ -32,7 +32,7 @@
  *
  * The panel (the bench) at 390, 523 and 720, light and dark:
  * 8. (330 too, where the mode stands as one button; and 8h, at 330 with
- *    Send picks standing, Comments in More at 0 and 2 open pins.)
+ *    Send standing, Comments in More at 0 and 2 open pins.)
  *    The name is whole or ellipsed, never under another control; every
  *    head control is 44px tall or reaches 44px through its ::after under a
  *    finger; the controls past the head's room stand in More, in head
@@ -82,7 +82,7 @@
  *    whole on one line with its full text as a title, and Vite's code frame. (`CANVAS_DESIGN=refused` runs 13 and 14 alone.)
  *
  * The bench head swept every px from 300 to 800, light, desk pointer, for a
- * component canvas and a plain preview, with Send picks standing and
+ * component canvas and a plain preview, with Send standing and
  * without, at 0 and 2 open pins (W0–W4, `CANVAS_DESIGN=sweep` alone): a
  * wider head stands every control a narrower one does, no width alternates
  * between frames, the way down stands what the way up did, and the head's
@@ -2375,7 +2375,7 @@ const pinOf = (number: number, at: string) => ({
  * Each artifact's live doc as the hub's `/ws/artifact/<session>/<artifact>`
  * serves it (y-websocket's sync protocol), answered in the page's own
  * network, one doc per artifact: a pick the session has not heard (none,
- * `pick` false: Send picks doesn't stand), the stage `stages` names for it
+ * `pick` false: Send doesn't stand), the stage `stages` names for it
  * (its `meta.stage`), and the pins `pins()` holds as it changes.
  */
 async function serveDoc(
@@ -2504,17 +2504,26 @@ async function readMore(page: Page) {
     .filter({ hasText: "Comments" });
   said.entry = `${(await entry.textContent())?.trim()} (menu-count ${await textOr(entry.locator("[data-slot=count]"))})`;
   await entry.click();
-  said.opened = await page
-    .locator("[data-pin-list-pop]")
+  const opened = await page
+    .locator('[data-slot="comment-rail"]')
     .waitFor({ state: "visible", timeout: 5000 })
     .then(() => true)
     .catch(() => false);
-  await page.keyboard.press("Escape");
+  said.opened = opened;
+  // The rail closes only by its Close or by Comments, never by Esc (DESIGN.md, The Comments rail).
+  if (opened) {
+    await page
+      .locator('[data-slot="comment-rail"]')
+      .getByRole("button", { name: "Close comments" })
+      .click();
+  } else {
+    await page.keyboard.press("Escape");
+  }
   await page.waitForTimeout(300);
   return said;
 }
 
-/** 8h: Comments in More, at 330 with Send picks standing, at 0 open pins and at 2, under a finger. */
+/** 8h: Comments in More, at 330 with Send standing, at 0 open pins and at 2, under a finger. */
 async function moreHoldsComments(
   kit: Kit,
   bench: string,
@@ -2547,7 +2556,7 @@ async function moreHoldsComments(
     const count = open > 0 ? String(open) : "none";
     const label = open > 0 ? `More, Comments ${open} open` : "More";
     kit.check(
-      `8h: 330 ${theme}, Send picks standing, ${open} open: Comments goes to More, whose count is ${count}, named "${label}", its entry's count ${count}, and choosing it opens the Comments panel`,
+      `8h: 330 ${theme}, Send standing, ${open} open: Comments goes to More, whose count is ${count}, named "${label}", its entry's count ${count}, and choosing it opens the Comments rail`,
       said.standing.includes("send") &&
         !said.standing.includes("comments") &&
         said.count === count &&
@@ -2609,6 +2618,8 @@ async function commentsCount(
 interface SweepRead {
   box: number | null;
   frames: string[];
+  /** The head read is no longer in the page: something drew a new one. */
+  gone: boolean;
   head: number;
   w: number;
 }
@@ -2670,7 +2681,13 @@ const SWEEP = async ({
       await frame();
       frames.push(read());
     }
-    reads.push({ w, head: head.clientWidth, box: box(), frames });
+    reads.push({
+      w,
+      head: head.clientWidth,
+      box: box(),
+      frames,
+      gone: !head.isConnected,
+    });
   }
   return reads;
 };
@@ -2687,7 +2704,7 @@ const keysOf = (frame: string): Set<string> =>
 /**
  * The head's invariant swept every px from 300 to 800 (DESIGN.md, the
  * head's priority rule): a component canvas (the mode, the view, Inspect)
- * or a plain preview, with Send picks standing or not, at 0 and 2 open
+ * or a plain preview, with Send standing or not, at 0 and 2 open
  * pins. W1: every wider head stands every control a narrower one does; W2:
  * no width alternates between frames; W3: coming back down stands the same
  * controls at each width as going up.
@@ -2711,7 +2728,7 @@ async function sweepLeg(
   await page.goto(
     `${bench}/motion/artifact-head?w=800&kind=${kind}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
   );
-  const config = `${kind === "component" ? "component canvas" : "plain preview"}, ${picks ? "Send picks standing" : "no Send picks"}`;
+  const config = `${kind === "component" ? "component canvas" : "plain preview"}, ${picks ? "Send standing" : "no Send"}`;
   const ready = await page
     .waitForSelector(
       picks
@@ -2742,7 +2759,9 @@ async function sweepLeg(
       sized.length === 0,
       sized
         .slice(0, 5)
-        .map((one) => `${one.w}: head ${one.head}`)
+        .map(
+          (one) => `${one.w}: head ${one.head}${one.gone ? " (detached)" : ""}`
+        )
         .join("; ") || "every width"
     );
     const apart = up.filter((one) => one.box !== one.head);
@@ -3031,7 +3050,7 @@ const DESK_READ = () => {
 
 /**
  * D: the head at session-sheet leg 18's desk pane (523px, a component
- * canvas, no Send picks, no open pins): its width and the old label rule's
+ * canvas, no Send, no open pins): its width and the old label rule's
  * container box agree, both under 640, so Comments stands by glyph and
  * count with its word not drawn, as the old rule drew it there.
  */
@@ -3070,7 +3089,7 @@ async function deskLeg(kit: Kit, bench: string, stage: Stage): Promise<void> {
   await page.close();
 }
 
-/** W0–W3 for a component canvas and a plain preview, with Send picks standing and without. */
+/** W0–W3 for a component canvas and a plain preview, with Send standing and without. */
 async function sweeps(kit: Kit, bench: string, stage: Stage): Promise<void> {
   for (const kind of ["component", "preview"] as const) {
     for (const picks of [true, false]) {

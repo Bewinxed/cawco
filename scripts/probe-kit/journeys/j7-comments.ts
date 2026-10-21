@@ -1,8 +1,8 @@
 /**
  * J7, previews and comments: a session shows a page; the person opens it,
- * pins a comment on what they mean and writes in it, and the session
- * receives it by itself (artifacts/service.ts `deliverMarks`: one delivery
- * after a quiet period, no Send to press).
+ * presses what they mean, writes in the composer that opens there and
+ * presses Comment, then Send: the session receives it as one delivery
+ * (artifacts/service.ts `deliverMarks`, on Send alone).
  *
  * The page is the session's own, made through the hub's artifact API as
  * `artifact_create` makes one. The outcome is read from the model: it is
@@ -25,8 +25,8 @@ const NOTICE = "[CawCo] The person commented on the page";
 const PAGE = "release-notes";
 const LEAD = "Version 4.2 ships the new import screen and two fixes.";
 const DETAIL = "The import screen reads CSV and Excel files up to 50 MB.";
-/** The quiet period, then the hub's send, the agent and the harness's request. */
-const DELIVERY_MS = 45_000;
+/** The hub's send, the agent and the harness's request. */
+const DELIVERY_MS = 30_000;
 
 const html = (title: string) => `<!doctype html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -67,25 +67,45 @@ async function walk(leg: Leg): Promise<void> {
       shows(preview.getByText(LEAD), "the page's words in its preview", 60_000)
   );
 
-  // The preview's mode: Interact, Comment, Draw.
-  const comment = page
+  // The preview's mode: Interact, Comment, Draw, as three segments, or,
+  // where a phone's head has no room for them, one button (`Mode: …`)
+  // opening the three.
+  const segment = page
     .getByRole("tablist", { name: "Preview mode" })
     .getByRole("tab", { name: "Comment" })
     .filter({ visible: true });
+  const modeButton = page
+    .locator('button[aria-label^="Mode:"]')
+    .filter({ visible: true })
+    .first();
   await leg.step(
     "Turn on Comment",
-    () => comment.click(),
+    async () => {
+      if ((await segment.count()) > 0) {
+        await segment.click();
+        return;
+      }
+      await modeButton.click();
+      await page
+        .getByRole("menuitemradio", { name: "Comment" })
+        .filter({ visible: true })
+        .first()
+        .click();
+    },
     () =>
       eventually(
         "Comment is the preview's mode",
-        () => comment.getAttribute("aria-selected"),
-        (selected) => selected === "true"
+        async () =>
+          (await segment.count()) > 0
+            ? (await segment.getAttribute("aria-selected")) === "true"
+            : (await modeButton.getAttribute("aria-label")) === "Mode: Comment",
+        Boolean
       )
   );
 
-  const card = page.getByRole("textbox").filter({ visible: true }).last();
+  const composer = page.locator('[data-slot="pin-composer"]');
   await leg.step(
-    "Pin a comment on the first line and write in it",
+    "Comment on the first line, then Send",
     async () => {
       // A tap where the line is: in Comment mode the comment layer lies
       // over the page and takes the tap (as the person's finger lands).
@@ -97,14 +117,21 @@ async function walk(leg: Leg): Promise<void> {
         line.x + line.width * 0.3,
         line.y + line.height / 2
       );
-      await card.waitFor({ timeout: 10_000 });
-      await card.fill(words);
-      await page.getByRole("button", { name: "Reply" }).click();
-      await page.keyboard.press("Escape");
+      await composer.waitFor({ timeout: 10_000 });
+      await composer.getByRole("combobox").fill(words);
+      await composer
+        .getByRole("button", { name: "Comment", exact: true })
+        .click();
+      await composer.waitFor({ state: "detached", timeout: 10_000 });
+      await page
+        .locator('[data-slot="send"]')
+        .filter({ visible: true })
+        .first()
+        .click();
     },
     async () => {
       const heard = await eventually(
-        "the session is sent the comment by itself",
+        "the session is sent the comment on Send",
         () =>
           fleet.seen.find(
             (one) =>
@@ -131,7 +158,7 @@ async function walk(leg: Leg): Promise<void> {
 
 const journey: Journey = {
   name: "j7-comments",
-  flow: "Previews and comments: open a preview, pin a comment, the agent receives it",
+  flow: "Previews and comments: open a preview, comment on it, Send, the agent receives it",
   respond: (seen: Seen) =>
     seen.tools && seen.last.includes(NOTICE)
       ? say("Read your comment; putting the version first.")

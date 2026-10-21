@@ -122,7 +122,7 @@ export const previewRoutes = (deps: {
           return refused(error);
         }
       })
-      // The pane's Send picks, as the page's own send would.
+      // The pane's Send (picks, comments and ink, with the note), as the page's own send would.
       .post(
         "/api/instances/:id/artifacts/:artifact/send",
         ({ params, request }) =>

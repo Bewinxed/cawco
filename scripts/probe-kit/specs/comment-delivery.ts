@@ -1,54 +1,57 @@
 /**
- * The person's pins reach the session by themselves (artifacts/service.ts
- * `deliverMarks`, server.ts `deliverArtifactMarks`). The owner: "this part
- * where i type a comment and i have to type them all and then have to tell
- * you to read them is getting tedious".
+ * The person's comments reach the session when they press Send (owner's
+ * pick 3 on the commenting page: "On Send": hollow Unsent pills, Send
+ * counting them, one press sending all with a note; artifacts/service.ts
+ * `send` and `deliverMarks`, server.ts `deliverArtifactMarks`).
  *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
  * mock model) and the built dashboard at the desk, read from the hub's own
  * records (`sent_messages`), what the model was sent, the page's doc and
  * the pane's DOM:
  *
- * 1. A session shows a page in its pane; the pane's head has no Send control.
- * 2. Three pins, each tapped and written in, 2 s apart: exactly one delivery
- *    to the session, about the quiet period (10 s) after the third; it
- *    carries all three, each with its number, id, selector, source
- *    file:line, text and the person's words, and their three pictures; the
- *    session's turn starts on it (the model is asked with it as the last
- *    message); the transcript draws one quiet line, "Comments on <page>",
- *    and no row of the person's; every pin and entry is stamped `sentAt`.
- * 3. A reply to pin 2 later: one more delivery, pin 2 alone with the reply.
- * 4. The person resolves pin 3: one more delivery, its one resolve line.
- * 5. A pen stroke no pin stands on: one more delivery, the ink over its
- *    element with its box, and the page with the ink as its picture.
- * 6. Still no Send control in the pane.
- * 8. A pin the session reads with comment_read before the quiet period ends
- *    is not delivered to it (it is stamped heard as read); the person's
- *    later reply on it still delivers, with only the new words.
+ * 1. A session shows a page in its pane; nothing is unsent, so the head has
+ *    no Send.
+ * 2. Three comments, each pressed and written, 2 s apart: past the old quiet
+ *    period nothing reaches the session, and the head's Send counts 3. One
+ *    press of it: exactly one delivery, carrying all three, each with its
+ *    number, id, selector, source file:line, text and the person's words,
+ *    and their three pictures; the session's turn starts on it; the
+ *    transcript draws one quiet line, "Comments on <page>", and no row of
+ *    the person's; every pin and entry is stamped `sentAt`.
+ * 3. A reply to pin 2 later and Send: one more delivery, pin 2 alone.
+ * 4. The person resolves pin 3 and sends: one more delivery, its resolve line.
+ * 5. A pen stroke no pin stands on and Send: one more delivery, the ink over
+ *    its element with its box, and the page with the ink as its picture.
+ * 6. Everything sent: no Send in the pane's head.
+ * 8. A comment the session reads with comment_read before any Send is
+ *    stamped heard and offers no Send; the person's later reply on it still
+ *    delivers on Send, with only the new words.
  * 7. A writer that has ended: a session of a project with Caw makes a page,
  *    and its conversation is gone (the hub's own record, `last_error`, as
- *    the harness sets it when a resume finds nothing). A pin on its page
- *    wakes the project's Caw instead, the delivery naming the pin's id; his
- *    comment_reply lands in that pin's thread, by the agent, where the
- *    person reads it (7a). Caw's own turn needs his place's sandbox: run
- *    from inside a workspace on a host that cannot nest one (core
- *    boundary-nesting.ts), the hub's refusal of his wake is noted, the
+ *    the harness sets it when a resume finds nothing). A comment on its
+ *    page, sent, wakes the project's Caw instead, the delivery naming the
+ *    pin's id; his comment_reply lands in that pin's thread, by the agent,
+ *    where the person reads it (7a). Caw's own turn needs his place's
+ *    sandbox: run from inside a workspace on a host that cannot nest one
+ *    (core boundary-nesting.ts), the hub's refusal of his wake is noted, the
  *    writer is checked to be sent nothing, the pin to stay unstamped (owed
- *    for the next delivery), and the writer's transcript to show the
- *    comments line "not sent" with why. Live, the pin is stamped heard. 7b, the rule through the tool:
- *    a session that is not the project's lead is refused the pin; once the
- *    hub's record names it the lead, its comment_reply lands in the thread.
- * 9. A comment on the page as a whole (a tap in its padding, no content
- *    within reach) stands on the page's body and keeps none of its words;
- *    the page's words changing twice leaves it on the page, never moved
- *    aside nor said gone, and it is delivered once, as the page's comment.
+ *    for the next Send), and the writer's transcript to show the comments
+ *    line "not sent" with why. Live, the pin is stamped heard. 7b, the rule
+ *    through the tool: a session that is not the project's lead is refused
+ *    the pin; once the hub's record names it the lead, its comment_reply
+ *    lands in the thread.
+ * 9. A comment on the whole page (a press in its padding, no content within
+ *    reach) stands on the page's body, its pill at the viewport's top-right,
+ *    and keeps none of its words; the page's words changing twice leaves it
+ *    on the page, never moved aside nor said gone, and Send delivers it
+ *    once, as a comment on the whole page.
  * 10. The page's own doc socket dropped: once it has stood lost 15 s the
- *    Comments control and its panel say the comments aren't reaching the
- *    agent, with Try again; a comment tapped then opens its card at once
- *    and keeps its words in the page's doc; it and an annotation made then
- *    survive a frame reload from the device, the page lets go of another
- *    artifact's stale copy, and with the link back and Try again the
- *    session hears each once.
+ *    Comments control and its rail say the comments aren't reaching the
+ *    agent, with Try again; a comment pressed then opens its composer at
+ *    once, and Comment keeps its words in the page's doc; it and an
+ *    annotation made then survive a frame reload from the device, the page
+ *    lets go of another artifact's stale copy, and with the link back, Try
+ *    again and Send the session hears each once.
  * 11. Pins kept on a page-sized container by its place (one moved aside)
  *    stand on the page as a whole again, written back on its body, and the
  *    session is told nothing new of them.
@@ -79,11 +82,11 @@ const NAME = "comment-delivery";
 const NOTICE =
   /\[CawCo\] The person commented on the page "comment-delivery" \(artifact [0-9a-f-]{36}\)\./;
 const IMAGE_BLOCK = /"type":"image"/g;
-/** The hub's quiet period (artifacts/service.ts `MARKS_QUIET_MS`). */
+/** The hub's old quiet period: nothing may come of the person's marks in it, or past it, without Send. */
 const QUIET_MS = 10_000;
-/** How far past the quiet period a delivery may reach the model: the hub's send, the agent, Claude Code's request. */
-const REACH_MS = 6000;
-/** How long after a delivery the probe watches for another that should not come. */
+/** How long a Send's delivery may take to reach the model: the hub's send, the agent, Claude Code's request. */
+const REACH_MS = 12_000;
+/** How long after a delivery (or none) the probe watches for one that should not come. */
 const STILL_MS = 12_000;
 
 const PARAS = [
@@ -300,35 +303,83 @@ const numbered = (pins: Pins, number: number) =>
       })
     | undefined;
 
-/** The pane's pin list: in the Comments popover hung from the well, opened when shut. */
+const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
+/** The Comments rail (DESIGN.md, The Comments rail). */
+const RAIL = '[data-slot="comment-rail"]';
+/** The composer a press on the page opens (DESIGN.md, Placing a comment). */
+const COMPOSE = '[data-slot="pin-composer"]';
+
+/** The pane's Comments rail, beside the page, opened when shut. */
 const rowsOf = async (page: Page) => {
-  const button = page.locator(
-    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
-  );
+  const button = page.locator(`${PANE} button[data-slot="comments"]`);
   if ((await button.getAttribute("aria-expanded")) !== "true") {
     await button.click();
   }
-  const list = page.locator('[data-pin-list-pop] [data-slot="pin-list"]');
+  const list = page.locator(RAIL);
   await list.waitFor({ timeout: 5000 });
+  await settle(page, 350);
   return list;
 };
-/** Pin `number`'s card, opened from its row in the Comments popover. */
+/** Pin `number`'s thread, opened from its row in the rail. */
 const openRow = async (page: Page, number: number) =>
   (await rowsOf(page))
     .locator(`[data-slot="pin-row"][data-pin-row="${number}"]`)
     .click();
-/** The Comments popover shut, when open. */
+/** The rail shut, when open. */
 const shutList = async (page: Page) => {
-  const button = page.locator(
-    ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[data-slot="comments"]'
-  );
+  const button = page.locator(`${PANE} button[data-slot="comments"]`);
   if ((await button.getAttribute("aria-expanded")) === "true") {
     await button.click();
     await page
-      .locator("[data-pin-list-pop]")
+      .locator(RAIL)
       .waitFor({ state: "detached", timeout: 3000 })
       .catch(() => undefined);
   }
+};
+/** The head's Send, while something is unsent: its count, or null when it doesn't stand. */
+const sendCount = async (page: Page) =>
+  (
+    await page
+      .locator(`${PANE} [data-slot="send"] [data-slot="send-count"]`)
+      .textContent({ timeout: 1000 })
+      .catch(() => null)
+  )?.trim() ?? null;
+/** The person's Send: the head's, or the rail's with a note. When it was pressed. */
+const sendNow = async (page: Page, note = "") => {
+  if (note) {
+    const rail = await rowsOf(page);
+    await rail
+      .getByRole("textbox", { name: "Add a note for the agent" })
+      .fill(note);
+    const at = Date.now();
+    await rail.locator('[data-slot="rail-send"]').click();
+    return at;
+  }
+  const at = Date.now();
+  await page.locator(`${PANE} [data-slot="send"]`).click();
+  return at;
+};
+/**
+ * A press at the screen's `x`, `y` in Comment mode: its composer opens,
+ * writing nothing; `words` typed and Enter comment, the pin and its first
+ * entry written at once. Whether the composer opened.
+ */
+const commentAt = async (page: Page, x: number, y: number, words: string) => {
+  await page.mouse.move(x, y, { steps: 4 });
+  await page.mouse.click(x, y);
+  const composer = page.locator(COMPOSE);
+  const opened = await composer
+    .waitFor({ timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  if (opened) {
+    await composer.getByRole("combobox").fill(words);
+    await page.keyboard.press("Enter");
+    await composer
+      .waitFor({ state: "detached", timeout: 8000 })
+      .catch(() => undefined);
+  }
+  return opened;
 };
 
 /** Until the page has heard the pane's Comment mode. */
@@ -351,7 +402,7 @@ const pageInComment = (frame: Frame) =>
 const nextDelivery = (label: string, from: number, ms: number) =>
   until(label, () => deliveries(from)[0], Boolean, ms).catch(() => undefined);
 
-/** Pins 1–3, each tapped and written in, 2 s from one's words to the next; when each one's words were kept. */
+/** Comments 1–3, each pressed and written, 2 s from one's words to the next; when each one's words were kept. */
 const writePins = async (on: On, frame: Frame): Promise<number[]> => {
   const { page } = on;
   const keptAt: number[] = [];
@@ -363,13 +414,7 @@ const writePins = async (on: On, frame: Frame): Promise<number[]> => {
       await Bun.sleep(Math.max(0, keptAt[i - 1] + 2000 - Date.now()));
     }
     const b = await screenBox(on, frame, `#${PARAS[i].id}`);
-    await page.mouse.click(b.x + b.w * 0.3, b.y + b.h / 2);
-    const card = page.locator(
-      `[data-slot="pin-card"][data-pin-card="${number}"]`
-    );
-    await card.waitFor({ timeout: 5000 });
-    await card.getByRole("textbox").fill(words);
-    await card.getByRole("button", { name: "Reply" }).click();
+    await commentAt(page, b.x + b.w * 0.3, b.y + b.h / 2, words);
     await until(
       `pin ${number}'s words in the doc`,
       () => docOf(frame),
@@ -377,12 +422,11 @@ const writePins = async (on: On, frame: Frame): Promise<number[]> => {
       5000
     );
     keptAt.push(Date.now());
-    await page.keyboard.press("Escape");
   }
   return keptAt;
 };
 
-/** Comment mode on in the pane, a tap on `selector`, the person's words in pin `number`'s card. */
+/** Comment mode on in the pane, a press on `selector`, the person's words commented as pin `number`. */
 const pinWith = async (
   on: On,
   frame: Frame,
@@ -400,20 +444,14 @@ const pinWith = async (
   await frame.locator(selector).scrollIntoViewIfNeeded();
   await settle(on.page, 300);
   const b = await screenBox(on, frame, selector);
-  await on.page.mouse.click(b.x + b.w * 0.3, b.y + b.h / 2);
-  const card = on.page.locator(
-    `[data-slot="pin-card"][data-pin-card="${number}"]`
-  );
-  await card.waitFor({ timeout: 5000 }).catch(async (error: unknown) => {
+  if (!(await commentAt(on.page, b.x + b.w * 0.3, b.y + b.h / 2, words))) {
     const pins = Object.values((await docOf(frame)).pins).map(
       (pin) => pin.number
     );
     throw new Error(
-      `pin ${number}'s card never opened (the doc holds pins ${pins.join(", ")}; tapped ${selector} at ${JSON.stringify(b)}): ${error instanceof Error ? error.message : String(error)}`
+      `pin ${number}'s composer never opened (the doc holds pins ${pins.join(", ")}; pressed ${selector} at ${JSON.stringify(b)})`
     );
-  });
-  await card.getByRole("textbox").fill(words);
-  await card.getByRole("button", { name: "Reply" }).click();
+  }
   await until(
     `pin ${number}'s words in the doc`,
     () => docOf(frame),
@@ -421,12 +459,12 @@ const pinWith = async (
     5000
   );
   await on.page.keyboard.press("Escape");
-  await on.page.keyboard.press("Escape");
 };
 
 /**
- * 8. Read before it goes: a pin the session reads with comment_read inside
- * the quiet period is not delivered to it; the person's later reply is.
+ * 8. Read before it goes: a comment the session reads with comment_read
+ * before any Send is stamped heard and offers no Send; the person's later
+ * reply on it goes on the next Send.
  */
 const readFirstChecks = async (
   on: On,
@@ -440,24 +478,24 @@ const readFirstChecks = async (
   const keptAt = Date.now();
   const read = await callIn(session, READ_TOOL, { artifact });
   const readIn = Date.now() - keptAt;
-  await Bun.sleep(
-    Math.max(0, keptAt + QUIET_MS + REACH_MS + 4000 - Date.now())
-  );
+  await Bun.sleep(Math.max(0, keptAt + QUIET_MS + 2000 - Date.now()));
   const pin4 = numbered((await docOf(frame)).pins, 4);
   const early = deliveries(before).filter((one) => one.last.includes("## 4."));
+  const offered = await sendCount(page);
   kit.check(
-    "8: a pin the session reads with comment_read before the quiet period ends is not delivered to it, and is stamped heard",
-    readIn < QUIET_MS &&
-      read.includes(FIRST_WORDS) &&
+    "8: a comment the session reads with comment_read before any Send is stamped heard, is never delivered, and leaves nothing to Send",
+    read.includes(FIRST_WORDS) &&
       early.length === 0 &&
       !!pin4?.heard &&
-      !!pin4.sentAt,
-    `read ${readIn} ms after the pin's words; deliveries of pin 4 ${early.length}; pin ${JSON.stringify(pin4 && { sentAt: pin4.sentAt, heard: pin4.heard })}; read ${read.slice(0, 200)}`
+      !!pin4.sentAt &&
+      offered === null,
+    `read ${readIn} ms after the comment; deliveries of pin 4 ${early.length}; Send ${offered}; pin ${JSON.stringify(pin4 && { sentAt: pin4.sentAt, heard: pin4.heard })}; read ${read.slice(0, 200)}`
   );
   const later = heard.length;
   await openRow(page, 4);
   const card = page.locator('[data-slot="pin-card"][data-pin-card="4"]');
-  await card.getByRole("textbox").fill(LATER_WORDS);
+  await card.waitFor({ timeout: 5000 });
+  await card.getByRole("combobox").fill(LATER_WORDS);
   await card.getByRole("button", { name: "Reply" }).click();
   await until(
     "the later reply in pin 4's thread",
@@ -467,14 +505,15 @@ const readFirstChecks = async (
   );
   await page.keyboard.press("Escape");
   await shutList(page);
+  await sendNow(page);
   const next = await nextDelivery(
     "the later reply's delivery",
     later,
-    QUIET_MS + REACH_MS + 5000
+    REACH_MS + 5000
   );
   const words = next?.last ?? "";
   kit.check(
-    "8: the person's later reply on that pin still delivers, with only the new words",
+    "8: the person's later reply on that comment goes on the next Send, with only the new words",
     words.includes("## 4. comment on #e") &&
       words.includes(`- I wrote: ${JSON.stringify(LATER_WORDS)}`) &&
       !words.includes(`- I wrote: ${JSON.stringify(FIRST_WORDS)}`),
@@ -505,21 +544,18 @@ const wholePageChecks = async (on: On, frame: Frame) => {
   // Beside #c, past the paragraphs' 70% and far from any of them: the page's own box.
   const pageBox = await screenBox(on, frame, "main");
   const c = await screenBox(on, frame, "#c");
-  await page.mouse.click(pageBox.x + pageBox.w * 0.95, c.y + c.h / 2);
-  const card = page.locator(
-    `[data-slot="pin-card"][data-pin-card="${WHOLE_PIN}"]`
+  await commentAt(
+    page,
+    pageBox.x + pageBox.w * 0.95,
+    c.y + c.h / 2,
+    WHOLE_WORDS
   );
-  await card.waitFor({ timeout: 5000 });
-  await card.getByRole("textbox").fill(WHOLE_WORDS);
-  await card.getByRole("button", { name: "Reply" }).click();
   await until(
     `pin ${WHOLE_PIN}'s words in the doc`,
     () => docOf(frame),
     (now) => (numbered(now.pins, WHOLE_PIN)?.thread.length ?? 0) === 1,
     5000
   );
-  const keptAt = Date.now();
-  await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   const made = numbered((await docOf(frame)).pins, WHOLE_PIN) as
     | (ReturnType<typeof numbered> & {
@@ -527,7 +563,7 @@ const wholePageChecks = async (on: On, frame: Frame) => {
       })
     | undefined;
   kit.check(
-    "9: a tap in the page's padding, no content within reach, pins the page as a whole: its anchor is the page's body, keeping none of the page's words",
+    "9: a press in the page's padding, no content within reach, comments on the whole page: its anchor is the page's body, keeping none of the page's words",
     made?.anchor?.selector === "body" && !made.anchor.text,
     JSON.stringify(made?.anchor)
   );
@@ -545,8 +581,9 @@ const wholePageChecks = async (on: On, frame: Frame) => {
     await settle(page, 1000);
   }
   const after = numbered((await docOf(frame)).pins, WHOLE_PIN);
+  // A comment on the whole page stands at the viewport's top-right, fixed to it.
   const disc = await frame
-    .locator(`svg[data-cawco-pins] g[data-pin="${WHOLE_PIN}"]`)
+    .locator(`svg[data-cawco-pins-fixed] g[data-pin="${WHOLE_PIN}"]`)
     .count();
   await openRow(page, WHOLE_PIN);
   const opened = page.locator(
@@ -557,22 +594,21 @@ const wholePageChecks = async (on: On, frame: Frame) => {
   await page.keyboard.press("Escape");
   await shutList(page);
   kit.check(
-    "9: after the page's words change twice the page's pin stays on the page: never moved aside, its disc drawn, its card not saying its element is gone",
+    "9: after the page's words change twice the page's comment stays on the page: never moved aside, its pill drawn at the viewport's top-right, its thread not saying its element is gone",
     !!after && !after.movedAt && disc === 1 && gone === 0,
     `movedAt ${String(after?.movedAt)}; discs ${disc}; gone lines ${gone}`
   );
-  await Bun.sleep(
-    Math.max(0, keptAt + QUIET_MS + REACH_MS + STILL_MS - Date.now())
-  );
+  await sendNow(page);
+  await Bun.sleep(REACH_MS + STILL_MS);
   const went = deliveries(before).filter((one) =>
     one.last.includes(`## ${WHOLE_PIN}.`)
   );
   const words = went[0]?.last ?? "";
   const stamped = numbered((await docOf(frame)).pins, WHOLE_PIN);
   kit.check(
-    "9: the page's comment reaches the session exactly once, as a comment on the page with the person's words and its id, never as gone, and is stamped sent",
+    "9: on Send the page's comment reaches the session exactly once, as a comment on the whole page with the person's words and its id, never as gone, and is stamped sent",
     went.length === 1 &&
-      words.includes(`## ${WHOLE_PIN}. comment on the page as a whole`) &&
+      words.includes(`## ${WHOLE_PIN}. comment on the whole page`) &&
       words.includes(`- I wrote: ${JSON.stringify(WHOLE_WORDS)}`) &&
       words.includes(`- Pin: ${stamped?.id}`) &&
       !words.includes("gone from the page") &&
@@ -617,10 +653,10 @@ const linkDownChecks = async (on: On, frame: Frame) => {
   ).catch(() => null);
   const saidIn = Date.now() - droppedAt;
   await rowsOf(page);
-  const line = page.locator("[data-pin-list-down]");
+  const line = page.locator(`${RAIL} [data-pin-list-down]`);
   const lineWords = (await line.count()) > 0 ? await line.innerText() : "";
   kit.check(
-    "10: the page's link dropped: once it has stood lost, the Comments control says the comments aren't reaching the agent, and its panel says why with Try again",
+    "10: the page's link dropped: once it has stood lost, the Comments control says the comments aren't reaching the agent, and its rail says why with Try again",
     !!told?.includes("Comments aren't reaching the agent") &&
       saidIn >= LINK_DOWN_MS - 1000 &&
       lineWords.includes(LINK_DROPPED) &&
@@ -643,8 +679,8 @@ const linkDownChecks = async (on: On, frame: Frame) => {
   ).catch(() => null);
   const madeId = made ? numbered(made.pins, DOWN_PIN)?.id : undefined;
 
-  // A comment tapped while the link is down: its card opens at once, drawn
-  // from the page's pin, and the person's words are kept in the page's doc.
+  // A comment pressed while the link is down: its composer opens at once,
+  // and Comment keeps its words in the page's doc; its thread draws them.
   const comment = page.locator(
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
@@ -655,18 +691,17 @@ const linkDownChecks = async (on: On, frame: Frame) => {
   await settle(page, 300);
   const b = await screenBox(on, frame, "#b");
   const tappedAt = Date.now();
+  await page.mouse.move(b.x + b.w * 0.75, b.y + b.h / 2, { steps: 4 });
   await page.mouse.click(b.x + b.w * 0.75, b.y + b.h / 2);
-  const card = page.locator(
-    `[data-slot="pin-card"][data-pin-card="${DOWN_COMMENT}"]`
-  );
-  const opened = await card
+  const composer = page.locator(COMPOSE);
+  const opened = await composer
     .waitFor({ timeout: 2000 })
     .then(() => true)
     .catch(() => false);
   const openedIn = Date.now() - tappedAt;
   if (opened) {
-    await card.getByRole("textbox").fill(DOWN_WORDS);
-    await card.getByRole("button", { name: "Reply" }).click();
+    await composer.getByRole("combobox").fill(DOWN_WORDS);
+    await page.keyboard.press("Enter");
   }
   const written = await until(
     `pin ${DOWN_COMMENT}'s words in the page's doc`,
@@ -674,21 +709,25 @@ const linkDownChecks = async (on: On, frame: Frame) => {
     (now) => numbered(now.pins, DOWN_COMMENT)?.thread[0]?.text === DOWN_WORDS,
     5000
   ).catch(() => null);
-  const shown = opened
-    ? await card
-        .locator('[data-slot="thread"]')
-        .innerText()
-        .catch(() => "")
-    : "";
+  await openRow(page, DOWN_COMMENT).catch(() => undefined);
+  const card = page.locator(
+    `[data-slot="pin-card"][data-pin-card="${DOWN_COMMENT}"]`
+  );
+  await card.waitFor({ timeout: 5000 }).catch(() => undefined);
+  const shown = await card
+    .locator('[data-slot="thread"]')
+    .innerText()
+    .catch(() => "");
   await page.keyboard.press("Escape");
+  await shutList(page);
   await page.keyboard.press("Escape");
   const commentId = written
     ? numbered(written.pins, DOWN_COMMENT)?.id
     : undefined;
   kit.check(
-    "10: a comment tapped while the link is down opens its card at once, and the person's words are kept in the page's doc and drawn in the card",
+    "10: a comment pressed while the link is down opens its composer at once; Comment keeps the person's words in the page's doc, and its thread draws them",
     opened && !!commentId && shown.includes(DOWN_WORDS),
-    `card ${opened ? `open in ${openedIn} ms` : "never opened"}; words in the page's doc ${written ? "yes" : "no"}; card thread ${JSON.stringify(shown.slice(0, 120))}`
+    `composer ${opened ? `open in ${openedIn} ms` : "never opened"}; words in the page's doc ${written ? "yes" : "no"}; thread ${JSON.stringify(shown.slice(0, 120))}`
   );
 
   // Its write to the device lands, and a copy of another artifact no one
@@ -750,7 +789,7 @@ const linkDownChecks = async (on: On, frame: Frame) => {
   const backAt = Date.now();
   await rowsOf(page);
   await page
-    .locator("[data-pin-list-down]")
+    .locator(`${RAIL} [data-pin-list-down]`)
     .getByRole("button", { name: "Try again" })
     .click()
     .catch(() => undefined);
@@ -764,9 +803,16 @@ const linkDownChecks = async (on: On, frame: Frame) => {
     15_000
   ).catch(() => false);
   await shutList(page);
-  await Bun.sleep(
-    Math.max(0, backAt + QUIET_MS + REACH_MS + STILL_MS - Date.now())
-  );
+  // The page's doc reaches the hub, then the Send that carries it.
+  await until(
+    "Send standing for what the link held",
+    () => sendCount(page),
+    (count) => count !== null,
+    15_000
+  ).catch(() => null);
+  await Bun.sleep(Math.max(0, backAt + 2000 - Date.now()));
+  await sendNow(page);
+  await Bun.sleep(REACH_MS + STILL_MS);
   const went = deliveries(before).filter((one) =>
     one.last.includes(`## ${DOWN_PIN}.`)
   );
@@ -779,7 +825,7 @@ const linkDownChecks = async (on: On, frame: Frame) => {
   const stamped = numbered(after, DOWN_PIN);
   const stampedComment = numbered(after, DOWN_COMMENT);
   kit.check(
-    "10: with the link back and Try again, the annotation reaches the hub and the session hears it exactly once, stamped sent, and the control says nothing more",
+    "10: with the link back, Try again and Send, the annotation reaches the hub and the session hears it exactly once, stamped sent, and the control says nothing more",
     cleared === true &&
       went.length === 1 &&
       words.includes(`## ${DOWN_PIN}. annotation on #c`) &&
@@ -881,17 +927,17 @@ const oldPageAnchorChecks = async (on: On, frame: Frame) => {
   ).catch(() => null);
   const discs = await frame
     .locator(
-      `svg[data-cawco-pins] :is(g[data-pin="${OLD_PINS[0]}"], g[data-pin="${OLD_PINS[1]}"])`
+      `svg[data-cawco-pins-fixed] :is(g[data-pin="${OLD_PINS[0]}"], g[data-pin="${OLD_PINS[1]}"])`
     )
     .count();
-  await Bun.sleep(QUIET_MS + REACH_MS);
+  await Bun.sleep(QUIET_MS + 2000);
   const told = deliveries(before).filter(
     (one) =>
       one.last.includes(`## ${OLD_PINS[0]}.`) ||
       one.last.includes(`## ${OLD_PINS[1]}.`)
   ).length;
   kit.check(
-    "11: pins kept on a page-sized container by its place, its old words and box (one in the moved tray) stand on the page as a whole again: written back on body, out of the tray, both discs drawn, nothing new told",
+    "11: pins kept on a page-sized container by its place, its old words and box (one in the moved tray) stand on the page as a whole again: written back on body, out of the tray, both pills drawn at the viewport's top-right, nothing new told",
     ids.length === 2 && !!stood && discs === 2 && told === 0,
     `stood ${stood ? "yes" : "no"}; discs ${discs}; told ${told}; pins ${JSON.stringify(
       [OLD_PINS[0], OLD_PINS[1]].map((number) => {
@@ -956,6 +1002,7 @@ const endedWriterChecks = async (
   await frame.waitForSelector("#w", { timeout: 60_000 });
   await settle(on.page, 600);
   await pinWith(on, frame, "#w", 1, "Who picks this up now?");
+  await sendNow(tab).catch(() => undefined);
   const pin = numbered((await docOf(frame)).pins, 1);
   const hubLines = async () =>
     (await fleet.logs("hub")).split("\n").filter((line) => HUB_LINE.test(line));
@@ -1043,7 +1090,7 @@ const endedWriterChecks = async (
   } else {
     const agentSaid = outcome.pin?.thread.find((entry) => entry.by === "agent");
     kit.check(
-      "7a: a pin on an ended writer's page wakes the project's Caw, the delivery naming the pin's id",
+      "7a: a comment on an ended writer's page, sent, wakes the project's Caw, the delivery naming the pin's id",
       !!pin &&
         writerEvents === 0 &&
         caw.pin === pin.id &&
@@ -1174,12 +1221,12 @@ const run = async (kit: Kit) => {
       .count();
   const atStart = await sendControls();
   kit.check(
-    "1: the session's page is in its pane, and the pane's head has no Send control",
+    "1: the session's page is in its pane; nothing is unsent, so the pane's head has no Send",
     atStart === 0,
     `${atStart} Send control(s)`
   );
 
-  // 2. Three pins, 2 s apart, each tapped and written in.
+  // 2. Three comments, 2 s apart, each pressed and written.
   const startedAt = Date.now();
   const comment = page.locator(
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
@@ -1191,12 +1238,17 @@ const run = async (kit: Kit) => {
   const keptAt = await writePins(on, frame);
   await page.keyboard.press("Escape");
   const [, , third] = keptAt;
+  // Past the old quiet period, with no Send: nothing goes.
+  await Bun.sleep(Math.max(0, third + QUIET_MS + 4000 - Date.now()));
+  const unsentBefore = deliveries().length;
+  const counted = await sendCount(page);
+  const sentAt = await sendNow(page);
   const first = await nextDelivery(
-    "the delivery of the three pins",
+    "the delivery of the three comments",
     0,
-    QUIET_MS + REACH_MS + 5000
+    REACH_MS + 8000
   );
-  const arrived = first ? first.at - third : Number.NaN;
+  const arrived = first ? first.at - sentAt : Number.NaN;
   await Bun.sleep(STILL_MS);
   const all = deliveries();
   const events = eventsOf(dbPath, session, startedAt);
@@ -1215,12 +1267,14 @@ const run = async (kit: Kit) => {
     );
   });
   kit.check(
-    "2: three pins written 2 s apart reach the session as exactly one delivery, about the quiet period after the third",
-    all.length === 1 &&
+    "2: three comments written 2 s apart reach the session not at all past the old quiet period, the head's Send counting 3; one press of Send is exactly one delivery",
+    unsentBefore === 0 &&
+      counted === "3" &&
+      all.length === 1 &&
       events.length === 1 &&
-      arrived >= QUIET_MS - 1000 &&
-      arrived <= QUIET_MS + REACH_MS,
-    `${all.length} deliveries at the model, ${events.length} artifact event(s) in sent_messages; the first ${arrived} ms after the third pin's words (pins kept at +${keptAt.map((at) => at - keptAt[0]).join(", +")} ms)`
+      arrived >= 0 &&
+      arrived <= REACH_MS,
+    `${unsentBefore} before Send; Send counted ${counted}; ${all.length} deliveries at the model, ${events.length} artifact event(s) in sent_messages; the first ${arrived} ms after Send (comments kept at +${keptAt.map((at) => at - keptAt[0]).join(", +")} ms)`
   );
   kit.check(
     "2: it carries all three, each with its number, selector, source file:line, text, the person's words and its id, and the three pins' pictures",
@@ -1268,12 +1322,13 @@ const run = async (kit: Kit) => {
   );
   await page.screenshot({ path: join(kit.out, "comment-delivery-first.png") });
 
-  // 3. A reply to pin 2 later: one more delivery, pin 2 alone.
+  // 3. A reply to pin 2 later, and Send: one more delivery, pin 2 alone.
   const before3 = heard.length;
   const events3 = events.length;
   await openRow(page, 2);
   const card2 = page.locator('[data-slot="pin-card"][data-pin-card="2"]');
-  await card2.getByRole("textbox").fill("On second thought, keep the weight.");
+  await card2.waitFor({ timeout: 5000 });
+  await card2.getByRole("combobox").fill("On second thought, keep the weight.");
   await card2.getByRole("button", { name: "Reply" }).click();
   await until(
     "the reply in pin 2's thread",
@@ -1281,29 +1336,32 @@ const run = async (kit: Kit) => {
     (now) => (numbered(now.pins, 2)?.thread.length ?? 0) === 2,
     5000
   );
-  const repliedAt = Date.now();
   await page.keyboard.press("Escape");
   await shutList(page);
+  await Bun.sleep(QUIET_MS);
+  const held3 = deliveries(before3).length;
+  const repliedAt = await sendNow(page);
   const second = await nextDelivery(
     "the reply's delivery",
     before3,
-    QUIET_MS + REACH_MS + 5000
+    REACH_MS + 5000
   );
   await Bun.sleep(STILL_MS);
   const after3 = eventsOf(dbPath, session, startedAt).length - events3;
   const words2 = second?.last ?? "";
   kit.check(
-    "3: a reply to pin 2 later is one more delivery, about the quiet period after it, with pin 2 alone and the reply",
-    deliveries(before3).length === 1 &&
+    "3: a reply to pin 2 later waits for Send, then is one more delivery with pin 2 alone and the reply",
+    held3 === 0 &&
+      deliveries(before3).length === 1 &&
       after3 === 1 &&
       !!second &&
-      second.at - repliedAt >= QUIET_MS - 1000 &&
+      second.at >= repliedAt &&
       words2.includes("## 2. comment on #b") &&
       words2.includes('- I wrote: "On second thought, keep the weight."') &&
       !words2.includes(`- I wrote: ${JSON.stringify(WORDS[1])}`) &&
       !words2.includes("## 1.") &&
       !words2.includes("## 3."),
-    `${deliveries(before3).length} at the model, ${after3} event(s); ${second ? second.at - repliedAt : "-"} ms after the reply; heard ${words2.slice(0, 600)}`
+    `${held3} before Send; ${deliveries(before3).length} at the model, ${after3} event(s); ${second ? second.at - repliedAt : "-"} ms after Send; heard ${words2.slice(0, 600)}`
   );
 
   // 4. The person resolves pin 3: its one resolve line.
@@ -1322,21 +1380,22 @@ const run = async (kit: Kit) => {
   await page.keyboard.press("Escape");
   await shutList(page);
   const pin3 = numbered((await docOf(frame)).pins, 3);
+  await sendNow(page);
   const resolved = await nextDelivery(
     "the resolve's delivery",
     before4,
-    QUIET_MS + REACH_MS + 5000
+    REACH_MS + 5000
   );
   const words4 = resolved?.last ?? "";
   kit.check(
-    "4: the person's resolve of pin 3 is one more delivery, its one line",
+    "4: the person's resolve of pin 3 goes on the next Send, its one line",
     deliveries(before4).length === 1 &&
       words4.includes(`## 3. Resolved by the person (pin ${pin3?.id})`) &&
       !words4.includes("## 2."),
     words4.slice(0, 400)
   );
 
-  // 8, before the stroke: a pin read before the quiet period ends.
+  // 8, before the stroke: a comment read before any Send.
   await readFirstChecks(on, frame, id, callIn);
 
   // 5. A pen stroke no pin stands on.
@@ -1348,14 +1407,16 @@ const run = async (kit: Kit) => {
     (now) => Object.keys(now.ink).length > 0,
     10_000
   ).catch(() => docOf(frame));
+  await settle(page, 1800);
+  await sendNow(page);
   const ink = await nextDelivery(
     "the ink's delivery",
     before5,
-    QUIET_MS + REACH_MS + 8000
+    REACH_MS + 8000
   );
   const words5 = ink?.last ?? "";
   kit.check(
-    "5: a pen stroke no pin stands on is one more delivery: the ink over #d with its box, and the page with the ink as its picture",
+    "5: a pen stroke no pin stands on goes on the next Send: the ink over #d with its box, and the page with the ink as its picture",
     Object.keys(inked.ink).length === 1 &&
       deliveries(before5).length === 1 &&
       words5.includes("## Ink over #d") &&
@@ -1376,10 +1437,10 @@ const run = async (kit: Kit) => {
   // 11. Pins kept on the page-sized container before the body was the page's.
   await oldPageAnchorChecks(on, frame);
 
-  // 6. Still no Send control.
+  // 6. Everything sent: no Send.
   const atEnd = await sendControls();
   kit.check(
-    "6: no Send control in the pane after all of it",
+    "6: with everything sent, the pane's head has no Send",
     atEnd === 0,
     `${atEnd} Send control(s)`
   );

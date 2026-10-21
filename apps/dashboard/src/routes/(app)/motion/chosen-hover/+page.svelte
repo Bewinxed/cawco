@@ -4,7 +4,7 @@
    * chosen and one not, for the chosen-hover probe: the new-session chips'
    * rows (`?control=lifetime|project|machines` opens that one's popover),
    * the permission rows, the side panel's pressed head button, the kit
-   * Toggle itself (one pressed, one not), the plan ring, the comments list's current pin, the model list (its catalogue
+   * Toggle itself (one pressed, one not), the plan ring, the Comments rail's open row, the model list (its catalogue
    * is what the machines report, models.svelte.ts: the bench has no hub, so
    * it stands one machine in the client's own state reporting two Claude
    * models, the first chosen),
@@ -18,7 +18,7 @@
   import type { Pin } from "@cawco/core/comments";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import PlanRing from "#lib/cawco/plan/PlanRing.svelte";
-  import PinList from "#lib/cawco/preview/PinList.svelte";
+  import CommentRail from "#lib/cawco/preview/CommentRail.svelte";
   import FolderFiles from "#lib/cawco/project/FolderFiles.svelte";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import LifetimeChip from "#lib/cawco/spawn/LifetimeChip.svelte";
@@ -29,7 +29,6 @@
   import ProjectChip from "#lib/cawco/spawn/ProjectChip.svelte";
   import MarkdownEditor from "#lib/components/features/MarkdownEditor.svelte";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
-  import { floatingSurface } from "#lib/components/ui/popover/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Resizable from "#lib/components/ui/resizable/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
@@ -90,7 +89,7 @@
       text,
     })),
   });
-  // The rows as the panel draws them: a comment answered, and one waiting.
+  // The rows as the rail draws them: a comment answered, and one waiting.
   const pins: Pin[] = [
     pin("pin-1", 1, [
       "Make this heading a bit bigger",
@@ -101,8 +100,6 @@
     ]),
   ];
   const noop = () => undefined;
-  /** The panel's surface, as the pane's popover wears it. */
-  const pinsPanel = floatingSurface({ class: "w-c-pin-list-min min-w-0" });
 
   let markdown = $state("");
 
@@ -221,9 +218,9 @@
   <section class="w-c-bench-field-w min-w-0" data-probe="slash">
     <MarkdownEditor bind:value={markdown} label="Notes" />
   </section>
-  <!-- The Comments panel as the pane floats it: the kit's floating surface at the panel's floor (c-pin-list-min). -->
-  <section class={pinsPanel} data-probe="pins">
-    <PinList
+  <!-- The Comments rail as it stands beside the page, its first comment's thread open. -->
+  <section class="h-c-bench-side-h min-w-0" data-probe="pins">
+    <CommentRail
       down={null}
       focused="pin-1"
       hold="ready"
@@ -231,8 +228,14 @@
       onclose={noop}
       onhover={noop}
       onopen={noop}
+      onpage={noop}
+      onresolve={noop}
       onretry={noop}
+      onsend={noop}
+      open="pin-1"
       {pins}
+      unread={new Set()}
+      unsent={0}
     />
   </section>
   <section class="min-w-0" data-probe="files">

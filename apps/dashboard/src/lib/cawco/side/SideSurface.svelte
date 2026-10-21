@@ -66,6 +66,7 @@
     mode,
     well = $bindable(),
     section = $bindable(),
+    beside,
     children,
   }: {
     /** What the card is, read out. */
@@ -110,6 +111,12 @@
     mode?: "interact" | "comment" | "draw";
     well?: HTMLDivElement;
     section?: HTMLElement;
+    /**
+     * What stands on the card beside the well, at its end, outside its edge
+     * and its mode's seam: the preview's Comments rail. The well gives it
+     * its width.
+     */
+    beside?: Snippet;
     /** The well's content. */
     children: Snippet;
   } = $props();
@@ -173,6 +180,27 @@
     };
   }
 
+  /**
+   * A control drawn whole, measured in its narrowest form as it would draw
+   * now (`data-form="compact"` for the one read, then back): its words go
+   * and its padding narrows, and a count it says stays (Send's, Comments').
+   * Read so, a form never drawn yet, or last drawn at another count, is
+   * never guessed at the glyph alone. Only a control whose narrowest form
+   * is its own (`words`, no `compact` snippet): the attribute is all that
+   * changes, and it is back before anything paints.
+   */
+  function compactWidth(one: HTMLElement): number {
+    const was = one.dataset.form;
+    one.dataset.form = "compact";
+    const { width } = one.getBoundingClientRect();
+    if (was === undefined) {
+      delete one.dataset.form;
+    } else {
+      one.dataset.form = was;
+    }
+    return width;
+  }
+
   /** What always stands (the switch, Close) as drawn; each control's width, and More's, kept while it stands. */
   function drawnWidths(el: HTMLElement, name: HTMLElement) {
     const kept: number[] = [];
@@ -181,10 +209,15 @@
       const { width } = one.getBoundingClientRect();
       const item = one.dataset.headItem;
       if (item && !one.hidden) {
-        widths.set(
-          one.dataset.form === "compact" ? `${item}:compact` : item,
-          width
-        );
+        if (one.dataset.form === "compact") {
+          widths.set(`${item}:compact`, width);
+        } else {
+          widths.set(item, width);
+          const own = all.find((each) => each.key === item);
+          if (own?.words && !own.compact) {
+            widths.set(`${item}:compact`, compactWidth(one));
+          }
+        }
       } else if (one.dataset.slot === "more") {
         widths.set(
           one.querySelector('[data-slot="more-count"]')
@@ -503,14 +536,17 @@
          hears nothing; the cue is the cursor and the pressed segment), the
          edge easing in and out except while the split slides, and points a
          crosshair. -->
-    <div
-      data-side-well
-      data-mode={mode && mode !== "interact" ? mode : undefined}
-      data-ringed={mode ? "" : undefined}
-      class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-well bg-surface-well data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--dur-control) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-seam group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
-      bind:this={well}
-    >
-      {@render children()}
+    <div class="flex min-h-0 flex-1 gap-space-2" data-slot="well-row">
+      <div
+        data-side-well
+        data-mode={mode && mode !== "interact" ? mode : undefined}
+        data-ringed={mode ? "" : undefined}
+        class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-well bg-surface-well data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--dur-control) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-seam group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+        bind:this={well}
+      >
+        {@render children()}
+      </div>
+      {@render beside?.()}
     </div>
   {:else}
     {@render children()}

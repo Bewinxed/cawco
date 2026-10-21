@@ -9,9 +9,9 @@
  * the session: when the person sends their picks, the session hears that the
  * artifact has new responses ({@link ArtifactServiceDeps.signal}) and reads
  * them itself with `artifact_read`. The person's pins, replies, resolves and
- * ink go by themselves: once they have been quiet {@link MARKS_QUIET_MS},
- * the burst is delivered as one message carrying them
- * ({@link ArtifactServiceDeps.deliverMarks}).
+ * ink wait for their Send, which delivers them as one message with their
+ * note ({@link ArtifactServiceDeps.deliverMarks}); a sheet's saves and
+ * compile errors go by themselves once quiet {@link MARKS_QUIET_MS}.
  */
 import { cpSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -34,11 +34,13 @@ import {
   choiceEntryProblem,
   DESK_CAPTURE_WIDTH,
   DESK_CAPTURES_PER_PAGE,
+  fileHash,
   type InstanceRow,
   machineLabel,
   noteText,
   type PreviewAddress,
   type PreviewSource,
+  type SendAttachment,
   type ShownFailure,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -50,17 +52,20 @@ import {
 } from "@cawco/core/canvas";
 import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
 import {
+  type Carried,
   COMMENT_LIMITS,
+  type CommentAttachment,
   inkSection,
   type MarkPictures,
   type Pin,
   pinDelivery,
   pinHeard,
-  pinReady,
   pinSaid,
   pinUnsent,
   type SendBody,
+  sendNoteSection,
   type ThreadEntry,
+  unheardEntries,
 } from "@cawco/core/comments";
 import {
   type DecisionCard,
@@ -116,6 +121,7 @@ import {
 import type { AskedArtifact } from "../design-verify";
 import { sessionLabel } from "../labels";
 import type { HubLifetimeShape, HubTimer } from "../lifetime";
+import { storedFilePath } from "../media";
 import {
   changeFolderFiles,
   FolderRefusal,
@@ -938,12 +944,54 @@ export interface Removed {
   showing: { id: string; kind: ArtifactKind; name: string } | null;
 }
 
+/** A sentence's closing full stop, for one folded into another. */
+const FINAL_STOP = /\.$/;
+
 /**
- * How long the person's marks on an artifact (pins, replies, resolves, ink)
- * stay quiet before they go to the session: since the last one. A batch of
- * pins is written a pin every few seconds (a tap, a sentence, the next tap),
- * so 10 s of nothing reads as the batch done without leaving the session
- * waiting long for it. Our call.
+ * How one stored attachment rides a delivery: a picture as an image block
+ * while the message has room (core `COMMENT_LIMITS.pictures`, each at most
+ * `pictureChars`), past that as a file; a text folded in; anything else a
+ * file the session's machine keeps.
+ */
+function carryOne(
+  one: CommentAttachment,
+  bytes: Buffer,
+  images: { data: string; mediaType: string }[]
+): { attachment?: SendAttachment; carried: Carried } {
+  if (one.kind === "image" && images.length < COMMENT_LIMITS.pictures) {
+    const data = bytes.toString("base64");
+    if (data.length <= COMMENT_LIMITS.pictureChars) {
+      images.push({ data, mediaType: one.mediaType });
+      return { carried: { picture: images.length } };
+    }
+  }
+  if (one.kind === "text") {
+    return {
+      carried: { as: "text" },
+      attachment: {
+        kind: "text",
+        name: one.name,
+        content: bytes.toString("utf8"),
+      },
+    };
+  }
+  return {
+    carried: { as: "file" },
+    attachment: {
+      kind: "file",
+      name: one.name,
+      mediaType: one.mediaType,
+      ref: one.ref,
+      size: one.size,
+    },
+  };
+}
+
+/**
+ * How long a sheet's saves and compile errors stay quiet before they go to
+ * the session: since the last one. A burst of saves is a few seconds
+ * apart, so 10 s of nothing reads as the burst done without leaving the
+ * session waiting long for it. Our call.
  */
 export const MARKS_QUIET_MS = 10_000;
 
@@ -953,8 +1001,10 @@ export const MARKS_QUIET_MS = 10_000;
  */
 export const MARKS_LONGEST_MS = 60_000;
 
-/** What a delivery of the person's marks carries: the words and the pictures. */
+/** What a delivery of the person's marks carries: the words, the pictures, and the texts and files their comments attach. */
 export interface MarksDelivery {
+  /** The texts folded in and the files the session's machine keeps (core attachments.ts), as a send carries them. */
+  attachments: SendAttachment[];
   images: { data: string; mediaType: string }[];
   /** The comments notice (core `artifactCommentsNotice`), its sections the marks themselves. */
   text: string;
@@ -2571,12 +2621,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /*
-   * The person's marks (pins, replies, resolves, ink) go by themselves
-   * (core comments.ts). Each person's write on an artifact's `pins` or `ink`
-   * (docs.ts `onMarks`) pushes its delivery back to {@link MARKS_QUIET_MS}
-   * from now, never past {@link MARKS_LONGEST_MS} from the burst's first.
-   * The page posts its pictures of the marks it just made beside the doc
-   * (sync.ts `artifactPictures`); they wait here for the delivery.
+   * The person's marks (pins, replies, resolves, ink) wait for their Send
+   * ({@link send}): one press delivers everything the session hasn't heard,
+   * with their note, as one message. A sheet's saves and compile errors are
+   * not the person's marks and go by themselves: each pushes its delivery
+   * back to {@link MARKS_QUIET_MS} from now, never past
+   * {@link MARKS_LONGEST_MS} from the burst's first. The page posts its
+   * pictures of the marks it just made beside the doc (sync.ts
+   * `artifactPictures`); they wait here for the Send.
    */
   const bursts = new Map<string, { first: number; timer: HubTimer }>();
   const held = new Map<
@@ -2603,22 +2655,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           return;
         }
         delivering.add(id);
-        deliverMarks(id)
+        deliverMarks(id, null)
           .catch((error: unknown) => {
             console.warn(
-              `[artifacts] ${id}: the person's marks were not delivered: ${error instanceof Error ? error.message : String(error)}`
+              `[artifacts] ${id}: the sheet's saves and errors were not delivered: ${error instanceof Error ? error.message : String(error)}`
             );
           })
           .finally(() => delivering.delete(id));
       }),
     });
   };
-  docs.onMarks(marked);
 
   /**
    * What of the person's marks on an artifact's doc the session has not
-   * heard: each pin ready to go (core `pinReady`), by number, and each
-   * stroke group no pin stands on; with every group, moved ones too, by id.
+   * heard: each pin, by number, and each stroke group no pin stands on;
+   * with every group, moved ones too, by id.
    */
   const marksOwed = (doc: Doc) => {
     const pins = Object.values(
@@ -2628,9 +2679,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const ink = doc.getMap("ink").toJSON() as Record<string, InkGroup>;
     return {
       pins,
-      owed: pins
-        .filter((pin) => pinUnsent(pin) && pinReady(pin))
-        .sort((a, b) => a.number - b.number),
+      owed: pins.filter(pinUnsent).sort((a, b) => a.number - b.number),
       loose: Object.values(ink).filter(
         (group) => !(group.sentAt || pinned.has(group.id))
       ),
@@ -2681,7 +2730,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * What went is let go of the held pictures, and what is gone from the doc;
-   * a pin not ready yet keeps its own for its delivery.
+   * a pin not sent yet keeps its own for its Send.
    */
   const letGoPictures = (id: string, went: string[], standing: Set<string>) => {
     const kept = held.get(id);
@@ -2699,58 +2748,138 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
   };
 
+  /** A stored file's bytes by its reference (`/api/files/<sha256>`); null when the hub doesn't hold it. */
+  const storedBytes = (ref: string): Buffer | null => {
+    const path = storedFilePath(fileHash(ref));
+    return path && existsSync(path) ? readFileSync(path) : null;
+  };
+
   /**
-   * Delivers what of the person's marks on artifact `id` the session has
-   * not heard ({@link marksOwed}), as one message: each pin as its section
-   * or its one resolve line, each loose stroke group, with the page's
-   * pictures of them. Once someone took it they are stamped heard
-   * ({@link stampDelivered}); when no one did, they stay owed, the next mark
-   * or the hub's resume delivering them again, and the person reads why in
-   * the writer's transcript (server.ts `deliverArtifactMarks`). Nothing
-   * owed, nothing goes.
+   * How one delivery carries what the person's unheard entries attach
+   * (attachments design §5): each picture as an image block after its pin's
+   * crop, in the order attached, while the message's picture caps hold
+   * (core `COMMENT_LIMITS.pictures`, `pictureChars`), past them as a file;
+   * each text folded in; anything else a file the session's machine keeps.
+   * `images` starts with the blocks ahead of every pin's (a canvas's, the
+   * loose ink's), so a picture's number is its place in the message.
    */
-  const deliverMarks = async (id: string) => {
+  const carryAttachments = (
+    owed: Pin[],
+    crop: (of: Pin) => string | undefined,
+    ahead: string[]
+  ) => {
+    const images: { data: string; mediaType: string }[] = ahead.map((data) => ({
+      data,
+      mediaType: "image/png",
+    }));
+    const attachments: SendAttachment[] = [];
+    const carried = new Map<string, Carried>();
+    for (const pin of owed) {
+      const picture = crop(pin);
+      if (picture && images.length < COMMENT_LIMITS.pictures) {
+        images.push({ data: picture, mediaType: "image/png" });
+      }
+      const stored = unheardEntries(pin).flatMap((entry) =>
+        (entry.attachments ?? []).flatMap((one) => {
+          const bytes = storedBytes(one.ref);
+          return bytes ? [{ one, bytes }] : [];
+        })
+      );
+      for (const { one, bytes } of stored) {
+        const how = carryOne(one, bytes, images);
+        carried.set(one.ref, how.carried);
+        if (how.attachment) {
+          attachments.push(how.attachment);
+        }
+      }
+    }
+    return { images, attachments, carried };
+  };
+
+  /** Where the person marked artifact `id`: the page's address the page last said, else the last delivery's, else its own route. */
+  const addressOf = (id: string, doc: Doc): string =>
+    held.get(id)?.url ??
+    (doc.getMap("meta").get("sentUrl") as string | null | undefined) ??
+    routeOf(id);
+
+  /**
+   * The pictures of the loose ink a delivery carries ahead of every pin's: a
+   * canvas's ink is in the canvas's own picture, a page's each in the crop
+   * the page drew round it.
+   */
+  const loosePictures = (row: ArtifactRow, loose: InkGroup[]) => {
+    const kept = held.get(row.id);
+    const canvas = row.kind === "canvas" ? pictureOf(row.id) : null;
+    const pictureOfGroup = (group: InkGroup) =>
+      row.kind === "canvas" ? null : (kept?.pictures.get(group.id) ?? null);
+    return {
+      canvas,
+      pictureOfGroup,
+      ahead: [
+        ...(canvas && loose.length > 0 ? [canvas] : []),
+        ...loose.flatMap((group) => pictureOfGroup(group) ?? []),
+      ],
+    };
+  };
+
+  /** Each owed pin's section, what it carries named as the delivery carries it. */
+  const pinSections = (
+    owed: Pin[],
+    groups: Record<string, InkGroup>,
+    url: string,
+    carried: Map<string, Carried>
+  ) =>
+    owed.map((pin) =>
+      pinDelivery(pin, {
+        url,
+        carried: (one) => carried.get(one.ref) ?? { as: "file" },
+        ...(pin.ink && groups[pin.ink] ? { ink: groups[pin.ink].page } : {}),
+      })
+    );
+
+  /**
+   * Delivers what artifact `id` owes its session as one message. On the
+   * person's Send (`send`, with their note): every pin and loose stroke
+   * group the session hasn't heard ({@link marksOwed}), each pin as its
+   * section or its one resolve line with what it carries, the page's
+   * pictures of them, the note first; a sheet's saves and errors with them.
+   * Without a Send (the quiet timer), a sheet's saves and errors alone.
+   * Once someone took it, what went is stamped heard ({@link stampDelivered});
+   * when no one did, it stays owed and the outcome says why (the writer's
+   * transcript keeps it as not sent: server.ts `deliverArtifactMarks`).
+   * Nothing owed, nothing goes (`nothing`).
+   */
+  const deliverMarks = async (
+    id: string,
+    send: { note: string | null } | null
+  ): Promise<MarksOutcome | "nothing"> => {
     const row = db.get(id);
     const instance = row ? holder(row) : undefined;
     if (!(row && instance)) {
       held.delete(id);
-      return;
+      return "nothing";
     }
     const doc = docs.doc(id);
-    const { pins, owed, loose, groups } = marksOwed(doc);
+    const all = marksOwed(doc);
+    const { pins, groups } = all;
+    const owed = send ? all.owed : [];
+    const loose = send ? all.loose : [];
     const errors = errorsOwed(row, doc);
     const saves = savesOwed(row, doc);
-    if (
-      owed.length === 0 &&
-      loose.length === 0 &&
-      errors.length === 0 &&
-      saves.length === 0
-    ) {
-      return;
+    if (owed.length + loose.length + errors.length + saves.length === 0) {
+      return "nothing";
     }
     const kept = held.get(id);
-    const url =
-      kept?.url ??
-      (doc.getMap("meta").get("sentUrl") as string | null | undefined) ??
-      routeOf(id);
-    // A canvas's loose ink is in its own picture; a page's each in the crop the page drew round it.
-    const canvas = row.kind === "canvas" ? pictureOf(id) : null;
-    const pictureOfGroup = (group: InkGroup) =>
-      row.kind === "canvas" ? null : (kept?.pictures.get(group.id) ?? null);
-    const images = [
-      ...(canvas && loose.length > 0 ? [canvas] : []),
-      ...loose.flatMap((group) => pictureOfGroup(group) ?? []),
-      ...owed.flatMap((pin) => kept?.pictures.get(pin.id) ?? []),
-    ]
-      .slice(0, COMMENT_LIMITS.pictures)
-      .map((data) => ({ mediaType: "image/png", data }));
+    const url = addressOf(id, doc);
+    const { canvas, pictureOfGroup, ahead } = loosePictures(row, loose);
+    const { images, attachments, carried } = carryAttachments(
+      owed,
+      (pin) => kept?.pictures.get(pin.id),
+      ahead
+    );
     const marks = [
-      ...owed.map((pin) =>
-        pinDelivery(pin, {
-          url,
-          ...(pin.ink && groups[pin.ink] ? { ink: groups[pin.ink].page } : {}),
-        })
-      ),
+      ...(send?.note ? [sendNoteSection(send.note)] : []),
+      ...pinSections(owed, groups, url, carried),
       ...loose.map((group) =>
         inkSection(group, {
           url,
@@ -2760,12 +2889,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ];
     // A sheet's saves and compile errors go on the person's marks' own channel.
     const text = marksText(row, marks, errors, saves);
-    const outcome = await deps.deliverMarks(instance, row, { text, images });
+    const outcome = await deps.deliverMarks(instance, row, {
+      text,
+      images: images.slice(0, COMMENT_LIMITS.pictures),
+      attachments,
+    });
     if (!outcome.ok) {
       console.warn(
         `[artifacts] ${id}: the person's marks reached no one, and stay owed: ${outcome.reason}`
       );
-      return;
+      return outcome;
     }
     stampDelivered(
       id,
@@ -2789,6 +2922,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       [...owed.map((pin) => pin.id), ...loose.map((group) => group.id)],
       new Set([...pins.map((pin) => pin.id), ...Object.keys(groups)])
     );
+    return outcome;
   };
 
   /** A canvas's `.excalidraw` file and its outline, as the doc holds them now. */
@@ -5204,9 +5338,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /**
      * After a restart: each artifact changed within the last day has its
-     * delivery scheduled again, so marks written just before the hub went
-     * down still go (nothing owed, nothing goes). A day, our call: a hub down
-     * longer than that has a person who has moved on from those marks.
+     * sheet's saves and errors scheduled again, so those written just before
+     * the hub went down still go (nothing owed, nothing goes). The person's
+     * marks wait for their Send. A day, our call: a hub down longer than
+     * that has a person who has moved on.
      */
     resumeMarks: (): void => {
       for (const row of db.touchedSince(new Date(Date.now() - 86_400_000))) {
@@ -5215,12 +5350,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * The person sends their picks, by the page's `cawco.send` (a decision
-     * page's "Send picks"): what the send applies first (`sending`), then
-     * the session hears that the artifact has new responses since the last
-     * it was told of ({@link ArtifactServiceDeps.signal}); the page's words
-     * are kept as `sentText` for `artifact_read`. Pins and ink are not sent:
-     * they go by themselves ({@link MARKS_QUIET_MS}).
+     * The person's Send (the panel's Send, a page's `cawco.send`): one press
+     * sends everything the session hasn't heard of the artifact. Their
+     * comments, replies, resolves and ink go as one message, the note
+     * (`body.text`) its first section, exactly once ({@link deliverMarks});
+     * their picks are applied first (`sending`), and the session hears it
+     * has new responses to read ({@link ArtifactServiceDeps.signal}) when
+     * there are picks, or a note with nothing else. The note is kept as
+     * `sentText` for `artifact_read`. A Send while one is on its way, or
+     * with nothing new, is refused; one no one took says why, and what it
+     * carried stays owed.
      */
     send: async (
       instanceId: string,
@@ -5235,21 +5374,46 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const picked = Object.values(state).some(
         (entry) => !sentAt || entry.at > sentAt
       );
-      if (!(picked || body.text)) {
+      const { owed, loose } = marksOwed(doc);
+      const marks = owed.length + loose.length > 0;
+      const note = body.text?.trim() || null;
+      if (!(picked || marks || note)) {
         throw new ArtifactRefusal(
           409,
-          "Nothing new to send: every pick here has gone to the session."
+          "Nothing new to send: every pick and comment here has gone to the session."
         );
       }
-      if (picked) {
-        await deps.sending(instance, row, state);
+      if (delivering.has(row.id)) {
+        throw new ArtifactRefusal(
+          409,
+          "A Send is already on its way to the session, so this one didn't go."
+        );
       }
-      await deps.signal(instance, row, { since: row.deliveredSeq });
+      delivering.add(row.id);
+      try {
+        if (picked) {
+          await deps.sending(instance, row, state);
+        }
+        if (marks) {
+          const outcome = await deliverMarks(row.id, { note });
+          if (outcome !== "nothing" && !outcome.ok) {
+            throw new ArtifactRefusal(
+              503,
+              `The session didn't get the comments: ${outcome.reason.replace(FINAL_STOP, "")}. They're kept; Send again.`
+            );
+          }
+        }
+        if (picked || !marks) {
+          await deps.signal(instance, row, { since: row.deliveredSeq });
+        }
+      } finally {
+        delivering.delete(row.id);
+      }
       const at = new Date().toISOString();
       docs.transact(row.id, "hub", (live) => {
         const meta = live.getMap("meta");
         meta.set("sentAt", at);
-        meta.set("sentText", body.text || null);
+        meta.set("sentText", note);
       });
       db.update(row.id, { deliveredSeq: (db.get(row.id) as ArtifactRow).seq });
       return { choices: state, ...metaOf(doc) };

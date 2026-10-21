@@ -11,8 +11,9 @@
  * 1. A page with three pins written in its own doc, as the overlay writes
  *    them: one on its paragraph, two on elements the page doesn't have,
  *    which the overlay moves aside itself (`movedAt`); one of those two
- *    resolved through the hub. The list's tabs read the hub's counts (Open
- *    2, Resolved 1), the head's count the open one; Open lists pin 1 and pin
+ *    resolved through the hub. The rail's tabs read the hub's counts (Open
+ *    2, Resolved 1), the head's Comments drawing no count while the rail
+ *    stands; Open lists pin 1 and pin
  *    3, pin 3's row marked moved (its disc recessed) and, like every row,
  *    one button holding no other; Resolved lists pin 2 the same way.
  * 2. The pane's doc held back by a stand-in for its socket (`routeWebSocket`
@@ -40,7 +41,8 @@ import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;
-const LIST = '[data-pin-list-pop] [data-slot="pin-list"]';
+/** The Comments rail (DESIGN.md, The Comments rail). */
+const LIST = '[data-slot="comment-rail"]';
 type Theme = "light" | "dark";
 /** Each leg: where it runs and in which scheme. */
 const LEGS: { theme: Theme; view: "desk" | "phone" }[] = [
@@ -218,9 +220,7 @@ const recorder = () => {
     if (!socketAt) {
       return;
     }
-    const list = document.querySelector(
-      '[data-pin-list-pop] [data-slot="pin-list"]'
-    );
+    const list = document.querySelector('[data-slot="comment-rail"]');
     if (!list) {
       return;
     }
@@ -468,9 +468,9 @@ const counts = async (at: At, leg: Leg, hub: HubPin[]) => {
     30_000
   ).catch(() => drawn(page));
   check(
-    `1: the tabs read the hub's counts (Open ${openOnHub}, Resolved ${resolvedOnHub}) and the head its open one`,
+    `1: the tabs read the hub's counts (Open ${openOnHub}, Resolved ${resolvedOnHub}); the head's Comments draws no count while the rail stands, its Open tab saying it`,
     onOpen.tabs.join("|") === `Open ${openOnHub}|Resolved ${resolvedOnHub}` &&
-      (view === "phone" || onOpen.count === String(openOnHub)),
+      onOpen.count === null,
     JSON.stringify(onOpen)
   );
   const openPress = await rowPress(page, 3);

@@ -230,10 +230,11 @@ const run = async (kit: Kit) => {
   await settle(page, 300);
   const box = await screenBox(on, frame, "#p");
   await page.mouse.click(box.x + box.w * 0.3, box.y + box.h / 2);
-  const card = page.locator('[data-slot="pin-card"][data-pin-card="1"]');
-  await card.waitFor({ timeout: 5000 });
-  await card.getByRole("textbox").fill("Bolder, please.");
-  await card.getByRole("button", { name: "Reply" }).click();
+  // The press opens the comment's composer; Comment writes the pin with its words.
+  const composer = page.locator('[data-slot="pin-composer"]');
+  await composer.waitFor({ timeout: 5000 });
+  await composer.getByRole("combobox").fill("Bolder, please.");
+  await composer.getByRole("button", { name: "Comment", exact: true }).click();
   await until(
     "the pin's words in the doc",
     () => docOf(frame),

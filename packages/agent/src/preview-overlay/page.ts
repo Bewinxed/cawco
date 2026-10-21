@@ -8,19 +8,21 @@ import {
   ANCHOR_IDENTITIES,
   type ChainLink,
   COMMENT_LIMITS,
+  type CommentAttachment,
+  type CommentTarget,
+  commentOn,
   deletePin,
   findAnchor,
+  generatedId,
   type MarkPicture,
   type PageAnchor,
   type Pin,
   type PinnedElement,
   type PreviewMode,
-  pinFirstLine,
   pinUnsent,
   previewMode,
   replyToPin,
   resolvePin,
-  withdrawPin,
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
 import { shellShortcutOf } from "@cawco/core/shell-shortcuts";
@@ -45,7 +47,13 @@ import { startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
 import { choiceOf, listenForPicks } from "./pick";
 import { cropPicture } from "./picture";
-import { type Box, type Pins, padded, startPins } from "./pins";
+import {
+  type Box,
+  type DraftTarget,
+  type Pins,
+  padded,
+  startPins,
+} from "./pins";
 import { inkChrome } from "./radial";
 import { drawInScheme, type Scheme } from "./schemes";
 
@@ -89,7 +97,6 @@ sheet.textContent = `
   .layer { position:fixed; inset:0; pointer-events:none; cursor:crosshair; }
   .layer.comment { pointer-events:auto; }
   .layer.draw { pointer-events:auto; touch-action:none; }
-  .peek { position:fixed; pointer-events:none; max-width:240px; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm); background:var(--surface-raised); color:var(--ink-row); font:var(--type-meta); border:1px solid var(--border-control); box-shadow:var(--shadow-tile); }
   .rect { position:fixed; pointer-events:none; outline:var(--c-target-stroke) solid var(--brand-solid); outline-offset:0; border-radius:var(--radius-xs); background:var(--c-target-tint); }
   .rect[data-bare] { outline-offset:var(--c-target-gap); }
   .rect[data-rest] { outline-style:none; }
@@ -102,31 +109,12 @@ const highlight = document.createElement("div");
 highlight.className = "rect";
 const label = document.createElement("div");
 label.className = "label";
-/** A pin's first line, beside its disc while the pointer rests on it (Figma: "Hover over a pin to preview the comment"). */
-const peekLabel = document.createElement("div");
-peekLabel.className = "peek";
 highlight.hidden = true;
 label.hidden = true;
-peekLabel.hidden = true;
-shadow.append(sheet, layer, highlight, label, peekLabel);
+shadow.append(sheet, layer, highlight, label);
 document.documentElement.append(host);
 
 const chrome = inkChrome(shadow);
-
-/** Pin `pin`'s first line beside its disc, centred at the viewport's `x`, `y`, radius `r`; none hides it. */
-function peek(pin: Pin | null, x = 0, y = 0, r = 0) {
-  peekLabel.hidden = !pin;
-  if (!pin) {
-    return;
-  }
-  peekLabel.textContent =
-    pinFirstLine(pin) ??
-    (pin.kind === "annotation" ? "Annotation" : "Nothing written yet");
-  const gap = r + 6;
-  const right = x + gap + peekLabel.offsetWidth <= innerWidth;
-  peekLabel.style.left = `${right ? x + gap : Math.max(0, x - gap - peekLabel.offsetWidth)}px`;
-  peekLabel.style.top = `${Math.max(0, y - peekLabel.offsetHeight / 2)}px`;
-}
 
 /*
  * The One Target Rule (DESIGN.md): the overlay draws one target at a time.
@@ -142,14 +130,37 @@ function peek(pin: Pin | null, x = 0, y = 0, r = 0) {
  */
 /** The element under the pointer in Comment mode. */
 let hovered: Element | null = null;
-/** The pin's element pins.ts names: the open thread's, a rested-on disc's, the stepped-to pin's. */
+/** The pin's element pins.ts names: the open thread's, a rested-on pill's, the stepped-to pin's. */
 let pinEl: Element | null = null;
-/** In Comment mode, whether the pinned element leads the pointer's: until the pointer leaves a disc, or a card closes. */
+/** In Comment mode, whether the pinned element leads the pointer's: until the pointer leaves a pill, or a thread closes. */
 let pinLeads = false;
-/** The host's card stands open on a pin (`cawco:track-pin`). */
-let composing = false;
-/** The card's field shows its keyboard ring (`cawco:composer-ring`). */
+/** The host's thread card stands open on a pin (`cawco:track-pin`). */
+let threadOpen = false;
+/** The composer's field shows its keyboard ring (`cawco:composer-ring`). */
 let ringed = false;
+
+/**
+ * The comment being written: what the press chose (an element and the
+ * point on it, or an ink group), the element's chain out to the page's
+ * root, which of it the person chose in the composer's target chip, and the
+ * press. Nothing of it is written until the host says the words
+ * (`cawco:comment`); Esc, a press outside, a mode switch or a reload leave
+ * nothing behind.
+ */
+let drafting: {
+  chain: Element[];
+  chosen: number;
+  /** An ink group's Comment: the elements it marks, and its anchor. */
+  ink?: {
+    anchor: PageAnchor;
+    elements: PinnedElement[] | string[];
+    id: string;
+  };
+  x: number;
+  y: number;
+} | null = null;
+/** A composer or a thread stands: the chosen element alone is drawn. */
+const composing = () => threadOpen || drafting !== null;
 
 /**
  * Pin `el`'s element chosen, or none; `lead` says whether it leads the
@@ -190,11 +201,13 @@ function drawsBox(el: Element): boolean {
 
 /** The one target drawn: the chosen pin's element, else the element under the pointer in Comment mode; and its label in Comment mode. */
 function paint() {
-  const chosen =
-    pinEl?.isConnected && (!commenting() || composing || pinLeads)
+  const drafted = drafting ? (drafting.chain[drafting.chosen] ?? null) : null;
+  const pinned =
+    pinEl?.isConnected && (!commenting() || composing() || pinLeads)
       ? pinEl
       : null;
-  const target = chosen ?? (commenting() && !composing ? hovered : null);
+  const chosen = drafted?.isConnected ? drafted : pinned;
+  const target = chosen ?? (commenting() && !composing() ? hovered : null);
   highlight.hidden = !target;
   const doc = target?.ownerDocument;
   const root =
@@ -267,11 +280,11 @@ function outlineOver(el: Element): DOMRect {
 const pins: Pins = startPins({
   anchorOf,
   chrome,
+  compose: (target, elements) => composeInk(target, elements),
   describe,
   groupBox: (id) => ink.groupBox(id),
   locate,
   outline,
-  peek,
   post,
   waiting,
 });
@@ -383,7 +396,7 @@ let docTelling: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * The doc changed — a pick, a note, a pin, the agent's patch, a Send's
- * stamp — so a host that counts from the hub's reads (the app's pins and Send picks)
+ * stamp — so a host that counts from the hub's reads (the app's pins and Send)
  * reads again at once (`cawco:doc`): one word per burst.
  */
 function tellDoc() {
@@ -631,6 +644,7 @@ const kept = (node: Node): boolean =>
   node === host ||
   node === ink.layer ||
   node === pins.layer ||
+  node === pins.fixed ||
   (node instanceof Element && node.hasAttribute("data-cawco-host")) ||
   (node instanceof HTMLScriptElement &&
     OVERLAY_SRC.test(node.getAttribute("src") ?? ""));
@@ -869,6 +883,10 @@ function navigated() {
 
 /** The pane's mode; `again` names the moved pin the next tap in Comment places again. */
 function mode(next: PreviewMode, again: string | null = null) {
+  // A mode switch leaves nothing of a comment being written.
+  if (next !== modeNow && drafting) {
+    endDraft();
+  }
   modeNow = next;
   placing = next === "comment" ? again : null;
   layer.classList.toggle("comment", next === "comment");
@@ -876,7 +894,7 @@ function mode(next: PreviewMode, again: string | null = null) {
   hovered = null;
   pinLeads = false;
   paint();
-  peek(null);
+  post("cawco:peek", { id: null });
 }
 
 interface Fiber {
@@ -1128,7 +1146,8 @@ const namesOne = (doc: Document, selector: string): boolean => {
  */
 function identityOf(el: Element): string | null {
   const doc = el.ownerDocument;
-  if (el.id && namesOne(doc, `#${CSS.escape(el.id)}`)) {
+  // A framework's minted id (React's `useId`, Radix's) names whatever its next render hands it to: no identity.
+  if (el.id && !generatedId(el.id) && namesOne(doc, `#${CSS.escape(el.id)}`)) {
     return `#${CSS.escape(el.id)}`;
   }
   for (const name of ANCHOR_IDENTITIES) {
@@ -1192,7 +1211,8 @@ function elementAt(x: number, y: number): Element | null {
 }
 
 /** The overlay's own: its host, and the ink and pin layers it puts in the page. */
-const OVERLAY_OWN = "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins]";
+const OVERLAY_OWN =
+  "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], svg[data-cawco-pins-fixed]";
 
 /**
  * The page's own deepest element at each of the viewport's points, seen
@@ -1385,8 +1405,7 @@ function anchorOf(el: Element): PageAnchor {
 /** `doc`'s own elements (the page's, or a frame's), any overlay's left out. */
 function pageElements(doc: Document): Element[] {
   return [...(doc.body?.querySelectorAll("*") ?? [])].filter(
-    (el) =>
-      !el.closest("cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins]")
+    (el) => !el.closest(OVERLAY_OWN)
   );
 }
 
@@ -1595,25 +1614,192 @@ window.addEventListener(
 
 let touchCaptured = false;
 
-/** A tap in Comment mode: a comment pinned where it landed, or the moved pin being placed again. */
+/** A tap in Comment mode: a comment's composer opened where it landed, or the moved pin being placed again. */
 function commentAt(clientX: number, clientY: number) {
-  // A tap on a pin's own disc opens that pin, as it does out of Comment mode.
-  const disc = pinUnder(clientX, clientY);
-  if (disc) {
-    pins.open(disc);
+  // A tap on a pin's own pill opens that pin, as it does out of Comment mode.
+  const pill = pinUnder(clientX, clientY);
+  if (pill) {
+    pins.open(pill);
     return;
   }
   const el = contentAt(clientX, clientY);
   if (!(el && artifact.keeps())) {
     return;
   }
-  const id = placing ?? pins.commentAt(el, clientX, clientY);
   if (placing) {
-    pins.placeAgain(placing, el, clientX, clientY);
+    const id = placing;
+    pins.placeAgain(id, el, clientX, clientY);
     placing = null;
+    // Drawn once its pill stands: the next frame.
+    requestAnimationFrame(() => pinPicture(id));
+    return;
   }
-  // Drawn once its disc stands: the next frame.
-  requestAnimationFrame(() => pinPicture(id));
+  startDraft(el, clientX, clientY);
+}
+
+/** The most of an element's ancestors its composer's target chip offers, before the whole page. Our call. */
+const CHAIN_MOST = 5;
+
+/**
+ * What a press on `el` may stand on, innermost first: `el`, its ancestors
+ * that draw a box of their own (a wrapper exactly as big as what it holds
+ * says nothing new), at most {@link CHAIN_MOST}, then the page as a whole.
+ */
+function chainOf(el: Element): Element[] {
+  const doc = el.ownerDocument;
+  const root = doc.body ?? doc.documentElement;
+  if (el === root || el === doc.documentElement) {
+    return [root];
+  }
+  const chain: Element[] = [el];
+  let last = rectOf(el);
+  for (
+    let at = el.parentElement;
+    at &&
+    at !== root &&
+    at !== doc.documentElement &&
+    chain.length <= CHAIN_MOST;
+    at = at.parentElement
+  ) {
+    const box = rectOf(at);
+    const same =
+      Math.abs(box.width - last.width) < 1 &&
+      Math.abs(box.height - last.height) < 1;
+    if (!(same || pageSized(at))) {
+      chain.push(at);
+      last = box;
+    }
+  }
+  chain.push(root);
+  return chain;
+}
+
+/** What the host names a target by: its anchor and its element, as a pin would hold them. */
+const named = (el: Element) => ({
+  anchor: anchorOf(el),
+  elements: [describe(el)],
+});
+
+/** The composer's word to the host: what the comment stands on, its chain, the one chosen, and how it was opened. */
+function tellDraft() {
+  if (!drafting) {
+    return;
+  }
+  const { ink: inked } = drafting;
+  post("cawco:compose", {
+    via: "pointer",
+    chosen: drafting.chosen,
+    chain: inked
+      ? [{ anchor: inked.anchor, elements: inked.elements, ink: true }]
+      : drafting.chain.map(named),
+  });
+}
+
+/** The chosen target of the comment being written, as pins.ts draws its hollow pill. */
+function draftTarget(): DraftTarget | null {
+  const el = drafting?.chain[drafting.chosen];
+  if (!(drafting && el)) {
+    return null;
+  }
+  if (drafting.ink) {
+    return { el, ink: drafting.ink.id };
+  }
+  const root = el === el.ownerDocument.body;
+  return root
+    ? { el }
+    : { el, point: pins.pointOn(el, drafting.x, drafting.y) };
+}
+
+/**
+ * A press chose `el` at the viewport's `x`, `y`: its composer opens in the
+ * host and its hollow pill stands where the press landed. Nothing is
+ * written. A comment already being written gives way to this one.
+ */
+function startDraft(el: Element, x: number, y: number) {
+  drafting = { chain: chainOf(el), chosen: 0, x, y };
+  pins.draft(draftTarget());
+  paint();
+  tellDraft();
+}
+
+/** The radial's Comment on an ink group: its composer opens on the ink. */
+function composeInk(target: DraftTarget, elements: PinnedElement[] | string[]) {
+  const group = target.ink
+    ? (artifact.doc().getMap("ink") as YMap<InkGroup>).get(target.ink)
+    : undefined;
+  if (!(group && artifact.keeps())) {
+    return;
+  }
+  drafting = {
+    chain: [target.el],
+    chosen: 0,
+    x: 0,
+    y: 0,
+    ink: { anchor: group.anchor as PageAnchor, elements, id: group.id },
+  };
+  pins.draft(draftTarget());
+  paint();
+  tellDraft();
+}
+
+/** The comment being written is let go: its pill and its outline with it. */
+function endDraft() {
+  if (!drafting) {
+    return;
+  }
+  drafting = null;
+  pins.draft(null);
+  paint();
+}
+
+/**
+ * The host's words for the comment being written (`cawco:comment`): its pin
+ * and first entry in one write (core `commentOn`), answered as
+ * `cawco:comment-result` with the pin, or the refusal's sentence, the
+ * comment still standing to try again.
+ */
+async function writeDraft(message: HostMessage) {
+  const said = {
+    text: typeof message.text === "string" ? message.text : "",
+    attachments: Array.isArray(message.attachments)
+      ? (message.attachments as CommentAttachment[])
+      : [],
+  };
+  const el = drafting?.chain[drafting.chosen];
+  if (!(drafting && el)) {
+    post("cawco:comment-result", {
+      ok: false,
+      error:
+        "This comment's place is gone from the page, so it wasn't kept. Click the page again.",
+    });
+    return;
+  }
+  if (!artifact.keeps()) {
+    post("cawco:comment-result", { ok: false, error: NO_ARTIFACT });
+    return;
+  }
+  await artifact.whenKnown();
+  const at = drafting;
+  const target: CommentTarget = at.ink
+    ? { anchor: at.ink.anchor, elements: at.ink.elements, ink: at.ink.id }
+    : {
+        anchor: anchorOf(el),
+        elements: [describe(el)],
+        ...(el === el.ownerDocument.body
+          ? {}
+          : { point: pins.pointOn(el, at.x, at.y) }),
+      };
+  const pin = commentOn(artifact.doc(), target, said);
+  if (typeof pin === "string") {
+    post("cawco:comment-result", { ok: false, error: pin });
+    return;
+  }
+  if (drafting === at) {
+    endDraft();
+  }
+  post("cawco:comment-result", { ok: true, pin });
+  // Drawn once its pill stands: the next frame.
+  requestAnimationFrame(() => pinPicture(pin.id));
 }
 
 /*
@@ -1717,8 +1903,18 @@ window.addEventListener(
   true
 );
 
-/** The pane's keys, heard while the page has the keyboard: V, C and D, ⇧C (as `C`), J, K, Enter and Esc. */
-const PANE_KEYS = new Set(["v", "c", "d", "C", "j", "k", "Enter", "Escape"]);
+/** The pane's keys, heard while the page has the keyboard: V, C and D, ⇧C (as `C`), J, K, `/` (the rail's search), Enter and Esc. */
+const PANE_KEYS = new Set([
+  "v",
+  "c",
+  "d",
+  "C",
+  "j",
+  "k",
+  "/",
+  "Enter",
+  "Escape",
+]);
 
 /** Whether `target` takes typing: the page's own keys stay its own there. */
 const typing = (target: EventTarget | null) =>
@@ -1729,6 +1925,14 @@ const typing = (target: EventTarget | null) =>
 window.addEventListener(
   "keydown",
   (event) => {
+    // A composer or a thread stands: Esc is the host's to unwind (composer,
+    // then thread, then the mode), wherever the keyboard is.
+    if (event.key === "Escape" && composing()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      post("cawco:key", { key: "Escape" });
+      return;
+    }
     if (modeNow !== "interact" && event.key === "Escape") {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -1881,29 +2085,34 @@ async function markPictures(): Promise<MarkPicture[]> {
 
 /**
  * How long after the person's last mark here the page draws its pictures
- * for the hub: a pause in the burst, well inside the hub's quiet period
- * (service.ts `MARKS_QUIET_MS`, 10 s), so the delivery carries them. Our call.
+ * for the hub: a pause in the burst, so the Send that delivers them finds
+ * them there; a Send sooner asks for them first (`cawco:pictures-now`).
+ * Our call.
  */
 const PICTURES_AFTER_MS = 1500;
 let picturesTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** The pictures of what is unheard, to the hub now. */
+async function postPictures(): Promise<void> {
+  const pictures = await markPictures();
+  if (pictures.length > 0) {
+    await artifact
+      .pictures({ pictures, url: location.href })
+      .catch((error: unknown) => {
+        console.warn(
+          `[cawco] the marks' pictures did not reach the hub: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
+  }
+}
+
 /** The person marked this page: once they pause, its pictures of what is unheard go to the hub. A canvas's picture is its own. */
 function picturesLater() {
   clearTimeout(picturesTimer);
   if (artifact.kind() === "canvas") {
     return;
   }
-  picturesTimer = setTimeout(async () => {
-    const pictures = await markPictures();
-    if (pictures.length > 0) {
-      await artifact
-        .pictures({ pictures, url: location.href })
-        .catch((error: unknown) => {
-          console.warn(
-            `[cawco] the marks' pictures did not reach the hub: ${error instanceof Error ? error.message : String(error)}`
-          );
-        });
-    }
-  }, PICTURES_AFTER_MS);
+  picturesTimer = setTimeout(postPictures, PICTURES_AFTER_MS);
 }
 
 type HostMessage = Record<string, unknown>;
@@ -1961,11 +2170,11 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:hello": (message) => {
       ready();
       // The host names the artifact this page is, and where its doc is synced.
-      const named = message as {
+      const hello = message as {
         artifact: Parameters<typeof artifact.join>[0];
         sync: Parameters<typeof artifact.join>[1];
       };
-      if (artifact.join(named.artifact, named.sync)) {
+      if (artifact.join(hello.artifact, hello.sync)) {
         tellLink(artifact.link());
       } else {
         failed("artifact", NO_ARTIFACT);
@@ -2039,11 +2248,12 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     // resolve and delete through this page's, by the one write core keeps.
     "cawco:reply": (message) =>
       personWrite(message, "cawco:reply-result", (pin) =>
-        replyToPin(
-          artifact.doc(),
-          pin,
-          typeof message.text === "string" ? message.text : ""
-        )
+        replyToPin(artifact.doc(), pin, {
+          text: typeof message.text === "string" ? message.text : "",
+          attachments: Array.isArray(message.attachments)
+            ? (message.attachments as CommentAttachment[])
+            : [],
+        })
       ),
     "cawco:resolve": (message) =>
       personWrite(message, "cawco:resolve-result", (pin) =>
@@ -2055,13 +2265,43 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       personWrite(message, "cawco:delete-result", (pin) =>
         deletePin(artifact.doc(), pin)
       ),
-    // The app dismissed the card of a pin it just made, said nothing in it: taken back.
-    "cawco:withdraw": async (message) => {
-      if (typeof message.pin === "string" && artifact.keeps()) {
-        await artifact.whenKnown();
-        withdrawPin(artifact.doc(), message.pin);
+    // A Send is about to go: the pictures of what is unheard reach the hub first, answered once they have.
+    "cawco:pictures-now": async () => {
+      clearTimeout(picturesTimer);
+      if (artifact.kind() !== "canvas" && artifact.keeps()) {
+        await postPictures();
+      }
+      post("cawco:pictures-sent");
+    },
+    // The composer's words: the comment written, its pin and first entry at once.
+    "cawco:comment": (message) => writeDraft(message),
+    // The composer closed with nothing said (Esc, a press outside, Close): nothing was written, and its pill goes.
+    "cawco:compose-cancel": () => endDraft(),
+    // The composer's target chip chose another of the press's chain: its pill and outline follow.
+    "cawco:compose-target": (message) => {
+      const index = typeof message.index === "number" ? message.index : -1;
+      if (!drafting?.chain[index]) {
+        return;
+      }
+      drafting.chosen = index;
+      pins.draft(draftTarget());
+      paint();
+      tellDraft();
+    },
+    // A comment on the whole page (the rail's +): its composer opens with the page as its target.
+    "cawco:compose-page": () => {
+      if (artifact.keeps() && document.body) {
+        startDraft(document.body, 0, 0);
       }
     },
+    // The agent working on a pin, and an answer the person hasn't read: each pin's dot.
+    "cawco:pin-marks": (message) =>
+      pins.marks(
+        new Set(Array.isArray(message.live) ? (message.live as string[]) : []),
+        new Set(
+          Array.isArray(message.unread) ? (message.unread as string[]) : []
+        )
+      ),
     "cawco:mode": (message) =>
       mode(
         previewMode(message.mode) ?? "interact",
@@ -2078,13 +2318,22 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:hover-pin": (message) => pins.hover(idOf(message)),
     "cawco:track-pin": (message) => {
       const id = idOf(message);
-      composing = id !== null;
-      if (!composing) {
+      threadOpen = id !== null;
+      if (!composing()) {
         pinLeads = false;
         ringed = false;
       }
       pins.track(id);
       paint();
+      // The open thread's element and what holds it, for its card's chain line.
+      const pin = id
+        ? (artifact.doc().getMap("pins") as YMap<Pin>).get(id)
+        : undefined;
+      const el =
+        pin && "selector" in pin.anchor ? locate(pin.anchor)?.el : undefined;
+      if (id && el) {
+        post("cawco:pin-chain", { id, chain: chainOf(el).map(named) });
+      }
     },
     // The card's field shows its keyboard ring: the target drops its line and keeps its tint.
     "cawco:composer-ring": (message) => {
