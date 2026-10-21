@@ -2195,8 +2195,15 @@ const NAVIGATION_NOOP = [
   "disableScrollHandling",
   "snapshot",
 ];
+/**
+ * The stub's page. Its module is evaluated on the server too: the project's
+ * server hooks import client modules that import `$app/state` (the
+ * dashboard's tab icon), and the alias is the whole server's, so its own
+ * routes (`/prefs`, written by a story's folder tabs) answered 500 with
+ * "location is not defined". There the page has no address of its own.
+ */
 const PAGE =
-  "{ url: new URL(location.href), params: {}, route: { id: null }, status: 200, error: null, data: {}, form: null, state: {}, shallow: null }";
+  '{ url: new URL(globalThis.location?.href ?? "http://localhost/"), params: {}, route: { id: null }, status: 200, error: null, data: {}, form: null, state: {}, shallow: null }';
 const NAVIGATING =
   "{ from: null, to: null, type: null, willUnload: null, delta: null, complete: null }";
 

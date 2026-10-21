@@ -6,9 +6,14 @@
  * reads, `visualViewport` (its width, height and offsets) and else the
  * root's `clientWidth`, and what script reads as `innerWidth`. Those answer
  * at the frame a floating layer opens from (runtime.ts says which), its
- * left and right; its top and height stay the window's, so a layer still
- * flips up and down as the window allows. The canvas reads the window's
- * own through `windowWidth` and `windowHeight`.
+ * left and right as the frame stands, never cut by the window: a layer
+ * placed in a 1440 frame collides where the app's 1440 window has it
+ * collide, wherever the frame stands on the screen. What the window cuts
+ * off is the canvas's to bring back into sight, by moving the frame
+ * (runtime.ts `keepInSight`), never by squeezing the layer. Its top and
+ * height stay the window's, so a layer still flips up and down as the
+ * window allows. The canvas reads the window's own through `windowWidth`
+ * and `windowHeight`.
  *
  * Which layer asks: floating-ui's `getViewportRect(element)` is handed the
  * floating layer itself, and reads `element.ownerDocument` (its
@@ -91,7 +96,7 @@ function asFrame(real: VisualViewport, frame: DOMRect): VisualViewport {
  * Has the viewport answer at `frame(asking)`'s box, where it names one
  * (null: the window's own), `asking` the element that asks (the layer
  * floating-ui places): the visual viewport, the root's client width and
- * `innerWidth`, its left and right clipped to the window.
+ * `innerWidth`, at the frame's own left and right.
  */
 export function frameAsViewport(
   frame: (asking: Element | null) => DOMRect | null
@@ -103,17 +108,7 @@ export function frameAsViewport(
       return ownerDocumentOf(this);
     },
   });
-  const box = (): DOMRect | null => {
-    const at = frame(asking);
-    if (!at) {
-      return null;
-    }
-    const left = Math.max(0, at.left);
-    const right = Math.min(windowWidth(), at.right);
-    return right > left
-      ? new DOMRect(left, at.top, right - left, at.height)
-      : null;
-  };
+  const box = (): DOMRect | null => frame(asking);
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
     get: () => box()?.width ?? windowWidth(),

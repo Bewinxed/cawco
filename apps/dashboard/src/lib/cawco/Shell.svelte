@@ -27,6 +27,7 @@
   import { keepPrefs } from "#lib/cawco/prefs.js";
   import { gridView } from "#lib/cawco/workspace/grid-view.svelte.js";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
+  import { provideHangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Sheet from "#lib/components/ui/sheet/index.js";
@@ -78,6 +79,12 @@
   // needs a context. The Shell manages its own layout (resize, mobile sheet),
   // so we provide a context that wires into the Shell's existing state.
   let sidebarOpen = $state(true);
+  /**
+   * The layer the hanging cards stand in: the glass's card and the session
+   * card (hang-layer). One Shell to a page, so its name is its own, and the
+   * ids the page's components take ($props.id) stay as they were.
+   */
+  const hangLayerOf = provideHangLayer("shell");
   setSidebar({
     open: () => sidebarOpen,
     setOpen: (v: boolean) => {
@@ -1398,15 +1405,20 @@
     </div>
   </div>
 
-  <!-- The glass's one card: Caw's panel, the machines, Jump or Files
-       (bar-glass). It takes its form from a `shell` container as the glass
-       does (HangCard `@max-desk/shell`, `100cqi`): this layer, as wide as
-       the shell above and drawn in place, not portaled. Not inside the shell
-       itself: a container is a stacking context, so a held toast or a sheet
-       on the page's own layers would stand over the card there; here it
-       stands on the floating layer as a portaled card did, at the window's
-       origin, so its fixed place is the window's. -->
-  <div class="@container/shell fixed inset-x-0 top-0 z-(--layer-float)">
+  <!-- The hanging cards' layer (hang-layer): the glass's one card (Caw's
+       panel, the machines, Jump or Files; bar-glass), drawn in it, and the
+       session card, portaled into it from its tab (PaneTabs). They take
+       their form from a `shell` container as the glass does (HangCard
+       `@max-desk/shell`, `@max-phone/shell`, `100cqi`): this layer, as wide
+       as the shell above, its height the window's (`--shell-h`). Not inside
+       the shell itself: a container is a stacking context, so a held toast
+       or a sheet on the page's own layers would stand over a card there;
+       here they stand on the floating layer as portaled cards did, at the
+       window's origin, so their place is the window's. -->
+  <div
+    class="@container/shell hang-layer-screen fixed inset-x-0 top-0 z-(--layer-float)"
+    data-hang-layer={hangLayerOf.id}
+  >
     <GlassCard />
   </div>
   <!-- The file chosen in Files, floating on its leading side (a desk). -->

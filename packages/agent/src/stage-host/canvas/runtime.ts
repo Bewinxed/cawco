@@ -616,11 +616,87 @@ export function boot(options: BootOptions): void {
       ? (frames[0] ?? null)
       : null;
   };
+  /** Each layer that asked at a frame, and that frame: the layers a shown frame brings into sight. */
+  const layersAt = new Map<Element, Frame>();
+  /** Layers brought into sight as they opened: where the person moves the view after that is theirs. */
+  const sighted = new WeakSet<Element>();
+  /** A layer stands open: it, or the content it positions, says so (bits-ui's `data-state`). */
+  const standsOpen = (layer: Element) =>
+    layer.isConnected &&
+    (layer.matches('[data-state="open"]') ||
+      layer.querySelector(':scope > [data-state="open"]') !== null);
+  /**
+   * A frame's layer collides with the frame's own box (viewport.ts), so a
+   * frame the window cuts could place it where nobody sees it (a 1440
+   * frame in a 1440 window, the canvas's edge past the window's; an
+   * embed's wide frame scrolled sideways). The canvas moves the frame,
+   * never the layer: an open layer standing past what the person sees
+   * across is brought in by its overflow, the canvas's world panned, an
+   * embed's wide frame scrolled sideways. False while it is not open and
+   * placed, so it is asked again.
+   */
+  const reveal = (layer: Element, frame: Frame): boolean => {
+    const box = layer.getBoundingClientRect();
+    if (!standsOpen(layer) || box.width === 0) {
+      return false;
+    }
+    const wide = embed && frame.el.hasAttribute("data-cawco-wide");
+    if (embed && !wide) {
+      return true;
+    }
+    /** What the person sees across: the embed's wide frame, or the canvas, cut by the window. */
+    const seen = (wide ? frame.el : canvas).getBoundingClientRect();
+    const from = Math.max(0, seen.left);
+    const to = Math.min(windowWidth(), seen.right);
+    let over = 0;
+    if (box.left < from) {
+      over = box.left - from;
+    } else if (box.right > to) {
+      over = Math.min(box.right - to, box.left - from);
+    }
+    if (Math.abs(over) < 0.5) {
+      return true;
+    }
+    if (wide) {
+      frame.el.scrollLeft += over;
+      return true;
+    }
+    letGo();
+    zoom.x -= over;
+    place();
+    return true;
+  };
+  /** A layer as it opens, once placed (the frame after it asks): in sight, once. */
+  const keepInSight = (layer: Element, frame: Frame) => {
+    layersAt.set(layer, frame);
+    if (sighted.has(layer)) {
+      return;
+    }
+    sighted.add(layer);
+    requestAnimationFrame(() => {
+      if (!reveal(layer, frame)) {
+        sighted.delete(layer);
+      }
+    });
+  };
+  /** A frame the canvas shows: its open layers in sight with it. */
+  const revealLayersOf = (el: HTMLElement) => {
+    for (const [layer, frame] of layersAt) {
+      if (!layer.isConnected) {
+        layersAt.delete(layer);
+      } else if (frame.el === el) {
+        reveal(layer, frame);
+      }
+    }
+  };
   // Each layer asks at its own frame, the one it stands in or its trigger's.
-  frameAsViewport(
-    (layer) =>
-      (layerFrame(layer) ?? askedFrame())?.body.getBoundingClientRect() ?? null
-  );
+  frameAsViewport((layer) => {
+    const own = layerFrame(layer);
+    if (own && layer) {
+      keepInSight(layer, own);
+    }
+    return (own ?? askedFrame())?.body.getBoundingClientRect() ?? null;
+  });
 
   window.matchMedia = (query: string) => {
     if (view.motion === "reduce" && REDUCED_QUERY.test(query)) {
@@ -2085,6 +2161,22 @@ export function boot(options: BootOptions): void {
     }
     // On a phone the frame shown changed: its edges are drawn again, to frames now drawn only.
     drawEdges();
+    // Its open layers in sight with it, once the view stands where it goes;
+    // a frame posed for its picture stays where its pose puts it.
+    const landed = () =>
+      requestAnimationFrame(() => {
+        if (el.isConnected) {
+          revealLayersOf(el);
+        }
+      });
+    if (ownSize) {
+      return;
+    }
+    if (flight) {
+      flight.finished.then(landed, () => undefined);
+    } else {
+      landed();
+    }
   };
 
   /** The drawn frame element of `key`. */

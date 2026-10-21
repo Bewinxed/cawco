@@ -48,7 +48,6 @@
     pinned as pinnedOut,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { growTo } from "#lib/cawco/motion/hang.js";
-  import { placeHang } from "#lib/cawco/motion/hang-shape.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -61,6 +60,7 @@
     TabsList,
     type TabsTravel,
   } from "#lib/components/ui/fluid-tabs/index.js";
+  import { hangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
@@ -96,6 +96,7 @@
   import { runIdOf } from "../workflow-runs";
   import { workingSet } from "../working-set.svelte";
   import { dropHint, tabDropTarget } from "./dnd.svelte";
+  import { cardWidthIn, placeUnder } from "./hang-place";
   import SessionDetails from "./SessionDetails.svelte";
   import SessionStatus from "./SessionStatus.svelte";
   import { rebuildScheduler } from "./scheduler.svelte";
@@ -378,11 +379,12 @@
      between these"; "why aren't these the blended/merged menu that morphs
      out of the tab?").
 
-     Where they stand is the shape's own rule (`placeHang`, the same for
-     both, owner: "the curve of the foot doesn't match the curve of the
-     tab, and it needs to be wider to fit and connect well"): their top
-     edge runs out of each foot's tip, level, to a corner (`radius-lg`) a
-     short run (`HANG_RUN`) past it, so the foot's curve goes on into their
+     Where they stand is the shape's own rule (`placeHang` through
+     hang-place's `placeUnder`, the same for both, owner: "the curve of the
+     foot doesn't match the curve of the tab, and it needs to be wider to
+     fit and connect well"): their top edge runs out of each foot's tip,
+     level, to a corner (`radius-lg`) a short run past it, so the foot's
+     curve goes on into their
      edge and they are always wider than the tab's foot-to-foot span. Where
      that would cross the pane's leading edge (the sidebar's border, a
      split's seam: the strip's box, measured) or the screen's margin, they
@@ -393,47 +395,15 @@
      screen's trailing margin they shift toward the start, or stand flush
      with the trailing flank. The card is 416px wide, the screen less its
      margins at most (a phone's runs margin to margin); the menu is as wide
-     as its rows, at least as wide as the shape needs. */
-  /** Their corner (`radius-lg`) and the level run from a foot's tip to it. */
-  const HANG_CORNER = 12;
-  const HANG_RUN = 4;
-  /** Their margin to the screen's edges. */
-  const HANG_MARGIN = 12;
-  const flareOf = (anchor: HTMLElement) =>
-    Number.parseFloat(
-      getComputedStyle(
-        anchor.querySelector('[data-slot="ff-tab"]') ?? anchor
-      ).getPropertyValue("--flare")
-    ) || 0;
-  /**
-   * Where a hang `width` wide stands under `anchor`: its offset from the
-   * tab's leading edge (the primitive's `alignOffset`), its width, and the
-   * side it stands flush on, if any.
-   */
-  function placeOf(anchor: HTMLElement, width: number) {
-    const box = anchor.getBoundingClientRect();
-    const pane = anchor.closest("[data-session-tabs]")?.getBoundingClientRect();
-    const place = placeHang({
-      bounds: {
-        left: Math.max(pane?.left ?? 0, touch.current ? HANG_MARGIN : 0),
-        right: innerWidth - HANG_MARGIN,
-      },
-      corner: HANG_CORNER,
-      flare: flareOf(anchor),
-      run: HANG_RUN,
-      tab: { left: box.left, right: box.right },
-      width,
-    });
-    let flush: "start" | "end" | null = null;
-    if (place.flush.start) {
-      flush = "start";
-    } else if (place.flush.end) {
-      flush = "end";
-    }
-    return { offset: place.left - box.left, width: place.width, flush };
-  }
-  /** The card's width: 416px, within the screen less its margins. */
-  const cardWidth = () => Math.min(416, innerWidth - 2 * HANG_MARGIN);
+     as its rows, at least as wide as the shape needs. The screen is the
+     hang layer the card stands in (hang-layer), never the window. */
+  /** The layer the card stands in, portaled from here: its screen (hang-layer). */
+  const layer = hangLayer();
+  /** Where a hang `width` wide stands under `anchor`, in the layer's room (hang-place). */
+  const placeOf = (anchor: HTMLElement, width: number) =>
+    placeUnder(anchor, width, layer.room(), touch.current);
+  /** The card's width: 416px, within the layer less its margins. */
+  const cardWidth = () => cardWidthIn(layer.room());
   /** Where the card stands under its tab, as it was last placed. */
   let cardPlace = $state<ReturnType<typeof placeOf> | null>(null);
   /** The card stands drawn out of its tab (HangCard `joined`). */
@@ -1833,7 +1803,9 @@
   }}
   open={detailsOpen}
 >
-  <Popover.Portal>
+  <!-- Into the hang layer (hang-layer): its `shell` container is the
+       card's screen, as the glass's card's is. -->
+  <Popover.Portal to={layer.to}>
     <HangCard
       data-session-details-popover
       align="start"

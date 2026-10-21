@@ -146,7 +146,9 @@
    * its edge and scrolls inside them: no padding, its overflow clipped and
    * contained, never taller than its cap or the room bits-ui measures under
    * its tab, and on a phone than the screen under the bar less its margins
-   * and the safe area.
+   * and the safe area. Its screen is the hang layer it is portaled into
+   * (hang-layer): a phone is that `shell` container under the phone line
+   * (`@max-phone/shell`), and its height the layer's `--shell-h`.
    */
   const FRAMES: Record<Frame, string> = {
     caw: "w-(--frame-w) @max-desk/shell:w-(--frame-w-narrow) gap-0 p-space-2",
@@ -154,7 +156,7 @@
     jump: "w-(--frame-w) max-h-(--frame-h) gap-0 p-0 @max-desk/shell:h-(--frame-h) @max-desk/shell:w-(--frame-w-narrow)",
     files: "flex w-(--frame-w) max-h-(--frame-h) flex-col gap-0 p-space-2",
     details:
-      "flex max-h-[min(var(--c-details-card-max-h),var(--bits-popover-content-available-height,var(--c-sheet-max-h)))] overflow-hidden overscroll-contain p-0 max-phone:max-h-[min(calc(100dvh-var(--c-top-bar-h)-2*var(--c-screen-margin)-var(--safe-bottom)),var(--bits-popover-content-available-height,var(--c-sheet-max-h)))]",
+      "flex max-h-[min(var(--c-details-card-max-h),var(--bits-popover-content-available-height,var(--c-sheet-max-h)))] overflow-hidden overscroll-contain p-0 @max-phone/shell:max-h-[min(calc(var(--shell-h)-var(--c-top-bar-h)-2*var(--c-screen-margin)-var(--safe-bottom)),var(--bits-popover-content-available-height,var(--c-sheet-max-h)))]",
   };
   /** The shell less a floating card's edge each side. */
   const ROOM = "calc(100cqi - 2 * var(--c-screen-margin))";

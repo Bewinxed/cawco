@@ -646,6 +646,12 @@
 @utility caw-neck-* {
   --caw-neck: --value([*]);
 }
+/* The Shell's hang layer (hang-layer): the screen its hanging cards stand
+   in is the window, its height the dynamic viewport's (`--shell-h`, which a
+   width container can't say). A states frame says its own height instead. */
+@utility hang-layer-screen {
+  --shell-h: 100dvh;
+}
 @utility press-by-* {
   --press-by: --value([*]);
 }
