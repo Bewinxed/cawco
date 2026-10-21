@@ -1814,7 +1814,10 @@ const SPILL_KEEP = ".cawco-keep";
  * files and empties only the directories it finds there and passes a link
  * by, so a folder holding the link stays, and its parents with it. The sweep
  * may take the folder between the `mkdir` and the link, so both are made
- * again until the link stands.
+ * again until the link stands. The folder outlives its session by design:
+ * what it holds is Claude Code's retention's to delete, and a workspace's
+ * archive leaves it, as a retired workspace is cut again at the same path
+ * and its session resumes there.
  */
 const keepSpill = async (dir: string): Promise<void> => {
   const keep = join(dir, SPILL_KEEP);
