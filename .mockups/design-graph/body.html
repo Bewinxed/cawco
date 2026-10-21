@@ -1,0 +1,30 @@
+<body>
+  <main class="page" id="page"><div class="stage-wrap"><div id="stage"></div><div class="marks" id="marks" aria-hidden="true"></div></div></main>
+
+  <aside class="tool panel t-panel-slide" id="panel" data-open="true" aria-label="Design graph">
+    <div class="toolbar">
+      <div class="t-tabs" id="tabs" role="tablist" aria-label="Components"><span class="t-tabs-pill" aria-hidden="true"></span></div>
+      <div class="bar-end">
+        <div class="zoom" role="group" aria-label="Zoom">
+          <button class="icon-btn" id="zoomOut" aria-label="Zoom out" data-tip="Zoom out (⌘ scroll)" data-icon="zoomOut"></button>
+          <output id="zoomLevel" aria-live="polite">100%</output>
+          <button class="icon-btn" id="zoomIn" aria-label="Zoom in" data-tip="Zoom in (⌘ scroll)" data-icon="zoomIn"></button>
+          <button class="icon-btn" id="zoomFit" aria-label="Fit" data-tip="Fit" data-icon="fit"></button>
+        </div>
+        <button class="icon-btn hide-btn" id="hide" aria-label="Hide" data-tip="Hide (H)" data-icon="eyeClosed"></button>
+      </div>
+    </div>
+    <div class="graph" id="graph" role="region" aria-label="Its state machines"></div>
+    <div class="dials" id="dials"></div>
+    <div class="sash sash-w" id="sashW" role="separator" aria-orientation="vertical" aria-label="Resize panel width" tabindex="0" data-edge="w"></div>
+    <div class="sash sash-h" id="sashH" role="separator" aria-orientation="horizontal" aria-label="Resize graph height" tabindex="0" data-edge="h"></div>
+    <div class="sash sash-c" id="sashC" role="separator" aria-label="Resize panel" tabindex="0" data-edge="wh"></div>
+    <span class="edge-pill edge-pill-w" aria-hidden="true"></span>
+    <span class="edge-pill edge-pill-h" aria-hidden="true"></span>
+    <span class="corner-l" aria-hidden="true"></span>
+  </aside>
+  <button class="show" id="show" type="button" data-tip="Show (H)" hidden><span data-icon="eye"></span>Design graph</button>
+
+  <section class="tool dock t-panel-slide" id="dock" data-open="false" aria-label="The kept move"></section>
+  <div class="tip" id="tip" role="tooltip"></div>
+<script>
