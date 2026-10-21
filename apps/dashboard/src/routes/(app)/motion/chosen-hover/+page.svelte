@@ -224,6 +224,7 @@
   <!-- The Comments panel as the pane floats it: the kit's floating surface at the panel's floor (c-pin-list-min). -->
   <section class={pinsPanel} data-probe="pins">
     <PinList
+      down={null}
       focused="pin-1"
       hold="ready"
       live={new Set(["pin-2"])}

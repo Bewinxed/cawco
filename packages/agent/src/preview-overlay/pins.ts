@@ -21,7 +21,9 @@
  * `findAnchor`: source file:line, then selector, then text). A page's pin
  * whose element none of them finds goes to the moved tray (`movedAt`) until
  * the person places it again. A pin on the page as a whole stands on its
- * body (core `wholePage`), whatever the page says now, and never goes there.
+ * body (core `wholePage`), whatever the page says now, and never goes there;
+ * nor does one kept on a page-sized container (core `findAnchor`'s `page`),
+ * which stands on the body again, out of the tray if it was put there.
  *
  * The host (the dashboard's pane) draws the card and the list; this tells it
  * where the card's pin stands as the page scrolls, and where each pin's
@@ -29,6 +31,7 @@
  * point it was made at, with room round either.
  */
 import {
+  type AnchorFound,
   changedAnchor,
   type PageAnchor,
   type Pin,
@@ -78,9 +81,7 @@ export interface PinsDeps {
   /** A placed ink group's box in the page, px; null when it is not on the page. */
   groupBox: (id: string) => Box | null;
   /** Where a page's anchor stands now, and by what; null when nothing on the page matches it. */
-  locate: (
-    anchor: PageAnchor
-  ) => { by: "source" | "selector" | "text"; el: Element } | null;
+  locate: (anchor: PageAnchor) => AnchorFound<Element> | null;
   /** The overlay's highlight round `el` (its box in the viewport), or none. */
   outline: (el: Element | null) => void;
   /** Pin `pin`'s first line beside its disc, at the viewport's `x`, `y`, radius `r`; none hides it. */
@@ -107,6 +108,8 @@ export interface Pins {
   /** After a re-publish or an HMR update: the open card's pin, if it now stands under the host's chrome, brought out again. */
   keepClear: () => void;
   layer: SVGSVGElement;
+  /** Pin `id`'s card opened in the host (`cawco:pin-open`), the pin as this page holds it with it; `made`, for one just made. */
+  open: (id: string, made?: boolean) => void;
   /** A pin on an ink group (Annotate, Comment); a comment's card opened. */
   pinInk: (
     group: InkGroup,
@@ -167,6 +170,20 @@ export function startPins(deps: PinsDeps): Pins {
   document.documentElement.append(layer);
 
   const pinsMap = () => artifact.doc().getMap("pins") as YMap<Pin>;
+  /**
+   * Pin `id`'s card opened in the host, carrying the pin as this page holds
+   * it: a host whose own doc doesn't hold it yet (it reaches the host's only
+   * through the hub, and the page's link is down) draws the card from that,
+   * and writes its words through the page (`cawco:reply`).
+   */
+  const open = (id: string, made = false) => {
+    const pin = pinsMap().get(id);
+    deps.post("cawco:pin-open", {
+      id,
+      ...(made ? { made: true } : {}),
+      ...(pin ? { pin } : {}),
+    });
+  };
   const onPage = () => artifact.kind() !== "canvas";
   /**
    * A pin whose element is gone may be moved aside, and an anchor that reads
@@ -217,18 +234,25 @@ export function startPins(deps: PinsDeps): Pins {
    * The anchors whose element is found under another selector or text now
    * (a revision moved or reworded it), written back so the next look finds
    * it by its selector. One that still reads as it was is left alone: a
-   * write here draws the pins again.
+   * write here draws the pins again. A moved pin its anchor now reads as on
+   * the page as a whole (core `findAnchor`'s `page`: one kept on the
+   * page-sized container a press in the page's padding named) stands on the
+   * page again, out of the moved tray: the page is always there.
    */
   const reanchor = (pins: Pin[]) => {
     const moves: Pin[] = [];
     for (const pin of pins) {
-      if (!("selector" in pin.anchor) || pin.movedAt) {
+      if (!("selector" in pin.anchor) || (pin.movedAt && pin.ink)) {
         continue;
       }
       const found = deps.locate(pin.anchor);
+      if (pin.movedAt && found?.by !== "page") {
+        continue;
+      }
       const now = found && deps.anchorOf(found.el);
-      if (now && changedAnchor(pin.anchor, now)) {
-        moves.push({ ...pin, anchor: now });
+      if (now && (pin.movedAt || changedAnchor(pin.anchor, now))) {
+        const { movedAt: _moved, ...rest } = pin;
+        moves.push({ ...rest, anchor: now });
       }
     }
     return moves;
@@ -274,12 +298,12 @@ export function startPins(deps: PinsDeps): Pins {
     g.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      deps.post("cawco:pin-open", { id: pin.id });
+      open(pin.id);
     });
     return g;
   };
 
-  /** Writes the pins found again by their source or text, and moves aside those no anchor finds. */
+  /** Writes the pins found again by their source, text or the page, and moves aside those no anchor finds. */
   const settle = (moves: Pin[], gone: Pin[]) => {
     if (moves.length === 0 && gone.length === 0) {
       return;
@@ -481,6 +505,7 @@ export function startPins(deps: PinsDeps): Pins {
   return {
     layer,
     draw,
+    open,
     cropOf: (id) => {
       const pin = pinsMap().get(id);
       const where = placed.get(id);
@@ -515,7 +540,7 @@ export function startPins(deps: PinsDeps): Pins {
         thread: [],
       };
       write(pin);
-      deps.post("cawco:pin-open", { id: pin.id, made: true });
+      open(pin.id, true);
       return pin.id;
     },
     pinInk: (group, kind, elements) => {
@@ -532,7 +557,7 @@ export function startPins(deps: PinsDeps): Pins {
       };
       write(pin);
       if (kind === "comment") {
-        deps.post("cawco:pin-open", { id: pin.id, made: true });
+        open(pin.id, true);
       }
     },
     placeAgain: (id, el, x, y) => {
@@ -547,7 +572,7 @@ export function startPins(deps: PinsDeps): Pins {
         elements: [deps.describe(el)],
         point: pointOn(el, x, y),
       });
-      deps.post("cawco:pin-open", { id });
+      open(id);
     },
     focus: (id, scroll) => {
       focused = id;

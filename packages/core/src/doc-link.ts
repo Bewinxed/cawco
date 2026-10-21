@@ -24,7 +24,58 @@
  * holds unanswered would stand connecting for ever. {@link reopenStalled}
  * closes such an attempt and tries again through the library's own
  * disconnect and connect.
+ *
+ * Each also keeps its doc on the device (y-indexeddb), under
+ * {@link deviceDocName}, so what the person marks while the link is down
+ * outlives a reload; {@link tendDeviceDocs} lets go of the copies of
+ * artifacts no one has opened on that device for {@link DEVICE_DOC_MS}, and
+ * a doc the hub says is gone ({@link ARTIFACT_GONE}) is let go at once.
  */
+
+/** The hub's close code for an artifact removed while a doc is joined (hub artifacts/sync.ts). */
+export const ARTIFACT_GONE = 4410;
+
+/** Where artifact `id`'s doc is kept on a device: its IndexedDB database's name. */
+export const deviceDocName = (id: string): string => `cawco-artifact:${id}`;
+
+/** How long a device keeps the doc of an artifact no one opened there, ms: 30 days. Our call. */
+export const DEVICE_DOC_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Where a device notes when it last opened artifact `id`'s doc (localStorage, beside its database). */
+const usedKey = (id: string) => `cawco-artifact-used:${id}`;
+
+/**
+ * Artifact `id`'s doc noted as opened now on this device, and every other
+ * artifact's doc it keeps that no one opened within {@link DEVICE_DOC_MS}
+ * deleted. Does nothing where the browser lists no databases or keeps no
+ * storage.
+ */
+export function tendDeviceDocs(id: string): void {
+  try {
+    localStorage.setItem(usedKey(id), String(Date.now()));
+  } catch {
+    return;
+  }
+  const listed = globalThis.indexedDB?.databases?.();
+  listed
+    ?.then((databases) => {
+      const prefix = deviceDocName("");
+      for (const { name } of databases) {
+        const other = name?.startsWith(prefix)
+          ? name.slice(prefix.length)
+          : null;
+        if (!other || other === id) {
+          continue;
+        }
+        const used = Number(localStorage.getItem(usedKey(other)) ?? 0);
+        if (Date.now() - used > DEVICE_DOC_MS) {
+          indexedDB.deleteDatabase(deviceDocName(other));
+          localStorage.removeItem(usedKey(other));
+        }
+      }
+    })
+    .catch(() => undefined);
+}
 
 /**
  * How often a doc's socket asks the hub for its state, and the hub beats it,

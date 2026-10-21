@@ -14,7 +14,12 @@
     sheetWords,
   } from "@cawco/core";
   import { readWithin } from "@cawco/core/bounded";
-  import { type PreviewMode, previewMode } from "@cawco/core/comments";
+  import {
+    type Pin,
+    type PreviewMode,
+    pinProblem,
+    previewMode,
+  } from "@cawco/core/comments";
   import { STAGE_CLONE_MS, STAGE_READY_MS } from "@cawco/core/stage";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -49,6 +54,7 @@
     IconTrash,
     IconTuning,
     IconUndock,
+    IconWarningTriangle,
   } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import { goto } from "$app/navigation";
@@ -88,7 +94,9 @@
     artifactSyncPath,
     type DocSync,
     joinArtifact,
+    LINK_DOWN_MS,
     type ListHold,
+    NOT_REACHING,
     sendArtifact,
   } from "./artifact-doc";
   import CanvasView from "./CanvasView.svelte";
@@ -787,7 +795,68 @@
    */
   let view = $state.raw<ArtifactView | null>(null);
   let doc: ArtifactDoc | null = null;
-  const pins = $derived(view?.pins ?? []);
+  /**
+   * Pins the page's doc holds that the pane's doesn't yet, as the page last
+   * said them (`cawco:pin-open`'s pin, a write's result): one made while the
+   * page's link to the hub is down reaches the pane's doc only through the
+   * hub. The card and the list read them beside the pane's own, and their
+   * words, resolve and delete go through the page ({@link onlyOnPage}).
+   */
+  let pagePins = $state.raw<Record<string, Pin>>({});
+  const pins = $derived.by(() => {
+    const held = view?.pins ?? [];
+    const known = new Set(held.map((pin) => pin.id));
+    const more = Object.values(pagePins).filter((pin) => !known.has(pin.id));
+    return more.length > 0
+      ? [...held, ...more].sort((a, b) => a.number - b.number)
+      : held;
+  });
+  /** Whether pin `id` stands only in the page's doc yet: written through the page's own messages, as the app's are. */
+  const onlyOnPage = (id: string) =>
+    id in pagePins && !view?.pins.some((pin) => pin.id === id);
+  /** Pin `id` as the page says it now (a valid pin), or gone from it (null). */
+  function pageSays(id: string, now: unknown) {
+    const { [id]: _was, ...rest } = pagePins;
+    pagePins =
+      now !== null && pinProblem(now) === null && (now as Pin).id === id
+        ? { ...rest, [id]: now as Pin }
+        : rest;
+  }
+  /** Words sent through the page, kept until it says they were written: a refusal puts them back in the field. */
+  const pageWords = new Map<string, string>();
+  /**
+   * The page's answer to a write the pane sent it: the pin as the page now
+   * holds it, drawn again; a refusal under the open card, a reply's words
+   * back in its field.
+   */
+  function heardPageWrite(type: string, message: Record<string, unknown>) {
+    const id = typeof message.pin === "string" ? message.pin : null;
+    if (!(id && (id in pagePins || pageWords.has(id)))) {
+      return;
+    }
+    if ("now" in message && !view?.pins.some((one) => one.id === id)) {
+      pageSays(id, message.now);
+    }
+    const words = type === "cawco:reply-result" ? pageWords.get(id) : undefined;
+    if (type === "cawco:reply-result") {
+      pageWords.delete(id);
+    }
+    if (message.ok === true) {
+      if (words !== undefined) {
+        drafts.discard(id);
+      }
+      return;
+    }
+    if (words !== undefined) {
+      drafts.set(id, words);
+    }
+    if (id === openPin) {
+      cardError =
+        typeof message.error === "string"
+          ? message.error
+          : "The page didn't keep that, so nothing changed. Try again.";
+    }
+  }
   /** Whether the pane holds the doc yet: until it does, no count or list reads as none. */
   let docSync = $state<DocSync>({ state: "reading" });
   /** The first sync has outlasted `--dur-wait-grace`: the list's skeleton stands in (The Real Wait Rule). */
@@ -806,6 +875,7 @@
   const listHold = $derived.by<ListHold>(() => {
     switch (docSync.state) {
       case "synced":
+      case "lost":
         return "ready";
       case "failed":
         return { failed: docSync.why };
@@ -814,6 +884,49 @@
     }
     return readingLong ? "reading" : "quiet";
   });
+  /** The page's doc's link to the hub, as the page says it (`cawco:sync`): what closed it, while it stands lost. */
+  let pageLost = $state<string | null>(null);
+  const pageIsLost = $derived(pageLost !== null);
+  /** The page's link has stood lost {@link LINK_DOWN_MS} from its first close, whatever each close said. */
+  let pageDown = $state(false);
+  $effect(() => {
+    if (!pageIsLost) {
+      pageDown = false;
+      return;
+    }
+    const said = setTimeout(() => {
+      pageDown = true;
+    }, LINK_DOWN_MS);
+    return () => clearTimeout(said);
+  });
+  /**
+   * The comments aren't reaching the agent: the page's link or the pane's
+   * has stood lost {@link LINK_DOWN_MS} (the pane's own is graced in
+   * artifact-doc.ts), so a drop y-websocket reopens says nothing; what
+   * closed it, word for word. What the person marks meanwhile is kept on
+   * the device (artifact-doc.ts, overlay artifact.ts).
+   */
+  const linkDown = $derived(
+    (pageDown ? pageLost : null) ??
+      (docSync.state === "lost" ? docSync.why : null)
+  );
+  /** What closed the page's link, as the page said it (artifact.ts `closedBecause`). */
+  const lostWhy = (error: unknown): string =>
+    typeof error === "string" ? error : "The page's link to the hub closed.";
+  /** The Comments control's title: why the comments aren't reaching the agent, else what ⇧C does. */
+  const commentsTitle = $derived.by(() => {
+    if (linkDown) {
+      return `${NOT_REACHING}. Open them to try again.`;
+    }
+    return pinsShown
+      ? "Comments (⇧C hides the pins)"
+      : "Comments (⇧C shows the pins)";
+  });
+  /** Try again on the comments' links: the pane's socket and the page's, each opened again now. */
+  function relink() {
+    doc?.retry();
+    post({ type: "cawco:reconnect" });
+  }
   /**
    * The head's line under the name (DESIGN.md, Artifact panel): the ask the
    * session gave it, carried by the panel's frame, so it stands from the
@@ -1072,11 +1185,22 @@
       return;
     }
     docSync = { state: "reading" };
+    pageLost = null;
+    pagePins = {};
+    pageWords.clear();
     const joined = joinArtifact(
       session,
       id,
       (next) => {
         view = next;
+        // A pin the pane's doc holds now is its own from here on: the page's
+        // copy goes, so a later delete or take-back there never brings it back.
+        const held = new Set(next.pins.map((pin) => pin.id));
+        if (Object.keys(pagePins).some((pinId) => held.has(pinId))) {
+          pagePins = Object.fromEntries(
+            Object.entries(pagePins).filter(([pinId]) => !held.has(pinId))
+          );
+        }
       },
       (sync) => {
         docSync = sync;
@@ -1409,7 +1533,12 @@
     if (id && id === madePin) {
       madePin = null;
       if (!drafts.text(id).trim()) {
-        doc?.withdraw(id);
+        if (onlyOnPage(id)) {
+          post({ type: "cawco:withdraw", pin: id });
+          pageSays(id, null);
+        } else {
+          doc?.withdraw(id);
+        }
         drafts.discard(id);
       }
     }
@@ -1475,6 +1604,21 @@
       return false;
     }
     const reopens = !!cardPin?.resolvedAt;
+    if (onlyOnPage(openPin)) {
+      // The page holds the pin and keeps the words on its device until the
+      // hub has them; its answer (`cawco:reply-result`) draws them, or puts
+      // them back in the field with why.
+      pageWords.set(openPin, text);
+      post({ type: "cawco:reply", pin: openPin, text });
+      if (reopens) {
+        post({ type: "cawco:resolve", pin: openPin, resolved: false });
+      }
+      cardError = null;
+      if (madePin === openPin) {
+        madePin = null;
+      }
+      return true;
+    }
     cardError = doc
       ? doc.reply(openPin, text)
       : "The pane lost the page's document, so the reply wasn't kept. Reload, then reply again.";
@@ -1491,6 +1635,11 @@
     return cardError === null;
   }
   function resolvePin(resolved: boolean) {
+    if (openPin && onlyOnPage(openPin)) {
+      cardError = null;
+      post({ type: "cawco:resolve", pin: openPin, resolved });
+      return;
+    }
     if (openPin) {
       cardError = doc
         ? doc.resolve(openPin, resolved)
@@ -1507,9 +1656,16 @@
     if (!id) {
       return Promise.resolve();
     }
-    const refused = doc
-      ? doc.delete(id)
-      : "The pane lost the page's document, so the pin wasn't deleted. Reload, then try again.";
+    let refused: string | null = null;
+    if (onlyOnPage(id)) {
+      // The page holds it alone: deleted there, its answer saying any refusal.
+      post({ type: "cawco:delete", pin: id });
+      pageSays(id, null);
+    } else {
+      refused = doc
+        ? doc.delete(id)
+        : "The pane lost the page's document, so the pin wasn't deleted. Reload, then try again.";
+    }
     if (refused) {
       return Promise.reject(new Error(refused));
     }
@@ -1696,9 +1852,26 @@
           }
           placingFrom = null;
         }
+        // The pin as the page holds it: the card draws from it while the pane's doc doesn't hold it yet.
+        if (
+          message.pin !== undefined &&
+          !view?.pins.some((one) => one.id === id)
+        ) {
+          pageSays(id, message.pin);
+        }
         openCard(id, message.made === true);
         break;
       }
+      // What the page said of a write the pane sent it for a pin it holds alone.
+      case "cawco:reply-result":
+      case "cawco:resolve-result":
+      case "cawco:delete-result":
+        heardPageWrite(message.type, message);
+        break;
+      case "cawco:sync":
+        // The page's doc's link to the hub (overlay artifact.ts `Link`): a lost one is said once it has stood.
+        pageLost = message.state === "lost" ? lostWhy(message.error) : null;
+        break;
       case "cawco:press":
         // A press on the page, outside the card: the outside-press rule, heard from the page's own process.
         if (openPin) {
@@ -2289,13 +2462,12 @@
     data-slot="comments"
     aria-expanded={listOpen}
     aria-haspopup="dialog"
-    aria-label={`Comments${openCount > 0 ? `, ${openCount} open` : ""}${pinsShown ? "" : ", pins hidden"}`}
+    aria-label={`Comments${openCount > 0 ? `, ${openCount} open` : ""}${pinsShown ? "" : ", pins hidden"}${linkDown ? `, ${NOT_REACHING}` : ""}`}
+    data-link-down={linkDown ? "" : undefined}
     expanded="pressed"
     onclick={() => showList(!listOpen)}
     size="sm"
-    title={pinsShown
-      ? "Comments (⇧C hides the pins)"
-      : "Comments (⇧C shows the pins)"}
+    title={commentsTitle}
     variant="ghost"
   >
     <IconChat /><span class="in-form-compact:hidden" data-slot="comments-label"
@@ -2307,6 +2479,10 @@
     {#if !pinsShown}
       <!-- ⇧C hid the pins: said where the person looks for them. -->
       <IconEyeClosed />
+    {/if}
+    {#if linkDown}
+      <!-- The comments aren't reaching the agent: said where the person looks for them, why in the panel. -->
+      <IconWarningTriangle class="text-data-bad" />
     {/if}
   </Button>
 {/snippet}
@@ -2389,12 +2565,13 @@
       trapFocus={false}
     >
       <PinList
+        down={linkDown}
         focused={focusedPin}
         {live}
         hold={listHold}
         onclose={() => showList(false)}
         onopen={openCard}
-        onretry={() => doc?.retry()}
+        onretry={relink}
         {pins}
         bind:filter={listFilter}
         bind:scroll={listScroll}

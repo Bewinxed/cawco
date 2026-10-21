@@ -83,6 +83,7 @@
         "tldts": "7.4.18",
         "virtua": "0.53.4",
         "web-haptics": "0.0.6",
+        "y-indexeddb": "9.0.12",
         "y-websocket": "3.1.0",
         "yjs": "13.6.33",
       },
@@ -154,6 +155,7 @@
         "turn-server": "0.8.0",
         "typebox": "1.3.34",
         "y-excalidraw": "2.0.12",
+        "y-indexeddb": "9.0.12",
         "y-websocket": "3.1.0",
         "yaml": "^2.9.1",
         "yjs": "13.6.33",
@@ -3299,6 +3301,8 @@
     "xmlbuilder": ["xmlbuilder@11.0.1", "", {}, "sha512-fDlsI/kFEx7gLvbecc0/ohLG50fugQp8ryHzMTuW9vSa1GJ0XYWKnhsUx7oie3G98+r56aTQIUB4kht42R3JvA=="],
 
     "y-excalidraw": ["y-excalidraw@2.0.12", "", { "dependencies": { "fractional-indexing": "^3.2.0" }, "peerDependencies": { "@excalidraw/excalidraw": "^0.17.6", "yjs": "^13.6.19" } }, "sha512-/dp0MUSD7WC4TFXsv9DyXxeg+CQoSM4iwh9UpLx8+VFwAg47F3O9KW62C/Jkuq7Rt3y9MAmKC2rE8beZOHCGaw=="],
+
+    "y-indexeddb": ["y-indexeddb@9.0.12", "", { "dependencies": { "lib0": "^0.2.74" }, "peerDependencies": { "yjs": "^13.0.0" } }, "sha512-9oCFRSPPzBK7/w5vOkJBaVCQZKHXB/v6SIT+WYhnJxlEC61juqG0hBrAf+y3gmSMLFLwICNH9nQ53uscuse6Hg=="],
 
     "y-protocols": ["y-protocols@1.0.7", "", { "dependencies": { "lib0": "^0.2.85" }, "peerDependencies": { "yjs": "^13.0.0" } }, "sha512-YSVsLoXxO67J6eE/nV4AtFtT3QEotZf5sK5BHxFBXso7VDUT3Tx07IfA6hsu5Q5OmBdMkQVmFZ9QOA7fikWvnw=="],
 

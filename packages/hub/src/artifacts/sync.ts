@@ -32,6 +32,7 @@ import {
   pinsProblem,
   type SendBody,
 } from "@cawco/core/comments";
+import { ARTIFACT_GONE } from "@cawco/core/doc-link";
 import { inkProblem } from "@cawco/core/ink";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { ServerWebSocket } from "bun";
@@ -80,9 +81,6 @@ const BEAT = (() => {
 
 /** The close code of an update the hub would not keep. */
 export const REFUSED = 4400;
-
-/** The close code of a socket whose artifact was removed. */
-const GONE = 4410;
 
 /** What the listener keeps on an artifact's socket. */
 export interface ArtifactSocket {
@@ -566,7 +564,8 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
   open(socket: ServerWebSocket<ArtifactSocket>) {
     const client: ArtifactClient = {
       beat: () => socket.send(BEAT),
-      close: () => socket.close(GONE, "This artifact was removed."),
+      // The artifact was removed: core ARTIFACT_GONE, on which a device lets its copy go.
+      close: () => socket.close(ARTIFACT_GONE, "This artifact was removed."),
       screen: socket.data.screen,
       send: (update) =>
         socket.send(syncMessage((encoder) => writeUpdate(encoder, update))),

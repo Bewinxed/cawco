@@ -37,6 +37,7 @@
  * (`cawco:stroke-end`) and the icon and its picks run on that element.
  */
 import {
+  type AnchorFound,
   changedAnchor,
   type PageAnchor,
   type Pin,
@@ -120,9 +121,7 @@ export interface InkDeps {
   /** Whether a press that is not a pen's inks: the pane's Draw mode, on the overlay's own layer. */
   freehand: (event: PointerEvent) => boolean;
   /** Where a page's anchor stands now, and by what; null when nothing on the page matches it. */
-  locate: (
-    anchor: PageAnchor
-  ) => { by: "source" | "selector" | "text"; el: Element } | null;
+  locate: (anchor: PageAnchor) => AnchorFound<Element> | null;
   /** Whether `el` is the page's own box rather than content on it. */
   pageSized: (el: Element) => boolean;
   /** The pins, drawn after the ink each time it is drawn. */
