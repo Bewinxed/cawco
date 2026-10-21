@@ -1879,7 +1879,9 @@ html[data-stack] .dock { position: relative; inset: auto; max-block-size: none; 
 @media (prefers-reduced-motion: reduce) { .var::after { transition: none; } }
 /* A graph drawn anew (a tab, a resize, a relayout) takes its tiers at once: only a change of state on a graph
    already drawn fades between them. */
-.world[data-instant] :is(.node, .var, .var::after) { transition: none; }
+.world[data-instant] :is(.node, .var) { transition: none; }
+/* Its own rule: :is() takes no pseudo-elements, so the tier layer is named apart. */
+.world[data-instant] .var::after { transition: none; }
 .var:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 
 /* The zoom group: 24px items in a 30px group, 2px in, so 5px + 3px = the group's 8px (The Concentric Rule). */
