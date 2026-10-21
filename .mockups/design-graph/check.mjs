@@ -1,6 +1,9 @@
-// The round-21 proof for the design-graph mockup: engine first (computed styles, boxes, the CDP Animation
-// domain), pixels only for what drawing alone decides (mask-composite). Runs 1440×900 light and dark,
-// 1024×768, and 390×844 under touch, then saves the reviewer's captures.
+// The round-22 proof for the design-graph mockup: engine first (computed styles, boxes, the CDP Animation
+// domain), pixels only for what drawing alone decides (mask-composite). Every screen class of
+// responsive-design.md at its own size: the desk family (desk 1440 light and dark, desk 1024, tablet
+// landscape by touch and by trackpad, wide 1920, ultrawide 2560 and 3440) runs the whole suite; the compact
+// classes (phone portrait, phone landscape, tablet portrait, a short desk window) run the same sweep on each
+// face and stop of their drawer or sheet, plus their own input. Then it saves the reviewer's captures.
 //   node .mockups/design-graph/check.mjs        (CHROME=<path> to point at another Chromium)
 import { mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -38,7 +41,11 @@ function install() {
       if (e.classList && e.classList.contains("tl")) {
         const area = document.getElementById("endArea"), ar = area && area.getBoundingClientRect();
         const px = x ?? (el.getBoundingClientRect().left + el.getBoundingClientRect().width / 2);
-        if (ar && px >= ar.left + 1) { stack.push(K.rgba(getComputedStyle(area).backgroundColor)); break; }
+        // Stacked rows draw the end area inside each lane and the ruler (::before, from --end-x).
+        if (getComputedStyle(e).getPropertyValue("--rows").trim() === "stacked") {
+          const host = el.closest(".ruler, .lane");
+          if (host && px >= host.getBoundingClientRect().left + parseFloat(getComputedStyle(e).getPropertyValue("--end-x")) + 1) { stack.push(K.rgba(getComputedStyle(host, "::before").backgroundColor)); break; }
+        } else if (ar && K.vis(area) && px >= ar.left + 1) { stack.push(K.rgba(getComputedStyle(area).backgroundColor)); break; }
       }
       const c = K.rgba(cs.backgroundColor);
       if (c[3] > 0) stack.push(c);
@@ -49,7 +56,8 @@ function install() {
     for (let i = stack.length - 1; i >= 0; i--) out = K.over(stack[i], out);
     return out;
   };
-  K.layer = (el) => { const f = el.closest(".pop, .menu, .tip"); if (f) return f.className.split(" ")[0]; const t = el.closest(".panel, .dock, .show"); return t ? t.id || t.className.split(" ")[0] : "page"; };
+  // A compact screen's drawer or sheet is one surface: its head and both faces are one layer.
+  K.layer = (el) => { const f = el.closest(".pop:not(.inline), .menu, .tip"); if (f) return f.className.split(" ")[0]; if (el.closest("#tools") && document.documentElement.dataset.layout !== "desk") return "tools"; const t = el.closest(".panel, .dock, .show"); return t ? t.id || t.className.split(" ")[0] : "page"; };
   K.textItems = () => {
     const out = [], walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let n; (n = walker.nextNode()); ) {
@@ -62,6 +70,7 @@ function install() {
     return out;
   };
   K.controls = () => [...document.querySelectorAll("button, input, [role=button], [role=tab], .edge-pill, .corner-l, .badge")].filter((el) => K.vis(el) && !el.closest(".tip")).map((el) => ({ el, r: el.getBoundingClientRect(), kind: "control" }));
+  K.compact = () => document.documentElement.dataset.layout !== "desk";
   // Overlaps: no text or control over another in the same layer (the page, the panel, the dock, the popover,
   // the menu); the base layers never overlap each other at all.
   K.clipTo = (el, r) => { let { left, top, right, bottom } = r; for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) { const cs = getComputedStyle(e); if (cs.overflowX !== "visible" || cs.overflowY !== "visible") { const b = e.getBoundingClientRect(); left = Math.max(left, b.left); top = Math.max(top, b.top); right = Math.min(right, b.right); bottom = Math.min(bottom, b.bottom); } } return { left, top, right, bottom }; };
@@ -76,7 +85,7 @@ function install() {
       if (a.el.closest(".t-text-soft") && a.el.closest(".t-text-soft") === b.el.closest(".t-text-soft")) continue;
       if (hit(a.r, b.r)) out.push(name(a) + " × " + name(b));
     }
-    const base = ["panel", "dock", "page"].map((id) => document.getElementById(id)).filter((e) => e && K.vis(e));
+    const base = ["panel", "dock", "page", "tools"].map((id) => document.getElementById(id)).filter((e) => e && K.vis(e) && getComputedStyle(e).display !== "contents");
     const stageBox = K.clipTo(document.getElementById("stage"), document.getElementById("stage").getBoundingClientRect());
     for (const t of base.filter((e) => e.id !== "page")) if (hit(t.getBoundingClientRect(), stageBox) && getComputedStyle(t).position === "fixed") out.push(t.id + " covers the component");
     const p = document.getElementById("panel"), d = document.getElementById("dock");
@@ -86,13 +95,24 @@ function install() {
   // Spill: a box whose content runs past it where nothing scrolls or clips it on purpose.
   K.spills = () => {
     const out = [];
-    for (const el of document.querySelectorAll("#page *, .panel *, .dock *, .pop *, .menu *, .show")) {
+    for (const el of document.querySelectorAll("#page *, .panel *, .dock *, .pop *, .menu *, .show, #sheetHead *")) {
       // The corner L's stroke box is its 12px legs plus the clipped-away stroke on its other two sides.
       if (!K.vis(el) || el.closest("svg") || el.matches(".zoomer, .world, .region, .regionBody, .t-tabs-pill, .t-text-soft, .t-text-soft *, .corner-l")) continue;
       const cs = getComputedStyle(el);
       if (cs.display === "inline" || cs.position === "absolute" && el.matches(".bar, .ghost, .tail, .tie, .playhead, .snap, .tick, .end-area")) continue;
       if (el.tagName === "INPUT") { if (el.type !== "range" && el.scrollWidth > el.clientWidth + 1) out.push("input " + (el.dataset.f || "") + " cuts its value"); continue; }
       if (cs.overflowX !== "visible" && cs.overflowY !== "visible") continue;
+      // Under touch every target grows a transparent hit layer (::before, absolute) past its box on purpose,
+      // which every ancestor's scroll size counts: there a box is measured by what it draws, its children's
+      // boxes and its own text.
+      if (document.documentElement.dataset.input !== "fine") {
+        const b = el.getBoundingClientRect(), rs = [...el.children].filter((k) => K.vis(k) && !k.matches(".t-tabs-pill, .bar, .ghost, .tail, .tie, .playhead, .snap, .tick, .end-area")).map((k) => k.getBoundingClientRect());
+        // Text is measured across only: a run's ink box stands taller than a line-height-1 line box by design.
+        for (const n of el.childNodes) if (n.nodeType === 3 && n.textContent.trim()) { const rg = document.createRange(); rg.selectNodeContents(n); for (const r of rg.getClientRects()) rs.push({ left: r.left, right: r.right, top: b.top, bottom: b.bottom, width: r.width, height: 1 }); }
+        const bad = rs.filter((k) => k.width > 0.5 && k.height > 0.5 && (k.right > b.right + 1 || k.bottom > b.bottom + 1 || k.left < b.left - 1 || k.top < b.top - 1));
+        if (bad.length) out.push((el.id || el.className || el.tagName) + " draws past its box by " + Math.round(Math.max(...bad.map((k) => Math.max(k.right - b.right, k.bottom - b.bottom, b.left - k.left, b.top - k.top)))) + "px");
+        continue;
+      }
       if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) out.push((el.id || el.className || el.tagName) + " " + el.scrollWidth + "/" + el.clientWidth + " × " + el.scrollHeight + "/" + el.clientHeight);
     }
     return out;
@@ -118,8 +138,9 @@ function install() {
   // Breakage the eye catches (the review of round 21):
   // a. the tool never sits over the component's text or controls, scrolled out of its room or not;
   K.underTool = () => {
-    const tools = ["dock", "panel", "show"].map((id) => document.getElementById(id)).filter((t) => t && K.vis(t) && getComputedStyle(t).position === "fixed");
-    const items = K.textItems().concat(K.controls()).filter((it) => it.el.closest("#stage"));
+    const tools = ["dock", "panel", "show", "tools"].map((id) => document.getElementById(id)).filter((t) => t && K.vis(t) && getComputedStyle(t).position === "fixed" && getComputedStyle(t).display !== "contents");
+    // What the page column clips (scrolled out of its room) is not under the tool: only what shows.
+    const items = K.textItems().concat(K.controls()).filter((it) => it.el.closest("#stage")).map((it) => ({ ...it, r: K.clipTo(it.el, it.r) })).filter((it) => it.r.right - it.r.left > 0.5 && it.r.bottom - it.r.top > 0.5);
     const hit = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
     const out = [];
     for (const t of tools) { const tb = t.getBoundingClientRect(); for (const it of items) if (hit(it.r, tb)) out.push(t.id + " over \"" + (it.el.textContent || it.el.tagName).trim().slice(0, 24) + "\""); }
@@ -153,7 +174,8 @@ function install() {
   };
   // d. no line (a graph edge, a tie, the playhead, the move's end edge) runs through a text box.
   K.linesOverText = () => {
-    const texts = K.textItems().filter((t) => !t.el.closest("svg")).map((t) => ({ el: t.el, r: K.clipTo(t.el, t.r) })).filter((t) => t.r.right - t.r.left > 0.5 && t.r.bottom - t.r.top > 0.5);
+    // A floating popover or menu stands over the dock's lines: its text is on another layer.
+    const texts = K.textItems().filter((t) => !t.el.closest("svg, .pop:not(.inline), .menu")).map((t) => ({ el: t.el, r: K.clipTo(t.el, t.r) })).filter((t) => t.r.right - t.r.left > 0.5 && t.r.bottom - t.r.top > 0.5);
     const inside = (x, y, r) => x > r.left + 0.5 && x < r.right - 0.5 && y > r.top + 0.5 && y < r.bottom - 0.5;
     const out = [];
     const g = document.getElementById("graph").getBoundingClientRect();
@@ -164,9 +186,9 @@ function install() {
     const rects = [];
     for (const t of document.querySelectorAll(".tie")) rects.push(["tie", t.getBoundingClientRect()]);
     const ph = document.getElementById("playhead");
-    if (ph && K.vis(document.getElementById("dock"))) { const b = ph.getBoundingClientRect(), a = getComputedStyle(ph, "::after"); rects.push(["playhead", { left: b.left - 0.5, right: b.left + 0.5, top: b.top + parseFloat(a.top), bottom: b.bottom }]); }
+    if (ph && K.vis(document.getElementById("dock")) && getComputedStyle(ph, "::after").display !== "none") { const b = ph.getBoundingClientRect(), a = getComputedStyle(ph, "::after"); rects.push(["playhead", { left: b.left - 0.5, right: b.left + 0.5, top: b.top + parseFloat(a.top), bottom: b.bottom }]); }
     const area = document.getElementById("endArea");
-    if (area && K.vis(document.getElementById("dock"))) { const b = area.getBoundingClientRect(), tl = document.getElementById("tl").getBoundingClientRect(); const rr = document.querySelector(".ruler-row").getBoundingClientRect(); rects.push(["move's end edge", { left: b.left, right: b.left + 1, top: Math.max(b.top, tl.top, rr.bottom), bottom: Math.min(b.bottom, tl.bottom) }]); }
+    if (area && K.vis(document.getElementById("dock")) && K.vis(area)) { const b = area.getBoundingClientRect(), tl = document.getElementById("tl").getBoundingClientRect(); const rr = document.querySelector(".ruler-row").getBoundingClientRect(); rects.push(["move's end edge", { left: b.left, right: b.left + 1, top: Math.max(b.top, tl.top, rr.bottom), bottom: Math.min(b.bottom, tl.bottom) }]); }
     for (const s of document.querySelectorAll(".snap")) rects.push(["snap line", s.getBoundingClientRect()]);
     const ruler = document.querySelector(".ruler-row") && document.querySelector(".ruler-row").getBoundingClientRect();
     for (const [name, r] of rects) for (const t of texts) {
@@ -226,6 +248,9 @@ function install() {
   K.radius = (el, pseudo) => { const cs = getComputedStyle(el, pseudo); return parseFloat(cs.borderBottomLeftRadius) || 0; };
   K.box = (el) => { const b = el.getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom, w: b.width, h: b.height }; };
   // The page's boxes: every element of the component, and the outer boxes of the tool.
+  // The component's own boxes alone, in the viewport: what "nothing moves the preview" means where the
+  // tool's own size changes (a drawer stop, the dock's height edge).
+  K.stageSnap = () => [...document.querySelectorAll("#stage, #stage *")].map((el) => { const b = el.getBoundingClientRect(); return [b.x, b.y, b.width, b.height].map((v) => Math.round(v * 100) / 100).join(","); });
   K.snap = () => {
     const out = [];
     for (const el of document.querySelectorAll("#page, #page *")) { if (el.closest("#marks")) continue; const b = el.getBoundingClientRect(); out.push([b.x + scrollX, b.y + scrollY, b.width, b.height].map((v) => Math.round(v * 100) / 100).join(",")); }
@@ -234,15 +259,31 @@ function install() {
   };
 }
 
+// `screen` is the class app.js must set; `touch` drives the views by finger, `hasTouch` without `isMobile`
+// is a trackpad iPad (any-pointer: coarse with hover).
 const views = [
-  { id: "1440-light", viewport: { width: 1440, height: 900 }, colorScheme: "light" },
-  { id: "1440-dark", viewport: { width: 1440, height: 900 }, colorScheme: "dark" },
-  { id: "1024", viewport: { width: 1024, height: 768 }, colorScheme: "light" },
-  { id: "390-touch", viewport: { width: 390, height: 844 }, colorScheme: "light", hasTouch: true, isMobile: true },
+  { id: "1440-light", screen: "desk", viewport: { width: 1440, height: 900 }, colorScheme: "light" },
+  { id: "1440-dark", screen: "desk", viewport: { width: 1440, height: 900 }, colorScheme: "dark" },
+  { id: "1024", screen: "desk", viewport: { width: 1024, height: 768 }, colorScheme: "light" },
+  { id: "1180-touch", screen: "tablet-landscape", input: "touch", viewport: { width: 1180, height: 820 }, colorScheme: "light", hasTouch: true, isMobile: true, touch: true },
+  // An iPad with a trackpad: a fine, hovering primary pointer and a coarse one beside it. Playwright's touch
+  // emulation reports no hover, so this browser is started with Blink's pointer settings (ui::PointerType
+  // fine 4, coarse|fine 6; HoverType hover 2).
+  { id: "1180-trackpad", screen: "tablet-landscape", input: "touch-hover", viewport: { width: 1180, height: 820 }, colorScheme: "light", args: ["--blink-settings=primaryPointerType=4,availablePointerTypes=6,primaryHoverType=2,availableHoverTypes=2"] },
+  { id: "1920", screen: "wide", viewport: { width: 1920, height: 1080 }, colorScheme: "light" },
+  { id: "2560", screen: "ultrawide", viewport: { width: 2560, height: 1080 }, colorScheme: "dark" },
+  { id: "3440", screen: "ultrawide", viewport: { width: 3440, height: 1440 }, colorScheme: "light" },
+];
+const compactViews = [
+  { id: "390-phone", screen: "phone-portrait", layout: "drawer", stacked: true, viewport: { width: 390, height: 844 }, colorScheme: "light", hasTouch: true, isMobile: true, touch: true },
+  { id: "844-phone-landscape", screen: "phone-landscape", layout: "sheet", stacked: true, viewport: { width: 844, height: 390 }, colorScheme: "dark", hasTouch: true, isMobile: true, touch: true },
+  { id: "820-tablet-portrait", screen: "tablet-portrait", layout: "drawer", viewport: { width: 820, height: 1180 }, colorScheme: "light", hasTouch: true, isMobile: true, touch: true },
+  { id: "1280x540-short", screen: "short", layout: "sheet", viewport: { width: 1280, height: 540 }, colorScheme: "light" },
 ];
 
 const browser = await chromium.launch({ executablePath: CHROME });
 for (const view of views) await runView(view);
+for (const view of compactViews) await runClass(view);
 await runReduced();
 grepCheck();
 await browser.close();
@@ -250,8 +291,9 @@ console.log("\n" + passes + " passed, " + fails + " failed");
 process.exit(fails ? 1 : 0);
 
 async function runView(view) {
-  const V = view.id, touch = !!view.hasTouch;
-  const ctx = await browser.newContext({ viewport: view.viewport, colorScheme: view.colorScheme, hasTouch: touch, isMobile: touch, deviceScaleFactor: 1 });
+  const V = view.id, touch = !!view.touch;
+  const own = view.args ? await chromium.launch({ executablePath: CHROME, args: view.args }) : null;
+  const ctx = await (own || browser).newContext({ viewport: view.viewport, colorScheme: view.colorScheme, hasTouch: !!view.hasTouch, isMobile: !!view.isMobile, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
@@ -272,6 +314,10 @@ async function runView(view) {
   const playLen = () => ev(() => { const km = keptMove(); return km ? playLengthOf(km.r) : 0; });
   await load();
   if (touch) await page.evaluate(() => scrollTo(0, 0));
+
+  // ---- 9. Its class (responsive-design.md): the pane measured, the layout and the input it sets ----
+  const cls = await ev(() => ({ screen: document.documentElement.dataset.screen, layout: document.documentElement.dataset.layout, input: document.documentElement.dataset.input }));
+  ok(V, "9 the pane is the " + view.screen + " class, the desk layout, input " + (view.input || "fine"), cls.screen === view.screen && cls.layout === "desk" && cls.input === (view.input || "fine"), JSON.stringify(cls));
 
   // ---- 1. No page errors; nothing overlaps or spills ----
   const sweep = async (label) => {
@@ -372,7 +418,7 @@ async function runView(view) {
       pair("panel ⊃ corner L", panel, document.querySelector(".corner-l"));
       const pb = panel.getBoundingClientRect(), a = getComputedStyle(panel, "::after"), ins = -parseFloat(a.top);
       const ab = { left: pb.left + 1 - ins, top: pb.top + 1 - ins, right: pb.right - 1 + ins, bottom: pb.bottom - 1 + ins };
-      out.push({ name: "lit edge ⊃ panel", R: parseFloat(a.borderTopLeftRadius), r: K.radius(panel), gap: Math.round((pb.left - ab.left) * 100) / 100, even: true, pass: Math.abs(parseFloat(a.borderTopLeftRadius) - (K.radius(panel) + (pb.left - ab.left))) <= 0.5 });
+      if (a.display !== "none" && K.vis(panel)) out.push({ name: "lit edge ⊃ panel", R: parseFloat(a.borderTopLeftRadius), r: K.radius(panel), gap: Math.round((pb.left - ab.left) * 100) / 100, even: true, pass: Math.abs(parseFloat(a.borderTopLeftRadius) - (K.radius(panel) + (pb.left - ab.left))) <= 0.5 });
       for (const n of document.querySelectorAll(".node")) pair("region ⊃ node", n.closest(".region"), n);
       for (const b of document.querySelectorAll(".zoom .icon-btn")) pair("zoom group ⊃ button", b.closest(".zoom"), b);
       for (const t of document.querySelectorAll(".t-tabs")) pair("tabs track ⊃ pill", t, t.querySelector(".t-tabs-pill"));
@@ -390,7 +436,7 @@ async function runView(view) {
   const grips = await ev(() => {
     const K = __k, panel = document.getElementById("panel"), p = panel.getBoundingClientRect(), rel = (el) => { if (!K.vis(el)) return null; const b = el.getBoundingClientRect(); return { x: Math.round((b.left - p.left) * 100) / 100, y: Math.round((b.top - p.top) * 100) / 100, r: Math.round((p.right - b.right) * 100) / 100, b: Math.round((p.bottom - b.bottom) * 100) / 100, w: Math.round(b.width * 100) / 100, h: Math.round(b.height * 100) / 100 }; };
     const cs = getComputedStyle(panel), padL = parseFloat(cs.paddingLeft) + 1, padB = parseFloat(cs.paddingBottom) + 1;
-    return { panel: { w: p.width, h: p.height, padL, padB }, pillW: rel(document.querySelector(".edge-pill-w")), pillH: rel(document.querySelector(".edge-pill-h")), L: rel(document.querySelector(".corner-l")), sashW: rel(document.getElementById("sashW")), sashH: rel(document.getElementById("sashH")), sashC: rel(document.getElementById("sashC")), coarse: matchMedia("(pointer: coarse)").matches };
+    return { panel: { w: p.width, h: p.height, padL, padB }, pillW: rel(document.querySelector(".edge-pill-w")), pillH: rel(document.querySelector(".edge-pill-h")), L: rel(document.querySelector(".corner-l")), sashW: rel(document.getElementById("sashW")), sashH: rel(document.getElementById("sashH")), sashC: rel(document.getElementById("sashC")), coarse: document.documentElement.dataset.input !== "fine" };
   });
   const G = grips;
   console.log("INFO [" + V + "] 3 grips, drawn and hit boxes relative to the panel's border box: " + JSON.stringify({ pillW: G.pillW, pillH: G.pillH, L: G.L, sashW: G.sashW, sashH: G.sashH, sashC: G.sashC }));
@@ -418,7 +464,7 @@ async function runView(view) {
   cdp.on("Animation.animationStarted", (e) => anims.push(e.animation));
   const hoverable = !touch;
   for (const [edge, sashId] of [["w", "sashW"], ["h", "sashH"], ["wh", "sashC"]]) {
-    if (!(await page.locator("#" + sashId).isVisible())) { note(V, "3 " + edge + " grip", "not drawn under the phone line (the panel is the screen's width)"); continue; }
+    if (!(await page.locator("#" + sashId).isVisible())) { note(V, "3 " + edge + " grip", "not drawn on this class (touch without hover has no corner)"); continue; }
     if (!hoverable) { note(V, "3 " + edge + " hover", "no hover under touch: the mark tints on touch-down (drag below)"); continue; }
     const pb = await ev(() => { const b = document.getElementById("panel").getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom, w: b.width, h: b.height }; });
     const c = await center("#" + sashId);
@@ -484,6 +530,54 @@ async function runView(view) {
     await page.mouse.up();
     ok(V, "3 " + sashId + " drag: the cursor holds on html (" + want + "), the edge lit at once in ink-muted", cur.html === want && cur.under === want && cur.lit === "1" && cur.ink === cur.muted, JSON.stringify(cur));
     await settle(300);
+  }
+
+  // ---- 9. The desk family's own (responsive-design.md, Per class 4–7) ----
+  await load();
+  {
+    const W = view.viewport.width, H = view.viewport.height;
+    const geo = await ev(() => { const b = (id) => __k.box(document.getElementById(id)), cs = getComputedStyle(document.documentElement); return { page: b("page"), panel: b("panel"), dock: b("dock"), s5: parseFloat(cs.getPropertyValue("--space-5")), maxW: parseFloat(cs.getPropertyValue("--c-review-max-w")), stack: document.querySelectorAll("[data-stack]").length, lane: document.querySelector(".lane").getBoundingClientRect().width }; });
+    const g0 = Math.max(0, (W - geo.maxW) / 2);
+    ok(V, "9 page, panel and dock stand inside " + (g0 ? "the centred " + geo.maxW + "px column (" + g0 + "px either side)" : "the pane") + "; the dock at the foot under the page column, whose room ends above it; no stack mode", Math.abs(geo.page.l - g0) <= 0.5 && Math.abs(geo.panel.r - (W - g0 - geo.s5)) <= 0.5 && Math.abs(geo.dock.l - (g0 + geo.s5)) <= 0.5 && Math.abs(geo.dock.b - (H - geo.s5)) <= 0.5 && Math.abs(geo.page.b - (geo.dock.t - geo.s5)) <= 0.5 && Math.abs(geo.dock.r - geo.page.r) <= 0.5 && geo.stack === 0, JSON.stringify(geo));
+    const wantW = view.screen === "wide" || view.screen === "ultrawide" ? 640 : 448;
+    ok(V, "9 the panel defaults to " + wantW + "px", Math.abs(geo.panel.w - wantW) <= 0.5, geo.panel.w + "px");
+    if (wantW === 640) {
+      const two = await ev(() => { const rs = [...document.querySelectorAll(".region")].map((r) => ({ m: r.dataset.machine, b: r.getBoundingClientRect() })), out = []; for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) { const a = rs[i].b, b = rs[j].b; if (Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0 && (a.right <= b.left || b.right <= a.left)) out.push(rs[i].m + " | " + rs[j].m); } return out; });
+      ok(V, "9 two machines stand side by side in the 640px panel", two.length > 0, two.join(", "));
+      ok(V, "9 the lanes grow to about 900px", geo.lane >= 850, Math.round(geo.lane) + "px");
+      await ev(() => document.getElementById("sashW").focus());
+      await page.keyboard.press("ArrowLeft"); await page.keyboard.press("ArrowLeft"); await settle(300);
+      await ev(() => dispatchEvent(new Event("resize"))); await settle(300);
+      const dragged = await ev(() => document.getElementById("panel").offsetWidth);
+      ok(V, "9 the person's dragged width still wins over the class's default (through a resize)", dragged === 656, dragged + "px");
+    }
+    const d = await ev(() => ({ h: document.getElementById("dock").offsetHeight, floor: dockFloor(), ceil: dockCeil(), shown: __k.vis(document.getElementById("sashD")) }));
+    ok(V, "9 the dock has its own height edge: floor head + ruler + one row (" + d.floor + "px), ceiling the room (" + d.ceil + "px)", d.shown && d.floor > 100 && d.floor <= d.h && d.ceil === H - 2 * geo.s5, JSON.stringify(d));
+    const st0 = await ev(() => __k.stageSnap());
+    const sd = await center("#sashD");
+    await page.mouse.move(sd.x, sd.y); await page.mouse.down(); await page.mouse.move(sd.x, sd.y - 60, { steps: 6 }); await page.mouse.up(); await settle(300);
+    const d1 = await ev(() => ({ h: document.getElementById("dock").offsetHeight, page: __k.box(document.getElementById("page")).b, top: __k.box(document.getElementById("dock")).t }));
+    ok(V, "9 dragging the dock's top edge up 60px grows it 60px; the page column ends above it", Math.abs(d1.h - d.h - 60) <= 1 && Math.abs(d1.page - (d1.top - geo.s5)) <= 0.5, d.h + " → " + d1.h + "px, page bottom " + d1.page + ", dock top " + d1.top);
+    ok(V, "2 nothing moves the preview: the dock's height edge", same(st0, await ev(() => __k.stageSnap())), st0.length + " boxes");
+    await ev(() => document.getElementById("sashD").focus());
+    const keyH = async (k) => { await page.keyboard.press(k); return ev(() => document.getElementById("dock").offsetHeight); };
+    const k1 = await keyH("ArrowUp"), k2 = await keyH("Shift+ArrowDown"), kEnd = await keyH("End"), kHome = await keyH("Home");
+    ok(V, "9 the dock's edge by keys: Up 8px, Shift+Down 32px, End the room, Home the floor", k1 - d1.h === 8 && k1 - k2 === 32 && kHome === d.floor && kEnd === d.ceil, [d1.h, k1, k2, kEnd, kHome].join(" → "));
+    await settle(300);
+    await sweep("the dock at its floor"); await breakage("the dock at its floor");
+    await page.screenshot({ path: join(CAPS, V + "-dock-floor.jpg"), type: "jpeg", quality: 82 });
+    if (view.screen === "tablet-landscape") {
+      const t = await ev(() => ({ corner: __k.vis(document.getElementById("sashC")), L: __k.vis(document.querySelector(".corner-l")), lit: getComputedStyle(document.getElementById("panel"), "::after").display, bands: ["sashW", "sashH", "sashD"].map((id) => { const b = document.getElementById(id).getBoundingClientRect(); return Math.round(id === "sashW" ? b.width : b.height); }) }));
+      if (view.input === "touch") ok(V, "9 touch: 44px bands on the width edge, the graph's foot and the dock's top; no corner, no lit edge", t.bands.every((x) => x === 44) && !t.corner && !t.L && t.lit === "none", JSON.stringify(t));
+      else {
+        ok(V, "9 trackpad: the corner and the lit edges come back, the bands stay 44px", t.bands.every((x) => x === 44) && t.corner && t.L && t.lit !== "none", JSON.stringify(t));
+        await page.mouse.move(5, 5); await settle(200);
+        const z = await center("#zoomIn"); await page.mouse.move(z.x, z.y); await settle(700);
+        const tip = await ev(() => ({ on: document.getElementById("tip").hasAttribute("data-on"), text: document.getElementById("tip").textContent }));
+        ok(V, "9 trackpad: tooltips come back", tip.on && /Zoom in/.test(tip.text), JSON.stringify(tip));
+        await page.mouse.move(5, 5); await settle(200);
+      }
+    }
   }
   await load();
   if (touch) await page.evaluate(() => scrollTo(0, 0));
@@ -721,6 +815,175 @@ async function runView(view) {
   else for (let y = 0, n = 1; y < fh; y += view.viewport.height, n++) await page.screenshot({ path: join(CAPS, V + "-page-" + n + ".jpg"), type: "jpeg", quality: 82, fullPage: true, clip: { x: 0, y, width: view.viewport.width, height: Math.min(view.viewport.height, fh - y) } });
   ok(V, "1 no page errors", errors.length === 0, errors.join(" | "));
   await ctx.close();
+  if (own) await own.close();
+}
+
+// The compact classes: the drawer (phone portrait, tablet portrait) and the side sheet (phone landscape, a
+// short desk window). The sweep runs on each face at each stop; then each class's own input.
+async function runClass(view) {
+  const V = view.id, touch = !!view.touch, W = view.viewport.width, H = view.viewport.height;
+  const ctx = await browser.newContext({ viewport: view.viewport, colorScheme: view.colorScheme, hasTouch: !!view.hasTouch, isMobile: !!view.isMobile, deviceScaleFactor: 1 });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  const ev = (fn, arg) => page.evaluate(fn, arg);
+  const settle = (ms = 450) => page.waitForTimeout(ms);
+  const load = async () => { await page.goto(URL_); await page.waitForTimeout(700); await ev(install); };
+  const cdp = await ctx.newCDPSession(page);
+  const touchAt = (type, pts) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: pts.map(([x, y], i) => ({ x, y, id: i + 1 })) });
+  const tapAt = async (x, y) => { if (touch) await page.touchscreen.tap(x, y); else await page.mouse.click(x, y); };
+  const tap = async (sel) => { const b = await page.locator(sel).first().boundingBox(); await tapAt(b.x + b.width / 2, b.y + b.height / 2); };
+  const shot = (name) => page.screenshot({ path: join(CAPS, V + "-" + name + ".jpg"), type: "jpeg", quality: 82 });
+  const sweepAll = async (label) => {
+    const o = await ev(() => __k.overlaps()), sp = await ev(() => __k.spills()), a = await ev(() => __k.underTool()), b = await ev(() => __k.tabStrips()), c = await ev(() => __k.graphCuts()), d = await ev(() => __k.linesOverText()), r = await ev(() => __k.rulerOverlaps());
+    const t = await ev(() => __k.textContrast()), bad = t.filter((x) => !x.pass);
+    ok(V, "1 no overlaps (" + label + ")", o.length === 0, o.slice(0, 4).join(" | "));
+    ok(V, "1 nothing spills its box (" + label + ")", sp.length === 0, sp.slice(0, 4).join(" | "));
+    ok(V, "1 the drawer or sheet sits over none of the component's text or controls (" + label + ")", a.length === 0, a.slice(0, 5).join(" | "));
+    ok(V, "1 every tab shown whole at rest (" + label + ")", b.length === 0, b.join(" | "));
+    ok(V, "1 no state's text cut by the graph's edge (" + label + ")", c.length === 0, c.slice(0, 6).join(" | "));
+    ok(V, "1 no line runs through a text box (" + label + ")", d.length === 0, d.slice(0, 5).join(" | "));
+    ok(V, "1 no two ruler labels overlap (" + label + ")", r.overlaps.length === 0, r.overlaps.slice(0, 4).join(", "));
+    ok(V, "7 text ≥ 4.5:1 (" + label + ")", t.length > 0 && bad.length === 0, bad.length ? bad.slice(0, 4).map((x) => x.text + " " + x.r).join(" | ") : t.length + " runs, lowest " + Math.min(...t.map((x) => x.r)));
+  };
+  await load();
+
+  // ---- 9. Its class ----
+  const cls = await ev(() => ({ screen: document.documentElement.dataset.screen, layout: document.documentElement.dataset.layout, input: document.documentElement.dataset.input, face: document.getElementById("tools").dataset.face }));
+  ok(V, "9 the pane is the " + view.screen + " class, the " + view.layout + " layout, input " + (touch ? "touch" : "fine") + "; it opens on the Graph face", cls.screen === view.screen && cls.layout === view.layout && cls.input === (touch ? "touch" : "fine") && cls.face === "graph", JSON.stringify(cls));
+  const kept = await ev(() => { const v = views[tab], g = document.getElementById("graph").getBoundingClientRect(), n = document.querySelector(".node.kept").getBoundingClientRect(); return { inView: n.top >= g.top - 0.5 && n.bottom <= g.bottom + 0.5, head: document.getElementById("sheetState").textContent, state: stateOf(machineOf(comp(), v.last), v.cur[v.last].state).name }; });
+  ok(V, "9 the graph opens on the kept state, in view, and the head names it", kept.inView && kept.head === kept.state, JSON.stringify(kept));
+  const wantZoom = !["phone-portrait", "phone-landscape"].includes(view.screen);
+  ok(V, "9 zoom buttons " + (wantZoom ? "shown (tablet up, or a mouse)" : "gone: a phone pinches"), (await ev(() => __k.vis(document.querySelector(".zoom")))) === wantZoom);
+  ok(V, "9 no grips on a compact screen: no sash, no corner, no Hide in the panel's toolbar", await ev(() => [...document.querySelectorAll(".sash, .corner-l, .edge-pill-w, .edge-pill-h, .edge-pill-d, #hide")].every((e) => !__k.vis(e))));
+
+  // ---- The sweep: each face, each stop ----
+  const stops = view.layout === "drawer" ? ["peek", "full", "head"] : [null];
+  for (const f of ["graph", "move"]) {
+    await ev((f) => setFace(f), f); await settle(400);
+    for (const st of stops) {
+      if (st) { await ev((s) => setStop(s), st); await settle(500); }
+      await sweepAll(f + " face" + (st ? " at " + st : ""));
+      if (st !== "head") await shot(f + (st ? "-" + st : ""));
+    }
+    if (view.layout === "drawer") { await ev(() => setStop("peek")); await settle(500); }
+  }
+  await ev(() => setFace("graph")); await settle(400);
+
+  if (view.layout === "drawer") {
+    // The stops, measured; the page's room ends at the drawer's top; the component never moves.
+    const hs = {}, snaps = {};
+    for (const st of ["head", "peek", "full"]) { await ev((s) => setStop(s), st); await settle(500); hs[st] = await ev(() => ({ tools: __k.box(document.getElementById("tools")), page: __k.box(document.getElementById("page")), head: document.getElementById("sheetHead").offsetHeight })); snaps[st] = await ev(() => __k.stageSnap()); }
+    ok(V, "9 the drawer's stops: head alone (44px and its edge), peek 45% of the height, full 85%; the page's room ends at its top", hs.head.head === 44 && Math.abs(hs.head.tools.h - 45) <= 0.5 && Math.abs(hs.peek.tools.h - H * 0.45) <= 1 && Math.abs(hs.full.tools.h - H * 0.85) <= 1 && Object.values(hs).every((x) => Math.abs(x.page.b - x.tools.t) <= 0.5 && Math.abs(x.tools.b - H) <= 0.5), Object.entries(hs).map(([k, x]) => k + " " + x.tools.h + "px, page " + x.page.h + "px").join("; "));
+    ok(V, "2 nothing moves the preview: the drawer's stops", same(snaps.head, snaps.peek) && same(snaps.peek, snaps.full), snaps.peek.length + " boxes");
+    // Play at full drops the drawer to peek. (Before the drag below: Chromium's touch emulation drops the
+    // click of the next tap after a dispatched touch drag.)
+    await ev(() => { setFace("move"); setStop("full"); }); await settle(500);
+    await tap("#play"); await settle(120);
+    const dropped = await ev(() => stop + (playing ? " (playing)" : " (not playing)"));
+    await settle((await ev(() => playLengthOf(keptMove().r))) + 300);
+    ok(V, "9 Play at full drops the drawer to peek, so the page is seen playing", dropped === "peek (playing)", "stop " + dropped);
+    await ev(() => setFace("graph")); await settle(400);
+    await ev(() => setStop("peek")); await settle(500);
+    await tap("#sheetTitle"); await settle(500);
+    const afterTap = await ev(() => stop);
+    // A drag on the head follows the finger and settles on the nearest stop: from full, down by 30% of the
+    // height, lands on peek.
+    const hb = await page.locator("#sheetHead").boundingBox(), x = hb.x + 40, y = hb.y + hb.height / 2;
+    if (touch) { await touchAt("touchStart", [[x, y]]); for (let i = 1; i <= 6; i++) await touchAt("touchMove", [[x, y + (H * 0.3 * i) / 6]]); await touchAt("touchEnd", []); }
+    else { await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x, y + H * 0.3, { steps: 6 }); await page.mouse.up(); }
+    await settle(500);
+    const afterDrag = await ev(() => ({ stop, h: __k.box(document.getElementById("tools")).h }));
+    ok(V, "9 a tap on the head steps peek to full; a drag down from full settles on peek", afterTap === "full" && afterDrag.stop === "peek" && Math.abs(afterDrag.h - H * 0.45) <= 1, "tap → " + afterTap + ", drag → " + JSON.stringify(afterDrag));
+  } else {
+    const g = await ev(() => ({ tools: __k.box(document.getElementById("tools")), page: __k.box(document.getElementById("page")), m: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--c-screen-margin")) }));
+    ok(V, "9 the side sheet stands at the trailing edge at half the pane; the page takes the other half", Math.abs(g.tools.l - W / 2) <= 0.5 && Math.abs(g.tools.r - (W - g.m)) <= 0.5 && Math.abs(g.page.r - W / 2) <= 0.5 && Math.abs(g.tools.h - (H - 2 * g.m)) <= 0.5, JSON.stringify(g));
+    await tap("#sheetHide"); await settle(450);
+    const hidden = await ev(() => ({ tools: __k.vis(document.getElementById("tools")), tab: __k.box(document.getElementById("show")), page: __k.box(document.getElementById("page")) }));
+    ok(V, "9 Hide folds the sheet to a 32px edge tab at the trailing edge; the page takes the room", !hidden.tools && Math.abs(hidden.tab.w - 32) <= 0.5 && Math.abs(hidden.tab.r - W) <= 0.5 && Math.abs(hidden.page.r - (W - 32)) <= 0.5, JSON.stringify(hidden));
+    await sweepAll("the sheet folded to its tab");
+    await shot("sheet-folded");
+    await tap("#show"); await settle(450);
+    ok(V, "9 the edge tab brings the sheet back", await ev(() => __k.vis(document.getElementById("tools")) && document.getElementById("show").hidden));
+  }
+
+  // ---- Input: previews and keeps ----
+  const target = () => ev(() => { const g = document.getElementById("graph").getBoundingClientRect(); const n = [...document.querySelectorAll(".node:not(.kept):not(.cur)")].find((n) => { const b = n.querySelector("b").getBoundingClientRect(); return b.top > g.top + 4 && b.bottom < g.bottom - 4 && b.left > g.left + 4 && b.right < g.right - 4; }); if (!n) return null; const b = n.querySelector("b").getBoundingClientRect(); return { m: n.dataset.machine, s: n.dataset.state, x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
+  const keptNow = () => ev(() => views[tab].last + ":" + views[tab].cur[views[tab].last].state + "|" + JSON.stringify(views[tab].cur));
+  const peekNow = () => ev(() => ({ peek: peek ? peek.machine + ":" + peek.state : null, washes: document.querySelectorAll(".wash").length, peeked: document.querySelectorAll(".node.peek").length }));
+  let t1 = await target();
+  if (!t1) ok(V, "9 a state to press in view", false, "none");
+  else if (touch) {
+    const k0 = await keptNow();
+    await touchAt("touchStart", [[t1.x, t1.y]]);
+    await page.waitForTimeout(200); const early = await peekNow();
+    await page.waitForTimeout(300); const held = await peekNow();
+    await shot("hold-preview");
+    await touchAt("touchEnd", []); await settle(300);
+    const after = await peekNow(), k1 = await keptNow();
+    ok(V, "9 touch: a press held past --dur-press-hold (380ms) previews the state (its node peeks, the page washes), release ends it and keeps nothing", early.peek === null && held.peek === t1.m + ":" + t1.s && held.peeked === 1 && after.peek === null && after.washes === 0 && k1 === k0, "at 200ms " + JSON.stringify(early) + ", at 500ms " + JSON.stringify(held) + ", released " + JSON.stringify(after));
+    await touchAt("touchStart", [[t1.x, t1.y]]);
+    for (let i = 1; i <= 4; i++) await touchAt("touchMove", [[t1.x + 4 * i, t1.y]]);
+    await page.waitForTimeout(500); const dragged = await peekNow();
+    await touchAt("touchEnd", []); await settle(300);
+    ok(V, "9 touch: a press that moves past 10px previews nothing and keeps nothing", dragged.peek === null && (await keptNow()) === k0, JSON.stringify(dragged));
+    await page.touchscreen.tap(t1.x, t1.y); await settle(500);
+    const k2 = await ev(() => views[tab].last + ":" + views[tab].cur[views[tab].last].state);
+    ok(V, "9 touch: a tap keeps the state", k2 === t1.m + ":" + t1.s, k2 + " (tapped " + t1.m + ":" + t1.s + ")");
+    // Pinch: out to the 1.6 ceiling, in to the 0.5 floor.
+    const gb = await page.locator("#graph").boundingBox(), cx = gb.x + gb.width / 2, cy = gb.y + gb.height / 2;
+    const pinchTo = async (from, to) => { await touchAt("touchStart", [[cx - from / 2, cy], [cx + from / 2, cy]]); for (let i = 1; i <= 6; i++) { const d = from + ((to - from) * i) / 6; await touchAt("touchMove", [[cx - d / 2, cy], [cx + d / 2, cy]]); } await touchAt("touchEnd", []); await settle(150); return ev(() => zoom); };
+    const zOut = await pinchTo(80, 200), zIn = await pinchTo(200, 20);
+    ok(V, "9 a pinch zooms the graph, from the 0.5 floor to the 1.6 ceiling", zOut === 1.6 && zIn === 0.5, "out → " + zOut + ", in → " + zIn);
+    await load();
+  } else {
+    await page.mouse.move(t1.x, t1.y); await settle(300);
+    const held = await peekNow();
+    ok(V, "9 a mouse: hover previews", held.peek === t1.m + ":" + t1.s, JSON.stringify(held));
+    await page.mouse.click(t1.x, t1.y); await settle(400);
+    ok(V, "9 a mouse: a click keeps", (await ev(() => views[tab].last + ":" + views[tab].cur[views[tab].last].state)) === t1.m + ":" + t1.s);
+    await load();
+  }
+
+  // ---- The Move face: its rows and the clip's editor ----
+  await tap('#faces [data-face="move"]'); await settle(500);
+  const rows = await ev(() => ({ stacked: stacked(), rows: [...document.querySelectorAll(".clip")].map((r) => { const n = r.querySelector(".clip-name").getBoundingClientRect(), l = r.querySelector(".lane").getBoundingClientRect(), rb = r.getBoundingClientRect(); return { name: Math.round(n.width), lane: Math.round(l.width), below: l.top >= n.bottom - 0.5, full: Math.abs(l.width - rb.width) <= 1 }; }) }));
+  if (view.stacked) ok(V, "9 rows stack: the name and readouts, then a lane across the face (about 340px)", rows.stacked && rows.rows.every((r) => r.below && r.full && r.lane >= 320), JSON.stringify(rows));
+  else ok(V, "9 rows keep the desk's two columns: name 280, the lanes beside", !rows.stacked && rows.rows.every((r) => r.name === 280 && !r.below), JSON.stringify(rows));
+  const st0 = await ev(() => __k.stageSnap());
+  await tap('.bar[data-key="reveal"]'); await settle(600);
+  const ed = await ev(() => { const p = document.querySelector(".pop"), bar = document.querySelector('.bar[data-key="reveal"]'); if (!p) return null; const pb = p.getBoundingClientRect(), bb = bar.getBoundingClientRect(), row = bar.closest(".clip").getBoundingClientRect(); return { inline: p.classList.contains("inline"), after: p.previousElementSibling && p.previousElementSibling.dataset.key, top: Math.round(pb.top), rowBottom: Math.round(row.bottom), above: Math.abs(pb.bottom - (bb.top - 4)) <= 0.5, w: Math.round(pb.width), rowW: Math.round(row.width) }; });
+  if (view.stacked) ok(V, "9 a clip's editor unfolds inline, under its row, the row's width", !!ed && ed.inline && ed.after === "reveal" && Math.abs(ed.top - ed.rowBottom) <= 1 && Math.abs(ed.w - ed.rowW) <= 1, JSON.stringify(ed));
+  else ok(V, "9 a clip's editor stays a popover, 4px above its bar", !!ed && !ed.inline && ed.above, JSON.stringify(ed));
+  ok(V, "2 nothing moves the preview: opening the clip's editor", same(st0, await ev(() => __k.stageSnap())));
+  await sweepAll("the clip's editor open");
+  await shot("editor");
+  await page.locator('.pop input[data-f="dur"]').fill("300"); await page.keyboard.press("Enter"); await settle(500);
+  const typed = await ev(() => ({ dur: keptMove().e.cur.find((c) => c.key === "reveal").dur, still: !!document.querySelector(".pop"), inline: !!pop && pop.inline, after: pop && pop.el.previousElementSibling && pop.el.previousElementSibling.dataset.key }));
+  ok(V, "9 a typed value commits (touch frees a value by typing it), and the editor stays with its row", typed.dur === 300 && typed.still && (!view.stacked || (typed.inline && typed.after === "reveal")), JSON.stringify(typed));
+  await ev(() => stopPlay());
+  await sweepAll("after a typed edit");
+  await page.keyboard.press("Escape"); await settle(500);
+  ok(V, "9 Esc closes the editor", (await page.locator(".pop").count()) === 0);
+  if (touch) {
+    // The selected bar's 44px end handle: a press 15px past its end, on the bare lane, drags the end.
+    const b = await page.locator('.bar[data-key="reveal"]').boundingBox(), y = b.y + b.height / 2;
+    const d0 = await ev(() => resolve(keptMove().e.cur).reveal.dur);
+    await touchAt("touchStart", [[b.x + b.width + 15, y]]);
+    for (let i = 1; i <= 6; i++) await touchAt("touchMove", [[b.x + b.width + 15 + 8 * i, y]]);
+    await touchAt("touchEnd", []); await settle((await ev(() => playLengthOf(keptMove().r))) + 400);
+    const d1 = await ev(() => resolve(keptMove().e.cur).reveal.dur);
+    ok(V, "9 touch: the selected bar's transparent 44px end handle drags its end, from beside the bar", d1 > d0, d0 + " → " + d1 + " ms");
+  }
+  const before = await ev(() => __k.snap());
+  await tap("#play"); await settle((await ev(() => playLengthOf(keptMove().r))) + 400);
+  const after = await ev(() => __k.snap());
+  ok(V, "2 nothing moves the preview: a replay", same(before, after), before.length + " boxes");
+  await sweepAll("edited");
+  await shot("move-edited");
+  ok(V, "1 no page errors", errors.length === 0, errors.join(" | "));
+  await ctx.close();
 }
 
 // Reduced motion (prefers-reduced-motion: reduce): the paths the designs give.
@@ -792,6 +1055,8 @@ function grepCheck() {
   ok("grep", "8 no index band or region headers", band.length === 0, band.join(", "));
   const showing = find(/Showing|Previewing|nowText|nowMode/);
   ok("grep", "8 no Showing line", showing.length === 0, showing.join(", "));
+  const stack = find(/data-stack|placeDock|phone\(\)|width < 640px\)/);
+  ok("grep", "9 stack mode and the old phone line are gone (one code path per class)", stack.length === 0, stack.join(", "));
   const selNone = find(/user-select:\s*none/);
   console.log("INFO [grep] user-select: none only on the lanes, the ruler and held drags: " + selNone.join(", "));
 }
