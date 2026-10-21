@@ -339,13 +339,22 @@ async function motion(kit: Kit, page: Page) {
   await settle(page);
 }
 
-/** Drags `from`'s head by the mouse onto `to`'s top edge; reads mid-drag what is drawn. */
+/**
+ * Drags `from`'s head by the mouse onto `to`'s top edge; reads mid-drag what
+ * is drawn. The head is scrolled into view first, as a person scrolls to
+ * what they press: on a phone an empty block's state stands 21px padded with
+ * its action (DESIGN.md Empty, The Empty Starts Work Rule), so the last
+ * block's head stands below the fold, where a pointer can't take hold.
+ */
 async function dragOnto(page: Page, from: string, to: string) {
-  const head = await page
-    .locator(
-      `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${from}'] [data-slot="block-head"] [data-slot="title"]`
-    )
-    .boundingBox();
+  const title = page.locator(
+    `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${from}'] [data-slot="block-head"] [data-slot="title"]`
+  );
+  await title.evaluate((el) =>
+    el.scrollIntoView({ behavior: "instant", block: "nearest" })
+  );
+  await frames(page);
+  const head = await title.boundingBox();
   const target = await page
     .locator(
       `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${to}']`

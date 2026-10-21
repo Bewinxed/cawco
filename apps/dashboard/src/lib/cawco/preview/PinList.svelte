@@ -93,6 +93,13 @@
   const title = (pin: Pin): string =>
     pin.thread[0]?.text ??
     (pin.kind === "annotation" ? "Annotation" : "Nothing written yet");
+  /** The title's ink: selected-ink on the wash, else ink-muted while nothing is written yet, else ink-strong. */
+  const titleInk = (pin: Pin, current: boolean) => {
+    if (current) {
+      return "text-selected-ink";
+    }
+    return pin.thread.length === 0 ? "text-ink-muted" : "text-ink-strong";
+  };
   /** The thread's last line once it runs past its first entry, which the title already shows. */
   const lastLine = (pin: Pin) => {
     const last = pin.thread.length > 1 ? pin.thread.at(-1) : undefined;
@@ -107,11 +114,12 @@
 
 {#snippet row(pin: Pin)}
   {@const last = lastLine(pin)}
+  {@const current = pin.id === focused}
   <li>
     <!-- The row is the comment and the press that opens its card: it holds no button. -->
     <button
       data-slot="pin-row"
-      aria-current={pin.id === focused || undefined}
+      aria-current={current || undefined}
       data-moved={pin.movedAt ? "" : undefined}
       class="flex items-start gap-space-2 w-full min-h-c-artifact-row-h px-space-2 py-space-2 border-none border-current rounded-sm bg-transparent text-ink-row type-body text-start transition-[background-color] duration-(--dur-control) ease-out not-active:not-aria-current:hover:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-selected-bg focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
       data-pin-row={pin.number}
@@ -125,16 +133,23 @@
           resolved={!!pin.resolvedAt}
         />
       </span>
+      <!-- One ink per word on the row: on the selected wash every word is
+           selected-ink (ink-muted measures 4.49:1 on it by day, DESIGN.md
+           Colors: Selected); off it, the title ink-strong, or ink-muted
+           while nothing is written yet, and the last line ink-muted. -->
       <span data-slot="words" class="flex flex-1 min-w-0 flex-col">
         <span
           data-slot="title"
-          class="line-clamp-4 wrap-anywhere data-quiet:text-ink-muted not-data-quiet:text-ink-strong in-aria-current:text-selected-ink"
-          data-quiet={pin.thread.length === 0 || undefined}>{title(pin)}</span
+          class={["line-clamp-4 wrap-anywhere", titleInk(pin, current)]}
+          >{title(pin)}</span
         >
         {#if last}
           <span
             data-slot="last"
-            class="flex min-w-0 gap-space-1 text-ink-muted type-meta in-aria-current:text-selected-ink"
+            class={[
+              "flex min-w-0 gap-space-1 type-meta",
+              current ? "text-selected-ink" : "text-ink-muted",
+            ]}
             ><span class="flex-none">{last.by}</span><span
               class="min-w-0 truncate">{last.text}</span
             ></span

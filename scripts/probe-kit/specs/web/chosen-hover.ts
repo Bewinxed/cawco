@@ -166,7 +166,7 @@ const CONTROLS: Control[] = [
     onWash: {
       row: '[data-probe="pins"] [data-slot="pin-row"][aria-current="true"]',
       label:
-        '[data-probe="pins"] [data-slot="pin-row"][aria-current="true"] [data-slot="name"]',
+        '[data-probe="pins"] [data-slot="pin-row"][aria-current="true"] [data-slot="title"]',
     },
   },
   {
