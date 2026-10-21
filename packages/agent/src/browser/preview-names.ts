@@ -74,47 +74,66 @@ const loopback = (address: string): boolean =>
   address.startsWith("127.") || address === "::1";
 
 /**
+ * The hub's preview names, and whether their sample resolves to this
+ * machine's loopback alone: the fetch, its body and the lookup under one
+ * deadline ({@link NAMES_MS}), so a start or a move never waits longer.
+ */
+const readNames = async (
+  signal: AbortSignal
+): Promise<{ loopback: boolean; names: PreviewNames["names"] }> => {
+  const answer = await provenFetch(
+    `${delegationHubUrl()}${PREVIEW_NAMES_PATH}`,
+    {
+      signal,
+    }
+  );
+  if (!answer.ok) {
+    throw new Error(`HTTP ${answer.status}`);
+  }
+  const { names } = (await answer.json()) as PreviewNames;
+  if (!names) {
+    return { names, loopback: false };
+  }
+  const resolved = await Bun.dns
+    .lookup(names.sample)
+    .catch(() => [] as { address: string }[]);
+  return {
+    names,
+    loopback:
+      resolved.length > 0 && resolved.every((one) => loopback(one.address)),
+  };
+};
+
+/**
  * The rules a container of `runtime` wants now: each of the hub's preview
  * names that resolves to this machine's loopback, mapped to the machine
  * ({@link machineHostOf}); `rules` undefined when none does. Null when the
- * hub didn't answer, said in one line: nothing is known, so nothing changes
- * for it.
+ * hub didn't answer within {@link NAMES_MS} or refused, said in one line:
+ * nothing is known, so nothing changes for it, and it never throws.
  */
 export const wantedHostRules = async (
   runtime: Pick<Runtime, "kind" | "ownNetwork">
 ): Promise<{ rules: string | undefined } | null> => {
-  let names: PreviewNames["names"];
+  let read: Awaited<ReturnType<typeof readNames>>;
   try {
-    const read = await readWithin(NAMES_MS, (signal) =>
-      provenFetch(`${delegationHubUrl()}${PREVIEW_NAMES_PATH}`, { signal })
-    );
-    if (read.kind !== "answered") {
+    const bounded = await readWithin(NAMES_MS, readNames);
+    if (bounded.kind !== "answered") {
       throw new Error(`no answer within ${NAMES_MS / 1000} s`);
     }
-    if (!read.value.ok) {
-      throw new Error(`HTTP ${read.value.status}`);
-    }
-    ({ names } = (await read.value.json()) as PreviewNames);
+    read = bounded.value;
   } catch (error) {
     console.warn(
       `[browser] the hub's preview names were not read (${error instanceof Error ? error.message : String(error)}): the container's rules stay as they are`
     );
     return null;
   }
-  if (!names) {
-    return { rules: undefined };
-  }
-  const resolved = await Bun.dns
-    .lookup(names.sample)
-    .catch(() => [] as { address: string }[]);
-  if (
-    resolved.length === 0 ||
-    !resolved.every((one) => loopback(one.address))
-  ) {
+  if (!(read.names && read.loopback)) {
     return { rules: undefined };
   }
   const { name } = machineHostOf(runtime);
   return {
-    rules: names.patterns.map((pattern) => `MAP ${pattern} ${name}`).join(", "),
+    rules: read.names.patterns
+      .map((pattern) => `MAP ${pattern} ${name}`)
+      .join(", "),
   };
 };

@@ -824,9 +824,11 @@ const intoContainer = async (
  * `key`'s browser, made on the local host while no runtime answered, moved
  * into a container now that `answering` does, at rest (`atRest`), under its
  * lock. Its sign-ins carry by cookie, localStorage and IndexedDB (sign-ins.ts): read
- * from the local Chromium (started for it when asleep), which then stops,
- * since the container takes the same ports; written into the container's
- * Chromium once it is live; and read back from it. Only then is the record
+ * from the local Chromium at its own slot's ports (started for it when
+ * asleep), which then stops, since the container takes the same ports or,
+ * where another agent's container holds that slot, the next free one;
+ * written into the container's Chromium once it is live; and read back
+ * from it. Only then is the record
  * written, its host changed this once, and the local profile removed. A move
  * that fails on the way removes the container and volume made for it and
  * leaves the record as it was, on the local host.
@@ -852,17 +854,20 @@ const moveIntoContainer = (
     starting.set(key, { state: "starting" });
     told();
     try {
-      let from: BrowserRecord = await slotted(
-        record,
-        await container.heldSlots()
-      );
+      // The sign-ins are read at the ports the local Chromium runs on: its
+      // own slot. The container's slot is taken only once it stopped, since
+      // another agent's container may hold that slot (heldSlots counts
+      // stopped ones), and a slot moved under a live local Chromium names
+      // ports nothing listens on.
+      let from: BrowserRecord = await slotted(record);
       if (!(from.state === "live" && (await local.running(from)))) {
         from = await local.start(from, { progress: () => undefined });
       }
       const signIns = await readSignIns(local.devtoolsUrl(from));
       await local.stop(from);
       goOn(abort.signal);
-      const { local: _local, why: _why, runtimeAway: _away, ...kept } = from;
+      const placed = await slotted(from, await container.heldSlots());
+      const { local: _local, why: _why, runtimeAway: _away, ...kept } = placed;
       await intoContainer(
         container,
         { ...kept, host: "container", state: "asleep" },

@@ -34,8 +34,14 @@
  *     outsider's preview name (the locked page);
  * (f) once the pass's end has passed (its row's `expires_at` set back), the
  *     page is refused; a second `artifact_browse` opens it again;
- * (g) once the session ends, the page is refused and the session holds no
- *     pass.
+ * (g) a witness, another session of the project, whose tab shares the
+ *     project browser's cookies, opens the page by the writer's pass; once
+ *     the writer ends (its own pages and connection go with it) the page is
+ *     refused there, and the writer holds no pass.
+ *
+ * What the fleet's agent made on the machine's runtime is removed as the
+ * spec ends, whatever its legs did: a container left behind holds its slot
+ * against every other agent there.
  *
  * Host-only: a sheet's stage runs in a stage clone's boundary, which needs
  * namespaces no workspace can make, and the container leg needs the
@@ -47,7 +53,9 @@
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { removeOwned } from "../../../packages/agent/src/browser/container-host";
 import type { Runtime } from "../../../packages/agent/src/browser/runtime";
+import { keptBrowserOwner } from "../../../packages/agent/src/browser/state";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import {
   browserTool,
@@ -56,7 +64,7 @@ import {
   selected,
 } from "../browser-tool";
 import { cloudflareTo, scratchCertificate } from "../cloudflare-front";
-import type { Kit, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../kit";
 import { PASS_DOMAIN, storeHostMode } from "../pass-legs";
 
 const BROWSE = "mcp__cawco__artifact_browse";
@@ -190,7 +198,13 @@ const SocketWith = WebSocket as unknown as new (
   options: { headers: Record<string, string> }
 ) => WebSocket;
 
-/** The gate as session `id`'s door names it (agent browser/door.ts: `wsEndpoint`, `wsHeaders`). */
+/**
+ * The gate as session `id`'s door names it (agent browser/door.ts:
+ * `wsEndpoint`, `wsHeaders`). Once the gate closes the connection (its
+ * session ended: gate.ts cuts it and closes its pages), every call
+ * waiting on it, and every one after, fails with the close's code and
+ * reason.
+ */
 const gateAs = async (home: string, id: string): Promise<Gate> => {
   const door = JSON.parse(
     await readFile(
@@ -210,6 +224,8 @@ const gateAs = async (home: string, id: string): Promise<Gate> => {
     }) => void
   >();
   const events: Gate["events"] = [];
+  /** Why the connection closed, once it has. */
+  let closed: string | undefined;
   socket.onmessage = (event) => {
     const message = JSON.parse(String(event.data));
     if (typeof message.id === "number") {
@@ -218,6 +234,13 @@ const gateAs = async (home: string, id: string): Promise<Gate> => {
     } else if (message.method) {
       events.push(message);
     }
+  };
+  socket.onclose = (event) => {
+    closed = `the gate closed ${id}'s connection (${event.code} ${event.reason})`;
+    for (const answer of waiting.values()) {
+      answer({ error: { message: closed } });
+    }
+    waiting.clear();
   };
   await new Promise<void>((resolve, reject) => {
     socket.onopen = () => resolve();
@@ -228,6 +251,10 @@ const gateAs = async (home: string, id: string): Promise<Gate> => {
     events,
     send: (method, params, sessionId) =>
       new Promise((resolve, reject) => {
+        if (closed) {
+          reject(new Error(`${method}: ${closed}`));
+          return;
+        }
         next += 1;
         waiting.set(next, (message) =>
           message.error
@@ -670,7 +697,6 @@ const run = async (kit: Kit) => {
   const { findRuntime } =
     await import("../../../packages/agent/src/browser/runtime");
   const runtime = await findRuntime();
-  const host = "missing" in runtime ? "local" : "container";
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
@@ -728,6 +754,46 @@ const run = async (kit: Kit) => {
     false,
     "0.0.0.0"
   );
+  try {
+    await legs(kit, fleet, runtime, home, tool, front.port as number);
+  } finally {
+    front.stop(true);
+    await removeOwnBrowsers(runtime, home);
+  }
+};
+
+/**
+ * What the fleet's agent made on the machine's runtime, removed: its
+ * browsers' containers and volumes, by its owner label (container-host.ts
+ * `removeOwned`). The runtime is the machine's, shared with every agent
+ * there, and a container left behind holds its slot (container-host.ts
+ * `heldSlots` counts stopped ones too).
+ */
+const removeOwnBrowsers = async (
+  runtime: Runtime | { missing: string },
+  home: string
+): Promise<void> => {
+  if ("missing" in runtime) {
+    return;
+  }
+  const owner = await keptBrowserOwner(
+    join(home, ".local", "share", "cawco", "browsers")
+  );
+  if (owner) {
+    await removeOwned(runtime.docker, owner);
+  }
+};
+
+/** Every leg after the fleet, its browser tool and the names' front stand. */
+const legs = async (
+  kit: Kit,
+  fleet: KitFleet,
+  runtime: Runtime | { missing: string },
+  home: string,
+  tool: SessionEntry,
+  frontPort: number
+) => {
+  const host = "missing" in runtime ? "local" : "container";
   const dir = `${fleet.sandbox}/browse-project`;
   await Promise.all(
     Object.entries(PROJECT).map(async ([file, text]) => {
@@ -762,10 +828,11 @@ const run = async (kit: Kit) => {
   await rulesLeg(kit, runtime, home, writer, () =>
     storeHostMode(fleet, {
       mode: "host",
-      pattern: `https://p-{port}.${PASS_DOMAIN}:${front.port}`,
+      pattern: `https://p-{port}.${PASS_DOMAIN}:${frontPort}`,
     })
   );
   const outsider = await fleet.spawn("claude", "Outsider", fleet.repo);
+  const witness = await fleet.spawn("claude", "Witness", dir, { projectId });
   const at = `/api/instances/${writer}/artifacts`;
   const sheet = await fleet.api<{ id: string }>(at, {
     kind: "component",
@@ -806,7 +873,6 @@ const run = async (kit: Kit) => {
     JSON.stringify({ result: one, entry })
   );
   if (!entry) {
-    front.stop(true);
     return;
   }
 
@@ -902,34 +968,72 @@ const run = async (kit: Kit) => {
     JSON.stringify({ lapsed, again, reopened })
   );
 
-  // (g) The session ends: refused, and it holds no pass.
-  await fleet.stopSession(writer);
-  await until(
-    "the session stopped",
-    () => fleet.instance(writer),
-    (row) => row?.status === "stopped",
-    120_000
-  ).catch(() => undefined);
-  await tab.navigate(pageUrl);
-  const ended = await until(
-    "the ended session's pass refused",
-    () => locked(tab),
-    Boolean,
-    20_000
-  ).catch(() => false);
-  const passes = fleet.query<{ n: number }>(
-    "SELECT count(*) AS n FROM preview_passes WHERE instance_id = ?",
-    writer
-  )[0]?.n;
-  kit.check(
-    "(g) once the session ends the page is refused, and no pass of the session's is kept",
-    ended && passes === 0,
-    JSON.stringify({ ended, passes, status: fleet.instance(writer)?.status })
-  );
-
+  // (g) The session ends: its pass is refused, and it holds none. The
+  // writer's own pages and connection go with it (gate.ts), so a witness
+  // of the project, whose pages share the browser's cookies, reads it.
   await tab.close();
   gate.socket.close();
-  front.stop(true);
+  await endedLeg(kit, fleet, home, writer, witness, pageUrl);
+};
+
+/**
+ * (g) Session `writer` ends. `witness`, a session of the same project,
+ * opens the page through its own door: its tab shares the project
+ * browser's cookies, the writer's pass among them, so the page opens while
+ * the writer runs, and is refused once it ended, its pass gone.
+ */
+const endedLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  home: string,
+  writer: string,
+  witness: string,
+  pageUrl: string
+) => {
+  const door = join(home, ".cawco", "workspaces", witness, "browser-mcp.json");
+  await until(
+    "the witness's browser door",
+    () => existsSync(door),
+    Boolean,
+    60_000
+  );
+  const link = await gateAs(home, witness);
+  const seen = await pageIn(link);
+  try {
+    await seen.navigate(pageUrl);
+    const opened = await until(
+      "the page in the witness's tab, by the writer's pass",
+      () => decisionShown(seen),
+      Boolean,
+      60_000
+    ).catch(() => false);
+    await fleet.stopSession(writer);
+    const status = await until(
+      "the writer stopped",
+      () => fleet.instance(writer)?.status,
+      (now) => now === "stopped",
+      120_000
+    ).catch(() => fleet.instance(writer)?.status);
+    await seen.navigate(pageUrl);
+    const refused = await until(
+      "the ended session's pass refused",
+      () => locked(seen),
+      Boolean,
+      20_000
+    ).catch(() => false);
+    const passes = fleet.query<{ n: number }>(
+      "SELECT count(*) AS n FROM preview_passes WHERE instance_id = ?",
+      writer
+    )[0]?.n;
+    kit.check(
+      "(g) a witness of the project opens the page by the writer's pass; once the writer ends the page is refused there, and no pass of the writer's is kept",
+      opened && status === "stopped" && refused && passes === 0,
+      JSON.stringify({ opened, status, refused, passes })
+    );
+  } finally {
+    await seen.close();
+    link.socket.close();
+  }
 };
 
 const spec: Spec = {
