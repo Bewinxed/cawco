@@ -67,6 +67,7 @@ import {
   RENDERED_PATH,
   REPORT_PATH,
   type RenderReport,
+  SECTION_MISSING,
   type SectionPlan,
   type SectionRender,
   type SheetImport,
@@ -1970,6 +1971,26 @@ function storyFile(named: string | null): string | null {
     : null;
 }
 
+/**
+ * A section's module, or why it can't be one, in the stage's words: Vite
+ * sends the page the refusal (`vite:error`), which its section says; its
+ * code tells a file that isn't there from one that won't compile.
+ */
+function sectionLoad(file: string): Promise<string> {
+  const problem = sectionProblem(file);
+  if (problem) {
+    throw Object.assign(new Error(problem), {
+      pluginCode: existsSync(resolve(root, file)) ? undefined : SECTION_MISSING,
+    });
+  }
+  if (toolchain === "nuxt") {
+    watchStory(resolve(root, file));
+  }
+  return sectionModule(file).catch((error: unknown) => {
+    throw placedAt(error, file);
+  });
+}
+
 /** A parser's trailing place in its message: Babel's ` (2:61)`. */
 const PLACE_SUFFIX = / \(\d+:\d+\)$/;
 
@@ -1985,13 +2006,41 @@ function placedAt(error: unknown, file: string): unknown {
   if (!(error instanceof Error && typeof loc?.line === "number")) {
     return error;
   }
+  const abs = resolve(root, file);
+  const column = typeof loc.column === "number" ? loc.column : 0;
   return Object.assign(new Error(error.message.replace(PLACE_SUFFIX, "")), {
-    loc: {
-      file: resolve(root, file),
-      line: loc.line,
-      column: typeof loc.column === "number" ? loc.column : 0,
-    },
+    loc: { file: abs, line: loc.line, column },
+    frame: codeFrame(abs, loc.line, column),
   });
+}
+
+/** Lines of a code frame either side of the line it points at. Ours: Vite's own frame shows two. */
+const FRAME_AROUND = 2;
+
+/**
+ * A code frame as Vite draws one: the lines around 1-based `line`, each
+ * numbered, and a caret under 0-based `column`; null when the file doesn't
+ * read.
+ */
+function codeFrame(abs: string, line: number, column: number): string | null {
+  let lines: string[];
+  try {
+    lines = readFileSync(abs, "utf8").split("\n");
+  } catch {
+    return null;
+  }
+  const from = Math.max(1, line - FRAME_AROUND);
+  const to = Math.min(lines.length, line + FRAME_AROUND);
+  const width = String(to).length;
+  const rows: string[] = [];
+  for (let at = from; at <= to; at += 1) {
+    const number = String(at).padStart(width);
+    rows.push(`${number} | ${lines[at - 1] ?? ""}`);
+    if (at === line) {
+      rows.push(`${" ".repeat(width)} | ${" ".repeat(column)}^`);
+    }
+  }
+  return rows.join("\n");
 }
 
 /** Why `named` (from the toolchain root) can't be a canvas's section, in the stage's words; null when it can. */
@@ -2115,18 +2164,8 @@ function cawcoStage() {
       const file = decodeURIComponent(
         id.slice(VIRTUAL.length + 1, -".js".length)
       );
-      const problem = sectionProblem(file);
-      if (problem) {
-        // Vite sends the page these words (`vite:error`), which its section says.
-        throw new Error(problem);
-      }
-      if (toolchain === "nuxt") {
-        watchStory(resolve(root, file));
-      }
       sections.set(file, id);
-      return sectionModule(file).catch((error: unknown) => {
-        throw placedAt(error, file);
-      });
+      return sectionLoad(file);
     },
     /**
      * An edit to a file a loaded section is drawn from ({@link drawnFrom}:

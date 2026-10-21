@@ -413,6 +413,13 @@ export type StageToolchain = "vite" | "astro" | "nuxt";
 export const AS_PAGE =
   "Show its components as an HTML page artifact (artifact_create kind page) that loads the project's built CSS.";
 
+/**
+ * The code a stage's refusal of a section carries when its states file isn't
+ * there (Vite's `pluginCode`, which it sends the page with the error): the
+ * canvas says the file isn't there yet, not that it doesn't compile.
+ */
+export const SECTION_MISSING = "cawco-section-missing";
+
 /** A CSF story file: `Who.stories.ts`, `Card.stories.tsx`, `Page.stories.js`. */
 export const STORY_FILE = /\.stories\.[cm]?[jt]sx?$/;
 

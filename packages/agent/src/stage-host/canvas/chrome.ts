@@ -230,17 +230,27 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 @keyframes cawco-wait { from { opacity: 0; } }
 @keyframes cawco-sweep { to { translate: 100% 0; } }
 /* A section whose module didn't load says so where its frames would stand: the error formula's line, then Show details. */
-.cawco-section-failed { display: grid; gap: var(--space-2); inline-size: 0; min-inline-size: max(100%, var(--c-canvas-skeleton-w)); }
+/* It reads raised on the well, as a frame's page does, so its details recess inside it in both schemes (the well is surface-recess in light). */
+.cawco-section-failed { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); inline-size: 0; min-inline-size: max(100%, var(--c-canvas-skeleton-w)); box-sizing: border-box;
+  padding: var(--space-3); background: var(--surface-raised); border: 1px solid var(--border-hairline); border-radius: var(--radius-md); }
 .cawco-section-failed-line { margin: 0; font: var(--type-body); color: var(--status-fail-ink); text-wrap: pretty; }
 /* Show details: the sm ghost, its words standing on the line's start (its own inset pulled back), no disclosure triangle. */
 .cawco-section-failed summary { list-style: none; display: inline-flex; align-items: center; inline-size: fit-content; block-size: var(--c-btn-h-sm);
   padding-inline: var(--space-2); margin-inline-start: calc(var(--space-2) * -1); border-radius: var(--radius-sm);
   font: var(--type-label); color: var(--ink-strong); cursor: pointer; }
 .cawco-section-failed summary::-webkit-details-marker { display: none; }
+/* Its details stand in the card's one track: a wide code frame scrolls inside it, never widens it. */
+.cawco-section-failed details { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
 @media (hover: hover) { .cawco-section-failed summary:hover { background: var(--surface-hover); } }
 .cawco-section-failed summary:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 .cawco-section-failed pre { margin: var(--space-1) 0 0; padding: var(--space-2); font: var(--type-code); font-variant-ligatures: none; color: var(--ink-strong);
   white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-recess); border-radius: var(--radius-sm); }
+/* Vite's code frame: its columns line up, so it scrolls rather than wraps. */
+.cawco-section-failed pre.cawco-section-failed-frame { white-space: pre; overflow-wrap: normal; overflow-x: auto; }
+/* The place stays whole on one line: the path gives way inside (The Truncate Inside Rule), :line:column never. */
+.cawco-section-failed-place { display: flex; min-inline-size: 0; margin: 0; font: var(--type-code); font-variant-ligatures: none; color: var(--ink-muted); white-space: nowrap; }
+.cawco-section-failed-place > span:first-child { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+.cawco-section-failed-place > span:last-child { flex: none; }
 .cawco-grid { display: grid; grid-auto-columns: max-content; gap: var(--space-6) var(--space-6); align-items: start; justify-content: start; }
 .cawco-colhead { font: var(--type-meta); color: var(--ink-muted); text-transform: none; }
 /* The gap clears the selected ring (2px at a 2px offset) of the label above and the status below. */

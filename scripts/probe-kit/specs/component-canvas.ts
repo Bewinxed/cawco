@@ -1168,6 +1168,9 @@ async function waiting(kit: Kit, stage: Stage): Promise<void> {
     const summary = document.querySelector(".cawco-section-failed summary");
     return {
       text: pre?.textContent ?? "",
+      place:
+        document.querySelector(".cawco-section-failed-place")?.textContent ??
+        "",
       height: pre?.getBoundingClientRect().height ?? 0,
       summary: summary?.textContent ?? "",
       marker: summary ? getComputedStyle(summary).listStyleType : "",
@@ -1204,7 +1207,7 @@ async function waiting(kit: Kit, stage: Stage): Promise<void> {
       details.summary === "Hide details" &&
       details.marker === "none" &&
       details.text.includes("The states file's helper broke as it loaded") &&
-      details.text.includes("src/broken.js:2:") &&
+      details.place.includes("src/broken.js:2:") &&
       report.some((one) =>
         one.message.includes("The states file's helper broke as it loaded")
       ),

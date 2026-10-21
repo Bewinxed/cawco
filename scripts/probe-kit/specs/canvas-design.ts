@@ -71,13 +71,15 @@
  *    Show details only, folded until pressed and then whole; never blank.
  * 13. A canvas whose states file doesn't exist, its doc's stage `live` as
  *    the hub keeps it (the owner's delegate canvas, stuck on "Compiling…"):
- *    within 5 s the canvas says its section didn't load, the stage's words
- *    ("… does not exist …") under Show details, and the pane never says
- *    "Compiling…". The frame says `cawco:ready` only for an HTML answer, as
+ *    within 5 s the canvas says "<Name>'s states file isn't there yet, so
+ *    none of its stories are drawn.", the stage's words ("… does not exist
+ *    …") under Show details on a ground recessed from its card (in light
+ *    too), and the pane never says "Compiling…". The frame says `cawco:ready` only for an HTML answer, as
  *    the hub's proxy injects the overlay only into one.
- * 14. The same for a states file that doesn't compile: Vite's compile error
- *    under Show details, not the browser's "Failed to fetch dynamically
- *    imported module". (`CANVAS_DESIGN=refused` runs 13 and 14 alone.)
+ * 14. The same for a states file that doesn't compile: "<Name> doesn't
+ *    compile, …", Vite's compile error under Show details (not the
+ *    browser's "Failed to fetch dynamically imported module"), its place
+ *    whole on one line with its full text as a title, and Vite's code frame. (`CANVAS_DESIGN=refused` runs 13 and 14 alone.)
  *
  * The bench head swept every px from 300 to 800, light, desk pointer, for a
  * component canvas and a plain preview, with Send picks standing and
@@ -2186,6 +2188,47 @@ const liveStage = (): StageState => ({
 });
 
 /**
+ * The canvas page's failed section, read with its details opened and shut
+ * again (what they hold is laid out only while open): its line, the stage's
+ * words, its place and whether it stands on one line, the code frame, the
+ * words' ground and the card's, and whether all it holds stands inside the
+ * card; null while none stands.
+ */
+const FAILED_READ = () => {
+  const box = document.querySelector<HTMLElement>(".cawco-section-failed");
+  const details = box?.querySelector("details");
+  if (!(box && details)) {
+    return null;
+  }
+  const text = (selector: string) =>
+    box.querySelector(selector)?.textContent ?? null;
+  const summary = text("summary") ?? "";
+  details.open = true;
+  const pre = box.querySelector<HTMLElement>("pre");
+  const at = box.querySelector<HTMLElement>(".cawco-section-failed-place");
+  const oneLine = (el: HTMLElement) =>
+    el.getBoundingClientRect().height <=
+    Number.parseFloat(getComputedStyle(el).lineHeight) + 0.5;
+  const edge = box.getBoundingClientRect().right + 0.5;
+  const failed = {
+    line: text(".cawco-section-failed-line") ?? "",
+    summary,
+    details: pre?.textContent ?? "",
+    place: at?.textContent ?? null,
+    placeTitle: at?.title ?? null,
+    placeOneLine: at ? oneLine(at) : null,
+    frame: text(".cawco-section-failed-frame"),
+    ground: pre ? getComputedStyle(pre).backgroundColor : "",
+    card: getComputedStyle(box).backgroundColor,
+    inside: [...box.querySelectorAll<HTMLElement>("p, pre, summary")].every(
+      (el) => el.getBoundingClientRect().right <= edge
+    ),
+  };
+  details.open = false;
+  return failed;
+};
+
+/**
  * Legs 13 and 14: a canvas whose states file the stage can't load, its doc's
  * stage `live` as the hub keeps it. The hub's preview proxy injects the
  * overlay only into an HTML answer (agent preview.ts), so the frame here
@@ -2207,19 +2250,22 @@ async function refusedLeg(
       leg: "13",
       file: GONE_FILE,
       what: "a canvas whose states file doesn't exist",
+      line: "Gone's states file isn't there yet, so none of its stories are drawn.",
       said: (words: string) =>
         words.includes(GONE_FILE) && words.includes("does not exist"),
+      place: null,
     },
     {
       leg: "14",
       file: BROKEN_FILE,
       what: "a canvas whose states file doesn't compile",
+      line: "Broken doesn't compile, so none of its stories are drawn.",
       said: (words: string) =>
-        words.includes(BROKEN_FILE) &&
         !words.includes("Failed to fetch dynamically imported module"),
+      place: `${BROKEN_FILE}:2:62`,
     },
   ];
-  for (const { leg, file, what, said } of legs) {
+  for (const { leg, file, what, line, said, place } of legs) {
     // biome-ignore lint/performance/noAwaitInLoops: one page at a time
     const page = await kit.page("desk", { theme, scale: 2 });
     await page.setViewportSize({ width: 760, height: 900 });
@@ -2260,20 +2306,7 @@ async function refusedLeg(
         .frames()
         .find((frame) => frame.url().includes("/@cawco/canvas"));
       const failed = canvas
-        ? await canvas
-            .evaluate(() => {
-              const box = document.querySelector(".cawco-section-failed");
-              return box
-                ? {
-                    line:
-                      box.querySelector(".cawco-section-failed-line")
-                        ?.textContent ?? "",
-                    summary: box.querySelector("summary")?.textContent ?? "",
-                    details: box.querySelector("pre")?.textContent ?? "",
-                  }
-                : null;
-            })
-            .catch(() => null)
+        ? await canvas.evaluate(FAILED_READ).catch(() => null)
         : null;
       return { compiling, failed };
     };
@@ -2288,11 +2321,19 @@ async function refusedLeg(
     }
     const took = Date.now() - opened;
     kit.check(
-      `${leg}: ${theme}: ${what} says so within ${REFUSED_MS / 1000}s, the stage's own words under Show details, and the pane never says "Compiling…"`,
+      `${leg}: ${theme}: ${what} says so within ${REFUSED_MS / 1000}s in the error formula's line, the stage's own words under Show details on a ground recessed from its card${place ? ", its place whole on one line and Vite's code frame under them" : ""}, and the pane never says "Compiling…"`,
       !seen.compiling &&
         !!seen.failed &&
         seen.failed.summary === "Show details" &&
-        said(seen.failed.details),
+        seen.failed.line === line &&
+        said(seen.failed.details) &&
+        seen.failed.ground !== seen.failed.card &&
+        seen.failed.inside &&
+        seen.failed.place === place &&
+        (place === null ||
+          (seen.failed.placeOneLine === true &&
+            seen.failed.placeTitle === place &&
+            !!seen.failed.frame)),
       `after ${took}ms: ${JSON.stringify(seen)}`
     );
     // For a reviewer: the pane with the section folded, then its details open.

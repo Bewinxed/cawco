@@ -32,6 +32,7 @@ import {
   type PageError,
   type RenderReport,
   type Scheme,
+  SECTION_MISSING,
   type SectionPlan,
   type SectionRender,
   type SheetOnPage,
@@ -94,10 +95,32 @@ export interface SectionModule {
 
 /** Vite's error as its server sends it to pages (`prepareError`): its message, the module's id and its place. */
 interface ViteError {
+  frame?: string;
   id?: string;
   loc?: { column?: number; file?: string; line?: number };
   message: string;
+  pluginCode?: string;
 }
+
+/**
+ * Why a section didn't load: its states file isn't there (`missing`), the
+ * stage couldn't compile a module it imports (`compile`, with Vite's code
+ * frame when it sent one), or its code threw in the page (`page`).
+ */
+interface SectionFailure {
+  error: PageError;
+  frame: string | null;
+  kind: "missing" | "compile" | "page";
+}
+
+/** Each failure's line, the error formula's what happened and what it means: the stage's words stand under Show details. */
+const FAILED_LINE: Record<SectionFailure["kind"], (name: string) => string> = {
+  missing: (name) =>
+    `${name}'s states file isn't there yet, so none of its stories are drawn.`,
+  compile: (name) =>
+    `${name} doesn't compile, so none of its stories are drawn.`,
+  page: (name) => `${name} didn't load, so none of its stories are drawn.`,
+};
 
 /** How long a section's failed import waits for the stage's words. Our call: Vite sends them before it answers the request. */
 const STAGE_SAYS_MS = 1000;
@@ -395,7 +418,7 @@ export function boot(options: BootOptions): void {
    * dynamically imported module"), so a section that didn't load says the
    * stage's words.
    */
-  let stageSaid: { at: number; error: PageError } | null = null;
+  let stageSaid: { at: number; failure: SectionFailure } | null = null;
   const stageHeard = new Set<() => void>();
   window.addEventListener("cawco:stage-error", (event) => {
     const err = (event as CustomEvent<ViteError | undefined>).detail;
@@ -406,28 +429,32 @@ export function boot(options: BootOptions): void {
     const own = at.startsWith(`${root}/`);
     stageSaid = {
       at: performance.now(),
-      error: {
-        message: err.message.trim(),
-        file: own ? fromRoot(at, root) : null,
-        line: own ? (err.loc?.line ?? null) : null,
-        // Vite's (Rollup's) column is 0-based.
-        column:
-          own && typeof err.loc?.column === "number"
-            ? err.loc.column + 1
-            : null,
+      failure: {
+        kind: err.pluginCode === SECTION_MISSING ? "missing" : "compile",
+        frame: err.frame?.trim() || null,
+        error: {
+          message: err.message.trim(),
+          file: own ? fromRoot(at, root) : null,
+          line: own ? (err.loc?.line ?? null) : null,
+          // Vite's (Rollup's) column is 0-based.
+          column:
+            own && typeof err.loc?.column === "number"
+              ? err.loc.column + 1
+              : null,
+        },
       },
     };
     for (const done of stageHeard) {
       done();
     }
   });
-  const saidSince = (since: number): PageError | null =>
-    stageSaid && stageSaid.at >= since ? stageSaid.error : null;
+  const saidSince = (since: number): SectionFailure | null =>
+    stageSaid && stageSaid.at >= since ? stageSaid.failure : null;
   /** Why a section's import that began at `since` failed: the stage's words heard since, or within {@link STAGE_SAYS_MS}; else the page's own error. */
   async function loadFailure(
     error: unknown,
     since: number
-  ): Promise<PageError> {
+  ): Promise<SectionFailure> {
     if (!saidSince(since)) {
       await new Promise<void>((done) => {
         const finish = () => {
@@ -439,7 +466,13 @@ export function boot(options: BootOptions): void {
         stageHeard.add(finish);
       });
     }
-    return saidSince(since) ?? pageError(error, root, base);
+    return (
+      saidSince(since) ?? {
+        kind: "page",
+        frame: null,
+        error: pageError(error, root, base),
+      }
+    );
   }
   /** A promise the page does not wait on: what it throws is a page error, never lost. */
   const quietly = (promise: Promise<unknown>) => {
@@ -895,14 +928,15 @@ export function boot(options: BootOptions): void {
    * A section whose module didn't load: it says so in its own place, its
    * error and where it threw under Show details, never a blank canvas.
    */
-  function failedSection(section: Section, error: PageError): void {
+  function failedSection(section: Section, failure: SectionFailure): void {
+    const { error, frame, kind } = failure;
     clearStandIns(section);
     const failed = document.createElement("div");
     failed.className = "cawco-section-failed cawco-ui";
     failed.setAttribute("role", "alert");
     const line = document.createElement("p");
     line.className = "cawco-section-failed-line";
-    line.textContent = `${section.name} didn't load, so none of its stories are drawn.`;
+    line.textContent = FAILED_LINE[kind](section.name);
     const details = document.createElement("details");
     const summary = document.createElement("summary");
     summary.textContent = "Show details";
@@ -911,10 +945,27 @@ export function boot(options: BootOptions): void {
       summary.textContent = details.open ? "Hide details" : "Show details";
     });
     const words = document.createElement("pre");
-    words.textContent = error.file
-      ? `${error.message}\n${error.file}:${error.line ?? 1}:${error.column ?? 1}`
-      : error.message;
+    words.textContent = error.message;
     details.append(summary, words);
+    if (error.file) {
+      // Its place on one line: the path gives way inside, its line and column never.
+      const at = `:${error.line ?? 1}:${error.column ?? 1}`;
+      const place = document.createElement("p");
+      place.className = "cawco-section-failed-place";
+      place.title = `${error.file}${at}`;
+      const path = document.createElement("span");
+      path.textContent = error.file;
+      const lineColumn = document.createElement("span");
+      lineColumn.textContent = at;
+      place.append(path, lineColumn);
+      details.append(place);
+    }
+    if (frame) {
+      const code = document.createElement("pre");
+      code.className = "cawco-section-failed-frame";
+      code.textContent = frame;
+      details.append(code);
+    }
     failed.append(line, details);
     section.head.after(failed);
     section.standIns = [failed];
