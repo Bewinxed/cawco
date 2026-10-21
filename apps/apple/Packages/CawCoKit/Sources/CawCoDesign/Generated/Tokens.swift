@@ -522,6 +522,8 @@ public enum Radius {
     public static let tabIconR: Double = 4
     /// A control standing in a composer shell (Attach, Send/Stop, a view bar's controls): concentric with the shell (The Concentric Rule), its 12px less its inset and its 1px edge.
     public static let composerControlR: Double = 4
+    /// A row standing at a glide popover's own inset (the new-session form's popovers, `roomy`): concentric with the surface (The Concentric Rule), its 12px less its space-2 pad and its 1px edge.
+    public static let glideRowR: Double = 4
     /// A transcript's well inside a row (a subagent's, an inline transcript's): concentric round its rows (The Concentric Rule), their radius-xs plus its space-1 padding.
     public static let innerWellR: Double = 9
 }

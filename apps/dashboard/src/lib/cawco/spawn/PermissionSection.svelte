@@ -75,10 +75,14 @@
   );
 </script>
 
+<!-- Its rows' corners are concentric with what holds them (The Concentric
+     Rule): on its own it is a field, its 10px less its edge and pad,
+     `radius-xs`; embedded it is no surface at all, and its rows stand at the
+     glide popover's inset, `glide-row-r`. -->
 <div
   data-slot="perms"
   aria-label="Permission mode"
-  class="group relative grid gap-space-row rounded-md border border-border-control bg-surface-raised p-space-1 shadow-xs data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0 data-embedded:shadow-none"
+  class="group relative grid gap-space-row rounded-md border border-border-control bg-surface-raised p-space-1 shadow-xs data-embedded:rounded-none data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0 data-embedded:shadow-none"
   data-embedded={embedded || undefined}
   role="radiogroup"
   tabindex="-1"
@@ -87,7 +91,7 @@
   <span
     data-slot="fill"
     aria-hidden="true"
-    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-c-row-h translate-y-(--fill-y) rounded-sm bg-selected-bg opacity-0 group-data-embedded:inset-x-0 group-data-embedded:top-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--dur-toggle) motion-safe:ease-in-out"
+    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-c-row-h translate-y-(--fill-y) rounded-xs bg-selected-bg group-data-embedded:rounded-glide-row opacity-0 group-data-embedded:inset-x-0 group-data-embedded:top-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--dur-toggle) motion-safe:ease-in-out"
     data-shown={rows.some((row) => row.value === value) || undefined}
     style:--fill-y={`calc(${index} * (var(--c-row-h) + var(--space-row)))`}
   ></span>
@@ -101,7 +105,7 @@
       aria-describedby={row.reason
         ? `${uid}-perm-${row.value}-reason`
         : undefined}
-      class="ns-in press-tint transition-control relative flex select-none h-c-row-h w-full items-center gap-space-3 rounded-sm border border-transparent bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-checked:text-selected-ink disabled:cursor-not-allowed disabled:opacity-50"
+      class="ns-in press-tint transition-control relative flex select-none h-c-row-h w-full items-center gap-space-3 rounded-xs border group-data-embedded:rounded-glide-row border-transparent bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-checked:text-selected-ink disabled:cursor-not-allowed disabled:opacity-50"
       data-fh="1"
       data-perm={row.value}
       disabled={row.disabled}

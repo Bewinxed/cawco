@@ -284,6 +284,7 @@ export type TokenSize =
   | "radius.row-mark-r"
   | "radius.tab-icon-r"
   | "radius.composer-control-r"
+  | "radius.glide-row-r"
   | "radius.inner-well-r"
   | "size.caw-peek"
   | "size.caw-peek-rise"

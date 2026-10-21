@@ -19,6 +19,7 @@
   import CheckInStatus from "../join/CheckInStatus.svelte";
   import CopyBox from "../join/CopyBox.svelte";
   import { CheckIn, installCommand, joinInfo } from "../join/join.svelte";
+  import { machineRowRadius } from "./machine-rows";
   import NsPopover from "./NsPopover.svelte";
   import type { MachineItem } from "./ns-types";
 
@@ -62,13 +63,12 @@
     }
     return row.load === "Idle" ? "online" : "away";
   };
-  const radius = (index: number, on: boolean) => {
-    const prev = index > 0 && selected.includes(machines[index - 1].id);
-    const next =
-      index < machines.length - 1 && selected.includes(machines[index + 1].id);
-    const r = "var(--radius-sm)";
-    return `${on && prev ? "0 0" : `${r} ${r}`} ${on && next ? "0 0" : `${r} ${r}`}`;
-  };
+  const radius = (index: number, on: boolean) =>
+    machineRowRadius(
+      on,
+      index > 0 && selected.includes(machines[index - 1].id),
+      index < machines.length - 1 && selected.includes(machines[index + 1].id)
+    );
 </script>
 
 <NsPopover
@@ -161,7 +161,7 @@
     <button
       data-slot="row"
       data-add
-      class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color,border-radius] duration-(--dur-toggle) ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
+      class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color,border-radius] duration-(--dur-toggle) ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
       data-fh="1"
       onclick={startPairing}
       style="--delay:140ms"

@@ -708,6 +708,10 @@
     --composer-control-r: calc(
       var(--radius-lg) - var(--c-composer-inset) - var(--border-width)
     );
+    /* A row standing at a glide popover's own inset (the new-session form's popovers, `roomy`): concentric with the surface (The Concentric Rule), its 12px less its space-2 pad and its 1px edge. */
+    --glide-row-r: calc(
+      var(--radius-lg) - var(--space-2) - var(--border-width)
+    );
     /* A transcript's well inside a row (a subagent's, an inline transcript's): concentric round its rows (The Concentric Rule), their radius-xs plus its space-1 padding. */
     --inner-well-r: calc(var(--radius-xs) + var(--space-1));
     /* Caw's 512 box on the channel cards: he stands behind the chosen card and looks over its top edge. */

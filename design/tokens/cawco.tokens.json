@@ -4055,6 +4055,19 @@
         }
       }
     },
+    "glide-row-r": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
+      "$description": "A row standing at a glide popover's own inset (the new-session form's popovers, `roomy`): concentric with the surface (The Concentric Rule), its 12px less its space-2 pad and its 1px edge.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({radius.radius-lg} - {space.space-2} - {size.border-width})"
+        }
+      }
+    },
     "inner-well-r": {
       "$type": "dimension",
       "$value": {

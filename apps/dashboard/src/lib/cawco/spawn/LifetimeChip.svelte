@@ -70,7 +70,7 @@
     <button
       data-slot="row"
       aria-pressed={on}
-      class="select-none ns-in press-tint transition-control relative flex min-h-c-row-h w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
+      class="select-none ns-in press-tint transition-control relative flex min-h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
       data-fh="1"
       onclick={() => {
         onlifetime(option.ephemeral);

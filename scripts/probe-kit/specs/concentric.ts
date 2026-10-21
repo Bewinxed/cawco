@@ -7,25 +7,33 @@
  * scaled, in the page's light scheme), its rest frames read:
  *
  * 1. Every nested pair in the popover's, the dropdown menu's, the segmented
- *    control's and the canvas stages' frames: a rounded box whose corner
- *    stands the same gap in from both edges of the nearest rounded box
- *    holding it, nearer than that box's radius (so its corner stands inside
- *    the outer's curve). Its outer radius is its inner radius plus that gap,
- *    the edge counted, within 0.5px. Radii as drawn: a radius past half its
- *    box's side is cut to fit, as CSS cuts it.
+ *    control's and the canvas stages' frames, and in the glide popover's
+ *    surfaces (the new-session form's own, which bits-ui opens on the page):
+ *    a surface (rounded, or drawing a fill, an edge or a shadow) whose
+ *    corner stands the same gap in from both edges of the nearest surface
+ *    holding it, nearer than that surface's radius (so its corner stands
+ *    inside the outer's curve). Its outer radius is its inner radius plus
+ *    that gap, the edge counted, within 0.5px. Radii as drawn: a radius past
+ *    half its box's side is cut to fit, as CSS cuts it, and an inner on the
+ *    clip edge of an outer that clips takes the clip's curve.
  * 2. The canvas's corner grips draw their `c-corner-grip-stroke` (1.5px) at
  *    1.5 CSS px at device scale 1 and 3: the drawn width as the engine
  *    computes it (a border's used width, which Chromium snaps to whole device
  *    pixels; an inset ring's spread, which it never snaps), and the ink of
  *    the straight run of the top-left grip's top leg, measured once per
  *    scale: its coverage summed down one device column, over the scale.
+ * 3. The decision-page kit's own surfaces (packages/hub/skills/decision-page
+ *    kit/page.css), on a fixture page (fixtures/decision-kit: a card with
+ *    its media panes, a mockup and a code block, and a picked option) built
+ *    by the hub's own builder (decision-page.ts): every nested pair, as 1.
  */
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
+import { buildDecisionPage } from "../../../packages/hub/src/decision-page";
 import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -37,7 +45,24 @@ const FILES = {
   dropdown: "src/lib/components/ui/dropdown-menu/dropdown-menu.stories.ts",
   segmented: "src/lib/components/ui/tabs/segmented.stories.ts",
   stages: "src/lib/cawco/canvas/CanvasStages.stories.ts",
+  glide: "src/lib/cawco/spawn/GlidePopover.stories.ts",
 } as const;
+
+/**
+ * Where each file's surfaces stand: in its rest frames' bodies, or (the
+ * glide popover, which bits-ui portals to the page) on the page, each
+ * surface the outer of what it holds.
+ */
+const SCOPES: Record<keyof typeof FILES, { own: boolean; scopes: string }> = {
+  popover: { own: false, scopes: restBodies(FILES.popover) },
+  dropdown: { own: false, scopes: restBodies(FILES.dropdown) },
+  segmented: { own: false, scopes: restBodies(FILES.segmented) },
+  stages: { own: false, scopes: restBodies(FILES.stages) },
+  glide: { own: true, scopes: "[data-ns-pop]" },
+};
+
+/** The decision-page kit's fixture: page.html and its mockups, built by the hub's own builder. */
+const DECISION_FIXTURE = join(import.meta.dir, "../fixtures/decision-kit");
 
 /** Outer radius = inner radius + gap, within this. */
 const RADIUS_SLACK = 0.5;
@@ -117,11 +142,21 @@ async function openFile(page: Page, base: string, file: string) {
 }
 
 /** The selector of `file`'s rest frames' bodies: an embed draws each in the page's scheme, light here. */
-const restBodies = (file: string) =>
-  `.cawco-frame[data-cawco-file="${file}"][data-cawco-interaction="rest"] > .cawco-frame-body`;
+function restBodies(file: string): string {
+  return `.cawco-frame[data-cawco-file="${file}"][data-cawco-interaction="rest"] > .cawco-frame-body`;
+}
 
-/** Every nested pair in the frames' bodies `selector` names. In the page. */
-function nestedPairs(args: { selector: string; slack: number }): Pair[] {
+/**
+ * Every nested pair inside the scopes `scopes` names. In the page. A frame's
+ * body is a scope that holds the surfaces (`own` false); a surface opened on
+ * the page outside its frame (a portaled popover) is a scope that is itself
+ * the outer of what it holds (`own` true).
+ */
+function nestedPairs(args: {
+  own: boolean;
+  scopes: string;
+  slack: number;
+}): Pair[] {
   const name = (el: Element) => {
     const slot = el.getAttribute("data-slot");
     const classes = (el.getAttribute("class") ?? "")
@@ -183,7 +218,9 @@ function nestedPairs(args: { selector: string; slack: number }): Pair[] {
       (style.backgroundColor !== "rgba(0, 0, 0, 0)" &&
         style.backgroundColor !== "transparent") ||
       style.backgroundImage !== "none" ||
-      style.boxShadow !== "none" ||
+      // A shadow with a colour: Tailwind's `shadow-none` leaves its layers
+      // in, each transparent, and those draw nothing.
+      style.boxShadow.replaceAll("rgba(0, 0, 0, 0)", "").includes("(") ||
       ["Top", "Right", "Bottom", "Left"].some(
         (side) =>
           style.getPropertyValue(`border-${side.toLowerCase()}-style`) !==
@@ -194,16 +231,19 @@ function nestedPairs(args: { selector: string; slack: number }): Pair[] {
       )
     );
   };
-  /** The nearest shown rounded box holding `inner` inside `body`; null when none does. */
-  const holderOf = (inner: HTMLElement, body: HTMLElement) => {
+  /** A surface an inner one can nest in: rounded, shown, and drawing something. */
+  const surface = (el: HTMLElement) =>
+    rounded(radii(el)) && shown(el) && paints(el);
+  /** The nearest surface holding `inner` in `scope` (the scope itself when it is its own outer); null when none does. */
+  const holderOf = (inner: HTMLElement, scope: HTMLElement) => {
     let outer = inner.parentElement;
-    while (outer && outer !== body) {
-      if (rounded(radii(outer)) && shown(outer)) {
+    while (outer && outer !== scope) {
+      if (surface(outer)) {
         return outer;
       }
       outer = outer.parentElement;
     }
-    return null;
+    return outer === scope && args.own && surface(scope) ? scope : null;
   };
   /** Each corner of `inner` that stands the same gap in from both of `outer`'s edges, inside its curve: a nested corner the rule speaks of. */
   const cornersOf = (
@@ -214,6 +254,19 @@ function nestedPairs(args: { selector: string; slack: number }): Pair[] {
   ): Pair[] => {
     const or = radii(outer);
     const ir = radii(inner);
+    const style = getComputedStyle(outer);
+    const clips =
+      style.overflowX !== "visible" || style.overflowY !== "visible";
+    const edge = Number.parseFloat(style.borderTopWidth) || 0;
+    /**
+     * Its corner as drawn: an outer that clips its content cuts an inner
+     * standing on its clip edge to the clip's own curve, the outer's radius
+     * less its edge, wherever that is rounder than the inner's own.
+     */
+    const drawn = (corner: keyof typeof ir, gap: number) =>
+      clips && gap <= edge + args.slack
+        ? Math.max(ir[corner], or[corner] - edge)
+        : ir[corner];
     const a = outer.getBoundingClientRect();
     const b = inner.getBoundingClientRect();
     const gaps = {
@@ -236,21 +289,24 @@ function nestedPairs(args: { selector: string; slack: number }): Pair[] {
         outer: name(outer),
         outerR: Number(or[corner].toFixed(3)),
         inner: name(inner),
-        innerR: Number(ir[corner].toFixed(3)),
+        innerR: Number(drawn(corner, (x + y) / 2).toFixed(3)),
         gap: Number(((x + y) / 2).toFixed(3)),
       }));
   };
   const pairs: Pair[] = [];
-  for (const body of document.querySelectorAll<HTMLElement>(args.selector)) {
-    const story = body.parentElement?.dataset.cawcoStory ?? "?";
+  for (const scope of document.querySelectorAll<HTMLElement>(args.scopes)) {
+    const story =
+      scope.closest<HTMLElement>(".cawco-frame")?.dataset.cawcoStory ??
+      scope.getAttribute("aria-label") ??
+      (scope.id || scope.localName);
     // The canvas's own zoom on a frame wider than the embed: rects are
     // undone by it, radii are never zoomed.
-    const zoom = body.getBoundingClientRect().width / body.offsetWidth || 1;
-    for (const inner of body.querySelectorAll<HTMLElement>("*")) {
+    const zoom = scope.getBoundingClientRect().width / scope.offsetWidth || 1;
+    for (const inner of scope.querySelectorAll<HTMLElement>("*")) {
       const outer =
         inner instanceof SVGElement || !shown(inner)
           ? null
-          : holderOf(inner, body);
+          : holderOf(inner, scope);
       // A surface: rounded, or drawing something (a hit area draws nothing).
       if (outer && (rounded(radii(inner)) || paints(inner))) {
         pairs.push(...cornersOf(outer, inner, zoom, story));
@@ -385,6 +441,23 @@ async function inkWidth(page: Page, selector: string, scale: number) {
   };
 }
 
+/** One check per nested pair (its corners alike said once), and one that there was a pair to read. */
+function holdPairs(kit: Kit, what: string, where: string, pairs: Pair[]) {
+  kit.check(`${what}: holds a nested pair to read`, pairs.length > 0, where);
+  const seen = new Set<string>();
+  for (const pair of pairs) {
+    const line = `${pair.story}: ${pair.outer} ${pair.outerR}px ⊃ ${pair.inner} ${pair.innerR}px, ${pair.gap}px in`;
+    if (!seen.has(line)) {
+      seen.add(line);
+      kit.check(
+        `${what}: outer radius = inner radius + gap (${line})`,
+        Math.abs(pair.outerR - (pair.innerR + pair.gap)) <= RADIUS_SLACK,
+        `${pair.outerR} vs ${pair.innerR} + ${pair.gap} = ${Number((pair.innerR + pair.gap).toFixed(3))} at ${pair.corner}`
+      );
+    }
+  }
+}
+
 const run = async (kit: Kit) => {
   const host = join(APP, ".cawco/stage/host.mjs");
   mkdirSync(join(APP, ".cawco/stage"), { recursive: true });
@@ -418,34 +491,68 @@ const run = async (kit: Kit) => {
     );
     const base = `http://127.0.0.1:${port}`;
 
-    // 1. The Concentric Rule, on every nested pair the four files draw.
+    // 1. The Concentric Rule, on every nested pair the files draw.
     const page = await kit.page("desk", { scale: 1 });
     for (const [what, file] of Object.entries(FILES)) {
       // biome-ignore lint/performance/noAwaitInLoops: one page, each file in turn
       await openFile(page, base, file);
       const pairs = await page.evaluate(nestedPairs, {
-        selector: restBodies(file),
+        ...SCOPES[what as keyof typeof FILES],
         slack: RADIUS_SLACK,
       });
-      kit.check(
-        `1 ${what}: its frames hold a nested pair to read`,
-        pairs.length > 0,
-        file
-      );
-      const seen = new Set<string>();
-      for (const pair of pairs) {
-        const line = `${pair.story}: ${pair.outer} ${pair.outerR}px ⊃ ${pair.inner} ${pair.innerR}px, ${pair.gap}px in`;
-        // One line per pair and radii: its corners alike say it once.
-        if (seen.has(line)) {
-          continue;
-        }
-        seen.add(line);
-        kit.check(
-          `1 ${what}: outer radius = inner radius + gap (${line})`,
-          Math.abs(pair.outerR - (pair.innerR + pair.gap)) <= RADIUS_SLACK,
-          `${pair.outerR} vs ${pair.innerR} + ${pair.gap} = ${Number((pair.innerR + pair.gap).toFixed(3))} at ${pair.corner}`
-        );
+      holdPairs(kit, `1 ${what}`, file, pairs);
+    }
+
+    // 3. The decision-page kit, on its fixture as the hub builds it.
+    const built = await buildDecisionPage(
+      readFileSync(join(DECISION_FIXTURE, "page.html"), "utf8"),
+      {
+        image: () => Promise.resolve(undefined),
+        mockup: (id) =>
+          Promise.resolve(
+            readFileSync(join(DECISION_FIXTURE, `mockups/${id}.html`), "utf8")
+          ),
       }
+    );
+    if ("problem" in built) {
+      kit.check(
+        "3 decision page: the hub builds the fixture",
+        false,
+        built.problem
+      );
+    } else {
+      await page.setContent(built.html, { waitUntil: "load" });
+      const pairs = await page.evaluate(nestedPairs, {
+        own: false,
+        scopes: "main.dp",
+        slack: RADIUS_SLACK,
+      });
+      holdPairs(kit, "3 decision page", "kit/page.css", pairs);
+      // The panes hold the fixture's mockup and code block: each stands
+      // clear of its pane's curve, so no nesting there is read above.
+      const panes = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>(".dp-pane")].map((pane) => {
+          const box = pane.getBoundingClientRect();
+          const last = pane.lastElementChild?.getBoundingClientRect();
+          return {
+            radius: Number.parseFloat(
+              getComputedStyle(pane).borderTopLeftRadius
+            ),
+            foot: last ? Number((box.bottom - last.bottom).toFixed(3)) : -1,
+            side: last ? Number((last.left - box.left).toFixed(3)) : -1,
+          };
+        })
+      );
+      kit.check(
+        "3 decision page: each pane's mockup or code block stands clear of the pane's curve (its padding at least its radius), so whatever corners a mockup draws hold",
+        panes.length === 2 &&
+          panes.every(
+            (pane) =>
+              pane.foot >= pane.radius - RADIUS_SLACK &&
+              pane.side >= pane.radius - RADIUS_SLACK
+          ),
+        JSON.stringify(panes)
+      );
     }
 
     // 2. The grip's stroke at device scale 1 and 3.
