@@ -134,7 +134,7 @@ const spec: Spec = {
       const orch = await fleet.spawn("claude", "Orchestrator", repo, {
         projectId: project.id,
       });
-      const then = await fleet.logs("hub");
+      const then = await fleet.logMark("hub");
       await fleet.send(orch, `${ORCHESTRATE}: delegate the work.`);
       const item = await until(
         "the delegate's item live",
@@ -156,7 +156,7 @@ const spec: Spec = {
       kit.check(
         "(a) a top-level session that delegated ended its turn while its delegate ran, and no turn push went",
         quietPushes === 0 && during?.state === "running",
-        `${quietPushes} turn push(es) in ${QUIET_WATCH_MS / 1000} s after its turn ended, the item ${during?.state}; hub: ${await notifyLines(fleet, orch, then)}`
+        `${quietPushes} turn push(es) in ${QUIET_WATCH_MS / 1000} s after its turn ended, the item ${during?.state}; hub: ${await notifyLines(orch, then)}`
       );
       await until(
         "the delegate's item done",
@@ -190,7 +190,7 @@ const spec: Spec = {
       kit.check(
         "(b) once its delegate reported, the turn that read the report ended with nothing left and pushed once",
         pushes === 1,
-        `${pushes} turn push(es); hub: ${await notifyLines(fleet, orch, then)}`
+        `${pushes} turn push(es); hub: ${await notifyLines(orch, then)}`
       );
       kit.note(`every push the phone took: ${device.ids().join(", ")}`);
     } finally {

@@ -332,7 +332,7 @@ const cutPhase = async (
 ): Promise<void> => {
   const { head, source } = held;
   const { agent, stray } = revived;
-  const lawsBefore = (await fleet.logs("agent")).split(LAW).length - 1;
+  const watched = await fleet.logMark("agent");
   const cut = await callAs(fleet, parent, "delegate", {
     prompt: `${FROM}: finish the commit you start from.`,
     title: "From held probe",
@@ -348,12 +348,12 @@ const cutPhase = async (
     // biome-ignore lint/performance/noAwaitInLoops: watches the agent through its beats
     await Bun.sleep(1000);
   }
-  const laws = (await fleet.logs("agent"))
+  const laws = (await watched.since())
     .split("\n")
     .filter((line) => line.includes(LAW));
   check(
     "(c) through two beats after the cut the agent still runs, and no law line is in its log",
-    agent.exitCode === null && laws.length === lawsBefore,
+    agent.exitCode === null && laws.length === 0,
     `agent ${agent.exitCode === null ? "running" : `exited ${agent.exitCode}`}; ${laws.join(" / ") || "no law line"}`
   );
   const left = await ofWorkspace(fleet, source.id);
@@ -396,7 +396,7 @@ const repairPhase = async (
   source: Workspace,
   agent: ReturnType<KitFleet["launch"]>
 ): Promise<void> => {
-  const lawsBefore = (await fleet.logs("agent")).split(LAW).length - 1;
+  const watched = await fleet.logMark("agent");
   const before = await ofWorkspace(fleet, source.id);
   const stray = await strayIn(fleet, source.path);
   const repaired = `[workspace] ${source.id}: law live-workspace-judge-answers was broken`;
@@ -405,12 +405,12 @@ const repairPhase = async (
     // biome-ignore lint/performance/noAwaitInLoops: watches the agent through its beats
     await Bun.sleep(1000);
   }
-  const log = await fleet.logs("agent");
+  const log = await watched.since();
   const laws = log.split("\n").filter((line) => line.includes(LAW));
   const said = log.split("\n").filter((line) => line.includes(repaired));
   check(
     "(d) with its judge gone under a live process, the agent still runs through two beats and no law line is in its log",
-    agent.exitCode === null && laws.length === lawsBefore,
+    agent.exitCode === null && laws.length === 0,
     `agent ${agent.exitCode === null ? "running" : `exited ${agent.exitCode}`}; ${laws.join(" / ") || "no law line"}`
   );
   const after = await ofWorkspace(fleet, source.id);

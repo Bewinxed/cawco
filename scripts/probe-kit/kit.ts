@@ -221,33 +221,6 @@ function pinnedWebkit(revision: string): string {
   return run;
 }
 
-/**
- * The lines `now` holds that `then` did not: what a role wrote since. A
- * role's log is several files read whole and joined (scratch-fleet.ts
- * `logs`: a launch's `.log` and its `.err`), each growing on its own, so an
- * offset into the join moves with every file before it: on 2026-10-20 the
- * parent's first register, written before the load, read as one inside it
- * once its `.err` ahead of it had grown. Line by line, as many of each as
- * `then` held are taken away.
- */
-export const logSince = (then: string, now: string): string => {
-  const held = new Map<string, number>();
-  for (const line of then.split("\n")) {
-    held.set(line, (held.get(line) ?? 0) + 1);
-  }
-  return now
-    .split("\n")
-    .filter((line) => {
-      const left = held.get(line) ?? 0;
-      if (left === 0) {
-        return true;
-      }
-      held.set(line, left - 1);
-      return false;
-    })
-    .join("\n");
-};
-
 /** A spec: one surface, a short list of assertions on the kit's helpers. */
 export interface Spec {
   /**

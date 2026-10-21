@@ -23,7 +23,7 @@
  */
 import { signal, spawnedPid } from "../../../packages/core/src/signal";
 import { delay, until } from "../../scratch-fleet";
-import { type Kit, logSince, type Spec } from "../kit";
+import type { Kit, Spec } from "../kit";
 import { relay } from "../relay";
 
 const OTHER = "held-requests-other";
@@ -59,10 +59,8 @@ const spec: Spec = {
       signal(pid, frozen ? "SIGSTOP" : "SIGCONT");
     const inspect = () =>
       fleet.api<{ cwd?: string }>(`/api/agents/${OTHER}/inspect`, {});
-    const hubLog = async () => await fleet.logs("hub");
-
     // Back in time.
-    const before = await hubLog();
+    const before = await fleet.logMark("hub");
     freeze(true);
     const asked = Date.now();
     const answer = inspect().then(
@@ -80,7 +78,7 @@ const spec: Spec = {
       got.ok && typeof got.value === "object",
       `${Math.round((Date.now() - asked) / 1000)} s; ${got.ok ? JSON.stringify(got.value).slice(0, 200) : got.error.slice(0, 400)}`
     );
-    const said = logSince(before, await hubLog());
+    const said = await before.since();
     check(
       "the hub sent the held request again on the machine's register",
       said.includes(RESENT),
@@ -126,7 +124,7 @@ const spec: Spec = {
       Boolean,
       60_000
     );
-    const beforeAway = await hubLog();
+    const beforeAway = await fleet.logMark("hub");
     between.cut();
     await delay(500);
     const askedAway = Date.now();
@@ -144,7 +142,7 @@ const spec: Spec = {
     );
     check(
       "the hub sent the request held from its making on the machine's register",
-      logSince(beforeAway, await hubLog()).includes(RESENT)
+      (await beforeAway.since()).includes(RESENT)
     );
     between.stop();
   },

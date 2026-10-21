@@ -358,14 +358,14 @@ const olderFormRestart = async (
     await readFile(accounts, "utf8").catch(() => "[]")
   ) as string[];
   await writeFile(accounts, `${JSON.stringify([...listed, account])}\n`);
-  const before = (await fleet.logs("agent")).split(START_LINE).length;
+  const before = await fleet.logMark("agent");
   await fleet.stop("agent");
   fleet.launch("agent");
   await fleet.agentUp();
   await until(
     "the restarted agent's start-up pass",
-    () => fleet.logs("agent"),
-    (logged) => logged.split(START_LINE).length > before,
+    () => before.since(),
+    (logged) => logged.includes(START_LINE),
     120_000
   );
 };
@@ -736,14 +736,14 @@ const deletedStops = async (
   }
 ): Promise<void> => {
   const folder = await realpath(projectFolderOf(fleet, h.project));
-  const before = (await fleet.logs("agent")).split(START_LINE).length;
+  const before = await fleet.logMark("agent");
   await fleet.stop("agent");
   fleet.launch("agent", [], { CAWCO_NARROW_LOOK_MS: "3600000" });
   await fleet.agentUp();
   await until(
     "the restarted agent's start-up pass",
-    () => fleet.logs("agent"),
-    (logged) => logged.split(START_LINE).length > before,
+    () => before.since(),
+    (logged) => logged.includes(START_LINE),
     120_000
   );
   const from = fleet.seen.length;

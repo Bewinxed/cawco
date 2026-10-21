@@ -32,11 +32,12 @@ import { join } from "node:path";
 import {
   HARNESSES,
   type Harness,
+  type LogMark,
   type Reply,
   type Seen,
   until,
 } from "../../scratch-fleet";
-import { type Kit, type KitFleet, logSince, type Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../kit";
 
 /** How long a background command runs: past the quiet window, then it ends. */
 const BG_SECONDS = 50;
@@ -137,11 +138,10 @@ export type Phone = ReturnType<typeof standInPhone>;
 
 /** The hub's `[notify]` lines about the session since `then`: why a push went or did not. */
 export const notifyLines = async (
-  fleet: KitFleet,
   instanceId: string,
-  then: string
+  then: LogMark
 ): Promise<string> =>
-  logSince(then, await fleet.logs("hub"))
+  (await then.since())
     .split("\n")
     .filter((line) => line.includes(`turn-${instanceId}`))
     .join(" | ");
@@ -232,7 +232,7 @@ const plainLeg = async (
   cwd: string
 ): Promise<void> => {
   const id = await fleet.spawn(harness, `Plain ${harness}`, cwd);
-  const then = await fleet.logs("hub");
+  const then = await fleet.logMark("hub");
   await fleet.send(id, `${plainTag(harness)}: say ok.`);
   await until(
     `${harness}: the plain turn answered`,
@@ -250,7 +250,7 @@ const plainLeg = async (
   kit.check(
     `(d) ${harness}: a plain session's finished turn pushes once`,
     pushes === 1,
-    `${pushes} turn push(es); hub: ${await notifyLines(fleet, id, then)}`
+    `${pushes} turn push(es); hub: ${await notifyLines(id, then)}`
   );
 };
 
@@ -263,7 +263,7 @@ const backgroundLeg = async (
   cwd: string
 ): Promise<void> => {
   const id = await fleet.spawn(harness, `Background ${harness}`, cwd);
-  const then = await fleet.logs("hub");
+  const then = await fleet.logMark("hub");
   await fleet.send(id, `${bgTag(harness)}: start the long command.`);
   const startedAt = Date.now();
   await until(
@@ -286,7 +286,7 @@ const backgroundLeg = async (
   kit.check(
     `(c) ${harness}: its turn ended with its background command running, and no turn push went`,
     quietPushes === 0 && stillRunning,
-    `${quietPushes} turn push(es) in ${QUIET_WATCH_MS / 1000} s after its turn ended, ${((Date.now() - startedAt) / 1000).toFixed(0)} s into a ${BG_SECONDS} s command (turn ended ${((restedAt - startedAt) / 1000).toFixed(0)} s in); hub: ${await notifyLines(fleet, id, then)}`
+    `${quietPushes} turn push(es) in ${QUIET_WATCH_MS / 1000} s after its turn ended, ${((Date.now() - startedAt) / 1000).toFixed(0)} s into a ${BG_SECONDS} s command (turn ended ${((restedAt - startedAt) / 1000).toFixed(0)} s in); hub: ${await notifyLines(id, then)}`
   );
   const pushes = await until(
     `${harness}: the push after the background command ended`,
@@ -300,7 +300,7 @@ const backgroundLeg = async (
   kit.check(
     `(c) ${harness}: once its command ended, the turn that ended with nothing left pushed once`,
     pushes === 1,
-    `${pushes} turn push(es); ${woke} request(s) of its conversation; hub: ${await notifyLines(fleet, id, then)}`
+    `${pushes} turn push(es); ${woke} request(s) of its conversation; hub: ${await notifyLines(id, then)}`
   );
 };
 
@@ -316,7 +316,7 @@ const restartLeg = async (
   cwd: string
 ): Promise<void> => {
   const id = await fleet.spawn("opencode", "Restart opencode", cwd);
-  const then = await fleet.logs("hub");
+  const then = await fleet.logMark("hub");
   await fleet.send(id, `${RESTART_TAG}: start the long command.`);
   const startedAt = Date.now();
   await until(
@@ -347,7 +347,7 @@ const restartLeg = async (
   kit.check(
     "(e) opencode: after an agent restart, its turn ended with its background command running, and no turn push went",
     quietPushes === 0 && elapsed < RESTART_SECONDS,
-    `${quietPushes} turn push(es) by ${elapsed.toFixed(0)} s into a ${RESTART_SECONDS} s command (the turn after the restart ended ${((restedAt - startedAt) / 1000).toFixed(0)} s in); hub: ${await notifyLines(fleet, id, then)}`
+    `${quietPushes} turn push(es) by ${elapsed.toFixed(0)} s into a ${RESTART_SECONDS} s command (the turn after the restart ended ${((restedAt - startedAt) / 1000).toFixed(0)} s in); hub: ${await notifyLines(id, then)}`
   );
   const pushes = await until(
     "(e) the push after the command ended",
@@ -358,7 +358,7 @@ const restartLeg = async (
   kit.check(
     "(e) opencode: once its command ended, the turn that ended with nothing left pushed once",
     pushes === 1,
-    `${pushes} turn push(es); hub: ${await notifyLines(fleet, id, then)}`
+    `${pushes} turn push(es); hub: ${await notifyLines(id, then)}`
   );
 };
 
@@ -393,7 +393,7 @@ const downLeg = async (
   // Any push for a turn the agent missed lands before the count starts.
   await Bun.sleep(QUIET_WATCH_MS);
   const before = await phone.turns(id);
-  const then = await fleet.logs("hub");
+  const then = await fleet.logMark("hub");
   await fleet.send(id, `${AFTER_DOWN_TAG}: say ok.`);
   await until(
     "(f) the turn after the restart answered",
@@ -413,7 +413,7 @@ const downLeg = async (
   kit.check(
     "(f) opencode: its command ended while the agent was down, and its turn after the restart pushed once",
     pushes === 1,
-    `${pushes} turn push(es) for the turn after the restart; hub: ${await notifyLines(fleet, id, then)}`
+    `${pushes} turn push(es) for the turn after the restart; hub: ${await notifyLines(id, then)}`
   );
 };
 

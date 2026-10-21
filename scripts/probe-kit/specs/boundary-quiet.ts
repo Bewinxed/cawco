@@ -425,14 +425,14 @@ const serving = async (
 
 /** Restarts the agent; answers its start-up pass's line once it is logged. */
 const restart = async (fleet: Fleet): Promise<string> => {
-  const before = (await fleet.logs("agent")).split(START_LINE).length;
+  const before = await fleet.logMark("agent");
   await fleet.stop("agent");
   fleet.launch("agent");
   await fleet.agentUp();
   const log = await until(
     "the restarted agent's start-up pass",
-    () => fleet.logs("agent"),
-    (logged) => logged.split(START_LINE).length > before,
+    () => before.since(),
+    (logged) => logged.includes(START_LINE),
     120_000
   );
   return log.slice(log.lastIndexOf(START_LINE)).split("\n")[0] ?? "";

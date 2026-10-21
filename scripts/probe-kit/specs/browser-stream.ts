@@ -83,7 +83,7 @@ import {
   STREAM_RELAY_PORTS,
   streamRelayUrls,
 } from "../../../packages/core/src/stream-relay";
-import { until } from "../../scratch-fleet";
+import { type LogMark, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 import {
   freeStandIn,
@@ -453,21 +453,12 @@ const browserOf = async (
   return listed.find((one) => one.kind === "browser")?.id;
 };
 
-/** How many times the agent's logs, every file of every launch, say `line`. */
-const said = async (fleet: KitFleet, line: string): Promise<number> =>
-  (await fleet.logs("agent")).split(line).length - 1;
-
-/**
- * The agent's logs say `line` more than the `before` times they had. Counted,
- * not read from an offset: `fleet.logs` joins a launch's `.err` and `.log`
- * in the order the directory lists them, so a line the `.log` gains can land
- * before an offset taken in the text joined.
- */
-const saidAgain = (fleet: KitFleet, line: string, before: number) =>
+/** The agent's logs say `line` since `before` ({@link LogMark}). */
+const saidAgain = (line: string, before: LogMark) =>
   until(
     `the agent's log says "${line}" again`,
-    () => said(fleet, line),
-    (times) => times > before,
+    () => before.since(),
+    (since) => since.includes(line),
     30_000
   ).then(
     () => true,
@@ -804,7 +795,7 @@ const countLeg = async (
 ): Promise<void> => {
   const openLine = `${key}: the hub counts 1 view`;
   const closeLine = `${key}: the hub counts 0 views`;
-  const openedBefore = await said(fleet, openLine);
+  const openedBefore = await fleet.logMark("agent");
   await page.evaluate((at: string) => {
     const socket = new WebSocket(at);
     (window as unknown as { probeView: WebSocket }).probeView = socket;
@@ -812,12 +803,12 @@ const countLeg = async (
       socket.onmessage = () => opened();
     });
   }, url);
-  const one = await saidAgain(fleet, openLine, openedBefore);
-  const closedBefore = await said(fleet, closeLine);
+  const one = await saidAgain(openLine, openedBefore);
+  const closedBefore = await fleet.logMark("agent");
   await page.evaluate(() =>
     (window as unknown as { probeView: WebSocket }).probeView.close()
   );
-  const none = await saidAgain(fleet, closeLine, closedBefore);
+  const none = await saidAgain(closeLine, closedBefore);
   kit.check(
     `viewers counted: open → browser.viewers ${one ? 1 : "?"}, close → ${none ? 0 : "?"}`,
     one && none

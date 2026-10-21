@@ -282,9 +282,7 @@ const statusReads = (
     }
     const last = counts.at(-1);
     if (!(sync || last === undefined)) {
-      last.evicted += Number(
-        line.includes("location evicted by fleet MCP status")
-      );
+      last.evicted += Number(line.includes(EVICTED));
       last.published += Number(
         line.includes('"type":"config-convergence","state":"applied"')
       );
@@ -322,25 +320,7 @@ const waitsForSignIn = async (
   };
   const docs = mcpOauthMock([DOCS_TOOL]);
   try {
-    // Counted, never sliced at an offset: the agent's log is its `.log` and
-    // `.err` joined in no fixed order (scratch-fleet.ts `logs`), so an
-    // offset moves as the first of them grows.
-    const evictions = async () =>
-      (await fleet.logs("agent"))
-        .split("\n")
-        .filter((line) =>
-          line.includes("location evicted by fleet MCP status")
-        );
-    const readsAgain = async () =>
-      (await fleet.logs("agent"))
-        .split("\n")
-        .filter(
-          (line) =>
-            line.includes(DOCS) &&
-            (line.includes("fleet MCP read again later") ||
-              line.includes("OpenCode held it failed"))
-        );
-    const evictedBefore = (await evictions()).length;
+    const added = await fleet.logMark("agent");
     const putDocs = await fetch(`${fleet.base}/api/fleet/mcp/${DOCS}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
@@ -374,8 +354,14 @@ const waitsForSignIn = async (
     );
 
     await Bun.sleep(QUIET_MS);
-    const evicted = (await evictions()).slice(evictedBefore);
-    const again = await readsAgain();
+    const during = (await added.since()).split("\n");
+    const evicted = during.filter((line) => line.includes(EVICTED));
+    const again = during.filter(
+      (line) =>
+        line.includes(DOCS) &&
+        (line.includes("fleet MCP read again later") ||
+          line.includes("OpenCode held it failed"))
+    );
     kit.check(
       `from its addition to ${QUIET_MS / 1000} s after it read needs-auth, ${evicted.length} location eviction(s) by fleet MCP status, the sync's own read of ${FLEET} at most, and nothing read or started ${DOCS} again (${again.length}); the row still reads ${docsStates()}`,
       evicted.length <= 1 &&
@@ -814,7 +800,7 @@ const run = async (kit: Kit): Promise<void> => {
         "[fleet] sync from the hub",
         '"state":"applied"',
         "fleet MCP pass: generation",
-        "location evicted by fleet MCP status",
+        EVICTED,
         "fleet MCP read again later",
       ].some((mark) => line.includes(mark))
     )

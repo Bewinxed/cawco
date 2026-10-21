@@ -44,7 +44,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import { type Kit, logSince, type Spec } from "../kit";
+import type { Kit, Spec } from "../kit";
 import { relay } from "../relay";
 
 const TAG = "PROBE-LINK-LOAD";
@@ -233,9 +233,9 @@ const spec: Spec = {
     const { check } = kit;
     const { fleet, between, other, parent, src } = await setUp(kit);
     const before = {
-      agent: await fleet.logs("agent"),
-      hub: await fleet.logs("hub"),
-      other: await other.logs(),
+      agent: await fleet.logMark("agent"),
+      hub: await fleet.logMark("hub"),
+      other: await other.logMark(),
     };
     const inputs = await writeInputs(join(fleet.sandbox, "parent-files"));
 
@@ -331,9 +331,9 @@ const spec: Spec = {
       `${listed.size} of ${LANES} lanes listed ${INPUTS} inputs`
     );
 
-    const agentLog = logSince(before.agent, await fleet.logs("agent"));
-    const hubLog = logSince(before.hub, await fleet.logs("hub"));
-    const otherLog = logSince(before.other, await other.logs());
+    const agentLog = await before.agent.since();
+    const hubLog = await before.hub.since();
+    const otherLog = await before.other.since();
     const drops = saying(agentLog, DROPS);
     check(
       "the parent's machine never drops its link to the hub",

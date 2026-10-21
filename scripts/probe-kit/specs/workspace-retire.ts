@@ -1199,23 +1199,24 @@ const huskPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   // unarmed for a session there. Its line, counted per launch, is the pass
   // done; no boundary of the three running after it is each known gone.
   const PASS_DONE = "[workspace] boundary hooks written for ";
+  const restarted = await fleet.logMark("agent");
+  /** The start-up passes the agent said were done since the restart. */
   const passes = async () =>
-    (await fleet.logs("agent")).split(PASS_DONE).length - 1;
-  const passesBefore = await passes();
+    (await restarted.since()).split(PASS_DONE).length - 1;
   await fleet.stop("agent");
   fleet.launch("agent");
   await fleet.agentUp();
   const passesAfter = await until(
     "the restarted agent's start-up pass done",
     passes,
-    (count) => count > passesBefore,
+    (count) => count > 0,
     60_000
   ).catch(passes);
   const running = await boundaries();
   check(
     "(f) after an agent restart, its start-up pass done, none of the three has a boundary and nothing is at any of their paths",
-    passesAfter > passesBefore && running.length === 0 && at().length === 0,
-    `start-up passes logged: ${passesBefore} before, ${passesAfter} after; boundaries: ${running.join(", ") || "none"}; something at: ${at().join(", ") || "none"}`
+    passesAfter > 0 && running.length === 0 && at().length === 0,
+    `start-up passes logged since the restart: ${passesAfter}; boundaries: ${running.join(", ") || "none"}; something at: ${at().join(", ") || "none"}`
   );
 
   await makeHusk(wg.path);

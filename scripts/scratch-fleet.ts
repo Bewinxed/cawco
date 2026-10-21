@@ -36,7 +36,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir, platform } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import { parseProcId } from "../packages/agent/src/proc-id";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { readWithin } from "../packages/core/src/bounded";
@@ -1419,12 +1419,68 @@ const serviceSpawn = (
     }
   );
 
+/** A launch's two log files, in the order a role's are read: its stdout's, then its stderr's. */
+const LOG_EXTENSIONS = [".log", ".err"];
+
+/**
+ * Where each of a role's log files stood when it was taken. A role's log is
+ * several files, each growing on its own, so a point in it is one length per
+ * file, never one offset into their join, which moves as an earlier file
+ * grows (a launch's `.err` before its `.log`).
+ */
+export interface LogMark {
+  /** What each file has gained since the mark, and any file made since, in the order the role's are read. */
+  since: () => Promise<string>;
+}
+
+/** `files` read and joined, each from its length in `from` (none: whole). */
+const readLogs = async (
+  files: readonly string[],
+  from: ReadonlyMap<string, number> = new Map()
+): Promise<string> =>
+  (
+    await Promise.all(
+      files.map(async (file) =>
+        (
+          await Bun.file(file)
+            .text()
+            .catch(() => "")
+        ).slice(from.get(file) ?? 0)
+      )
+    )
+  ).join("\n");
+
+/** A {@link LogMark} on the files `list` names now; a file it names later is read whole. */
+const markLogs = async (
+  list: () => Promise<readonly string[]>
+): Promise<LogMark> => {
+  const files = await list();
+  const lengths = new Map(
+    await Promise.all(
+      files.map(
+        async (file) =>
+          [
+            file,
+            (
+              await Bun.file(file)
+                .text()
+                .catch(() => "")
+            ).length,
+          ] as const
+      )
+    )
+  );
+  return { since: async () => await readLogs(await list(), lengths) };
+};
+
 /** A machine `launchMachine` added to the fleet. */
 export interface Machine {
   agent: ReturnType<typeof Bun.spawn>;
   /** Its agent's and sessiond's environment. */
   env: Record<string, string>;
   home: string;
+  /** Where its agent's and sessiond's logs stand now ({@link LogMark}). */
+  logMark: () => Promise<LogMark>;
   /** Its agent's and sessiond's stdout and stderr so far, read whole. */
   logs: () => Promise<string>;
   machineId: string;
@@ -1980,20 +2036,24 @@ async function standUp(
     signalPid(pid, frozen ? "SIGSTOP" : "SIGCONT");
     console.log(`… ${role} (pid ${pid}) ${frozen ? "frozen" : "thawed"}`);
   };
-  /** The log files a role's launches wrote so far, read whole, oldest first. */
-  const logs = async (role: Role): Promise<string> => {
-    const files = (await readdir(sandbox))
+  /** A role's log files, oldest launch first, each launch's `.log` before its `.err`. */
+  const logFiles = async (role: Role): Promise<string[]> =>
+    (await readdir(sandbox))
       .filter((file) => file.startsWith(`${role}-`))
       .sort(
         (a, b) =>
           Number(a.split("-")[1]?.split(".")[0]) -
-          Number(b.split("-")[1]?.split(".")[0])
-      );
-    const texts = await Promise.all(
-      files.map((file) => Bun.file(join(sandbox, file)).text())
-    );
-    return texts.join("\n");
-  };
+            Number(b.split("-")[1]?.split(".")[0]) ||
+          LOG_EXTENSIONS.indexOf(extname(a)) -
+            LOG_EXTENSIONS.indexOf(extname(b))
+      )
+      .map((file) => join(sandbox, file));
+  /** The log files a role's launches wrote so far, read whole, in {@link logFiles}' order. */
+  const logs = async (role: Role): Promise<string> =>
+    await readLogs(await logFiles(role));
+  /** Where each of a role's log files stands now: what its {@link LogMark.since} reads after. */
+  const logMark = async (role: Role): Promise<LogMark> =>
+    await markLogs(() => logFiles(role));
   /** Every descendant of `pid`, read from /proc (on macOS, from `pgrep -P`: a workspace boundary refuses setuid `ps`). */
   const descendants = async (pid: number): Promise<number[]> => {
     if (process.platform === "darwin") {
@@ -2627,6 +2687,9 @@ async function standUp(
       `${machineId}'s agent online with custody and its reports`,
       machineId
     );
+    const machineLogs = ["agent", "sessiond"].flatMap((role) =>
+      LOG_EXTENSIONS.map((ext) => join(sandbox, `${machineId}-${role}${ext}`))
+    );
     return {
       machineId,
       home: machineHome,
@@ -2634,18 +2697,8 @@ async function standUp(
       env: machineEnv,
       agent: agent.child,
       sessiond: sessiond.child,
-      logs: async () =>
-        (
-          await Promise.all(
-            ["agent", "sessiond"].flatMap((role) =>
-              ["log", "err"].map((ext) =>
-                Bun.file(join(sandbox, `${machineId}-${role}.${ext}`))
-                  .text()
-                  .catch(() => "")
-              )
-            )
-          )
-        ).join("\n"),
+      logs: async () => await readLogs(machineLogs),
+      logMark: async () => await markLogs(async () => machineLogs),
     };
   };
   const sessiondUp = () =>
@@ -2890,6 +2943,7 @@ async function standUp(
     stop,
     freeze,
     logs,
+    logMark,
     killTree,
     killSessiond,
     sessionPid,
