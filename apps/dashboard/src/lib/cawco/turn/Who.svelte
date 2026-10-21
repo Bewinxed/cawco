@@ -24,6 +24,7 @@
    * 3px from the other and read visibly off-centre. 18 − 12 = 6 splits 3/3.
    */
   import { IconAgent, IconUser } from "#lib/icons.js";
+  import { formatAgeShort } from "#lib/utils/time.js";
   import { useVoice } from "./voice";
 
   let {
@@ -33,6 +34,7 @@
     timestamp,
     note,
     live = false,
+    shown = false,
   }: {
     you?: boolean;
     /**
@@ -56,6 +58,13 @@
      * the reader hovers for, this is the row's whole status.
      */
     note?: string;
+    /**
+     * The clock stands at rest and says the turn's age ("2h"), the string a
+     * list row says for the same moment: in a short thread (a pin's, a Caw
+     * thread of two turns, a quoted turn) when each turn was is a fact the
+     * reader needs without asking for it.
+     */
+    shown?: boolean;
   } = $props();
 
   /** Who answers here, when a pane says (a project's Caw): its face is the mark. */
@@ -64,7 +73,12 @@
   /** A transcript may arrive with its timestamp already serialised to a string. */
   const at = $derived(timestamp ? new Date(timestamp) : null);
   const validAt = $derived(at && !Number.isNaN(at.getTime()) ? at : null);
-  const clock = $derived(validAt ? CLOCK.format(validAt) : "");
+  const clock = $derived.by(() => {
+    if (!validAt) {
+      return "";
+    }
+    return shown ? formatAgeShort(validAt.getTime()) : CLOCK.format(validAt);
+  });
 </script>
 
 <!-- The speaker line arrives with its row: it moves with the row's own
@@ -127,7 +141,8 @@
     <time
       data-slot="when"
       data-after-note={note || undefined}
-      class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out data-after-note:ms-0"
+      data-shown={shown || undefined}
+      class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 data-shown:opacity-100 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out data-after-note:ms-0"
       datetime={validAt.toISOString()}>{clock}</time
     >
   {/if}

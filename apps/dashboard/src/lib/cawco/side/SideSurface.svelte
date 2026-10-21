@@ -103,8 +103,8 @@
     /** What the card holds, its hook (`data-side-card`): the pane's own name. */
     of?: "preview" | "task" | "file" | "plan";
     /**
-     * A page's mode in the well (the preview's): Comment and Draw turn the
-     * well's own border the accent, inside its box, never a second ring;
+     * A page's mode in the well (the preview's): Comment and Draw mark the
+     * well's edge with a 1px seam inside its box, never a second ring;
      * Interact leaves it as the page's own. None: the well has no ring.
      */
     mode?: "interact" | "comment" | "draw";
