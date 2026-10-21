@@ -32,7 +32,9 @@ import {
   deviceDocName,
   RESYNC_MS,
   reopenStalled,
+  type StallWatch,
   tendDeviceDocs,
+  watchSilence,
 } from "@cawco/core/doc-link";
 import { IndexeddbPersistence } from "y-indexeddb";
 import { WebsocketProvider } from "y-websocket";
@@ -78,6 +80,12 @@ export type State = Record<string, ChoiceEntry>;
  */
 export interface Link {
   error: string | null;
+  /**
+   * Lost to silence (core doc-link.ts `watchSilence`): its socket heard
+   * nothing for `SILENT_MS`, so the host says it at once, the silence its
+   * grace. Kept through the closes that follow until it syncs again.
+   */
+  silent: boolean;
   state: "connecting" | "synced" | "lost";
 }
 
@@ -181,6 +189,8 @@ export interface ArtifactGlobal {
 let watchers: Watchers | null = null;
 let doc = new Doc();
 let provider: WebsocketProvider | null = null;
+/** {@link provider}'s silence watch (core doc-link.ts `watchSilence`), stopped with it. */
+let quiet: StallWatch | null = null;
 /** The doc kept on the device, once the artifact is joined. */
 let kept: IndexeddbPersistence | null = null;
 /** The device gave the doc marks back (a reload while they hadn't reached the hub): their pictures are drawn once it syncs. */
@@ -193,7 +203,7 @@ let seededKind: ArtifactRef["kind"] | null = null;
 let syncPath: string | null = null;
 const holders = new Set<(hold: ArtifactHold) => void>();
 let generation = 0;
-let link: Link = { state: "connecting", error: null };
+let link: Link = { state: "connecting", error: null, silent: false };
 /** The doc has synced with the hub since it was joined. */
 let everSynced = false;
 /** A lost link has stood {@link LOST_REFUSES_MS}. */
@@ -214,8 +224,18 @@ const handed = () => {
   }
 };
 
-/** The link moved: the holders and the host hear it; a lost one refuses once it has stood {@link LOST_REFUSES_MS}. */
-const linked = (next: Link) => {
+/**
+ * The link moved: the holders and the host hear it; a lost one refuses once
+ * it has stood {@link LOST_REFUSES_MS}. A link lost to silence stays silent
+ * through the closes after it, until it is no longer lost.
+ */
+const linked = (said: Omit<Link, "silent"> & { silent?: boolean }) => {
+  const next: Link = {
+    ...said,
+    silent:
+      said.state === "lost" &&
+      (said.silent === true || (link.state === "lost" && link.silent)),
+  };
   if (next.state === "synced") {
     everSynced = true;
   }
@@ -230,7 +250,11 @@ const linked = (next: Link) => {
       handed();
     }, LOST_REFUSES_MS);
   }
-  if (next.state === link.state && next.error === link.error) {
+  if (
+    next.state === link.state &&
+    next.error === link.error &&
+    next.silent === link.silent
+  ) {
     return;
   }
   link = next;
@@ -324,6 +348,8 @@ const keepOnDevice = () => {
 
 /** Starts a fresh doc in place of the one held (another artifact's, or one the hub refused); the device keeps the old one's no longer. */
 const replaceDoc = () => {
+  quiet?.stop();
+  quiet = null;
   provider?.destroy();
   provider = null;
   kept = null;
@@ -372,6 +398,17 @@ const connect = () => {
     state: link.state === "lost" ? "lost" : "connecting",
     error: link.error,
   });
+  // An open socket silent for core `SILENT_MS` is lost now, the host told
+  // to say so at once; the watch opens it again.
+  quiet?.stop();
+  const silence = watchSilence(own, () => {
+    linked({
+      state: "lost",
+      error: `Its link to ${location.host} stopped answering`,
+      silent: true,
+    });
+  });
+  quiet = silence;
   // An attempt that never opens is tried again (core doc-link.ts); the
   // second in a row that never opened says the link is lost.
   const stalls = reopenStalled(own, (inRow) => {
@@ -399,7 +436,7 @@ const connect = () => {
     }
   });
   own.on("connection-close", (event) => {
-    if (own !== provider || stalls.reopening()) {
+    if (own !== provider || stalls.reopening() || silence.reopening()) {
       return;
     }
     // The artifact was removed: nothing of it is kept on the device.

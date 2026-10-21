@@ -10,7 +10,9 @@
  * WebKit sends the upgrade itself, its URL absolute. Either way a spec
  * names a socket by its path. Every tunnel that carries no byte either way
  * for `idleMs` is cut, both ends at once and with no close frame, so the
- * page reads 1006, as it does from a proxy's drop. Plain requests are
+ * page reads 1006, as it does from a proxy's drop. A tunnel the spec
+ * stalls carries nothing either way and is never closed, as a dropped
+ * network or a sleeping laptop leaves an open socket. Plain requests are
  * passed on as they are.
  */
 import http from "node:http";
@@ -21,6 +23,8 @@ interface Tunnel {
   client: net.Socket;
   last: number;
   path: string | null;
+  /** Carrying nothing either way, never cut for idling, its upstream's close kept from the page. */
+  stalled: boolean;
   target: string;
   upstream: net.Socket;
 }
@@ -32,6 +36,13 @@ export interface IdleProxy {
   idleCuts: () => string[];
   /** While set, a new tunnel whose upgrade's path `matches` is cut before it reaches the hub (a link that doesn't come back); null lets them through. */
   refuse: (matches: ((path: string) => boolean) | null) => void;
+  /**
+   * While set, every tunnel whose upgrade's path `matches`, open now or
+   * opened later, stops carrying bytes and is never closed: a link gone
+   * silent. Null forwards again, the stalled tunnels cut as a network that
+   * comes back resets the connections that died on it. The count stalled now.
+   */
+  stall: (matches: ((path: string) => boolean) | null) => number;
   stop: () => void;
   /** The paths of the tunnels open now. */
   tunnels: () => string[];
@@ -48,6 +59,7 @@ export async function idleProxy(idleMs: number): Promise<IdleProxy> {
   const open = new Set<Tunnel>();
   const idleCuts: string[] = [];
   let refusing: ((path: string) => boolean) | null = null;
+  let stalling: ((path: string) => boolean) | null = null;
   const cut = (tunnel: Tunnel) => {
     open.delete(tunnel);
     tunnel.client.destroy();
@@ -91,9 +103,14 @@ export async function idleProxy(idleMs: number): Promise<IdleProxy> {
       target: `${host}:${hostPort}`,
       path,
       last: Date.now(),
+      stalled: path !== null && stalling?.(path) === true,
     };
     open.add(made);
-    upstream.on("connect", () => opened(upstream));
+    upstream.on("connect", () => {
+      if (!made.stalled) {
+        opened(upstream);
+      }
+    });
     wire(made);
   };
   // Chromium and Firefox send a `ws://` socket as a CONNECT tunnel.
@@ -189,27 +206,40 @@ export async function idleProxy(idleMs: number): Promise<IdleProxy> {
           cut(tunnel);
           return;
         }
+        tunnel.stalled = stalling?.(tunnel.path) === true;
       }
-      upstream.write(chunk);
+      if (!tunnel.stalled) {
+        upstream.write(chunk);
+      }
     });
     upstream.on("data", (chunk: Buffer) => {
       tunnel.last = Date.now();
-      client.write(chunk);
+      if (!tunnel.stalled) {
+        client.write(chunk);
+      }
     });
     const end = () => {
       if (open.has(tunnel)) {
         cut(tunnel);
       }
     };
+    // A stalled tunnel's far end closing never reaches the page: the network between is dead.
+    const upstreamEnd = () => {
+      if (tunnel.stalled) {
+        upstream.destroy();
+        return;
+      }
+      end();
+    };
     client.on("close", end);
-    upstream.on("close", end);
+    upstream.on("close", upstreamEnd);
     client.on("error", end);
-    upstream.on("error", end);
+    upstream.on("error", upstreamEnd);
   }
   const sweep = setInterval(() => {
     const now = Date.now();
     for (const tunnel of open) {
-      if (now - tunnel.last > idleMs) {
+      if (!tunnel.stalled && now - tunnel.last > idleMs) {
         idleCuts.push(tunnel.path ?? tunnel.target);
         cut(tunnel);
       }
@@ -238,6 +268,21 @@ export async function idleProxy(idleMs: number): Promise<IdleProxy> {
     idleCuts: () => [...idleCuts],
     refuse: (matches) => {
       refusing = matches;
+    },
+    stall: (matches) => {
+      stalling = matches;
+      let count = 0;
+      for (const tunnel of [...open]) {
+        if (matches === null) {
+          if (tunnel.stalled) {
+            cut(tunnel);
+          }
+        } else if (tunnel.path !== null && matches(tunnel.path)) {
+          tunnel.stalled = true;
+          count += 1;
+        }
+      }
+      return count;
     },
     tunnels: () =>
       [...open].map((tunnel) => tunnel.path ?? `(${tunnel.target})`),

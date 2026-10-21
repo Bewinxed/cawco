@@ -368,11 +368,12 @@ function post(type: string, payload: object = {}) {
   toHost({ type, ...payload });
 }
 
-/** The doc's link to the hub, to the host (`cawco:sync`): connecting, synced or lost, and why it was lost. */
+/** The doc's link to the hub, to the host (`cawco:sync`): connecting, synced or lost, why it was lost, and whether to silence (said at once). */
 function tellLink(link: Link) {
   post("cawco:sync", {
     state: link.state,
     ...(link.error ? { error: link.error } : {}),
+    ...(link.silent ? { silent: true } : {}),
   });
 }
 

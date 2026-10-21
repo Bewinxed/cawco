@@ -887,11 +887,17 @@
   /** The page's doc's link to the hub, as the page says it (`cawco:sync`): what closed it, while it stands lost. */
   let pageLost = $state<string | null>(null);
   const pageIsLost = $derived(pageLost !== null);
-  /** The page's link has stood lost {@link LINK_DOWN_MS} from its first close, whatever each close said. */
+  /** The page's link was lost to silence (overlay artifact.ts `Link.silent`): its silence was the grace. */
+  let pageSilent = $state(false);
+  /** The page's link has stood lost {@link LINK_DOWN_MS} from its first close, whatever each close said, or was lost to silence. */
   let pageDown = $state(false);
   $effect(() => {
     if (!pageIsLost) {
       pageDown = false;
+      return;
+    }
+    if (pageSilent) {
+      pageDown = true;
       return;
     }
     const said = setTimeout(() => {
@@ -902,7 +908,8 @@
   /**
    * The comments aren't reaching the agent: the page's link or the pane's
    * has stood lost {@link LINK_DOWN_MS} (the pane's own is graced in
-   * artifact-doc.ts), so a drop y-websocket reopens says nothing; what
+   * artifact-doc.ts), or fell silent (core doc-link.ts `SILENT_MS`), so a
+   * drop y-websocket reopens says nothing; what
    * closed it, word for word. What the person marks meanwhile is kept on
    * the device (artifact-doc.ts, overlay artifact.ts).
    */
@@ -1186,6 +1193,7 @@
     }
     docSync = { state: "reading" };
     pageLost = null;
+    pageSilent = false;
     pagePins = {};
     pageWords.clear();
     const joined = joinArtifact(
@@ -1885,8 +1893,9 @@
         heardPageWrite(message.type, message);
         break;
       case "cawco:sync":
-        // The page's doc's link to the hub (overlay artifact.ts `Link`): a lost one is said once it has stood.
+        // The page's doc's link to the hub (overlay artifact.ts `Link`): a lost one is said once it has stood, or at once when lost to silence.
         pageLost = message.state === "lost" ? lostWhy(message.error) : null;
+        pageSilent = message.state === "lost" && message.silent === true;
         break;
       case "cawco:press":
         // A press on the page, outside the card: the outside-press rule, heard from the page's own process.

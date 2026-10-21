@@ -51,6 +51,15 @@
  *    minute, under the proxy's idle cut, and its 30 s no-message check runs
  *    on the same wake-ups; the hub's beat (artifacts/docs.ts) keeps the
  *    link busy and what it last heard fresh.
+ * 7. A link gone silent (owner, 2026-10-21: DevTools offline kept the
+ *    socket open and the control said nothing for some 50 s): the proxy
+ *    stops forwarding both links and closes neither. A pin tapped and
+ *    written in the silence is kept in the page; the Comments control says
+ *    the comments aren't reaching the agent within 30 s, from the hub's
+ *    missed beats (core doc-link.ts `watchSilence`), not after
+ *    y-websocket's 30 s check and the 15 s grace; forwarding again, it
+ *    clears within 30 s, the words reach the hub, and the session hears
+ *    them once.
  *
  *   bun scripts/probe-kit/run.ts comment-link
  */
@@ -91,6 +100,15 @@ const HIDDEN_MS = 200_000;
 /** Chromium's intensive throttling: a wake-up a minute. */
 const WAKE_MS = 60_000;
 const PIN_WORDS = "Written while the link was down.";
+/** What (7)'s pin says, written while both links are silent. */
+const SILENT_WORDS = "Written while the link was silent.";
+/**
+ * How soon a silent link is said, and said back once forwarding again: the
+ * brief's 30 s, over core doc-link.ts `SILENT_MS` (25 s) and its 1 s read.
+ */
+const SILENT_SAID_MS = 30_000;
+/** The Comments control saying the comments aren't reaching the agent (PreviewPane `linkDown`). */
+const DOWN = `${PANE} button[data-slot="comments"][data-link-down]`;
 /** The comments notice (core injected.ts `artifactCommentsNotice`). */
 const NOTICE =
   /\[CawCo\] The person commented on the page "comment-link" \(artifact [0-9a-f-]{36}\)\./;
@@ -299,8 +317,8 @@ const hubPins = async ({ fleet, id, session }: At) =>
     }>(`/api/instances/${session}/artifacts/comments?artifact=${id}&filter=all`)
   ).artifacts.find((one) => one.id === id)?.pins ?? [];
 
-const withWords = (pins: { thread: { text: string }[] }[]) =>
-  pins.filter((pin) => pin.thread.some((entry) => entry.text === PIN_WORDS));
+const withWords = (pins: { thread: { text: string }[] }[], words = PIN_WORDS) =>
+  pins.filter((pin) => pin.thread.some((entry) => entry.text === words));
 
 /** The dashboard as the owner's machines run it, against `fleet`'s hub: its address, and its end. */
 const servedDashboard = async (kit: Kit, fleet: KitFleet) => {
@@ -361,6 +379,7 @@ const run = async (kit: Kit) => {
     const page = await quiet(at, proxy, silent.port as number);
     await droppedOnceSynced(at, proxy, page);
     await pinnedWhileDown(at, proxy, page);
+    await silentDrop(at, proxy, page);
     await page.close();
     await hiddenTab(at, proxy);
     for (const where of [
@@ -505,8 +524,26 @@ const screenBox = async (page: Page, frame: Frame, selector: string) => {
   return { x: outer.x + inner.x, y: outer.y + inner.y, w: inner.w, h: inner.h };
 };
 
-/** The person taps `#here` with Comment on, as comment-delivery's pins are made: a pin in the page's own doc. */
-const tapPin = async (page: Page, frame: Frame): Promise<void> => {
+/** Whether the page's Comment mode is on. */
+const commenting = (frame: Frame): Promise<boolean> =>
+  frame.evaluate(
+    () =>
+      document
+        .querySelector("cawco-overlay")
+        ?.shadowRoot?.querySelector(".layer")
+        ?.classList.contains("comment") ?? false
+  );
+
+/**
+ * The person taps `#here` with Comment on, `across` its width (each leg its
+ * own spot, off the pins before it), as comment-delivery's pins are made: a
+ * pin in the page's own doc.
+ */
+const tapPin = async (
+  page: Page,
+  frame: Frame,
+  across = 0.3
+): Promise<void> => {
   const comments = page.locator(`${PANE} button[data-slot="comments"]`);
   if ((await comments.getAttribute("aria-expanded")) === "true") {
     await comments.click();
@@ -515,45 +552,41 @@ const tapPin = async (page: Page, frame: Frame): Promise<void> => {
       .waitFor({ state: "detached", timeout: 3000 })
       .catch(() => undefined);
   }
-  await page.locator(`${PANE} button[aria-keyshortcuts='C']`).focus();
-  await page.keyboard.press("c");
+  if (!(await commenting(frame))) {
+    await page.locator(`${PANE} button[aria-keyshortcuts='C']`).focus();
+    await page.keyboard.press("c");
+  }
   await until(
     "the page's Comment mode on",
-    () =>
-      frame.evaluate(
-        () =>
-          document
-            .querySelector("cawco-overlay")
-            ?.shadowRoot?.querySelector(".layer")
-            ?.classList.contains("comment") ?? false
-      ),
+    () => commenting(frame),
     Boolean,
     5000
   );
   await settle(page, 300);
   const b = await screenBox(page, frame, "#here");
-  await page.mouse.click(b.x + b.w * 0.3, b.y + b.h / 2);
+  await page.mouse.click(b.x + b.w * across, b.y + b.h / 2);
 };
 
 /**
- * The tapped pin's card, once it opens, and `PIN_WORDS` written in it; when
+ * The tapped pin's card, once it opens, and `words` written in it; when
  * the card opened and when the words were kept in the page. The pane draws
- * the card from its own doc (PreviewPane `cardPin`), which hears of a pin
- * the page made through the hub alone.
+ * the card from its own doc (PreviewPane `cardPin`), or from the page's pin
+ * while its own doesn't hold it yet.
  */
 const writeWords = async (
   page: Page,
-  frame: Frame
+  frame: Frame,
+  words = PIN_WORDS
 ): Promise<{ cardAt: number; keptAt: number }> => {
   const card = page.locator('[data-slot="pin-card"]').last();
   await card.waitFor({ timeout: 15_000 });
   const cardAt = Date.now();
-  await card.getByRole("textbox").fill(PIN_WORDS);
+  await card.getByRole("textbox").fill(words);
   await card.getByRole("button", { name: "Reply" }).click();
   await until(
     "the pin's words in the page's doc",
     () => pagePins(frame),
-    (pins) => withWords(Object.values(pins)).length === 1,
+    (pins) => withWords(Object.values(pins), words).length === 1,
     5000
   );
   const keptAt = Date.now();
@@ -621,6 +654,111 @@ const pinnedWhileDown = async (at: At, proxy: Proxy, page: Page) => {
   at.kit.check(
     "5: the session hears the pin once",
     deliveries.length === 1 && deliveries[0]?.last.includes(PIN_WORDS) === true,
+    `${deliveries.length} deliveries; ${deliveries.map((one) => one.last.slice(0, 300)).join(" | ")}`
+  );
+};
+
+/**
+ * 7. Both links gone silent, open and unclosed (the proxy stalls them): a
+ * pin tapped and written in the silence, the warning said within
+ * {@link SILENT_SAID_MS}, cleared within it once forwarding again, and the
+ * words heard once.
+ */
+const silentDrop = async (at: At, proxy: Proxy, page: Page) => {
+  const frame = await pageFrame(page);
+  const down = page.locator(DOWN);
+  const before = await until(
+    "both links synced, nothing said",
+    async () => ({ link: await overlayLink(frame), down: await down.count() }),
+    (now) => now.link === "synced" && now.down === 0,
+    30_000
+  ).catch(async () => ({
+    link: await overlayLink(frame),
+    down: await down.count(),
+  }));
+  const heardBefore = heard.length;
+  const t0 = Date.now();
+  const stalled = proxy.stall(
+    (path) => PANE_PATH.test(path) || OVERLAY_PATH.test(path)
+  );
+  let failed = "";
+  await tapPin(page, frame, 0.7).catch((error: unknown) => {
+    failed = `the tap: ${error instanceof Error ? error.message : String(error)}`;
+  });
+  const written = failed
+    ? null
+    : await writeWords(page, frame, SILENT_WORDS).catch((error: unknown) => {
+        failed = `the card: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`;
+        return null;
+      });
+  const writtenMs = written ? written.keptAt - t0 : null;
+  const saidMs = await down
+    .waitFor({
+      timeout: Math.max(1000, t0 + SILENT_SAID_MS + 10_000 - Date.now()),
+    })
+    .then(
+      () => Date.now() - t0,
+      () => null
+    );
+  const onHubWhileSilent = withWords(await hubPins(at), SILENT_WORDS).length;
+  const label = await page
+    .locator(`${PANE} button[data-slot="comments"]`)
+    .getAttribute("aria-label");
+  at.kit.check(
+    `7: both links silent and unclosed (${stalled} stalled), a comment written in the silence, the Comments control says they aren't reaching the agent within ${SILENT_SAID_MS} ms`,
+    before.link === "synced" &&
+      before.down === 0 &&
+      stalled === 2 &&
+      writtenMs !== null &&
+      saidMs !== null &&
+      writtenMs < saidMs &&
+      saidMs <= SILENT_SAID_MS &&
+      onHubWhileSilent === 0 &&
+      label?.includes("Comments aren't reaching the agent") === true,
+    `before: overlay ${before.link}, warning ${before.down}; words kept in the page ${writtenMs ?? `never (${failed.slice(0, 400)})`} ms in; warning ${saidMs ?? "never"} ms in; words on the hub meanwhile ${onHubWhileSilent}; control ${JSON.stringify(label)}`
+  );
+  const releasedAt = Date.now();
+  proxy.stall(null);
+  const clearedMs = await down
+    .waitFor({ state: "detached", timeout: SILENT_SAID_MS + 10_000 })
+    .then(
+      () => Date.now() - releasedAt,
+      () => null
+    );
+  const linkNow = await until(
+    "the overlay synced again",
+    () => overlayLink(frame),
+    (s) => s === "synced",
+    10_000
+  ).catch(() => overlayLink(frame));
+  const onHub = await until(
+    "the silent pin's words on the hub",
+    async () => withWords(await hubPins(at), SILENT_WORDS),
+    (pins) => pins.length > 0,
+    15_000
+  ).catch(async () => withWords(await hubPins(at), SILENT_WORDS));
+  at.kit.check(
+    `7: forwarding again, the warning clears within ${SILENT_SAID_MS} ms, the overlay syncs, and the words written in the silence reach the hub`,
+    clearedMs !== null &&
+      clearedMs <= SILENT_SAID_MS &&
+      linkNow === "synced" &&
+      onHub.length === 1,
+    `cleared ${clearedMs ?? "never"} ms after forwarding again; overlay ${linkNow}; words on the hub ${onHub.length}`
+  );
+  await until(
+    "the delivery",
+    () => heard.slice(heardBefore).filter((one) => NOTICE.test(one.last)),
+    (got) => got.length > 0,
+    DELIVERY_MS + 10_000
+  ).catch(() => []);
+  await page.waitForTimeout(STILL_MS);
+  const deliveries = heard
+    .slice(heardBefore)
+    .filter((one) => NOTICE.test(one.last) && !one.afterTool);
+  at.kit.check(
+    "7: the session hears the comment written in the silence once",
+    deliveries.length === 1 &&
+      deliveries[0]?.last.includes(SILENT_WORDS) === true,
     `${deliveries.length} deliveries; ${deliveries.map((one) => one.last.slice(0, 300)).join(" | ")}`
   );
 };

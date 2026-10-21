@@ -12,6 +12,7 @@ import {
   RESYNC_MS,
   reopenStalled,
   tendDeviceDocs,
+  watchSilence,
 } from "@cawco/core/doc-link";
 import type { StageState } from "@cawco/core/stage";
 import { IndexeddbPersistence } from "y-indexeddb";
@@ -36,7 +37,9 @@ import { hubRefusal } from "#lib/cawco/hub-read.js";
  * pane's own before its first sync and after it, and the page's
  * (PreviewPane's `pageDown`). y-websocket reopens a dropped socket within
  * 2.5 s, so a drop a reconnect fixes (a proxy's or tunnel's, a hub or
- * dashboard restarting) is over well inside it. Our call.
+ * dashboard restarting) is over well inside it. A link found silent (core
+ * doc-link.ts `watchSilence`) is said at once: its silence was the grace.
+ * Our call.
  */
 export const LINK_DOWN_MS = 15_000;
 
@@ -61,8 +64,8 @@ export interface ArtifactView extends ArtifactChoices {
  * Whether the pane holds the hub's doc yet: `reading` until its first sync
  * lands, `synced` from then on, `failed` before it ever synced when the hub
  * refused the link, or when the link has dropped for {@link LINK_DOWN_MS}
- * with y-websocket reopening it, with why as a sentence of its own; `lost`
- * when it has dropped that long after it, the last good view kept (as the
+ * with y-websocket reopening it or its socket fell silent, with why as a
+ * sentence of its own; `lost` when either happens after it, the last good view kept (as the
  * board does). A sync after either clears it.
  */
 export type DocSync =
@@ -104,9 +107,15 @@ const refusedWhy = ({ code, reason }: { code: number; reason: string }) => {
   return `The hub refused the link (${code}).`;
 };
 
+/** What happens next while the link is down, and the way on. */
+const KEEPS_TRYING = "It keeps trying by itself; Try again tries now.";
+
 /** Why the link is down after {@link LINK_DOWN_MS} of reconnects: the last close's code, or attempts that never opened. */
 const downWhy = (code: number | null): string =>
-  `${code === null ? "The link to the hub didn't open" : `The link to the hub dropped (${code})`} and hasn't come back. It keeps trying by itself; Try again tries now.`;
+  `${code === null ? "The link to the hub didn't open" : `The link to the hub dropped (${code})`} and hasn't come back. ${KEEPS_TRYING}`;
+
+/** Why the link is down when its open socket heard nothing for core `SILENT_MS`. */
+const SILENT_WHY = `The link to the hub stopped answering. ${KEEPS_TRYING}`;
 
 const viewOf = (doc: Doc): ArtifactView => {
   const meta = doc.getMap("meta");
@@ -167,7 +176,8 @@ const REFUSED = 4400;
  * ({@link DocSync}), starting at `reading`. The socket is kept as core
  * doc-link.ts says: y-websocket's resync is its keepalive, a drop is
  * reopened by y-websocket itself and resyncs, an attempt that never opens
- * is tried again. A write of the pane's the hub would not keep closes the
+ * is tried again, and an open socket silent for core `SILENT_MS` is said
+ * down at once and opened again. A write of the pane's the hub would not keep closes the
  * socket with {@link REFUSED}, which y-websocket never reopens: the pane
  * starts again from the hub's doc, as the page's overlay does, and
  * `refused` hears the hub's reason.
@@ -197,6 +207,13 @@ export function joinArtifact(
   const watchStalls = (joined: WebsocketProvider) =>
     reopenStalled(joined, () => dropped(null));
 
+  /** An open socket that heard nothing for core `SILENT_MS`: said at once, the silence its grace; the watch reopens it. */
+  const watchQuiet = (joined: WebsocketProvider) =>
+    watchSilence(joined, () => {
+      clearDown();
+      sayDown(SILENT_WHY);
+    });
+
   const ours = (close: () => void) => {
     closingOurs = true;
     try {
@@ -223,16 +240,20 @@ export function joinArtifact(
     }
     downTimer = setTimeout(() => {
       downTimer = undefined;
-      if (gone) {
-        return;
-      }
-      if (held) {
-        lost = true;
-        synced({ state: "lost", why: downWhy(lastDrop) });
-      } else {
-        synced({ state: "failed", why: downWhy(lastDrop) });
+      if (!gone) {
+        sayDown(downWhy(lastDrop));
       }
     }, LINK_DOWN_MS);
+  }
+
+  /** The link said down now, `why`: `failed` before the first sync, `lost` after it. */
+  function sayDown(why: string) {
+    if (held) {
+      lost = true;
+      synced({ state: "lost", why });
+    } else {
+      synced({ state: "failed", why });
+    }
   }
 
   /**
@@ -256,6 +277,7 @@ export function joinArtifact(
   let kept = keepOnDevice(doc);
   let provider = join(doc);
   let stalls = watchStalls(provider);
+  let quiet = watchQuiet(provider);
 
   function join(into: Doc): WebsocketProvider {
     into.on("update", () => changed(viewOf(into)));
@@ -289,8 +311,9 @@ export function joinArtifact(
         return;
       }
       // y-websocket's own null close is its no-message check on an open
-      // socket: a drop like any other. A stalled attempt's is said by its watch.
-      if (!(closingOurs || stalls.reopening())) {
+      // socket: a drop like any other. A stalled attempt's and a silent
+      // socket's are said by their watches.
+      if (!(closingOurs || stalls.reopening() || quiet.reopening())) {
         dropped(event?.code ?? null);
       }
     });
@@ -313,6 +336,7 @@ export function joinArtifact(
       return;
     }
     stalls.stop();
+    quiet.stop();
     ours(() => provider.destroy());
     const refusedCopy = kept;
     kept = null;
@@ -326,6 +350,7 @@ export function joinArtifact(
           kept = keepOnDevice(fresh);
           provider = join(fresh);
           stalls = watchStalls(provider);
+          quiet = watchQuiet(provider);
         }
       });
   }
@@ -347,6 +372,7 @@ export function joinArtifact(
       gone = true;
       clearDown();
       stalls.stop();
+      quiet.stop();
       ours(() => provider.destroy());
       doc.destroy();
     },
