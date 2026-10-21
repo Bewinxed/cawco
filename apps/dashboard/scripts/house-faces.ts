@@ -1,7 +1,7 @@
 /**
  * The house faces as every CawCo web surface serves them (core
  * house-faces.ts): each face's woff2 pieces, cut from the repository's own
- * Figtree and JetBrains Mono, and a rule per piece, written into
+ * Figtree, JetBrains Mono and Nunito, and a rule per piece, written into
  * `src/house-faces/` (git-ignored), which app.css imports as `faces.css`.
  * Written only where a file differs, so a dev server's restart reloads
  * nothing.

@@ -69,10 +69,13 @@ const devHub = (): URL => {
  * after the first paint re-sets every line in it: with the font 600ms late,
  * the phone board re-wrapped and moved 20px (0.027 CLS), and no fallback
  * face matches the UI face's widths. app.html starts their decode before
- * the body is parsed. Every other asset keeps Vite's limit: the other
- * pieces and Fredoka load by URL when a page draws them.
+ * the body is parsed. No other font is inlined, whatever its size: the
+ * other pieces, Fredoka and KaTeX's load by URL when a page draws them
+ * (under Vite's 4 KB default, Fredoka's 2.7 KB rode in every page's
+ * stylesheet). Every other asset keeps Vite's limit.
  */
 const firstPaint = new Set<string>();
+const FONT_FILE = /\.(?:woff2?|ttf|otf)$/;
 
 const houseFaces = (): Plugin => ({
   name: "cawco:house-faces",
@@ -95,13 +98,13 @@ const houseFaces = (): Plugin => ({
  * package from one shared store (`…/links/<pkg>@<version>-<hash>/node_modules/
  * <pkg>`), outside the clone, so the faces app.css names answered 403 and the
  * page drew in the fallback face. The store is read off where the dashboard's
- * own face package (Nunito's) resolves; in a normal checkout that is `node_modules/.bun`
+ * own face package (Fredoka's) resolves; in a normal checkout that is `node_modules/.bun`
  * under the workspace root, already allowed, and nothing is added.
  */
 const SERVED_DIRS = (() => {
   const workspaceRoot = searchForWorkspaceRoot(process.cwd());
   const face = realpathSync(
-    join(import.meta.dirname, "node_modules/@fontsource-variable/nunito")
+    join(import.meta.dirname, "node_modules/@fontsource/fredoka")
   );
   const linkDir = face.slice(0, face.lastIndexOf("/node_modules/"));
   const store = dirname(linkDir);
@@ -490,7 +493,8 @@ export default defineConfig(({ command }) => {
      */
     build: {
       cssTarget: CSS_TARGET,
-      assetsInlineLimit: (file) => firstPaint.has(file) || undefined,
+      assetsInlineLimit: (file) =>
+        firstPaint.has(file) || (FONT_FILE.test(file) ? false : undefined),
     },
     /**
      * vaul-svelte imports bits-ui and never declares it
@@ -531,7 +535,6 @@ export default defineConfig(({ command }) => {
       // resolver follows it. Bundled, the server never resolves them at all.
       noExternal: [
         "@fontsource/fredoka",
-        "@fontsource-variable/nunito",
         "@xyflow/svelte",
         "virtua",
         "@hugeicons/svelte",

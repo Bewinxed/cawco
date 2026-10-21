@@ -24,6 +24,14 @@
  *    URL) and fetched by URL (the body's bytes), as NOTE lines; and the
  *    house faces' pieces a first load fetches by URL on the home are none
  *    (their latin pieces are inlined).
+ * 5. Nunito, the wordmark's face, is a house face: on the home's first load
+ *    every Nunito rule's source is a house piece (inlined, or a `face-`
+ *    file), never Fontsource's, it takes at most the 39,128 B Fontsource's
+ *    latin file took, and the sidebar's wordmark ("Caw&Co") measures as
+ *    Nunito, not as its fallback.
+ * 6. The stylesheet inlines the house faces' latin pieces and no other font:
+ *    each house face inlines one piece, and no other face (Fredoka, KaTeX's)
+ *    any, whatever its size.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one surface at a time, as a person opens them
 import { type ChildProcess, spawn } from "node:child_process";
@@ -189,17 +197,24 @@ const pageFonts = (page: Page) =>
 const fontBytes = async (page: Page) => {
   const { rules, resources } = await pageFonts(page);
   const inline: Record<string, number> = {};
+  const inlined: Record<string, number> = {};
+  const sources: Record<string, string[]> = {};
   const byUrl = new Map<string, string>();
   for (const { family: quoted, href, src } of rules) {
     const family = quoted.replaceAll(QUOTES, "");
+    sources[family] ??= [];
     const data = DATA_FONT.exec(src)?.[1];
     if (data) {
       const padding = data.endsWith("==") ? 2 : Number(data.endsWith("="));
       inline[family] = (inline[family] ?? 0) + (data.length * 3) / 4 - padding;
+      inlined[family] = (inlined[family] ?? 0) + 1;
+      sources[family].push("inlined");
       continue;
     }
     for (const [, url] of src.matchAll(URL_IN_SRC)) {
-      byUrl.set(new URL(url ?? "", href).href, family);
+      const at = new URL(url ?? "", href);
+      byUrl.set(at.href, family);
+      sources[family].push(at.pathname);
     }
   }
   const fetched: Record<string, number> = {};
@@ -212,12 +227,58 @@ const fontBytes = async (page: Page) => {
       files.push(`${path} ${bytes}`);
     }
   }
-  return { inline, fetched, files };
+  return { inline, inlined, sources, fetched, files };
 };
 
-const HOUSE = /^(Figtree Variable|JetBrains Mono Variable)$/;
+/**
+ * 5. How the sidebar's wordmark ("Caw&Co") is drawn: its width as laid out
+ * against its width on a canvas in Nunito alone and in its fallback stack
+ * alone, at its own weight, size and tracking.
+ */
+const wordmarkIn = (page: Page) =>
+  page.evaluate(async () => {
+    const mark = [...document.querySelectorAll("span")].find(
+      (span) =>
+        span.textContent === "Caw&Co" &&
+        getComputedStyle(span).fontFamily.includes("Nunito")
+    );
+    if (!mark) {
+      return null;
+    }
+    const style = getComputedStyle(mark);
+    const lead = `${style.fontStyle} ${style.fontWeight} ${style.fontSize}`;
+    await document.fonts.load(`${lead} "Nunito Variable"`, "Caw&Co");
+    const fallback = style.fontFamily
+      .split(",")
+      .map((name) => name.trim())
+      .filter((name) => !name.includes("Nunito"))
+      .join(", ");
+    const context = document.createElement("canvas").getContext("2d");
+    const width = (family: string) => {
+      if (!context) {
+        return -1;
+      }
+      context.font = `${lead} ${family}`;
+      context.letterSpacing = style.letterSpacing;
+      return Math.round(context.measureText("Caw&Co").width * 100) / 100;
+    };
+    const range = document.createRange();
+    range.selectNodeContents(mark);
+    return {
+      family: style.fontFamily,
+      weight: style.fontWeight,
+      check: document.fonts.check(`${lead} "Nunito Variable"`, "Caw&Co"),
+      drawn: Math.round(range.getBoundingClientRect().width * 100) / 100,
+      nunito: width('"Nunito Variable"'),
+      fallback: width(fallback),
+    };
+  });
 
-/** A first load of `url` in a context of its own: the fonts it took, as NOTE lines; the house faces' bytes. */
+const HOUSE = /^(Figtree Variable|JetBrains Mono Variable|Nunito Variable)$/;
+/** What Fontsource's latin Nunito (`nunito-latin-wght-normal.woff2`, 5.3.0) took on a first load. */
+const NUNITO_BEFORE = 39_128;
+
+/** A first load of `url` in a context of its own: the fonts it took, as NOTE lines, and its wordmark as drawn. */
 const firstLoad = async (
   kit: Kit,
   url: string,
@@ -227,7 +288,7 @@ const firstLoad = async (
   const page = await kit.page("desk", { theme: "light" });
   await open(page, url, ready);
   await page.waitForTimeout(1500);
-  const read = await fontBytes(page);
+  const read = { ...(await fontBytes(page)), wordmark: await wordmarkIn(page) };
   const sum = (by: Record<string, number>, ofHouse: boolean) =>
     Object.entries(by)
       .filter(([family]) => HOUSE.test(family) === ofHouse)
@@ -383,8 +444,45 @@ const spec: Spec = {
       "4: the home's first load fetches no house face by URL: their latin pieces are inlined in the stylesheet",
       houseFetched.length === 0 &&
         Object.keys(home.inline).filter((family) => HOUSE.test(family))
-          .length === 2,
+          .length === 3,
       JSON.stringify(home)
+    );
+    const nunito = home.sources["Nunito Variable"] ?? [];
+    const nunitoBytes =
+      (home.inline["Nunito Variable"] ?? 0) +
+      (home.fetched["Nunito Variable"] ?? 0);
+    kit.check(
+      `5: Nunito comes from the house pieces: every Nunito rule's source is an inlined piece or a face- file, and the home's first load takes at most the ${NUNITO_BEFORE} B Fontsource's latin file took (${nunitoBytes} B)`,
+      nunito.length > 0 &&
+        nunito.every(
+          (source) => source === "inlined" || source.includes("/face-")
+        ) &&
+        nunitoBytes > 0 &&
+        nunitoBytes <= NUNITO_BEFORE,
+      JSON.stringify({ sources: nunito, bytes: nunitoBytes })
+    );
+    const mark = home.wordmark;
+    kit.check(
+      "5: the sidebar's wordmark (Caw&Co) is drawn in Nunito: document.fonts.check holds, and it measures as Nunito on a canvas, not as its fallback",
+      !!mark &&
+        mark.family.startsWith('"Nunito Variable"') &&
+        mark.check &&
+        Math.abs(mark.drawn - mark.nunito) < 0.5 &&
+        Math.abs(mark.nunito - mark.fallback) > 1,
+      JSON.stringify(mark)
+    );
+    const inlinedOther = Object.entries(home.inlined).filter(
+      ([family]) => !HOUSE.test(family)
+    );
+    kit.check(
+      "6: the stylesheet inlines the house faces' latin pieces and no other font: one piece per house face, none of any other face",
+      inlinedOther.length === 0 &&
+        [
+          "Figtree Variable",
+          "JetBrains Mono Variable",
+          "Nunito Variable",
+        ].every((family) => home.inlined[family] === 1),
+      JSON.stringify(home.inlined)
     );
 
     // 1. The transcript, on a first load of its session's page.

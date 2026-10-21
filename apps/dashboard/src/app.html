@@ -37,7 +37,7 @@
     %sveltekit.head%
     <!--
       The faces the first paint sets its text in, decoded before it. The build
-      inlines Figtree's and JetBrains Mono's latin pieces into the stylesheet
+      inlines Figtree's, JetBrains Mono's and Nunito's latin pieces into the stylesheet
       above (vite.config.ts), but a browser decodes a face only once text asks for
       it, and off to one side: the first frame could still be laid out in the
       fallback and re-set a moment later. This script runs once the stylesheet
@@ -66,6 +66,7 @@
       "use strict";
       document.fonts.load('1em "Figtree Variable"');
       document.fonts.load('1em "JetBrains Mono Variable"');
+      document.fonts.load('1em "Nunito Variable"');
     </script>
     <!--
       Taps before hydration. The shell is server-rendered, so its buttons (the

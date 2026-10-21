@@ -154,12 +154,12 @@ for (const face of readHouseFaces()) {
       .join(", ")})`
   );
 }
-const { sans, mono } = faces;
-if (!(sans && mono)) {
-  throw new Error("house faces: a sans and a mono face, each once");
+const { sans, mono, wordmark } = faces;
+if (!(sans && mono && wordmark)) {
+  throw new Error("house faces: a sans, a mono and a wordmark face, each once");
 }
 
-const coverage: HouseCoverage = { faces: { sans, mono }, from };
+const coverage: HouseCoverage = { faces: { sans, mono, wordmark }, from };
 // Formatted as the repository's formatter writes it, so the check compares bytes.
 const text = await formatText(OUT, `${JSON.stringify(coverage)}\n`);
 

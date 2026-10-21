@@ -1,13 +1,15 @@
 /**
  * The house faces every CawCo web surface draws in (DESIGN.md: "Figtree for
- * the product, JetBrains Mono for code, paths and IDs"): the dashboard, the
- * canvas's chrome and every decision page, each from the same files and the
- * same rules. Their one source is the variable file the Apple app ships
- * (CawCoDesign's Resources/Fonts), so a page draws every character the font
- * holds, not only a web subset's. The Figtree file is Google Fonts'
- * `ofl/figtree/Figtree[wght].ttf` (2.002), the file Fontsource cuts its
- * latin and latin-ext subsets from; the JetBrains Mono file is JetBrains'
- * own `fonts/variable/JetBrainsMono[wght].ttf` (2.305). Neither is patched.
+ * the product, JetBrains Mono for code, paths and IDs", Nunito for the
+ * wordmark): the dashboard, the canvas's chrome and every decision page, each
+ * from the same files and the same rules. Their one source is the variable
+ * file the Apple app ships (CawCoDesign's Resources/Fonts), so a page draws
+ * every character the font holds, not only a web subset's. The Figtree file
+ * is Google Fonts' `ofl/figtree/Figtree[wght].ttf` (2.002), the file
+ * Fontsource cuts its latin and latin-ext subsets from; the JetBrains Mono
+ * file is JetBrains' own `fonts/variable/JetBrainsMono[wght].ttf` (2.305);
+ * the Nunito file is Nunito 3.602's latin cut (Fontsource's latin subset, as
+ * a TTF). None is patched.
  *
  * - Each face is served as woff2 pieces cut from its file when a surface is
  *   built ({@link houseFaceSheet}): Google Fonts' latin range, its latin-ext
@@ -35,8 +37,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import coverage from "./house-faces.json" with { type: "json" };
 
-/** Which role a face plays: words, or code, paths and IDs. */
-export type FaceRole = "sans" | "mono";
+/** Which role a face plays: words, code, paths and IDs, or the wordmark. */
+export type FaceRole = "sans" | "mono" | "wordmark";
 
 /** A house face: its family as a page's CSS names it, its file and its weight axis. */
 export interface HouseFace {
@@ -87,6 +89,13 @@ export const HOUSE_FACES: readonly HouseFace[] = [
       ...["cv09", "cv10", "cv11", "cv12", "cv14", "cv15", "cv16", "cv17"],
       ...["cv18", "cv19", "cv20", "cv99", "ss01", "ss02", "ss19", "ss20"],
     ],
+  },
+  {
+    role: "wordmark",
+    family: "Nunito Variable",
+    file: "Nunito.ttf",
+    weight: "200 1000",
+    leaves: PICKER_ONLY,
   },
 ];
 
