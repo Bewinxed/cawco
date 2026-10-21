@@ -610,3 +610,30 @@ export async function overlay(page: Page, looks: Look[]): Promise<void> {
   }
   await frames(page);
 }
+
+/** Two `cubic-bezier()`s as numbers (`0.32` is `.32`). */
+export const sameCurve = (a: string, b: string): boolean => {
+  const [x, y] = [a, b].map((curve) =>
+    (curve.match(NUMBER) ?? []).map(Number).join(",")
+  );
+  return x !== "" && x === y;
+};
+const NUMBER = /-?\d*\.?\d+/g;
+
+/** `cubic-bezier(x1, y1, x2, y2)` at progress `x`, solved for its t. */
+export function bezierAt(curve: string, x: number): number {
+  const [x1, y1, x2, y2] = (curve.match(/-?\d*\.?\d+/g) ?? []).map(Number);
+  const at = (a: number, b: number, t: number) =>
+    3 * a * t * (1 - t) ** 2 + 3 * b * t ** 2 * (1 - t) + t ** 3;
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 40; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (at(x1 ?? 0, x2 ?? 1, mid) < x) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return at(y1 ?? 0, y2 ?? 1, (lo + hi) / 2);
+}

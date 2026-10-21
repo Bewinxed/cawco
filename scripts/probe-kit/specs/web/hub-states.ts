@@ -32,6 +32,7 @@
  */
 import { join } from "node:path";
 import type { Page, WebSocketRoute } from "playwright-core";
+import { bezierAt, sameCurve } from "../../anim";
 import { scan } from "../../journeys/scan";
 import {
   entrySlug,
@@ -312,33 +313,6 @@ async function scrubBand(
     await cdp.send("Animation.setPlaybackRate", { playbackRate: 1 });
     await cdp.detach();
   }
-}
-
-/** Two `cubic-bezier()`s as numbers (`0.32` is `.32`). */
-const sameCurve = (a: string, b: string): boolean => {
-  const [x, y] = [a, b].map((curve) =>
-    (curve.match(NUMBER) ?? []).map(Number).join(",")
-  );
-  return x !== "" && x === y;
-};
-const NUMBER = /-?\d*\.?\d+/g;
-
-/** `cubic-bezier(x1, y1, x2, y2)` at progress `x`, solved for its t. */
-function bezierAt(curve: string, x: number): number {
-  const [x1, y1, x2, y2] = (curve.match(/-?\d*\.?\d+/g) ?? []).map(Number);
-  const at = (a: number, b: number, t: number) =>
-    3 * a * t * (1 - t) ** 2 + 3 * b * t ** 2 * (1 - t) + t ** 3;
-  let lo = 0;
-  let hi = 1;
-  for (let i = 0; i < 40; i += 1) {
-    const mid = (lo + hi) / 2;
-    if (at(x1 ?? 0, x2 ?? 1, mid) < x) {
-      lo = mid;
-    } else {
-      hi = mid;
-    }
-  }
-  return at(y1 ?? 0, y2 ?? 1, (lo + hi) / 2);
 }
 
 /** Holds a read to its tokens: one clock, the tokens' duration and curve, opacity on that curve. */

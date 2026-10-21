@@ -1,23 +1,22 @@
 /**
- * MachineAuthStatus's answer mark coming in (`mark-in`: from opacity 0,
- * scale 0.25 and a 4px blur, over --dur-pop on --ease-out), on the clock
- * (anim.ts): the home surface's answered unlocks (catalogue.ts `unlocked`
- * and `unlock-unreadable`, the studio's unlock answered on the page's own
- * socket), each standing as the walk leaves it, its mark's run started again
- * by its own rule, caught and held, and read at 0, 25, 50, 75 and 100%: the
- * runs caught (kind, name, length, easing), and the mark's opacity, scale
- * and filter at each.
+ * MachineAuthStatus's answer mark coming in (`mark-in`, theme.css: from
+ * opacity 0, scale 0.25 and a `--space-1` blur, over `--dur-pop` on
+ * `--ease-out`), on the clock (anim.ts): the home surface's answered unlocks
+ * (catalogue.ts `unlocked` and `unlock-unreadable`, the studio's unlock
+ * answered on the page's own socket), each standing as the walk leaves it,
+ * its mark's run started again by its own rule, caught and held, and read at
+ * 0, 25, 50, 75 and 100%.
  *
- * The walk's own read finishes every run (read.ts `still`), so the style
- * snapshot holds the mark's last frame alone; this holds the frames before
- * it. A reading held to the one approved: approved on the base of record,
- * and the converted tree read against it (`PROBE_BASELINES`).
+ * The walk's own read finishes every run (read.ts `still`), so the frames
+ * before the last are read here, each held to what the keyframes and the
+ * tokens say it is: the one run is `mark-in` over `--dur-pop` on
+ * `--ease-out`, and at each fraction f, with p the curve's progress at f,
+ * the mark's opacity is p, its scale 0.25 + 0.75p and its blur
+ * `--space-1` × (1 − p), read off the engine.
  *
- *   bun scripts/probe-kit/run.ts web mark-in-scrub [--approve mark-in-scrub]
+ *   bun scripts/probe-kit/run.ts web mark-in-scrub
  */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { Clock } from "../../anim";
+import { bezierAt, Clock, type Run, sameCurve } from "../../anim";
 import { entrySlug, type Spec } from "../../kit";
 import { chosen } from "../../surfaces/catalogue";
 import { PASSES, walkTapes } from "../../surfaces/walk";
@@ -27,17 +26,17 @@ const MARK = '[data-slot="mark"][data-enter]';
 /** The answered unlocks: the check, and the warning. */
 const ANSWERED = new Set(["unlocked", "unlock-unreadable"]);
 const FRACTIONS = [0, 0.25, 0.5, 0.75, 1];
-/** The prefix Svelte scopes a component's `@keyframes` names by. */
-const SCOPED = /^svelte-[a-z0-9]+-/;
+/** The keyframes' `from` (theme.css `@keyframes mark-in`): opacity 0, scale 0.25. */
+const FROM_SCALE = 0.25;
+/** How near a computed value stands to the curve's: the engine rounds. */
+const NEAR = { opacity: 0.01, scale: 0.01, blur: 0.05 };
+const BLUR = /blur\(([\d.]+)px\)/;
 
-interface Reading {
-  frames: {
-    fraction: number;
-    filter: string;
-    opacity: string;
-    scale: string;
-  }[];
-  runs: string[];
+interface Frame {
+  blur: number;
+  fraction: number;
+  opacity: number;
+  scale: number;
 }
 
 const spec: Spec = {
@@ -55,6 +54,24 @@ const spec: Spec = {
         const entry = entrySlug(
           `${surface.name} ${state.name} ${pass.width} ${pass.theme}`
         );
+        // The tokens as the page resolves them: the run's length and curve,
+        // and the blur it starts from, in px.
+        const tokens = await page.evaluate(() => {
+          const root = getComputedStyle(document.documentElement);
+          const probe = document.createElement("div");
+          probe.style.width = "var(--space-1)";
+          document.body.append(probe);
+          const space = Number.parseFloat(getComputedStyle(probe).width);
+          probe.remove();
+          const dur = root.getPropertyValue("--dur-pop").trim();
+          return {
+            duration: dur.endsWith("ms")
+              ? Number.parseFloat(dur)
+              : Number.parseFloat(dur) * 1000,
+            easing: root.getPropertyValue("--ease-out").trim(),
+            blur: space,
+          };
+        });
         // The walk holds page time between acts, and the clock (anim.ts)
         // waits on the page's frames, which a held page never draws (a
         // scrub under it waited for ever): page time runs while the mark
@@ -62,13 +79,18 @@ const spec: Spec = {
         // walk's own act leaves it (walk.ts `acting`).
         await page.clock.resume();
         const clock = await Clock.on(page);
-        let reading: Reading;
+        let runs: Run[];
+        // The run's curve: a CSS animation's lies on its keyframes, so the
+        // protocol reports the effect's own easing as `linear`; the rule's
+        // `animation-timing-function` is the curve each keyframe runs on.
+        let timing = "";
+        const frames: Frame[] = [];
         try {
           // Its rule's run started again from the rule itself: no name for
           // a style recalc, then the rule's own. A run replayed with
           // `cancel()` and `play()` is never reported as starting (the
           // protocol's `animationStarted`), so the clock caught nothing.
-          const runs = await clock.catchRuns(
+          runs = await clock.catchRuns(
             () =>
               page.evaluate((mark) => {
                 const el = document.querySelector<HTMLElement>(mark);
@@ -82,55 +104,80 @@ const spec: Spec = {
               }, MARK),
             MARK
           );
-          const frames: Reading["frames"] = [];
+          timing = await page.evaluate((mark) => {
+            const el = document.querySelector(mark);
+            return el ? getComputedStyle(el).animationTimingFunction : "";
+          }, MARK);
           for (const fraction of FRACTIONS) {
             // biome-ignore lint/performance/noAwaitInLoops: one fraction at a time, on the one clock
             await clock.seek(fraction);
+            const read = await page.evaluate((mark) => {
+              const el = document.querySelector(mark);
+              const style = el ? getComputedStyle(el) : null;
+              return style
+                ? {
+                    opacity: style.opacity,
+                    scale: style.scale,
+                    filter: style.filter,
+                  }
+                : null;
+            }, MARK);
             frames.push({
               fraction,
-              ...(await page.evaluate((mark) => {
-                const el = document.querySelector(mark);
-                const style = el ? getComputedStyle(el) : null;
-                return {
-                  opacity: style?.opacity ?? "(no mark)",
-                  scale: style?.scale ?? "(no mark)",
-                  filter: style?.filter ?? "(no mark)",
-                };
-              }, MARK)),
+              opacity: read ? Number.parseFloat(read.opacity) : Number.NaN,
+              // `scale: none` is 1; a uniform scale computes as one number.
+              scale:
+                read?.scale === "none"
+                  ? 1
+                  : Number.parseFloat(read?.scale ?? "NaN"),
+              blur:
+                read?.filter === "none"
+                  ? 0
+                  : Number.parseFloat(read?.filter.match(BLUR)?.[1] ?? "NaN"),
             });
           }
-          reading = {
-            // A run's name without the prefix Svelte scopes a component's
-            // keyframes by (`svelte-<hash>-`), a hash of the component's
-            // file: the frames read say what the keyframes are.
-            runs: runs.map(
-              (run) =>
-                `${run.type} ${run.name.replace(SCOPED, "")} ${Math.round(run.end)}ms ${run.easing}`
-            ),
-            frames,
-          };
         } finally {
           await clock.release();
           const moment = await page.evaluate(() => Date.now());
           await page.clock.pauseAt(moment);
           await page.clock.setFixedTime(moment);
         }
-        const said = `${JSON.stringify(reading, null, 2)}\n`;
-        await writeFile(join(kit.out, `${entry}.json`), said);
-        const baseline = join(kit.baselines, `${entry}.json`);
-        if (kit.approves(entry)) {
-          await mkdir(kit.baselines, { recursive: true });
-          await writeFile(baseline, said);
-          kit.note(`${entry}: baseline approved (${baseline})`);
-          return;
-        }
-        const approved = await readFile(baseline, "utf8").catch(() => null);
+        const [run] = runs;
         kit.check(
-          `${entry} reads as approved`,
-          approved === said,
-          approved === null
-            ? `no baseline at ${baseline}`
-            : `read ${reading.frames.map((f) => `${f.fraction}: ${f.opacity} ${f.scale} ${f.filter}`).join("; ")} (${reading.runs.join(", ")}); approved ${baseline}`
+          `${entry}: the mark comes in as one run, mark-in over --dur-pop on --ease-out`,
+          runs.length === 1 &&
+            run?.type === "CSSAnimation" &&
+            run.name === "mark-in" &&
+            Math.abs(run.end - tokens.duration) < 0.5 &&
+            sameCurve(timing, tokens.easing),
+          `caught ${runs.map((r) => `${r.type} ${r.name} ${Math.round(r.end)}ms`).join(", ") || "nothing"} on ${timing || "no curve"}; tokens ${tokens.duration}ms ${tokens.easing}`
+        );
+        const want = (fraction: number) => {
+          const p = bezierAt(tokens.easing, fraction);
+          return {
+            opacity: p,
+            scale: FROM_SCALE + (1 - FROM_SCALE) * p,
+            blur: tokens.blur * (1 - p),
+          };
+        };
+        const off = frames.filter((frame) => {
+          const w = want(frame.fraction);
+          return !(
+            Math.abs(frame.opacity - w.opacity) <= NEAR.opacity &&
+            Math.abs(frame.scale - w.scale) <= NEAR.scale &&
+            Math.abs(frame.blur - w.blur) <= NEAR.blur
+          );
+        });
+        const fmt = (n: number) => (Math.round(n * 1000) / 1000).toString();
+        kit.check(
+          `${entry}: scrubbed at 0, 25, 50, 75 and 100%, its opacity, scale and blur ride --ease-out from 0, 0.25 and --space-1 to 1, 1 and none`,
+          frames.length === FRACTIONS.length && off.length === 0,
+          frames
+            .map((frame) => {
+              const w = want(frame.fraction);
+              return `${frame.fraction}: opacity ${fmt(frame.opacity)}/${fmt(w.opacity)} scale ${fmt(frame.scale)}/${fmt(w.scale)} blur ${fmt(frame.blur)}/${fmt(w.blur)}px`;
+            })
+            .join("; ")
         );
       },
       (what, why) => kit.check(`${what}: opens`, false, why)
