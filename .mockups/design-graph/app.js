@@ -438,6 +438,9 @@ function drawGraph() {
   graph.innerHTML = "";
   const zoomer = document.createElement("div"); zoomer.className = "zoomer";
   const world = document.createElement("div"); world.className = "world";
+  // Drawn anew, its states take their tiers (mark) without a transition; two frames on, changes fade again.
+  world.dataset.instant = "";
+  requestAnimationFrame(() => requestAnimationFrame(() => delete world.dataset.instant));
   zoomer.append(world); graph.append(zoomer);
   const margin = 10, room = graph.clientWidth - 2 * margin;
   // Two states side by side, the gap between them and their region's edges fit the graph's width, so the
