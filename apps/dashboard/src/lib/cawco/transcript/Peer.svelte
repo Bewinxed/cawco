@@ -11,8 +11,9 @@
     IconWorkflow,
   } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
-  import { conversationHref, resolveInstanceId } from "../links";
+  import { conversationHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
+  import { sessionNamed } from "../session-names.svelte";
   /**
    * What cawco put into this session on someone else's behalf: a rule that
    * fired, a delegate's report or ask, another session's hand-off, a
@@ -72,11 +73,15 @@
     };
   });
 
-  /** A report's delegate or a hand-off's sender, linked where the fleet still has its row. */
+  /**
+   * A report's delegate or a hand-off's sender, by its full or short id,
+   * linked wherever it lives (session-names.svelte.ts): on the board, or
+   * named by the hub after it aged off it.
+   */
   const senderId = $derived(
-    row.kind === "report" || row.kind === "handoff"
-      ? resolveInstanceId(meta.peerSession, cawco.instanceIndex)
-      : undefined
+    (row.kind === "report" || row.kind === "handoff") && meta.peerSession
+      ? sessionNamed(meta.peerSession)
+      : null
   );
 
   /** Open or folded, kept per session by the message, as tool rows are. */

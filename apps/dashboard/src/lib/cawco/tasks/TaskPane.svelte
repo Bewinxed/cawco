@@ -77,11 +77,11 @@
   } from "../project-tasks";
   import RowFault from "../RowFault.svelte";
   import SessionMark from "../SessionMark.svelte";
+  import { sessionTitle } from "../session-names.svelte";
   import SideSurface from "../side/SideSurface.svelte";
   import type { MarkStatus } from "../TreeMark.svelte";
   import { openBeside } from "./beside.svelte";
   import { resultStamp } from "./review-stamp";
-  import { sessionName } from "./session-name";
   import TaskActivity from "./TaskActivity.svelte";
   import TaskFields from "./TaskFields.svelte";
   import TaskLabels from "./TaskLabels.svelte";
@@ -177,7 +177,10 @@
       (attempt) => attempt.state === "starting" || attempt.state === "running"
     );
     if (live) {
-      return { kind: "live" as const, session: sessionName(live.instanceId) };
+      return {
+        kind: "live" as const,
+        session: sessionTitle(live.instanceId) ?? "Its session",
+      };
     }
     const open = shown?.kind !== "done" && shown?.kind !== "dropped";
     return attempts.length > 0 && open ? { kind: "resumes" as const } : null;
@@ -749,7 +752,7 @@
                     />
                     <span
                       class="flex-initial min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap"
-                      >{sessionName(attempt.instanceId)}</span
+                      >{sessionTitle(attempt.instanceId) ?? "Its session"}</span
                     >
                     <Badge data-box variant={TINT[word] ?? "secondary"}>
                       {#if word === "Failed"}

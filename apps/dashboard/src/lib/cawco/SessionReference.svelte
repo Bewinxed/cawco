@@ -21,7 +21,7 @@
   import { conversationHref } from "./links";
   import { markHue, sessionSprite } from "./mark";
   import SessionCard, { readThreadCard, tailOf } from "./SessionCard.svelte";
-  import { namedSession } from "./session-names.svelte";
+  import { sessionAnswer } from "./session-names.svelte";
   import { threadIdOf } from "./thread-tabs";
 
   /**
@@ -34,10 +34,10 @@
   const row = $derived(cawco.instanceIndex.byId.get(id));
   const thread = $derived(cawco.threadOf(id));
   /** The hub's answer, for a session this browser holds no row of. */
-  const named = $derived(row || thread ? undefined : namedSession(id));
-  const title = $derived(named ? named.title : sessionName(id));
+  const answer = $derived(row || thread ? undefined : sessionAnswer(id));
+  const title = $derived(sessionName(id));
   const caw = $derived(
-    thread?.status ?? (named?.kind === "thread" ? named.state : null)
+    thread?.status ?? (answer?.kind === "thread" ? answer.state : null)
   );
   const Sprite = $derived(sessionSprite(id));
 

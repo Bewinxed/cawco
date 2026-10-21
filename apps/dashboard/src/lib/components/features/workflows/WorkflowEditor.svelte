@@ -14,6 +14,7 @@
   import { newId } from "#lib/cawco/id.js";
   import { crossIn, dur } from "#lib/cawco/motion/curves.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import { sessionTitle } from "#lib/cawco/session-names.svelte.js";
   import { runHref } from "#lib/cawco/workflow-runs.js";
   import {
     refreshWorkflows,
@@ -791,8 +792,8 @@
                      a run is not editing its workflow. -->
                 {#each runs as run (run.id)}
                   {@const supervisor = run.supervisorInstanceId
-                    ? cawco.instanceIndex.byId.get(run.supervisorInstanceId)
-                    : undefined}
+                    ? sessionTitle(run.supervisorInstanceId)
+                    : null}
                   <!-- When it started over how long it took, as one
                        block, its state at the end. -->
                   <a
@@ -807,9 +808,7 @@
                       >
                       <span class="type-meta wrap-anywhere text-ink-muted"
                         >{duration(run.startedAt, run.endedAt, now)}
-                        {supervisor?.title
-                          ? ` · from ${supervisor.title}`
-                          : ""}</span
+                        {supervisor ? ` · from ${supervisor}` : ""}</span
                       >
                     </span>
                     <WorkflowStatus status={run.status} />

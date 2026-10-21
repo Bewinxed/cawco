@@ -11,12 +11,18 @@
  * hub folded into a continuation. A session the index does not hold (ended
  * days ago, on another machine, in another project) is asked of the hub's
  * names (`GET /api/find`), which hold every session it ever started, and
- * the answer is kept for this tab: the chip draws from it.
+ * the answer is kept for this tab. Every reader that names or describes a
+ * session by its id (a chip, a tab, the bar, a card, a tail, a delegate's
+ * row, a hand-off's sender, a run's supervisor) reads it through here, so a
+ * session aged off the board is drawn as itself, never as "Fleet", a bare
+ * id or a transcript that never loads.
  */
 import type { FindConversation, FindThread } from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
 import { cawco } from "./client.svelte";
 import { findNames } from "./find/find-client";
+import { age, rowOf } from "./find/find-rows";
+import { resolveSessionTitle } from "./links";
 import { threadTabId } from "./thread-tabs";
 
 /** The shortest id part that names a session (the hub's resolver's own). */
@@ -160,6 +166,44 @@ export function sessionNamed(name: string): string | null {
   return null;
 }
 
-/** The session the hub's names answered for under `id`, when this browser holds no row of it. */
-export const namedSession = (id: string): NamedSession | undefined =>
-  answered.get(id);
+/**
+ * The session `name` names as the hub's names answered it, when this
+ * browser holds no row of it: what a reader that names or describes a
+ * session draws it from in place of the row (its title, harness, state,
+ * parent, machine). Undefined for a session the index holds (read the row),
+ * while the hub is asked, and when it names nothing by it.
+ */
+export function sessionAnswer(name: string): NamedSession | undefined {
+  const at = sessionNamed(name);
+  return at ? answered.get(at) : undefined;
+}
+
+/**
+ * What a session is called, read from its id the one way: a thread's
+ * title, a row's (core's order: its title, else its folder), else the hub's
+ * answer. Null while the hub is asked and when nothing names it.
+ */
+export function sessionTitle(name: string): string | null {
+  const id = sessionNamed(name) ?? name;
+  const thread = cawco.threadOf(id);
+  if (thread) {
+    return thread.title;
+  }
+  const row = cawco.instanceIndex.byId.get(id);
+  if (row) {
+    return resolveSessionTitle({ title: row.title, cwd: row.cwd, id: row.id });
+  }
+  return answered.get(id)?.title ?? null;
+}
+
+/**
+ * What the hub's names say of a session this browser holds no row of, as
+ * a card or a tail says it in place of its live transcript: its state, its
+ * row's facts (project, role, machine) and its age, the finder's words.
+ */
+export function sessionFacts(answer: NamedSession, now = Date.now()): string {
+  const shown = rowOf(answer, now);
+  return [shown.state.word, ...shown.meta, age(answer.lastActivity, now)]
+    .filter(Boolean)
+    .join(" · ");
+}

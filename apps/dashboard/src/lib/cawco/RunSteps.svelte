@@ -32,6 +32,7 @@
   import { type BranchOptions, branch, nestFrom } from "./motion/branch.svelte";
   import { reflow } from "./motion/rows.svelte";
   import Self from "./RunSteps.svelte";
+  import { sessionAnswer } from "./session-names.svelte";
   import TreeCount from "./TreeCount.svelte";
   import InlineTranscript from "./transcript/InlineTranscript.svelte";
   import { runHref, stepTitle } from "./workflow-runs";
@@ -251,6 +252,7 @@
           >
             {#if step.instanceId}
               {@const row = cawco.instanceIndex.byId.get(step.instanceId)}
+              {@const answer = row ? undefined : sessionAnswer(step.instanceId)}
               <div
                 data-slot="well"
                 class="min-w-0 self-stretch"
@@ -258,7 +260,9 @@
                 {@attach following(step.instanceId)}
               >
                 <InlineTranscript
-                  agentName={row?.harness ?? "agent"}
+                  agentName={row?.harness ??
+                    (answer?.kind === "conversation" ? answer.harness : null) ??
+                    "agent"}
                   id={step.instanceId}
                   open={drawing.has(step.id)}
                 />

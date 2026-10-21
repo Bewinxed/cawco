@@ -22,8 +22,21 @@
  *   the chip, a `cawco:session/<id8>` link is the board session's chip, and
  *   a mention inside a code span stays code. Each chip sits in its line as
  *   a word does (geom.ts `inlineFit`). Pressed, the far session's chip opens
- *   its card: its title, the hub's facts (Stopped, its machine), and Open
- *   session to it.
+ *   its card: its title, the hub's facts (Stopped, its machine) in its tail
+ *   (DelegateTail) where no transcript is waited on, and Open session to it.
+ *
+ * Every other reader that names the far session by its id draws it from
+ * the hub's answer, never "Fleet", "Its session", a bare id or a stand-in
+ * word (Chromium):
+ * - readers: a delegate's row (it stopped; its harness) and a report's
+ *   sender line (a link to it, by its short id).
+ * - run step: a workflow run's step it ran, opened, names its speaker by
+ *   its harness.
+ * - own page: `/session/<id>`'s document title, its tab's name and its
+ *   tab's state (Stopped).
+ * - workflow runs: a run it supervised says "from <its title>".
+ * - task attempt: a task's attempt on Details, and the session a Review is
+ *   from, are named by its title.
  */
 import type { Page, Route } from "playwright-core";
 import type {
@@ -415,6 +428,592 @@ async function transcript(
   await page.close();
 }
 
+/** The head-tint bench under the board (NEAR only) and the hub's names, its shown transcript given `messages`. */
+async function benchWith(
+  kit: Kit,
+  base: string,
+  messages: Record<string, unknown>[],
+  answers: Record<string, unknown> = {}
+): Promise<Page> {
+  const page = await kit.page("desk", { engine: "chromium" });
+  await hubNames(page);
+  await page.route(
+    (url) => url.pathname in answers,
+    (route: Route) =>
+      route.fulfill({
+        json: answers[new URL(route.request().url()).pathname],
+      })
+  );
+  await page.routeWebSocket(
+    (url) => url.pathname === "/ws/dashboard",
+    (hubSide) => {
+      hubSide.send(JSON.stringify(BOARD));
+    }
+  );
+  await open(page, `${base}/motion/head-tint`, "[data-head-tint]", 120_000);
+  await page.waitForFunction(() => "__ht" in window);
+  await page.evaluate(
+    ([shown, rows]) => {
+      const debug = (
+        globalThis as unknown as {
+          __cawcoDebug: {
+            state: {
+              sessions: Record<string, { messages: Record<string, unknown>[] }>;
+            };
+          };
+        }
+      ).__cawcoDebug;
+      const session = debug.state.sessions[shown];
+      session.messages = [
+        ...session.messages,
+        ...rows.map((row) => ({ ...row, instanceId: shown })),
+      ];
+    },
+    [SHOWN, messages] as const
+  );
+  return page;
+}
+
+/**
+ * Readers in a transcript that name the far session by its id: a
+ * delegate's row (it was this session's delegate, three days ago) and a
+ * report's sender line (its short id, as a report names it).
+ */
+async function readers(kit: Kit, base: string): Promise<void> {
+  const at = Date.now();
+  const page = await benchWith(kit, base, [
+    {
+      id: "far-delegate",
+      type: "tool.handoff",
+      content: "",
+      timestamp: new Date(at).toISOString(),
+      metadata: {
+        handoffKind: "delegate",
+        delegateInstanceId: FAR_ID,
+        delegateTitle: FAR_TITLE,
+        handoffBrief: "Add image editing to the take view.",
+        toolName: "mcp__cawco__delegate",
+        toolInput: { title: FAR_TITLE },
+        toolStatus: "success",
+      },
+    },
+    {
+      id: "far-report",
+      type: "user.peer",
+      content: "Image editing is in the take view.",
+      timestamp: new Date(at + 1000).toISOString(),
+      metadata: {
+        peerSession: FAR_ID.slice(0, 8),
+        peerName: FAR_TITLE,
+        reportKind: "done",
+        reportHeadline: "Image editing is in the take view",
+      },
+    },
+  ]);
+  const pane = `[data-pane="${SHOWN}"]`;
+  await page.waitForSelector(`${pane} [data-delegate-tone]`, {
+    timeout: 15_000,
+  });
+  // The hub is asked once a reader draws it; its answer lands after.
+  await settle(page, 1500);
+  const read = await page.evaluate((p) => {
+    const head = [...document.querySelectorAll(`${p} [data-slot="head"]`)].find(
+      (el) => el.querySelector("[data-delegate-tone]")
+    );
+    const sender = [
+      ...document.querySelectorAll(`${p} [data-slot="name"]`),
+    ].find(
+      (el) =>
+        el.closest("[data-slot]")?.textContent?.includes("Report from") ||
+        el.parentElement?.textContent?.includes("Report from")
+    );
+    return {
+      pill:
+        head?.querySelector("[data-delegate-tone]")?.textContent?.trim() ??
+        null,
+      tone:
+        head
+          ?.querySelector("[data-delegate-tone]")
+          ?.getAttribute("data-tone") ?? null,
+      meta: [...(head?.querySelectorAll('[data-slot="meta"]') ?? [])].map(
+        (el) => el.textContent?.trim() ?? ""
+      ),
+      sender: sender
+        ? {
+            tag: sender.tagName.toLowerCase(),
+            href: sender.getAttribute("href"),
+          }
+        : null,
+    };
+  }, pane);
+  kit.note(`readers, as drawn: ${JSON.stringify(read)}`);
+  kit.check(
+    "readers: a delegate's row for the far session says it stopped and its harness, from the hub's answer",
+    (read.pill ?? "").startsWith("stopped") && read.meta.includes("claude"),
+    JSON.stringify(read)
+  );
+  kit.check(
+    "readers: a report's sender line links the far session by its short id, to its own view",
+    read.sender?.tag === "a" && read.sender.href === `/session/${FAR_ID}`,
+    JSON.stringify(read.sender)
+  );
+  await page.close();
+}
+
+/**
+ * A workflow run started from this transcript (RunBlock, RunSteps), whose
+ * step the far session ran three days ago: opened, the step's transcript
+ * names its speaker by the far session's harness. The run's detail is
+ * answered as the hub would; the far session's transcript stands in the
+ * client's state, as the bench's own do.
+ */
+async function runStep(kit: Kit, base: string): Promise<void> {
+  const runId = "7c0ffee0-1111-4222-8333-444455556666";
+  const at = new Date(Date.now() - 3 * 24 * 3_600_000).toISOString();
+  const run = {
+    id: runId,
+    workflowId: "wf-1",
+    status: "done",
+    startedAt: at,
+    endedAt: at,
+    failure: null,
+    machineId: "studio-machine",
+    parentRunId: null,
+    parentStepId: null,
+    seenAt: null,
+    supervisorInstanceId: null,
+    workspace: "/backlot",
+    edges: {},
+    graph: null,
+    inputs: {},
+    launchedBy: "owner",
+    loops: {},
+    planned: null,
+    program: "",
+    rerunOfRunId: null,
+    result: null,
+    state: {},
+    waiting: null,
+    steps: [
+      {
+        id: "step-1",
+        runId,
+        nodeId: "review",
+        kind: "run",
+        instanceId: FAR_ID,
+        status: "passed",
+        startedAt: at,
+        endedAt: at,
+        title: "Review the take view",
+        seq: 1,
+        mapIndex: null,
+        childRunId: null,
+        failure: null,
+        result: null,
+      },
+    ],
+    attempts: [],
+  };
+  const page = await benchWith(
+    kit,
+    base,
+    [
+      {
+        id: "far-run",
+        toolCallId: "call-far-run",
+        type: "tool.use",
+        content: "",
+        timestamp: new Date().toISOString(),
+        metadata: {
+          toolName: "mcp__cawco__workflow_run",
+          toolInput: { workflow: "nightly-review" },
+          toolResult: JSON.stringify({ runId }),
+          toolStatus: "success",
+        },
+      },
+    ],
+    { [`/api/workflow-runs/${runId}`]: run }
+  );
+  await page.evaluate(
+    ([shown, far]) => {
+      const debug = (
+        globalThis as unknown as {
+          __cawcoDebug: {
+            state: { sessions: Record<string, Record<string, unknown>> };
+          };
+        }
+      ).__cawcoDebug;
+      debug.state.sessions[far] = {
+        ...debug.state.sessions[shown],
+        instanceId: far,
+        machineId: "studio-machine",
+        cwd: "/backlot",
+        messages: [
+          {
+            id: "far-said",
+            instanceId: far,
+            type: "assistant",
+            content: "Reviewed the take view: the crop handles hold.",
+            timestamp: new Date(Date.now() - 3 * 24 * 3_600_000).toISOString(),
+          },
+        ],
+      };
+    },
+    [SHOWN, FAR_ID] as const
+  );
+  const step = `[data-pane="${SHOWN}"] button[aria-expanded]:has-text("Review the take view")`;
+  await page.waitForSelector(step, { timeout: 15_000 }).catch(async (error) => {
+    const drawn = await page.evaluate(
+      (p) =>
+        [...document.querySelectorAll(`[data-pane="${p}"] [data-tx-rail]`)]
+          .map((el) => el.textContent?.replace(/\s+/g, " ").trim())
+          .slice(-3),
+      SHOWN
+    );
+    kit.note(`run step, the rail rows drawn: ${JSON.stringify(drawn)}`);
+    throw error;
+  });
+  await page.locator(step).first().click();
+  const who = `[data-pane="${SHOWN}"] [data-slot="well"] [data-turn-who] [data-slot="role"]`;
+  await page.waitForSelector(who, { timeout: 15_000 });
+  await settle(page, 1500);
+  const name = await page.locator(who).first().textContent();
+  kit.note(`run step, the step's speaker reads: ${name}`);
+  kit.check(
+    "run step: opened, the far session's step names its speaker by its harness (claude), not agent",
+    name?.trim() === "claude",
+    JSON.stringify(name)
+  );
+  await page.close();
+}
+
+/**
+ * The far session's own page, opened from its chip's "Open session": the
+ * document's title, its tab's name and its tab's state, named by the hub's
+ * answer (the dev server has no hub: its own reads of the session fail).
+ */
+async function ownPage(kit: Kit, base: string): Promise<void> {
+  const page = await kit.page("desk", { engine: "chromium" });
+  await hubNames(page);
+  await page.routeWebSocket(
+    (url) => url.pathname === "/ws/dashboard",
+    (hubSide) => {
+      hubSide.send(JSON.stringify(BOARD));
+    }
+  );
+  await open(
+    page,
+    `${base}/session/${FAR_ID}`,
+    `[data-session-tab="${FAR_ID}"]`,
+    120_000
+  );
+  await settle(page, 1500);
+  const read = await page.evaluate((id) => {
+    const tab = document.querySelector(`[data-session-tab="${id}"]`);
+    const strip = tab?.closest('[data-slot="tab"]');
+    return {
+      title: document.title,
+      tab: strip?.textContent?.replace(/\s+/g, " ").trim() ?? null,
+      status:
+        strip?.querySelector("[aria-label]")?.getAttribute("aria-label") ??
+        null,
+    };
+  }, FAR_ID);
+  kit.note(`own page, as drawn: ${JSON.stringify(read)}`);
+  kit.check(
+    "own page: the document is titled by the far session's title, not Fleet",
+    read.title.startsWith(FAR_TITLE),
+    read.title
+  );
+  kit.check(
+    "own page: its tab is named by the far session's title",
+    (read.tab ?? "").includes(FAR_TITLE),
+    JSON.stringify(read.tab)
+  );
+  kit.check(
+    "own page: its tab says the far session stopped (as the hub has it), not Stored",
+    (read.status ?? "").includes("Stopped") &&
+      !(read.status ?? "").includes("Stored"),
+    JSON.stringify(read.status)
+  );
+  await page.close();
+}
+
+/**
+ * A workflow's runs list (WorkflowEditor's Runs tab): a run the far session
+ * supervised, three days ago, says it came from it. The workflow, its run
+ * and the delegate types are answered as the hub would.
+ */
+async function workflowRuns(kit: Kit, base: string): Promise<void> {
+  const page = await kit.page("desk", { engine: "chromium" });
+  await hubNames(page);
+  await page.routeWebSocket(
+    (url) => url.pathname === "/ws/dashboard",
+    (hubSide) => {
+      hubSide.send(JSON.stringify(BOARD));
+    }
+  );
+  const at = new Date(Date.now() - 3 * 24 * 3_600_000).toISOString();
+  const listing = {
+    id: "wf-1",
+    name: "Nightly review",
+    description: "",
+    graph: null,
+    inputs: [],
+    origin: "code",
+    slug: "nightly-review",
+    createdAt: at,
+    updatedAt: at,
+  };
+  const run = {
+    id: "run-1",
+    workflowId: "wf-1",
+    status: "done",
+    startedAt: at,
+    endedAt: at,
+    failure: null,
+    machineId: "studio-machine",
+    parentRunId: null,
+    parentStepId: null,
+    seenAt: null,
+    supervisorInstanceId: FAR_ID,
+    workspace: "/backlot",
+    edges: {},
+    graph: null,
+    inputs: {},
+    launchedBy: "owner",
+    loops: {},
+    planned: null,
+    program: "",
+    rerunOfRunId: null,
+    result: null,
+    state: {},
+    waiting: null,
+  };
+  const answers: Record<string, unknown> = {
+    "/api/workflows": { workflows: [listing] },
+    "/api/workflows/wf-1": { ...listing, program: "", problems: [] },
+    "/api/workflows/wf-1/runs": { runs: [run] },
+    "/api/workflow-runs/run-1": { ...run, steps: [], attempts: [] },
+    "/api/workflow-runs/run-1/log": { log: [] },
+    "/api/delegate-types": { types: [] },
+  };
+  await page.route(
+    (url) => url.pathname in answers,
+    (route: Route) =>
+      route.fulfill({
+        json: answers[new URL(route.request().url()).pathname],
+      })
+  );
+  await open(page, `${base}/workflows/wf-1`, '[role="tab"]', 120_000);
+  await page.getByRole("tab", { name: "Runs" }).click();
+  await page.waitForSelector('[data-slot="run-entry"]', { timeout: 15_000 });
+  await settle(page, 1500);
+  const entry = await page
+    .locator('[data-slot="run-entry"]')
+    .first()
+    .evaluate((el) => el.textContent?.replace(/\s+/g, " ").trim() ?? "");
+  kit.note(`workflow runs, the run reads: ${entry}`);
+  kit.check(
+    "workflow runs: a run the far session supervised says it came from it, by its title",
+    entry.includes(`from ${FAR_TITLE}`),
+    entry
+  );
+  await page.close();
+}
+
+/**
+ * A task's sheet (TaskPane): its attempt, run by the far session three days
+ * ago, is named by that session's title. The project page's reads are
+ * answered as the hub would; the page is reached by a client navigation, so
+ * its load runs in the browser where they are answered.
+ */
+async function taskAttempt(kit: Kit, base: string): Promise<void> {
+  const page = await kit.page("desk", { engine: "chromium" });
+  await hubNames(page);
+  await page.routeWebSocket(
+    (url) => url.pathname === "/ws/dashboard",
+    (hubSide) => {
+      hubSide.send(JSON.stringify(BOARD));
+    }
+  );
+  const at = Date.now() - 3 * 24 * 3_600_000;
+  const stamp = new Date(at).toISOString();
+  const project = {
+    id: "backlot",
+    name: "backlot",
+    caw: false,
+    cawHarness: "claude",
+    cawModel: null,
+    createdAt: stamp,
+    lands: "main",
+    leadInstanceId: null,
+    lfsConnection: null,
+    lfsUrl: null,
+    places: [
+      {
+        createdAt: stamp,
+        id: "place-1",
+        isPrimary: true,
+        kind: "checkout",
+        machineId: "studio-machine",
+        path: "/backlot",
+        projectId: "backlot",
+      },
+    ],
+    primaryPlaceId: "place-1",
+    remote: null,
+    review: false,
+    upstreamPosts: null,
+  };
+  const attempt = {
+    endedAt: at,
+    endedHow: null,
+    headline: "Image editing is in the take view",
+    instanceId: FAR_ID,
+    result: null,
+    startedAt: at - 3_600_000,
+    state: "done",
+    workItemId: "wi-1",
+  };
+  const flags = {
+    attempts: [attempt],
+    blockedBy: [],
+    lastAttemptFailed: false,
+    lastAttemptStopped: false,
+    liveAttempt: false,
+    queuedStart: false,
+    startProblem: null,
+  };
+  const summary = {
+    ...flags,
+    after: [],
+    duplicateOf: null,
+    fields: {},
+    foundIn: null,
+    id: "tsk-1",
+    kind: "done",
+    labels: [],
+    needsYou: false,
+    number: 1,
+    outputs: [],
+    parent: null,
+    path: "tasks/tsk-1.md",
+    problem: null,
+    rank: null,
+    related: [],
+    stage: "done",
+    title: "Image editing in the take view",
+    todos: { done: 0, total: 0 },
+    type: null,
+    createdAt: at,
+    updatedAt: at,
+  };
+  const view = {
+    ...summary,
+    acceptance: "",
+    checks: [],
+    comments: [],
+    description: "Edit a take's frames in place.",
+    extra: {},
+    hash: "0",
+    issue: null,
+    lands: null,
+    problems: [],
+    result: null,
+    sections: [],
+    todos: [],
+  };
+  /** A second task, waiting on you in review: its sheet opens on Review (TaskReview). */
+  const inReview = {
+    ...summary,
+    id: "tsk-2",
+    number: 2,
+    path: "tasks/tsk-2.md",
+    stage: "review",
+    kind: "you",
+    title: "Crop in the take view",
+  };
+  const history = (id: string) => ({
+    events: [],
+    id,
+    path: `tasks/${id}.md`,
+    state: "live",
+  });
+  const answers: Record<string, unknown> = {
+    "/api/projects": [project],
+    "/api/agents": [],
+    "/api/projects/backlot/tasks": {
+      problems: [],
+      stagesProblems: [],
+      tasks: [summary, inReview],
+    },
+    "/api/projects/backlot/stages": {
+      decisionStarters: [],
+      moves: [],
+      problems: [],
+      routineStarters: [],
+      source: "template",
+      stages: [
+        { name: "review", kind: "you", hooks: {} },
+        { name: "done", kind: "done", hooks: {} },
+      ],
+      starters: [],
+      template: null,
+      views: [],
+    },
+    "/api/projects/backlot/tasks/tsk-1": view,
+    "/api/projects/backlot/tasks/tsk-1/history": history("tsk-1"),
+    "/api/projects/backlot/tasks/tsk-2": { ...view, ...inReview },
+    "/api/projects/backlot/tasks/tsk-2/history": history("tsk-2"),
+  };
+  await page.route(
+    (url) => url.pathname in answers,
+    (route: Route) =>
+      route.fulfill({
+        json: answers[new URL(route.request().url()).pathname],
+      })
+  );
+  // Any page of the app, then the project's by a link: SvelteKit takes the
+  // click and runs the project page's load here.
+  await open(page, `${base}/motion/recall`, COMPOSER, 120_000);
+  const sheet = async (task: string, row: string): Promise<string> => {
+    await page.evaluate((to) => {
+      const link = document.createElement("a");
+      link.href = `/project/backlot?task=${to}`;
+      link.id = `to-${to}`;
+      link.textContent = to;
+      link.style.cssText = "position:fixed;top:0;left:0;z-index:2147483647";
+      document.body.append(link);
+    }, task);
+    await page.locator(`#to-${task}`).click();
+    await page.waitForSelector(row, { timeout: 30_000 });
+    await settle(page, 1500);
+    return page
+      .locator(row)
+      .first()
+      .evaluate((el) => el.textContent?.replace(/\s+/g, " ").trim() ?? "");
+  };
+  const attempted = await sheet("tsk-1", '[data-slot="session"]');
+  kit.note(`task attempt, the attempt reads: ${attempted}`);
+  kit.check(
+    "task attempt: on a task's Details, the attempt the far session ran is named by its title, not Its session",
+    attempted.includes(FAR_TITLE) && !attempted.includes("Its session"),
+    attempted
+  );
+  const review = await sheet(
+    "tsk-2",
+    `[data-band="result"] [data-session="${FAR_ID}"]`
+  );
+  kit.note(`task attempt, the review's session reads: ${review}`);
+  kit.check(
+    "task attempt: on a task's Review, the session it is from (the far session) is named by its title, not Its session",
+    review.includes(FAR_TITLE) && !review.includes("Its session"),
+    review
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "session-mention",
   async run(kit) {
@@ -423,6 +1022,11 @@ const spec: Spec = {
       ["composer", composer],
       ["transcript on chromium", (k, b) => transcript(k, b, "chromium")],
       ["transcript on webkit", (k, b) => transcript(k, b, "webkit")],
+      ["readers", readers],
+      ["run step", runStep],
+      ["own page", ownPage],
+      ["workflow runs", workflowRuns],
+      ["task attempt", taskAttempt],
     ];
     for (const [name, scene] of scenes) {
       try {

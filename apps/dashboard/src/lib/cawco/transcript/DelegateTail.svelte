@@ -33,6 +33,7 @@
   import { cawco } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
   import { CURVE, dur, easeOut, motionOk } from "../motion/curves.svelte";
+  import { sessionAnswer, sessionFacts } from "../session-names.svelte";
   import type { Message } from "../types";
 
   let {
@@ -160,8 +161,23 @@
   }
 
   const branch = $derived(cawco.session(instanceId));
+  /**
+   * A session the board does not hold (it moved more than a day ago) whose
+   * transcript has nothing here yet (unread, on its way, or its read
+   * refused): what the hub's names say of it stands in its tail's place
+   * (session-names.svelte.ts) until its transcript's rows arrive.
+   */
+  const answer = $derived(
+    instanceId &&
+      !branch?.messages.length &&
+      !cawco.instanceIndex.byId.has(instanceId)
+      ? sessionAnswer(instanceId)
+      : undefined
+  );
   /** The read is still under way (or not begun) and nothing has arrived to show. */
-  const loading = $derived(!branch || branch.loading || branch.hydrating);
+  const loading = $derived(
+    !answer && (!branch || branch.loading || branch.hydrating)
+  );
 
   /** The newest rows, oldest first: a few more than the tail shows, for the one leaving. */
   const rows = $derived.by((): Row[] => {
@@ -210,6 +226,9 @@
   const slots = $derived.by(() => {
     if (shown.length > 0) {
       return Math.min(SLOTS, shown.length);
+    }
+    if (answer) {
+      return 1;
     }
     return loading ? 3 : 0;
   });
@@ -401,6 +420,14 @@
         </div>
       {/each}
     </div>
+  {:else if answer}
+    <!-- Its facts as the hub has them: state, project, role, machine, age. -->
+    <p
+      data-slot="facts"
+      class="m-0 flex-none h-(--row) flex items-center min-w-0 text-size-meta text-ink-muted"
+    >
+      <span class="min-w-0 truncate">{sessionFacts(answer)}</span>
+    </p>
   {:else if loading}
     <!-- Its transcript is on the way: three rows' worth of the house skeleton. -->
     <div

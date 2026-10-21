@@ -19,13 +19,14 @@
     unwatchDelegate,
     watchDelegate,
   } from "../client.svelte";
-  import { conversationHref, resolveSessionTitle } from "../links";
+  import { conversationHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import { markHue, sessionSprite } from "../mark";
   import { modelLabel } from "../models.svelte";
   import { tickingClock } from "../motion/clock.svelte.js";
   import { dur, easeOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
+  import { sessionAnswer, sessionTitle } from "../session-names.svelte";
   import type {
     DelegateAskEvent,
     DelegateReportEvent,
@@ -51,6 +52,25 @@
 
   const row = $derived(id ? cawco.instanceIndex.byId.get(id) : undefined);
   const branch = $derived(id ? cawco.session(id) : null);
+  /**
+   * The delegate as the hub's names have it, when the board no longer holds
+   * its row (it moved more than a day ago): its harness, its state at rest
+   * and the session it reports to (session-names.svelte.ts).
+   */
+  const hubAnswer = $derived.by(() => {
+    const named = id && !row ? sessionAnswer(id) : undefined;
+    return named?.kind === "conversation" ? named : undefined;
+  });
+  /** Its status as its row has it, or at rest as the hub's answer says. */
+  const rowStatus = $derived.by(() => {
+    if (row) {
+      return row.status;
+    }
+    if (hubAnswer?.state === "ended") {
+      return "stopped";
+    }
+    return hubAnswer?.state === "sleeping" ? "sleeping" : undefined;
+  });
 
   /**
    * The session the delegate reports to, when that is not the one whose
@@ -59,22 +79,13 @@
    * that session's, so the card draws the call as it was made and says
    * where the delegate answers now.
    */
+  const parentId = $derived(row?.parentInstanceId ?? hubAnswer?.parent?.id);
   const elsewhere = $derived(
-    row?.parentInstanceId && row.parentInstanceId !== message.instanceId
-      ? row.parentInstanceId
-      : null
+    parentId && parentId !== message.instanceId ? parentId : null
   );
-  const ownerName = $derived.by(() => {
-    if (!elsewhere) {
-      return "";
-    }
-    const owner = cawco.instanceIndex.byId.get(elsewhere);
-    return resolveSessionTitle({
-      title: owner?.title ?? owner?.derivedTitle,
-      cwd: owner?.cwd,
-      id: elsewhere,
-    });
-  });
+  const ownerName = $derived(
+    elsewhere ? (sessionTitle(elsewhere) ?? hubAnswer?.parent?.title ?? "") : ""
+  );
 
   const events = $derived(id && !elsewhere ? cawco.delegateEventsOf(id) : []);
   const askEvents = $derived(
@@ -104,7 +115,10 @@
     typeof toolInput.type === "string" ? toolInput.type : ""
   );
   const harness = $derived(
-    row?.harness ?? branch?.harness ?? String(toolInput.harness ?? "")
+    row?.harness ??
+      hubAnswer?.harness ??
+      branch?.harness ??
+      String(toolInput.harness ?? "")
   );
   const model = $derived(
     branch?.model ?? row?.model ?? String(toolInput.model ?? "")
@@ -251,7 +265,7 @@
     if (elsewhere) {
       return "elsewhere";
     }
-    if (spawnFailed || row?.status === "error") {
+    if (spawnFailed || rowStatus === "error") {
       return "failed";
     }
     if (!id) {
@@ -264,10 +278,10 @@
       return "working";
     }
     // Asked to end, its machine yet to confirm the process gone.
-    if (row?.status === "stopping") {
+    if (rowStatus === "stopping") {
       return "stopping";
     }
-    if (row?.status === "stopped") {
+    if (rowStatus === "stopped") {
       return "stopped";
     }
     // At rest, what it reported is what the card says, whether or not its
@@ -275,7 +289,7 @@
     if (report) {
       return "reported";
     }
-    return row?.status === "sleeping" ? "sleeping" : "idle";
+    return rowStatus === "sleeping" ? "sleeping" : "idle";
   });
   const inFlight = $derived(phase === "spawning" || phase === "working");
   const tone = $derived.by(() => {

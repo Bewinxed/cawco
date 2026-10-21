@@ -61,9 +61,9 @@
   } from "../project-tasks";
   import RowFault from "../RowFault.svelte";
   import SessionMark from "../SessionMark.svelte";
+  import { sessionTitle } from "../session-names.svelte";
   import { sessionStatus } from "../session-status";
   import { openBeside } from "./beside.svelte";
-  import { sessionName } from "./session-name";
   import Presented, { isPresented } from "./stage/Presented.svelte";
 
   let {
@@ -121,7 +121,9 @@
   const row = $derived(
     from ? cawco.instanceIndex.byId.get(from.instanceId) : undefined
   );
-  const fromName = $derived(from ? sessionName(from.instanceId) : "");
+  const fromName = $derived(
+    from ? (sessionTitle(from.instanceId) ?? "Its session") : ""
+  );
   const markStatus = $derived(
     ended && newest?.state === "failed" ? "fail" : sessionStatus(row, true)
   );

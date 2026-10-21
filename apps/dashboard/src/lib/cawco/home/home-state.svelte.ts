@@ -66,6 +66,8 @@ import { folderOf } from "../projects";
 import { rail } from "../rail.svelte";
 import { sameRow } from "../same-row";
 import { onRow } from "../session-acts.svelte";
+import { sessionName as tabName } from "../session-name";
+import { sessionTitle } from "../session-names.svelte";
 import { threadIdOf, threadTabId } from "../thread-tabs";
 import { hasParent, rooted, tree } from "../tree";
 import { runHref, runIdOf } from "../workflow-runs";
@@ -527,15 +529,15 @@ export const instanceTitle = (row: BoardRow): string =>
 
 /**
  * What `/session/<id>` is called, in the bar and the document title alike:
- * the thread's title where Caw asked in one, else the session's; the board
- * (no id, or one the fleet does not hold yet) is Fleet.
+ * the thread's title where Caw asked in one, else the session's, wherever it
+ * lives (session-names.svelte.ts); one the hub names nothing by (a stored
+ * session, a deleted one) as its tab names it. The board (no id) is Fleet.
  */
 export function sessionName(id: string | undefined): string {
   if (!id) {
     return "Fleet";
   }
-  const row = cawco.instanceIndex.byId.get(id);
-  return cawco.threadOf(id)?.title ?? (row ? instanceTitle(row) : "Fleet");
+  return sessionTitle(id) ?? tabName(id, {}).label;
 }
 
 export const machineName = (machineId: string): string => {

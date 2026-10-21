@@ -7,6 +7,7 @@
 import { cawco } from "./client.svelte";
 import type { HubRead } from "./hub-read";
 import { resolveSessionTitle } from "./links";
+import { sessionAnswer } from "./session-names.svelte";
 import { workingSet } from "./working-set.svelte";
 import { contextOf } from "./workspace/workspace.svelte";
 
@@ -36,14 +37,17 @@ export function sessionName(
   const row = cawco.instanceIndex.byId.get(id);
   const view = cawco.session(id);
   const ctx = contextOf(id);
-  const title = row?.title;
+  // A session the board does not hold is named as the hub's names have it
+  // (session-names.svelte.ts): its answer is the fleet's.
+  const answer = row ? undefined : sessionAnswer(id);
+  const title = row ? row.title : answer?.title;
   const settled =
     !!view && !view.loading && view.cursor === null && view.messages.length > 0;
   const firstMessage = settled
     ? view.messages.find((m) => m.type === "user" && m.content.trim())?.content
     : undefined;
   const named = !!title?.trim() || !!firstMessage?.trim();
-  const answered = !!row && (!!title?.trim() || settled);
+  const answered = (!!row || !!answer) && (!!title?.trim() || settled);
   const resolved = resolveSessionTitle({
     title,
     firstMessage,

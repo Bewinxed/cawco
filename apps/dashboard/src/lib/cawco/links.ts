@@ -212,26 +212,3 @@ export function delegateHandle(row: { id: string; cwd: string }): string {
   const leaf = row.cwd.split("/").filter(Boolean).pop() ?? "session";
   return `${leaf}#${row.id.slice(0, 8)}`;
 }
-
-/**
- * The full instance id behind a full or short (8-char prefix) id, if it names
- * exactly one row. A stored transcript keeps only the short id (NEW.md:
- * `matchesSession` prefix-matches), so a session reference in a report header
- * or a hand-off receipt resolves here against the fleet's live rows.
- */
-export function resolveInstanceId(
-  id: string | null | undefined,
-  index: InstanceIndex
-): string | undefined {
-  if (!id) {
-    return undefined;
-  }
-  if (index.byId.has(id)) {
-    return id;
-  }
-  if (id.length >= 8) {
-    const matches = [...index.byId.keys()].filter((key) => key.startsWith(id));
-    return matches.length === 1 ? matches[0] : undefined;
-  }
-  return undefined;
-}

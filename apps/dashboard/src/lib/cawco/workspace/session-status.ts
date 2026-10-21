@@ -15,6 +15,7 @@ import Unknown from "~icons/solar/question-circle-bold-duotone";
 import Working from "~icons/solar/refresh-circle-bold-duotone";
 import { STOPPED_LABEL, STOPPING_LABEL } from "../activity";
 import { cawco, isFailed, isStale } from "../client.svelte";
+import { type NamedSession, sessionAnswer } from "../session-names.svelte";
 import { runIdOf } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
 
@@ -38,6 +39,17 @@ const STEP: Record<WorkflowStep["status"], SessionStatusOf> = {
   skipped: { label: "Skipped", icon: Pause, tone: "quiet" },
   cancelled: { label: "Cancelled", icon: Pause, tone: "quiet" },
   unknown: { label: "Unknown", icon: Unknown, tone: "quiet" },
+};
+
+/** A session the hub's names answered for, on the session's scale (session-names.svelte.ts). */
+const ANSWERED: Record<NamedSession["state"], SessionStatusOf> = {
+  working: { label: "Working", icon: Working, tone: "working" },
+  "needs-you": { label: "Needs you", icon: Attention, tone: "attention" },
+  idle: { label: "Idle", icon: Pause, tone: "quiet" },
+  ready: { label: "Idle", icon: Pause, tone: "quiet" },
+  sleeping: { label: "Sleeping", icon: Sleeping, tone: "quiet" },
+  ended: { label: STOPPED_LABEL, icon: Pause, tone: "quiet" },
+  unknown: { label: "Unreachable", icon: Unknown, tone: "quiet" },
 };
 
 /**
@@ -87,7 +99,12 @@ export function stepSessionStatus(
     return { label: "Working", icon: Working, tone: "working" };
   }
   if (!row) {
-    return { label: "Stored", icon: Pause, tone: "quiet" };
+    // A session the board does not hold (moved more than a day ago): in the
+    // state the hub's names have it in; one the hub never started is stored.
+    const answer = sessionAnswer(sessionId);
+    return answer
+      ? ANSWERED[answer.state]
+      : { label: "Stored", icon: Pause, tone: "quiet" };
   }
   return { label: "Idle", icon: Pause, tone: "quiet" };
 }
