@@ -118,6 +118,8 @@ const readRects = (page: Page): Promise<{ card: number[]; rects: Rects }> =>
       // the morph's letters stand only while it runs.
       const measured = (el: Element): el is HTMLElement =>
         el instanceof HTMLElement &&
+        // A box-less element (`display: contents`, a fold's wrapper) lays out nothing.
+        getComputedStyle(el).display !== "contents" &&
         !el.closest('[data-slot="join-actions"], [data-slot="morph-text"]');
       const rects: Record<string, Box> = {};
       if (!root) {
