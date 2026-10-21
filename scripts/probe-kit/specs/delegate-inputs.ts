@@ -12,9 +12,10 @@
  * - A handoff from the parent adds an input while the leaf works: it lands in
  *   the leaf's `$TMPDIR/inputs/`, and the handoff names it.
  * - The leaf then calls finish_item; its item, which lands none, is done.
- * - Its output is a folder (`deck/`, named with a trailing slash) holding
- *   two files and a subfolder: the item finishes, and the project's
- *   `assets/<item>/deck/` holds every file, the subfolder's included.
+ * - Its output is a folder (`.decisions/deck/`, named with a trailing slash)
+ *   holding two files and a subfolder: the item finishes, and the project's
+ *   `assets/<item>/.decisions/deck/` holds every file, the subfolder's
+ *   included, at its whole path from the workspace's root.
  *
  *   bun scripts/probe-kit/run.ts delegate-inputs
  */
@@ -33,14 +34,14 @@ const HANDED_TOKEN = `delegate-inputs-handoff-${crypto.randomUUID()}`;
 /** How the handoff names its input to the leaf (core `withInputsLine`). */
 const HANDED_LINE = `Your parent's inputs are in $TMPDIR/inputs/: ${HANDED}`;
 /** The leaf's output: a folder of two files and a subfolder, by its path in the workspace and what each holds. */
-const OUTPUT = "deck/";
+const OUTPUT = ".decisions/deck/";
 const DECK: Record<string, string> = {
-  "deck/page.oui": `page-${crypto.randomUUID()}`,
-  "deck/notes.md": `notes-${crypto.randomUUID()}`,
-  "deck/shots/one.txt": `shot-${crypto.randomUUID()}`,
+  ".decisions/deck/page.oui": `page-${crypto.randomUUID()}`,
+  ".decisions/deck/notes.md": `notes-${crypto.randomUUID()}`,
+  ".decisions/deck/shots/one.txt": `shot-${crypto.randomUUID()}`,
 };
 const WRITE_DECK = [
-  "mkdir -p deck/shots",
+  "mkdir -p .decisions/deck/shots",
   ...Object.entries(DECK).map(([path, body]) => `printf %s ${body} > ${path}`),
 ].join(" && ");
 
@@ -226,25 +227,29 @@ const handsOn = async (
 
 /**
  * The folder output, collected whole: the report lists each of its files at
- * `<project folder>/assets/<item>/deck/…`, and each holds what the leaf wrote.
+ * its whole path, `<project folder>/assets/<item>/.decisions/deck/…` (hub
+ * work-items.ts `outputsFolder`: an item of no task by its id's first eight
+ * characters), and each holds what the leaf wrote.
  */
 const collectsFolder = async (
   { check }: Kit,
+  workItemId: string,
   result: string
 ): Promise<void> => {
+  const assets = `/assets/${workItemId.slice(0, 8)}/`;
   const listed = result
     .split("\n")
     .filter((line) => line.startsWith("- /") && line.includes("/assets/"))
     .map((line) => line.slice(2));
   const copied = await Promise.all(
     Object.entries(DECK).map(async ([path, body]) => {
-      const at = listed.find((one) => one.endsWith(`/${path}`));
+      const at = listed.find((one) => one.endsWith(`${assets}${path}`));
       const held = at ? await readFile(at, "utf8").catch(() => "") : "";
       return { path, at, ok: held === body };
     })
   );
   check(
-    "the folder output's two files and its subfolder's file are all in the item's assets folder",
+    "the folder output's two files and its subfolder's file are all in the item's assets folder, at their whole paths",
     copied.every((one) => one.ok),
     copied
       .map(
@@ -321,7 +326,7 @@ const spec: Spec = {
         (ended.result ?? "").includes("Read both inputs."),
       `${ended?.state}: ${(ended?.result ?? "").slice(0, 400)}`
     );
-    await collectsFolder(kit, ended?.result ?? "");
+    await collectsFolder(kit, started.workItemId, ended?.result ?? "");
   },
 };
 

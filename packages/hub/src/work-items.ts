@@ -1395,16 +1395,6 @@ const outputsProbe = (outputs: string[]): string =>
 const outputFilesCommand = (path: string): string =>
   `p=${quote(path)}; if [ -d "$p" ]; then find "$p" -type f | LC_ALL=C sort; else echo "$p"; fi`;
 
-/**
- * Where an output's file lands under the item's assets folder: a file at
- * its own path, a file of a folder output under the folder's last path part
- * (`.decisions/commenting/page.oui` → `commenting/page.oui`).
- */
-const assetPathOf = (output: string, file: string): string =>
-  file === output
-    ? output
-    : `${output.split("/").at(-1)}${file.slice(output.length)}`;
-
 /** What a probe's answer says is wrong with the outputs, a sentence each. */
 const outputsSaid = (stdout: string): string[] => {
   const by = { missing: [] as string[], link: [] as string[] };
@@ -6329,9 +6319,10 @@ export const createWorkItems = ({
   };
 
   /**
-   * One output's files read from the workspace, each at its path under the
-   * item's assets `folder` ({@link assetPathOf}): the file itself, or every
-   * file of a folder, its subfolders' included.
+   * One output's files read from the workspace, each at its whole path from
+   * the workspace's root under the item's assets `folder` (so two folders of
+   * one name never merge): the file itself, or every file of a folder, its
+   * subfolders' included.
    */
   const outputFiles = async (
     workspace: WorkspaceRow,
@@ -6357,7 +6348,7 @@ export const createWorkItems = ({
         throw new Error(`${path} could not be read: ${failedWith(read)}`);
       }
       files.push({
-        path: `${folder}/${assetPathOf(output, path)}`,
+        path: `${folder}/${path}`,
         content: Buffer.from(read.stdout, "base64"),
       });
     }
