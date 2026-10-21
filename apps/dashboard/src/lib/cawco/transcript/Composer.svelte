@@ -97,6 +97,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Command from "#lib/components/ui/command/index.js";
   import { dockShellVariants } from "#lib/components/ui/dock-shell/index.js";
+  import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -2934,6 +2935,13 @@
    * --dur-control.
    */
   let focused = $state(false);
+  /**
+   * How the field took the focus, read as it does (the page's last input,
+   * a key or a pointer): its ring is for the keyboard's focus alone, and a
+   * field focused by a press, or opened by one, draws none (DESIGN.md,
+   * The One Target Rule).
+   */
+  let focusBy = $state<"key" | "pointer">("pointer");
   const folds = (whole: number) => !focused && whole > floor + 0.5;
   const folded = $derived(folds(natural));
 
@@ -3401,6 +3409,7 @@
         data-grown={!!edit || askOpen || canvasUp || undefined}
         data-hint-back={!!hintBack || undefined}
         data-lead={!!lead || undefined}
+        data-pointer-focus={(focused && focusBy === "pointer") || undefined}
         data-recalling={!!recall || undefined}
         data-settling={(!!recall && !wheeling) || undefined}
         data-wheeling={wheeling || undefined}
@@ -3410,7 +3419,7 @@
         aria-label={FIELD_LABEL}
         class={dockShellVariants({
           class:
-            "group/cin field-shell relative z-2 py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-lead:flex-wrap data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none data-recalling:outline-off data-grown:outline-off [&:is([data-recalling],[data-grown]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-off not-focus-within:touch-none not-focus-within:touch-callout-none",
+            "group/cin field-shell relative z-2 py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-lead:flex-wrap data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none data-recalling:outline-off data-grown:outline-off [&:is([data-recalling],[data-grown],[data-pointer-focus]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-off not-focus-within:touch-none not-focus-within:touch-callout-none",
         })}
         onclickcapture={onholdclick}
         oncontextmenu={onholdnative}
@@ -3590,6 +3599,7 @@
             {ondrop}
             onfocus={() => {
               focused = true;
+              focusBy = lastInput.current;
             }}
             oninput={noteCaret}
             {onkeydown}

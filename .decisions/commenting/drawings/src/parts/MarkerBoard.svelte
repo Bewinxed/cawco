@@ -1,7 +1,7 @@
 <!--
   Pick 2's close-up: one marker shape at one, two and three digits, three
   comments stacked on one spot, and a pin pressed at the well's edge (the
-  edge drawn as Comment mode draws it, 2px accent). Each cell is a strip of
+  edge drawn as Comment mode draws it, a 1px seam). Each cell is a strip of
   the page with the pressed point under the marker.
 -->
 <script lang="ts">
@@ -35,7 +35,7 @@
   </figure>
   <figure class="col-span-2 flex flex-col gap-space-1">
     <div
-      class="relative h-16 w-full overflow-hidden rounded-xs border-e-2 border-brand-solid bg-surface-page"
+      class="relative h-16 w-full overflow-hidden rounded-xs border-e border-seam bg-surface-page"
       data-edge
       data-cell
     >

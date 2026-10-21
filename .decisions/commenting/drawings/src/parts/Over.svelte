@@ -6,8 +6,10 @@
   lays out (fonts, sizes). It takes no presses and paints nothing itself
   (`data-over-box`: render.ts reads it as geometry, never as a surface).
   Its corners are the element's own computed radii, `--radius-xs` at the
-  least, so the outline drawn round it is round where the element is, and
-  concentric through its offset (build-notes 6).
+  least. Chosen (`outlined`: the composer open on it, or its pin's thread),
+  it marks the element as the overlay's `.rect` does under The One Target
+  Rule: the `brand-wash` fill and a `--c-target-stroke` (1px) `brand-solid`
+  line on its border box, offset 0, so concentric by construction.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
@@ -56,7 +58,7 @@
   <div
     class={[
       "pointer-events-none absolute z-10",
-      outlined && "outline-2 outline-offset-2 outline-brand-solid",
+      outlined && "bg-brand-wash outline-(length:--c-target-stroke) outline-solid outline-offset-0 outline-brand-solid",
     ]}
     data-anchor={name}
     data-over-box

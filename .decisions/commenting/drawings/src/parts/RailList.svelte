@@ -7,8 +7,10 @@
   page, in its mark cell; line 1 the place, the element's name in label at
   500 in the row ink, what it carries and its age at the line's end in meta;
   line 2 the words in body, two lines at most; line 3 what came back, in
-  meta, the speaker's word at 500: in the strong ink while unread, "Working
-  on it…" while the agent is, "Unsent" in the brand ink while the session
+  meta, after its speaker's mark (the speaker line's own glyph, bare at
+  12px in a box cell: the agent's ghost in the line's ink, the person's in
+  the brand ink; the speaker's word for a screen reader alone): in the
+  strong ink while unread, "Working on it…" while the agent is, "Unsent" in the brand ink while the session
   hasn't heard it, and nothing for a comment sent and unanswered (its filled
   pill says so). The foot is the caller's: the Send bar while anything is
   unsent, or the composer (pick 4).
@@ -23,7 +25,16 @@
   } from "$kit/components/ui/fluid-tabs/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as InputGroup from "$kit/components/ui/input-group/index.js";
-  import { IconClose, IconDocument, IconPaperclip, IconPlus, IconSearch, IconSort } from "$kit/icons.js";
+  import {
+    IconAgent,
+    IconClose,
+    IconDocument,
+    IconPaperclip,
+    IconPlus,
+    IconSearch,
+    IconSort,
+    IconUser,
+  } from "$kit/icons.js";
   import { type Comment, screenshot } from "../data";
   import Marker from "./Marker.svelte";
 
@@ -159,15 +170,27 @@
           {#if row.state === "unsent"}
             <span class="mt-space-1 type-meta text-brand-ink" data-line="back">Unsent</span>
           {:else if row.last}
+            {@const Mark = row.last.by === "agent" ? IconAgent : IconUser}
             <span
-              class={["mt-space-1 truncate type-meta", row.last.unread ? "text-ink-strong" : "text-ink-muted"]}
+              class={["mt-space-1 flex min-w-0 items-center gap-space-1 type-meta mark-line", row.last.unread ? "text-ink-strong" : "text-ink-muted"]}
               data-line="back"
               data-unread={row.last.unread || undefined}
-              ><span class="font-medium">{row.last.by === "agent" ? "Agent" : "You"}:</span>
-              {row.last.text}</span
+              ><span class="sr-only">{row.last.by === "agent" ? "Agent: " : "You: "}</span><span
+                aria-hidden="true"
+                class={["grid size-icon-sm flex-none place-items-center", row.last.by === "you" && "text-brand-ink"]}
+                data-box
+                data-speaker={row.last.by}><Mark class="size-icon-sm" /></span
+              ><span class="min-w-0 truncate">{row.last.text}</span></span
             >
           {:else if row.live}
-            <span class="mt-space-1 type-meta text-ink-muted" data-line="back">Working on it…</span>
+            <span class="mt-space-1 flex min-w-0 items-center gap-space-1 type-meta text-ink-muted mark-line" data-line="back"
+              ><span class="sr-only">{"Agent: "}</span><span
+                aria-hidden="true"
+                class="grid size-icon-sm flex-none place-items-center"
+                data-box
+                data-speaker="agent"><IconAgent class="size-icon-sm" /></span
+              ><span class="min-w-0 truncate">Working on it…</span></span
+            >
           {/if}
         </span>
       </button>

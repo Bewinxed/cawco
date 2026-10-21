@@ -309,6 +309,7 @@
   --spacing-c-artifact-row-h: var(--c-artifact-row-h);
   --spacing-c-pin: var(--c-pin);
   --spacing-c-pin-card-w: var(--c-pin-card-w);
+  --spacing-c-target-stroke: var(--c-target-stroke);
   --spacing-c-pin-card-min: var(--c-pin-card-min);
   --spacing-c-sheet-inspector-w: var(--c-sheet-inspector-w);
   --spacing-c-sheet-inspector-max-h: var(--c-sheet-inspector-max-h);

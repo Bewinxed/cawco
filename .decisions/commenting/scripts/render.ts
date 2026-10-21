@@ -336,9 +336,8 @@ const cropSweep = (tab: Page, clip: Clip) =>
     // Crowded tags: a name tag needs room of its own, `ROOM` clear of every
     // drawn part but the ones it stands on (its outline's element and what
     // holds it), floating surfaces included wherever the kit portals them.
-    // The drawings place tags by the same room (drawings/src/parts/place-tag.ts).
     const ROOM = 3;
-    // What a part paints, as place-tag.ts reads it: its box, or where its words stand when words are all it paints.
+    // What a part paints: its box, or where its words stand when words are all it paints.
     const painted = (el: Element): DOMRect[] => {
       const s = getComputedStyle(el);
       const fill = s.backgroundColor !== "rgba(0, 0, 0, 0)" && s.backgroundColor !== "transparent";

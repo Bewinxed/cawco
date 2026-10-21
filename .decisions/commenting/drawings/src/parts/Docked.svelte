@@ -6,7 +6,9 @@
   (`onfoot`) plus its dock's foot, and gives it the host's width
   (`--c-composer-w`, which the composer's column reads). `target`
   is the lead row's chip (TargetChip); `action` the send glyph's label and
-  tooltip ("Comment", "Reply").
+  tooltip ("Comment", "Reply"). A composer focused as it opens stands as one
+  opened by a press does under The One Target Rule: focused, with no ring
+  (the composer draws it for the keyboard's focus alone).
 -->
 <script lang="ts">
   import Composer from "$kit/cawco/transcript/Composer.svelte";
@@ -32,7 +34,7 @@
     chain?: string[];
     /** Why the last Comment didn't go, over the pill. */
     sendError?: string;
-    /** Its field takes the focus as it opens (comment-design §3); off where several stand side by side. */
+    /** Its field takes the focus as it opens (comment-design §3), as after the press that opened it; off where several stand side by side, or for an idle reply. */
     focus?: boolean;
   } = $props();
 

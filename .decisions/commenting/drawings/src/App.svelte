@@ -170,7 +170,7 @@
                 {/if}
               {/snippet}
             </RoutinePage>
-            <span aria-hidden="true" class="pointer-events-none absolute inset-0 z-30 rounded-lg border-2 border-brand-solid"></span>
+            <span aria-hidden="true" class="pointer-events-none absolute inset-0 z-30 rounded-lg border border-seam"></span>
           </div>
           <figcaption class="type-meta text-ink-muted">{frame}</figcaption>
         </figure>

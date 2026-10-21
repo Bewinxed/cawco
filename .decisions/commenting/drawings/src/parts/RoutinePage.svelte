@@ -7,12 +7,14 @@
 
   Each element a comment can stand on (data.ts ELEMENTS) has a box standing
   over it (Over) that holds its pins (`pin(name)`). In Comment mode the
-  element under the pointer is `outlined`: 2px brand outline 2px out, its
-  words in a name tag on the outline's top-left (comment-design §2), or on
-  the first other corner with room where something drawn holds that one
-  (place-tag.ts); the page's root is outlined dashed `--space-1` inside the
-  well, tagged "Whole page" on the outline's corner, clear of the page's
-  first line.
+  element chosen is `outlined` (The One Target Rule): its box washes it and
+  draws a 1px brand line on its border box (Over). Its name is said where
+  it was chosen (the composer's target chip, the thread's head), so it
+  takes no label: the hover's label leaves with the hover once a target is
+  chosen. The page's root takes a 1px dashed brand line `--space-1` inside
+  the well, with no wash, and keeps its label (raised, `border-control`,
+  meta, `ink-strong`) on the line's foot corner, the page's empty corner:
+  its head corner stands on the form's first label.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
@@ -20,7 +22,6 @@
   import type { RoutineFormHub } from "$kit/cawco/routines/routines-api";
   import { ELEMENTS, type ElementName } from "../data";
   import Over from "./Over.svelte";
-  import { placeTag } from "./place-tag";
 
   let {
     outlined = null,
@@ -53,10 +54,10 @@
   {#if outlined === "page"}
     <span
       aria-hidden="true"
-      class="pointer-events-none absolute inset-space-1 z-10 rounded-xs border-2 border-dashed border-brand-solid"
+      class="pointer-events-none absolute inset-space-1 z-10 rounded-xs border-(length:--c-target-stroke) border-dashed border-brand-solid"
     ></span>
     <span
-      class="absolute start-(--space-row) top-(--space-row) z-10 rounded-xs bg-ink-solid px-space-1 py-0.5 type-caps text-on-ink"
+      class="absolute start-space-1 bottom-space-1 z-10 truncate whitespace-nowrap rounded-xs border border-border-control bg-surface-raised px-space-2 py-space-1 type-meta text-ink-strong shadow-tile"
       data-tag>Whole page</span
     >
   {/if}
@@ -72,13 +73,6 @@
   {#if root}
     {#each names as name (name)}
       <Over find={ELEMENTS[name].find} {name} outlined={outlined === name} {root}>
-        {#if outlined === name}
-          <span
-            class="absolute z-10 max-w-[32ch] truncate rounded-xs bg-ink-solid px-space-1 py-0.5 type-caps text-on-ink"
-            data-tag
-            {@attach placeTag}>{ELEMENTS[name].words}</span
-          >
-        {/if}
         {@render pin?.(name)}
       </Over>
     {/each}

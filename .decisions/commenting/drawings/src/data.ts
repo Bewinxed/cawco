@@ -100,6 +100,8 @@ export const WITH_ATTACHMENTS: Comment[] = [
   {
     ...COMMENTS[1],
     words: "Every field is a different width; line them up like these.",
+    live: false,
+    last: { by: "you", text: "The same width as Name, please." },
     attachments: ["one.png", "two.png", "three.png", "four.png", "five.png"].map((name) => ({ kind: "image" as const, name })),
   },
   COMMENTS[2],

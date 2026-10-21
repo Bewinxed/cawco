@@ -103,8 +103,8 @@
     /** What the card holds, its hook (`data-side-card`): the pane's own name. */
     of?: "preview" | "task" | "file" | "plan";
     /**
-     * A page's mode in the well (the preview's): Comment and Draw turn the
-     * well's own border the accent, inside its box, never a second ring;
+     * A page's mode in the well (the preview's): Comment and Draw mark the
+     * well's edge with a 1px seam inside its box, never a second ring;
      * Interact leaves it as the page's own. None: the well has no ring.
      */
     mode?: "interact" | "comment" | "draw";
@@ -498,14 +498,16 @@
   {#if recessed}
     <!-- The content's ground: a well inside its edge (surface-well,
          border-well: the recess and hairline by day, deeper with a clear
-         edge at night). A page's Comment or Draw mode rings it in the brand
-         accent (`brand-solid`, `mode`), 2px inside its box, the ring easing in and out except while the split
-         slides, and points a crosshair. -->
+         edge at night). A page's Comment or Draw mode marks its edge with a
+         1px `seam` inside its box (`mode`), easing in and out except while
+         the split slides, and points a crosshair: the cursor and the pressed
+         segment are the mode's cue, the edge only says the page hears
+         nothing (The One Target Rule). -->
     <div
       data-side-well
       data-mode={mode && mode !== "interact" ? mode : undefined}
       data-ringed={mode ? "" : undefined}
-      class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-well bg-surface-well data-ringed:outline-(length:--focus-ring-width) data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:outline-offset-(--focus-ring-inset) data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--dur-control) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-brand-solid group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+      class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-well bg-surface-well data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--dur-control) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-seam group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
       bind:this={well}
     >
       {@render children()}
