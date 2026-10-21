@@ -3,6 +3,8 @@
    the script (--ds-s, the outline's width over the class's). */
 .mk-dg-screens {
   container: ds / inline-size;
+  /* Room above the first row, so no outline or its shadow meets the mockup's top edge. */
+  padding-block-start: var(--space-2);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-7) var(--space-5);
@@ -13,11 +15,7 @@
   gap: var(--space-7) var(--space-5);
   align-items: end;
 }
-/* Two to a row from 520px: the portrait pair, the landscape pair, desk beside wide; the ultrawides span. */
-@container ds (width >= 520px) {
-  .mk-dg-screens .ds-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .mk-dg-screens .ds-shot.ds-full { grid-column: 1 / -1; }
-}
+/* One frame to a row: at the 10px floor no two fit a card side by side, and each row scrolls on its own. */
 .mk-dg-screens .ds-shot {
   margin: 0;
   min-inline-size: 0;
@@ -25,10 +23,20 @@
   gap: var(--space-3);
   align-content: end;
 }
+/* The kit's rule for wide media: a frame scales down to fit only while its words stay at 10px or more
+   (--ds-min-s, 10 over the frame's smallest type, measured by the script); past that it stands at that scale
+   and its row scrolls sideways. */
+.mk-dg-screens .ds-scroll {
+  display: grid;
+  min-inline-size: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-block: var(--space-1);
+}
 /* The outline: a raised bezel round the screen, concentric (8px screen + 7px bezel = 15px). */
 .mk-dg-screens .ds-device {
-  justify-self: center;
-  inline-size: min(100%, calc(var(--ds-cap) * var(--ds-w) / var(--ds-h)));
+  justify-self: safe center;
+  inline-size: max(min(100%, calc(var(--ds-cap) * var(--ds-w) / var(--ds-h))), calc(var(--ds-w) * var(--ds-min-s, 0) * 1px + 2 * var(--space-2) + 2px));
   padding: var(--space-2);
   border: 1px solid var(--border-control);
   border-radius: calc(var(--radius-sm) + var(--space-2));

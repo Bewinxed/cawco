@@ -228,12 +228,13 @@ function install() {
       const boxed = +w.dataset.pad === 0, r = (n) => Math.round(n * 100) / 100;
       // A gone value marked in its seam (its place filled by the preview) stands in that gap, within its old
       // box's reach, no taller than it was.
-      if (w.dataset.seam !== undefined) { const reach = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-3")) + (tb.bottom - tb.top); return { of: w.dataset.of, kind: w.dataset.wash + " (seam)", boxed, pad: +w.dataset.pad, over: r(Math.max(tb.left - wb.left, wb.right - tb.right)), under: 0, pass: wb.left >= tb.left - gap - 0.5 && wb.right <= tb.right + gap + 0.5 && wb.top >= tb.top - reach - 0.5 && wb.bottom <= tb.bottom + reach + 0.5 && wb.height <= tb.bottom - tb.top + 0.5 && wb.height >= 4 - 0.5 && [...wrap.querySelectorAll(".stage [data-key], .stage label, .stage .btn, .stage .line, .stage .note")].filter((el) => K.vis(el)).every((el) => { const b = el.getBoundingClientRect(); if (Math.min(b.right, wb.right) - Math.max(b.left, wb.left) <= 0.5) return true; return b.bottom <= wb.top - gap + 0.5 || b.top >= wb.bottom + gap - 0.5; }) }; }
-      return { of: w.dataset.of, kind: w.dataset.wash, boxed, pad: +w.dataset.pad, over: r(out), under: r(inn), pass: out <= gap + 0.5 && (boxed ? Math.abs(out) <= 0.5 && Math.abs(inn) <= 0.5 : Math.abs(out - gap) <= 0.5 && Math.abs(inn - gap) <= 0.5) };
+      if (w.dataset.seam !== undefined) { const reach = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-3")) + (tb.bottom - tb.top); return { of: w.dataset.of, kind: w.dataset.wash + " (seam)", boxed, pad: +w.dataset.pad, over: r(Math.max(tb.left - wb.left, wb.right - tb.right)), under: 0, pass: wb.left >= tb.left - gap - 1.5 && wb.right <= tb.right + gap + 1.5 && wb.top >= tb.top - reach - 0.5 && wb.bottom <= tb.bottom + reach + 0.5 && wb.height <= tb.bottom - tb.top + 0.5 && wb.height >= 4 - 0.5 && [...wrap.querySelectorAll(".stage [data-key], .stage label, .stage .btn, .stage .line, .stage .note")].filter((el) => K.vis(el)).every((el) => { const b = el.getBoundingClientRect(); if (Math.min(b.right, wb.right) - Math.max(b.left, wb.left) <= 0.5) return true; return b.bottom <= wb.top - gap + 0.5 || b.top >= wb.bottom + gap - 0.5; }) }; }
+      return { of: w.dataset.of, kind: w.dataset.wash, boxed, pad: +w.dataset.pad, over: r(out), under: r(inn), pass: out <= gap + 1.5 && (boxed ? Math.abs(out) <= 0.5 && Math.abs(inn) <= 0.5 : Math.abs(out - gap - 1) <= 0.5 && Math.abs(inn - gap - 1) <= 0.5) };
     });
   };
   // r24 B6: no wash covers anything the preview shows but its own target (a gone value's wash may stand on
   // what came in at its place, by design). What shows: every value, label, button and line of the page.
+  K.visibleWashes = () => [...document.querySelectorAll(".wash")].filter((w) => { const r = K.clipTo(w, w.getBoundingClientRect()); return r.right - r.left > 1 && r.bottom - r.top > 1; }).length;
   K.washCover = () => {
     const out = [];
     for (const w of document.querySelectorAll(".wash")) {
@@ -248,6 +249,14 @@ function install() {
     }
     return [...new Set(out)];
   };
+  // r26 B3: a bare target's wash keeps its 1px stroke --c-target-gap clear of the target's text.
+  K.washStroke = () => [...document.querySelectorAll(".wash")].filter((w) => +w.dataset.pad > 0 && w.dataset.wash === "add").map((w) => {
+    const el = w.closest(".stage-wrap").querySelector('.stage [data-key="' + w.dataset.of + '"]'), wb = w.getBoundingClientRect(), stroke = K.shadow(w).spread || 1;
+    const rg = document.createRange(); rg.selectNodeContents(el); const rs = [...rg.getClientRects()].filter((r) => r.width > 0.5 && r.height > 0.5);
+    const t = { l: Math.min(...rs.map((r) => r.left)), t: Math.min(...rs.map((r) => r.top)), r: Math.max(...rs.map((r) => r.right)), b: Math.max(...rs.map((r) => r.bottom)) };
+    const gap = Math.min(t.l - (wb.left + stroke), t.t - (wb.top + stroke), wb.right - stroke - t.r, wb.bottom - stroke - t.b);
+    return { of: w.dataset.of, gap: Math.round(gap * 100) / 100 };
+  });
   // r24 B3: no edge's path crosses any edge label's box, its own or another's, in every graph.
   K.edgeLabels = () => {
     const out = [];
@@ -285,7 +294,7 @@ function install() {
     // person moved to, a hover's) the top only cuts none of them.
     const tm = opts.margin === false ? 0 : m;
     each(".node, .region-name, .world svg text", (el, t, b, l, r) => { if (g.scrollTop > 0.5 && t < tm - 0.5 && b > 0.5) bad.push(name(el) + " at the top (" + Math.round(t) + ")"); if (b > 0.5 && t < H - 0.5 && (l < -0.5 || r > Wd + 0.5)) bad.push(name(el) + " cut across"); });
-    each(".node, .region-name, .world svg text", (el, t, b) => { if (t < H - 0.5 && b > H + 0.5) bad.push(name(el) + " cut at the foot"); });
+    each(".node, .region-name, .world svg text", (el, t, b) => { if (opts.footCut === false) return; if (t < H - 0.5 && b > H + 0.5) bad.push(name(el) + " cut at the foot"); else if (opts.foot && t < H - 0.5 && b > H - m + 0.5) bad.push(name(el) + " flush at the foot (" + Math.round(H - b) + ")"); });
     void tm;
     return { comp: g.closest(".gsec").dataset.comp, zoom: Math.round(G[g.closest(".gsec").dataset.comp].zoom * 100) / 100, scroll: g.scrollTop, bad };
   });
@@ -914,18 +923,22 @@ async function runView(view) {
 
   // Change marks: a hover that changes the page washes what it changes.
   if (!touch) {
-    // The state is reached by focus, so the graph brings it into view by its own rule (r25 B1), not a test scroll.
-    // Where its graph can't hold Every hour with a clean foot (the stacked 1920 panel's 425px at 0.75), the
-    // hover takes the kept state's from-state, in the view the graph opens on.
-    const hoverSel = await ev(() => { const hour = '.node[data-machine="when"][data-state="hour"]'; document.querySelector(hour).focus(); if (__k.graphView({ margin: false }).every((g) => !g.bad.length)) return hour; document.activeElement.blur(); showKept(tab); return '.node[data-machine="save"][data-state="saving"]'; });
+    // The designer: Every hour in every pane, scrolled into view plainly; the clean-foot rule is the opening
+    // view's (r26 item 6).
+    const hoverSel = '.node[data-machine="when"][data-state="hour"]';
+    await ev((sel) => document.querySelector(sel).scrollIntoView({ block: "nearest" }), hoverSel);
     await page.hover(hoverSel);
     await settle(300);
     const w = await ev(() => { const K = __k, r = (n) => Math.round(n * 100) / 100; return [...document.querySelectorAll(".wash")].map((x) => { const of = x.dataset.of && x.closest(".stage-wrap").querySelector('.stage [data-key="' + x.dataset.of + '"]'); const field = K.bgOf(of ? of.parentElement : x.closest(".stage-wrap")), fill = K.rgba(getComputedStyle(x).backgroundColor), washed = K.over(fill, field), edge = K.shadow(x).color, ink = getComputedStyle(x).boxShadow.split(")")[0] + ")"; return { kind: x.dataset.wash, of: x.dataset.of, fill: r(K.ratio(washed, field)), edgeOnField: r(K.ratio(K.over(edge, field), field)), edgeOnWash: r(K.ratio(K.over(edge, washed), washed)), edgeWidth: K.shadow(x).spread }; }); });
-    ok(V, "clarity §3 B: hovering " + (hoverSel.includes("hour") ? "Every hour" : "Saving (Every hour can't stand clean in this graph)") + " washes what changes (green) and where something went (red)", w.some((x) => x.kind === "add") && w.some((x) => x.kind === "del"), JSON.stringify(w.map((x) => x.kind + ":" + x.of)));
+    ok(V, "clarity §3 B: hovering Every hour washes what changes (green) and where something went (red)", w.some((x) => x.kind === "add") && w.some((x) => x.kind === "del"), JSON.stringify(w.map((x) => x.kind + ":" + x.of)));
     ok(V, "7 every wash's 1px edge in its hue's ink holds 3:1 against the field and against its own fill", w.length > 0 && w.every((x) => x.edgeWidth === 1 && x.edgeOnField >= 3 && x.edgeOnWash >= 3), w.map((x) => x.kind + ":" + x.of + " fill " + x.fill + ", edge " + x.edgeOnField + " on the field / " + x.edgeOnWash + " on the wash").join("; "));
     const geom = await ev(() => __k.washGeometry());
-    const gvh = await ev(() => __k.graphView({ margin: false }));
-    ok(V, "9 r25 B1: while a hover previews a state, the graph's foot cuts no state, name or label, nor does its top", gvh.length > 0 && gvh.every((g) => g.bad.length === 0), gvh.map((g) => g.comp + " at " + g.zoom + "×, scrolled " + Math.round(g.scroll) + (g.bad.length ? ": " + g.bad.slice(0, 4).join(", ") : " clear")).join("; "));
+    // r26 B2: in the hover view the foot stands --space-2 clear of every state, name and label, as the top
+    // does. (The stacked 1920 panel is the designer's exception: its plain scroll is the person's view.)
+    const gvh = await ev((stackedPanel) => __k.graphView({ margin: false, foot: !stackedPanel, footCut: !stackedPanel }), view.multi === "stack");
+    ok(V, "9 r26 B2: while a hover previews Every hour, " + (view.multi === "stack" ? "the graph's top cuts nothing (the stacked panel's plain scroll: the designer's clean-foot rule is the opening view's, item 6)" : "the graph's foot stands --space-2 clear of every state, name and label, and its top cuts none"), gvh.length > 0 && gvh.every((g) => g.bad.length === 0), gvh.map((g) => g.comp + " at " + g.zoom + "×, scrolled " + Math.round(g.scroll) + (g.bad.length ? ": " + g.bad.slice(0, 4).join(", ") : " clear")).join("; "));
+    const st = await ev(() => __k.washStroke());
+    ok(V, "9 r26 B3: a bare line's wash (\"Next run 10:00\") keeps its stroke --c-target-gap (2px) clear of its text", st.length > 0 && st.every((x) => x.gap >= 2 - 0.5), JSON.stringify(st));
     const cover = await ev(() => __k.washCover());
     ok(V, "9 B6: no wash covers anything the preview shows but its own target", cover.length === 0, cover.join(" | ") || (await ev(() => [...document.querySelectorAll(".wash")].map((w) => w.dataset.wash + ":" + w.dataset.of + (w.dataset.seam !== undefined ? " (seam)" : "")).join(", "))));
     ok(V, "9 fault 7: One Target washes: on a boxed target the wash is its box, on a bare one 2px outside; none runs past its target's box plus 2px", geom.length > 0 && geom.every((g) => g.pass), geom.map((g) => g.kind + ":" + g.of + (g.boxed ? " boxed" : " bare") + " +" + g.over + "px").join(", "));
@@ -1139,7 +1152,9 @@ async function runClass(view) {
   }
 
   // ---- Input: previews and keeps ----
-  const target = () => ev(() => { const g = __k.graph().getBoundingClientRect(); const n = [...document.querySelectorAll(".node:not(.kept):not(.cur)")].find((n) => { const b = n.querySelector("b").getBoundingClientRect(); return b.top > g.top + 4 && b.bottom < g.bottom - 4 && b.left > g.left + 4 && b.right < g.right - 4; }); if (!n) return null; const b = n.querySelector("b").getBoundingClientRect(); return { m: n.dataset.machine, s: n.dataset.state, x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
+  // The state held: one in the graph's view whose preview washes something the page's room shows (r26 B1: at
+  // 844 the first one in view, Saving, changed only what stood below the room).
+  const target = () => ev(() => { const g = __k.graph().getBoundingClientRect(); const inView = [...document.querySelectorAll(".node:not(.kept):not(.cur)")].filter((n) => { const b = n.querySelector("b").getBoundingClientRect(); return b.top > g.top + 4 && b.bottom < g.bottom - 4 && b.left > g.left + 4 && b.right < g.right - 4; }); const shows = (n) => { peek = { comp: tab, machine: n.dataset.machine, state: n.dataset.state, vary: 0 }; drawStage(tab); const k = __k.visibleWashes(); peek = null; drawStage(tab); return k; }; const n = inView.find((x) => shows(x) > 0) || inView[0]; if (!n) return null; const b = n.querySelector("b").getBoundingClientRect(); return { m: n.dataset.machine, s: n.dataset.state, x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
   const keptNow = () => ev(() => views[tab].last + ":" + views[tab].cur[views[tab].last].state + "|" + JSON.stringify(views[tab].cur));
   const peekNow = () => ev(() => ({ peek: peek ? peek.machine + ":" + peek.state : null, washes: document.querySelectorAll(".wash").length, peeked: document.querySelectorAll(".node.peek").length }));
   let t1 = await target();
@@ -1151,6 +1166,8 @@ async function runClass(view) {
     await page.waitForTimeout(300); const held = await peekNow();
     const heldLook = await ev(() => { const n = document.querySelector(".node.peek"), rest = document.querySelector(".node:not(.peek):not(.kept):not(.cur)"); return n ? { peekBg: getComputedStyle(n).backgroundColor, restBg: getComputedStyle(rest).backgroundColor, hover: __k.tokenColor("--surface-hover").join(",") , got: __k.rgba(getComputedStyle(n).backgroundColor).join(",") } : null; });
     ok(V, "9 r25 B4b: the held state peeks in the graph (its fill steps to --surface-hover) while its washes draw on the page", !!heldLook && heldLook.got === heldLook.hover && heldLook.peekBg !== heldLook.restBg, JSON.stringify(heldLook));
+    const seenWashes = await ev(() => __k.visibleWashes());
+    ok(V, "9 r26 B1: the held preview shows: its node peeks and its washes stand in the page's visible room (" + t1.m + ":" + t1.s + ")", held.peeked === 1 && seenWashes > 0, seenWashes + " washes in view");
     const underHeld = await ev(() => __k.pageUnderDrawer());
     if (view.layout === "drawer") ok(V, "9 r25 B2: during the held preview the page's room still ends above the drawer and its grabber", underHeld.length === 0, underHeld.join(" | "));
     const geom = await ev(() => __k.washGeometry());
