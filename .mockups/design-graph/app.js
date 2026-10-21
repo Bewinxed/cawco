@@ -423,7 +423,7 @@ function stateNode(m, it) {
   if (it.vars) {
     const list = document.createElement("div"); list.className = "vars";
     it.vars.forEach((vv, i) => {
-      const ch = document.createElement("button"); ch.className = "var"; ch.dataset.machine = m.id; ch.dataset.state = it.id; ch.dataset.vary = i; ch.textContent = vv.name;
+      const ch = document.createElement("button"); ch.className = "var"; ch.dataset.machine = m.id; ch.dataset.state = it.id; ch.dataset.vary = i; ch.dataset.label = vv.name; ch.textContent = vv.name;
       ch.onmouseenter = () => enter(i);
       ch.onclick = (e) => { e.stopPropagation(); keep(m.id, it.id, i); };
       list.append(ch);
@@ -530,6 +530,8 @@ function mark() {
   document.querySelectorAll(".var").forEach((el) => {
     const k = v.cur[el.dataset.machine], i = +el.dataset.vary, on = k.state === el.dataset.state && k.vary === i;
     el.classList.toggle("kept", on && el.dataset.machine === v.last); el.classList.toggle("cur", on && el.dataset.machine !== v.last);
+    // The tier layer keeps its last look while it wipes out.
+    if (on) el.dataset.tier = el.dataset.machine === v.last ? "kept" : "cur";
     el.classList.toggle("peek", peeked(el) && peek.vary === i);
   });
   // The lit edge: the edge into the kept state, drawn last, in coral. Edges between machines never light.

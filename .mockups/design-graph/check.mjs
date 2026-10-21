@@ -200,6 +200,29 @@ function install() {
   };
   // Every animation and transition on the page finished.
   K.settled = async () => { await Promise.all(document.getAnimations().map((a) => (a.playState === "running" ? a.finished.catch(() => {}) : null))); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); };
+  // Per frame, every chip's and node's text against what stands behind it: a chip's base layer where its tier
+  // layer (::after) doesn't cover it, and the tier layer where it does.
+  K.tierFrame = () => {
+    const out = [];
+    for (const c of document.querySelectorAll(".var")) {
+      if (!K.vis(c)) continue;
+      const w = c.getBoundingClientRect().width, cs = getComputedStyle(c), base = K.bgOf(c), a = getComputedStyle(c, "::after");
+      let cover = 0;
+      if (a.content && a.content !== "none" && a.content !== "normal") {
+        const m = (a.clipPath || "").match(/inset\(([^)]*)\)/);
+        const v = m ? m[1].split(/\s+/).map((x) => (x.endsWith("%") ? (parseFloat(x) / 100) * w : parseFloat(x) || 0)) : [0, 0, 0, 0];
+        const [t, r, b, l] = v.length === 1 ? [v[0], v[0], v[0], v[0]] : v.length === 2 ? [v[0], v[1], v[0], v[1]] : v.length === 3 ? [v[0], v[1], v[2], v[1]] : v;
+        cover = a.clipPath === "none" ? w : Math.max(0, w - l - r);
+        void t; void b;
+        if (cover > 0.5) { const fill = K.over(K.rgba(a.backgroundColor), base), ink = K.rgba(a.color); out.push({ text: c.textContent, layer: "tier", r: K.ratio(K.over(ink, fill), fill) }); }
+      }
+      if (cover < w - 0.5) { const ink = K.rgba(cs.color); out.push({ text: c.textContent, layer: "base", r: K.ratio(K.over(ink, base), base) }); }
+    }
+    for (const t of document.querySelectorAll(".node > b, .node > p")) { if (!K.vis(t)) continue; const bg = K.bgOf(t), ink = K.rgba(getComputedStyle(t).color); out.push({ text: t.textContent.slice(0, 20), layer: "node", r: K.ratio(K.over(ink, bg), bg) }); }
+    return out;
+  };
+  K.chipRatio = (c) => { const rows = []; for (const f of K.tierFrame()) if (f.text === c.textContent) rows.push(f.r); return rows.length ? Math.min(...rows) : null; };
+  K.sampleTiers = (ms) => new Promise((res) => { const t0 = performance.now(), frames = []; const tick = () => { const t = Math.round(performance.now() - t0); for (const f of K.tierFrame()) frames.push({ t, ...f, r: Math.round(f.r * 100) / 100 }); if (performance.now() - t0 < ms) requestAnimationFrame(tick); else res(frames); }; tick(); });
   K.radius = (el, pseudo) => { const cs = getComputedStyle(el, pseudo); return parseFloat(cs.borderBottomLeftRadius) || 0; };
   K.box = (el) => { const b = el.getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom, w: b.width, h: b.height }; };
   // The page's boxes: every element of the component, and the outer boxes of the tool.
@@ -611,7 +634,7 @@ async function runView(view) {
   // Every chip tier the graph can show, its ink against its fill: kept, current (another machine's), hovered
   // (previewed), at rest; and the state a full-page capture draws (the viewport grown to the page's height, the
   // graph rebuilt), read at once and settled.
-  const chipRead = (label) => ev((label) => [...document.querySelectorAll(".var")].filter((c) => __k.vis(c)).map((c) => { const cs = getComputedStyle(c), fg = __k.rgba(cs.color), bg = __k.bgOf(c); let op = 1; for (let e = c; e; e = e.parentElement) op *= +getComputedStyle(e).opacity; return { label, text: c.textContent, tier: c.classList.contains("kept") ? "kept" : c.classList.contains("cur") ? "current" : c.classList.contains("peek") || c.matches(":hover") ? "hovered" : "rest", ink: cs.color, fill: cs.backgroundColor, r: Math.round(__k.ratio(__k.over([fg[0], fg[1], fg[2], fg[3] * op], bg), bg) * 100) / 100 }; }), label);
+  const chipRead = (label) => ev((label) => [...document.querySelectorAll(".var")].filter((c) => __k.vis(c)).map((c) => { const cs = getComputedStyle(c), fg = __k.rgba(cs.color), bg = __k.bgOf(c); let op = 1; for (let e = c; e; e = e.parentElement) op *= +getComputedStyle(e).opacity; const layer = c.matches(".kept, .cur") ? getComputedStyle(c, "::after") : cs; void fg; void bg; void op; return { label, text: c.textContent, tier: c.classList.contains("kept") ? "kept" : c.classList.contains("cur") ? "current" : c.classList.contains("peek") || c.matches(":hover") ? "hovered" : "rest", ink: layer.color, fill: layer.backgroundColor, r: Math.round(__k.chipRatio(c) * 100) / 100 }; }), label);
   const chipOk = (name, rows, tiers) => { const bad = rows.filter((c) => c.r < 4.5); const seen = [...new Set(rows.map((c) => c.tier))]; ok(V, "7 chips read 4.5:1 or better: " + name, bad.length === 0 && tiers.every((t) => seen.includes(t)), (bad.length ? "UNDER 4.5 " + bad.map((c) => c.text + " (" + c.tier + ") " + c.r + " ink " + c.ink + " on " + c.fill).join("; ") + "; " : "") + rows.filter((c) => c.tier !== "rest").map((c) => c.text + " (" + c.tier + ") " + c.r).join(", ") + "; lowest " + Math.min(...rows.map((c) => c.r))); };
   await ev(() => __k.settled());
   chipOk("kept and at rest, settled", await chipRead("rest"), ["kept", "rest"]);
@@ -626,13 +649,36 @@ async function runView(view) {
     chipOk("a hovered (previewed) chip", await chipRead("hovered"), ["kept", "hovered"]);
     await page.mouse.move(5, 5); await settle(250);
   }
+  // A keep and a hover on a graph already drawn: every frame of their tier fades, the lowest reading.
+  if (!touch) {
+    const sampleDuring = async (name, act) => {
+      await ev(() => { window.__tiers = null; __k.sampleTiers(450).then((f) => { window.__tiers = f; }); });
+      await act();
+      await page.waitForFunction(() => window.__tiers !== null, null, { timeout: 3000 });
+      const f = await ev(() => window.__tiers);
+      const low = f.slice().sort((a, b) => a.r - b.r)[0];
+      const frames = new Set(f.map((x) => x.t)).size;
+      ok(V, "7 every frame of " + name + " reads 4.5:1 or better (chips and states)", frames > 5 && low.r >= 4.5, frames + " frames, lowest " + low.r + " (" + low.text + ", " + low.layer + " layer, at " + low.t + "ms)");
+    };
+    await page.locator('.var[data-machine="save"][data-state="failed"][data-vary="1"]').scrollIntoViewIfNeeded();
+    await sampleDuring("a keep (one chip to its sibling)", () => page.locator('.var[data-machine="save"][data-state="failed"][data-vary="1"]').click());
+    await settle(300);
+    await sampleDuring("a keep on another machine (kept to current)", () => page.locator('.var[data-machine="when"][data-vary="0"]').click());
+    await settle(300);
+    await sampleDuring("a keep back (current to kept)", () => page.locator('.var[data-machine="save"][data-state="failed"][data-vary="0"]').click());
+    await settle(300);
+    await sampleDuring("a hover on a chip", () => page.locator('.var[data-machine="save"][data-state="filled"][data-vary="2"]').hover());
+    await sampleDuring("a hover on a state", () => page.locator('.node[data-machine="save"][data-state="empty"]').hover());
+    await page.mouse.move(5, 5); await settle(300);
+  }
+
   // The state a full-page capture draws: the viewport grown to the page's height (which rebuilds the graph),
   // read at once, then settled.
   // Every frame for 400ms after the resize, the kept and current chips' ink against their fill; a capture can
   // land on any of them.
   const fullH = await ev(() => Math.max(document.documentElement.scrollHeight, innerHeight));
   if (fullH <= view.viewport.height) note(V, "7 chips through a full-page capture", "the page fits the viewport (" + fullH + "px), so a full-page capture resizes and redraws nothing");
-  else await ev(() => { window.__frames = []; const t0 = performance.now(); addEventListener("resize", () => { const tick = () => { for (const c of document.querySelectorAll(".var.kept, .var.cur")) { const cs = getComputedStyle(c), fg = __k.rgba(cs.color), bg = __k.bgOf(c); window.__frames.push({ t: Math.round(performance.now() - t0), text: c.textContent, tier: c.classList.contains("kept") ? "kept" : "current", r: Math.round(__k.ratio(__k.over(fg, bg), bg) * 100) / 100, ink: cs.color, fill: cs.backgroundColor }); } if (performance.now() - t0 < 400) requestAnimationFrame(tick); }; tick(); }, { once: true }); });
+  else await ev(() => { window.__frames = []; const t0 = performance.now(); addEventListener("resize", () => { const tick = () => { for (const c of document.querySelectorAll(".var.kept, .var.cur")) { const a = getComputedStyle(c, "::after"); window.__frames.push({ t: Math.round(performance.now() - t0), text: c.textContent, tier: c.classList.contains("kept") ? "kept" : "current", r: Math.round(__k.chipRatio(c) * 100) / 100, ink: a.color, fill: a.backgroundColor }); } if (performance.now() - t0 < 400) requestAnimationFrame(tick); }; tick(); }, { once: true }); });
   await page.setViewportSize({ width: view.viewport.width, height: fullH });
   await settle(500);
   const frames = await ev(() => window.__frames || []);
@@ -644,7 +690,7 @@ async function runView(view) {
   // Whole-page captures, once every animation has finished; the kept chip's ink at rest.
   await page.mouse.move(5, 5); await settle(300);
   await ev(() => __k.settled());
-  const chips = await ev(() => [...document.querySelectorAll(".var")].filter((c) => __k.vis(c)).map((c) => { const fg = __k.rgba(getComputedStyle(c).color), bg = __k.bgOf(c); let op = 1; for (let e = c; e; e = e.parentElement) op *= +getComputedStyle(e).opacity; return { text: c.textContent, tier: c.classList.contains("kept") ? "kept" : c.classList.contains("cur") ? "current" : "rest", r: Math.round(__k.ratio(__k.over([fg[0], fg[1], fg[2], fg[3] * op], bg), bg) * 100) / 100, running: c.getAnimations().length }; }));
+  const chips = await ev(() => [...document.querySelectorAll(".var")].filter((c) => __k.vis(c)).map((c) => ({ text: c.textContent, tier: c.classList.contains("kept") ? "kept" : c.classList.contains("cur") ? "current" : "rest", r: Math.round(__k.chipRatio(c) * 100) / 100, running: c.getAnimations({ subtree: true }).length })));
   const keptChip = chips.filter((c) => c.tier === "kept");
   ok(V, "7 the kept chip (\"The hub didn't answer\") reads 4.5:1 or better at rest, every chip settled", keptChip.length > 0 && chips.every((c) => c.r >= 4.5 && c.running === 0), chips.map((c) => c.text + " (" + c.tier + ") " + c.r).join(", "));
   const full = await page.screenshot({ type: "jpeg", quality: 82, fullPage: true });
