@@ -25,7 +25,10 @@
  *   without its slash, draw as its chip and any other stays code; every
  *   chip sits in its line as a word does, on Chromium and WebKit; pressing
  *   one opens the house hover panel with its description and source, and
- *   Escape puts it away.
+ *   Escape puts it away. Copying the two turns puts each skill chip on the
+ *   clipboard as its `/name`, the chips still showing their names and the
+ *   selection where it was; copying words inside one chip gives its
+ *   `/name` whole.
  * - A kit popover over a sticky table head (the overlays bench, desk): a
  *   sticky head on `--layer-sticky` set under the popover's place, and the
  *   popover first at that point.
@@ -43,6 +46,7 @@ import type { Page } from "playwright-core";
 import type { InstancesFrame } from "../../../../packages/core/src/frames";
 import type { Envelope } from "../../../../packages/core/src/index";
 import { WIRE_PROTOCOL } from "../../../../packages/core/src/stream";
+import { pressCopy } from "../../clipboard";
 import { fitsLine, inlineFit } from "../../geom";
 import { type Engine, type Kit, open, type Spec, settle } from "../../kit";
 
@@ -669,6 +673,73 @@ async function skillChips(
     `skill-chip on ${engine}: Escape puts the panel away and focus goes back to the chip`,
     !shut.panel && shut.focused,
     JSON.stringify(shut)
+  );
+
+  // From the person's first word to the agent's last.
+  const picked = () =>
+    page.evaluate(() => {
+      const range = getSelection()?.getRangeAt(0);
+      return range ? range.toString().length : -1;
+    });
+  await page.evaluate(
+    ([from, to]) => {
+      const rows = [...document.querySelectorAll('[data-slot="msg"] p')];
+      const first = rows.find((p) => p.textContent?.includes(from));
+      const last = rows.find((p) => p.textContent?.includes(to));
+      if (!(first && last)) {
+        throw new Error("the two turns' paragraphs are not drawn");
+      }
+      const range = document.createRange();
+      range.setStartBefore(first);
+      range.setEndAfter(last);
+      getSelection()?.removeAllRanges();
+      getSelection()?.addRange(range);
+    },
+    ["nope-skill", "not-a-skill"] as const
+  );
+  const before = await picked();
+  const copy = await pressCopy(page, engine);
+  const after = await picked();
+  const labels = await agent
+    .locator("[data-skill-chip]")
+    .evaluateAll((els) => els.map((el) => el.textContent?.trim() ?? ""));
+  const wants = [
+    "Run /clean-copy over the empty states",
+    "then /interfaces:better-typography on every heading",
+    "/nope-skill is no skill",
+    "I ran /clean-copy over the empty states and /interfaces:better-typography over the headings, while not-a-skill stays code.",
+  ];
+  kit.check(
+    `skill-chip on ${engine}: copying the two turns puts each skill chip on the clipboard as its /name, the chips still showing their names and the selection where it was`,
+    [copy.event, copy.clipboard].every(
+      (text) => text === null || wants.every((w) => text.includes(w))
+    ) &&
+      copy.event !== null &&
+      labels.join("|") === "clean-copy|interfaces:better-typography" &&
+      before > 0 &&
+      before === after,
+    JSON.stringify({ copy, labels, before, after })
+  );
+  // Words inside one chip copy as all it stands for.
+  await agent
+    .locator(
+      '[data-skill-chip="interfaces:better-typography"] [data-slot="label"]'
+    )
+    .evaluate((label) => {
+      const words = label.firstChild as Text;
+      const range = document.createRange();
+      range.setStart(words, 3);
+      range.setEnd(words, 9);
+      getSelection()?.removeAllRanges();
+      getSelection()?.addRange(range);
+    });
+  const part = await pressCopy(page, engine);
+  kit.check(
+    `skill-chip on ${engine}: words copied from inside a chip give its /name whole`,
+    part.event === "/interfaces:better-typography" &&
+      (part.clipboard === null ||
+        part.clipboard === "/interfaces:better-typography"),
+    JSON.stringify(part)
   );
   await page.close();
 }

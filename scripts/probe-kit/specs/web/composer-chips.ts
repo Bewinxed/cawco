@@ -11,12 +11,16 @@
  * - A skill typed whole (`/name` and a space) is its chip where it stands;
  *   an unknown `/word` stays text; the message is sent as typed.
  * - Backspace after a chip takes it whole.
+ * - Copying, then cutting, the whole of a draft that holds a mention chip
+ *   and a skill chip puts the draft's own string on the clipboard, each
+ *   chip as what it stands for; the cut empties the field.
  * - In a draft long enough to wrap, a mention chip and a skill chip each
  *   sit in their line as a word does: the label on the text's baseline
  *   (within 1px), every line of the field its line-height, no space of the
  *   chip's own (geom.ts `inlineFit`).
  */
 import type { Page } from "playwright-core";
+import { pressCopy } from "../../clipboard";
 import { fitsLine, inlineFit } from "../../geom";
 import {
   COMPOSER,
@@ -199,6 +203,63 @@ async function typed(kit: Kit, base: string, engine: Engine): Promise<void> {
   await page.close();
 }
 
+/** A draft holding a mention and a skill, in their serialised forms. */
+const HOLDING =
+  "Ask @Cap the tray chip at its pane <bench#1a2b> to run /clean-copy over the empty states";
+
+async function copied(kit: Kit, base: string, engine: Engine): Promise<void> {
+  const page = await fresh(kit, base, engine);
+  await writeDraft(page, HOLDING);
+  await page.waitForSelector(`${FIELD} [data-skill-chip="clean-copy"]`, {
+    timeout: 15_000,
+  });
+  const shown = await chipsIn(page);
+  // Focused as a keyboard reaches it: a click in its middle lands on a chip.
+  await page.locator(FIELD).focus();
+  await page.keyboard.press("ControlOrMeta+a");
+  const copy = await pressCopy(page, engine, "c");
+  kit.check(
+    `copy on ${engine}: copying a draft that holds chips puts each chip's serialised form on the clipboard, the chips still showing their labels`,
+    copy.event === HOLDING &&
+      (copy.clipboard === null || copy.clipboard === HOLDING) &&
+      shown.length === 2 &&
+      shown.map((c) => c.label).join("|") ===
+        "Cap the tray chip at its pane|clean-copy",
+    JSON.stringify({ copy, shown })
+  );
+  await page.keyboard.press("ControlOrMeta+a");
+  const cut = await pressCopy(page, engine, "x");
+  await settle(page, 200);
+  const left = await bench(page);
+  const chips = await chipsIn(page);
+  kit.check(
+    `cut on ${engine}: cutting it puts the same string on the clipboard and takes the words and the chips whole`,
+    cut.event === HOLDING &&
+      (cut.clipboard === null || cut.clipboard === HOLDING) &&
+      left.text === "" &&
+      chips.length === 0,
+    JSON.stringify({ cut, text: left.text, chips })
+  );
+  await writeDraft(page, HOLDING);
+  await page.waitForSelector(`${FIELD} [data-skill-chip="clean-copy"]`, {
+    timeout: 15_000,
+  });
+  // The page selected whole: the field's chips copy as what they stand for.
+  await page.evaluate(() => getSelection()?.selectAllChildren(document.body));
+  const whole = await pressCopy(page, engine, "c");
+  kit.check(
+    `copy on ${engine}: a copy reaching past the field gives its chips as what they stand for too`,
+    [whole.event, whole.clipboard].every(
+      (text) =>
+        text === null ||
+        (text.includes("Ask @Cap the tray chip at its pane <bench#1a2b>") &&
+          text.includes("to run /clean-copy over the empty states"))
+    ) && whole.event !== null,
+    JSON.stringify(whole)
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "composer-chips",
   async run(kit) {
@@ -208,7 +269,8 @@ const spec: Spec = {
       scenes.push(
         [`fits on ${engine}`, (k, b) => fits(k, b, engine)],
         [`picked on ${engine}`, (k, b) => picked(k, b, engine)],
-        [`typed on ${engine}`, (k, b) => typed(k, b, engine)]
+        [`typed on ${engine}`, (k, b) => typed(k, b, engine)],
+        [`copied on ${engine}`, (k, b) => copied(k, b, engine)]
       );
     }
     for (const [name, scene] of scenes) {

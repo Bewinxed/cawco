@@ -40,7 +40,8 @@ import { tv } from "#lib/utils.js";
  *   line's width. As a button it hovers and scales on press; as an atom of
  *   a field (a span) it does neither. Its 44px area is the line's, as a
  *   link's is: a finger's area on a chip in running text would cover the
- *   lines above and below it.
+ *   lines above and below it (DESIGN.md, The 44 Touch Rule; WCAG 2.2 SC
+ *   2.5.8, its Inline exception).
  *
  * Every other chip is a control, so each look carries a finger's 44px area
  * (`touch-hit`, DESIGN.md, The 44 Touch Rule), the drawn chip unchanged; a

@@ -11,10 +11,15 @@
    * where it came from. In the composer (`field`) it is one atom of the
    * message, sent as exactly `/name`: the field's own tip says the same on
    * hover or press, from the chip's `data-tip` and `data-handle`.
+   *
+   * Copied, it is what it stands for, `/name`, in both: the field writes
+   * its own string, and a copy reaching past the field reads the chip's
+   * `data-copies` (chip-copy.ts).
    */
   import { Portal } from "bits-ui";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { IconToolSkill } from "#lib/icons.js";
+  import { copyChips } from "./chip-copy";
   import { ChipPanel } from "./chip-panel.svelte";
   import HoverPanel from "./HoverPanel.svelte";
   import { type Skill, sourceWords } from "./skill-chips";
@@ -34,6 +39,7 @@
   const facts = $derived(
     [skill.description, sourceWords(skill)].filter(Boolean).join(" · ")
   );
+  copyChips();
 </script>
 
 {#if field}
@@ -44,6 +50,7 @@
       class: "cursor-default select-all",
     })}
     contenteditable="false"
+    data-copies={said}
     data-handle={said}
     data-mention={said}
     data-mention-chip
@@ -63,6 +70,7 @@
     aria-haspopup="dialog"
     aria-label={`${skill.name}, ${sourceWords(skill)}`}
     class={chipVariants({ variant: "inline" })}
+    data-copies={said}
     data-skill-chip={skill.name}
     onclick={panel.press}
     type="button"

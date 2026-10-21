@@ -74,7 +74,7 @@
    * each chip in its serialised form (`@<title> <handle>`), so a send, a
    * queued edit, recall and the drafts store carry it as text.
    */
-  import { type Snippet, tick, untrack } from "svelte";
+  import { flushSync, type Snippet, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
@@ -1154,12 +1154,13 @@
     draft.text = `${draft.text.slice(0, active.from)}${entry.insert} ${draft.text.slice(end)}`;
     const next = active.from + entry.insert.length + 1;
     dismissed = true;
-    // After the field has drawn the new text, so the caret is set in it.
-    tick().then(() => {
-      field?.focus();
-      mentionField?.select(next);
-      caret = next;
-    });
+    // The field draws the new text now, and the caret is set in it before
+    // the next key: set a tick later, a key typed straight after the pick
+    // landed at the field's start.
+    flushSync();
+    field?.focus();
+    mentionField?.select(next);
+    caret = next;
   }
 
   function step(by: number): void {

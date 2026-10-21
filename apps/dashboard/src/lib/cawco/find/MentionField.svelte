@@ -20,6 +20,10 @@
    * was written, and a command at its start still runs as one. Every chip
    * sits in its line as a word does (ui/chip `inline`).
    *
+   * Copying or cutting puts the selection's serialised string on the
+   * clipboard, each chip as what it stands for, while the chip shows its
+   * label.
+   *
    * The host reads and puts the caret in the string's own offsets
    * (`selection`, `select`), and has first claim on the field's keys, paste
    * and drop: what it handles (`defaultPrevented`) the field leaves. Any
@@ -40,6 +44,7 @@
   import { cn } from "#lib/utils.js";
   import Idle from "~icons/solar/pause-circle-bold-duotone";
   import Machine from "~icons/solar/server-bold-duotone";
+  import { copyChips } from "../chip-copy";
   import { CURVE, dur, motionOk } from "../motion/curves.svelte.js";
   import SkillChip from "../SkillChip.svelte";
   import { type Skill, skillWords } from "../skill-chips";
@@ -104,6 +109,9 @@
 
   const SPACE = /\s/;
   const CHIP = "[data-mention-chip]";
+  // A copy that reaches past the field (the page selected whole) gives each
+  // chip as what it stands for too (chip-copy.ts).
+  copyChips();
   const uid = $props.id();
   const menuId = `${uid}-menu`;
   const mention = new MentionState(() => here);
@@ -433,8 +441,24 @@
     return out;
   }
 
-  /** Where a point in the field stands in the string. */
-  function offsetOf(container: Node, offset: number, list: Atom[]): number {
+  /**
+   * Where a point in the field stands in the string. A point inside a chip
+   * (its label's words) stands at the chip's start, or its end for the end
+   * of a selection (`side`): a chip is one atom.
+   */
+  function offsetOf(
+    container: Node,
+    offset: number,
+    list: Atom[],
+    side: "start" | "end" = "start"
+  ): number {
+    const within = (
+      container instanceof Element ? container : container.parentElement
+    )?.closest(CHIP);
+    const chip = list.find((a) => a.node === within);
+    if (chip) {
+      return side === "end" ? chip.end : chip.start;
+    }
     if (container.nodeType === Node.TEXT_NODE) {
       const atom = list.find((a) => a.node === container);
       return atom ? atom.start + Math.min(offset, atom.end - atom.start) : 0;
@@ -483,7 +507,7 @@
     const range = picked.getRangeAt(0);
     return [
       offsetOf(range.startContainer, range.startOffset, list),
-      offsetOf(range.endContainer, range.endOffset, list),
+      offsetOf(range.endContainer, range.endOffset, list, "end"),
     ];
   }
 
@@ -607,6 +631,7 @@
     span.setAttribute("data-mention-chip", "");
     span.contentEditable = "false";
     span.dataset.mention = chip.serialised;
+    span.dataset.copies = chip.serialised;
     span.dataset.tip = chip.tip;
     span.dataset.handle = chip.handle;
     span.dataset.tone = chip.tone;
@@ -738,6 +763,36 @@
     }
     event.preventDefault();
     insertPlain(event.clipboardData?.getData("text/plain") ?? "");
+  }
+
+  /**
+   * Copying or cutting from the field puts the selection's serialised
+   * string on the clipboard: each chip as what it stands for (`/name`, a
+   * mention's `@<title> <handle>`), never the label it shows. A cut takes
+   * whole chips with the words.
+   */
+  function oncopy(event: ClipboardEvent) {
+    const [from, to] = selection();
+    if (from === to || !event.clipboardData) {
+      return;
+    }
+    event.preventDefault();
+    event.clipboardData.setData("text/plain", (written ?? "").slice(from, to));
+  }
+
+  function oncut(event: ClipboardEvent) {
+    oncopy(event);
+    const picked = getSelection();
+    if (!(event.defaultPrevented && editor && picked)) {
+      return;
+    }
+    const [from, to] = selection();
+    select(from, to);
+    picked.getRangeAt(0).deleteContents();
+    select(from);
+    sync();
+    look();
+    editor.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   /** Text dropped on the field lands where it was let go, as plain text. */
@@ -887,6 +942,8 @@
     hostKeyup?.(event);
   }}
   {ondrop}
+  {oncopy}
+  {oncut}
   {onpaste}
   {onpointerdown}
   {onpointerout}
