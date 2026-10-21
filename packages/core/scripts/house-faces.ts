@@ -1,7 +1,8 @@
 /**
  * Writes `src/house-faces.json`: what each house face draws (house-faces.ts),
- * read from its files' own cmaps with fontkit, each file's characters kept
- * within its rule's `unicode-range`, which is what a browser takes from it.
+ * read from its whole file's own cmap with fontkit, which is what a browser
+ * takes from it, with the file's own version string. Fails when a face's
+ * declared weight range is not its file's `wght` axis.
  *
  *   bun scripts/house-faces.ts          write it
  *   bun scripts/house-faces.ts --check  fail when it is stale
@@ -10,6 +11,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { create, type Font } from "fontkit";
 import { formatText } from "../../../scripts/fmt";
 import {
+  type FaceCoverage,
   type FaceRole,
   type HouseCoverage,
   readHouseFaces,
@@ -18,9 +20,9 @@ import {
 const OUT = new URL("../src/house-faces.json", import.meta.url).pathname;
 
 /** `held` as inclusive pairs, ascending and apart. */
-const pairsOf = (held: Set<number>): [number, number][] => {
+const pairsOf = (held: Iterable<number>): [number, number][] => {
   const ranges: [number, number][] = [];
-  for (const point of [...held].sort((a, b) => a - b)) {
+  for (const point of [...new Set(held)].sort((a, b) => a - b)) {
     const last = ranges.at(-1);
     if (last && last[1] === point - 1) {
       last[1] = point;
@@ -31,33 +33,32 @@ const pairsOf = (held: Set<number>): [number, number][] => {
   return ranges;
 };
 
-const files = readHouseFaces();
-const points: Record<FaceRole, Set<number>> = {
-  sans: new Set(),
-  mono: new Set(),
-};
-const families: Partial<Record<FaceRole, string>> = {};
+const faces: Partial<Record<FaceRole, FaceCoverage>> = {};
 const from: Record<string, string> = {};
-for (const face of files) {
+const sizes: string[] = [];
+for (const face of readHouseFaces()) {
   const font = create(Buffer.from(face.bytes)) as Font;
-  const inRange = (point: number) =>
-    face.unicodeRange.some(([low, high]) => point >= low && point <= high);
-  for (const point of font.characterSet) {
-    if (inRange(point)) {
-      points[face.role].add(point);
-    }
+  const axis = font.variationAxes.wght;
+  if (!axis || `${axis.min} ${axis.max}` !== face.weight) {
+    console.error(
+      `house faces: ${face.file}'s wght axis is ${axis ? `${axis.min} ${axis.max}` : "missing"}, not the ${face.weight} house-faces.ts gives it.`
+    );
+    process.exit(1);
   }
-  families[face.role] = face.family;
-  from[face.file] = face.version;
+  faces[face.role] = {
+    family: face.family,
+    ranges: pairsOf(font.characterSet),
+  };
+  // The name table's version string, "Version 2.002" (@types/fontkit says a number).
+  from[face.file] = String(font.version);
+  sizes.push(`${new Set(font.characterSet).size} in ${face.family}`);
+}
+const { sans, mono } = faces;
+if (!(sans && mono)) {
+  throw new Error("house faces: a sans and a mono face, each once");
 }
 
-const coverage: HouseCoverage = {
-  faces: {
-    sans: { family: families.sans ?? "", ranges: pairsOf(points.sans) },
-    mono: { family: families.mono ?? "", ranges: pairsOf(points.mono) },
-  },
-  from,
-};
+const coverage: HouseCoverage = { faces: { sans, mono }, from };
 // Formatted as the repository's formatter writes it, so the check compares bytes.
 const text = await formatText(OUT, `${JSON.stringify(coverage)}\n`);
 
@@ -79,9 +80,7 @@ if (process.argv.includes("--check")) {
 } else {
   writeFileSync(OUT, text);
   console.log(
-    `house faces: ${points.sans.size} characters in ${families.sans}, ${points.mono.size} in ${families.mono}, from ${Object.entries(
-      from
-    )
+    `house faces: ${sizes.join(", ")}, from ${Object.entries(from)
       .map(([file, version]) => `${file} ${version}`)
       .join(", ")}.`
   );

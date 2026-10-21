@@ -1,6 +1,6 @@
 # Card recipes
 
-Every card is one question of the interview (SKILL.md, The card): an `<article class="dp-card" id="<id>">`, its why the reason for the one Recommended, each option's line what it gets and its `.dp-cost` what it costs. The bridge does the picking: a click on a `[data-option]` inside a `[data-cawco-choice]` stores the pick in the hub and the hub's answer marks it (`data-cawco-picked`, `aria-pressed`). `kit/page.js` keeps the progress, each card's state line and notes in step. Copy is calm, short and sentence case; option labels are what the person gets, not "Option A"; an icon is named in words ("Attach"), never drawn as a stand-in symbol or emoji, which the house faces lack.
+Every card is one question of the interview (SKILL.md, The card): an `<article class="dp-card" id="<id>">`, its why the reason for the one Recommended, each option's line what it gets and its `.dp-cost` what it costs. The bridge does the picking: a click on a `[data-option]` inside a `[data-cawco-choice]` stores the pick in the hub and the hub's answer marks it (`data-cawco-picked`, `aria-pressed`). `kit/page.js` keeps the progress, each card's state line and notes in step. Copy is calm, short and sentence case; option labels are what the person gets, not "Option A"; an icon is named in words ("Attach"), never drawn as a stand-in symbol, a check mark (✓), a key symbol (⌘ ⇧ ↵) or an emoji, which the house faces lack; arrows (← →) and dashes they draw.
 
 ## One pick
 

@@ -61,10 +61,12 @@
  *     cost, one recommended and a why per card is kept.
  * (l) Every page draws in the house faces: in a program's page and an HTML
  *     page, `document.fonts.check('500 13px "Figtree Variable"')` holds and
- *     the hero's heading measures as Figtree, not as the fallback stack; a
- *     program whose option's label holds "⎘" is refused, 422, naming its
- *     card, its string and the character, and the same program in words is
- *     kept.
+ *     the hero's heading measures as Figtree, not as the fallback stack.
+ *     Figtree is served whole, so a program whose option's label holds
+ *     "A → B" is kept and its → measures as Figtree's, not the fallback's;
+ *     a label holding ✓ or ⌘ (Figtree lacks them, JetBrains Mono holds
+ *     them) or ⎘ (neither face holds it) is refused, 422, naming its card,
+ *     its string and the character, and the same program in words is kept.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { createHash } from "node:crypto";
@@ -2540,7 +2542,75 @@ attach = Decision("attach", "How does a brief take a file?", [clip, drop], "Most
 clip = Option("clip", "${label}", "A button beside the brief.", true, [], "One more control in the row.")
 drop = Option("drop", "Drop it in", "Drag the file onto the brief.", false, [], "Nothing shows it can be done.")`;
 
-/** (l) A stand-in glyph the house faces don't draw is refused, naming its card; the same page in words is kept. */
+/**
+ * (l) How `glyph`, standing in the clip option's label in `frame`, is drawn:
+ * its own width there (a Range over it), beside its width on a canvas in
+ * the label's font as Figtree alone and as the label's fallback stack
+ * alone; and, as the measure's control, ✓ (which Figtree lacks) on the
+ * canvas in Figtree-then-fallback and in the fallback alone.
+ */
+const glyphIn = (frame: Frame, glyph: string) =>
+  frame.evaluate(async (char) => {
+    const label = [
+      ...document.querySelectorAll('#decision-attach [data-option="clip"] *'),
+    ].find((el) =>
+      [...el.childNodes].some(
+        (node) =>
+          node.nodeType === Node.TEXT_NODE && node.textContent?.includes(char)
+      )
+    );
+    const text = [...(label?.childNodes ?? [])].find((node) =>
+      node.textContent?.includes(char)
+    );
+    if (!(label && text?.textContent)) {
+      return null;
+    }
+    const style = getComputedStyle(label);
+    const fallback = style.fontFamily
+      .split(",")
+      .map((name) => name.trim())
+      .filter((name) => !name.includes("Figtree"))
+      .join(", ");
+    const lead = `${style.fontStyle} ${style.fontWeight} ${style.fontSize}`;
+    await document.fonts.load(`${lead} "Figtree Variable"`, char);
+    await document.fonts.ready;
+    const range = document.createRange();
+    const from = text.textContent.indexOf(char);
+    range.setStart(text, from);
+    range.setEnd(text, from + char.length);
+    const context = document.createElement("canvas").getContext("2d");
+    const width = (family: string, what: string) => {
+      if (!context) {
+        return -1;
+      }
+      context.font = `${lead} ${family}`;
+      return Math.round(context.measureText(what).width * 100) / 100;
+    };
+    return {
+      family: style.fontFamily,
+      spacing:
+        style.letterSpacing === "normal"
+          ? 0
+          : Number.parseFloat(style.letterSpacing),
+      label: text.textContent.trim(),
+      check: document.fonts.check(`${lead} "Figtree Variable"`, char),
+      drawn: Math.round(range.getBoundingClientRect().width * 100) / 100,
+      figtree: width('"Figtree Variable"', char),
+      fallback: width(fallback, char),
+      control: {
+        houseFirst: width(`"Figtree Variable", ${fallback}`, "✓"),
+        fallback: width(fallback, "✓"),
+      },
+    };
+  }, glyph);
+
+/**
+ * (l) What the house face draws is kept and drawn in it; what it lacks is
+ * refused, naming its card, its string and the character. Figtree draws →
+ * (its full file serves, not only the web's latin subsets); it lacks ✓ and
+ * ⌘, which JetBrains Mono holds but a program's words are never set in, and
+ * ⎘, which neither face holds.
+ */
 const glyphLeg = async (on: On) => {
   const { fleet, kit, writer } = on;
   const at = `/api/instances/${writer}/artifacts`;
@@ -2554,24 +2624,68 @@ const glyphLeg = async (on: On) => {
         program: glyphPage(label),
       })
       .then(
-        (answer) => `kept ${JSON.stringify(answer)}`,
-        (error: Error) => error.message
+        (answer) => ({ id: answer.id, said: `kept ${JSON.stringify(answer)}` }),
+        (error: Error) => ({ id: "", said: error.message })
       );
-  const refused = await create("⎘ Attach a file");
-  kit.check(
-    '(l) a program whose option label holds "⎘" is refused, 422, naming its card, its string and the character',
-    refused.includes(": 422 ") &&
-      refused.includes(
-        'Decision "attach", option "clip": its label “⎘ Attach a file” holds ⎘ (U+2398), which Figtree Variable'
-      ),
-    refused.slice(0, 600)
-  );
+  const fault = (label: string, char: string) =>
+    `Decision "attach", option "clip": its label “${label}” holds ${char}, which Figtree Variable, the page's face, doesn't draw: it would show as an empty box or in another face.`;
+  for (const [label, char, why] of [
+    ["✓ Done", "✓ (U+2713)", "Figtree lacks it; JetBrains Mono holds it"],
+    ["⌘K to open", "⌘ (U+2318)", "Figtree lacks it; JetBrains Mono holds it"],
+    ["⎘ Attach a file", "⎘ (U+2398)", "neither house face holds it"],
+  ] as const) {
+    const refused = await create(label);
+    kit.check(
+      `(l) a program whose option label holds ${char} (${why}) is refused, 422, naming its card, its string and the character`,
+      refused.said.includes(": 422 ") &&
+        refused.said.includes(fault(label, char)),
+      refused.said.slice(0, 600)
+    );
+  }
   const inWords = await create("Attach a file");
   kit.check(
     "(l) the same program with the icon named in words is kept",
-    inWords.startsWith("kept ") && inWords.includes('"id"'),
-    inWords.slice(0, 300)
+    inWords.said.startsWith("kept ") && !!inWords.id,
+    inWords.said.slice(0, 300)
   );
+  const arrow = await create("Ship A → B");
+  kit.check(
+    '(l) a program whose option label holds "A → B" is kept',
+    arrow.said.startsWith("kept ") && !!arrow.id,
+    arrow.said.slice(0, 300)
+  );
+  if (!arrow.id) {
+    return;
+  }
+  const page = await kit.page("desk", { theme: "light" });
+  await page.goto(`${on.base}/artifact/${arrow.id}`, {
+    waitUntil: "domcontentloaded",
+  });
+  const frame = await until(
+    "the arrow page's host frame",
+    async () => {
+      for (const one of page.frames()) {
+        if ((await countIn(one, '#decision-attach [data-option="clip"]')) > 0) {
+          return one;
+        }
+      }
+      return null;
+    },
+    Boolean,
+    60_000
+  ).catch(() => null);
+  const read = frame ? await glyphIn(frame, "→") : null;
+  kit.check(
+    "(l) its → is drawn in Figtree: the label's face is Figtree, document.fonts.check holds for →, the glyph as drawn measures as Figtree's on a canvas and not as the fallback's, and the measure tells a glyph Figtree lacks (✓ falls through to the fallback)",
+    !!read &&
+      read.family.startsWith('"Figtree Variable"') &&
+      read.check &&
+      Math.abs(read.drawn - read.figtree - read.spacing) < 0.5 &&
+      Math.abs(read.figtree - read.fallback) > 0.5 &&
+      Math.abs(read.control.houseFirst - read.control.fallback) < 0.01,
+    JSON.stringify(read)
+  );
+  await page.close();
 };
 
 /** A page of two cards, the first tall, for a finger's pick on the artifact's own route. */

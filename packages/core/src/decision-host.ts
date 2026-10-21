@@ -17,7 +17,7 @@
  * entry (`host.js`, `host.css`), its chunks (Pele's diagram types, each
  * loaded when a page first draws one) and its files (Caw's stills);
  * `faces.css`, the house faces' rules (house-faces.ts), each face's file
- * beside it as `face-<hash>.woff2`, linked by a program's page and imported
+ * beside it as `face-<hash>.ttf`, linked by a program's page and imported
  * by an HTML page's `{{KIT_CSS}}`; `dials.js` and `dials.css`, DialKit with
  * the kit's dials.js, loaded only by a page that has Dials.
  */
@@ -29,7 +29,7 @@ import { agentReact } from "./agent-react";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
 import { unlayeredRules } from "./css-layers";
-import { readHouseFaces } from "./house-faces";
+import { faceRule, readHouseFaces } from "./house-faces";
 import { compileSheets, pageFiles } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
 
@@ -309,20 +309,17 @@ async function dialFiles(): Promise<Map<string, string>> {
   ]);
 }
 
-const FACE_FILE = /url\(\.\/files\/[^)]+\)/;
-
 /**
- * The house faces (house-faces.ts) as the host serves them: each file at
- * `face-<its content's hash>.woff2`, kept for good, and `faces.css`, each
- * file's rule as its package writes it, its `src` pointing there. A browser
- * fetches a file only when the page draws a character in its range.
+ * The house faces (house-faces.ts) as the host serves them: each face's
+ * whole file at `face-<its content's hash>.ttf`, kept for good, and
+ * `faces.css`, a rule per face pointing there.
  */
 function faceFiles(): Map<string, Blob> {
   const files = new Map<string, Blob>();
   const rules = readHouseFaces().map((face) => {
-    const name = `face-${createHash("sha256").update(face.bytes).digest("hex").slice(0, 16)}.woff2`;
+    const name = `face-${createHash("sha256").update(face.bytes).digest("hex").slice(0, 16)}.ttf`;
     files.set(name, new Blob([face.bytes]));
-    return face.rule.replace(FACE_FILE, `url(${PUBLIC_PATH}${name})`);
+    return faceRule(face, `${PUBLIC_PATH}${name}`);
   });
   files.set("faces.css", new Blob([`${rules.join("\n")}\n`]));
   return files;
@@ -372,8 +369,8 @@ const bundle = (): Promise<Map<string, Blob>> => {
 const TYPES: Record<string, string> = {
   css: "text/css; charset=utf-8",
   js: "text/javascript; charset=utf-8",
+  ttf: "font/ttf",
   webp: "image/webp",
-  woff2: "font/woff2",
 };
 
 const typeOf = (name: string) =>

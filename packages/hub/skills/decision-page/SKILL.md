@@ -20,7 +20,7 @@ The page is a **page** artifact whose source is a program in OpenUI Lang over Ca
 - **A stable order**: options stand in their own order (today first, small to large); never move the Recommended one to the top.
 - **Say what it changes**: the question or the `why` says what the pick changes. Where something stands today, mark that option `current`.
 - **Restate what it rests on**: a card that depends on an earlier pick names that pick in its question or `why` ("With Astro picked, …").
-- **Words first**: the question, lines and costs carry the meaning; media shows it and never replaces it. Name an icon in words ("Attach"), never as a stand-in symbol or emoji: the house faces draw neither, and the hub refuses a program holding a character they lack.
+- **Words first**: the question, lines and costs carry the meaning; media shows it and never replaces it. Name an icon in words ("Attach"), never as a stand-in symbol or emoji. Figtree draws arrows (← → ↑ ↓), dashes, × ≠ ≤ ≥ and the like, but not ✓ ✗ ✕, the key symbols ⌘ ⌥ ⇧ ⌃ ⎋ ↵, ↔, ≈ or any emoji: write "Done" or "Command-K", for the hub refuses a program holding a character Figtree lacks.
 - **Few options**: around five at most; split a bigger choice into two cards.
 - **Diagrams that fit the card**: a diagram reads without scrolling either way. Draw fewer steps, or split it into two; a long chain of steps reads left to right (`flowchart LR`).
 - **Dials** only for values on a picked option (its radius, its duration): add them to that card's media once it is decided.
