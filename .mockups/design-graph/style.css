@@ -14,7 +14,7 @@
   /* fable-timeline-design.md: "ew-resize on the 8px handle zones". */
   --bar-handle-zone: 8px;
   /* responsive-design.md, "Proposed tokens". The breakpoints (bp-short 560, bp-desk-wide 1800, bp-ultra
-     2400) live in app.js's BP, which sets html[data-screen]; a media query can't read a custom property. */
+     2450) live in app.js's BP, which sets html[data-screen]; a media query can't read a custom property. */
   --c-graph-panel-w: 448px;
   --c-graph-panel-w-wide: 800px;
   /* r22 ruling call 3: the dock's ceiling leaves the page this much, its head and first field readable. */
@@ -29,15 +29,27 @@
   --c-edge-tab-w: 32px;
   /* The panel's width; a dragged width is set on html's own style and wins. */
   --panel-w: var(--c-graph-panel-w);
-  /* From 2400 up the whole layout stands in a 2000px column, centred: the gutter either side. A percentage,
-     so each fixed box resolves it against the viewport it stands in. */
+  /* One component from bp-ultra up: the whole layout stands in a 2000px column, centred, the gutter either
+     side. A percentage, so each fixed box resolves it against the viewport it stands in. */
   --gutter: max(0px, (100% - var(--c-review-max-w)) / 2);
+  --gutter-start: var(--gutter);
+  --gutter-end: var(--gutter);
 }
 /* One component under review: the wide panel from bp-desk-wide. Two or more on screen at once: the 448 panel
    with the graphs stacked, or twice it with them side by side, and no 2000 cap (all-components-design.md). */
 html:is([data-screen="wide"], [data-screen="ultrawide"]):not([data-multi]) { --panel-w: var(--c-graph-panel-w-wide); }
-html[data-multi] { --gutter: 0px; --panel-w: var(--c-graph-panel-w); }
-html[data-multi][data-graphs="row"] { --panel-w: calc(2 * var(--c-graph-panel-w)); }
+html[data-multi] { --panel-default: var(--c-graph-panel-w); --panel-w: var(--panel-default); }
+html[data-multi][data-graphs="row"] { --panel-default: calc(2 * var(--c-graph-panel-w)); }
+/* Every component at once (the r23 values ruling, call 2): the review block (the pages row and its margins,
+   the panel and its margins) stands centred. The end gutter is fixed by the panel's default width, so a
+   dragged panel keeps its trailing edge and the pages shift by the drag, wrapping only once the start gutter
+   is spent. --row-w (the pages' row, from app.js) and its 18px margins either side; the panel's likewise. */
+html[data-multi] {
+  --gutter-end: max(0px, (100% - (var(--row-w) + 2 * var(--space-5)) - (var(--panel-default) + 2 * var(--space-5))) / 2);
+  --gutter-start: max(0px, 100% - var(--gutter-end) - (var(--row-w) + 2 * var(--space-5)) - (var(--panel-w) + 2 * var(--space-5)));
+}
+/* More components than fit a row: the pages wrap and the block fills the pane. */
+html[data-multi][data-wrapped] { --gutter-end: 0px; --gutter-start: 0px; }
 * { box-sizing: border-box; }
 body { margin: 0; min-block-size: 100dvh; font: var(--type-body); background: var(--surface-recess); color: var(--ink-strong); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 button { font: inherit; color: inherit; }
@@ -45,7 +57,7 @@ button { font: inherit; color: inherit; }
 /* ---- The page under the tool: the component being judged ----
    It owns the room left of the panel and above the dock, and scrolls inside it, so the dock never covers it
    and nothing the tool does moves it. */
-.page { position: fixed; inset-block: 0 var(--dock-room, 0px); inset-inline: var(--gutter) calc(var(--gutter) + var(--panel-w) + 2 * var(--space-5)); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: max(var(--space-8), env(safe-area-inset-top, 0px)) var(--space-5) var(--space-8); display: grid; justify-items: center; align-content: start; }
+.page { position: fixed; inset-block: 0 var(--dock-room, 0px); inset-inline: var(--gutter-start) calc(var(--gutter-end) + var(--panel-w) + 2 * var(--space-5)); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: max(var(--space-8), env(safe-area-inset-top, 0px)) var(--space-5) var(--space-8); display: grid; justify-items: center; align-content: start; }
 /* The pages: one row of 600px pages a margin apart, the spare width the recess; more than fit wrap. */
 .pages { inline-size: 100%; display: flex; flex-wrap: wrap; justify-content: center; align-items: start; gap: var(--space-5); }
 .stage-wrap { position: relative; flex: 0 1 auto; inline-size: min(100%, 600px); }
@@ -91,7 +103,7 @@ button { font: inherit; color: inherit; }
 /* ---- The tool: the house floating panel ---- */
 .tool { position: fixed; z-index: var(--layer-dock); color: var(--ink-strong); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-overlay); font: var(--type-label); font-weight: var(--weight-body); }
 .tool :focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
-.panel { inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: calc(var(--gutter) + var(--space-5)); inline-size: var(--panel-w); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border-radius: var(--radius-panel); padding: var(--space-2); }
+.panel { inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: calc(var(--gutter-end) + var(--space-5)); inline-size: var(--panel-w); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border-radius: var(--radius-panel); padding: var(--space-2); }
 /* One row over the graph: the components' tabs, then the graph's zoom and Hide at the trailing end. */
 /* It wraps (zoom and Hide to a line of their own, at the end) before the tabs would be cut. */
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
@@ -151,7 +163,6 @@ button { font: inherit; color: inherit; }
 @media (hover: hover) { .icon-btn:hover { background: var(--surface-hover); } }
 .icon-btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 
-/* The dials, on one grid, starting --space-3 in so the corner's L stands clear of the first label. */
 /* A graph's section: its name in the label role and its own zoom group over it (shown with every graph on
    screen); below the line, the toolbar's tabs pick the one section shown. */
 .graphs { display: flex; flex-direction: column; flex: 0 1 auto; min-block-size: 0; }
@@ -169,18 +180,13 @@ html[data-graphs="stack"] .gsec:first-child { flex: none; }
 html[data-graphs="stack"] .gsec:first-child .graph { flex: none; block-size: var(--split-h, 240px); }
 html[data-graphs="stack"] .gsec:last-child { flex: 1 1 0; }
 html[data-graphs="stack"] .gsec:last-child .graph { flex: 1 1 auto; block-size: auto; }
-html[data-graphs="stack"] :is(.sash-h, .edge-pill-h) { display: none; }
+/* Its grips are the width edge and the split edge: no foot edge, no corner (the r23 values ruling, call 3). */
+html[data-graphs="stack"] :is(.sash-h, .edge-pill-h, .sash-c, .corner-l) { display: none; }
 /* Side by side past bp-ultra: each graph its own column at the panel's graph height. */
 html[data-graphs="row"] .graphs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-3); }
-/* One component past bp-ultra: page, panel and dock in the centred 2000 column, the dock spanning it at the
-   foot and the panel reaching down to it, its graph taking the height; the dock's edge is the one height
-   control there. */
-html[data-screen="ultrawide"]:not([data-multi]) .dock { inset-inline-end: calc(var(--gutter) + var(--space-5)); }
-html[data-screen="ultrawide"]:not([data-multi]) .panel { block-size: calc(100dvh - max(var(--dock-room, 0px), var(--space-5)) - var(--space-5)); max-block-size: none; }
-html[data-screen="ultrawide"]:not([data-multi]) :is(.graphs, .gsec[data-current], .graph) { flex: 1 1 auto; }
-html[data-screen="ultrawide"]:not([data-multi]) .graph { block-size: auto; }
-html[data-screen="ultrawide"]:not([data-multi]) :is(.sash-h, .edge-pill-h, .sash-c, .corner-l) { display: none; }
-.dials { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; column-gap: var(--space-3); row-gap: var(--space-1); align-items: center; padding: var(--space-2) 0 0 var(--space-3); }
+/* The dials start clear of the corner's L: its 6px inset and 12px legs, then --space-2, less the panel's own
+   pad and edge, so no label's first letter stands under the L's curve. */
+.dials { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; column-gap: var(--space-3); row-gap: var(--space-1); align-items: center; padding: var(--space-2) 0 0 calc(var(--c-corner-grip-inset) + var(--c-corner-grip-leg) + var(--space-2) - var(--space-2) - 1px); }
 .dial { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; }
 .dial span:first-child { color: var(--ink-row); }
 .dial output { font: var(--type-meta); text-align: end; font-variant-numeric: tabular-nums; color: var(--ink-muted); }
@@ -273,7 +279,7 @@ html[data-dragging], html[data-dragging] * { cursor: grabbing !important; user-s
 html[data-dragging="edge"], html[data-dragging="edge"] * { cursor: ew-resize !important; }
 
 /* Show: the way back once the panel is hidden. */
-.show { position: fixed; z-index: var(--layer-dock); inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: calc(var(--gutter) + var(--space-5)); display: inline-flex; align-items: center; gap: var(--space-2); block-size: var(--c-btn-h-sm); padding: 0 var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface-raised); box-shadow: var(--shadow-raised); font: var(--type-label); color: var(--ink-strong); cursor: pointer; transition: var(--transition-control); }
+.show { position: fixed; z-index: var(--layer-dock); inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: calc(var(--gutter-end) + var(--space-5)); display: inline-flex; align-items: center; gap: var(--space-2); block-size: var(--c-btn-h-sm); padding: 0 var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface-raised); box-shadow: var(--shadow-raised); font: var(--type-label); color: var(--ink-strong); cursor: pointer; transition: var(--transition-control); }
 .show svg { inline-size: var(--icon-md); block-size: var(--icon-md); color: var(--ink-muted); }
 .show[hidden] { display: none; }
 @media (hover: hover) { .show:hover { background: var(--surface-hover); } }
@@ -282,7 +288,7 @@ html[data-dragging="edge"], html[data-dragging="edge"] * { cursor: ew-resize !im
 /* ---- The dock: the kept move's clips over time, an editor ---- */
 /* The dock at the foot, under the page column. Its height is its rows' until its top edge is dragged
    (--dock-h), between its floor (head, ruler, one row) and the room; the page column takes what is left. */
-.dock { container: dock / inline-size; inset-inline-start: calc(var(--gutter) + var(--space-5)); inset-inline-end: calc(var(--gutter) + var(--panel-w) + 2 * var(--space-5)); inset-block-end: var(--space-5); block-size: var(--dock-h, auto); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border-radius: var(--radius-panel); padding: var(--space-3) var(--space-4) var(--space-4); }
+.dock { container: dock / inline-size; inset-inline-start: calc(var(--gutter-start) + var(--space-5)); inset-inline-end: calc(var(--gutter-end) + var(--panel-w) + 2 * var(--space-5)); inset-block-end: var(--space-5); block-size: var(--dock-h, auto); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border-radius: var(--radius-panel); padding: var(--space-3) var(--space-4) var(--space-4); }
 .dock-body { display: contents; }
 .dock-head { display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-btn-h); margin-block-end: var(--space-2); }
 .dock-title { flex: 1 1 auto; min-inline-size: 0; margin: 0; font: var(--type-label); color: var(--ink-strong); overflow-wrap: anywhere; }
@@ -400,8 +406,8 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
 .anchor-btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 .arrow { font: var(--type-meta); color: var(--ink-muted); }
 .sent { font: var(--type-meta); color: var(--ink-muted); }
-/* The kit's DropdownMenu: the floating surface holding 8px items. The kit pads it 6px, which leaves a 12px menu
-   round an 8px item 7px in; here the pad is what the Concentric Rule leaves: 12 - 8 - the 1px edge = 3px. */
+/* The kit's DropdownMenu (the r21 ruling): a 12px surface, its 1px edge and the kit popover's 6px pad round
+   5px (--radius-xs) items: 5 + 6 + 1 = 12 (The Concentric Rule). */
 .menu { position: fixed; z-index: calc(var(--layer-float) + 1); min-inline-size: 12rem; display: flex; flex-direction: column; padding: var(--c-floating-pad); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-overlay); max-block-size: calc(100dvh - 2 * var(--space-5)); overflow-y: auto; overscroll-behavior: contain; }
 .mi { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-menu-item-h); padding: 0 var(--space-8) 0 var(--c-row-inset); border-radius: var(--radius-xs); font: var(--type-label); font-weight: var(--weight-body); color: var(--ink-strong); cursor: default; position: relative; transition: var(--transition-control); }
 .mi code { font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); }

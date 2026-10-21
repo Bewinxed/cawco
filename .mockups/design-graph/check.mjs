@@ -226,8 +226,73 @@ function install() {
       else { const [x, y, ww, hh] = w.dataset.box.split(",").map(Number); tb = { left: st.left + x, top: st.top + y, right: st.left + x + ww, bottom: st.top + y + hh }; }
       const out = Math.max(tb.left - wb.left, tb.top - wb.top, wb.right - tb.right, wb.bottom - tb.bottom), inn = Math.min(tb.left - wb.left, tb.top - wb.top, wb.right - tb.right, wb.bottom - tb.bottom);
       const boxed = +w.dataset.pad === 0, r = (n) => Math.round(n * 100) / 100;
+      // A gone value marked in its seam (its place filled by the preview) stands in that gap, within its old
+      // box's reach, no taller than it was.
+      if (w.dataset.seam !== undefined) { const reach = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-3")) + (tb.bottom - tb.top); return { of: w.dataset.of, kind: w.dataset.wash + " (seam)", boxed, pad: +w.dataset.pad, over: r(Math.max(tb.left - wb.left, wb.right - tb.right)), under: 0, pass: wb.left >= tb.left - gap - 0.5 && wb.right <= tb.right + gap + 0.5 && wb.top >= tb.top - reach - 0.5 && wb.bottom <= tb.bottom + reach + 0.5 && wb.height <= tb.bottom - tb.top + 0.5 }; }
       return { of: w.dataset.of, kind: w.dataset.wash, boxed, pad: +w.dataset.pad, over: r(out), under: r(inn), pass: out <= gap + 0.5 && (boxed ? Math.abs(out) <= 0.5 && Math.abs(inn) <= 0.5 : Math.abs(out - gap) <= 0.5 && Math.abs(inn - gap) <= 0.5) };
     });
+  };
+  // r24 B6: no wash covers anything the preview shows but its own target (a gone value's wash may stand on
+  // what came in at its place, by design). What shows: every value, label, button and line of the page.
+  K.washCover = () => {
+    const out = [];
+    for (const w of document.querySelectorAll(".wash")) {
+      const wrap = w.closest(".stage-wrap"), wb = w.getBoundingClientRect(), added = [...wrap.querySelectorAll(".wash.add")].map((x) => x.dataset.of);
+      const own = w.dataset.wash === "add" ? wrap.querySelector('.stage [data-key="' + w.dataset.of + '"]') : null;
+      for (const el of wrap.querySelectorAll(".stage [data-key], .stage label, .stage .btn, .stage .line, .stage .note, .stage .rrow > b, .stage .rmeta, .stage .rstatus, .stage .done")) {
+        if (!K.vis(el) || (own && (el === own || own.contains(el) || el.contains(own)))) continue;
+        if (added.some((k) => { const a = wrap.querySelector('.stage [data-key="' + k + '"]'); return a && (a === el || a.contains(el) || el.contains(a)); })) continue;
+        const b = el.getBoundingClientRect();
+        if (Math.min(wb.right, b.right) - Math.max(wb.left, b.left) > 0.5 && Math.min(wb.bottom, b.bottom) - Math.max(wb.top, b.top) > 0.5) out.push(w.dataset.wash + ":" + w.dataset.of + " over " + (el.dataset.key || el.className || el.tagName) + " \"" + el.textContent.trim().slice(0, 24) + "\"");
+      }
+    }
+    return [...new Set(out)];
+  };
+  // r24 B3: no edge's path crosses any edge label's box, its own or another's, in every graph.
+  K.edgeLabels = () => {
+    const out = [];
+    for (const svg of document.querySelectorAll(".world svg")) {
+      if (!K.vis(svg.closest(".graph"))) continue;
+      const texts = [...svg.querySelectorAll("text")].map((t) => ({ t: t.textContent, b: t.getBBox() }));
+      for (const pl of svg.querySelectorAll("polyline")) {
+        const p = pl.getAttribute("points").split(" ").map((q) => q.split(",").map(Number));
+        for (const { t, b } of texts) {
+          let hit = false;
+          for (let i = 1; i < p.length && !hit; i++) for (let k = 0; k <= 64; k++) { const x = p[i - 1][0] + ((p[i][0] - p[i - 1][0]) * k) / 64, y = p[i - 1][1] + ((p[i][1] - p[i - 1][1]) * k) / 64; if (x > b.x + 0.5 && x < b.x + b.width - 0.5 && y > b.y + 0.5 && y < b.y + b.height - 0.5) { hit = true; break; } }
+          if (hit) out.push(pl.dataset.from + "→" + pl.dataset.to + " through \"" + t + "\"");
+        }
+      }
+    }
+    return out;
+  };
+  // r24 B4: no grip mark (a pill, the corner's L) or the corner's square crosses a text box.
+  K.gripsOverText = () => {
+    const marks = [...document.querySelectorAll(".edge-pill, .corner-l, .sash-c")].filter((e) => K.vis(e)).map((e) => ({ n: e.className.split(" ").pop() || e.id, b: e.getBoundingClientRect() }));
+    const out = [];
+    for (const it of K.textItems()) { const r = K.clipTo(it.el, it.r); for (const m of marks) if (Math.min(m.b.right, r.right) - Math.max(m.b.left, r.left) > 0.5 && Math.min(m.b.bottom, r.bottom) - Math.max(m.b.top, r.top) > 0.5) out.push(m.n + " over \"" + it.el.textContent.trim().slice(0, 20) + "\""); }
+    return [...new Set(out)];
+  };
+  // r24 B5: each graph's view as it opens. Its top edge cuts nothing (a state, a machine's name or box, a
+  // label, an arrow inside a machine) and stands --space-2 clear of what shows under it; only an arrow
+  // between machines comes in over it. Its foot cuts no state, name or label. Across, everything stands
+  // inside with a margin.
+  K.graphView = () => K.graphs().map((g) => {
+    const gb = g.getBoundingClientRect(), top = gb.top + g.clientTop, left = gb.left + g.clientLeft, H = g.clientHeight, Wd = g.clientWidth, m = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-2")), bad = [];
+    const each = (sel, fn) => { for (const el of g.querySelectorAll(sel)) { const b = el.getBoundingClientRect(); fn(el, b.top - top, b.bottom - top, b.left - left, b.right - left); } };
+    const name = (el) => (el.dataset && (el.dataset.state || el.dataset.machine)) || el.textContent.trim().slice(0, 16) || el.tagName;
+    each(".node, .region-name, .world svg text, .region, .regionBody svg polyline", (el, t, b, l, r) => { if (g.scrollTop > 0.5 && t < m - 0.5 && b > 0.5) bad.push(name(el) + " at the top (" + Math.round(t) + ")"); if (b > 0.5 && t < H - 0.5 && (l < -0.5 || r > Wd + 0.5)) bad.push(name(el) + " cut across"); });
+    each(".node, .region-name, .world svg text", (el, t, b) => { if (t < H - 0.5 && b > H + 0.5) bad.push(name(el) + " cut at the foot"); });
+    return { comp: g.closest(".gsec").dataset.comp, zoom: Math.round(G[g.closest(".gsec").dataset.comp].zoom * 100) / 100, scroll: g.scrollTop, bad };
+  });
+  // r24 B2: the timeline's marks (ties, snap and tick lines, the drag pill) stand in their lanes, never over
+  // the inline editor.
+  K.marksOverEditor = () => {
+    const p = document.querySelector(".pop.inline"), out = [];
+    if (!p) return out;
+    const pb = p.getBoundingClientRect();
+    for (const m of document.querySelectorAll(".tie, .snap, .tick, .drag-pill")) { const b = m.getBoundingClientRect(); if (b.width + b.height > 0 && Math.min(b.right, pb.right) - Math.max(b.left, pb.left) > -0.5 && Math.min(b.bottom, pb.bottom) - Math.max(b.top, pb.top) > -0.5) out.push(m.className + " at " + Math.round(b.left) + "," + Math.round(b.top)); }
+    if (stacked()) for (const t of document.querySelectorAll(".tie")) { const key = t.dataset.for, lane = key && document.querySelector('.lane[data-key="' + key + '"]'); if (lane) { const b = t.getBoundingClientRect(), l = lane.getBoundingClientRect(); if (b.top < l.top - 0.5 || b.bottom > l.bottom + 0.5) out.push("tie of " + key + " outside its lane (" + Math.round(b.top) + "–" + Math.round(b.bottom) + " vs " + Math.round(l.top) + "–" + Math.round(l.bottom) + ")"); } }
+    return out;
   };
   // Every animation and transition on the page finished.
   K.settled = async () => { await Promise.all(document.getAnimations().map((a) => (a.playState === "running" ? a.finished.catch(() => {}) : null))); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); };
@@ -295,6 +360,14 @@ await browser.close();
 console.log("\n" + passes + " passed, " + fails + " failed");
 process.exit(fails ? 1 : 0);
 
+// r24 B3–B5 as each graph opens: labels clear of every line, grips clear of every text, the view's edges
+// cutting nothing.
+async function graphOpen(V, ev, label) {
+  const e = await ev(() => __k.edgeLabels()), gr = await ev(() => __k.gripsOverText()), gv = await ev(() => __k.graphView());
+  ok(V, "9 B3: no edge's path crosses an edge label's box (" + label + ")", e.length === 0, e.join(" | ") || (await ev(() => document.querySelectorAll(".world svg text").length)) + " labels clear");
+  ok(V, "9 B4: no grip mark or corner box crosses a text box (" + label + ")", gr.length === 0, gr.join(" | "));
+  ok(V, "9 B5: each graph's view holds its states, groups, labels and arrows: the top edge cuts nothing and stands --space-2 clear, the foot cuts no state or label, nothing is cut across (" + label + ")", gv.length > 0 && gv.every((g) => g.bad.length === 0), gv.map((g) => g.comp + " at " + g.zoom + "×, scrolled " + Math.round(g.scroll) + (g.bad.length ? ": " + g.bad.slice(0, 4).join(", ") : " clear")).join("; "));
+}
 // Checks both runners share.
 function mkHelpers(V, ev) {
   // Fault 5: Hide is the kit's sm icon button (30px, the button outline) with its glyph at --icon-md (16px),
@@ -357,6 +430,7 @@ async function runView(view) {
     ok(V, "1 no line runs through a text box (" + label + ")", d.length === 0, d.slice(0, 5).join(" | "));
   };
   await breakage("the view it opens on");
+  await graphOpen(V, ev, "the view it opens on");
   const rulerAt = async (label) => { const r = await ev(() => __k.rulerOverlaps()); ok(V, "1 no two ruler labels overlap (" + label + ")", r.overlaps.length === 0, (r.overlaps.length ? "OVERLAP " + r.overlaps.slice(0, 4).join(", ") + "; " : "") + "labels " + r.labels); };
   await rulerAt("320 ms track");
 
@@ -429,7 +503,9 @@ async function runView(view) {
       const K = __k, out = [];
       const pair = (name, outer, inner) => {
         if (!outer || !inner || !K.vis(inner)) return;
-        const o = outer.getBoundingClientRect(), i = inner.getBoundingClientRect(), RO = K.usedRadius(outer), RI = K.usedRadius(inner);
+        // Inside a zoomed graph every length draws at the world's scale, its radii too.
+        const world = inner.closest(".world"), k = world ? world.getBoundingClientRect().width / world.offsetWidth : 1;
+        const o = outer.getBoundingClientRect(), i = inner.getBoundingClientRect(), RO0 = K.usedRadius(outer), RI0 = K.usedRadius(inner), sc = (R) => Object.fromEntries(Object.entries(R).map(([c, v]) => [c, v * k])), RO = sc(RO0), RI = sc(RI0);
         // The corner the inner shape sits in: both its gaps under the outer radius.
         for (const [gx, gy, c] of [[i.left - o.left, i.top - o.top, "tl"], [o.right - i.right, i.top - o.top, "tr"], [i.left - o.left, o.bottom - i.bottom, "bl"], [o.right - i.right, o.bottom - i.bottom, "br"]]) {
           const R = RO[c], r = RI[c];
@@ -569,8 +645,24 @@ async function runView(view) {
     const geo = await ev(() => { const b = (id) => __k.box(document.getElementById(id)), cs = getComputedStyle(document.documentElement); return { page: b("page"), panel: b("panel"), dock: b("dock"), s5: parseFloat(cs.getPropertyValue("--space-5")), maxW: parseFloat(cs.getPropertyValue("--c-review-max-w")), floorH: parseFloat(cs.getPropertyValue("--c-page-h-floor")), stack: document.querySelectorAll("[data-stack]").length, lane: document.querySelector(".lane").getBoundingClientRect().width, multi: document.documentElement.hasAttribute("data-multi"), graphs: document.documentElement.dataset.graphs || null, nodeW: getComputedStyle(document.querySelector(".gsec[data-current] .world")).getPropertyValue("--node-w").trim(), two: document.querySelector(".gsec[data-current] .graph").dataset.two }; });
     const capped = view.screen === "ultrawide" && !view.multi, g0 = capped ? Math.max(0, (W - geo.maxW) / 2) : 0, near = (a, b) => Math.abs(a - b) <= 0.5;
     ok(V, "9 the layout is " + (view.multi ? "every component at once, graphs " + view.multi : "one component") + " (html[data-multi], [data-graphs])", geo.multi === !!view.multi && geo.graphs === (view.multi || null), JSON.stringify({ multi: geo.multi, graphs: geo.graphs }));
-    if (capped) ok(V, "9 fault 4: one component past 2450: page, panel and dock stand in the centred " + geo.maxW + "px column (" + g0 + "px either side), the dock spanning it at the foot, the panel down to it, the page above it", near(geo.page.l, g0) && near(geo.page.r, geo.panel.l - geo.s5) && near(geo.panel.r, W - g0 - geo.s5) && near(geo.panel.b, geo.dock.t - geo.s5) && near(geo.dock.l, g0 + geo.s5) && near(geo.dock.r, W - g0 - geo.s5) && near(geo.dock.b, H - geo.s5) && near(geo.page.b, geo.dock.t - geo.s5) && geo.stack === 0, JSON.stringify({ page: geo.page, panel: geo.panel, dock: geo.dock }));
+    // The r23 values ruling: one component past 2450 is the wide layout under the 2000 cap (call 4); every
+    // component at once is a centred review block (call 2): gutterEnd = (W - (rowW + 36) - (panel + 36)) / 2.
+    const block = view.multi ? await ev(() => { const s5 = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-5")), pages = [...document.querySelectorAll(".stage-wrap")].filter((e) => __k.vis(e)).map((e) => e.getBoundingClientRect()), rowW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-w")), pd = document.documentElement.dataset.graphs === "row" ? 896 : 448; return { rowW, gutterEnd: Math.max(0, (innerWidth - (rowW + 2 * s5) - (pd + 2 * s5)) / 2), lastPage: Math.max(...pages.map((b) => b.right)), firstPage: Math.min(...pages.map((b) => b.left)), sb: scrollbarW() }; }) : null;
+    const gs = capped ? g0 : view.multi ? block.gutterEnd : 0, ge = gs;
+    if (capped) ok(V, "9 one component past 2450 (r24 call 4): the wide layout under the 2000 cap: page, panel and dock in the centred " + geo.maxW + "px column (" + g0 + "px either side), the dock under the page column, the panel with its own height; the page column " + Math.round(geo.page.w - 2 * geo.s5) + "px, lanes " + Math.round(geo.lane) + "px", near(geo.page.l, g0) && near(geo.panel.r, W - g0 - geo.s5) && near(geo.dock.l, g0 + geo.s5) && near(geo.dock.r, geo.page.r) && near(geo.dock.b, H - geo.s5) && near(geo.page.b, geo.dock.t - geo.s5) && geo.panel.b < geo.dock.t && near(geo.page.w - 2 * geo.s5, 1128) && geo.lane >= 780 && geo.lane <= 860 && geo.stack === 0, JSON.stringify({ page: geo.page, panel: geo.panel, dock: geo.dock }));
+    else if (view.multi) ok(V, "9 every component at once (r24 call 2): the review block stands centred, a " + Math.round(block.gutterEnd) + "px gutter either side, the pages 36px from the panel (plus the page column's " + block.sb + "px scrollbar gutter), the dock spanning the page column; lanes " + Math.round(geo.lane) + "px", near(geo.page.l, gs) && near(geo.panel.r, W - ge - geo.s5) && near(geo.panel.l - block.lastPage, 2 * geo.s5 + block.sb) && near(block.firstPage - geo.page.l, geo.s5) && near(geo.dock.l, gs + geo.s5) && near(geo.dock.r, geo.page.r) && near(geo.dock.b, H - geo.s5) && near(geo.page.b, geo.dock.t - geo.s5) && geo.lane >= 900 && geo.lane <= 980 && geo.stack === 0, JSON.stringify({ block, page: geo.page, panel: geo.panel, dock: geo.dock }));
     else ok(V, "9 page, panel and dock stand inside the pane; the dock at the foot under the page column, whose room ends above it; no stack mode", near(geo.page.l, 0) && near(geo.panel.r, W - geo.s5) && near(geo.dock.l, geo.s5) && near(geo.dock.b, H - geo.s5) && near(geo.page.b, geo.dock.t - geo.s5) && near(geo.dock.r, geo.page.r) && geo.stack === 0, JSON.stringify({ page: geo.page, panel: geo.panel, dock: geo.dock }));
+    if (view.multi) {
+      // The ruling's gutters (91, 187, 627) are for overlay scrollbars; a stable classic gutter (sbw) takes
+      // half its width from each.
+      const want = { "1920": 91, "2560": 187, "3440": 627 }[V], sb = await ev(() => scrollbarW());
+      if (want) ok(V, "9 the ruling's gutter at " + V + ": " + want + "px, less half the page column's " + sb + "px scrollbar gutter", Math.abs(block.gutterEnd - (want - sb / 2)) <= 0.5, block.gutterEnd + "px");
+      await ev(() => document.getElementById("sashW").focus()); await page.keyboard.press("ArrowLeft"); await page.keyboard.press("ArrowLeft"); await settle(300);
+      const dr = await ev(() => ({ panel: __k.box(document.getElementById("panel")), page: __k.box(document.getElementById("page")), pages: document.querySelectorAll(".stage-wrap").length && [...document.querySelectorAll(".stage-wrap")].map((e) => Math.round(e.getBoundingClientRect().top)) }));
+      ok(V, "9 a dragged panel keeps its trailing edge; the pages shift by the drag (16px) and stay in one row", near(dr.panel.r, geo.panel.r) && near(dr.panel.w, geo.panel.w + 16) && near(dr.page.l, geo.page.l - 16) && new Set(dr.pages).size === 1, JSON.stringify({ before: [geo.page.l, geo.panel.l, geo.panel.r], after: [dr.page.l, dr.panel.l, dr.panel.r], tops: dr.pages }));
+      if (view.multi === "stack") ok(V, "9 the stacked panel's grips are the width edge and the split edge: no corner (r24 call 3)", await ev(() => !__k.vis(document.getElementById("sashC")) && !__k.vis(document.querySelector(".corner-l")) && __k.vis(document.getElementById("sashW")) && __k.vis(document.getElementById("sashS"))));
+      await load();
+    }
     const wantW = view.multi === "row" ? 896 : view.multi ? 448 : view.screen === "wide" || view.screen === "ultrawide" ? 800 : 448;
     ok(V, "9 the panel defaults to " + wantW + "px" + (view.multi === "row" ? " (two 448 graphs side by side)" : view.multi ? " (the graphs stacked)" : wantW === 800 ? " (c-graph-panel-w-wide, one component)" : ""), Math.abs(geo.panel.w - wantW) <= 0.5, geo.panel.w + "px");
     // The r22 ruling: nodes are always 168 here; two regions side by side only where the graph holds both at 168
@@ -596,10 +688,10 @@ async function runView(view) {
       ok(V, view.multi === "stack" ? "9 the two graphs stack, one under the other" : "9 past 2450 the two graphs stand side by side in the 896 panel", view.multi === "stack" ? s2.g.t >= s1.g.b && near(s1.g.l, s2.g.l) : near(s1.g.t, s2.g.t) && s2.g.l >= s1.g.r, JSON.stringify([s1.g, s2.g]));
       ok(V, "9 two coral kept states on screen, one per component", m.kept === 2, m.kept + " kept");
       await sweep("every component at once"); await breakage("every component at once"); await contrast("every component at once");
-      if (view.screen === "wide") ok(V, "9 the dock's lanes run about 1000px", geo.lane >= 950 && geo.lane <= 1150, Math.round(geo.lane) + "px");
+      const z0 = await ev(() => ({ form: G.form.zoom, row: G.row.zoom }));
       await click('.gsec[data-comp="row"] [data-z="in"]'); await settle(150);
       const z = await ev(() => ({ form: G.form.zoom, row: G.row.zoom }));
-      ok(V, "9 each graph keeps its own zoom: zooming the row's graph leaves the form's", z.row === 1.2 && z.form === 1, JSON.stringify(z));
+      ok(V, "9 each graph keeps its own zoom: zooming the row's graph leaves the form's", Math.abs(z.row - z0.row * 1.2) < 0.001 && z.form === z0.form, JSON.stringify({ before: z0, after: z }));
       ok(V, "9 the dock edits the last-kept component's move and names it", m.title === "Create routine form · Saving → Save failed", m.title);
       await click('.gsec[data-comp="row"] .node[data-machine="runs"][data-state="running"]'); await settle(400);
       const t2 = await ev(() => ({ title: document.querySelector(".dock-title").textContent, tab, kept: document.querySelectorAll(".node.kept").length }));
@@ -636,6 +728,13 @@ async function runView(view) {
     await settle(300);
     await sweep("the dock at its floor"); await breakage("the dock at its floor");
     await page.screenshot({ path: join(CAPS, V + "-dock-floor.jpg"), type: "jpeg", quality: 82 });
+    // The designer: the dock's head keeps Original | Edited, the edits chip and Reset at every height.
+    await ev(() => document.querySelector('.bar[data-key="label"]').focus()); await page.keyboard.press("ArrowRight"); await settle(300);
+    await ev(() => document.getElementById("sashD").focus()); await page.keyboard.press("Home"); await settle(300);
+    const fl = await ev(() => { const d = document.getElementById("dock").getBoundingClientRect(), r = (id) => { const e = id[0] === "#" ? document.querySelector(id) : document.querySelector(id); if (!e) return null; const b = e.getBoundingClientRect(); return { vis: __k.vis(e), inside: b.left >= d.left - 0.5 && b.right <= d.right + 0.5 && b.top >= d.top - 0.5 && b.bottom <= d.bottom + 0.5 }; }; return { h: Math.round(d.height), floor: dockFloor(), compare: r("#compare"), badge: r(".edits .badge"), reset: r("#resetAll") }; });
+    ok(V, "9 at its floor, with an edit, the dock's head still shows Original | Edited, the edits chip and Reset", [fl.compare, fl.badge, fl.reset].every((x) => x && x.vis && x.inside) && Math.abs(fl.h - fl.floor) <= 1, JSON.stringify(fl));
+    await page.screenshot({ path: join(CAPS, V + "-dock-floor-edited.jpg"), type: "jpeg", quality: 82 });
+    await ev(() => document.querySelector('.bar[data-key="label"]').focus()); await page.keyboard.press("Control+z"); await settle(300);
     if (view.screen === "tablet-landscape") {
       const t = await ev(() => ({ corner: __k.vis(document.getElementById("sashC")), L: __k.vis(document.querySelector(".corner-l")), lit: getComputedStyle(document.getElementById("panel"), "::after").display, bands: ["sashW", "sashH", "sashD"].map((id) => { const b = document.getElementById(id).getBoundingClientRect(); return Math.round(id === "sashW" ? b.width : b.height); }) }));
       if (view.input === "touch") ok(V, "9 touch: 44px bands on the width edge, the graph's foot and the dock's top; no corner, no lit edge", t.bands.every((x) => x === 44) && !t.corner && !t.L && t.lit === "none", JSON.stringify(t));
@@ -792,6 +891,8 @@ async function runView(view) {
     ok(V, "clarity §3 B: hovering Every hour washes what changes (green) and where something went (red)", w.some((x) => x.kind === "add") && w.some((x) => x.kind === "del"), JSON.stringify(w.map((x) => x.kind + ":" + x.of)));
     ok(V, "7 every wash's 1px edge in its hue's ink holds 3:1 against the field and against its own fill", w.length > 0 && w.every((x) => x.edgeWidth === 1 && x.edgeOnField >= 3 && x.edgeOnWash >= 3), w.map((x) => x.kind + ":" + x.of + " fill " + x.fill + ", edge " + x.edgeOnField + " on the field / " + x.edgeOnWash + " on the wash").join("; "));
     const geom = await ev(() => __k.washGeometry());
+    const cover = await ev(() => __k.washCover());
+    ok(V, "9 B6: no wash covers anything the preview shows but its own target", cover.length === 0, cover.join(" | ") || (await ev(() => [...document.querySelectorAll(".wash")].map((w) => w.dataset.wash + ":" + w.dataset.of + (w.dataset.seam !== undefined ? " (seam)" : "")).join(", "))));
     ok(V, "9 fault 7: One Target washes: on a boxed target the wash is its box, on a bare one 2px outside; none runs past its target's box plus 2px", geom.length > 0 && geom.every((g) => g.pass), geom.map((g) => g.kind + ":" + g.of + (g.boxed ? " boxed" : " bare") + " +" + g.over + "px").join(", "));
     await ev(() => __k.settled());
     await page.screenshot({ path: join(CAPS, V + "-page-washes.jpg"), type: "jpeg", quality: 85 });
@@ -928,6 +1029,7 @@ async function runClass(view) {
   ok(V, "9 the pane is the " + view.screen + " class, the " + view.layout + " layout, input " + (touch ? "touch" : "fine") + "; it opens on the Graph face", cls.screen === view.screen && cls.layout === view.layout && cls.input === (touch ? "touch" : "fine") && cls.face === "graph", JSON.stringify(cls));
   const kept = await ev(() => { const v = views[tab], g = __k.graph().getBoundingClientRect(), n = document.querySelector(".node.kept").getBoundingClientRect(); return { inView: n.top >= g.top - 0.5 && n.bottom <= g.bottom + 0.5, head: document.getElementById("sheetState").textContent, state: stateOf(machineOf(comp(), v.last), v.cur[v.last].state).name }; });
   ok(V, "9 the graph opens on the kept state, in view, and the head names it", kept.inView && kept.head === kept.state, JSON.stringify(kept));
+  await graphOpen(V, ev, "the view it opens on");
   const wantZoom = !["phone-portrait", "phone-landscape"].includes(view.screen);
   ok(V, "9 zoom buttons " + (wantZoom ? "shown (tablet up, or a mouse)" : "gone: a phone pinches"), (await ev(() => __k.vis(document.querySelector(".zoom")))) === wantZoom);
   ok(V, "9 no grips on a compact screen: no sash, no corner, no Hide in the panel's toolbar", await ev(() => [...document.querySelectorAll(".sash, .corner-l, .edge-pill-w, .edge-pill-h, .edge-pill-d, #hide")].every((e) => !__k.vis(e))));
@@ -1007,6 +1109,8 @@ async function runClass(view) {
     await page.waitForTimeout(200); const early = await peekNow();
     await page.waitForTimeout(300); const held = await peekNow();
     const geom = await ev(() => __k.washGeometry());
+    const cover = await ev(() => __k.washCover()), list = await ev(() => [...document.querySelectorAll(".wash")].map((w) => w.dataset.wash + ":" + w.dataset.of + (w.dataset.seam !== undefined ? " (seam)" : "")).join(", "));
+    ok(V, "9 B6: the held preview's washes cover nothing the preview shows but their own targets (a gone value's wash on what came in at its place is by design)", cover.length === 0, (cover.join(" | ") || "clear") + " — " + list + " (previewing " + t1.m + ":" + t1.s + ")");
     ok(V, "9 fault 7: the held preview's washes keep to One Target: a boxed target's box exactly, a bare one's plus 2px, none past", geom.every((g) => g.pass), geom.length + " washes: " + geom.map((g) => g.kind + ":" + g.of + (g.boxed ? " boxed" : " bare") + " +" + g.over + "px").join(", "));
     await shot("hold-preview");
     await touchAt("touchEnd", []); await settle(300);
@@ -1023,7 +1127,7 @@ async function runClass(view) {
     // Pinch: out to the 1.6 ceiling, in to the 0.5 floor.
     const gb = await page.locator(".gsec[data-current] .graph").boundingBox(), cx = gb.x + gb.width / 2, cy = gb.y + gb.height / 2;
     const pinchTo = async (from, to) => { await touchAt("touchStart", [[cx - from / 2, cy], [cx + from / 2, cy]]); for (let i = 1; i <= 6; i++) { const d = from + ((to - from) * i) / 6; await touchAt("touchMove", [[cx - d / 2, cy], [cx + d / 2, cy]]); } await touchAt("touchEnd", []); await settle(150); return ev(() => G[tab].zoom); };
-    const zOut = await pinchTo(80, 200), zIn = await pinchTo(200, 20);
+    const zOut = await pinchTo(30, 300), zIn = await pinchTo(300, 20);
     ok(V, "9 a pinch zooms the graph, from the 0.5 floor to the 1.6 ceiling", zOut === 1.6 && zIn === 0.5, "out → " + zOut + ", in → " + zIn);
     await load();
   } else {
@@ -1051,7 +1155,12 @@ async function runClass(view) {
   // under the sheet's head) and the viewport.
   const seen = await ev(() => { const p = document.querySelector(".pop").getBoundingClientRect(), t = document.getElementById("tl").getBoundingClientRect(), ruler = document.querySelector(".ruler-row").getBoundingClientRect(), face = document.getElementById("dock").getBoundingClientRect(), tools = document.getElementById("tools").getBoundingClientRect(), head = document.getElementById("sheetHead").getBoundingClientRect(), r = (n) => Math.round(n * 100) / 100; return { pop: [r(p.left), r(p.top), r(p.right), r(p.bottom)], rowsView: [r(t.left), r(ruler.bottom), r(t.right), r(t.bottom)], face: [r(face.left), r(face.top), r(face.right), r(face.bottom)], tools: [r(tools.left), r(tools.top), r(tools.right), r(tools.bottom)], headBottom: r(head.bottom), vp: [innerWidth, innerHeight] }; });
   const inside = (a, b) => a[0] >= b[0] - 0.5 && a[1] >= b[1] - 0.5 && a[2] <= b[2] + 0.5 && a[3] <= b[3] + 0.5;
-  if (view.stacked) ok(V, "9 fault 2: the inline editor scrolls into view as it opens: inside the rows' visible box and the " + view.layout, inside(seen.pop, seen.rowsView) && inside(seen.pop, seen.tools), JSON.stringify(seen));
+  // r24 call 7: one scroller. The editor keeps its natural height; it opens whole in the rows' view where it
+  // fits, and with its head at the view's top where it doesn't.
+  const own = await ev(() => { const cs = getComputedStyle(document.querySelector(".pop")); return { overflowY: cs.overflowY, maxH: cs.maxBlockSize, h: document.querySelector(".pop").scrollHeight, client: document.querySelector(".pop").clientHeight }; });
+  const fits = seen.pop[3] - seen.pop[1] <= seen.rowsView[3] - seen.rowsView[1] + 0.5;
+  if (view.stacked) ok(V, "9 fault 2: the inline editor scrolls into view as it opens, the rows its one scroller: " + (fits ? "whole inside the rows' view" : "its head at the view's top"), own.maxH === "none" && own.overflowY !== "auto" && own.h <= own.client + 1 && (fits ? inside(seen.pop, seen.rowsView) : Math.abs(seen.pop[1] - seen.rowsView[1]) <= 1) && inside([seen.pop[0], seen.pop[1], seen.pop[2], Math.min(seen.pop[3], seen.rowsView[3])], seen.tools), JSON.stringify({ ...seen, own, fits }));
+  if (view.stacked) { const mk = await ev(() => __k.marksOverEditor()); ok(V, "9 B2: nothing of the timeline's marks is painted over the inline editor's fields (ties stand in their lanes)", mk.length === 0, mk.join(" | ") || (await ev(() => document.querySelectorAll(".tie").length)) + " ties in their lanes"); }
   else ok(V, "9 fault 6: the popover stands inside the surface it opens in (the Move face, under the head with its Graph | Move and Hide) and the viewport", inside(seen.pop, seen.face) && seen.pop[1] >= seen.headBottom && inside(seen.pop, [0, 0, seen.vp[0], seen.vp[1]]), JSON.stringify(seen));
   ok(V, "2 nothing moves the preview: opening the clip's editor", same(st0, await ev(() => __k.stageSnap())));
   await sweepAll("the clip's editor open");
