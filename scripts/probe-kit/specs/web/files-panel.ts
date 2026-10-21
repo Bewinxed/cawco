@@ -1104,17 +1104,35 @@ const reviewLegs = async (
     .waitFor({ timeout: 30_000 });
   await narrow.locator("[data-files-search] input").fill("brief");
   await narrow.waitForTimeout(500);
+  // Each run of words inside its segment's padding box, and whole (not
+  // clipped). The segment's own scrollWidth also counts its touch area, the
+  // `::after` that stands half a pixel past its box on a coarse pointer
+  // (DESIGN.md, The 44 Touch Rule; ab92c1929: "every touch area sits where
+  // the browser actually hit-tests it"), so it reads 1px over at any width.
   const fit = await narrow.evaluate(() =>
     [...document.querySelectorAll<HTMLElement>("[data-files-segment]")].map(
-      (segment) => ({
-        text: segment.textContent?.replace(/\s+/g, " ").trim(),
-        fits: segment.scrollWidth <= segment.clientWidth,
-      })
+      (segment) => {
+        const box = segment.getBoundingClientRect();
+        const style = getComputedStyle(segment);
+        const start = box.left + Number.parseFloat(style.paddingLeft) - 0.5;
+        const end = box.right - Number.parseFloat(style.paddingRight) + 0.5;
+        const runs = [...segment.children].map((words) => {
+          const at = words.getBoundingClientRect();
+          return {
+            inside: at.left >= start && at.right <= end,
+            whole: words.scrollWidth <= words.clientWidth,
+          };
+        });
+        return {
+          text: segment.textContent?.replace(/\s+/g, " ").trim(),
+          fits: runs.length > 0 && runs.every((one) => one.inside && one.whole),
+        };
+      }
     )
   );
   await sweep(narrow, "320 drawer searching");
   kit.check(
-    '22: at 320px the segments\' words and counts ("Attachments 3 of 9") fit their segments (scrollWidth ≤ clientWidth)',
+    "22: at 320px the segments' words and counts (\"Attachments 3 of 9\") fit their segments (each run whole inside the segment's padding)",
     fit.length === 2 &&
       fit.every((one) => one.fits) &&
       fit.some((one) => one.text?.includes(" of ")),
