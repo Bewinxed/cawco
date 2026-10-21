@@ -225,12 +225,19 @@ function screenOf(w, h, input) {
 // the pages stand in rows of as many as fit (each 600 with its margins either side, a margin apart, beside the
 // 448 panel and its margins: W >= N x 636 + (N - 1) x 18 + 484), the tabs go and the graphs stack in the
 // panel. Past bp-ultra the panel holds the graphs side by side where the row leaves room for two.
+// The width a stable scrollbar gutter takes on this platform (0 where scrollbars overlay), measured once.
+let sbw = null;
+function scrollbarW() {
+  if (sbw === null) { const p = document.createElement("div"); p.style.cssText = "position:absolute;visibility:hidden;inline-size:100px;block-size:10px;overflow:auto;scrollbar-gutter:stable"; document.body.append(p); sbw = p.offsetWidth - p.clientWidth; p.remove(); }
+  return sbw;
+}
 function multiOf(w, layout) {
   if (review.length < 2 || layout !== "desk" || w < BP.wide) return null;
   const s5 = px("--space-5"), pageW = 600 + 2 * s5, panelW = px("--c-graph-panel-w");
   const perRow = Math.max(1, Math.floor((w - panelW - 2 * s5 + s5) / (pageW + s5)));
   const n = Math.min(review.length, perRow), rowW = n * pageW + (n - 1) * s5;
-  return { perRow, graphs: w >= BP.ultra && rowW + 2 * panelW + 2 * s5 <= w ? "row" : "stack" };
+  // The pages' own row (each 600, a margin apart), which the centred review block is laid out from.
+  return { perRow, rowW: n * 600 + (n - 1) * s5, wrapped: review.length > perRow, graphs: w >= BP.ultra && rowW + 2 * panelW + 2 * s5 <= w ? "row" : "stack" };
 }
 let screen = null;
 // Sets html[data-screen], [data-layout], [data-input], [data-multi] and [data-graphs]; answers whether the
@@ -241,6 +248,9 @@ function applyScreen() {
   rootEl.dataset.screen = s.screen; rootEl.dataset.layout = s.layout; rootEl.dataset.input = input;
   rootEl.toggleAttribute("data-multi", !!multi);
   if (multi) rootEl.dataset.graphs = multi.graphs; else delete rootEl.dataset.graphs;
+  // The page column keeps a stable scrollbar gutter: the row's width includes it, so two pages never wrap.
+  if (multi) rootEl.style.setProperty("--row-w", multi.rowW + scrollbarW() + "px"); else rootEl.style.removeProperty("--row-w");
+  rootEl.toggleAttribute("data-wrapped", !!multi && multi.wrapped);
   return !was || was.layout !== s.layout || !!was.multi !== !!multi || (was.multi && multi && was.multi.graphs !== multi.graphs);
 }
 const layoutIs = (l) => screen.layout === l;
@@ -413,11 +423,32 @@ function drawWashes(cid) {
   const now = snapStage(cid), out = [], gap = px("--c-target-gap"), marks = marksOf(cid);
   for (const [k, n] of now) { const o = was.get(k); if (!o || o.val !== n.val || o.cls !== n.cls) out.push(["add", n, k]); }
   for (const [k, o] of was) if (!now.has(k)) out.push(["del", o, k]);
+  // What the preview draws, in the stage's own coordinates: every box that shows a value or a control, less
+  // those that came in or changed (their washes may stand where a gone value stood: the same place, by design).
+  const st = stageOf(cid), sb = st.getBoundingClientRect(), added = new Set(out.filter(([k]) => k === "add").map(([, , key]) => key));
+  const live = [...st.querySelectorAll("[data-key], label, .btn, .line, .note, .rrow > b, .rmeta, .rstatus, .done")].filter((el) => !added.has(el.dataset.key) && !el.closest(added.size ? [...added].map((k) => '[data-key="' + k + '"]').join(",") : "#none")).map((el) => { const b = el.getBoundingClientRect(); return { x: b.left - sb.left, y: b.top - sb.top, w: b.width, h: b.height }; }).filter((b) => b.w > 0.5 && b.h > 0.5);
+  const hits = (r) => live.some((b) => Math.min(r.x + r.w, b.x + b.w) - Math.max(r.x, b.x) > 0.5 && Math.min(r.y + r.h, b.y + b.h) - Math.max(r.y, b.y) > 0.5);
   marks.replaceChildren(...out.map(([kind, n, key]) => {
     const pad = n.boxed ? 0 : gap, w = document.createElement("div");
     w.className = "wash " + kind; w.dataset.wash = kind; w.dataset.of = key; w.dataset.pad = pad;
     w.dataset.box = [n.box.x, n.box.y, n.box.w, n.box.h].join(",");
-    Object.assign(w.style, { left: n.box.x - pad + "px", top: n.box.y - pad + "px", width: n.box.w + 2 * pad + "px", height: n.box.h + 2 * pad + "px", borderRadius: n.radius + pad + "px" });
+    let r = { x: n.box.x - pad, y: n.box.y - pad, w: n.box.w + 2 * pad, h: n.box.h + 2 * pad };
+    // A gone value whose place the preview has filled with something else (the rows under it moved up) is
+    // marked in the seam where it went: the gap nearest its old top that the preview leaves free, a wash
+    // no taller than it was. It never covers what the preview shows.
+    if (kind === "del" && hits(r)) {
+      const reach = px("--space-3") + n.box.h, edges = [n.box.y - reach, n.box.y + n.box.h + reach];
+      for (const b of live) if (Math.min(r.x + r.w, b.x + b.w) - Math.max(r.x, b.x) > 0.5) edges.push(b.y, b.y + b.h);
+      const ys = [...new Set(edges)].filter((y) => y >= edges[0] && y <= edges[1]).sort((a, b) => a - b);
+      let seam = null;
+      for (let i = 1; i < ys.length; i++) {
+        const t = ys[i - 1], h = Math.min(ys[i] - t, n.box.h), cand = { x: r.x, y: t, w: r.w, h };
+        if (h < 2 || hits(cand)) continue;
+        if (!seam || Math.abs(t - n.box.y) < Math.abs(seam.y - n.box.y)) seam = cand;
+      }
+      if (seam) { r = seam; w.dataset.seam = ""; }
+    }
+    Object.assign(w.style, { left: r.x + "px", top: r.y + "px", width: r.w + "px", height: r.h + "px", borderRadius: (w.dataset.seam !== undefined ? Math.min(n.radius + pad, r.h / 2) : n.radius + pad) + "px" });
     return w;
   }));
   void marks.offsetWidth;
@@ -448,6 +479,24 @@ function moveOrder(c) {
   return order;
 }
 const SVGNS = "http://www.w3.org/2000/svg";
+// An edge's label never sits on a line (its own or another's) or over a state: it starts where dagre put it,
+// then takes the nearest place round it, a few px at a time, that no line crosses and no state covers, its
+// halo's 2px included.
+function clearLabels(svg, g) {
+  const segs = [...svg.querySelectorAll("polyline")].flatMap((pl) => { const p = pl.getAttribute("points").split(" ").map((q) => q.split(",").map(Number)); return p.slice(1).map((b, i) => [p[i], b]); });
+  const nodes = g.nodes().map((id) => { const n = g.node(id); return { l: n.x - n.width / 2, t: n.y - n.height / 2, r: n.x + n.width / 2, b: n.y + n.height / 2 }; });
+  // A label may stand into its machine's padding, never past it.
+  const slack = px("--space-2") - 1, W = g.graph().width + slack, H = g.graph().height + slack;
+  const hitSeg = (bx, [[x1, y1], [x2, y2]]) => { for (let k = 0; k <= 48; k++) { const x = x1 + ((x2 - x1) * k) / 48, y = y1 + ((y2 - y1) * k) / 48; if (x > bx.l && x < bx.r && y > bx.t && y < bx.b) return true; } return false; };
+  const free = (bx) => bx.l >= -slack && bx.t >= -slack && bx.r <= W && bx.b <= H && !segs.some((sg) => hitSeg(bx, sg)) && !nodes.some((n) => n.l < bx.r && n.r > bx.l && n.t < bx.b && n.b > bx.t);
+  for (const t of svg.querySelectorAll("text")) {
+    const b = t.getBBox(), x0 = +t.getAttribute("x"), y0 = +t.getAttribute("y"), halo = 2;
+    const at = (dx, dy) => ({ l: b.x + dx - halo, t: b.y + dy - halo, r: b.x + b.width + dx + halo, b: b.y + b.height + dy + halo });
+    let best = null;
+    for (let r = 0; r <= 120 && !best; r += 2) for (const [dx, dy] of [[r, 0], [-r, 0], [0, -r], [0, r], [r, -r], [-r, -r], [r, r], [-r, r]]) if (free(at(dx, dy))) { best = [dx, dy]; break; }
+    if (best) { t.setAttribute("x", x0 + best[0]); t.setAttribute("y", y0 + best[1]); }
+  }
+}
 function edgesSvg(g, id) {
   const svg = document.createElementNS(SVGNS, "svg");
   svg.setAttribute("width", g.graph().width); svg.setAttribute("height", g.graph().height);
@@ -550,6 +599,7 @@ function drawGraph(cid = tab) {
     body.style.width = g.graph().width + "px"; body.style.height = g.graph().height + "px";
     for (const id of g.nodes()) { const p = g.node(id); els[id].style.left = p.x - p.width / 2 + "px"; els[id].style.top = p.y - p.height / 2 + "px"; }
     body.prepend(edgesSvg(g, "arrow-" + cid + "-" + n));
+    clearLabels(body.querySelector("svg"), g);
     regions[m.id] = r;
   });
   const sized = c.machines.map((m) => ({ id: m.id, w: regions[m.id].offsetWidth, h: regions[m.id].offsetHeight }));
@@ -575,8 +625,9 @@ function applyZoom(cid = tab) {
   zoomer.style.width = gs.gw * gs.zoom + "px"; zoomer.style.height = gs.gh * gs.zoom + "px";
   zoomer.firstChild.style.transform = "scale(" + gs.zoom + ")";
 }
-const setZoom = (cid, z, lo = 0.25) => { G[cid].zoom = clamp(z, lo, 1.6); applyZoom(cid); };
-const fitZoom = (cid) => { const g = graphOf(cid), gs = G[cid]; gs.zoom = clamp(Math.min((g.clientWidth - 8) / gs.gw, (g.clientHeight - 8) / gs.gh), 0.25, 1); applyZoom(cid); };
+// A zoom the person sets is theirs: the graph stops fitting its kept machine.
+const setZoom = (cid, z, lo = 0.25) => { G[cid].zoom = clamp(z, lo, 1.6); G[cid].own = true; applyZoom(cid); };
+const fitZoom = (cid) => { const g = graphOf(cid), gs = G[cid]; gs.own = true; gs.zoom = clamp(Math.min((g.clientWidth - 8) / gs.gw, (g.clientHeight - 8) / gs.gh), 0.25, 1); applyZoom(cid); };
 // The kept state brought into view, with its from-node above it when there is room.
 function showKept(cid = tab) {
   const v = views[cid], g = graphOf(cid);
@@ -585,21 +636,38 @@ function showKept(cid = tab) {
   if (!el) return;
   const into = moveInto(compOf(cid), v.last, v.cur[v.last].state);
   const fromEl = into ? g.querySelector('.node[data-machine="' + v.last + '"][data-state="' + into.from + '"]') : null;
+  const pad = px("--space-2"), gs = G[cid];
+  // Until the person zooms it, the graph opens zoomed (never past 100%) to hold the kept state's machine whole,
+  // its box and a margin, so the view it opens on cuts nothing of it (the r23 review).
+  if (!gs.own) {
+    const rh = el.closest(".region").getBoundingClientRect().height / gs.zoom, fit = clamp((g.clientHeight - 2 * pad) / rh, 0.25, 1);
+    if (Math.abs(fit - gs.zoom) > 0.001) { gs.zoom = fit; applyZoom(cid); }
+  }
   const box = g.getBoundingClientRect(), n = el.getBoundingClientRect(), r = el.closest(".region").getBoundingClientRect();
-  const at = (y) => y - box.top - g.clientTop + g.scrollTop, pad = px("--space-2");
+  const at = (y) => y - box.top - g.clientTop + g.scrollTop;
   const topWant = Math.min(at(r.top) - pad, fromEl ? at(fromEl.getBoundingClientRect().top) - pad : Infinity, at(n.top) - pad);
   const want = Math.max(at(n.bottom) + pad - g.clientHeight, topWant);
-  // Where the view's edges would cut a state or a machine's name, the nearest scroll that cuts none and still
-  // shows the kept state whole.
+  // The view it opens on (the r23 review): its top edge cuts nothing, a state, a machine's name, an edge's
+  // label, a machine's box or an arrow inside one, and stands --space-2 clear of what shows under it; only an
+  // arrow between machines may come in over it, its head in view. Its foot cuts no state, name or label (a
+  // box or an arrow running on under it is the cue that there is more). The nearest such scroll to the
+  // kept state's; where none shows the kept state whole, the edges cut no state or name, as before.
   const H = g.clientHeight;
   let max = g.scrollHeight - H;
-  const boxes = [...g.querySelectorAll(".node, .region-name")].map((el) => { const b = el.getBoundingClientRect(); return [at(b.top), at(b.bottom)]; });
+  const boxOf = (el) => { const b = el.getBoundingClientRect(); return [at(b.top), at(b.bottom)]; };
+  const solid = [...g.querySelectorAll(".node, .region-name, .world svg text")].map(boxOf);
+  const frames = [...g.querySelectorAll(".region, .regionBody svg polyline")].map(boxOf);
+  const boxes = [...g.querySelectorAll(".node, .region-name")].map(boxOf);
   const cuts = (s) => boxes.some(([t, b]) => (t < s - 0.5 && b > s + 0.5) || (t < s + H - 0.5 && b > s + H + 0.5));
+  const clear = (s) => s <= 0.5 || (!solid.some(([t, b]) => t < s + pad - 0.5 && b > s + 0.5) && !frames.some(([t, b]) => t < s + pad - 0.5 && b > s + 0.5));
+  const footClear = (s) => !solid.some(([t, b]) => t < s + H - 0.5 && b > s + H + 0.5);
   const keeps = (s) => at(n.top) >= s - 0.5 && at(n.bottom) <= s + H + 0.5;
   const cands = [want, 0, max];
-  for (const [t, b] of boxes) cands.push(t - pad, t, b + pad - H, b - H, b + pad, t - pad - H + (b - t));
+  for (const [t, b] of boxes.concat(frames, solid)) cands.push(t - pad, t, b + pad - H, b - H, b + pad, b, t - pad - H + (b - t));
   // Scroll offsets land on whole pixels, so each candidate is tried rounded down and up.
-  const pick = (limit) => cands.flatMap((s) => [Math.floor(s), Math.ceil(s)]).map((s) => clamp(s, 0, Math.max(0, Math.floor(limit)))).filter((s) => !cuts(s) && keeps(s)).sort((a, b) => Math.abs(a - want) - Math.abs(b - want))[0];
+  const pickBy = (ok) => (limit) => cands.flatMap((s) => [Math.floor(s), Math.ceil(s)]).map((s) => clamp(s, 0, Math.max(0, Math.floor(limit)))).filter((s) => ok(s) && keeps(s)).sort((a, b) => Math.abs(a - want) - Math.abs(b - want))[0];
+  const strict = pickBy((s) => clear(s) && footClear(s)), loose = pickBy((s) => !cuts(s));
+  const pick = (limit) => strict(limit) ?? loose(limit);
   let best = pick(max);
   // Where no view of the content as drawn shows the kept state whole and cuts nothing, the well gets room
   // past its last machine, so the view can open lower.
@@ -841,8 +909,11 @@ function layoutDock(work) {
 // An anchored start draws its tie: a hairline from the anchor's edge to this bar's start, a foot at each end.
 // Stacked, the tie stays in its own lane: a hairline across the lane at the anchor, its foot along the lane's
 // middle to the bar's start, so it never crosses the names between two rows.
+// The timeline scrolls: a mark placed in it from viewport boxes adds its scroll offset, or it lands that far
+// up (the r23 review's stray bracket on the inline editor's fields was a tie drawn above its lane).
+const tlTop = () => $("tl").getBoundingClientRect().top - $("tl").scrollTop;
 function drawTies(clips, r, g) {
-  const tlb = $("tl").getBoundingClientRect(), html = [], st = stacked();
+  const tlb = { left: $("tl").getBoundingClientRect().left, top: tlTop() }, html = [], st = stacked();
   for (const c of clips) {
     if (!c.at.ref) continue;
     const a = r[c.at.of], me = r[c.key];
@@ -865,7 +936,7 @@ function updateTime() {
   $("playhead").style.left = xOf(g, Math.min(t, g.end)) + "px";
   $("tl").style.setProperty("--ph-x", xOf(g, Math.min(t, g.end)) - g.x0 + "px");
   const rb = $("ruler").getBoundingClientRect(), tb = $("tl").getBoundingClientRect();
-  $("playhead").style.setProperty("--ph-y", rb.bottom - tb.top - px("--space-1") / 2 + "px");
+  $("playhead").style.setProperty("--ph-y", rb.bottom - tlTop() - px("--space-1") / 2 + "px");
   $("readout").innerHTML = "<b>" + Math.round(t) + "</b> / " + Math.round(len) + " ms";
   $("play").toggleAttribute("data-playing", !!playing);
   $("play").setAttribute("aria-label", playing ? "Pause" : "Play");
@@ -1028,7 +1099,7 @@ function barDown(bar, e, touchEdge) {
           if (sL !== null && (sE === null || Math.abs(sL - (end - s0.start)) <= Math.abs(sE - end))) { dur = sL; snapAt = s0.start + sL; }
           else if (sE !== null) { dur = sE - s0.start; snapAt = sE; }
           else dur = tens(end - s0.start);
-          ticks.innerHTML = lens.filter((l) => s0.start + l <= g.end).map((l) => '<div class="tick" style="left:' + xOf(g, s0.start + l) + "px;top:" + (bar.getBoundingClientRect().bottom - $("tl").getBoundingClientRect().top) + 'px"></div>').join("");
+          ticks.innerHTML = lens.filter((l) => s0.start + l <= g.end).map((l) => '<div class="tick" style="left:' + xOf(g, s0.start + l) + "px;top:" + (bar.getBoundingClientRect().bottom - tlTop()) + 'px"></div>').join("");
         }
         dur = Math.max(10, dur);
         const c = work.find((x) => x.key === key); c.dur = free ? dur : asValue(dur, typeof c0.dur === "string" ? c0.dur : null);
@@ -1053,7 +1124,7 @@ function barDown(bar, e, touchEdge) {
     if (snapAt !== null) snapLine.style.left = xOf(g, snapAt) + "px";
     pill.innerHTML = pillHtml;
     pill.style.left = pillX + "px";
-    pill.style.top = bar.getBoundingClientRect().top - $("tl").getBoundingClientRect().top - px("--c-badge-h") - px("--space-1") + "px";
+    pill.style.top = bar.getBoundingClientRect().top - tlTop() - px("--c-badge-h") - px("--space-1") + "px";
     layoutDock(work);
     if (zone === "body" && s0.start + dt < 0) bar.style.left = (g.w * -Math.sqrt(-(s0.start + dt) * 4)) / g.end + "px";
     if (pop) refreshPop(work);
@@ -1082,7 +1153,7 @@ function marquee(e) {
     if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
     if (!moved) { moved = true; tlEl.append(box); closePop(); }
     const l = Math.min(x0, ev.clientX), r = Math.max(x0, ev.clientX), t = Math.min(y0, ev.clientY), b = Math.max(y0, ev.clientY);
-    Object.assign(box.style, { left: l - tlb.left + "px", top: t - tlb.top + "px", width: r - l + "px", height: b - t + "px" });
+    Object.assign(box.style, { left: l - tlb.left + "px", top: t - tlTop() + "px", width: r - l + "px", height: b - t + "px" });
     const sel = new Set(startSel);
     for (const bar of $("rows").querySelectorAll(".bar")) { const bb = bar.getBoundingClientRect(); if (bb.left < r && bb.right > l && bb.top < b && bb.bottom > t) sel.add(bar.dataset.key); }
     km.e.sel = sel; layoutDock();
@@ -1148,10 +1219,6 @@ function openPop(key, origin) {
   placePop();
   el.setAttribute("aria-label", clipNow(key).of + " " + clipNow(key).does);
   if (inline) {
-    // Taller than the rows' view (a phone's side sheet), it takes the view's height and scrolls inside itself,
-    // so it opens whole in view.
-    const room = $("tl").getBoundingClientRect().bottom - $("dock").querySelector(".ruler-row").getBoundingClientRect().bottom;
-    if (el.offsetHeight > room) { el.style.maxBlockSize = Math.floor(room) + "px"; el.style.overflowY = "auto"; el.style.overscrollBehavior = "contain"; }
     // It unfolds in place: its height from nothing, its words fading in.
     const h = el.offsetHeight, frames = reduced() ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 0, height: "0px", marginBlockEnd: "0px" }, { opacity: 1, height: h + "px", marginBlockEnd: getComputedStyle(el).marginBlockEnd }];
     followRows(el.animate(frames, { duration: ms("--dur-pop"), easing: tok("--ease-drawer") }), true);
@@ -1179,16 +1246,17 @@ function closePop(instant) {
 }
 // The inline editor scrolls into the face's view as it opens: its foot clear of the rows' bottom edge, and
 // never above the sticky ruler.
-// Its margin to the view's edges is --space-2 where the view holds it and that, else what the view leaves;
-// an editor taller than the view shows its top.
+// Its margin to the view's edges is --space-2 where the view holds it and that, else what the view leaves.
+// An editor taller than the view keeps its natural height, the rows its one scroller: its head goes to the
+// view's top (the r23 values ruling, call 7).
 function revealInline() {
   const t = $("tl");
   if (!t || !pop || !pop.inline || !pop.el.isConnected) return;
   const top = $("dock").querySelector(".ruler-row").getBoundingClientRect().bottom, tb = t.getBoundingClientRect(), pb = pop.el.getBoundingClientRect();
   const room = tb.bottom - top, pad = Math.max(0, Math.min(px("--space-2"), (room - pb.height) / 2));
   let d = 0;
-  if (pb.bottom + pad > tb.bottom) d = pb.bottom + pad - tb.bottom;
-  if (pb.top - d < top + pad) d = pb.top - top - pad;
+  if (pb.height > room) d = pb.top - top;
+  else { if (pb.bottom + pad > tb.bottom) d = pb.bottom + pad - tb.bottom; if (pb.top - d < top + pad) d = pb.top - top - pad; }
   if (Math.abs(d) >= 0.5) t.scrollTop += d;
 }
 // The surface a popover opens in, less the inset: the viewport at a desk (over the page and the dock, by
@@ -1591,9 +1659,7 @@ for (const sash of document.querySelectorAll(".sash")) {
     const x0 = e.clientX, y0 = e.clientY, w0 = panel.offsetWidth, h0 = graphOf(tab).offsetHeight, d0 = $("dock").offsetHeight, s0 = splitGraphs()[0].offsetHeight;
     sash.setPointerCapture(e.pointerId);
     owner.dataset.edge = edge; owner.dataset.resizing = edge; rootEl.dataset.resizing = edge;
-    // With the graphs stacked the panel stands the pane's height: its corner moves the width alone.
-    const hOf = (ev) => (edge.includes("h") && !stackedGraphs() ? h0 + ev.clientY - y0 : null);
-    sash.onpointermove = (ev) => { if (edge === "d") setDockH(d0 - (ev.clientY - y0)); else if (edge === "s") setSplit(s0 + ev.clientY - y0); else setSize(edge.includes("w") ? w0 + x0 - ev.clientX : null, hOf(ev)); };
+    sash.onpointermove = (ev) => { if (edge === "d") setDockH(d0 - (ev.clientY - y0)); else if (edge === "s") setSplit(s0 + ev.clientY - y0); else setSize(edge.includes("w") ? w0 + x0 - ev.clientX : null, edge.includes("h") ? h0 + ev.clientY - y0 : null); };
     sash.onpointerup = sash.onpointercancel = () => { sash.onpointermove = null; delete owner.dataset.resizing; delete rootEl.dataset.resizing; relayoutAfterResize(); };
   };
   // The APG window splitter: arrows move the edge 8px, 32px with Shift; Home and End go to the floor and ceiling.
@@ -1612,7 +1678,7 @@ for (const sash of document.querySelectorAll(".sash")) {
     else return;
     e.preventDefault();
     owner.dataset.edge = edge; owner.dataset.resizing = edge;
-    if (nd !== null) setDockH(nd); else if (ns !== null) setSplit(ns); else setSize(nw, stackedGraphs() ? null : nh);
+    if (nd !== null) setDockH(nd); else if (ns !== null) setSplit(ns); else setSize(nw, nh);
     clearTimeout(keyTimer);
     keyTimer = setTimeout(() => { delete owner.dataset.resizing; relayoutAfterResize(); }, ms("--dur-control"));
   };
