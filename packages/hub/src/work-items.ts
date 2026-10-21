@@ -611,10 +611,18 @@ interface Inputs {
   files: InputNamed[];
   machineId: string;
   paths: string[];
+  /** The project the parent belongs to: a file in its folder may go. */
+  project: string | null;
 }
 
 /** A delegation that names no inputs. */
-const NO_INPUTS: Inputs = { paths: [], bound: null, machineId: "", files: [] };
+const NO_INPUTS: Inputs = {
+  paths: [],
+  bound: null,
+  project: null,
+  machineId: "",
+  files: [],
+};
 
 /** What `delegate` asks for. */
 /** An item's clone as a brief reads it: its workspace, on its machine (commands in it run inside its boundary). */
@@ -4551,8 +4559,9 @@ export const createWorkItems = ({
    * inputs.ts), before anything is cut: none for none. Refused, in the
    * machine's words, when one may not leave it; one outside `reader`'s own
    * clone and scratch dir may not, when it runs inside a boundary
-   * ({@link boundOf}). No byte of them is read here: {@link handIn} moves
-   * them once their workspace is known.
+   * ({@link boundOf}). A file in the folder of `reader`'s project, which its
+   * delegates' boundaries read, may go. No byte of them is read here:
+   * {@link handIn} moves them once their workspace is known.
    */
   const readInputs = async (
     paths: string[] | undefined,
@@ -4563,14 +4572,22 @@ export const createWorkItems = ({
     }
     const [row] = db.getInstancesByIds([reader.id]);
     const bound = (row && boundOf(row)) ?? null;
+    const project = row?.projectId ?? null;
     const judged = (await call(reader.machineId, CONTROL_INPUTS_ADMIT, [
       paths,
       bound,
+      project,
     ])) as InputsAdmitted;
     if ("refused" in judged) {
       throw new WorkItemRefusal(400, `inputs: ${judged.refused}.`);
     }
-    return { paths, bound, machineId: reader.machineId, files: judged.files };
+    return {
+      paths,
+      bound,
+      project,
+      machineId: reader.machineId,
+      files: judged.files,
+    };
   };
 
   /**
@@ -4592,6 +4609,7 @@ export const createWorkItems = ({
         inputs.paths,
         inputs.bound,
         refOf(workspace),
+        inputs.project,
       ])) as InputsAdmitted;
       if ("refused" in copied) {
         throw new WorkItemRefusal(400, `inputs: ${copied.refused}.`);
@@ -4601,6 +4619,7 @@ export const createWorkItems = ({
     const read = (await call(inputs.machineId, CONTROL_INPUTS_READ, [
       inputs.paths,
       inputs.bound,
+      inputs.project,
     ])) as InputsRead;
     if ("refused" in read) {
       throw new WorkItemRefusal(400, `inputs: ${read.refused}.`);

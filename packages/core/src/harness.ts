@@ -2251,16 +2251,20 @@ export const CONTROL_WORKSPACE_AT = "workspaceAt";
  * A delegate's inputs admitted on its parent's machine, before anything is
  * cut for it: each an absolute path to a file, refused in words when one may
  * not leave it (workspace-policy.ts `inputDenial`), lies outside the parent's
- * own clone and scratch dir when the parent runs in a workspace (`bound`), or
- * the whole passes {@link INPUTS_LIMIT_BYTES}. Args `[paths, bound?:
- * WorkspaceRef]`; answers {@link InputsAdmitted}, no bytes. Machine-scoped.
+ * own clone, scratch dir and project folder when the parent runs in a
+ * workspace (`bound`), or the whole passes {@link INPUTS_LIMIT_BYTES}. A file
+ * in the folder of the parent's project (`project`), which its delegates'
+ * boundaries read, may go. Args `[paths, bound: WorkspaceRef | null,
+ * project: string | null]`; answers {@link InputsAdmitted}, no bytes.
+ * Machine-scoped.
  */
 export const CONTROL_INPUTS_ADMIT = "inputsAdmit";
 
 /**
  * A delegate's inputs read on its parent's machine for a workspace on
  * another, admitted again as {@link CONTROL_INPUTS_ADMIT} admits them. Args
- * `[paths, bound?: WorkspaceRef]`; answers {@link InputsRead}. Machine-scoped.
+ * `[paths, bound: WorkspaceRef | null, project: string | null]`; answers
+ * {@link InputsRead}. Machine-scoped.
  */
 export const CONTROL_INPUTS_READ = "inputsRead";
 
@@ -2280,7 +2284,8 @@ export const CONTROL_INPUTS_WRITE = "inputsWrite";
  * to the hub: read and written back down to the same machine, each input
  * crossed it twice, up to 86 MiB of base64 a delegation each way, and a
  * conductor's lanes queued it ahead of every heartbeat (2026-10-19). Args
- * `[paths, bound: WorkspaceRef | null, WorkspaceRef]`; answers
+ * `[paths, bound: WorkspaceRef | null, WorkspaceRef, project: string |
+ * null]`; answers
  * {@link InputsAdmitted}. Machine-scoped.
  */
 export const CONTROL_INPUTS_COPY = "inputsCopy";

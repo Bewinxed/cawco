@@ -30,7 +30,11 @@ import {
 } from "@cawco/core";
 import { workspaceScratchDir } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
-import { inputDenial, resolveAsFar } from "@cawco/core/workspace-policy";
+import {
+  inputDenial,
+  projectFolderOf,
+  resolveAsFar,
+} from "@cawco/core/workspace-policy";
 import { isWorkspaceRef } from "./workflow-command";
 
 /** Inputs one delegation may name (the outputs' limit, work-items.ts `OUTPUTS_LIMIT`). */
@@ -53,16 +57,28 @@ interface Admitted {
 }
 
 /**
+ * Where the caller may name inputs from: `opened`, its project's folder on
+ * the hub's machine as its boundaries read it (workspace-policy.ts
+ * `projectFolderOf`), and, for a parent bound to a workspace, `roots`: its
+ * clone, its scratch dir and `opened`.
+ */
+interface Reach {
+  opened: string[];
+  roots: string[] | undefined;
+}
+
+/**
  * The policy refusal for `named` resolving to `real`, or nothing when the
- * caller may name it: outside what every boundary hides (workspace-policy.ts
- * `inputDenial`) and, for a parent bound to a workspace, inside its `roots`.
+ * caller may name it: outside what every boundary hides but its project's
+ * folder (workspace-policy.ts `inputDenial`) and, for a parent bound to a
+ * workspace, inside its `roots`.
  */
 const gate = (
   named: string,
   real: string,
-  roots: string[] | undefined
+  { opened, roots }: Reach
 ): string | undefined =>
-  inputDenial(named, real) ??
+  inputDenial(named, real, opened) ??
   (roots && !roots.some((root) => within(real, root))
     ? `${named} is outside your clone and your $TMPDIR; you run inside a workspace's boundary, so you hand on only files of your own`
     : undefined);
@@ -77,9 +93,9 @@ const gate = (
 const unresolved = async (
   named: string,
   error: NodeJS.ErrnoException,
-  roots: string[] | undefined
+  reach: Reach
 ): Promise<string> => {
-  const denied = gate(named, resolveAsFar(named), roots);
+  const denied = gate(named, resolveAsFar(named), reach);
   if (denied) {
     return denied;
   }
@@ -93,7 +109,7 @@ const unresolved = async (
       const deniedTarget = gate(
         named,
         resolveAsFar(resolve(resolveAsFar(dirname(named)), target)),
-        roots
+        reach
       );
       return (
         deniedTarget ??
@@ -115,13 +131,14 @@ const unresolved = async (
 
 /**
  * Why `named` may not go as an input, or what it is when it may: a file
- * that exists, outside what every boundary hides (workspace-policy.ts
- * `inputDenial`), and, for a parent that runs in a workspace, inside its own
- * clone or scratch dir (`roots`): it hands on only what it reads itself.
+ * that exists, outside what every boundary hides but its project's folder
+ * (workspace-policy.ts `inputDenial`), and, for a parent that runs in a
+ * workspace, inside its own clone, scratch dir or project folder (`roots`):
+ * it hands on only what it reads itself.
  */
 const admit = async (
   named: string,
-  roots: string[] | undefined
+  reach: Reach
 ): Promise<Admitted | string> => {
   if (!isAbsolute(named)) {
     return `${named} is not an absolute path; name each input by its absolute path on your machine`;
@@ -130,9 +147,9 @@ const admit = async (
     (error: NodeJS.ErrnoException) => error
   );
   if (typeof real !== "string") {
-    return unresolved(named, real, roots);
+    return unresolved(named, real, reach);
   }
-  const denied = gate(named, real, roots);
+  const denied = gate(named, real, reach);
   if (denied) {
     return denied;
   }
@@ -155,12 +172,14 @@ const admit = async (
  * Each of `paths` admitted, or the first reason one may not go ({@link
  * admit}), two that would land under one name, or more than {@link
  * INPUTS_LIMIT_BYTES} together. `bound` is the workspace the parent runs in,
- * when it runs in one. The one place every input is judged: at delegate
- * time, and again where it is read or copied.
+ * when it runs in one; `project` the project the parent belongs to, when it
+ * belongs to one. The one place every input is judged: at delegate time, and
+ * again where it is read or copied.
  */
 const admitAll = async (
   paths: unknown,
-  bound: unknown
+  bound: unknown,
+  project: unknown
 ): Promise<Admitted[] | string> => {
   if (!(
     Array.isArray(paths) && paths.every((one) => typeof one === "string")
@@ -170,19 +189,27 @@ const admitAll = async (
   if (paths.length > INPUTS_COUNT_LIMIT) {
     return `inputs names ${paths.length} files; it stops at ${INPUTS_COUNT_LIMIT}`;
   }
+  if (!(project === null || typeof project === "string")) {
+    throw new Error("an inputs' project is a project id or null");
+  }
+  const opened = project ? await projectFolderOf(project) : [];
   const roots = isWorkspaceRef(bound)
-    ? await Promise.all(
-        [bound.path, workspaceScratchDir(bound.id)].map((root) =>
-          realpath(root).catch(() => root)
-        )
-      )
+    ? [
+        ...(await Promise.all(
+          [bound.path, workspaceScratchDir(bound.id)].map((root) =>
+            realpath(root).catch(() => root)
+          )
+        )),
+        ...opened,
+      ]
     : undefined;
+  const reach = { opened, roots };
   const admitted: Admitted[] = [];
   const named = new Map<string, string>();
   let total = 0;
   for (const path of paths as string[]) {
     // biome-ignore lint/performance/noAwaitInLoops: one input at a time, the first refusal is the answer
-    const one = await admit(path, roots);
+    const one = await admit(path, reach);
     if (typeof one === "string") {
       return one;
     }
@@ -212,9 +239,10 @@ const namedOf = ({ name, named, mode }: Admitted): InputNamed => ({
  */
 export const admitInputs = async (
   paths: unknown,
-  bound: unknown
+  bound: unknown,
+  project: unknown
 ): Promise<InputsAdmitted> => {
-  const admitted = await admitAll(paths, bound);
+  const admitted = await admitAll(paths, bound, project);
   return typeof admitted === "string"
     ? { refused: admitted }
     : { files: admitted.map(namedOf) };
@@ -223,9 +251,10 @@ export const admitInputs = async (
 /** {@link CONTROL_INPUTS_READ}: each of `paths` admitted ({@link admitAll}), then read whole. */
 export const readInputs = async (
   paths: unknown,
-  bound: unknown
+  bound: unknown,
+  project: unknown
 ): Promise<InputsRead> => {
-  const admitted = await admitAll(paths, bound);
+  const admitted = await admitAll(paths, bound, project);
   if (typeof admitted === "string") {
     return { refused: admitted };
   }
@@ -246,9 +275,10 @@ export const readInputs = async (
 export const copyInputs = async (
   paths: unknown,
   bound: unknown,
-  ref: unknown
+  ref: unknown,
+  project: unknown
 ): Promise<InputsAdmitted> => {
-  const admitted = await admitAll(paths, bound);
+  const admitted = await admitAll(paths, bound, project);
   if (typeof admitted === "string") {
     return { refused: admitted };
   }

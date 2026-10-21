@@ -11,8 +11,12 @@
  *   and no workspace is cut.
  * - A missing path in `~/.ssh`, and a dangling link to one, get the store's
  *   refusal: neither says the file is missing, nor names the link's target.
+ * - The hub's database, in the hub's data dir beside the projects' folders,
+ *   is refused as a credential store.
  * - A parent delegates a leaf with an input file. The leaf's brief names the
  *   input, and its Bash reads it from `$TMPDIR/inputs/`.
+ * - A file in the parent's project's `assets/`, which its delegates'
+ *   boundaries read, goes with it and lands in `$TMPDIR/inputs/`.
  * - A handoff from the parent adds an input while the leaf works: it lands in
  *   the leaf's `$TMPDIR/inputs/`, and the handoff names it.
  * - The leaf then calls finish_item; its item, which lands none, is done.
@@ -24,7 +28,7 @@
  *   bun scripts/probe-kit/run.ts delegate-inputs
  */
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -32,6 +36,8 @@ const TAG = "PROBE-DELEGATE-INPUTS";
 const FINISH = "mcp__cawco__finish_item";
 const INPUT = "probe-input.txt";
 const HANDED = "probe-handoff.txt";
+const ASSET = "probe-asset.md";
+const ASSET_TOKEN = `delegate-inputs-asset-${crypto.randomUUID()}`;
 /** What the input holds: only a read of the file can put it in a request. */
 const TOKEN = `delegate-inputs-${crypto.randomUUID()}`;
 const HANDED_TOKEN = `delegate-inputs-handoff-${crypto.randomUUID()}`;
@@ -112,7 +118,13 @@ interface Started {
 /** The fleet up, a repository in a project, and its parent session running. */
 const setUp = async (
   kit: Kit
-): Promise<{ fleet: Fleet; home: string; parent: string; src: string }> => {
+): Promise<{
+  fleet: Fleet;
+  home: string;
+  parent: string;
+  projectId: string;
+  src: string;
+}> => {
   const fleet = await kit.fleet(respond);
   const home = fleet.env.HOME as string;
   fleet.launch("sessiond");
@@ -141,7 +153,7 @@ const setUp = async (
   const parent = await fleet.spawn("claude", "Parent", src, {
     projectId: project.id,
   });
-  return { fleet, home, parent, src };
+  return { fleet, home, parent, projectId: project.id, src };
 };
 
 const workspaceCount = (fleet: Fleet): number =>
@@ -235,6 +247,48 @@ const refusesHiddenMissing = async (
       linked.includes(`in ${store}`) &&
       !linked.includes(target),
     linked.slice(0, 400)
+  );
+};
+
+/**
+ * The hub's database, beside the projects' folders in the hub's data dir, is
+ * refused as a credential store: only the caller's project folder opens.
+ */
+const refusesHubDatabase = async (
+  { check }: Kit,
+  fleet: Fleet,
+  delegate: (inputs: string[]) => Promise<Started>
+): Promise<void> => {
+  const db = fleet.env.CAWCO_DB_PATH as string;
+  const before = workspaceCount(fleet);
+  const refused = await delegate([db]).then(
+    () => "started",
+    (error: unknown) => String(error)
+  );
+  check(
+    "the hub's database is refused as a credential store",
+    refused.includes(": 400 ") &&
+      refused.includes(`${db} is in `) &&
+      refused.includes("a credential store no workspace reads"),
+    refused.slice(0, 400)
+  );
+  check(
+    "the refused delegate cut no workspace",
+    workspaceCount(fleet) === before,
+    `${before} before, ${workspaceCount(fleet)} after`
+  );
+};
+
+/** A file in the parent's project's assets landed in the leaf's inputs. */
+const landsAsset = async ({ check }: Kit, started: Started): Promise<void> => {
+  const landed = await readFile(
+    join(started.workspaceTmp, "inputs", ASSET),
+    "utf8"
+  ).catch(() => "");
+  check(
+    "a file in the parent's project's assets is admitted and lands in the leaf's $TMPDIR/inputs/",
+    landed.includes(ASSET_TOKEN),
+    landed.slice(0, 120) || "missing"
   );
 };
 
@@ -333,7 +387,7 @@ const spec: Spec = {
   host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {
     const { check } = kit;
-    const { fleet, home, parent, src } = await setUp(kit);
+    const { fleet, home, parent, projectId, src } = await setUp(kit);
     const delegate = (inputs: string[]) =>
       fleet.api<Started>("/api/work-items", {
         parentInstanceId: parent,
@@ -349,11 +403,23 @@ const spec: Spec = {
     await refusesKeys(kit, fleet, home, delegate);
     await refusesMissing(kit, fleet, delegate);
     await refusesHiddenMissing(kit, fleet, home, delegate);
+    await refusesHubDatabase(kit, fleet, delegate);
 
     const outside = join(fleet.sandbox, "parent-files");
     await mkdir(outside, { recursive: true });
     await writeFile(join(outside, INPUT), `${TOKEN}\n`);
-    const started = await delegate([join(outside, INPUT)]);
+    // A file a delegate handed in (hub work-items.ts `outputsFolder`).
+    const assets = join(
+      dirname(fleet.env.CAWCO_DB_PATH as string),
+      "projects",
+      projectId,
+      "assets",
+      "probe"
+    );
+    await mkdir(assets, { recursive: true });
+    await writeFile(join(assets, ASSET), `${ASSET_TOKEN}\n`);
+    const started = await delegate([join(outside, INPUT), join(assets, ASSET)]);
+    await landsAsset(kit, started);
 
     const brief = await until(
       "the leaf's brief",

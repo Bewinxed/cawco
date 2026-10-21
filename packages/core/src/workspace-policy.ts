@@ -880,19 +880,31 @@ export const resolveAsFar = (path: string): string => {
  * whoever asks. A credential store ({@link credentialStores}: logins, key
  * folders, the hub's own secrets), a file named as a secret
  * ({@link isSecretFileName}), and on Linux the host's runtime dirs and logs
- * ({@link LINUX_HOST_PRIVATE}). Judged on the path as named and on its real
- * path, so a link leads neither into one nor out of one.
+ * ({@link LINUX_HOST_PRIVATE}). `opened` is what the caller's project opens
+ * inside a store, as every boundary of the project opens it
+ * ({@link projectFolderOf}): a path there, as named and as its real path, is
+ * not in that store. Judged on the path as named and on its real path, so a
+ * link leads neither into one nor out of one.
  */
 export const inputDenial = (
   named: string,
-  real: string
+  real: string,
+  opened: readonly string[]
 ): string | undefined => {
   const paths = [resolveAsFar(named), real];
   const inside = (roots: readonly string[]): string | undefined =>
     roots
       .map(resolveDenied)
       .find((root) => paths.some((path) => within(path, root)));
-  const store = inside(credentialStores());
+  const store = credentialStores()
+    .map(resolveDenied)
+    .find((root) =>
+      paths.some(
+        (path) =>
+          within(path, root) &&
+          !opened.some((folder) => within(folder, root) && within(path, folder))
+      )
+    );
   if (store) {
     return `${named} is in ${store}, a credential store no workspace reads`;
   }
@@ -1009,15 +1021,8 @@ const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
 /**
  * The folder of the project the workspace's work belongs to
- * ({@link workspaceProjectFile}), as a real path, read only: what one
- * delegate hands in (`outputs`, copied into `assets/<item>/`), its project's
- * `knowledge/` and tasks, for the next delegate to read. It lies in the
- * hub's data dir, a credential store (the hub's database with its tokens and
- * keys, its backups, the transcript index, every other project's folder), so
- * only this one folder opens, the deeper entry deciding; nothing writes it.
- * None for a workspace of no project, and none on a machine that is not the
- * hub's, where the folder does not exist (its delegates read the folder with
- * `folder_read`).
+ * ({@link workspaceProjectFile}), read only ({@link projectFolderOf}). None
+ * for a workspace of no project.
  */
 const projectFolder = async (id: string): Promise<string[]> => {
   const file = workspaceProjectFile(id);
@@ -1027,6 +1032,26 @@ const projectFolder = async (id: string): Promise<string[]> => {
   }
   if (typeof project !== "string" || !PROJECT_ID.test(project)) {
     throw new DamagedRecord(file, "it is not a project id");
+  }
+  return projectFolderOf(project);
+};
+
+/**
+ * Project `project`'s folder on the hub's machine, as a real path: what one
+ * delegate hands in (`outputs`, copied into `assets/<item>/`), its project's
+ * `knowledge/` and tasks, for the next delegate to read. It lies in the
+ * hub's data dir, a credential store (the hub's database with its tokens and
+ * keys, its backups, the transcript index, every other project's folder), so
+ * only this one folder opens, the deeper entry deciding; nothing writes it.
+ * THE ONE DEFINITION of that opening: a workspace's boundary reads it
+ * ({@link projectFolder}), and a session of the project may name a file in
+ * it as a delegate's input ({@link inputDenial}). None on a machine that is
+ * not the hub's, where the folder does not exist (its delegates read the
+ * folder with `folder_read`).
+ */
+export const projectFolderOf = async (project: string): Promise<string[]> => {
+  if (!PROJECT_ID.test(project)) {
+    throw new Error(`"${project}" is not a project id`);
   }
   const folder = join(hubProjectsDir(), project);
   const found = await stat(folder).catch(() => undefined);
