@@ -10,6 +10,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { refuseSchemeLowering } from "@cawco/core/bundle-css-guard";
 import { bundled } from "@cawco/core/bundled";
+import { houseFaceSheet } from "@cawco/core/house-faces";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 
 const HOST = new URL("./host.ts", import.meta.url).pathname;
@@ -113,69 +114,26 @@ const DIALKIT = join(
   "packages/hub/skills/decision-page/kit/vendor/dialkit"
 );
 
-/** The house faces the canvas's chrome is set in (DESIGN.md's type), each package's latin and latin-ext files, from the dashboard's own font packages. */
-const FACES: [pkg: string, files: string[]][] = [
-  [
-    "@fontsource-variable/figtree",
-    ["figtree-latin-wght-normal.woff2", "figtree-latin-ext-wght-normal.woff2"],
-  ],
-  [
-    "@fontsource-variable/jetbrains-mono",
-    [
-      "jetbrains-mono-latin-wght-normal.woff2",
-      "jetbrains-mono-latin-ext-wght-normal.woff2",
-    ],
-  ],
-];
-const FACE_RULE = /@font-face\s*\{[^}]*\}/g;
-const FACE_FILE = /url\(\.\/files\/([^)]+)\)/;
-
 /**
- * The faces as the decision host takes them (dashboard decisions/host
- * faces.ts): each package's own `@font-face` rules for the files in
- * {@link FACES}, pointed at `faces/<file>` beside the canvas page (the host
- * serves them there), and each file's bytes in base64.
+ * The house faces the canvas's chrome is set in (DESIGN.md's type), as every
+ * surface serves them (core house-faces.ts): a rule per woff2 piece, pointed
+ * at `faces/<file>` beside the canvas page (the host serves them there), and
+ * each piece's bytes in base64.
  */
 async function canvasFaces(): Promise<{
   css: string;
   files: Record<string, string>;
 }> {
-  const packages = await Promise.all(
-    FACES.map(async ([pkg, names]) => {
-      const dir = join(
-        Bun.resolveSync(`${pkg}/package.json`, join(REPO, "apps/dashboard")),
-        ".."
-      );
-      const css = await readFile(join(dir, "index.css"), "utf8");
-      const bytes = await Promise.all(
-        names.map(
-          async (name) =>
-            [
-              name,
-              (await readFile(join(dir, "files", name))).toString("base64"),
-            ] as const
-        )
-      );
-      return { css, names, bytes };
-    })
-  );
-  const rules = packages.flatMap(({ css, names }) =>
-    [...css.matchAll(FACE_RULE)].flatMap(([rule]) => {
-      const file = FACE_FILE.exec(rule)?.[1];
-      return file && names.includes(file)
-        ? [rule.replace(FACE_FILE, `url(faces/${file})`)]
-        : [];
-    })
-  );
-  const files: Record<string, string> = Object.fromEntries(
-    packages.flatMap(({ bytes }) => bytes)
-  );
-  if (rules.length !== Object.keys(files).length) {
-    throw new Error(
-      `The font packages wrote ${rules.length} rules for ${Object.keys(files).length} files: read their index.css again.`
-    );
-  }
-  return { css: rules.join("\n"), files };
+  const { css, files } = await houseFaceSheet("faces/");
+  return {
+    css,
+    files: Object.fromEntries(
+      files.map(([name, bytes]) => [
+        name,
+        Buffer.from(bytes).toString("base64"),
+      ])
+    ),
+  };
 }
 
 /** The canvas's browser runtime (canvas/runtime.ts), bundled: an ES module the stage serves as `cawco:stage/runtime.js`. */

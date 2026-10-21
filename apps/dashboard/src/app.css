@@ -14,8 +14,10 @@
    where it is first named. */
 @layer theme, base, vendor, components, utilities, overrides;
 @import "tailwindcss" source(".");
-@import "@fontsource-variable/figtree";
-@import "@fontsource-variable/jetbrains-mono";
+/* The house faces, Figtree and JetBrains Mono, as every CawCo web surface
+   serves them: woff2 pieces cut from the repository's own files (core
+   house-faces.ts), written here by vite.config.ts's `houseFaces`. */
+@import "./house-faces/faces.css";
 @import "@fontsource/fredoka/600.css";
 @import "@fontsource-variable/nunito";
 /* The house design layer (tokens, theme, variants, element defaults,

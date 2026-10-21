@@ -16,12 +16,11 @@
  * Paths, on every preview origin: `/__cawco/decision/<file>`, the bundle's
  * entry (`host.js`, `host.css`), its chunks (Pele's diagram types, each
  * loaded when a page first draws one) and its files (Caw's stills);
- * `faces.css`, the house faces' rules (house-faces.ts), each face's file
- * beside it as `face-<hash>.ttf`, linked by a program's page and imported
- * by an HTML page's `{{KIT_CSS}}`; `dials.js` and `dials.css`, DialKit with
+ * `faces.css`, the house faces' rules (house-faces.ts), each face's woff2
+ * pieces beside it as `face-<hash>.woff2`, linked by a program's page and
+ * imported by an HTML page's `{{KIT_CSS}}`; `dials.js` and `dials.css`, DialKit with
  * the kit's dials.js, loaded only by a page that has Dials.
  */
-import { createHash } from "node:crypto";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join, normalize, resolve } from "node:path";
 import { SveltePlugin } from "bun-plugin-svelte";
@@ -29,7 +28,7 @@ import { agentReact } from "./agent-react";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
 import { unlayeredRules } from "./css-layers";
-import { faceRule, readHouseFaces } from "./house-faces";
+import { houseFaceSheet } from "./house-faces";
 import { compileSheets, pageFiles } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
 
@@ -311,18 +310,15 @@ async function dialFiles(): Promise<Map<string, string>> {
 
 /**
  * The house faces (house-faces.ts) as the host serves them: each face's
- * whole file at `face-<its content's hash>.ttf`, kept for good, and
- * `faces.css`, a rule per face pointing there.
+ * woff2 pieces at `face-<its content's hash>.woff2`, kept for good, and
+ * `faces.css`, a rule per piece pointing there.
  */
-function faceFiles(): Map<string, Blob> {
-  const files = new Map<string, Blob>();
-  const rules = readHouseFaces().map((face) => {
-    const name = `face-${createHash("sha256").update(face.bytes).digest("hex").slice(0, 16)}.ttf`;
-    files.set(name, new Blob([face.bytes]));
-    return faceRule(face, `${PUBLIC_PATH}${name}`);
-  });
-  files.set("faces.css", new Blob([`${rules.join("\n")}\n`]));
-  return files;
+async function faceFiles(): Promise<Map<string, Blob>> {
+  const { css, files } = await houseFaceSheet(PUBLIC_PATH);
+  return new Map([
+    ...files.map(([name, bytes]) => [name, new Blob([bytes])] as const),
+    ["faces.css", new Blob([css])],
+  ]);
 }
 
 /** The host's files for a release build: the bundle's outputs (`outdir`), the faces and DialKit's. */
@@ -332,9 +328,13 @@ export async function decisionHostAssets(
 ): Promise<[string, string][]> {
   await rm(outdir, { recursive: true, force: true });
   await mkdir(outdir, { recursive: true });
-  const [files, dials] = await Promise.all([buildDecisionHost(), dialFiles()]);
+  const [files, dials, faces] = await Promise.all([
+    buildDecisionHost(),
+    dialFiles(),
+    faceFiles(),
+  ]);
   await Promise.all([
-    ...[...files, ...faceFiles()].map(([name, file]) =>
+    ...[...files, ...faces].map(([name, file]) =>
       Bun.write(join(outdir, name), file)
     ),
     ...[...dials].map(([name, text]) => Bun.write(join(outdir, name), text)),
@@ -348,12 +348,12 @@ let built: Promise<Map<string, Blob>> | undefined;
 
 /** The host's files and DialKit's by name, built once per process; a failure clears the slot so the next request retries. */
 const bundle = (): Promise<Map<string, Blob>> => {
-  built ??= Promise.all([buildDecisionHost(), dialFiles()])
+  built ??= Promise.all([buildDecisionHost(), dialFiles(), faceFiles()])
     .then(
-      ([files, dials]) =>
+      ([files, dials, faces]) =>
         new Map<string, Blob>([
           ...files,
-          ...faceFiles(),
+          ...faces,
           ...[...dials].map(
             ([name, text]) => [name, new Blob([text])] as const
           ),
@@ -369,8 +369,8 @@ const bundle = (): Promise<Map<string, Blob>> => {
 const TYPES: Record<string, string> = {
   css: "text/css; charset=utf-8",
   js: "text/javascript; charset=utf-8",
-  ttf: "font/ttf",
   webp: "image/webp",
+  woff2: "font/woff2",
 };
 
 const typeOf = (name: string) =>

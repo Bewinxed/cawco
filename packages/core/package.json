@@ -144,13 +144,16 @@
     "@typescript/native": "npm:typescript@~7.0.2",
     "browserslist": "4.29.3",
     "bun-plugin-svelte": "0.0.6",
+    "fontkit": "2.0.4",
     "lightningcss": "1.33.0",
     "postcss": "8.5.30",
+    "subset-font": "2.9.0",
     "svelte": "5.57.2",
     "tailwindcss": "4.3.3",
     "tldts": "7.4.18",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "unplugin-icons": "24.0.0",
+    "woff2-encoder": "2.0.0",
     "yaml": "^2.9.1",
     "yjs": "13.6.33",
     "zod": "4.6.5"
@@ -158,6 +161,6 @@
   "devDependencies": {
     "@types/bun": "^1.4.3",
     "@types/fontkit": "2.0.9",
-    "fontkit": "2.0.4"
+    "@types/subset-font": "2.3.0"
   }
 }

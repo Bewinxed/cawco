@@ -11,6 +11,8 @@ dist
 apps/dashboard/build
 apps/dashboard/.build-next
 apps/dashboard/.build-old
+# The house faces' woff2 pieces and rules, cut by every dashboard build (vite.config.ts `houseFaces`).
+apps/dashboard/src/house-faces/
 
 # database
 *.db

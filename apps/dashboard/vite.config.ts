@@ -1,5 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, realpathSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import type http from "node:http";
 import { dirname, join, relative } from "node:path";
 import {
@@ -9,6 +17,7 @@ import {
 } from "@cawco/core/browser-gate";
 import { unlayeredRules } from "@cawco/core/css-layers";
 import { CSS_TARGET } from "@cawco/core/css-target";
+import { houseFacePieces, houseFaceSheet } from "@cawco/core/house-faces";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
@@ -59,18 +68,56 @@ const devHub = (): URL => {
 };
 
 /**
- * The faces the first paint sets its text in: Figtree's and JetBrains
- * Mono's latin variable faces. The build inlines them into the stylesheet,
- * which the page waits for anyway, so the first frame is laid out in them.
- * Fetched by URL, a face that lands after the first paint re-sets every line
- * in it: with the font 600ms late, the phone board re-wrapped and moved 20px
- * (0.027 CLS), and no fallback face matches the UI face's widths. app.html
- * starts their decode before the body is parsed. Every other asset keeps
- * Vite's limit: the other subsets and Fredoka load by URL when a page uses
- * them.
+ * The house faces as every CawCo web surface serves them (core
+ * house-faces.ts): each face's woff2 pieces, cut from the repository's own
+ * Figtree and JetBrains Mono, and a rule per piece, written into
+ * `src/house-faces/` (git-ignored, written by every build and dev server)
+ * before Tailwind reads app.css, which imports its `faces.css`. Written only
+ * where a file differs, so a dev server's restart reloads nothing.
+ *
+ * The latin pieces are the faces the first paint sets its text in. The
+ * build inlines them into the stylesheet, which the page waits for anyway,
+ * so the first frame is laid out in them. Fetched by URL, a face that lands
+ * after the first paint re-sets every line in it: with the font 600ms late,
+ * the phone board re-wrapped and moved 20px (0.027 CLS), and no fallback
+ * face matches the UI face's widths. app.html starts their decode before
+ * the body is parsed. Every other asset keeps Vite's limit: the other
+ * pieces and Fredoka load by URL when a page draws them.
  */
-export const INLINE_FACES =
-  /\/(?:figtree-latin-wght-normal|jetbrains-mono-latin-wght-normal)\.woff2$/;
+const FACES_DIR = join(import.meta.dirname, "src/house-faces");
+const firstPaint = new Set<string>();
+
+const houseFaces = (): Plugin => ({
+  name: "cawco:house-faces",
+  async config() {
+    const [{ css, files }, pieces] = await Promise.all([
+      houseFaceSheet("./"),
+      houseFacePieces(),
+    ]);
+    mkdirSync(FACES_DIR, { recursive: true });
+    const wanted = new Map<string, string | Uint8Array>([
+      ["faces.css", css],
+      ...files,
+    ]);
+    for (const name of readdirSync(FACES_DIR)) {
+      if (!wanted.has(name)) {
+        rmSync(join(FACES_DIR, name));
+      }
+    }
+    for (const [name, body] of wanted) {
+      const path = join(FACES_DIR, name);
+      const bytes = typeof body === "string" ? Buffer.from(body) : body;
+      if (!(existsSync(path) && readFileSync(path).equals(bytes))) {
+        writeFileSync(path, bytes);
+      }
+    }
+    for (const piece of pieces) {
+      if (piece.cut === "latin") {
+        firstPaint.add(join(FACES_DIR, piece.name));
+      }
+    }
+  },
+});
 
 /**
  * The folders `vite dev` serves files from: the workspace root Vite finds by
@@ -82,13 +129,13 @@ export const INLINE_FACES =
  * package from one shared store (`…/links/<pkg>@<version>-<hash>/node_modules/
  * <pkg>`), outside the clone, so the faces app.css names answered 403 and the
  * page drew in the fallback face. The store is read off where the dashboard's
- * own face package resolves; in a normal checkout that is `node_modules/.bun`
+ * own face package (Nunito's) resolves; in a normal checkout that is `node_modules/.bun`
  * under the workspace root, already allowed, and nothing is added.
  */
 const SERVED_DIRS = (() => {
   const workspaceRoot = searchForWorkspaceRoot(process.cwd());
   const face = realpathSync(
-    join(import.meta.dirname, "node_modules/@fontsource-variable/figtree")
+    join(import.meta.dirname, "node_modules/@fontsource-variable/nunito")
   );
   const linkDir = face.slice(0, face.lastIndexOf("/node_modules/"));
   const store = dirname(linkDir);
@@ -422,6 +469,7 @@ export default defineConfig(({ command }) => {
   }
   return {
     plugins: [
+      houseFaces(),
       vendorComponentSheets(),
       streamdownOverlayOwn(),
       hubProxy(),
@@ -476,7 +524,7 @@ export default defineConfig(({ command }) => {
      */
     build: {
       cssTarget: CSS_TARGET,
-      assetsInlineLimit: (file) => INLINE_FACES.test(file) || undefined,
+      assetsInlineLimit: (file) => firstPaint.has(file) || undefined,
     },
     /**
      * vaul-svelte imports bits-ui and never declares it
@@ -516,8 +564,6 @@ export default defineConfig(({ command }) => {
       // refuses a directory import (ERR_UNSUPPORTED_DIR_IMPORT) where vite's
       // resolver follows it. Bundled, the server never resolves them at all.
       noExternal: [
-        "@fontsource-variable/figtree",
-        "@fontsource-variable/jetbrains-mono",
         "@fontsource/fredoka",
         "@fontsource-variable/nunito",
         "@xyflow/svelte",

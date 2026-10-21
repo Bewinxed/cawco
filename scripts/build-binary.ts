@@ -343,6 +343,10 @@ export async function buildBinary(options: {
     // postcss, @tailwindcss/postcss and unplugin-icons: the decision host's
     // Tailwind compile and its icons (core decision-host.ts), loaded the same
     // way; the binary carries the host prebuilt and never builds it.
+    // fontkit, subset-font and woff2-encoder: what cuts the house faces into
+    // their woff2 pieces (core house-faces.ts), loaded the same way; the
+    // binary carries the decision host's and the stage host's pieces
+    // prebuilt.
     external: [
       "cpu-features",
       "lightningcss",
@@ -350,6 +354,9 @@ export async function buildBinary(options: {
       "postcss",
       "@tailwindcss/postcss",
       "unplugin-icons",
+      "fontkit",
+      "subset-font",
+      "woff2-encoder",
     ],
     define: {
       __CAWCO_RELEASE__: "true",

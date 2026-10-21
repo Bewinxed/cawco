@@ -882,8 +882,8 @@ async function reportOf(files: string[]): Promise<RenderReport> {
 /**
  * DialKit's vendored vanilla build and stylesheet (decision-page kit, MIT),
  * served beside the canvas for its timeline and dials, and the house faces'
- * files (the dashboard's @fontsource-variable packages, OFL) its `faces`
- * rules name, at `faces/<file>`.
+ * woff2 pieces (core house-faces.ts, cut from the repository's own Figtree
+ * and JetBrains Mono, OFL) its `faces` rules name, at `faces/<file>`.
  */
 const CANVAS_ASSETS: Record<string, { body: string | Buffer; type: string }> = {
   "/@cawco/dialkit.js": { body: DIALKIT_JS, type: "text/javascript" },

@@ -156,6 +156,7 @@ import { join } from "node:path";
 import type { Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { houseFacePieces } from "../../../packages/core/src/house-faces";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { traceMain } from "../frames";
 import {
@@ -3799,11 +3800,16 @@ const SVG_MARKER = [200, 40, 40];
 const LABEL_SLACK = 2;
 /** A pixel as ink: any channel under it. Our call: the label's colour is 90, the ground 255. */
 const INK_BELOW = 200;
-/** (k2)'s face: Figtree as the dashboard ships it (its latin file), served beside the page. */
-const FIGTREE = join(
-  ROOT,
-  "apps/dashboard/node_modules/@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2"
-);
+/** (k2)'s face: Figtree as the dashboard ships it (its latin piece, core house-faces.ts), served beside the page. */
+const figtreeLatin = async (): Promise<Uint8Array<ArrayBuffer>> => {
+  const piece = (await houseFacePieces()).find(
+    (one) => one.role === "sans" && one.cut === "latin"
+  );
+  if (!piece) {
+    throw new Error("house faces: no latin piece of the sans face");
+  }
+  return piece.bytes;
+};
 /** One more whole part than a picture draws (picture.ts `PARTS_MAX`, 60). */
 const PAST_PARTS = 61;
 
@@ -4147,7 +4153,7 @@ const svgPictureChecks = async (on: On) => {
 
 /** (k2) The graph's label in Figtree, the page's own `@font-face`, served beside it: a preview of a port, as a dev server's page is. */
 const figtreeChecks = async (on: On) => {
-  const face = await Bun.file(FIGTREE).arrayBuffer();
+  const face = await figtreeLatin();
   const app = Bun.serve({
     port: 0,
     fetch: (request) =>

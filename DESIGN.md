@@ -591,8 +591,8 @@ Live, done and fail chips are the hue's 3-step mixed 24% toward its 9-step, with
 
 ## Typography
 
-**UI font:** Figtree Variable (`@fontsource-variable/figtree`, with ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif), at 400 and 500 only
-**Mono font:** JetBrains Mono Variable (`@fontsource-variable/jetbrains-mono`, with ui-monospace, SF Mono, monospace), ligatures off
+**UI font:** Figtree Variable (the repository's own variable file, served as woff2 pieces by every web surface through `packages/core/src/house-faces.ts`, with ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif), at 400 and 500 only
+**Mono font:** JetBrains Mono Variable (the repository's own variable file, served the same way, with ui-monospace, SF Mono, monospace), ligatures off
 **Wordmark font:** Nunito Variable (`--font-wordmark`, `@fontsource-variable/nunito`), “Caw&Co” at weight 1000, −0.045em tracking and 1 leading, with the ampersand in the same face and size, as on the approved landing. The dashboard keeps its existing body-size slot and box height. This brand mark is exempt from the product's 500 ceiling.
 **Display font:** Fredoka 600 (`@fontsource/fredoka`), brand display only: marketing, a brand moment in an empty state. Never product chrome.
 
