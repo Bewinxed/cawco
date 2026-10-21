@@ -16,7 +16,7 @@ const html = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Design graph mockup</title>
 <style>
 /* CawCo tokens (packages/hub/skills/decision-page/kit/tokens.css, built from design/tokens) */
