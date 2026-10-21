@@ -556,42 +556,231 @@ const SVG_STYLES = [
  */
 const SVG_EMBEDS = /\bx?link:?href\s*=\s*["'](?!data:)[^"']+["']/i;
 
+/** A face's `font-weight` descriptor as the weights it covers: `100 900`, `500`, `bold`; NaN for any other word. */
+const WEIGHT_WORDS: Record<string, number> = { normal: 400, bold: 700 };
+const SPACES = /\s+/;
+const weightsOf = (descriptor: string): [number, number] => {
+  const [from = 400, to = from] = descriptor
+    .trim()
+    .split(SPACES)
+    .filter(Boolean)
+    .map((word) => WEIGHT_WORDS[word] ?? Number(word));
+  return [from, to];
+};
+
+/** A face's `unicode-range` descriptor as code point ranges (`U+0000-00FF, U+4??`); none for an empty one. */
+const CODE_POINT_PREFIX = /^u\+/i;
+const WILDCARD = /\?/g;
+const rangesOf = (descriptor: string) =>
+  descriptor
+    .split(",")
+    .map((part) => part.trim().replace(CODE_POINT_PREFIX, ""))
+    .filter(Boolean)
+    .map((part) => {
+      const [low, high = low] = part.split("-");
+      return [
+        Number.parseInt(low.replace(WILDCARD, "0"), 16),
+        Number.parseInt(high.replace(WILDCARD, "F"), 16),
+      ] as const;
+    });
+
+/** What text in an `<svg>` part sets in one family: its weights, styles (the first word) and code points. */
+interface FamilyUse {
+  points: Set<number>;
+  styles: Set<string>;
+  weights: Set<number>;
+}
+
 /**
- * The node a part standing on `el` at `at` hands modern-screenshot. An `<svg>`
- * it would draw as it stands is a detached copy, at its box's size, each of
- * whose elements (a `<marker>`'s in its `<defs>` too) says inline the
- * {@link SVG_STYLES} it computes on the page; any other element is itself. A
- * value is said only where the copy would not come to it alone: one the
- * element sets by attribute always, else an inherited one unlike its
- * parent's, a non-inherited one (and the root's every one) unlike its tag's
- * default, as {@link slim} measures. A breath between elements.
+ * The `@font-face` rules of a picture's page, read once, and each font file's
+ * data URL, fetched once: what an `<svg>` part's copy embeds, as
+ * modern-screenshot's own clone embeds the page's faces (its `embedWebFont`,
+ * which neither its exports nor its `<svg>` shortcut reach).
  */
-async function partRoot(
-  el: Element,
-  at: Box,
-  view: Window,
-  defaults: UaDefaults,
-  breathe: () => Promise<void>
-): Promise<Element> {
-  if (
-    !(el.namespaceURI === SVG_NS && el.localName === "svg") ||
-    SVG_EMBEDS.test(el.innerHTML)
-  ) {
-    return el;
-  }
-  const copy = el.cloneNode(true) as SVGSVGElement;
-  const live = [el, ...el.querySelectorAll("*")];
-  const copied = [copy, ...copy.querySelectorAll("*")];
-  const computed = new Map<Element, CSSStyleDeclaration>();
-  const styleOf = (one: Element) => {
-    let style = computed.get(one);
-    if (!style) {
-      style = view.getComputedStyle(one);
-      computed.set(one, style);
+interface PageFaces {
+  data: Map<string, Promise<string | null>>;
+  rules: CSSFontFaceRule[] | null;
+}
+
+/** `doc`'s `@font-face` rules: its sheets', inside `@import`, `@media`, `@supports` and `@layer` too; a sheet of another origin gives none. */
+function faceRulesOf(doc: Document): CSSFontFaceRule[] {
+  const found: CSSFontFaceRule[] = [];
+  const walk = (rules: CSSRuleList) => {
+    for (const rule of rules) {
+      // By name, not `instanceof`: a picture's page may be another window's.
+      const kind = rule.constructor.name;
+      if (kind === "CSSFontFaceRule") {
+        found.push(rule as CSSFontFaceRule);
+      } else if (kind === "CSSImportRule") {
+        const sheet = (rule as CSSImportRule).styleSheet;
+        readRules(sheet);
+      } else if ("cssRules" in rule) {
+        walk((rule as CSSGroupingRule).cssRules);
+      }
     }
-    return style;
   };
-  for (const [i, one] of live.entries()) {
+  const readRules = (sheet: CSSStyleSheet | null) => {
+    let rules: CSSRuleList | undefined;
+    try {
+      rules = sheet?.cssRules;
+    } catch {
+      // Another origin's sheet: the browser reads none of its rules out.
+      return;
+    }
+    if (rules) {
+      walk(rules);
+    }
+  };
+  for (const sheet of doc.styleSheets) {
+    readRules(sheet);
+  }
+  return found;
+}
+
+/** The file at `url` as a data URL, null when it can't be fetched. */
+async function dataUrlOf(url: string): Promise<string | null> {
+  const response = await fetch(url).catch(() => null);
+  if (!response?.ok) {
+    return null;
+  }
+  const blob = await response.blob();
+  return await new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () =>
+      resolve(typeof reader.result === "string" ? reader.result : null);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(blob);
+  });
+}
+
+const CSS_URL = /url\((["']?)([^"')]+)\1\)/g;
+
+/** Of `faces`, those a use of their family draws with: its style, then its weights, then its code points; a style or weight none covers keeps them all, as the browser's match falls to the nearest. */
+function facesFor(faces: CSSFontFaceRule[], use: FamilyUse) {
+  const styled = faces.filter((face) =>
+    use.styles.has(
+      face.style.getPropertyValue("font-style").split(" ")[0] || "normal"
+    )
+  );
+  const byStyle = styled.length > 0 ? styled : faces;
+  const weighted = byStyle.filter((face) => {
+    const [from, to] = weightsOf(face.style.getPropertyValue("font-weight"));
+    return (
+      Number.isNaN(from) ||
+      [...use.weights].some((weight) => weight >= from && weight <= to)
+    );
+  });
+  const byWeight = weighted.length > 0 ? weighted : byStyle;
+  return byWeight.filter((face) => {
+    const ranges = rangesOf(face.style.getPropertyValue("unicode-range"));
+    return (
+      ranges.length === 0 ||
+      [...use.points].some((point) =>
+        ranges.some(([low, high]) => point >= low && point <= high)
+      )
+    );
+  });
+}
+
+/**
+ * The `@font-face` rules the text of the live `<svg>` `el` draws with, each
+ * font file in it a data URL: one `<style>`'s text, "" for none. Only the
+ * faces of the page's own families its words set, in their styles, weights
+ * and code points; a file that can't be fetched leaves its face out,
+ * `failed` hearing which.
+ */
+async function facesOf(
+  el: Element,
+  styleOf: (one: Element) => CSSStyleDeclaration,
+  faces: PageFaces,
+  failed: (message: string) => void
+): Promise<string> {
+  const doc = el.ownerDocument;
+  faces.rules ??= faceRulesOf(doc);
+  if (faces.rules.length === 0) {
+    return "";
+  }
+  const uses = new Map<string, FamilyUse>();
+  for (const one of [el, ...el.querySelectorAll("*")]) {
+    if (!ownText(one)) {
+      continue;
+    }
+    const style = styleOf(one);
+    for (const family of style.getPropertyValue("font-family").split(",")) {
+      const key = familyKey(family);
+      let use = uses.get(key);
+      if (!use) {
+        use = { points: new Set(), styles: new Set(), weights: new Set() };
+        uses.set(key, use);
+      }
+      use.styles.add(style.getPropertyValue("font-style").split(" ")[0]);
+      use.weights.add(Number(style.getPropertyValue("font-weight")));
+      for (const char of one.textContent ?? "") {
+        use.points.add(char.codePointAt(0) ?? 0);
+      }
+    }
+  }
+  const chosen = [...uses].flatMap(([family, use]) =>
+    facesFor(
+      (faces.rules ?? []).filter(
+        (face) =>
+          familyKey(face.style.getPropertyValue("font-family")) === family
+      ),
+      use
+    )
+  );
+  const texts = await Promise.all(
+    chosen.map(async (face) => {
+      const base = face.parentStyleSheet?.href ?? doc.baseURI;
+      let text = face.cssText;
+      for (const [whole, , url] of face.cssText.matchAll(CSS_URL)) {
+        if (url.startsWith("data:")) {
+          continue;
+        }
+        const at = new URL(url, base).href;
+        let data = faces.data.get(at);
+        if (!data) {
+          data = dataUrlOf(at);
+          faces.data.set(at, data);
+        }
+        // biome-ignore lint/performance/noAwaitInLoops: a face's few files, each fetched once a picture
+        const read = await data;
+        if (!read) {
+          failed(
+            `A font of the mark's picture was not drawn: ${at} could not be fetched.`
+          );
+          return "";
+        }
+        text = text.replace(whole, `url("${read}")`);
+      }
+      return text;
+    })
+  );
+  return texts.filter(Boolean).join("\n");
+}
+
+/** How {@link partRoot} copies an `<svg>`: the page's window, its defaults, the slices, and its fonts (a thumbnail's: its web families dropped instead). */
+interface SvgCopying {
+  breathe: () => Promise<void>;
+  defaults: UaDefaults;
+  failed: (message: string) => void;
+  fonts: { faces: PageFaces } | { web: Set<string> };
+  view: Window;
+}
+
+/** A picture's `<svg>` fonts: a thumbnail's web families dropped (`web`), else the page's faces embedded. */
+const fontsOf = (web: Set<string> | null): SvgCopying["fonts"] =>
+  web ? { web } : { faces: { data: new Map(), rules: null } };
+
+/** {@link partRoot}'s styles: each element of `copy` says what its twin in the live `el` computes, as {@link partRoot} measures, a breath between elements. */
+async function styleCopy(
+  el: Element,
+  copy: Element,
+  styleOf: (one: Element) => CSSStyleDeclaration,
+  { breathe, defaults, fonts }: SvgCopying
+) {
+  const copied = [copy, ...copy.querySelectorAll("*")];
+  for (const [i, one] of [el, ...el.querySelectorAll("*")].entries()) {
     const style = styleOf(one);
     const parent = one === el ? null : one.parentElement;
     const fallback = defaults.of(one);
@@ -606,13 +795,63 @@ async function partRoot(
         target.setProperty(name, value);
       }
     }
+    if ("web" in fonts) {
+      dropWebFamilies(copied[i], fonts.web);
+    }
     // biome-ignore lint/performance/noAwaitInLoops: a slice of the page's thread at a time
     await breathe();
   }
+}
+
+/**
+ * The node a part standing on `el` at `at` hands modern-screenshot. An `<svg>`
+ * it would draw as it stands is a detached copy, at the part's size, each of
+ * whose elements (a `<marker>`'s in its `<defs>` too) says inline the
+ * {@link SVG_STYLES} it computes on the page; any other element is itself. A
+ * value is said only where the copy would not come to it alone: one the
+ * element sets by attribute always, else an inherited one unlike its
+ * parent's, a non-inherited one (and the root's every one) unlike its tag's
+ * default, as {@link slim} measures. A breath between elements. The copy
+ * carries the `@font-face` rules its words draw with ({@link facesOf}), as the
+ * library's clone does; a thumbnail's, as its parts do, asks for none of the
+ * page's web families ({@link dropWebFamilies}). A part's root is never a
+ * lone shape ({@link leftOut}).
+ */
+async function partRoot(
+  el: Element,
+  at: Box,
+  copying: SvgCopying
+): Promise<Element> {
+  if (
+    !(el.namespaceURI === SVG_NS && el.localName === "svg") ||
+    SVG_EMBEDS.test(el.innerHTML)
+  ) {
+    return el;
+  }
+  const { fonts, view } = copying;
+  const copy = el.cloneNode(true) as SVGSVGElement;
+  const computed = new Map<Element, CSSStyleDeclaration>();
+  const styleOf = (one: Element) => {
+    let style = computed.get(one);
+    if (!style) {
+      style = view.getComputedStyle(one);
+      computed.set(one, style);
+    }
+    return style;
+  };
+  await styleCopy(el, copy, styleOf, copying);
   copy.setAttribute("width", String(at.w));
   copy.setAttribute("height", String(at.h));
   copy.style.setProperty("width", `${at.w}px`);
   copy.style.setProperty("height", `${at.h}px`);
+  if ("faces" in fonts) {
+    const faces = await facesOf(el, styleOf, fonts.faces, copying.failed);
+    if (faces) {
+      const sheet = copy.ownerDocument.createElementNS(SVG_NS, "style");
+      sheet.textContent = faces;
+      copy.prepend(sheet);
+    }
+  }
   return copy;
 }
 
@@ -685,16 +924,29 @@ const drawnWhole = (el: Element, at: Box, box: Box) =>
   el.childElementCount === 0 ||
   ownText(el);
 
+/**
+ * Whether `el` is left out of a picture: one {@link SKIPPED}, or an `<svg>`
+ * standing at `at` with an empty box, which draws nothing ("A value of zero
+ * disables rendering of the element", SVG 1.1 struct.html, `width` and
+ * `height`); walked into, its shapes would be parts, and the library draws a
+ * lone shape bare.
+ */
+const leftOut = (el: Element, at: Box) =>
+  el.matches(SKIPPED) ||
+  (el.namespaceURI === SVG_NS &&
+    el.localName === "svg" &&
+    (at.w === 0 || at.h === 0));
+
 /** What of the page in `doc` the crop `box` shows, from the body down. */
 function stepsIn(doc: Document, box: Box): Step[] {
   const steps: Step[] = [];
   let wholes = 0;
   const walk = (parent: Element) => {
     for (const child of parent.children) {
-      if (child.matches(SKIPPED)) {
+      const at = boxOf(child);
+      if (leftOut(child, at)) {
         continue;
       }
-      const at = boxOf(child);
       // `display: contents` and its like: no box of its own, its children stand for it.
       const boxless = at.w === 0 && at.h === 0;
       if (boxless || !meets(at, box)) {
@@ -858,6 +1110,13 @@ export async function cropPicture(
   const breathe = breather();
   const web = thumbnail ? webFamilies(view.document) : null;
   const defaults = uaDefaults(view.document);
+  const copying: SvgCopying = {
+    breathe,
+    defaults,
+    failed,
+    fonts: fontsOf(web),
+    view,
+  };
   const context = first
     ? await createContext(first.el, {
         scale,
@@ -915,13 +1174,7 @@ export async function cropPicture(
       context.height = step.box.h;
       try {
         // biome-ignore lint/performance/noAwaitInLoops: one part at a time, in paint order, on one context
-        context.node = await partRoot(
-          step.el,
-          step.box,
-          view,
-          defaults,
-          breathe
-        );
+        context.node = await partRoot(step.el, step.box, copying);
         const part = await domToCanvas(context);
         ctx.drawImage(part, step.box.x, step.box.y, step.box.w, step.box.h);
       } catch (reason) {

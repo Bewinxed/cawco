@@ -124,6 +124,16 @@
  *    inside the wedge polyline's hull is the page's ground (never black),
  *    the marker's inside is its colour, and the label's ink is as wide as
  *    the page's own rendering of it (an element screenshot), within 3px.
+ * k2. The same graph's label set in Figtree by the page's own `@font-face`
+ *    (a port's page): the page has the face loaded, and the picture's label
+ *    is as wide as the page's, within 3px.
+ * k3. The graph in a 0×0 `<svg>` (`overflow: visible`), pinned on a spot
+ *    over it: the page draws none of it ("A value of zero disables rendering
+ *    of the element", SVG 1.1), and the picture draws as the page does, the
+ *    marker's point and the label as the page's, with no part failed (none
+ *    of its shapes handed to the library alone).
+ * k4. 61 whole parts ahead of the graph in the crop (one past the picture's
+ *    60): the picture is drawn with no part failed and the hull not black.
  */
 import { join } from "node:path";
 import type { Frame, Locator, Page } from "playwright-core";
@@ -3003,32 +3013,75 @@ const mapPressChecks = async (on: On) => {
 /** (k)'s colours, as the page's stylesheet gives them: its ground, the edges, the label, the marker. */
 const SVG_GROUND = [255, 255, 255];
 const SVG_MARKER = [200, 40, 40];
-/** How far (k)'s label ink in the picture may stand from the page's own, px. Our call: 0.5px measured on Chromium at 1×, room for hinting at another scale; the default serif was 15.5px off. */
-const LABEL_SLACK = 3;
+/** How far (k)'s label ink in the picture may stand from the page's own, px. Our call: 0.5px measured on Chromium at 1× (DejaVu Sans 309.0 against 309.5, Figtree 275.0 against 275.5); the face Figtree fell to was 13.5px off, the default serif more. */
+const LABEL_SLACK = 2;
 /** A pixel as ink: any channel under it. Our call: the label's colour is 90, the ground 255. */
 const INK_BELOW = 200;
+/** (k2)'s face: Figtree as the dashboard ships it (its latin file), served beside the page. */
+const FIGTREE = join(
+  ROOT,
+  "apps/dashboard/node_modules/@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2"
+);
+/** One more whole part than a picture draws (picture.ts `PARTS_MAX`, 60). */
+const PAST_PARTS = 61;
+
+/** How (k)'s page varies: the label's face, an `<svg>` with no area, parts ahead of the graph. */
+interface SvgPage {
+  /** The `<svg>` sized 0×0, its shapes standing out of it (`overflow: visible`), under a pinnable spot of its size. */
+  arealess?: boolean;
+  /** Figtree from the page's own `@font-face`, not a system face. */
+  figtree?: boolean;
+  /** Small boxes ahead of the graph inside the crop, each a whole part. */
+  parts?: number;
+}
+
 /**
  * (k)'s page: a graph as the mockup draws it, an inline `<svg>` whose shapes
  * the stylesheet alone styles, standing in a world wider than any pin's crop,
- * so the `<svg>` is the picture's part and not the world round it.
- * The `<svg>`'s user space is its px (its viewBox its own size).
+ * so the `<svg>` is the picture's part and not the world round it. The
+ * `<svg>`'s user space is its px (its viewBox its own size, or none).
  */
-const SVG_PAGE = `<!doctype html><html><head><style>
-  :root { --border-contrast: rgb(40, 110, 200); --ink-muted: rgb(90, 90, 90); --edge-head: rgb(${SVG_MARKER.join(", ")}); --font-sans: "DejaVu Sans"; }
+const svgPage = ({ arealess, figtree, parts = 0 }: SvgPage) => {
+  const size = arealess
+    ? 'width="0" height="0"'
+    : 'width="480" height="260" viewBox="0 0 480 260"';
+  const boxes = Array.from(
+    { length: parts },
+    (_, i) => `<i style="left: ${60 + i * 6}px"></i>`
+  ).join("");
+  return `<!doctype html><html><head><style>
+  ${figtree ? '@font-face { font-family: "Figtree"; src: url("/figtree.woff2") format("woff2"); font-weight: 300 900; }' : ""}
+  :root { --border-contrast: rgb(40, 110, 200); --ink-muted: rgb(90, 90, 90); --edge-head: rgb(${SVG_MARKER.join(", ")}); --font-sans: ${figtree ? '"Figtree"' : '"DejaVu Sans"'}; }
   body { margin: 0; background: rgb(${SVG_GROUND.join(", ")}); }
   .world { position: relative; width: 1400px; height: 900px; }
   .world svg { position: absolute; left: 40px; top: 40px; overflow: visible; }
   .world svg polyline { fill: none; stroke: var(--border-contrast); stroke-width: 1.5; }
   .world svg text { font: 500 11px var(--font-sans), system-ui, sans-serif; fill: var(--ink-muted); }
-</style></head><body><div class="world"><svg id="graph" width="480" height="260" viewBox="0 0 480 260">
+  .world i { position: absolute; top: 46px; width: 4px; height: 4px; background: rgb(220, 220, 220); }
+  #spot { position: absolute; left: 40px; top: 40px; width: 480px; height: 260px; z-index: 1; }
+</style></head><body><div class="world">${boxes}<svg id="graph" ${size}>
   <defs><marker id="head" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="20" markerHeight="20" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--edge-head)"/></marker></defs>
   <polyline id="wedge" points="40,40 240,170 440,40"/>
   <polyline id="edge" points="60,220 300,220" marker-end="url(#head)"/>
-  <text id="label" x="320" y="224">Waiting to scanning</text>
-</svg></div></body></html>`;
+  <text id="label" x="20" y="250">Waiting to scanning, scanning to done, done to waiting</text>
+</svg>${arealess ? '<div id="spot" data-insp-path="src/Graph.svelte:3:3"></div>' : ""}</div></body></html>`;
+};
 /** (k)'s points in the `<svg>`'s px: inside the wedge's hull, inside the marker's triangle (its scale 20/10 × the 1.5 stroke, 6px off the edge's stroke). */
 const IN_HULL = { x: 240, y: 90 };
 const IN_MARKER = { x: 280, y: 213 };
+
+/** (k)'s graph's area, px: its `<svg>`'s size, or the spot over an arealess one. */
+const GRAPH = { w: 480, h: 260 };
+
+/** `png`'s colour at a point of its px, null outside it. */
+const sample = (png: PNG, x: number, y: number) => {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  const i = (py * png.width + px) * 4;
+  return px >= 0 && py >= 0 && px < png.width && py < png.height
+    ? [png.data[i], png.data[i + 1], png.data[i + 2]]
+    : null;
+};
 
 /** The columns of `png` in rows `top`..`bottom` and from column `from` on holding ink: the first and the last, -1 for none. */
 const inkSpan = (png: PNG, top: number, bottom: number, from: number) => {
@@ -3055,17 +3108,195 @@ const inkSpan = (png: PNG, top: number, bottom: number, from: number) => {
   return { first, last };
 };
 
-/** (k) A pin on an inline SVG styled by the page's stylesheet: its picture, read by pixel. */
-const svgPictureChecks = async (on: On) => {
+/** A box in the page's px, its window's scroll added. */
+interface PageBox {
+  h: number;
+  w: number;
+  x: number;
+  y: number;
+}
+const pageBoxIn = (frame: Frame, selector: string) =>
+  frame.evaluate((s) => {
+    const r = document.querySelector(s)?.getBoundingClientRect();
+    return r
+      ? { x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height }
+      : null;
+  }, selector);
+
+/** A (k) page's picture as read: a pixel at a point of the `<svg>`'s px, the label's ink width beside the page's own, the parts that failed. */
+interface SvgPicture {
+  at: (x: number, y: number) => number[] | null;
+  failed: string[];
+  label: { drawn: number; own: number };
+  /** The page's own rendering at a point of the `<svg>`'s px. */
+  page: (x: number, y: number) => number[] | null;
+  where: string;
+}
+
+/** The `cawco:error`s the desk hears from the page's overlay from now on: a part not drawn says so there. */
+const watchPageErrors = (desk: Page) =>
+  desk.evaluate(() => {
+    const errors: string[] = [];
+    (window as unknown as { probeErrors: string[] }).probeErrors = errors;
+    addEventListener("message", (event) => {
+      const data = event.data as { message?: string; type?: string } | null;
+      if (data?.type === "cawco:error") {
+        errors.push(data.message ?? "");
+      }
+    });
+  });
+
+/**
+ * (k)'s press and read on `frame`'s graph: a press at the wedge's hull (on
+ * the spot over an arealess `<svg>`), the pin's words, its picture as the
+ * hub took it, read where the crop (pins.ts `padded`, picture.ts `onPage`)
+ * puts the `<svg>`'s points. Null, its failure checked, when any step fails.
+ */
+const readSvgPicture = async (
+  on: On,
+  frame: Frame,
+  leg: string
+): Promise<SvgPicture | null> => {
+  await settle(on.page, 400);
+  await frame.evaluate(() => scrollTo(0, 0));
+  // The page's own rendering of the label, before any of the overlay's layers stand over it.
+  const ownLabel = PNG.sync.read(await frame.locator("#label").screenshot());
+  const own = inkSpan(ownLabel, 0, ownLabel.height - 1, 0);
+  const svg = await pageBoxIn(frame, "#graph");
+  const label = await pageBoxIn(frame, "#label");
+  if (!(svg && label)) {
+    on.kit.check(`${leg}: the page has its graph`, false, "none");
+    return null;
+  }
+  const outer = await on.page.locator(FRAME).boundingBox();
+  // The page's own rendering of the graph's area, as the desk shows it.
+  const ownGraph = PNG.sync.read(
+    await on.page.screenshot({
+      clip: {
+        x: (outer?.x ?? 0) + svg.x,
+        y: (outer?.y ?? 0) + svg.y,
+        width: GRAPH.w,
+        height: GRAPH.h,
+      },
+    })
+  );
+  const pageAt = (x: number, y: number) =>
+    sample(
+      ownGraph,
+      x * (ownGraph.width / GRAPH.w),
+      y * (ownGraph.width / GRAPH.w)
+    );
+  await paneMode(on, frame, "C");
+  await watchPageErrors(on.page);
+  const pictures = watchPictures(on.page);
+  try {
+    const before = new Set(Object.keys((await docOf(frame)).pins));
+    await on.page.mouse.click(
+      (outer?.x ?? 0) + svg.x + IN_HULL.x,
+      (outer?.y ?? 0) + svg.y + IN_HULL.y
+    );
+    const pin = await until(
+      `the pin on ${leg}'s graph`,
+      async () => {
+        const { pins } = await docOf(frame);
+        const id = Object.keys(pins).find((one) => !before.has(one));
+        return id
+          ? {
+              id,
+              ...(pins[id] as { anchor: { selector: string }; number: number }),
+            }
+          : null;
+      },
+      Boolean,
+      5000
+    ).catch(() => null);
+    if (!pin) {
+      on.kit.check(`${leg}: a press on the graph makes a pin`, false, "none");
+      return null;
+    }
+    await writeIn(on, pin.number, "These edges.");
+    await on.page.keyboard.press("Escape");
+    const posted = await until(
+      `${leg}'s pin picture at the hub`,
+      () => pictures.posted.find((one) => one.mark === pin.id),
+      Boolean,
+      10_000
+    ).catch(() => undefined);
+    const anchor: PageBox | null = await pageBoxIn(frame, pin.anchor.selector);
+    if (!(posted && anchor)) {
+      on.kit.check(
+        `${leg}: the graph pin's picture reaches the hub`,
+        false,
+        `picture ${Boolean(posted)}; anchor ${pin.anchor.selector} ${JSON.stringify(anchor)}`
+      );
+      return null;
+    }
+    const png = PNG.sync.read(Buffer.from(posted.png, "base64"));
+    const crop = {
+      x: Math.max(0, anchor.x - CROP_PAD),
+      y: Math.max(0, anchor.y - CROP_PAD),
+    };
+    const scale = png.width / (anchor.x + anchor.w + CROP_PAD - crop.x);
+    const at = (x: number, y: number) =>
+      sample(png, (svg.x + x - crop.x) * scale, (svg.y + y - crop.y) * scale);
+    // The label's band in the picture, its ink read from its own left edge on.
+    const drawn = inkSpan(
+      png,
+      Math.floor((label.y - crop.y) * scale) - 2,
+      Math.ceil((label.y + label.h - crop.y) * scale) + 2,
+      Math.floor((label.x - crop.x) * scale) - 2
+    );
+    const failed = await on.page.evaluate(
+      () => (window as unknown as { probeErrors: string[] }).probeErrors
+    );
+    return {
+      at,
+      failed,
+      page: pageAt,
+      label: {
+        drawn: drawn.first < 0 ? 0 : (drawn.last - drawn.first + 1) / scale,
+        own:
+          own.first < 0
+            ? 0
+            : (own.last - own.first + 1) / (ownLabel.width / label.w),
+      },
+      where: `anchor ${pin.anchor.selector}; picture ${png.width}×${png.height} at ${scale.toFixed(3)}×; parts not drawn: ${failed.join(" | ") || "none"}`,
+    };
+  } finally {
+    pictures.stop();
+    await on.page.keyboard.press("Escape");
+  }
+};
+
+const nearColour = (rgb: number[] | null, want: number[], slack: number) =>
+  !!rgb && rgb.every((c, i) => Math.abs(c - want[i]) <= slack);
+
+/** (k)'s check that a picture's label is set as the page sets it. */
+const labelCheck = (on: On, leg: string, face: string, read: SvgPicture) =>
+  on.kit.check(
+    `${leg}: the CSS-styled <text>'s ink in the picture is as wide as the page's own rendering of it (within ${LABEL_SLACK}px): ${face}`,
+    read.label.own > 0 &&
+      read.label.drawn > 0 &&
+      Math.abs(read.label.drawn - read.label.own) <= LABEL_SLACK,
+    `picture ${read.label.drawn.toFixed(1)}px, page ${read.label.own.toFixed(1)}px; ${read.where}`
+  );
+
+/** (k)'s page as a page artifact, shown in the pane. */
+const showSvgPage = async (on: On, name: string, shape: SvgPage) => {
   await on.call(CREATE, {
     kind: "page",
     does: "judge",
     ask: "Judge this page: pin anything that reads wrong",
-    name: "svg-graph",
-    html: SVG_PAGE,
+    name,
+    html: svgPage(shape),
   });
-  const frame = (await until(
-    "the svg-graph page in the pane",
+  return await graphFrame(on, name);
+};
+
+/** The pane's page once it shows `name`'s graph. */
+const graphFrame = async (on: On, name: string) =>
+  (await until(
+    `the ${name} page in the pane`,
     async () => {
       const shown = await pageFrame(on);
       return (await shown
@@ -3078,126 +3309,107 @@ const svgPictureChecks = async (on: On) => {
     Boolean,
     60_000
   )) as Frame;
-  await settle(on.page, 400);
-  await frame.evaluate(() => scrollTo(0, 0));
-  // The page's own rendering of the label, before any of the overlay's layers stand over it.
-  const ownLabel = PNG.sync.read(await frame.locator("#label").screenshot());
-  const own = inkSpan(ownLabel, 0, ownLabel.height - 1, 0);
-  const geometry = await frame.evaluate(() => {
-    const box = (el: Element | null) => {
-      const r = el?.getBoundingClientRect();
-      return r
-        ? { x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height }
-        : null;
-    };
-    return {
-      svg: box(document.querySelector("#graph")),
-      label: box(document.querySelector("#label")),
-    };
-  });
-  if (!(geometry.svg && geometry.label)) {
-    on.kit.check("k: the svg-graph page has its graph", false, "none");
-    return;
-  }
-  const { svg, label } = geometry;
-  await paneMode(on, frame, "C");
-  const pictures = watchPictures(on.page);
-  try {
-    const before = new Set(Object.keys((await docOf(frame)).pins));
-    const b = await screenBox(on, frame, "#graph");
-    await on.page.mouse.click(b.x + IN_HULL.x, b.y + IN_HULL.y);
-    const pin = await until(
-      "the pin on the graph",
-      async () => {
-        const { pins } = await docOf(frame);
-        const id = Object.keys(pins).find((one) => !before.has(one));
-        return id
-          ? {
-              id,
-              ...(pins[id] as {
-                anchor: { selector: string };
-                number: number;
-              }),
-            }
-          : null;
-      },
-      Boolean,
-      5000
-    ).catch(() => null);
-    if (!pin) {
-      on.kit.check("k: a press on the graph makes a pin", false, "none");
-      return;
-    }
-    await writeIn(on, pin.number, "These edges.");
-    await on.page.keyboard.press("Escape");
-    const posted = await until(
-      "the graph pin's picture at the hub",
-      () => pictures.posted.find((one) => one.mark === pin.id),
-      Boolean,
-      10_000
-    ).catch(() => undefined);
-    const anchor = await frame.evaluate((selector) => {
-      const r = document.querySelector(selector)?.getBoundingClientRect();
-      return r
-        ? { x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height }
-        : null;
-    }, pin.anchor.selector);
-    if (!(posted && anchor)) {
-      on.kit.check(
-        "k: the graph pin's picture reaches the hub",
-        false,
-        `picture ${Boolean(posted)}; anchor ${pin.anchor.selector} ${JSON.stringify(anchor)}`
-      );
-      return;
-    }
-    const png = PNG.sync.read(Buffer.from(posted.png, "base64"));
-    // The crop as pins.ts `padded` and picture.ts `onPage` make it: the anchor's box with its pad, from the page's origin on.
-    const crop = {
-      x: Math.max(0, anchor.x - CROP_PAD),
-      y: Math.max(0, anchor.y - CROP_PAD),
-    };
-    const scale = png.width / (anchor.x + anchor.w + CROP_PAD - crop.x);
-    const at = (x: number, y: number) => {
-      const px = Math.round((svg.x + x - crop.x) * scale);
-      const py = Math.round((svg.y + y - crop.y) * scale);
-      const i = (py * png.width + px) * 4;
-      return px >= 0 && py >= 0 && px < png.width && py < png.height
-        ? [png.data[i], png.data[i + 1], png.data[i + 2]]
-        : null;
-    };
-    const close = (rgb: number[] | null, want: number[], slack: number) =>
-      !!rgb && rgb.every((c, i) => Math.abs(c - want[i]) <= slack);
-    const hull = at(IN_HULL.x, IN_HULL.y);
-    const head = at(IN_MARKER.x, IN_MARKER.y);
-    const where = `anchor ${pin.anchor.selector}; picture ${png.width}×${png.height} at ${scale.toFixed(3)}×`;
+
+/** (k) A pin on an inline SVG styled by the page's stylesheet: its picture, read by pixel, in each of the ways a graph stands. */
+const svgPictureChecks = async (on: On) => {
+  const plain = await readSvgPicture(
+    on,
+    await showSvgPage(on, "svg-graph", {}),
+    "k"
+  );
+  if (plain) {
     on.kit.check(
       "k: in a pin's picture over an inline SVG, a point inside the CSS-styled polyline's hull is the page's ground, never black (fill: none kept)",
-      close(hull, SVG_GROUND, 8),
-      `hull ${JSON.stringify(hull)}; ${where}`
+      nearColour(plain.at(IN_HULL.x, IN_HULL.y), SVG_GROUND, 8),
+      `hull ${JSON.stringify(plain.at(IN_HULL.x, IN_HULL.y))}; ${plain.where}`
     );
     on.kit.check(
       "k: the marker the stylesheet colours through a var() is drawn in its colour",
-      close(head, SVG_MARKER, 24),
-      `marker ${JSON.stringify(head)}, wanted ${JSON.stringify(SVG_MARKER)}; ${where}`
+      nearColour(plain.at(IN_MARKER.x, IN_MARKER.y), SVG_MARKER, 24),
+      `marker ${JSON.stringify(plain.at(IN_MARKER.x, IN_MARKER.y))}, wanted ${JSON.stringify(SVG_MARKER)}; ${plain.where}`
     );
-    // The label's band in the picture, its ink read from its own left edge on.
-    const top = Math.floor((label.y - crop.y) * scale) - 2;
-    const bottom = Math.ceil((label.y + label.h - crop.y) * scale) + 2;
-    const left = Math.floor((label.x - crop.x) * scale) - 2;
-    const drawn = inkSpan(png, top, bottom, left);
-    const ownScale = ownLabel.width / label.w;
-    const ownWidth = (own.last - own.first + 1) / ownScale;
-    const drawnWidth = (drawn.last - drawn.first + 1) / scale;
+    labelCheck(on, "k", "its 11px sans face, never the default serif", plain);
+  }
+  await figtreeChecks(on);
+  const arealess = await readSvgPicture(
+    on,
+    await showSvgPage(on, "svg-arealess", { arealess: true }),
+    "k3"
+  );
+  if (arealess) {
+    const shown = arealess.page(IN_MARKER.x, IN_MARKER.y);
+    const drawn = arealess.at(IN_MARKER.x, IN_MARKER.y);
     on.kit.check(
-      `k: the CSS-styled <text>'s ink in the picture is as wide as the page's own rendering of it (within ${LABEL_SLACK}px): its 11px sans face, never the default serif`,
-      own.first >= 0 &&
-        drawn.first >= 0 &&
-        Math.abs(drawnWidth - ownWidth) <= LABEL_SLACK,
-      `picture ${drawnWidth.toFixed(1)}px, page ${ownWidth.toFixed(1)}px (its box ${label.w.toFixed(1)}px); ${where}`
+      "k3: a 0×0 <svg> (overflow: visible), which the page draws nothing of, is drawn in the picture as the page draws it: its marker's point and its label as the page's, no part failed (no lone shape handed to the library)",
+      !!shown &&
+        nearColour(drawn, shown, 8) &&
+        arealess.label.drawn === arealess.label.own &&
+        arealess.failed.length === 0,
+      `marker's point: picture ${JSON.stringify(drawn)}, page ${JSON.stringify(shown)}; label: picture ${arealess.label.drawn.toFixed(1)}px, page ${arealess.label.own.toFixed(1)}px; ${arealess.where}`
     );
+  }
+  const crowded = await readSvgPicture(
+    on,
+    await showSvgPage(on, "svg-crowded", { parts: PAST_PARTS }),
+    "k4"
+  );
+  if (crowded) {
+    on.kit.check(
+      `k4: with ${PAST_PARTS} whole parts ahead of the graph in the crop (past PARTS_MAX), the picture is drawn with no part failed and nothing of the graph in black: no shape of it is a part`,
+      crowded.failed.length === 0 &&
+        nearColour(crowded.at(IN_HULL.x, IN_HULL.y), SVG_GROUND, 8),
+      `hull ${JSON.stringify(crowded.at(IN_HULL.x, IN_HULL.y))}; ${crowded.where}`
+    );
+  }
+};
+
+/** (k2) The graph's label in Figtree, the page's own `@font-face`, served beside it: a preview of a port, as a dev server's page is. */
+const figtreeChecks = async (on: On) => {
+  const face = await Bun.file(FIGTREE).arrayBuffer();
+  const app = Bun.serve({
+    port: 0,
+    fetch: (request) =>
+      new URL(request.url).pathname === "/figtree.woff2"
+        ? new Response(face, { headers: { "content-type": "font/woff2" } })
+        : new Response(svgPage({ figtree: true }), {
+            headers: { "content-type": "text/html" },
+          }),
+  });
+  try {
+    await on.call(CREATE, {
+      kind: "preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
+      name: "svg-figtree",
+      port: app.port,
+    });
+    const frame = await graphFrame(on, "svg-figtree");
+    const loaded = await until(
+      "Figtree loaded on the page",
+      () =>
+        frame.evaluate(async () => {
+          await document.fonts.load('500 11px "Figtree"');
+          return document.fonts.check('500 11px "Figtree"');
+        }),
+      Boolean,
+      10_000
+    ).catch(() => false);
+    const read = await readSvgPicture(on, frame, "k2");
+    if (read) {
+      on.kit.check(
+        "k2: the page draws its label in Figtree, from its own @font-face",
+        loaded,
+        `document.fonts.check('500 11px "Figtree"') ${loaded}`
+      );
+      labelCheck(
+        on,
+        "k2",
+        "the page's web font (Figtree, its @font-face embedded), never the face it would fall to",
+        read
+      );
+    }
   } finally {
-    pictures.stop();
-    await on.page.keyboard.press("Escape");
+    app.stop(true);
   }
 };
 
