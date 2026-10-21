@@ -43,18 +43,21 @@ export const CLOUDFLARE = {
  * origin from (public-origin.js), and what lets a `vite preview` of it, which
  * refuses a Host it doesn't know with a 403 ("Blocked request. This host
  * (…) is not allowed"), answer a name of the run's own. The hub's preview
- * names never take it: the hub routes them by their Host.
+ * names never take it: the hub routes them by their Host. `hostname`: the
+ * address it listens on, the machine's every address for a browser in a
+ * container (artifact-browse).
  */
 export const cloudflareTo = (
   target: string,
   tls?: { cert: string; key: string },
-  forwardedHost = false
+  forwardedHost = false,
+  hostname = "127.0.0.1"
 ) =>
   Bun.serve<{
     backend: WebSocket;
     queue: (string | Uint8Array<ArrayBuffer>)[];
   }>({
-    hostname: "127.0.0.1",
+    hostname,
     port: 0,
     ...(tls ? { tls } : {}),
     fetch(request, bun) {
