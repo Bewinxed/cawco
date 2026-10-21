@@ -338,7 +338,10 @@ function snapStage() {
   const wrap = $("stage").getBoundingClientRect(), out = new Map();
   for (const el of $("stage").querySelectorAll("[data-key]")) {
     const b = el.getBoundingClientRect();
-    out.set(el.dataset.key, { val: el.dataset.val ?? el.textContent, cls: el.className, box: { x: b.left - wrap.left, y: b.top - wrap.top, w: b.width, h: b.height }, radius: parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0 });
+    const rg = document.createRange(); rg.selectNodeContents(el);
+    const rs = [...rg.getClientRects()].filter((r) => r.width > 0.5 && r.height > 0.5);
+    const tx = rs.length ? { x: Math.min(...rs.map((r) => r.left)) - wrap.left, y: Math.min(...rs.map((r) => r.top)) - wrap.top, r: Math.max(...rs.map((r) => r.right)) - wrap.left, b: Math.max(...rs.map((r) => r.bottom)) - wrap.top } : null;
+    out.set(el.dataset.key, { val: el.dataset.val ?? el.textContent, cls: el.className, box: { x: b.left - wrap.left, y: b.top - wrap.top, w: b.width, h: b.height }, text: tx, radius: parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0 });
   }
   return out;
 }
@@ -348,10 +351,16 @@ function drawWashes() {
   const now = snapStage(), out = [];
   for (const [k, n] of now) { const o = keptSnap.get(k); if (!o || o.val !== n.val || o.cls !== n.cls) out.push(["add", n, k]); }
   for (const [k, o] of keptSnap) if (!now.has(k)) out.push(["del", o, k]);
-  const pad = px("--space-1");
+  // A wash stands --space-1 out from its element, and further where the element is bare (its text at its
+  // own edge), so the wash and its 1px edge stand --space-1 clear of the text. Its radius is the element's
+  // plus that outset (The Concentric Rule).
+  const space = px("--space-1"), edge = 1;
   $("marks").replaceChildren(...out.map(([kind, n, key]) => {
+    const t = n.text, inset = t ? Math.min(t.x - n.box.x, t.y - n.box.y, n.box.x + n.box.w - t.r, n.box.y + n.box.h - t.b) : Infinity;
+    const pad = Math.max(space, Math.ceil(space + edge - inset));
     const w = document.createElement("div");
     w.className = "wash " + kind; w.dataset.wash = kind; w.dataset.of = key;
+    if (t) w.dataset.tx = [t.x, t.y, t.r - t.x, t.b - t.y].join(",");
     Object.assign(w.style, { left: n.box.x - pad + "px", top: n.box.y - pad + "px", width: n.box.w + 2 * pad + "px", height: n.box.h + 2 * pad + "px", borderRadius: n.radius + pad + "px" });
     return w;
   }));
@@ -673,12 +682,23 @@ function layoutDock(work) {
   const area = $("endArea");
   area.style.left = endX + "px";
   $("dock").querySelector(".ruler-row").style.background = "linear-gradient(to right, var(--surface-raised) " + endX + "px, var(--surface-recess-deep) 0)";
-  // The ruler: round times, every 100ms (50 under 300), mono, to the ruler's end.
-  const step = total < 300 ? 50 : 100, ruler = $("ruler");
+  // The ruler: round times, every 100ms (50 under 300) where they fit, else the next step up a 1-2-5
+  // ladder that leaves each label its own width and a half, plus --space-2, so no two ever meet.
+  const ruler = $("ruler"), gap = px("--space-2");
+  ruler.innerHTML = "<span>" + Math.round(g.end) + "</span>";
+  const widest = ruler.firstChild.offsetWidth;
+  const ladder = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+  const base = total < 300 ? 50 : 100;
+  const step = ladder.find((s) => s >= base && (g.w * s) / g.end >= 1.5 * widest + gap) || ladder[ladder.length - 1];
   const marks = [];
   for (let t = 0; t <= g.end + 0.5; t += step) marks.push(t);
   ruler.innerHTML = marks.map((t) => '<span data-t="' + t + '">' + t + '</span><i style="left:' + (g.w * t) / g.end + 'px"></i>').join("");
-  for (const s of ruler.querySelectorAll("span")) { const t = +s.dataset.t, w = s.offsetWidth, x = (g.w * t) / g.end; s.style.left = clamp(x - w / 2, 0, g.w - w) + "px"; }
+  let prevRight = -Infinity;
+  for (const s of ruler.querySelectorAll("span")) {
+    const t = +s.dataset.t, w = s.offsetWidth, x = (g.w * t) / g.end, left = clamp(x - w / 2, 0, g.w - w);
+    if (left < prevRight + gap) { s.remove(); continue; }
+    s.style.left = left + "px"; prevRight = left + w;
+  }
   drawTies(clips, r, g);
   updateTime();
 }
