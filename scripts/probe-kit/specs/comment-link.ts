@@ -8,17 +8,18 @@
  * frame (developers.cloudflare.com/network/websockets).
  *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
- * mock model) and the built dashboard, an artifact's own tab at the desk
- * runs through an HTTP proxy (idle-proxy.ts) that cuts every tunnel quiet
- * for {@link IDLE_MS}, and that the spec cuts or refuses by path. Read from
- * each frame's own sockets (opens, closes and their codes), the pane's DOM,
- * the overlay's link (`cawcoArtifact`), the hub's pins and what the model
- * was sent:
+ * mock model) and the dashboard as the owner's machines run it (serve.js on
+ * the published build under systemd's socket activation, socket-served.ts),
+ * an artifact's own tab runs through an HTTP proxy (idle-proxy.ts) that
+ * cuts every tunnel quiet for {@link IDLE_MS}, and that the spec cuts or
+ * refuses by path. Read from each frame's own sockets (opens, closes and
+ * their codes), the pane's DOM, the overlay's link (`cawcoArtifact`), the
+ * hub's pins and what the model was sent:
  *
  * 1. Quiet past the proxy's timeout: a socket that says nothing (the
- *    control) is cut at it with 1006; the pane's and the overlay's links
- *    stay open the whole time, the proxy cutting neither (y-websocket's
- *    resync, core doc-link.ts `RESYNC_MS`, is their keepalive).
+ *    control, to a silent server of the spec's) is cut at it with 1006; the
+ *    pane's and the overlay's links stay open the whole time, the proxy
+ *    cutting neither.
  * 2. A drop once synced (both links cut at once, 1006): each frame opens
  *    its link again within y-websocket's first backoff, the overlay syncs
  *    again, and the pane never says the comments couldn't be read.
@@ -29,16 +30,44 @@
  *    comments couldn't be read, why and what happens next in the WORDS
  *    error formula; with the link let through, the comments by themselves,
  *    no Try again pressed.
- * 5. A pin written on the page while its link is down (cut and refused for
- *    3 s, under the overlay's 5 s before it refuses the pen) reaches the
- *    hub once the link is back, and the session hears it once.
+ *    3 and 4 run at the desk on Chromium, WebKit and Firefox, and on the
+ *    phone on Chromium.
+ * 5. A pin the person taps with Comment while the page's link is down (cut
+ *    and refused for 3 s, under the overlay's 5 s before it refuses the
+ *    pen) is made in the page's doc alone; once the link is back its card
+ *    opens within the backoff (the pane draws the card from its own doc,
+ *    which hears of the pin through the hub), the person's words in it
+ *    reach the hub, and the session hears them once.
+ * 6. A tab really hidden behind another (hidden-tab.ts: Chromium headed on
+ *    a headless Wayland session, through the same proxy), under Chromium's
+ *    intensive wake-up throttling (developer.chrome.com/blog/
+ *    timer-throttling-in-chrome-88: a timer chained 5 deep or more runs only
+ *    on a once-a-minute wake-up; an open WebSocket exempts nothing, chromium
+ *    commit b3ca8d2 "enables the IntensiveWakeUpThrottling and
+ *    AllowAggressiveThrottlingWithWebSocket features by default"), its grace
+ *    cut to 10 s: its timers read back on minute wake-ups, and for
+ *    {@link HIDDEN_MS} neither link closes nor opens again, and the
+ *    overlay's stays synced. y-websocket's resync then goes out once a
+ *    minute, under the proxy's idle cut, and its 30 s no-message check runs
+ *    on the same wake-ups; the hub's beat (artifacts/docs.ts) keeps the
+ *    link busy and what it last heard fresh.
  *
  *   bun scripts/probe-kit/run.ts comment-link
  */
+import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { hiddenTabs } from "../hidden-tab";
 import { idleProxy } from "../idle-proxy";
-import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import {
+  type Engine,
+  type Kit,
+  type KitFleet,
+  open,
+  type Spec,
+  settle,
+} from "../kit";
+import { freePort, publishBuild, serveUnder } from "../socket-served";
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;
@@ -46,7 +75,7 @@ const LIST = '[data-pin-list-pop] [data-slot="pin-list"]';
 const READ = `${LIST} [data-slot="pin-list-read"]`;
 const NAME = "comment-link";
 const PAGE =
-  '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Link</title></head><body><h1>Link</h1><p id="here">The paragraph the pin stands on.</p></body></html>';
+  '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Link</title></head><body style="margin:0;font:18px/1.6 system-ui"><main style="padding:24px"><h1>Link</h1><p id="here" style="width:70%">The paragraph the pin stands on.</p></main></body></html>';
 /** The proxy's idle timeout. Our stand-in: Cloudflare doesn't publish its own. */
 const IDLE_MS = 15_000;
 /** How long (1) stays quiet: twice the proxy's timeout and more. */
@@ -57,6 +86,10 @@ const LINK_DOWN_MS = 15_000;
 const REOPEN_MS = 3000;
 /** How long (5)'s link is down. */
 const DOWN_MS = 3000;
+/** How long (6)'s tab stays hidden: three of the throttled tab's wake-ups and more. */
+const HIDDEN_MS = 200_000;
+/** Chromium's intensive throttling: a wake-up a minute. */
+const WAKE_MS = 60_000;
 const PIN_WORDS = "Written while the link was down.";
 /** The comments notice (core injected.ts `artifactCommentsNotice`). */
 const NOTICE =
@@ -66,8 +99,8 @@ const DELIVERY_MS = 10_000 + 6000;
 const STILL_MS = 12_000;
 const PANE_PATH = /^\/ws\/artifact\//;
 const OVERLAY_PATH = /\/__cawco\/artifact\/[0-9a-f-]{36}$/;
-/** The control's own mark on its socket's address. */
-const CONTROL = "probe=quiet";
+/** The control's path on the silent server. */
+const CONTROL = "/quiet";
 
 /** Every request the model was asked with, in order. */
 const heard: Seen[] = [];
@@ -103,7 +136,8 @@ const recorder = () => {
       const { pathname, search } = new URL(String(url), location.href);
       if (!(
         pathname.includes("/ws/artifact/") ||
-        pathname.includes("/__cawco/artifact/")
+        pathname.includes("/__cawco/artifact/") ||
+        pathname === "/quiet"
       )) {
         return;
       }
@@ -172,6 +206,21 @@ const overlayLink = (frame: Frame): Promise<string> =>
     return state;
   });
 
+/** The pins in the page's own doc, by id. */
+const pagePins = (frame: Frame) =>
+  frame.evaluate(
+    () =>
+      (
+        window as unknown as {
+          cawcoArtifact: {
+            doc: { getMap: (n: string) => { toJSON: () => object } };
+          };
+        }
+      ).cawcoArtifact.doc
+        .getMap("pins")
+        .toJSON() as Record<string, { thread: { text: string }[] }>
+  );
+
 const pageFrame = async (page: Page): Promise<Frame> =>
   (await until(
     "the page in the pane",
@@ -190,25 +239,55 @@ interface At {
   session: string;
 }
 
+interface Where {
+  engine: Engine;
+  view: "desk" | "phone";
+}
+
+const DESK: Where = { engine: "chromium", view: "desk" };
+
 /** A tab on the artifact through `proxy`, the Comments list open, every frame recording. */
-const tab = async (at: At, proxy: string): Promise<Page> => {
-  const page = await at.kit.page("desk", { proxy });
+const tab = async (at: At, proxy: string, where: Where = DESK): Promise<Page> =>
+  onArtifact(
+    at,
+    await at.kit.page(where.view, { proxy, engine: where.engine }),
+    `${where.engine} ${where.view}`
+  );
+
+/** `page` on the artifact, the Comments list open, every frame recording; `label` names it in a failure. */
+const onArtifact = async (at: At, page: Page, label: string): Promise<Page> => {
   await page.addInitScript((key) => {
     localStorage.setItem(key, "open");
   }, `cawco-preview-comments:${at.session}`);
   await page.addInitScript(recorder);
-  await open(
-    page,
-    `${at.base}/artifact/${at.id}`,
-    `${PANE} [data-slot="comments"]`
-  );
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      errors.push(message.text());
+    }
+  });
+  try {
+    await open(
+      page,
+      `${at.base}/artifact/${at.id}`,
+      `${PANE} [data-slot="comments"]`
+    );
+  } catch (error) {
+    const text = await page
+      .locator("body")
+      .innerText()
+      .catch(() => "");
+    throw new Error(
+      `${label}: the artifact's tab never drew its pane (${error instanceof Error ? error.message.split("\n")[0] : String(error)}); the page says ${JSON.stringify(text.slice(0, 300))}; errors ${JSON.stringify(errors.slice(0, 5))}`,
+      { cause: error }
+    );
+  }
   return page;
 };
 
 const paneLinks = (seen: Recorded) =>
-  seen.links.filter(
-    (link) => PANE_PATH.test(link.path) && !link.path.includes(CONTROL)
-  );
+  seen.links.filter((link) => PANE_PATH.test(link.path));
 
 const hubPins = async ({ fleet, id, session }: At) =>
   (
@@ -220,6 +299,32 @@ const hubPins = async ({ fleet, id, session }: At) =>
     }>(`/api/instances/${session}/artifacts/comments?artifact=${id}&filter=all`)
   ).artifacts.find((one) => one.id === id)?.pins ?? [];
 
+const withWords = (pins: { thread: { text: string }[] }[]) =>
+  pins.filter((pin) => pin.thread.some((entry) => entry.text === PIN_WORDS));
+
+/** The dashboard as the owner's machines run it, against `fleet`'s hub: its address, and its end. */
+const servedDashboard = async (kit: Kit, fleet: KitFleet) => {
+  await publishBuild();
+  const port = await freePort();
+  const served = serveUnder(
+    fleet,
+    [{ address: `127.0.0.1:${port}`, name: "dashboard" }],
+    join(kit.out, "serve.log")
+  );
+  const base = `http://127.0.0.1:${port}`;
+  await until(
+    "serve.js answering",
+    () =>
+      fetch(`${base}/`).then(
+        (answer) => answer.status,
+        () => 0
+      ),
+    (status) => status === 200,
+    30_000
+  );
+  return { base, stop: () => served.kill() };
+};
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
@@ -230,7 +335,7 @@ const run = async (kit: Kit) => {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  const base = await fleet.dashboard();
+  const dashboard = await servedDashboard(kit, fleet);
   const session = await fleet.spawn("claude", "Comment link", fleet.repo);
   const { id } = await fleet.api<{ id: string }>(
     `/api/instances/${session}/artifacts`,
@@ -243,23 +348,51 @@ const run = async (kit: Kit) => {
     }
   );
   const proxy = await idleProxy(IDLE_MS);
+  // The control's server: it answers the upgrade and never says a word.
+  const silent = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: (request, server) =>
+      server.upgrade(request) ? undefined : new Response(null, { status: 426 }),
+    websocket: { message: () => undefined },
+  });
   try {
-    const at = { base, fleet, id, kit, session };
-    const page = await quiet(at, proxy);
+    const at = { base: dashboard.base, fleet, id, kit, session };
+    const page = await quiet(at, proxy, silent.port as number);
     await droppedOnceSynced(at, proxy, page);
     await pinnedWhileDown(at, proxy, page);
     await page.close();
-    await droppedBeforeSync(at, proxy);
-    await downForGood(at, proxy);
+    await hiddenTab(at, proxy);
+    for (const where of [
+      DESK,
+      { engine: "chromium", view: "phone" },
+      { engine: "webkit", view: "desk" },
+      { engine: "firefox", view: "desk" },
+    ] satisfies Where[]) {
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: one browser after another, each through the one proxy
+        await droppedBeforeSync(at, proxy, where);
+        await downForGood(at, proxy, where);
+      } catch (error) {
+        proxy.refuse(null);
+        kit.check(
+          `3 and 4 ${where.engine} ${where.view} run`,
+          false,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }
   } finally {
     proxy.stop();
+    silent.stop(true);
+    dashboard.stop();
   }
 };
 
 type Proxy = Awaited<ReturnType<typeof idleProxy>>;
 
 /** 1. Quiet past the proxy's timeout: the control is cut, the two links are not. */
-const quiet = async (at: At, proxy: Proxy): Promise<Page> => {
+const quiet = async (at: At, proxy: Proxy, silent: number): Promise<Page> => {
   const page = await tab(at, proxy.url);
   await page.waitForSelector(READ, { timeout: 30_000 });
   const frame = await pageFrame(page);
@@ -269,22 +402,18 @@ const quiet = async (at: At, proxy: Proxy): Promise<Page> => {
     (s) => s === "synced",
     30_000
   );
-  const cutsBefore = proxy.idleCuts().length;
-  // The control: a socket on the pane's own path that never answers the hub.
   await page.evaluate(
-    ({ session, id, mark }) => {
+    ({ port, path }) => {
       Object.defineProperty(window, "probeControl", {
-        value: new WebSocket(
-          `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/artifact/${session}/${id}?${mark}`
-        ),
+        value: new WebSocket(`ws://127.0.0.1:${port}${path}`),
       });
     },
-    { session: at.session, id: at.id, mark: CONTROL }
+    { port: silent, path: CONTROL }
   );
   await page.waitForTimeout(QUIET_MS);
   const tabSeen = await linksOf(page);
   const pageSeen = await linksOf(frame);
-  const control = tabSeen.links.find((link) => link.path.includes(CONTROL));
+  const control = tabSeen.links.find((link) => link.path === CONTROL);
   const controlLived =
     typeof control?.closed === "number" && typeof control.opened === "number"
       ? Math.round(control.closed - control.opened)
@@ -299,14 +428,14 @@ const quiet = async (at: At, proxy: Proxy): Promise<Page> => {
   );
   const pane = paneLinks(tabSeen);
   const overlay = pageSeen.links.filter((link) => OVERLAY_PATH.test(link.path));
-  const cut = proxy.idleCuts().slice(cutsBefore);
+  const cut = proxy.idleCuts();
   at.kit.check(
     `1: quiet for ${QUIET_MS} ms, the pane's and the overlay's links stay open, the proxy cutting neither`,
     pane.length === 1 &&
       pane[0]?.closed === null &&
       overlay.length === 1 &&
       overlay[0]?.closed === null &&
-      cut.every((path) => path.includes(CONTROL)),
+      cut.every((path) => path === CONTROL),
     `pane ${JSON.stringify(pane)}; overlay ${JSON.stringify(overlay)}; idle cuts ${JSON.stringify(cut)}`
   );
   return page;
@@ -315,43 +444,30 @@ const quiet = async (at: At, proxy: Proxy): Promise<Page> => {
 /** 2. Both links cut once synced: each opens again within the backoff, no fault said. */
 const droppedOnceSynced = async (at: At, proxy: Proxy, page: Page) => {
   const frame = await pageFrame(page);
-  const before = [
-    (await linksOf(page)).links.length,
-    (await linksOf(frame)).links.length,
-  ];
+  const overlayBefore = (await linksOf(frame)).links.length;
   const t0 = Date.now();
   const cut = proxy.drop(
-    (path) =>
-      (PANE_PATH.test(path) || OVERLAY_PATH.test(path)) &&
-      !path.includes(CONTROL)
+    (path) => PANE_PATH.test(path) || OVERLAY_PATH.test(path)
   );
+  const read = async () => ({
+    tabSeen: await linksOf(page),
+    pageSeen: await linksOf(frame),
+    link: await overlayLink(frame),
+    ms: Date.now() - t0,
+  });
   const back = await until(
     "both links open again and the overlay synced",
-    async () => {
-      const tabSeen = await linksOf(page);
-      const pageSeen = await linksOf(frame);
-      return {
-        tabSeen,
-        pageSeen,
-        link: await overlayLink(frame),
-        ms: Date.now() - t0,
-      };
-    },
+    read,
     (now) =>
       paneLinks(now.tabSeen).some(
         (link, i) => i >= 1 && link.opened !== null && link.closed === null
       ) &&
       now.pageSeen.links
-        .slice(before[1])
+        .slice(overlayBefore)
         .some((link) => link.opened !== null && link.closed === null) &&
       now.link === "synced",
     15_000
-  ).catch(async () => ({
-    tabSeen: await linksOf(page),
-    pageSeen: await linksOf(frame),
-    link: await overlayLink(frame),
-    ms: Date.now() - t0,
-  }));
+  ).catch(read);
   const pane = paneLinks(back.tabSeen);
   const overlay = back.pageSeen.links.filter((link) =>
     OVERLAY_PATH.test(link.path)
@@ -365,7 +481,7 @@ const droppedOnceSynced = async (at: At, proxy: Proxy, page: Page) => {
       overlay[0]?.code === 1006 &&
       back.link === "synced" &&
       back.ms <= REOPEN_MS,
-    `back in ${back.ms} ms; pane ${JSON.stringify(pane)}; overlay ${JSON.stringify(overlay)}; overlay link ${back.link}; tab links before ${before[0]}`
+    `back in ${back.ms} ms; pane ${JSON.stringify(pane)}; overlay ${JSON.stringify(overlay)}; overlay link ${back.link}`
   );
   await page.waitForTimeout(1000);
   const { faults } = await linksOf(page);
@@ -376,11 +492,82 @@ const droppedOnceSynced = async (at: At, proxy: Proxy, page: Page) => {
   );
 };
 
-/** 5. A pin written while the overlay's link is down reaches the hub, and the session once. */
+/** Where `selector` in the page stands on the tab's screen. */
+const screenBox = async (page: Page, frame: Frame, selector: string) => {
+  const outer = await page.locator(FRAME).boundingBox();
+  const inner = await frame.locator(selector).evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  });
+  if (!outer) {
+    throw new Error("the pane's frame has no box");
+  }
+  return { x: outer.x + inner.x, y: outer.y + inner.y, w: inner.w, h: inner.h };
+};
+
+/** The person taps `#here` with Comment on, as comment-delivery's pins are made: a pin in the page's own doc. */
+const tapPin = async (page: Page, frame: Frame): Promise<void> => {
+  const comments = page.locator(`${PANE} button[data-slot="comments"]`);
+  if ((await comments.getAttribute("aria-expanded")) === "true") {
+    await comments.click();
+    await page
+      .locator("[data-pin-list-pop]")
+      .waitFor({ state: "detached", timeout: 3000 })
+      .catch(() => undefined);
+  }
+  await page.locator(`${PANE} button[aria-keyshortcuts='C']`).focus();
+  await page.keyboard.press("c");
+  await until(
+    "the page's Comment mode on",
+    () =>
+      frame.evaluate(
+        () =>
+          document
+            .querySelector("cawco-overlay")
+            ?.shadowRoot?.querySelector(".layer")
+            ?.classList.contains("comment") ?? false
+      ),
+    Boolean,
+    5000
+  );
+  await settle(page, 300);
+  const b = await screenBox(page, frame, "#here");
+  await page.mouse.click(b.x + b.w * 0.3, b.y + b.h / 2);
+};
+
+/**
+ * The tapped pin's card, once it opens, and `PIN_WORDS` written in it; when
+ * the card opened and when the words were kept in the page. The pane draws
+ * the card from its own doc (PreviewPane `cardPin`), which hears of a pin
+ * the page made through the hub alone.
+ */
+const writeWords = async (
+  page: Page,
+  frame: Frame
+): Promise<{ cardAt: number; keptAt: number }> => {
+  const card = page.locator('[data-slot="pin-card"]').last();
+  await card.waitFor({ timeout: 15_000 });
+  const cardAt = Date.now();
+  await card.getByRole("textbox").fill(PIN_WORDS);
+  await card.getByRole("button", { name: "Reply" }).click();
+  await until(
+    "the pin's words in the page's doc",
+    () => pagePins(frame),
+    (pins) => withWords(Object.values(pins)).length === 1,
+    5000
+  );
+  const keptAt = Date.now();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  return { cardAt, keptAt };
+};
+
+/** 5. A pin placed with Comment while the overlay's link is down: kept, on the hub once back, heard once. */
 const pinnedWhileDown = async (at: At, proxy: Proxy, page: Page) => {
   const frame = await pageFrame(page);
   const heardBefore = heard.length;
   proxy.refuse((path) => OVERLAY_PATH.test(path));
+  const cutAt = Date.now();
   proxy.drop((path) => OVERLAY_PATH.test(path));
   const down = await until(
     "the overlay's link lost",
@@ -388,53 +575,38 @@ const pinnedWhileDown = async (at: At, proxy: Proxy, page: Page) => {
     (s) => s !== "synced",
     5000
   ).catch(() => "synced");
-  await frame.evaluate((words) => {
-    const { doc } = (
-      window as unknown as {
-        cawcoArtifact: {
-          doc: {
-            getMap: (n: string) => { set: (k: string, v: object) => void };
-          };
-        };
-      }
-    ).cawcoArtifact;
-    const now = new Date().toISOString();
-    doc.getMap("pins").set("probe-link-pin", {
-      id: "probe-link-pin",
-      number: 1,
-      kind: "comment",
-      anchor: { selector: "#here", text: "The paragraph the pin stands on." },
-      at: now,
-      by: "person",
-      elements: [],
-      point: { x: 0.5, y: 0.5 },
-      thread: [{ id: "probe-link-entry", by: "person", text: words, at: now }],
-    });
-  }, PIN_WORDS);
-  const onHubWhileDown = (await hubPins(at)).some(
-    (pin) => pin.id === "probe-link-pin"
-  );
-  await page.waitForTimeout(DOWN_MS);
+  const pinsBefore = Object.keys(await pagePins(frame)).length;
+  const hubBefore = (await hubPins(at)).length;
+  let failed = "";
+  await tapPin(page, frame).catch((error: unknown) => {
+    failed = `the tap: ${error instanceof Error ? error.message : String(error)}`;
+  });
+  const inPage = Object.keys(await pagePins(frame)).length - pinsBefore;
+  const onHubWhileDown = (await hubPins(at)).length - hubBefore;
+  const linkWhileDown = await overlayLink(frame);
+  await page.waitForTimeout(Math.max(0, cutAt + DOWN_MS - Date.now()));
+  const releasedAt = Date.now();
   proxy.refuse(null);
-  const synced = await until(
-    "the overlay synced again",
-    () => overlayLink(frame),
-    (s) => s === "synced",
-    15_000
-  ).catch(() => "not synced");
+  const written = await writeWords(page, frame).catch((error: unknown) => {
+    failed ||= `the card: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`;
+    return null;
+  });
   const onHub = await until(
-    "the pin on the hub",
-    () => hubPins(at),
-    (pins) => pins.some((pin) => pin.id === "probe-link-pin"),
+    "the pin's words on the hub",
+    async () => withWords(await hubPins(at)),
+    (pins) => pins.length > 0,
     15_000
-  ).catch(() => hubPins(at));
+  ).catch(async () => withWords(await hubPins(at)));
   at.kit.check(
-    "5: a pin written while the link is down is on the hub once the link is back",
+    "5: a pin tapped with Comment while the page's link is down is made in the page alone; once the link is back its card opens, and its words reach the hub",
     down !== "synced" &&
-      !onHubWhileDown &&
-      synced === "synced" &&
-      onHub.some((pin) => pin.thread.some((entry) => entry.text === PIN_WORDS)),
-    `overlay while down ${down}; on the hub while down ${onHubWhileDown}; after ${synced}; hub ${JSON.stringify(onHub.map((pin) => pin.id))}`
+      linkWhileDown !== "synced" &&
+      inPage === 1 &&
+      onHubWhileDown === 0 &&
+      written !== null &&
+      written.cardAt - releasedAt <= REOPEN_MS &&
+      onHub.length === 1,
+    `link while down ${linkWhileDown}; pins made in the page ${inPage}, on the hub ${onHubWhileDown}; card ${written ? `${written.cardAt - releasedAt} ms after the link was let through` : `never (${failed.slice(0, 400)})`}; words on the hub ${onHub.length}`
   );
   await until(
     "the delivery",
@@ -453,8 +625,81 @@ const pinnedWhileDown = async (at: At, proxy: Proxy, page: Page) => {
   );
 };
 
+/** 6. The tab really hidden behind another, its timers throttled by Chromium itself: neither link closes. */
+const hiddenTab = async (at: At, proxy: Proxy) => {
+  const browser = await hiddenTabs(join(at.kit.out, "hidden-tab"), proxy.url);
+  try {
+    const page = await onArtifact(at, await browser.open(), "hidden tab");
+    await page.waitForSelector(READ, { timeout: 30_000 });
+    const frame = await pageFrame(page);
+    await until(
+      "the overlay synced",
+      () => overlayLink(frame),
+      (s) => s === "synced",
+      30_000
+    );
+    await hiddenFor(at, page, frame, () => browser.coverAll());
+  } finally {
+    await browser.stop();
+  }
+};
+
+/** `page` hidden by `hide` for {@link HIDDEN_MS}, read back: its timers on minute wake-ups, its links untouched. */
+const hiddenFor = async (
+  at: At,
+  page: Page,
+  frame: Frame,
+  hide: () => Promise<void>
+) => {
+  const frames = [page, frame];
+  const before = await Promise.all(
+    frames.map(async (one) => (await linksOf(one)).links.length)
+  );
+  // A 10 s interval of the page's own, read back for when it ran.
+  const hiddenAt = await Promise.all(
+    frames.map((one) =>
+      one.evaluate(() => {
+        const runs: number[] = [];
+        setInterval(() => runs.push(performance.now()), 10_000);
+        Object.defineProperty(window, "probeRuns", { value: () => runs });
+        return performance.now();
+      })
+    )
+  );
+  await hide();
+  const shown = await page.evaluate(() => document.visibilityState);
+  await page.waitForTimeout(HIDDEN_MS);
+  const runs = await page.evaluate(() =>
+    (window as unknown as { probeRuns: () => number[] }).probeRuns()
+  );
+  const gaps = runs.slice(1).map((ran, i) => Math.round(ran - (runs[i] ?? 0)));
+  at.kit.check(
+    "6: the tab behind another is hidden, and Chromium wakes its chained timers once a minute",
+    shown === "hidden" && (gaps.at(-1) ?? 0) >= WAKE_MS - 1000,
+    `visibility ${shown}; a 10 s interval's gaps ${JSON.stringify(gaps)} ms`
+  );
+  const seen = await Promise.all(frames.map(linksOf));
+  const closed = seen.flatMap(({ links }, i) =>
+    links.filter(
+      (link) =>
+        link.path !== CONTROL &&
+        link.closed !== null &&
+        link.closed > (hiddenAt[i] ?? 0)
+    )
+  );
+  const opened = seen.map(({ links }, i) => links.length - (before[i] ?? 0));
+  const overlayNow = await overlayLink(frame);
+  at.kit.check(
+    `6: hidden for ${HIDDEN_MS} ms, neither link closes nor opens again, and the overlay's stays synced`,
+    closed.length === 0 &&
+      opened.every((n) => n === 0) &&
+      overlayNow === "synced",
+    `closed ${JSON.stringify(closed)}; opened since ${JSON.stringify(opened)}; overlay ${overlayNow}`
+  );
+};
+
 /** 3. The pane's first two attempts cut before its first sync: read on the third, nothing said. */
-const droppedBeforeSync = async (at: At, proxy: Proxy) => {
+const droppedBeforeSync = async (at: At, proxy: Proxy, where: Where) => {
   let cuts = 2;
   proxy.refuse((path) => {
     if (!PANE_PATH.test(path) || cuts === 0) {
@@ -463,7 +708,7 @@ const droppedBeforeSync = async (at: At, proxy: Proxy) => {
     cuts -= 1;
     return true;
   });
-  const page = await tab(at, proxy.url);
+  const page = await tab(at, proxy.url, where);
   const read = await page.waitForSelector(READ, { timeout: 20_000 }).then(
     () => true,
     () => false
@@ -475,8 +720,9 @@ const droppedBeforeSync = async (at: At, proxy: Proxy) => {
   const synced = pane.find(
     (link) => link.opened !== null && link.closed === null
   );
+  const leg = `${where.engine} ${where.view}`;
   at.kit.check(
-    "3: a drop before the first sync (two attempts cut, 1006) is reopened by itself, the comments read on the third",
+    `3 ${leg}: a drop before the first sync (two attempts cut, 1006) is reopened by itself, the comments read on the third`,
     read &&
       pane.length === 3 &&
       pane.slice(0, 2).every((link) => link.code === 1006) &&
@@ -485,7 +731,7 @@ const droppedBeforeSync = async (at: At, proxy: Proxy) => {
     `pane ${JSON.stringify(pane)}`
   );
   at.kit.check(
-    "3: the pane never says the comments couldn't be read",
+    `3 ${leg}: the pane never says the comments couldn't be read`,
     seen.faults.length === 0,
     `faults ${JSON.stringify(seen.faults)}`
   );
@@ -493,9 +739,9 @@ const droppedBeforeSync = async (at: At, proxy: Proxy) => {
 };
 
 /** 4. Every attempt cut: said only past the grace, in the formula; cleared by itself once let through. */
-const downForGood = async (at: At, proxy: Proxy) => {
+const downForGood = async (at: At, proxy: Proxy, where: Where) => {
   proxy.refuse((path) => PANE_PATH.test(path));
-  const page = await tab(at, proxy.url);
+  const page = await tab(at, proxy.url, where);
   const fault = await until(
     "the pane saying the link is down",
     () => linksOf(page),
@@ -510,8 +756,9 @@ const downForGood = async (at: At, proxy: Proxy) => {
       ? Math.round(saidAt - firstDrop)
       : null;
   const text = fault.faults[0]?.text ?? "";
+  const leg = `${where.engine} ${where.view}`;
   at.kit.check(
-    `4: a link down for good is said only after ${LINK_DOWN_MS} ms of reconnects`,
+    `4 ${leg}: a link down for good is said only after ${LINK_DOWN_MS} ms of reconnects`,
     after !== null &&
       after >= LINK_DOWN_MS &&
       after < LINK_DOWN_MS + 2000 &&
@@ -519,24 +766,34 @@ const downForGood = async (at: At, proxy: Proxy) => {
     `said ${after} ms after the first drop; ${pane.length} attempts, codes ${pane.map((link) => link.code).join(",")}`
   );
   at.kit.check(
-    "4: it says what happened, why, how to fix it and what happens next",
+    `4 ${leg}: it says what happened, why, how to fix it and what happens next`,
     text.includes(
       "The comments couldn't be read. The link to the hub dropped (1006) and hasn't come back. It keeps trying by itself; Try again tries now."
     ),
     JSON.stringify(text)
   );
+  const failed = paneLinks(await linksOf(page)).length;
+  // Firefox holds a socket to a host whose last ones failed for its own
+  // delay (WebSocketChannel.cpp FailDelay, RFC 6455 §7.2.3): "randomly
+  // chosen between 200-400 ms", times 1.5 each failure, at most 60 s.
+  const browserDelay =
+    where.engine === "firefox"
+      ? Math.min(60_000, 400 * 1.5 ** Math.max(0, failed - 1))
+      : 0;
   proxy.refuse(null);
   const t0 = Date.now();
-  const back = await page.waitForSelector(READ, { timeout: 10_000 }).then(
-    () => Date.now() - t0,
-    () => null
-  );
+  const back = await page
+    .waitForSelector(READ, { timeout: REOPEN_MS + 1000 + browserDelay + 5000 })
+    .then(
+      () => Date.now() - t0,
+      () => null
+    );
   at.kit.check(
-    "4: let through, the comments come back by themselves, no Try again pressed, the fault gone",
+    `4 ${leg}: let through, the comments come back by themselves within the backoff (y-websocket's${browserDelay ? ", and Firefox's own" : ""}), no Try again pressed, the fault gone`,
     back !== null &&
-      back <= REOPEN_MS + 1000 &&
+      back <= REOPEN_MS + 1000 + browserDelay &&
       (await page.locator("[data-pin-list-failed]").count()) === 0,
-    `back in ${back} ms`
+    `back in ${back} ms; ${failed} attempts failed${browserDelay ? `, Firefox's delay at most ${Math.round(browserDelay)} ms` : ""}`
   );
   await page.close();
 };

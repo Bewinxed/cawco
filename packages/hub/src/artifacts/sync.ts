@@ -3,8 +3,10 @@
  * preview listener at `/__cawco/artifact/<id>` (preview.ts), and the
  * person's send of their picks beside it at `/__cawco/artifact/<id>/send`,
  * and the page's pictures of their marks at `…/pictures`. Sync only:
- * awareness, auth and awareness queries are read and ignored, so a client
- * keeps its socket fresh with its own resync (`resyncInterval`).
+ * awareness, auth and awareness queries are read and ignored. A client
+ * keeps its socket fresh with its own resync (`resyncInterval`), and the
+ * hub with its {@link BEAT}, which a hidden tab's throttled timers can't
+ * hold back (core doc-link.ts).
  *
  * A page's client may write the doc's `state`, within the bridge's bounds
  * (core `choiceEntryProblem`), the same the pane checks before it writes. A
@@ -39,6 +41,7 @@ import {
   type Encoder,
   toUint8Array,
   writeVarUint,
+  writeVarUint8Array,
 } from "lib0/encoding";
 import {
   messageYjsSyncStep1,
@@ -59,6 +62,21 @@ import { ArtifactRefusal } from "./service";
 
 /** y-websocket's sync message type (its server's `messageSync`). */
 const MESSAGE_SYNC = 0;
+
+/** y-websocket's awareness message type (`messageAwareness`). */
+const MESSAGE_AWARENESS = 1;
+
+/**
+ * The hub's beat to a joined client (docs.ts): an awareness update of no
+ * clients, which y-websocket applies as nothing and answers with nothing,
+ * but which is a message, so its no-message check hears the link alive.
+ */
+const BEAT = (() => {
+  const encoder = createEncoder();
+  writeVarUint(encoder, MESSAGE_AWARENESS);
+  writeVarUint8Array(encoder, Uint8Array.of(0));
+  return toUint8Array(encoder);
+})();
 
 /** The close code of an update the hub would not keep. */
 export const REFUSED = 4400;
@@ -547,6 +565,7 @@ export const artifactSend =
 export const artifactSocket = (docs: ArtifactDocs) => ({
   open(socket: ServerWebSocket<ArtifactSocket>) {
     const client: ArtifactClient = {
+      beat: () => socket.send(BEAT),
       close: () => socket.close(GONE, "This artifact was removed."),
       screen: socket.data.screen,
       send: (update) =>

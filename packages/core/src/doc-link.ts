@@ -8,7 +8,11 @@
  *   {@link RESYNC_MS}, which the hub answers with its step 2 (hub
  *   artifacts/sync.ts), so a quiet link carries bytes both ways and a proxy
  *   that drops idle sockets never finds it idle. y-websocket 3.1.0 has no
- *   ping option, and a browser's WebSocket can't send a ping frame.
+ *   ping option, and a browser's WebSocket can't send a ping frame. The
+ *   page's timers stall in a hidden tab (a wake-up a minute), so the hub
+ *   beats every joined client on its own every {@link RESYNC_MS} too (hub
+ *   artifacts/docs.ts), and y-websocket's 30 s no-message check, which runs
+ *   on those same stalled timers, always finds a message within it.
  * - **Reconnect** is its own: a socket closed without a frame (1006: a
  *   proxy or tunnel dropped it) opens again on an exponential backoff from
  *   200 ms up to its `maxBackoffTime` (2.5 s), and resyncs on open. A close
@@ -23,11 +27,11 @@
  */
 
 /**
- * How often a doc's socket asks the hub for its state, ms. The hub serves no
- * awareness, so this keeps the socket heard from inside y-websocket's 30 s
- * no-message window, and under any proxy's idle timeout (Cloudflare closes a
- * WebSocket "when no data is transmitted in either direction for a period
- * of time": developers.cloudflare.com/network/websockets). Our call.
+ * How often a doc's socket asks the hub for its state, and the hub beats it,
+ * ms: inside y-websocket's 30 s no-message window, and under any proxy's
+ * idle timeout (Cloudflare closes a WebSocket "when no data is transmitted
+ * in either direction for a period of time":
+ * developers.cloudflare.com/network/websockets). Our call.
  */
 export const RESYNC_MS = 10_000;
 

@@ -5,8 +5,9 @@
  * transmitted in either direction for a period of time" and on its own
  * restarts (developers.cloudflare.com/network/websockets).
  *
- * Chromium sends a `ws://` socket through an HTTP proxy as a CONNECT
- * tunnel; the proxy reads the upgrade's request line in it, so a spec
+ * Chromium and Firefox send a `ws://` socket through an HTTP proxy as a
+ * CONNECT tunnel, whose upgrade's request line the proxy reads in it;
+ * WebKit sends the upgrade itself, its URL absolute. Either way a spec
  * names a socket by its path. Every tunnel that carries no byte either way
  * for `idleMs` is cut, both ends at once and with no close frame, so the
  * page reads 1006, as it does from a proxy's drop. Plain requests are
@@ -38,6 +39,9 @@ export interface IdleProxy {
 }
 
 const REQUEST_LINE = /^[A-Z]+ (\S+) HTTP\/1\.1\r\n/;
+/** An upgrade sent to the proxy whole (WebKit's), and how much of a head tells one apart. */
+const WS_LINE = /^GET wss?:\/\//;
+const WS_PREFIX = "GET wss://".length;
 
 /** The proxy, its tunnels cut once idle for `idleMs`. */
 export async function idleProxy(idleMs: number): Promise<IdleProxy> {
@@ -68,27 +72,115 @@ export async function idleProxy(idleMs: number): Promise<IdleProxy> {
     onward.on("error", () => response.destroy());
     request.pipe(onward);
   });
+  /**
+   * A tunnel from `client` to `host:hostPort`, tracked for idling: `opened`
+   * runs once the upstream connects; `path` is known already (an upgrade
+   * sent to the proxy whole) or read from the first bytes through it.
+   */
+  const openTunnel = (
+    client: net.Socket,
+    host: string,
+    hostPort: number,
+    path: string | null,
+    opened: (upstream: net.Socket) => void
+  ) => {
+    const upstream = net.connect(hostPort, host);
+    const made: Tunnel = {
+      client,
+      upstream,
+      target: `${host}:${hostPort}`,
+      path,
+      last: Date.now(),
+    };
+    open.add(made);
+    upstream.on("connect", () => opened(upstream));
+    wire(made);
+  };
+  // Chromium and Firefox send a `ws://` socket as a CONNECT tunnel.
   server.on("connect", (request, client: net.Socket, head: Buffer) => {
     const target = request.url ?? "";
     const at = target.lastIndexOf(":");
-    const upstream = net.connect(
-      Number(target.slice(at + 1)),
-      target.slice(0, at)
-    );
-    const tunnel: Tunnel = {
+    openTunnel(
       client,
-      upstream,
-      target,
-      path: null,
-      last: Date.now(),
-    };
-    open.add(tunnel);
-    upstream.on("connect", () => {
-      client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
-      if (head.length > 0) {
-        upstream.write(head);
+      target.slice(0, at),
+      Number(target.slice(at + 1)),
+      null,
+      (upstream) => {
+        client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+        if (head.length > 0) {
+          upstream.write(head);
+        }
       }
-    });
+    );
+  });
+  /**
+   * WebKit sends a `ws://` socket to the proxy whole: `GET ws://host:port/path`.
+   * Bun's node:http answers that line 400 where node emits `upgrade` (Bun
+   * keeps parsing an upgraded connection: oven-sh/bun#28157, #28396), so
+   * it is read off the raw socket here, its head sent on in origin form.
+   */
+  const wsUpgrade = (client: net.Socket, head: string) => {
+    const end = head.indexOf("\r\n\r\n");
+    const [line = "", ...fields] = head.slice(0, end).split("\r\n");
+    const url = new URL(line.split(" ")[1] ?? "/");
+    const path = `${url.pathname}${url.search}`;
+    if (refusing?.(path)) {
+      client.destroy();
+      return;
+    }
+    const kept = fields.filter(
+      (field) => !field.toLowerCase().startsWith("proxy-connection:")
+    );
+    openTunnel(
+      client,
+      url.hostname,
+      Number(url.port || 80),
+      path,
+      (upstream) => {
+        upstream.write(
+          `GET ${path} HTTP/1.1\r\n${kept.join("\r\n")}\r\n\r\n${head.slice(end + 4)}`,
+          "latin1"
+        );
+      }
+    );
+  };
+  /** Where every connection lands: a whole `ws://` upgrade is tunnelled here, the rest goes to {@link server}. */
+  const front = net.createServer((client) => {
+    let head = "";
+    const first = (chunk: Buffer) => {
+      head += chunk.toString("latin1");
+      if (head.length < WS_PREFIX && !head.includes("\r\n")) {
+        return;
+      }
+      if (!WS_LINE.test(head)) {
+        client.off("data", first);
+        client.pause();
+        const inner = net.connect(innerPort, "127.0.0.1", () => {
+          inner.write(Buffer.from(head, "latin1"));
+          client.pipe(inner);
+          inner.pipe(client);
+        });
+        const close = () => {
+          inner.destroy();
+          client.destroy();
+        };
+        inner.on("error", close);
+        client.on("error", close);
+        inner.on("close", close);
+        client.on("close", close);
+        return;
+      }
+      if (head.includes("\r\n\r\n")) {
+        client.off("data", first);
+        wsUpgrade(client, head);
+      }
+    };
+    client.on("data", first);
+  });
+  let innerPort = 0;
+  /** Carries a tunnel's bytes both ways, its last byte's time kept; the first through a CONNECT names its path. */
+  function wire(tunnel: Tunnel) {
+    const { client, upstream } = tunnel;
     client.on("data", (chunk: Buffer) => {
       tunnel.last = Date.now();
       if (tunnel.path === null) {
@@ -113,7 +205,7 @@ export async function idleProxy(idleMs: number): Promise<IdleProxy> {
     upstream.on("close", end);
     client.on("error", end);
     upstream.on("error", end);
-  });
+  }
   const sweep = setInterval(() => {
     const now = Date.now();
     for (const tunnel of open) {
@@ -126,7 +218,11 @@ export async function idleProxy(idleMs: number): Promise<IdleProxy> {
   await new Promise<void>((resolve) =>
     server.listen(0, "127.0.0.1", () => resolve())
   );
-  const { port } = server.address() as net.AddressInfo;
+  innerPort = (server.address() as net.AddressInfo).port;
+  await new Promise<void>((resolve) =>
+    front.listen(0, "127.0.0.1", () => resolve())
+  );
+  const { port } = front.address() as net.AddressInfo;
   return {
     url: `http://127.0.0.1:${port}`,
     drop: (matches) => {
@@ -150,6 +246,7 @@ export async function idleProxy(idleMs: number): Promise<IdleProxy> {
       for (const tunnel of [...open]) {
         cut(tunnel);
       }
+      front.close();
       server.close();
     },
   };
