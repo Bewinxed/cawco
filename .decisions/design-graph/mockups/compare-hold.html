@@ -1,0 +1,31 @@
+<style>
+.mk-compare-hold { padding-block-end: var(--space-2); }
+</style>
+<div class="mk mk-compare-hold gd" role="img" aria-label="With two edits made, holding the Original button plays the agent's timing and turns the edited bars to outlines; letting go returns to the edit."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-compare-hold");
+  if (!root) return;
+  const G = window.GD;
+  const dock = G.dock({
+    clips: [{ ...G.MOVE[0] }, { ...G.MOVE[1], at: "--dur-control", diffAt: true }, { ...G.MOVE[2], dur: "--dur-grow", diffDur: true }],
+    headExtra: '<span class="dk-hold">Original</span><span class="dk-badge">2 edits</span><span class="dk-text">Reset</span>',
+  });
+  root.append(dock.el);
+  dock.ghost("reveal", 60, 260); dock.ghost("fade", 60, 260);
+  const cur = G.cursor(root), hold = dock.el.querySelector(".dk-hold");
+  const within = (t, a, b) => t >= a && t < b, SLOW = 4;
+  G.run(root, 6500, (t) => {
+    const held = within(t, 1500, 4500);
+    hold.classList.toggle("down", held);
+    dock.el.querySelectorAll(".dk-bar").forEach((b) => b.classList.toggle("orig", held && b.closest('[data-key="reveal"], [data-key="fade"]')));
+    dock.el.querySelectorAll(".dk-ghost").forEach((g) => g.classList.toggle("play", held));
+    const ms = held ? Math.min(320, Math.max(0, (t - 1700) / SLOW)) : dock.total;
+    dock.setT(ms, held ? 320 : dock.total); dock.playing(held && t >= 1700 && t < 1700 + 320 * SLOW);
+    const pts = { rest: G.at(root, dock.el, 0.6, 0.6), hold: G.at(root, hold) };
+    const [x, y] = G.path(t, [[800, 1400, "rest", "hold"], [4800, 5600, "hold", "rest"]], pts);
+    cur.set(x, y, "arrow", held);
+  }, 2400);
+  root.gdKeys = [600, 2400, 5000];
+})();
+</script>

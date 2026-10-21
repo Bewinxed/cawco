@@ -1,0 +1,11 @@
+<style>
+.mk-tokens-free { padding-block-end: var(--space-2); }
+</style>
+<div class="mk mk-tokens-free gd" role="img" aria-label="Dragging a clip's end moves it in 10ms steps to any length, its readout in plain milliseconds; the agent names a token afterwards."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-tokens-free");
+  if (!root) return;
+  window.GD.lengthDrag(root, "free");
+})();
+</script>

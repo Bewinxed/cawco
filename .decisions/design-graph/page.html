@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design graph: nine picks before the build</title>
+<style>{{KIT_CSS}}</style>
+<style>
+/* The design graph's own drawing, scoped to every drawing on this page (.gd).
+   Part 1 is the published mockup's style.css, its lines kept verbatim.
+   Part 2 is the round's decided design written over it. */
+@scope (.gd) {
+/* ---- Part 1: reused verbatim from the mockup's style.css ---- */
+.frame { padding: 20px; border: 1px solid var(--border-control); border-radius: calc(var(--mock-radius, 8px) + 4px); background: var(--surface-raised); box-shadow: var(--shadow-tile); }
+label { display: block; margin: 0 0 4px; font-size: 12px; color: var(--ink-muted); }
+.field { margin-bottom: 12px; }
+.input { min-height: 36px; padding: 8px 11px; border: 1px solid var(--border-control); border-radius: var(--mock-radius, 8px); background: var(--surface-raised); overflow-wrap: anywhere; }
+.input.empty { color: var(--ink-subtle); }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.line { margin: 2px 0 12px; }
+.line.read { font-weight: 500; }
+.line.muted { color: var(--ink-muted); }
+.line.fail { color: var(--status-fail-ink); }
+.actions { display: flex; justify-content: flex-end; gap: 8px; }
+.btn { padding: 6px 14px; border: 1px solid var(--border-control); border-radius: var(--mock-radius, 8px); background: var(--surface-raised); color: var(--ink-strong); font-weight: 600; font-size: 13px; }
+.btn.primary { background: var(--action-solid); border-color: var(--action-solid); color: var(--on-action); }
+.tool { position: fixed; color: var(--ink-strong); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-overlay); font: 400 13px/1.4 var(--font-sans), system-ui, sans-serif; user-select: none; }
+.panel { top: 16px; right: 16px; width: var(--panel-w, 448px); max-height: calc(100vh - 32px); display: flex; flex-direction: column; border-radius: var(--radius-panel); padding: var(--space-2) var(--space-2) calc(var(--space-7) + var(--space-1)); }
+.bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin: 0 0 var(--space-2); }
+.graph { position: relative; height: var(--graph-h, 520px); overflow: auto; cursor: grab; border-radius: calc(var(--radius-panel) - var(--space-2)); background: var(--surface-well); border: 1px solid var(--border-well); }
+.world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.region { position: absolute; padding: var(--space-2); border: 1px dashed var(--border-card); border-radius: var(--radius-lg); }
+.region > header { width: 0; min-width: 100%; padding: 0 var(--space-1) var(--space-2); font-size: 12px; line-height: 1.35; color: var(--ink-muted); text-wrap: pretty; }
+.region > header b { display: block; font-weight: 600; color: var(--ink-strong); }
+.regionBody { position: relative; }
+.zoom { flex: none; display: flex; align-items: center; gap: 2px; height: 28px; padding: 1px; border-radius: var(--radius-sm); background: var(--surface-raised); border: 1px solid var(--border-control); }
+.zoom button { all: unset; cursor: pointer; min-width: 24px; height: 24px; padding: 0 6px; text-align: center; line-height: 24px; border-radius: var(--radius-xs); font-size: 12px; color: var(--ink-row); }
+.zoom span { min-width: 38px; text-align: center; font-size: 11px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.world svg { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.world svg polyline { fill: none; stroke: var(--border-contrast); stroke-width: 1.5; }
+.world svg polyline.dash { stroke-dasharray: 4 3; }
+.world svg text { font: 500 11px var(--font-sans), system-ui, sans-serif; fill: var(--ink-muted); }
+.node { position: absolute; width: 168px; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 9px; border-radius: var(--radius-md); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); cursor: pointer; }
+.node b { font-size: 13px; font-weight: 600; }
+.node p { margin: 0; font-size: 12px; line-height: 1.35; color: var(--ink-muted); }
+.node.on { background: var(--selected-bg); border-color: var(--brand-solid); }
+.node.on b { color: var(--selected-ink); }
+.vars { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.var { all: unset; display: block; padding: 3px 8px; border-radius: var(--radius-sm); font-size: 12px; color: var(--ink-row); border: 1px solid var(--border-control); background: var(--surface-raised); cursor: pointer; }
+.var.on { border-color: var(--brand-solid); background: var(--surface-recess); color: var(--ink-strong); }
+.dials { padding: var(--space-2) 0 0; }
+.dial { display: grid; grid-template-columns: 136px 1fr 56px; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; }
+.dial span:first-child { color: var(--ink-row); }
+.dial span:last-child { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-muted); }
+.dial input[type="range"] { width: 100%; accent-color: var(--action-solid); }
+.dock { left: 16px; right: calc(var(--panel-w, 448px) + 32px); bottom: 16px; border-radius: var(--radius-panel); padding: var(--space-3) var(--space-4) var(--space-4); --name-w: 240px; }
+.t-tabs {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 48px;
+  background: var(--tabs-bar-bg);
+}
+.t-tab {
+  position: relative;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  height: 30px;
+  padding: 4px 12px;
+  color: var(--tabs-text-muted);
+  cursor: pointer;
+  border-radius: 48px;
+  z-index: 1;
+  transition: color var(--tabs-dur) var(--tabs-ease);
+}
+.t-tab[aria-selected="true"] {
+  color: var(--tabs-text-active);
+}
+.t-tabs-pill {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  height: 30px;
+  width: 0;
+  background: var(--tabs-pill-bg);
+  border-radius: 48px;
+  transform: translateX(0);
+  transition:
+    transform var(--tabs-dur) var(--tabs-ease),
+    width     var(--tabs-dur) var(--tabs-ease);
+  will-change: transform, width;
+  z-index: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-tabs-pill, .t-tab { transition: none !important; }
+}
+.t-tabs { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.t-tab { flex: none; font: 500 13px/1 var(--font-sans), system-ui, sans-serif; }
+.t-tabs-pill { box-shadow: var(--shadow-tile); }
+.t-text-soft {
+  display: inline-grid;
+  justify-items: var(--text-soft-align, start);
+  transition: width var(--text-soft-resize-dur) var(--text-soft-resize-ease);
+}
+.t-text-soft > span {
+  grid-area: 1 / 1;
+  white-space: pre;
+  transition:
+    filter  var(--text-soft-dur) var(--text-soft-ease),
+    opacity var(--text-soft-dur) var(--text-soft-ease);
+}
+
+/* ---- Part 2: the decided design, written over Part 1 ---- */
+:scope {
+  --tabs-dur: var(--dur-toggle);
+  --tabs-ease: var(--ease-out);
+  --tabs-text-muted: var(--ink-muted);
+  --tabs-text-active: var(--ink-strong);
+  --tabs-bar-bg: var(--surface-recess);
+  --tabs-pill-bg: var(--surface-raised);
+  --text-soft-dur: var(--dur-fade);
+  --text-soft-ease: var(--ease-crossfade);
+  --text-soft-resize-dur: var(--dur-reveal);
+  --text-soft-resize-ease: var(--ease-out);
+  position: relative;
+  min-inline-size: 0;
+  font: 400 13px/1.4 var(--font-sans), system-ui, sans-serif;
+  color: var(--ink-strong);
+  /* A drawing: it shows the tool and takes no pointer of its own. */
+  pointer-events: none;
+}
+/* Drawn inside a card, not fixed to the window. */
+.tool { position: relative; }
+.world, .region, .node { position: relative; }
+/* Every 600 becomes the system's ceiling, 500. */
+.btn, .region > header b { font-weight: var(--weight-strong); }
+/* The round-20 panel: its foot padding back to --space-2, the grip gone. */
+.panel { top: auto; right: auto; inline-size: var(--pw, 448px); max-block-size: none; padding: var(--space-2); }
+.bar { min-inline-size: 0; }
+.gd-tools { display: flex; align-items: center; gap: var(--space-1); flex: none; }
+.zoom button, .gd-hide { display: inline-grid; place-items: center; }
+.gd-hide { inline-size: var(--c-btn-h-xs); block-size: var(--c-btn-h-xs); border-radius: var(--radius-xs); color: var(--ink-muted); }
+.zoom span { font: var(--type-meta); }
+.gd-ic { inline-size: var(--icon-sm); block-size: var(--icon-sm); flex: none; }
+.gd-hide .gd-ic { inline-size: var(--icon-md); block-size: var(--icon-md); }
+.graph { scrollbar-width: thin; }
+/* Regions on one left edge (align UL on every stacked layout). */
+.world { padding: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+.region > header { inline-size: auto; }
+.gd-grid { display: grid; grid-template-columns: repeat(var(--cols, 2), 168px); column-gap: 22px; row-gap: 46px; align-items: center; }
+/* Three tiers of a state, one meaning for coral: kept (.on), current, hover, rest. */
+.node { transition: var(--transition-control); box-shadow: none; }
+.node b { font: var(--type-label); }
+.node p { font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
+.node.cur { background: var(--surface-pressed); border-color: var(--border-contrast); }
+.node.hov { background: var(--surface-hover); }
+.var { font: var(--type-meta); border-radius: var(--radius-xs); }
+.var.on { background: var(--chip-chosen-bg); color: var(--chip-chosen-ink); border-color: transparent; }
+.var.cur { background: var(--surface-pressed); border-color: var(--border-contrast); color: var(--ink-strong); }
+.var.hov { background: var(--surface-hover); }
+/* Edge labels knock out their own line. */
+.world svg text { paint-order: stroke; stroke: var(--surface-well); stroke-width: 4px; stroke-linejoin: round; font: var(--type-meta); fill: var(--ink-muted); }
+.world svg polyline.kept { stroke: var(--brand-solid); stroke-width: var(--c-block-drop-line); }
+.world svg .gd-disc { fill: var(--brand-solid); }
+/* The tool's controls are neutral. */
+.dial input[type="range"] { accent-color: var(--ink-solid); }
+.dial { font: 400 var(--text-label) / 1.3 var(--font-body); }
+
+/* The page beside the panel: the component on the stage. */
+.gd-page { display: flex; gap: var(--space-4); align-items: flex-start; justify-content: flex-end; }
+.gd-stage { flex: 1 1 0; min-inline-size: 0; }
+.gd-test { flex: 1 1 14em; align-self: center; font: var(--type-meta); color: var(--ink-muted); min-inline-size: 0; text-wrap: pretty; }
+.actions { align-items: center; flex-wrap: wrap; }
+.gd-xf { display: inline-grid; }
+.gd-xf > span { grid-area: 1 / 1; text-align: center; }
+.btn { flex: none; white-space: nowrap; }
+
+/* Change marks (clarity §3): a layer over the stage, no words. */
+.gd-stage { position: relative; }
+.gd-marks { position: absolute; inset: 0; overflow: visible; pointer-events: none; opacity: 0; }
+.gd-marks.on { opacity: 1; transition: opacity var(--dur-control) var(--ease-out); }
+.gd-ring { fill: none; stroke: var(--border-contrast); stroke-width: var(--c-graph-edge); }
+.gd-ring.gone { stroke-dasharray: 4 3; }
+.gd-wash { stroke: none; }
+.gd-wash.add { fill: var(--diff-add-bg); }
+.gd-wash.del { fill: var(--diff-del-bg); }
+.gd-side { flex: none; block-size: auto; overflow: visible; cursor: default; }
+.gd-side .world { gap: var(--space-4); }
+
+/* ---- The dock, the timeline design ---- */
+.dock { position: relative; inset: auto; --name-w: min(280px, 36%); }
+.dk-head { display: flex; align-items: center; gap: var(--space-3); min-block-size: var(--c-btn-h-sm); margin-block-end: var(--space-2); }
+.dk-head > b { flex: 1 1 auto; min-inline-size: 0; font: var(--type-label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-state { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+.dk-badge { display: inline-flex; align-items: center; block-size: var(--c-badge-h); padding-inline: 6px; border-radius: var(--radius-xs); background: var(--surface-recess); font: var(--type-meta); white-space: nowrap; }
+.dk-text { font: var(--type-label); color: var(--ink-row); white-space: nowrap; }
+.dk-hold { display: inline-flex; align-items: center; block-size: var(--c-btn-h-sm); padding-inline: var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--border-control); background: var(--surface-raised); font: var(--type-label); white-space: nowrap; transition: transform var(--dur-control) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
+.dk-hold.down { background: var(--surface-pressed); transform: scale(var(--press-scale)); }
+.dk-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.dk-body.insp { grid-template-columns: minmax(0, 1fr) 280px; }
+.dk-tl { position: relative; min-inline-size: 0; }
+.dk-g { display: grid; grid-template-columns: var(--name-w) minmax(0, 1fr); column-gap: var(--space-4); }
+.dk-rr { align-items: end; block-size: 36px; padding-block-end: var(--space-2); border-block-end: 1px solid var(--border-hairline); }
+.dk-tr { display: flex; align-items: center; gap: var(--space-2); min-inline-size: 0; }
+.dk-btn { display: grid; place-items: center; flex: none; inline-size: 28px; block-size: 28px; border-radius: var(--radius-sm); border: 1px solid var(--border-control); background: var(--surface-raised); color: var(--ink-row); transition: transform var(--dur-control) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
+.dk-btn.down { transform: scale(var(--press-scale)); background: var(--surface-pressed); }
+.dk-btn.on { background: var(--surface-pressed); }
+.dk-btn .gd-play { translate: 1px 0; }
+.dk-btn .gd-ic { grid-area: 1 / 1; }
+.dk-ro { font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); font-variant-numeric: tabular-nums; color: var(--ink-muted); white-space: nowrap; }
+.dk-ro b { font-weight: var(--weight-body); color: var(--ink-strong); }
+.dk-ruler { position: relative; block-size: var(--c-pill-h); font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); color: var(--ink-subtle); }
+.dk-ruler span { position: absolute; inset-block-end: 6px; line-height: 1; translate: -50% 0; }
+.dk-ruler span:first-of-type { translate: 0 0; }
+.dk-ruler i { position: absolute; inset-block-end: 0; inline-size: 1px; block-size: var(--space-1); background: var(--border-control); }
+.dk-row { align-items: start; min-block-size: 56px; padding-block: var(--space-2); border-block-end: 1px solid var(--border-hairline); transition: background-color var(--dur-control) var(--ease-out); }
+.dk-row:last-child { border-block-end: 0; }
+.dk-name { min-inline-size: 0; font-size: var(--text-label); line-height: 1.3; text-wrap: pretty; }
+.dk-of { font-weight: var(--weight-strong); color: var(--ink-strong); }
+.dk-does { color: var(--ink-muted); }
+.dk-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-block-start: var(--space-1); }
+.dk-chip { display: inline-flex; align-items: center; gap: 4px; block-size: var(--c-badge-h); padding-inline: 6px; border-radius: var(--radius-xs); background: var(--surface-recess); border: 1px solid var(--border-hairline); font: var(--type-meta); color: var(--ink-muted); white-space: nowrap; transition: background-color var(--dur-control) var(--ease-out), border-color var(--dur-control) var(--ease-out); }
+.dk-chip code { font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); line-height: 1; color: var(--ink-strong); }
+.dk-chip.free { border-style: dashed; border-color: var(--border-contrast); }
+.dk-chip.diff { background: var(--selected-bg); }
+.dk-chip.open { border-color: var(--ink-muted); background: var(--surface-raised); }
+.gd-curve path, .gd-curve polyline { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.dk-chip .gd-curve { color: var(--ink-row); }
+.dk-lane { position: relative; block-size: var(--c-pill-h); margin-block-start: calc((1.3em - var(--c-pill-h)) / 2); border-radius: var(--radius-xs); background: var(--surface-recess); }
+.dk-past { position: absolute; inset-block: 0; inset-inline-end: 0; border-radius: 0 var(--radius-xs) var(--radius-xs) 0; background: var(--surface-recess-deep); }
+.dk-bar, .dk-ghost { position: absolute; inset-block: 3px; border-radius: var(--radius-xs); }
+.dk-bar { background: var(--surface-fill); border: 1px solid transparent; transition: background-color var(--dur-control) var(--ease-out), border-color var(--dur-control) var(--ease-out), opacity var(--dur-control) var(--ease-out); }
+.dk-bar::before, .dk-bar::after { content: ""; position: absolute; inset-block: 3px; inline-size: 2px; border-radius: var(--radius-hair); background: transparent; }
+.dk-bar::before { inset-inline-start: 2px; }
+.dk-bar::after { inset-inline-end: 2px; }
+.dk-bar.hov { background: var(--surface-fill-strong); }
+.dk-bar.hov::before, .dk-bar.hov::after { background: var(--ink-muted); }
+.dk-bar.sel { background: var(--selected-bg); border-color: var(--brand-solid); }
+.dk-bar.sel::before, .dk-bar.sel::after { background: var(--brand-solid); }
+.dk-bar.orig { background: transparent; border: 1px dashed var(--border-contrast); }
+.dk-ghost { border: 1px dashed var(--border-contrast); transition: background-color var(--dur-control) var(--ease-out); }
+.dk-ghost.play { background: var(--surface-fill); border-style: solid; border-color: transparent; }
+.dk-over { position: absolute; inset-block: 0; inset-inline-start: calc(var(--name-w) + var(--space-4)); inset-inline-end: 0; pointer-events: none; }
+.dk-ph { position: absolute; inset-block-start: 28px; inset-block-end: 0; inline-size: 0; }
+.dk-ph::before { content: ""; position: absolute; inset-block-start: calc(var(--c-block-drop-dot) / -2); inset-inline-start: calc(var(--c-block-drop-dot) / -2); inline-size: var(--c-block-drop-dot); block-size: var(--c-block-drop-dot); border-radius: var(--radius-pill); background: var(--brand-solid); }
+.dk-ph::after { content: ""; position: absolute; inset-block: 0; inset-inline-start: calc(var(--c-block-drop-line) / -2); inline-size: var(--c-block-drop-line); background: var(--brand-solid); }
+.dk-guide { position: absolute; inset-block-start: 28px; inset-block-end: 0; inline-size: 1px; translate: -0.5px 0; background: var(--ink-muted); }
+.dk-pill { position: absolute; translate: -50% 0; padding: 1px 7px; border-radius: var(--radius-pill); background: var(--brand-solid); color: var(--on-action); font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); line-height: 16px; white-space: nowrap; box-shadow: var(--shadow-tile); }
+.dk-tick { position: absolute; inset-block-end: 0; inline-size: 1px; block-size: 6px; background: var(--border-contrast); }
+.dk-railwrap { grid-column: 1 / -1; display: grid; grid-template-rows: 0fr; }
+.dk-railwrap.open { grid-template-rows: 1fr; }
+.dk-railwrap > div { min-block-size: 0; overflow: hidden; }
+@media (prefers-reduced-motion: no-preference) {
+  .dk-railwrap { transition: grid-template-rows var(--dur-exit) var(--ease-out); }
+  .dk-railwrap.open { transition-duration: var(--dur-reveal); }
+}
+.dk-rail { display: flex; flex-wrap: wrap; gap: var(--space-1); padding-block-start: var(--space-2); }
+.dk-tile { display: grid; justify-items: center; align-content: center; gap: 3px; min-inline-size: 104px; block-size: 48px; padding-inline: var(--space-2); border-radius: var(--radius-sm); border: 1px solid var(--border-hairline); background: var(--surface-raised); color: var(--ink-row); transition: background-color var(--dur-control) var(--ease-out), border-color var(--dur-control) var(--ease-out); }
+.dk-tile code { font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); line-height: 1; color: var(--ink-strong); white-space: nowrap; }
+.dk-tile.on { background: var(--selected-bg); border-color: var(--brand-solid); }
+.dk-tile.hov { background: var(--surface-hover); }
+.dk-insp { display: flex; flex-direction: column; gap: var(--space-3); padding-inline-start: var(--space-4); border-inline-start: 1px solid var(--border-hairline); min-inline-size: 0; }
+.dk-insp > b { font: var(--type-label); }
+.dk-field { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: var(--space-2); font: var(--type-meta); color: var(--ink-muted); }
+.dk-field > span:last-child { justify-self: start; }
+.dk-insp .dk-rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0; }
+.dk-insp .dk-tile { min-inline-size: 0; }
+
+/* The cursor a drawing moves: never the person's. */
+.gd-cursor { position: absolute; inset: 0 auto auto 0; z-index: 5; inline-size: 22px; block-size: 22px; transition: scale var(--dur-control) var(--ease-out); }
+.gd-cursor svg { position: absolute; inset: 0; overflow: visible; }
+.gd-cursor path { fill: var(--ink-strong); stroke: var(--surface-raised); stroke-width: 1.25; stroke-linejoin: round; }
+.gd-cursor.down { scale: 0.9; }
+.gd-key { position: absolute; z-index: 5; display: inline-grid; place-items: center; min-inline-size: 22px; block-size: 22px; padding-inline: 5px; border-radius: var(--radius-xs); border: 1px solid var(--border-control); background: var(--surface-raised); box-shadow: var(--shadow-tile); font: var(--type-meta); transition: opacity var(--dur-control) var(--ease-out); }
+}
+@media (prefers-color-scheme: dark) {
+  .gd .gd-cursor path { stroke: var(--surface-recess-deep); }
+}
+
+/* Page-level: the context block and the option panes. */
+.gd-ctx { display: flex; flex-direction: column; gap: var(--space-4); }
+.gd-ctx h2 { font-size: var(--text-title); }
+.gd-ctx-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--space-5); }
+.gd-ctx h3 { font: var(--type-label); color: var(--ink-muted); margin-block-end: var(--space-2); }
+.gd-ctx ol, .gd-ctx ul { margin: 0; padding-inline-start: 1.25em; display: grid; gap: var(--space-1); color: var(--ink-strong); }
+.gd-ctx li { text-wrap: pretty; }
+.gd-panes { display: grid; gap: var(--space-3); }
+/* A card's drawings run taller than the view: its options stay at the view's foot while the card is on screen,
+   so each drawing and its pick are seen together. */
+.dp-card > .dp-opts { position: sticky; inset-block-end: var(--page-inset-bottom, 0px); z-index: 6; padding-block: var(--space-3); background: var(--surface-raised); box-shadow: 0 -1px 0 var(--border-hairline); }
+.gd-panes.trio { grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); align-items: start; }
+.gd-panes .dp-pane > figcaption { display: flex; align-items: center; gap: var(--space-2); }
+.gd-panes .dp-pane > figcaption .dp-tag-s { font: var(--type-meta); color: var(--ink-muted); font-weight: var(--weight-body); }
+.gd-panes .dp-pane > figcaption kbd { display: inline-grid; place-items: center; min-inline-size: 17px; block-size: 17px; padding-inline: 4px; border-radius: var(--radius-xs); background: var(--surface-raised); font: var(--type-meta); color: var(--ink-strong); }
+</style>
+<script>
+/* The drawing kit every option on this page is drawn with: the mockup's data, its
+   token reader and its graph grammar, laid out on CSS grid instead of dagre. */
+window.GD = (() => {
+  "use strict";
+  const tok = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  // Text swap soft's token reader, verbatim from the mockup's app.js.
+  const ms = (name) =>
+    parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
+  const ease = (p) => 1 - Math.pow(1 - p, 3);
+  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const mix = (a, b, k) => a + (b - a) * k;
+  const node = (s) => { const t = document.createElement("template"); t.innerHTML = s.trim(); return t.content.firstElementChild; };
+
+  // Solar glyphs (iconify solar set), one library for the tool.
+  const ICON = {
+    play: '<path fill="currentColor" d="M21.4086 9.35258C23.5305 10.5065 23.5305 13.4935 21.4086 14.6474L8.59662 21.6145C6.53435 22.736 4 21.2763 4 18.9671L4 5.0329C4 2.72368 6.53435 1.26402 8.59661 2.38548L21.4086 9.35258Z"/>',
+    pause: '<g fill="currentColor"><path d="M2 6C2 4.11438 2 3.17157 2.58579 2.58579C3.17157 2 4.11438 2 6 2C7.88562 2 8.82843 2 9.41421 2.58579C10 3.17157 10 4.11438 10 6V18C10 19.8856 10 20.8284 9.41421 21.4142C8.82843 22 7.88562 22 6 22C4.11438 22 3.17157 22 2.58579 21.4142C2 20.8284 2 19.8856 2 18V6Z"/><path d="M14 6C14 4.11438 14 3.17157 14.5858 2.58579C15.1716 2 16.1144 2 18 2C19.8856 2 20.8284 2 21.4142 2.58579C22 3.17157 22 4.11438 22 6V18C22 19.8856 22 20.8284 21.4142 21.4142C20.8284 22 19.8856 22 18 22C16.1144 22 15.1716 22 14.5858 21.4142C14 20.8284 14 19.8856 14 18V6Z"/></g>',
+    zoomIn: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><circle cx="11.5" cy="11.5" r="9.5"/><path d="M9 11.5H11.5M11.5 11.5H14M11.5 11.5V14M11.5 11.5V9"/><path d="M18.2173 18.2178L21.9999 22.0004"/></g>',
+    zoomOut: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><circle cx="11.5" cy="11.5" r="9.5"/><path d="M9 11.5H11.5H14"/><path d="M18.2173 18.2178L21.9999 22.0004"/></g>',
+    fit: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><path d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z"/><path stroke-linejoin="round" d="M17 10V7H14M17 7L13.5 10.5M7 14V17H10M7 17L10.5 13.5"/></g>',
+    hide: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5" d="M12 14C5 14 2 7 2 7M22 7C22 7 21.0586 9.19661 19 11.1288C18.0872 11.9856 16.9547 12.7904 15.5872 13.3287C14.5334 13.7435 13.34 14 12 14M12 14V16.5M15.5872 13.3287L17 15.5M19 11.1288L20.5 12.6288M8.41281 13.3287L7 15.5M5 11.1288L3.5 12.6288"/>',
+    loop: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M9.5 19H9.00028C5.13428 19 2 15.866 2 12C2 8.13401 5.13401 5 9 5H11L9 3"/><path d="M15 21L13 19H15C18.866 19 22 15.866 22 12C22 8.13401 18.866 5 15 5H14.5"/></g>',
+    check: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path stroke-linejoin="round" d="M8.5 12.5L10.5 14.5L15.5 9.5"/></g>',
+    cross: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M14.5 9.50002L9.5 14.5M9.49998 9.5L14.5 14.5"/></g>',
+    chat: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 13.5997 2.37562 15.1116 3.04346 16.4525C3.22094 16.8088 3.28001 17.2161 3.17712 17.6006L2.58151 19.8267C2.32295 20.793 3.20701 21.677 4.17335 21.4185L6.39939 20.8229C6.78393 20.72 7.19121 20.7791 7.54753 20.9565C8.88837 21.6244 10.4003 22 12 22Z"/><path d="M8 10.5H16"/><path d="M8 14H13.5"/></g>',
+  };
+  const icon = (n, cls = "") => `<svg class="gd-ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
+
+  // A curve's glyph, drawn from its token's own cubic-bezier.
+  function curve(name, w, h) {
+    const p = 1.5, X = (x) => (p + x * (w - 2 * p)).toFixed(1), Y = (y) => (h - p - y * (h - 2 * p) * 0.86).toFixed(1);
+    if (name === "spring") {
+      const pts = [];
+      for (let i = 0; i <= 32; i++) { const x = i / 32; pts.push(X(x) + "," + Y(1 - Math.exp(-5 * x) * Math.cos(9.5 * x))); }
+      return `<svg class="gd-curve" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${pts.join(" ")}"/></svg>`;
+    }
+    const [x1, y1, x2, y2] = (tok(name).match(/-?[\d.]+/g) || [0, 0, 1, 1]).map(Number);
+    return `<svg class="gd-curve" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><path d="M${X(0)} ${Y(0)} C${X(x1)} ${Y(y1)} ${X(x2)} ${Y(y2)} ${X(1)} ${Y(1)}"/></svg>`;
+  }
+  const CURVES = ["--ease-out", "--ease-in-out", "--ease-drawer", "--ease-arrive", "--ease-figure", "--ease-crossfade", "--ease-glide-in", "--ease-glide-out"];
+
+  // ---- The component's state machines: the mockup's data, its copy per round 20,
+  // every note saying what the state is for and what to check in it.
+  const M = {
+    when: { name: "When it runs", path: ["hour", "day", "week", "custom"], nodes: [
+      { id: "hour", name: "Every hour", note: "At swaps to the read-back; nothing else moves", c: 1, r: 1 },
+      { id: "day", name: "Every day", note: "The default: At holds the time it runs", c: 2, r: 1 },
+      { id: "week", name: "Every week", note: "The read-back names the day it runs", c: 1, r: 2 },
+      { id: "custom", name: "Custom", note: "Schedule takes At's place and is read back in words", c: 2, r: 2, vars: ["Readable", "Unreadable"] } ],
+      edges: [["hour", "day", "h"], ["day", "week", "elbow"], ["day", "custom", "v"]] },
+    read: { name: "Reading the schedule back", path: ["reading", "readback", "cant"], nodes: [
+      { id: "reading", name: "Reading", note: "Asking the hub when it runs next", c: 1, r: 1 },
+      { id: "readback", name: "Read back", note: "The hub's words take the reading line's place", c: 1, r: 2 },
+      { id: "cant", name: "Can't be read", note: "The reason stands where the read-back was", c: 2, r: 2 } ],
+      edges: [["reading", "readback", "v"], ["reading", "cant", "elbow"]] },
+    types: { name: "Delegate type", path: ["loading", "loaded", "typesfail"], nodes: [
+      { id: "loading", name: "Loading", note: "The field holds its place while the list loads", c: 1, r: 1 },
+      { id: "loaded", name: "Loaded", note: "The field offers the types; the hub's pick stays the default", c: 1, r: 2 },
+      { id: "typesfail", name: "Didn't load", note: "The hub picks each run; the reason sits under the field", c: 2, r: 2 } ],
+      edges: [["loading", "loaded", "v"], ["loading", "typesfail", "elbow"]] },
+    save: { name: "Saving it", path: ["empty", "filled", "saving", "failed", "created"], nodes: [
+      { id: "empty", name: "Empty", note: "The labels alone say what goes where", c: 1, r: 1 },
+      { id: "filled", name: "Filled", note: "Long values wrap; nothing is cut", c: 2, r: 1, vars: ["Short instruction", "Long instruction with a link", "Long name"] },
+      { id: "saving", name: "Saving", note: "Only the button's words change", c: 2, r: 2 },
+      { id: "failed", name: "Save failed", note: "The reason sits under the actions; the form keeps every value", c: 2, r: 3, vars: ["The hub didn't answer", "Delegate type refused"] },
+      { id: "created", name: "Created", note: "The form closes; it's in the list", c: 1, r: 3 } ],
+      edges: [["empty", "filled", "h"], ["filled", "saving", "v"], ["saving", "failed", "v", { ax: 56, bx: 56 }], ["failed", "saving", "up", { ax: 124, label: "Try again", dash: true }], ["saving", "created", "elbow", { ax: 16 }]] },
+  };
+  const CURRENT = { when: "day", read: "readback", types: "loaded", save: "failed" };
+  const STATE_NAME = (m, s) => M[m].nodes.find((n) => n.id === s).name;
+
+  // roles: { kept: "save:failed", keptVar: 0, current: {...}, hover: "when:hour", lit: true, vars: true }
+  function region(id, roles = {}) {
+    const m = M[id], cur = { ...CURRENT, ...(roles.current || {}) };
+    const [km, ks] = (roles.kept || "save:failed").split(":");
+    const sec = node(`<section class="region" data-machine="${id}"><header><b>${m.name}</b></header><div class="regionBody gd-grid"></div></section>`);
+    const body = sec.lastElementChild;
+    for (const n of m.nodes) {
+      const kept = km === id && ks === n.id, current = !kept && cur[id] === n.id && km !== id;
+      const hov = roles.hover === id + ":" + n.id && !kept && !current;
+      const el = node(`<div class="node${kept ? " on" : current ? " cur" : hov ? " hov" : ""}" data-machine="${id}" data-state="${n.id}" style="grid-column:${n.c};grid-row:${n.r}"><b>${n.name}</b><p>${n.note}</p></div>`);
+      if (n.vars && roles.vars !== false) {
+        const list = node(`<div class="vars"></div>`);
+        n.vars.forEach((v, i) => {
+          const on = kept && (roles.keptVar || 0) === i, c = current && i === 0;
+          list.append(node(`<span class="var${on ? " on" : c ? " cur" : ""}" data-vary="${i}">${v}</span>`));
+        });
+        el.append(list);
+      }
+      body.append(el);
+    }
+    sec._roles = { lit: roles.lit !== false };
+    return sec;
+  }
+  let uid = 0;
+  // Edges drawn from the laid-out nodes; the edge into the kept state (moveInto's rule) lit, drawn last.
+  function route(sec) {
+    const m = M[sec.dataset.machine], body = sec.querySelector(".regionBody");
+    body.querySelector(":scope > svg")?.remove();
+    const NS = "http://www.w3.org/2000/svg", svg = document.createElementNS(NS, "svg"), id = "gd-a" + ++uid;
+    svg.setAttribute("width", body.offsetWidth); svg.setAttribute("height", body.offsetHeight);
+    const marker = (mid, fill) => `<marker id="${mid}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" style="fill: var(${fill})"/></marker>`;
+    svg.innerHTML = `<defs>${marker(id, "--border-contrast")}${marker(id + "k", "--brand-solid")}</defs>`;
+    const box = (s) => { const e = body.querySelector(`[data-state="${s}"]`); return { x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight }; };
+    const keptEl = body.querySelector(".node.on"), state = keptEl && keptEl.dataset.state;
+    const into = state && (m.edges.find(([a, b]) => b === state && m.path.indexOf(a) === m.path.indexOf(state) - 1) || m.edges.find(([, b]) => b === state));
+    let lit = null;
+    const labels = [];
+    for (const e of m.edges) {
+      const [a, b, kind, o = {}] = e, A = box(a), B = box(b);
+      let pts, mid;
+      if (kind === "h") { const y = Math.round(A.y + A.h / 2); pts = B.x > A.x ? [[A.x + A.w, y], [B.x, y]] : [[A.x, y], [B.x + B.w, y]]; }
+      else if (kind === "v") { const x = A.x + (o.ax ?? A.w / 2); pts = [[x, A.y + A.h], [x, B.y]]; }
+      else if (kind === "up") { const x = A.x + (o.ax ?? A.w / 2); pts = [[x, A.y], [x, B.y + B.h]]; }
+      else { const ax = A.x + (o.ax ?? A.w / 2), bx = B.x + (o.bx ?? B.w / 2), y = Math.round((A.y + A.h + B.y) / 2); pts = [[ax, A.y + A.h], [ax, y], [bx, y], [bx, B.y]]; }
+      mid = kind === "elbow" ? [(pts[1][0] + pts[2][0]) / 2, pts[1][1]] : [(pts[0][0] + pts.at(-1)[0]) / 2, (pts[0][1] + pts.at(-1)[1]) / 2];
+      const pl = document.createElementNS(NS, "polyline");
+      pl.setAttribute("points", pts.map((q) => q.join(",")).join(" "));
+      const isLit = sec._roles.lit && e === into;
+      pl.setAttribute("class", (o.dash ? "dash " : "") + (isLit ? "kept" : ""));
+      pl.setAttribute("marker-end", `url(#${id}${isLit ? "k" : ""})`);
+      if (isLit) lit = pl; else svg.append(pl);
+      if (o.label) labels.push([mid, o.label]);
+    }
+    if (lit) svg.append(lit);
+    for (const [[x, y], text] of labels) {
+      const t = document.createElementNS(NS, "text");
+      t.setAttribute("x", x); t.setAttribute("y", y); t.setAttribute("text-anchor", "middle"); t.setAttribute("dominant-baseline", "central");
+      t.textContent = text; svg.append(t);
+    }
+    if (lit) { const d = document.createElementNS(NS, "circle"); d.setAttribute("r", 3); d.setAttribute("class", "gd-disc"); d.setAttribute("opacity", 0); svg.append(d); sec._disc = d; }
+    sec._lit = lit;
+    body.prepend(svg);
+  }
+  // The disc rides the lit edge at the dock's playhead fraction, fading into the arrowhead at the end.
+  function ride(sec, k, show) {
+    if (!sec._lit) return;
+    const len = sec._lit.getTotalLength(), p = sec._lit.getPointAtLength(clamp(k) * len);
+    sec._disc.setAttribute("cx", p.x); sec._disc.setAttribute("cy", p.y);
+    sec._disc.setAttribute("opacity", show ? clamp((1 - k) / 0.12) : 0);
+  }
+  function world(ids, roles) {
+    const w = node(`<div class="world"></div>`);
+    for (const id of ids) w.append(region(id, roles));
+    return w;
+  }
+
+  // ---- The panel, round 20: tabs and zoom on one row, the graph, the dials; no help, no grip.
+  function panel({ regions = ["save"], roles = {}, graphH = 320, dials = [["Corner radius", 8, "px", 16]] } = {}) {
+    const tabs = ["Create routine form", "Routine row"].map((n, i) => `<button class="t-tab" tabindex="-1" aria-selected="${i === 0}">${n}</button>`).join("");
+    const p = node(`<div class="tool panel">
+      <div class="bar"><div class="t-tabs"><span class="t-tabs-pill"></span>${tabs}</div>
+        <div class="gd-tools"><div class="zoom"><button tabindex="-1">${icon("zoomOut")}</button><span>100%</span><button tabindex="-1">${icon("zoomIn")}</button><button tabindex="-1">${icon("fit")}</button></div><span class="gd-hide">${icon("hide")}</span></div></div>
+      <div class="graph" style="height:${graphH}px"></div>
+      <div class="dials">${dials.map(([n, v, u, max]) => `<label class="dial"><span>${n}</span><input type="range" tabindex="-1" min="0" max="${max}" value="${v}"><span>${v} ${u}</span></label>`).join("")}</div>
+    </div>`);
+    p.querySelector(".graph").append(world(regions, roles));
+    return p;
+  }
+  // The kept node brought into view, with its machine's header above it when there is room.
+  function showKept(graph) {
+    const n = graph.querySelector(".node.on");
+    if (!n) return;
+    const g = graph.getBoundingClientRect(), r = n.getBoundingClientRect(), reg = n.closest(".region").getBoundingClientRect();
+    const at = (y) => y - g.top + graph.scrollTop, pad = 8;
+    graph.scrollTop = Math.max(at(r.bottom) + pad - graph.clientHeight, Math.min(at(reg.top) - pad, at(r.top) - pad));
+  }
+
+  // ---- The stage: the Create routine form, its copy per round 20.
+  const FORM = { name: "Triage new issues", prompt: "Read the issues opened since the last run, label each one, and say which need me.", when: "Every day", at: "09:00", zone: "Asia/Riyadh", read: "Next run today 09:00", type: "The hub's pick for each run", fail: "The routine wasn't created. The hub didn't answer.", primary: "Create routine", test: "Creating it runs it once now, as a test." };
+  function form(over = {}) {
+    const f = { ...FORM, ...over };
+    const val = (k, v, extra = "") => `<div class="input" data-key="${k}"${extra}>${v}</div>`;
+    return `<div class="frame gd-form">
+      <div class="field"><label>Name</label>${val("name", f.name)}</div>
+      <div class="field"><label>What each run does</label>${val("prompt", f.prompt, ' style="min-height: 60px"')}</div>
+      <div class="row"><div class="field"><label>When</label>${val("when", f.when)}</div>${f.at ? `<div class="field"><label>At</label>${val("at", f.at)}</div>` : '<div data-gone="at"></div>'}</div>
+      <div class="row"><div class="field"><label>Time zone</label>${val("zone", f.zone)}</div><div></div></div>
+      <p class="line read" data-key="read">${f.read}</p>
+      <div class="field"><label>Delegate type</label>${val("type", f.type)}</div>
+      ${f.fail ? `<p class="line fail" data-key="fail">${f.fail}</p>` : ""}
+      <div class="actions"><span class="gd-test">${f.test}</span><span class="btn">Cancel</span><span class="btn primary" data-key="primary">${f.primary}</span></div>
+    </div>`;
+  }
+
+  // The stage at time t of the move, on the mockup's own clip timing.
+  function progressOf(clips, key, t) {
+    const clip = clips.find((x) => x.key === key);
+    if (!clip) return 1;
+    return ease(Math.max(0, Math.min(1, (t - clip.at) / clip.dur)));
+  }
+  function stageAt(stage, clips, t) {
+    const btn = stage.querySelector('[data-key="primary"]');
+    if (!btn.querySelector(".gd-xf")) btn.innerHTML = '<span class="gd-xf"><span>Creating…</span><span>Create routine</span></span>';
+    const [a, b] = btn.querySelectorAll(".gd-xf > span"), kL = progressOf(clips, "label", t);
+    a.style.opacity = 1 - kL; b.style.opacity = kL;
+    const fail = stage.querySelector('[data-key="fail"]'), revealK = progressOf(clips, "reveal", t), fadeK = progressOf(clips, "fade", t);
+    if (fail) { fail.style.overflow = "hidden"; fail.style.maxBlockSize = 60 * revealK + "px"; fail.style.marginBlock = `${2 * revealK}px ${12 * revealK}px`; fail.style.opacity = Math.min(fadeK, revealK); }
+  }
+
+  // ---- The dock, the timeline design: the move into the kept state, its clips in tokens.
+  const MOVE = [
+    { key: "label", of: "Button", does: "label swaps to “Create routine”", at: 0, dur: "--dur-fade", ease: "--ease-crossfade" },
+    { key: "reveal", of: "Reason line", does: "unfolds", at: "--dur-stagger", dur: "--dur-pop", ease: "--ease-out" },
+    { key: "fade", of: "Reason words", does: "fade in", at: { with: "reveal" }, dur: "--dur-pop", ease: "--ease-out" },
+  ];
+  const LADDER = ["--dur-stagger", "--dur-ghost", "--dur-control", "--dur-menu", "--dur-exit", "--dur-morph", "--dur-fade", "--dur-grow-exit", "--dur-reveal", "--dur-pop", "--dur-panel", "--dur-grow", "--dur-lift", "--dur-press-hold", "--dur-settle", "--dur-cascade"].map((n) => [n, ms(n)]);
+  const tokenOf = (v) => (LADDER.find(([, x]) => x === v) || [null])[0];
+
+  function dock(opt = {}) {
+    const clips = (opt.clips || MOVE).map((c) => ({ ...c }));
+    for (const c of clips) {
+      c.durTok = c.durTok || (typeof c.dur === "string" ? c.dur : tokenOf(c.dur));
+      c.dur = typeof c.dur === "string" ? ms(c.dur) : c.dur;
+      c.atTok = c.at;
+      c.at = typeof c.at === "number" ? c.at : typeof c.at === "string" ? ms(c.at) : null;
+    }
+    for (const c of clips) if (c.at === null) { const o = clips.find((x) => x.key === (c.atTok.with || c.atTok.after)); c.at = c.atTok.with ? o.at : o.at + o.dur; }
+    const total = Math.max(...clips.map((c) => c.at + c.dur)), span = opt.span || total + 100;
+    const pct = (v) => (100 * v) / span + "%";
+    const chips = (c) => {
+      const d = c.atTok && typeof c.atTok === "object" ? `<span class="dk-chip">with ${clips.find((x) => x.key === c.atTok.with).of}</span>` : c.at ? `<span class="dk-chip${c.diffAt ? " diff" : ""}" data-chip="at">${c.at} ms in</span>` : "";
+      const len = c.durTok && !c.free ? `<span class="dk-chip${c.diffDur ? " diff" : ""}" data-chip="dur"><code>${c.durTok}</code> ${c.dur} ms</span>` : `<span class="dk-chip${c.free ? " free" : ""}${c.diffDur ? " diff" : ""}" data-chip="dur">${c.dur} ms</span>`;
+      return d + len + `<span class="dk-chip${c.diffEase ? " diff" : ""}" data-chip="ease">${curve(c.ease, 16, 10)}<code>${c.ease === "spring" ? "Spring" : c.ease}</code></span>` + (c.bounce != null ? `<span class="dk-chip">bounce <code>${c.bounce}</code></span>` : "");
+    };
+    const ticks = []; for (let v = 0; v <= span; v += total < 300 ? 50 : 100) ticks.push(v);
+    const head = `<div class="dk-head"><b>${opt.title || "Saving → Save failed"}</b><span class="dk-state">${opt.headExtra || ""}</span></div>`;
+    const rows = clips.map((c) => `<div class="dk-g dk-row" data-key="${c.key}"><div class="dk-name"><span class="dk-of">${c.of}</span> <span class="dk-does">${c.does}</span><div class="dk-chips">${chips(c)}</div></div><div class="dk-lane"><span class="dk-past" style="inline-size:${pct(span - total)}"></span><span class="dk-ghost" hidden></span><span class="dk-bar" style="inset-inline-start:${pct(c.at)};inline-size:${pct(c.dur)}"></span></div>${opt.rail ? `<div class="dk-railwrap"><div><div class="dk-rail">${railTiles(opt.rail, c.ease)}</div></div></div>` : ""}</div>`).join("");
+    const el = node(`<div class="tool dock">${head}<div class="dk-body${opt.inspector ? " insp" : ""}"><div class="dk-tl">
+      <div class="dk-g dk-rr"><div class="dk-tr"><span class="dk-btn" data-play>${icon("play", "gd-play")}${icon("pause", "gd-pause")}</span><span class="dk-btn" data-loop>${icon("loop")}</span><span class="dk-ro"><b>0</b> / ${total} ms</span></div>
+        <div class="dk-ruler">${ticks.map((v) => `<i style="inset-inline-start:${pct(v)}"></i><span style="inset-inline-start:${pct(v)}">${v}</span>`).join("")}</div></div>
+      ${rows}
+      <div class="dk-over"><span class="dk-guide" hidden></span><span class="dk-ph"></span></div>
+    </div>${opt.inspector ? opt.inspector : ""}</div></div>`);
+    const $ = (s) => el.querySelector(s), row = (k) => el.querySelector(`.dk-row[data-key="${k}"]`);
+    const api = {
+      el, clips, total, span, pct,
+      clip: (k) => clips.find((c) => c.key === k),
+      setT(t, len = total) {
+        $(".dk-ph").style.insetInlineStart = pct(t);
+        $(".dk-ro").innerHTML = `<b>${Math.round(t)}</b> / ${len} ms`;
+      },
+      head(html) { const s = $(".dk-state"); if (s.innerHTML !== html) s.innerHTML = html; },
+      playing(on) { const p = $("[data-play]"); p.querySelector(".gd-play").style.opacity = on ? 0 : 1; p.querySelector(".gd-pause").style.opacity = on ? 1 : 0; },
+      bar: (k) => row(k).querySelector(".dk-bar"),
+      setClip(k, at, dur) { const b = api.bar(k); b.style.insetInlineStart = pct(at); b.style.inlineSize = pct(dur); },
+      ghost(k, at, dur) { const g = row(k).querySelector(".dk-ghost"); g.hidden = at == null; if (at != null) { g.style.insetInlineStart = pct(at); g.style.inlineSize = pct(dur); } },
+      chips(k, c) { row(k).querySelector(".dk-chips").innerHTML = chips({ ...api.clip(k), ...c }); },
+      guide(v) { const g = $(".dk-guide"); g.hidden = v == null; if (v != null) g.style.insetInlineStart = pct(v); },
+      // The drag readout rides the dragged edge, under its lane.
+      pill(k, text, v) {
+        let p = el.querySelector(".dk-pill");
+        if (text == null) { p?.remove(); return; }
+        if (!p) { p = node('<span class="dk-pill"></span>'); $(".dk-over").append(p); }
+        const lane = row(k).querySelector(".dk-lane"), tl = $(".dk-tl");
+        p.textContent = text; p.style.insetInlineStart = pct(v);
+        p.style.insetBlockStart = lane.getBoundingClientRect().bottom - tl.getBoundingClientRect().top + 4 + "px";
+      },
+      ticks(k, from, on) {
+        const lane = row(k).querySelector(".dk-lane");
+        lane.querySelectorAll(".dk-tick").forEach((t) => t.remove());
+        if (on) for (const [, v] of LADDER) if (from + v <= span && v >= 200) lane.append(node(`<span class="dk-tick" style="inset-inline-start:${pct(from + v)}"></span>`));
+      },
+      rail(k, open) { row(k).querySelector(".dk-railwrap")?.classList.toggle("open", open); },
+      row,
+    };
+    api.playing(false);
+    return api;
+  }
+  function railTiles(list, chosen, extra = "") {
+    return (list === true ? CURVES : list).map((n) => `<span class="dk-tile${n === chosen ? " on" : ""}" data-ease="${n}">${curve(n, 40, 20)}<code>${n === "spring" ? "Spring" : n}</code></span>`).join("") + extra;
+  }
+
+  // ---- The cursor a drawing moves.
+  const CURSOR = {
+    arrow: ['M2 1 L2 17.5 L6.4 13.4 L9.3 19.6 L11.9 18.4 L9.1 12.4 L15 12.2 Z', 2, 1],
+    ew: ['M1 11 L6 6 L6 9.4 L16 9.4 L16 6 L21 11 L16 16 L16 12.6 L6 12.6 L6 16 Z', 11, 11],
+  };
+  function cursor(root) {
+    const c = node(`<span class="gd-cursor" aria-hidden="true"><svg viewBox="0 0 22 22"><path/></svg></span>`);
+    root.append(c);
+    let kind = null;
+    return {
+      el: c,
+      // x, y in the root's own box; kind arrow | ew | ns | nesw.
+      set(x, y, k = "arrow", down = false, shown = true) {
+        if (k !== kind) {
+          kind = k; const [d] = CURSOR[k === "arrow" ? "arrow" : "ew"];
+          c.querySelector("path").setAttribute("d", d);
+          c.querySelector("svg").style.rotate = k === "ns" ? "90deg" : k === "nesw" ? "-45deg" : "0deg";
+        }
+        const [, hx, hy] = CURSOR[k === "arrow" ? "arrow" : "ew"];
+        c.style.translate = `${x - hx}px ${y - hy}px`;
+        c.classList.toggle("down", down);
+        c.style.opacity = shown ? 1 : 0;
+      },
+    };
+  }
+  // A point on an element, in the root's box: fx, fy are fractions of its width and height.
+  function at(root, el, fx = 0.5, fy = 0.5, dx = 0, dy = 0) {
+    const r = root.getBoundingClientRect(), b = el.getBoundingClientRect();
+    return [b.left - r.left + b.width * fx + dx, b.top - r.top + b.height * fy + dy];
+  }
+  const lerp2 = (p, q, k) => [mix(p[0], q[0], k), mix(p[1], q[1], k)];
+  const smooth = (k) => k * k * (3 - 2 * k);
+  // Where the cursor is at t: moves are [t0, t1, from, to] between named points; between moves it rests where the last one ended.
+  function path(t, moves, pts) {
+    let p = pts[moves[0][2]];
+    for (const [a, b, from, to] of moves) {
+      if (t < a) break;
+      p = t >= b ? pts[to] : lerp2(pts[from], pts[to], smooth(seg(t, a, b)));
+    }
+    return p;
+  }
+  // A value over time: keys are [t, v]; eased between them, held outside.
+  function kf(t, keys) {
+    if (t <= keys[0][0]) return keys[0][1];
+    for (let i = 1; i < keys.length; i++) if (t < keys[i][0]) return mix(keys[i - 1][1], keys[i][1], smooth(seg(t, keys[i - 1][0], keys[i][0])));
+    return keys.at(-1)[1];
+  }
+
+  // Dragging Reason line's trailing handle under one of the three length rules:
+  // tokens (snap to the ladder), free (10ms steps), snap (the ladder until ⌥ is held).
+  function lengthDrag(root, mode) {
+    const d = dock();
+    root.append(d.el);
+    const cur = cursor(root), key = node('<span class="gd-key" aria-hidden="true">⌥</span>');
+    root.append(key);
+    const c = d.clip("reveal"), at0 = c.at, dur0 = c.dur, other = d.clip("fade");
+    const within = (t, a, b) => t >= a && t < b;
+    const lane = d.row("reveal").querySelector(".dk-lane");
+    const pointer = (t) => kf(t, [[1500, at0 + dur0], [3500, at0 + dur0 + 42]]);
+    const valueAt = (t) => {
+      const raw = pointer(t) - at0, alt = mode === "snap" && t >= 2600;
+      if (mode === "free" || alt) return { dur: Math.round(raw / 10) * 10, tok: null, free: true };
+      const [tk, v] = LADDER.reduce((b, x) => (Math.abs(x[1] - raw) < Math.abs(b[1] - raw) ? x : b));
+      return { dur: v, tok: tk, free: false };
+    };
+    const drop = valueAt(3500);
+    let sig = "";
+    run(root, 7000, (t) => {
+      const dragging = within(t, 1500, 3600), edited = within(t, 3600, 6000);
+      const v = dragging ? valueAt(t) : edited ? drop : { dur: dur0, tok: c.durTok, free: false };
+      d.setClip("reveal", at0, v.dur);
+      d.setT(320, Math.max(at0 + v.dur, other.at + other.dur));
+      const s = [dragging, edited, v.dur, v.tok].join();
+      if (s !== sig) {
+        sig = s;
+        d.chips("reveal", edited ? { dur: v.dur, durTok: v.tok, free: mode === "snap" && !v.tok, diffDur: true } : {});
+        d.head(edited ? '<span class="dk-badge">1 edit</span><span class="dk-text">Reset</span>' : "");
+        d.ghost("reveal", edited ? at0 : null, dur0);
+        d.ticks("reveal", at0, dragging && !v.free);
+      }
+      d.pill("reveal", dragging ? (v.tok ? `${v.tok} ${v.dur} ms` : `${v.dur} ms`) : null, at0 + v.dur);
+      d.guide(dragging && !v.free && at0 + v.dur === other.at + other.dur ? at0 + v.dur : null);
+      const bar = d.bar("reveal");
+      bar.classList.toggle("hov", within(t, 1300, 1500));
+      bar.classList.toggle("sel", within(t, 1500, 6000));
+      const L = lane.getBoundingClientRect(), R = root.getBoundingClientRect();
+      const reset = d.el.querySelector(".dk-text");
+      const pts = { rest: at(root, d.el, 0.9, 0.2), ptr: [L.left - R.left + (pointer(t) / d.span) * L.width, L.top - R.top + L.height / 2], reset: reset ? at(root, reset) : at(root, d.el, 0.95, 0.06) };
+      const [x, y] = path(t, [[700, 1300, "rest", "ptr"], [3800, 4500, "ptr", "rest"], [5200, 5800, "rest", "reset"], [6200, 6900, "reset", "rest"]], pts);
+      cur.set(x, y, within(t, 1300, 3600) ? "ew" : "arrow", within(t, 1500, 3600) || within(t, 5900, 6050));
+      key.style.translate = `${x + 16}px ${y + 14}px`;
+      key.style.opacity = mode === "snap" && within(t, 2600, 3600) ? 1 : 0;
+    }, mode === "snap" ? 3300 : 2600);
+    root.gdKeys = mode === "snap" ? [1400, 2300, 3300, 4400] : [1400, 2600, 4400];
+  }
+
+  // Dragging Reason line to start later, then either replaying the move once (replay)
+  // or leaving the playhead where it was until Play is pressed (hold). The stage above follows the playhead.
+  function editDemo(root, mode) {
+    const f = FORM;
+    const stage = node(`<div class="frame"><p class="line fail" data-key="fail">${f.fail}</p><div class="actions"><span class="gd-test">${f.test}</span><span class="btn">Cancel</span><span class="btn primary" data-key="primary">${f.primary}</span></div></div>`);
+    const d = dock();
+    root.append(stage, d.el);
+    stageAt(stage, d.clips, d.total);
+    stage.style.minBlockSize = stage.offsetHeight + "px";
+    const cur = cursor(root), SLOW = 4;
+    const reveal = d.clip("reveal"), fade = d.clip("fade");
+    const lane = d.row("reveal").querySelector(".dk-lane");
+    const within = (t, a, b) => t >= a && t < b;
+    const startAt = (t) => kf(t, [[1400, 60], [2400, 125]]);
+    const replay = mode === "replay";
+    const period = replay ? 8400 : 7400;
+    let sig = "";
+    run(root, period, (t) => {
+      const edited = within(t, 2400, 6200), dragging = within(t, 1400, 2400);
+      const at = dragging ? Math.round(startAt(t) / 60) * 60 : edited ? 120 : 60;
+      reveal.at = at; fade.at = at;
+      d.setClip("reveal", at, reveal.dur); d.setClip("fade", at, fade.dur);
+      const len = at + reveal.dur;
+      // Where the playhead is: at the end at rest; a replay or a Play press runs it from 0.
+      const runs = replay ? [[2600, len], [6400, 320]] : [[3900, 380]];
+      let ms = 320, playing = false;
+      for (const [s, L] of runs) if (t >= s) { ms = Math.min(L, (t - s) / SLOW); playing = t < s + L * SLOW; }
+      if (!replay && t >= 6200) ms = Math.min(ms, 320);
+      d.setT(ms, len); d.playing(playing);
+      stageAt(stage, d.clips, ms);
+      const s = [edited].join();
+      if (s !== sig) {
+        sig = s;
+        d.chips("reveal", edited ? { at: 120, diffAt: true } : {});
+        d.head(edited ? '<span class="dk-badge">1 edit</span><span class="dk-text">Reset</span>' : "");
+        d.ghost("reveal", edited ? 60 : null, reveal.dur); d.ghost("fade", edited ? 60 : null, fade.dur);
+      }
+      d.pill("reveal", dragging ? `starts ${at} ms` : null, at);
+      const bar = d.bar("reveal");
+      bar.classList.toggle("hov", within(t, 1200, 1400));
+      bar.classList.toggle("sel", within(t, 1400, 6200));
+      const L = lane.getBoundingClientRect(), R = root.getBoundingClientRect(), reset = d.el.querySelector(".dk-text");
+      const pts = { rest: at2(d.el, 0.88, 0.2), ptr: [L.left - R.left + ((startAt(t) + reveal.dur / 2) / d.span) * L.width, L.top - R.top + L.height / 2], play: at2(d.el.querySelector("[data-play]")), reset: reset ? at2(reset) : at2(d.el, 0.95, 0.06) };
+      const moves = replay
+        ? [[600, 1200, "rest", "ptr"], [2700, 3400, "ptr", "rest"], [5600, 6100, "rest", "reset"], [6600, 7400, "reset", "rest"]]
+        : [[600, 1200, "rest", "ptr"], [2700, 3500, "ptr", "play"], [5600, 6100, "play", "reset"], [6600, 7200, "reset", "rest"]];
+      const [x, y] = path(t, moves, pts);
+      cur.set(x, y, "arrow", dragging || within(t, 6200, 6350) || (!replay && within(t, 3700, 3850)));
+    }, replay ? 3300 : 3000);
+    root.gdKeys = replay ? [1900, 3300, 4600, 6900] : [1900, 3000, 4600];
+    function at2(el, fx = 0.5, fy = 0.5) { return at(root, el, fx, fy); }
+  }
+
+  // Kept Save failed, hovering Every hour: the stage shows the hovered state, and a layer over it
+  // marks what changed against the kept render: rings and a dashed ghost, or diff washes.
+  function marksDemo(root, mode) {
+    const page = node(`<div class="gd-page"><div class="gd-stage">${form()}</div><div class="graph gd-side"><div class="world"></div></div></div>`);
+    root.append(page);
+    const stage = page.querySelector(".gd-stage"), side = page.querySelector(".world");
+    const hourNode = node(`<div class="node" data-state="hour"><b>Every hour</b><p>${M.when.nodes[0].note}</p></div>`);
+    const keptNode = node(`<div class="node on" data-state="failed"><b>Save failed</b><p>${M.save.nodes[3].note}</p><div class="vars"><span class="var on">The hub didn't answer</span><span class="var">Delegate type refused</span></div></div>`);
+    side.append(hourNode, keptNode);
+    const NS = "http://www.w3.org/2000/svg", svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("class", "gd-marks"); svg.setAttribute("aria-hidden", "true");
+    stage.append(svg);
+    const frame = () => stage.querySelector(".frame");
+    const box = (el) => { const s = stage.getBoundingClientRect(), r = el.getBoundingClientRect(); return { x: r.left - s.left, y: r.top - s.top, w: r.width, h: r.height }; };
+    const keptBoxes = { at: box(frame().querySelector('[data-key="at"]')) };
+    const draw = () => {
+      const pad = 4, ring = (b, rx, cls) => `<rect class="${cls}" x="${b.x - pad}" y="${b.y - pad}" width="${b.w + 2 * pad}" height="${b.h + 2 * pad}" rx="${rx}"/>`;
+      const when = box(frame().querySelector('[data-key="when"]')), read = box(frame().querySelector('[data-key="read"]')), at = keptBoxes.at;
+      svg.setAttribute("width", stage.offsetWidth); svg.setAttribute("height", stage.offsetHeight);
+      svg.innerHTML = mode === "rings"
+        ? ring(when, 12, "gd-ring") + ring(read, 6, "gd-ring") + ring(at, 12, "gd-ring gone")
+        : ring(when, 12, "gd-wash add") + ring(read, 6, "gd-wash add") + ring(at, 12, "gd-wash del");
+    };
+    let state = "kept";
+    const within = (t, a, b) => t >= a && t < b;
+    const cursorEl = cursor(root);
+    run(root, 6000, (t) => {
+      const hover = within(t, 1200, 3900), s = hover ? "hover" : "kept";
+      if (s !== state) {
+        state = s;
+        const k = stage.querySelector(".frame");
+        k.outerHTML = hover ? form({ when: "Every hour", at: null, read: "Next run 10:00" }) : form();
+        if (hover) draw();
+        svg.classList.toggle("on", hover);
+      }
+      hourNode.classList.toggle("hov", hover);
+      const pts = { rest: at(root, page, 0.97, 0.92), hour: at(root, hourNode, 0.62, 0.4) };
+      const [x, y] = path(t, [[500, 1200, "rest", "hour"], [3900, 4600, "hour", "rest"]], pts);
+      cursorEl.set(x, y, "arrow", false);
+    }, 2400);
+    root.gdKeys = [600, 2400];
+  }
+
+  function settle(root) {
+    root.querySelectorAll(".region").forEach(route);
+    root.querySelectorAll(".t-tabs").forEach((tabs) => {
+      const sel = tabs.querySelector('[aria-selected="true"]'), pill = tabs.querySelector(".t-tabs-pill");
+      if (!sel || !pill) return;
+      pill.style.transition = "none"; pill.style.transform = `translateX(${sel.offsetLeft}px)`; pill.style.width = sel.offsetWidth + "px";
+      void pill.offsetWidth; pill.style.transition = "";
+    });
+  }
+  function tab(tabs, i) {
+    const all = tabs.querySelectorAll(".t-tab"), pill = tabs.querySelector(".t-tabs-pill");
+    all.forEach((b, j) => b.setAttribute("aria-selected", String(i === j)));
+    pill.style.transform = `translateX(${all[i].offsetLeft}px)`; pill.style.width = all[i].offsetWidth + "px";
+  }
+
+  // One loop per drawing: frame(t) draws time t of a period; it runs only while the drawing is
+  // on screen (mk:live / mk:idle), and under reduced motion it draws its still and stops.
+  function run(root, period, frame, still) {
+    const reduce = !period || matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let raf = 0, t0 = 0;
+    const tick = (now) => { if (!t0) t0 = now; frame((now - t0) % period); raf = requestAnimationFrame(tick); };
+    const start = () => { if (raf || reduce) return; t0 = 0; raf = requestAnimationFrame(tick); };
+    const stop = () => { cancelAnimationFrame(raf); raf = 0; };
+    root.addEventListener("mk:live", start);
+    root.addEventListener("mk:idle", () => { stop(); frame(still); });
+    root.gdSeek = (t) => { stop(); frame(t); };
+    root.gdPeriod = period; root.gdStill = still;
+    const go = () => { settle(root); frame(still); if (root.classList.contains("is-live")) start(); };
+    go();
+    if (document.fonts) document.fonts.ready.then(() => { settle(root); if (!raf) frame(still); });
+  }
+  return { tok, ms, ease, clamp, seg, mix, node, icon, curve, CURVES, M, FORM, MOVE, LADDER, tokenOf, STATE_NAME, region, route, ride, world, panel, showKept, form, stageAt, dock, railTiles, cursor, at, lerp2, path, kf, lengthDrag, editDemo, marksDemo, settle, tab, run };
+})();
+</script>
+</head>
+<body>
+<main class="dp">
+  <header class="dp-hero">
+    <span><img class="caw-l" src="caw/light-ready.webp" alt="Caw" width="72" height="72"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="72" height="72"></span>
+    <div>
+      <h1>Design graph: nine picks before the build</h1>
+      <p>Three designs answered your last round. These nine cards are where they differ in taste; what they agree on comes first.</p>
+    </div>
+    <div class="dp-meter" aria-live="polite"><span><b data-dp-count>0</b> of <span data-dp-total>0</span> picked</span><span class="dp-bar"><i data-dp-fill></i></span></div>
+  </header>
+  <p class="dp-offline" data-dp-offline hidden>Picks are kept only when CawCo shows this page: publish it with artifact_create.</p>
+
+  <section class="dp-card gd-ctx" aria-labelledby="ctx-h">
+    <header><h2 id="ctx-h">Settled already</h2></header>
+    <div class="gd-ctx-cols">
+      <div>
+        <h3>What the critique ranked first</h3>
+        <ol>
+          <li>Coral means one thing: the kept state and its move.</li>
+          <li>The graph names its machines and the state each is in, always readable.</li>
+          <li>A hover marks on the page what it changed.</li>
+          <li>The kept move is drawn on the graph, and the dock's playhead rides it.</li>
+          <li>The drawing faults go: edge labels, the regions' left edge, one icon set.</li>
+          <li>Notes say why.</li>
+          <li>A place for your verdict.</li>
+        </ol>
+      </div>
+      <div>
+        <h3>Settled for the build</h3>
+        <ul>
+          <li>Coral marks only the kept state and its move: the kept node and variant, the edge into it, and the dock's playhead. Every other machine's state is grey, and the sliders are ink.</li>
+          <li>The edge into the kept state is lit, and while the move plays a dot rides it in step with the dock's playhead.</li>
+          <li>Edge labels cut through their line, regions share one left edge, and play, zoom and fit use one icon set.</li>
+          <li>Every state keeps its note whole: what it's for and what to check, never its name again.</li>
+          <li>The Showing line is gone: the component starts at the top of the page, and nothing above it moves.</li>
+        </ul>
+      </div>
+    </div>
+    <figure class="dp-pane"><figcaption>Save failed kept, its move playing</figcaption>{{MK:ctx-move}}</figure>
+  </section>
+
+  <article class="dp-card" id="resize">
+    <header><h2>How does the panel resize?</h2><span class="dp-state" data-dp-state="resize">Not picked</span></header>
+    <p class="dp-why">Its edges are where every reference tool resizes a side panel, with nothing drawn at rest; a handle on the seam would cover the dials' first row by 4px.</p>
+    <div class="gd-panes">
+      <figure class="dp-pane"><figcaption><kbd>1</kbd>Its edges</figcaption>{{MK:resize-edges}}</figure>
+      <figure class="dp-pane"><figcaption><kbd>2</kbd>The graph's seam</figcaption>{{MK:resize-seam}}</figure>
+    </div>
+    <div class="dp-opts" data-cawco-choice="resize" role="group" aria-label="How does the panel resize">
+      <button class="dp-opt" type="button" data-option="edges"><span class="dp-tag">Recommended</span><b>Its edges</b><span>The left edge sets the width, the foot the graph's height, the corner both; the edge lights while you hold it.</span><span class="dp-cost">Cost: nothing at rest says it resizes until the pointer finds an edge.</span></button>
+      <button class="dp-opt" type="button" data-option="seam"><b>The graph's seam</b><span>Width on the left edge; the graph's height on the seam between the graph and the dials.</span><span class="dp-cost">Cost: the handle covers the dials' first row by 4px, and one drag moves the seam and the panel's foot.</span></button>
+    </div>
+    <label class="dp-note">Note<textarea data-dp-note="resize" rows="1" placeholder="Anything to add"></textarea></label>
+  </article>
+
+  <article class="dp-card" id="clip-controls">
+    <header><h2>Where do a clip's controls open?</h2><span class="dp-state" data-dp-state="clip-controls">Not picked</span></header>
+    <p class="dp-why">In the row the lanes stay wide and the dock is 250px tall at rest; an inspector takes 280px off every lane and holds the dock at 330px.</p>
+    <div class="gd-panes">
+      <figure class="dp-pane"><figcaption><kbd>1</kbd>In the row</figcaption>{{MK:controls-row}}</figure>
+      <figure class="dp-pane"><figcaption><kbd>2</kbd>An inspector column</figcaption>{{MK:controls-inspector}}</figure>
+    </div>
+    <div class="dp-opts" data-cawco-choice="clip-controls" role="group" aria-label="Where do a clip's controls open">
+      <button class="dp-opt" type="button" data-option="row"><span class="dp-tag">Recommended</span><b>In the row</b><span>A clip's chips open their field, or a rail of curves, under its bar.</span><span class="dp-cost">Cost: the dock grows while a rail is open.</span></button>
+      <button class="dp-opt" type="button" data-option="inspector"><b>An inspector column</b><span>A 280px column at the dock's trailing edge shows every value of the selected clip.</span><span class="dp-cost">Cost: 280px off the lanes, and a dock 330px tall at all times.</span></button>
+    </div>
+    <label class="dp-note">Note<textarea data-dp-note="clip-controls" rows="1" placeholder="Anything to add"></textarea></label>
+  </article>
+
+  <article class="dp-card" id="token-rule">
+    <header><h2>While you drag a clip, what lengths can it take?</h2><span class="dp-state" data-dp-state="token-rule">Not picked</span></header>
+    <p class="dp-why">Tokens are named by use, so snapping keeps most edits inside the system, and ⌥ still lets you try a length the ladder lacks, like 300ms, marked for the agent to name.</p>
+    <div class="gd-panes">
+      <figure class="dp-pane"><figcaption><kbd>1</kbd>Tokens only</figcaption>{{MK:tokens-only}}</figure>
+      <figure class="dp-pane"><figcaption><kbd>2</kbd>Free values</figcaption>{{MK:tokens-free}}</figure>
+      <figure class="dp-pane"><figcaption><kbd>3</kbd>Snap, and ⌥ frees it</figcaption>{{MK:tokens-snap}}</figure>
+    </div>
+    <div class="dp-opts" data-cawco-choice="token-rule" role="group" aria-label="While you drag a clip, what lengths can it take">
+      <button class="dp-opt" type="button" data-option="tokens"><b>Tokens only</b><span>Every edit lands on a token, so what reaches the agent is tokens alone.</span><span class="dp-cost">Cost: the ladder is uneven, 300ms can't be tried, and a borrowed token can name the wrong use.</span></button>
+      <button class="dp-opt" type="button" data-option="free"><b>Free values</b><span>Any length in 10ms steps; the agent makes the token after.</span><span class="dp-cost">Cost: the no-one-off rule holds only after the fact, and the token file grows.</span></button>
+      <button class="dp-opt" type="button" data-option="snap"><span class="dp-tag">Recommended</span><b>Snap, and ⌥ frees it</b><span>Drags snap to tokens; hold ⌥ for any length, and its chip turns dashed.</span><span class="dp-cost">Cost: one modifier to learn, and two chip styles.</span></button>
+    </div>
+    <label class="dp-note">Note<textarea data-dp-note="token-rule" rows="1" placeholder="Anything to add"></textarea></label>
+  </article>
+
+  <article class="dp-card" id="compare">
+    <header><h2>How do you compare your edit with the agent's original?</h2><span class="dp-state" data-dp-state="compare">Not picked</span></header>
+    <p class="dp-why">A two-way switch is in view and works from the keyboard; a button you hold is neither. The original's dashed outline shows under each edited bar either way.</p>
+    <div class="gd-panes">
+      <figure class="dp-pane"><figcaption><kbd>1</kbd>Original | Edited</figcaption>{{MK:compare-segments}}</figure>
+      <figure class="dp-pane"><figcaption><kbd>2</kbd>Hold to see</figcaption>{{MK:compare-hold}}</figure>
+    </div>
+    <div class="dp-opts" data-cawco-choice="compare" role="group" aria-label="How do you compare your edit with the agent's original">
+      <button class="dp-opt" type="button" data-option="segments"><span class="dp-tag">Recommended</span><b>Original | Edited</b><span>A switch in the dock's head swaps what the page plays, and the bars turn to outlines under Original.</span><span class="dp-cost">Cost: one more control in the head once there are edits.</span></button>
+      <button class="dp-opt" type="button" data-option="hold"><b>Hold to see</b><span>Hold a button and the page plays the original until you let go.</span><span class="dp-cost">Cost: hard to discover, and no keyboard way to hold it.</span></button>
+    </div>
+    <label class="dp-note">Note<textarea data-dp-note="compare" rows="1" placeholder="Anything to add"></textarea></label>
+  </article>
+
+  <article class="dp-card" id="springs">
+    <header><h2>Can a clip use a spring?</h2><span class="dp-state" data-dp-state="springs">Not picked</span></header>
+    <p class="dp-why">No component needs a spring yet, and a Spring tile can't name a token until two are added to the system.</p>
+    <div class="gd-panes">
+      <figure class="dp-pane"><figcaption><kbd>1</kbd>Add spring tokens first</figcaption>{{MK:springs-tokens}}</figure>
+      <figure class="dp-pane"><figcaption><kbd>2</kbd>The eight curves for now</figcaption>{{MK:springs-curves}}</figure>
+    </div>
+    <div class="dp-opts" data-cawco-choice="springs" role="group" aria-label="Can a clip use a spring">
+      <button class="dp-opt" type="button" data-option="spring-tokens"><b>Add spring tokens first</b><span>Settle, 400ms with bounce 0.15, and snap, 260ms with none, join the system; then a ninth tile, Spring.</span><span class="dp-cost">Cost: two tokens and a bounce chip to keep before anything uses them.</span></button>
+      <button class="dp-opt" type="button" data-option="curves"><span class="dp-tag">Recommended</span><b>The eight curves for now</b><span>The rail offers the system's eight curves; a spring comes when a component needs one.</span><span class="dp-cost">Cost: a move that wants a bounce can't be tried in the dock.</span></button>
+    </div>
+    <label class="dp-note">Note<textarea data-dp-note="springs" rows="1" placeholder="Anything to add"></textarea></label>
+  </article>
+
+  <article class="dp-card" id="after-edit">
+    <header><h2>What plays after you change a clip?</h2><span class="dp-state" data-dp-state="after-edit">Not picked</span></header>
+    <p class="dp-why">Seeing the move again is the point of an edit: one replay per drop shows it with no extra press, and keyboard nudges stay still.</p>
+    <div class="gd-panes">
+      <figure class="dp-pane"><figcaption><kbd>1</kbd>Replay once</figcaption>{{MK:edit-replay}}</figure>
+      <figure class="dp-pane"><figcaption><kbd>2</kbd>Hold the playhead</figcaption>{{MK:edit-hold}}</figure>
+    </div>
+    <div class="dp-opts" data-cawco-choice="after-edit" role="group" aria-label="What plays after you change a clip">
+      <button class="dp-opt" type="button" data-option="replay"><span class="dp-tag">Recommended</span><b>Replay once</b><span>Each drop, chip change or curve pick plays the move once from the start.</span><span class="dp-cost">Cost: the page moves on every committed edit.</span></button>
+      <button class="dp-opt" type="button" data-option="hold"><b>Hold the playhead</b><span>The playhead stays where it was; Play shows the edit.</span><span class="dp-cost">Cost: a press after every edit to see what it did.</span></button>
+    </div>
+    <label class="dp-note">Note<textarea data-dp-note="after-edit" rows="1" placeholder="Anything to add"></textarea></label>
+  </article>
+
+  <article class="dp-card" id="machine-names">
+    <header><h2>How does the graph name its state machines?</h2><span class="dp-state" data-dp-state="machine-names">Not picked</span></header>
+    <p class="dp-why">Four machines stack to about 1,700px in a 520px well; a band keeps all four and their states in view and jumps to any of them, where a pinned header shows one at a time.</p>
+    <div class="gd-panes">
+      <figure class="dp-pane"><figcaption><kbd>1</kbd>An index band</figcaption>{{MK:names-band}}</figure>
+      <figure class="dp-pane"><figcaption><kbd>2</kbd>Pinned region headers</figcaption>{{MK:names-headers}}</figure>
+    </div>
+    <div class="dp-opts" data-cawco-choice="machine-names" role="group" aria-label="How does the graph name its state machines">
+      <button class="dp-opt" type="button" data-option="band"><span class="dp-tag">Recommended</span><b>An index band</b><span>A row of cells over the graph, each machine's name over its state; press one to jump there.</span><span class="dp-cost">Cost: 51px of graph at 448px wide, 98px at 380px.</span></button>
+      <button class="dp-opt" type="button" data-option="headers"><b>Pinned region headers</b><span>Each region's name and current state pin to the top while it scrolls past.</span><span class="dp-cost">Cost: you never see there are four, and you can't jump to one.</span></button>
+    </div>
+    <label class="dp-note">Note<textarea data-dp-note="machine-names" rows="1" placeholder="Anything to add"></textarea></label>
+  </article>
+
+  <article class="dp-card" id="change-marks">
+    <header><h2>How does a hover show what it changed on the page?</h2><span class="dp-state" data-dp-state="change-marks">Not picked</span></header>
+    <p class="dp-why">Rings add no colour beside the component's own error red, and a ringed field still looks like itself.</p>
+    <div class="gd-panes">
+      <figure class="dp-pane"><figcaption><kbd>1</kbd>Rings and ghosts</figcaption>{{MK:marks-rings}}</figure>
+      <figure class="dp-pane"><figcaption><kbd>2</kbd>Diff washes</figcaption>{{MK:marks-washes}}</figure>
+    </div>
+    <div class="dp-opts" data-cawco-choice="change-marks" role="group" aria-label="How does a hover show what it changed on the page">
+      <button class="dp-opt" type="button" data-option="rings"><span class="dp-tag">Recommended</span><b>Rings and ghosts</b><span>A ring around each value that changed, a dashed ghost where a field went.</span><span class="dp-cost">Cost: a new value and a changed one ring alike.</span></button>
+      <button class="dp-opt" type="button" data-option="washes"><b>Diff washes</b><span>Green behind what came in or changed, red where something went.</span><span class="dp-cost">Cost: red beside the component's error text, two more hues, and a washed field reads as a different field.</span></button>
+    </div>
+    <label class="dp-note">Note<textarea data-dp-note="change-marks" rows="1" placeholder="Anything to add"></textarea></label>
+  </article>
+
+  <article class="dp-card" id="verdict">
+    <header><h2>Where does your verdict on a state go?</h2><span class="dp-state" data-dp-state="verdict">Not picked</span></header>
+    <p class="dp-why">Pins already reach the agent; recording the kept state's path makes a pin a verdict with one engine change and no new control on the page.</p>
+    <div class="gd-panes trio">
+      <figure class="dp-pane"><figcaption><kbd>1</kbd>Not now</figcaption>{{MK:verdict-none}}</figure>
+      <figure class="dp-pane"><figcaption><kbd>2</kbd>Pins carry the state</figcaption>{{MK:verdict-pins}}</figure>
+      <figure class="dp-pane"><figcaption><kbd>3</kbd>A mark on the kept node</figcaption>{{MK:verdict-mark}}</figure>
+    </div>
+    <div class="dp-opts" data-cawco-choice="verdict" role="group" aria-label="Where does your verdict on a state go">
+      <button class="dp-opt" type="button" data-option="not-now"><b>Not now</b><span>The tool stays a viewer.</span><span class="dp-cost">Cost: a verdict lives in chat, apart from the state it judges.</span></button>
+      <button class="dp-opt" type="button" data-option="pins"><span class="dp-tag">Recommended</span><b>Pins carry the state</b><span>A pin placed while a state is kept records its path, shown under your words.</span><span class="dp-cost">Cost: no tally, and "right" takes a word.</span></button>
+      <button class="dp-opt" type="button" data-option="mark"><b>A mark on the kept node</b><span>Check and cross at the kept node's title; a press marks it there and in its index cell.</span><span class="dp-cost">Cost: controls inside the node, shown on hover where hover means preview.</span></button>
+    </div>
+    <label class="dp-note">Note<textarea data-dp-note="verdict" rows="1" placeholder="Anything to add"></textarea></label>
+  </article>
+
+  <footer class="dp-done"><span data-dp-sent></span><button class="dp-send" type="button" data-dp-send>Send picks</button></footer>
+</main>
+<script>{{KIT_JS}}</script>
+</body>
+</html>

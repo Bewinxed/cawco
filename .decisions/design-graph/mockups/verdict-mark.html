@@ -1,0 +1,40 @@
+<style>
+.mk-verdict-mark { display: grid; justify-items: center; gap: var(--space-3); }
+/* Clarity §7, option 3: check and cross at the kept node's title end on hover; a press draws the mark there and in its index cell. Ink, never status hues. */
+.mk-verdict-mark .vm-cell { display: grid; inline-size: 168px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-xs); background: var(--selected-bg); }
+.mk-verdict-mark .vm-cell > span { display: flex; align-items: center; gap: var(--space-1); min-inline-size: 0; overflow: hidden; white-space: nowrap; }
+.mk-verdict-mark .vm-n { font: var(--type-meta); color: var(--ink-muted); }
+.mk-verdict-mark .vm-s { font: var(--type-label); color: var(--selected-ink); }
+.mk-verdict-mark .vm-t { display: flex; align-items: center; gap: var(--space-1); min-inline-size: 0; }
+.mk-verdict-mark .vm-g { display: flex; gap: 2px; margin-inline-start: auto; opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
+.mk-verdict-mark .vm-g.on { opacity: 1; }
+.mk-verdict-mark .vm-g .gd-ic { inline-size: var(--icon-md); block-size: var(--icon-md); color: var(--ink-muted); }
+.mk-verdict-mark .vm-mark { inline-size: var(--icon-md); block-size: var(--icon-md); color: var(--ink-strong); flex: none; }
+</style>
+<div class="mk mk-verdict-mark gd" role="img" aria-label="Hovering the kept node shows a check and a cross at its title; pressing the check marks Save failed right, at its title and in its index cell."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-verdict-mark");
+  if (!root) return;
+  const G = window.GD, n = G.M.save.nodes[3];
+  const cell = G.node(`<div class="vm-cell"><span class="vm-n">Saving it</span><span class="vm-s">Save failed<span class="vm-slot"></span></span></div>`);
+  const nodeEl = G.node(`<div class="node on"><div class="vm-t"><b>${n.name}</b><span class="vm-slot"></span><span class="vm-g"><span class="vm-c">${G.icon("check")}</span><span>${G.icon("cross")}</span></span></div><p>${n.note}</p><div class="vars"><span class="var on">${n.vars[0]}</span><span class="var">${n.vars[1]}</span></div></div>`);
+  root.append(cell, G.node('<div class="graph gd-side"><div class="world"></div></div>'));
+  root.querySelector(".world").append(nodeEl);
+  const cur = G.cursor(root), ghosts = nodeEl.querySelector(".vm-g"), check = nodeEl.querySelector(".vm-c");
+  const within = (t, a, b) => t >= a && t < b;
+  let marked = null;
+  G.run(root, 6400, (t) => {
+    const over = within(t, 1100, 5300), m = within(t, 2000, 5100);
+    ghosts.classList.toggle("on", over && !m);
+    if (m !== marked) {
+      marked = m;
+      root.querySelectorAll(".vm-slot").forEach((s) => (s.innerHTML = m ? G.icon("check", "vm-mark") : ""));
+    }
+    const pts = { rest: G.at(root, root, 0.5, 0.98), node: G.at(root, nodeEl, 0.5, 0.7), check: G.at(root, check), mark: G.at(root, nodeEl.querySelector(".vm-slot"), 0.5, 0.5) };
+    const [x, y] = G.path(t, [[500, 1100, "rest", "node"], [1300, 1800, "node", "check"], [4400, 4900, "check", "mark"], [5400, 6100, "mark", "rest"]], pts);
+    cur.set(x, y, "arrow", within(t, 1900, 2050) || within(t, 5000, 5150));
+  }, 3000);
+  root.gdKeys = [400, 1700, 3000];
+})();
+</script>

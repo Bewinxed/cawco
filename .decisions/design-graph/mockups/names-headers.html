@@ -1,0 +1,40 @@
+<style>
+.mk-names-headers { display: grid; justify-items: center; }
+/* Clarity §2, design B: the region scrolling past pins its name and current state to the well's top, drawn by hand over the graph. */
+.mk-names-headers .ph { position: absolute; z-index: 2; display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) var(--space-3); background: var(--surface-band); border-block-end: 1px solid var(--border-hairline); border-start-start-radius: calc(var(--radius-panel) - var(--space-2) - 1px); border-start-end-radius: calc(var(--radius-panel) - var(--space-2) - 1px); }
+.mk-names-headers .ph > * { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-names-headers .ph b { font: var(--type-label); }
+.mk-names-headers .ph span { font: var(--type-meta); color: var(--ink-muted); flex: none; }
+.mk-names-headers .ph span.kept { color: var(--selected-ink); }
+</style>
+<div class="mk mk-names-headers gd" role="img" aria-label="As the graph scrolls, the region passing under the top of the well pins its name and current state there; only one machine is named at a time."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-names-headers");
+  if (!root) return;
+  const G = window.GD;
+  const ids = ["when", "read", "types", "save"];
+  const cur = { when: "day", read: "readback", types: "loaded", save: "failed" };
+  const panel = G.panel({ regions: ids, roles: { kept: "save:failed" }, graphH: 380 });
+  const graph = panel.querySelector(".graph");
+  const ph = G.node('<div class="ph" aria-hidden="true"><b></b><span></span></div>');
+  panel.append(ph);
+  root.append(panel);
+  G.run(root, 7600, (t) => {
+    const max = graph.scrollHeight - graph.clientHeight;
+    graph.scrollTop = Math.round(G.kf(t, [[600, 0], [3600, max], [4600, max], [6800, 0]]));
+    ph.style.insetBlockStart = graph.offsetTop + 1 + "px";
+    ph.style.insetInline = `calc(var(--space-2) + 1px)`;
+    const g = graph.getBoundingClientRect();
+    const pinned = ids.find((id) => { const r = graph.querySelector(`.region[data-machine="${id}"]`).getBoundingClientRect(); return r.top < g.top + 1 && r.bottom > g.top + ph.offsetHeight; });
+    ph.style.display = pinned ? "" : "none";
+    if (pinned) {
+      ph.querySelector("b").textContent = G.M[pinned].name;
+      const s = ph.querySelector("span");
+      s.textContent = G.STATE_NAME(pinned, cur[pinned]);
+      s.classList.toggle("kept", pinned === "save");
+    }
+  }, 2100);
+  root.gdKeys = [400, 1500, 2600, 3800];
+})();
+</script>

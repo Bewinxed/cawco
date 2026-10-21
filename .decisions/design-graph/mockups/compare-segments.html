@@ -1,0 +1,35 @@
+<style>
+.mk-compare-segments { padding-block-end: var(--space-2); }
+</style>
+<div class="mk mk-compare-segments gd" role="img" aria-label="With two edits made, an Original and Edited switch in the dock's head swaps what plays: under Original the edited bars turn to outlines and the agent's timing plays; under Edited the edit plays."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-compare-segments");
+  if (!root) return;
+  const G = window.GD;
+  const tabs = '<span class="t-tabs"><span class="t-tabs-pill"></span><button class="t-tab" tabindex="-1" aria-selected="false">Original</button><button class="t-tab" tabindex="-1" aria-selected="true">Edited</button></span>';
+  const dock = G.dock({
+    clips: [{ ...G.MOVE[0] }, { ...G.MOVE[1], at: "--dur-control", diffAt: true }, { ...G.MOVE[2], dur: "--dur-grow", diffDur: true }],
+    headExtra: tabs + '<span class="dk-badge">2 edits</span><span class="dk-text">Reset</span>',
+  });
+  root.append(dock.el);
+  dock.ghost("reveal", 60, 260); dock.ghost("fade", 60, 260);
+  const cur = G.cursor(root), seg = dock.el.querySelector(".t-tabs"), [orig, edit] = seg.querySelectorAll(".t-tab");
+  const within = (t, a, b) => t >= a && t < b, SLOW = 4;
+  let mode = "edited";
+  G.run(root, 7400, (t) => {
+    const m = within(t, 1500, 4300) ? "original" : "edited";
+    if (m !== mode) { mode = m; G.tab(seg, m === "original" ? 0 : 1); }
+    const len = m === "original" ? 320 : dock.total;
+    dock.el.querySelectorAll(".dk-bar").forEach((b) => b.classList.toggle("orig", m === "original" && b.closest('[data-key="reveal"], [data-key="fade"]')));
+    dock.el.querySelectorAll(".dk-ghost").forEach((g) => g.classList.toggle("play", m === "original"));
+    const play = m === "original" ? [1700, 1700 + 320 * SLOW] : [4500, 4500 + dock.total * SLOW];
+    const ms = t < 1700 && m === "edited" ? dock.total : Math.min(len, Math.max(0, (t - play[0]) / SLOW));
+    dock.setT(ms, len); dock.playing(t >= play[0] && t < play[1]);
+    const pts = { rest: G.at(root, dock.el, 0.6, 0.6), orig: G.at(root, orig), edit: G.at(root, edit) };
+    const [x, y] = G.path(t, [[800, 1400, "rest", "orig"], [3600, 4200, "orig", "edit"], [5000, 5800, "edit", "rest"]], pts);
+    cur.set(x, y, "arrow", within(t, 1500, 1650) || within(t, 4300, 4450));
+  }, 2400);
+  root.gdKeys = [600, 2400, 5400];
+})();
+</script>

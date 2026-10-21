@@ -1,0 +1,36 @@
+<style>
+.mk-controls-row { padding-block-end: var(--space-2); }
+</style>
+<div class="mk mk-controls-row gd" role="img" aria-label="A clip's curve chip opens a rail of curve tiles under its own bar; picking a tile sets the curve and closes the rail, and the dock is short again."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-controls-row");
+  if (!root) return;
+  const G = window.GD;
+  const dock = G.dock({ rail: true });
+  root.append(dock.el);
+  const cur = G.cursor(root);
+  const row = dock.row("reveal"), chip = () => row.querySelector('[data-chip="ease"]');
+  const tile = (n) => row.querySelector(`.dk-tile[data-ease="${n}"]`);
+  // Hold the drawing at its tallest, rail open, so the card never jumps.
+  dock.rail("reveal", true); row.querySelector(".dk-railwrap").style.transition = "none";
+  root.style.minBlockSize = root.offsetHeight + "px";
+  dock.rail("reveal", false); void row.offsetHeight; row.querySelector(".dk-railwrap").style.transition = "";
+  const within = (t, a, b) => t >= a && t < b;
+  let ease = null;
+  // Twice round: pick --ease-drawer, then back to --ease-out, so the loop ends where it began.
+  const half = (t, pick, back) => {
+    const open = within(t, 1450, 2800);
+    dock.rail("reveal", open);
+    const chosen = t < 2700 ? back : pick;
+    if (chosen !== ease) { ease = chosen; dock.chips("reveal", { ease: chosen, diffEase: chosen !== "--ease-out" }); row.querySelectorAll(".dk-tile").forEach((x) => x.classList.toggle("on", x.dataset.ease === chosen)); }
+    chip().classList.toggle("open", open);
+    row.querySelectorAll(".dk-tile").forEach((x) => x.classList.toggle("hov", within(t, 2450, 2800) && x.dataset.ease === pick));
+    const pts = { rest: G.at(root, dock.el, 0.82, 0.18), chip: G.at(root, chip(), 0.5, 0.5), tile: G.at(root, tile(pick), 0.5, 0.45) };
+    const [x, y] = G.path(t, [[600, 1300, "rest", "chip"], [1900, 2450, "chip", "tile"], [3100, 3900, "tile", "rest"]], pts);
+    cur.set(x, y, "arrow", within(t, 1400, 1550) || within(t, 2700, 2850));
+  };
+  G.run(root, 9000, (t) => (t < 4500 ? half(t, "--ease-drawer", "--ease-out") : half(t - 4500, "--ease-out", "--ease-drawer")), 2500);
+  root.gdKeys = [400, 1400, 2500, 3400];
+})();
+</script>

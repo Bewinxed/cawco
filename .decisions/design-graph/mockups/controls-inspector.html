@@ -1,0 +1,44 @@
+<style>
+.mk-controls-inspector { padding-block-end: var(--space-2); }
+</style>
+<div class="mk mk-controls-inspector gd" role="img" aria-label="A 280px inspector at the dock's trailing edge shows the selected clip's start, length and curve tiles at all times; clicking a bar selects its clip, and a tile sets its curve."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-controls-inspector");
+  if (!root) return;
+  const G = window.GD;
+  const dock = G.dock({ inspector: '<div class="dk-insp"></div>' });
+  root.append(dock.el);
+  const cur = G.cursor(root), insp = dock.el.querySelector(".dk-insp");
+  let shown = "";
+  const draw = (key, ease) => {
+    const c = dock.clip(key), sig = key + ease;
+    if (sig === shown) return;
+    shown = sig;
+    const start = c.key === "fade" ? "with Reason line" : c.at ? `${c.at} ms in` : "0 ms";
+    insp.innerHTML = `<b>${c.of} ${c.does}</b>
+      <div class="dk-field"><span>Starts</span><span class="dk-chip">${start}</span></div>
+      <div class="dk-field"><span>Length</span><span class="dk-chip"><code>${c.durTok}</code> ${c.dur} ms</span></div>
+      <div class="dk-field"><span>Curve</span><span class="dk-chip">${G.curve(ease, 16, 10)}<code>${ease}</code></span></div>
+      <div class="dk-rail">${G.railTiles(true, ease)}</div>`;
+  };
+  const within = (t, a, b) => t >= a && t < b;
+  G.run(root, 8000, (t) => {
+    const key = within(t, 1500, 2900) ? "label" : "reveal";
+    const ease = key === "label" ? "--ease-crossfade" : within(t, 4300, 6000) ? "--ease-drawer" : "--ease-out";
+    draw(key, ease);
+    for (const c of dock.clips) dock.bar(c.key).classList.toggle("sel", c.key === key);
+    dock.chips("reveal", { ease: key === "reveal" ? ease : "--ease-out", diffEase: key === "reveal" && ease !== "--ease-out" });
+    const pts = {
+      rest: G.at(root, dock.el, 0.45, 0.12),
+      label: G.at(root, dock.bar("label"), 0.5, 0.5),
+      reveal: G.at(root, dock.bar("reveal"), 0.5, 0.5),
+      drawer: G.at(root, insp.querySelector('[data-ease="--ease-drawer"]'), 0.5, 0.45),
+      out: G.at(root, insp.querySelector('[data-ease="--ease-out"]'), 0.5, 0.45),
+    };
+    const [x, y] = G.path(t, [[800, 1400, "rest", "label"], [2200, 2800, "label", "reveal"], [3500, 4200, "reveal", "drawer"], [5200, 5900, "drawer", "out"], [6600, 7400, "out", "rest"]], pts);
+    cur.set(x, y, "arrow", within(t, 1500, 1650) || within(t, 2900, 3050) || within(t, 4300, 4450) || within(t, 6000, 6150));
+  }, 4800);
+  root.gdKeys = [400, 2000, 4800];
+})();
+</script>

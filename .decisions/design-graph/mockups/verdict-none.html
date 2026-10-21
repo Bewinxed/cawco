@@ -1,0 +1,13 @@
+<style>
+.mk-verdict-none { display: grid; justify-items: center; }
+</style>
+<div class="mk mk-verdict-none gd" role="img" aria-label="The kept node stays as it is, with no place for a verdict; the tool is a viewer."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-verdict-none");
+  if (!root) return;
+  const G = window.GD, n = G.M.save.nodes[3];
+  root.append(G.node(`<div class="graph gd-side"><div class="world"><div class="node on"><b>${n.name}</b><p>${n.note}</p><div class="vars"><span class="var on">${n.vars[0]}</span><span class="var">${n.vars[1]}</span></div></div></div></div>`));
+  G.run(root, 0, () => {}, 0);
+})();
+</script>

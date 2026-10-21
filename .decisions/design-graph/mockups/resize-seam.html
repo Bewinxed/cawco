@@ -1,0 +1,41 @@
+<style>
+/* Round 20 §1, design B: width on the left edge; the graph's height on the seam between the graph and the dials. */
+.mk-resize-seam .sash { position: absolute; z-index: 3; }
+.mk-resize-seam .sw { inset-block: var(--radius-panel); inset-inline-start: calc(-1 * var(--space-1)); inline-size: var(--space-3); }
+.mk-resize-seam .ss { inset-inline: var(--radius-panel); block-size: var(--space-3); }
+.mk-resize-seam .sw::after, .mk-resize-seam .ss::after { content: ""; position: absolute; border-radius: var(--radius-pill); background: var(--brand-solid); opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
+.mk-resize-seam .sw::after { inset-block: 0; inset-inline-start: calc(var(--space-1) - 1.5px); inline-size: var(--c-block-drop-line); }
+.mk-resize-seam .ss::after { inset-inline: 0; inset-block-start: -1.5px; block-size: var(--c-block-drop-line); }
+.mk-resize-seam .lit::after { opacity: 1; transition-delay: var(--dur-pop); }
+.mk-resize-seam .drag::after { opacity: 1; transition-delay: 0s; }
+</style>
+<div class="mk mk-resize-seam gd" role="img" aria-label="The panel's width drags from its left edge, and the graph's height from the seam between the graph and the dials; dragging the seam moves the dials and the panel's foot with it."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-resize-seam");
+  if (!root) return;
+  const G = window.GD;
+  const page = G.node(`<div class="gd-page"><div class="gd-stage">${G.form()}</div></div>`);
+  const panel = G.panel({ regions: ["save"], roles: { kept: "save:failed" }, graphH: 300 });
+  for (const c of ["sw", "ss"]) panel.append(G.node(`<span class="sash ${c}"></span>`));
+  page.append(panel);
+  root.append(page);
+  const cur = G.cursor(root), graph = panel.querySelector(".graph");
+  const [sw, ss] = [panel.querySelector(".sw"), panel.querySelector(".ss")];
+  const size = (w, h) => { panel.style.setProperty("--pw", w + "px"); graph.style.height = h + "px"; ss.style.insetBlockStart = graph.offsetTop + graph.offsetHeight + "px"; };
+  size(520, 360); root.style.minBlockSize = root.offsetHeight + "px"; size(448, 300);
+  const within = (t, a, b) => t >= a && t < b;
+  G.run(root, 9000, (t) => {
+    size(G.kf(t, [[1500, 448], [2500, 520], [5300, 520], [6300, 448]]), G.kf(t, [[3400, 300], [4400, 360], [7200, 360], [8000, 300]]));
+    G.showKept(graph);
+    const pts = { p0: G.at(root, panel, 0, 0, -120, 150), edge: G.at(root, panel, 0, 0, 0, 170), seam: G.at(root, ss, 0.5, 0, 0, 4) };
+    const [x, y] = G.path(t, [[600, 1200, "p0", "edge"], [2700, 3200, "edge", "seam"], [4600, 5100, "seam", "edge"], [6500, 7000, "edge", "seam"], [8200, 8900, "seam", "p0"]], pts);
+    const onW = within(t, 1200, 2700) || within(t, 5100, 6500), onS = within(t, 3200, 4600) || within(t, 7000, 8200);
+    const down = within(t, 1500, 2500) || within(t, 3400, 4400) || within(t, 5300, 6300) || within(t, 7200, 8000);
+    cur.set(x, y, onW ? "ew" : onS ? "ns" : "arrow", down);
+    sw.classList.toggle("lit", onW); ss.classList.toggle("lit", onS);
+    sw.classList.toggle("drag", onW && down); ss.classList.toggle("drag", onS && down);
+  }, 4000);
+  root.gdKeys = [400, 2200, 3300, 4000];
+})();
+</script>

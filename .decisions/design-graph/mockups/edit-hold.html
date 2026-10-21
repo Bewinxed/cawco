@@ -1,0 +1,12 @@
+<style>
+.mk-edit-hold { display: grid; gap: var(--space-4); padding-block-end: var(--space-2); }
+.mk-edit-hold .frame { inline-size: min(100%, 600px); justify-self: center; }
+</style>
+<div class="mk mk-edit-hold gd" role="img" aria-label="Dragging Reason line to start at 120ms and dropping it leaves the playhead where it was, with the form above held at that moment; pressing Play shows the edit."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-edit-hold");
+  if (!root) return;
+  window.GD.editDemo(root, "hold");
+})();
+</script>

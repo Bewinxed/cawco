@@ -1,0 +1,12 @@
+<style>
+.mk-edit-replay { display: grid; gap: var(--space-4); padding-block-end: var(--space-2); }
+.mk-edit-replay .frame { inline-size: min(100%, 600px); justify-self: center; }
+</style>
+<div class="mk mk-edit-replay gd" role="img" aria-label="Dragging Reason line to start at 120ms and dropping it plays the move once from the start, so the form's reason line unfolds later on the page above; Reset plays it once more."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-edit-replay");
+  if (!root) return;
+  window.GD.editDemo(root, "replay");
+})();
+</script>

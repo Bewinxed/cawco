@@ -1,0 +1,51 @@
+<style>
+.mk-names-band { display: grid; justify-items: center; }
+/* Clarity §2, design A: a band pinned at the top of the graph well, one cell per machine. */
+.mk-names-band .ix { position: sticky; inset-block-start: 0; z-index: 2; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--space-1); padding: var(--space-1); background: var(--surface-band); border-block-end: 1px solid var(--border-hairline); }
+.mk-names-band .ix-cell { display: grid; min-inline-size: 0; padding: var(--space-1) var(--space-2); border-radius: var(--radius-xs); transition: background-color var(--dur-control) var(--ease-out), scale var(--dur-control) var(--ease-out); }
+.mk-names-band .ix-cell > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-names-band .ix-n { font: var(--type-meta); color: var(--ink-muted); }
+.mk-names-band .ix-s { font: var(--type-label); color: var(--ink-strong); }
+.mk-names-band .ix-cell.on { background: var(--selected-bg); }
+.mk-names-band .ix-cell.on .ix-s { color: var(--selected-ink); }
+.mk-names-band .ix-cell.hov { background: var(--surface-hover); }
+.mk-names-band .ix-cell.down { scale: var(--press-scale); }
+</style>
+<div class="mk mk-names-band gd" role="img" aria-label="A band over the graph names all four state machines and the state each is in, the kept one in coral; pressing a cell jumps the graph to that machine at once."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-names-band");
+  if (!root) return;
+  const G = window.GD;
+  const ids = ["when", "read", "types", "save"];
+  const panel = G.panel({ regions: ids, roles: { kept: "save:failed" }, graphH: 380 });
+  const graph = panel.querySelector(".graph");
+  const cur = { when: "day", read: "readback", types: "loaded", save: "failed" };
+  const band = G.node(`<div class="ix">${ids.map((id) => `<span class="ix-cell${id === "save" ? " on" : ""}" data-machine="${id}" title="${G.M[id].name} · ${G.STATE_NAME(id, cur[id])}"><span class="ix-n">${G.M[id].name}</span><span class="ix-s">${G.STATE_NAME(id, cur[id])}</span></span>`).join("")}</div>`);
+  graph.prepend(band);
+  root.append(panel);
+  const cursor = G.cursor(root), cell = (id) => band.querySelector(`[data-machine="${id}"]`);
+  // A press scrolls to that machine at once: its header at the band's foot, or for the kept one, its kept node in view.
+  const jump = (id) => {
+    const g = graph.getBoundingClientRect(), off = (el) => el.getBoundingClientRect().top - g.top + graph.scrollTop, gap = 6;
+    const reg = graph.querySelector(`.region[data-machine="${id}"]`);
+    if (id !== "save") return off(reg) - band.offsetHeight - gap;
+    const n = graph.querySelector(".node.on");
+    return Math.max(off(n) + n.offsetHeight + gap - graph.clientHeight, Math.min(off(reg) - band.offsetHeight - gap, off(n) - band.offsetHeight - gap));
+  };
+  const within = (t, a, b) => t >= a && t < b;
+  G.run(root, 7000, (t) => {
+    const view = within(t, 1400, 3100) ? "when" : within(t, 3100, 4800) ? "types" : "save";
+    const top = Math.round(jump(view));
+    if (Math.abs(graph.scrollTop - top) > 1) graph.scrollTop = top;
+    for (const id of ids) {
+      cell(id).classList.toggle("hov", (id === "when" && within(t, 1300, 1500)) || (id === "types" && within(t, 3000, 3200)));
+      cell(id).classList.toggle("down", (id === "when" && within(t, 1400, 1520)) || (id === "types" && within(t, 3100, 3220)) || (id === "save" && within(t, 4800, 4920)));
+    }
+    const pts = { rest: G.at(root, graph, 0.7, 0.75), when: G.at(root, cell("when")), types: G.at(root, cell("types")), save: G.at(root, cell("save")) };
+    const [x, y] = G.path(t, [[700, 1300, "rest", "when"], [2400, 3000, "when", "types"], [4100, 4700, "types", "save"], [5800, 6600, "save", "rest"]], pts);
+    cursor.set(x, y, "arrow", within(t, 1400, 1520) || within(t, 3100, 3220) || within(t, 4800, 4920));
+  }, 2200);
+  root.gdKeys = [600, 2200, 3800, 5400];
+})();
+</script>

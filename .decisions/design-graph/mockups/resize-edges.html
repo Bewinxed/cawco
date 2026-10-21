@@ -1,0 +1,45 @@
+<style>
+/* Round 20 §1, design A: three hit zones over the panel's free edges, nothing drawn at rest.
+   Insets count from the padding edge, inside the 1px border: the lit line sits 2.5px in, on the border. */
+.mk-resize-edges .sash { position: absolute; z-index: 3; }
+.mk-resize-edges .sw { inset-block: var(--radius-panel); inset-inline-start: calc(-1 * var(--space-1)); inline-size: var(--space-3); }
+.mk-resize-edges .sh { inset-inline: var(--radius-panel); inset-block-end: calc(-1 * var(--space-1)); block-size: var(--space-3); }
+.mk-resize-edges .sc { inset-inline-start: calc(-1 * var(--space-1)); inset-block-end: calc(-1 * var(--space-1)); inline-size: calc(var(--radius-panel) + var(--space-1)); block-size: calc(var(--radius-panel) + var(--space-1)); }
+.mk-resize-edges .sw::after, .mk-resize-edges .sh::after { content: ""; position: absolute; border-radius: var(--radius-pill); background: var(--brand-solid); opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
+.mk-resize-edges .sw::after { inset-block: 0; inset-inline-start: calc(var(--space-1) - 1.5px); inline-size: var(--c-block-drop-line); }
+.mk-resize-edges .sh::after { inset-inline: 0; inset-block-end: calc(var(--space-1) - 1.5px); block-size: var(--c-block-drop-line); }
+.mk-resize-edges .lit::after { opacity: 1; transition-delay: var(--dur-pop); }
+.mk-resize-edges .drag::after { opacity: 1; transition-delay: 0s; }
+</style>
+<div class="mk mk-resize-edges gd" role="img" aria-label="The panel resizes from its own edges: the left edge lights and drags wider, the bottom-left corner drags width and height together, and the foot drags the graph's height. Nothing is drawn at rest."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-resize-edges");
+  if (!root) return;
+  const G = window.GD;
+  const page = G.node(`<div class="gd-page"><div class="gd-stage">${G.form()}</div></div>`);
+  const panel = G.panel({ regions: ["save"], roles: { kept: "save:failed" }, graphH: 300 });
+  for (const c of ["sw", "sh", "sc"]) panel.append(G.node(`<span class="sash ${c}"></span>`));
+  page.append(panel);
+  root.append(page);
+  const cur = G.cursor(root), graph = panel.querySelector(".graph");
+  const [sw, sh] = [panel.querySelector(".sw"), panel.querySelector(".sh")];
+  const size = (w, h) => { panel.style.setProperty("--pw", w + "px"); graph.style.height = h + "px"; };
+  // Hold the drawing's height at its tallest so the card never jumps while the panel grows.
+  size(520, 360); root.style.minBlockSize = root.offsetHeight + "px"; size(448, 300);
+  const within = (t, a, b) => t >= a && t < b;
+  G.run(root, 7600, (t) => {
+    size(G.kf(t, [[1500, 448], [2500, 520], [3400, 520], [4400, 448]]), G.kf(t, [[3400, 300], [4400, 360], [5300, 360], [6300, 300]]));
+    G.showKept(graph);
+    const pts = { p0: G.at(root, panel, 0, 0, -120, 150), edge: G.at(root, panel, 0, 0, 0, 170), corner: G.at(root, panel, 0, 1, 2, -2), foot: G.at(root, panel, 0.55, 1, 0, 0) };
+    const [x, y] = G.path(t, [[600, 1200, "p0", "edge"], [2700, 3200, "edge", "corner"], [4600, 5100, "corner", "foot"], [6500, 7300, "foot", "p0"]], pts);
+    const kind = within(t, 1200, 2700) ? "ew" : within(t, 3200, 4600) ? "nesw" : within(t, 5100, 6500) ? "ns" : "arrow";
+    const down = within(t, 1500, 2500) || within(t, 3400, 4400) || within(t, 5300, 6300);
+    cur.set(x, y, kind, down);
+    const onW = within(t, 1200, 2700) || within(t, 3200, 4600), onH = within(t, 3200, 4600) || within(t, 5100, 6500);
+    sw.classList.toggle("lit", onW); sh.classList.toggle("lit", onH);
+    sw.classList.toggle("drag", onW && down); sh.classList.toggle("drag", onH && down);
+  }, 2200);
+  root.gdKeys = [400, 1400, 2200, 4000, 5800];
+})();
+</script>

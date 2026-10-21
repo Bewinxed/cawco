@@ -1,0 +1,11 @@
+<style>
+.mk-tokens-only { padding-block-end: var(--space-2); }
+</style>
+<div class="mk mk-tokens-only gd" role="img" aria-label="Dragging a clip's end snaps it from token to token along the duration ladder, its readout naming each token; 300ms can't be reached."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-tokens-only");
+  if (!root) return;
+  window.GD.lengthDrag(root, "tokens");
+})();
+</script>

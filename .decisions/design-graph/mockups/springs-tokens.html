@@ -1,0 +1,18 @@
+<style>
+.mk-springs-tokens { padding-block-end: var(--space-2); }
+</style>
+<div class="mk mk-springs-tokens gd" role="img" aria-label="The curve rail with a ninth tile, Spring, picked for Reason line: its chips read the new settle token at 400ms and a bounce of 0.15."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-springs-tokens");
+  if (!root) return;
+  const G = window.GD;
+  const dock = G.dock({ clips: [{ ...G.MOVE[0] }, { ...G.MOVE[1], dur: 400, durTok: "--spring-settle", ease: "spring", bounce: 0.15, diffDur: true, diffEase: true }, { ...G.MOVE[2] }] });
+  root.append(dock.el);
+  const rail = G.node(`<div class="dk-railwrap open"><div><div class="dk-rail">${G.railTiles([...G.CURVES, "spring"], "spring")}</div></div></div>`);
+  dock.row("reveal").append(rail);
+  dock.bar("reveal").classList.add("sel");
+  dock.row("reveal").querySelector('[data-chip="ease"]').classList.add("open");
+  G.run(root, 0, () => {}, 0);
+})();
+</script>

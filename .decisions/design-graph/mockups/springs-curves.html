@@ -1,0 +1,18 @@
+<style>
+.mk-springs-curves { padding-block-end: var(--space-2); }
+</style>
+<div class="mk mk-springs-curves gd" role="img" aria-label="The curve rail with the system's eight curves only, ease-out picked for Reason line."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-springs-curves");
+  if (!root) return;
+  const G = window.GD;
+  const dock = G.dock();
+  root.append(dock.el);
+  const rail = G.node(`<div class="dk-railwrap open"><div><div class="dk-rail">${G.railTiles(true, "--ease-out")}</div></div></div>`);
+  dock.row("reveal").append(rail);
+  dock.bar("reveal").classList.add("sel");
+  dock.row("reveal").querySelector('[data-chip="ease"]').classList.add("open");
+  G.run(root, 0, () => {}, 0);
+})();
+</script>

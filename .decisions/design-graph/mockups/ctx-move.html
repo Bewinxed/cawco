@@ -1,0 +1,32 @@
+<style>
+.mk-ctx-move { display: grid; gap: var(--space-4); }
+.mk-ctx-move .gd-page { --pw: 448px; }
+</style>
+<div class="mk mk-ctx-move gd" role="img" aria-label="The page as decided: the form in Save failed, the graph with only the kept state and the edge into it in coral, and the dock playing the move while a dot rides that edge in step with the playhead."></div>
+<script>
+(() => {
+  const root = document.querySelector(".mk-ctx-move");
+  if (!root) return;
+  const G = window.GD;
+  const page = G.node(`<div class="gd-page"><div class="gd-stage">${G.form()}</div></div>`);
+  // The well at its real 520px, opened on the kept state.
+  const panel = G.panel({ regions: ["types", "save"], roles: { kept: "save:failed" }, graphH: 520 });
+  page.append(panel);
+  const dock = G.dock();
+  root.append(page, dock.el);
+  const graph = panel.querySelector(".graph"), world = graph.querySelector(".world"), save = world.querySelector('[data-machine="save"]');
+  const stage = page.querySelector(".gd-stage");
+  const fit = () => G.showKept(graph);
+  // 0–600 at the move's start; 600 Play; the move runs at a quarter of its speed; the end holds.
+  const SLOW = 4, start = 600, end = start + dock.total * SLOW, period = end + 2600;
+  G.run(root, period, (t) => {
+    fit();
+    const ms = t < start ? 0 : Math.min(dock.total, (t - start) / SLOW);
+    const playing = t >= start && t < end;
+    dock.setT(ms); dock.playing(playing);
+    G.stageAt(stage, dock.clips, ms);
+    G.ride(save, ms / dock.total, playing);
+  }, start + 0.55 * dock.total * SLOW);
+  root.gdKeys = [300, start + 0.3 * dock.total * SLOW, start + 0.7 * dock.total * SLOW, end + 1000];
+})();
+</script>
