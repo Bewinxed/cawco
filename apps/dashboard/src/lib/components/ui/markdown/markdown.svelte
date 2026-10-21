@@ -22,6 +22,7 @@
 </script>
 
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import { untrack } from "svelte";
   import {
     Streamdown,
@@ -29,6 +30,7 @@
     type Theme,
   } from "svelte-streamdown";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { referenceOf } from "#lib/cawco/references.js";
   import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
   import { PROSE } from "#lib/prose.js";
   import { cn } from "#lib/utils.js";
@@ -99,6 +101,13 @@
     descriptionTerm: { base: "" },
     descriptionDetail: { base: "" },
   };
+
+  /**
+   * The link destinations drawn: streamdown's own (`*`: http, https, mailto
+   * and tel) and CawCo's rich references (`cawco:`, core references.ts),
+   * which the `link` snippet below draws. Any other scheme stays blocked.
+   */
+  const LINKS = ["*", "cawco:"];
 
   const COMMENT = /<!--[\s\S]*?-->/g;
   const ESCAPES: Record<string, string> = {
@@ -290,6 +299,7 @@
       markdownVariants({ look }),
       className
     )}
+    allowedLinkPrefixes={LINKS}
     {content}
     controls={{ mermaid: false, table: false }}
     mergeTheme={false}
@@ -312,6 +322,34 @@
       <div class="not-prose my-3">
         <OutputBlock language={token.lang} text={token.text} />
       </div>
+    {/snippet}
+    <!-- A link: a `cawco:` reference is drawn as its kind's element (a
+         session as its chip), or as its label alone when the dashboard
+         knows no such kind or id (references.ts). Any other link is the
+         anchor streamdown draws (its Link element), `href` being the
+         destination streamdown allowed. -->
+    {#snippet link({
+      children,
+      href,
+      token,
+    }: {
+      children: Snippet;
+      href?: string | null;
+      /** The fields of marked's link token read here. */
+      token: { href: string; title?: string | null };
+    })}
+      {@const drawn = referenceOf(token.href)}
+      {#if drawn.draw === "element"}
+        <drawn.element id={drawn.id} />
+      {:else if drawn.draw === "label"}
+        {@render children()}
+      {:else if token.href.startsWith("/")}
+        <a href={token.href} title={token.title}>{@render children()}</a>
+      {:else}
+        <a {href} rel="noopener noreferrer" target="_blank" title={token.title}
+          >{@render children()}</a
+        >
+      {/if}
     {/snippet}
     <!-- Agents write prices and shell variables, not formulas: `$…$` and
          `\(…\)` read as the characters they are. Streamdown lexes them as math,

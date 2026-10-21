@@ -8,6 +8,13 @@
  * - The head-tint bench (desk): the bench (`--layer-bench`) over the shell's
  *   top bar; a tab's details card, opened from the strip, on the floating
  *   layer (`--layer-float`) over the bench and the bar under it.
+ * - A session named in a transcript's words (head-tint, desk, the hub's
+ *   board answering with one real session row): `[label](cawco:session/<id>)`
+ *   draws as that session's chip with the row's title, never "[blocked]"; an
+ *   id the board does not hold, and a kind the dashboard does not know, read
+ *   as their labels; pressing the chip opens the house hover panel with
+ *   "Open session" to the session, on the floating layer over the bench;
+ *   Escape puts it away.
  * - A kit popover over a sticky table head (the overlays bench, desk): a
  *   sticky head on `--layer-sticky` set under the popover's place, and the
  *   popover first at that point.
@@ -19,8 +26,12 @@
  * returns, from the top, named by the nearest `data-slot` (or its tag), with
  * the computed `z-index` of the stacked box it belongs to.
  */
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Page } from "playwright-core";
+import type { InstancesFrame } from "../../../../packages/core/src/frames";
+import type { Envelope } from "../../../../packages/core/src/index";
+import { WIRE_PROTOCOL } from "../../../../packages/core/src/stream";
 import { type Kit, open, type Spec, settle } from "../../kit";
 
 /**
@@ -164,6 +175,257 @@ async function headTint(kit: Kit, base: string): Promise<void> {
   await page.close();
 }
 
+/** The head-tint bench's first session (its `ids[0]`), and the title its board row gives it. */
+const NAMED = "1a2b3c4d-0000-4000-8000-000000000001";
+const NAMED_TITLE = "Cap the tray chip at its pane";
+/** The session whose transcript the bench shows first (`?at=1`). */
+const SHOWN = "1a2b3c4d-0000-4000-8000-000000000002";
+/** An id no row holds. */
+const GONE = "00000000-dead-4000-8000-000000000000";
+const SAID_ID = "reference-chip-said";
+/** The markdown the answer is drawn in: an agent's row carries no message id of its own. */
+const MESSAGE = `[data-pane="${SHOWN}"] [data-slot="md"]:has([data-session-chip])`;
+/** The answer's box (the markdown root is `display: contents`). */
+const MESSAGE_BOX = `[data-pane="${SHOWN}"] [data-slot="msg"]:has([data-session-chip])`;
+const SAID = `Handed the cap to [the tray chip work](cawco:session/${NAMED}). The earlier run, [an earlier try](cawco:session/${GONE}), is gone, and [a pin](cawco:pin/p1) is a kind of its own.`;
+
+/**
+ * The hub's board, as its first frame on the socket says it: one session
+ * row, NAMED, beside the bench's own state (its pulses and transcripts).
+ */
+const BOARD: Envelope<InstancesFrame> = {
+  verb: "frames",
+  machineId: "hub",
+  payload: {
+    kind: "instances",
+    agents: [],
+    continuations: [],
+    formerIds: {},
+    handoffs: {},
+    hubBuild: { startedAt: 0, version: "0.0.0" },
+    instances: [
+      {
+        cwd: "/bench",
+        harness: "claude",
+        id: NAMED,
+        kind: "mainline",
+        launchDir: "known",
+        machineId: "bench",
+        sessionId: null,
+        status: "running",
+        title: NAMED_TITLE,
+      },
+    ],
+    moves: [],
+    noticesSeen: [],
+    protocol: WIRE_PROTOCOL,
+    pulses: {},
+  },
+};
+
+async function sessionChip(kit: Kit, base: string): Promise<void> {
+  const page = await kit.page("desk");
+  await page.routeWebSocket(
+    (url) => url.pathname === "/ws/dashboard",
+    (hubSide) => {
+      hubSide.send(JSON.stringify(BOARD));
+    }
+  );
+  await open(page, `${base}/motion/head-tint`, "[data-head-tint]", 120_000);
+  await page.waitForFunction(() => "__ht" in window);
+  // The agent's answer lands in the shown session's transcript, as a frame
+  // would put it there.
+  await page.evaluate(
+    ([shown, id, words]) => {
+      const debug = (
+        globalThis as unknown as {
+          __cawcoDebug: {
+            state: {
+              sessions: Record<string, { messages: Record<string, unknown>[] }>;
+            };
+          };
+        }
+      ).__cawcoDebug;
+      const session = debug.state.sessions[shown];
+      session.messages = [
+        ...session.messages,
+        {
+          id,
+          instanceId: shown,
+          type: "assistant",
+          content: words,
+          timestamp: new Date().toISOString(),
+        },
+      ];
+    },
+    [SHOWN, SAID_ID, SAID] as const
+  );
+  const message = MESSAGE;
+  const chip = `${message} [data-session-chip="${NAMED}"]`;
+  await page.waitForSelector(chip, { timeout: 15_000 });
+  await settle(page, 300);
+  const read = await page.evaluate(
+    ([m, c]) => {
+      const row = document.querySelector(m);
+      const button = document.querySelector<HTMLElement>(c);
+      const anchors = [...(row?.querySelectorAll("a") ?? [])].map(
+        (a) => a.textContent?.trim() ?? ""
+      );
+      // The chip's line, from the text before it to the line after.
+      // Lines counted by the paragraph's own words, outside the chip.
+      const para = button?.closest("p");
+      const tops = new Set<number>();
+      const walk = para
+        ? document.createTreeWalker(para, NodeFilter.SHOW_TEXT)
+        : null;
+      for (let node = walk?.nextNode(); node; node = walk?.nextNode()) {
+        if (!(node.textContent?.trim() && !button?.contains(node))) {
+          continue;
+        }
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        for (const rect of range.getClientRects()) {
+          tops.add(Math.round(rect.top));
+        }
+      }
+      const lines = [...tops];
+      const lineHeight = para
+        ? Number.parseFloat(getComputedStyle(para).lineHeight)
+        : 0;
+      return {
+        paraHeight: para?.getBoundingClientRect().height ?? 0,
+        lineHeight,
+        lineCount: lines.length,
+        title:
+          button?.querySelector('[data-slot="title"]')?.textContent?.trim() ??
+          null,
+        tag: button?.tagName.toLowerCase() ?? null,
+        height: button?.getBoundingClientRect().height ?? 0,
+        words: row?.textContent?.replace(/\s+/g, " ").trim() ?? "",
+        anchors,
+        blockedEls: document.querySelectorAll("[data-streamdown-link-blocked]")
+          .length,
+        blockedText: document.body.innerText.includes("[blocked]"),
+      };
+    },
+    [message, chip] as const
+  );
+  kit.note(`session chip, the message reads: ${read.words}`);
+  // For the review item: the answer as drawn, and below with the panel open.
+  mkdirSync(kit.out, { recursive: true });
+  await page
+    .locator(MESSAGE_BOX)
+    .screenshot({ path: join(kit.out, "session-chip-message.png") });
+  kit.check(
+    `session-chip: cawco:session/<id> of a board row draws as its chip, titled as the row is ("${NAMED_TITLE}")`,
+    read.tag === "button" && read.title === NAMED_TITLE && read.height > 0,
+    JSON.stringify({ tag: read.tag, title: read.title, height: read.height })
+  );
+  kit.check(
+    "session-chip: the chip's line keeps the text's own height (the paragraph is its lines × its line-height)",
+    read.lineHeight > 0 &&
+      Math.abs(read.paraHeight - read.lineCount * read.lineHeight) < 0.5,
+    JSON.stringify({
+      height: read.paraHeight,
+      lines: read.lineCount,
+      lineHeight: read.lineHeight,
+    })
+  );
+  kit.check(
+    "session-chip: the words after the chip follow it with no space of the chip's own",
+    read.words.includes(`${NAMED_TITLE}. The earlier run`),
+    read.words
+  );
+  kit.check(
+    "session-chip: an id no row holds, and a kind the dashboard does not know, read as their labels, drawn as no link",
+    read.words.includes("The earlier run, an earlier try, is gone") &&
+      read.words.includes("and a pin is a kind") &&
+      read.anchors.length === 0,
+    JSON.stringify({ anchors: read.anchors })
+  );
+  kit.check(
+    'session-chip: "[blocked]" is drawn nowhere on the page',
+    !read.blockedText && read.blockedEls === 0,
+    JSON.stringify({ text: read.blockedText, elements: read.blockedEls })
+  );
+
+  await page.locator(chip).click();
+  const panelId = await page.locator(chip).getAttribute("aria-controls");
+  const panel = `[id="${panelId}"]`;
+  await page.waitForSelector(panel, { timeout: 5000 });
+  await settle(page, 400);
+  const opened = await page.evaluate(
+    ([p, c]) => {
+      const el = document.querySelector(p);
+      const action = el?.querySelector<HTMLAnchorElement>(
+        '[data-slot="acts"] a'
+      );
+      return {
+        expanded: document.querySelector(c)?.getAttribute("aria-expanded"),
+        role: el?.getAttribute("role") ?? null,
+        title:
+          el
+            ?.querySelector('[data-slot="head"] [data-slot="title"]')
+            ?.textContent?.trim() ?? null,
+        action: action?.textContent?.trim() ?? null,
+        href: action?.getAttribute("href") ?? null,
+      };
+    },
+    [panel, chip] as const
+  );
+  kit.check(
+    "session-chip: pressed, it opens the house hover panel: the session's card and Open session to it",
+    opened.expanded === "true" &&
+      opened.role === "dialog" &&
+      opened.title === NAMED_TITLE &&
+      opened.action === "Open session" &&
+      opened.href === `/session/${NAMED}`,
+    JSON.stringify(opened)
+  );
+  const bench = await tokenOf(page, "--layer-bench");
+  const float = await tokenOf(page, "--layer-float");
+  const at = await centre(page, panel);
+  const over = await chainAt(page, at.x, at.y);
+  kit.note(`session chip, the panel's centre: ${said(over)}`);
+  const shot = await page.locator(MESSAGE_BOX).boundingBox();
+  const panelBox = await page.locator(panel).boundingBox();
+  if (shot && panelBox) {
+    const x = Math.min(shot.x, panelBox.x) - 16;
+    const y = Math.min(shot.y, panelBox.y) - 16;
+    await page.screenshot({
+      path: join(kit.out, "session-chip-open.png"),
+      clip: {
+        x,
+        y,
+        width:
+          Math.max(shot.x + shot.width, panelBox.x + panelBox.width) - x + 16,
+        height:
+          Math.max(shot.y + shot.height, panelBox.y + panelBox.height) - y + 16,
+      },
+    });
+  }
+  kit.check(
+    `session-chip: the panel (--layer-float ${float}) stands over the bench (${bench})`,
+    over[0]?.z === float && over.findIndex((h) => h.z === bench) > 0
+  );
+  await page.keyboard.press("Escape");
+  await settle(page, 400);
+  const shut = await page.evaluate(
+    ([p, c]) => ({
+      panel: document.querySelector(p) !== null,
+      expanded: document.querySelector(c)?.getAttribute("aria-expanded"),
+      focused: document.activeElement === document.querySelector(c),
+    }),
+    [panel, chip] as const
+  );
+  kit.check(
+    "session-chip: Escape puts the panel away and focus goes back to the chip",
+    !shut.panel && shut.expanded === "false" && shut.focused,
+    JSON.stringify(shut)
+  );
+  await page.close();
+}
+
 async function popoverOverSticky(kit: Kit, base: string): Promise<void> {
   const page = await kit.page("desk");
   await open(page, `${base}/motion/overlays?only=popover`, "[data-open]");
@@ -281,7 +543,13 @@ const spec: Spec = {
   name: "layer-stack",
   async run(kit) {
     const base = await kit.bench();
-    for (const scene of [headTint, popoverOverSticky, skipLink, railSheet]) {
+    for (const scene of [
+      headTint,
+      sessionChip,
+      popoverOverSticky,
+      skipLink,
+      railSheet,
+    ]) {
       try {
         // biome-ignore lint/performance/noAwaitInLoops: one scene at a time
         await scene(kit, base);

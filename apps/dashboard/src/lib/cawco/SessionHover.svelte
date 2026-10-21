@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { ThreadMessage } from "@cawco/core";
   /**
    * The rail's session card: resting the pointer on a session row (Working,
    * Finished, a project's sessions) opens the delegate tray's panel
@@ -17,22 +16,15 @@
    * would paint under the panes.
    */
   import { Portal } from "bits-ui";
-  import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { IconAsk, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
-  import { STOPPING_LABEL } from "./activity";
-  import { cawco, isFailed, readThread, readTranscript } from "./client.svelte";
+  import { cawco, readTranscript } from "./client.svelte";
   import HoverPanel from "./HoverPanel.svelte";
-  import CawFace from "./home/CawFace.svelte";
-  import { instanceTitle } from "./home/home-state.svelte";
-  import { markHue, sessionSprite } from "./mark";
-  import RunSteps from "./RunSteps.svelte";
+  import SessionCard, {
+    readThreadCard,
+    runningStep,
+    tailOf,
+  } from "./SessionCard.svelte";
   import { threadIdOf } from "./thread-tabs";
-  import DelegateTail, {
-    type TailNote,
-  } from "./transcript/DelegateTail.svelte";
-  import { askDetailOf } from "./transcript/present";
   import { runIdOf } from "./workflow-runs";
-  import { workflowState } from "./workflow-state.svelte";
 
   /** The rail whose session rows open the card. */
   let { within }: { within: HTMLElement | undefined } = $props();
@@ -69,57 +61,6 @@
       // biome-ignore lint/complexity/noVoid: fire-and-forget; the card draws whatever has arrived.
       void readTranscript(tail);
     }
-  }
-
-  /** A thread's card reads its messages, so it opens on its newest line. */
-  function readThreadCard(threadId: string): void {
-    const thread = cawco.threadOf(`thread:${threadId}`);
-    if (!thread) {
-      return;
-    }
-    if (!cawco.threadMessagesOf(threadId)) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget; the card draws whatever has arrived.
-      void readThread(thread.projectId, threadId).catch(() => undefined);
-    }
-  }
-
-  /**
-   * The session whose live tail the card draws: a run's running step, the
-   * session itself, and none for a thread, whose card is its newest line
-   * (held for a tail that never comes, the card kept the last one's size).
-   */
-  const watchOf = (id: string | null): string | null => {
-    if (!id || threadIdOf(id)) {
-      return null;
-    }
-    return runIdOf(id) ? runningStep(id) : id;
-  };
-
-  /** A thread's newest line, as the card's tail ends on it. */
-  const newestLine = (message: ThreadMessage | undefined): string | null => {
-    if (!message) {
-      return null;
-    }
-    const words = message.author === "event" ? message.noteTitle : message.body;
-    return words.trim().split("\n")[0] ?? null;
-  };
-  const SPEAKER: Record<ThreadMessage["author"], string> = {
-    caw: "Caw",
-    event: "Event",
-    you: "You",
-  };
-
-  /** The session of a run's running step, whose tail is the run's live tail. */
-  function runningStep(id: string): string | null {
-    const runId = runIdOf(id);
-    if (!runId) {
-      return null;
-    }
-    return (
-      workflowState.details[runId]?.steps.find(
-        (step) => step.status === "running" && step.instanceId
-      )?.instanceId ?? null
-    );
   }
 
   /** The row the open card stands beside. */
@@ -254,74 +195,6 @@
       cancelAnimationFrame(frame);
     };
   });
-
-  type Tone = "live" | "needs" | "stopping" | "done" | "failed" | "idle";
-  const toneOf = (id: string): Tone => {
-    const thread = cawco.threadOf(id);
-    if (thread) {
-      if (thread.status === "needs-you") {
-        return "needs";
-      }
-      return thread.status === "working" ? "live" : "idle";
-    }
-    const row = cawco.instanceIndex.byId.get(id);
-    if (row && isFailed(row)) {
-      return "failed";
-    }
-    // Asked to end, its machine yet to confirm the process gone.
-    if (row?.status === "stopping") {
-      return "stopping";
-    }
-    if (
-      (runIdOf(id) && cawco.activityOf(id) === "blocked") ||
-      (cawco.session(id)?.pending ?? []).some((each) => !each.routedTo)
-    ) {
-      return "needs";
-    }
-    if (cawco.activityOf(id) === "working") {
-      return "live";
-    }
-    return row?.status === "stopped" ? "done" : "idle";
-  };
-  const WORD: Record<Tone, string> = {
-    live: "Working",
-    needs: "Needs you",
-    stopping: STOPPING_LABEL,
-    done: "Finished",
-    failed: "Failed",
-    idle: "Idle",
-  };
-
-  /** The row the tail ends on: the question waiting, or the failure. */
-  const noteOf = (id: string, tone: Tone): TailNote | null => {
-    if (tone === "needs") {
-      const asking = (cawco.session(id)?.pending ?? []).find(
-        (each) => !each.routedTo
-      );
-      if (asking) {
-        const text = askDetailOf(
-          asking.toolName,
-          asking.input as Parameters<typeof askDetailOf>[1]
-        );
-        return { key: `ask:${text}`, kind: "ask", text };
-      }
-    }
-    if (tone === "failed") {
-      // A delegate whose work item failed fails for the item's reason; its
-      // session's own error is only the process's.
-      const item = cawco.workItemFor(id);
-      const why =
-        item?.state === "failed"
-          ? item.firstLines.error
-          : cawco.instanceIndex.byId.get(id)?.lastError;
-      return {
-        key: "fail",
-        kind: "fail",
-        text: why || "It failed without saying why.",
-      };
-    }
-    return null;
-  };
 </script>
 
 <Portal>
@@ -333,87 +206,10 @@
     onpointerleave={release}
     side="right"
     style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: var(--c-session-hover-room)"
-    watch={watchOf(openId)}
+    watch={tailOf(openId)}
   >
     {#snippet children(id)}
-      {@const row = cawco.instanceIndex.byId.get(id)}
-      {@const tone = toneOf(id)}
-      {@const Sprite = sessionSprite(id)}
-      {@const runId = runIdOf(id)}
-      {@const thread = cawco.threadOf(id)}
-      <div data-nest-host>
-        <div
-          data-slot="head"
-          class="mark-line mb-space-2 flex min-w-c-session-hover-head items-center gap-space-2"
-        >
-          <span
-            data-slot="mark"
-            aria-hidden="true"
-            class="grid size-c-row-mark flex-none place-items-center rounded-xs bg-(--mark-bg) bg-mark-overlay"
-            style:--mark-bg="var(--mark-{markHue(row?.cwd || id)})"
-            data-box
-          >
-            {#if thread}
-              <CawFace size={14} status={thread.status} />
-            {:else}
-              <Sprite />
-            {/if}
-          </span>
-          <span
-            data-slot="title"
-            class="min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap text-size-label font-medium text-ink-strong"
-            >{row ? instanceTitle(row) : "Session"}</span
-          >
-          <span
-            aria-label={WORD[tone]}
-            class="grid size-icon-md flex-none place-items-center text-ink-muted status-needs:text-status-attn-ink status-done:text-status-done-ink status-failed:text-status-fail-ink"
-            data-session-hover-tone={tone}
-            data-status={tone}
-            data-box
-            role="img"
-          >
-            {#if tone === "live"}
-              <span
-                data-slot="dot"
-                class="size-space-2 rounded-pill bg-status-live-glyph"
-              ></span>
-            {:else if tone === "needs"}
-              <IconAsk />
-            {:else if tone === "stopping"}
-              <Spinner aria-hidden="true" role="presentation" />
-            {:else if tone === "done"}
-              <IconSuccess />
-            {:else if tone === "failed"}
-              <IconWarningTriangle />
-            {/if}
-          </span>
-        </div>
-        {#if thread}
-          <!-- A thread's card: its newest line. -->
-          {@const newest = cawco.threadMessagesOf(thread.id)?.at(-1)}
-          {@const line = newestLine(newest)}
-          {#if newest && line}
-            <p class="flex min-w-0 gap-space-2 text-size-meta text-ink-strong">
-              <span data-slot="who" class="flex-none font-medium"
-                >{SPEAKER[newest.author]}</span
-              >
-              <span class="min-w-0 truncate">{line}</span>
-            </p>
-          {/if}
-        {:else if runId}
-          <!-- A workflow run's card: its steps under it, then the live tail of
-             the one running, the way a session's card ends on its own. -->
-          {@const step = runningStep(id)}
-          <RunSteps glyph={'[data-slot="mark"]'} interactive={false} {runId} />
-          {#if step}
-            <DelegateTail instanceId={step} note={null} />
-          {:else if tone === "failed"}
-            <DelegateTail instanceId="" note={noteOf(id, tone)} />
-          {/if}
-        {:else}
-          <DelegateTail instanceId={id} note={noteOf(id, tone)} />
-        {/if}
-      </div>
+      <SessionCard {id} />
     {/snippet}
   </HoverPanel>
 </Portal>

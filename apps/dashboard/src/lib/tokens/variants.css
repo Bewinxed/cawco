@@ -341,6 +341,7 @@
 @custom-variant slot-actions-ledger (&[data-slot="actions-ledger"]);
 @custom-variant slot-actions-table-col-status (&[data-slot="actions-table-col-status"]);
 @custom-variant slot-actions-table-col-when (&[data-slot="actions-table-col-when"]);
+@custom-variant slot-acts (&[data-slot="acts"]);
 @custom-variant slot-age (&[data-slot="age"]);
 @custom-variant slot-alert-action (&[data-slot="alert-action"]);
 @custom-variant slot-alert-dialog-media (&[data-slot="alert-dialog-media"]);
