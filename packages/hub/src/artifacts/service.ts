@@ -1065,15 +1065,18 @@ export interface ArtifactServiceDeps {
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
   /**
-   * Publishes `artifact` to its session's panel at a fresh revision (the open
-   * frame every view of the session hears); why not, when its server could
-   * not be started. Whether a view put it on screen is that view's word
-   * ({@link Artifacts.shown}). One the person opened is kept as what they
-   * have in front ({@link ArtifactServiceDeps.personShown}).
+   * Publishes `artifact` to session `panel`'s panel (its own session's
+   * unless named: another session of its delegation tree shows it in its
+   * own) at a fresh revision (the open frame every view of that session
+   * hears); why not, when its server could not be started. Whether a view
+   * put it on screen is that view's word ({@link Artifacts.shown}). One the
+   * person opened is kept as what they have in front
+   * ({@link ArtifactServiceDeps.personShown}).
    */
   open: (
     artifact: ArtifactRow,
-    by: PanelHand
+    by: PanelHand,
+    panel?: string | null
   ) => Promise<{ ok: true; revision: string } | { error: string; ok: false }>;
   /** The workspace a session runs in, by id; undefined outside one. */
   ownWorkspace: (instance: InstanceRow) => string | undefined;
@@ -1431,6 +1434,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return row;
     }
     return own(instance, id);
+  };
+
+  /**
+   * Artifact `id` for a look that changes nothing (a show, a view's word that
+   * it has it, a canvas's map): the session's own, one it made, or another
+   * session's of its delegation tree ({@link inTree}); refused as not there
+   * otherwise. Every change keeps to {@link own}.
+   */
+  const viewable = (instance: InstanceRow, id: string): ArtifactRow => {
+    const row = db.get(id);
+    if (
+      row &&
+      (row.instanceId === instance.id ||
+        row.madeBy === instance.id ||
+        inTree(instance, row))
+    ) {
+      return row;
+    }
+    throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
   };
 
   /**
@@ -2445,23 +2467,27 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Publishes the artifact to its session's panel and waits for a view to
-   * have it on screen; `started` is false when its server could not even be
-   * started, and nothing was published.
+   * Publishes the artifact to session `panel`'s panel (its own session's
+   * unless named) and waits for a view to have it on screen; `started` is
+   * false when its server could not even be started, and nothing was
+   * published. Only its own session's show marks it opened (handed, shown
+   * at): another session of the tree showing it changes nothing of it.
    */
   const show = async (
     row: ArtifactRow,
-    by: PanelHand
+    by: PanelHand,
+    panel = row.instanceId
   ): Promise<
     | { opened: true; started: true }
     | { opened: false; started: boolean; why: string }
   > => {
-    const published = await deps.open(row, by);
+    const published = await deps.open(row, by, panel);
     if (!published.ok) {
       return { opened: false, why: published.error, started: false };
     }
+    const owns = panel === row.instanceId;
     const meta = docs.doc(row.id).getMap("meta");
-    if (meta.get(HANDED) === true) {
+    if (owns && meta.get(HANDED) === true) {
       docs.transact(row.id, "hub", () => meta.delete(HANDED));
     }
     const shown = await shownBy(row.id, published.revision);
@@ -2485,7 +2511,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         started: true,
       };
     }
-    db.update(row.id, { shownAt: new Date() });
+    if (owns) {
+      db.update(row.id, { shownAt: new Date() });
+    }
     return { opened: true, started: true };
   };
   /** A show's answer, as the tools and the panel's Show give it. */
@@ -4656,7 +4684,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * miniature, read on the workspace its stage runs in.
      */
     mapOf: async (instanceId: string, id: string): Promise<CanvasMap> => {
-      const row = own(sessionOf(instanceId), id);
+      const row = viewable(sessionOf(instanceId), id);
       const sheet = sheetOf(row);
       const component = (
         docs.doc(row.id).getMap("meta").get("sheet") as SheetRead | undefined
@@ -4858,15 +4886,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * Brings an artifact to the front of its owner's panel and waits for a
-     * view to have it on screen ({@link Opened}); a refusal when its server
-     * could not be started. Its owner's to call, or the person's: what they
-     * open is what the panel goes back to when the agent takes away
-     * something it showed over it. A delegate that handed it up is refused:
-     * its parent's panel changes only when the parent opens it. The owner's
-     * show of one with a held next version (or of that version, by its id)
-     * opens the next version ({@link promote}); the person's shows what the
-     * panel has.
+     * Brings an artifact to the front of session `instanceId`'s panel and
+     * waits for a view to have it on screen ({@link Opened}); a refusal when
+     * its server could not be started. The session shows its own, one it
+     * made, or another session's of its delegation tree ({@link viewable}),
+     * at the agent's call or the person's: what they open is what the panel
+     * goes back to when the agent takes away something it showed over it.
+     * Another session's opens in the caller's panel as it stands, never the
+     * owner's, and nothing of it changes. The owner's show of one with a held
+     * next version (or of that version, by its id) opens the next version
+     * ({@link promote}); the person's shows what the panel has.
      */
     show: async (
       instanceId: string,
@@ -4874,22 +4903,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       by: PanelHand
     ): Promise<Opened> => {
       const instance = sessionOf(instanceId);
-      const found = ownedOrMade(instance, id);
+      const found = viewable(instance, id);
       let row = found.heldFor === null ? found : db.get(found.heldFor);
       if (!row) {
         throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
       }
-      if (row.instanceId !== instance.id) {
-        throw new ArtifactRefusal(
-          409,
-          `${named(row)[0]?.toUpperCase()}${named(row).slice(1)} is your parent's: it opens in their panel when they call artifact_show.`
-        );
-      }
-      const next = by === "agent" ? db.heldOf(row.id) : undefined;
+      const next =
+        by === "agent" && row.instanceId === instance.id
+          ? db.heldOf(row.id)
+          : undefined;
       if (next) {
         row = await promote(row, next);
       }
-      const shown = await show(row, by);
+      const shown = await show(row, by, instance.id);
       if (!shown.started) {
         throw new ArtifactRefusal(503, shown.why);
       }
@@ -4971,8 +4997,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * starts waiting (a fast page answers before the publish returns).
      */
     shown: (instanceId: string, id: string, ack: ShownAck): { heard: true } => {
-      const row = own(sessionOf(instanceId), id);
-      if (ack.ok) {
+      const row = viewable(sessionOf(instanceId), id);
+      if (ack.ok && row.instanceId === instanceId) {
         db.update(row.id, { openedRevision: row.revision });
       }
       const key = shownKey(row.id, ack.revision);

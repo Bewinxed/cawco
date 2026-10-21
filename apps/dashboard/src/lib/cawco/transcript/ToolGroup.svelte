@@ -11,7 +11,7 @@
   import { getContext, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
-  import { showArtifact } from "#lib/cawco/artifact-api.js";
+  import { ShowRefused, showArtifact } from "#lib/cawco/artifact-api.js";
   import { cawco, revealPreview } from "#lib/cawco/client.svelte.js";
   import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
@@ -200,7 +200,11 @@
 
   /** Favicons that failed to load; their rows keep the tool's glyph. */
   const brokenIcons = new SvelteSet<string>();
-  /** Preview calls whose open request is out, and why the last one failed, said under its row. */
+  /**
+   * Preview calls whose open request is out, and why the last one failed,
+   * said under its row: with the way back, a press again, unless the hub
+   * said the artifact is no longer there (404), which no press brings back.
+   */
   const opening = new SvelteSet<string>();
   const openFailed = new SvelteMap<string, string>();
 
@@ -212,7 +216,14 @@
       await showArtifact(m.instanceId, artifact.id);
       revealPreview(m.instanceId);
     } catch (error) {
-      openFailed.set(key, failureWords(error));
+      // A hub that didn't answer already says to try again.
+      const retry = error instanceof ShowRefused && error.status !== 404;
+      openFailed.set(
+        key,
+        retry
+          ? `${failureWords(error)} Press it to try again.`
+          : failureWords(error)
+      );
     } finally {
       opening.delete(key);
     }
@@ -521,8 +532,7 @@
                 class="max-w-(--tx-preview-max) mb-space-2 text-data-bad text-size-meta font-normal"
                 role="alert"
               >
-                Couldn't open {name}: {openFailed.get(callId(m))} Press it to try
-                again.
+                Couldn't open {name}: {openFailed.get(callId(m))}
               </p>
             {/if}
           {:else if hasBody}

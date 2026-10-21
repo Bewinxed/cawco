@@ -88,8 +88,16 @@
  *    all, and listed to it as the parent's; a session of the project
  *    outside the tree is refused it (404); the sibling's artifact_update of
  *    it is refused and its outline stays.
- * H9. The delegate's own artifact_show of what it handed up is refused, and
- *    the parent's panel keeps its page.
+ * T4–T7. A session shows in its own panel what its tree may read, and
+ *    nothing of it changes: the parent's artifact_show of its delegate's own
+ *    page opens it in the parent's panel and the page stays the delegate's;
+ *    the delegate's artifact_show of its parent's page opens it in the
+ *    delegate's panel and the parent's panel keeps it; a session outside
+ *    the tree is refused the show (404); the parent's artifact_update of
+ *    the delegate's page is still refused with the 403.
+ * H9. The delegate's own artifact_show of what it handed up opens it in the
+ *    delegate's panel: the parent's panel keeps its page, and the hand-off
+ *    still waits on the parent.
  * H8. Once the parent opened it, the delegate's re-create while the
  *    parent's panel shows it is held as its next version: the panel keeps
  *    it, it waits on the parent, the parent is told it changed.
@@ -828,24 +836,30 @@ const handChecks = async ({
   );
 
   if (drawingId) {
-    await treeChecks({ kit, fleet, callIn, parent, drawingId });
+    await treeChecks({ kit, fleet, callIn, parent, ownId, drawingId });
   }
 
-  // H9. The delegate can't open what it handed up: its artifact_show is
-  // refused, and the parent's panel keeps its page.
+  // H9. The delegate's artifact_show of what it handed up opens it in the
+  // delegate's own panel: the parent's panel keeps its page, and the
+  // hand-off still waits on the parent (the show changed nothing of it).
   const delegateShow = await callDelegate("mcp__cawco__artifact_show", {
     id: handedId,
   });
-  const [ownAfterRefused, handedAfterRefused] = await Promise.all([
+  const [ownAfterDelegate, handedAfterDelegate] = await Promise.all([
     shownOf(ownId),
     shownOf(handedId),
   ]);
+  const stillWaiting = (
+    await fleet.api<Listed[]>(`/api/instances/${parent}/artifacts/status`)
+  ).find((one) => one.id === handedId);
   kit.check(
-    "H9: the delegate's artifact_show of the canvas it handed up is refused, and the parent's panel keeps its page",
-    delegateShow.includes("is your parent's: it opens in their panel") &&
-      ownAfterRefused.shown &&
-      !handedAfterRefused.shown,
-    `delegate show: ${delegateShow.slice(-300)}; own ${ownAfterRefused.shown}, handed ${handedAfterRefused.shown}`
+    "H9: the delegate's artifact_show of the canvas it handed up opens it in the delegate's panel; the parent's panel keeps its page and the hand-off still waits on the parent",
+    showedOk(delegateShow) &&
+      panelOf(fleet, delegate) === handedId &&
+      ownAfterDelegate.shown &&
+      !handedAfterDelegate.shown &&
+      stillWaiting?.waitingOn.includes("session") === true,
+    `delegate show: ${delegateShow.slice(-300)}; delegate's panel ${panelOf(fleet, delegate)}; own ${ownAfterDelegate.shown}, handed ${handedAfterDelegate.shown}; list ${JSON.stringify(stillWaiting ?? null)}`
   );
 
   // H6. The parent's artifact_show opens it; it waits on no one for it after.
@@ -881,6 +895,17 @@ const handChecks = async ({
   await refusedHandChecks({ kit, fleet, parent, callDelegate });
 };
 
+/** What session `on`'s panel shows, as the hub keeps it (`shown_previews`); null when it shows nothing. */
+const panelOf = (fleet: KitFleet, on: string): string | null =>
+  fleet.query<{ artifact_id: string }>(
+    "SELECT artifact_id FROM shown_previews WHERE instance_id = ?",
+    on
+  )[0]?.artifact_id ?? null;
+
+/** An artifact_show that went through: opened, or in the panel with no dashboard open to say so (`NO_VIEW`). */
+const showedOk = (answer: string): boolean =>
+  answer.includes('"opened":true') || answer.includes(NO_VIEW);
+
 /** One artifact as artifact_list answers it to another session of the tree: its holder as `session`. */
 interface TreeListed {
   id: string;
@@ -888,6 +913,11 @@ interface TreeListed {
 }
 
 /**
+ * T4–T7: a session shows its tree's artifacts in its own panel, the parent
+ * its delegate's page and the delegate its parent's, a session outside the
+ * tree is refused the show, and the parent's update of its delegate's page
+ * is still refused.
+ *
  * T1–T3: a delegation tree reads its sessions' artifacts (hub
  * delegation-tree.ts `treeSessions`). The delegate's canvas handed to the
  * parent (`drawingId`, drawn by H7) is read by a second delegate of the
@@ -900,18 +930,22 @@ const treeChecks = async ({
   fleet,
   callIn,
   parent,
+  ownId,
   drawingId,
 }: {
   callIn: (on: string) => (tool: string, input: object) => Promise<string>;
   drawingId: string;
   fleet: KitFleet;
   kit: Kit;
+  /** The parent's own page, which its panel shows. */
+  ownId: string;
   parent: string;
 }) => {
   const sibling = await fleet.spawn("claude", "Hand sibling", fleet.repo, {
     parent: { instanceId: parent },
   });
   const outsider = await fleet.spawn("claude", "Hand outsider", fleet.repo);
+  const callParent = callIn(parent);
   const callSibling = callIn(sibling);
   const callOutsider = callIn(outsider);
   const listOf = (on: string) =>
@@ -975,6 +1009,89 @@ const treeChecks = async ({
       after.outline.includes("Handed box") &&
       !after.outline.includes("Sibling box"),
     `update: ${update.slice(-300)}; outline ${after.outline.slice(0, 200)}`
+  );
+
+  // T4. The parent shows its delegate's own page: it opens in the parent's
+  // panel, and the delegate's panel keeps it as its own.
+  const made = await callSibling(CREATE, {
+    kind: "page",
+    name: "sibling-own",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    html: PAGE,
+  });
+  const pageId = made.match(ANSWERED_ID)?.[1];
+  if (!pageId) {
+    kit.check("T4: the delegate's own page is made", false, made.slice(-400));
+    return;
+  }
+  const pageBefore = await fleet.api<{ instanceId: string; shown: boolean }>(
+    `/api/artifacts/${pageId}`
+  );
+  const parentShow = await callParent("mcp__cawco__artifact_show", {
+    id: pageId,
+  });
+  const pageAfter = await fleet.api<{ instanceId: string; shown: boolean }>(
+    `/api/artifacts/${pageId}`
+  );
+  kit.check(
+    "T4: the parent's artifact_show of its delegate's page opens it in the parent's panel; the page stays the delegate's, in its panel",
+    showedOk(parentShow) &&
+      !parentShow.includes("only that session changes it") &&
+      panelOf(fleet, parent) === pageId &&
+      pageAfter.instanceId === sibling &&
+      pageAfter.shown === pageBefore.shown &&
+      panelOf(fleet, sibling) === pageId,
+    `show: ${parentShow.slice(-300)}; parent's panel ${panelOf(fleet, parent)}; page ${JSON.stringify(pageAfter)}`
+  );
+  // The parent's panel goes back to its own page for H9 and H6.
+  await callParent("mcp__cawco__artifact_show", { id: ownId });
+
+  // T5. The delegate shows its parent's page: it opens in the delegate's
+  // panel, and the parent's panel keeps it.
+  const siblingShow = await callSibling("mcp__cawco__artifact_show", {
+    id: ownId,
+  });
+  const ownAfter = await fleet.api<{ instanceId: string; shown: boolean }>(
+    `/api/artifacts/${ownId}`
+  );
+  kit.check(
+    "T5: the delegate's artifact_show of its parent's page opens it in the delegate's panel; the parent's panel keeps it",
+    showedOk(siblingShow) &&
+      panelOf(fleet, sibling) === ownId &&
+      panelOf(fleet, parent) === ownId &&
+      ownAfter.instanceId === parent &&
+      ownAfter.shown,
+    `show: ${siblingShow.slice(-300)}; sibling's panel ${panelOf(fleet, sibling)}; parent's ${panelOf(fleet, parent)}; own ${JSON.stringify(ownAfter)}`
+  );
+
+  // T6. A session outside the tree is refused the show, as it is the read.
+  const outsiderShow = await callOutsider("mcp__cawco__artifact_show", {
+    id: pageId,
+  });
+  kit.check(
+    "T6: a session of the project outside the tree is refused the delegate's page (404), and its panel stays empty of it",
+    outsiderShow.includes(`This session has no artifact ${pageId}.`) &&
+      panelOf(fleet, outsider) !== pageId,
+    `show: ${outsiderShow.slice(-300)}; outsider's panel ${panelOf(fleet, outsider)}`
+  );
+
+  // T7. The parent's artifact_update of its delegate's page is still refused.
+  const pageRevision = (
+    await fleet.api<HeldRead>(`/api/instances/${sibling}/artifacts/${pageId}`)
+  ).revision;
+  const parentUpdate = await callParent(UPDATE, {
+    id: pageId,
+    html: versionPage("parent"),
+  });
+  const pageRead = await fleet.api<HeldRead>(
+    `/api/instances/${sibling}/artifacts/${pageId}`
+  );
+  kit.check(
+    "T7: the parent's artifact_update of its delegate's page is refused with the 403, and the page keeps its revision",
+    parentUpdate.includes("only that session changes it") &&
+      pageRead.revision === pageRevision,
+    `update: ${parentUpdate.slice(-300)}; revision ${pageRevision} → ${pageRead.revision}`
   );
 };
 

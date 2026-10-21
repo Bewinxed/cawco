@@ -325,8 +325,8 @@ export const artifactList = {
 export const artifactShow = {
   name: "artifact_show",
   description:
-    "Bring one of your artifacts to the front of your panel for the person to look at again. Answers " +
-    "`opened` as artifact_create does.",
+    "Bring an artifact, yours or your delegation tree's, to the front of your panel. Answers `opened` as " +
+    "artifact_create does.",
   input: { id },
 };
 

@@ -95,14 +95,32 @@ export async function keepThumbnail(
   );
 }
 
-/** Brings one of a session's artifacts to the front of its panel; the panel follows its frame. */
+/** The hub's refusal of a show, in its own words, with its status: a 404 is an artifact no longer there, which no retry brings back. */
+export class ShowRefused extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/**
+ * Brings an artifact to the front of a session's panel (its own, or one of
+ * its delegation tree's sessions'); the panel follows its frame.
+ */
 export async function showArtifact(
   instanceId: string,
   id: string
 ): Promise<void> {
-  await ok(
-    await fetch(`${artifactsPath(instanceId, id)}/show`, { method: "POST" })
-  );
+  const response = await fetch(`${artifactsPath(instanceId, id)}/show`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    throw new ShowRefused(
+      response.status,
+      (await hubRefusal(response)).message
+    );
+  }
 }
 
 /**

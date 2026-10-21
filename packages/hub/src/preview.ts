@@ -427,8 +427,10 @@ export interface PreviewListenerDeps {
   send: ReturnType<typeof artifactSend>;
   /**
    * Whether origin `key` serves an artifact by its id: the origin that
-   * serves it ({@link originOf}), and a project's origin also its
-   * project's canvases, which its pages' Canvas pieces show inside them.
+   * serves it ({@link originOf}); a session's origin also another session's
+   * artifact its panel shows (its delegation tree's), a project's page
+   * excepted; and a project's origin also its project's canvases, which its
+   * pages' Canvas pieces show inside them.
    */
   servedOn: (artifactId: string, key: string) => boolean;
   /** An artifact of the session's brought to the front of its panel from a page (`/show`: a decision page's Canvas, Open to draw). */
@@ -794,7 +796,7 @@ async function serveSession(
   if ("page" in target.source && target.artifact.kind !== "component") {
     // A project's page is served on its project's origin alone, at its own
     // address there (`/__cawco/page/<id>/`): its frame names that origin.
-    if (deps.originOf(target.artifact.id) !== instanceId) {
+    if (!deps.servedOn(target.artifact.id, instanceId)) {
       previewFailed(HOP, instanceId, "its page is its project's origin's");
       return downResponse("closed", 404);
     }

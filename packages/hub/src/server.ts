@@ -12068,15 +12068,15 @@ export const createServer = (
     tree: (instance) => treeSessions(db, instance),
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
-    open: async (artifact, by) => {
-      if (artifact.instanceId === null) {
+    open: async (artifact, by, panel = artifact.instanceId) => {
+      if (panel === null) {
         return {
           ok: false,
           error: `No session holds ${artifact.name} now: it is its project's page.`,
         };
       }
       const opened = await openPreview(
-        artifact.instanceId,
+        panel,
         artifact.machineId ?? "",
         artifact.source,
         shownArtifact(artifact)
@@ -12085,7 +12085,7 @@ export const createServer = (
         return { ok: false, error: opened.error };
       }
       if (by === "person") {
-        personShown.set(artifact.instanceId, artifact.id);
+        personShown.set(panel, artifact.id);
       }
       return { ok: true, revision: opened.frame.revision };
     },
@@ -12557,6 +12557,15 @@ export const createServer = (
     originOf: originKeyOf,
     servedOn: (artifactId, key) => {
       if (originKeyOf(artifactId) === key) {
+        return true;
+      }
+      // Another session's artifact its delegation tree's session shows in
+      // its own panel: served on that panel's origin while it shows it. A
+      // project's page keeps to its project's origin.
+      if (
+        !pageProject(artifactId) &&
+        previewTargets.get(key)?.artifact.id === artifactId
+      ) {
         return true;
       }
       // A project's canvas, which its pages' Canvas pieces show inside them.

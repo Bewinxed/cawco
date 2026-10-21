@@ -1825,8 +1825,13 @@
           preview.thumbnailRevision = preview.revision;
           preview.thumbnailWanted = false;
           // The hub keeps it as the artifact's latest picture: Files' cards
-          // draw it. A canvas keeps its own.
-          if (preview.artifact.kind !== "canvas") {
+          // draw it. A canvas keeps its own, and another session's artifact
+          // this panel shows (its delegation tree's, not in its list) is
+          // that session's to keep.
+          if (
+            preview.artifact.kind !== "canvas" &&
+            (preview.artifacts?.includes(preview.artifact.id) ?? true)
+          ) {
             keepThumbnail(instanceId, preview.artifact.id, shot).catch(
               (error: unknown) => {
                 console.error("The page's thumbnail was not kept", error);
