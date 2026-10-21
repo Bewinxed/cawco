@@ -15,10 +15,13 @@
  *
  * Paths, on every preview origin: `/__cawco/decision/<file>`, the bundle's
  * entry (`host.js`, `host.css`), its chunks (Pele's diagram types, each
- * loaded when a page first draws one) and its files (Caw's stills, the house
- * faces from the dashboard's font packages); `dials.js` and `dials.css`,
- * DialKit with the kit's dials.js, loaded only by a page that has Dials.
+ * loaded when a page first draws one) and its files (Caw's stills);
+ * `faces.css`, the house faces' rules (house-faces.ts), each face's file
+ * beside it as `face-<hash>.woff2`, linked by a program's page and imported
+ * by an HTML page's `{{KIT_CSS}}`; `dials.js` and `dials.css`, DialKit with
+ * the kit's dials.js, loaded only by a page that has Dials.
  */
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join, normalize, resolve } from "node:path";
 import { SveltePlugin } from "bun-plugin-svelte";
@@ -26,6 +29,7 @@ import { agentReact } from "./agent-react";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
 import { unlayeredRules } from "./css-layers";
+import { readHouseFaces } from "./house-faces";
 import { compileSheets, pageFiles } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
 
@@ -262,9 +266,8 @@ export async function buildDecisionHost(): Promise<Map<string, Blob>> {
     ],
     define: { "process.env.NODE_ENV": '"production"' },
     publicPath: PUBLIC_PATH,
-    // Faces and stills as files of their own: fetched by unicode-range as a
-    // page needs them, and kept for good at their hashed names.
-    loader: { ".woff2": "file", ".webp": "file" },
+    // Stills as files of their own, kept for good at their hashed names.
+    loader: { ".webp": "file" },
     naming: {
       entry: "[name].[ext]",
       chunk: "chunk-[hash].[ext]",
@@ -306,7 +309,26 @@ async function dialFiles(): Promise<Map<string, string>> {
   ]);
 }
 
-/** The host's files for a release build: the bundle's outputs (`outdir`) and DialKit's. */
+const FACE_FILE = /url\(\.\/files\/[^)]+\)/;
+
+/**
+ * The house faces (house-faces.ts) as the host serves them: each file at
+ * `face-<its content's hash>.woff2`, kept for good, and `faces.css`, each
+ * file's rule as its package writes it, its `src` pointing there. A browser
+ * fetches a file only when the page draws a character in its range.
+ */
+function faceFiles(): Map<string, Blob> {
+  const files = new Map<string, Blob>();
+  const rules = readHouseFaces().map((face) => {
+    const name = `face-${createHash("sha256").update(face.bytes).digest("hex").slice(0, 16)}.woff2`;
+    files.set(name, new Blob([face.bytes]));
+    return face.rule.replace(FACE_FILE, `url(${PUBLIC_PATH}${name})`);
+  });
+  files.set("faces.css", new Blob([`${rules.join("\n")}\n`]));
+  return files;
+}
+
+/** The host's files for a release build: the bundle's outputs (`outdir`), the faces and DialKit's. */
 export async function decisionHostAssets(
   outdir: string,
   filesUnder: (dir: string, prefix: string) => Promise<[string, string][]>
@@ -315,7 +337,9 @@ export async function decisionHostAssets(
   await mkdir(outdir, { recursive: true });
   const [files, dials] = await Promise.all([buildDecisionHost(), dialFiles()]);
   await Promise.all([
-    ...[...files].map(([name, file]) => Bun.write(join(outdir, name), file)),
+    ...[...files, ...faceFiles()].map(([name, file]) =>
+      Bun.write(join(outdir, name), file)
+    ),
     ...[...dials].map(([name, text]) => Bun.write(join(outdir, name), text)),
   ]);
   return filesUnder(outdir, "decision");
@@ -332,6 +356,7 @@ const bundle = (): Promise<Map<string, Blob>> => {
       ([files, dials]) =>
         new Map<string, Blob>([
           ...files,
+          ...faceFiles(),
           ...[...dials].map(
             ([name, text]) => [name, new Blob([text])] as const
           ),
@@ -354,21 +379,23 @@ const TYPES: Record<string, string> = {
 const typeOf = (name: string) =>
   TYPES[name.slice(name.lastIndexOf(".") + 1)] ?? "application/octet-stream";
 
+/** Names that are their content's hash, kept for good: chunks, files and faces. */
+const HASHED = /^(chunk|asset|face)-/;
+
 /**
  * One of the host's files, by its path under `/__cawco/decision/`; null
- * when there is none. A chunk's or a file's name is its hash, kept for
- * good; the entry and DialKit's files are named the same build after build,
- * so never kept.
+ * when there is none. A chunk's, a file's or a face's name is its hash,
+ * kept for good; the entry, `faces.css` and DialKit's files are named the
+ * same build after build, so never kept.
  */
 export async function decisionHostFile(path: string): Promise<Response | null> {
   const name = normalize(path).replace(LEADING_SLASHES, "");
   if (name.startsWith("..") || name.includes("/")) {
     return null;
   }
-  const cache =
-    name.startsWith("chunk-") || name.startsWith("asset-")
-      ? "public, max-age=31536000, immutable"
-      : "no-store";
+  const cache = HASHED.test(name)
+    ? "public, max-age=31536000, immutable"
+    : "no-store";
   if (standalone) {
     try {
       return new Response(Bun.file(embeddedFile(`decision/${name}`)), {

@@ -15,6 +15,10 @@
  * - It cannot run code or reach the network: no Query, Mutation, `$state`
  *   or action step, and no URL or markup in its words (a Diagram's Mermaid
  *   is Pele's to escape, its links and images off).
+ * - Its words are drawn in the house's sans face, so a character that face
+ *   doesn't draw (core house-faces.ts, read from the face's own files) is
+ *   refused, named with its card and its string: a stand-in glyph or an
+ *   emoji would show as an empty box or in a face that isn't the house's.
  *
  * The host page around it ({@link programHost}) is the hub's: the program
  * in a script tag the host bundle reads (agent `decision-host/`), served at
@@ -28,6 +32,7 @@ import {
   DECISION_ID,
 } from "@cawco/core/decisions-library";
 import spec from "@cawco/core/decisions-spec";
+import { named, SANS_FAMILY, undrawn } from "@cawco/core/house-faces";
 import {
   createParser,
   type ElementNode,
@@ -132,6 +137,111 @@ const unsafeWords = (root: ElementNode | null): string[] => {
     }
   };
   look(root, "", "");
+  return found;
+};
+
+/** Props that name things rather than draw words: ids, references, files, and a component's look. */
+const UNDRAWN_PROPS = new Set([
+  "id",
+  "after",
+  "file",
+  "alt",
+  "artifact",
+  "stories",
+  "variant",
+  "tone",
+  "justify",
+  "align",
+]);
+/** The components whose props a fault names by the prop alone ("its label"). */
+const CARD_PARTS = new Set(["Decisions", "Section", "Decision", "Option"]);
+const EXCERPT = 60;
+
+/** Where a string stands, as a fault names it: its card and option, or the page's title or a Section's. */
+interface WordsAt {
+  decision?: string;
+  option?: string;
+  section?: string;
+}
+
+/** `value` cut to {@link EXCERPT} characters around `at`. */
+const excerpt = (value: string, at: number): string => {
+  if (value.length <= EXCERPT) {
+    return value;
+  }
+  const start = Math.max(0, Math.min(at - 20, value.length - EXCERPT));
+  return `${start > 0 ? "…" : ""}${value.slice(start, start + EXCERPT)}${start + EXCERPT < value.length ? "…" : ""}`;
+};
+
+/** Why one string can't stand in the house face: the characters it lacks, where the string is, and what to write; null when it can. */
+const glyphProblem = (
+  value: string,
+  prop: string,
+  component: string,
+  at: WordsAt
+): string | null => {
+  const missing = undrawn(value);
+  const [first] = missing;
+  if (!first) {
+    return null;
+  }
+  const where = [
+    at.decision ? `Decision "${at.decision}"` : null,
+    at.option ? `option "${at.option}"` : null,
+    !at.decision && at.section ? `Section "${at.section}"` : null,
+  ].filter(Boolean);
+  const what = CARD_PARTS.has(component)
+    ? `its ${prop}`
+    : `a ${component}'s ${prop}`;
+  const lead =
+    where.length > 0 ? `${where.join(", ")}: ${what}` : `The page's ${prop}`;
+  const chars = missing.map(named).join(", ");
+  return `${lead} “${excerpt(value, value.indexOf(first))}” holds ${chars}, which ${SANS_FAMILY}, the page's face, doesn't draw: it would show as an empty box or in another face. Say what it stands for in words (an icon by its name, like "paperclip"), or leave it out.`;
+};
+
+/** Where an element's words stand: in its own card, option or Section, else where it stands itself. */
+const within = (element: ElementNode, at: WordsAt): WordsAt => {
+  const { id, title } = element.props;
+  if (element.typeName === "Decision" && typeof id === "string") {
+    return { decision: id };
+  }
+  if (element.typeName === "Option" && typeof id === "string") {
+    return { ...at, option: id };
+  }
+  if (element.typeName === "Section" && typeof title === "string") {
+    return { section: title };
+  }
+  return at;
+};
+
+/** Its strings that hold a character the house face can't draw, each named with its card. */
+const undrawnWords = (root: ElementNode | null): string[] => {
+  const found: string[] = [];
+  const look = (
+    value: unknown,
+    prop: string,
+    component: string,
+    at: WordsAt
+  ): void => {
+    if (typeof value === "string") {
+      const problem = UNDRAWN_PROPS.has(prop)
+        ? null
+        : glyphProblem(value, prop, component, at);
+      if (problem) {
+        found.push(problem);
+      }
+    } else if (Array.isArray(value)) {
+      for (const each of value) {
+        look(each, prop, component, at);
+      }
+    } else if (isElement(value)) {
+      const inside = within(value, at);
+      for (const [name, held] of Object.entries(value.props)) {
+        look(held, name, value.typeName, inside);
+      }
+    }
+  };
+  look(root, "", "", {});
   return found;
 };
 
@@ -380,7 +490,7 @@ export const checkProgram = (raw: string): CheckedProgram => {
   if (problems.length > 0) {
     refuse(problems);
   }
-  const unsafe = unsafeWords(result.root);
+  const unsafe = [...unsafeWords(result.root), ...undrawnWords(result.root)];
   if (unsafe.length > 0) {
     refuse(unsafe);
   }
@@ -523,7 +633,10 @@ export const buildProgram = async (
 export const scriptJson = (id: string, value: unknown): string =>
   `<script type="application/json" id="${id}">${JSON.stringify(value).replaceAll("<", "\\u003c")}</script>`;
 
-/** The page the hub serves for a program: its host bundle, the program and its files' addresses in script tags, nothing else. */
+/** The house faces' sheet on every preview origin (core decision-host.ts): a program's page links it, an HTML page's kit CSS imports it. */
+export const FACES_SHEET = `${DECISION_ASSETS}faces.css`;
+
+/** The page the hub serves for a program: the house faces, its host bundle, the program and its files' addresses in script tags, nothing else. */
 export const programHost = (
   program: string,
   title: string,
@@ -536,6 +649,7 @@ export const programHost = (
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>${escaped(title || "Decision page")}</title>
+<link rel="stylesheet" href="${FACES_SHEET}">
 <link rel="stylesheet" href="${DECISION_ASSETS}host.css">
 <script type="module" src="${DECISION_ASSETS}host.js"></script>
 </head>

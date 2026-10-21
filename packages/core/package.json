@@ -51,6 +51,7 @@
     "./machine-key": "./src/machine-key.ts",
     "./choices": "./src/choices.ts",
     "./decisions": "./src/decisions.ts",
+    "./house-faces": "./src/house-faces.ts",
     "./words/decisions": "./src/words/decisions.ts",
     "./words/local-name": "./src/words/local-name.ts",
     "./words/routines": "./src/words/routines.ts",
@@ -125,6 +126,8 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
+    "faces": "bun scripts/house-faces.ts",
+    "faces:check": "bun scripts/house-faces.ts --check",
     "openui": "OPENUI_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 bun scripts/openui-views.ts",
     "openui:check": "OPENUI_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 bun scripts/openui-views.ts --check",
     "pricing": "bun scripts/pricing-snapshot.ts",
@@ -153,6 +156,8 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.3"
+    "@types/bun": "^1.4.3",
+    "@types/fontkit": "2.0.9",
+    "fontkit": "2.0.4"
   }
 }
