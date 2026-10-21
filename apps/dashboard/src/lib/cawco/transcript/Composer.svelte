@@ -120,6 +120,7 @@
   import { newId } from "../id";
   import { carriesFiles } from "../internal-drag";
   import { minimizedAsks } from "../minimized-asks.svelte";
+  import { skillsOf } from "../skill-chips";
   import {
     loadSuggestSetting,
     type SuggestCandidate,
@@ -331,6 +332,8 @@
   /** The field (MentionField's editable box), and the MentionField, whose caret is in the draft's offsets. */
   let field = $state<HTMLDivElement | null>(null);
   let mentionField = $state<ReturnType<typeof MentionField>>();
+  /** The session's skills, which its field draws as chips. */
+  const skills = $derived(skillsOf(commands));
   /** A phone's @ menu: its rows wrap, and it drags down to go. */
   const phone = new MediaQuery(NARROW_QUERY);
 
@@ -1001,7 +1004,8 @@
     const start =
       Math.max(before.lastIndexOf(" "), before.lastIndexOf("\n")) + 1;
     const word = before.slice(start);
-    if (!word.startsWith("/")) {
+    // A skill already drawn as its chip is no longer being typed.
+    if (!word.startsWith("/") || mentionField?.chipAt(start)) {
       return null;
     }
     const query = word.slice(1);
@@ -3551,6 +3555,7 @@
             {onpaste}
             phone={phone.current}
             placeholder={hint}
+            {skills}
             tabindex={0}
             bind:this={mentionField}
             bind:editor={field}

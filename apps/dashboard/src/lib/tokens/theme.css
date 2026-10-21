@@ -385,6 +385,8 @@
   --spacing-c-block-drop-dot: var(--c-block-drop-dot);
   /* Switches with its context: no literal maps to it. */
   --spacing-c-tray-chip: var(--c-tray-chip);
+  --spacing-c-inline-chip-line: var(--c-inline-chip-line);
+  --spacing-c-inline-chip-pad: var(--c-inline-chip-pad);
   /* Switches with its context: no literal maps to it. */
   --spacing-c-peek-glyph: var(--c-peek-glyph);
   /* Switches with its context: no literal maps to it. */

@@ -371,6 +371,8 @@ export type TokenSize =
   | "size.c-block-drop-line"
   | "size.c-block-drop-dot"
   | "size.c-tray-chip"
+  | "size.c-inline-chip-line"
+  | "size.c-inline-chip-pad"
   | "size.c-peek-glyph"
   | "size.c-tray-gap"
   | "size.c-tray-row"

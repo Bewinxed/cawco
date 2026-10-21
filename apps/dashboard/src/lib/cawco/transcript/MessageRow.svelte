@@ -748,7 +748,7 @@
                 />
               </div>
             {:else}
-              <MessageBody source={shownContent} />
+              <MessageBody said source={shownContent} />
               {#if (hasActions || retried) && !wordsAway}
                 <!-- Over the well's top edge at its end; a grouped row's sit
                      inside the well, on its raised surface, and flip under

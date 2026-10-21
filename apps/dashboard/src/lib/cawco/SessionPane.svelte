@@ -73,6 +73,7 @@
   } from "./project-tasks";
   import RegionBoundary from "./RegionBoundary.svelte";
   import SideSplit from "./side/SideSplit.svelte";
+  import { setSkills, skillsOf } from "./skill-chips";
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
@@ -775,6 +776,10 @@
   const agentName = $derived(speakerName(session?.harness));
 
   const commands = $derived(cawco.commandsOf(viewId));
+
+  /** The session's skills: a `/name` of one in its transcript draws as its chip. */
+  const sessionSkills = $derived(skillsOf(commands));
+  setSkills(() => sessionSkills);
 
   /**
    * What the composer may suggest: the session's skills, its connected MCP
