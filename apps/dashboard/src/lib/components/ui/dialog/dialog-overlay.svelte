@@ -10,6 +10,8 @@
    * says it is closed (the lightbox flying its picture home, `leaving`)
    * fades out then. One opened over another open scrim draws nothing of
    * its own (`data-stacked`, scrim-stack.ts): there is one scrim.
+   * specificity-trap: `leaving` fades out over `data-open` on purpose, the
+   * scrim leaving while its dialog still says it is open.
    */
   export const scrimVariants = tv({
     base: "bg-scrim backdrop-blur-(--scrim-blur) data-[leaving]:animate-kit-fade-out data-closed:animate-kit-fade-out data-open:animate-scrim-in data-[stacked]:bg-transparent data-[stacked]:backdrop-filter-none",

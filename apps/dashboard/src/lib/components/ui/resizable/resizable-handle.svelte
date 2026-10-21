@@ -17,7 +17,7 @@
     variants: {
       look: {
         split:
-          "bg-border-hairline transition-[background-color] duration-(--dur-control) ease-out hover:bg-border-control data-hidden:hidden data-active:bg-ink-muted data-expanded:after:left-px data-expanded:after:w-c-side-grip-w data-expanded:after:translate-x-0",
+          "bg-border-hairline transition-[background-color] duration-(--dur-control) ease-out not-data-active:hover:bg-border-control data-hidden:hidden data-active:bg-ink-muted data-expanded:after:left-px data-expanded:after:w-c-side-grip-w data-expanded:after:translate-x-0",
         grid: "bg-border-hairline not-active-keyboard:not-active-pointer:hover:bg-border-control active-keyboard:bg-ink-muted active-pointer:bg-ink-muted motion-safe:transition-[background-color] motion-safe:duration-(--dur-control) motion-safe:ease-out motion-reduce:transition-off",
       },
     },

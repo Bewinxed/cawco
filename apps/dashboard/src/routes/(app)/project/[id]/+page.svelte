@@ -1453,6 +1453,26 @@
       ? "decisions-graph"
       : "decisions";
   });
+  /** A view that fills its pane stands on the pane's foot at its own padding. */
+  const PANE_FOOT: Record<string, string> = {
+    board: "pb-0",
+    canvas: "pb-space-5",
+    "decisions-graph": "pb-space-5",
+    "decisions-page": "pb-0",
+  };
+  /**
+   * The pane's foot: its view's own padding, and on a phone while Caw's
+   * sheet stands (CawFloat, a bottom sheet that holds nothing) the sheet's
+   * height of room, so any part of the view (a form's buttons, a block's
+   * head) scrolls clear of it, whatever the view. One class per state:
+   * the phone's comes after the view's in Tailwind's order at equal weight,
+   * where `view-board:pb-0` (0,2,0) outweighed
+   * `max-phone:in-data-caw-open:…` (0,1,0) and the sheet covered the foot.
+   */
+  const paneFoot = $derived([
+    PANE_FOOT[reading ? "board" : paneView] ?? "pb-space-6",
+    docked && "max-phone:pb-c-sheet-max-h",
+  ]);
   /**
    * Which box wears the house edge fade: the one that scrolls the view. On a
    * phone that is the page (the board's columns included, which stand at
@@ -2196,12 +2216,9 @@
     data-slot="pane"
     aria-busy={cawco.hub === "unreachable" || awaiting || reading}
     class={[
-      "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 pe-space-6 pb-space-6 ps-space-7 max-desk:px-space-5 view-board:overflow-hidden view-board:pb-0 view-canvas:overflow-hidden view-canvas:pb-space-5 view-decisions-graph:overflow-hidden view-decisions-graph:pb-space-5 view-decisions-page:overflow-hidden view-decisions-page:pb-0 max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-graph:basis-0 max-phone:view-decisions-graph:min-h-(--pane-min) max-phone:view-decisions-graph:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
+      "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 pe-space-6 ps-space-7 max-desk:px-space-5 view-board:overflow-hidden view-canvas:overflow-hidden view-decisions-graph:overflow-hidden view-decisions-page:overflow-hidden max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-graph:basis-0 max-phone:view-decisions-graph:min-h-(--pane-min) max-phone:view-decisions-graph:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
       fadeOn === "pane" && "kit-edge-fade-block",
-      // On a phone Caw's panel is a bottom sheet that holds nothing (CawFloat):
-      // while it stands the page keeps its height of room at its foot, so any
-      // part of the view (a form's buttons, a block's head) scrolls clear of it.
-      "max-phone:in-data-caw-open:pb-c-sheet-max-h",
+      paneFoot,
     ]}
     data-view={reading ? "board" : paneView}
     style:--pane-min="50cqb"

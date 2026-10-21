@@ -901,7 +901,9 @@
          itself (its row is read out, not drawn twice). The pick: what sits
          on the field's line, what Enter or a tap takes, its words and its
          time in the selected ink; the reader's own draft on the line is not
-         a pick and keeps the field's ink. -->
+         a pick and keeps the field's ink.
+         specificity-trap: `data-own` stands only on a draft, and the pick's
+         selected ink holds only off one (`not-data-draft`). -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- biome-ignore lint/a11y/useKeyWithClickEvents: the field owns the keys for every row (aria-activedescendant) -->
     <div
@@ -946,6 +948,7 @@
           {oneLine(entry.entry?.text ?? "")}
         {/if}
       </span>
+      <!-- specificity-trap: as the row's ink, `data-own` stands only on a draft. -->
       <span
         data-slot="num"
         class="num text-size-meta font-normal text-ink-muted whitespace-nowrap transition-[color] duration-(--dur-control) ease-out group-data-own/ghost:text-transparent group-aria-selected/ghost:group-not-data-draft/ghost:text-selected-ink"

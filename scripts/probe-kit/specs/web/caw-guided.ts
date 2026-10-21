@@ -655,6 +655,30 @@ const leg = async (kit: Kit, setup: Setup, one: Leg, theme: Theme) => {
   );
   if (phone) {
     sheetChecks(kit, tag, at);
+    // The sheet holds nothing (CawFloat): while it stands, the pane keeps
+    // its height of room at its foot, whatever the view (the board's own
+    // `pb-0` included), so the view's foot scrolls clear of it (b8eca881d).
+    const foot = await page.evaluate(() => {
+      const pane = document.querySelector<HTMLElement>('[data-slot="pane"]');
+      const probe = document.createElement("div");
+      probe.style.height = "var(--c-sheet-max-h)";
+      document.body.append(probe);
+      const room = getComputedStyle(probe).height;
+      probe.remove();
+      return {
+        view: pane?.dataset.view ?? null,
+        padding: pane ? getComputedStyle(pane).paddingBottom : null,
+        room,
+      };
+    });
+    kit.check(
+      `${tag}: the pane keeps the sheet's height of room at its foot, on the board too`,
+      foot.padding !== null &&
+        Math.abs(
+          Number.parseFloat(foot.padding) - Number.parseFloat(foot.room)
+        ) < 0.5,
+      JSON.stringify(foot)
+    );
   } else {
     dockChecks(kit, tag, name, theme, at);
   }

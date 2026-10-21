@@ -59,6 +59,9 @@
     CheckboxLooks = $props();
 </script>
 
+<!-- specificity-trap: invalid and checked takes
+     aria-invalid:aria-checked:border-action-solid at the greater weight;
+     aria-checked and data-checked are one state, bits-ui writes both. -->
 <CheckboxPrimitive.Root
   class={cn(
     "peer relative flex size-icon-md shrink-0 items-center",

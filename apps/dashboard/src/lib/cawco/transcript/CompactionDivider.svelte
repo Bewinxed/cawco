@@ -162,7 +162,9 @@
      draws back from the centre as the chevron comes in. While the word
      turns from "Compacting…" to "Compacted" its box takes the new word's
      width at once and the letters leaving fade past its end: clipped
-     across, never up or down, the word is its box throughout. -->
+     across, never up or down, the word is its box throughout.
+     specificity-trap: a failed divider is disabled, so `hover:enabled:`
+     never holds beside `data-failed:`. -->
 <button
   data-compaction-divider-live={live || undefined}
   data-compaction-divider-failed={failed || undefined}

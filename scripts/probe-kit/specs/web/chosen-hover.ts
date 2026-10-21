@@ -38,6 +38,14 @@
  * material, the box), its backdrop's blur and saturation left out, which
  * over the flat raised ground changes nothing measurable.
  *
+ * A state stays drawn under the pointer where its utility used to lose to
+ * the hover's on weight alone (the house's specificity-trap lint): a chosen
+ * option chip that is a button keeps `surface-recess` with `:hover`
+ * forced, and the split's handle mid-drag (`data-active`) keeps
+ * `ink-muted`. A ringed side well (`data-ringed`) inside a sliding split
+ * (`data-split-sliding`) runs the slide's transition, not the ring's (its
+ * own comment: "the ring easing in and out except while the split slides").
+ *
  * Caw's panel's section rule (DESIGN.md, Caw's panel), on the
  * /motion/caw-notices bench with both sections: solid `brand-solid`, and
  * 3:1 or more against the raised panel (`surface-raised`).
@@ -704,6 +712,80 @@ async function checkCawRule(
   );
 }
 
+/** A state held under the pointer: chosen chip, dragged handle; and the ringed well's transition while the split slides. */
+async function checkHeld(
+  kit: Kit,
+  theme: string,
+  page: Page,
+  cdp: CDPSession,
+  bench: string
+) {
+  await open(
+    page,
+    `${bench}/motion/chosen-hover`,
+    '[data-probe="split"] [data-slot="resizable-handle"]'
+  );
+  await page.mouse.move(1, 1);
+  await settle(page, 400);
+  const held = [
+    {
+      name: "a chosen option chip that is a button keeps surface-recess under the pointer",
+      selector: '[data-probe="chip-chosen"] button',
+      recipe: "var(--surface-recess)",
+      state: null,
+    },
+    {
+      name: "the split's handle mid-drag keeps ink-muted under the pointer",
+      selector: '[data-probe="split"] [data-slot="resizable-handle"]',
+      recipe: "var(--ink-muted)",
+      state: "data-active",
+    },
+  ];
+  for (const one of held) {
+    if (one.state) {
+      // biome-ignore lint/performance/noAwaitInLoops: one control at a time on one page
+      await page.evaluate(
+        ([sel, attr]) =>
+          document.querySelector(sel)?.setAttribute(attr, "pointer"),
+        [one.selector, one.state] as const
+      );
+    }
+    const release = await forceHover(cdp, one.selector);
+    await settle(page, 400);
+    const read = await readBackground(page, one.selector, null);
+    const recipe = await resolve(page, one.recipe);
+    await release();
+    kit.check(
+      `${theme}: ${one.name}`,
+      read !== null && recipe !== null && same(read.rgb, recipe.rgb),
+      JSON.stringify({ read: read?.color, recipe: recipe?.color })
+    );
+  }
+  const well = '[data-probe="side"] [data-side-well]';
+  const transition = (slides: boolean) =>
+    page.evaluate(
+      ([sel, slide]) => {
+        const el = document.querySelector<HTMLElement>(sel);
+        const section = el?.closest("[data-probe]");
+        if (!(el && section)) {
+          return null;
+        }
+        el.setAttribute("data-ringed", "");
+        section.toggleAttribute("data-split-sliding", slide);
+        return getComputedStyle(el).transitionProperty;
+      },
+      [well, slides] as const
+    );
+  const still = await transition(false);
+  const sliding = await transition(true);
+  kit.check(
+    `${theme}: a ringed side well eases its ring at rest and runs the slide's transition while the split slides`,
+    still === "outline-color" &&
+      sliding === "padding, border-radius, border-width, box-shadow",
+    JSON.stringify({ still, sliding })
+  );
+}
+
 const spec: Spec = {
   name: "chosen-hover",
   run: async (kit: Kit) => {
@@ -750,6 +832,7 @@ const spec: Spec = {
           })
         );
       }
+      await checkHeld(kit, theme, page, cdp, bench);
       await checkCawRule(kit, theme, page, bench);
       await checkRail(kit, theme, cdp, page, sheets);
     }

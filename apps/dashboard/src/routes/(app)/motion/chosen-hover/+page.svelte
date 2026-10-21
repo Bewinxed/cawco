@@ -10,7 +10,9 @@
    * models, the first chosen),
    * a live Crepe editor, for its slash menu, and a Caw reply's file chips
    * (`?control=files` stands the page on that project's file, shallowly, as
-   * the project page does, so the first chip reads current).
+   * the project page does, so the first chip reads current), a chosen
+   * option chip that is a button, and the split's handle (its drag's
+   * `data-active` the probe sets).
    */
   import { CAPABILITIES_NONE } from "@cawco/core";
   import type { Pin } from "@cawco/core/comments";
@@ -26,7 +28,10 @@
   import PermissionSection from "#lib/cawco/spawn/PermissionSection.svelte";
   import ProjectChip from "#lib/cawco/spawn/ProjectChip.svelte";
   import MarkdownEditor from "#lib/components/features/MarkdownEditor.svelte";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as Resizable from "#lib/components/ui/resizable/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
   import { IconEye, IconLaptop, IconPen, IconServer } from "#lib/icons.js";
   import { goto } from "$app/navigation";
@@ -230,5 +235,19 @@
   </section>
   <section class="min-w-0" data-probe="files">
     <FolderFiles files={["notes.md", "plan.md"]} projectId="p1" />
+  </section>
+  <section class="min-w-0" data-probe="chip-chosen">
+    <button
+      class={chipVariants({ variant: "option" })}
+      data-chosen
+      type="button"><span>Chosen</span></button
+    >
+  </section>
+  <section class="h-c-bench-side-h w-c-bench-side-w min-w-0" data-probe="split">
+    <Resizable.PaneGroup direction="horizontal">
+      <Resizable.Pane defaultSize={50} look="split" />
+      <Resizable.Handle look="split" />
+      <Resizable.Pane defaultSize={50} look="split" />
+    </Resizable.PaneGroup>
   </section>
 </main>
