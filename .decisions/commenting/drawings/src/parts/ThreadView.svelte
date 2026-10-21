@@ -4,10 +4,20 @@
   - Head: in the rail Back, the marker and the element's name, Resolve and
     ⋯; as a card the same with Close in Back's place.
   - The chain in meta, one line, then ‹ 3 / 12 › (rail only).
-  - The thread: the transcript's own turns (Turn, Who, Well), unchanged.
-  - Foot: the reply field and Reply, Reply off while the field is empty.
+  - The thread: the transcript's own turns (Turn, Who, Well), unchanged;
+    an entry's attachments under its words in the transcript's gallery
+    (MessageRow's `chips`): a picture as `Shot size="thumb"`, a file as
+    its DocThumb (attachments-design §4).
+  - Foot: the reply field, its chip row (none here), then Attach (the
+    dashboard's AttachButton) at the start and Reply at the end, Reply off
+    while there's nothing to send (attachments-design §2).
 -->
 <script lang="ts">
+  import AttachButton from "$kit/cawco/transcript/AttachButton.svelte";
+  import AttachmentChips from "$kit/cawco/transcript/AttachmentChips.svelte";
+  import { ComposerDraft } from "$kit/cawco/transcript/composer-draft.svelte";
+  import DocThumb from "$kit/cawco/transcript/DocThumb.svelte";
+  import Shot from "$kit/cawco/transcript/Shot.svelte";
   import Turn from "$kit/cawco/turn/Turn.svelte";
   import TurnWell from "$kit/cawco/turn/Well.svelte";
   import Who from "$kit/cawco/turn/Who.svelte";
@@ -20,13 +30,15 @@
     IconClose,
     IconMore,
   } from "$kit/icons.js";
-  import { AGENT, THREAD } from "../data";
+  import { AGENT, screenshot, THREAD } from "../data";
   import Marker from "./Marker.svelte";
 
   let {
     as = "rail",
     shape = "tail",
   }: { as?: "rail" | "card"; shape?: "tail" | "stem" } = $props();
+
+  const reply = new ComposerDraft();
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col" data-thread={as}>
@@ -48,7 +60,7 @@
       state="sent"
       tail={shape === "tail" ? "bottom-start" : "none"}
     />
-    <span class="min-w-0 flex-1 truncate type-label text-ink-strong">Save</span>
+    <span class="min-w-0 flex-1 truncate type-label text-ink-strong">Create routine</span>
     <Button aria-label="Resolve" size="icon-sm" variant="ghost"
       ><IconCheck /></Button
     >
@@ -67,7 +79,7 @@
     data-sweep="row"
   >
     <span class="min-w-0 flex-1 truncate type-meta text-ink-muted"
-      >on Form › Actions › Save</span
+      >on Routine form › Create routine</span
     >
     {#if as === "rail"}
       <span class="flex flex-none items-center">
@@ -92,6 +104,17 @@
         <Turn you>
           <Who name="You" timestamp={entry.at} you />
           <TurnWell><p class="type-body text-ink-strong">{entry.text}</p></TurnWell>
+          {#if entry.attachments?.length}
+            <div class="mt-space-2 flex flex-wrap items-center gap-space-2" data-gallery data-slot="chips">
+              {#each entry.attachments as one (one.name)}
+                {#if one.kind === "image"}
+                  <Shot alt={`${one.name}, attached to comment 14`} size="thumb" src={screenshot()} />
+                {:else}
+                  <DocThumb href={`/api/files/${one.name}`} name={one.name} size={one.size ?? 0} />
+                {/if}
+              {/each}
+            </div>
+          {/if}
         </Turn>
       {:else}
         <Turn>
@@ -115,7 +138,10 @@
     ]}
   >
     <Textarea placeholder="Reply" rows={1} />
-    <div class="flex justify-end">
+    <AttachmentChips draft={reply} />
+    <div class="flex items-center gap-space-2" data-sweep="row">
+      <AttachButton draft={reply} />
+      <span class="flex-1"></span>
       <Button disabled size="sm">Reply</Button>
     </div>
   </div>

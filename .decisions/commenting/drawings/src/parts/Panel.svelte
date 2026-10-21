@@ -1,30 +1,26 @@
 <!--
-  The artifact panel at desk width, as DESIGN.md's "Artifact panel, canvas
-  and ink" draws its head, and comment-design §1 changes it: the 44px head
-  (the artifact's name over its ask; Send with its count, only above 0; the
-  mode, the kit's segmented control; Comments, a pressed toggle with the open
-  count; Reload; Close, each the `sm` ghost), then the well holding the page,
-  its edge the 2px accent in Comment mode, and the Comments rail beside it
-  when Comments is pressed.
+  The artifact panel at desk width: the dashboard's own frame (SideSurface,
+  as PreviewPane draws it), its name the artifact's own menu (ArtifactMenu)
+  over its ask, its controls standing by the head's priority rule (Send
+  with the unsent count, only above 0, comment-design §1, in the place
+  PreviewPane gives Send picks; the mode; Comments with the open count;
+  Reload), Close last, and the well holding the page, ringed in Comment
+  mode as SideSurface rings it.
+
+  Comment-design §1 adds the Comments rail beside the well. SideSurface has
+  no place beside its well, so the rail stands in the card's room to the
+  well's end, under the head, until the build gives the frame one.
+  PreviewPane's control snippets are its own and can't be imported: the
+  controls here are the same kit parts with the same props.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import ArtifactMenu from "$kit/cawco/preview/ArtifactMenu.svelte";
+  import { HEAD_PRIORITY, type HeadItem } from "$kit/cawco/side/head";
+  import SideSurface from "$kit/cawco/side/SideSurface.svelte";
   import { Button } from "$kit/components/ui/button/index.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "$kit/components/ui/fluid-tabs/index.js";
-  import {
-    IconChat,
-    IconChevronDown,
-    IconClose,
-    IconComment,
-    IconInteract,
-    IconPen,
-    IconRefresh,
-    IconSend,
-  } from "$kit/icons.js";
+  import { TabItem, Tabs, TabsList } from "$kit/components/ui/fluid-tabs/index.js";
+  import { IconChat, IconComment, IconInteract, IconPen, IconRefresh, IconSend } from "$kit/icons.js";
 
   let {
     mode = "comment",
@@ -32,7 +28,7 @@
     open = 3,
     send = 0,
     ask = "Pin anything that reads wrong",
-    height = "560px",
+    height = "690px",
     page,
     rail,
   }: {
@@ -41,35 +37,22 @@
     open?: number;
     send?: number;
     ask?: string;
-    /** The panel's height; `auto` fits it to the page and the rail, so the whole page shows. */
+    /** The panel's height; `auto` fits it to the page, so the whole page shows. */
     height?: string;
     page: Snippet;
     rail?: Snippet;
   } = $props();
+
+  const nothing = () => undefined;
 </script>
 
-<section
-  class="flex w-[760px] flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
-  data-panel
-  style:height={height}
->
-  <header
-    class="flex h-c-sheet-inspector-head-h flex-none items-center gap-space-2 border-b border-border-hairline px-space-3"
-    data-sweep="row"
+{#snippet sendBar()}
+  <Button data-slot="send" size="sm" variant="ghost"
+    ><IconSend /><span data-slot="send-label">Send</span><span class="num">{send}</span></Button
   >
-    <div class="flex min-w-0 flex-1 flex-col">
-      <span class="flex min-w-0 items-center gap-space-1 type-label text-ink-strong">
-        <span class="truncate">New routine</span><IconChevronDown
-          class="size-icon-sm flex-none text-ink-muted"
-        />
-      </span>
-      <span class="truncate type-meta text-ink-muted">{ask}</span>
-    </div>
-    {#if send > 0}
-      <Button data-send size="sm" variant="ghost"
-        ><IconSend /><span>Send</span><span class="num">{send}</span></Button
-      >
-    {/if}
+{/snippet}
+{#snippet modeBar()}
+  <div data-slot="modes">
     <Tabs size="compact" value={mode} values={["interact", "comment", "draw"]}>
       <TabsList aria-label="Preview mode">
         <TabItem glyphOnly icon={IconInteract} label="Interact" value="interact" />
@@ -77,40 +60,76 @@
         <TabItem glyphOnly icon={IconPen} label="Draw" value="draw" />
       </TabsList>
     </Tabs>
-    <Button
-      aria-expanded={comments}
-      aria-label="Comments"
-      expanded="pressed"
-      size="sm"
-      variant="ghost"
-      ><IconChat /><span>Comments</span>{#if open > 0}<span
-          class="min-w-c-count-digit num">{open}</span
-        >{/if}</Button
-    >
-    <Button aria-label="Reload" size="icon-sm" variant="ghost"
-      ><IconRefresh /></Button
-    >
-    <Button aria-label="Close" size="icon-sm" variant="ghost"
-      ><IconClose /></Button
-    >
-  </header>
-  <div class="flex min-h-0 flex-1">
-    <div class="relative min-w-0 flex-1 overflow-hidden bg-surface-page" data-well>
-      {@render page()}
-      {#if mode === "comment"}
-        <span
-          aria-hidden="true"
-          class="pointer-events-none absolute inset-0 z-20 border-2 border-brand-solid"
-        ></span>
-      {/if}
-    </div>
-    {#if rail}
-      <aside
-        class="flex w-(--c-comments-w) flex-none flex-col border-s border-border-hairline bg-surface-raised"
-        data-rail
-      >
-        {@render rail()}
-      </aside>
-    {/if}
   </div>
-</section>
+{/snippet}
+{#snippet commentsBar()}
+  <Button
+    data-slot="comments"
+    aria-expanded={comments}
+    aria-label={`Comments${open > 0 ? `, ${open} open` : ""}`}
+    expanded="pressed"
+    size="sm"
+    variant="ghost"
+    ><IconChat /><span data-slot="comments-label">Comments</span>{#if open > 0}<span
+        class="min-w-c-count-digit"
+        data-slot="count">{open}</span
+      >{/if}</Button
+  >
+{/snippet}
+{#snippet reloadBar()}
+  <Button data-slot="other" aria-label="Reload" dimmed={mode !== "interact"} size="icon-sm" variant="ghost"
+    ><IconRefresh /></Button
+  >
+{/snippet}
+{#snippet none()}{/snippet}
+{#snippet title()}
+  <ArtifactMenu
+    held={["routine"]}
+    instanceId="drawings"
+    line={ask}
+    lineDropped={false}
+    lineId="panel-line"
+    shown={{ id: "routine", kind: "page", name: "New routine" }}
+  />
+{/snippet}
+
+<div
+  class={["group/panel relative w-[760px]", comments && rail && "has-rail"]}
+  data-panel
+  style:height={height}
+>
+  <SideSurface
+    items={[
+      ...(send > 0 ? [{ key: "send", priority: HEAD_PRIORITY.send, bar: sendBar, menu: none, words: true } satisfies HeadItem] : []),
+      { key: "mode", priority: HEAD_PRIORITY.mode, bar: modeBar, menu: none, group: true },
+      { key: "comments", priority: HEAD_PRIORITY.comments, bar: commentsBar, menu: none, count: { n: open, of: "Comments" }, words: true },
+      { key: "reload", priority: HEAD_PRIORITY.reload, bar: reloadBar, menu: none },
+    ]}
+    label="Preview"
+    {mode}
+    of="preview"
+    onclose={nothing}
+    subtitle={ask}
+    subtitleId="panel-line"
+    titleControl={title}
+  >
+    <div class="relative flex min-h-0 flex-1 flex-col" data-well>
+      {@render page()}
+    </div>
+  </SideSurface>
+  {#if comments && rail}
+    <aside
+      class="absolute end-space-2 top-c-btn-h-lg bottom-space-2 flex w-(--c-comments-w) flex-col rounded-sm bg-surface-raised"
+      data-rail
+    >
+      {@render rail()}
+    </aside>
+  {/if}
+</div>
+
+<style>
+  /* The well gives the rail its room at the card's end (comment-design §1). */
+  .has-rail :global([data-side-well]) {
+    margin-inline-end: calc(var(--c-comments-w) + var(--space-2));
+  }
+</style>

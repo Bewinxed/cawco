@@ -52,6 +52,7 @@
 <span
   class="pointer-events-none absolute z-10 size-0"
   data-pin={n ?? "new"}
+  data-shape={shape}
   style:inset-inline-start={x}
   style:inset-block-start={y}
 >

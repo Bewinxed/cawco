@@ -1,8 +1,10 @@
 /**
- * Where an element's name tag stands (SamplePage's `tag`, as an attachment):
+ * Where an element's name tag stands (RoutinePage's tag, as an attachment):
  * at its outline's top-left, as comment-design §2 draws it, unless that spot
  * lacks room; then the first of the outline's top-right, bottom-left and
- * bottom-right that has it. Room is `ROOM` clear of every part drawn on the
+ * bottom-right that has it; then, where the page's fields stand closer than
+ * a tag is tall (the routine form's 14px), inside the outline's top-right
+ * corner, the end of the element's own label row. Room is `ROOM` clear of every part drawn on the
  * page that isn't the tag's own element (words, fills, edges, fields, glyphs,
  * pins with their rings, floating surfaces), inside the well or frame that
  * holds the page. With no spot clear, the tag keeps the top-left and
@@ -25,6 +27,7 @@ const PLACES = [
   { insetInlineStart: "auto", insetInlineEnd: OUT, top: "auto", bottom: OFF },
   { insetInlineStart: OUT, insetInlineEnd: "auto", top: OFF, bottom: "auto" },
   { insetInlineStart: "auto", insetInlineEnd: OUT, top: OFF, bottom: "auto" },
+  { insetInlineStart: "auto", insetInlineEnd: "0px", top: "0px", bottom: "auto" },
 ] as const;
 
 type Place = (typeof PLACES)[number];
@@ -38,22 +41,36 @@ const within = (a: DOMRect, b: DOMRect) =>
 
 const grow = (r: DOMRect, by: number) => new DOMRect(r.x - by, r.y - by, r.width + 2 * by, r.height + 2 * by);
 
-/** The box a part paints, its outline (a pin's focus ring) included; null when it paints nothing. */
-const painted = (el: Element): DOMRect | null => {
+/** The boxes a part's own words stand in (its text runs, not its block's width). */
+const wordBoxes = (el: Element): DOMRect[] => {
+  const range = document.createRange();
+  return [...el.childNodes]
+    .filter((child) => child.nodeType === Node.TEXT_NODE && (child.textContent ?? "").trim())
+    .flatMap((child) => {
+      range.selectNodeContents(child);
+      return [...range.getClientRects()];
+    });
+};
+
+/**
+ * The boxes a part paints, its outline (a pin's focus ring) included; none
+ * when it paints nothing. A part that paints only words (a label as wide as
+ * its row) paints where its words stand.
+ */
+const painted = (el: Element): DOMRect[] => {
   const s = getComputedStyle(el);
   if (s.display === "none" || s.visibility === "hidden") {
-    return null;
+    return [];
   }
-  const words = [...el.childNodes].some((child) => child.nodeType === Node.TEXT_NODE && (child.textContent ?? "").trim());
   const fill = s.backgroundColor !== "rgba(0, 0, 0, 0)" && s.backgroundColor !== "transparent";
   const edge = [s.borderTopWidth, s.borderRightWidth, s.borderBottomWidth, s.borderLeftWidth].some((w) => Number.parseFloat(w) > 0);
   const glyph = el instanceof SVGSVGElement || el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
-  if (!(words || fill || edge || glyph)) {
-    return null;
+  if (!(fill || edge || glyph)) {
+    return wordBoxes(el);
   }
   const box = el.getBoundingClientRect();
   const ring = s.outlineStyle === "none" ? 0 : Number.parseFloat(s.outlineOffset) + Number.parseFloat(s.outlineWidth);
-  return ring > 0 ? grow(box, ring) : box;
+  return [ring > 0 ? grow(box, ring) : box];
 };
 
 const put = (tag: HTMLElement, place: Place) => {
@@ -74,8 +91,7 @@ const roomy = (tag: HTMLElement) => {
     if (el === tag || tag.contains(el) || el.contains(tag) || el.closest("[aria-hidden='true']")) {
       return true;
     }
-    const box = painted(el);
-    return !(box && meets(room, box));
+    return !painted(el).some((box) => meets(room, box));
   });
 };
 
@@ -95,7 +111,7 @@ export const placeTag = (tag: HTMLElement) => {
   place();
   document.fonts.ready.then(later);
   const sizes = new ResizeObserver(later);
-  sizes.observe(tag.closest("[data-anchor='page']") ?? document.body);
+  sizes.observe(tag.closest("[data-well], [data-frame]") ?? document.body);
   // A pin or a floating surface arriving or moving; the tag's own moves are left out.
   const moves = new MutationObserver((records) => {
     if (records.some((record) => !tag.contains(record.target))) {

@@ -8,15 +8,9 @@
 @import "../../../../apps/dashboard/src/design.css";
 
 @source "./";
-@source "../../../../apps/dashboard/src/lib/components/ui/button/";
-@source "../../../../apps/dashboard/src/lib/components/ui/chip/";
-@source "../../../../apps/dashboard/src/lib/components/ui/fluid-tabs/";
-@source "../../../../apps/dashboard/src/lib/components/ui/input/";
-@source "../../../../apps/dashboard/src/lib/components/ui/input-group/";
-@source "../../../../apps/dashboard/src/lib/components/ui/kbd/";
-@source "../../../../apps/dashboard/src/lib/components/ui/popover/";
-@source "../../../../apps/dashboard/src/lib/components/ui/textarea/";
-@source "../../../../apps/dashboard/src/lib/cawco/turn/";
+/* The dashboard parts the drawings mount: the kit, the artifact panel's frame,
+   the routine form, the transcript's attachments and turns. */
+@source "../../../../apps/dashboard/src/lib/";
 
 /* The one token the design adds (comment-design §1, "a new token
    `--c-comments-w: 320px`"), held here until it lands in

@@ -20,7 +20,7 @@
   {#each CELLS as cell (cell.n)}
     <figure class="flex flex-col gap-space-1">
       <div class="relative h-16 w-28 rounded-xs bg-surface-page" data-cell>
-        <span class="absolute start-space-3 top-10 type-meta text-ink-muted">Save</span>
+        <span class="absolute start-space-3 top-11 type-meta text-ink-muted">Create</span>
         <Pin n={cell.n} {shape} x="28px" y="40px" />
       </div>
       <figcaption class="type-meta text-ink-muted">{cell.label}</figcaption>
@@ -28,7 +28,7 @@
   {/each}
   <figure class="flex flex-col gap-space-1">
     <div class="relative h-16 w-28 rounded-xs bg-surface-page" data-cell>
-      <span class="absolute start-space-3 top-10 type-meta text-ink-muted">Save</span>
+      <span class="absolute start-space-3 top-11 type-meta text-ink-muted">Create</span>
       <Pin deck={[12, 11]} n={14} {shape} x="28px" y="40px" />
     </div>
     <figcaption class="type-meta text-ink-muted">Three on one spot</figcaption>
@@ -39,7 +39,7 @@
       data-edge
       data-cell
     >
-      <span class="absolute end-space-2 top-10 type-meta text-ink-muted">Help</span>
+      <span class="absolute end-space-2 top-11 type-meta text-ink-muted">Help</span>
       <Pin
         n={103}
         place="up-left"

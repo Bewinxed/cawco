@@ -9,14 +9,30 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "$kit/components/ui/popover/index.js";
 
-  let { anchor, children }: { anchor: string; children: Snippet } = $props();
+  let {
+    anchor,
+    boundary = "[data-side-well]",
+    children,
+  }: {
+    anchor: string;
+    /** The box it keeps inside, flipping and sliding as the kit's popover does: the well it stands over. */
+    boundary?: string;
+    children: Snippet;
+  } = $props();
+  // The page is in the document only once the scene has mounted: the boundary is found then, and the surface opens inside it.
+  let room = $state<Element | null>(null);
+  $effect(() => {
+    room = document.querySelector(boundary);
+  });
   let open = $state(true);
 </script>
 
+{#if room}
 <Popover.Root bind:open>
   <Popover.Content
     align="start"
-    collisionPadding={32}
+    collisionBoundary={room}
+    collisionPadding={8}
     customAnchor={anchor}
     data-float
     gap="snug"
@@ -32,3 +48,4 @@
     {@render children()}
   </Popover.Content>
 </Popover.Root>
+{/if}

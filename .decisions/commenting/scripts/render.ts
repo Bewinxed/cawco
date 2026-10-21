@@ -26,7 +26,10 @@
  *   covered there, by a surface over it or by the overflow edge of a box
  *   holding it. A line covered whole is under a surface on purpose; one
  *   covered in part reads as a broken line. Text inside floating surfaces
- *   the kit portals out of the scene is read too;
+ *   the kit portals out of the scene is read too, and a field's value (a
+ *   textarea's, an input's, a select's), its lines laid out in a mirror of
+ *   the field. A line the picture's top or bottom edge crosses is cut too;
+ *   its sides may cut the page, as a picture of the panel's end does;
  * - crowded tag: a name tag within 3px of a drawn part other than its own
  *   element, floating surfaces included.
  */
@@ -44,12 +47,14 @@ type Region =
 
 const SHOTS: { scene: string; file: string; region: Region }[] = [
   { scene: "ctx-rail", file: "decided-rail.png", region: { kind: "right", width: 480, height: 420 } },
-  { scene: "ctx-whole", file: "decided-whole-page.png", region: { kind: "el", sel: "[data-well]" } },
+  { scene: "ctx-whole", file: "decided-whole-page.png", region: { kind: "el", sel: "[data-side-well]" } },
   { scene: "ctx-empty", file: "decided-empty.png", region: { kind: "el", sel: "[data-board]", pad: 8 } },
+  { scene: "ctx-attach", file: "decided-attach.png", region: { kind: "el", sel: "[data-board]", pad: 8 } },
   { scene: "p1-rail", file: "p1-rail-panel.png", region: { kind: "el", sel: "[data-panel]" } },
   { scene: "p1-rail", file: "p1-rail-thread.png", region: { kind: "right", width: 480 } },
+  { scene: "p1-rail", file: "decided-attach-thread.png", region: { kind: "el", sel: "[data-rail]" } },
   { scene: "p1-card", file: "p1-card-panel.png", region: { kind: "el", sel: "[data-panel]" } },
-  { scene: "p1-card", file: "p1-card-thread.png", region: { kind: "union", sels: ["[data-float]", "[data-pin='14'] [data-marker]"], pad: 24 } },
+  { scene: "p1-card", file: "p1-card-thread.png", region: { kind: "union", sels: ["[data-float]", "[data-pin='14'] [data-marker]", "[data-slot='commit']"], pad: 24 } },
   { scene: "p2-tail", file: "p2-tail-panel.png", region: { kind: "el", sel: "[data-panel]" } },
   { scene: "p2-tail-board", file: "p2-tail-close.png", region: { kind: "el", sel: "[data-board]" } },
   { scene: "p2-stem", file: "p2-stem-panel.png", region: { kind: "el", sel: "[data-panel]" } },
@@ -62,6 +67,10 @@ const SHOTS: { scene: string; file: string; region: Region }[] = [
   { scene: "p4-el-typed", file: "p4-element-typed.png", region: { kind: "right", width: 480 } },
   { scene: "p4-rail-empty", file: "p4-rail-empty.png", region: { kind: "right", width: 480 } },
   { scene: "p4-rail-typed", file: "p4-rail-typed.png", region: { kind: "right", width: 480 } },
+  { scene: "p6-words", file: "p6-words.png", region: { kind: "el", sel: "[data-board]", pad: 8 } },
+  { scene: "p6-alone", file: "p6-alone.png", region: { kind: "el", sel: "[data-board]", pad: 8 } },
+  { scene: "p7-count", file: "p7-count.png", region: { kind: "right", width: 480 } },
+  { scene: "p7-strip", file: "p7-strip.png", region: { kind: "right", width: 480 } },
 ];
 
 const server = Bun.serve({
@@ -98,7 +107,10 @@ const sweep = (tab: Page) =>
       if (s.display === "none" || s.visibility === "hidden" || scroller(s) || el.closest("svg")) { continue; }
       // A screen reader's label (sr-only) is a 1px box by design.
       if (el.clientWidth <= 2) { continue; }
-      if (el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0) {
+      // Content past a box that doesn't clip it isn't cut (a chip row's designed bleed, a
+      // control's invisible hit area); a box that clips it, or a field, cuts it.
+      const clips = s.overflowX !== "visible" || el.tagName === "INPUT";
+      if (clips && el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0) {
         found.push(`overflow-x ${el.scrollWidth}>${el.clientWidth}: ${name(el)}`);
       }
       // A run the house trims to its x-height (design.css `mark-text`:
@@ -112,7 +124,8 @@ const sweep = (tab: Page) =>
     }
     for (const el of aside) { el.style.display = ""; }
     for (const el of document.querySelectorAll("[data-float] *, [data-float]")) {
-      if (el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0 && !scroller(getComputedStyle(el))) {
+      const fs = getComputedStyle(el);
+      if ((fs.overflowX !== "visible" || el.tagName === "INPUT") && el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0 && !scroller(fs)) {
         found.push(`overflow-x in float: ${name(el)}`);
       }
     }
@@ -211,9 +224,11 @@ const cropSweep = (tab: Page, clip: Clip) =>
     // Every drawn part is made hit-testable while it's read (pins are
     // pointer-events: none on the page, so a press reaches the element under
     // them), except the decorations the drawings mark aria-hidden: outlines,
-    // the well's and frames' edges, status dots.
+    // the well's and frames' edges, status dots; and the boxes that stand
+    // over the form's elements to hold their pins (data-over-box), which are
+    // geometry, not surfaces.
     const testable = document.createElement("style");
-    testable.textContent = `:is(main, [data-float]) *:not([aria-hidden="true"], [aria-hidden="true"] *) { pointer-events: auto !important; }`;
+    testable.textContent = `:is(main, [data-float]) *:not([aria-hidden="true"], [aria-hidden="true"] *, [data-over-box]) { pointer-events: auto !important; }`;
     document.head.append(testable);
     /** A screen reader's label: clipped to nothing, or a 1px box, by design. */
     const unseen = (el: Element) => {
@@ -233,15 +248,61 @@ const cropSweep = (tab: Page, clip: Clip) =>
       for (let node = walker.nextNode(); node; node = walker.nextNode()) { out.push(node); }
       return out;
     });
+    // Every line of words in the scene: each text run's line boxes, and each
+    // field's value (a textarea's, an input's, a select's chosen option),
+    // which no text node holds: its lines are read from a mirror laid out
+    // with the field's own box and type, kept to the field's content box.
     const range = document.createRange();
+    const lines: { host: Element; words: string; boxes: DOMRect[] }[] = [];
     for (const node of texts) {
       const host = node.parentElement;
-      if (!(host && (node.textContent ?? "").trim()) || host.closest("svg") || !shown(host) || unseen(host)) { continue; }
+      if (!(host && (node.textContent ?? "").trim()) || host.closest("svg, select") || !shown(host) || unseen(host)) { continue; }
+      range.selectNodeContents(node);
+      lines.push({ host, words: (node.textContent ?? "").trim(), boxes: [...range.getClientRects()] });
+    }
+    const fields = roots.flatMap((root) => (root ? [...root.querySelectorAll<HTMLElement>("textarea, select, input:not([type]), input[type='text'], input[type='search']")] : []));
+    for (const field of fields) {
+      if (!shown(field) || unseen(field)) { continue; }
+      const value = field instanceof HTMLSelectElement ? (field.selectedOptions[0]?.text ?? "") : (field as HTMLInputElement | HTMLTextAreaElement).value || (field as HTMLInputElement).placeholder;
+      if (!value.trim()) { continue; }
+      const fs = getComputedStyle(field);
+      const box = field.getBoundingClientRect();
+      const mirror = document.createElement("div");
+      for (const property of ["font", "letterSpacing", "wordSpacing", "lineHeight", "textIndent", "textAlign", "textTransform", "fontFeatureSettings", "fontVariantNumeric", "boxSizing", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth", "overflowWrap", "wordBreak", "tabSize"] as const) {
+        mirror.style[property] = fs[property];
+      }
+      Object.assign(mirror.style, {
+        position: "fixed", left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px`,
+        borderStyle: "solid", borderColor: "transparent", visibility: "hidden", pointerEvents: "none", overflow: "hidden",
+        whiteSpace: field instanceof HTMLTextAreaElement ? "pre-wrap" : "pre",
+      });
+      mirror.textContent = value;
+      document.body.append(mirror);
+      const content = new DOMRect(
+        box.left + field.clientLeft + Number.parseFloat(fs.paddingLeft), box.top + field.clientTop + Number.parseFloat(fs.paddingTop),
+        field.clientWidth - Number.parseFloat(fs.paddingLeft) - Number.parseFloat(fs.paddingRight),
+        field.clientHeight - Number.parseFloat(fs.paddingTop) - Number.parseFloat(fs.paddingBottom),
+      );
+      range.selectNodeContents(mirror);
+      const boxes = [...range.getClientRects()].map((line) => {
+        const l = Math.max(line.left, content.left);
+        const t = Math.max(line.top, content.top);
+        return new DOMRect(l, t, Math.min(line.right, content.right) - l, Math.min(line.bottom, content.bottom) - t);
+      }).filter((line) => line.width > 1 && line.height > 1);
+      mirror.remove();
+      lines.push({ host: field, words: value.trim(), boxes });
+    }
+    for (const { host, words, boxes } of lines) {
       // A pin's stacked markers are one surface: the front one covers the deck by design.
       const pin = host.closest("[data-pin]");
-      range.selectNodeContents(node);
-      for (const line of range.getClientRects()) {
+      for (const line of boxes) {
         if (line.width < 2 || line.height < 2 || !meets(line, picture)) { continue; }
+        // The picture's top and bottom edges cut no line: a crop stops between lines. (Its sides may cut
+        // the page's lines: a picture of the panel's end shows the page's end, not its start.)
+        if ((line.top < picture.top - 0.5 && line.bottom > picture.top + 0.5) || (line.top < picture.bottom - 0.5 && line.bottom > picture.bottom + 0.5)) {
+          found.push(`cut line “${words.slice(0, 40)}”, cut by the picture's ${line.top < picture.top ? "top" : "bottom"} edge`);
+          continue;
+        }
         const left = Math.max(line.left, picture.left) + 1;
         const right = Math.min(line.right, picture.right) - 1;
         const top = Math.max(line.top, picture.top);
@@ -252,10 +313,13 @@ const cropSweep = (tab: Page, clip: Clip) =>
         for (const y of [top + (bottom - top) * 0.2, (top + bottom) / 2, bottom - (bottom - top) * 0.2]) {
           for (let x = left; x <= right; x += 3) {
             const hit = document.elementFromPoint(x, y);
+            // A part drawn invisible (a button's resting spinner cell, opacity 0) covers nothing.
+            if (hit && !shown(hit)) { continue; }
             if (hit && (hit === host || host.contains(hit) || hit.contains(host) || pin?.contains(hit))) {
               own += 1;
-            } else if (!hit?.closest("[data-pin]")) {
-              // A pin stands on its element's words by design (pick 2); its own rules sweep it.
+            } else if (!hit?.closest("[data-pin][data-shape='stem']")) {
+              // A stem's pill crosses the words under it by design (pick 2's stem option, its stated
+              // cost); any other marker standing over words cuts them like any surface.
               covered += 1;
               over.add(hit);
             }
@@ -263,7 +327,7 @@ const cropSweep = (tab: Page, clip: Clip) =>
         }
         if (own > 0 && covered > 0) {
           const by = [...over].map((el) => (el ? name(el) : "nothing")).join(" + ");
-          found.push(`cut line “${(node.textContent ?? "").trim().slice(0, 40)}”, ${covered} of ${own + covered} points covered by ${by}`);
+          found.push(`cut line “${words.slice(0, 40)}”, ${covered} of ${own + covered} points covered by ${by}`);
         }
       }
     }
@@ -274,12 +338,19 @@ const cropSweep = (tab: Page, clip: Clip) =>
     // holds it), floating surfaces included wherever the kit portals them.
     // The drawings place tags by the same room (drawings/src/parts/place-tag.ts).
     const ROOM = 3;
-    const paints = (el: Element) => {
+    // What a part paints, as place-tag.ts reads it: its box, or where its words stand when words are all it paints.
+    const painted = (el: Element): DOMRect[] => {
       const s = getComputedStyle(el);
-      const text = [...el.childNodes].some((child) => child.nodeType === Node.TEXT_NODE && (child.textContent ?? "").trim());
       const fill = s.backgroundColor !== "rgba(0, 0, 0, 0)" && s.backgroundColor !== "transparent";
       const edge = ["Top", "Right", "Bottom", "Left"].some((side) => Number.parseFloat(s.getPropertyValue(`border-${side.toLowerCase()}-width`)) > 0);
-      return text || fill || edge || el.tagName === "svg" || el.tagName === "TEXTAREA" || el.tagName === "INPUT";
+      if (fill || edge || el.tagName === "svg" || el.tagName === "TEXTAREA" || el.tagName === "INPUT") { return [el.getBoundingClientRect()]; }
+      const words = document.createRange();
+      return [...el.childNodes]
+        .filter((child) => child.nodeType === Node.TEXT_NODE && (child.textContent ?? "").trim())
+        .flatMap((child) => {
+          words.selectNodeContents(child);
+          return [...words.getClientRects()];
+        });
     };
     for (const tag of document.querySelectorAll("main [data-tag]")) {
       if (!shown(tag)) { continue; }
@@ -288,9 +359,8 @@ const cropSweep = (tab: Page, clip: Clip) =>
       const room = new DOMRect(t.x - ROOM, t.y - ROOM, t.width + 2 * ROOM, t.height + 2 * ROOM);
       const anchor = tag.parentElement;
       for (const el of document.querySelectorAll("main *, [data-float], [data-float] *")) {
-        if (el === tag || el === anchor || tag.contains(el) || el.contains(tag) || el.closest("[aria-hidden='true'], [data-pin]") || !shown(el) || !paints(el)) { continue; }
-        const r = el.getBoundingClientRect();
-        if (meets(r, picture) && meets(room, r)) { found.push(`crowded tag ${name(tag)}: within ${ROOM}px of ${name(el)}`); }
+        if (el === tag || el === anchor || tag.contains(el) || el.contains(tag) || el.closest("[aria-hidden='true'], [data-pin]") || !shown(el)) { continue; }
+        if (painted(el).some((r) => meets(r, picture) && meets(room, r))) { found.push(`crowded tag ${name(tag)}: within ${ROOM}px of ${name(el)}`); }
       }
     }
     return found;
@@ -322,7 +392,7 @@ const regionOf = async (tab: Page, region: Region) => {
 
 await mkdir(join(HERE, "captures"), { recursive: true });
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 800, height: 600 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
+const page = await browser.newPage({ viewport: { width: 1000, height: 1100 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
 const errors: string[] = [];
 page.on("pageerror", (error) => errors.push(error.message));
 page.on("console", (message) => {

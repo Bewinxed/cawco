@@ -34,6 +34,15 @@ export default defineConfig({
         find: /^\$kit\//,
         replacement: `${here}/../../../apps/dashboard/src/lib/`,
       },
+      // The dashboard's own import map (its package.json `imports`), which its parts import each other by.
+      {
+        find: /^#lib\//,
+        replacement: `${here}/../../../apps/dashboard/src/lib/`,
+      },
+      {
+        find: /^#lib$/,
+        replacement: `${here}/../../../apps/dashboard/src/lib/index.js`,
+      },
     ],
   },
   build: { outDir: "dist", emptyOutDir: true, target: "esnext" },
