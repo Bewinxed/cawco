@@ -290,11 +290,18 @@ import type { Tasks } from "./tasks";
  * judges a sibling's canvas handed to its parent): a clause each, paid for
  * by cutting their own words (worker 27,534, delegate 9,991, lead 18,337
  * measured). No budget moves.
+ * 2026-10-21: a work item's `outputs` take folders (work-items.ts
+ * `outputsProbe`, a decision page or preview is a folder of a page and its
+ * pictures, refused three times as missing): `delegate`'s `outputs` says
+ * files or folders with an example of each, and `lands`'s 'none' names
+ * folders. About 16 tokens for the worker and the lead (worker 27,551, lead
+ * 18,354 measured beside the tree's reads); the worker fits. Raised
+ * deliberately, by that, for the lead.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 27_580,
   delegate: 10_000,
-  lead: 18_338,
+  lead: 18_354,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

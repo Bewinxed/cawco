@@ -767,14 +767,14 @@ export function handoffTools(deps: HandoffDeps) {
             "Where the work goes once the delegate finishes. 'main' (default): the hub rebases the delegate's commits onto the repository's default branch, runs its landing gate (install, lint, typecheck, the iOS build when the app changed) and pushes. " +
               "'branch': the hub pushes them, as they are, to cawco/<task or item> on origin. " +
               "'pr': that, then a pull request against the default branch (or the one already open for that branch); the report carries its link. " +
-              "'none': nothing is pushed, for work that is not commits (a report, a draft); name its files in `outputs`."
+              "'none': nothing is pushed, for work that is not commits (a report, a draft); name its files or folders in `outputs`."
           ),
         outputs: z
           .array(z.string())
           .optional()
           .describe(
-            "Deliverable files that are not commits, as paths from the repository's root, e.g. ['report.md']. " +
-              "When the delegate finishes, the hub copies each into the project's folder under assets/<task or item>/ and the report lists them; " +
+            "Deliverable files or folders that are not commits, as paths from the repository's root, e.g. ['report.md', '.decisions/pick/']. " +
+              "When the delegate finishes, the hub copies each, a folder whole, into the project's folder under assets/<task or item>/ and the report lists them; " +
               "a missing one goes back to the delegate. Needs this session to be in a project."
           ),
         group: groupParameter().optional(),

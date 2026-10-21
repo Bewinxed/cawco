@@ -1337,13 +1337,13 @@ const outputsOf = (outputs: string[] | undefined): string[] | null => {
     if (path === undefined) {
       throw new WorkItemRefusal(
         400,
-        `outputs: “${raw}” is not a path inside the workspace. Name each file from the workspace's root, like report.md or docs/notes.md: no leading "/", no "..", nothing under .git.`
+        `outputs: “${raw}” is not a path inside the workspace. Name each file or folder from the workspace's root, like report.md or docs/notes/: no leading "/", no "..", nothing under .git.`
       );
     }
     if (!path) {
       throw new WorkItemRefusal(
         400,
-        `outputs: “${raw}” names the workspace itself; name a file in it, like report.md.`
+        `outputs: “${raw}” names the workspace itself; name a file or folder in it, like report.md.`
       );
     }
     return path;
@@ -1374,14 +1374,36 @@ const landingOf = (item: WorkItemRow): WorkspaceLanding => ({
 
 const MIB = 1024 * 1024;
 
-/** The shell that says of each output whether it is missing, a link, or a file of some size. */
+/**
+ * The shell that says of each output whether it is missing, a link, or a
+ * file of some size. A folder is said file by file, so a link inside it is
+ * refused and each file meets the size limit; a folder with no files in it
+ * is missing.
+ */
 const outputsProbe = (outputs: string[]): string =>
   outputs
     .map(
       (path) =>
-        `p=${quote(path)}; if [ -L "$p" ]; then echo "link $p"; elif [ ! -f "$p" ]; then echo "missing $p"; else echo "size $(wc -c < "$p" | tr -d ' ') $p"; fi`
+        `p=${quote(path)}; if [ -L "$p" ]; then echo "link $p"; elif [ -d "$p" ]; then find "$p" -type l | while IFS= read -r f; do echo "link $f"; done; find "$p" -type f | while IFS= read -r f; do echo "size $(wc -c < "$f" | tr -d ' ') $f"; done; [ -n "$(find "$p" -type f | head -n 1)" ] || echo "missing $p"; elif [ ! -f "$p" ]; then echo "missing $p"; else echo "size $(wc -c < "$p" | tr -d ' ') $p"; fi`
     )
     .join("; ");
+
+/**
+ * The shell that lists the files to collect for one output, a path from the
+ * workspace's root a line: the file itself, or every file under a folder.
+ */
+const outputFilesCommand = (path: string): string =>
+  `p=${quote(path)}; if [ -d "$p" ]; then find "$p" -type f | LC_ALL=C sort; else echo "$p"; fi`;
+
+/**
+ * Where an output's file lands under the item's assets folder: a file at
+ * its own path, a file of a folder output under the folder's last path part
+ * (`.decisions/commenting/page.oui` → `commenting/page.oui`).
+ */
+const assetPathOf = (output: string, file: string): string =>
+  file === output
+    ? output
+    : `${output.split("/").at(-1)}${file.slice(output.length)}`;
 
 /** What a probe's answer says is wrong with the outputs, a sentence each. */
 const outputsSaid = (stdout: string): string[] => {
@@ -5733,9 +5755,11 @@ export const createWorkItems = ({
     noWait: boolean
   ): Promise<TreeState | undefined> => {
     const outputs = item.outputs ?? [];
+    // One hash a line per output; a folder's is the hash of its files' list
+    // with each file's hash.
     const hashed =
       outputs.length > 0
-        ? ` && git hash-object -- ${outputs.map(quote).join(" ")}`
+        ? ` && for p in ${outputs.map(quote).join(" ")}; do if [ -d "$p" ]; then find "$p" -type f | LC_ALL=C sort | while IFS= read -r f; do echo "$f $(git hash-object -- "$f")"; done | git hash-object --stdin; else git hash-object -- "$p"; fi || exit 1; done`
         : "";
     const declared =
       inputPaths.length > 0
@@ -6279,9 +6303,10 @@ export const createWorkItems = ({
   };
 
   /**
-   * Whether each of the item's outputs is in its workspace: a file (not a
-   * link, which could lead anywhere) within the size the project's folder
-   * takes. The text that sends the item back when one is not; else nothing.
+   * Whether each of the item's outputs is in its workspace: a file, or a
+   * folder of files (no link, which could lead anywhere), each within the
+   * size the project's folder takes. The text that sends the item back when
+   * one is not; else nothing.
    */
   const outputsProblem = async (
     workspace: WorkspaceRow,
@@ -6301,6 +6326,42 @@ export const createWorkItems = ({
     return problems.length > 0
       ? `Not landed: the item's outputs are not ready. ${problems.join(" ")} Then call finish_item again.`
       : undefined;
+  };
+
+  /**
+   * One output's files read from the workspace, each at its path under the
+   * item's assets `folder` ({@link assetPathOf}): the file itself, or every
+   * file of a folder, its subfolders' included.
+   */
+  const outputFiles = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    output: string,
+    folder: string
+  ): Promise<{ path: string; content: Uint8Array }[]> => {
+    const listed = await runIn(workspace, item)(
+      outputFilesCommand(output),
+      GIT_TIMEOUT_MS
+    );
+    if (listed.exitCode !== 0) {
+      throw new Error(`${output} could not be listed: ${failedWith(listed)}`);
+    }
+    const files: { path: string; content: Uint8Array }[] = [];
+    for (const path of listed.stdout.split("\n").filter(Boolean)) {
+      // biome-ignore lint/performance/noAwaitInLoops: one file at a time keeps each read under the command's output cap
+      const read = await runIn(workspace, item)(
+        `base64 < ${quote(path)}`,
+        GIT_TIMEOUT_MS
+      );
+      if (read.exitCode !== 0) {
+        throw new Error(`${path} could not be read: ${failedWith(read)}`);
+      }
+      files.push({
+        path: `${folder}/${assetPathOf(output, path)}`,
+        content: Buffer.from(read.stdout, "base64"),
+      });
+    }
+    return files;
   };
 
   /**
@@ -6325,19 +6386,9 @@ export const createWorkItems = ({
     const folder = outputsFolder(item);
     try {
       const files: { path: string; content: Uint8Array }[] = [];
-      for (const path of outputs) {
-        // biome-ignore lint/performance/noAwaitInLoops: one file at a time keeps each read under the command's output cap
-        const read = await runIn(workspace, item)(
-          `base64 < ${quote(path)}`,
-          GIT_TIMEOUT_MS
-        );
-        if (read.exitCode !== 0) {
-          throw new Error(`${path} could not be read: ${failedWith(read)}`);
-        }
-        files.push({
-          path: `${folder}/${path}`,
-          content: Buffer.from(read.stdout, "base64"),
-        });
+      for (const output of outputs) {
+        // biome-ignore lint/performance/noAwaitInLoops: one output at a time keeps each read under the command's output cap
+        files.push(...(await outputFiles(workspace, item, output, folder)));
       }
       const written = await writeFolderFiles(item.projectId, files, {
         author: { name: item.title },

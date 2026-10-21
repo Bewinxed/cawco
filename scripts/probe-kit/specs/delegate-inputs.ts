@@ -12,6 +12,9 @@
  * - A handoff from the parent adds an input while the leaf works: it lands in
  *   the leaf's `$TMPDIR/inputs/`, and the handoff names it.
  * - The leaf then calls finish_item; its item, which lands none, is done.
+ * - Its output is a folder (`deck/`, named with a trailing slash) holding
+ *   two files and a subfolder: the item finishes, and the project's
+ *   `assets/<item>/deck/` holds every file, the subfolder's included.
  *
  *   bun scripts/probe-kit/run.ts delegate-inputs
  */
@@ -29,6 +32,17 @@ const TOKEN = `delegate-inputs-${crypto.randomUUID()}`;
 const HANDED_TOKEN = `delegate-inputs-handoff-${crypto.randomUUID()}`;
 /** How the handoff names its input to the leaf (core `withInputsLine`). */
 const HANDED_LINE = `Your parent's inputs are in $TMPDIR/inputs/: ${HANDED}`;
+/** The leaf's output: a folder of two files and a subfolder, by its path in the workspace and what each holds. */
+const OUTPUT = "deck/";
+const DECK: Record<string, string> = {
+  "deck/page.oui": `page-${crypto.randomUUID()}`,
+  "deck/notes.md": `notes-${crypto.randomUUID()}`,
+  "deck/shots/one.txt": `shot-${crypto.randomUUID()}`,
+};
+const WRITE_DECK = [
+  "mkdir -p deck/shots",
+  ...Object.entries(DECK).map(([path, body]) => `printf %s ${body} > ${path}`),
+].join(" && ");
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({
@@ -63,8 +77,8 @@ const respond = (request: Seen): Reply => {
   if (!leaf.read) {
     leaf.read = true;
     return useTool("Bash", {
-      command: `cat "$TMPDIR/inputs/${INPUT}"`,
-      description: "Read the input",
+      command: `cat "$TMPDIR/inputs/${INPUT}" && ${WRITE_DECK}`,
+      description: "Read the input and write the output folder",
     });
   }
   if (!request.all.includes(HANDED_LINE)) {
@@ -210,6 +224,37 @@ const handsOn = async (
   check("the handoff names its input to the leaf", named !== undefined);
 };
 
+/**
+ * The folder output, collected whole: the report lists each of its files at
+ * `<project folder>/assets/<item>/deck/…`, and each holds what the leaf wrote.
+ */
+const collectsFolder = async (
+  { check }: Kit,
+  result: string
+): Promise<void> => {
+  const listed = result
+    .split("\n")
+    .filter((line) => line.startsWith("- /") && line.includes("/assets/"))
+    .map((line) => line.slice(2));
+  const copied = await Promise.all(
+    Object.entries(DECK).map(async ([path, body]) => {
+      const at = listed.find((one) => one.endsWith(`/${path}`));
+      const held = at ? await readFile(at, "utf8").catch(() => "") : "";
+      return { path, at, ok: held === body };
+    })
+  );
+  check(
+    "the folder output's two files and its subfolder's file are all in the item's assets folder",
+    copied.every((one) => one.ok),
+    copied
+      .map(
+        (one) =>
+          `${one.path}: ${one.at ?? "not listed"} ${one.ok ? "ok" : "wrong"}`
+      )
+      .join("; ") || result.slice(-600)
+  );
+};
+
 const spec: Spec = {
   name: "delegate-inputs",
   host: "it delegates, so its fleet cuts workspaces",
@@ -225,6 +270,7 @@ const spec: Spec = {
         model: "claude-haiku-4-5",
         cwd: src,
         lands: "none",
+        outputs: [OUTPUT],
         inputs,
       });
     await refusesKeys(kit, fleet, home, delegate);
@@ -275,6 +321,7 @@ const spec: Spec = {
         (ended.result ?? "").includes("Read both inputs."),
       `${ended?.state}: ${(ended?.result ?? "").slice(0, 400)}`
     );
+    await collectsFolder(kit, ended?.result ?? "");
   },
 };
 
