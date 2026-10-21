@@ -25,6 +25,17 @@ import { CLAUDE_PROVIDER } from "./accounts";
 /** The harnesses cawco can spawn sessions on. Adding one is a new adapter. */
 export type HarnessKind = "claude" | "opencode" | "pi";
 
+/**
+ * How long one part of a machine's report may take before the agent gives
+ * it up for this beat (agent daemon.ts `readPart`), a harness's report among
+ * them. Longer than the slowest read that answers (a Claude account's probe
+ * waits up to 60 s for initialize, agent accounts.ts); a part past it is a
+ * read that will not answer, which held the whole first report back and so
+ * the machine's sign-ins with it. The hub waits on a starting machine's
+ * harness reports no longer than this (hub server.ts first fleet sync).
+ */
+export const MACHINE_PART_MS = 90_000;
+
 /** Recovery is a decided-outcome barrier, never evidence that every session succeeded. */
 export interface AgentBusyReport {
   busy: number;

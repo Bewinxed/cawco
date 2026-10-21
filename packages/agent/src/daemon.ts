@@ -60,8 +60,10 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_MIGRATE,
+  type HarnessKind,
   invariant,
   lawPolicy,
+  MACHINE_PART_MS,
   type TranscriptQuery,
   UPDATE_CAWCO,
   type WorkspaceRef,
@@ -581,17 +583,8 @@ const machineProviders = async (): Promise<
 };
 
 /**
- * How long one part of the machine's report may take before it is given up
- * for this beat. Longer than the slowest read that answers (a Claude
- * account's probe waits up to 60 s for initialize, accounts.ts); a part
- * past it is a read that will not answer, which held the whole first report
- * back and so the machine's sign-ins with it.
- */
-const PART_MS = 90_000;
-
-/**
  * One part of what the machine reports, read on its own: what it read, or
- * undefined when it was not read (no answer in {@link PART_MS}, or a failure),
+ * undefined when it was not read (no answer in {@link MACHINE_PART_MS}, or a failure),
  * said once under the part's name. Undefined is never sent as an empty part:
  * the part is left out, the hub keeps its last copy, and it is read again
  * on the next beat. One part failing, or never answering, never keeps the
@@ -603,7 +596,7 @@ const readPart = async <T>(
 ): Promise<T | undefined> => {
   let answer: Bounded<T>;
   try {
-    answer = await readWithin(PART_MS, () => read());
+    answer = await readWithin(MACHINE_PART_MS, () => read());
   } catch (error) {
     console.warn(`[agent] ${part} could not be read: ${errorWords(error)}`);
     return;
@@ -613,7 +606,7 @@ const readPart = async <T>(
       return answer.value;
     case "unanswered":
       console.warn(
-        `[agent] ${part} was not read within ${PART_MS / 1000} s; the hub keeps its last copy, and it is read again on the next beat`
+        `[agent] ${part} was not read within ${MACHINE_PART_MS / 1000} s; the hub keeps its last copy, and it is read again on the next beat`
       );
       return;
     default: {
@@ -842,6 +835,13 @@ export interface RegisterPayload extends MachineIdentity {
    * that machine (hub server.ts `takeFormerId`). Absent when it has not moved.
    */
   formerMachineId?: string;
+  /**
+   * The harnesses whose reports follow this register, each on a beat of its
+   * own: the adapters this daemon has (harnesses/index.ts), named without
+   * probing any. The hub holds the connection's first fleet sync until each
+   * has reported, so a starting machine is synced once, on its whole set.
+   */
+  harnessKinds: HarnessKind[];
   instances: string[];
   /**
    * The preview listeners this process is serving. A hub that restarted has
@@ -1536,6 +1536,7 @@ const attach = (
       instances: supervisor.instanceIds,
       previews: servingPreviews(),
       custody: snapshot.custody,
+      harnessKinds: harnesses().map((adapter) => adapter.kind),
       credentialHashes: storedHashes(),
       ...(snapshot.catalog
         ? {

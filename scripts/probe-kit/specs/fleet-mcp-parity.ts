@@ -13,13 +13,14 @@
  *
  * - the machine's row reads `probefleet` applied for Claude Code, OpenCode
  *   and pi alike;
- * - up to the first fleet change, the starting agent got one fleet sync
- *   (every harness's first report merged into it) and its location was
- *   evicted by fleet MCP status at most once;
+ * - up to the first fleet change, the starting agent got one fleet sync,
+ *   held until every harness its register named had reported, and its
+ *   location was evicted by fleet MCP status at most once;
  * - a session on each harness calls `probefleet`'s `whoami`, and the answer
  *   names a process of the fleet's;
  * - the same sessions call `his` `whoami`, answered by a process of his;
- * - the fleet's row moves to another config, and the same three sessions,
+ * - the fleet's row moves to another config, and the agent takes the sync
+ *   within {@link HELD_MS} of the PUT; the same three sessions,
  *   with no new one spawned, call it again: answered by a process of the
  *   new config's;
  * - what CawCo wrote into his files before (a server its sidecar names, one
@@ -248,6 +249,10 @@ interface Row {
 
 /** The agent's line for each location a fleet MCP status read booted and let go (opencode.ts `#releaseDirectory`). */
 const EVICTED = "location evicted by fleet MCP status";
+/** What the hub's log says before a sync's reason. */
+const SYNC_PREFIX = /^.*\[fleet\] sync → [^:]*: /;
+/** The wait 8ca774966 put on every fleet sync, which only the start-up's first may have. */
+const HELD_MS = 1500;
 /** A fleet sync the agent took, and how many servers it carried. */
 const SYNC_LINE = /\[fleet\] sync from the hub: (.*)$/;
 
@@ -405,6 +410,55 @@ const waitsForSignIn = async (
   } finally {
     docs.stop();
   }
+};
+
+/**
+ * The agent's start, up to the first fleet change: one sync, held until
+ * every harness its register named had reported (hub server.ts
+ * `awaitHarnesses`), and one read of the fleet's servers for it.
+ */
+const startedOnce = async (kit: Kit, fleet: KitFleet): Promise<void> => {
+  const syncs = (await fleet.logs("hub"))
+    .split("\n")
+    .filter((line) => line.includes("[fleet] sync → "));
+  const evicted = (await fleet.logs("agent"))
+    .split("\n")
+    .filter((line) => line.includes(EVICTED)).length;
+  kit.check(
+    `the agent's start-up got ${syncs.length} fleet sync(s) before the first fleet change, on ${HARNESSES.join(", ")}, and its location was evicted by fleet MCP status ${evicted} time(s): ${syncs[0]?.replace(SYNC_PREFIX, "")}`,
+    syncs.length === 1 &&
+      HARNESSES.every((h) => syncs[0]?.includes(h) === true) &&
+      evicted <= 1,
+    syncs.join("\n")
+  );
+};
+
+/**
+ * A fleet change after the start (`change`, the fleet's {@link FLEET} moved)
+ * goes out when it is asked: the agent's log is read every 25 ms, finer
+ * than `until`'s half second, for its word that it took the sync.
+ */
+const syncedAtOnce = async (
+  kit: Kit,
+  fleet: KitFleet,
+  change: () => Promise<boolean>
+): Promise<void> => {
+  const before = await fleet.logMark("agent");
+  const putAt = performance.now();
+  kit.check(`the fleet's ${FLEET} moves to a new config`, await change());
+  let reachedMs: number | undefined;
+  while (reachedMs === undefined && performance.now() - putAt < 10_000) {
+    // biome-ignore lint/performance/noAwaitInLoops: one look at the log every 25 ms until the sync is taken
+    if ((await before.since()).includes("[fleet] sync from the hub")) {
+      reachedMs = performance.now() - putAt;
+    } else {
+      await Bun.sleep(25);
+    }
+  }
+  kit.check(
+    `the fleet change reached the agent ${reachedMs === undefined ? "never" : `${Math.round(reachedMs)} ms`} after the PUT, under the ${HELD_MS} ms every sync waited in 8ca774966`,
+    reachedMs !== undefined && reachedMs < HELD_MS
+  );
 };
 
 const run = async (kit: Kit): Promise<void> => {
@@ -621,31 +675,13 @@ const run = async (kit: Kit): Promise<void> => {
     );
   }
 
-  // The agent's start, up to the first fleet change: one sync, merged from
-  // every harness's first report (hub server.ts `sendFleetSync`), and one
-  // read of the fleet's servers for it.
-  const startUp = {
-    syncs: (await fleet.logs("hub"))
-      .split("\n")
-      .filter((line) => line.includes("[fleet] sync → ")),
-    evicted: (await fleet.logs("agent"))
-      .split("\n")
-      .filter((line) => line.includes(EVICTED)).length,
-  };
-  kit.check(
-    `the agent's start-up got ${startUp.syncs.length} fleet sync(s) before the first fleet change, and its location was evicted by fleet MCP status ${startUp.evicted} time(s)`,
-    startUp.syncs.length === 1 && startUp.evicted <= 1,
-    startUp.syncs.join("\n")
-  );
+  await startedOnce(kit, fleet);
 
   // The fleet's row moves to another config; the running sessions take it.
   const spawnsBefore = fleet.query<{ n: number }>(
     "SELECT COUNT(*) AS n FROM instances"
   )[0]?.n;
-  kit.check(
-    `the fleet's ${FLEET} moves to a new config`,
-    await put(pids("fleet2"))
-  );
+  await syncedAtOnce(kit, fleet, () => put(pids("fleet2")));
   await until(
     `the sync wrote ${FLEET}'s new config`,
     async () =>

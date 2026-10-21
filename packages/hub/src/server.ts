@@ -245,6 +245,7 @@ import {
   LIMITED_PROVIDERS,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
   LOCAL_WEB_PORT,
+  MACHINE_PART_MS,
   type MachineFault,
   type MachineProviderLists,
   MCP_PLATFORMS,
@@ -1183,14 +1184,6 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
-/**
- * How long a fleet sync asked of a machine waits for the next one asked, to
- * go out as one (`sendFleetSync`), and how long from the first it waits at
- * most. A starting agent's harness reports land within a second of each
- * other; CawCo's own call, not a measured bound.
- */
-const FLEET_SYNC_SETTLE_MS = 1500;
-const FLEET_SYNC_SETTLE_MAX_MS = 5000;
 /** How long an approved post may take its machine (agent upstream-posts.ts makes it within five minutes). */
 const UPSTREAM_POST_MS = 6 * 60_000;
 
@@ -17589,61 +17582,22 @@ export const createServer = (
       .map((report) => report.harness)
       .sort()
       .join(",");
-  /**
-   * Each machine's connection a fleet sync last went out on, or is queued to
-   * go out on, by its id ({@link sendFleetSync}).
-   */
+  /** Each machine's connection a fleet sync last went out on, by its id ({@link sendFleetSync}). */
   const fleetSyncedLinks = new Map<string, string>();
-  /** The syncs asked of each machine that have not gone out yet: merged into one ({@link sendFleetSync}). */
-  const queuedFleetSyncs = new Map<
+  /**
+   * Each starting connection's first fleet sync, held for the harnesses its
+   * register named whose reports have not come yet ({@link awaitHarnesses}).
+   */
+  const awaitedHarnesses = new Map<
     string,
-    { agent: HubSocket; at: number; timer: HubTimer; whys: string[] }
+    { cap: HubTimer; kinds: Set<string>; link: string }
   >();
 
-  /**
-   * One sync for each settled state of what the hub knows of a machine. A
-   * sync asked for waits {@link FLEET_SYNC_SETTLE_MS} for the next, and every
-   * one asked meanwhile merges into it, up to {@link FLEET_SYNC_SETTLE_MAX_MS}
-   * from the first: a starting agent's harnesses report one beat each (agent
-   * daemon.ts `reannounce`), each moving what the hub knows, and each sync
-   * boots every fleet server in OpenCode's location again. The sync that goes
-   * out reads the fleet then, so it carries every change merged into it
-   * (`mcpChanges.ride` copies what is pending, it takes nothing). A harness
-   * that reports after it gets its own.
-   */
   const sendFleetSync = (
     machineId: string,
     agent: HubSocket,
     why: string
   ): void => {
-    const queued = queuedFleetSyncs.get(machineId);
-    const at = queued?.at ?? Date.now();
-    lifetime.cancel(queued?.timer);
-    fleetSyncedLinks.set(machineId, agent.id);
-    queuedFleetSyncs.set(machineId, {
-      agent,
-      at,
-      whys: [...new Set([...(queued?.whys ?? []), why])],
-      timer: lifetime.after(
-        Math.max(
-          0,
-          Math.min(
-            FLEET_SYNC_SETTLE_MS,
-            at + FLEET_SYNC_SETTLE_MAX_MS - Date.now()
-          )
-        ),
-        () => flushFleetSync(machineId)
-      ),
-    });
-  };
-
-  /** The machine's queued sync, out on the connection last asked for ({@link sendFleetSync}). */
-  const flushFleetSync = (machineId: string): void => {
-    const queued = queuedFleetSyncs.get(machineId);
-    if (!queued) {
-      return;
-    }
-    queuedFleetSyncs.delete(machineId);
     // Fleet sync converges each harness's own files. The register's sync goes
     // before the machine's harnesses have reported (they follow on its first
     // beat); only a report with no fleet-capable harness is a machine with
@@ -17661,10 +17615,49 @@ export const createServer = (
 
     // Always sent, a fleet with no rows too: it carries the denied tools, and
     // a machine spawns nothing until it has heard them.
-    console.info(
-      `[fleet] sync → ${machineName(machineId)}: ${queued.whys.join("; ")}`
-    );
-    pushFleetConfig(machineId, queued.agent, db.fleetConfig());
+    console.info(`[fleet] sync → ${machineName(machineId)}: ${why}`);
+    fleetSyncedLinks.set(machineId, agent.id);
+    // A sync out on the connection is its first: nothing is held for it now.
+    lifetime.cancel(awaitedHarnesses.get(machineId)?.cap);
+    awaitedHarnesses.delete(machineId);
+    pushFleetConfig(machineId, agent, db.fleetConfig());
+  };
+
+  /**
+   * A connection's first fleet sync waits for every harness its register
+   * named (`harnessKinds`: the agent's adapters, whose reports follow one
+   * beat each, agent daemon.ts `reannounce`), so a starting machine is
+   * synced once, on its whole set, rather than once per report, each sync
+   * booting OpenCode's location to read the fleet's servers again. A report
+   * that never comes is a read the agent gave up after
+   * {@link MACHINE_PART_MS} (`readPart`): then the sync goes on what came.
+   * Every sync after the first goes out when it is asked.
+   */
+  const awaitHarnesses = (
+    machineId: string,
+    agent: HubSocket,
+    kinds: readonly string[]
+  ): void => {
+    lifetime.cancel(awaitedHarnesses.get(machineId)?.cap);
+    awaitedHarnesses.set(machineId, {
+      link: agent.id,
+      kinds: new Set(kinds),
+      cap: lifetime.after(MACHINE_PART_MS, () => {
+        const held = awaitedHarnesses.get(machineId);
+        // A register again on a connection already synced holds nothing.
+        if (
+          held?.link !== agent.id ||
+          fleetSyncedLinks.get(machineId) === agent.id
+        ) {
+          return;
+        }
+        sendFleetSync(
+          machineId,
+          agent,
+          `its harnesses known (${fleetHarnesses(machineId) || "none"}), but for ${[...held.kinds].join(", ")}, which did not report within ${MACHINE_PART_MS / 1000} s`
+        );
+      }),
+    });
   };
 
   /**
@@ -29370,6 +29363,12 @@ export const createServer = (
                 }
               }
               registry.registerAgent(message.machineId, ws, ws.remoteAddress);
+              awaitHarnesses(
+                message.machineId,
+                ws,
+                (message.payload as { harnessKinds?: string[] }).harnessKinds ??
+                  []
+              );
               // A project Caw could not set up while no machine was online is set up now.
               soon(() => {
                 caw.machineOnline();
@@ -30001,19 +30000,28 @@ export const createServer = (
                     unread: claudeReport?.unreadAccounts ?? [],
                   });
                 }
-                // A connection no sync has been asked for on yet is sent one
-                // once its harnesses are known: the register no longer carries
-                // them (aca170f8f), and a sync's content needs none of them,
-                // so one asked already (a fleet change) is that sync. Each
-                // harness's first report moves the set below, and those of a
-                // starting agent merge into its first sync (sendFleetSync). A later
-                // report (Claude's sign-ins read again and changed, one per
+                // A connection no sync has gone out on yet is sent one once
+                // its harnesses are known: the register no longer carries
+                // their reports (aca170f8f), only their names, and its first
+                // sync waits for each (awaitHarnesses); a sync's content needs
+                // none of them, so one sent already (a fleet change) is that
+                // sync. A later report (Claude's sign-ins read again and changed, one per
                 // harness on a re-announce) syncs only when it moved which
                 // harnesses here converge the fleet: one installed since,
                 // or gone. Any other is no fleet change, and a sync then
                 // started every fleet server in a location again.
                 if (fleetSyncedLinks.get(message.machineId) !== ws.id) {
-                  sendFleetSync(message.machineId, ws, "its harnesses known");
+                  const held = awaitedHarnesses.get(message.machineId);
+                  for (const report of reported) {
+                    held?.kinds.delete(report.harness);
+                  }
+                  if (held?.link !== ws.id || held.kinds.size === 0) {
+                    sendFleetSync(
+                      message.machineId,
+                      ws,
+                      `its harnesses known (${fleetHarnesses(message.machineId) || "none"})`
+                    );
+                  }
                 } else if (
                   fleetHarnesses(message.machineId) !== convergingBefore
                 ) {
