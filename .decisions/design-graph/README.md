@@ -16,8 +16,11 @@ PW_DIR=… CHROMIUM=… node tools/probe.mjs
 - any piece of a drawing standing outside it, the drawn cursor and key included;
 - the drawn cursor or a key cap through a seen word (every 100ms of every loop);
 - text over text, a node, a chip, a control or an icon;
-- text spilling its box.
+- text spilling its box;
+- the page wider than the view, at 1440×900 (light and dark), 1024×768, 768×1024, 390×844 under touch, and 200% zoom (720×450 CSS px).
 
-`tools/runs/check-before.log` is the final check run on the page as first committed (8fc044442); `tools/runs/check-after.log` is the run on this page.
+A drawing narrower than its true width (its `.mk-<id> { min-inline-size }`) scrolls sideways in its own pane. The page carries the house faces, Figtree Variable and JetBrains Mono Variable (@fontsource-variable 5.3.0, latin subset), so it draws in them wherever it is shown.
+
+`tools/runs/check-before.log` is the final check run on the page as first committed (8fc044442, run from `git archive` in scratch); `tools/runs/check-after.log` is the run on this page.
 
 Each option is its drawing with its pick under it, inside the card's `data-cawco-choice` group. The press on the option is the pick, per the kit (RECIPES.md: "a click on a `[data-option]` inside a `[data-cawco-choice]` stores the pick in the hub").

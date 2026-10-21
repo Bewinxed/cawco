@@ -1,4 +1,6 @@
 <style>
+/* Its true width: below this the drawing keeps its size and its pane scrolls sideways. */
+.mk-resize-seam { min-inline-size: 800px; }
 /* Round 20 §1, design B: width on the left edge; the graph's height on the seam between the graph and the dials. */
 .mk-resize-seam .sash { position: absolute; z-index: 3; }
 .mk-resize-seam .sw { inset-block: var(--radius-panel); inset-inline-start: calc(-1 * var(--space-1)); inline-size: var(--space-3); }

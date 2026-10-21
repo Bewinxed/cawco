@@ -1,4 +1,6 @@
 <style>
+/* Its true width: below this the drawing keeps its size and its pane scrolls sideways. */
+.mk-resize-edges { min-inline-size: 800px; }
 /* Round 20 §1, design A: three hit zones over the panel's free edges, nothing drawn at rest.
    Insets count from the padding edge, inside the 1px border: the lit line sits 2.5px in, on the border. */
 .mk-resize-edges .sash { position: absolute; z-index: 3; }

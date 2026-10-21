@@ -1,4 +1,6 @@
 <style>
+/* Its true width: below this the drawing keeps its size and its pane scrolls sideways. */
+.mk-names-band { min-inline-size: 448px; }
 .mk-names-band { display: grid; justify-items: center; }
 /* Clarity §2, design A: a band pinned at the top of the graph well, one cell per machine. */
 .mk-names-band .ix { position: sticky; inset-block-start: 0; z-index: 2; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--space-1); padding: var(--space-1); background: var(--surface-band); border-block-end: 1px solid var(--border-hairline); }

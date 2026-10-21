@@ -1,5 +1,5 @@
 build: 21 mockups placed, missing 0, unused 0, leftover placeholders 0, contract faults 0
-build: page + mockups 107.4 KiB before the hub adds the kit (limit 512 KiB)
+build: the built page 345.9 KiB with the kit, the faces and its 2 Caw stills inlined (limit 512 KiB)
 card resize: 2 options [edges*, seam], 2 drawings, ok
 card clip-controls: 2 options [row*, inspector], 2 drawings, ok
 card token-rule: 3 options [tokens, free, snap*], 3 drawings, ok
@@ -18,5 +18,10 @@ sweep total findings (light + dark): 0
 chrome light: 0 card elements over a drawing
 chrome dark: 0 card elements over a drawing
 chrome total (light + dark): 0
+view 1024×768: page 1024px wide in 1024px, 0 drawings scroll sideways in their pane, sweep 0, chrome 0; findings 0
+view 768×1024: page 768px wide in 768px, 4 drawings scroll sideways in their pane, sweep 0, chrome 0; findings 0
+view 390×844 touch: page 390px wide in 390px, 18 drawings scroll sideways in their pane, sweep 0, chrome 0; findings 0
+view 200% zoom: page 720px wide in 720px, 14 drawings scroll sideways in their pane, sweep 0, chrome 0; findings 0
+views total: 0
 CHECK PASSED
 script errors: none

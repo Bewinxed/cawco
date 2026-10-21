@@ -35,14 +35,16 @@ for (const id of used.filter((x) => files.includes(x))) {
   if (!src.includes(`class="mk mk-${id}`)) contract.push(`${id}: no root .mk.mk-${id}`);
   page = page.replace(`{{MK:${id}}}`, () => src);
 }
+const pageForSize = page;
 page = page.replaceAll('src="caw/', `src="${pathToFileURL(join(kit, "caw")).href}/`);
 const leftover = page.match(/\{\{[A-Z_]+(:[a-z0-9-]+)?\}\}/g) || [];
 const built = join(out, "page.built.html");
 writeFileSync(built, page);
-const kib = (Buffer.byteLength(readFileSync(join(here, "page.html"))) + used.reduce((n, id) => n + (files.includes(id) ? Buffer.byteLength(readFileSync(join(here, "mockups", id + ".html"))) : 0), 0)) / 1024;
+const stills = [...new Set(page.match(/caw\/[a-z-]+\.webp/g) || [])];
+const kib = (Buffer.byteLength(pageForSize) + stills.reduce((n, f) => n + Math.ceil(readFileSync(join(kit, f)).length * 4 / 3), 0)) / 1024;
 console.log(`build: ${used.length} mockups placed, missing ${missing.length}${missing.length ? " " + missing : ""}, unused ${unused.length}${unused.length ? " " + unused : ""}, leftover placeholders ${leftover.length}, contract faults ${contract.length}`);
 for (const c of contract) console.log("  contract:", c);
-console.log(`build: page + mockups ${kib.toFixed(1)} KiB before the hub adds the kit (limit 512 KiB)`);
+console.log(`build: the built page ${kib.toFixed(1)} KiB with the kit, the faces and its ${stills.length} Caw stills inlined (limit 512 KiB)${kib > 512 ? " OVER" : ""}`);
 
 // CawCo's bridge, emulated to its documented contract (RECIPES.md, "The bridge"):
 // a click on a [data-option] inside a [data-cawco-choice] stores the pick and marks it.
@@ -65,8 +67,8 @@ const bridge = () => {
 
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 const errors = [];
-const open = async (scheme, reduced) => {
-  const p = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: scheme, reducedMotion: reduced ? "reduce" : "no-preference" });
+const open = async (scheme, reduced, vp = {}) => {
+  const p = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: scheme, reducedMotion: reduced ? "reduce" : "no-preference", ...vp });
   p.on("pageerror", (e) => errors.push(`${scheme}${reduced ? "/reduced" : ""}: ${e.message}`));
   p.on("console", (m) => { if (m.type() === "error") errors.push(`${scheme} console: ${m.text()}`); });
   await p.addInitScript(bridge);
@@ -155,8 +157,14 @@ const sweep = (fractions) => {
   const ink = (e) => [...e.childNodes].filter((n) => n.nodeType === 3 && n.textContent.trim()).flatMap((n) => { const r = document.createRange(); r.selectNodeContents(n); return [...r.getClientRects()]; });
   const opaqueBg = (e) => { const n = (getComputedStyle(e).backgroundColor.match(/[\d.]+/g) || []).map(Number); return n.length >= 3 && (n.length < 4 ? 1 : n.at(-1)) > 0.9; };
   // Is e's text seen at (x, y), or covered by an opaque layer (a sticky band) that is not its own background?
+  const inView = (e, x, y) => {
+    const pane = e.closest(".dp-pane");
+    if (pane && (x < 0 || x > innerWidth)) { const before = pane.scrollLeft; pane.scrollLeft += x - innerWidth / 2; x -= pane.scrollLeft - before; }
+    if (y < 0 || y > innerHeight) { const d = y + scrollY; scrollTo(scrollX, d - innerHeight / 2); y = d - scrollY; }
+    return [x, y];
+  };
   const visibleAt = (e, x, y) => {
-    if (y < 0 || y > innerHeight) { const d = y + scrollY; scrollTo(0, d - innerHeight / 2); y = d - scrollY; }
+    [x, y] = inView(e, x, y);
     const stack = document.elementsFromPoint(x, y).filter((el) => !el.closest(".gd-cursor, .gd-key"));
     const i = stack.findIndex((el) => e.contains(el) || el.contains(e));
     if (i < 0) return false;
@@ -203,7 +211,7 @@ const sweep = (fractions) => {
       // 3. Overlap: two pieces of text, or text over a control or node it doesn't belong to.
       // A text's ink is its line boxes (getClientRects), clipped like the element: a wrapped inline span is two lines, not one box.
       const lines = (e) => { const c = clipBox(e, root); if (!c) return []; return [...e.getClientRects()].map((r) => ({ x0: Math.max(r.left, c.x0), y0: Math.max(r.top, c.y0), x1: Math.min(r.right, c.x1), y1: Math.min(r.bottom, c.y1) })).filter((r) => r.x1 - r.x0 > 0.5 && r.y1 - r.y0 > 0.5); };
-      const sy0 = scrollY;
+      const sy0 = scrollY, pane0 = root.closest(".dp-pane"), sl0 = pane0 ? pane0.scrollLeft : 0;
       const texts = all.filter((e) => ownText(e) && !e.closest(".gd-xf")).map((e) => [e, lines(e)]).filter(([, c]) => c.length);
       const boxes = all.filter((e) => e.matches(".node, .var, .dk-chip, .dk-tile, .btn, .input, .dk-badge, .dk-btn, .dk-hold, .t-tab, .zoom, .ix-cell, .gd-ic, .gd-curve")).map((e) => [e, clipBox(e, root)]).filter(([, c]) => c);
       // Two boxes overlap when they share more than 2px each way (line boxes of one wrapped span touch by a pixel).
@@ -213,9 +221,9 @@ const sweep = (fractions) => {
       const opaque = (e) => { const n = (getComputedStyle(e).backgroundColor.match(/[\d.]+/g) || []).map(Number); return n.length >= 3 && (n.length < 4 ? 1 : n.at(-1)) > 0.9; };
       const seen = (a, b, x, y) => {
         // Hit-testing reads only the viewport: bring the point into it first (the drawing moves with the page, nothing inside it).
-        const docY = y + sy0;
-        y = docY - scrollY;
-        if (y < 0 || y > innerHeight) { scrollTo(0, docY - innerHeight / 2); y = docY - scrollY; }
+        // Points were measured at (sl0, sy0): carry them to the scroll positions now, then into view.
+        y -= scrollY - sy0; x -= (pane0 ? pane0.scrollLeft : 0) - sl0;
+        [x, y] = inView(a, x, y);
         const stack = document.elementsFromPoint(x, y).filter((e) => !e.closest(".gd-cursor, .gd-key"));
         const ia = stack.findIndex((e) => a.contains(e)), ib = stack.findIndex((e) => b.contains(e));
         if (ia < 0 || ib < 0) return false;
@@ -319,7 +327,8 @@ for (const scheme of ["light", "dark"]) {
       const top = mk.getBoundingClientRect().top + scrollY, h = mk.offsetHeight;
       for (const y of [top - 20, top + h / 2 - innerHeight / 2, top + h - innerHeight + 20]) {
         scrollTo(0, y); await frame();
-        const R = mk.getBoundingClientRect(), v = { x0: R.left, y0: Math.max(R.top, 0), x1: R.right, y1: Math.min(R.bottom, innerHeight) };
+        const R = mk.getBoundingClientRect(), P = mk.closest(".dp-pane").getBoundingClientRect();
+        const v = { x0: Math.max(R.left, P.left, 0), y0: Math.max(R.top, P.top, 0), x1: Math.min(R.right, P.right, innerWidth), y1: Math.min(R.bottom, P.bottom, innerHeight) };
         if (v.y1 - v.y0 < 1) continue;
         for (const e of chrome) {
           if (getComputedStyle(e).visibility === "hidden") continue;
@@ -336,6 +345,38 @@ for (const scheme of ["light", "dark"]) {
   await p.close();
 }
 console.log(`chrome total (light + dark): ${chromeTotal}`);
-console.log(total + chromeTotal ? "CHECK FAILED" : "CHECK PASSED");
+
+// The same sweep and chrome test, and the page's own width, at a laptop, a tablet, a phone under touch and 200% zoom
+// (1440×900 zoomed to 200% lays out at 720×450 CSS px). A drawing wider than its card scrolls sideways in its own pane.
+const VIEWS = [["1024×768", { viewport: { width: 1024, height: 768 } }], ["768×1024", { viewport: { width: 768, height: 1024 } }], ["390×844 touch", { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 }], ["200% zoom", { viewport: { width: 720, height: 450 }, deviceScaleFactor: 2 }]];
+let viewTotal = 0;
+for (const [name, vp] of VIEWS) {
+  const p = await open("light", true, vp);
+  const res = await p.evaluate(sweep, [0.25, 0.75]);
+  const pageW = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, w: innerWidth, scrollers: [...document.querySelectorAll(".dp-pane")].filter((e) => e.scrollWidth > e.clientWidth + 1).length }));
+  const ch = await p.evaluate(async () => {
+    let n = 0;
+    for (const mk of document.querySelectorAll(".mk")) {
+      const chrome = [...mk.closest(".dp-card").querySelectorAll("*")].filter((e) => !e.closest(".mk") && !e.querySelector(".mk"));
+      const top = mk.getBoundingClientRect().top + scrollY, h = mk.offsetHeight;
+      for (const y of [top - 20, top + h / 2 - innerHeight / 2, top + h - innerHeight + 20]) {
+        scrollTo(0, y); await new Promise((f) => requestAnimationFrame(() => requestAnimationFrame(f)));
+        const R = mk.getBoundingClientRect(), P = mk.closest(".dp-pane").getBoundingClientRect();
+        const v = { x0: Math.max(R.left, P.left, 0), y0: Math.max(R.top, P.top, 0), x1: Math.min(R.right, P.right, innerWidth), y1: Math.min(R.bottom, P.bottom, innerHeight) };
+        if (v.y1 - v.y0 < 1 || v.x1 - v.x0 < 1) continue;
+        for (const e of chrome) { const b = e.getBoundingClientRect(); if (Math.min(b.right, v.x1) - Math.max(b.left, v.x0) > 1 && Math.min(b.bottom, v.y1) - Math.max(b.top, v.y0) > 1 && getComputedStyle(e).visibility !== "hidden") n++; }
+      }
+    }
+    return n;
+  });
+  const n = res.reduce((s, [, f]) => s + f.length, 0) + (pageW.sw > pageW.w ? 1 : 0) + ch;
+  viewTotal += n;
+  console.log(`view ${name}: page ${pageW.sw}px wide in ${pageW.w}px, ${pageW.scrollers} drawings scroll sideways in their pane, sweep ${res.reduce((s, [, f]) => s + f.length, 0)}, chrome ${ch}; findings ${n}`);
+  for (const [id, f] of res) for (const [k, v] of f) console.log(`  ${id}: ${k} — ${v}`);
+  await p.screenshot({ path: join(here, "captures", `page-${name.split(" ")[0].replace("%", "pct").replace("×", "x")}-light.png`), fullPage: true });
+  await p.close();
+}
+console.log(`views total: ${viewTotal}`);
+console.log(total + chromeTotal + viewTotal ? "CHECK FAILED" : "CHECK PASSED");
 console.log(errors.length ? "script errors:\n" + errors.join("\n") : "script errors: none");
 await browser.close();
