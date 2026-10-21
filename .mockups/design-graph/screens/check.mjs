@@ -24,9 +24,9 @@ const MOMENTS = {
   "phone-landscape": [[600, { face: "graph", open: true }], [3200, { face: "move", pop: "reveal", popInline: true }], [5600, { open: false }]],
   "tablet-landscape": [[600, { dockH: "base", lit: false }], [2600, { dockH: "base+180", lit: false }], [6200, { dockH: "base", time: ">0" }]],
   desk: [[600, { dockH: "base", peek: null }], [1900, { lit: true, dockH: "between" }], [3800, { peek: "save:saving", washes: ">0", dockH: "base+160" }]],
-  wide: [[600, { peek: null }], [1500, { peek: "types:loading" }], [4700, { time: ">0", peek: null }]],
-  "ultrawide-2560": [[600, { tab: "form" }], [3000, { tab: "row", peek: "runs:running" }], [4500, { tab: "row", time: ">0" }]],
-  "ultrawide-3440": [[600, { kept: "save:failed", peek: null }], [1500, { peek: "save:created" }], [3000, { kept: "save:created" }]],
+  wide: [[600, { multi: true, keptOn: 2, title: "Create routine form · Saving → Save failed" }], [3000, { tab: "row", title: "Routine row · Waiting → Running" }], [5800, { tab: "row", peek: "save:created", washes: ">0" }]],
+  "ultrawide-2560": [[600, { multi: true, keptOn: 2, title: "Create routine form · Saving → Save failed" }], [3000, { tab: "form", kept: "save:created", title: "Create routine form · Saving → Created" }], [5300, { tab: "row", title: "Routine row · Waiting → Running", time: ">0" }]],
+  "ultrawide-3440": [[600, { multi: true, title: "Create routine form · Saving → Save failed" }], [3000, { tab: "row", title: "Routine row · Active → Paused" }], [4200, { tab: "row", time: ">0" }]],
 };
 const CLASS = { "phone-portrait": "phone-portrait", "tablet-portrait": "tablet-portrait", "phone-landscape": "phone-landscape", "tablet-landscape": "tablet-landscape", desk: "desk", wide: "wide", "ultrawide-2560": "ultrawide", "ultrawide-3440": "ultrawide" };
 
