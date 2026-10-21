@@ -441,16 +441,17 @@ function drawWashes(cid) {
       for (const b of live) if (Math.min(r.x + r.w, b.x + b.w) - Math.max(r.x, b.x) > 0.5) edges.push(b.y, b.y + b.h);
       const ys = [...new Set(edges)].filter((y) => y >= edges[0] && y <= edges[1]).sort((a, b) => a - b);
       let seam = null;
+      // It stands --c-target-gap off both neighbours, and only where that leaves it 4px (the r24 values ruling).
       for (let i = 1; i < ys.length; i++) {
-        const t = ys[i - 1], h = Math.min(ys[i] - t, n.box.h), cand = { x: r.x, y: t, w: r.w, h };
-        if (h < 2 || hits(cand)) continue;
+        const t = ys[i - 1], h = Math.min(ys[i] - t, n.box.h) - 2 * gap, cand = { x: r.x, y: t + gap, w: r.w, h };
+        if (h < 4 || hits(cand)) continue;
         if (!seam || Math.abs(t - n.box.y) < Math.abs(seam.y - n.box.y)) seam = cand;
       }
-      if (seam) { r = seam; w.dataset.seam = ""; }
+      if (seam) { r = seam; w.dataset.seam = ""; } else return null;
     }
     Object.assign(w.style, { left: r.x + "px", top: r.y + "px", width: r.w + "px", height: r.h + "px", borderRadius: (w.dataset.seam !== undefined ? Math.min(n.radius + pad, r.h / 2) : n.radius + pad) + "px" });
     return w;
-  }));
+  }).filter(Boolean));
   void marks.offsetWidth;
   for (const w of marks.children) w.classList.add("in");
 }
@@ -527,6 +528,8 @@ function stateNode(c, m, it) {
   hoverable(b, () => enter(varyOf(c.id, m.id, it.id)), leave);
   pressable(b, () => enter(varyOf(c.id, m.id, it.id)), leave, () => keep(c.id, m.id, it.id, varyOf(c.id, m.id, it.id)));
   b.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); keep(c.id, m.id, it.id, varyOf(c.id, m.id, it.id)); } };
+  // A focus by key (or by script) reveals the state; a press's own focus doesn't move the view under the finger.
+  b.addEventListener("focus", () => { if (performance.now() - lastPress > 500) revealNode(c.id, b); });
   if (it.vars) {
     const list = document.createElement("div"); list.className = "vars";
     it.vars.forEach((vv, i) => {
@@ -539,6 +542,8 @@ function stateNode(c, m, it) {
   }
   return b;
 }
+let lastPress = -Infinity;
+addEventListener("pointerdown", () => { lastPress = performance.now(); }, true);
 // Hover previews on a pointer that hovers (a mouse, a trackpad, a hovering Pencil); a finger never hovers.
 function hoverable(el, on, off) {
   el.addEventListener("pointerenter", (e) => { if (e.pointerType !== "touch") on(); });
@@ -626,8 +631,9 @@ function applyZoom(cid = tab) {
   zoomer.firstChild.style.transform = "scale(" + gs.zoom + ")";
 }
 // A zoom the person sets is theirs: the graph stops fitting its kept machine.
-const setZoom = (cid, z, lo = 0.25) => { G[cid].zoom = clamp(z, lo, 1.6); G[cid].own = true; applyZoom(cid); };
-const fitZoom = (cid) => { const g = graphOf(cid), gs = G[cid]; gs.own = true; gs.zoom = clamp(Math.min((g.clientWidth - 8) / gs.gw, (g.clientHeight - 8) / gs.gh), 0.25, 1); applyZoom(cid); };
+// One floor for every zoom path the person takes: the pinch's 0.5 (the r24 values ruling, call 3).
+const setZoom = (cid, z, lo = 0.5) => { G[cid].zoom = clamp(z, lo, 1.6); G[cid].own = true; applyZoom(cid); };
+const fitZoom = (cid) => { const g = graphOf(cid), gs = G[cid]; gs.own = true; gs.zoom = clamp(Math.min((g.clientWidth - 8) / gs.gw, (g.clientHeight - 8) / gs.gh), 0.5, 1); applyZoom(cid); };
 // The kept state brought into view, with its from-node above it when there is room.
 function showKept(cid = tab) {
   const v = views[cid], g = graphOf(cid);
@@ -636,17 +642,29 @@ function showKept(cid = tab) {
   if (!el) return;
   const into = moveInto(compOf(cid), v.last, v.cur[v.last].state);
   const fromEl = into ? g.querySelector('.node[data-machine="' + v.last + '"][data-state="' + into.from + '"]') : null;
-  const pad = px("--space-2"), gs = G[cid];
-  // Until the person zooms it, the graph opens zoomed (never past 100%) to hold the kept state's machine whole,
-  // its box and a margin, so the view it opens on cuts nothing of it (the r23 review).
-  if (!gs.own) {
-    const rh = el.closest(".region").getBoundingClientRect().height / gs.zoom, fit = clamp((g.clientHeight - 2 * pad) / rh, 0.25, 1);
-    if (Math.abs(fit - gs.zoom) > 0.001) { gs.zoom = fit; applyZoom(cid); }
+  revealIn(cid, el, fromEl, true);
+}
+// A state brought into its graph's view by the same rule as the kept one: a focus (a key, a press) shows it
+// on a view whose edges cut no state (the r24 review: a browser's own scroll-into-view cut the foot).
+function revealNode(cid, el) {
+  if (!graphOf(cid).clientHeight) return;
+  revealIn(cid, el, null, false);
+}
+function revealIn(cid, el, fromEl, fit) {
+  const g = graphOf(cid), pad = px("--space-2"), gs = G[cid];
+  // Until the person zooms it, the graph opens zoomed to hold the kept state's machine whole, its box and a
+  // margin, between 0.75 and 1 (the r24 values ruling, call 3). Where it doesn't fit at 0.75, the view opens
+  // on the kept state, its from-state above it when there is room, the machine's top cut cleanly.
+  if (fit && !gs.own) {
+    const rh = el.closest(".region").getBoundingClientRect().height / gs.zoom, z = clamp((g.clientHeight - 2 * pad) / rh, 0.75, 1);
+    if (Math.abs(z - gs.zoom) > 0.001) { gs.zoom = z; applyZoom(cid); }
   }
   const box = g.getBoundingClientRect(), n = el.getBoundingClientRect(), r = el.closest(".region").getBoundingClientRect();
   const at = (y) => y - box.top - g.clientTop + g.scrollTop;
   const topWant = Math.min(at(r.top) - pad, fromEl ? at(fromEl.getBoundingClientRect().top) - pad : Infinity, at(n.top) - pad);
-  const want = Math.max(at(n.bottom) + pad - g.clientHeight, topWant);
+  let want = Math.max(at(n.bottom) + pad - g.clientHeight, topWant);
+  // A focus keeps the view where it stands when that already shows the state; else it moves the least.
+  if (!fit) { const s0 = g.scrollTop; want = at(n.top) >= s0 - 0.5 && at(n.bottom) <= s0 + g.clientHeight + 0.5 ? s0 : at(n.top) < s0 ? at(n.top) - pad : at(n.bottom) + pad - g.clientHeight; }
   // The view it opens on (the r23 review): its top edge cuts nothing, a state, a machine's name, an edge's
   // label, a machine's box or an arrow inside one, and stands --space-2 clear of what shows under it; only an
   // arrow between machines may come in over it, its head in view. Its foot cuts no state, name or label (a
@@ -656,7 +674,9 @@ function showKept(cid = tab) {
   let max = g.scrollHeight - H;
   const boxOf = (el) => { const b = el.getBoundingClientRect(); return [at(b.top), at(b.bottom)]; };
   const solid = [...g.querySelectorAll(".node, .region-name, .world svg text")].map(boxOf);
-  const frames = [...g.querySelectorAll(".region, .regionBody svg polyline")].map(boxOf);
+  // The edge cuts no state, no machine's name and no edge label (the r24 values ruling, call 4); a machine's
+  // box and arrows, between machines or inside one, may run on over it.
+  const frames = [];
   const boxes = [...g.querySelectorAll(".node, .region-name")].map(boxOf);
   const cuts = (s) => boxes.some(([t, b]) => (t < s - 0.5 && b > s + 0.5) || (t < s + H - 0.5 && b > s + H + 0.5));
   const clear = (s) => s <= 0.5 || (!solid.some(([t, b]) => t < s + pad - 0.5 && b > s + 0.5) && !frames.some(([t, b]) => t < s + pad - 0.5 && b > s + 0.5));
@@ -666,8 +686,11 @@ function showKept(cid = tab) {
   for (const [t, b] of boxes.concat(frames, solid)) cands.push(t - pad, t, b + pad - H, b - H, b + pad, b, t - pad - H + (b - t));
   // Scroll offsets land on whole pixels, so each candidate is tried rounded down and up.
   const pickBy = (ok) => (limit) => cands.flatMap((s) => [Math.floor(s), Math.ceil(s)]).map((s) => clamp(s, 0, Math.max(0, Math.floor(limit)))).filter((s) => ok(s) && keeps(s)).sort((a, b) => Math.abs(a - want) - Math.abs(b - want))[0];
-  const strict = pickBy((s) => clear(s) && footClear(s)), loose = pickBy((s) => !cuts(s));
-  const pick = (limit) => strict(limit) ?? loose(limit);
+  // Where no scroll leaves --space-2 under the top edge, the foot still cuts nothing (the r25 review) and the
+  // top cuts no state, name or label.
+  const uncut = (s) => s <= 0.5 || !solid.some(([t, b]) => t < s - 0.5 && b > s + 0.5);
+  const strict = pickBy((s) => clear(s) && footClear(s)), footFirst = pickBy((s) => uncut(s) && footClear(s)), loose = pickBy((s) => !cuts(s));
+  const pick = (limit) => strict(limit) ?? footFirst(limit) ?? loose(limit);
   let best = pick(max);
   // Where no view of the content as drawn shows the kept state whole and cuts nothing, the well gets room
   // past its last machine, so the view can open lower.
@@ -877,7 +900,7 @@ function layoutDock(work) {
     ghost.hidden = !isEdited;
     if (isEdited) { const o = ro[c.key]; ghost.style.left = (g.w * o.start) / g.end + "px"; ghost.style.width = (g.w * o.dur) / g.end + "px"; }
     tail.hidden = !(isSpring(c.ease) && x.tail > x.end);
-    if (!tail.hidden) { const r5 = px("--radius-xs"); tail.style.left = (g.w * x.end) / g.end - r5 + "px"; tail.style.width = Math.min(g.w - (g.w * x.end) / g.end, (g.w * (x.tail - x.end)) / g.end) + r5 + "px"; }
+    if (!tail.hidden) { tail.style.left = (g.w * x.end) / g.end + "px"; tail.style.width = Math.min(g.w - (g.w * x.end) / g.end, (g.w * (x.tail - x.end)) / g.end) + "px"; }
   }
   // The move's end: one area behind every row and the ruler, from the move's end to the ruler's end.
   const total = lengthOf(r), endX = xOf(g, total);
@@ -945,7 +968,9 @@ function updateTime() {
 // The page's room ends where the tool at its foot begins: the dock and its margins at a desk, the drawer.
 function sizeDockRoom() {
   let room = 0;
-  if (layoutIs("drawer")) room = drawerH;
+  // The drawer's grabber stands on its top edge, half above it: the page's room ends above the grabber, so
+  // nothing of the page shows under it (the r24 review).
+  if (layoutIs("drawer")) room = drawerH + px("--c-grabber-h") / 2 + 0.5;
   else if (layoutIs("desk") && $("dock").dataset.open === "true") room = $("dock").offsetHeight + 2 * px("--space-5");
   rootEl.style.setProperty("--dock-room", room + "px");
 }
