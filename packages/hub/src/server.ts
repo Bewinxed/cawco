@@ -240,6 +240,7 @@ import {
   INSTALL_SESSION_CREDENTIAL,
   invariant,
   isEffortLevel,
+  isLoopbackSource,
   joinProviders,
   type LastErrorKind,
   LIMIT_REACHED,
@@ -18079,8 +18080,9 @@ export const createServer = (
    * Stores what a fetch of a skill or plugin came to: whether its source
    * moved on, held what the fleet has, or failed (`lastRefresh`, only for a
    * row that had files from that same source), and, when it fetched, what
-   * the source holds now, so a refresh also answers the update check.
-   * Answers whether the fleet's copy changed, the only news for the machines.
+   * the source holds now, so a refresh also answers the update check (a
+   * source not read for updates, {@link watched}, records none). Answers
+   * whether the fleet's copy changed, the only news for the machines.
    */
   const noteFetch = (
     row: { skill: string } | { plugin: string },
@@ -18095,7 +18097,7 @@ export const createServer = (
         : undefined;
     db.noteSource(row, {
       lastRefresh: lastRefresh ?? null,
-      ...(error === undefined
+      ...(watched(row) && error === undefined
         ? { checked: { at, hash: after.hash, version: after.version } }
         : {}),
     });
@@ -18131,7 +18133,7 @@ export const createServer = (
     }
     skillChoices.delete(name);
     const work = (async (): Promise<SkillFetch | undefined> => {
-      const resolved = await resolveSkill(source);
+      const resolved = await resolveSkill(source, db.heldSkillNames(name));
       const stored = db.listSkills().find((skill) => skill.name === name);
       if (!stored) {
         return;
@@ -18398,6 +18400,52 @@ export const createServer = (
       fanOutFleet();
     }
   };
+  /**
+   * Whether a row's source is read for updates: not an adopted skill's
+   * machine, which has no upstream, and not a source on a loopback host
+   * (core `isLoopbackSource`), a server stood up once to install from.
+   */
+  const watched = (row: { skill: string } | { plugin: string }): boolean => {
+    const source =
+      "skill" in row
+        ? db.listSkills().find((skill) => skill.name === row.skill)?.source
+        : marketplaceSource(row.plugin.split("@")[1] ?? "");
+    return (
+      source !== undefined &&
+      !source.startsWith("machine:") &&
+      !isLoopbackSource(source)
+    );
+  };
+
+  /**
+   * A row whose source is not read for updates keeps nothing an earlier read
+   * left on it (what it held, why it failed), so it says nothing of updates.
+   */
+  const unwatch = (
+    row: { skill: string } | { plugin: string },
+    held: FleetVersioned
+  ): void => {
+    if (
+      held.checkedAt === undefined &&
+      held.checkError === undefined &&
+      held.latestHash === undefined
+    ) {
+      return;
+    }
+    db.noteSource(row, { checked: null });
+    if ("skill" in row) {
+      const skill = db.listSkills().find((one) => one.name === row.skill);
+      if (skill) {
+        announceSkill(skill.name, skill.source);
+      }
+      return;
+    }
+    const plugin = db.listPlugins().find((one) => one.id === row.plugin);
+    if (plugin) {
+      announceFetch({ plugin: pluginRow(plugin) });
+    }
+  };
+
   /** The update check under way, if one is. */
   let checking: Promise<void> | undefined;
 
@@ -18412,14 +18460,18 @@ export const createServer = (
   /** {@link checkSources}' skills: one source at a time. */
   const checkSkillSources = async (): Promise<void> => {
     for (const row of db.listSkills()) {
-      if (
-        row.source.startsWith("machine:") ||
-        fetches.has(`skill:${row.name}`)
-      ) {
+      if (fetches.has(`skill:${row.name}`)) {
+        continue;
+      }
+      if (!watched({ skill: row.name })) {
+        unwatch({ skill: row.name }, row);
         continue;
       }
       // biome-ignore lint/performance/noAwaitInLoops: one source at a time, so GitHub is not hit in a burst
-      const resolved = await resolveSkill(row.source);
+      const resolved = await resolveSkill(
+        row.source,
+        db.heldSkillNames(row.name)
+      );
       if (lifetime.closed()) {
         return;
       }
@@ -18449,14 +18501,17 @@ export const createServer = (
     return grouped;
   };
 
+  /** Where the fleet's marketplace `marketplace` comes from, if it links one. */
+  const marketplaceSource = (marketplace: string): string | undefined =>
+    db.fleetConfig().marketplaces.find(({ name }) => name === marketplace)
+      ?.source;
+
   /** What `marketplace`'s source holds now for the plugins named `names`. */
   const readPluginSource = (
     marketplace: string,
     names: string[]
   ): Promise<ResolvedPlugin[]> => {
-    const source = db
-      .fleetConfig()
-      .marketplaces.find(({ name }) => name === marketplace)?.source;
+    const source = marketplaceSource(marketplace);
     return source
       ? resolveMarketplacePlugins(marketplace, source, names)
       : Promise.resolve(
@@ -18470,6 +18525,13 @@ export const createServer = (
   /** {@link checkSources}' plugins: one marketplace, every plugin of it, at a time. */
   const checkPluginSources = async (): Promise<void> => {
     for (const [marketplace, ids] of pluginsByMarketplace()) {
+      const rows = db.listPlugins().filter((row) => ids.includes(row.id));
+      if (!watched({ plugin: ids[0] ?? "" })) {
+        for (const row of rows) {
+          unwatch({ plugin: row.id }, row);
+        }
+        continue;
+      }
       const names = ids.map((id) => id.split("@")[0] ?? id);
       // biome-ignore lint/performance/noAwaitInLoops: one source at a time, so GitHub is not hit in a burst
       const found = await readPluginSource(marketplace, names);
@@ -18535,8 +18597,8 @@ export const createServer = (
    */
   const checkDue = (): boolean =>
     [
-      ...db.listSkills().filter((row) => !row.source.startsWith("machine:")),
-      ...db.listPlugins(),
+      ...db.listSkills().filter((row) => watched({ skill: row.name })),
+      ...db.listPlugins().filter((row) => watched({ plugin: row.id })),
     ].some(
       (row) =>
         row.checkedAt === undefined ||

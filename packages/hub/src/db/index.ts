@@ -99,7 +99,7 @@ import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Context, Effect, Layer } from "effect";
 import { bundledSkills, starterSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
-import { pluginVersion, skillVersion } from "../fleet-versions";
+import { pluginVersion, skillName, skillVersion } from "../fleet-versions";
 import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
 import type { MoveState } from "../moves";
@@ -312,7 +312,13 @@ export type PublicInstanceRow = Omit<
  * version it holds, or why it could not be read.
  */
 export interface SourceNote {
-  checked?: { at: number; hash?: string; version?: string; error?: string };
+  /** Null: the source is not read for updates (a loopback one): nothing read stands. */
+  checked?: {
+    at: number;
+    hash?: string;
+    version?: string;
+    error?: string;
+  } | null;
   lastRefresh?: FleetRefresh | null;
 }
 
@@ -993,6 +999,11 @@ export interface DbShape {
     instanceId: string,
     docs: readonly { path: string; hash: string }[]
   ) => void;
+  /**
+   * What names the skill a row is: the row's own name, and the name its
+   * stored SKILL.md declares (skills.ts `resolveSkill`'s `held`).
+   */
+  readonly heldSkillNames: (name: string) => string[];
   /** Every machine's held workspaces (schema.ts `WorkspaceState`), newest first. */
   readonly heldWorkspaces: () => WorkspaceRow[];
   readonly hiddenSession: (id: string) => boolean;
@@ -2699,6 +2710,14 @@ const sourceColumnsOf = (
 /** The columns a {@link SourceNote} writes. */
 const noteColumns = ({ lastRefresh, checked }: SourceNote) => ({
   ...(lastRefresh === undefined ? {} : { lastRefresh }),
+  ...(checked === null
+    ? {
+        checkedAt: null,
+        checkError: null,
+        latestHash: null,
+        latestVersion: null,
+      }
+    : {}),
   ...(checked
     ? {
         checkedAt: new Date(checked.at),
@@ -6566,6 +6585,15 @@ const make = async (path: string): Promise<DbShape> => {
         .from(skills)
         .all()
         .map(skillMeta),
+    heldSkillNames: (name) => {
+      const stored = db
+        .select({ files: skills.files })
+        .from(skills)
+        .where(eq(skills.name, name))
+        .get();
+      const declared = skillName(stored?.files);
+      return declared && declared !== name ? [name, declared] : [name];
+    },
     putSkill: ({
       name,
       source,

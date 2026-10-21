@@ -50,6 +50,20 @@ export const skillVersion = (
   );
 };
 
+/** The `name` a SKILL.md's front matter declares. */
+export const skillMdName = (text: string): string | undefined =>
+  declared(
+    frontMatterBlock(text)?.lines.find((line) => line.key === "name")?.value
+  );
+
+/** The `name` the root SKILL.md of a stored skill declares. */
+export const skillName = (
+  files: readonly SkillFile[] | null | undefined
+): string | undefined => {
+  const text = files ? fileText(files, "SKILL.md") : undefined;
+  return text === undefined ? undefined : skillMdName(text);
+};
+
 const manifestVersion = (text: string): string | undefined => {
   try {
     const manifest: unknown = JSON.parse(text);

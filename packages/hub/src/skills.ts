@@ -16,6 +16,7 @@ import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { $ } from "bun";
+import { skillMdName } from "./fleet-versions";
 
 /** What a `source` string names, once its scheme has been read off it. */
 export type SkillSource =
@@ -419,10 +420,36 @@ const skillDirs = async (root: string): Promise<string[]> => {
   return [];
 };
 
+/** The `name` a skill directory's SKILL.md front matter declares. */
+const declaredName = async (dir: string): Promise<string | undefined> =>
+  skillMdName(await Bun.file(join(dir, "SKILL.md")).text());
+
+/**
+ * Of several skills, the one a row already holds: the one whose directory or
+ * declared name is among `held` (the row's own name, and the name its stored
+ * SKILL.md declares). Undefined unless exactly one is.
+ */
+const heldDir = async (
+  found: string[],
+  held: readonly string[]
+): Promise<string | undefined> => {
+  if (held.length === 0) {
+    return;
+  }
+  const names = await Promise.all(found.map(declaredName));
+  const matches = found.filter(
+    (dir, at) =>
+      held.includes(basename(dir)) ||
+      (names[at] !== undefined && held.includes(names[at]))
+  );
+  return matches.length === 1 ? matches[0] : undefined;
+};
+
 /** The one directory the source meant, or why the archive could not answer that. */
 const pickSkillDir = async (
   root: string,
-  source: SkillSource
+  source: SkillSource,
+  held: readonly string[] = []
 ): Promise<{ dir: string } | UnresolvedSkill> => {
   if (source.kind === "repo" && source.path) {
     const dir = join(root, source.path);
@@ -455,10 +482,13 @@ const pickSkillDir = async (
         };
   }
   if (found.length > 1) {
-    return {
-      error: "repo has several skills — pick one with @<name>",
-      choices: names,
-    };
+    const kept = await heldDir(found, held);
+    return kept
+      ? { dir: kept }
+      : {
+          error: "repo has several skills — pick one with @<name>",
+          choices: names,
+        };
   }
   return { dir: found[0] };
 };
@@ -542,7 +572,8 @@ const readSkill = async (dir: string): Promise<ResolvedSkill> => {
 /** A URL is either the skill's own file or an archive holding it. */
 const fetchUrl = async (
   url: string,
-  work: string
+  work: string,
+  held: readonly string[]
 ): Promise<ResolvedSkill | UnresolvedSkill> => {
   const response = await get(url);
   if (!response.ok) {
@@ -573,23 +604,24 @@ const fetchUrl = async (
   }
 
   const root = await unpack(response, work, path);
-  const picked = await pickSkillDir(root, { kind: "url", url });
+  const picked = await pickSkillDir(root, { kind: "url", url }, held);
   return "error" in picked ? picked : await readSkill(picked.dir);
 };
 
 const fetchSkill = async (
   source: SkillSource,
-  work: string
+  work: string,
+  held: readonly string[]
 ): Promise<ResolvedSkill | UnresolvedSkill> => {
   if (source.kind === "url") {
-    return await fetchUrl(source.url, work);
+    return await fetchUrl(source.url, work, held);
   }
 
   const root =
     source.kind === "npm"
       ? await npmRoot(source, work)
       : await downloadRepo(source.owner, source.repo, source.ref, work);
-  const picked = await pickSkillDir(root, source);
+  const picked = await pickSkillDir(root, source, held);
   return "error" in picked ? picked : await readSkill(picked.dir);
 };
 
@@ -597,9 +629,15 @@ const fetchSkill = async (
  * The skill a source names, fetched and read once for the whole fleet. Every
  * failure comes back as a sentence rather than thrown: a source that cannot be
  * resolved is a row the dashboard shows, not a request that fell over.
+ *
+ * `held` names the skill the row is (its own name, and the name its stored
+ * SKILL.md declares): a source that names none and holds several resolves to
+ * the one of them those name, so a row installed from a bare multi-skill
+ * source is fetched again, and checked, as the skill it holds.
  */
 export const resolveSkill = async (
-  source: string
+  source: string,
+  held: readonly string[] = []
 ): Promise<ResolvedSkill | UnresolvedSkill> => {
   const parsed = parseSkillSource(source);
   if (!parsed) {
@@ -608,7 +646,7 @@ export const resolveSkill = async (
 
   const work = await mkdtemp(join(tmpdir(), "cawco-skill-"));
   try {
-    return await fetchSkill(parsed, work);
+    return await fetchSkill(parsed, work, held);
   } catch (error) {
     return { error: said(error) };
   } finally {

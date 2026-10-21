@@ -931,6 +931,31 @@ const PROXY_ENV = [
   "no_proxy",
 ];
 
+/**
+ * git's own setting for a proxy that carries its credentials in its URL, as a
+ * workspace's does (`http://user:pass@localhost:3128`): `basic`. git's default,
+ * `anyauth`, first asks the proxy unauthenticated, and the workspace's proxy
+ * ends that CONNECT ("Proxy CONNECT aborted"), so the hub's own fetch of a
+ * skill's GitHub source never arrived. The workspace's git has it already
+ * (its GIT_CONFIG_PARAMETERS); the fleet's environment is built afresh.
+ */
+const proxyGitAuth = (): Record<string, string> => {
+  const proxy = process.env.HTTPS_PROXY ?? process.env.https_proxy;
+  let user = "";
+  try {
+    user = proxy ? new URL(proxy).username : "";
+  } catch {
+    return {};
+  }
+  return user
+    ? {
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: "http.proxyAuthMethod",
+        GIT_CONFIG_VALUE_0: "basic",
+      }
+    : {};
+};
+
 /** Every two-hex name, in an order of its own each draw. */
 function shuffledHex(): string[] {
   const names = Array.from({ length: 256 }, (_, n) =>
@@ -1929,6 +1954,7 @@ async function standUp(
         return value ? [[name, value]] : [];
       })
     ),
+    ...proxyGitAuth(),
   };
   /** What the hub reaches in place of the world (stand-ins/index.ts): set before it launches. */
   const standIns: StandIns = {};

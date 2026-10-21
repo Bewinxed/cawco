@@ -209,6 +209,30 @@ export interface FleetRefresh {
  * telling the machines (`latestHash`, `latestVersion`, `checkedAt`);
  * `updateAvailable` is the source holding other content than the fleet's.
  */
+const LOOPBACK_V4 = /^127(?:\.\d{1,3}){3}$/;
+
+/**
+ * A source served from the hub's own machine: an `http(s)` URL on a loopback
+ * host (127.0.0.0/8, ::1, localhost). Such a server is one a person stood up
+ * to install from once and has stopped since, so the hub never reads it for
+ * updates and the dashboard offers no fetch of it again; the row keeps the
+ * files it was given.
+ */
+export const isLoopbackSource = (source: string): boolean => {
+  let host: string;
+  try {
+    host = new URL(source.trim()).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "[::1]" ||
+    LOOPBACK_V4.test(host)
+  );
+};
+
 export interface FleetVersioned {
   /** Why the last read of the source for what it holds failed. */
   checkError?: string;

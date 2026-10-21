@@ -3,30 +3,36 @@
  * holds something newer, and what a refresh came to (FleetVersioned in
  * @cawco/core; hub server.ts `fetchSkill`, `fetchPlugins`, `checkSources`).
  *
- * On a scratch fleet (real hub, agent and sessiond), the built dashboard on
- * the desk: a skill whose SKILL.md this spec serves (`version: 1.0.0`), and a
- * plugin from a marketplace on the hub's disk (`plugin.json` 1.0.0).
+ * On a scratch fleet (real hub, agent and sessiond), the built dashboard:
  *
- * - Each row's meta line names its version.
- * - Fetch again on a source that has not moved: the row says "Already on
- *   latest (1.0.0)", the `fleet.fetch` frame carries outcome `unchanged`, and
- *   the hub tells no machine (no `[fleet] sync →` in its log).
- * - The served SKILL.md moves to 1.1.0, then Check for updates: the row's
- *   badge says "Update available · 1.0.0 → 1.1.0" (a status, not a button),
- *   its action is Fetch update, and the hub stored none of the new files
- *   (the row's hash is the old one).
- * - Fetch update pressed: "Updated 1.0.0 → 1.1.0 · just now", the badge
- *   gone, and the machines told.
- * - The plugin the same way: its plugin.json moves to 1.1.0, the check marks
- *   it, Fetch update fetches it.
- * - The plugin's source broken, Fetch again: the hub keeps its last good
- *   hash and files, the row says "Couldn't update: …", no machine is told.
- * - A nightly-long version on a phone, at 390px and 320px: the badge, its
- *   action and the outcome note stay inside the row, and neither the row
- *   nor the page scrolls sideways.
+ * - A skill whose SKILL.md this spec serves on 127.0.0.1, as a one-shot file
+ *   server installs one: its meta line names its version 1.0.0; its menu
+ *   offers no Fetch again; Check for updates never reads it, and clears the
+ *   ECONNREFUSED an earlier check left on it (core `isLoopbackSource`), so
+ *   the row says nothing about updates.
+ * - Two skills from the owner's own multi-skill GitHub repos, as the live
+ *   fleet holds them, each by its bare source: apple-web-app from
+ *   `skills:joe-bell/skills` (installed bare, the row's name picking it) and
+ *   hairline from `skills:lucasmarkes/hairline` (installed picked, then its
+ *   source made bare, its SKILL.md declaring `hairline-create`). Check for
+ *   updates reads each as the skill the row holds: no "repo has several
+ *   skills", what the source holds is the row's own copy.
+ * - Fetch again on apple-web-app: "Already on latest (…) · just now", the
+ *   frame's outcome `unchanged`, no machine told (no `[fleet] sync →`).
+ * - Its stored copy made older (its hash changed in the hub's database), then
+ *   Check for updates: the badge "Update available · a → b" (a status, not a
+ *   button) and its Fetch update; pressed, "Updated a → b · just now", the
+ *   machines told.
+ * - A plugin from a marketplace on the hub's disk (`plugin.json` 1.0.0): its
+ *   version, its update to 1.1.0 found and fetched; its source broken, Fetch
+ *   again keeps its last good hash and files, says "Couldn't update: …" and
+ *   tells no machine.
+ * - The plugin at a nightly-long version on a phone, at 390px and 320px: the
+ *   badge, its action and the outcome note inside the row, nothing scrolling
+ *   sideways, the name kept.
  *
  * Each row's rendered text is printed, and a capture of it kept in the run's
- * out dir.
+ * out dir. The GitHub legs read github.com, as the live check does.
  *
  *   bun scripts/probe-kit/run.ts skill-updates
  */
@@ -37,15 +43,25 @@ import type { FleetPlugin, FleetSkillMeta } from "../../../packages/core/src";
 import type { Reply } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
-const SKILL = "probe-versions";
+/** Served on 127.0.0.1: a one-shot install source, never read for updates. */
+const LOCAL = "probe-local";
+/** `skills:joe-bell/skills` holds apple-web-app, elron and letterboxd-diary. */
+const MULTI = "apple-web-app";
+const MULTI_SOURCE = "skills:joe-bell/skills";
+/** `skills:lucasmarkes/hairline` holds hairline-adopt and hairline-create. */
+const HAIRLINE = "hairline";
+const HAIRLINE_SOURCE = "skills:lucasmarkes/hairline";
 const MARKETPLACE = "version-plugins";
 const PLUGIN = "versioned-plugin";
 const PLUGIN_ID = `${PLUGIN}@${MARKETPLACE}`;
 const SYNC_LINE = "[fleet] sync →";
 const UPDATE_CHIP = /^Update available/;
+const SEVERAL = "several skills";
 /** A version as long as a nightly's, to hold the row's edges against. */
 const LONG_VERSION = "2026.10.21-nightly.4627+abcdef0";
 const LINE_BREAKS = /\s*\n\s*/g;
+/** A content hash no source holds: a stored copy older than its source's. */
+const OLDER = "0".repeat(64);
 
 interface Snapshot {
   config: { plugins: FleetPlugin[] };
@@ -55,13 +71,13 @@ interface Snapshot {
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
 const skillMd = (version: string) =>
-  `---\nname: ${SKILL}\ndescription: says its version\nversion: ${version}\n---\nVersion ${version}.\n`;
+  `---\nname: ${LOCAL}\ndescription: says its version\nversion: ${version}\n---\nVersion ${version}.\n`;
 
 /** Polls `read` until `accept` holds or `ms` runs out; the last value either way. */
 async function until<T>(
   read: () => Promise<T>,
   accept: (value: T) => boolean,
-  ms = 60_000
+  ms = 120_000
 ): Promise<{ ok: boolean; value: T }> {
   const deadline = Date.now() + ms;
   for (;;) {
@@ -75,8 +91,8 @@ async function until<T>(
 }
 
 const fleetOf = (fleet: KitFleet) => fleet.api<Snapshot>("/api/fleet");
-const skillOf = async (fleet: KitFleet) =>
-  (await fleetOf(fleet)).skills.find((one) => one.name === SKILL);
+const skillOf = async (fleet: KitFleet, name: string) =>
+  (await fleetOf(fleet)).skills.find((one) => one.name === name);
 const pluginOf = async (fleet: KitFleet) =>
   (await fleetOf(fleet)).config.plugins.find((one) => one.id === PLUGIN_ID);
 
@@ -103,6 +119,21 @@ const send = async (
   return await response.json();
 };
 
+/** A skill stored from `source`, once its fetch has landed with files. */
+async function install(
+  fleet: KitFleet,
+  name: string,
+  source: string
+): Promise<FleetSkillMeta | undefined> {
+  await send(fleet, "PUT", `/api/fleet/skills/${name}`, { source });
+  return (
+    await until(
+      () => skillOf(fleet, name),
+      (row) => Boolean(row?.hash || row?.error)
+    )
+  ).value;
+}
+
 const rowOf = (page: Page, name: string): Locator =>
   page.locator(`li[data-row-name="${name}"]`);
 
@@ -125,21 +156,32 @@ const rowSays = (page: Page, name: string, words: string) =>
   rowOf(page, name)
     .getByText(words, { exact: false })
     .first()
-    .waitFor({ timeout: 60_000 })
+    .waitFor({ timeout: 120_000 })
     .then(
       () => true,
       () => false
     );
 
-async function fetchAgain(page: Page, name: string) {
+const openMenu = async (page: Page, name: string) => {
   await page.getByRole("button", { name: `More for ${name}` }).click();
+};
+
+async function fetchAgain(page: Page, name: string) {
+  await openMenu(page, name);
   await page.getByRole("menuitem", { name: "Fetch again" }).click();
 }
+
+/** Check for updates pressed; resolves once the hub says the check ended. */
+const checkNow = (fleet: KitFleet, page: Page) =>
+  fleet.fetched(
+    (frame) => frame.check,
+    () => page.getByRole("button", { name: "Check for updates" }).click()
+  );
 
 /** A marketplace with one plugin at `version`, on the hub's disk. */
 async function market(fleet: KitFleet, version: string): Promise<string> {
   const source = join(fleet.sandbox, "version-market");
-  const plugin = join(source, "plugins", PLUGIN);
+  const dir = join(source, "plugins", PLUGIN);
   await Bun.write(
     join(source, ".claude-plugin", "marketplace.json"),
     JSON.stringify({
@@ -149,22 +191,21 @@ async function market(fleet: KitFleet, version: string): Promise<string> {
     })
   );
   await Bun.write(
-    join(plugin, ".claude-plugin", "plugin.json"),
+    join(dir, ".claude-plugin", "plugin.json"),
     JSON.stringify({ name: PLUGIN, version })
   );
   await Bun.write(
-    join(plugin, "skills", "noop", "SKILL.md"),
+    join(dir, "skills", "noop", "SKILL.md"),
     `---\nname: noop\ndescription: does nothing\n---\nNothing at ${version}.\n`
   );
   return source;
 }
 
 const probe = async (kit: Kit) => {
-  let served = skillMd("1.0.0");
   const server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
-    fetch: () => new Response(served),
+    fetch: () => new Response(skillMd("1.0.0")),
   });
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
@@ -176,21 +217,186 @@ const probe = async (kit: Kit) => {
   await fleet.agentUp();
   const base = await fleet.dashboard();
   const page = await kit.page("desk");
+  const on = { kit, fleet, page, base };
 
-  // ── seeded: a skill and a plugin, each at 1.0.0 ─────────────────────
-  await send(fleet, "PUT", `/api/fleet/skills/${SKILL}`, {
-    source: `${server.url.origin}/${SKILL}/SKILL.md`,
-  });
-  const fetched = await until(
-    () => skillOf(fleet),
-    (row) => Boolean(row?.hash)
-  );
-  const first = fetched.value;
+  await loopback(on, `${server.url.origin}/${LOCAL}/SKILL.md`);
+  await server.stop(true);
+  await multiSkill(on);
+  await plugin(on);
+  await page.close();
+  await phone(on);
+};
+
+/** What each leg works on. */
+interface On {
+  base: string;
+  fleet: KitFleet;
+  kit: Kit;
+  page: Page;
+}
+
+/** A skill served on 127.0.0.1: its version shown, never fetched again or checked. */
+async function loopback({ kit, fleet, page, base }: On, source: string) {
+  const first = await install(fleet, LOCAL, source);
   kit.check(
-    "the hub reads the skill's declared version",
-    first?.version === "1.0.0",
+    "loopback: the skill is stored, version 1.0.0",
+    first?.version === "1.0.0" && Boolean(first.hash),
     JSON.stringify(first)
   );
+  // What the live fleet's first check left on such a row.
+  fleet.write(
+    "UPDATE skills SET check_error = ?, checked_at = ? WHERE name = ?",
+    `connect ECONNREFUSED ${new URL(source).host}`,
+    Date.now() - 60_000,
+    LOCAL
+  );
+  kit.check(
+    "loopback: before the check, the hub holds what the earlier check left",
+    (await skillOf(fleet, LOCAL))?.checkError?.includes("ECONNREFUSED") === true
+  );
+  await open(page, `${base}/config/skills`, `li[data-row-name="${LOCAL}"]`);
+  await checkNow(fleet, page);
+  const after = await skillOf(fleet, LOCAL);
+  kit.check(
+    "loopback: the check reads nothing from it and clears what was left",
+    after !== undefined &&
+      after.checkedAt === undefined &&
+      after.checkError === undefined &&
+      after.latestHash === undefined &&
+      after.updateAvailable === undefined &&
+      after.hash === first?.hash,
+    JSON.stringify(after)
+  );
+  const text = await readRow(kit, page, LOCAL, "loopback-row");
+  kit.check(
+    "loopback: the row names 1.0.0 and says nothing about updates",
+    text.includes("1.0.0") &&
+      !text.includes("Couldn't check") &&
+      !text.includes("Update available") &&
+      !text.includes("Already on latest"),
+    text
+  );
+  await openMenu(page, LOCAL);
+  const items = await page.getByRole("menuitem").allInnerTexts();
+  kit.check(
+    "loopback: its menu offers no Fetch again",
+    items.length > 0 && !items.some((item) => item.includes("Fetch again")),
+    items.join(" / ")
+  );
+  await page.keyboard.press("Escape");
+}
+
+/** The owner's two multi-skill repos, each row by its bare source. */
+async function multiSkill({ kit, fleet, page }: On) {
+  const multi = await install(fleet, MULTI, MULTI_SOURCE);
+  kit.check(
+    "multi-skill: installed by its bare source, the row's name picks the skill",
+    Boolean(multi?.hash) && multi?.error === undefined,
+    JSON.stringify(multi)
+  );
+  const picked = await install(
+    fleet,
+    HAIRLINE,
+    `${HAIRLINE_SOURCE}@hairline-create`
+  );
+  // As the live row stands: the bare source, the files hairline-create's.
+  fleet.write(
+    "UPDATE skills SET source = ? WHERE name = ?",
+    HAIRLINE_SOURCE,
+    HAIRLINE
+  );
+  kit.check(
+    "multi-skill: hairline stored, then its source made bare",
+    Boolean(picked?.hash) &&
+      (await skillOf(fleet, HAIRLINE))?.source === HAIRLINE_SOURCE
+  );
+  await checkNow(fleet, page);
+  for (const name of [MULTI, HAIRLINE]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one row at a time, read after the one check
+    const row = await skillOf(fleet, name);
+    kit.check(
+      `multi-skill: the check reads ${name} as the skill it holds, unchanged`,
+      row?.checkError === undefined &&
+        row?.latestHash === row?.hash &&
+        row?.checkedAt !== undefined &&
+        row.updateAvailable === undefined,
+      JSON.stringify({ ...row, source: row?.source })
+    );
+    const text = await readRow(kit, page, name, `multi-${name}-checked`);
+    kit.check(
+      `multi-skill: ${name}'s row says no "${SEVERAL}"`,
+      !(text.includes(SEVERAL) || text.includes("Couldn't check")),
+      text
+    );
+  }
+
+  // Fetch again, nothing new.
+  let mark = await fleet.logMark("hub");
+  const unchanged = await fleet.fetched(
+    (frame) => (frame.skill?.name === MULTI ? frame.skill : undefined),
+    () => fetchAgain(page, MULTI)
+  );
+  kit.check(
+    "multi-skill: Fetch again lands outcome unchanged",
+    unchanged.lastRefresh?.outcome === "unchanged" &&
+      unchanged.error === undefined,
+    JSON.stringify(unchanged.lastRefresh)
+  );
+  kit.check(
+    "multi-skill: the row says Already on latest (…) · just now",
+    await rowSays(page, MULTI, "· just now")
+  );
+  await readRow(kit, page, MULTI, "multi-already-latest");
+  let log = await mark.since();
+  kit.check(
+    "multi-skill: the unchanged fetch tells no machine",
+    log.includes(`skill ${MULTI}: unchanged`) && !log.includes(SYNC_LINE),
+    told(log, MULTI)
+  );
+
+  // Its stored copy made older: the check finds the update.
+  const current = unchanged.hash ?? "";
+  fleet.write("UPDATE skills SET hash = ? WHERE name = ?", OLDER, MULTI);
+  await checkNow(fleet, page);
+  const badge = `Update available · ${OLDER.slice(0, 7)} → ${current.slice(0, 7)}`;
+  kit.check(
+    `multi-skill: the row's badge says ${badge}`,
+    await rowSays(page, MULTI, badge)
+  );
+  kit.check(
+    "multi-skill: the badge is a status, not a button; its action is Fetch update",
+    (await rowOf(page, MULTI)
+      .getByRole("button", { name: UPDATE_CHIP })
+      .count()) === 0 && (await updateButton(page, MULTI).count()) === 1
+  );
+  await readRow(kit, page, MULTI, "multi-update-available");
+  mark = await fleet.logMark("hub");
+  await updateButton(page, MULTI).click();
+  const updated = `Updated ${OLDER.slice(0, 7)} → ${current.slice(0, 7)} · just now`;
+  kit.check(
+    `multi-skill: the row says ${updated}`,
+    await rowSays(page, MULTI, updated)
+  );
+  const landed = await skillOf(fleet, MULTI);
+  kit.check(
+    "multi-skill: the update lands: the source's copy, no update available, the badge gone",
+    landed?.hash === current &&
+      landed.updateAvailable === undefined &&
+      (await updateButton(page, MULTI).count()) === 0,
+    JSON.stringify(landed?.lastRefresh)
+  );
+  await readRow(kit, page, MULTI, "multi-updated");
+  log = await mark.since();
+  kit.check(
+    "multi-skill: the hub tells the machines of the changed copy",
+    log.includes(`skill ${MULTI}: the fleet's copy changed`) &&
+      log.includes(SYNC_LINE),
+    told(log, MULTI)
+  );
+}
+
+/** A plugin from a marketplace on the hub's disk: found, fetched, and kept when its source breaks. */
+async function plugin({ kit, fleet, page }: On) {
   const source = await market(fleet, "1.0.0");
   await fleet.fetched(
     (frame) => (frame.link?.source === source ? frame.link : undefined),
@@ -204,118 +410,31 @@ const probe = async (kit: Kit) => {
     (row) => Boolean(row?.hash)
   );
   kit.check(
-    "the hub reads the plugin's plugin.json version",
+    "plugin: the hub reads its plugin.json version",
     installed.value?.version === "1.0.0",
     JSON.stringify(installed.value)
   );
+  kit.check(
+    "plugin: its meta line names 1.0.0",
+    await rowSays(page, PLUGIN_ID, "1.0.0")
+  );
+  await readRow(kit, page, PLUGIN_ID, "plugin-version-shown");
 
-  await open(page, `${base}/config/skills`, `li[data-row-name="${SKILL}"]`);
-  const shown = await readRow(kit, page, SKILL, "skill-version-shown");
-  kit.check("the skill's meta line names 1.0.0", shown.includes("1.0.0"));
-  const pluginShown = await readRow(
-    kit,
-    page,
-    PLUGIN_ID,
-    "plugin-version-shown"
-  );
-  kit.check(
-    "the plugin's meta line names 1.0.0",
-    pluginShown.includes("1.0.0")
-  );
-
-  // ── Fetch again, nothing new ────────────────────────────────────────
-  let mark = await fleet.logMark("hub");
-  const unchanged = await fleet.fetched(
-    (frame) => (frame.skill?.name === SKILL ? frame.skill : undefined),
-    () => fetchAgain(page, SKILL)
-  );
-  kit.check(
-    "the landing frame carries outcome unchanged, 1.0.0",
-    unchanged.lastRefresh?.outcome === "unchanged" &&
-      unchanged.lastRefresh.toVersion === "1.0.0",
-    JSON.stringify(unchanged.lastRefresh)
-  );
-  kit.check(
-    "the row says Already on latest (1.0.0) · just now",
-    await rowSays(page, SKILL, "Already on latest (1.0.0) · just now")
-  );
-  await readRow(kit, page, SKILL, "skill-already-latest");
-  let log = await mark.since();
-  kit.check(
-    "the hub logs the unchanged fetch and tells no machine",
-    log.includes(`skill ${SKILL}: unchanged`) && !log.includes(SYNC_LINE),
-    told(log, SKILL)
-  );
-
-  // ── the source moves on; Check for updates ──────────────────────────
-  served = skillMd("1.1.0");
-  await page.getByRole("button", { name: "Check for updates" }).click();
-  kit.check(
-    "the row's badge says Update available · 1.0.0 → 1.1.0",
-    await rowSays(page, SKILL, "Update available · 1.0.0 → 1.1.0")
-  );
-  kit.check(
-    "the badge is a status, not a button; its action is Fetch update",
-    (await rowOf(page, SKILL)
-      .getByRole("button", { name: UPDATE_CHIP })
-      .count()) === 0 && (await updateButton(page, SKILL).count()) === 1
-  );
-  const checked = await skillOf(fleet);
-  kit.check(
-    "the check marks the update and stores none of its files",
-    checked?.updateAvailable === true &&
-      checked.latestVersion === "1.1.0" &&
-      checked.hash === first?.hash &&
-      checked.version === "1.0.0",
-    JSON.stringify(checked)
-  );
-  await readRow(kit, page, SKILL, "skill-update-available");
-
-  // ── Fetch update pressed ────────────────────────────────────────────
-  mark = await fleet.logMark("hub");
-  await updateButton(page, SKILL).click();
-  kit.check(
-    "the row says Updated 1.0.0 → 1.1.0 · just now",
-    await rowSays(page, SKILL, "Updated 1.0.0 → 1.1.0 · just now")
-  );
-  const updated = await skillOf(fleet);
-  kit.check(
-    "the update lands: 1.1.0, no update available",
-    updated?.version === "1.1.0" &&
-      updated.updateAvailable === undefined &&
-      updated.lastRefresh?.outcome === "updated",
-    JSON.stringify(updated)
-  );
-  kit.check(
-    "the badge and its action have gone",
-    (await rowOf(page, SKILL).getByText(UPDATE_CHIP).count()) === 0 &&
-      (await updateButton(page, SKILL).count()) === 0
-  );
-  await readRow(kit, page, SKILL, "skill-updated");
-  log = await mark.since();
-  kit.check(
-    "the hub tells the machines of the changed copy",
-    log.includes(`skill ${SKILL}: the fleet's copy changed`) &&
-      log.includes(SYNC_LINE),
-    told(log, SKILL)
-  );
-
-  // ── the plugin ──────────────────────────────────────────────────────
   await market(fleet, "1.1.0");
-  await page.getByRole("button", { name: "Check for updates" }).click();
+  await checkNow(fleet, page);
   kit.check(
-    "the plugin row's badge says Update available · 1.0.0 → 1.1.0",
+    "plugin: the badge says Update available · 1.0.0 → 1.1.0",
     await rowSays(page, PLUGIN_ID, "Update available · 1.0.0 → 1.1.0")
   );
   await readRow(kit, page, PLUGIN_ID, "plugin-update-available");
   await updateButton(page, PLUGIN_ID).click();
   kit.check(
-    "the plugin row says Updated 1.0.0 → 1.1.0 · just now",
+    "plugin: the row says Updated 1.0.0 → 1.1.0 · just now",
     await rowSays(page, PLUGIN_ID, "Updated 1.0.0 → 1.1.0 · just now")
   );
   await readRow(kit, page, PLUGIN_ID, "plugin-updated");
 
-  // ── the plugin's source breaks; Fetch again keeps the last good copy ─
+  // Its source broken: Fetch again keeps the last good copy.
   const held = () =>
     fleet.query<{ files: number; hash: string }>(
       "SELECT hash, length(files) AS files FROM plugins WHERE id = ?",
@@ -323,14 +442,14 @@ const probe = async (kit: Kit) => {
     )[0];
   const good = held();
   await rm(join(source, "plugins", PLUGIN), { recursive: true, force: true });
-  mark = await fleet.logMark("hub");
+  const mark = await fleet.logMark("hub");
   const failed = await fleet.fetched(
     (frame) => (frame.plugin?.id === PLUGIN_ID ? frame.plugin : undefined),
     () => fetchAgain(page, PLUGIN_ID)
   );
   const kept = held();
   kit.check(
-    "a failed plugin refresh keeps its hash and files, and says it failed",
+    "plugin: a failed refresh keeps its hash and files, and says it failed",
     failed.lastRefresh?.outcome === "failed" &&
       failed.hash === good?.hash &&
       kept?.hash === good?.hash &&
@@ -339,44 +458,48 @@ const probe = async (kit: Kit) => {
     `before ${JSON.stringify(good)}, after ${JSON.stringify(kept)}, refresh ${JSON.stringify(failed.lastRefresh)}`
   );
   kit.check(
-    "the plugin row says Couldn't update: …",
+    "plugin: the row says Couldn't update: …",
     await rowSays(page, PLUGIN_ID, "Couldn't update: ")
   );
   await readRow(kit, page, PLUGIN_ID, "plugin-update-failed");
-  log = await mark.since();
+  const log = await mark.since();
   kit.check(
-    "the failed refresh tells no machine",
+    "plugin: the failed refresh tells no machine",
     log.includes(`plugin ${PLUGIN_ID}: failed`) && !log.includes(SYNC_LINE),
     told(log, PLUGIN_ID)
   );
-  await market(fleet, "1.1.0");
-  await page.close();
+}
 
-  // ── a long version on a phone: nothing leaves the row ───────────────
-  served = skillMd(LONG_VERSION);
-  await fleet.api("/api/fleet/updates/check", {});
-  await until(
-    () => skillOf(fleet),
-    (row) => row?.latestVersion === LONG_VERSION
+/** The plugin at a nightly-long version on a phone: nothing leaves the row. */
+async function phone({ kit, fleet, base }: On) {
+  await market(fleet, LONG_VERSION);
+  await fleet.fetched(
+    (frame) => frame.check,
+    () => fleet.api("/api/fleet/updates/check", {})
   );
-  const phone = await kit.page("phone");
-  await open(phone, `${base}/config/skills`, `li[data-row-name="${SKILL}"]`);
-  await rowSays(phone, SKILL, "Update available");
+  const page = await kit.page("phone");
+  await open(page, `${base}/config/skills`, `li[data-row-name="${PLUGIN_ID}"]`);
+  kit.check(
+    "phone: the plugin's badge names the long version",
+    await rowSays(page, PLUGIN_ID, `→ ${LONG_VERSION}`)
+  );
   for (const width of [390, 320]) {
     // biome-ignore lint/performance/noAwaitInLoops: one width at a time, on one page
-    await phone.setViewportSize({ width, height: 844 });
-    await fitsRow(kit, phone, `badge at ${width}px`);
+    await page.setViewportSize({ width, height: 844 });
+    await fitsRow(kit, page, PLUGIN_ID, `badge at ${width}px`);
   }
-  await updateButton(phone, SKILL).click();
-  await rowSays(phone, SKILL, `Updated 1.1.0 → ${LONG_VERSION}`);
+  await updateButton(page, PLUGIN_ID).click();
+  kit.check(
+    "phone: the note names the long version",
+    await rowSays(page, PLUGIN_ID, `Updated 1.1.0 → ${LONG_VERSION}`)
+  );
   for (const width of [320, 390]) {
     // biome-ignore lint/performance/noAwaitInLoops: one width at a time, on one page
-    await phone.setViewportSize({ width, height: 844 });
-    await fitsRow(kit, phone, `note at ${width}px`);
+    await page.setViewportSize({ width, height: 844 });
+    await fitsRow(kit, page, PLUGIN_ID, `note at ${width}px`);
   }
-  await phone.close();
-  await server.stop(true);
-};
+  await page.close();
+}
 
 /** The row's Fetch update, the update badge's action. */
 const updateButton = (page: Page, name: string) =>
@@ -398,10 +521,15 @@ const told = (log: string, what: string) =>
  * so the row's own overflow is read with those areas off (`scrollBare`), and
  * each that reaches past the row must stand on the screen (`hits`).
  */
-async function fitsRow(kit: Kit, page: Page, leg: string): Promise<void> {
-  const read = await page.evaluate((name) => {
+async function fitsRow(
+  kit: Kit,
+  page: Page,
+  name: string,
+  leg: string
+): Promise<void> {
+  const read = await page.evaluate((key) => {
     const row = document.querySelector(
-      `li[data-row-name="${CSS.escape(name)}"]`
+      `li[data-row-name="${CSS.escape(key)}"]`
     );
     const doc = document.scrollingElement;
     if (!(row instanceof HTMLElement && doc)) {
@@ -469,8 +597,8 @@ async function fitsRow(kit: Kit, page: Page, leg: string): Promise<void> {
       page: { scroll: doc.scrollWidth, client: doc.clientWidth },
       parts,
     };
-  }, SKILL);
-  await rowOf(page, SKILL).screenshot({
+  }, name);
+  await rowOf(page, name).screenshot({
     path: join(kit.out, `phone-${leg.replaceAll(" ", "-")}.png`),
   });
   kit.check(

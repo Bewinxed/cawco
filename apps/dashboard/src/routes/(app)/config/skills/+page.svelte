@@ -5,6 +5,7 @@
     type FleetRefresh,
     type FleetSkillMeta,
     type FleetVersioned,
+    isLoopbackSource,
     type MarketplacePluginInfo,
     machineLabel,
     skillsWords as words,
@@ -167,6 +168,18 @@
         return;
     }
   }
+
+  /**
+   * A source on a loopback host (core `isLoopbackSource`): a server stood up
+   * once to install from. Its row is neither fetched again nor read for
+   * updates, so it offers no Fetch again and says nothing of updates; its
+   * meta line still names its version.
+   */
+  const oneShot = (source: string | undefined): boolean =>
+    source !== undefined && isLoopbackSource(source);
+  /** Where a plugin's marketplace comes from. */
+  const pluginSource = (id: string): string | undefined =>
+    marketplaces.find((row) => row.name === id.split("@")[1])?.source;
 
   /** The row's copy against what its source holds now, for its update chip. */
   const updatePair = (row: FleetVersioned & { hash?: string }) =>
@@ -543,12 +556,17 @@
         {#each skills as row (row.name)}
           <SectionRow
             actions={[
-              {
-                label: row.fetching ? FETCHING : words.fetchAgain,
-                icon: IconRefresh,
-                disabled: busy[row.name] === true || row.fetching === true,
-                onselect: () => refetchSkill(row),
-              },
+              ...(oneShot(row.source)
+                ? []
+                : [
+                    {
+                      label: row.fetching ? FETCHING : words.fetchAgain,
+                      icon: IconRefresh,
+                      disabled:
+                        busy[row.name] === true || row.fetching === true,
+                      onselect: () => refetchSkill(row),
+                    },
+                  ]),
               {
                 label:
                   historyOf === row.name
@@ -575,12 +593,15 @@
               ...(row.fetching ? [FETCHING] : sized(row)),
             ].join(" · ")}
             name={row.name}
-            note={outcomeOf(
-              row,
-              hubBroken.some(
-                (fault) => fault.scope === "skills" && fault.key === row.name
-              )
-            )}
+            note={oneShot(row.source)
+              ? undefined
+              : outcomeOf(
+                  row,
+                  hubBroken.some(
+                    (fault) =>
+                      fault.scope === "skills" && fault.key === row.name
+                  )
+                )}
             ontoggle={(next) => toggleSkill(row, next)}
             toggling={busy[row.name] === true}
           >
@@ -593,7 +614,7 @@
               />
             {/snippet}
             {#snippet below()}
-              {#if row.updateAvailable}
+              {#if row.updateAvailable && !oneShot(row.source)}
                 {@render update(
                   row,
                   busy[row.name] === true || row.fetching === true,
@@ -835,12 +856,16 @@
         {#each plugins as row (row.id)}
           <SectionRow
             actions={[
-              {
-                label: row.fetching ? FETCHING : words.fetchAgain,
-                icon: IconRefresh,
-                disabled: busy[row.id] === true || row.fetching === true,
-                onselect: () => refetchPlugin(row),
-              },
+              ...(oneShot(pluginSource(row.id))
+                ? []
+                : [
+                    {
+                      label: row.fetching ? FETCHING : words.fetchAgain,
+                      icon: IconRefresh,
+                      disabled: busy[row.id] === true || row.fetching === true,
+                      onselect: () => refetchPlugin(row),
+                    },
+                  ]),
               {
                 label: words.removeEverywhere,
                 icon: IconTrash,
@@ -858,12 +883,14 @@
               : sized(row).join(" · ") || words.noBytes}
             mono
             name={row.id}
-            note={outcomeOf(
-              row,
-              hubBroken.some(
-                (fault) => fault.scope === "plugins" && fault.key === row.id
-              )
-            )}
+            note={oneShot(pluginSource(row.id))
+              ? undefined
+              : outcomeOf(
+                  row,
+                  hubBroken.some(
+                    (fault) => fault.scope === "plugins" && fault.key === row.id
+                  )
+                )}
             ontoggle={(next) => togglePlugin(row.id, next)}
             toggling={busy[row.id] === true}
           >
@@ -876,7 +903,7 @@
               />
             {/snippet}
             {#snippet below()}
-              {#if row.updateAvailable}
+              {#if row.updateAvailable && !oneShot(pluginSource(row.id))}
                 {@render update(
                   row,
                   busy[row.id] === true || row.fetching === true,
