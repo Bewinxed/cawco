@@ -115,13 +115,74 @@ function install() {
   K.shadow = (el, pseudo) => { const v = getComputedStyle(el, pseudo).boxShadow; const m = v.match(/^(.*\))\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px/); return m ? { color: K.rgba(m[1]), spread: parseFloat(m[5]) } : { color: [0, 0, 0, 0], spread: 0 }; };
   // A corner's used radius: CSS scales every radius down by one factor when two on a side outgrow it.
   K.usedRadius = (el, pseudo) => { const cs = getComputedStyle(el, pseudo), b = el.getBoundingClientRect(); const [tl, tr, br, bl] = ["borderTopLeftRadius", "borderTopRightRadius", "borderBottomRightRadius", "borderBottomLeftRadius"].map((k) => parseFloat(cs[k]) || 0); const f = Math.min(1, b.width / (tl + tr || 1), b.width / (bl + br || 1), b.height / (tl + bl || 1), b.height / (tr + br || 1)); return { tl: tl * f, tr: tr * f, br: br * f, bl: bl * f }; };
+  // Breakage the eye catches (the review of round 21):
+  // a. the tool never sits over the component's text or controls, scrolled out of its room or not;
+  K.underTool = () => {
+    const tools = ["dock", "panel", "show"].map((id) => document.getElementById(id)).filter((t) => t && K.vis(t) && getComputedStyle(t).position === "fixed");
+    const items = K.textItems().concat(K.controls()).filter((it) => it.el.closest("#stage"));
+    const hit = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
+    const out = [];
+    for (const t of tools) { const tb = t.getBoundingClientRect(); for (const it of items) if (hit(it.r, tb)) out.push(t.id + " over \"" + (it.el.textContent || it.el.tagName).trim().slice(0, 24) + "\""); }
+    return [...new Set(out)];
+  };
+  // b. no tab label cut by its strip without the edge fade, and the strip clear of the zoom group;
+  K.tabStrips = () => {
+    const out = [];
+    for (const s of document.querySelectorAll(".t-tabs")) {
+      if (!K.vis(s)) continue;
+      const sb = s.getBoundingClientRect();
+      if (s.scrollWidth > s.clientWidth + 1) out.push("the strip " + (s.id || "") + " cuts its tabs at rest (" + s.scrollWidth + " of " + s.clientWidth + "px shown)");
+      for (const t of s.querySelectorAll(".t-tab")) { const b = t.getBoundingClientRect(); const end = b.right > sb.right + 0.5 && b.left < sb.right, start = b.left < sb.left - 0.5 && b.right > sb.left; const f = s.dataset.fade || ""; if ((end && !/end|both/.test(f)) || (start && !/start|both/.test(f))) out.push("\"" + t.textContent + "\" cut at the strip's " + (end ? "end" : "start") + " with no fade"); }
+      for (const z of document.querySelectorAll(".zoom, .bar-end")) { if (s.closest(".dock") || !K.vis(z)) continue; const zb = z.getBoundingClientRect(); if (Math.min(sb.right, zb.right) - Math.max(sb.left, zb.left) > 0 && Math.min(sb.bottom, zb.bottom) - Math.max(sb.top, zb.top) > 0) out.push("tab strip runs into ." + z.className.split(" ")[0] + " (" + Math.round(sb.right) + " > " + Math.round(zb.left) + ")"); }
+    }
+    return [...new Set(out)];
+  };
+  // c. no state's text cut by the graph's edge at the view it opens on;
+  K.graphCuts = () => {
+    const g = document.getElementById("graph"), gb = g.getBoundingClientRect(), cs = getComputedStyle(g);
+    const v = { left: gb.left + parseFloat(cs.borderLeftWidth), top: gb.top + parseFloat(cs.borderTopWidth) }; v.right = v.left + g.clientWidth; v.bottom = v.top + g.clientHeight;
+    const out = [];
+    for (const el of g.querySelectorAll(".node, .region-name")) {
+      const b = el.getBoundingClientRect();
+      const showsX = b.right > v.left + 0.5 && b.left < v.right - 0.5, showsY = b.bottom > v.top + 0.5 && b.top < v.bottom - 0.5;
+      if (!showsX || !showsY) continue;
+      const cutX = b.left < v.left - 0.5 || b.right > v.right + 0.5, cutY = b.top < v.top - 0.5 || b.bottom > v.bottom + 0.5;
+      if (cutX || cutY) out.push((el.dataset.state || el.textContent.slice(0, 16)) + " cut " + (cutX ? "across" : "") + (cutX && cutY ? " and " : "") + (cutY ? "down" : ""));
+    }
+    return out;
+  };
+  // d. no line (a graph edge, a tie, the playhead, the move's end edge) runs through a text box.
+  K.linesOverText = () => {
+    const texts = K.textItems().filter((t) => !t.el.closest("svg")).map((t) => ({ el: t.el, r: K.clipTo(t.el, t.r) })).filter((t) => t.r.right - t.r.left > 0.5 && t.r.bottom - t.r.top > 0.5);
+    const inside = (x, y, r) => x > r.left + 0.5 && x < r.right - 0.5 && y > r.top + 0.5 && y < r.bottom - 0.5;
+    const out = [];
+    const g = document.getElementById("graph").getBoundingClientRect();
+    for (const pl of document.querySelectorAll(".world svg polyline")) {
+      const m = pl.getScreenCTM(), pts = pl.getAttribute("points").split(" ").map((p) => { const [x, y] = p.split(",").map(Number); return new DOMPoint(x, y).matrixTransform(m); });
+      for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i], n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y)); for (let k = 0; k <= n; k++) { const x = a.x + ((b.x - a.x) * k) / (n || 1), y = a.y + ((b.y - a.y) * k) / (n || 1); if (!inside(x, y, g)) continue; const t = texts.find((t) => inside(x, y, t.r)); if (t) { out.push("graph edge " + pl.dataset.from + "→" + pl.dataset.to + " through \"" + t.el.textContent.trim().slice(0, 20) + "\""); k = n; i = pts.length; } } }
+    }
+    const rects = [];
+    for (const t of document.querySelectorAll(".tie")) rects.push(["tie", t.getBoundingClientRect()]);
+    const ph = document.getElementById("playhead");
+    if (ph && K.vis(document.getElementById("dock"))) { const b = ph.getBoundingClientRect(), a = getComputedStyle(ph, "::after"); rects.push(["playhead", { left: b.left - 0.5, right: b.left + 0.5, top: b.top + parseFloat(a.top), bottom: b.bottom }]); }
+    const area = document.getElementById("endArea");
+    if (area && K.vis(document.getElementById("dock"))) { const b = area.getBoundingClientRect(), tl = document.getElementById("tl").getBoundingClientRect(); const rr = document.querySelector(".ruler-row").getBoundingClientRect(); rects.push(["move's end edge", { left: b.left, right: b.left + 1, top: Math.max(b.top, tl.top, rr.bottom), bottom: Math.min(b.bottom, tl.bottom) }]); }
+    for (const s of document.querySelectorAll(".snap")) rects.push(["snap line", s.getBoundingClientRect()]);
+    const ruler = document.querySelector(".ruler-row") && document.querySelector(".ruler-row").getBoundingClientRect();
+    for (const [name, r] of rects) for (const t of texts) {
+      const x0 = Math.max(r.left, t.r.left), x1 = Math.min(r.right, t.r.right), y0 = Math.max(r.top, t.r.top), y1 = Math.min(r.bottom, t.r.bottom);
+      if (x1 - x0 > 0.25 && y1 - y0 > 0.5) out.push(name + " through \"" + t.el.textContent.trim().slice(0, 20) + "\"");
+    }
+    void ruler;
+    return [...new Set(out)];
+  };
   K.radius = (el, pseudo) => { const cs = getComputedStyle(el, pseudo); return parseFloat(cs.borderBottomLeftRadius) || 0; };
   K.box = (el) => { const b = el.getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom, w: b.width, h: b.height }; };
   // The page's boxes: every element of the component, and the outer boxes of the tool.
   K.snap = () => {
     const out = [];
-    for (const el of document.querySelectorAll("#page, #page *")) { if (el.closest("#marks")) continue; const b = el.getBoundingClientRect(); out.push([b.x, b.y, b.width, b.height].map((v) => Math.round(v * 100) / 100).join(",")); }
-    for (const s of ["#panel", ".graph", "#dock"]) { const e = document.querySelector(s); const b = e.getBoundingClientRect(); out.push(s + ":" + [b.x, b.y, b.width, b.height].map((v) => Math.round(v * 100) / 100).join(",")); }
+    for (const el of document.querySelectorAll("#page, #page *")) { if (el.closest("#marks")) continue; const b = el.getBoundingClientRect(); out.push([b.x + scrollX, b.y + scrollY, b.width, b.height].map((v) => Math.round(v * 100) / 100).join(",")); }
+    for (const s of ["#panel", ".graph", "#dock"]) { const e = document.querySelector(s); const b = e.getBoundingClientRect(); let fixed = false; for (let x = e; x; x = x.parentElement) if (getComputedStyle(x).position === "fixed") fixed = true; out.push(s + ":" + [b.x + (fixed ? 0 : scrollX), b.y + (fixed ? 0 : scrollY), b.width, b.height].map((v) => Math.round(v * 100) / 100).join(",")); }
     return out;
   };
 }
@@ -135,6 +196,7 @@ const views = [
 
 const browser = await chromium.launch({ executablePath: CHROME });
 for (const view of views) await runView(view);
+await runReduced();
 grepCheck();
 await browser.close();
 console.log("\n" + passes + " passed, " + fails + " failed");
@@ -171,6 +233,14 @@ async function runView(view) {
     ok(V, "1 nothing spills its box (" + label + ")", s.length === 0, s.length ? s.slice(0, 4).join(" | ") : "");
   };
   await sweep("at rest");
+  const breakage = async (label) => {
+    const a = await ev(() => __k.underTool()), b = await ev(() => __k.tabStrips()), c = await ev(() => __k.graphCuts()), d = await ev(() => __k.linesOverText());
+    ok(V, "1 the dock and the panel sit over none of the component's text or controls (" + label + ")", a.length === 0, a.slice(0, 5).join(" | "));
+    ok(V, "1 every tab shown whole at rest (and never cut without its edge fade), the tab strip clear of the zoom group (" + label + ")", b.length === 0, b.join(" | "));
+    ok(V, "1 no state's text cut by the graph's edge (" + label + ")", c.length === 0, c.slice(0, 6).join(" | "));
+    ok(V, "1 no line runs through a text box (" + label + ")", d.length === 0, d.slice(0, 5).join(" | "));
+  };
+  await breakage("the view it opens on");
 
   // ---- 7. Contrast at rest ----
   const contrast = async (label) => {
@@ -233,7 +303,8 @@ async function runView(view) {
   ok(V, "5 every bar and ghost 24px, 5px radius, nothing inside", lanes.shapes.every((s) => s.h === 24 && s.r === 5 && s.kids === 0), lanes.shapes.map((s) => s.k.split(" ")[0] + " " + s.h + "/" + s.r + "/" + s.kids).join(", "));
   ok(V, "5 end region is one area behind every row and the ruler", lanes.area.one && Math.abs(lanes.area.left - lanes.area.want) <= 1 && Math.abs(lanes.area.right - lanes.area.laneEnd) <= 1 && lanes.area.top && lanes.area.bottom && !!lanes.area.behind, JSON.stringify(lanes.area));
   ok(V, "5 each anchored start draws its tie", lanes.ties.length > 0 && lanes.ties.every((t) => t.drawn && Math.abs(t.x - t.want) <= 1), JSON.stringify(lanes.ties));
-  ok(V, "5 each row's readouts on one line in the name column", lanes.readouts.every((r) => r.oneLine && r.fits), lanes.readouts.map((r) => r.right + "/" + r.col + "px").join(", "));
+  if (view.viewport.width >= 640) ok(V, "5 each row's readouts on one line in the 280px name column", lanes.readouts.every((r) => r.oneLine && r.fits && r.col === 280), lanes.readouts.map((r) => r.right + "/" + r.col + "px").join(", "));
+  else ok(V, "5 under the phone line the name column is half the dock: each readout whole on a line of its own", lanes.readouts.every((r) => r.fits), lanes.readouts.map((r) => r.right + "/" + r.col + "px").join(", "));
 
   // ---- 6. Concentric radii, for each pair this mockup draws ----
   const conc = async (label) => {
@@ -406,6 +477,23 @@ async function runView(view) {
   ok(V, "4 Enter opens the popover from a focused bar, focus in Starts with its number selected", foc.open && foc.f === "at" && foc.selected > 0, JSON.stringify(foc));
   await page.keyboard.press("Escape"); await page.keyboard.press("Escape"); await settle(300);
 
+  // A bar near the dock's right end: Starts typed to 4000 ms (the ruler rescales), then its popover.
+  await click('.bar[data-key="' + first + '"]');
+  await settle(400);
+  await page.locator('.pop input[data-f="at"]').fill("4000");
+  await page.keyboard.press("Enter");
+  await settle(600);
+  await page.locator('.bar[data-key="' + first + '"]').scrollIntoViewIfNeeded();
+  await settle(200);
+  const edge = await ev((k) => { const p = document.querySelector(".pop").getBoundingClientRect(), b = document.querySelector('.bar[data-key="' + k + '"]').getBoundingClientRect(), d = document.getElementById("dock").getBoundingClientRect(), lane = document.querySelector('.lane[data-key="' + k + '"]').getBoundingClientRect(), inset = popInset(), r = (n) => Math.round(n * 100) / 100; const hit = Math.min(p.right, b.right) > Math.max(p.left, b.left) && Math.min(p.bottom, b.bottom) > Math.max(p.top, b.top); const fits = b.left + p.width <= innerWidth - inset; return { barL: r(b.left), barAt: r((b.left - lane.left) / lane.width * 100) + "% of the lane", dockR: r(d.right), popL: r(p.left), popR: r(p.right), limitR: innerWidth - inset, inset, slid: !fits, onStart: Math.abs(p.left - b.left) <= 0.5, atLimit: Math.abs(p.right - (innerWidth - inset)) <= 0.5, insideInset: p.left >= inset - 0.5 && p.right <= innerWidth - inset + 0.5, covers: hit, inView: p.top >= 0 && p.bottom <= innerHeight, gap: r(b.top - p.bottom) }; }, first);
+  ok(V, "4 a bar at the dock's right end: the popover stands inside the viewport less the inset (on the bar's start where it fits, slid to the inset where it doesn't), never covers its bar, stays in view", edge.insideInset && (edge.slid ? edge.atLimit : edge.onStart) && !edge.covers && edge.inView && Math.abs(edge.gap - 4) <= 0.5, JSON.stringify(edge));
+  await page.screenshot({ path: join(CAPS, V + "-popover-right-edge.jpg"), type: "jpeg", quality: 85 });
+  await page.keyboard.press("Escape"); await settle(300);
+  await ev((k) => document.querySelector('.bar[data-key="' + k + '"]').focus(), first);
+  await page.keyboard.press("Control+z");
+  await settle(300);
+  ok(V, "undo puts the bar back", await ev((k) => { const km = keptMove(); return JSON.stringify(km.e.cur.find((c) => c.key === k).at) === JSON.stringify(km.e.orig.find((c) => c.key === k).at); }, first));
+
   // A free value: ⌥-drag the reveal clip's end off the ladder, then a drop replays without moving the page.
   const reveal = keys.find((k) => k.k === "reveal") ? "reveal" : middle;
   const bb = await page.locator('.bar[data-key="' + reveal + '"]').boundingBox();
@@ -454,6 +542,7 @@ async function runView(view) {
     await snapDiff("toggling back to Edited", async () => { await click('#compare [data-view="edited"]'); await settle((await playLen()) + 300); });
   } else ok(V, "Original | Edited shown once there are edits", false, "no compare control");
   await sweep("edited");
+  await breakage("edited");
   await contrast("edited");
 
   // Change marks: a hover that changes the page washes what it changes.
@@ -461,9 +550,10 @@ async function runView(view) {
     await page.locator('.node[data-machine="when"][data-state="hour"]').scrollIntoViewIfNeeded();
     await page.hover('.node[data-machine="when"][data-state="hour"]');
     await settle(300);
-    const w = await ev(() => { const K = __k; return [...document.querySelectorAll(".wash")].map((x) => { const of = x.dataset.of && document.querySelector('#stage [data-key="' + x.dataset.of + '"]'); const bg = of ? K.bgOf(of) : [255, 255, 255, 1], fill = K.rgba(getComputedStyle(x).backgroundColor); return { kind: x.dataset.wash, of: x.dataset.of, opacity: getComputedStyle(x).opacity, fill: Math.round(K.ratio(K.over(fill, bg), bg) * 100) / 100 }; }); });
-    ok(V, "clarity §3 B: hovering Every hour washes what changes (green) and where something went (red)", w.some((x) => x.kind === "add") && w.some((x) => x.kind === "del"), JSON.stringify(w));
-    note(V, "7 washes (the owner's pick B)", "fill against its field " + [...new Set(w.map((x) => x.fill))].join(", ") + ":1; a wash is a 15% diff tint and cannot reach 3:1 as a fill");
+    const w = await ev(() => { const K = __k, r = (n) => Math.round(n * 100) / 100; return [...document.querySelectorAll(".wash")].map((x) => { const of = x.dataset.of && document.querySelector('#stage [data-key="' + x.dataset.of + '"]'); const field = K.bgOf(of ? of.parentElement : document.getElementById("stage")), fill = K.rgba(getComputedStyle(x).backgroundColor), washed = K.over(fill, field), edge = K.shadow(x).color, ink = getComputedStyle(x).boxShadow.split(")")[0] + ")"; return { kind: x.dataset.wash, of: x.dataset.of, fill: r(K.ratio(washed, field)), edgeOnField: r(K.ratio(K.over(edge, field), field)), edgeOnWash: r(K.ratio(K.over(edge, washed), washed)), edgeWidth: K.shadow(x).spread }; }); });
+    ok(V, "clarity §3 B: hovering Every hour washes what changes (green) and where something went (red)", w.some((x) => x.kind === "add") && w.some((x) => x.kind === "del"), JSON.stringify(w.map((x) => x.kind + ":" + x.of)));
+    ok(V, "7 every wash's 1px edge in its hue's ink holds 3:1 against the field and against its own fill", w.length > 0 && w.every((x) => x.edgeWidth === 1 && x.edgeOnField >= 3 && x.edgeOnWash >= 3), w.map((x) => x.kind + ":" + x.of + " fill " + x.fill + ", edge " + x.edgeOnField + " on the field / " + x.edgeOnWash + " on the wash").join("; "));
+    await page.screenshot({ path: join(CAPS, V + "-page-washes.jpg"), type: "jpeg", quality: 85 });
     await conc("washes shown");
     await page.mouse.move(5, 5);
     await settle(200);
@@ -486,6 +576,62 @@ async function runView(view) {
   if (fh <= view.viewport.height * 1.5) writeFileSync(join(CAPS, V + "-page.jpg"), full);
   else for (let y = 0, n = 1; y < fh; y += view.viewport.height, n++) await page.screenshot({ path: join(CAPS, V + "-page-" + n + ".jpg"), type: "jpeg", quality: 82, fullPage: true, clip: { x: 0, y, width: view.viewport.width, height: Math.min(view.viewport.height, fh - y) } });
   ok(V, "1 no page errors", errors.length === 0, errors.join(" | "));
+  await ctx.close();
+}
+
+// Reduced motion (prefers-reduced-motion: reduce): the paths the designs give.
+async function runReduced() {
+  const V = "1440-reduced";
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce", deviceScaleFactor: 1 });
+  const page = await ctx.newPage();
+  const errors = []; page.on("pageerror", (e) => errors.push(String(e)));
+  const ev = (fn, arg) => page.evaluate(fn, arg);
+  await page.goto(URL_); await page.waitForTimeout(700); await ev(install);
+  ok(V, "the page reads reduce", await ev(() => matchMedia("(prefers-reduced-motion: reduce)").matches));
+  // What an element's running animations move: every property their keyframes or transitions name.
+  const props = () => `(el) => el ? el.getAnimations().flatMap((a) => a.transitionProperty ? [a.transitionProperty] : a.effect.getKeyframes().flatMap((k) => Object.keys(k).filter((p) => !["offset", "easing", "composite", "computedOffset"].includes(p)))) : null`;
+  // The popover: fade only, opening and closing.
+  await page.locator('.bar[data-key="label"]').click();
+  const open = await ev(`(${props()})(document.querySelector(".pop"))`);
+  await page.waitForTimeout(400);
+  await page.keyboard.press("Escape");
+  const close = await ev(`(${props()})(document.querySelector(".pop"))`);
+  await page.waitForTimeout(400);
+  const gone = await ev(() => !document.querySelector(".pop"));
+  ok(V, "the popover fades only, opening and closing", !!open && open.length > 0 && open.every((p) => p === "opacity") && !!close && close.length > 0 && close.every((p) => p === "opacity") && gone, "open " + JSON.stringify(open) + ", close " + JSON.stringify(close) + ", gone " + gone);
+  // The lit edge: opacity alone; the marks only change colour; nothing on the panel travels.
+  const c = await page.locator("#sashW").boundingBox();
+  await page.mouse.move(c.x + c.width / 2, c.y + c.height / 2);
+  await page.waitForTimeout(40);
+  const lit = await ev(() => document.getAnimations().map((a) => ({ target: (a.effect.target && (a.effect.target.id || a.effect.target.className)) + (a.effect.pseudoElement || ""), prop: a.transitionProperty || "keyframes" })).filter((a) => /panel|edge-pill|corner-l/.test(a.target)));
+  await page.waitForTimeout(500);
+  const litAfter = await ev(() => +getComputedStyle(document.getElementById("panel"), "::after").opacity);
+  const afterAnims = lit.filter((a) => a.target.endsWith("::after"));
+  ok(V, "the lit edge changes only opacity, and nothing on the panel moves", afterAnims.length > 0 && afterAnims.every((a) => a.prop === "opacity") && lit.every((a) => ["opacity", "background-color", "box-shadow"].includes(a.prop)) && litAfter === 1, JSON.stringify(lit) + ", opacity after " + litAfter);
+  await page.mouse.move(40, 40); await page.waitForTimeout(300);
+  // A key's step lands at once: the panel's width and a bar's start, with nothing animating them.
+  await ev(() => document.getElementById("sashW").focus());
+  const w0 = await ev(() => document.getElementById("panel").getBoundingClientRect().width);
+  await page.keyboard.press("ArrowLeft");
+  const step = await ev(() => ({ w: document.getElementById("panel").getBoundingClientRect().width, anims: document.getElementById("panel").getAnimations().map((a) => a.transitionProperty || "keyframes").filter((p) => !["opacity", "box-shadow", "background-color"].includes(p)) }));
+  ok(V, "a key's step on the edge lands at once", step.w - w0 === 8 && step.anims.length === 0, w0 + " → " + step.w + ", moving animations " + JSON.stringify(step.anims));
+  await page.waitForTimeout(300);
+  await ev(() => document.querySelector('.bar[data-key="label"]').focus());
+  const l0 = await ev(() => document.querySelector('.bar[data-key="label"]').getBoundingClientRect().left);
+  await page.keyboard.press("ArrowRight");
+  const nudge = await ev(() => { const b = document.querySelector('.bar[data-key="label"]'); return { l: b.getBoundingClientRect().left, anims: b.getAnimations().map((a) => a.transitionProperty || "keyframes").filter((p) => !["background-color", "box-shadow", "opacity"].includes(p)) }; });
+  ok(V, "a key's nudge on a clip lands at once", nudge.l > l0 && nudge.anims.length === 0, l0 + " → " + nudge.l + ", moving animations " + JSON.stringify(nudge.anims));
+  await page.keyboard.press("Control+z"); await page.waitForTimeout(200);
+  // The replay still runs: the playhead and the page move through the move, then rest at its end.
+  const total = await ev(() => playLengthOf(keptMove().r));
+  await page.locator("#play").click();
+  const mid = [];
+  for (let i = 0; i < 4; i++) { await page.waitForTimeout(Math.max(30, total / 6)); mid.push(await ev(() => (time === null ? null : Math.round(time)))); }
+  await page.waitForTimeout(total + 300);
+  const end = await ev(() => ({ time, readout: document.getElementById("readout").textContent }));
+  const ran = mid.filter((t) => t !== null);
+  ok(V, "the replay still runs under reduced motion", ran.length >= 2 && ran.every((t, i) => !i || t >= ran[i - 1]) && ran.some((t) => t > 0 && t < total) && end.time === null, "playhead at " + JSON.stringify(mid) + " of " + total + " ms, then " + JSON.stringify(end));
+  ok(V, "no page errors", errors.length === 0, errors.join(" | "));
   await ctx.close();
 }
 
