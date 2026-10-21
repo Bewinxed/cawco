@@ -176,6 +176,30 @@ function install() {
     void ruler;
     return [...new Set(out)];
   };
+  // The ruler's labels: no two boxes overlap, whatever the track's length.
+  K.rulerOverlaps = () => {
+    const ls = [...document.querySelectorAll(".ruler span")].filter((s) => K.vis(s)).map((s) => ({ t: s.textContent, b: s.getBoundingClientRect() }));
+    const out = [];
+    for (let i = 0; i < ls.length; i++) for (let j = i + 1; j < ls.length; j++) { const a = ls[i].b, b = ls[j].b; if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0) out.push(ls[i].t + "×" + ls[j].t); }
+    return { labels: ls.map((l) => l.t).join(" "), overlaps: out };
+  };
+  // A wash and its 1px edge stand --space-1 clear of the text they mark.
+  K.washGaps = () => {
+    const pad = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-1")), wrap = document.getElementById("stage").getBoundingClientRect();
+    return [...document.querySelectorAll(".wash")].map((w) => {
+      const wb = w.getBoundingClientRect(), edge = K.shadow(w).spread || 0;
+      const inner = { left: wb.left + edge, top: wb.top + edge, right: wb.right - edge, bottom: wb.bottom - edge };
+      let tb = null;
+      const el = w.dataset.wash === "add" && document.querySelector('#stage [data-key="' + w.dataset.of + '"]');
+      if (el) { const rg = document.createRange(); rg.selectNodeContents(el); const rs = [...rg.getClientRects()].filter((r) => r.width > 0.5 && r.height > 0.5); if (rs.length) tb = { left: Math.min(...rs.map((r) => r.left)), top: Math.min(...rs.map((r) => r.top)), right: Math.max(...rs.map((r) => r.right)), bottom: Math.max(...rs.map((r) => r.bottom)) }; }
+      else if (w.dataset.tx) { const [x, y, ww, hh] = w.dataset.tx.split(",").map(Number); tb = { left: wrap.left + x, top: wrap.top + y, right: wrap.left + x + ww, bottom: wrap.top + y + hh }; }
+      if (!tb) return { of: w.dataset.of, kind: w.dataset.wash, gap: null };
+      const gap = Math.min(tb.left - inner.left, tb.top - inner.top, inner.right - tb.right, inner.bottom - tb.bottom);
+      return { of: w.dataset.of, kind: w.dataset.wash, gap: Math.round(gap * 100) / 100, pass: gap >= pad - 0.5 };
+    });
+  };
+  // Every animation and transition on the page finished.
+  K.settled = async () => { await Promise.all(document.getAnimations().map((a) => (a.playState === "running" ? a.finished.catch(() => {}) : null))); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); };
   K.radius = (el, pseudo) => { const cs = getComputedStyle(el, pseudo); return parseFloat(cs.borderBottomLeftRadius) || 0; };
   K.box = (el) => { const b = el.getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom, w: b.width, h: b.height }; };
   // The page's boxes: every element of the component, and the outer boxes of the tool.
@@ -241,6 +265,8 @@ async function runView(view) {
     ok(V, "1 no line runs through a text box (" + label + ")", d.length === 0, d.slice(0, 5).join(" | "));
   };
   await breakage("the view it opens on");
+  const rulerAt = async (label) => { const r = await ev(() => __k.rulerOverlaps()); ok(V, "1 no two ruler labels overlap (" + label + ")", r.overlaps.length === 0, (r.overlaps.length ? "OVERLAP " + r.overlaps.slice(0, 4).join(", ") + "; " : "") + "labels " + r.labels); };
+  await rulerAt("320 ms track");
 
   // ---- 7. Contrast at rest ----
   const contrast = async (label) => {
@@ -487,8 +513,18 @@ async function runView(view) {
   await settle(200);
   const edge = await ev((k) => { const p = document.querySelector(".pop").getBoundingClientRect(), b = document.querySelector('.bar[data-key="' + k + '"]').getBoundingClientRect(), d = document.getElementById("dock").getBoundingClientRect(), lane = document.querySelector('.lane[data-key="' + k + '"]').getBoundingClientRect(), inset = popInset(), r = (n) => Math.round(n * 100) / 100; const hit = Math.min(p.right, b.right) > Math.max(p.left, b.left) && Math.min(p.bottom, b.bottom) > Math.max(p.top, b.top); const fits = b.left + p.width <= innerWidth - inset; return { barL: r(b.left), barAt: r((b.left - lane.left) / lane.width * 100) + "% of the lane", dockR: r(d.right), popL: r(p.left), popR: r(p.right), limitR: innerWidth - inset, inset, slid: !fits, onStart: Math.abs(p.left - b.left) <= 0.5, atLimit: Math.abs(p.right - (innerWidth - inset)) <= 0.5, insideInset: p.left >= inset - 0.5 && p.right <= innerWidth - inset + 0.5, covers: hit, inView: p.top >= 0 && p.bottom <= innerHeight, gap: r(b.top - p.bottom) }; }, first);
   ok(V, "4 a bar at the dock's right end: the popover stands inside the viewport less the inset (on the bar's start where it fits, slid to the inset where it doesn't), never covers its bar, stays in view", edge.insideInset && (edge.slid ? edge.atLimit : edge.onStart) && !edge.covers && edge.inView && Math.abs(edge.gap - 4) <= 0.5, JSON.stringify(edge));
+  await ev(() => stopPlay());
+  await rulerAt("4200 ms track");
   await page.screenshot({ path: join(CAPS, V + "-popover-right-edge.jpg"), type: "jpeg", quality: 85 });
+  await page.locator('.pop input[data-f="at"]').fill("19800");
+  await page.keyboard.press("Enter");
+  await settle(400);
+  await ev(() => stopPlay());
+  await rulerAt("20 s track");
   await page.keyboard.press("Escape"); await settle(300);
+  await ev((k) => document.querySelector('.bar[data-key="' + k + '"]').focus(), first);
+  await page.keyboard.press("Control+z");
+  await settle(200);
   await ev((k) => document.querySelector('.bar[data-key="' + k + '"]').focus(), first);
   await page.keyboard.press("Control+z");
   await settle(300);
@@ -553,6 +589,9 @@ async function runView(view) {
     const w = await ev(() => { const K = __k, r = (n) => Math.round(n * 100) / 100; return [...document.querySelectorAll(".wash")].map((x) => { const of = x.dataset.of && document.querySelector('#stage [data-key="' + x.dataset.of + '"]'); const field = K.bgOf(of ? of.parentElement : document.getElementById("stage")), fill = K.rgba(getComputedStyle(x).backgroundColor), washed = K.over(fill, field), edge = K.shadow(x).color, ink = getComputedStyle(x).boxShadow.split(")")[0] + ")"; return { kind: x.dataset.wash, of: x.dataset.of, fill: r(K.ratio(washed, field)), edgeOnField: r(K.ratio(K.over(edge, field), field)), edgeOnWash: r(K.ratio(K.over(edge, washed), washed)), edgeWidth: K.shadow(x).spread }; }); });
     ok(V, "clarity §3 B: hovering Every hour washes what changes (green) and where something went (red)", w.some((x) => x.kind === "add") && w.some((x) => x.kind === "del"), JSON.stringify(w.map((x) => x.kind + ":" + x.of)));
     ok(V, "7 every wash's 1px edge in its hue's ink holds 3:1 against the field and against its own fill", w.length > 0 && w.every((x) => x.edgeWidth === 1 && x.edgeOnField >= 3 && x.edgeOnWash >= 3), w.map((x) => x.kind + ":" + x.of + " fill " + x.fill + ", edge " + x.edgeOnField + " on the field / " + x.edgeOnWash + " on the wash").join("; "));
+    const gaps = await ev(() => __k.washGaps());
+    ok(V, "every wash and its edge stand --space-1 clear of the text they mark", gaps.length > 0 && gaps.every((g) => g.pass), gaps.map((g) => g.kind + ":" + g.of + " " + g.gap + "px").join(", "));
+    await ev(() => __k.settled());
     await page.screenshot({ path: join(CAPS, V + "-page-washes.jpg"), type: "jpeg", quality: 85 });
     await conc("washes shown");
     await page.mouse.move(5, 5);
@@ -569,8 +608,12 @@ async function runView(view) {
   await settle(400);
   ok(V, "Hide hides the panel and Show brings it back", hid.panel === "false" && hid.show && (await ev(() => document.getElementById("panel").dataset.open)) === "true", JSON.stringify(hid));
 
-  // Whole-page captures.
+  // Whole-page captures, once every animation has finished; the kept chip's ink at rest.
   await page.mouse.move(5, 5); await settle(300);
+  await ev(() => __k.settled());
+  const chips = await ev(() => [...document.querySelectorAll(".var")].filter((c) => __k.vis(c)).map((c) => { const fg = __k.rgba(getComputedStyle(c).color), bg = __k.bgOf(c); let op = 1; for (let e = c; e; e = e.parentElement) op *= +getComputedStyle(e).opacity; return { text: c.textContent, tier: c.classList.contains("kept") ? "kept" : c.classList.contains("cur") ? "current" : "rest", r: Math.round(__k.ratio(__k.over([fg[0], fg[1], fg[2], fg[3] * op], bg), bg) * 100) / 100, running: c.getAnimations().length }; }));
+  const keptChip = chips.filter((c) => c.tier === "kept");
+  ok(V, "7 the kept chip (\"The hub didn't answer\") reads 4.5:1 or better at rest, every chip settled", keptChip.length > 0 && chips.every((c) => c.r >= 4.5 && c.running === 0), chips.map((c) => c.text + " (" + c.tier + ") " + c.r).join(", "));
   const full = await page.screenshot({ type: "jpeg", quality: 82, fullPage: true });
   const fh = await ev(() => document.documentElement.scrollHeight);
   if (fh <= view.viewport.height * 1.5) writeFileSync(join(CAPS, V + "-page.jpg"), full);
