@@ -34,9 +34,11 @@
   import SessionDetails from "#lib/cawco/workspace/SessionDetails.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconMaximize, IconPlus } from "#lib/icons.js";
+  import { IconClose, IconMaximize, IconPlus } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import type { CawLead } from "./caw-lead.svelte";
 
@@ -44,10 +46,16 @@
     lead,
     projectId,
     projectName,
+    sheet = false,
   }: {
     lead: CawLead;
     projectId: string;
     projectName: string;
+    /**
+     * In the phone's bottom sheet (CawFloat): his head is the sheet's one
+     * header, so it carries the sheet's Close at its trailing edge.
+     */
+    sheet?: boolean;
   } = $props();
 
   // --- the thread on show -----------------------------------------------------
@@ -326,6 +334,22 @@
             />
           {/snippet}
         </Tip>
+      {/if}
+      {#if sheet}
+        <!-- The sheet's Close, the ghost his head's other actions are. -->
+        <Drawer.Close>
+          {#snippet child({ props })}
+            <Button
+              {...props}
+              aria-label="Close"
+              press="pressable"
+              icon={IconClose}
+              size="icon-sm"
+              title="Close"
+              variant="ghost"
+            />
+          {/snippet}
+        </Drawer.Close>
       {/if}
     </div>
   </div>

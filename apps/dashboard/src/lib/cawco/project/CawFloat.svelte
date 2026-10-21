@@ -71,18 +71,19 @@
          and flush on the screen's foot, its top corners rounded, its hairline
          along the top edge. The panel runs edge to edge inside it, from under
          the grabber to the foot, which keeps the safe area clear itself
-         (ThreadPane's docked composer). -->
+         (ThreadPane's docked composer). His head is the sheet's one header,
+         his name right under the grabber and Close at its trailing edge. -->
     <Drawer.Content
       data-caw-float-sheet
       height="cap"
       modal={false}
+      ownHead
       pad="none"
       title={`Caw, lead of ${projectName}`}
-      titleHidden
     >
       <div class="flex min-h-0 flex-auto flex-col overflow-hidden">
         {#key projectId}
-          <CawThread {lead} {projectId} {projectName} />
+          <CawThread {lead} {projectId} {projectName} sheet />
         {/key}
       </div>
     </Drawer.Content>

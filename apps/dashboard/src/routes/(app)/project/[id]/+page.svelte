@@ -1851,8 +1851,9 @@
       <Skeleton class="w-full" height="chart" radius="card" width="chart-cap" />
     {:else if canTalk}
       <!-- The project's starters are the empty board's one action (DESIGN.md,
-           The Empty Starts Work Rule), open panel or not: a press puts its
-           words in his composer, opening his panel if it is put away. -->
+           The Empty Starts Work Rule): while his panel is open they are in
+           it (CawFloat); put away, they stand here and open it with their
+           words. -->
       <div data-slot="caw-empty" class="w-full max-w-c-starters-w">
         <EmptyState
           actionWidth="fill"
@@ -1880,7 +1881,7 @@
           {/snippet}
           {#snippet action()}
             <!-- A starter opens his panel with its words in his composer. -->
-            {#if starters.length > 0}
+            {#if starters.length > 0 && !lead.open}
               <StarterCards
                 onpick={(text) => lead.ask(text, "board")}
                 {starters}

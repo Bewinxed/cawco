@@ -80,6 +80,7 @@
     look,
     title,
     titleHidden = false,
+    ownHead = false,
     actions,
     children,
     ...restProps
@@ -98,6 +99,10 @@
       /** The name read out but not drawn, on a sheet whose content names
           itself on screen; Close still stands at the header's trailing edge. */
       titleHidden?: boolean;
+      /** The content draws the sheet's one header itself, right under the
+          grabber, with the kit's Close (`Drawer.Close` in the head's `close`
+          look) at its trailing edge: the kit reads the name out only. */
+      ownHead?: boolean;
       /** The sheet's own controls in its header, after the title and before
           Close (the workflow inspector's Settings). */
       actions?: Snippet;
@@ -222,7 +227,7 @@
         )}
       ></div>
     {/if}
-    {#if hosted}
+    {#if hosted || ownHead}
       <DrawerPrimitive.Title class="sr-only" data-slot="drawer-title"
         ><MorphText text={title} wrap /></DrawerPrimitive.Title
       >

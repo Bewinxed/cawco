@@ -291,12 +291,12 @@
       data-slot="txt"
       class="flex min-w-0 flex-col gap-space-1 has-data-field:flex-auto"
     >
-      <!-- The name bleeds space-1 past the title on each side (its tint and
-           field), so its box is the title's width plus both bleeds. -->
+      <!-- The name bleeds space-1 past its column on each side (its tint and
+           field): the title takes both bleeds into its own box, so the name
+           fills it whole and nothing stands outside the title. -->
       <h1
         data-slot="title"
-        class="min-w-0 type-title text-ink-strong"
-        style:--name-w="calc(100% + var(--space-1) * 2)"
+        class="-mx-space-1 min-w-0 type-title text-ink-strong"
       >
         {#if draft !== null}
           <!-- svelte-ignore a11y_autofocus -->
@@ -306,7 +306,7 @@
             aria-label="Project name"
             autocomplete="off"
             autofocus
-            class="focus-inset -mx-space-1 block w-(--name-w) overflow-hidden text-ellipsis cursor-text rounded-xs border border-border-control bg-surface-raised px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out read-only:text-ink-muted"
+            class="focus-inset block w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-border-control bg-surface-raised px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out read-only:text-ink-muted"
             onblur={() => {
               // Left after a refusal, it stays as typed, the reason under
               // it; Enter or Try again sends it.
@@ -332,7 +332,7 @@
         {:else}
           <button
             data-slot="name"
-            class="press-tint -mx-space-1 block max-w-(--name-w) overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
+            class="press-tint block max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
             onclick={editName}
             title="Rename {project.name}"
             type="button"

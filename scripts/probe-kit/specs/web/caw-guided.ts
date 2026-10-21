@@ -13,7 +13,8 @@
  *    (1440), under it across the column where it has not (680, the same
  *    margins as 1440's foot), never over the head, the empty board's
  *    words or a column; on a phone it is the kit's bottom sheet, full-bleed
- *    on the foot. The rows: each glyph a mark on its half-ink body, each
+ *    on the foot, his head its one header under the grabber, Close at its
+ *    trailing edge. The rows: each glyph a mark on its half-ink body, each
  *    reason 4.5:1 on its row, each row's edge 3:1 on the panel; curly
  *    apostrophes. The shell's Caw card stands shut behind its cut, never
  *    opened by itself. Nothing spills or covers text (journeys/scan.ts), and
@@ -358,6 +359,12 @@ const readPanel = (page: Page) =>
         : null,
       grabber: box(grabber),
       name: box(panel?.querySelector('[data-caw-head] [data-slot="name"]')),
+      // The sheet's headers: the kit's own, and Close in his head.
+      sheetHeads:
+        shell?.querySelectorAll('[data-slot="drawer-header"]').length ?? 0,
+      headClose: box(
+        panel?.querySelector('[data-caw-head] [aria-label="Close"]')
+      ),
       // The shell's Caw card, as it stands now: shown, or at rest up behind
       // its cut, inert (GlassCard, motion/hang).
       glassCard: card
@@ -528,6 +535,23 @@ const sheetChecks = (kit: Kit, tag: string, at: PanelRead) => {
     `${tag}: his name stands under the grabber, no band between them`,
     gap >= 0 && gap <= 20,
     JSON.stringify({ grabber: at.grabber, name: at.name, gap })
+  );
+  // DESIGN.md, Drawer: "A 100×6 grabber, then one header: the title in the
+  // title role and Close at the trailing edge". His head is that one header.
+  kit.check(
+    `${tag}: his head is the sheet's one header, Close at its trailing edge`,
+    at.sheetHeads === 0 &&
+      at.headClose !== null &&
+      at.headClose.width > 0 &&
+      at.shell !== null &&
+      at.headClose.right <= at.shell.right &&
+      at.name !== null &&
+      at.headClose.left > at.name.right,
+    JSON.stringify({
+      headers: at.sheetHeads,
+      close: at.headClose,
+      name: at.name,
+    })
   );
 };
 
@@ -728,7 +752,7 @@ const answerOf = (page: Page, notes: number | null = null) =>
           .querySelector(sel)
           ?.querySelector('[data-slot="room"]');
         const caw = [
-          ...(room?.querySelectorAll('[data-slot="who"] [data-slot="role"]') ??
+          ...(room?.querySelectorAll('[data-turn-who] [data-slot="role"]') ??
             []),
         ].some((role) => role.textContent?.trim() === "Caw");
         const said = [...(room?.querySelectorAll("[data-not-woken]") ?? [])];
