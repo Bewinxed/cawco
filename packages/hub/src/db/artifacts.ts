@@ -146,6 +146,8 @@ export interface ArtifactsDb {
   ) => ArtifactChange[];
   /** Replaces the log with one snapshot, at the seq the log had reached. */
   readonly compact: (id: string, snapshot: Uint8Array) => void;
+  /** The component canvases made on machine `machineId`, held next versions too: each one's stage runs there. */
+  readonly componentsOn: (machineId: string) => ArtifactRow[];
   readonly create: (row: ArtifactRow) => ArtifactRow;
   readonly get: (id: string) => ArtifactRow | undefined;
   /** The next version held for artifact `id` (`heldFor`), if one waits. */
@@ -192,6 +194,15 @@ export interface ArtifactsDb {
 }
 
 export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
+  componentsOn: (machineId) =>
+    db
+      .select()
+      .from(artifacts)
+      .where(
+        and(eq(artifacts.machineId, machineId), eq(artifacts.kind, "component"))
+      )
+      .all()
+      .map(artifactOf),
   append: (id, update, changed) =>
     db.transaction((tx) => {
       const row = tx.select().from(artifacts).where(eq(artifacts.id, id)).get();

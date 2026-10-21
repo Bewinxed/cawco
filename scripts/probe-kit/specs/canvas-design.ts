@@ -90,6 +90,11 @@
  *    `meta.unreached` beside a `live` stage) says so where the page would
  *    be: the machine isn't answering, "Not reached since <when>: <why>", and
  *    Try again. (`CANVAS_DESIGN=refused` runs it after 13 and 14.)
+ * 16. That hop back with no read and no stage frame (a scratch hub; the
+ *    machine's agent registers): the docs no longer say machine or reach
+ *    unreached (a workspace's waits for its stage's word), and the pane on
+ *    such a doc stands no down card and no "Not reached since" at any
+ *    sample until its page has drawn. (`CANVAS_DESIGN=refused` too.)
  *    (`CANVAS_DESIGN=refused` runs 13 and 14 alone.)
  *
  * The bench head swept every px from 300 to 800, light, desk pointer, for a
@@ -106,6 +111,7 @@
  * `canvas-{390,523,desk}-{light,dark}.png`, the panel's pane at 2×, and
  * `map-{desk,phone}-{light,dark}.png` (also to the clone's `caps/`).
  */
+import { Database } from "bun:sqlite";
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -118,7 +124,7 @@ import type {
   StageState,
 } from "../../../packages/core/src/stage";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
-import { until } from "../../scratch-fleet";
+import { MACHINE, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const DASHBOARD = join(ROOT, "apps/dashboard");
@@ -2523,6 +2529,181 @@ async function keptLeg(
   await unreachedLeg(kit, bench, stage, theme);
 }
 
+/** Leg 16's canvases, seeded into a scratch hub: one whose read found its machine down, one its reach, one its workspace. */
+const BACK_ROWS = [
+  { id: "00000000-0000-4000-8000-0000000000b1", down: "machine" },
+  { id: "00000000-0000-4000-8000-0000000000b2", down: "reach" },
+  { id: "00000000-0000-4000-8000-0000000000b3", down: "workspace" },
+] as const;
+
+/**
+ * Leg 16: a canvas whose read found its stage unreached, once the hop is
+ * back with no read and no stage frame. On a scratch hub, canvases on the
+ * fleet's machine are seeded with `meta.unreached` (machine, reach,
+ * workspace) as a failed read leaves it, before that machine's agent is up;
+ * the agent registering (hub server.ts register → `artifacts.machineBack`)
+ * takes the machine's and the reach's away, and leaves the workspace's for
+ * its stage's own word. The pane, opened on the doc as the hub then keeps
+ * it, stands no down card and no "Not reached since" at any sample until
+ * its page has drawn.
+ */
+async function backLeg(kit: Kit, bench: string, stage: Stage): Promise<void> {
+  const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
+  fleet.launch("sessiond");
+  await fleet.sessiondUp();
+  fleet.launch("hub");
+  await fleet.hubUp();
+  const Y = (await import(Bun.resolveSync("yjs", DASHBOARD))) as {
+    applyUpdate: (doc: unknown, update: Uint8Array) => void;
+    Doc: new () => {
+      getMap: (name: string) => {
+        get: (key: string) => unknown;
+        set: (key: string, value: unknown) => void;
+        toJSON: () => Record<string, unknown>;
+      };
+    };
+    encodeStateAsUpdate: (doc: unknown) => Uint8Array;
+  };
+  const store = new Database(join(fleet.sandbox, "hub", "hub.db"));
+  store.exec("PRAGMA busy_timeout = 15000");
+  const since = new Date(Date.now() - 300_000).toISOString();
+  const now = Date.now();
+  for (const { id, down } of BACK_ROWS) {
+    store
+      .query(
+        "INSERT INTO artifacts (id, kind, name, machine_id, source_port, source_place, source_stage_dir, source_stage_file, seq, created_at, updated_at) VALUES (?, 'component', ?, ?, ?, ?, 'apps/dashboard', ?, 1, ?, ?)"
+      )
+      .run(
+        id,
+        `back-${down}`,
+        MACHINE,
+        stage.port,
+        `place-${down}`,
+        FILES[0] as string,
+        now,
+        now
+      );
+    const doc = new Y.Doc();
+    doc.getMap("meta").set("stage", liveStage());
+    doc.getMap("meta").set("unreached", { down, since, why: UNREACHED_WHY });
+    store
+      .query(
+        'INSERT INTO artifact_updates (artifact_id, seq, "update") VALUES (?, 1, ?)'
+      )
+      .run(id, Y.encodeStateAsUpdate(doc));
+  }
+  /** Each seeded canvas's doc as the hub's log holds it now. */
+  const metaOf = (id: string) => {
+    const doc = new Y.Doc();
+    for (const row of store
+      .query(
+        'SELECT "update" AS bytes FROM artifact_updates WHERE artifact_id = ? ORDER BY seq'
+      )
+      .all(id) as { bytes: Uint8Array }[]) {
+      Y.applyUpdate(doc, row.bytes);
+    }
+    return doc.getMap("meta").toJSON();
+  };
+  const seeded = BACK_ROWS.every(({ id }) => !!metaOf(id).unreached);
+  // The machine comes back: its agent registers. No read, no stage frame.
+  fleet.launch("agent");
+  await fleet.agentUp();
+  const after = await until(
+    "the machine's and the reach's unreached gone",
+    () => {
+      const metas = BACK_ROWS.map(({ id }) => metaOf(id));
+      return metas[0]?.unreached || metas[1]?.unreached ? undefined : metas;
+    },
+    Boolean,
+    15_000
+  ).catch(() => BACK_ROWS.map(({ id }) => metaOf(id)));
+  kit.check(
+    "16: the machine's agent registered again, with no read and no stage frame, its canvases' docs no longer say machine or reach unreached; a workspace's waits for its stage",
+    seeded &&
+      !after[0]?.unreached &&
+      !after[1]?.unreached &&
+      (after[2]?.unreached as { down?: string } | undefined)?.down ===
+        "workspace" &&
+      (after[0]?.stage as { status?: string } | undefined)?.status === "live",
+    `seeded ${seeded}; after: ${JSON.stringify(after.map((one) => one.unreached ?? null))}`
+  );
+  store.close();
+  // The pane on the doc as the hub keeps it now: no down card while its page loads.
+  const meta = after[0] ?? {};
+  for (const theme of ["light", "dark"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one theme at a time
+    const page = await kit.page("desk", { theme, scale: 2 });
+    await page.setViewportSize({ width: 760, height: 900 });
+    await page.route(`${stage.base}/__cawco/ping`, (route) =>
+      route.fulfill({
+        status: 204,
+        headers: { "access-control-allow-origin": "*" },
+      })
+    );
+    await serveDoc(
+      page,
+      {
+        [BENCH_ARTIFACT]: (meta.stage as StageState | undefined) ?? liveStage(),
+      },
+      false,
+      { [BENCH_ARTIFACT]: meta.unreached ? { unreached: meta.unreached } : {} }
+    );
+    await page.addInitScript(() => {
+      if (
+        window.top !== window &&
+        location.pathname.includes("/@cawco/") &&
+        document.contentType === "text/html"
+      ) {
+        addEventListener("load", () =>
+          parent.postMessage(
+            { type: "cawco:ready", url: location.href, title: document.title },
+            "*"
+          )
+        );
+      }
+    });
+    const path = `/@cawco/canvas?file=${encodeURIComponent(FILES[0] as string)}&spec=${encodeURIComponent(JSON.stringify({ name: "back" }))}`;
+    const opened = Date.now();
+    await page.goto(
+      `${bench}/motion/artifact-head?w=720&port=${stage.port}&path=${encodeURIComponent(path)}&ask=${encodeURIComponent(ASK)}`
+    );
+    const samples: { down: boolean; drawn: boolean; unreached: boolean }[] = [];
+    for (;;) {
+      const canvas = page
+        .frames()
+        .find((frame) => frame.url().includes("/@cawco/canvas"));
+      const sample = {
+        // biome-ignore lint/performance/noAwaitInLoops: a sample, one read at a time against the leg's clock
+        ...(await page.evaluate(() => {
+          const pane = document.querySelector("[data-bench-pane]");
+          return {
+            down: !!pane?.querySelector('[data-slot="down"]'),
+            unreached: !!pane?.querySelector('[data-slot="unreached"]'),
+          };
+        })),
+        // The canvas page is the stage's origin: read in its own frame.
+        drawn: canvas
+          ? await canvas
+              .evaluate(() => !!document.querySelector("[data-cawco-story]"))
+              .catch(() => false)
+          : false,
+      };
+      samples.push(sample);
+      if (sample.drawn || Date.now() - opened > 20_000) {
+        break;
+      }
+      await page.waitForTimeout(100);
+    }
+    kit.check(
+      `16: ${theme}: the pane opened on that doc stands no down card and no "Not reached since" at any sample until its page has drawn`,
+      samples.at(-1)?.drawn === true &&
+        samples.every((one) => !(one.down || one.unreached)),
+      `${samples.length} samples over ${Date.now() - opened}ms; down at ${samples.findIndex((one) => one.down)}, unreached at ${samples.findIndex((one) => one.unreached)}, drawn ${samples.at(-1)?.drawn}`
+    );
+    await page.close();
+  }
+}
+
 /** The hub's words for a read that couldn't reach a stage, as its relay refuses one (hub server.ts `onStage`). */
 const UNREACHED_WHY =
   "The workspace's machine isn't connected to the hub, so its stage can't be reached.";
@@ -3366,6 +3547,7 @@ const spec: Spec = {
           // biome-ignore lint/performance/noAwaitInLoops: one theme at a time
           await refusedLeg(kit, bench, stage, theme);
         }
+        await backLeg(kit, bench, stage);
         return;
       }
       if (only === "sweep") {
@@ -3419,6 +3601,7 @@ const spec: Spec = {
         await artifactSwitchLeg(kit, bench, stage, theme);
       }
       if (only !== "page") {
+        await backLeg(kit, bench, stage);
         await sweeps(kit, bench, stage);
         await deskLeg(kit, bench, stage);
       }

@@ -4973,6 +4973,37 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * keeps its state, and a sheet with a compile error its session has not
      * heard has its delivery scheduled.
      */
+    /**
+     * Machine `machineId`'s agent registered again: the hop a read found down
+     * on it (`machine`, `reach`) is back, so each of its canvases' docs lets
+     * `meta.unreached` go, as a reached read's `stageWritten` does; a
+     * `workspace` one waits for that workspace's stage to say it is up
+     * ({@link staged}).
+     */
+    machineBack: (machineId: string): void => {
+      for (const row of db.componentsOn(machineId)) {
+        const unreached = docs.doc(row.id).getMap("meta").get("unreached") as
+          StageUnreached | undefined;
+        if (!(unreached && unreached.down !== "workspace")) {
+          continue;
+        }
+        // One doc that can't be written is that canvas's: the register goes on.
+        try {
+          docs.transact(row.id, "hub", (doc) => {
+            doc.getMap("meta").delete("unreached");
+          });
+        } catch (error) {
+          console.warn(
+            `[artifacts] ${row.id} still says its stage is unreached: ${error instanceof Error ? error.message : String(error)}`
+          );
+          continue;
+        }
+        if (inPanel(row)) {
+          relistOf(row);
+        }
+      }
+    },
+
     staged: (machineId: string, frame: StageFrame): void => {
       // A port preview naming the workspace; no folder matches "//".
       const rows = db.previewing({

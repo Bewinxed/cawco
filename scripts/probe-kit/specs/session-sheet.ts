@@ -405,8 +405,22 @@ const PID = /^\d+$/;
 /** A read's `unreached` (hub service.ts `unreachedWritten`), whole. */
 const UNREACHED = /"unreached":(\{[^}]*\})/;
 
-/** The stage host serving from `clone` (agent stage.ts `HOST_FILE`, run with its toolchain root as its working dir): its pid as the host sees it. */
-const stageHostIn = async (clone: string): Promise<number | undefined> => {
+/** The stage host's file, from its toolchain root (agent stage.ts `HOST_FILE`). */
+const HOST_FILE = ".cawco/stage/host.mjs";
+
+/**
+ * The stage host serving from `clone`: the process whose own argument is
+ * {@link HOST_FILE} (agent stage.ts runs `exec <runtime> .cawco/stage/host.mjs`
+ * inside the boundary), its working dir (or the PWD it was given) in
+ * `clone`; with its argv for the
+ * leg's words. Never the boundary's executor (agent boundary.ts
+ * `execScript`), a bash script that names the whole command as one argument
+ * from the same folder and hands it to the boundary: stopping that stops no
+ * host (host run r114 did, and the read was answered).
+ */
+const stageHostIn = async (
+  clone: string
+): Promise<{ argv: string[]; pid: number } | undefined> => {
   const real = await realpath(clone);
   for (const entry of await readdir("/proc")) {
     if (!PID.test(entry)) {
@@ -416,12 +430,22 @@ const stageHostIn = async (clone: string): Promise<number | undefined> => {
     const cmdline = await readFile(`/proc/${entry}/cmdline`, "utf8").catch(
       () => ""
     );
-    if (!cmdline.includes(".cawco/stage/host.mjs")) {
+    const argv = cmdline.split("\0").filter(Boolean);
+    if (
+      !argv.some((one) => one === HOST_FILE || one.endsWith(`/${HOST_FILE}`))
+    ) {
       continue;
     }
     const cwd = await realpath(`/proc/${entry}/cwd`).catch(() => "");
-    if (cwd === real || cwd.startsWith(`${real}/`)) {
-      return Number(entry);
+    // Its PWD as the daemon set it (stage.ts `start`: the executor enters it), should its mount namespace show the cwd otherwise.
+    const pwd =
+      (await readFile(`/proc/${entry}/environ`, "utf8").catch(() => ""))
+        .split("\0")
+        .find((one) => one.startsWith("PWD="))
+        ?.slice("PWD=".length) ?? "";
+    const inClone = (dir: string) => dir === real || dir.startsWith(`${real}/`);
+    if (inClone(cwd) || inClone(pwd)) {
+      return { pid: Number(entry), argv };
     }
   }
 };
@@ -1545,11 +1569,11 @@ const run = async (kit: Kit) => {
     const placeClone = await stageCloneIn(fleet.env.HOME as string, fleet.repo);
     const host = placeClone ? await stageHostIn(placeClone.path) : undefined;
     if (host) {
-      signal(listedPid(host), "SIGSTOP");
+      signal(listedPid(host.pid), "SIGSTOP");
     }
     const stopped = await read("5d");
     if (host) {
-      signal(listedPid(host), "SIGCONT");
+      signal(listedPid(host.pid), "SIGCONT");
     }
     const unreached = stopped.match(UNREACHED)?.[1];
     const reached = await until(
@@ -1567,7 +1591,7 @@ const run = async (kit: Kit) => {
         stopped.match(STATUS)?.[1] === "live" &&
         !reached.includes('"unreached"') &&
         reached.match(STATUS)?.[1] === "live",
-      `host ${host ?? "not found"} in ${placeClone?.path ?? "no clone"}; stopped: ${short(stopped)}; again: ${short(reached).slice(0, 200)}`
+      `host ${host ? `${host.pid} (${host.argv.join(" ")})` : "not found"} in ${placeClone?.path ?? "no clone"}; stopped: ${short(stopped)}; again: ${short(reached).slice(0, 200)}`
     );
   }
 

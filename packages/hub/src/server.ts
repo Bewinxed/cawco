@@ -30074,6 +30074,8 @@ export const createServer = (
               console.info(
                 `[hub] machine ${message.machineId} registered from ${from ?? "an unknown address"}`
               );
+              // Its canvases' stages are reachable again: no doc says otherwise.
+              artifacts.machineBack(message.machineId);
               awaitHarnesses(
                 message.machineId,
                 ws,
