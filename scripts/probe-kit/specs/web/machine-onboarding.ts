@@ -558,10 +558,117 @@ const readHouse = (page: Page): Promise<HouseRead> =>
 
 /** The house legs, each with its own faults. */
 type HouseLeg =
-  "astray" | "baseline" | "separators" | "tail" | "words" | "reopened";
+  | "astray"
+  | "baseline"
+  | "separators"
+  | "tail"
+  | "words"
+  | "reopened"
+  | "folds"
+  | "alert";
+
+/**
+ * Where a disclosure starts against the words it belongs to, px (null where
+ * there is none to read): the card's first visible fold against the card's
+ * words column, and the alert's Show details against the alert's words, each
+ * by the disclosure's own box edge.
+ */
+const readEdges = (
+  page: Page
+): Promise<{ alert: number | null; fold: number | null }> =>
+  page.evaluate(() => {
+    const textLeft = (root: Element | null | undefined) => {
+      const walker = root
+        ? document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+        : null;
+      for (let node = walker?.nextNode(); node; node = walker?.nextNode()) {
+        const parent = node.parentElement;
+        if (
+          node.textContent?.trim() &&
+          parent &&
+          !parent.closest('[aria-hidden="true"]') &&
+          getComputedStyle(parent).visibility === "visible"
+        ) {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          return range.getBoundingClientRect().left;
+        }
+      }
+      return null;
+    };
+    const words = document.querySelector('[data-slot="words"]');
+    const fold = [
+      ...document.querySelectorAll('[data-slot="folds"] button'),
+    ].find((b) => getComputedStyle(b).visibility === "visible");
+    const alert = document.querySelector(
+      '[data-slot="join-tray"] [role="alert"]'
+    );
+    const details = alert?.querySelector("button");
+    const alertWords = textLeft(alert?.querySelector("span.block"));
+    const detailsLeft = details?.getBoundingClientRect().left ?? null;
+    return {
+      fold:
+        fold && words
+          ? fold.getBoundingClientRect().left -
+            words.getBoundingClientRect().left
+          : null,
+      alert:
+        alertWords !== null && detailsLeft !== null
+          ? detailsLeft - alertWords
+          : null,
+    };
+  });
 
 /** "·" stands with one space on each side, every time. */
 const SEPARATOR_FAULT = /\S·|·\S|\s{2,}·|·\s{2,}/;
+
+/** One state's house faults, each under its leg. */
+function noteHouse(
+  view: string,
+  read: HouseRead,
+  edges: { alert: number | null; fold: number | null },
+  faults: Record<HouseLeg, string[]>
+): void {
+  if (read.astray.length > 0) {
+    faults.astray.push(`${view}: ${read.astray.slice(0, 3).join("; ")}`);
+  }
+  const tops = read.baselines.filter((n) => !Number.isNaN(n));
+  if (tops.length > 1 && Math.max(...tops) - Math.min(...tops) > 0.5) {
+    faults.baseline.push(
+      `${view}: ${tops.map((n) => n.toFixed(2)).join(" vs ")}`
+    );
+  }
+  if (read.line.includes("·") && SEPARATOR_FAULT.test(read.line)) {
+    faults.separators.push(`${view}: "${read.line}"`);
+  }
+  const tailWhole =
+    read.tail !== null &&
+    read.tail.offLine < 0.5 &&
+    read.tail.endGap < 1 &&
+    read.tail.padTop >= 10.5;
+  if (view === "failed" && !tailWhole) {
+    faults.tail.push(`${view}: ${JSON.stringify(read.tail)}`);
+  }
+  if (RAW_CODE.test(read.words)) {
+    faults.words.push(
+      `${view}: "${read.words.match(RAW_CODE)?.[0]}" in "${read.words.slice(0, 120)}"`
+    );
+  }
+  if (view === "reopened" && !read.line.startsWith("Still going · 1:3")) {
+    faults.reopened.push(`"${read.line}"`);
+  }
+  if (edges.fold !== null && Math.abs(edges.fold) > 0.5) {
+    faults.folds.push(`${view}: ${edges.fold.toFixed(1)}px`);
+  }
+  if (
+    view === "change" &&
+    (edges.alert === null || Math.abs(edges.alert) > 0.5)
+  ) {
+    faults.alert.push(
+      `${view}: ${edges.alert === null ? "no Show details" : `${edges.alert.toFixed(1)}px`}`
+    );
+  }
+}
 
 /**
  * The house rules, per state: nothing paints outside the dialog's box (desk);
@@ -584,42 +691,13 @@ async function houseLegs(
     tail: [],
     words: [],
     reopened: [],
+    folds: [],
+    alert: [],
   };
   for (const view of HOUSE_VIEWS) {
     await open(page, `${bench}${ROUTE}?layout=${layout}&view=${view}`, TRAY);
     await settle(page, 400);
-    const read = await readHouse(page);
-    if (read.astray.length > 0) {
-      faults.astray.push(`${view}: ${read.astray.slice(0, 3).join("; ")}`);
-    }
-    const tops = read.baselines.filter((n) => !Number.isNaN(n));
-    if (tops.length > 1 && Math.max(...tops) - Math.min(...tops) > 0.5) {
-      faults.baseline.push(
-        `${view}: ${tops.map((n) => n.toFixed(2)).join(" vs ")}`
-      );
-    }
-    if (read.line.includes("·") && SEPARATOR_FAULT.test(read.line)) {
-      faults.separators.push(`${view}: "${read.line}"`);
-    }
-    if (
-      view === "failed" &&
-      !(
-        read.tail &&
-        read.tail.offLine < 0.5 &&
-        read.tail.endGap < 1 &&
-        read.tail.padTop >= 10.5
-      )
-    ) {
-      faults.tail.push(`${view}: ${JSON.stringify(read.tail)}`);
-    }
-    if (RAW_CODE.test(read.words)) {
-      faults.words.push(
-        `${view}: "${read.words.match(RAW_CODE)?.[0]}" in "${read.words.slice(0, 120)}"`
-      );
-    }
-    if (view === "reopened" && !read.line.startsWith("Still going · 1:3")) {
-      faults.reopened.push(`"${read.line}"`);
-    }
+    noteHouse(view, await readHouse(page), await readEdges(page), faults);
   }
   const say = (key: HouseLeg) =>
     faults[key].length ? `\n    ${faults[key].join("\n    ")}` : "";
@@ -654,6 +732,16 @@ async function houseLegs(
     `machine-onboarding: ${width}: opened onto a step 90 s in (the job's stepAt), the line says "Still going · 1:3x" at once`,
     faults.reopened.length === 0,
     say("reopened")
+  );
+  kit.check(
+    `machine-onboarding: ${width}: in every state the first visible disclosure starts on the card's words column (within 0.5px), alone or not`,
+    faults.folds.length === 0,
+    say("folds")
+  );
+  kit.check(
+    `machine-onboarding: ${width}: on Change target's alert, Show details starts on the alert's words' edge (within 0.5px)`,
+    faults.alert.length === 0,
+    say("alert")
   );
   await detailsFold(kit, page, bench, layout, width);
 }

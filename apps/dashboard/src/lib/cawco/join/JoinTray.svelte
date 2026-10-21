@@ -290,7 +290,8 @@
         <Alert.Description>
           <span class="block">{formAlert.text}</span>
           {#if formAlert.details}
-            <!-- The code it ended on, word for word, as RowFault folds one. -->
+            <!-- The code it ended on, word for word, as RowFault folds one;
+                 its words start on the alert's words' edge (no inline pad). -->
             <Button
               aria-controls="{id}-alert-details"
               aria-expanded={alertDetails}
@@ -298,6 +299,7 @@
               onclick={() => {
                 alertDetails = !alertDetails;
               }}
+              pad="none"
               size="xs"
               variant="ghost"
             />

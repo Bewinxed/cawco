@@ -134,43 +134,48 @@
   controls: string,
   toggle: () => void
 )}
-  <!-- A fold with nothing to show yet keeps its place, unseen. -->
-  <span class="contents" class:invisible={!shown}>
-    <Button
-      aria-controls={controls}
-      aria-expanded={open}
-      disabled={!shown}
-      onclick={toggle}
-      pad="none"
-      size="xs"
-      tone="quiet"
-      variant="link"
-    >
-      <span
-        data-slot="chev"
-        aria-hidden="true"
-        class="inline-grid motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out data-open:rotate-90"
-        data-open={open || undefined}
-        data-box><IconChevronRight class="size-icon-sm" /></span
+  <!-- While it runs, a fold with nothing to show yet keeps its place,
+       unseen, so the first step line moves nothing. Settled, a fold with
+       nothing to show is not drawn: the one that is starts the row, on the
+       words' edge. -->
+  {#if shown || running}
+    <span class="contents" class:invisible={!shown}>
+      <Button
+        aria-controls={controls}
+        aria-expanded={open}
+        disabled={!shown}
+        onclick={toggle}
+        pad="none"
+        size="xs"
+        tone="quiet"
+        variant="link"
       >
-      <!-- "Show steps" and "Hide steps" in one cell as wide as the wider
+        <span
+          data-slot="chev"
+          aria-hidden="true"
+          class="inline-grid motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out data-open:rotate-90"
+          data-open={open || undefined}
+          data-box><IconChevronRight class="size-icon-sm" /></span
+        >
+        <!-- "Show steps" and "Hide steps" in one cell as wide as the wider
            (The Steady Swap Rule): the fold never changes width. The cell
            stands as a box on the line; each wording trims itself to its
            x-height (mark-text), as a grid cell's label does. -->
-      <span class="grid *:col-start-1 *:row-start-1" data-box>
-        <span
-          class="mark-text"
-          aria-hidden={open || undefined}
-          class:invisible={open}>Show {what}</span
-        >
-        <span
-          class="mark-text"
-          aria-hidden={!open || undefined}
-          class:invisible={!open}>Hide {what}</span
-        >
-      </span>
-    </Button>
-  </span>
+        <span class="grid *:col-start-1 *:row-start-1" data-box>
+          <span
+            class="mark-text"
+            aria-hidden={open || undefined}
+            class:invisible={open}>Show {what}</span
+          >
+          <span
+            class="mark-text"
+            aria-hidden={!open || undefined}
+            class:invisible={!open}>Hide {what}</span
+          >
+        </span>
+      </Button>
+    </span>
+  {/if}
 {/snippet}
 
 <!-- No gap here: a closed fold takes no room at all, so one mounting with
