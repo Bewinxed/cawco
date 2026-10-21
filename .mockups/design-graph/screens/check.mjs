@@ -126,10 +126,17 @@ for (const [V, width] of [["page 1100", 1100], ["page 390", 390]]) {
       let min = Infinity;
       for (const el of fd.querySelectorAll("body *")) { if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue; const cs = fd.defaultView.getComputedStyle(el); if (cs.display === "none" || cs.visibility === "hidden" || !el.getBoundingClientRect().width) continue; min = Math.min(min, parseFloat(cs.fontSize)); }
       const left = d.left - sb.left + sc.scrollLeft, right = d.right - sb.left + sc.scrollLeft;
-      return { loop: f.dataset.loop, drawn: Math.round(min * s * 100) / 100, whole: d.top >= card.top - 0.5 && d.bottom <= card.bottom + 0.5 && d.top >= mk.top - 0.5 && left >= -0.5 && right <= sc.scrollWidth + 0.5, scrolls: sc.scrollWidth > sc.clientWidth + 1 };
+      // Across: the frame's left edge at the scroll's start, and its right edge at the scroll's end, stand
+      // --space-2 inside the row's visible box.
+      const m = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-2")), dev = f.querySelector(".ds-device"), vis = () => { const b = sc.getBoundingClientRect(); return [b.left + sc.clientLeft, b.left + sc.clientLeft + sc.clientWidth]; };
+      const s0 = sc.scrollLeft;
+      sc.scrollLeft = 0; let [vl] = vis(); const lGap = dev.getBoundingClientRect().left - vl;
+      sc.scrollLeft = sc.scrollWidth; const [, vr] = vis(); const rGap = vr - dev.getBoundingClientRect().right;
+      sc.scrollLeft = s0;
+      return { loop: f.dataset.loop, drawn: Math.round(min * s * 100) / 100, whole: d.top >= card.top - 0.5 && d.bottom <= card.bottom + 0.5 && d.top >= mk.top - 0.5 && left >= -0.5 && right <= sc.scrollWidth + 0.5 && lGap >= m - 0.5 && rGap >= m - 0.5, lGap: Math.round(lGap * 10) / 10, rGap: Math.round(rGap * 10) / 10, scrolls: sc.scrollWidth > sc.clientWidth + 1 };
     });
   });
-  ok(V, "r26 B4: every frame stands whole inside its card (top to bottom, and across within its row's scroll)", r.every((x) => x.whole), r.map((x) => x.loop + (x.whole ? "" : " CUT")).join(", "));
+  ok(V, "r26 B4: every frame stands whole inside its card (top to bottom), and its left edge, and its right edge scrolled to the end, stand --space-2 inside its row's visible box", r.every((x) => x.whole), r.map((x) => x.loop + " " + x.lGap + "/" + x.rGap + (x.whole ? "" : " CUT")).join(", "));
   ok(V, "r26 B5: no frame draws its words under 10px; a frame too wide at that size scrolls sideways in its row", r.every((x) => x.drawn >= 10 - 0.01), r.map((x) => x.loop + " " + x.drawn + "px" + (x.scrolls ? " (scrolls)" : "")).join(", "));
   await ctx.close();
 }
