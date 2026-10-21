@@ -56,28 +56,32 @@
       { at: 6500, dot: ".edge-pill-d", press: true, hold: true, lit: true, dock: [160, 0, 6500, 7400] },
       { at: 7400, dot: null },
     ],
+    // Both components at once from 1800: a state kept on each, so the dock's title follows the last kept.
     wide: [
       { at: 0 },
-      { at: 1100, dot: NODE("types", "loading"), peek: ["types", "loading", 0] },
-      { at: 2800, dot: NODE("save", "saving"), peek: ["save", "saving", 0] },
-      { at: 4400, dot: "#play", press: true, play: 4400, speed: 0.4 },
-      { at: 7600, dot: null },
+      { at: 1100, dot: NODE("runs", "running"), peek: ["row", "runs", "running", 0] },
+      { at: 2400, dot: NODE("runs", "running"), press: true, kept: { row: ["runs", "running", 0] }, last: "row" },
+      { at: 3800, dot: "#play", press: true, kept: { row: ["runs", "running", 0] }, last: "row", play: 3800, speed: 0.5 },
+      { at: 5400, dot: NODE("save", "created"), kept: { row: ["runs", "running", 0] }, last: "row", peek: ["form", "save", "created", 0] },
+      { at: 6800, dot: NODE("save", "failed"), press: true, kept: { row: ["runs", "running", 0] }, last: "form" },
+      { at: 8200, dot: null, kept: { row: ["runs", "running", 0] }, last: "form" },
     ],
     "ultrawide-2560": [
       { at: 0 },
-      { at: 1100, dot: '#tabs [data-tab="row"]', press: true, tab: "row" },
-      { at: 2600, dot: NODE("runs", "running"), tab: "row", peek: ["runs", "running", 0] },
-      { at: 4200, dot: "#play", press: true, tab: "row", play: 4200, speed: 0.5 },
-      { at: 6400, dot: '#tabs [data-tab="form"]', press: true },
-      { at: 7800, dot: null },
+      { at: 1100, dot: NODE("save", "created"), peek: ["form", "save", "created", 0] },
+      { at: 2400, dot: NODE("save", "created"), press: true, kept: { form: ["save", "created", 0] }, last: "form" },
+      { at: 3800, dot: NODE("runs", "running"), press: true, kept: { form: ["save", "created", 0], row: ["runs", "running", 0] }, last: "row" },
+      { at: 5000, dot: "#play", press: true, kept: { form: ["save", "created", 0], row: ["runs", "running", 0] }, last: "row", play: 5000, speed: 0.5 },
+      { at: 7000, dot: NODE("save", "failed"), press: true, kept: { row: ["runs", "running", 0] }, last: "form" },
+      { at: 8200, dot: null, kept: { row: ["runs", "running", 0] }, last: "form" },
     ],
     "ultrawide-3440": [
       { at: 0 },
-      { at: 1100, dot: NODE("save", "created"), peek: ["save", "created", 0] },
-      { at: 2500, dot: NODE("save", "created"), press: true, kept: ["save", "created", 0] },
-      { at: 4200, dot: NODE("save", "failed"), press: true, kept: ["save", "failed", 0] },
-      { at: 5600, dot: "#play", press: true, play: 5600, speed: 0.4 },
-      { at: 7800, dot: null },
+      { at: 1100, dot: NODE("pause", "paused"), peek: ["row", "pause", "paused", 0] },
+      { at: 2400, dot: NODE("pause", "paused"), press: true, kept: { row: ["pause", "paused", 0] }, last: "row" },
+      { at: 3800, dot: "#play", press: true, kept: { row: ["pause", "paused", 0] }, last: "row", play: 3800, speed: 0.4 },
+      { at: 6000, dot: NODE("save", "failed"), press: true, kept: { row: ["pause", "paused", 0] }, last: "form" },
+      { at: 7800, dot: null, kept: { row: ["pause", "paused", 0] }, last: "form" },
     ],
   };
   const sceneAt = (list, t) => { let i = 0; for (let k = 0; k < list.length; k++) if (list[k].at <= t) i = k; return i; };
@@ -88,10 +92,16 @@
     const KEPT = { form: ["save", "failed", 0], row: ["runs", "failed", 0] };
     let h0 = null, dragging = false, dockSet = null;
     function apply(s, t) {
-      const want = s.tab || "form";
-      if (want !== tab) { tab = want; peek = null; time = null; stopPlay(); closePop(true); zoom = 1; render(true); }
-      const k = s.kept || KEPT[tab], v = views[tab];
-      if (v.last !== k[0] || v.cur[k[0]].state !== k[1] || v.cur[k[0]].vary !== k[2]) keep(k[0], k[1], k[2]);
+      // Each component's kept state, then the one last kept (a keep, with every page on screen; a tab, below).
+      const last = s.last || s.tab || "form", kept = Array.isArray(s.kept) ? { [last]: s.kept } : s.kept || {};
+      for (const cid of Object.keys(views)) {
+        const k = kept[cid] || KEPT[cid], v = views[cid];
+        if (v.last !== k[0] || v.cur[k[0]].state !== k[1] || v.cur[k[0]].vary !== k[2]) keep(cid, k[0], k[1], k[2]);
+      }
+      if (tab !== last) {
+        if (screen.multi) { const v = views[last]; keep(last, v.last, v.cur[v.last].state, v.cur[v.last].vary); }
+        else { stopPlay(); tab = last; peek = null; time = null; closePop(true); render(true); }
+      }
       if (compact()) {
         if (layoutIs("sheet")) { const o = s.open !== false; if (toolsOpen() !== o) setOpen(o); }
         const f = s.face || "graph";
@@ -109,8 +119,8 @@
       }
       if (s.pop) { if (!pop || pop.key !== s.pop) { const km = keptMove(); km.e.sel = new Set([s.pop]); layoutDock(); openPop(s.pop, "pointer"); } }
       else if (pop) { const km = keptMove(); if (km) km.e.sel.clear(); closePop(true); if (tl) layoutDock(); }
-      const pk = s.peek || null, now = peek ? [peek.machine, peek.state, peek.vary] : null;
-      if (JSON.stringify(pk) !== JSON.stringify(now)) { peek = pk ? { machine: pk[0], state: pk[1], vary: pk[2] } : null; drawStage(); mark(); }
+      const pk = s.peek ? (s.peek.length === 4 ? s.peek : [tab, ...s.peek]) : null, now = peek ? [peek.comp, peek.machine, peek.state, peek.vary] : null;
+      if (JSON.stringify(pk) !== JSON.stringify(now)) { const was = peek && peek.comp; peek = pk ? { comp: pk[0], machine: pk[1], state: pk[2], vary: pk[3] } : null; if (was && (!pk || was !== pk[0])) drawStage(was); if (pk) drawStage(pk[0]); mark(); }
       const km = keptMove();
       if (s.play != null && km) {
         const len = playLengthOf(km.r), p = (t - s.play) * (s.speed || 1), nt = p < 0 ? 0 : p >= len ? null : p;
@@ -118,7 +128,7 @@
       } else if (time !== null) { time = null; drawStage(); updateTime(); }
     }
     const center = (sel) => { const el = sel && document.querySelector(sel); if (!el) return null; const b = el.getBoundingClientRect(); return b.width || b.height ? [b.left + b.width / 2, b.top + b.height / 2] : null; };
-    const read = () => ({ tab, kept: views[tab].last + ":" + views[tab].cur[views[tab].last].state, peek: peek && peek.machine + ":" + peek.state, washes: document.querySelectorAll(".wash").length, face, stop, drawerH: Math.round(drawerH), open: toolsOpen(), dockH: $("dock").offsetHeight, time: time === null ? null : Math.round(time), pop: pop && pop.key, popInline: !!pop && pop.inline, lit: !!$("dock").dataset.resizing, screen: rootEl.dataset.screen });
+    const read = () => ({ tab, kept: views[tab].last + ":" + views[tab].cur[views[tab].last].state, peek: peek && peek.machine + ":" + peek.state, washes: document.querySelectorAll(".wash").length, face, stop, drawerH: Math.round(drawerH), open: toolsOpen(), dockH: $("dock").offsetHeight, time: time === null ? null : Math.round(time), pop: pop && pop.key, popInline: !!pop && pop.inline, lit: !!$("dock").dataset.resizing, screen: rootEl.dataset.screen, multi: !!screen.multi, title: ($("dock").querySelector(".dock-title") || {}).textContent || null, keptOn: document.querySelectorAll(".node.kept").length });
     window.__dg = { apply, center, read };
   }
 

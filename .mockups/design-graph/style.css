@@ -16,7 +16,13 @@
   /* responsive-design.md, "Proposed tokens". The breakpoints (bp-short 560, bp-desk-wide 1800, bp-ultra
      2400) live in app.js's BP, which sets html[data-screen]; a media query can't read a custom property. */
   --c-graph-panel-w: 448px;
-  --c-graph-panel-w-wide: 640px;
+  --c-graph-panel-w-wide: 800px;
+  /* r22 ruling call 3: the dock's ceiling leaves the page this much, its head and first field readable. */
+  --c-page-h-floor: 240px;
+  /* The kit's floating-surface pad (its menu), and One Target's gap round a bare element (the r21 ruling);
+     neither has a token yet. */
+  --c-floating-pad: 6px;
+  --c-target-gap: 2px;
   --c-graph-drawer-stop: 45dvh;
   --c-review-max-w: 2000px;
   /* Phone landscape's collapsed sheet: "Hide collapses it to a 32px edge tab". */
@@ -27,7 +33,11 @@
      so each fixed box resolves it against the viewport it stands in. */
   --gutter: max(0px, (100% - var(--c-review-max-w)) / 2);
 }
-html:is([data-screen="wide"], [data-screen="ultrawide"]) { --panel-w: var(--c-graph-panel-w-wide); }
+/* One component under review: the wide panel from bp-desk-wide. Two or more on screen at once: the 448 panel
+   with the graphs stacked, or twice it with them side by side, and no 2000 cap (all-components-design.md). */
+html:is([data-screen="wide"], [data-screen="ultrawide"]):not([data-multi]) { --panel-w: var(--c-graph-panel-w-wide); }
+html[data-multi] { --gutter: 0px; --panel-w: var(--c-graph-panel-w); }
+html[data-multi][data-graphs="row"] { --panel-w: calc(2 * var(--c-graph-panel-w)); }
 * { box-sizing: border-box; }
 body { margin: 0; min-block-size: 100dvh; font: var(--type-body); background: var(--surface-recess); color: var(--ink-strong); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 button { font: inherit; color: inherit; }
@@ -36,7 +46,10 @@ button { font: inherit; color: inherit; }
    It owns the room left of the panel and above the dock, and scrolls inside it, so the dock never covers it
    and nothing the tool does moves it. */
 .page { position: fixed; inset-block: 0 var(--dock-room, 0px); inset-inline: var(--gutter) calc(var(--gutter) + var(--panel-w) + 2 * var(--space-5)); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: max(var(--space-8), env(safe-area-inset-top, 0px)) var(--space-5) var(--space-8); display: grid; justify-items: center; align-content: start; }
-.stage-wrap { position: relative; inline-size: min(100%, 600px); }
+/* The pages: one row of 600px pages a margin apart, the spare width the recess; more than fit wrap. */
+.pages { inline-size: 100%; display: flex; flex-wrap: wrap; justify-content: center; align-items: start; gap: var(--space-5); }
+.stage-wrap { position: relative; flex: 0 1 auto; inline-size: min(100%, 600px); }
+.stage-wrap[hidden] { display: none; }
 .frame { padding: var(--space-6); border: 1px solid var(--border-control); border-radius: calc(var(--mock-radius, 8px) + var(--space-1)); background: var(--surface-raised); box-shadow: var(--shadow-tile); }
 .frame label { display: block; margin: 0 0 var(--space-1); font: var(--type-meta); color: var(--ink-muted); }
 .field { margin-block-end: var(--space-3); min-inline-size: 0; }
@@ -90,8 +103,8 @@ button { font: inherit; color: inherit; }
 /* A machine: a statechart's parallel region, dashed, its name at its top. Its corner holds a node 8px in,
    so its radius is the node's plus that gap (The Concentric Rule). */
 .region { position: absolute; padding: var(--space-2); border: 1px dashed var(--border-card); border-radius: var(--radius-panel); }
-/* A machine's name labels its region, a step under the states it holds: meta at 500, muted. */
-.region-name { inline-size: 0; min-inline-size: 100%; margin: 0; padding: 0 var(--space-1) var(--space-2); font: var(--type-meta); font-weight: var(--weight-strong); color: var(--ink-muted); text-wrap: pretty; }
+/* A machine's name labels its region, a step under the states it holds: meta at 400, muted. */
+.region-name { inline-size: 0; min-inline-size: 100%; margin: 0; padding: 0 var(--space-1) var(--space-2); font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
 .regionBody { position: relative; }
 .world svg { position: absolute; inset-inline-start: 0; inset-block-start: 0; overflow: visible; pointer-events: none; }
 .world svg polyline { fill: none; stroke: var(--border-contrast); stroke-width: var(--c-graph-edge); transition: stroke var(--dur-control) var(--ease-out), stroke-width var(--dur-control) var(--ease-out); }
@@ -117,33 +130,56 @@ button { font: inherit; color: inherit; }
 .vars { display: flex; flex-direction: column; gap: var(--space-1); margin-block-start: var(--space-2); }
 .var { all: unset; display: block; padding: var(--space-row) var(--space-2); border-radius: var(--radius-xs); font: var(--type-meta); color: var(--ink-row); border: 1px solid var(--border-control); background: var(--surface-raised); cursor: pointer; transition: var(--transition-control); }
 @media (hover: hover) { .var:not(.kept, .cur):hover, .var.peek:not(.kept, .cur) { background: var(--surface-hover); } }
-/* A chip's tier (kept, current) is a second chip laid over it, each readable on its own fill, and a change of
-   tier wipes it in or out from the leading edge over --dur-control. No frame puts an ink on a fill half-way
-   between the two: a colour fade from the raised fill to coral passes through fills no ink holds 4.5:1 on. */
-.var { position: relative; }
-.var::after { content: attr(data-label) / ""; position: absolute; inset: -1px; padding: inherit; border: 1px solid var(--tier-edge, transparent); border-radius: inherit; background: var(--tier-fill, transparent); color: var(--tier-ink, inherit); font: inherit; pointer-events: none; clip-path: inset(0 100% 0 0); transition: clip-path var(--dur-control) var(--ease-out); }
-.var[data-tier="kept"] { --tier-fill: var(--chip-chosen-bg); --tier-edge: var(--chip-chosen-bg); --tier-ink: var(--chip-chosen-ink); }
-.var[data-tier="cur"] { --tier-fill: var(--surface-pressed); --tier-edge: var(--border-contrast); --tier-ink: var(--ink-strong); }
-.var:is(.kept, .cur)::after { clip-path: inset(0); }
-@media (prefers-reduced-motion: reduce) { .var::after { transition: none; } }
+/* A chip's tier is the chip's own fill, edge and ink, faded over --transition-control (the ruling: the
+   mid-fade frame is accepted house-wide; no clip-path wipe). */
+.var.kept { background: var(--chip-chosen-bg); border-color: var(--chip-chosen-bg); color: var(--chip-chosen-ink); }
+.var.cur { background: var(--surface-pressed); border-color: var(--border-contrast); color: var(--ink-strong); }
 /* A graph drawn anew (a tab, a resize, a relayout) takes its tiers at once: only a change of state on a graph
    already drawn fades between them. */
 .world[data-instant] :is(.node, .var) { transition: none; }
-/* Its own rule: :is() takes no pseudo-elements, so the tier layer is named apart. */
-.world[data-instant] .var::after { transition: none; }
 .var:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 
-/* The zoom group: 24px items in a 30px group, 2px in, so 5px + 3px = the group's 8px (The Concentric Rule). */
-.zoom { display: flex; align-items: center; gap: var(--space-row); padding: var(--space-row); border-radius: var(--radius-sm); background: var(--surface-raised); border: 1px solid var(--border-control); }
+/* The zoom group: 24px items 2px in, so 5px + 2px + the 1px edge = the group's 8px (The Concentric Rule);
+   the pad is derived, never --space-row. */
+.zoom { display: flex; align-items: center; gap: var(--space-row); padding: calc(var(--radius-sm) - var(--radius-xs) - 1px); border-radius: var(--radius-sm); background: var(--surface-raised); border: 1px solid var(--border-control); }
 .zoom output { min-inline-size: 4ch; text-align: center; font: var(--type-meta); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 .icon-btn { all: unset; box-sizing: border-box; display: grid; place-items: center; inline-size: var(--c-btn-h-xs); block-size: var(--c-btn-h-xs); border-radius: var(--radius-xs); color: var(--ink-row); cursor: pointer; transition: var(--transition-control); }
 .icon-btn svg { inline-size: var(--icon-sm); block-size: var(--icon-sm); }
-.hide-btn { color: var(--ink-muted); }
+/* Hide: the kit's sm icon button (30px, the input's radius, the button outline), its glyph at --icon-md. */
+.hide-btn { inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); border-radius: var(--radius-md); border: 1px solid var(--border-button-outline); color: var(--ink-row); }
 .hide-btn svg { inline-size: var(--icon-md); block-size: var(--icon-md); }
 @media (hover: hover) { .icon-btn:hover { background: var(--surface-hover); } }
 .icon-btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 
 /* The dials, on one grid, starting --space-3 in so the corner's L stands clear of the first label. */
+/* A graph's section: its name in the label role and its own zoom group over it (shown with every graph on
+   screen); below the line, the toolbar's tabs pick the one section shown. */
+.graphs { display: flex; flex-direction: column; flex: 0 1 auto; min-block-size: 0; }
+.gsec { display: flex; flex-direction: column; min-block-size: 0; }
+html:not([data-multi]) .gsec:not([data-current]) { display: none; }
+html:not([data-multi]) .gsec-head { display: none; }
+.gsec-head { display: flex; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
+.gsec-name { flex: 1 1 auto; min-inline-size: 0; margin: 0; padding-inline-start: var(--space-1); font: var(--type-label); color: var(--ink-strong); overflow-wrap: anywhere; text-wrap: balance; }
+html[data-multi] .toolbar :is(#tabs, .bar-end > .zoom) { display: none; }
+html[data-multi] .graphs { gap: var(--space-4); }
+/* Stacked: the panel stands the pane's height and the two graphs share it, split by the first one's foot. */
+html[data-graphs="stack"] .panel { block-size: calc(100dvh - 2 * var(--space-5)); }
+html[data-graphs="stack"] .graphs { flex: 1 1 auto; }
+html[data-graphs="stack"] .gsec:first-child { flex: none; }
+html[data-graphs="stack"] .gsec:first-child .graph { flex: none; block-size: var(--split-h, 240px); }
+html[data-graphs="stack"] .gsec:last-child { flex: 1 1 0; }
+html[data-graphs="stack"] .gsec:last-child .graph { flex: 1 1 auto; block-size: auto; }
+html[data-graphs="stack"] :is(.sash-h, .edge-pill-h) { display: none; }
+/* Side by side past bp-ultra: each graph its own column at the panel's graph height. */
+html[data-graphs="row"] .graphs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-3); }
+/* One component past bp-ultra: page, panel and dock in the centred 2000 column, the dock spanning it at the
+   foot and the panel reaching down to it, its graph taking the height; the dock's edge is the one height
+   control there. */
+html[data-screen="ultrawide"]:not([data-multi]) .dock { inset-inline-end: calc(var(--gutter) + var(--space-5)); }
+html[data-screen="ultrawide"]:not([data-multi]) .panel { block-size: calc(100dvh - max(var(--dock-room, 0px), var(--space-5)) - var(--space-5)); max-block-size: none; }
+html[data-screen="ultrawide"]:not([data-multi]) :is(.graphs, .gsec[data-current], .graph) { flex: 1 1 auto; }
+html[data-screen="ultrawide"]:not([data-multi]) .graph { block-size: auto; }
+html[data-screen="ultrawide"]:not([data-multi]) :is(.sash-h, .edge-pill-h, .sash-c, .corner-l) { display: none; }
 .dials { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; column-gap: var(--space-3); row-gap: var(--space-1); align-items: center; padding: var(--space-2) 0 0 var(--space-3); }
 .dial { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; }
 .dial span:first-child { color: var(--ink-row); }
@@ -157,6 +193,11 @@ button { font: inherit; color: inherit; }
 .sash-w { inset-block: var(--radius-panel); inset-inline-start: calc(-1 * (var(--space-1) + 1px)); inline-size: var(--c-edge-hit); cursor: ew-resize; }
 .sash-h { inset-inline: var(--radius-panel); inset-block-end: calc(-1 * (var(--space-1) + 1px)); block-size: var(--c-edge-hit); cursor: ns-resize; }
 .sash-c { inset-inline-start: calc(-1 * (var(--space-1) + 1px)); inset-block-end: calc(-1 * (var(--space-1) + 1px)); inline-size: calc(var(--radius-panel) + var(--space-1)); block-size: calc(var(--radius-panel) + var(--space-1)); cursor: nesw-resize; }
+/* The split between stacked graphs: a band across the panel in the gap under the first graph (top set by
+   app.js), its pill centred on it. */
+.sash-s { inset-inline: var(--radius-panel); block-size: var(--c-edge-hit); cursor: ns-resize; }
+html:is([data-input="touch"], [data-input="touch-hover"]) .sash-s { block-size: var(--c-side-divider-hit); }
+.edge-pill-s { block-size: var(--c-grabber-h); inline-size: var(--c-edge-grip-len); inset-inline-start: calc(50% - var(--c-edge-grip-len) / 2); }
 /* The dock's height edge: the same band on its top border. */
 .sash-d { inset-inline: var(--radius-panel); inset-block-start: calc(-1 * (var(--space-1) + 1px)); block-size: var(--c-edge-hit); cursor: ns-resize; }
 /* Touch (any-pointer: coarse, set by app.js as html[data-input]): 44px bands straddling each edge. */
@@ -181,16 +222,21 @@ html[data-input="touch"] :is(.sash-c, .corner-l) { display: none; }
 @media (hover: hover) {
   .panel:has(.sash-w:hover, .sash-c:hover) .edge-pill-w,
   .panel:has(.sash-h:hover, .sash-c:hover) .edge-pill-h,
-  .dock:has(.sash-d:hover) .edge-pill-d { background: var(--ink-muted); }
+  .dock:has(.sash-d:hover) .edge-pill-d,
+  .panel:has(.sash-s:hover) .edge-pill-s { background: var(--ink-muted); }
   .panel:has(.sash-c:hover) .corner-l { --l-ink: var(--ink-muted); }
 }
 .panel:is([data-resizing="w"], [data-resizing="wh"]) .edge-pill-w,
 .panel:is([data-resizing="h"], [data-resizing="wh"]) .edge-pill-h,
-.dock[data-resizing] .edge-pill-d { background: var(--ink-muted); }
+.dock[data-resizing] .edge-pill-d,
+.panel[data-resizing="s"] .edge-pill-s { background: var(--ink-muted); }
+/* The split is inside the panel, off its outline: it lights its pill, not the outline. */
+.panel[data-resizing="s"]::after { opacity: 0; }
 .panel[data-resizing="wh"] .corner-l { --l-ink: var(--ink-muted); }
 .panel:has(.sash-w:focus-visible) .edge-pill-w,
 .panel:has(.sash-h:focus-visible) .edge-pill-h,
 .dock:has(.sash-d:focus-visible) .edge-pill-d,
+.panel:has(.sash-s:focus-visible) .edge-pill-s,
 .panel:has(.sash-c:focus-visible) .corner-l { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 /* The lit edge: the panel's own outline re-stroked on its border and radius (an inset 1.5px spread, which no
    pixel ratio snaps), masked to the arm under the
@@ -220,7 +266,7 @@ html[data-input="touch"] :is(.panel, .dock)::after { display: none; }
 /* A drag holds its cursor on the document, so it stays when the pointer outruns the band. */
 html[data-resizing] * { user-select: none; }
 html[data-resizing="w"], html[data-resizing="w"] * { cursor: ew-resize !important; }
-html:is([data-resizing="h"], [data-resizing="d"]), html:is([data-resizing="h"], [data-resizing="d"]) * { cursor: ns-resize !important; }
+html:is([data-resizing="h"], [data-resizing="d"], [data-resizing="s"]), html:is([data-resizing="h"], [data-resizing="d"], [data-resizing="s"]) * { cursor: ns-resize !important; }
 html[data-resizing="wh"], html[data-resizing="wh"] * { cursor: nesw-resize !important; }
 html[data-scrubbing], html[data-scrubbing] * { cursor: ew-resize !important; user-select: none; }
 html[data-dragging], html[data-dragging] * { cursor: grabbing !important; user-select: none; }
@@ -247,10 +293,11 @@ html[data-dragging="edge"], html[data-dragging="edge"] * { cursor: ew-resize !im
 .tl { position: relative; flex: 1 1 auto; overflow: hidden auto; overscroll-behavior: contain; min-block-size: 0; }
 .tl-row { display: grid; grid-template-columns: var(--dock-name-w) minmax(0, 1fr); }
 /* The ruler row: the transport and the readout in the name column, the time over the lanes. */
-.ruler-row { position: sticky; inset-block-start: 0; z-index: 3; align-items: center; min-block-size: var(--c-bar-item); background: var(--surface-raised); border-block-end: 1px solid var(--border-hairline); padding-block-end: var(--space-2); }
+.ruler-row { position: sticky; inset-block-start: 0; z-index: 3; align-items: center; min-block-size: var(--c-btn-h-sm); background: var(--surface-raised); border-block-end: 1px solid var(--border-hairline); padding-block-end: var(--space-2); }
 .transport { display: flex; align-items: center; gap: var(--space-1); min-inline-size: 0; }
-.tbtn { all: unset; box-sizing: border-box; position: relative; display: grid; place-items: center; inline-size: var(--c-bar-item); block-size: var(--c-bar-item); border-radius: var(--radius-sm); border: 1px solid var(--border-control); background: var(--surface-raised); color: var(--ink-row); cursor: pointer; transition: var(--transition-control), scale var(--dur-control) var(--ease-out); }
-.tbtn svg { grid-area: 1 / 1; inline-size: var(--icon-sm); block-size: var(--icon-sm); transition: opacity var(--dur-control) var(--ease-out), scale var(--dur-control) var(--ease-out), filter var(--dur-control) var(--ease-out); }
+/* Play and Loop: the kit's sm icon button (30px, the input's radius, the button outline, a 16px glyph). */
+.tbtn { all: unset; box-sizing: border-box; position: relative; display: grid; place-items: center; inline-size: var(--c-btn-h-sm); block-size: var(--c-btn-h-sm); border-radius: var(--radius-md); border: 1px solid var(--border-button-outline); background: var(--surface-raised); color: var(--ink-row); cursor: pointer; transition: var(--transition-control), scale var(--dur-control) var(--ease-out); }
+.tbtn svg { grid-area: 1 / 1; inline-size: var(--icon-md); block-size: var(--icon-md); transition: opacity var(--dur-control) var(--ease-out), scale var(--dur-control) var(--ease-out), filter var(--dur-control) var(--ease-out); }
 .tbtn .i-play { translate: 1px 0; }
 .tbtn .i-pause, .tbtn[data-playing] .i-play { opacity: 0; scale: var(--pop-scale); filter: blur(var(--c-recall-cross-blur)); }
 .tbtn[data-playing] .i-pause { opacity: 1; scale: 1; filter: none; }
@@ -304,7 +351,7 @@ html[data-dragging="edge"], html[data-dragging="edge"] * { cursor: ew-resize !im
 /* Drawn over the lanes, under nothing that takes a press. */
 /* The move's end to the ruler's end: one area behind every row and the ruler. Its fill alone is a 1.2:1 step,
    so its start, the move's end, is drawn in the 3:1 edge ink. */
-.end-area { position: absolute; inset-block: 0; inset-inline-end: 0; background: var(--surface-recess-deep); border-inline-start: 1px solid var(--border-row-outline); pointer-events: none; }
+.end-area { position: absolute; inset-block: 0; inset-inline-end: 0; background: var(--surface-recess-deep); pointer-events: none; }
 .tie { position: absolute; inline-size: 1px; background: var(--border-contrast); pointer-events: none; }
 .tie::before, .tie::after { content: ""; position: absolute; inset-inline-start: 0; block-size: 1px; inline-size: var(--space-1); background: var(--border-contrast); }
 .tie::before { inset-block-start: 0; }
@@ -316,7 +363,10 @@ html[data-dragging="edge"], html[data-dragging="edge"] * { cursor: ew-resize !im
 .snap { position: absolute; inset-block: 0; inline-size: 1px; z-index: 2; background: var(--border-contrast); pointer-events: none; }
 .tick { position: absolute; inline-size: 1px; block-size: var(--space-1); background: var(--border-contrast); pointer-events: none; }
 .marquee { position: absolute; z-index: 2; background: var(--selection); border: 1px solid var(--focus-ring); pointer-events: none; }
-.drag-pill { position: absolute; z-index: 4; box-shadow: var(--shadow-raised); pointer-events: none; translate: -50% 0; }
+/* The drag pill is the Badge (20px, --radius-xs, meta) lifted onto the raised surface; a free value keeps
+   the Badge's dashed edge. */
+.drag-pill { position: absolute; z-index: 4; pointer-events: none; translate: -50% 0; }
+.drag-pill .badge { background: var(--surface-raised); box-shadow: var(--shadow-tile); }
 .lanes-col { grid-column: 2; }
 
 /* ---- Floating surfaces: the clip popover, its menus, the tooltip ---- */
@@ -352,13 +402,13 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
 .sent { font: var(--type-meta); color: var(--ink-muted); }
 /* The kit's DropdownMenu: the floating surface holding 8px items. The kit pads it 6px, which leaves a 12px menu
    round an 8px item 7px in; here the pad is what the Concentric Rule leaves: 12 - 8 - the 1px edge = 3px. */
-.menu { --menu-pad: calc(var(--radius-lg) - var(--radius-sm) - 1px); position: fixed; z-index: calc(var(--layer-float) + 1); min-inline-size: 12rem; display: flex; flex-direction: column; padding: var(--menu-pad); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-overlay); max-block-size: calc(100dvh - 2 * var(--space-5)); overflow-y: auto; overscroll-behavior: contain; }
-.mi { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-menu-item-h); padding: 0 var(--space-8) 0 var(--c-row-inset); border-radius: var(--radius-sm); font: var(--type-label); font-weight: var(--weight-body); color: var(--ink-strong); cursor: default; position: relative; transition: var(--transition-control); }
+.menu { position: fixed; z-index: calc(var(--layer-float) + 1); min-inline-size: 12rem; display: flex; flex-direction: column; padding: var(--c-floating-pad); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-overlay); max-block-size: calc(100dvh - 2 * var(--space-5)); overflow-y: auto; overscroll-behavior: contain; }
+.mi { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-menu-item-h); padding: 0 var(--space-8) 0 var(--c-row-inset); border-radius: var(--radius-xs); font: var(--type-label); font-weight: var(--weight-body); color: var(--ink-strong); cursor: default; position: relative; transition: var(--transition-control); }
 .mi code { font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); }
 .mi svg.glyph { inline-size: 16px; block-size: 10px; color: var(--ink-muted); overflow: visible; flex: none; }
 .mi[data-highlighted] { background: var(--surface-hover); }
 .mi[aria-checked="true"]::after { content: ""; position: absolute; inset-inline-end: calc(var(--c-row-inset) + (var(--icon-md) - var(--c-block-drop-dot)) / 2); inline-size: var(--c-block-drop-dot); block-size: var(--c-block-drop-dot); border-radius: var(--radius-pill); background: currentColor; }
-.mi-sep { block-size: 1px; margin: var(--space-1) calc(-1 * var(--menu-pad)); background: var(--border-hairline); }
+.mi-sep { block-size: 1px; margin: var(--space-1) calc(-1 * var(--c-floating-pad)); background: var(--border-hairline); }
 .tip { position: fixed; z-index: var(--layer-toast); max-inline-size: 16rem; padding: 6px 10px; border-radius: var(--radius-sm); background: var(--ink-solid); color: var(--on-ink); font: var(--type-meta); pointer-events: none; opacity: 0; scale: 0.96; transition: opacity var(--dur-menu) var(--ease-out), scale var(--dur-menu) var(--ease-out); }
 .tip[data-on] { opacity: 1; scale: 1; }
 
@@ -402,16 +452,16 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
 }
 
 /* The kit's Segmented control (DESIGN.md, Segmented controls and tabs): a recess-deep groove holding a lifted
-   thumb that glides with position and size together. Its 8px thumb stands 2px in a 10px groove (The Concentric
-   Rule); segments are 30px, label weight at line-height 1, muted until chosen; a press tints, never scales.
+   thumb (--surface-lift) that glides with position and size together over --dur-pop on --ease-in-out. Its 7px
+   thumb (--radius-well) stands 3px (--c-segmented-pad) in a 10px groove (The Concentric Rule); segments are 30px, label weight at line-height 1, muted until chosen; a press tints, never scales.
    Used by the components' tabs and by Original | Edited. */
-.t-tabs { position: relative; display: inline-flex; align-items: center; padding: var(--space-row); border-radius: var(--radius-md); background: var(--surface-recess-deep); min-inline-size: 0; overflow-x: auto; scrollbar-width: none; flex: 0 1 auto; }
-.t-tab { position: relative; z-index: 1; flex: none; appearance: none; border: 0; background: transparent; block-size: var(--c-btn-h-sm); padding: 0 var(--c-row-inset); border-radius: var(--radius-sm); font: var(--type-label); line-height: 1; color: var(--ink-muted); cursor: pointer; transition: color var(--dur-control) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
+.t-tabs { position: relative; display: inline-flex; align-items: center; padding: var(--c-segmented-pad); border-radius: var(--radius-md); background: var(--surface-recess-deep); min-inline-size: 0; overflow-x: auto; scrollbar-width: none; flex: 0 1 auto; }
+.t-tab { position: relative; z-index: 1; flex: none; appearance: none; border: 0; background: transparent; block-size: var(--c-btn-h-sm); padding: 0 var(--c-segment-pad-x); border-radius: var(--radius-well); font: var(--type-label); line-height: 1; color: var(--ink-muted); cursor: pointer; transition: color var(--dur-control) var(--ease-out), background-color var(--dur-control) var(--ease-out); }
 .t-tab[aria-selected="true"] { color: var(--ink-strong); }
 @media (hover: hover) { .t-tab:not([aria-selected="true"]):hover { color: var(--ink-strong); } }
 .t-tab:not([aria-selected="true"]):active { background: var(--press-fill); }
 .t-tab:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
-.t-tabs-pill { position: absolute; z-index: 0; inset-block-start: var(--space-row); inset-inline-start: 0; block-size: var(--c-btn-h-sm); inline-size: 0; border-radius: var(--radius-sm); background: var(--surface-raised); box-shadow: var(--shadow-raised); pointer-events: none; transition: transform var(--dur-pop) var(--ease-in-out), width var(--dur-pop) var(--ease-in-out); }
+.t-tabs-pill { position: absolute; z-index: 0; inset-block-start: var(--c-segmented-pad); inset-inline-start: 0; block-size: var(--c-btn-h-sm); inline-size: 0; border-radius: var(--radius-well); background: var(--surface-lift); box-shadow: var(--shadow-raised); pointer-events: none; transition: transform var(--dur-pop) var(--ease-in-out), width var(--dur-pop) var(--ease-in-out); }
 @media (prefers-reduced-motion: reduce) { .t-tabs-pill { transition: none; } }
 /* A strip that scrolls fades the edge with more to scroll (the house edge fade). */
 .t-tabs[data-fade="end"] { mask-image: linear-gradient(to right, #000 calc(100% - var(--c-edge-fade-len-phone)), transparent); }
@@ -447,7 +497,7 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
   .clip-name p { padding-inline-end: 0; }
   .end-area { display: none; }
   .playhead::after { display: none; }
-  .lane::before, .ruler::before { content: ""; position: absolute; inset-block: 0; inset-inline: var(--end-x, 100%) 0; background: var(--surface-recess-deep); border-inline-start: 1px solid var(--border-row-outline); pointer-events: none; }
+  .lane::before, .ruler::before { content: ""; position: absolute; inset-block: 0; inset-inline: var(--end-x, 100%) 0; background: var(--surface-recess-deep); pointer-events: none; }
   .lane::after { content: ""; position: absolute; z-index: 1; inset-block: 0; inset-inline-start: calc(var(--ph-x, 0px) - 0.5px); inline-size: 1px; background: var(--brand-ink-strong); pointer-events: none; }
 }
 /* Stacked rows open a clip's editor inline, under its row (HIG: no popovers in compact views). */
@@ -458,7 +508,7 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
 html:is([data-input="touch"], [data-input="touch-hover"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .anchor-btn) { position: relative; touch-action: manipulation; }
 html:is([data-input="touch"], [data-input="touch-hover"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .anchor-btn)::before { content: ""; position: absolute; inset-block: min(0px, (100% - var(--c-touch-floor)) / 2); inset-inline: min(0px, (100% - var(--c-touch-floor)) / 2); }
 html:is([data-input="touch"], [data-input="touch-hover"]) .zoom { gap: calc(var(--c-touch-floor) - var(--c-btn-h-xs)); }
-html:is([data-input="touch"], [data-input="touch-hover"]) .transport { gap: calc(var(--c-touch-floor) - var(--c-bar-item)); }
+html:is([data-input="touch"], [data-input="touch-hover"]) .transport { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
 html:is([data-input="touch"], [data-input="touch-hover"]) :is(.node, .var) { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 /* Native scroll; a pinch is the graph's own zoom. */
 html:is([data-input="touch"], [data-input="touch-hover"]) .graph { touch-action: pan-x pan-y; cursor: auto; }
@@ -483,7 +533,8 @@ html:not([data-layout="desk"]) .tools[data-face="graph"] > .dock,
 html:not([data-layout="desk"]) .tools[data-face="move"] > .panel { display: none; }
 html:not([data-layout="desk"]) :is(.sash, .edge-pill-w, .edge-pill-h, .edge-pill-d, .corner-l, #hide) { display: none; }
 html:not([data-layout="desk"]) .panel { padding-block-start: 0; }
-html:not([data-layout="desk"]) .graph { flex: 1 1 auto; block-size: auto; }
+html:not([data-layout="desk"]) :is(.graphs, .gsec[data-current], .graph) { flex: 1 1 auto; }
+html:not([data-layout="desk"]) .graph { block-size: auto; }
 html:not([data-layout="desk"]) .dock { padding-block-start: 0; }
 
 /* The drawer: the house bottom drawer, three stops (head, peek, full). The page takes the room above it. */
