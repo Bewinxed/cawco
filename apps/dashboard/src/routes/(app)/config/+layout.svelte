@@ -40,6 +40,8 @@
       heard: (frame) => store.heardFetch(frame),
       dropped: () => {
         dropped = true;
+        // Its end would come on the socket that dropped.
+        store.checkingUpdates = false;
       },
     });
   });

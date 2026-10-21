@@ -29,6 +29,7 @@ import type {
   FleetReportFrame,
   FleetSkillMeta,
   FleetSyncReport,
+  FleetVersioned,
   FleetWatchNotice,
   FleetWatchSettings,
   FramePayload,
@@ -520,6 +521,7 @@ import type {
   ProjectRow,
   PublicInstanceRow,
   SentMessageRow,
+  SourceNote,
   WorkItemRow,
   WorkspaceRow,
 } from "./db";
@@ -581,6 +583,7 @@ import {
 import { type FetchNews, heardFetch } from "./fleet-fetches";
 import { FleetMcp } from "./fleet-mcp";
 import { FleetMcpChanges, type RidingChanges } from "./fleet-mcp-changes";
+import { refreshOf, skillVersion } from "./fleet-versions";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { accountForecasts, carrySequence } from "./forecast";
 import { createForgePosts } from "./forge-posts";
@@ -682,6 +685,7 @@ import { createPlans, planRoutes } from "./plans";
 import {
   isHubDirectory,
   pluginMarketplace,
+  type ResolvedPlugin,
   readMarketplace,
   resolveMarketplacePlugins,
 } from "./plugins";
@@ -898,6 +902,8 @@ function searchMiss(answer: Bounded<ControlResult>): string {
  * delays when a new terminal session becomes findable by name.
  */
 const STORED_LISTING_MS = 15_000;
+/** How often the hub reads every skill's and plugin's source for an update. */
+const UPDATE_CHECK_MS = 6 * 60 * 60_000;
 
 /** A busy probe is polled in a loop before a restart, so it answers fast or not at all. */
 const BUSY_TIMEOUT_MS = 5000;
@@ -17934,13 +17940,11 @@ export const createServer = (
    * So the bytes are resolved here and stored, and sync carries them. What
    * cannot be resolved keeps its sentence on the row and is left to the old
    * path, which is the only one that still needs a machine to reach github.
-   * Answers whether any row came to files, which is news for the machines.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: groups ids by marketplace, resolves each group, and stores every outcome (resolved or errored) in one place; splitting it would scatter the per-marketplace fallback this depends on.
-  const resolvePlugins = async (ids: readonly string[]): Promise<boolean> => {
-    let carried = false;
+  const resolvePlugins = async (ids: readonly string[]): Promise<void> => {
     if (ids.length === 0) {
-      return carried;
+      return;
     }
     const sources = new Map(
       db.fleetConfig().marketplaces.map(({ name, source }) => [name, source])
@@ -17982,12 +17986,11 @@ export const createServer = (
             hash: plugin.hash,
             bytes: plugin.bytes,
             files: plugin.files,
+            version: plugin.version,
           });
-          carried = true;
         }
       }
     }
-    return carried;
   };
 
   const fanOutFleet = (): void => {
@@ -18011,6 +18014,11 @@ export const createServer = (
    * fetched joins the fetch under way.
    */
   const fetches = new Map<string, Promise<unknown>>();
+  /**
+   * What a skill fetch came to for the machines: the fleet's copy changed
+   * (they were told), stayed as it was, or the fetch failed.
+   */
+  type SkillFetch = "changed" | "same" | "failed";
   /** What an ambiguous source's last fetch could have meant, by skill name. */
   const skillChoices = new Map<string, string[]>();
 
@@ -18057,23 +18065,67 @@ export const createServer = (
   };
 
   /**
-   * Fetches a skill's source at the hub and stores what came of it, announced
-   * as it starts and as it lands. Resolves once it has landed; never rejects.
+   * Stores what a fetch of a skill or plugin came to: whether its source
+   * moved on, held what the fleet has, or failed (`lastRefresh`, only for a
+   * row that had files from that same source), and, when it fetched, what
+   * the source holds now, so a refresh also answers the update check.
+   * Answers whether the fleet's copy changed, the only news for the machines.
    */
-  const fetchSkill = (name: string, source: string): Promise<unknown> => {
+  const noteFetch = (
+    row: { skill: string } | { plugin: string },
+    before: FleetVersioned & { hash?: string; source?: string },
+    after: FleetVersioned & { hash?: string; source?: string },
+    error: string | undefined
+  ): boolean => {
+    const at = Date.now();
+    const lastRefresh =
+      before.source === after.source
+        ? refreshOf(before, after, error, at)
+        : undefined;
+    db.noteSource(row, {
+      lastRefresh: lastRefresh ?? null,
+      ...(error === undefined
+        ? { checked: { at, hash: after.hash, version: after.version } }
+        : {}),
+    });
+    const what = "skill" in row ? `skill ${row.skill}` : `plugin ${row.plugin}`;
+    console.log(
+      `[hub] ${what}: ${lastRefresh?.outcome ?? "fetched"}${error === undefined ? "" : ` (${error})`}`
+    );
+    return after.hash !== before.hash;
+  };
+
+  /** A fetch changed the fleet's copy of `what`: every machine is told. */
+  const fanOutFetched = (what: string): void => {
+    console.log(
+      `[hub] ${what}: the fleet's copy changed; telling the machines`
+    );
+    fanOutFleet();
+  };
+
+  /**
+   * Fetches a skill's source at the hub and stores what came of it, announced
+   * as it starts and as it lands. The machines are told only when the fleet's
+   * copy changed. Resolves once it has landed with what came of it (absent
+   * when the row went meanwhile); never rejects.
+   */
+  const fetchSkill = (
+    name: string,
+    source: string
+  ): Promise<SkillFetch | undefined> => {
     const key = `skill:${name}`;
     const running = fetches.get(key);
     if (running !== undefined) {
-      return running;
+      return running as Promise<SkillFetch | undefined>;
     }
     skillChoices.delete(name);
-    const work = (async () => {
+    const work = (async (): Promise<SkillFetch | undefined> => {
       const resolved = await resolveSkill(source);
       const stored = db.listSkills().find((skill) => skill.name === name);
       if (!stored) {
         return;
       }
-      db.putSkill({
+      const after = db.putSkill({
         name,
         source,
         enabled: stored.enabled,
@@ -18090,12 +18142,19 @@ export const createServer = (
       } else {
         skillChoices.delete(name);
       }
-      // Nothing on any machine changed unless there are files to change it with.
-      if (!("error" in resolved)) {
-        fanOutFleet();
+      const error = "error" in resolved ? resolved.error : undefined;
+      const changed = noteFetch({ skill: name }, stored, after, error);
+      if (error !== undefined) {
+        return "failed";
       }
+      // Nothing on any machine changed unless the fleet's copy did.
+      if (changed) {
+        fanOutFetched(`skill ${name}`);
+        return "changed";
+      }
+      return "same";
     })()
-      .catch((error: unknown) => {
+      .catch((error: unknown): undefined => {
         console.warn(
           `[hub] skill ${name}: fetch from ${source} failed: ${error instanceof Error ? error.message : String(error)}`
         );
@@ -18111,7 +18170,9 @@ export const createServer = (
 
   /**
    * Fetches plugins at the hub, as {@link fetchSkill} does a skill; resolves
-   * with whether any came to files, which is news for the machines.
+   * with whether any fleet copy changed, which is news for the machines.
+   * Each row that had files records what its fetch came to, and each that
+   * came to files what its source holds now.
    */
   const fetchPlugins = async (ids: readonly string[]): Promise<boolean> => {
     const fresh = ids.filter((id) => !fetches.has(`plugin:${id}`));
@@ -18129,23 +18190,41 @@ export const createServer = (
             }
       );
     };
-    const work = resolvePlugins(fresh).catch((error: unknown) => {
-      console.warn(
-        `[hub] plugins ${fresh.join(", ")}: fetch failed: ${error instanceof Error ? error.message : String(error)}`
-      );
-      return false;
-    });
+    const before = new Map(
+      db
+        .listPlugins()
+        .filter((plugin) => fresh.includes(plugin.id))
+        .map((plugin) => [plugin.id, plugin])
+    );
+    const work = resolvePlugins(fresh)
+      .then(() =>
+        db
+          .listPlugins()
+          .flatMap((after) => {
+            const was = before.get(after.id);
+            return was
+              ? [noteFetch({ plugin: after.id }, was, after, after.error)]
+              : [];
+          })
+          .includes(true)
+      )
+      .catch((error: unknown) => {
+        console.warn(
+          `[hub] plugins ${fresh.join(", ")}: fetch failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+        return false;
+      });
     for (const id of fresh) {
       fetches.set(`plugin:${id}`, work);
       announce(id);
     }
-    const carried = await work;
+    const changed = await work;
     for (const id of fresh) {
       fetches.delete(`plugin:${id}`);
       announce(id);
     }
     await Promise.all(joined);
-    return carried;
+    return changed;
   };
 
   /** Marketplace sources being read at the hub, by source. */
@@ -18308,14 +18387,166 @@ export const createServer = (
       fanOutFleet();
     }
   };
+  /** The update check under way, if one is. */
+  let checking: Promise<void> | undefined;
+
+  /** What one read of a source found, as a row's `checked` note keeps it. */
+  const checkedOf = (
+    read: { error: string } | { hash: string; version?: string }
+  ): NonNullable<SourceNote["checked"]> =>
+    "error" in read
+      ? { at: Date.now(), error: read.error }
+      : { at: Date.now(), hash: read.hash, version: read.version };
+
+  /** {@link checkSources}' skills: one source at a time. */
+  const checkSkillSources = async (): Promise<void> => {
+    for (const row of db.listSkills()) {
+      if (
+        row.source.startsWith("machine:") ||
+        fetches.has(`skill:${row.name}`)
+      ) {
+        continue;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one source at a time, so GitHub is not hit in a burst
+      const resolved = await resolveSkill(row.source);
+      if (lifetime.closed()) {
+        return;
+      }
+      db.noteSource(
+        { skill: row.name },
+        {
+          checked: checkedOf(
+            "error" in resolved
+              ? resolved
+              : { hash: resolved.hash, version: skillVersion(resolved.files) }
+          ),
+        }
+      );
+      announceSkill(row.name, row.source);
+    }
+  };
+
+  /** The fleet's plugins not being fetched now, by the marketplace each comes from. */
+  const pluginsByMarketplace = (): Map<string, string[]> => {
+    const grouped = new Map<string, string[]>();
+    for (const { id } of db.listPlugins()) {
+      if (!fetches.has(`plugin:${id}`)) {
+        const marketplace = id.split("@")[1] ?? "";
+        grouped.set(marketplace, [...(grouped.get(marketplace) ?? []), id]);
+      }
+    }
+    return grouped;
+  };
+
+  /** What `marketplace`'s source holds now for the plugins named `names`. */
+  const readPluginSource = (
+    marketplace: string,
+    names: string[]
+  ): Promise<ResolvedPlugin[]> => {
+    const source = db
+      .fleetConfig()
+      .marketplaces.find(({ name }) => name === marketplace)?.source;
+    return source
+      ? resolveMarketplacePlugins(marketplace, source, names)
+      : Promise.resolve(
+          names.map((name) => ({
+            name,
+            error: `no marketplace called ${marketplace} in this fleet`,
+          }))
+        );
+  };
+
+  /** {@link checkSources}' plugins: one marketplace, every plugin of it, at a time. */
+  const checkPluginSources = async (): Promise<void> => {
+    for (const [marketplace, ids] of pluginsByMarketplace()) {
+      const names = ids.map((id) => id.split("@")[0] ?? id);
+      // biome-ignore lint/performance/noAwaitInLoops: one source at a time, so GitHub is not hit in a burst
+      const found = await readPluginSource(marketplace, names);
+      if (lifetime.closed()) {
+        return;
+      }
+      for (const plugin of found) {
+        const id = `${plugin.name}@${marketplace}`;
+        db.noteSource({ plugin: id }, { checked: checkedOf(plugin) });
+        const row = db.listPlugins().find((entry) => entry.id === id);
+        if (row) {
+          announceFetch({ plugin: pluginRow(row) });
+        }
+      }
+    }
+  };
+
+  /**
+   * Reads every skill's and plugin's source for what it holds now, without
+   * storing its files or telling the machines, and records on each row the
+   * content hash and version it found, or why it could not read it
+   * (FleetVersioned): a row whose source holds other content than the
+   * fleet's copy has an update available. One source at a time, so a fleet
+   * of GitHub sources is not a burst against its rate limit; a plugin
+   * marketplace is one source for every plugin of it. An adopted skill's
+   * source is a machine, which has no upstream to be newer. A row being
+   * fetched is left to that fetch, which records what its source holds
+   * itself. A second ask while one runs joins it.
+   */
+  const checkSources = (): Promise<void> => {
+    if (checking !== undefined) {
+      return checking;
+    }
+    announceFetch({ check: { fetching: true } });
+    checking = checkSkillSources()
+      .then(checkPluginSources)
+      .then(() => {
+        const due = [...db.listSkills(), ...db.listPlugins()].filter(
+          (row) => row.updateAvailable
+        ).length;
+        console.log(
+          `[hub] update check: ${due === 0 ? "every source holds what the fleet has" : `${due} with an update available`}`
+        );
+      })
+      .catch((error: unknown) => {
+        console.warn(
+          `[hub] update check failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      })
+      .finally(() => {
+        checking = undefined;
+        if (!lifetime.closed()) {
+          announceFetch({ check: { fetching: false } });
+        }
+      });
+    return checking;
+  };
+
+  /**
+   * Whether a row's source has gone a whole check interval unread, so a hub
+   * that restarts often still reads each source once per interval, not once
+   * per start.
+   */
+  const checkDue = (): boolean =>
+    [
+      ...db.listSkills().filter((row) => !row.source.startsWith("machine:")),
+      ...db.listPlugins(),
+    ].some(
+      (row) =>
+        row.checkedAt === undefined ||
+        Date.now() - row.checkedAt >= UPDATE_CHECK_MS
+    );
+
+  db.versionStoredOnce();
   // Named first, so a plugin re-resolved below is looked up under its row's
-  // current name.
+  // current name. An update check follows when one is due, then one every
+  // six hours.
   offBoot.push(() =>
     detach(
-      nameMarketplacesByManifest().then(reresolveFailed),
-      "fleet marketplace names and source re-resolve"
+      nameMarketplacesByManifest()
+        .then(reresolveFailed)
+        .then(() => (checkDue() ? checkSources() : undefined)),
+      "fleet marketplace names, source re-resolve and update check"
     )
   );
+  lifetime.every(UPDATE_CHECK_MS, () => {
+    detach(checkSources(), "update check");
+  });
 
   /** Each place's path by its id, for a folded hook report to say which place a copy failed in. */
   const placePathById = (): ((placeId: string) => string | undefined) => {
@@ -26833,8 +27064,13 @@ export const createServer = (
         if (!row) {
           return status(404, `no plugin ${params.id} in this fleet`);
         }
+        // The machines are told only when the fleet's copy changed.
         detach(
-          fetchPlugins([params.id]).then(() => fanOutFleet()),
+          fetchPlugins([params.id]).then((changed) => {
+            if (changed) {
+              fanOutFetched(`plugin ${params.id}`);
+            }
+          }),
           "plugin refresh"
         );
         return pluginRow(row);
@@ -26941,7 +27177,16 @@ export const createServer = (
             enabled: body.enabled,
             projectId: body.projectId,
           });
-          detach(fetchSkill(params.name, body.source), "skill fetch");
+          // A fetch that found the files the fleet has tells the machines
+          // here instead: the row's switch or placement may have moved.
+          detach(
+            fetchSkill(params.name, body.source).then((fetched) => {
+              if (fetched === "same") {
+                fanOutFleet();
+              }
+            }),
+            "skill fetch"
+          );
           const staged = db
             .listSkills()
             .find((entry) => entry.name === params.name);
@@ -26973,6 +27218,14 @@ export const createServer = (
           return skillRow(row);
         }
       )
+      // Reads every skill's and plugin's source for what it holds now, nothing
+      // stored and no machine told (`checkSources`). Answers at once,
+      // `fetching`; each row it reads is a `fleet.fetch` frame, and so is its
+      // end (`check`).
+      .post("/api/fleet/updates/check", () => {
+        detach(checkSources(), "update check");
+        return { fetching: true };
+      })
       // The same source, fetched again — for a skill whose repo has moved on.
       // Answers at once, the row marked `fetching`, as the PUT does.
       .post("/api/fleet/skills/:name/refresh", async ({ params, status }) => {
@@ -27024,10 +27277,13 @@ export const createServer = (
             ),
             files,
           });
-          if (skill.hash !== stored.hash) {
-            fanOutFleet();
+          if (noteFetch({ skill: stored.name }, stored, skill, undefined)) {
+            fanOutFetched(`skill ${stored.name}`);
           }
-          return skill;
+          announceSkill(stored.name, stored.source);
+          return skillRow(
+            db.listSkills().find((row) => row.name === stored.name) ?? skill
+          );
         }
 
         detach(fetchSkill(stored.name, stored.source), "skill refresh");
@@ -27077,8 +27333,13 @@ export const createServer = (
               bytes: version.bytes,
               files: version.files,
             });
+            // A restore is no fetch: what the last one came to no longer
+            // says what the row holds.
+            db.noteSource({ skill: skill.name }, { lastRefresh: null });
             fanOutFleet();
-            return skill;
+            return skillRow(
+              db.listSkills().find((row) => row.name === skill.name) ?? skill
+            );
           } catch (error) {
             return status(
               400,

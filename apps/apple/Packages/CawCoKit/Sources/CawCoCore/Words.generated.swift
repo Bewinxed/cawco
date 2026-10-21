@@ -2610,6 +2610,35 @@ public enum Words {
 
         public static let noBytes = "No bytes resolved yet"
 
+        /// A row's version against what its source holds now.
+        public static let checkForUpdates = "Check for updates"
+
+        public static let checking = "Checking…"
+
+        public static func updateAvailable(from: String, to: String) -> String {
+            "Update available · \(from) → \(to)"
+        }
+
+        public static func fetchUpdate(to: String) -> String {
+            "Fetch \(to)"
+        }
+
+        public static func updated(from: String, to: String) -> String {
+            "Updated \(from) → \(to)"
+        }
+
+        public static func alreadyLatest(version: String) -> String {
+            "Already on latest (\(version))"
+        }
+
+        public static func updateFailed(why: String) -> String {
+            "Couldn't update: \(why)"
+        }
+
+        public static func checkFailed(why: String) -> String {
+            "Couldn't check for updates: \(why)"
+        }
+
         /// A marketplace's listing.
         public static let browse = "Browse"
 

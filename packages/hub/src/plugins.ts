@@ -30,6 +30,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FleetPluginPayload, MarketplacePluginInfo } from "@cawco/core";
+import { pluginVersion } from "./fleet-versions";
 import { downloadRepo, get, readTree, unpack } from "./skills";
 
 /** `owner/repo` as a marketplace source names it, with an optional `@ref`. */
@@ -328,9 +329,12 @@ export const readMarketplace = (
     });
   });
 
-/** One resolved plugin, or the sentence saying why it is not. */
+/**
+ * One resolved plugin, with the version it declares (fleet-versions.ts
+ * `pluginVersion`), or the sentence saying why it is not.
+ */
 export type ResolvedPlugin =
-  FleetPluginPayload | { name: string; error: string };
+  (FleetPluginPayload & { version?: string }) | { name: string; error: string };
 
 /**
  * Every wanted plugin of one marketplace, resolved to files.
@@ -364,7 +368,15 @@ export const resolveMarketplacePlugins = async (
           // biome-ignore lint/performance/noAwaitInLoops: plugins of one marketplace are fetched one at a time to stay a good citizen of the source (github/CDN) and to keep each plugin's error attributable to its own name.
           const dir = await pluginRoot(entry, root, work);
           const { files, hash, bytes } = await readTree(dir);
-          resolved.push({ name, marketplace, hash, bytes, files });
+          const version = pluginVersion(files, entry.version);
+          resolved.push({
+            name,
+            marketplace,
+            hash,
+            bytes,
+            files,
+            ...(version ? { version } : {}),
+          });
         } catch (error) {
           resolved.push({
             name,

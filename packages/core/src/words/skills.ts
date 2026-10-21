@@ -35,6 +35,16 @@ export const skillsWords = {
   theFleet: "the fleet",
   unlink: "Unlink",
   noBytes: "No bytes resolved yet",
+  /** A row's version against what its source holds now. */
+  checkForUpdates: "Check for updates",
+  checking: "Checking…",
+  updateAvailable: (from: string, to: string) =>
+    `Update available · ${from} → ${to}`,
+  fetchUpdate: (to: string) => `Fetch ${to}`,
+  updated: (from: string, to: string) => `Updated ${from} → ${to}`,
+  alreadyLatest: (version: string) => `Already on latest (${version})`,
+  updateFailed: (why: string) => `Couldn't update: ${why}`,
+  checkFailed: (why: string) => `Couldn't check for updates: ${why}`,
   /** A marketplace's listing. */
   browse: "Browse",
   hide: "Hide",

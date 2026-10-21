@@ -1933,6 +1933,13 @@
       "when": 1792532550180,
       "tag": "0283_preview_passes",
       "breakpoints": true
+    },
+    {
+      "idx": 284,
+      "version": "6",
+      "when": 1792569508319,
+      "tag": "0284_skill_versions",
+      "breakpoints": true
     }
   ]
 }

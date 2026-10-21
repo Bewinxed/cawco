@@ -3,6 +3,7 @@
     type FleetMarketplace,
     type FleetPlugin,
     type FleetSkillMeta,
+    type FleetVersioned,
     type MarketplacePluginInfo,
     machineLabel,
     skillsWords as words,
@@ -23,10 +24,13 @@
   import RowFaults from "#lib/cawco/config/RowFaults.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
-  import SectionRow from "#lib/cawco/config/SectionRow.svelte";
+  import SectionRow, {
+    type RowNote,
+  } from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
   import {
+    checkForUpdates,
     formatBytes,
     installPlugin,
     marketplaceCatalog,
@@ -36,6 +40,8 @@
     skillHistory,
     switchPlugin,
     switchSkill,
+    versionLabel,
+    versionPair,
   } from "#lib/cawco/fleet.js";
   import { hubFaults } from "#lib/cawco/fleet-faults.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
@@ -95,11 +101,63 @@
     void store.fleet.load();
   };
 
-  const sized = (row: { bytes?: number; hash?: string }) =>
+  /** A row's version (else its short hash) and size, for its meta line. */
+  const sized = (row: { bytes?: number; hash?: string; version?: string }) =>
     [
+      versionLabel(row.version, row.hash) || null,
       row.bytes === undefined ? null : formatBytes(row.bytes),
-      row.hash ? row.hash.slice(0, 7) : null,
     ].filter((part): part is string => part !== null);
+
+  /**
+   * What a row's last fetch came to, said under it until the next update
+   * check reads its source again: "Updated 4.6.0 → 4.7.0", "Already on
+   * latest (4.7.0)", or why it failed where no hub fault under the row says
+   * so already. Else why the last check could not read its source.
+   */
+  function outcomeOf(
+    row: FleetVersioned & { fetching?: boolean },
+    faulted: boolean
+  ): RowNote | undefined {
+    if (row.fetching) {
+      return;
+    }
+    const last = row.lastRefresh;
+    if (last && (row.checkedAt === undefined || last.at >= row.checkedAt)) {
+      const from = { version: last.fromVersion, hash: last.fromHash };
+      const to = { version: last.toVersion, hash: last.toHash };
+      switch (last.outcome) {
+        case "updated":
+          return {
+            tone: "done",
+            text: words.updated(...versionPair(from, to)),
+          };
+        case "unchanged":
+          return {
+            tone: "done",
+            text: words.alreadyLatest(versionLabel(to.version, to.hash)),
+          };
+        case "failed":
+          return faulted
+            ? undefined
+            : {
+                tone: "fail",
+                text: words.updateFailed(last.error ?? words.saidNothing),
+              };
+        default:
+          return;
+      }
+    }
+    return row.checkError
+      ? { tone: "fail", text: words.checkFailed(row.checkError) }
+      : undefined;
+  }
+
+  /** The row's copy against what its source holds now, for its update chip. */
+  const updatePair = (row: FleetVersioned & { hash?: string }) =>
+    versionPair(
+      { version: row.version, hash: row.hash },
+      { version: row.latestVersion, hash: row.latestHash }
+    );
 
   function landedSkill(row: FleetSkillMeta) {
     if (fleet) {
@@ -170,6 +228,26 @@
       refusedOn(row.id, err, () => refetchPlugin(row));
     } finally {
       delete busy[row.id];
+    }
+  }
+
+  /** Why Check for updates did not run: said under it. */
+  let checkProblem = $state<string | null>(null);
+  let askedCheck = $state(false);
+
+  /**
+   * Has the hub read every source for what it holds now; each row it reads
+   * lands on its own, its chip appearing or going.
+   */
+  async function checkUpdates() {
+    askedCheck = true;
+    checkProblem = null;
+    try {
+      await checkForUpdates();
+    } catch (err) {
+      checkProblem = message(err);
+    } finally {
+      askedCheck = false;
     }
   }
 
@@ -381,6 +459,21 @@
       />
     {/if}
     <RowFault again={refetchAll} reason={refetchProblem} />
+    {#if skills.length + plugins.length > 0}
+      <Button
+        disabled={hubDown() !== null}
+        failed={checkProblem !== null}
+        icon={IconRefresh}
+        label={words.checkForUpdates}
+        onclick={checkUpdates}
+        pending={askedCheck || store.checkingUpdates}
+        pendingLabel={words.checking}
+        size="sm"
+        title={hubDown() ?? undefined}
+        variant="outline"
+      />
+      <RowFault again={checkUpdates} reason={checkProblem} />
+    {/if}
     {@render linkMarketplace()}
   {/snippet}
 
@@ -437,6 +530,12 @@
               ...(row.fetching ? [FETCHING] : sized(row)),
             ].join(" · ")}
             name={row.name}
+            note={outcomeOf(
+              row,
+              hubBroken.some(
+                (fault) => fault.scope === "skills" && fault.key === row.name
+              )
+            )}
             ontoggle={(next) => toggleSkill(row, next)}
             toggling={busy[row.name] === true}
           >
@@ -449,6 +548,20 @@
               />
             {/snippet}
             {#snippet below()}
+              {#if row.updateAvailable}
+                {@const [from, to] = updatePair(row)}
+                <Button
+                  class="self-start"
+                  icon={IconRefresh}
+                  label={words.updateAvailable(from, to)}
+                  onclick={() => refetchSkill(row)}
+                  pending={busy[row.name] === true || row.fetching === true}
+                  pendingLabel={FETCHING}
+                  size="xs"
+                  title={words.fetchUpdate(to)}
+                  variant="secondary"
+                />
+              {/if}
               <RowFault
                 again={rowFaults[row.name]?.again}
                 reason={rowFaults[row.name]?.reason}
@@ -707,6 +820,12 @@
               : sized(row).join(" · ") || words.noBytes}
             mono
             name={row.id}
+            note={outcomeOf(
+              row,
+              hubBroken.some(
+                (fault) => fault.scope === "plugins" && fault.key === row.id
+              )
+            )}
             ontoggle={(next) => togglePlugin(row.id, next)}
             toggling={busy[row.id] === true}
           >
@@ -719,6 +838,20 @@
               />
             {/snippet}
             {#snippet below()}
+              {#if row.updateAvailable}
+                {@const [from, to] = updatePair(row)}
+                <Button
+                  class="self-start"
+                  icon={IconRefresh}
+                  label={words.updateAvailable(from, to)}
+                  onclick={() => refetchPlugin(row)}
+                  pending={busy[row.id] === true || row.fetching === true}
+                  pendingLabel={FETCHING}
+                  size="xs"
+                  title={words.fetchUpdate(to)}
+                  variant="secondary"
+                />
+              {/if}
               <RowFault
                 again={rowFaults[row.id]?.again}
                 reason={rowFaults[row.id]?.reason}

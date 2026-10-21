@@ -167,7 +167,7 @@ export interface FleetMarketplace extends FleetPlacement {
  * machine's `failed` in {@link FleetSyncReport.plugins}: one says the bytes
  * were never fetched, the other says a machine would not take them.
  */
-export interface FleetPlugin extends FleetPlacement {
+export interface FleetPlugin extends FleetPlacement, FleetVersioned {
   /** Decoded size of the resolved files, for the dashboard to show. */
   bytes?: number;
   /** Disabled rows are uninstalled from the machines, not merely disabled. */
@@ -182,6 +182,52 @@ export interface FleetPlugin extends FleetPlacement {
   /** Content hash of the resolved files; absent until a resolve succeeds. */
   hash?: string;
   id: string;
+}
+
+/**
+ * What a fetch of a row that already had files came to: its source moved on
+ * (`updated`), held what the fleet already has (`unchanged`), or could not be
+ * fetched (`failed`, the machines keeping the copy they had). The versions
+ * are the ones each copy declares, when it declares one; the hashes are the
+ * copies' content hashes.
+ */
+export interface FleetRefresh {
+  /** When it landed, epoch ms. */
+  at: number;
+  /** Why it failed. */
+  error?: string;
+  fromHash?: string;
+  fromVersion?: string;
+  outcome: "updated" | "unchanged" | "failed";
+  toHash?: string;
+  toVersion?: string;
+}
+
+/**
+ * A skill's or plugin's version, and what its source holds now. The hub
+ * reads the source on a schedule and on demand without storing its files or
+ * telling the machines (`latestHash`, `latestVersion`, `checkedAt`);
+ * `updateAvailable` is the source holding other content than the fleet's.
+ */
+export interface FleetVersioned {
+  /** Why the last read of the source for what it holds failed. */
+  checkError?: string;
+  /** When the source was last read for what it holds, epoch ms. */
+  checkedAt?: number;
+  /** What the last fetch of a row that had files came to. */
+  lastRefresh?: FleetRefresh;
+  /** The content hash the source held when last read. */
+  latestHash?: string;
+  /** The version the source's copy declared when last read. */
+  latestVersion?: string;
+  /** The source holds other content than the fleet's copy. */
+  updateAvailable?: boolean;
+  /**
+   * The version the fleet's copy declares: a skill's SKILL.md front matter
+   * `version`, a plugin's `plugin.json` `version` (else its marketplace
+   * entry's).
+   */
+  version?: string;
 }
 
 /** One file of a resolved skill; `path` is relative to the skill's directory. */
@@ -212,7 +258,7 @@ export interface SkillFile {
  *   content — their CLIs fetch from GitHub at runtime).
  * - a plain URL to a `SKILL.md` (single-file skill).
  */
-export interface FleetSkillMeta extends FleetPlacement {
+export interface FleetSkillMeta extends FleetPlacement, FleetVersioned {
   /** Decoded size of the resolved files, for the dashboard to show. */
   bytes?: number;
   /**

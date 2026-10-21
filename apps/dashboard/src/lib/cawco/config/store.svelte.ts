@@ -167,13 +167,23 @@ export class ConfigStore {
   }
 
   /**
+   * The hub is reading every skill's and plugin's source for an update, as
+   * the last `fleet.fetch` frame said: asked here, in another tab, or on its
+   * own schedule.
+   */
+  checkingUpdates = $state(false);
+
+  /**
    * A `fleet.fetch` frame into the rows: a fetch began or landed, here or
    * in another tab. A row removed meanwhile leaves the list; a marketplace
    * a link landed joins its list.
    */
   heardFetch(frame: FleetFetchFrame): void {
     const fleet = this.fleet.value;
-    const { skill, plugin, removed, link } = frame;
+    const { skill, plugin, removed, link, check } = frame;
+    if (check) {
+      this.checkingUpdates = check.fetching;
+    }
     if (link?.marketplace && fleet) {
       const linked = link.marketplace;
       upsert(

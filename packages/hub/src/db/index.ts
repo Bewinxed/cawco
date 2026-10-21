@@ -16,9 +16,11 @@ import type {
   FleetMcpConfig,
   FleetMcpServer,
   FleetPlugin,
+  FleetRefresh,
   FleetScope,
   FleetSkillMeta,
   FleetSyncReport,
+  FleetVersioned,
   FleetWatchNotice,
   HarnessKind,
   HarnessReport,
@@ -97,6 +99,7 @@ import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Context, Effect, Layer } from "effect";
 import { bundledSkills, starterSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
+import { pluginVersion, skillVersion } from "../fleet-versions";
 import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
 import type { MoveState } from "../moves";
@@ -303,6 +306,16 @@ export type PublicInstanceRow = Omit<
   | "turnOpenAt"
 >;
 /** A line its machine said about a session, kept on its row ({@link DbShape.noteMachineLine}). */
+/**
+ * What a fetch of a skill or plugin came to (`lastRefresh`, null to clear
+ * it) and what a read of its source found (`checked`): the content hash and
+ * version it holds, or why it could not be read.
+ */
+export interface SourceNote {
+  checked?: { at: number; hash?: string; version?: string; error?: string };
+  lastRefresh?: FleetRefresh | null;
+}
+
 export interface LimitNote {
   at: number;
   content: string;
@@ -1340,6 +1353,15 @@ export interface DbShape {
     instanceId: string,
     repeat: boolean
   ) => RuleState;
+  /**
+   * What a fetch of a skill or plugin came to, and what its source holds now
+   * (FleetVersioned). `lastRefresh` null clears it; `checked` with an `error`
+   * clears what an earlier read found, so a read that failed marks no update.
+   */
+  readonly noteSource: (
+    row: { skill: string } | { plugin: string },
+    note: SourceNote
+  ) => void;
   /** Notes a comment written under the id its device chose, once committed. */
   readonly noteTaskComment: (said: {
     id: string;
@@ -1681,6 +1703,8 @@ export interface DbShape {
     bytes?: number;
     error?: string;
     files?: SkillFile[];
+    /** What the files declare (fleet-versions.ts `pluginVersion`). */
+    version?: string;
   }) => void;
   /** Upsert by id. The caller mints the id; this never invents one. */
   readonly putRule: (rule: Rule) => Rule;
@@ -2421,6 +2445,11 @@ export interface DbShape {
     machineId?: string;
     groupBy: UsageGroupBy;
   }) => UsageSummary;
+  /**
+   * Once per database (`data_migrations`): each stored skill's and plugin's
+   * declared version, read off the files it already holds.
+   */
+  readonly versionStoredOnce: () => void;
   /** Stored waits, including any that elapsed while the hub was stopped. */
   readonly waitingWorkItems: () => WorkItemRow[];
   /** The fleet-watch lines kept on the session's row, oldest first. */
@@ -2595,6 +2624,75 @@ const skillMeta = (
   ...(row.error ? { error: row.error } : {}),
   ...(row.projectId
     ? { projectId: row.projectId, scope: row.scope ?? "project" }
+    : {}),
+  ...versioned(row),
+});
+
+/** The columns a skill and a plugin row keep their {@link FleetVersioned} in. */
+type VersionColumns = Pick<
+  typeof skills.$inferSelect,
+  | "hash"
+  | "version"
+  | "lastRefresh"
+  | "latestHash"
+  | "latestVersion"
+  | "checkedAt"
+  | "checkError"
+>;
+
+/** A row's version, what its source held when last read, and its last fetch. */
+const versioned = (row: VersionColumns): FleetVersioned => ({
+  ...(row.version ? { version: row.version } : {}),
+  ...(row.lastRefresh ? { lastRefresh: row.lastRefresh } : {}),
+  ...(row.latestHash ? { latestHash: row.latestHash } : {}),
+  ...(row.latestVersion ? { latestVersion: row.latestVersion } : {}),
+  ...(row.checkedAt ? { checkedAt: row.checkedAt.getTime() } : {}),
+  ...(row.checkError ? { checkError: row.checkError } : {}),
+  ...(row.hash && row.latestHash && row.latestHash !== row.hash
+    ? { updateAvailable: true }
+    : {}),
+});
+
+/** A row nothing has fetched or checked yet. */
+const noVersionColumns = {
+  version: null,
+  lastRefresh: null,
+  latestHash: null,
+  latestVersion: null,
+  checkedAt: null,
+  checkError: null,
+} satisfies Omit<VersionColumns, "hash">;
+
+/**
+ * What a skill row keeps about its source (its last fetch, what the source
+ * held when last read) when a write gives it `source`: what it had, when
+ * that is the source it had; else nothing yet.
+ */
+const sourceColumnsOf = (
+  stored: typeof skills.$inferSelect | undefined,
+  source: string
+): Omit<VersionColumns, "hash"> =>
+  stored?.source === source
+    ? {
+        version: stored.version,
+        lastRefresh: stored.lastRefresh,
+        latestHash: stored.latestHash,
+        latestVersion: stored.latestVersion,
+        checkedAt: stored.checkedAt,
+        checkError: stored.checkError,
+      }
+    : noVersionColumns;
+
+/** The columns a {@link SourceNote} writes. */
+const noteColumns = ({ lastRefresh, checked }: SourceNote) => ({
+  ...(lastRefresh === undefined ? {} : { lastRefresh }),
+  ...(checked
+    ? {
+        checkedAt: new Date(checked.at),
+        checkError: checked.error ?? null,
+        latestHash: checked.error ? null : (checked.hash ?? null),
+        latestVersion: checked.error ? null : (checked.version ?? null),
+      }
     : {}),
 });
 
@@ -6314,17 +6412,69 @@ const make = async (path: string): Promise<DbShape> => {
         }
         return moved;
       }),
-    putPluginPayload: ({ id, hash, bytes, error, files }) => {
+    putPluginPayload: ({ id, hash, bytes, error, files, version }) => {
       db.update(plugins)
         .set({
           hash: hash ?? null,
           bytes: bytes ?? null,
           error: error ?? null,
           files: files ?? null,
+          version: version ?? null,
         })
         .where(eq(plugins.id, id))
         .run();
     },
+    noteSource: (row, note) => {
+      const set = noteColumns(note);
+      if (Object.keys(set).length === 0) {
+        return;
+      }
+      if ("skill" in row) {
+        db.update(skills).set(set).where(eq(skills.name, row.skill)).run();
+      } else {
+        db.update(plugins).set(set).where(eq(plugins.id, row.plugin)).run();
+      }
+    },
+    versionStoredOnce: () =>
+      db.transaction((tx) => {
+        const name = "skill_plugin_versions";
+        if (
+          tx
+            .select()
+            .from(dataMigrations)
+            .where(eq(dataMigrations.name, name))
+            .get()
+        ) {
+          return;
+        }
+        for (const row of tx
+          .select({ name: skills.name, files: skills.files })
+          .from(skills)
+          .all()) {
+          const version = skillVersion(row.files);
+          if (version) {
+            tx.update(skills)
+              .set({ version })
+              .where(eq(skills.name, row.name))
+              .run();
+          }
+        }
+        for (const row of tx
+          .select({ id: plugins.id, files: plugins.files })
+          .from(plugins)
+          .all()) {
+          // The marketplace entry's version is not stored; the next fetch
+          // or update check reads it.
+          const version = pluginVersion(row.files, undefined);
+          if (version) {
+            tx.update(plugins)
+              .set({ version })
+              .where(eq(plugins.id, row.id))
+              .run();
+          }
+        }
+        tx.insert(dataMigrations).values({ name, at: new Date() }).run();
+      }),
     unresolvedPlugins: () =>
       db
         .select({ id: plugins.id, hash: plugins.hash })
@@ -6340,20 +6490,27 @@ const make = async (path: string): Promise<DbShape> => {
           hash: plugins.hash,
           bytes: plugins.bytes,
           error: plugins.error,
+          version: plugins.version,
+          lastRefresh: plugins.lastRefresh,
+          latestHash: plugins.latestHash,
+          latestVersion: plugins.latestVersion,
+          checkedAt: plugins.checkedAt,
+          checkError: plugins.checkError,
         })
         .from(plugins)
         .all()
-        .map(({ id, enabled, hash, bytes, error }) => ({
-          id,
-          enabled,
-          ...(hash ? { hash } : {}),
-          ...(bytes === null ? {} : { bytes }),
-          ...(error ? { error } : {}),
+        .map((row) => ({
+          id: row.id,
+          enabled: row.enabled,
+          ...(row.hash ? { hash: row.hash } : {}),
+          ...(row.bytes === null ? {} : { bytes: row.bytes }),
+          ...(row.error ? { error: row.error } : {}),
+          ...versioned(row),
         })),
     putPlugin: ({ id, enabled }) => {
       const plugin: FleetPlugin = { id, enabled: enabled ?? true };
       db.insert(plugins)
-        .values(plugin)
+        .values({ id, enabled: plugin.enabled })
         .onConflictDoUpdate({
           target: plugins.id,
           set: { enabled: plugin.enabled },
@@ -6372,6 +6529,12 @@ const make = async (path: string): Promise<DbShape> => {
           error: skills.error,
           scope: skills.scope,
           projectId: skills.projectId,
+          version: skills.version,
+          lastRefresh: skills.lastRefresh,
+          latestHash: skills.latestHash,
+          latestVersion: skills.latestVersion,
+          checkedAt: skills.checkedAt,
+          checkError: skills.checkError,
         })
         .from(skills)
         .all()
@@ -6423,23 +6586,34 @@ const make = async (path: string): Promise<DbShape> => {
         error: error ?? null,
         files: (keep ? stored.files : files) ?? null,
       };
+      const version = skillVersion(row.files) ?? null;
+      // What a source held and what its last fetch came to are that source's:
+      // a row given another source has read neither from it yet.
+      const carried = sourceColumnsOf(stored, source);
       const placement = placementOf(projectId, stored?.projectId, "project");
       db.insert(skills)
-        .values({ ...row, ...placement })
+        .values({ ...row, version, ...placement })
         .onConflictDoUpdate({
           target: skills.name,
           set: {
+            ...carried,
             source: row.source,
             enabled: row.enabled,
             hash: row.hash,
             bytes: row.bytes,
             error: row.error,
             files: row.files,
+            version,
             ...placement,
           },
         })
         .run();
-      return skillMeta({ ...row, ...placement });
+      return skillMeta({
+        ...carried,
+        ...row,
+        version,
+        ...placement,
+      });
     },
     setSkillEnabled: (name, enabled) => {
       refuseWorkflowSkill(name);
@@ -6475,7 +6649,7 @@ const make = async (path: string): Promise<DbShape> => {
         db.insert(skills)
           .values({ ...row, ...placement })
           .run();
-        return skillMeta({ ...row, ...placement });
+        return skillMeta({ ...noVersionColumns, ...row, ...placement });
       }
       // The source, hash and files stay the last fetch's until this one lands
       // (`putSkill`), so a fetch that fails keeps what the machines serve.
