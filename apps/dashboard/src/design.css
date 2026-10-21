@@ -892,13 +892,25 @@
   }
 }
 
-/* A fold's one row, shut to nothing or open to its content, so the height
-   transitions on grid-template-rows. */
+/* A fold, one recipe everywhere: its track (`grid-rows-shut`, then
+   `grid-rows-open`) shut to nothing or open to its content, so the height
+   transitions on grid-template-rows, and its one item the `fold-item`. */
 @utility grid-rows-shut {
   grid-template-rows: 0fr;
 }
 @utility grid-rows-open {
   grid-template-rows: 1fr;
+}
+/* A fold's one item: it shrinks with the track and clips what it holds,
+   and it is the containing block of whatever inside it stands out of the
+   flow (a field's screen-reader label), so that box is clipped with the rest
+   and never reaches a scroller past the shut fold (the plan view's list
+   scrolled 74px into blank space when the clip was not its containing
+   block). */
+@utility fold-item {
+  position: relative;
+  min-block-size: 0;
+  overflow: hidden;
 }
 /* Words that take the rest of the row beside a part at its own width. */
 @utility grid-cols-fluid-auto {
@@ -920,10 +932,18 @@
 @utility auto-rows-band-phone {
   grid-auto-rows: minmax(max(var(--c-btn-h-sm), 2lh), auto);
 }
-/* A box clipped at its block-start edge only: a slot that cuts what slides
-   in from behind it while its shadow spills past its sides and foot. */
+/* A box clipped at its block-start edge only: a hanging card's wrapper, which
+   cuts what slides in from behind it while its shadow spills past its sides
+   and foot. */
 @utility clip-block-start {
   clip-path: inset(0 -100vw -100vw);
+}
+/* The connection band shut: up behind its fold's top edge by its own height
+   and the air over it (`--band-air`, its block-start margin), so it starts
+   wholly behind the clip and its foot stays on the fold's foot, the page's
+   top, through the whole slide. */
+@utility translate-band-shut {
+  translate: 0 calc(-100% - var(--band-air));
 }
 
 /* The hooks a component reads, set by its host: the Files lists' floors,

@@ -271,18 +271,19 @@
   );
 </script>
 
-<!-- Its slot is a row of the page's column under the bar, clipped at the
-     bar's foot, so the band is uncovered from under the bar and closes back
-     into it while the row opens and shuts under it: a row shut until the
-     band opens, opening from nothing as the band slides down on the band's
-     own clock, so the band's foot and the page's top move as one edge. The
-     bar's foot is the band's top edge: it travels up under the bar, and its
-     shadow still falls on the page. Under the drawer's line (DRAWER_QUERY)
-     a bar floating over a conversation's tabs (the Shell's `peer/top`,
-     `data-floating`) has the band over it instead, with its tabs. -->
+<!-- Its slot is a row of the page's column under the bar, a fold (design.css
+     `grid-rows-shut`, `fold-item`) clipped at the bar's foot, so the band is
+     uncovered from under the bar and closes back into it while the row
+     opens and shuts under it: a row shut until the band opens, opening from
+     nothing as the band slides down on the band's own clock, so the band's
+     foot and the page's top move as one edge. The band slides by its own
+     height and the air over it, so it starts wholly behind the bar's foot.
+     Under the drawer's line (DRAWER_QUERY) a bar floating over a
+     conversation's tabs (the Shell's `peer/top`, `data-floating`) has the
+     band over it instead, with its tabs. -->
 <div
   data-slot="hub-band-slot"
-  class="pointer-events-none relative z-(--layer-band) grid flex-none grid-rows-shut clip-block-start @container/hub-band data-open:grid-rows-open max-desk:peer-data-floating/top:-order-1 motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
+  class="pointer-events-none relative z-(--layer-band) grid flex-none grid-rows-shut @container/hub-band data-open:grid-rows-open max-desk:peer-data-floating/top:-order-1 motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
   data-open={band ? "" : undefined}
 >
   <!-- The live region stands from the first markup, so assistive tech has
@@ -297,7 +298,7 @@
   {#if browser}
     <!-- The row's one item: it shuts to nothing, the band drawn whole inside
          it, held up under the bar. -->
-    <div data-slot="hub-band-row" class="min-h-0">
+    <div data-slot="hub-band-row" class="fold-item">
       <!-- The sentence and its button on one row, the row at least the
            button's height whether a state has one or not, and two lines tall
            where a phone wraps the sentence: every state is one height at a
@@ -307,11 +308,12 @@
            under the drawer's line). -->
       <div
         data-slot="hub-band"
-        class="pointer-events-auto invisible mx-space-3 mt-space-2 grid auto-rows-band grid-cols-fluid-auto items-center gap-x-space-3 rounded-md bg-status-attn-bg px-3 py-2.5 text-size-body font-normal text-status-attn-ink tabular-nums opacity-0 desk:ms-space-7 desk:me-space-6 @max-phone/hub-band:auto-rows-band-phone data-open:visible data-open:opacity-100 tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink tone-live:bg-status-live-bg tone-live:text-status-live-ink motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:-translate-y-full motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
+        class="pointer-events-auto invisible mx-space-3 mt-(--band-air) grid auto-rows-band grid-cols-fluid-auto items-center gap-x-space-3 rounded-md bg-status-attn-bg px-3 py-2.5 text-size-body font-normal text-status-attn-ink tabular-nums opacity-0 desk:ms-space-7 desk:me-space-6 @max-phone/hub-band:auto-rows-band-phone data-open:visible data-open:opacity-100 tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink tone-live:bg-status-live-bg tone-live:text-status-live-ink motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:translate-band-shut motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
         aria-hidden={band ? undefined : "true"}
         data-open={band ? "" : undefined}
         data-tone={tone}
         inert={!band}
+        style:--band-air="var(--space-2)"
         {@attach morph()}
       >
         <!-- The sentence morphs as a paragraph (`wrap`): its countdown ticks

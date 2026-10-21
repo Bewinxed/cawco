@@ -141,17 +141,15 @@
            opening; the chevron flips with it. -->
       <div
         data-slot="fold"
-        class="group grid grid-rows-(--fold-shut) data-open:grid-rows-(--fold-open) motion-safe:transition-[grid-template-rows] motion-safe:duration-(--dur-exit) motion-safe:ease-out motion-safe:data-open:duration-(--dur-panel)"
+        class="group grid grid-rows-shut data-open:grid-rows-open motion-safe:transition-[grid-template-rows] motion-safe:duration-(--dur-exit) motion-safe:ease-out motion-safe:data-open:duration-(--dur-panel)"
         data-open={open || undefined}
         id="moved-done"
         inert={!open}
         ontransitionend={settled}
-        style:--fold-open="1fr"
-        style:--fold-shut="0fr"
       >
         <div
           data-slot="fold-inner"
-          class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open:opacity-100 motion-safe:group-data-open:blur-(--fold-clear) motion-safe:group-data-open:duration-(--dur-panel) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--dur-fade) motion-reduce:ease-out motion-reduce:group-data-open:blur-(--fold-clear) motion-reduce:group-data-open:duration-(--dur-panel)"
+          class="fold-item opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open:opacity-100 motion-safe:group-data-open:blur-(--fold-clear) motion-safe:group-data-open:duration-(--dur-panel) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--dur-fade) motion-reduce:ease-out motion-reduce:group-data-open:blur-(--fold-clear) motion-reduce:group-data-open:duration-(--dur-panel)"
           style:--fold-clear="0"
         >
           <ul data-slot="list" class="m-0 flex list-none flex-col p-0">

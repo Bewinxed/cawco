@@ -198,7 +198,7 @@ interface Read {
     clipTop: number;
     f: number;
     opacity: number;
-    /** The top edge of what follows the band: the bar over the drawer's line, else the page (`#main-content`). */
+    /** The top edge of what follows the band: the bar floating over a phone's tabs, else the page (`#main-content`). */
     pageTop: number;
     translate: string;
   }[];
@@ -256,10 +256,11 @@ async function scrubBand(
             )
         ) as CSSTransition[];
         // What stands under the band's foot: the bar, where the band is
-        // over it (under the drawer's line), else the page.
-        const next = window.matchMedia("(max-width: 899px)").matches
-          ? document.querySelector('header[data-slot="top"]')
-          : document.querySelector("#main-content");
+        // over it (a bar floating over a phone's tabs), else the page.
+        const floating = window.matchMedia("(max-width: 899px)").matches
+          ? document.querySelector('header[data-slot="top"][data-floating]')
+          : null;
+        const next = floating ?? document.querySelector("#main-content");
         for (const run of runs) {
           run.pause();
         }
@@ -464,7 +465,18 @@ const bandCover = (page: Page) =>
         covered.push(`“${text.slice(0, 40)}” at ${line.top.toFixed(1)}`);
       }
     }
-    return { top: b.top, bottom: b.bottom, height: b.height, covered };
+    // The band's fold: the row of the page it opens, the band and the air
+    // over it (DESIGN.md, Alert: "a compact tinted row, never a slab").
+    const fold = band
+      .closest('[data-slot="hub-band-slot"]')
+      ?.getBoundingClientRect();
+    return {
+      top: b.top,
+      bottom: b.bottom,
+      height: b.height,
+      fold: fold ? { top: fold.top, height: fold.height } : null,
+      covered,
+    };
   }, BAND);
 
 /** The band's line boxes: each drawn line's width, for its wrap. */
@@ -662,26 +674,32 @@ async function boardRead(kit: Kit, page: Page, name: string, project: string) {
     !COLON_JOIN.test(board),
     board.replace(/\s+/g, " ").slice(0, 240)
   );
-  // The coral hairline under the bar here is its `--seam` divider, drawn
-  // whatever the hub does, not a hub state's.
+  // The hairline under the bar here is the bar's own, drawn whatever the hub
+  // does, not a hub state's: `border-hairline`, the rule between regions
+  // (DESIGN.md, "Borders are graded. `border-hairline` separates rows and
+  // regions."; the shell's "44px top bar with a 1px hairline at every
+  // width").
   const seam = await page.evaluate(() => {
     const bar = document.querySelector<HTMLElement>('header[data-slot="top"]');
     if (!bar) {
       return null;
     }
     const probe = document.createElement("i");
-    probe.style.borderBottom = "1px solid var(--seam)";
+    probe.style.borderBottom = "1px solid var(--border-hairline)";
     bar.append(probe);
     const want = getComputedStyle(probe).borderBottomColor;
     probe.remove();
-    return { foot: getComputedStyle(bar).borderBottomColor, seam: want };
+    return { foot: getComputedStyle(bar).borderBottomColor, hairline: want };
   });
   kit.check(
-    `${name}, board 502: the hairline under the bar is its --seam divider`,
-    seam !== null && seam.foot === seam.seam,
+    `${name}, board 502: the hairline under the bar is its --border-hairline`,
+    seam !== null && seam.foot === seam.hairline,
     JSON.stringify(seam)
   );
-  // Caw's read was refused with the rest: no empty seat before the name.
+  // Caw's own read was refused with the rest. He is drawn from the project's
+  // row the dashboard keeps (CawLead `project`, 29f534dd4), so a seat that
+  // stands holds him; no seat stands empty, and the name starts the head
+  // (his seat is at the head's end, by Ask Caw).
   const head = await page.evaluate(() => {
     const who = document
       .querySelector('[data-slot="project-head"] [data-slot="who"]')
@@ -689,9 +707,17 @@ async function boardRead(kit: Kit, page: Page, name: string, project: string) {
     const title = document
       .querySelector('[data-slot="project-head"] [data-slot="name"]')
       ?.getBoundingClientRect();
-    return {
-      seats: document.querySelectorAll(
+    const seats = [
+      ...document.querySelectorAll<HTMLElement>(
         '[data-slot="project-head"] [data-slot="seat"]'
+      ),
+    ];
+    return {
+      seats: seats.length,
+      empty: seats.filter(
+        (seat) =>
+          seat.querySelector('[data-slot="caw-seat"] > *') === null ||
+          seat.getBoundingClientRect().width < 1
       ).length,
       who: who?.left ?? null,
       name: title?.left ?? null,
@@ -699,7 +725,7 @@ async function boardRead(kit: Kit, page: Page, name: string, project: string) {
   });
   kit.check(
     `${name}, board 502: Caw unread, the name starts the head (no empty seat)`,
-    head.seats === 0 &&
+    head.empty === 0 &&
       head.who !== null &&
       head.name !== null &&
       head.name - head.who <= 4.5,
@@ -946,30 +972,39 @@ async function search(kit: Kit, page: Page, name: string, view: View) {
 }
 
 /**
- * Where the open band stands: at the top of the screen over the bar under
- * the drawer's line (JOURNEY.md: "at the top of the viewport across all
- * mobile surfaces"), under the bar on a desk.
+ * Where the open band stands: its fold under the bar at every width, the bar
+ * staying where it is (HubBand: "Under the drawer's line, where the bar is
+ * the phone's one row, the band stands under the bar as it does on a desk";
+ * d71708ddd: the band "never pushes a phone's bar down"), the band its air
+ * (its block-start margin) inside the fold, as the house alert stands on the
+ * page's insets.
  */
-async function bandPlace(kit: Kit, page: Page, name: string, view: View) {
+async function bandPlace(kit: Kit, page: Page, name: string) {
   const at = await page.evaluate((selector) => {
-    const band = document.querySelector(selector)?.getBoundingClientRect();
+    const el = document.querySelector<HTMLElement>(selector);
+    const band = el?.getBoundingClientRect();
+    const fold = el
+      ?.closest('[data-slot="hub-band-slot"]')
+      ?.getBoundingClientRect();
     const bar = document
       .querySelector('header[data-slot="top"]')
       ?.getBoundingClientRect();
-    return band && bar
-      ? { band: [band.top, band.bottom], bar: [bar.top, bar.bottom] }
+    return el && band && fold && bar
+      ? {
+          band: [band.top, band.bottom],
+          fold: [fold.top, fold.bottom],
+          bar: [bar.top, bar.bottom],
+          air: Number.parseFloat(getComputedStyle(el).marginBlockStart),
+        }
       : null;
   }, BAND);
-  const top = view === "desk";
   kit.check(
-    top
-      ? `${name}: the band stands under the bar`
-      : `${name}: the band stands at the top of the screen, the bar under it`,
+    `${name}: the band stands under the bar`,
     at !== null &&
-      (top
-        ? Math.abs((at.band[0] ?? -1) - (at.bar[1] ?? 0)) <= 0.5
-        : at.band[0] === 0 &&
-          Math.abs((at.bar[0] ?? -1) - (at.band[1] ?? 0)) <= 0.5),
+      at.bar[0] === 0 &&
+      Math.abs((at.fold[0] ?? -1) - (at.bar[1] ?? 0)) <= 0.5 &&
+      Math.abs((at.band[0] ?? -1) - (at.fold[0] ?? 0) - at.air) <= 0.5 &&
+      Math.abs((at.band[1] ?? -1) - (at.fold[1] ?? 0)) <= 0.5,
     JSON.stringify(at)
   );
 }
@@ -1119,7 +1154,7 @@ async function runLeg(
     JSON.stringify(down)
   );
   await coversNothing("hub away");
-  await bandPlace(kit, page, name, view);
+  await bandPlace(kit, page, name);
   await countdownSteady(kit, page, name);
   const spoken = await said
     .ariaSnapshot({ timeout: 3000 })
@@ -1131,9 +1166,10 @@ async function runLeg(
   );
   const clip = await page.evaluate((selector) => {
     const band = document.querySelector<HTMLElement>(selector);
-    // The slot that clips it: the row it stands in is the slot's one item.
-    const slot = band?.closest<HTMLElement>('[data-slot="hub-band-slot"]');
-    if (!(band && slot)) {
+    // What clips it: the fold's one item (design.css `fold-item`), the row
+    // it stands in.
+    const row = band?.parentElement;
+    if (!(band && row)) {
       return null;
     }
     const shadow = getComputedStyle(band).boxShadow;
@@ -1153,26 +1189,23 @@ async function runLeg(
       reach.top = Math.max(reach.top, -y + out);
     }
     const b = band.getBoundingClientRect();
-    const s = slot.getBoundingClientRect();
-    const vw = window.innerWidth;
+    const r = row.getBoundingClientRect();
     return {
-      clipPath: getComputedStyle(slot).clipPath,
-      vw,
+      overflow: getComputedStyle(row).overflow,
       shadow,
       drawn:
-        b.left - reach.left >= s.left - vw &&
-        b.right + reach.right <= s.right + vw &&
-        b.bottom + reach.bottom <= s.bottom + vw,
+        b.left - reach.left >= r.left - 0.5 &&
+        b.right + reach.right <= r.right + 0.5 &&
+        b.top - reach.top >= r.top - 0.5 &&
+        b.bottom + reach.bottom <= r.bottom + 0.5,
       band: [b.left, b.top, b.right, b.bottom],
-      slot: [s.left, s.top, s.right, s.bottom],
+      row: [r.left, r.top, r.right, r.bottom],
       reach,
     };
   }, BAND);
   kit.check(
-    `${name}: the open band's shadow is drawn whole below and at both sides`,
-    clip !== null &&
-      clip.clipPath === `inset(0px -${clip.vw}px -${clip.vw}px)` &&
-      clip.drawn,
+    `${name}: the open band is drawn whole inside its fold's clip, any shadow with it`,
+    clip !== null && clip.overflow === "hidden" && clip.drawn,
     JSON.stringify(clip)
   );
   const sayers = await awaySayers(page);
@@ -1181,30 +1214,40 @@ async function runLeg(
     sayers.length === 1 && sayers[0]?.startsWith("hub-band"),
     sayers.join(" | ")
   );
+  // What the button holds: its glyph's slot and its label's cell, which
+  // holds the label and its pending wording, as wide as the wider (DESIGN.md,
+  // Pending: "Beside a rest icon the label and its pending wording stand in
+  // one cell as wide as the wider of them").
   const button = await page.evaluate((selector) => {
     const press = document.querySelector<HTMLElement>(
       `${selector} button[data-slot="button"]`
     );
     const words =
-      press?.querySelector<HTMLElement>(
-        '[data-slot="words"] > [data-active="true"]'
-      ) ?? press?.querySelector<HTMLElement>('[data-slot="label-text"]');
+      press?.querySelector<HTMLElement>('[data-slot="words"]') ??
+      press?.querySelector<HTMLElement>('[data-slot="label-text"]');
     if (!(press && words)) {
       return null;
     }
+    const glyph = press.querySelector<HTMLElement>('[data-slot="btn-slot"]');
     const outer = press.getBoundingClientRect();
-    const inner = words.getBoundingClientRect();
+    const cell = words.getBoundingClientRect();
+    const left = Math.min(
+      cell.left,
+      glyph?.getBoundingClientRect().left ?? cell.left
+    );
     const style = getComputedStyle(press);
     return {
-      label: words.innerText,
-      off: inner.left + inner.width / 2 - (outer.left + outer.width / 2),
-      start: inner.left - outer.left,
-      end: outer.right - inner.right,
+      label: words.querySelector<HTMLElement>('[data-active="true"]')
+        ?.innerText,
+      glyph: glyph !== null,
+      off: (left + cell.right) / 2 - (outer.left + outer.width / 2),
+      start: left - outer.left,
+      end: outer.right - cell.right,
       paddings: [style.paddingInlineStart, style.paddingInlineEnd],
     };
   }, BAND);
   kit.check(
-    `${name}: the band's button centres its label, its paddings even`,
+    `${name}: the band's button centres its glyph and label, its paddings even`,
     button !== null &&
       Math.abs(button.off) <= 0.5 &&
       button.paddings[0] === button.paddings[1],
@@ -1577,6 +1620,7 @@ async function conversationLeg(
   await until(async () => (await bandNow(page)).open, 10_000);
   await settle(page, 600);
   const cover = await bandCover(page);
+  const fold = cover?.fold ?? null;
   const bar = await page.evaluate(() =>
     document
       .querySelector('header[data-slot="top"]')
@@ -1592,22 +1636,32 @@ async function conversationLeg(
     view === "phone"
       ? `${name}: the band stands over the floating bar and its tabs, moving both down`
       : `${name}: the band stands under the bar`,
+    // Its fold (the band and the air over it) at the screen's top over the
+    // floating bar, or at the bar's foot on a desk; the band's foot is the
+    // fold's.
     cover !== null &&
+      fold !== null &&
       bar !== undefined &&
+      Math.abs(cover.bottom - (fold.top + fold.height)) <= 0.5 &&
       (view === "phone"
-        ? Math.abs(bar.top - cover.bottom) <= 0.5 && cover.top === 0
-        : Math.abs(cover.top - bar.bottom) <= 0.5),
-    JSON.stringify({ band: cover && [cover.top, cover.bottom], bar })
+        ? Math.abs(bar.top - cover.bottom) <= 0.5 && fold.top === 0
+        : Math.abs(fold.top - bar.bottom) <= 0.5),
+    JSON.stringify({
+      band: cover && [cover.top, cover.bottom],
+      fold,
+      bar,
+    })
   );
   const after = await scrolled();
   kit.check(
-    `${name}: a scrolled transcript moves down whole by the band's height, its scroll kept`,
+    `${name}: a scrolled transcript moves down whole by the band's fold, its scroll kept`,
     before !== null &&
       after !== null &&
       cover !== null &&
+      fold !== null &&
       Math.abs(after.scrollTop - before.scrollTop) <= 1 &&
-      Math.abs(after.rowTop - before.rowTop - cover.height) <= 1,
-    JSON.stringify({ before, after, band: cover?.height })
+      Math.abs(after.rowTop - before.rowTop - fold.height) <= 1,
+    JSON.stringify({ before, after, fold: fold?.height })
   );
   await page.screenshot({
     path: join(kit.out, `${entrySlug(`${name} hub away`)}.png`),

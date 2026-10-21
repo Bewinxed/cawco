@@ -148,7 +148,7 @@
     data-slot="detail"
     class="grid grid-rows-shut opacity-0 text-center type-meta text-ink-subtle group-data-open/move:grid-rows-open group-data-open/move:opacity-100 peer-focus-visible/line:grid-rows-open peer-focus-visible/line:opacity-100 group-hover/move:grid-rows-open group-hover/move:opacity-100 @phone:grid-rows-open @phone:opacity-100 motion-safe:transition-[grid-template-rows,opacity] motion-safe:duration-(--dur-toggle) motion-safe:ease-out"
   >
-    <span class="overflow-hidden">{words.detail}</span>
+    <span class="fold-item">{words.detail}</span>
   </p>
   {#if open && row.brief !== null}
     <div

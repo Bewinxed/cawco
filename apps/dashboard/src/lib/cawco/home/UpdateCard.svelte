@@ -301,20 +301,18 @@
              motion nothing travels: the notes only fade. -->
         <div
           data-slot="fold"
-          class="group/fold -mt-space-row grid grid-rows-(--fold-shut) transition-[grid-template-rows,margin-top] duration-(--dur-exit) ease-out data-open:mt-0 data-open:grid-rows-(--fold-open) motion-safe:data-open:duration-(--dur-panel) motion-reduce:transition-off"
+          class="group/fold -mt-space-row grid grid-rows-shut transition-[grid-template-rows,margin-top] duration-(--dur-exit) ease-out data-open:mt-0 data-open:grid-rows-open motion-safe:data-open:duration-(--dur-panel) motion-reduce:transition-off"
           data-open={open || undefined}
           id="update-notes"
           inert={!open}
           ontransitionend={settled}
-          style:--fold-open="1fr"
-          style:--fold-shut="0fr"
         >
           <!-- Open, no filter at all: a blur(0) is still a filter, and WebKit
                drew the whole of the notes through one on every paint of the
                panel. It interpolates with the shut blur as blur(0) would. -->
           <div
             data-slot="fold-inner"
-            class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:duration-(--dur-panel) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--dur-fade) motion-reduce:group-data-open/fold:duration-(--dur-panel)"
+            class="fold-item opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:duration-(--dur-panel) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--dur-fade) motion-reduce:group-data-open/fold:duration-(--dur-panel)"
           >
             <div class="flex flex-col gap-space-1 pt-space-1">
               <div class="type-body text-ink-row">

@@ -900,7 +900,7 @@
           style:--fail-delay="calc(var(--dur-control) / 3)"
           class="grid grid-rows-shut opacity-0 data-open:grid-rows-open data-open:opacity-100 data-open:mt-space-2 motion-safe:transition-[grid-template-rows,opacity,margin-block-start] motion-safe:duration-(--dur-pop) motion-safe:ease-out motion-safe:delay-(--fail-delay)"
         >
-          <div class="overflow-hidden min-h-0">
+          <div class="fold-item">
             {#if failed || retried}
               <!-- Being sent again is not a failure: it says so in the meta
                    ink. -->
