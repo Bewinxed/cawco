@@ -71,7 +71,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { WorkItemSummary } from "../../../packages/core/src";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
-import { recutLine } from "../../../packages/core/src/injected";
+import { movedLine } from "../../../packages/core/src/injected";
 import {
   ACCOUNT,
   MACHINE,
@@ -843,8 +843,12 @@ const oldSeen = (fleet: KitFleet, since: number): Seen[] =>
       !one.all.includes(RESTARTING)
   );
 
-/** How the hub's line that a session's clone was cut again opens (core injected.ts `recutLine`), up to its commit. */
-const RECUT_OPENING = recutLine("", "").split(", cut again at")[0] as string;
+/** How the hub's line that a session's clone was cut again opens (core injected.ts `movedLine`), up to its commit. */
+const RECUT_OPENING = movedLine({
+  kind: "recut",
+  branch: "",
+  commit: "",
+}).split(", cut again at")[0] as string;
 
 /** The text of the user message in `request` that carries `marker`, its text parts joined. */
 const userTextWith = (request: Seen, marker: string): string | undefined => {

@@ -12,6 +12,7 @@ import type {
   BlockWidth,
   BuildInfo,
   CapPeriod,
+  CheckoutMove,
   ClaudeModelUsage,
   ContinuationJob,
   DelegateAskStatus,
@@ -1364,13 +1365,14 @@ export const workspaces = sqliteTable("workspaces", {
    */
   head: text("head", { mode: "json" }).$type<WorkspaceCut>(),
   /**
-   * Where it was cut again (work-items.ts `recut`) while no message has been
-   * handed to a session of it since: the next one opens with the hub's line
-   * that the folder is a new clone (core injected.ts `withRecutLine`), and
-   * clears it. Null otherwise. Kept on the row, so a hub restart between the
-   * cut and that message still says it.
+   * How CawCo moved its checkout (core injected.ts `CheckoutMove`: cut again,
+   * work-items.ts `recut`; rebased as it landed, `landOnBase`) while no
+   * message has been handed to a session of it since: the next one opens
+   * with the hub's line naming the move and the install to run (core
+   * injected.ts `withMovedLine`), and clears it. Null otherwise. Kept on the
+   * row, so a hub restart between the move and that message still says it.
    */
-  recutUntold: text("recut_untold", { mode: "json" }).$type<WorkspaceCut>(),
+  movedUntold: text("moved_untold", { mode: "json" }).$type<CheckoutMove>(),
   /**
    * The carry its discard wrote on its machine, its parent or the person
    * letting its unlanded work go: such a workspace is never cut again.

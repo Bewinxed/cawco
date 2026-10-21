@@ -96,12 +96,16 @@ import type { CarrySessionRequest } from "./harness";
  *    `installed`: a workspace cut again installs nothing (ab4953b28,
  *    reverted), and its session is told the folder is new instead. No page
  *    reads it; a page built for 18 reloads first all the same.
+ * 20: a workspace's row says `movedUntold` (core injected.ts
+ *    `CheckoutMove`: cut again, or rebased as it landed) where it said
+ *    `recutUntold`, the move its session's next message names. No page
+ *    reads it; a page built for 19 reloads first all the same.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 19;
+export const WIRE_PROTOCOL = 20;
 
 /**
  * What a session's stream carries: the changes each frame made to its

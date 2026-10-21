@@ -331,7 +331,7 @@ import {
   WITHDRAW_PERMISSION,
   WORKSPACE_CREATE_TIMEOUT_MS,
   type WorkInFlight,
-  withRecutLine,
+  withMovedLine,
 } from "@cawco/core";
 import {
   AGENT_RESTARTING,
@@ -8255,26 +8255,27 @@ export const createServer = (
   };
 
   /**
-   * The message `envelope` carries, opened with the hub's line that its
-   * session's workspace was cut again (core injected.ts `withRecutLine`)
-   * when this is the first message handed to a session of it since the cut
-   * (work-items.ts `recutTold`). Called as a send is handed to its machine,
-   * whichever way it goes there (at once, or released after a hold), so a
-   * handoff, a follow-up's or retry's brief and a continuation all carry it,
-   * on any harness. A keep-alive ping never does. Answers whether it did.
+   * The message `envelope` carries, opened with the hub's line that CawCo
+   * moved its session's checkout (core injected.ts `withMovedLine`: cut
+   * again, or rebased as it landed) when this is the first message handed
+   * to a session of it since the move (work-items.ts `movedTold`). Called
+   * as a send is handed to its machine, whichever way it goes there (at
+   * once, or released after a hold), so a handoff, a follow-up's or retry's
+   * brief and a continuation all carry it, on any harness. A keep-alive ping
+   * never does. Answers whether it did.
    */
-  const toldRecut = (envelope: Envelope<SendPayload>): boolean => {
+  const toldMove = (envelope: Envelope<SendPayload>): boolean => {
     const { instanceId, message } = envelope.payload;
     if (isKeepAlive(message)) {
       return false;
     }
-    const cut = workItems.recutTold(instanceId);
-    if (!cut) {
+    const move = workItems.movedTold(instanceId);
+    if (!move) {
       return false;
     }
     const { content } = message.message;
     if (typeof content === "string") {
-      message.message.content = withRecutLine(content, cut);
+      message.message.content = withMovedLine(content, move);
     } else {
       const at = content.findIndex((part) => part.type === "text");
       const first = content[at];
@@ -8282,12 +8283,19 @@ export const createServer = (
         first?.type === "text"
           ? content.with(at, {
               ...first,
-              text: withRecutLine(first.text, cut),
+              text: withMovedLine(first.text, move),
             })
-          : [{ type: "text", text: withRecutLine("", cut).trim() }, ...content];
+          : [
+              { type: "text", text: withMovedLine("", move).trim() },
+              ...content,
+            ];
     }
+    const how =
+      move.kind === "recut"
+        ? `its clone was cut again at ${move.commit.slice(0, 9)} on ${move.branch}`
+        : `its checkout moved from ${move.from.slice(0, 9)} to ${move.to.slice(0, 9)} as it landed on ${move.branch}`;
     console.log(
-      `[hub] send ${message.uuid} to ${instanceId} opens with the hub's line that its clone was cut again at ${cut.commit.slice(0, 9)} on ${cut.branch}`
+      `[hub] send ${message.uuid} to ${instanceId} opens with the hub's line that ${how}`
     );
     return true;
   };
@@ -8391,7 +8399,7 @@ export const createServer = (
       envelope.payload.delivery = delivery;
     }
     if (agent && !owed) {
-      toldRecut(envelope);
+      toldMove(envelope);
       sendFrame(agent, envelope);
     }
     // Kept for its machine alone, not for its session, an interrupt's hold
@@ -8753,7 +8761,7 @@ export const createServer = (
   /**
    * An owed send handed to its machine as its hold ends ({@link releaseOne}),
    * under a hand-off of its own, the hub's line in it when it is the first
-   * message since its workspace was cut again ({@link toldRecut}). Its
+   * message since CawCo moved its checkout ({@link toldMove}). Its
    * record keeps it whole as handed (`envelope`, with this hand-off and that
    * line), in the same write as its new hand-off: what a machine that comes
    * back is handed again ({@link handAgain}), and what a fold or a
@@ -8767,7 +8775,7 @@ export const createServer = (
   ): void => {
     const delivery = crypto.randomUUID();
     envelope.payload.delivery = delivery;
-    const told = toldRecut(envelope);
+    const told = toldMove(envelope);
     changeSend(send, {
       acceptedAt: new Date(),
       delivery,

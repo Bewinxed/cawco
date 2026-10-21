@@ -31335,8 +31335,57 @@
           "head": {
             "$ref": "#/components/schemas/WorkspaceCut"
           },
-          "recutUntold": {
-            "$ref": "#/components/schemas/WorkspaceCut"
+          "movedUntold": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "branch": {
+                    "type": "string"
+                  },
+                  "commit": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "recut"
+                    ]
+                  }
+                },
+                "required": [
+                  "branch",
+                  "commit",
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "branch": {
+                    "type": "string"
+                  },
+                  "from": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "landing"
+                    ]
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "branch",
+                  "from",
+                  "kind",
+                  "to"
+                ]
+              }
+            ]
           },
           "cutFrom": {
             "$ref": "#/components/schemas/WorkspaceFrom"

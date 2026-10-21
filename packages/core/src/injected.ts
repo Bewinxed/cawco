@@ -257,24 +257,43 @@ export const withInputsLine = (
       );
 
 /**
- * The hub's line to a session whose workspace retired while it slept and
- * was cut again for it at `commit` on `branch` (hub work-items.ts `recut`):
- * the folder is a new clone, so nothing git does not track came with it.
- * CawCo installs nothing there (the owner, 2026-10-18: "the delegate or
- * whatever will handle this as they need in each workspace"); the session
- * sets up what its next commands need.
+ * How CawCo moved a workspace's checkout under the session that goes on in
+ * it, untold until the next message handed to that session:
+ * - `recut`: the workspace retired while its session slept and was cut again
+ *   for it at `commit` on `branch` (hub work-items.ts `recut`), a new clone
+ *   with nothing git does not track;
+ * - `landing`: the hub rebased the workspace's commits onto origin's `branch`
+ *   as it landed them (hub landing.ts `onBase`), HEAD going `from` → `to`,
+ *   so the tree holds every file main gained in between, its lockfile and
+ *   package manifests among them.
  */
-export const recutLine = (commit: string, branch: string): string =>
-  `[CawCo] Your workspace retired while this session slept, so this folder is a new clone, cut again at ${commit.slice(0, 9)} on ${branch}. Nothing git doesn't track came with it: installed dependencies, build outputs and your $TMPDIR scratch are gone. Set up again whatever your next commands need.`;
+export type CheckoutMove =
+  | { branch: string; commit: string; kind: "recut" }
+  | { branch: string; from: string; kind: "landing"; to: string };
+
+/** The run that brings a moved checkout's installed dependencies to its lockfile, in the line's words. */
+const INSTALL_AGAIN = "Run the repo's install before you build or test.";
 
 /**
- * `text` with {@link recutLine} right after any hand-off marker: the first
- * message a session reads in a clone cut again.
+ * The hub's line to a session whose checkout CawCo moved ({@link
+ * CheckoutMove}). CawCo installs nothing (the owner, 2026-10-18: "the
+ * delegate or whatever will handle this as they need in each workspace"),
+ * so an install the session made before the move no longer matches the
+ * checkout: on 2026-10-21 a leaf's build failed on a dependency main had
+ * gained since its install (`Could not resolve: "tldts"`) until it ran
+ * `bun install` again. The line names the move and that run.
  */
-export const withRecutLine = (
-  text: string,
-  cut: { branch: string; commit: string }
-): string => afterMarker(text, recutLine(cut.commit, cut.branch));
+export const movedLine = (move: CheckoutMove): string =>
+  move.kind === "recut"
+    ? `[CawCo] Your workspace retired while this session slept, so this folder is a new clone, cut again at ${move.commit.slice(0, 9)} on ${move.branch}: installed dependencies, build outputs and your $TMPDIR scratch are gone. ${INSTALL_AGAIN}`
+    : `[CawCo] Your checkout moved from ${move.from.slice(0, 9)} to ${move.to.slice(0, 9)}: the hub rebased your commits onto origin/${move.branch} as it landed them, so files main gained since are here and your installed dependencies may predate them. ${INSTALL_AGAIN}`;
+
+/**
+ * `text` with {@link movedLine} right after any hand-off marker: the first
+ * message a session reads after CawCo moved its checkout.
+ */
+export const withMovedLine = (text: string, move: CheckoutMove): string =>
+  afterMarker(text, movedLine(move));
 
 /**
  * A hand-off read back into who sent it and what it says. `from` names the

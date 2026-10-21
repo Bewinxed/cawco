@@ -2425,7 +2425,7 @@ export interface DbShape {
         | "head"
         | "heldAt"
         | "holding"
-        | "recutUntold"
+        | "movedUntold"
         | "state"
         | "tmp"
       >

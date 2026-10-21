@@ -38,6 +38,7 @@
  */
 import type {
   BriefTarget,
+  CheckoutMove,
   CommandResult,
   DeclaredStep,
   DelegateType,
@@ -63,7 +64,6 @@ import type {
   WorkspaceArchived,
   WorkspaceCheckout,
   WorkspaceCommit,
-  WorkspaceCut,
   WorkspaceHolding,
   WorkspaceRef,
   WorkspaceUnlanded,
@@ -3746,7 +3746,7 @@ export const createWorkItems = ({
    * installed dependencies, build outputs, its scratch dir. CawCo installs
    * nothing (the owner, 2026-10-18); the next message handed to its session
    * opens with the hub's line saying the folder is new (its row's
-   * `recutUntold`, {@link WorkItems.recutTold}), whichever path goes on there (a handoff, a
+   * `movedUntold`, {@link WorkItems.movedTold}), whichever path goes on there (a handoff, a
    * follow-up, a retry or a continuation), so it sets up what it needs. One
    * cut at a time per workspace; every caller shares it.
    * `onCut` runs in the step that files it active, before anything else
@@ -3808,7 +3808,7 @@ export const createWorkItems = ({
           boundaryPid: checkout.boundaryPid,
           base: checkout.base,
           tmp: checkout.tmp,
-          recutUntold: head,
+          movedUntold: { kind: "recut", ...head },
         }) ?? workspace;
       onCut?.();
       workspaceChanged?.(again);
@@ -5916,6 +5916,43 @@ export const createWorkItems = ({
         }
       );
 
+  /** HEAD of the workspace's checkout, read whatever stops the item's landing; nothing when git cannot say. */
+  const headOf = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow
+  ): Promise<string | undefined> => {
+    const read = await runIn(workspace, item)(
+      "git rev-parse HEAD",
+      GIT_TIMEOUT_MS,
+      false,
+      true
+    );
+    return read.exitCode === 0 ? read.stdout.trim() : undefined;
+  };
+
+  /**
+   * The landing rebased workspace `id`'s commits onto origin's `base`, HEAD
+   * going `from` → `to` (landing.ts `onBase`, landed or not): its row's
+   * `movedUntold` says so to the next message its session reads
+   * ({@link WorkItems.movedTold}). One still untold keeps where it started:
+   * a clone cut again stays the new clone it is, at `to` now; an earlier
+   * landing's move keeps its `from`.
+   */
+  const movedByLanding = (
+    id: string,
+    base: string,
+    from: string,
+    to: string
+  ): void => {
+    const [row] = db.workspacesNamed(id);
+    const prior = row?.movedUntold ?? undefined;
+    const move: CheckoutMove =
+      prior?.kind === "recut"
+        ? { ...prior, commit: to }
+        : { kind: "landing", branch: base, from: prior?.from ?? from, to };
+    db.updateWorkspace(id, { movedUntold: move });
+  };
+
   /**
    * How an item's landing gate runs in its landing on `base` (landing.ts):
    * in its turn it never waits; while it gates on top of the branch, its
@@ -6000,6 +6037,7 @@ export const createWorkItems = ({
       // it at once. A failure's or an error's words go as settleLanding ends.
       landingWait(item.id, null);
     };
+    const before = await headOf(workspace, item);
     const outcome = await land<GateRun>(base, {
       run: runIn(workspace, item),
       turn: turnOf(item),
@@ -6012,6 +6050,10 @@ export const createWorkItems = ({
       stopped: landingStopped(item),
       ...(item.projectId ? { repo: item.projectId } : {}),
     });
+    const after = await headOf(workspace, item);
+    if (before && after && before !== after) {
+      movedByLanding(workspace.id, base, before, after);
+    }
     const ran = runs.gate;
     switch (outcome.kind) {
       case "stopped":
@@ -7234,20 +7276,21 @@ export const createWorkItems = ({
     },
 
     /**
-     * Where session `instanceId`'s workspace was cut again, when it was cut
-     * again since a message was last handed to a session of it (its row's
-     * `recutUntold`, set by {@link recut}); taken, so only the first message
-     * handed there says so. Called as a message is handed to the machine.
+     * How CawCo moved session `instanceId`'s workspace's checkout since a
+     * message was last handed to a session of it (its row's `movedUntold`:
+     * cut again by {@link recut}, rebased as it landed by `landOnBase`);
+     * taken, so only the first message handed there says so. Called as a
+     * message is handed to the machine.
      */
-    recutTold(instanceId: string): WorkspaceCut | undefined {
+    movedTold(instanceId: string): CheckoutMove | undefined {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
       const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
-      const cut = workspace?.recutUntold ?? undefined;
-      if (workspace && cut) {
-        db.updateWorkspace(workspace.id, { recutUntold: null });
+      const move = workspace?.movedUntold ?? undefined;
+      if (workspace && move) {
+        db.updateWorkspace(workspace.id, { movedUntold: null });
       }
-      return cut;
+      return move;
     },
 
     /**
