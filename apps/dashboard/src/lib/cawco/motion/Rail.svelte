@@ -208,7 +208,7 @@
     <button
       aria-checked={entry.id === value}
       aria-label={entry.label}
-      class="press-tint relative rounded-sm border-none border-current bg-transparent p-0 text-ink-muted transition-[background-color] duration-(--dur-control) ease-out hover:enabled:aria-checked-false:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 aria-checked:text-ink-strong {itemClass}"
+      class="press-tint relative select-none rounded-sm border-none border-current bg-transparent p-0 text-ink-muted transition-[background-color] duration-(--dur-control) ease-out hover:enabled:aria-checked-false:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 aria-checked:text-ink-strong {itemClass}"
       data-rail-item-class={itemClass}
       data-rail-item={entry.id}
       disabled={entry.disabled}

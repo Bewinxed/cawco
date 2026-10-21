@@ -325,7 +325,7 @@
       data-slot="hit"
       aria-expanded={open}
       aria-label={label}
-      class="focus-inset touch-hit absolute z-4 -inset-x-(--reach) -top-(--reach) bottom-(--hit-foot) coarse:-bottom-(--reach) rounded-xs coarse:hit-gap-x-(--hit-stop-x) coarse:hit-gap-y-(--hit-stop-y)"
+      class="focus-inset touch-hit select-none touch-callout-none absolute z-4 -inset-x-(--reach) -top-(--reach) bottom-(--hit-foot) coarse:-bottom-(--reach) rounded-xs coarse:hit-gap-x-(--hit-stop-x) coarse:hit-gap-y-(--hit-stop-y)"
       style:--reach="calc(var(--status-dot-size) / 2)"
       style:--hit-max={"var(--mark-hit-max, calc(var(--space-1) + var(--tree-gap)))"}
       style:--hit-foot={"calc(-1 * min(var(--n) * var(--deck-step) + var(--reach), var(--hit-max)))"}

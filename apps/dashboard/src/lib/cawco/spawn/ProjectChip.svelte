@@ -110,7 +110,7 @@
       <!-- biome-ignore lint/a11y/useSemanticElements: the clear control sits inside the chip trigger, which is already a button; buttons cannot nest -->
       <span
         data-slot="clear"
-        class="ns-check pointer-hit touch-hit relative z-1 -mr-space-row inline-flex size-space-5 items-center justify-center rounded-xs text-ink-subtle transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:text-ink-strong"
+        class="ns-check pointer-hit touch-hit select-none relative z-1 -mr-space-row inline-flex size-space-5 items-center justify-center rounded-xs text-ink-subtle transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:text-ink-strong"
         onclick={(event) => {
           event.stopPropagation();
           onclear();

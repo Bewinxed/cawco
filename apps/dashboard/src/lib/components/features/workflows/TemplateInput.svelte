@@ -160,7 +160,7 @@
     >
       {#each matches as path, index (path)}
         <button
-          class="block w-full text-start p-space-2 wrap-anywhere font-(family-name:--font-mono) text-size-label min-h-c-btn-h max-wide:min-h-c-btn-h-lg"
+          class="block w-full select-none text-start p-space-2 wrap-anywhere font-(family-name:--font-mono) text-size-label min-h-c-btn-h max-wide:min-h-c-btn-h-lg"
           aria-selected={active === index}
           onclick={() => choose(path)}
           onmousedown={(event) => {

@@ -103,7 +103,7 @@
     <button
       data-slot="option"
       aria-selected={tool.value === null}
-      class="group press-tint transition-control grid min-h-c-row-h w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong"
+      class="group press-tint transition-control select-none grid min-h-c-row-h w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong"
       data-account-option="auto"
       onclick={() => pick(null)}
       role="option"
@@ -127,7 +127,7 @@
       <button
         data-slot="option"
         aria-selected={tool.value === option.id}
-        class="group press-tint transition-control grid min-h-c-row-h w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong"
+        class="group press-tint transition-control select-none grid min-h-c-row-h w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong"
         data-account-option={option.id}
         disabled={option.disabled}
         onclick={() => pick(option.id)}

@@ -603,7 +603,7 @@
         {@const k = `${row}#${act}`}
         <button
           id={idOf(k)}
-          class="mark-line flex items-center gap-space-2 w-full h-space-8 px-space-2 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill"
+          class="mark-line select-none flex items-center gap-space-2 w-full h-space-8 px-space-2 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill"
           aria-selected={activeKey === k}
           data-active={activeKey === k ? "" : undefined}
           data-find-row
@@ -629,7 +629,7 @@
     <button
       data-slot="fold-row"
       id={idOf(item.key)}
-      class="mark-line flex items-center gap-space-2 flex-none w-full h-c-find-line-h px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-c-find-phone-h"
+      class="mark-line select-none flex items-center gap-space-2 flex-none w-full h-c-find-line-h px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-c-find-phone-h"
       aria-label={`${count} ${kindNoun(first, count)} match “${finder.asked}”, ${open ? "shown" : "folded"}`}
       aria-selected={activeKey === item.key}
       data-active={activeKey === item.key ? "" : undefined}
@@ -659,7 +659,7 @@
   {:else if item.t === "waiting"}
     <button
       id={idOf("waiting")}
-      class="mark-line flex items-center gap-space-2 flex-none w-full h-c-find-line-h px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-c-find-phone-h"
+      class="mark-line select-none flex items-center gap-space-2 flex-none w-full h-c-find-line-h px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-c-find-phone-h"
       aria-selected={activeKey === "waiting"}
       data-active={activeKey === "waiting" ? "" : undefined}
       data-find-row

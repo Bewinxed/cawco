@@ -41,7 +41,7 @@
   data-slot="count"
   aria-expanded={open}
   aria-label={open ? `Hide ${label}` : `Show ${label}`}
-  class="num pressable transition-tint-press focus-inset pointer-hit touch-hit inline-flex flex-none items-center justify-center h-space-5 min-w-space-5 px-space-1 overflow-visible rounded-xs bg-surface-fill text-ink-muted type-meta whitespace-nowrap data-open:bg-surface-fill-strong data-open:text-ink-strong hover:bg-surface-fill-strong hover:text-ink-strong"
+  class="num pressable select-none transition-tint-press focus-inset pointer-hit touch-hit inline-flex flex-none items-center justify-center h-space-5 min-w-space-5 px-space-1 overflow-visible rounded-xs bg-surface-fill text-ink-muted type-meta whitespace-nowrap data-open:bg-surface-fill-strong data-open:text-ink-strong hover:bg-surface-fill-strong hover:text-ink-strong"
   data-open={open || undefined}
   onclick={toggle}
   onkeydown={(event) => {

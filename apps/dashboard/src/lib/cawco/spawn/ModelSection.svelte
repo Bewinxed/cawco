@@ -501,7 +501,7 @@
               data-slot="row"
               aria-disabled={reason ? true : undefined}
               aria-selected={picked}
-              class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint transition-control min-w-0 shrink grow basis-c-model-row-basis border border-transparent bg-transparent"
+              class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint transition-control select-none min-w-0 shrink grow basis-c-model-row-basis border border-transparent bg-transparent"
               data-fh="1"
               data-model={entry.id}
               disabled={Boolean(reason)}

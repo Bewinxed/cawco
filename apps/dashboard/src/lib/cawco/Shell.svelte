@@ -1041,7 +1041,7 @@
         aria-valuemax={RAIL_MAX}
         aria-valuemin={RAIL_MIN}
         aria-valuenow={railWidth}
-        class="pointer-hit hit-gap-x-space-1 absolute inset-y-0 end-0 w-c-side-grip-w translate-x-1/2 cursor-col-resize touch-none z-5 hover:bg-border-control"
+        class="pointer-hit hit-gap-x-space-1 absolute inset-y-0 end-0 w-c-side-grip-w translate-x-1/2 cursor-col-resize touch-none select-none z-5 hover:bg-border-control"
         onkeydown={resizeKey}
         onpointerdown={startDrag}
         role="slider"

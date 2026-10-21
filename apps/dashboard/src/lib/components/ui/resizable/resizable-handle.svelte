@@ -46,7 +46,7 @@
 
 <PaneResizer
   class={cn(
-    "relative flex w-px items-center",
+    "relative flex w-px select-none items-center",
     "justify-center bg-border after:absolute after:inset-y-0",
     "after:left-1/2 after:w-space-1 after:-translate-x-1/2",
     "data-[direction=vertical]:h-px",
