@@ -1435,10 +1435,11 @@ public enum Words {
 
         public static let customHint = "Five values: minute, hour, day of the month, month, day of the week. 0 9 * * 1-5 means weekdays at 09:00."
 
-        public static let needsCustom = "Write the schedule as five values, like 0 9 * * 1-5 for weekdays at 09:00."
+        /// A blank custom schedule: what to write, the five values named in order (it stands where the hint did).
+        public static let needsCustom = "Write five values separated by spaces: minute, hour, day of the month, month, day of the week. 0 9 * * 1-5 means weekdays at 09:00."
 
-        /// A custom schedule the hub can't read: the form's own sentence; the hub's words are for agents.
-        public static let customUnread = "This schedule can't be read. Write five values separated by spaces, like 0 9 * * 1-5 for weekdays at 09:00, or choose a schedule under When."
+        /// A custom schedule the hub can't read: the form's own sentence, naming the five values in order, since it stands where the hint did; the hub's words are for agents.
+        public static let customUnread = "This schedule can't be read. Write five values separated by spaces: minute, hour, day of the month, month, day of the week. 0 9 * * 1-5 means weekdays at 09:00. Or choose a schedule under When."
 
         public static let zoneLabel = "Time zone"
 

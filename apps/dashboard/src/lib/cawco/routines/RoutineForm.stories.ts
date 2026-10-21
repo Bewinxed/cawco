@@ -49,6 +49,29 @@ const runsOf = (expression: string): number[] => {
   return runs;
 };
 
+/** A custom schedule no choice writes: twice a day on weekdays. */
+const TWICE_WEEKDAYS = "0 8,13 * * 1-5";
+
+/** Its runs over the next week and its words, as the hub's own parser gives them (routines.ts `schedulePreview`). */
+const twiceWeekdays = (timeZone: string) => {
+  const runs: number[] = [];
+  for (const hour of [8, 13]) {
+    const start = new Date();
+    start.setHours(hour, 0, 0, 0);
+    for (let day = 0; day <= 7; day += 1) {
+      const at = start.getTime() + day * DAY;
+      const weekday = new Date(at).getDay();
+      if (at > Date.now() && weekday !== 0 && weekday !== 6) {
+        runs.push(at);
+      }
+    }
+  }
+  return {
+    nextRuns: runs.sort((a, b) => a - b),
+    words: `At 08:00 and 13:00, Monday through Friday (${timeZone})`,
+  };
+};
+
 /** The hub's refusal of a schedule that isn't five values (routines.ts `cronOf`); the form says its own sentence. */
 const UNREADABLE =
   "“every weekday at 9” is not a cron schedule: Invalid number of segments in cron expression. Give five fields (minute hour day month weekday), or six with seconds first.";
@@ -67,13 +90,17 @@ const hub = (over: Partial<RoutineFormHub> = {}): RoutineFormHub => ({
         description: "Reads sources and answers a question with quotes.",
       },
     ]),
-  preview: (cron, timeZone) =>
-    cron.split(VALUES).length === 5
+  preview: (cron, timeZone) => {
+    if (cron === TWICE_WEEKDAYS) {
+      return Promise.resolve(twiceWeekdays(timeZone));
+    }
+    return cron.split(VALUES).length === 5
       ? Promise.resolve({
           nextRuns: runsOf(cron),
           words: `At 09:00, Monday through Friday (${timeZone})`,
         })
-      : Promise.reject(new Error(UNREADABLE)),
+      : Promise.reject(new Error(UNREADABLE));
+  },
   create: () => new Promise(() => undefined),
   ...over,
 });
@@ -151,7 +178,19 @@ export const Hourly = {
   parameters: { viewport: 1440 },
 };
 
-/** A custom schedule the hub can't read: the form's own sentence under it, with an example, and no read-back. */
+/** A custom schedule the hub reads: its hint naming the five values, the hub's words under When and its week on the strip. */
+export const Custom = {
+  args: { draft: { ...filled, cron: TWICE_WEEKDAYS } },
+  parameters: { viewport: 1440 },
+};
+
+/** A custom schedule the hub reads, on a phone. */
+export const CustomPhone = {
+  args: { draft: { ...filled, cron: TWICE_WEEKDAYS } },
+  parameters: { viewport: 390 },
+};
+
+/** A custom schedule the hub can't read: the form's own sentence under it, naming the five values in order with an example, and no read-back. */
 export const InvalidSchedule = {
   args: { draft: unreadable },
   parameters: { viewport: 1440 },
