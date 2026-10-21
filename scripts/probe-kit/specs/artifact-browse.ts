@@ -11,6 +11,12 @@
  * component canvas of a toggle and a decision page whose card media is a
  * Preview of that canvas. Then:
  *
+ * (r) the session acquires its browser in port mode and lets it go; host
+ *     mode's names then want other rules, and its next acquisition makes
+ *     the container again with them: mapped to the machine by the
+ *     runtime's own name (`cawco-host` and a `host-gateway` entry on a
+ *     native engine; `host.docker.internal` or `host.containers.internal`
+ *     and no entry in a VM), read from its record and the runtime;
  * (a) the session's `artifact_browse` of its page answers a `url` and an
  *     `expiresAt`;
  * (b) its gated browser (the gate, as the session's door names it) loads
@@ -36,8 +42,9 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one CDP step at a time, in order
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import type { Runtime } from "../../../packages/agent/src/browser/runtime";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { cloudflareTo, scratchCertificate } from "../cloudflare-front";
 import type { Kit, Spec } from "../kit";
@@ -453,6 +460,94 @@ const browsed = (said: { failed: boolean; text: string } | undefined) => {
   }
 };
 
+/** The live browser's container and its rules, as the agent keeps its record (agent browser/state.ts, under the fleet's data dir). */
+const liveBrowser = async (
+  home: string
+): Promise<{ id?: string; rules?: string } | undefined> => {
+  const dir = join(home, ".local", "share", "cawco", "browsers");
+  for (const name of await readdir(dir).catch(() => [] as string[])) {
+    const record = await readFile(join(dir, name, "record.json"), "utf8")
+      .then(
+        (text) =>
+          JSON.parse(text) as {
+            container?: { hostRules?: string; id?: string };
+            state?: string;
+          }
+      )
+      .catch(() => undefined);
+    if (record?.state === "live") {
+      return {
+        ...(record.container?.id ? { id: record.container.id } : {}),
+        ...(record.container?.hostRules
+          ? { rules: record.container.hostRules }
+          : {}),
+      };
+    }
+  }
+};
+
+/**
+ * Session `id` acquires its browser through the gate (a page made there,
+ * as its browser tool's first call makes one), then lets it go: the live
+ * browser's container and rules after.
+ */
+const acquired = async (home: string, id: string) => {
+  const gate = await gateAs(home, id);
+  const tab = await pageIn(gate);
+  await tab.close();
+  gate.socket.close();
+  return await until(
+    "the session's browser live",
+    () => liveBrowser(home),
+    Boolean,
+    300_000
+  );
+};
+
+/**
+ * (r) Session `writer` acquires its browser in port mode and lets it go;
+ * `toHostMode` makes the hub's names want other rules, and its next
+ * acquisition makes the container again with them.
+ */
+const rulesLeg = async (
+  kit: Kit,
+  runtime: Runtime | { missing: string },
+  home: string,
+  writer: string,
+  toHostMode: () => Promise<void>
+) => {
+  const portMode = await acquired(home, writer);
+  await toHostMode();
+  const hostMode = await acquired(home, writer);
+  if ("missing" in runtime) {
+    kit.note(
+      "(r) local: the local Chromium runs on the machine's own network and maps no names, so it has no rules to make again"
+    );
+    return;
+  }
+  const { machineHostOf } =
+    await import("../../../packages/agent/src/browser/preview-names");
+  const { name, extraHosts } = machineHostOf(runtime);
+  const made = hostMode.id
+    ? await runtime.docker.getContainer(hostMode.id).inspect()
+    : undefined;
+  const env = made?.Config.Env.find((line) =>
+    line.startsWith("CAWCO_HOST_RULES=")
+  );
+  const wanted = `MAP *.${PASS_DOMAIN} ${name}, MAP ${PASS_DOMAIN} ${name}`;
+  const entries = made?.HostConfig.ExtraHosts ?? [];
+  kit.check(
+    `(r) container (${runtime.kind}, ${runtime.ownNetwork ? "native" : "in a VM"}): host mode's names change the rules, and the session's next acquisition makes the container again with them, mapped to ${name}${extraHosts.length > 0 ? ` (${extraHosts.join(", ")})` : " with no host entry"}`,
+    !!portMode.id &&
+      !!hostMode.id &&
+      portMode.id !== hostMode.id &&
+      hostMode.rules === wanted &&
+      env === `CAWCO_HOST_RULES=${wanted}` &&
+      JSON.stringify(entries) === JSON.stringify(extraHosts),
+    JSON.stringify({ portMode, hostMode, env, extraHosts: entries })
+  );
+};
+
 const run = async (kit: Kit) => {
   // The runtime as this process finds it (browser-gate.ts): the fleet's
   // HOME hides one kept under the home dir. None: the local Chromium.
@@ -517,11 +612,6 @@ const run = async (kit: Kit) => {
     false,
     "0.0.0.0"
   );
-  await storeHostMode(fleet, {
-    mode: "host",
-    pattern: `https://p-{port}.${PASS_DOMAIN}:${front.port}`,
-  });
-
   const dir = `${fleet.sandbox}/browse-project`;
   await Promise.all(
     Object.entries(PROJECT).map(async ([file, text]) => {
@@ -539,6 +629,26 @@ const run = async (kit: Kit) => {
     caw: false,
   });
   const writer = await fleet.spawn("claude", "Lamp page", dir, { projectId });
+  const doorFile = join(
+    home,
+    ".cawco",
+    "workspaces",
+    writer,
+    "browser-mcp.json"
+  );
+  await until(
+    "the session's browser door",
+    () => existsSync(doorFile),
+    Boolean,
+    60_000
+  );
+
+  await rulesLeg(kit, runtime, home, writer, () =>
+    storeHostMode(fleet, {
+      mode: "host",
+      pattern: `https://p-{port}.${PASS_DOMAIN}:${front.port}`,
+    })
+  );
   const outsider = await fleet.spawn("claude", "Outsider", fleet.repo);
   const at = `/api/instances/${writer}/artifacts`;
   const sheet = await fleet.api<{ id: string }>(at, {
@@ -585,19 +695,6 @@ const run = async (kit: Kit) => {
   }
 
   // (b) The gated browser loads it, the canvas's toggle drawn inside the Preview.
-  const doorFile = join(
-    home,
-    ".cawco",
-    "workspaces",
-    writer,
-    "browser-mcp.json"
-  );
-  await until(
-    "the session's browser door",
-    () => existsSync(doorFile),
-    Boolean,
-    60_000
-  );
   const gate = await gateAs(home, writer);
   const tab = await pageIn(gate);
   const loaded = await tab.navigate(entry.url);

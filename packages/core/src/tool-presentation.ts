@@ -502,6 +502,8 @@ export const TOOL_KINDS: ToolKind[] = [
       "cawco_artifact_create",
       "artifact_show",
       "cawco_artifact_show",
+      "artifact_browse",
+      "cawco_artifact_browse",
     ],
     glyph: "window-frame-bold-duotone",
     ink: "tool-mcp",

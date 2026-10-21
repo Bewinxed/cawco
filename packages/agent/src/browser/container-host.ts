@@ -59,7 +59,7 @@ import {
   slotAddress,
   slotHost,
 } from "./media-network";
-import { containerHostRules, MACHINE_HOST } from "./preview-names";
+import { machineHostOf, wantedHostRules } from "./preview-names";
 import { relayKeyOf, relayUrlsFor } from "./relay-urls";
 import type { Runtime } from "./runtime";
 import {
@@ -366,6 +366,16 @@ export class ContainerHost implements BrowserHost {
     return held;
   }
 
+  /**
+   * Whether `record`'s container was made with other preview-name rules
+   * than the hub's names want now (preview-names.ts): a start then makes it
+   * again. False while the hub doesn't answer: nothing is known to differ.
+   */
+  async rulesDue(record: BrowserRecord): Promise<boolean> {
+    const wanted = await wantedHostRules(this.#runtime);
+    return wanted !== null && wanted.rules !== record.container?.hostRules;
+  }
+
   async running(record: BrowserRecord): Promise<boolean> {
     if (!record.container) {
       return false;
@@ -404,7 +414,9 @@ export class ContainerHost implements BrowserHost {
       throw new Error(`${record.key} has no slot on the container host.`);
     }
     const address = slotAddress(network, record.slot);
-    const hostRules = await containerHostRules();
+    // Not known now (the hub didn't answer): the container's own stand.
+    const wanted = await wantedHostRules(this.#runtime);
+    const hostRules = wanted ? wanted.rules : kept?.hostRules;
     let reuse =
       kept &&
       keptAsAsked(record, { image, media, address, hostRules }, options.relay)
@@ -543,6 +555,7 @@ export class ContainerHost implements BrowserHost {
   ): Promise<NonNullable<BrowserRecord["container"]>> {
     const { image, volume, relay, media, owner, network, address, hostRules } =
       made;
+    const { extraHosts } = machineHostOf(this.#runtime);
     const { http, devtools, media: port } = portsOf(record);
     const passwords = { admin: password(), user: password() };
     const stun = stunServer();
@@ -583,10 +596,13 @@ export class ContainerHost implements BrowserHost {
         ),
       },
       HostConfig: {
-        // The machine, as the rules name it: asked for only where a rule
-        // needs it, since a runtime that can't find the host's address
-        // refuses the container.
-        ...(hostRules ? { ExtraHosts: [`${MACHINE_HOST}:host-gateway`] } : {}),
+        // The machine, as the rules name it on a native engine: asked for
+        // only where a rule needs it, since a runtime that can't find the
+        // host's address refuses the container. A VM's runtime names the
+        // machine itself, and takes none (preview-names.ts `machineHostOf`).
+        ...(hostRules && extraHosts.length > 0
+          ? { ExtraHosts: extraHosts }
+          : {}),
         NetworkMode: placed.NetworkMode,
         PortBindings: {
           "8080/tcp": [{ HostIp: "127.0.0.1", HostPort: String(http) }],

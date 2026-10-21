@@ -234,16 +234,50 @@ const relayHolds = (relay: BrowserRelay): boolean => {
 };
 
 /**
+ * What a start of a live browser does with its container's preview-name
+ * rules (preview-names.ts) when the hub's names now want others: `match`,
+ * the container made again with them; `defer`, kept as it is while another
+ * session holds it, and made again once its last connection lets it go
+ * ({@link rulesAtRelease}); `keep`, not looked at.
+ */
+type RulesAt = "match" | "defer" | "keep";
+
+/** The browsers whose rules changed while another session held them: made again at the last release. */
+const rulesWaiting = new Set<BrowserKey>();
+
+/**
+ * The last connection to `key` let go: a remake its rules waited for
+ * ({@link RulesAt} `defer`) happens now, but while the person holds it (a
+ * take-over cut every connection), when the next session's acquisition
+ * matches them instead.
+ */
+const rulesAtRelease = (key: BrowserKey): void => {
+  if (!rulesWaiting.delete(key)) {
+    return;
+  }
+  readBrowser(key)
+    .then((record) =>
+      record && !record.takeover ? wakeBrowser(key, "match") : undefined
+    )
+    .catch((error: unknown) =>
+      console.warn(
+        `[browser] ${key} was not made again for its preview-name rules: ${why(error)}`
+      )
+    );
+};
+
+/**
  * `key`'s DevTools address as its host gives it: with `wake`, the browser
  * started or woken first, with the stream relay the hub last gave it while
- * that credential holds (a container made again keeps its relay); without,
- * only while it runs.
+ * that credential holds (a container made again keeps its relay), its
+ * preview-name rules as `rules` says; without, only while it runs.
  */
 const devtoolsOf = async (
   key: BrowserKey,
-  wake: boolean
+  wake: boolean,
+  rules: RulesAt
 ): Promise<string | undefined> => {
-  const record = wake ? await wakeBrowser(key) : await readBrowser(key);
+  const record = wake ? await wakeBrowser(key, rules) : await readBrowser(key);
   if (record?.state !== "live") {
     return;
   }
@@ -255,17 +289,21 @@ const devtoolsOf = async (
 
 /**
  * `key` started or woken, with the stream relay the hub last gave it while
- * that credential holds (a container made again keeps its relay): its record
- * as it stands then.
+ * that credential holds (a container made again keeps its relay), its
+ * preview-name rules as `rules` says: its record as it stands then.
  */
 export const wakeBrowser = async (
-  key: BrowserKey
+  key: BrowserKey,
+  rules: RulesAt = "keep"
 ): Promise<BrowserRecord | undefined> => {
   const kept = (await readBrowser(key))?.relay;
-  await startBrowser({
-    key,
-    ...(kept && relayHolds(kept) ? { relay: kept } : {}),
-  });
+  await startBrowser(
+    {
+      key,
+      ...(kept && relayHolds(kept) ? { relay: kept } : {}),
+    },
+    rules
+  );
   return readBrowser(key);
 };
 
@@ -302,8 +340,15 @@ const gateFor = (record: BrowserRecord): void => {
   const made = !gateOf(key);
   const gate = serveGate({
     key,
-    devtools: (wake) => devtoolsOf(key, wake),
-    used: () => used(key),
+    // A session's acquisition matches the rules; while another holds the
+    // browser, the remake waits for its release.
+    devtools: (wake, alone) => devtoolsOf(key, wake, alone ? "match" : "defer"),
+    used: (held) => {
+      used(key);
+      if (!held) {
+        rulesAtRelease(key);
+      }
+    },
   });
   // A gate made while the person holds the browser (the daemon restarted
   // mid-take-over, its record read back) starts closed, as the shield
@@ -391,10 +436,49 @@ const markAway = async (record: BrowserRecord): Promise<string> => {
 };
 
 /**
- * Starts the browser of `key`, or wakes it, on the host this machine has
- * now, and answers its row once it is live.
+ * Whether `record`'s browser, live, stands as a start asks: running, its
+ * relay credential good, and its preview-name rules as the hub wants them
+ * now unless `rules` keeps them; a change another session's hold defers is
+ * noted for its release ({@link rulesAtRelease}).
  */
-export const startBrowser = (args: BrowserStartArgs): Promise<BrowserRow> => {
+const standsAsAsked = async (
+  record: BrowserRecord,
+  host: BrowserHost,
+  relay: BrowserRelay | undefined,
+  rules: RulesAt
+): Promise<boolean> => {
+  if (!(
+    record.state === "live" &&
+    (await host.running(record)) &&
+    !relayDue(record, relay)
+  )) {
+    return false;
+  }
+  if (rules === "keep" || !(await host.rulesDue?.(record))) {
+    return true;
+  }
+  if (rules === "defer") {
+    rulesWaiting.add(record.key);
+    console.info(
+      `[browser] ${record.key}: the hub's preview names want other rules; another session holds it, so it is made again once released`
+    );
+    return true;
+  }
+  console.info(
+    `[browser] ${record.key}: the hub's preview names want other rules; made again with them`
+  );
+  return false;
+};
+
+/**
+ * Starts the browser of `key`, or wakes it, on the host this machine has
+ * now, and answers its row once it is live; a live one's preview-name rules
+ * as `rules` says ({@link RulesAt}).
+ */
+export const startBrowser = (
+  args: BrowserStartArgs,
+  rules: RulesAt = "keep"
+): Promise<BrowserRow> => {
   const { key, relay } = args;
   if (!isBrowserKey(key)) {
     return Promise.reject(new Error(`${String(key)} is no browser key.`));
@@ -412,11 +496,7 @@ export const startBrowser = (args: BrowserStartArgs): Promise<BrowserRow> => {
       record = { ...record, relay };
     }
     record = await slotted(record, await host.heldSlots?.());
-    if (
-      record.state === "live" &&
-      (await host.running(record)) &&
-      !relayDue(record, relay)
-    ) {
+    if (await standsAsAsked(record, host, relay, rules)) {
       record = { ...record, lastUsedAt: Date.now() };
       await writeBrowser(record);
       told();
@@ -435,6 +515,8 @@ export const startBrowser = (args: BrowserStartArgs): Promise<BrowserRow> => {
       const { why: _why, runtimeAway: _away, ...live } = record;
       record = { ...live, state: "live", lastUsedAt: Date.now() };
       await writeBrowser(record);
+      // Made with the rules wanted now: no remake waits on a release.
+      rulesWaiting.delete(key);
       console.info(`[browser] ${key} live on the ${host.kind} host`);
       gateFor(record);
       starting.delete(key);

@@ -9,7 +9,7 @@ export const previewPlace = (source: PreviewSource): string => {
   return "dir" in source ? pathLeaf(source.dir) : `localhost:${source.port}`;
 };
 
-/** The artifact a call made or showed (`artifact_create`, `artifact_show`), as its tool row names it. */
+/** The artifact a call made, showed or opened in its session's browser (`artifact_create`, `artifact_show`, `artifact_browse`), as its tool row names it. */
 export interface CalledArtifact {
   id: string;
   kind?: ArtifactKind;
@@ -19,7 +19,7 @@ export interface CalledArtifact {
 const UUID = /^[0-9a-f-]{36}$/;
 
 /**
- * The artifact a call names: `artifact_show`'s `id`, or the one
+ * The artifact a call names: `artifact_show`'s or `artifact_browse`'s `id`, or the one
  * `artifact_create` answered with; undefined until the call has one.
  */
 export const calledArtifact = (

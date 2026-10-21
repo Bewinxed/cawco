@@ -115,6 +115,12 @@ export interface BrowserHost {
   readonly kind: BrowserHostKind;
   /** Stops it and deletes its profile. */
   remove: (record: BrowserRecord) => Promise<void>;
+  /**
+   * Whether the record's container was made with other preview-name rules
+   * than the hub wants now (container-host.ts); none on a host that maps no
+   * names.
+   */
+  rulesDue?: (record: BrowserRecord) => Promise<boolean>;
   /** Whether the record's browser runs now, read from the runtime or the process. */
   running: (record: BrowserRecord) => Promise<boolean>;
   /** Starts (or wakes) it and answers the record once it is live. */

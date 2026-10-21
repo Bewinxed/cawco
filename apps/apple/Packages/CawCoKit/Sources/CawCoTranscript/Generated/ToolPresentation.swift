@@ -555,7 +555,7 @@ nonisolated enum ToolPresentation {
         ),
         Kind(
             id: .preview,
-            names: ["artifact_create", "cawco_artifact_create", "artifact_show", "cawco_artifact_show"],
+            names: ["artifact_create", "cawco_artifact_create", "artifact_show", "cawco_artifact_show", "artifact_browse", "cawco_artifact_browse"],
             namePattern: nil,
             glyph: "window-frame-bold-duotone",
             ink: "tool-mcp",

@@ -34,7 +34,10 @@
  * every connection with {@link SHIELD_CLOSE} and refuses new ones with its
  * sentence until it opens again; a workspace whose boundary ends for good
  * has its connections cut and its pages closed. A connection holds its
- * browser awake, and one to a browser that sleeps wakes it.
+ * browser awake, and one to a browser that sleeps wakes it. A session's
+ * connection, while no other session holds one, has a container made again
+ * whose preview-name rules the hub's names no longer want (browsers.ts
+ * `RulesAt`); while another does, that waits for the last release.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
@@ -326,9 +329,11 @@ const dial = (url: string): Promise<WebSocket> =>
 export interface GateDeps {
   /**
    * Chromium's DevTools address: with `wake`, the browser started or woken
-   * first; without, undefined while it does not run.
+   * first, `alone` when no other session holds a connection to it (a
+   * session's acquisition may then make it again, browsers.ts `RulesAt`);
+   * without, undefined while it does not run.
    */
-  devtools: (wake: boolean) => Promise<string | undefined>;
+  devtools: (wake: boolean, alone: boolean) => Promise<string | undefined>;
   key: BrowserKey;
   /** Called as the first connection opens (`true`) and the last closes (`false`). */
   used: (held: boolean) => void;
@@ -465,9 +470,9 @@ export class Gate {
     return this.#closedWhy ?? new Link(this, id);
   }
 
-  /** Chromium's browser connection URL, the browser woken first when `wake`. */
-  async #browserUrl(wake: boolean): Promise<string> {
-    const base = await this.#deps.devtools(wake);
+  /** Chromium's browser connection URL, the browser woken first when `wake` (`alone`: no other session holds it). */
+  async #browserUrl(wake: boolean, alone = false): Promise<string> {
+    const base = await this.#deps.devtools(wake, alone);
     if (!base) {
       throw new Error(`${this.key} does not run.`);
     }
@@ -495,7 +500,10 @@ export class Gate {
       this.#deps.used(true);
     }
     this.#arrived(link.workspace);
-    const url = await this.#browserUrl(true);
+    const alone = ![...this.#links].some(
+      (other) => other !== link && other.workspace !== link.workspace
+    );
+    const url = await this.#browserUrl(true, alone);
     await this.#watching(url);
     return dial(url);
   }
