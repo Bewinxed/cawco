@@ -104,9 +104,11 @@ import { machineEndpoint } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
 import {
   machineKeyPath,
+  machineRefusalPath,
   readMachineKey,
   socketProof,
   writeMachineKey,
+  writeMachineRefusal,
 } from "@cawco/core/machine-key";
 import { userLayerPath } from "@cawco/core/paths";
 import { sweepDeadShortLinks } from "@cawco/core/sessiond";
@@ -2683,12 +2685,25 @@ const attach = (
      * the hub requires paired devices and holds this connection until the
      * person admits the machine; nothing more is sent on it meanwhile.
      * Admitted: the key, kept beside `config.json`; a waiting connection
-     * then ends, and the next one proves the key.
+     * then ends, and the next one proves the key. Refused: the person's
+     * answer, kept for this machine's install, which waits on it (CLI
+     * binary-install.ts `awaitJoined`); the hub closes the connection next.
      */
     const admission = (said: AdmissionPayload): void => {
       if (said.kind === "waiting") {
         waitingAdmission = true;
         Effect.runFork(Effect.logWarning(`[admission] ${said.message}`));
+        return;
+      }
+      if (said.kind === "refused") {
+        Effect.runFork(Effect.logWarning(`[admission] ${said.message}`));
+        writeMachineRefusal(said.message).catch((error: unknown) =>
+          Effect.runFork(
+            Effect.logError(
+              `[admission] the refusal could not be written to ${machineRefusalPath()}: ${error instanceof Error ? error.message : String(error)}`
+            )
+          )
+        );
         return;
       }
       if (said.kind !== "admitted") {

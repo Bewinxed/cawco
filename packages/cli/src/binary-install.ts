@@ -32,7 +32,7 @@ import type {
 import { writeWrapper } from "@cawco/core/binary-wrapper";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { machineId } from "@cawco/core/machine-id";
-import { machineFetch } from "@cawco/core/machine-key";
+import { machineFetch, refusalSince } from "@cawco/core/machine-key";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { askYes, closeAsking } from "./ask";
 import { discoverHub } from "./discover";
@@ -46,8 +46,6 @@ import {
 /** Tools offered at install: what CawCo uses, none of it required to start. */
 const OFFERED = ["git", "claude", "opencode", "pi"] as const;
 const JOIN_TIMEOUT_MS = 90_000;
-/** How long a machine waits for the person to admit it, once the hub says it requires paired devices. */
-const ADMISSION_TIMEOUT_MS = 10 * 60_000;
 const LOCAL_NETWORK_URL =
   /^https?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
 
@@ -94,11 +92,21 @@ const readOwnRow = (
     }
   });
 
+/**
+ * Until the hub lists this machine online. A hub that holds it for the
+ * person (it requires paired devices, and this machine holds no key it
+ * admitted) is waited on for as long as the person takes: the wait says so
+ * once, and ends when they admit the machine (it comes online) or refuse it
+ * (the agent keeps the hub's words, core machine-key.ts `refusalSince`). A
+ * machine the hub added over SSH holds the key its add gave it, and is
+ * never held.
+ */
 async function awaitJoined(hubUrl: string): Promise<void> {
   const id = await machineId();
-  let deadline = Date.now() + JOIN_TIMEOUT_MS;
+  const since = Date.now();
+  const deadline = since + JOIN_TIMEOUT_MS;
   let waiting = false;
-  while (Date.now() < deadline) {
+  while (waiting || Date.now() < deadline) {
     // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the hub after the previous one
     const answer = await readOwnRow(hubUrl, id).catch(() => undefined);
     // Neither an unanswered read nor a refused one ends the wait: the poll asks again.
@@ -109,7 +117,6 @@ async function awaitJoined(hubUrl: string): Promise<void> {
       case "answered":
         if (answer.value.pairing === "required" && !waiting) {
           waiting = true;
-          deadline = Date.now() + ADMISSION_TIMEOUT_MS;
           console.log(
             `${INSTALL_STEP_PREFIX}waiting to be admitted: this hub requires paired devices. Admit ${hostname()} on the dashboard's Machines list.`
           );
@@ -123,12 +130,13 @@ async function awaitJoined(hubUrl: string): Promise<void> {
         throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
     }
+    const refused = refusalSince(since);
+    if (refused) {
+      throw new Error(
+        `The agent started, and ${hubUrl} answered: ${refused} Nothing joined.`
+      );
+    }
     await Bun.sleep(1000);
-  }
-  if (waiting) {
-    throw new Error(
-      `The agent started, and ${hubUrl} still waits for the person to admit this machine after ${ADMISSION_TIMEOUT_MS / 60_000} minutes. Admit it on the dashboard's Machines list; it connects the moment it is admitted.`
-    );
   }
   const lan = process.platform === "darwin" && LOCAL_NETWORK_URL.test(hubUrl);
   throw new Error(

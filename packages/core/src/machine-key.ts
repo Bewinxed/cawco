@@ -22,6 +22,40 @@ export const machineKeyPath = (): string =>
 /** Readable by its owner and nobody else. */
 const KEY_MODE = 0o600;
 
+/**
+ * Where the agent keeps the person's last refusal of this machine (hub
+ * hub-auth.ts `refuse`): the install's wait for its admission reads it, the
+ * agent being the one on the hub's socket.
+ */
+export const machineRefusalPath = (): string =>
+  join(cawcoConfigDir(), "admission-refused.json");
+
+/** The person refused this machine, in the hub's words: kept for the install that waits on the answer. */
+export const writeMachineRefusal = (
+  message: string,
+  path = machineRefusalPath()
+): Promise<void> =>
+  writeStateFile(path, `${JSON.stringify({ at: Date.now(), message })}\n`, {
+    mode: KEY_MODE,
+  });
+
+/** The hub's words for the person's refusal of this machine at `since` or later; undefined when none came since. */
+export const refusalSince = (
+  since: number,
+  path = machineRefusalPath()
+): string | undefined => {
+  const text = readTextRecordSync(path);
+  if (!text) {
+    return;
+  }
+  const said = JSON.parse(text) as { at?: unknown; message?: unknown };
+  return typeof said.at === "number" &&
+    said.at >= since &&
+    typeof said.message === "string"
+    ? said.message
+    : undefined;
+};
+
 /** This machine's key, or undefined before it was admitted. */
 export const readMachineKey = (path = machineKeyPath()): string | undefined =>
   readTextRecordSync(path)?.trim() || undefined;

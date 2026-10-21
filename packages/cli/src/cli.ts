@@ -18,21 +18,17 @@ import {
 } from "@cawco/core";
 import { hubCredentialSocket } from "@cawco/core/paths";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
-import { BrowserCommandError } from "./browser";
-import { ConnectionKeyError } from "./connections";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
 import { OwnerApprovalError, ownerFetch } from "./owner";
-import { PairingError, pairingOff } from "./pairing";
-import { RelayError } from "./relay";
+import { pairingOff } from "./pairing";
 import {
   isServiceAction,
   isServiceId,
   SERVICE_ACTIONS,
   SERVICE_IDS,
-  ServiceError,
   service,
 } from "./service";
-import { callTool, listTools, sessionOf, ToolError, toolDoor } from "./tools";
+import { callTool, listTools, sessionOf, toolDoor } from "./tools";
 
 /** Reported by `--version`; keep in sync with package.json. */
 /**
@@ -912,6 +908,28 @@ const run = async (argv: string[]): Promise<number> => {
   throw new UsageError(`unknown command ${args.command}`);
 };
 
+/**
+ * A failed command as the CLI says it: `cawco: <message>`, then each cause
+ * it carries, one line each. Never rethrown: an error that escapes is
+ * printed by Bun with the lines of source around where it was thrown, in a
+ * binary install the minified bundle's.
+ */
+const failure = (error: unknown): string => {
+  const lines = [
+    `cawco: ${error instanceof Error ? error.message : String(error)}`,
+  ];
+  const said = new Set<unknown>([error]);
+  let cause = error instanceof Error ? error.cause : undefined;
+  while (cause !== undefined && !said.has(cause)) {
+    said.add(cause);
+    lines.push(
+      `  because: ${cause instanceof Error ? cause.message : String(cause)}`
+    );
+    cause = cause instanceof Error ? cause.cause : undefined;
+  }
+  return lines.join("\n");
+};
+
 const cliArgs = Bun.argv.slice(2);
 // `heavy-run`'s argument is a shell command, never parsed as flags.
 const code = await (
@@ -921,19 +939,8 @@ const code = await (
     console.error(`cawco: ${error.message}\n\nRun \`cawco --help\`.`);
     return 2;
   }
-  if (
-    error instanceof ServiceError ||
-    error instanceof ToolError ||
-    error instanceof ConnectionKeyError ||
-    error instanceof RelayError ||
-    error instanceof PairingError ||
-    error instanceof OwnerApprovalError ||
-    error instanceof BrowserCommandError
-  ) {
-    console.error(`cawco: ${error.message}`);
-    return 1;
-  }
-  throw error;
+  console.error(failure(error));
+  return 1;
 });
 
 // A command that left something running — the daemon, the hub — keeps the

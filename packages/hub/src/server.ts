@@ -774,7 +774,12 @@ import { applySetupPicks } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
 import { resolveSkill } from "./skills";
 import { sourceFacts } from "./source-facts";
-import { createSshDoor } from "./ssh-door";
+import {
+  CLIENT_ADDRESS_HEADER,
+  createSshDoor,
+  SSH_FORWARD_HEADER,
+  viaSshForward,
+} from "./ssh-door";
 import { createSshTunnels } from "./ssh-tunnels";
 import { type StagesTemplate, TEMPLATES, templateOf } from "./stages";
 import { createStreamHub } from "./stream";
@@ -3574,17 +3579,15 @@ export const createServer = (
    * (ssh-tunnels.ts): the machine's agent reaches the hub through it, at
    * the door that holds every caller to a proof of what it is
    * (ssh-door.ts), and the hub reaches its preview listeners the same way.
-   * The door opens, then every joined machine's connection, once the hub
-   * serves.
+   * Every joined machine's connection opens once the hub serves, each
+   * forwarded to the door's listener for its record.
    */
-  const sshDoor = createSshDoor(lifetime);
   const sshTunnels = createSshTunnels({
     db: db.sshMachines,
     lifetime,
-    door: () => sshDoor.port(),
+    door: createSshDoor(lifetime),
   });
   offBoot.push(() => {
-    sshDoor.start();
     sshTunnels.start();
   });
 
@@ -16412,6 +16415,17 @@ export const createServer = (
   /** The mode a machine's socket is held to: always paired through a machine's SSH forward (hub-auth.ts `modeFor`). */
   const socketMode = (ws: AuthSocket) =>
     hubAuth.modeFor((name) => ws.headers?.[name]);
+  /**
+   * Where a machine's socket came from, as the hub names it: through an SSH
+   * add's forward, the address the person gave that add (ssh-door.ts sets
+   * it, and only the door's mark makes it read), else the socket's own.
+   */
+  const socketAddress = (ws: AuthSocket): string | null =>
+    (viaSshForward(ws.headers?.[SSH_FORWARD_HEADER])
+      ? ws.headers?.[CLIENT_ADDRESS_HEADER]
+      : undefined) ??
+    ws.remoteAddress ??
+    null;
   /** Each dashboard socket's paired device; null for one the hub trusted by its network. */
   const dashboardDevices = new Map<AuthSocket, string | null>();
   /**
@@ -16483,7 +16497,8 @@ export const createServer = (
       ? hubAuth.proveSocket(
           message.machineId,
           nonce,
-          typeof proof === "string" ? proof : undefined
+          typeof proof === "string" ? proof : undefined,
+          ws.id
         )
       : "unknown";
     if (verdict === "proven" || socketMode(ws) === "trusted") {
@@ -16492,7 +16507,7 @@ export const createServer = (
     }
     if (verdict === "wrong") {
       const fault = `register refused: machine ${message.machineId} is admitted with a key, and this connection did not prove it. If this is that machine and it lost its key, remove it from Machines and admit it again.`;
-      console.warn(`[hub-auth] ${fault} (from ${ws.remoteAddress})`);
+      console.warn(`[hub-auth] ${fault} (from ${socketAddress(ws)})`);
       sendFrame(ws, refusalFrame(message, fault));
       ws.close(4403, "machine key not proven");
       return false;
@@ -16515,7 +16530,7 @@ export const createServer = (
       hostname:
         typeof identity.hostname === "string" ? identity.hostname : null,
       platform: typeof identity.os === "string" ? identity.os : null,
-      address: ws.remoteAddress ?? null,
+      address: socketAddress(ws),
       since: Date.now(),
       socket: ws.id,
       admit: (key) =>
@@ -16524,7 +16539,15 @@ export const createServer = (
           machineId: message.machineId,
           payload: { kind: "admitted", key },
         } satisfies Envelope<AdmissionPayload>),
-      refuse: (reason) => ws.close(4403, reason),
+      close: (reason) => ws.close(4403, reason),
+      refuse: (reason) => {
+        sendFrame(ws, {
+          verb: "admission",
+          machineId: message.machineId,
+          payload: { kind: "refused", message: reason },
+        } satisfies Envelope<AdmissionPayload>);
+        ws.close(4403, reason);
+      },
     });
     sendFrame(ws, {
       verb: "admission",
@@ -16563,7 +16586,8 @@ export const createServer = (
       const proof = peek(message.payload, "proof");
       const proven =
         hubAuth.provesFormer(former, message.machineId, nonce, proof) ||
-        (hubAuth.proveSocket(message.machineId, nonce, proof) === "proven" &&
+        (hubAuth.proveSocket(message.machineId, nonce, proof, ws.id) ===
+          "proven" &&
           message.machineId === ownMachineIdRead);
       if (!proven) {
         console.warn(

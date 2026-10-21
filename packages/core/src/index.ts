@@ -164,11 +164,16 @@ export type Verb =
  *   it was connected): its key, sent this once over this socket. A waiting
  *   machine writes it and connects again with its proof; a connected one
  *   writes it and carries on.
+ * - `refused`: the person refused the machine: said on its waiting
+ *   connection just before the hub closes it, so the machine's install,
+ *   waiting on that answer, ends with it (core machine-key.ts
+ *   `refusalSince`).
  */
 export type AdmissionPayload =
   | { kind: "challenge"; hubId: string; nonce: string }
   | { kind: "waiting"; message: string }
-  | { kind: "admitted"; key: string };
+  | { kind: "admitted"; key: string }
+  | { kind: "refused"; message: string };
 
 /**
  * `launch`, agent → hub: a launch the hub sent this machine is starting now,

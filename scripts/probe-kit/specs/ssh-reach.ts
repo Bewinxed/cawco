@@ -54,6 +54,15 @@
  *     box's sshd listens beyond its loopback.
  * (f) A machine whose sshd says `AllowTcpForwarding no`: the add fails with
  *     words naming that setting, and no connection or record is kept.
+ * (j) The owner's stuck add: the machine's agent already runs and is held
+ *     for the person (it knocked before the add wrote its key), and the
+ *     install leaves it running. The add ends done and online, no Admit
+ *     click, no Admit row ({@link heldAgentAdd}). (b) and (c) say neither of
+ *     their adds held the machine either.
+ * (k) A box process with no key, knocking through the forward as a machine
+ *     joining by itself, is still held; its Admit row names the SSH target's
+ *     host, never 127.0.0.1; refused, it hears the refusal, then the close.
+ * (l) A failing CLI command prints `cawco: <message>`, no source frame.
  *
  * It makes namespaces, so it runs on the host, outside every workspace:
  *
@@ -67,6 +76,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -104,6 +114,18 @@ const PROCESS_ID = /^\d+$/;
 const MASTER = / -N .* -M -S /;
 const LOOPBACK_HOST = /^(?:127\.[\d.]+|\[::1\]|::1)$/;
 const WHITESPACE = /\s+/;
+/** A line of Bun's source frame for an error it printed itself: `312 |   throw …`. */
+const SOURCE_FRAME = /^\s*\d+ \| /;
+
+/** Whether the hub's log says `machineId` was held for the person (hub-auth.ts `hold`). */
+const heldIn = (log: string, machineId: string): boolean =>
+  log
+    .split("\n")
+    .some(
+      (line) =>
+        line.includes(`machine ${machineId} (`) &&
+        line.includes("waits to be admitted")
+    );
 
 /** Every live process's pid, parent and argv, read from /proc. */
 const processList = (): { argv: string; pid: number; ppid: number }[] =>
@@ -158,14 +180,22 @@ hub=$3
 binary="$HOME/.local/share/cawco/binary"
 printf '{"role":"agent","hubUrl":"%s","installedVersion":"ssh-reach"}\\n' "$hub" > "$binary/installation.json"
 old=$(/usr/bin/cat "$binary/agent.pid" 2>/dev/null || :)
+running=0
 case "$old" in
   ''|*[!0-9]*) ;;
-  *) if [ "$old" -gt 1 ] && /usr/bin/grep -qa ${quoted(agent)} "/proc/$old/cmdline" 2>/dev/null; then /usr/bin/kill "$old"; fi ;;
+  *) if [ "$old" -gt 1 ] && /usr/bin/grep -qa ${quoted(agent)} "/proc/$old/cmdline" 2>/dev/null; then running=1; fi ;;
 esac
 . ${quoted(agentEnv)}
 cd ${quoted(root)} || exit 1
-CAWCO_HUB_URL="ws://\${hub#http://}/ws" /usr/bin/setsid ${quoted(process.execPath)} ${quoted(agent)} </dev/null >>"$binary/agent.log" 2>&1 &
-echo $! > "$binary/agent.pid"
+# With keep-running, an agent that runs is left be, as a first install's
+# \`systemctl --user enable --now\` leaves a unit that is already active.
+if [ "$running" = 1 ] && [ -e "$binary/keep-running" ]; then
+  echo "cawco (ssh-reach stand-in): the running agent $old is left running" >&2
+else
+  [ "$running" = 1 ] && /usr/bin/kill "$old"
+  CAWCO_HUB_URL="ws://\${hub#http://}/ws" /usr/bin/setsid ${quoted(process.execPath)} ${quoted(agent)} </dev/null >>"$binary/agent.log" 2>&1 &
+  echo $! > "$binary/agent.pid"
+fi
 i=0
 while [ $i -lt 120 ]; do
   ASK="$hub/api/agents/${BOX}" ${quoted(process.execPath)} ${quoted(ask)} && { echo "cawco-install: joined as ${BOX}"; exit 0; }
@@ -292,6 +322,32 @@ async function furnish(fleet: KitFleet): Promise<Box> {
   writeFileSync(
     join(dir, "ask-file.ts"),
     `import { createHash } from "node:crypto";\nimport { machineFetch } from ${JSON.stringify(join(root, "packages/core/src/machine-key.ts"))};\nconst answer = await machineFetch(process.env.ASK ?? "");\nconst bytes = new Uint8Array(await answer.arrayBuffer());\nconsole.log(answer.status, createHash("sha256").update(bytes).digest("hex"));\n`
+  );
+  // A machine knocking by itself, through the forward, with no key: its
+  // register names `argv[3]` and proves nothing; each admission word it
+  // hears is a line, then how the hub closed it.
+  writeFileSync(
+    join(dir, "knock.ts"),
+    `const [url, id] = process.argv.slice(2);
+const socket = new WebSocket(url ?? "");
+const bound = setTimeout(() => socket.close(), 90_000);
+socket.addEventListener("message", (event) => {
+  const frame = JSON.parse(String(event.data)) as { verb?: string; payload?: { kind?: string; message?: string } };
+  if (frame.verb !== "admission") {
+    return;
+  }
+  if (frame.payload?.kind === "challenge") {
+    socket.send(JSON.stringify({ verb: "register", machineId: id, payload: { hostname: id, os: "linux" } }));
+    return;
+  }
+  console.log(\`\${frame.payload?.kind} \${frame.payload?.message ?? ""}\`);
+});
+socket.addEventListener("close", (event) => {
+  clearTimeout(bound);
+  console.log(\`closed \${event.code}\`);
+  process.exit(0);
+});
+`
   );
   const sourced = `. ${quoted(agentEnv)};`;
   const asMachine = `${sourced} ${quoted(process.execPath)}`;
@@ -477,6 +533,12 @@ const readers = (kit: Kit, fleet: KitFleet, box: Box) => {
       fetch(`${fleet.base}/api/agents/${BOX}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((row: { status?: string } | null) => row?.status ?? "absent"),
+    /** The machines held for the person, as the dashboard's Admit rows read them. */
+    waiting: () =>
+      fetch(`${fleet.base}/api/machines/waiting`).then(
+        (r) =>
+          r.json() as Promise<{ address: string | null; machineId: string }[]>
+      ),
     rows: () =>
       fleet.query<{
         box_port: number | null;
@@ -506,7 +568,7 @@ const carriedPort = (job: SshJoinJob) =>
 async function joins(
   fleet: KitFleet,
   box: Box,
-  { check, add, status, rows, tunnels, keyLines }: Readers
+  { check, add, status, rows, tunnels, keyLines, waiting }: Readers
 ): Promise<number> {
   // (a) No way from the box to the hub, nor out.
   const fromBox = readFileSync(join(box.dir, "reach-hub.txt"), "utf8").trim();
@@ -553,18 +615,163 @@ async function joins(
   const second = await add(`${box.user}@ssh-reach-box`, OPEN);
   const port = carriedPort(second);
   const held = tunnels();
+  const waitingRows = await waiting();
+  const log = await fleet.logs("hub").catch((error: Error) => error.message);
   await check(
-    "c: by key on OpenSSH the machine moves to that connection: done, online, one record and one connection for it, on the port the box allocated",
+    "c: by key on OpenSSH the machine moves to that connection: done, online, one record and one connection for it, on the port the box allocated; neither add held it for the person, and no Admit row stands",
     second.state === "done" &&
       second.machineId === BOX &&
       port > 0 &&
       (await status()) === "online" &&
       JSON.stringify(rows()) ===
         JSON.stringify([{ ssh_port: OPEN, box_port: port, machine_id: BOX }]) &&
-      held.length === 1,
-    `${seen(second)}; records ${JSON.stringify(rows())}; connections ${JSON.stringify(held.map(({ pid }) => pid))}`
+      held.length === 1 &&
+      waitingRows.length === 0 &&
+      !heldIn(log, BOX),
+    `${seen(second)}; records ${JSON.stringify(rows())}; connections ${JSON.stringify(held.map(({ pid }) => pid))}; waiting ${JSON.stringify(waitingRows)}; the hub held it: ${heldIn(log, BOX)}`
   );
   return port;
+}
+
+/**
+ * (j) The owner's add, 2026-10-21: the machine's agent already runs, its
+ * connection held for the person (it knocked through the forward before
+ * the add wrote its key), and the install leaves a running agent be, as a
+ * first install's `systemctl --user enable --now` does. Held by the hub
+ * before this change, the add failed after 90 s with the Admit row
+ * standing. Now the install's own check, made with the key, closes the held
+ * connection, the agent connects again with that key, and the add is done.
+ */
+async function heldAgentAdd(
+  fleet: KitFleet,
+  box: Box,
+  { check, add, status, tunnels, waiting }: Readers
+): Promise<void> {
+  const name =
+    "j: an SSH add whose machine's agent already runs, held for the person since before the add wrote its key, ends done and online with no Admit click, its held connection closed by the key's first proof, and no Admit row stands";
+  rmSync(join(box.home, ".config", "cawco", "machine-key"), { force: true });
+  fleet.write("DELETE FROM machine_keys WHERE machine_id = ?", BOX);
+  const [master] = tunnels();
+  if (!master) {
+    await check(name, false, "the hub held no connection to the machine");
+    return;
+  }
+  signalOwn(listedPid(master.pid), "SIGKILL");
+  const heldRow = await until(
+    "the machine's agent held for the person",
+    () => waiting(),
+    (rows) => rows.some((row) => row.machineId === BOX),
+    BACK_MS
+  ).catch(() => waiting());
+  writeFileSync(join(box.binary, "keep-running"), "");
+  try {
+    const job = await add(`${box.user}@ssh-reach-box`, OPEN);
+    const after = await waiting();
+    const log = await fleet.logs("hub").catch((error: Error) => error.message);
+    await check(
+      name,
+      heldRow.some((row) => row.machineId === BOX) &&
+        job.state === "done" &&
+        job.lines.some((line) => line.includes("is left running")) &&
+        (await status()) === "online" &&
+        after.length === 0 &&
+        log.includes(`machine ${BOX}'s connection held since`),
+      `held first: ${JSON.stringify(heldRow)}; ${seen(job)}; machine ${await status()}; waiting after ${JSON.stringify(after)}; the hub closed the held connection: ${log.includes(`machine ${BOX}'s connection held since`)}`
+    );
+  } finally {
+    rmSync(join(box.binary, "keep-running"), { force: true });
+  }
+}
+
+/** The id the keyless knock of (k) registers as. */
+const STRANGER = "ssh-reach-stranger";
+
+/**
+ * (k) Admission keeps its protection: a box process knocking through the
+ * forward with no key, as a machine joining by itself, is held for the
+ * person, its row named by the SSH target the person gave the add (never
+ * the forward's 127.0.0.1), and a refusal is said on its connection before
+ * the hub closes it.
+ */
+async function strangerHeld(
+  fleet: KitFleet,
+  box: Box,
+  { check, waiting }: Readers,
+  port: number
+): Promise<void> {
+  const knocking = box.enter(
+    OPEN,
+    `${box.asMachine} ${quoted(join(box.dir, "knock.ts"))} ws://127.0.0.1:${port}/ws ${STRANGER}`
+  );
+  const held = await until(
+    "the knock held for the person",
+    () => waiting(),
+    (rows) => rows.some((one) => one.machineId === STRANGER),
+    30_000
+  ).catch(() => waiting());
+  const row = held.find((one) => one.machineId === STRANGER);
+  const refused = row
+    ? await fetch(`${fleet.base}/api/machines/waiting/${STRANGER}/refuse`, {
+        method: "POST",
+      }).then((r) => r.status)
+    : 0;
+  const heard = await knocking;
+  const words = heard.out.split("\n");
+  await check(
+    "k: a box process knocking through the forward with no key is held for the person, its row named by the SSH target's host (ssh-reach-box), and refused: it hears the refusal, then the close",
+    row?.address === "ssh-reach-box" &&
+      refused === 200 &&
+      words[0]?.startsWith("waiting ") === true &&
+      words.includes("refused The person refused this machine.") &&
+      words.at(-1) === "closed 4403" &&
+      !(await waiting()).some((one) => one.machineId === STRANGER),
+    `held ${JSON.stringify(held)}; refuse answered ${refused}; the knock heard ${JSON.stringify(heard)}`
+  );
+}
+
+/**
+ * (l) A failed CLI command says its error in the CLI's words and exits 1:
+ * no line of the source around where it was thrown (Bun's `NNN | ` frame),
+ * which a binary install printed from its minified bundle. A rejoin on a
+ * machine with no installation, its data and config dirs the sandbox's.
+ */
+async function cliFailure(
+  fleet: KitFleet,
+  box: Box,
+  { check }: Readers
+): Promise<void> {
+  const scratch = join(fleet.sandbox, "cli-failure");
+  mkdirSync(scratch, { recursive: true });
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      join(box.root, "packages/cli/src/cli.ts"),
+      "binary-rejoin",
+      "--hub",
+      "http://127.0.0.1:9",
+    ],
+    {
+      env: {
+        ...process.env,
+        XDG_DATA_HOME: join(scratch, "data"),
+        XDG_CONFIG_HOME: join(scratch, "config"),
+      },
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    }
+  );
+  const [err, code] = await Promise.all([
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  await check(
+    "l: a failing CLI command's stderr is `cawco: <message>` with no source-frame (`NNN | `) line, and it exits 1",
+    code === 1 &&
+      err.trim() === "cawco: This machine has no binary installation" &&
+      !err.split("\n").some((line) => SOURCE_FRAME.test(line)),
+    `exit ${code}; stderr ${JSON.stringify(err)}`
+  );
 }
 
 /** (d) and (e): the connection killed, then the hub restarted. */
@@ -886,6 +1093,9 @@ async function run(kit: Kit): Promise<void> {
     await silentDrop(fleet, box, read, port);
     await credentials(fleet, box, read, port);
     await refusals(box, read);
+    await heldAgentAdd(fleet, box, read);
+    await strangerHeld(fleet, box, read, port);
+    await cliFailure(fleet, box, read);
   } finally {
     await keepLogs(kit, fleet, box);
     sweep(box);
@@ -897,4 +1107,8 @@ async function run(kit: Kit): Promise<void> {
   }
 }
 
-export default { name: "ssh-reach", run } satisfies Spec;
+export default {
+  name: "ssh-reach",
+  host: "it gives the box a network of its own (bwrap --unshare-net), which no workspace boundary starts",
+  run,
+} satisfies Spec;

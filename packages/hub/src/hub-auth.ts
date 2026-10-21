@@ -226,6 +226,9 @@ interface Pairing extends PairingRequest {
 
 interface Waiting extends WaitingMachine {
   admit: (key: string) => void;
+  /** Ends the connection with nothing granted: its machine connects again, and proves what it holds then. */
+  close: (reason: string) => void;
+  /** The person refused the machine: said on the connection, which then ends. */
   refuse: (reason: string) => void;
   /** Which connection holds this place, so a closing older one leaves a newer one be. */
   socket: string;
@@ -360,10 +363,21 @@ export const createHubAuth = ({
    * add wrote to its machine over its own connection (ssh-tunnels.ts
    * `admit`), which is its own from then on. An SSH add is the person
    * admitting that machine; the key is what the machine proves it with.
+   *
+   * A connection of that machine's still held for the person (one its agent
+   * opened before the add wrote the key, through the forward the add opened
+   * again: it registered with nothing to prove, and an agent the install
+   * left running never registers again on its own) is closed, granted
+   * nothing, so its agent connects again and proves the key. Anyone else on
+   * the box who knocked as that machine proves nothing on their next
+   * connection, and is refused as a forged register (server.ts
+   * `registerProven`). `socket` is the connection this proof came on, which
+   * stands.
    */
   const proves = (
     machineId: string,
-    check: (key: string) => boolean
+    check: (key: string) => boolean,
+    socket?: string
   ): boolean => {
     const key = db.machineKey(machineId);
     if (key && check(key)) {
@@ -378,6 +392,16 @@ export const createHubAuth = ({
     console.log(
       `[hub-auth] machine ${machineId} proved the key its SSH add gave it: admitted`
     );
+    const held = waiting.get(machineId);
+    if (held && held.socket !== socket) {
+      waiting.delete(machineId);
+      held.close(
+        "This machine proved the key its SSH add gave it: connect again with it."
+      );
+      console.log(
+        `[hub-auth] machine ${machineId}'s connection held since ${new Date(held.since).toISOString()} closed: it connects again with that key`
+      );
+    }
     changed();
     return true;
   };
@@ -729,17 +753,18 @@ export const createHubAuth = ({
     return key;
   };
 
-  /** What a machine's register proves: its key's answer to this socket's nonce, a wrong one, or no key on file. */
+  /** What a machine's register on `socket` proves: its key's answer to this socket's nonce, a wrong one, or no key on file. */
   const proveSocket = (
     machineId: string,
     nonce: string,
-    proof: string | undefined
+    proof: string | undefined,
+    socket: string
   ): "proven" | "wrong" | "unknown" => {
     const answered = (key: string) =>
       Boolean(
         proof && sameMac(socketProof(key, nonce, hubId(), machineId), proof)
       );
-    if (proves(machineId, answered)) {
+    if (proves(machineId, answered, socket)) {
       return "proven";
     }
     return db.machineKey(machineId) ? "wrong" : "unknown";
@@ -768,7 +793,7 @@ export const createHubAuth = ({
   const hold = (entry: Waiting) => {
     const before = waiting.get(entry.machineId);
     if (before && before.socket !== entry.socket) {
-      before.refuse("Another connection from this machine is waiting now.");
+      before.close("Another connection from this machine is waiting now.");
     }
     waiting.set(entry.machineId, entry);
     console.log(

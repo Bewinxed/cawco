@@ -26,7 +26,9 @@
  *    its own, ClientAliveInterval "The default is 0"), is ended: only an
  *    `sshd` or `sshd-session` of the user the hub signs in as, listening on
  *    that port.
- * 3. The forward, `-R 127.0.0.1:<port>:127.0.0.1:<door>`. The first time the
+ * 3. The forward, `-R 127.0.0.1:<port>:127.0.0.1:<door>`, to the door's
+ *    listener for this machine's record, which names what comes through it
+ *    by the SSH target the person gave (ssh-door.ts). The first time the
  *    port is 0: "If the port argument is '0', the listen port will be
  *    dynamically allocated on the server and reported to the client at run
  *    time. When used together with -O forward, the allocated port will be
@@ -52,6 +54,7 @@ import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { DB_PATH } from "./config";
 import type { SshMachineRow, SshMachinesDb } from "./db/ssh-machines";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { SshDoor } from "./ssh-door";
 
 /**
  * How long a connection gets to open: `ssh`'s to the machine, and the
@@ -558,8 +561,8 @@ export const createSshTunnels = ({
   lifetime,
 }: {
   db: SshMachinesDb;
-  /** The port of the hub's door for SSH forwards (ssh-door.ts), once it listens. */
-  door: () => number;
+  /** The hub's door for SSH forwards (ssh-door.ts): each record's listener, named by its target. */
+  door: Pick<SshDoor, "close" | "port">;
   lifetime: HubLifetimeShape;
 }): SshTunnels => {
   const tunnels = new Map<string, Tunnel>();
@@ -646,7 +649,7 @@ export const createSshTunnels = ({
     row: SshMachineRow,
     path: string
   ): Promise<{ port: number } | { refusal: TunnelRefusal }> => {
-    const spec = `127.0.0.1:${row.boxPort ?? 0}:127.0.0.1:${door()}`;
+    const spec = `127.0.0.1:${row.boxPort ?? 0}:127.0.0.1:${door.port(row.id, row.target)}`;
     const answer = await control([
       "ssh",
       "-S",
@@ -880,6 +883,7 @@ export const createSshTunnels = ({
       if (tunnel) {
         stop(tunnel);
       }
+      door.close(id);
       db.remove(id);
     },
     joined: (id, machineId) => {
@@ -892,6 +896,7 @@ export const createSshTunnels = ({
         if (tunnel) {
           stop(tunnel);
         }
+        door.close(other.id);
         db.remove(other.id);
       }
     },
@@ -909,6 +914,7 @@ export const createSshTunnels = ({
         if (tunnel) {
           stop(tunnel);
         }
+        door.close(row.id);
         db.remove(row.id);
       }
     },
