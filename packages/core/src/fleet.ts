@@ -920,6 +920,17 @@ export type FleetItemState =
         | "pending";
     };
 
+/**
+ * A server that waits on a sign-in: a runtime's own needs-auth, and every
+ * fleet server the hub holds no sign-in for ({@link FleetMcpServer.auth}
+ * `needs-auth`), which no harness starts or reads until the hub's sync after
+ * the sign-in drops the mark.
+ */
+export const MCP_NEEDS_SIGN_IN: FleetItemState = {
+  state: "needs-auth",
+  detail: "Sign in to this server from Configure → MCP servers.",
+};
+
 /** Every runtime uses this translation; an unknown status cannot claim success. */
 export const mcpFleetState = (status?: {
   status: string;
@@ -931,10 +942,7 @@ export const mcpFleetState = (status?: {
     case "needs_auth":
     case "needs_client_registration":
     case "needs-auth":
-      return {
-        state: "needs-auth",
-        detail: "Sign in to this server from Configure → MCP servers.",
-      };
+      return MCP_NEEDS_SIGN_IN;
     case "disabled":
       return { state: "disabled" };
     case "pending":

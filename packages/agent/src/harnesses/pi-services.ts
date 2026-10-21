@@ -35,7 +35,7 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { heldSkills, skillDrift, skillRecords } from "../fleet";
-import { readFleetMcpSet } from "../fleet-mcp-set";
+import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
 import { probeStarted } from "../probe-count";
 import { resolveBin } from "../tools";
 import {
@@ -452,17 +452,22 @@ const PI_AUTH_STATE: Record<PiCredentialState["state"], AuthState> = {
 /**
  * The fleet's MCP servers as pi's own client finds them ({@link piMcpList}),
  * each as every CawCo pi session takes it (pi-runtime.ts): one pi cannot take
- * says why. A project's placed copies (`placed`) are applied once in the set,
- * as on Claude Code.
+ * says why, and one the hub holds no sign-in for needs one, unread
+ * ({@link apartSignedOut}). A project's placed copies (`placed`) are applied
+ * once in the set, as on Claude Code.
  */
 const piFleetMcp = async (
   servers: Record<string, FleetMcpConfig>,
   placed: readonly string[]
 ): Promise<Record<string, FleetItemState>> => {
-  const report: Record<string, FleetItemState> = {};
+  const { read, signedOut } = apartSignedOut(
+    Object.keys(servers),
+    await readFleetMcpSet()
+  );
+  const report: Record<string, FleetItemState> = { ...signedOut };
   const taken: Record<string, McpServerConfig> = {};
-  for (const [name, config] of Object.entries(servers)) {
-    const entry = piMcpEntry(config);
+  for (const name of read) {
+    const entry = piMcpEntry(servers[name] as FleetMcpConfig);
     if ("skipped" in entry) {
       report[name] = { state: "unsupported", detail: entry.skipped };
     } else {

@@ -88,6 +88,7 @@ import {
   opencodeDenyRules,
   sessionFleetDenials,
 } from "../denied-tools";
+import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
 import { GATE_FORM_ENV, gateForm } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
@@ -5284,16 +5285,22 @@ export class OpencodeHarness implements Harness {
     await this.#ensure();
     const unsettled = await this.#configSettled();
     if (unsettled) {
-      const states = Object.fromEntries(mcp.map((name) => [name, unsettled]));
+      const { read, signedOut } = apartSignedOut(mcp, await readFleetMcpSet());
+      const states = {
+        ...signedOut,
+        ...Object.fromEntries(read.map((name) => [name, unsettled])),
+      };
       this.#heardFleetMcp(states, "report");
       report.mcp = { ...placed, ...states };
       return report;
     }
     // A fleet server OpenCode holds failed where it runs here is started again
-    // now, not at the next pass: a proxied one answers 503 until the hub signs
-    // in, and the hub's sync after a sign-in is what connects it. A location
-    // booted on the config just written holds every fleet server already, in
-    // its launch config; one still connecting is left to connect.
+    // now, not at the next pass. One the hub holds no sign-in for is not: its
+    // proxy answers 503 until the sign-in, and the hub's sync after it, with
+    // the mark dropped, is the one that starts it again in every location a
+    // live session runs in. A location booted on the config just written
+    // holds every fleet server already, in its launch config; one still
+    // connecting is left to connect.
     await this.#fleetMcpTurn(() => this.#startFailed(mcp));
     Object.assign(report.mcp, placed, await this.#readFleetMcp(mcp, "fresh"));
     return report;
@@ -5575,9 +5582,15 @@ export class OpencodeHarness implements Harness {
    * them as the server connects), and in the machine server's own location,
    * the one the status read reads. A location's MCP servers are its own, so
    * each is started where it failed. A place that does not answer its list
-   * is left to the next pass.
+   * is left to the next pass. A server the hub holds no sign-in for is
+   * started nowhere ({@link apartSignedOut}): with none other, no location
+   * is asked anything.
    */
-  async #startFailed(names: string[]): Promise<void> {
+  async #startFailed(all: string[]): Promise<void> {
+    const names = apartSignedOut(all, await readFleetMcpSet()).read;
+    if (names.length === 0) {
+      return;
+    }
     const places = new Map<
       string,
       { client: OpencodeClient; directory?: string }
@@ -5653,40 +5666,64 @@ export class OpencodeHarness implements Harness {
    * ({@link #heardFleetMcp}). The location is borrowed for the read: the
    * read boots it when none runs, and it is released after, as a session's
    * directory is ({@link #releaseDirectory}), so no copy of the fleet's
-   * servers runs on in it for nobody. A pass's reading that moved is kept
-   * for the report it asks for ({@link #readFleetMcp}).
+   * servers runs on in it for nobody. A server the hub holds no sign-in for
+   * needs one, read from nothing ({@link apartSignedOut}): with none other,
+   * no location boots. A pass's reading that moved is kept for the report it
+   * asks for ({@link #readFleetMcp}).
    */
   async #readFleetMcpNow(
-    names: string[],
+    all: string[],
     by: "report" | "pass"
   ): Promise<FleetSyncReport["mcp"]> {
-    if (names.length === 0) {
+    if (all.length === 0) {
       return {};
     }
-    let states: Record<string, FleetItemState>;
-    let read: { directory: string; identity: ServerIdentity } | undefined;
+    const { read: names, signedOut } = apartSignedOut(
+      all,
+      await readFleetMcpSet()
+    );
+    const { states: live, read } =
+      names.length > 0 ? await this.#readLiveFleetMcp(names) : { states: {} };
+    if (read) {
+      this.#releaseDirectory(read.directory, read.identity, "fleet MCP status");
+    }
+    const states = { ...signedOut, ...live };
+    if (this.#heardFleetMcp(states, by) && read) {
+      this.#passReading = { procId: read.identity.procId, states };
+    }
+    return states;
+  }
+
+  /** {@link #readFleetMcpNow}'s read of `names`, and the location it borrowed for it, for the release. */
+  async #readLiveFleetMcp(names: string[]): Promise<{
+    states: Record<string, FleetItemState>;
+    read?: { directory: string; identity: ServerIdentity };
+  }> {
     try {
       await this.#ensure();
       const unsettled = await this.#configSettled();
       if (unsettled) {
-        states = Object.fromEntries(names.map((name) => [name, unsettled]));
-      } else {
-        const client = await this.#ensure();
-        const identity = this.#serverOwner.active;
-        if (!identity) {
-          throw new Error(
-            "OpenCode's server isn't running, so its MCP servers couldn't be checked."
-          );
-        }
-        // The server's own directory: a read there boots its location, which
-        // may also hold live sessions. Its release shares the location
-        // release's attachment and running checks.
-        const listed = await this.#settledMcpList(client, names);
-        read = { directory: listed.location.directory, identity };
-        const byName = new Map(
-          listed.data.map((server) => [server.name, server.status] as const)
+        return {
+          states: Object.fromEntries(names.map((name) => [name, unsettled])),
+        };
+      }
+      const client = await this.#ensure();
+      const identity = this.#serverOwner.active;
+      if (!identity) {
+        throw new Error(
+          "OpenCode's server isn't running, so its MCP servers couldn't be checked."
         );
-        states = Object.fromEntries(
+      }
+      // The server's own directory: a read there boots its location, which
+      // may also hold live sessions. Its release shares the location
+      // release's attachment and running checks.
+      const listed = await this.#settledMcpList(client, names);
+      const byName = new Map(
+        listed.data.map((server) => [server.name, server.status] as const)
+      );
+      return {
+        read: { directory: listed.location.directory, identity },
+        states: Object.fromEntries(
           names.map((name) => {
             const status = byName.get(name);
             const item = mcpFleetState(
@@ -5707,23 +5744,18 @@ export class OpencodeHarness implements Harness {
                 : item,
             ];
           })
-        );
-      }
+        ),
+      };
     } catch (error) {
       const failed: FleetItemState = {
         state: "failed",
         cause: "unknown",
         detail: String(error),
       };
-      states = Object.fromEntries(names.map((name) => [name, failed]));
+      return {
+        states: Object.fromEntries(names.map((name) => [name, failed])),
+      };
     }
-    if (read) {
-      this.#releaseDirectory(read.directory, read.identity, "fleet MCP status");
-    }
-    if (this.#heardFleetMcp(states, by) && read) {
-      this.#passReading = { procId: read.identity.procId, states };
-    }
-    return states;
   }
 }
 

@@ -9,7 +9,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { FleetItemState, FleetMcpConfig } from "@cawco/core";
+import {
+  type FleetItemState,
+  type FleetMcpConfig,
+  MCP_NEEDS_SIGN_IN,
+} from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { standalone } from "@cawco/core/runtime";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -89,10 +93,7 @@ const stateOf = (listed: Listed | undefined): FleetItemState => {
     case "connected":
       return { state: "applied" };
     case "needs-auth":
-      return {
-        state: "needs-auth",
-        detail: "Sign in to this server from Configure → MCP servers.",
-      };
+      return MCP_NEEDS_SIGN_IN;
     case "connecting":
       return { state: "pending", detail: "pi was still connecting it." };
     case undefined:

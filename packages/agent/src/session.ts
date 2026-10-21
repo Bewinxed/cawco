@@ -5256,6 +5256,11 @@ export class SessionSupervisor {
               { cwd: row.cwd as string, name: row.name, config: row.config },
             ])
         ),
+        // The hub's own word that it holds no sign-in for a server: each
+        // harness reports it needing one and starts it for no status read.
+        signedOut: config.mcp
+          .filter((row) => row.enabled && row.auth?.state === "needs-auth")
+          .map((row) => row.name),
       });
     }
     type State = import("@cawco/core").FleetItemState;

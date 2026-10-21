@@ -10,7 +10,11 @@
  * person's own `claude`, `opencode` or `pi` reads holds any of them.
  */
 import { sep } from "node:path";
-import type { FleetMcpConfig } from "@cawco/core";
+import {
+  type FleetItemState,
+  type FleetMcpConfig,
+  MCP_NEEDS_SIGN_IN,
+} from "@cawco/core";
 import { fleetMcpSetFile } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 
@@ -26,14 +30,23 @@ export interface FleetMcpSet {
   placed: Record<string, PlacedFleetMcp>;
   /** The fleet's own servers, by the name sessions see. */
   servers: Record<string, FleetMcpConfig>;
+  /**
+   * The fleet's servers the hub holds no sign-in for (`auth.state`
+   * `needs-auth` on the sync's row): sessions still take them, so the
+   * sign-in reaches them in place, but no harness starts or reads one for
+   * its status ({@link apartSignedOut}). The hub's sync after the sign-in
+   * drops the name.
+   */
+  signedOut: string[];
 }
 
-const EMPTY: FleetMcpSet = { servers: {}, placed: {} };
+const EMPTY: FleetMcpSet = { servers: {}, placed: {}, signedOut: [] };
 
 /** The set the last sync wrote; none before the first, or when it cannot be read (said on the log). */
 export const readFleetMcpSet = async (): Promise<FleetMcpSet> => {
   try {
-    return (await readRecord<FleetMcpSet>(fleetMcpSetFile())) ?? EMPTY;
+    const stored = await readRecord<Partial<FleetMcpSet>>(fleetMcpSetFile());
+    return { ...EMPTY, ...stored };
   } catch (error) {
     console.warn(
       `[fleet] ${fleetMcpSetFile()} was not read, so sessions load no fleet MCP server: ${error instanceof Error ? error.message : String(error)}`
@@ -45,6 +58,25 @@ export const readFleetMcpSet = async (): Promise<FleetMcpSet> => {
 /** The set, written whole. */
 export const writeFleetMcpSet = (set: FleetMcpSet): Promise<void> =>
   writeStateFile(fleetMcpSetFile(), JSON.stringify(set, null, 2));
+
+/**
+ * `names` apart by the set's sign-in marks: the ones a harness reads, and
+ * each one the hub holds no sign-in for with its verdict, read from nothing.
+ * A signed-out server is never started for a status read: the proxy answers
+ * it 503 until the sign-in, which is a verdict that waits, not a failure to
+ * try again.
+ */
+export const apartSignedOut = (
+  names: readonly string[],
+  set: Pick<FleetMcpSet, "signedOut">
+): { read: string[]; signedOut: Record<string, FleetItemState> } => ({
+  read: names.filter((name) => !set.signedOut.includes(name)),
+  signedOut: Object.fromEntries(
+    names
+      .filter((name) => set.signedOut.includes(name))
+      .map((name) => [name, MCP_NEEDS_SIGN_IN])
+  ),
+});
 
 const within = (cwd: string, folder: string): boolean =>
   cwd === folder ||

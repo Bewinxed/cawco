@@ -6,7 +6,7 @@
  *  - `POST /mcp` without a token answers 401 naming its resource metadata
  *    (`WWW-Authenticate: Bearer resource_metadata=…`), which is how the hub
  *    learns the server wants OAuth; with one, it answers `initialize` and
- *    lists no tools.
+ *    lists the tools it was made with (none unless asked).
  *  - `GET /.well-known/oauth-protected-resource/mcp`: the resource, and this
  *    origin as its authorization server.
  *  - `GET /.well-known/oauth-authorization-server`: authorize, token and
@@ -73,25 +73,29 @@ async function answer(
   });
 }
 
-/** The MCP endpoint: 401 naming the resource metadata without a token; `initialize` and an empty tool list with one. */
-function mcp(request: Request, origin: string): Promise<Response> | Response {
-  if (!request.headers.get("authorization")) {
-    return new Response(null, {
-      status: 401,
-      headers: {
-        "www-authenticate": `Bearer resource_metadata="${origin}${RESOURCE_METADATA}"`,
-      },
-    });
-  }
-  return answer(request, "tray-docs", []);
-}
+/** The MCP endpoint: 401 naming the resource metadata without a token; `initialize` and `tools` with one. */
+const mcp =
+  (tools: object[]) =>
+  (request: Request, origin: string): Promise<Response> | Response => {
+    if (!request.headers.get("authorization")) {
+      return new Response(null, {
+        status: 401,
+        headers: {
+          "www-authenticate": `Bearer resource_metadata="${origin}${RESOURCE_METADATA}"`,
+        },
+      });
+    }
+    return answer(request, "tray-docs", tools);
+  };
 
-/** Each route by method and path: what it answers. */
-const ROUTES: Record<
+/** Each route by method and path, the MCP endpoint listing `tools`: what it answers. */
+const routes = (
+  tools: object[]
+): Record<
   string,
   (request: Request, origin: string) => Response | Promise<Response>
-> = {
-  [`POST ${MCP_PATH}`]: mcp,
+> => ({
+  [`POST ${MCP_PATH}`]: mcp(tools),
   [`POST ${FEED_PATH}`]: (request) => answer(request, "tray-feed", [FEED_TOOL]),
   [`GET ${RESOURCE_METADATA}`]: (_, origin) =>
     Response.json({
@@ -127,15 +131,17 @@ const ROUTES: Record<
       refresh_token: "tray-docs-refresh",
       scope: "docs.read",
     }),
-};
+});
 
-export function mcpOauthMock(): McpOauthMock {
+/** The mock, its MCP endpoint listing `tools` once signed in to. */
+export function mcpOauthMock(tools: object[] = []): McpOauthMock {
+  const table = routes(tools);
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     fetch(request) {
       const { origin, pathname } = new URL(request.url);
-      const route = ROUTES[`${request.method} ${pathname}`];
+      const route = table[`${request.method} ${pathname}`];
       return route
         ? route(request, origin)
         : new Response("not found", { status: 404 });

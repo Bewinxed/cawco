@@ -63,7 +63,7 @@ import {
   machineDenyList,
   readFleetDenials,
 } from "./denied-tools";
-import { readFleetMcpSet } from "./fleet-mcp-set";
+import { apartSignedOut, readFleetMcpSet } from "./fleet-mcp-set";
 import { expandHome } from "./fs";
 import { readMcpRuntime } from "./mcp-status";
 import { noRepositoryAt } from "./stand-ins";
@@ -437,9 +437,29 @@ const dropWrittenMcpFrom = async (
 };
 
 /**
+ * Each of the fleet's `servers` as Claude Code finds it ({@link readMcpRuntime}),
+ * but one the hub holds no sign-in for (the set's `signedOut`), which needs
+ * one and is not started to be told so.
+ */
+const readFleetMcpRuntime = async (
+  servers: Record<string, FleetMcpConfig>
+): Promise<FleetSyncReport["mcp"]> => {
+  const { read, signedOut } = apartSignedOut(
+    Object.keys(servers),
+    await readFleetMcpSet()
+  );
+  return {
+    ...signedOut,
+    ...(await readMcpRuntime(
+      Object.fromEntries(read.map((name) => [name, servers[name]]))
+    )),
+  };
+};
+
+/**
  * The fleet's MCP servers and placed copies, as every session takes them
  * (fleet-mcp-set.ts), read by Claude Code itself: each server's state is its
- * verdict on connecting ({@link readMcpRuntime}), a placed copy is applied
+ * verdict on connecting ({@link readFleetMcpRuntime}), a placed copy is applied
  * once it is in the set, and what the last sync handed sessions and this one
  * does not is removed. Answers what this sync hands them.
  */
@@ -454,7 +474,7 @@ const reportMcp = async (
   const placed = config.placedMcp
     .filter((row) => row.enabled && row.cwd && row.placeId)
     .map(placedKey);
-  Object.assign(report, await readMcpRuntime(servers));
+  Object.assign(report, await readFleetMcpRuntime(servers));
   for (const key of placed) {
     report[key] = { state: "applied" };
   }
@@ -2829,7 +2849,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
   // The set every session takes (fleet-mcp-set.ts), read by Claude Code;
   // a placed copy in it is one each session in its folder takes.
   const set = await readFleetMcpSet();
-  report.mcp = await readMcpRuntime(set.servers);
+  report.mcp = await readFleetMcpRuntime(set.servers);
   for (const key of Object.keys(set.placed)) {
     report.mcp[key] = { state: "applied" };
   }

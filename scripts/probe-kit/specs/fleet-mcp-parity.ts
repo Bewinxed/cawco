@@ -26,7 +26,16 @@
  *   `mcp.json` hold `his` and nothing of CawCo's, and the old sidecar and the
  *   sidecar's list of what it wrote are gone;
  * - the OpenCode server CawCo's session runs on lists no plan agent and lists his own, and his `opencode.json`
- *   holds his agent and not the plan agent's `disabled` CawCo once wrote.
+ *   holds his agent and not the plan agent's `disabled` CawCo once wrote;
+ * - the fleet takes `probefleet` out and adds `probedocs`, an OAuth server
+ *   (mcp-oauth-mock.ts) the hub is not signed in to: the row reads it
+ *   `needs-auth` on Claude Code, OpenCode and pi, in the hub's words; from
+ *   its addition to {@link QUIET_MS} after that, longer than the first two
+ *   waits of the backoff that used to retry it, the agent's log has no
+ *   `location evicted by fleet MCP status` and nothing read or started it
+ *   again;
+ * - the hub signs in to it: the row reads it applied on every harness, and
+ *   the same three sessions, with no new one spawned, call its `whoami`.
  *
  * Runs inside a workspace or on the host alike: it delegates nothing.
  *
@@ -49,17 +58,34 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../kit";
+import { mcpOauthMock, signIn } from "../mcp-oauth-mock";
 
 const FLEET = "probefleet";
 const HIS = "his";
+/** The fleet's OAuth server the hub signs in to only late in the spec. */
+const DOCS = "probedocs";
+/** What it lists once signed in to; a call answers "Posted." (mcp-oauth-mock.ts). */
+const DOCS_TOOL = {
+  name: "whoami",
+  description: "Say who answers.",
+  inputSchema: { type: "object", properties: {} },
+};
+/**
+ * How long the agent is watched while the hub holds no sign-in for it:
+ * past the first two waits of the backoff OpenCode's pass once retried it
+ * on (15 s, then 30 s: opencode.ts `MCP_RETRY_FIRST_MS`), with margin.
+ */
+const QUIET_MS = 90_000;
+/** The words every harness says a server waiting on the hub's sign-in with (core `MCP_NEEDS_SIGN_IN`). */
+const SIGN_IN_WORDS = "Sign in to this server from Configure → MCP servers.";
 /** His own OpenCode agent, beside the plan agent. */
 const HIS_AGENT = "hisagent";
 /** The machine's OpenCode generation record (agent opencode-server.ts `recordStem`), not an account's. */
 const SERVER_RECORD = /^opencode-server-[0-9a-f]{16}\.json$/;
 const FIXTURE = join(import.meta.dir, "../fixtures/shared-mcp-server.ts");
 const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
-const TAG = /PROBE-PARITY-([A-Z]+)-(\d+): (fleet|his)/g;
+const TAG = /PROBE-PARITY-([A-Z]+)-(\d+): (fleet|his|docs)/g;
 const PID = /PROBE-PID (\d+)/g;
 /** OpenCode's Code Mode tool, which runs MCP tools from a script (document-scope.ts). */
 const CODE_MODE = "execute";
@@ -129,7 +155,7 @@ const respond = (request: Seen): Reply => {
     return text("ok");
   }
   const key = `${found[1]}-${found[2]}`;
-  const server = found[3] === "his" ? HIS : FLEET;
+  const server = { his: HIS, docs: DOCS }[found[3] as string] ?? FLEET;
   const step = steps.get(key) ?? {};
   steps.set(key, step);
   if (step.called) {
@@ -215,6 +241,139 @@ interface Row {
   mcp?: Record<string, { detail?: string; state?: string }>;
   mcpByHarness?: Record<string, Record<string, { state?: string }> | undefined>;
 }
+
+/**
+ * The fleet's {@link DOCS}, an OAuth server the hub is not signed in to, on
+ * the machine `run` stood up with its three sessions (`askAll` asks each):
+ * a verdict that waits for the sign-in, never a failure tried again on a
+ * timer, and the sign-in reaches the sessions in place. {@link FLEET} is
+ * taken out first, so the fleet holds no server a status read could boot a
+ * location for but {@link DOCS}: an eviction by fleet MCP status from its
+ * addition on can only be for it.
+ */
+const waitsForSignIn = async (
+  kit: Kit,
+  fleet: KitFleet,
+  askAll: (
+    server: "fleet" | "his" | "docs"
+  ) => Promise<Record<Harness, string | undefined>>
+): Promise<void> => {
+  // A fleet server the hub holds no sign-in for: a verdict that waits for
+  // the sign-in, never a failure tried again on a timer.
+  const row = (): Row | undefined => {
+    const said = fleet
+      .query<{ fleet: string | null }>("SELECT fleet FROM agents")
+      .map((one) => one.fleet ?? "")
+      .at(0);
+    return said ? (JSON.parse(said) as Row) : undefined;
+  };
+  const removed = await fetch(`${fleet.base}/api/fleet/mcp/${FLEET}`, {
+    method: "DELETE",
+  });
+  const gone = await until(
+    `the machine no longer holds ${FLEET}`,
+    row,
+    (read) =>
+      HARNESSES.every((h) =>
+        [undefined, "removed"].includes(read.mcpByHarness?.[h]?.[FLEET]?.state)
+      ),
+    120_000
+  ).catch(() => undefined);
+  kit.check(
+    `the fleet takes ${FLEET} out, so no other server is read for its status`,
+    removed.ok && !!gone,
+    `${removed.status} ${JSON.stringify(row()?.mcpByHarness)}`.slice(0, 1000)
+  );
+  const docs = mcpOauthMock([DOCS_TOOL]);
+  try {
+    const before = (await fleet.logs("agent")).length;
+    const putDocs = await fetch(`${fleet.base}/api/fleet/mcp/${DOCS}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        config: { type: "http", url: docs.url },
+        enabled: true,
+      }),
+    });
+    kit.check(
+      `the fleet adds ${DOCS}, an OAuth server the hub is not signed in to`,
+      putDocs.ok,
+      `${putDocs.status} ${await putDocs.text()}`
+    );
+    const docsStates = () =>
+      HARNESSES.map(
+        (h) => `${h}: ${row()?.mcpByHarness?.[h]?.[DOCS]?.state}`
+      ).join(", ");
+    const waiting = await until(
+      `the row reads ${DOCS} needs-auth for every harness`,
+      row,
+      (read) =>
+        HARNESSES.every(
+          (h) => read.mcpByHarness?.[h]?.[DOCS]?.state === "needs-auth"
+        ),
+      180_000
+    ).catch(() => undefined);
+    kit.check(
+      `the machine reads ${DOCS} needs-auth, in the hub's words, on Claude Code, OpenCode and pi (${docsStates()})`,
+      !!waiting && row()?.mcp?.[DOCS]?.detail?.includes(SIGN_IN_WORDS) === true,
+      JSON.stringify(row()?.mcp?.[DOCS])
+    );
+
+    await Bun.sleep(QUIET_MS);
+    const during = (await fleet.logs("agent")).slice(before).split("\n");
+    const evicted = during.filter((line) =>
+      line.includes("location evicted by fleet MCP status")
+    );
+    const again = during.filter(
+      (line) =>
+        line.includes(DOCS) &&
+        (line.includes("fleet MCP read again later") ||
+          line.includes("OpenCode held it failed"))
+    );
+    kit.check(
+      `from its addition to ${QUIET_MS / 1000} s after it read needs-auth, no location was evicted by fleet MCP status (${evicted.length}) and nothing read or started ${DOCS} again (${again.length}); the row still reads ${docsStates()}`,
+      evicted.length === 0 &&
+        again.length === 0 &&
+        HARNESSES.every(
+          (h) => row()?.mcpByHarness?.[h]?.[DOCS]?.state === "needs-auth"
+        ),
+      [...evicted, ...again].join("\n").slice(0, 2000)
+    );
+
+    const spawnsSignedOut = fleet.query<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM instances"
+    )[0]?.n;
+    await signIn(fleet.base, DOCS);
+    const signedIn = await until(
+      `the row reads ${DOCS} applied for every harness`,
+      row,
+      (read) =>
+        HARNESSES.every(
+          (h) => read.mcpByHarness?.[h]?.[DOCS]?.state === "applied"
+        ),
+      180_000
+    ).catch(() => undefined);
+    kit.check(
+      `after the hub's sign-in the machine reads ${DOCS} applied (${docsStates()})`,
+      !!signedIn,
+      JSON.stringify(row()?.mcp?.[DOCS])
+    );
+    const called = await askAll("docs");
+    const spawnsSignedIn = fleet.query<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM instances"
+    )[0]?.n;
+    for (const harness of HARNESSES) {
+      kit.check(
+        `${harness}: with no new session (${spawnsSignedOut} → ${spawnsSignedIn} sessions), the same session called ${DOCS}'s whoami after the sign-in (${called[harness]})`,
+        spawnsSignedOut === spawnsSignedIn &&
+          called[harness]?.includes("Posted.") === true,
+        JSON.stringify({ answered: called[harness] })
+      );
+    }
+  } finally {
+    docs.stop();
+  }
+};
 
 const run = async (kit: Kit): Promise<void> => {
   const fleet = await kit.fleet(respond);
@@ -366,7 +525,7 @@ const run = async (kit: Kit): Promise<void> => {
   let asked = 0;
   /** One ask to each session, answered by the pid of the server it named. */
   const askAll = async (
-    server: "fleet" | "his"
+    server: "fleet" | "his" | "docs"
   ): Promise<Record<Harness, string | undefined>> => {
     asked += 1;
     const n = asked;
@@ -580,6 +739,8 @@ const run = async (kit: Kit): Promise<void> => {
       kept.placedMcp === undefined,
     JSON.stringify({ placed, kept })
   );
+
+  await waitsForSignIn(kit, fleet, askAll);
   await Promise.allSettled(
     Object.values(sessions).map((id) => fleet.stopSession(id as string))
   );
