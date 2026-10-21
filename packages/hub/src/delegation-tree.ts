@@ -189,11 +189,17 @@ const isLive = (item: WorkItemRow, now: number): boolean =>
  * Every session of `caller`'s delegation tree, `caller` included: its
  * session row's `parentInstanceId` walked up to the top (a session with no
  * parent, or one a routine or a design check started, which reports to no
- * session), then every delegate under that top, one level at a time, by the
- * same work items `delegate_list` reads ({@link sessionsOf}).
+ * session), then every child under that top, one level at a time: by the
+ * same work items `delegate_list` reads ({@link sessionsOf}), and by the
+ * children's own `parentInstanceId`, so a child started with no work item (a
+ * harness's subagent, OpenCode's `delegate`) is in the tree as it is from
+ * its own side.
  */
 export const treeSessions = (
-  db: Pick<DbShape, "getInstancesByIds" | "workItemsOfParents">,
+  db: Pick<
+    DbShape,
+    "childIdsOfParents" | "getInstancesByIds" | "workItemsOfParents"
+  >,
   caller: InstanceRow
 ): Set<string> => {
   let top = caller;
@@ -209,9 +215,13 @@ export const treeSessions = (
   const tree = new Set<string>([top.id, ...above]);
   let level = [top.id];
   while (level.length > 0) {
-    level = sessionsOf(db.workItemsOfParents(level))
-      .map((session) => session.item.instanceId)
-      .filter((id) => !tree.has(id));
+    const below = [
+      ...sessionsOf(db.workItemsOfParents(level)).map(
+        (session) => session.item.instanceId
+      ),
+      ...db.childIdsOfParents(level),
+    ];
+    level = [...new Set(below)].filter((id) => !tree.has(id));
     for (const id of level) {
       tree.add(id);
     }

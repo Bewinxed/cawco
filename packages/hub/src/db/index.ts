@@ -691,6 +691,12 @@ export interface DbShape {
   /** The gate workspaces, still with their checkout, that run a workspace's landing gate steps (the iOS build) on other machines. */
   readonly checkWorkspacesOf: (workspaceId: string) => WorkspaceRow[];
   /**
+   * The ids of every session any of these started with itself as its
+   * `parentInstanceId`, a work item or none (a harness's subagent, OpenCode's
+   * `delegate`): delegation-tree.ts `treeSessions`.
+   */
+  readonly childIdsOfParents: (parentInstanceIds: string[]) => string[];
+  /**
    * The effort the operator chose for the session: what its every launch asks
    * for. Written by a spawn that names one and by a `set-effort`, never by a
    * reading ({@link DbShape.noteInstanceEffort}).
@@ -9260,6 +9266,15 @@ const make = async (path: string): Promise<DbShape> => {
             .where(inArray(workItems.parentInstanceId, parentInstanceIds))
             .orderBy(desc(workItems.createdAt))
             .all(),
+    childIdsOfParents: (parentInstanceIds) =>
+      parentInstanceIds.length === 0
+        ? []
+        : db
+            .select({ id: instances.id })
+            .from(instances)
+            .where(inArray(instances.parentInstanceId, parentInstanceIds))
+            .all()
+            .map((row) => row.id),
     trayItemsOf: (sessionId, ledProjectIds, endedSince) =>
       db
         .select()

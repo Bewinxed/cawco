@@ -94,7 +94,11 @@
  *    the delegate's artifact_show of its parent's page opens it in the
  *    delegate's panel and the parent's panel keeps it; a session outside
  *    the tree is refused the show (404); the parent's artifact_update of
- *    the delegate's page is still refused with the 403.
+ *    the delegate's page is still refused with the 403. That delegate is
+ *    spawned with `parent` and no work item (a harness's subagent,
+ *    OpenCode's `delegate`): the tree walks down by `parentInstanceId` too.
+ * T8. That child hands up a page: the parent's artifact_show opens it in
+ *    the parent's panel, and the outsider is refused it (404).
  * H9. The delegate's own artifact_show of what it handed up opens it in the
  *    delegate's panel: the parent's panel keeps its page, and the hand-off
  *    still waits on the parent.
@@ -913,10 +917,11 @@ interface TreeListed {
 }
 
 /**
- * T4–T7: a session shows its tree's artifacts in its own panel, the parent
- * its delegate's page and the delegate its parent's, a session outside the
- * tree is refused the show, and the parent's update of its delegate's page
- * is still refused.
+ * T4–T8: a session shows its tree's artifacts in its own panel, the parent
+ * its delegate's page (own or handed up) and the delegate its parent's, a
+ * session outside the tree is refused the show, and the parent's update of
+ * its delegate's page is still refused. The delegate is spawned with
+ * `parent` and no work item, as a harness's subagent is.
  *
  * T1–T3: a delegation tree reads its sessions' artifacts (hub
  * delegation-tree.ts `treeSessions`). The delegate's canvas handed to the
@@ -1042,32 +1047,6 @@ const treeChecks = async ({
     `show: ${siblingShow.slice(-300)}; sibling's panel ${panelOf(fleet, sibling)}; parent's ${panelOf(fleet, parent)}; own ${JSON.stringify(ownAfter)}`
   );
 
-  // Its last call made (a finished item takes no more sends), the sibling
-  // is filed as the parent's delegate, as the hub files a finished attempt
-  // (a work item in an archived workspace): the tree reaches down through
-  // work items (delegation-tree.ts `treeSessions`), and a delegate the tool
-  // starts cuts a workspace, which no workspace can make here.
-  const filedAt = Date.now();
-  fleet.write(
-    "INSERT INTO workspaces (id, machine_id, repo_root, path, branch, state, created_by_instance_id, created_at) VALUES (?, ?, ?, ?, ?, 'archived', ?, ?)",
-    "ws-hand-sibling",
-    MACHINE,
-    fleet.repo,
-    fleet.repo,
-    "ws/hand-sibling",
-    parent,
-    filedAt
-  );
-  fleet.write(
-    "INSERT INTO work_items (id, workspace_id, parent_instance_id, instance_id, brief, title, harness, state, created_at, ended_at) VALUES (?, 'ws-hand-sibling', ?, ?, ?, ?, 'claude', 'done', ?, ?)",
-    "wi-hand-sibling",
-    parent,
-    sibling,
-    "Make a page for the parent to look at.",
-    "Hand sibling",
-    filedAt,
-    filedAt
-  );
   // T4. The parent shows its delegate's own page: it opens in the parent's
   // panel; the page stays the delegate's, and the delegate's panel as it was.
   const pageBefore = await fleet.api<{ instanceId: string; shown: boolean }>(
@@ -1121,6 +1100,36 @@ const treeChecks = async ({
       pageRead.revision === pageRevision,
     `update: ${parentUpdate.slice(-300)}; revision ${pageRevision} → ${pageRead.revision}`
   );
+
+  // T8. The child with no work item hands up a page: the parent's
+  // artifact_show opens it in the parent's panel; the outsider gets the 404.
+  const up = await callSibling(CREATE, {
+    kind: "page",
+    name: "sibling-handed",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    html: PAGE,
+    to: "parent",
+  });
+  const upId = up.match(ANSWERED_ID)?.[1];
+  if (!upId) {
+    kit.check("T8: the child's handed page is made", false, up.slice(-400));
+    return;
+  }
+  const upShow = await callParent("mcp__cawco__artifact_show", { id: upId });
+  const outsiderUp = await callOutsider("mcp__cawco__artifact_show", {
+    id: upId,
+  });
+  kit.check(
+    "T8: a child spawned with parent and no work item hands up a page; the parent's artifact_show opens it in the parent's panel, and the outsider is refused (404)",
+    showedOk(upShow) &&
+      panelOf(fleet, parent) === upId &&
+      outsiderUp.includes(`This session has no artifact ${upId}.`) &&
+      panelOf(fleet, outsider) !== upId,
+    `show: ${upShow.slice(-300)}; parent's panel ${panelOf(fleet, parent)}; outsider: ${outsiderUp.slice(-200)}`
+  );
+  // The parent's panel goes back to its own page for H9 and H6.
+  await callParent("mcp__cawco__artifact_show", { id: ownId });
 };
 
 /** The next version a held change answers (artifacts/service.ts `heldId`). */
