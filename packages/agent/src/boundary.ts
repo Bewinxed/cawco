@@ -179,6 +179,7 @@ import {
   isPlace,
   workspaceDenies,
   workspacePolicy,
+  workspaceSpills,
 } from "@cawco/core/workspace-policy";
 import { rgPath } from "@vscode/ripgrep-universal";
 import {
@@ -1769,14 +1770,14 @@ export const boundaryFor = async (
 
 /**
  * Adds `dir` to the folders workspace `id`'s sessions save tool results in
- * ({@link workspaceSpillsFile}), once, and makes it: srt binds a read allow
- * back only where it exists as the sandbox starts, and the harness writes
- * its first saved result long after. Made owner-only, as Claude Code makes
- * its own; never taken away while the workspace lives, as a session's
- * transcript names its saved results for as long as it is resumed.
+ * ({@link workspaceSpillsFile}), once, and makes it ({@link keepSpill}):
+ * srt binds a read allow back only where it exists as the sandbox starts,
+ * and the harness writes its first saved result long after. Never taken
+ * away while the workspace lives, as a session's transcript names its saved
+ * results for as long as it is resumed.
  */
 export const addSpill = async (id: string, dir: string): Promise<void> => {
-  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await keepSpill(dir);
   const file = workspaceSpillsFile(id);
   const listed = await reported(
     readRecord<unknown>(file).then((record = []) => {
@@ -1791,6 +1792,64 @@ export const addSpill = async (id: string, dir: string): Promise<void> => {
   }
   await mkdir(stateDir(id), { recursive: true });
   await writeWhole(file, `${JSON.stringify([...listed, dir])}\n`, 0o644);
+};
+
+/**
+ * The entry that keeps a spill folder from being swept ({@link keepSpill}):
+ * a link to `/dev/null`, which reads as empty wherever it is followed.
+ */
+const SPILL_KEEP = ".cawco-keep";
+
+/**
+ * Makes spill folder `dir` owner-only, as Claude Code makes its own, with
+ * {@link SPILL_KEEP} in it. Claude Code's start-up retention sweep (2.1.302)
+ * takes every empty session folder in its config dir away, a live session's
+ * included: for each `projects/<slug>/<session id>/` it unlinks
+ * `tool-results`' expired files and then `rmdir`s `tool-results`, the session
+ * folder and the project folder, whatever their age (`T(L,n)`, `T(j,n)`,
+ * `T(g,n)`, where `T` is `rmdir` of a directory). Twenty-one sessions starting
+ * at once on one account took a folder away between srt resolving it and bwrap
+ * binding it: "bwrap: Can't get type of source …/tool-results: No such file
+ * or directory", and the boundary did not start. The sweep unlinks only the
+ * files and empties only the directories it finds there and passes a link
+ * by, so a folder holding the link stays, and its parents with it. The sweep
+ * may take the folder between the `mkdir` and the link, so both are made
+ * again until the link stands.
+ */
+const keepSpill = async (dir: string): Promise<void> => {
+  const keep = join(dir, SPILL_KEEP);
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: the folder is made again only when the sweep took it
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    const kept = await symlink("/dev/null", keep).then(
+      () => true,
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "EEXIST") {
+          return true;
+        }
+        if (error.code === "ENOENT") {
+          return false;
+        }
+        throw error;
+      }
+    );
+    if (kept) {
+      return;
+    }
+  }
+};
+
+/**
+ * Makes every spill folder workspace `id`'s policy binds ({@link keepSpill}),
+ * as its boundary starts: one a session was launched with long ago can be
+ * gone since (Claude Code removes a session's folders with its transcript),
+ * and srt passes over an allow that is not there, so its session's saved
+ * results would not be read. Made as {@link addSpill} makes them, so the
+ * boundary's form is the same.
+ */
+const keepSpills = async (id: string): Promise<void> => {
+  const dirs = await reported(workspaceSpills(id));
+  await Promise.all(dirs.map(keepSpill));
 };
 
 /**
@@ -6500,6 +6559,8 @@ const launch = async (
   if (own) {
     await listStandIns(ref, linux);
   }
+  // Every spill folder its policy binds is there as srt and bwrap look.
+  await keepSpills(ref.id);
   const plan = await planOf(ref, gen);
   for (const [path, content, mode] of plan.files) {
     // biome-ignore lint/performance/noAwaitInLoops: a few small files

@@ -969,17 +969,24 @@ const isSpillDir = (id: string, dir: string): boolean => {
  * session's own folder opens, the deeper entry deciding; it holds that
  * session's tool output alone, never a credential or another session's.
  */
-const spillDirs = async (id: string): Promise<string[]> => {
+const spillDirs = async (id: string): Promise<string[]> =>
+  (await workspaceSpills(id)).map(resolveReal);
+
+/**
+ * The spill folders workspace `id`'s policy binds ({@link spillDirs}), as
+ * they are listed: each one the record names that is a session's spill
+ * folder ({@link isSpillDir}). The agent makes each of them before its
+ * boundary starts (boundary.ts `keepSpills`).
+ */
+export const workspaceSpills = async (id: string): Promise<string[]> => {
   const file = workspaceSpillsFile(id);
   const listed = (await readRecord<unknown>(file)) ?? [];
   if (!Array.isArray(listed)) {
     throw new DamagedRecord(file, "it is not a list");
   }
-  return listed
-    .filter(
-      (dir): dir is string => typeof dir === "string" && isSpillDir(id, dir)
-    )
-    .map(resolveReal);
+  return listed.filter(
+    (dir): dir is string => typeof dir === "string" && isSpillDir(id, dir)
+  );
 };
 
 /** A project id as the hub mints and accepts it (hub project-folder.ts `PROJECT_ID`). */

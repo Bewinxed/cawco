@@ -16,7 +16,11 @@
  * session quiet. All 22 are delegated at once from one repository with no
  * `origin`, as a person fans delegates out: each workspace's create readies
  * that one source (agent workspace.ts `inSource`). The hub puts each finished
- * delegate to sleep.
+ * delegate to sleep. Every delegate's spill folder (agent boundary.ts
+ * `addSpill`) still stands then, though their Claude Code processes, started
+ * at once on one account, each swept its projects 5 s on (`keepSpill`): on
+ * 2026-10-21 one such sweep took a folder between srt resolving it and bwrap
+ * binding it, and that delegate's boundary never started.
  *
  * 1. Agent restart before the quiet time: no idle workspace's boundary is
  *    started again or handed over, five of them given an older form first
@@ -30,7 +34,9 @@
  * 3. The footprint, before and after: boundary and judge processes with
  *    everything under them, and the inotify instances they hold.
  * 4. A message to I0's sleeping session: it wakes, its boundary starts again
- *    and its first command runs inside it.
+ *    and its first command runs inside it. A spill folder of an earlier
+ *    session, listed and gone, is made again as the boundary starts
+ *    (`keepSpills`), and the command reads it there.
  * 5. A message to I1's: it wakes and shows a served preview, whose server the
  *    stage starts in its workspace; the preview serves the page.
  * 6. Agent restart after the closes: no closed workspace's boundary starts.
@@ -58,7 +64,7 @@ import {
   readlink,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { QUIET_CLOSE_MS } from "../../../packages/agent/src/boundary";
 import { isBoundaryOf, isJudgeOf } from "../../../packages/agent/src/proc-id";
 import { readWithin } from "../../../packages/core/src/bounded";
@@ -144,6 +150,9 @@ const steps = new Map<
     woke?: boolean;
   }
 >();
+
+/** Leg 4's spill folder of an earlier session of I0's, listed and gone as I0 wakes: its command reads it in the boundary it starts. */
+let earlierSpill: string | undefined;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const tool = (name: string, input: object): Reply => ({
@@ -279,10 +288,13 @@ const respond = (request: Seen): Reply => {
     return waiter(request);
   }
   if (request.all.includes(`PROBE-QUIET-AGAIN-${tag}:`)) {
+    const reads = earlierSpill
+      ? `; test -d ${quoted(earlierSpill)} && echo "SPILL-""READ-${tag}:"`
+      : "";
     return request.all.includes(`AGAIN-DONE-${tag}:`)
       ? text("Ran it again.")
       : tool("Bash", {
-          command: `echo "AGAIN-""DONE-${tag}:"; readlink /proc/self/ns/pid`,
+          command: `echo "AGAIN-""DONE-${tag}:"; readlink /proc/self/ns/pid${reads}`,
           description: "Run again",
         });
   }
@@ -557,6 +569,24 @@ const standUp = async (kit: Kit) => {
     awake.length === 0,
     awake.map((row) => `${row.tag} ${row.status}`).join("; ") || "all asleep"
   );
+  // Every delegate has run past its Claude Code's retention sweep by now
+  // (5 s after a start, agent boundary.ts `keepSpill`): 22 started at once
+  // on one account, before any had written its `.last-cleanup`.
+  const listed = await Promise.all(
+    everyone.map(async (one) => ({
+      tag: one.tag,
+      dirs: await spillsOf(home, one.workspaceId),
+    }))
+  );
+  const gone = listed.flatMap(({ tag, dirs }) =>
+    dirs.filter((dir) => !existsSync(dir)).map((dir) => `${tag} ${dir}`)
+  );
+  const count = listed.reduce((sum, { dirs }) => sum + dirs.length, 0);
+  kit.check(
+    "every delegate's spill folder stands after the delegates' Claude Code processes swept their account's projects",
+    count >= everyone.length && gone.length === 0,
+    `${count} listed; gone: ${gone.join("; ") || "none"}`
+  );
   const idle = all.filter((one) => one.tag !== "P");
   const p = all.find((one) => one.tag === "P") as Delegated;
   kit.check(
@@ -565,6 +595,15 @@ const standUp = async (kit: Kit) => {
   );
   return { fleet, home, idle, p, w };
 };
+
+/** Workspace `id`'s spill folders as the agent lists them (agent boundary.ts `addSpill`). */
+const spillsOf = async (home: string, id: string): Promise<string[]> =>
+  JSON.parse(
+    await readFile(
+      join(home, ".cawco", "workspaces", id, "spills.json"),
+      "utf8"
+    ).catch(() => "[]")
+  ) as string[];
 
 /** Gives workspace `id` an older form: an account added to its policy, as a session on another account would. */
 const reForm = async (home: string, id: string): Promise<void> => {
@@ -800,9 +839,28 @@ const waiterCloses = async (
 const reopens = async (
   kit: Kit,
   fleet: Fleet,
+  home: string,
   i0: Delegated,
   i1: Delegated
 ): Promise<void> => {
+  // An earlier session of I0's workspace, its spill folder listed and gone
+  // since (Claude Code takes a session's folders with its transcript): the
+  // boundary I0's wake starts makes it and reads it.
+  const file = join(
+    home,
+    ".cawco",
+    "workspaces",
+    i0.workspaceId,
+    "spills.json"
+  );
+  const own = await spillsOf(home, i0.workspaceId);
+  const project = own[0] ? dirname(dirname(own[0])) : undefined;
+  earlierSpill = project
+    ? join(project, crypto.randomUUID(), "tool-results")
+    : undefined;
+  if (earlierSpill) {
+    await writeFile(file, `${JSON.stringify([...own, earlierSpill])}\n`);
+  }
   const seenBefore = fleet.seen.length;
   await fleet.send(i0.instanceId, `PROBE-QUIET-AGAIN-${i0.tag}: run it again.`);
   const again = await until(
@@ -821,6 +879,15 @@ const reopens = async (
     "4: a message to I0's sleeping session wakes it, its boundary starts again, and its first command runs inside it",
     Boolean(again) && reopened.length === 1 && ns !== "" && ns !== hostNs,
     `ran: ${Boolean(again)}; boundary: ${reopened.join(",") || "none"}; its pid namespace ${ns || "unread"}, the host's ${hostNs}`
+  );
+  const read = again?.body.includes(`SPILL-READ-${i0.tag}:`) ?? false;
+  kit.check(
+    "4: a listed spill folder that was gone is made again as I0's boundary starts, and its command reads it there",
+    Boolean(earlierSpill) &&
+      existsSync(earlierSpill as string) &&
+      reopened.length === 1 &&
+      read,
+    `${earlierSpill ?? `no spill listed in ${file}`}: there ${earlierSpill ? existsSync(earlierSpill) : false}; read in the boundary: ${read}`
   );
 
   await fleet.send(
@@ -887,7 +954,7 @@ const run = async (kit: Kit) => {
   const waiterEnded = await waiterFinishes(kit, fleet, w);
 
   const [i0, i1, ...rest] = idle as [Delegated, Delegated, ...Delegated[]];
-  await reopens(kit, fleet, i0, i1);
+  await reopens(kit, fleet, home, i0, i1);
   // Before the next restart, which gives every boundary its quiet time again.
   await waiterCloses(kit, fleet, w, waiterEnded);
 
