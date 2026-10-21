@@ -3,13 +3,17 @@
      kit's page.html with a card's media (two panes, a mockup and a code
      block) and a picked option, built by the hub's own builder. The kit's
      script is left out: the fill and the pick stand in the markup, as the
-     bridge would draw them, so the page holds still. -->
+     bridge would draw them, so the page holds still. Under the page, a
+     DialKit panel with an easing curve (the kit's dials, drawn inline by
+     cawcoDialsIn), for its handles' rings; a stand-in bridge holds its
+     values, as CawCo's would. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Concentric fixture</title>
 <style>{{KIT_CSS}}</style>
+{{DIALS}}
 </head>
 <body>
 <main class="dp">
@@ -39,5 +43,15 @@ gap: space-3</pre></figure>
 
   <footer class="dp-done"><span data-dp-sent></span><button class="dp-send" type="button" data-dp-send>Send picks</button></footer>
 </main>
+<div data-probe-dials style="inline-size: 320px; margin: var(--space-5)"></div>
+<script>
+  window.cawco = { on: () => () => undefined, set: () => undefined };
+  window.cawcoDialsIn(
+    document.querySelector("[data-probe-dials]"),
+    "Motion",
+    { curve: { type: "easing", duration: 0.3, ease: [0.2, 0, 0, 1] } },
+    { theme: "light" }
+  );
+</script>
 </body>
 </html>

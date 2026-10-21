@@ -31,7 +31,7 @@ const PLACES = [
   "packages/agent/src/canvas-host",
   "packages/hub/skills/decision-page/kit",
 ];
-/** Generated from the tokens, which are read once, as tokens; a vendored library's own sheet is not the house's. */
+/** Generated from the tokens, which are read once, as tokens. A vendored library's own sheet is not the house's: where it draws a fractional border on our page, the house's own sheet redraws it (decision-page kit page.css over DialKit's easing handle). */
 const GENERATED = new Set([
   TOKENS,
   "apps/dashboard/src/lib/tokens/theme.css",

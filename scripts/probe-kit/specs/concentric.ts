@@ -26,6 +26,11 @@
  *    kit/page.css), on a fixture page (fixtures/decision-kit: a card with
  *    its media panes, a mockup and a code block, and a picked option) built
  *    by the hub's own builder (decision-page.ts): every nested pair, as 1.
+ * 4. On that page, DialKit's easing handles (the vendored panel, drawn
+ *    inline under it) draw their 1.5px ring at 1.5 CSS px at device scale 1
+ *    and 3, read as 2 reads the grip: the computed width (the kit's page.css
+ *    draws it as an inset ring over the vendor's border), and the ink of
+ *    the first handle's ring once per scale.
  */
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -441,6 +446,111 @@ async function inkWidth(page: Page, selector: string, scale: number) {
   };
 }
 
+/** What draws each DialKit easing handle's ring (its `::after`), as the engine computes it. In the page. */
+function handleRings(): Stroke[] {
+  return [
+    ...document.querySelectorAll<HTMLElement>(".dialkit-easing-handle"),
+  ].flatMap((handle, index) => {
+    const style = getComputedStyle(handle, "::after");
+    const name = `handle ${index + 1}`;
+    const strokes: Stroke[] = [];
+    const border = Number.parseFloat(style.borderTopWidth);
+    if (style.borderTopStyle !== "none" && border > 0) {
+      strokes.push({ handle: name, how: "border", widths: [border] });
+    }
+    // `<colour> 0px 0px 0px <spread>px inset`: the spread before "px inset".
+    if (style.boxShadow.includes("px inset")) {
+      const spread = Number.parseFloat(
+        style.boxShadow.split("px inset")[0].split(" ").at(-1) ?? ""
+      );
+      if (spread > 0) {
+        strokes.push({ handle: name, how: "inset ring", widths: [spread] });
+      }
+    }
+    return strokes;
+  });
+}
+
+/**
+ * The ink of the first easing handle's ring, CSS px: the handle posed on a
+ * whole pixel (DialKit places it by percentage), then one device column
+ * down through the top of its ring, each pixel's coverage between the
+ * ring's inside (read just under it) and the ring's own colour laid over
+ * that inside (its inset ring's or its border's computed colour and
+ * alpha, as the page composites it),
+ * summed, over the scale.
+ */
+async function ringInk(page: Page, scale: number) {
+  const at = await page.evaluate(() => {
+    const handle = document.querySelector<HTMLElement>(
+      ".dialkit-easing-handle"
+    );
+    if (!handle) {
+      return null;
+    }
+    handle.scrollIntoView({ block: "center" });
+    const style = getComputedStyle(handle);
+    const box = handle.getBoundingClientRect();
+    handle.style.left = `${Number.parseFloat(style.left) + Math.round(box.left) - box.left}px`;
+    handle.style.top = `${Number.parseFloat(style.top) + Math.round(box.top) - box.top}px`;
+    const ring = getComputedStyle(handle, "::after");
+    const posed = handle.getBoundingClientRect();
+    const size = Number.parseFloat(ring.width);
+    return {
+      // Its ::after is centred in the handle's box.
+      x: posed.left + posed.width / 2,
+      y: posed.top + (posed.height - size) / 2,
+      // The ring's colour: its inset ring's, or its border's where a
+      // border draws it.
+      colour:
+        (ring.boxShadow.includes("inset")
+          ? ring.boxShadow
+          : ring.borderTopColor
+        )
+          .split(")")[0]
+          .split("(")[1] ?? "",
+    };
+  });
+  if (!at) {
+    return null;
+  }
+  const [r, g, b, a = "1"] = at.colour.split(",").map((one) => one.trim());
+  const alpha = Number(a);
+  const luma = (red: number, green: number, blue: number) =>
+    0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  const shot = async (y: number, height: number) =>
+    PNG.sync.read(
+      await page.screenshot({
+        clip: { x: at.x - 0.5, y, width: 1, height },
+        scale: "device",
+        animations: "disabled",
+      })
+    );
+  const pixel = (png: PNG, row: number) => {
+    const i = (row * png.width + Math.floor(png.width / 2)) * 4;
+    return luma(png.data[i], png.data[i + 1], png.data[i + 2]);
+  };
+  // The ring's inside, 3px down: under the ring, above the curve's line
+  // through the handle's middle.
+  const ground = pixel(await shot(at.y + 3, 1), 0);
+  const ink =
+    ground * (1 - alpha) + luma(Number(r), Number(g), Number(b)) * alpha;
+  // The ring and a pixel of its inside: from its top edge, 2.5px down.
+  const column = await shot(at.y, 2.5);
+  let covered = 0;
+  for (let row = 0; row < column.height; row += 1) {
+    covered += Math.min(
+      1,
+      Math.max(0, (ground - pixel(column, row)) / (ground - ink))
+    );
+  }
+  return {
+    width: Number((covered / scale).toFixed(3)),
+    ink: Math.round(ink),
+    ground: Math.round(ground),
+  };
+}
+
 /** One check per nested pair (its corners alike said once), and one that there was a pair to read. */
 function holdPairs(kit: Kit, what: string, where: string, pairs: Pair[]) {
   kit.check(`${what}: holds a nested pair to read`, pairs.length > 0, where);
@@ -583,6 +693,43 @@ const run = async (kit: Kit) => {
           ? `${ink.width} CSS px (ink ${ink.ink}, surface ${ink.ground})`
           : "no grip found"
       );
+    }
+
+    // 4. DialKit's easing handles on a decision page draw their 1.5px ring
+    // at 1.5 CSS px at device scale 1 and 3 (page.css over the vendor's
+    // border).
+    if (!("problem" in built)) {
+      for (const scale of SCALES) {
+        // biome-ignore lint/performance/noAwaitInLoops: one scale's page at a time
+        const at = await kit.page("desk", { scale });
+        await at.setContent(built.html, { waitUntil: "load" });
+        await at.waitForSelector(".dialkit-easing-handle");
+        const rings = await at.evaluate(handleRings);
+        kit.check(
+          `4 @${scale}x: each DialKit easing handle draws its ring at ${STROKE}px as the engine computes it`,
+          rings.length >= 2 &&
+            rings.every((one) =>
+              one.widths.every(
+                (width) => Math.abs(width - STROKE) <= STROKE_SLACK
+              )
+            ),
+          `devicePixelRatio ${await at.evaluate(() => window.devicePixelRatio)}: ${
+            rings
+              .map(
+                (one) => `${one.handle} ${one.how} ${one.widths.join("/")}px`
+              )
+              .join("; ") || "no handle found"
+          }`
+        );
+        const ink = await ringInk(at, scale);
+        kit.check(
+          `4 @${scale}x: the first easing handle's ring inks ${STROKE} CSS px`,
+          !!ink && Math.abs(ink.width - STROKE) <= STROKE_SLACK,
+          ink
+            ? `${ink.width} CSS px (ink ${ink.ink}, inside ${ink.ground})`
+            : "no handle found"
+        );
+      }
     }
   } finally {
     stage.kill("SIGTERM");
