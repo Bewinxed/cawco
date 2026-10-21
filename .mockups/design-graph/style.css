@@ -60,7 +60,7 @@ button { font: inherit; color: inherit; }
 .page { position: fixed; inset-block: 0 var(--dock-room, 0px); inset-inline: var(--gutter-start) calc(var(--gutter-end) + var(--panel-w) + 2 * var(--space-5)); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: max(var(--space-8), env(safe-area-inset-top, 0px)) var(--space-5) var(--space-8); display: grid; justify-items: center; align-content: start; }
 /* The pages: one row of 600px pages a margin apart, the spare width the recess; more than fit wrap. */
 .pages { inline-size: 100%; display: flex; flex-wrap: wrap; justify-content: center; align-items: start; gap: var(--space-5); }
-.stage-wrap { position: relative; flex: 0 1 auto; inline-size: min(100%, 600px); }
+.stage-wrap { position: relative; flex: 0 1 auto; inline-size: min(100%, 600px); container: page / inline-size; }
 .stage-wrap[hidden] { display: none; }
 .frame { padding: var(--space-6); border: 1px solid var(--border-control); border-radius: calc(var(--mock-radius, 8px) + var(--space-1)); background: var(--surface-raised); box-shadow: var(--shadow-tile); }
 .frame label { display: block; margin: 0 0 var(--space-1); font: var(--type-meta); color: var(--ink-muted); }
@@ -75,6 +75,9 @@ button { font: inherit; color: inherit; }
 .field .line { margin: var(--space-1) 0 0; }
 .actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); }
 .actions .note { font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
+/* A narrow page (a phone) gives the caption its own line over the buttons, rather than two squeezed beside
+   them (the r24 review). */
+@container page (width < 440px) { .actions .note { grid-column: 1 / -1; } .actions .btn { grid-row: 2; grid-column: 2; } .actions .btn.primary { grid-column: 3; } }
 .btn { display: inline-flex; align-items: center; min-block-size: var(--c-btn-h-sm); padding: 0 var(--space-4); border: 1px solid var(--border-control); border-radius: var(--mock-radius, 8px); background: var(--surface-raised); color: var(--ink-strong); font: var(--type-button); white-space: nowrap; }
 .btn.primary { background: var(--action-solid); border-color: var(--action-solid); color: var(--on-action); }
 .done { padding: var(--space-5); border-radius: var(--radius-md); background: var(--surface-recess); }
@@ -128,7 +131,9 @@ button { font: inherit; color: inherit; }
 .node { position: absolute; inline-size: var(--node-w, 168px); display: flex; flex-direction: column; gap: var(--space-row); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); cursor: pointer; transition: var(--transition-control); }
 .node b { font: var(--type-label); color: var(--ink-strong); }
 .node p { margin: 0; font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
-@media (hover: hover) { .node:not(.kept, .cur):hover, .node.peek:not(.kept, .cur) { background: var(--surface-hover); } }
+@media (hover: hover) { .node:not(.kept, .cur):hover { background: var(--surface-hover); } }
+/* A previewed state peeks on every pointer: a hover, or a finger's held press (the r24 review). */
+.node.peek:not(.kept, .cur) { background: var(--surface-hover); }
 .node.cur { background: var(--surface-pressed); border-color: var(--border-contrast); }
 .node.kept { background: var(--selected-bg); border-color: var(--brand-solid); box-shadow: var(--selected-shadow); }
 .node.kept b { color: var(--selected-ink); }
@@ -141,7 +146,8 @@ button { font: inherit; color: inherit; }
 .node.kept p, .node.cur p { color: var(--ink-row); }
 .vars { display: flex; flex-direction: column; gap: var(--space-1); margin-block-start: var(--space-2); }
 .var { all: unset; display: block; padding: var(--space-row) var(--space-2); border-radius: var(--radius-xs); font: var(--type-meta); color: var(--ink-row); border: 1px solid var(--border-control); background: var(--surface-raised); cursor: pointer; transition: var(--transition-control); }
-@media (hover: hover) { .var:not(.kept, .cur):hover, .var.peek:not(.kept, .cur) { background: var(--surface-hover); } }
+@media (hover: hover) { .var:not(.kept, .cur):hover { background: var(--surface-hover); } }
+.var.peek:not(.kept, .cur) { background: var(--surface-hover); }
 /* A chip's tier is the chip's own fill, edge and ink, faded over --transition-control (the ruling: the
    mid-fade frame is accepted house-wide; no clip-path wipe). */
 .var.kept { background: var(--chip-chosen-bg); border-color: var(--chip-chosen-bg); color: var(--chip-chosen-ink); }
@@ -346,11 +352,14 @@ html[data-dragging="edge"], html[data-dragging="edge"] * { cursor: ew-resize !im
 }
 .bar[aria-pressed="true"] { background: var(--selected-bg); box-shadow: inset 0 0 0 1px var(--brand-solid); }
 .bar[aria-pressed="true"]::before, .bar[aria-pressed="true"]::after { background: var(--brand-solid); opacity: 1; }
-.bar.spring { border-start-end-radius: 0; border-end-end-radius: 0; }
+/* A spring's bar runs on into its settle tail: square at its end and open there, its top and bottom edges
+   carried on by the tail, so the two read as one shape fading out (no notch where they meet). */
+.bar.spring { border-start-end-radius: 0; border-end-end-radius: 0; box-shadow: inset 0 1px 0 0 var(--bar-edge, var(--border-row-outline)), inset 0 -1px 0 0 var(--bar-edge, var(--border-row-outline)), inset 1px 0 0 0 var(--bar-edge, var(--border-row-outline)); }
+.bar.spring[aria-pressed="true"] { --bar-edge: var(--brand-solid); }
 .lane.rescaling .bar, .lane.rescaling .ghost, .lane.rescaling .tail { transition: left var(--dur-reveal) var(--ease-in-out), width var(--dur-reveal) var(--ease-in-out), background-color var(--dur-control) var(--ease-out); }
 .ghost { position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); border-radius: var(--radius-xs); border: 1px dashed var(--border-contrast); pointer-events: none; }
-.tail { position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); background: linear-gradient(to right, var(--surface-fill), transparent); pointer-events: none; }
-.bar[aria-pressed="true"] + .tail { background: linear-gradient(to right, var(--selected-bg), transparent); }
+.tail { --tail-fill: var(--surface-fill); --tail-edge: var(--border-row-outline); position: absolute; inset-block-start: 0; block-size: var(--c-pill-h); background: linear-gradient(to right, var(--tail-edge), transparent) top / 100% 1px no-repeat, linear-gradient(to right, var(--tail-edge), transparent) bottom / 100% 1px no-repeat, linear-gradient(to right, var(--tail-fill), transparent); pointer-events: none; }
+.bar[aria-pressed="true"] + .tail { --tail-fill: var(--selected-bg); --tail-edge: var(--brand-solid); }
 .dock[data-view="original"] .bar { background: none; box-shadow: none; border: 1px dashed var(--border-contrast); cursor: default; }
 .dock[data-view="original"] .bar::before, .dock[data-view="original"] .bar::after { opacity: 0; }
 .dock[data-view="original"] .ghost, .dock[data-view="original"] .tail { display: none; }
@@ -359,7 +368,9 @@ html[data-dragging="edge"], html[data-dragging="edge"] * { cursor: ew-resize !im
    so its start, the move's end, is drawn in the 3:1 edge ink. */
 .end-area { position: absolute; inset-block: 0; inset-inline-end: 0; background: var(--surface-recess-deep); pointer-events: none; }
 .tie { position: absolute; inline-size: 1px; background: var(--border-contrast); pointer-events: none; }
-.tie::before, .tie::after { content: ""; position: absolute; inset-inline-start: 0; block-size: 1px; inline-size: var(--space-1); background: var(--border-contrast); }
+/* A tie (fable-timeline-design.md): a hairline from the anchor's edge to this bar's start, a foot at each
+   end. The feet are centred on the hairline, so it reads as a measure between two bars, not a box's side. */
+.tie::before, .tie::after { content: ""; position: absolute; inset-inline-start: calc((1px - var(--space-1) - 1px) / 2); block-size: 1px; inline-size: calc(var(--space-1) + 1px); background: var(--border-contrast); }
 .tie::before { inset-block-start: 0; }
 .tie::after { inset-block-end: 0; }
 /* The playhead: the graph disc's twin on the ruler's tick line, a coral hairline down through the rows. */
