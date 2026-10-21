@@ -125,8 +125,33 @@ const run = async (kit: Kit): Promise<void> => {
     return text ? (JSON.parse(text) as Row) : undefined;
   };
 
+  /**
+   * The lines of `role`'s log naming `mark`. Counted, never sliced at an
+   * offset: the log is its `.log` and `.err` files joined in no fixed order
+   * (scratch-fleet.ts `logs`), so an offset taken before moves as the first
+   * file grows.
+   */
+  const lines = async (role: "agent" | "hub", mark: string) =>
+    (await fleet.logs(role)).split("\n").filter((line) => line.includes(mark));
+  // The machine's start-up syncs (its harnesses known, then each harness
+  // that converges the fleet, OpenCode last) are all taken before the PUT's
+  // is counted: the agent runs them one at a time, behind the hub.
+  await until(
+    "the machine took every start-up sync the hub sent it",
+    async () => ({
+      opencode: (
+        await lines("hub", "the harnesses converging the fleet are now")
+      ).some((line) => line.includes("opencode")),
+      sent: (await lines("hub", "[fleet] sync → ")).length,
+      took: (await lines("agent", "[fleet] sync from the hub")).length,
+    }),
+    ({ opencode, sent, took }) => opencode && took >= sent,
+    120_000
+  ).catch(() => undefined);
+  const hubSyncsBefore = (await lines("hub", "[fleet] sync → ")).length;
+  const agentSyncsBefore = (await lines("agent", "[fleet] sync from the hub"))
+    .length;
   const logBefore = (await fleet.logs("agent")).length;
-  const hubBefore = (await fleet.logs("hub")).length;
   const put = await fetch(`${fleet.base}/api/fleet/mcp/${SERVER}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
@@ -297,14 +322,12 @@ const run = async (kit: Kit): Promise<void> => {
 
   // One fleet change, one sync to the machine: what the hub sent, why, and
   // what the agent took, from the PUT to rest.
-  const hubSyncs = (await fleet.logs("hub"))
-    .slice(hubBefore)
-    .split("\n")
-    .filter((line) => line.includes("[fleet] sync → "));
-  const agentSyncs = (await fleet.logs("agent"))
-    .slice(logBefore)
-    .split("\n")
-    .filter((line) => line.includes("[fleet] sync from the hub"));
+  const hubSyncs = (await lines("hub", "[fleet] sync → ")).slice(
+    hubSyncsBefore
+  );
+  const agentSyncs = (await lines("agent", "[fleet] sync from the hub")).slice(
+    agentSyncsBefore
+  );
   kit.check(
     `the PUT sent the machine one fleet sync (hub ${hubSyncs.length}, agent ${agentSyncs.length})`,
     hubSyncs.length === 1 && agentSyncs.length === 1,

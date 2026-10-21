@@ -1439,6 +1439,17 @@ export class OpencodeHarness implements Harness {
     procId: string;
     states: Record<string, FleetItemState>;
   } | null = null;
+  /**
+   * The last reading that booted a location to read the fleet's servers
+   * ({@link #readFleetMcpNow}): the generation it was read on, the servers it
+   * read, and whether each came to a lasting verdict. A pass finds there
+   * whether the generation serving now was read already ({@link #mendFleetMcp}).
+   */
+  #fleetMcpRead: {
+    names: ReadonlySet<string>;
+    procId: string;
+    settled: boolean;
+  } | null = null;
   /** Each fleet server's state as last reported for the machine, by name ({@link #heardFleetMcp}). */
   readonly #fleetMcpReported = new Map<string, FleetItemState["state"]>();
   /** The next pass that reads unsettled fleet servers again ({@link #mendFleetMcp}). */
@@ -2670,7 +2681,8 @@ export class OpencodeHarness implements Harness {
           // biome-ignore lint/complexity/noVoid: publication does not wait for busy incumbent sessions to migrate
           void this.#handoffIdle().catch(console.warn);
           // What was reported of the fleet's servers was read on the
-          // generation this one replaces: it is read again on this one.
+          // generation this one replaces: it is read again on this one,
+          // unless a sync's read takes this one's first (#mendFleetMcp).
           this.#mendLater(true);
         }
       );
@@ -5555,6 +5567,12 @@ export class OpencodeHarness implements Harness {
    * failed is started again ({@link #startFailed}), then the machine's
    * reading is taken as a report's is, against the generation serving now.
    * A fleet sync running reads and reports them itself: the pass waits for it.
+   * A generation whose servers were all read already, each to a lasting
+   * verdict (the sync's own read after the publication its config change
+   * made), has nothing for the pass to mend or report: it reads nothing,
+   * so the location is not booted a second time for the same reading. A
+   * generation published with no sync after it (the person's own config,
+   * a new OpenCode) was read by nobody, and is read.
    */
   async #mendFleetMcp(): Promise<void> {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set by dispose()
@@ -5568,6 +5586,20 @@ export class OpencodeHarness implements Harness {
     }
     const names = (await readSidecar(OPENCODE_SIDECAR)).mcp ?? [];
     if (names.length === 0) {
+      this.#mendAttempt = 0;
+      return;
+    }
+    const taken = this.#fleetMcpRead;
+    if (
+      taken?.settled &&
+      taken.procId === this.#serverOwner.active?.procId &&
+      apartSignedOut(names, await readFleetMcpSet()).read.every((name) =>
+        taken.names.has(name)
+      )
+    ) {
+      console.info(
+        `[opencode] fleet MCP pass: generation ${taken.procId} was read already, every server settled: nothing read`
+      );
       this.#mendAttempt = 0;
       return;
     }
@@ -5686,6 +5718,17 @@ export class OpencodeHarness implements Harness {
       names.length > 0 ? await this.#readLiveFleetMcp(names) : { states: {} };
     if (read) {
       this.#releaseDirectory(read.directory, read.identity, "fleet MCP status");
+    }
+    if (names.length > 0) {
+      // A read that took no reading (it threw, or the config had not
+      // settled) leaves the generation unread: the pass it asks for reads.
+      this.#fleetMcpRead = read
+        ? {
+            names: new Set(names),
+            procId: read.identity.procId,
+            settled: !Object.values(live).some(unsettledState),
+          }
+        : null;
     }
     const states = { ...signedOut, ...live };
     if (this.#heardFleetMcp(states, by) && read) {

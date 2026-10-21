@@ -27,13 +27,14 @@
  *   sidecar's list of what it wrote are gone;
  * - the OpenCode server CawCo's session runs on lists no plan agent and lists his own, and his `opencode.json`
  *   holds his agent and not the plan agent's `disabled` CawCo once wrote;
- * - the fleet takes `probefleet` out and adds `probedocs`, an OAuth server
- *   (mcp-oauth-mock.ts) the hub is not signed in to: the row reads it
- *   `needs-auth` on Claude Code, OpenCode and pi, in the hub's words; from
- *   its addition to {@link QUIET_MS} after that, longer than the first two
- *   waits of the backoff that used to retry it, the agent's log has no
- *   `location evicted by fleet MCP status` and nothing read or started it
- *   again;
+ * - the fleet adds `probedocs`, an OAuth server (mcp-oauth-mock.ts) the hub
+ *   is not signed in to: the row reads it `needs-auth` on Claude Code,
+ *   OpenCode and pi, in the hub's words; from its addition to
+ *   {@link QUIET_MS} after that, longer than the first two waits of the
+ *   backoff that used to retry it, the agent's log has at most one
+ *   `location evicted by fleet MCP status` (the addition's sync reading
+ *   `probefleet`; the new generation's pass reads nothing more) and nothing
+ *   read or started it again;
  * - the hub signs in to it: the row reads it applied on every harness, and
  *   the same three sessions, with no new one spawned, call its `whoami`.
  *
@@ -242,14 +243,61 @@ interface Row {
   mcpByHarness?: Record<string, Record<string, { state?: string }> | undefined>;
 }
 
+/** A fleet sync the agent took, and how many servers it carried. */
+const SYNC_LINE = /\[fleet\] sync from the hub: (.*)$/;
+
+/**
+ * What the agent's log says each fleet sync cost in fleet MCP status reads,
+ * from its first sync on: per sync (`[fleet] sync from the hub`), the
+ * generations OpenCode published (`config-convergence` applied), the passes
+ * those publications scheduled that found the sync's reading taken and read
+ * nothing (opencode.ts `#mendFleetMcp`), and the locations evicted by fleet
+ * MCP status. An eviction's line can land in the next sync's span when its
+ * release waited, so the evictions are judged in total: at most one read,
+ * the sync's own, for each sync.
+ */
+const statusReads = (
+  log: string
+): { evicted: number; published: number; skipped: number; sync: string }[] => {
+  const counts: {
+    evicted: number;
+    published: number;
+    skipped: number;
+    sync: string;
+  }[] = [];
+  for (const line of log.split("\n")) {
+    const sync = SYNC_LINE.exec(line);
+    if (sync) {
+      counts.push({
+        sync: `#${counts.length + 1} (${sync[1]})`,
+        evicted: 0,
+        published: 0,
+        skipped: 0,
+      });
+    }
+    const last = counts.at(-1);
+    if (!(sync || last === undefined)) {
+      last.evicted += Number(
+        line.includes("location evicted by fleet MCP status")
+      );
+      last.published += Number(
+        line.includes('"type":"config-convergence","state":"applied"')
+      );
+      last.skipped += Number(line.includes("fleet MCP pass: generation"));
+    }
+  }
+  return counts;
+};
+
 /**
  * The fleet's {@link DOCS}, an OAuth server the hub is not signed in to, on
  * the machine `run` stood up with its three sessions (`askAll` asks each):
  * a verdict that waits for the sign-in, never a failure tried again on a
- * timer, and the sign-in reaches the sessions in place. {@link FLEET} is
- * taken out first, so the fleet holds no server a status read could boot a
- * location for but {@link DOCS}: an eviction by fleet MCP status from its
- * addition on can only be for it.
+ * timer, and the sign-in reaches the sessions in place. {@link FLEET}
+ * stays: the addition's sync reads it once, booting the machine location
+ * once, and the pass the new generation's publication schedules finds that
+ * reading taken and reads nothing (opencode.ts `#mendFleetMcp`), so one
+ * eviction by fleet MCP status is the whole of the change's.
  */
 const waitsForSignIn = async (
   kit: Kit,
@@ -267,26 +315,27 @@ const waitsForSignIn = async (
       .at(0);
     return said ? (JSON.parse(said) as Row) : undefined;
   };
-  const removed = await fetch(`${fleet.base}/api/fleet/mcp/${FLEET}`, {
-    method: "DELETE",
-  });
-  const gone = await until(
-    `the machine no longer holds ${FLEET}`,
-    row,
-    (read) =>
-      HARNESSES.every((h) =>
-        [undefined, "removed"].includes(read.mcpByHarness?.[h]?.[FLEET]?.state)
-      ),
-    120_000
-  ).catch(() => undefined);
-  kit.check(
-    `the fleet takes ${FLEET} out, so no other server is read for its status`,
-    removed.ok && !!gone,
-    `${removed.status} ${JSON.stringify(row()?.mcpByHarness)}`.slice(0, 1000)
-  );
   const docs = mcpOauthMock([DOCS_TOOL]);
   try {
-    const before = (await fleet.logs("agent")).length;
+    // Counted, never sliced at an offset: the agent's log is its `.log` and
+    // `.err` joined in no fixed order (scratch-fleet.ts `logs`), so an
+    // offset moves as the first of them grows.
+    const evictions = async () =>
+      (await fleet.logs("agent"))
+        .split("\n")
+        .filter((line) =>
+          line.includes("location evicted by fleet MCP status")
+        );
+    const readsAgain = async () =>
+      (await fleet.logs("agent"))
+        .split("\n")
+        .filter(
+          (line) =>
+            line.includes(DOCS) &&
+            (line.includes("fleet MCP read again later") ||
+              line.includes("OpenCode held it failed"))
+        );
+    const evictedBefore = (await evictions()).length;
     const putDocs = await fetch(`${fleet.base}/api/fleet/mcp/${DOCS}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
@@ -320,19 +369,11 @@ const waitsForSignIn = async (
     );
 
     await Bun.sleep(QUIET_MS);
-    const during = (await fleet.logs("agent")).slice(before).split("\n");
-    const evicted = during.filter((line) =>
-      line.includes("location evicted by fleet MCP status")
-    );
-    const again = during.filter(
-      (line) =>
-        line.includes(DOCS) &&
-        (line.includes("fleet MCP read again later") ||
-          line.includes("OpenCode held it failed"))
-    );
+    const evicted = (await evictions()).slice(evictedBefore);
+    const again = await readsAgain();
     kit.check(
-      `from its addition to ${QUIET_MS / 1000} s after it read needs-auth, no location was evicted by fleet MCP status (${evicted.length}) and nothing read or started ${DOCS} again (${again.length}); the row still reads ${docsStates()}`,
-      evicted.length === 0 &&
+      `from its addition to ${QUIET_MS / 1000} s after it read needs-auth, ${evicted.length} location eviction(s) by fleet MCP status, the sync's own read of ${FLEET} at most, and nothing read or started ${DOCS} again (${again.length}); the row still reads ${docsStates()}`,
+      evicted.length <= 1 &&
         again.length === 0 &&
         HARNESSES.every(
           (h) => row()?.mcpByHarness?.[h]?.[DOCS]?.state === "needs-auth"
@@ -741,6 +782,30 @@ const run = async (kit: Kit): Promise<void> => {
   );
 
   await waitsForSignIn(kit, fleet, askAll);
+  const agentLog = await fleet.logs("agent");
+  const perSync = statusReads(agentLog);
+  /** The lines the counts are taken from, for the reader of the result. */
+  const counted = agentLog
+    .split("\n")
+    .filter((line) =>
+      [
+        "[fleet] sync from the hub",
+        '"state":"applied"',
+        "fleet MCP pass: generation",
+        "location evicted by fleet MCP status",
+        "fleet MCP read again later",
+      ].some((mark) => line.includes(mark))
+    )
+    .map((line) => line.slice(0, 200));
+  const total = (key: "evicted" | "published" | "skipped") =>
+    perSync.reduce((sum, one) => sum + one[key], 0);
+  kit.check(
+    `the passes OpenCode's publications scheduled found the sync's reading and read nothing (${total("skipped")} pass(es) for ${total("published")} publication(s)), and the ${perSync.length} syncs evicted the machine location ${total("evicted")} time(s), at most once each: ${perSync.map((one) => `${one.sync} published ${one.published}, pass read nothing ${one.skipped}, evicted ${one.evicted}`).join("; ")}`,
+    perSync.length > 0 &&
+      total("skipped") > 0 &&
+      total("evicted") <= perSync.length,
+    counted.join("\n")
+  );
   await Promise.allSettled(
     Object.values(sessions).map((id) => fleet.stopSession(id as string))
   );
