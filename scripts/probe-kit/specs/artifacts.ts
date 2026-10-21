@@ -1011,8 +1011,7 @@ const treeChecks = async ({
     `update: ${update.slice(-300)}; outline ${after.outline.slice(0, 200)}`
   );
 
-  // T4. The parent shows its delegate's own page: it opens in the parent's
-  // panel, and the delegate's panel keeps it as its own.
+  // The delegate's own page, for T4 to T7.
   const made = await callSibling(CREATE, {
     kind: "page",
     name: "sibling-own",
@@ -1025,28 +1024,6 @@ const treeChecks = async ({
     kit.check("T4: the delegate's own page is made", false, made.slice(-400));
     return;
   }
-  const pageBefore = await fleet.api<{ instanceId: string; shown: boolean }>(
-    `/api/artifacts/${pageId}`
-  );
-  const parentShow = await callParent("mcp__cawco__artifact_show", {
-    id: pageId,
-  });
-  const pageAfter = await fleet.api<{ instanceId: string; shown: boolean }>(
-    `/api/artifacts/${pageId}`
-  );
-  kit.check(
-    "T4: the parent's artifact_show of its delegate's page opens it in the parent's panel; the page stays the delegate's, in its panel",
-    showedOk(parentShow) &&
-      !parentShow.includes("only that session changes it") &&
-      panelOf(fleet, parent) === pageId &&
-      pageAfter.instanceId === sibling &&
-      pageAfter.shown === pageBefore.shown &&
-      panelOf(fleet, sibling) === pageId,
-    `show: ${parentShow.slice(-300)}; parent's panel ${panelOf(fleet, parent)}; page ${JSON.stringify(pageAfter)}`
-  );
-  // The parent's panel goes back to its own page for H9 and H6.
-  await callParent("mcp__cawco__artifact_show", { id: ownId });
-
   // T5. The delegate shows its parent's page: it opens in the delegate's
   // panel, and the parent's panel keeps it.
   const siblingShow = await callSibling("mcp__cawco__artifact_show", {
@@ -1064,6 +1041,57 @@ const treeChecks = async ({
       ownAfter.shown,
     `show: ${siblingShow.slice(-300)}; sibling's panel ${panelOf(fleet, sibling)}; parent's ${panelOf(fleet, parent)}; own ${JSON.stringify(ownAfter)}`
   );
+
+  // Its last call made (a finished item takes no more sends), the sibling
+  // is filed as the parent's delegate, as the hub files a finished attempt
+  // (a work item in an archived workspace): the tree reaches down through
+  // work items (delegation-tree.ts `treeSessions`), and a delegate the tool
+  // starts cuts a workspace, which no workspace can make here.
+  const filedAt = Date.now();
+  fleet.write(
+    "INSERT INTO workspaces (id, machine_id, repo_root, path, branch, state, created_by_instance_id, created_at) VALUES (?, ?, ?, ?, ?, 'archived', ?, ?)",
+    "ws-hand-sibling",
+    MACHINE,
+    fleet.repo,
+    fleet.repo,
+    "ws/hand-sibling",
+    parent,
+    filedAt
+  );
+  fleet.write(
+    "INSERT INTO work_items (id, workspace_id, parent_instance_id, instance_id, brief, title, harness, state, created_at, ended_at) VALUES (?, 'ws-hand-sibling', ?, ?, ?, ?, 'claude', 'done', ?, ?)",
+    "wi-hand-sibling",
+    parent,
+    sibling,
+    "Make a page for the parent to look at.",
+    "Hand sibling",
+    filedAt,
+    filedAt
+  );
+  // T4. The parent shows its delegate's own page: it opens in the parent's
+  // panel; the page stays the delegate's, and the delegate's panel as it was.
+  const pageBefore = await fleet.api<{ instanceId: string; shown: boolean }>(
+    `/api/artifacts/${pageId}`
+  );
+  const siblingPanelBefore = panelOf(fleet, sibling);
+  const parentShow = await callParent("mcp__cawco__artifact_show", {
+    id: pageId,
+  });
+  const pageAfter = await fleet.api<{ instanceId: string; shown: boolean }>(
+    `/api/artifacts/${pageId}`
+  );
+  kit.check(
+    "T4: the parent's artifact_show of its delegate's page opens it in the parent's panel; the page stays the delegate's, and the delegate's panel as it was",
+    showedOk(parentShow) &&
+      !parentShow.includes("only that session changes it") &&
+      panelOf(fleet, parent) === pageId &&
+      pageAfter.instanceId === sibling &&
+      pageAfter.shown === pageBefore.shown &&
+      panelOf(fleet, sibling) === siblingPanelBefore,
+    `show: ${parentShow.slice(-300)}; parent's panel ${panelOf(fleet, parent)}; page ${JSON.stringify(pageAfter)}`
+  );
+  // The parent's panel goes back to its own page for H9 and H6.
+  await callParent("mcp__cawco__artifact_show", { id: ownId });
 
   // T6. A session outside the tree is refused the show, as it is the read.
   const outsiderShow = await callOutsider("mcp__cawco__artifact_show", {
