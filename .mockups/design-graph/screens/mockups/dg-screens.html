@@ -29,17 +29,22 @@
 }
 /* The kit's rule for wide media: a frame scales down to fit only while its words stay at 10px or more
    (--ds-min-s, 10 over the frame's smallest type, measured by the script); past that it stands at that scale
-   and its row scrolls sideways. */
+   and its row scrolls sideways. The row's inline padding (and its scroll padding) keeps a frame's whole
+   border and a margin at both ends of the scroll. A flex row, because a grid's end padding does not reach
+   past an item that overflows its track. */
 .mk-dg-screens .ds-scroll {
-  display: grid;
+  display: flex;
+  justify-content: safe center;
   min-inline-size: 0;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   padding-block: var(--space-1);
+  padding-inline: var(--space-2);
+  scroll-padding-inline: var(--space-2);
 }
 /* The outline: a raised bezel round the screen, concentric (8px screen + 7px bezel = 15px). */
 .mk-dg-screens .ds-device {
-  justify-self: safe center;
+  flex: none;
   inline-size: max(min(100%, calc(var(--ds-cap) * var(--ds-w) / var(--ds-h))), calc(var(--ds-w) * var(--ds-min-s, 0) * 1px + 2 * var(--space-2) + 2px));
   padding: var(--space-2);
   border: 1px solid var(--border-control);
