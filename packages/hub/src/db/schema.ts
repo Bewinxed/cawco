@@ -2493,6 +2493,33 @@ export const limitHolds = sqliteTable("limit_holds", {
 });
 
 /**
+ * A move a session owes to its next launch (server.ts `owedMoves`): a
+ * person's, rebalance's or the at-limit controller's move to another
+ * account, or a relaunch its model's change of provider asked
+ * (`to_account_id` null). Kept here, the one record of it, so a hub restart
+ * carries it out: at the session's turn's end, or as its machine registers
+ * (`takeUpMovesOn`). `waits` says what it waits on: `turn`, the turn's end;
+ * `machine`, its machine connected again. Gone once carried, replaced by a
+ * newer move, or with the session's row.
+ */
+export const owedMoves = sqliteTable("owed_moves", {
+  instanceId: text("instance_id")
+    .primaryKey()
+    .references(() => instances.id, { onDelete: "cascade" }),
+  toAccountId: text("to_account_id").references(() => accounts.id, {
+    onDelete: "cascade",
+  }),
+  /** A person asked for it: the at-limit controller only carries it out. */
+  byHand: integer("by_hand", { mode: "boolean" }).notNull().default(false),
+  /** The line written once it lands; null for none. */
+  move: text("move", { mode: "json" }).$type<AccountMove>(),
+  waits: text("waits").$type<"turn" | "machine">().notNull(),
+  createdAt: timestamp("created_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/**
  * A session moved at its account's limit that compacts once there (core
  * `AccountMove` `moved` with `compact`), from the move until its compaction
  * has ended (server.ts `compactions`): its filing turn (`filing`, the send

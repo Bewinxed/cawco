@@ -13,10 +13,16 @@
  *   turn's requests carry that account's token.
  * - A running session's card is as it was: its live controls take changes,
  *   no line says they are locked, and its account chip opens.
+ * - A move asked mid-turn waits for the turn's end; the hub restarted
+ *   before that end, it is still carried there (the hub's `owed_moves`),
+ *   and the next turn runs on the new account.
  * - Its machine disconnected, the sleeping session's card says why its live
  *   controls are locked (until the machine is connected again); its account
  *   chip still opens, and a move picked there says it moves once the machine
- *   is connected again. Connected again, the hub carries the move out.
+ *   is connected again. The hub restarted meanwhile, a reloaded card still
+ *   says so (the row's `owedMove`). Connected again, the hub carries the
+ *   move out once: the machine's log has one carry of it and no refused
+ *   second, and its next wake runs on that account.
  *
  *   bun scripts/probe-kit/run.ts account-move-asleep
  */
@@ -43,8 +49,19 @@ type Id = keyof typeof TOKEN;
 const accountOf = (request: Seen): Id | undefined =>
   ([SECOND, FIRST] as const).find((id) => request.auth.endsWith(TOKEN[id]));
 
+/** A turn asked with this word streams for {@link SLOW_WORDS} × 100 ms: long enough to restart the hub inside it. */
+const SLOW = "PROBE-SLOW";
+const SLOW_WORDS = 250;
+
 const standUp = async (kit: Kit): Promise<KitFleet> => {
-  const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
+  const fleet = await kit.fleet((request) =>
+    request.last.includes(SLOW)
+      ? {
+          everyMs: 100,
+          words: Array.from({ length: SLOW_WORDS }, (_, n) => `w${n}`),
+        }
+      : { everyMs: 5, words: ["ok"] }
+  );
   const dir = join(fleet.home, ".cawco", "accounts", SECOND, "claude");
   await mkdir(dir, { recursive: true });
   await writeFile(
@@ -306,6 +323,61 @@ const run = async (kit: Kit) => {
     JSON.stringify(running)
   );
 
+  // 3b. A move asked mid-turn, the hub restarted before the turn ends: it
+  // is carried at the turn's end (or at once, had the restart ended it).
+  await fleet.send(runner, `${SLOW} talk at length`);
+  const midTurn = await until(
+    "the running session is inside its slow turn",
+    () => fleet.instance(runner)?.turn_open_at ?? undefined,
+    (openedAt) => openedAt !== null,
+    60_000
+  ).catch(() => null);
+  const asked = await fleet
+    .api<{ state: string }>(`/api/instances/${runner}/account`, {
+      accountId: SECOND,
+    })
+    .catch((error: unknown) => ({ state: `refused: ${String(error)}` }));
+  kit.check(
+    "a move asked mid-turn waits for the turn's end",
+    midTurn !== null &&
+      asked.state === "pending" &&
+      rowAccount(fleet, runner) === FIRST,
+    JSON.stringify({ midTurn, asked, account: rowAccount(fleet, runner) })
+  );
+  await fleet.stop("hub");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  const turnMoved = await until(
+    "the mid-turn move carried after the hub's restart",
+    () => rowAccount(fleet, runner),
+    (account) => account === SECOND,
+    SLOW_WORDS * 100 + 120_000
+  ).catch(() => rowAccount(fleet, runner));
+  await until(
+    "the slow turn closed",
+    () => (fleet.instance(runner)?.turn_open_at === null ? true : undefined),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  const turnSent = Date.now();
+  await fleet.send(runner, "Say ok after the move.");
+  await until(
+    "the moved session's next turn reaches the model",
+    () => fleet.seen.find((one) => one.at >= turnSent && accountOf(one)),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  const turnRanOn = fleet.seen
+    .filter((one) => one.at >= turnSent)
+    .map((one) => accountOf(one) ?? "none");
+  kit.check(
+    "a move owed at a turn's end survives a hub restart: carried, and the next turn runs on the new account",
+    turnMoved === SECOND &&
+      turnRanOn.length > 0 &&
+      turnRanOn.every((one) => one === SECOND),
+    JSON.stringify({ account: turnMoved, ranOn: turnRanOn })
+  );
+
   // 4. Its machine disconnected: the card says why, and a move waits for it.
   const again = await asleep(fleet, sleeper);
   await fleet.stop("agent");
@@ -336,6 +408,24 @@ const run = async (kit: Kit) => {
     saysOnly(owed, owedLine) && rowAccount(fleet, sleeper) === SECOND,
     JSON.stringify({ ...owed, account: rowAccount(fleet, sleeper) })
   );
+  // 4a. The hub restarts while the move waits: a reloaded card still says it.
+  await fleet.stop("hub");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  await openCard(page, base, sleeper);
+  const reloaded = await cardSays(
+    page,
+    "the reloaded card says the move waits",
+    owedLine
+  );
+  kit.check(
+    "after a hub restart, a reloaded card still says the move waits for the machine",
+    saysOnly(reloaded, owedLine) && rowAccount(fleet, sleeper) === SECOND,
+    JSON.stringify({ ...reloaded, account: rowAccount(fleet, sleeper) })
+  );
+
+  // 4b. Connected again: carried once, and the next wake runs there.
+  const agentLog = await fleet.logMark("agent");
   fleet.launch("agent");
   await fleet.agentUp();
   const carried = await until(
@@ -345,9 +435,35 @@ const run = async (kit: Kit) => {
     120_000
   ).catch(() => rowAccount(fleet, sleeper));
   kit.check(
-    "connected again, the hub carries out the move the card asked",
+    "connected again, the hub carries out the move the card asked, across its restart",
     carried === FIRST,
     JSON.stringify({ account: carried })
+  );
+  const carries = (await agentLog.since())
+    .split("\n")
+    .filter((line) => line.includes("[carry]") && line.includes(sleeper));
+  const started = carries.filter((line) => line.includes("[carry] started"));
+  kit.check(
+    "the machine carried the moved conversation once, with no second carry",
+    started.length === 1 &&
+      !carries.some((line) => line.includes("not carried")),
+    JSON.stringify(carries)
+  );
+  const wokeAgain = Date.now();
+  await fleet.send(sleeper, "Say ok once more.");
+  await until(
+    "the session's wake after reconnect reaches the model",
+    () => fleet.seen.find((one) => one.at >= wokeAgain && accountOf(one)),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  const wokeOn = fleet.seen
+    .filter((one) => one.at >= wokeAgain)
+    .map((one) => accountOf(one) ?? "none");
+  kit.check(
+    "its next wake runs on the account the move carried it to",
+    wokeOn.length > 0 && wokeOn.every((one) => one === FIRST),
+    JSON.stringify({ ranOn: wokeOn, account: rowAccount(fleet, sleeper) })
   );
 };
 

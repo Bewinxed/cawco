@@ -52,55 +52,71 @@ export function switchable(instance: BoardRow): Account[] {
   return eligible.length > 1 ? eligible : [];
 }
 
-/** The account a session is moving to, until its row names that account. */
+/**
+ * The account a session is moving to, until its row names that account: the
+ * move this tab is asking for, else the one the hub keeps for its next
+ * launch (its row's `owedMove`), which a reload reads the same.
+ */
 export function movingTo(instance: BoardRow): string | undefined {
-  const target = moving.get(instance.id);
+  const target = moving.get(instance.id) ?? instance.owedMove?.accountId;
   return target && target !== instance.accountId ? target : undefined;
 }
+
+/** Whether this tab's ask for a move is on its way to the hub: no other pick goes meanwhile. */
+export const asking = (instance: BoardRow): boolean => moving.has(instance.id);
 
 /** The account a session's row draws: the one it is moving to, else its own. */
 export const shownAccount = (instance: BoardRow): string | null =>
   movingTo(instance) ?? instance.accountId ?? null;
 
 /**
- * When a move asked now takes effect, in its rows' words: the hub moves a
- * session at rest (asleep, stopped, or running between turns) at once; one
- * mid-turn at the turn's end; one whose machine is away once that machine
- * is connected again, as its conversation is copied there.
+ * When the move a session is making takes effect, in its rows' words, or
+ * undefined when it makes none: the hub moves a session at rest (asleep,
+ * stopped, or running between turns) at once; one mid-turn at the turn's
+ * end; one whose machine is away once that machine is connected again, as
+ * its conversation is copied there.
  */
-function movingWords(instance: BoardRow, name: string): string {
+export function movingWords(instance: BoardRow): string | undefined {
+  const target = movingTo(instance);
+  if (target === undefined) {
+    return;
+  }
+  const account = cawco.accounts?.accounts.find((one) => one.id === target);
+  const name = account ? nameOf(account) : "another account";
   if (!machineConnected(instance.machineId)) {
     const host =
       cawco.machines.find((one) => one.machineId === instance.machineId)
         ?.hostname || instance.machineId;
     return `Moves to ${name} when ${host} is connected again`;
   }
-  return cawco.activityOf(instance.id) === "working"
+  return instance.owedMove || cawco.activityOf(instance.id) === "working"
     ? `Moves to ${name} when this turn ends`
     : `Moving to ${name}…`;
 }
 
 /**
  * Asks the hub to move the session, whatever its state. Its rows say so
- * until they name the new account ({@link movingWords}). A refusal stays on
- * its rows, in the hub's words, with Try again.
+ * until they name the new account ({@link movingWords}). Asking for the
+ * account it runs on while it owes a move calls that move off. A refusal
+ * stays on its rows, in the hub's words, with Try again.
  */
 export async function moveTo(
   instance: BoardRow,
   accountId: string
 ): Promise<void> {
-  if (accountId === instance.accountId || movingTo(instance) === accountId) {
+  const owed = instance.owedMove?.accountId;
+  if (
+    asking(instance) ||
+    accountId === owed ||
+    (accountId === instance.accountId && owed === undefined)
+  ) {
     return;
   }
-  const account = cawco.accounts?.accounts.find((one) => one.id === accountId);
-  const name = account ? nameOf(account) : "the other account";
   moving.set(instance.id, accountId);
-  pendingOn(instance.id, movingWords(instance, name));
   try {
     await moveInstanceAccount(instance.id, accountId);
   } catch (error) {
     moving.delete(instance.id);
-    pendingOn(instance.id, undefined);
     faultOn(instance.id, {
       reason: failureWords(error),
       again: () => moveTo(instance, accountId),
@@ -108,16 +124,53 @@ export async function moveTo(
   }
 }
 
-// A move is over once the session's row names its account: the entry goes,
-// and its rows stop saying it moves.
+/** The words each session's rows were given for its move, by session. */
+const said = new Map<string, string>();
+
+/**
+ * This tab's asks the hub has answered, gone: the row names the account,
+ * or the hub keeps the move for it (`owedMove`), or it ran on that account
+ * all along (a move called off).
+ */
+function settleAsks(): void {
+  for (const [id, target] of moving) {
+    const row = cawco.instances.find((one) => one.id === id);
+    if (
+      !row ||
+      row.accountId === target ||
+      row.owedMove?.accountId === target
+    ) {
+      moving.delete(id);
+    }
+  }
+}
+
+/** Each session's rows say the move it is making ({@link movingWords}), and stop once it makes none. */
+function sayMoves(): void {
+  const now = new Map<string, string>();
+  for (const row of cawco.instances) {
+    const words = movingWords(row);
+    if (words) {
+      now.set(row.id, words);
+    }
+  }
+  for (const [id, words] of now) {
+    if (said.get(id) !== words) {
+      pendingOn(id, words);
+      said.set(id, words);
+    }
+  }
+  for (const id of [...said.keys()]) {
+    if (!now.has(id)) {
+      pendingOn(id, undefined);
+      said.delete(id);
+    }
+  }
+}
+
 $effect.root(() => {
   $effect(() => {
-    for (const [id, target] of moving) {
-      const row = cawco.instances.find((one) => one.id === id);
-      if (!row || row.accountId === target) {
-        moving.delete(id);
-        pendingOn(id, undefined);
-      }
-    }
+    settleAsks();
+    sayMoves();
   });
 });

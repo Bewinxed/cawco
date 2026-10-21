@@ -3721,6 +3721,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/InstanceRowWaits`.
+    public enum InstanceRowWaits: OpenEnum {
+        case machine
+        case turn
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "machine": self = .machine
+            case "turn": self = .turn
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .machine: "machine"
+            case .turn: "turn"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.machine, .turn]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/InstanceStatus`.
     public enum InstanceStatus: OpenEnum {
         case discarded

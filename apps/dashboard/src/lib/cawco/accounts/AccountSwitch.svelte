@@ -10,15 +10,23 @@
    * signed in — a picker of them. Picking one moves the session whole
    * (switch.svelte.ts): no confirm, the card's feedback line says it is
    * moving and when it landed, and picking the other one moves it back.
-   * While a move is in flight the chip shows the account it is moving to
-   * (`shownAccount`), as the session's row does, and takes no picks.
+   * While a move waits the chip shows the account it is moving to
+   * (`shownAccount`), as the session's row does; another pick replaces it,
+   * and the account it runs on calls it off. Only while this tab's ask is on
+   * its way to the hub does it take no picks.
    */
   import Down from "~icons/solar/alt-arrow-down-linear";
   import { type BoardRow, cawco } from "../client.svelte";
   import NsPopover from "../spawn/NsPopover.svelte";
   import AccountName from "./AccountName.svelte";
   import { hueVar, nameOf } from "./model.svelte";
-  import { moveTo, movingTo, shownAccount, switchable } from "./switch.svelte";
+  import {
+    asking,
+    moveTo,
+    movingTo,
+    shownAccount,
+    switchable,
+  } from "./switch.svelte";
 
   let {
     instance,
@@ -48,7 +56,7 @@
   });
   const name = $derived(shown ? nameOf(shown) : "");
   const pickable = $derived(
-    !readonly && target === undefined && accounts.length > 0
+    !(readonly || asking(instance)) && accounts.length > 0
   );
 
   function pick(id: string) {
@@ -131,9 +139,8 @@
       </div>
     </NsPopover>
   {:else}
-    <!-- Nothing to pick: one account of its provider here, a move in
-         flight (the feedback line says so), or a session that takes no
-         changes now. -->
+    <!-- Nothing to pick: one account of its provider here, an ask on its
+         way to the hub (the feedback line says so), or the hub away. -->
     <span data-tool data-account-chip data-variant="static" class={chip}>
       <span class="sr-only">Account:</span>
       {@render face()}

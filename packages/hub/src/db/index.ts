@@ -123,6 +123,7 @@ import {
   mergeProjectPages,
   PROJECT_PAGES_MIGRATION_WHEN,
 } from "./merge-project-pages";
+import { type OwedMovesDb, owedMovesDb } from "./owed-moves";
 import { type PreviewPassesDb, previewPassesDb } from "./preview-passes";
 import { type PreviewsDb, previewsDb } from "./previews";
 import { type RelaysDb, relaysDb } from "./relays";
@@ -1477,6 +1478,8 @@ export interface DbShape {
    * were kept).
    */
   readonly oweAgain: (uuid: string) => boolean;
+  /** The moves sessions owe to their next launch, one per session (owed-moves.ts). */
+  readonly owedMoves: OwedMovesDb;
   /** The sends still owed to their machine ({@link sentMessages.owed}), pending, in the order accepted: a session's, or a machine's. */
   readonly owedSends: (
     of: { instanceId: string } | { machineId: string }
@@ -9657,6 +9660,7 @@ const make = async (path: string): Promise<DbShape> => {
     artifacts: artifactsDb(db),
     find: findDb(db),
     previews: previewsDb(db),
+    owedMoves: owedMovesDb(db),
     previewPasses: previewPassesDb(db),
     streamRelay: streamRelayDb(db),
     browsers: browsersDb(db),

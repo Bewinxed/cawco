@@ -79,7 +79,7 @@ export interface ForecastRead {
 /**
  * Reads `provider`'s accounts, their history and their turns, once, for one
  * pass. `owed`: the sessions a move at their turn's end, or a launch on its
- * way, takes to an account (server.ts `relaunchAtTurnEnd`, `launchClaims`),
+ * way, takes to an account (server.ts `owedMoves`, `launchClaims`),
  * by session: each arrives there now.
  */
 export const readForecast = (

@@ -28735,10 +28735,260 @@
       "getApiInstances200": {
         "type": "array",
         "items": {
-          "allOf": [
+          "anyOf": [
+            {
+              "allOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "$ref": "#/components/schemas/InstanceStatus"
+                    },
+                    "lastRequestAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "modelUsageSeen": {
+                      "type": "object"
+                    },
+                    "workflowRunId": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "workflowStepId": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "threadId": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "machineId": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "projectId": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "sessionId": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "harness": {
+                      "$ref": "#/components/schemas/HarnessKind"
+                    },
+                    "accountId": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "forkedFrom": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "parentInstanceId": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "parentToolUseId": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "cwd": {
+                      "$ref": "#/components/schemas/MachinePath"
+                    },
+                    "launchDir": {
+                      "$ref": "#/components/schemas/InstanceRowLaunchDir"
+                    },
+                    "title": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "titleSource": {
+                      "$ref": "#/components/schemas/InstanceRowTitleSource"
+                    },
+                    "derivedTitle": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "seenAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "turnEndedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "kind": {
+                      "$ref": "#/components/schemas/GetApiInstances200Kind"
+                    },
+                    "permissionMode": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "model": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "effort": {
+                      "$ref": "#/components/schemas/InstanceRowEffort"
+                    },
+                    "chosenEffort": {
+                      "$ref": "#/components/schemas/EffortLevel"
+                    },
+                    "canDelegate": {
+                      "type": [
+                        "null",
+                        "boolean"
+                      ]
+                    },
+                    "role": {
+                      "$ref": "#/components/schemas/DelegateTypeRole"
+                    },
+                    "delegateType": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "delegateTypeProject": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "lastError": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "lastErrorKind": {
+                      "$ref": "#/components/schemas/ErrorFrameLastErrorKind"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "spawnedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "workItemId": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "continuedInto": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "damaged": {
+                      "$ref": "#/components/schemas/DamagedRow",
+                      "description": "What the hub lays over a session row whose record, or whose workspace's\nrecord, is damaged on its machine ({@link DamagedRecordReport}): the file,\nwhy, and the way out that removes it (`archive`: archive workspace\n`workspaceId`; `end`: end the session)."
+                    },
+                    "runningDelegates": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "accountId",
+                    "canDelegate",
+                    "continuedInto",
+                    "createdAt",
+                    "cwd",
+                    "delegateType",
+                    "delegateTypeProject",
+                    "derivedTitle",
+                    "forkedFrom",
+                    "harness",
+                    "id",
+                    "kind",
+                    "lastError",
+                    "launchDir",
+                    "machineId",
+                    "model",
+                    "parentInstanceId",
+                    "parentToolUseId",
+                    "permissionMode",
+                    "projectId",
+                    "runningDelegates",
+                    "sessionId",
+                    "status",
+                    "threadId",
+                    "title",
+                    "updatedAt",
+                    "workItemId",
+                    "workflowRunId",
+                    "workflowStepId"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "keepAlive": {
+                      "$ref": "#/components/schemas/KeepAlive"
+                    }
+                  },
+                  "required": [
+                    "keepAlive"
+                  ]
+                }
+              ]
+            },
             {
               "type": "object",
               "properties": {
+                "owedMove": {
+                  "type": "object",
+                  "properties": {
+                    "accountId": {
+                      "type": "string"
+                    },
+                    "waits": {
+                      "$ref": "#/components/schemas/InstanceRowWaits"
+                    }
+                  },
+                  "required": [
+                    "accountId",
+                    "waits"
+                  ]
+                },
                 "id": {
                   "type": "string"
                 },
@@ -28922,6 +29172,9 @@
                 },
                 "runningDelegates": {
                   "type": "number"
+                },
+                "keepAlive": {
+                  "$ref": "#/components/schemas/KeepAlive"
                 }
               },
               "required": [
@@ -28936,11 +29189,13 @@
                 "forkedFrom",
                 "harness",
                 "id",
+                "keepAlive",
                 "kind",
                 "lastError",
                 "launchDir",
                 "machineId",
                 "model",
+                "owedMove",
                 "parentInstanceId",
                 "parentToolUseId",
                 "permissionMode",
@@ -28954,17 +29209,6 @@
                 "workItemId",
                 "workflowRunId",
                 "workflowStepId"
-              ]
-            },
-            {
-              "type": "object",
-              "properties": {
-                "keepAlive": {
-                  "$ref": "#/components/schemas/KeepAlive"
-                }
-              },
-              "required": [
-                "keepAlive"
               ]
             }
           ]
@@ -56231,6 +56475,22 @@
               "string"
             ]
           },
+          "owedMove": {
+            "description": "The account a person moved it to that it moves to at its next launch,\nas the hub keeps it (its `owed_moves`), until the move lands: what it\nwaits on, its turn's end or its machine connected again. Absent when it\nowes none.",
+            "type": "object",
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "waits": {
+                "$ref": "#/components/schemas/InstanceRowWaits"
+              }
+            },
+            "required": [
+              "accountId",
+              "waits"
+            ]
+          },
           "parentInstanceId": {
             "description": "The session that started this one (`delegate`, `start_session`, a\nworkflow's supervisor), which every rail nests it under; absent on a\nsession a person started. A delegate is told from a session merely\nstarted by {@link workItemId}, never by where it stands.",
             "type": [
@@ -58989,6 +59249,13 @@
           "known",
           "unknown",
           "unread"
+        ]
+      },
+      "InstanceRowWaits": {
+        "type": "string",
+        "enum": [
+          "machine",
+          "turn"
         ]
       },
       "InstanceRowTitleSource": {

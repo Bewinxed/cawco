@@ -536,6 +536,7 @@ import {
 import type { LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import type { LimitCompaction } from "./db/at-limit";
+import type { OwedMove } from "./db/owed-moves";
 import { projectOrigin } from "./db/previews";
 import type {
   ContinuationAsker,
@@ -9382,7 +9383,7 @@ export const createServer = (
    */
   const retryLaterMove = async (instanceId: string): Promise<void> => {
     const [row] = db.getInstancesByIds([instanceId]);
-    const owed = relaunchAtTurnEnd.get(instanceId);
+    const owed = owedMoves.get(instanceId);
     const held = db.atLimit.hold(instanceId) !== undefined;
     if (!(row && (held || owed?.to !== undefined))) {
       return;
@@ -9579,7 +9580,7 @@ export const createServer = (
    * dir as its agent starts ({@link RegisterAckPayload.sessions}). Rows that
    * share one conversation and disagree on its account are left out: their
    * data cannot be in both dirs. So is one whose row owes a move to another
-   * account ({@link relaunchAtTurnEnd}): the move carries it, behind this
+   * account ({@link owedMoves}): the move carries it, behind this
    * ack ({@link takeUpMovesOn}), and a machine refuses a carry of a
    * conversation another carry is moving, so the sweep's would drop the
    * move (2026-10-21, a sleeping session moved while its machine was away).
@@ -9587,7 +9588,7 @@ export const createServer = (
   const claudeSessionsOn = (machineId: string): CarrySessionRequest[] => {
     const bySession = new Map<string, CarrySessionRequest | null>();
     for (const row of db.claudeConversationsOn(machineId)) {
-      if (relaunchAtTurnEnd.get(row.id)?.to !== undefined) {
+      if (owedMoves.get(row.id)?.to !== undefined) {
         bySession.set(row.sessionId, null);
         continue;
       }
@@ -13098,12 +13099,12 @@ export const createServer = (
 
   /**
    * The account each session is on its way to and not on yet, by session: a
-   * move owed to its turn's end ({@link relaunchAtTurnEnd}), or a launch
+   * move owed to its turn's end ({@link owedMoves}), or a launch
    * placed and still carrying its conversation there ({@link launchClaims}).
    */
   const owedTargets = (): Map<string, string> => {
     const owed = new Map<string, string>();
-    for (const [id, one] of relaunchAtTurnEnd) {
+    for (const [id, one] of owedMoves.list()) {
       if (one.to !== undefined) {
         owed.set(id, one.to);
       }
@@ -15686,7 +15687,7 @@ export const createServer = (
     const from = source.id;
     const to = job.targetInstanceId;
     atLimit.forget(from);
-    relaunchAtTurnEnd.delete(from);
+    owedMoves.delete(from);
     stopCompaction(from);
     for (const send of db.sendsIn(from, ["pending"])) {
       if (!send.owed && send.envelope) {
@@ -15734,7 +15735,7 @@ export const createServer = (
       db.patchInstance(from, { continuedInto: to });
     }
     atLimit.forget(from);
-    relaunchAtTurnEnd.delete(from);
+    owedMoves.delete(from);
     const live = !["stopped", "discarded"].includes(row.status);
     console.info(
       `[continuation] ${sessionName(row)} (${from.slice(0, 8)}) was continued in ${to.slice(0, 8)}, which carries its work item on: it never runs again${live ? ", and its process is stopped" : ""}. What is sent to it goes to ${to.slice(0, 8)}.`
@@ -16342,9 +16343,19 @@ export const createServer = (
         listed.push(row);
       }
     }
+    // The move a person asked of each session that it still owes, off its
+    // one record (`owedMoves`, read here from the database: the board is
+    // first read before that is declared). A move of the hub's own
+    // (rebalance's, the at-limit controller's) says itself when it lands.
+    const owed = new Map(db.owedMoves.list());
     const board = withKeepAlive(
       withDelegates(damagedRecords.overlay(withSessionPresence(listed)))
-    );
+    ).map((row) => {
+      const one = owed.get(row.id);
+      return one?.to === undefined || !one.byHand
+        ? row
+        : { ...row, owedMove: { accountId: one.to, waits: one.waits } };
+    });
     // Law `running-session-machine-connected` (core invariant.ts), paired
     // with the overlay above: checked on the rows as they leave for a reader,
     // after every overlay laid on them, so no later one serves a stored
@@ -16885,6 +16896,7 @@ export const createServer = (
       "damaged" in row ? row.damaged : null,
       row.runningDelegates,
       row.keepAlive,
+      "owedMove" in row ? row.owedMove : null,
     ]);
   // Seeded from the board as the hub boots: every dashboard connects after
   // this and is handed a snapshot at least this fresh, so the first publish
@@ -19049,22 +19061,41 @@ export const createServer = (
   };
 
   /**
-   * Sessions whose account changes mid-turn: each relaunches when its turn
-   * ends. A model that crossed an account provider has already put its
-   * account on the row (`to` absent). A person's move has not: a row names
-   * the account its running process reads, so its account's readings and
-   * sign-in stay that process's until it is replaced; the next launch of the
-   * row takes `to` and writes `move` ({@link takeOwedMove}).
+   * Sessions whose account changes at their next launch: each relaunches
+   * when its turn ends, or is carried as its machine registers
+   * ({@link takeUpMovesOn}). A model that crossed an account provider has
+   * already put its account on the row (`to` absent). A person's move has
+   * not: a row names the account its running process reads, so its
+   * account's readings and sign-in stay that process's until it is
+   * replaced; the next launch of the row takes `to` and writes `move`
+   * ({@link takeOwedMove}).
+   *
+   * The database's record (db `owedMoves`, table `owed_moves`) is the one
+   * source: a hub restart, as every nightly install makes, carries out what
+   * it holds. Each change goes out on the board, whose rows say the move a
+   * session owes (InstanceRow `owedMove`), so a dashboard loaded before it
+   * is carried says it waits.
    */
-  const relaunchAtTurnEnd = new Map<
-    string,
-    {
-      /** A person asked for it ({@link moveByHand}): the at-limit controller only carries it out. */
-      byHand?: true;
-      to?: string;
-      move: AccountMove | null;
-    }
-  >();
+  const owedMoves = {
+    get: db.owedMoves.get,
+    has: db.owedMoves.has,
+    list: db.owedMoves.list,
+    set: (instanceId: string, owed: OwedMove): void => {
+      db.owedMoves.set(instanceId, owed);
+      publishInstances("");
+    },
+    delete: (instanceId: string): void => {
+      if (db.owedMoves.delete(instanceId)) {
+        publishInstances("");
+      }
+    },
+  };
+  /**
+   * The owed moves being carried now ({@link takeUpOwedMove}), by session:
+   * a second ask for one joins its carry, never starts another. Only what
+   * is in flight; the move itself is in {@link owedMoves} until it lands.
+   */
+  const owedCarries = new Map<string, Promise<void>>();
 
   /**
    * The row a launch of `row` runs as: on the account a person moved it to
@@ -19076,12 +19107,12 @@ export const createServer = (
    * is in the account's dir ({@link landSessionDir}).
    */
   const takeOwedMove = (row: StoredRow): StoredRow => {
-    const owed = relaunchAtTurnEnd.get(row.id);
+    const owed = owedMoves.get(row.id);
     if (!owed) {
       return row;
     }
     if (owed.to === undefined) {
-      relaunchAtTurnEnd.delete(row.id);
+      owedMoves.delete(row.id);
       return row;
     }
     return { ...row, accountId: owed.to };
@@ -19092,14 +19123,14 @@ export const createServer = (
    * (null: the machine's own), said once the launch carried it there and
    * before its CLI starts ({@link SESSION_DIR_READ}). The row names that
    * account from now on; a placement held for it ({@link launchClaims}) and
-   * a move owed to it ({@link relaunchAtTurnEnd}) are over, the move's line
+   * a move owed to it ({@link owedMoves}) are over, the move's line
    * written and any hold at its old account's limit ended.
    */
   const landSessionDir = (row: StoredRow, accountId: string | null): void => {
     launchClaims.delete(row.id);
-    const owed = relaunchAtTurnEnd.get(row.id);
+    const owed = owedMoves.get(row.id);
     if (owed?.to !== undefined && owed.to === accountId) {
-      relaunchAtTurnEnd.delete(row.id);
+      owedMoves.delete(row.id);
       db.atLimit.dropHold(row.id);
       if (owed.move) {
         noteAtLimit(row, owed.move);
@@ -19195,7 +19226,7 @@ export const createServer = (
    * one at rest has its process ended for that and relaunches on it now; one
    * not running resumes on it when it next starts. One mid-turn goes on
    * reading its old account until the turn ends, so its row names that one
-   * until then ({@link relaunchAtTurnEnd}); so does one whose machine is
+   * until then ({@link owedMoves}); so does one whose machine is
    * away, carried as that machine connects again ({@link takeUpMovesOn}).
    * A hold at its old account's limit
    * ends: the person chose. A carry that cannot happen is refused, the row
@@ -19233,20 +19264,26 @@ export const createServer = (
     const title = sessionName(row);
     const fromName = accountWords(row.accountId);
     const toName = accountNameAmong(account, db.accounts.list());
-    const owe = (words: string) => {
-      relaunchAtTurnEnd.set(row.id, { byHand: true, to: account.id, move });
+    const owe = (words: string, waitsOn: OwedMove["waits"] = "turn") => {
+      owedMoves.set(row.id, {
+        byHand: true,
+        to: account.id,
+        move,
+        waits: waitsOn,
+      });
       return { state: "pending" as const, accountId: account.id, why: words };
     };
     if (!registry.agent(row.machineId)) {
       return owe(
-        `${title} can't move from ${fromName} to ${toName} yet: ${machineName(row.machineId)} isn't connected, and its conversation is copied on that machine. It moves as soon as ${machineName(row.machineId)} is connected again.`
+        `${title} can't move from ${fromName} to ${toName} yet: ${machineName(row.machineId)} isn't connected, and its conversation is copied on that machine. It moves as soon as ${machineName(row.machineId)} is connected again.`,
+        "machine"
       );
     }
     if (running && !(await sessionIdle(row))) {
       return owe(midTurnMoveWords(row, title, fromName, toName));
     }
     // A move it still owed (asked mid-turn, to another account) is over.
-    relaunchAtTurnEnd.delete(row.id);
+    owedMoves.delete(row.id);
     if (running) {
       transcripts.noteRelaunch(row.id);
     }
@@ -19310,7 +19347,7 @@ export const createServer = (
    * conversation whole: Claude Code's is carried into that account's dir; pi
    * reopens its session file on that account's runtime; OpenCode carries it
    * into that account's server. A person's move it owes ({@link
-   * relaunchAtTurnEnd}) is carried first, its process ended at rest for it,
+   * owedMoves}) is carried first, its process ended at rest for it,
    * and its row names the account only once its data is there; one whose
    * carry cannot happen stays on its account and in place. `carry`: the turn
    * that ended was refused at its account's limit, so once relaunched it is
@@ -19358,20 +19395,59 @@ export const createServer = (
   };
 
   /**
-   * The move `instanceId` owes ({@link relaunchAtTurnEnd}), carried now: its
+   * An owed move whose carry did not land ({@link takeUpOwedMove}), its
+   * record still its own (`mine`): one whose process still runs owes it at
+   * its turn's end; one whose machine went away under the carry owes it to
+   * the machine's return; any other is dropped. Each says why in the log.
+   */
+  const keepUncarried = (
+    stored: StoredRow,
+    owed: OwedMove,
+    to: string,
+    why: Kept,
+    mine: boolean
+  ): void => {
+    const away = !(why.running || registry.agent(stored.machineId));
+    if (mine && why.running) {
+      owedMoves.set(stored.id, { ...owed, waits: "turn" });
+    } else if (mine && away) {
+      owedMoves.set(stored.id, { ...owed, waits: "machine" });
+    } else if (mine) {
+      owedMoves.delete(stored.id);
+    }
+    const next = away
+      ? `It moves as soon as ${machineName(stored.machineId)} is connected again.`
+      : keptNextWords(why, accountWords(to));
+    console.warn(
+      `[accounts] ${sessionName(stored)} can't move from ${accountWords(stored.accountId)} to ${accountWords(to)} yet: ${why.why}. ${next}`
+    );
+  };
+
+  /**
+   * The move `instanceId` owes ({@link owedMoves}), carried now: its
    * process ended at rest and its data carried into the account's dir, then
    * its row names the account, the move's line is written, and it relaunches
-   * there (`carry`: told to carry on past the limit that stopped it). One
-   * whose process still runs owes it again; one whose carry cannot happen
-   * stays where it is. Undefined when it owes no move to an account, or its
-   * machine is away: nothing was taken up.
+   * there (`carry`: told to carry on past the limit that stopped it). Its
+   * record stays until the carry lands, so a hub that dies under it carries
+   * it again on its return (a carry is idempotent: one already there moves
+   * nothing). One whose process still runs owes it at its turn's end; one
+   * whose machine went away under the carry owes it to the machine's
+   * return; one whose carry cannot happen stays where it is, the move
+   * dropped. A move asked meanwhile replaces it, and only its own outcome
+   * clears it. A second ask while it is carried joins that carry
+   * ({@link owedCarries}). Undefined when it owes no move to an account, or
+   * its machine is away: nothing was taken up.
    */
   const takeUpOwedMove = (
     instanceId: string,
     carry?: "limit"
   ): Promise<void> | undefined => {
+    const inFlight = owedCarries.get(instanceId);
+    if (inFlight !== undefined) {
+      return inFlight;
+    }
     const [stored] = db.getInstancesByIds([instanceId]);
-    const owed = stored ? relaunchAtTurnEnd.get(stored.id) : undefined;
+    const owed = stored ? owedMoves.get(stored.id) : undefined;
     if (!(
       stored &&
       owed?.to !== undefined &&
@@ -19380,29 +19456,37 @@ export const createServer = (
       return undefined;
     }
     const { to } = owed;
-    relaunchAtTurnEnd.delete(stored.id);
+    /** The record is still this move's: no newer ask replaced it. */
+    const still = () => owedMoves.get(stored.id)?.to === to;
     transcripts.noteRelaunch(stored.id);
-    return moveRowsToAccount(stored.machineId, [stored], to, true).then(
-      ({ kept }) => {
+    const carried = moveRowsToAccount(stored.machineId, [stored], to, true)
+      .then(({ kept }) => {
         const why = kept.get(stored.id);
         if (why) {
-          if (why.running) {
-            relaunchAtTurnEnd.set(stored.id, owed);
-          }
-          console.warn(
-            `[accounts] ${sessionName(stored)} can't move from ${accountWords(stored.accountId)} to ${accountWords(to)} yet: ${why.why}. ${keptNextWords(why, accountWords(to))}`
-          );
-          return;
+          keepUncarried(stored, owed, to, why, still());
+          return false;
+        }
+        if (still()) {
+          owedMoves.delete(stored.id);
         }
         db.atLimit.dropHold(stored.id);
         publishInstances(stored.machineId);
         if (owed.move) {
           noteAtLimit(stored, owed.move);
         }
-        relaunchOnAccount(stored.id, carry);
-        releaseOwed({ instanceId: stored.id });
-      }
-    );
+        return true;
+      })
+      .finally(() => owedCarries.delete(instanceId))
+      .then((landed) => {
+        // Behind the carry's own end, so its relaunch (and a newer move
+        // asked meanwhile) is taken up afresh, never joined to this one.
+        if (landed) {
+          relaunchOnAccount(stored.id, carry);
+          releaseOwed({ instanceId: stored.id });
+        }
+      });
+    owedCarries.set(instanceId, carried);
+    return carried;
   };
 
   /**
@@ -19411,15 +19495,28 @@ export const createServer = (
    * account's limit would not make. One held at its limit is looked at by
    * the at-limit controller ({@link AtLimit.lookNow}), which carries out a
    * person's move; any other owed move is carried as at a turn's end
-   * ({@link takeUpOwedMove}), and owed again by one inside a turn. Each says
-   * why in the log.
+   * ({@link takeUpOwedMove}), and owed again by one inside a turn. A
+   * relaunch alone (`to` absent) goes now when the session is at rest, as
+   * its turn's end would have relaunched it, else at that end. This is also
+   * how a hub restart carries out what {@link owedMoves} holds: every
+   * machine registers again. Each says why in the log.
    */
   const takeUpMovesOn = (machineId: string): void => {
-    const owedHere = [...relaunchAtTurnEnd].filter(
-      ([id, owed]) =>
-        owed.to !== undefined &&
-        db.getInstancesByIds([id])[0]?.machineId === machineId
-    );
+    const onMachine = owedMoves
+      .list()
+      .filter(([id]) => db.getInstancesByIds([id])[0]?.machineId === machineId);
+    const owedHere = onMachine.filter(([, owed]) => owed.to !== undefined);
+    for (const [id] of onMachine.filter(([, owed]) => owed.to === undefined)) {
+      detach(
+        (async () => {
+          const [row] = db.getInstancesByIds([id]);
+          if (row && owedMoves.has(id) && (await sessionIdle(row))) {
+            relaunchOnAccount(id);
+          }
+        })(),
+        "owed relaunch"
+      );
+    }
     const heldHere = db.atLimit
       .holds()
       .filter(
@@ -19452,13 +19549,13 @@ export const createServer = (
 
   /**
    * A turn refused at its account's limit by a session that owes a move
-   * ({@link relaunchAtTurnEnd}: a person's, or rebalance's) to an account
+   * ({@link owedMoves}: a person's, or rebalance's) to an account
    * that can take it now: the move is made, as at any turn's end, and the
    * session carries on there. True when it was; false leaves the refusal to
    * the at-limit controller.
    */
   const moveOwedAtRefusal = (instanceId: string): boolean => {
-    const owed = relaunchAtTurnEnd.get(instanceId);
+    const owed = owedMoves.get(instanceId);
     const [row] = db.getInstancesByIds([instanceId]);
     const to = owed?.to ? db.accounts.get(owed.to) : undefined;
     if (!(row && to) || to.id === row.accountId) {
@@ -19523,7 +19620,7 @@ export const createServer = (
     if (await sessionIdle(row)) {
       relaunchOnAccount(row.id);
     } else {
-      relaunchAtTurnEnd.set(row.id, { move: null });
+      owedMoves.set(row.id, { move: null, waits: "turn" });
     }
     return "crossed";
   };
@@ -23554,7 +23651,7 @@ export const createServer = (
       row.workflowStepId !== null ||
       atLimit.handling(row.id) ||
       db.atLimit.compaction(row.id) !== undefined ||
-      relaunchAtTurnEnd.has(row.id) ||
+      owedMoves.has(row.id) ||
       db
         .continuationRows()
         .some(
@@ -24074,7 +24171,7 @@ export const createServer = (
    * room like every move (admission.ts), so a reset never takes a herd of
    * waking sessions at once; one that does not fit wakes where it is, and
    * one admitted onto its account in this window stays. The move is owed to its launch
-   * ({@link relaunchAtTurnEnd}), which carries its conversation into the
+   * ({@link owedMoves}), which carries its conversation into the
    * new account's dir; its line is written once that has. A fork stays with
    * its origin, a session a person moved stays where they put it, and only
    * Claude's conversations are carried this way.
@@ -24088,7 +24185,7 @@ export const createServer = (
       row.harness !== "claude" ||
       !LIMITED_PROVIDERS.includes(from.provider) ||
       row.forkedFrom !== null ||
-      relaunchAtTurnEnd.has(row.id) ||
+      owedMoves.has(row.id) ||
       db.atLimit.hold(row.id) ||
       cacheWarm(row) ||
       !db.accounts.routing(from.provider).atLimit.move ||
@@ -24125,7 +24222,7 @@ export const createServer = (
     console.info(
       `[rebalance] ${sessionName(row)} moves from ${accountNameAmong(from, accounts)} to ${toName} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${toName} is where placement puts it now; ${verdict.words}. Its conversation is copied there before it starts.`
     );
-    relaunchAtTurnEnd.set(row.id, {
+    owedMoves.set(row.id, {
       to: to.id,
       move: {
         kind: "moved",
@@ -24137,6 +24234,7 @@ export const createServer = (
         resetsAt: null,
         because: { kind: "cold", wake: true },
       },
+      waits: "turn",
     });
   };
 
@@ -24290,7 +24388,7 @@ export const createServer = (
     // Rebalance's move of a session mid-turn waits for its turn's end, as a
     // person's does; its line is written once it lands.
     owe: (row, accountId, move, why) => {
-      relaunchAtTurnEnd.set(row.id, { to: accountId, move });
+      owedMoves.set(row.id, { to: accountId, move, waits: "turn" });
       console.info(
         `[rebalance] ${sessionName(row)} can't move from ${accountWords(row.accountId)} to ${accountWords(accountId)} yet: ${why}. It moves when its turn ends.`
       );
@@ -24299,7 +24397,7 @@ export const createServer = (
     laterSince: (instanceId) => laterWaits.get(instanceId)?.since,
     named: (row) => sessionName(row),
     handMove: (row) => {
-      const owed = relaunchAtTurnEnd.get(row.id);
+      const owed = owedMoves.get(row.id);
       return owed?.byHand && owed.to !== undefined && owed.to !== row.accountId
         ? owed.to
         : undefined;
@@ -24357,10 +24455,10 @@ export const createServer = (
     }
     // A move owed to its next launch off this refusal is the controller's
     // to make now ({@link oweRefusedMove}).
-    const owed = relaunchAtTurnEnd.get(instanceId)?.move;
+    const owed = owedMoves.get(instanceId)?.move;
     const take = (): void => {
       if (owed?.kind === "moved" && owed.because?.kind === "refused") {
-        relaunchAtTurnEnd.delete(instanceId);
+        owedMoves.delete(instanceId);
       }
       credentialTurns.add(instanceId);
     };
@@ -24392,7 +24490,7 @@ export const createServer = (
    * A session whose item failed on its account's refused credential: its
    * next launch (its parent's word wakes it) runs on the account placement
    * carries it to, its line written once its data is there
-   * ({@link relaunchAtTurnEnd}). None, when no account can take it.
+   * ({@link owedMoves}). None, when no account can take it.
    */
   const oweRefusedMove = (instanceId: string, accountId: string): void => {
     const [row] = db.getInstancesByIds([instanceId]);
@@ -24403,7 +24501,7 @@ export const createServer = (
       return;
     }
     const accounts = db.accounts.list();
-    relaunchAtTurnEnd.set(row.id, {
+    owedMoves.set(row.id, {
       to: to.id,
       move: {
         kind: "moved",
@@ -24415,6 +24513,7 @@ export const createServer = (
         resetsAt: null,
         because: { kind: "refused" },
       },
+      waits: "turn",
     });
   };
 
@@ -25967,6 +26066,10 @@ export const createServer = (
         "/api/instances/:id/account",
         { body: t.Object({ accountId: t.String() }) },
         async ({ params, body, status }) => {
+          // A move it owed being carried now goes first: its machine refuses
+          // a second carry of the conversation meanwhile, and this one
+          // starts from where that one left the row.
+          await owedCarries.get(params.id)?.catch(() => undefined);
           const [row] = db.getInstancesByIds([params.id]);
           if (!row) {
             return status(404, "Session not found");
@@ -25981,8 +26084,8 @@ export const createServer = (
           }
           if (row.accountId === account.id) {
             // Back to the account it runs on: a move asked mid-turn is off.
-            if (relaunchAtTurnEnd.get(row.id)?.to !== undefined) {
-              relaunchAtTurnEnd.delete(row.id);
+            if (owedMoves.get(row.id)?.to !== undefined) {
+              owedMoves.delete(row.id);
             }
             return {
               state: "moved" as const,
@@ -31191,7 +31294,7 @@ export const createServer = (
                   // (a move relaunched it on another account) is of no
                   // account the row names: dropped, never let it say who is
                   // signed in. The row names the account of the launch it
-                  // has now, as a move waits for it ({@link relaunchAtTurnEnd}).
+                  // has now, as a move waits for it ({@link owedMoves}).
                   if (
                     !row ||
                     peek(message.payload, "processGeneration") !==
@@ -31718,7 +31821,7 @@ export const createServer = (
                   // provider, or a person moved it): it moves now, at the
                   // turn's end.
                   // Its launch takes the move ({@link takeOwedMove}).
-                  if (cacheRow && relaunchAtTurnEnd.has(cacheRow.id)) {
+                  if (cacheRow && owedMoves.has(cacheRow.id)) {
                     relaunchOnAccount(cacheRow.id);
                   }
                   // Claude reports each model's window only here; kept so a

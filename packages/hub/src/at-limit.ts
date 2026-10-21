@@ -390,7 +390,7 @@ export interface AtLimitPorts {
   noticed: (notice: RebalanceNotice) => void;
   /**
    * Owes `row` a move to `accountId` at its turn's end, or its next start
-   * (server.ts `relaunchAtTurnEnd`, the way a person's move mid-turn waits):
+   * (server.ts `owedMoves`, the way a person's move mid-turn waits):
    * `move` is the line written once it has moved; `why` says why it waits.
    */
   owe: (

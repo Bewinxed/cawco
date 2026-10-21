@@ -17,7 +17,7 @@
   import Link from "~icons/solar/link-bold-duotone";
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { nameOf } from "../accounts/model.svelte";
-  import { movingTo } from "../accounts/switch.svelte";
+  import { movingTo, movingWords } from "../accounts/switch.svelte";
   import {
     answeredOr,
     cawco,
@@ -42,7 +42,6 @@
   import { standsOpen } from "../motion/hang";
   import { morph } from "../motion/morph.svelte";
   import { bypasses, permissionModesFor } from "../permission-modes";
-  import { sessionAct } from "../session-acts.svelte";
   import ModelSection from "../spawn/ModelSection.svelte";
   import { modelName } from "../spawn/model-entries";
   import NsPopover from "../spawn/NsPopover.svelte";
@@ -448,6 +447,11 @@
     permission: pending("permission"),
     account: pending("account"),
   }));
+  /**
+   * The account the session ran on as its move began: a move landed only
+   * when its row names another, never when it was called off.
+   */
+  let accountBefore = untrack(() => row?.accountId ?? null);
   $effect(() => {
     const id = sessionId;
     const now = {
@@ -462,11 +466,16 @@
       permission: failure("permission") !== null,
       account: failure("account") !== null,
     };
+    const account = row?.accountId ?? null;
     untrack(() => {
       const moved = id !== doneFor;
       for (const slot of SLOTS) {
         const landed =
-          !moved && wasPending[slot] && !now[slot] && !failed[slot];
+          !moved &&
+          wasPending[slot] &&
+          !now[slot] &&
+          !failed[slot] &&
+          (slot !== "account" || account !== accountBefore);
         if (landed || moved || now[slot]) {
           clearTimeout(holds.get(slot));
           done[slot] = landed;
@@ -482,6 +491,9 @@
       }
       doneFor = id;
       wasPending = now;
+      if (!now.account) {
+        accountBefore = account;
+      }
     });
   });
   onDestroy(() => {
@@ -583,10 +595,7 @@
       out:crossOut
     >
       <!-- A move says when it takes effect, in its rows' words (switch.svelte.ts). -->
-      {slot === "account" && row
-        ? (sessionAct(row.id)?.pending ??
-          `Moving to ${accountName(movingTo(row))}…`)
-        : "Applying change…"}
+      {slot === "account" && row ? movingWords(row) : "Applying change…"}
     </p>
   {:else if done[slot]}
     <p

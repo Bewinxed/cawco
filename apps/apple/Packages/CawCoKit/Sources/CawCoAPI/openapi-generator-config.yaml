@@ -94,6 +94,7 @@ typeOverrides:
     InstanceRowEffort: OpenEnums.InstanceRowEffort
     InstanceRowLaunchDir: OpenEnums.InstanceRowLaunchDir
     InstanceRowTitleSource: OpenEnums.InstanceRowTitleSource
+    InstanceRowWaits: OpenEnums.InstanceRowWaits
     InstanceStatus: OpenEnums.InstanceStatus
     Interaction: OpenEnums.Interaction
     IssueTracker: OpenEnums.IssueTracker

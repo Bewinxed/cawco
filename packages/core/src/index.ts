@@ -1385,6 +1385,13 @@ export interface InstanceRow {
   machineId: string;
   model?: string | null;
   /**
+   * The account a person moved it to that it moves to at its next launch,
+   * as the hub keeps it (its `owed_moves`), until the move lands: what it
+   * waits on, its turn's end or its machine connected again. Absent when it
+   * owes none.
+   */
+  owedMove?: { accountId: string; waits: "turn" | "machine" };
+  /**
    * The session that started this one (`delegate`, `start_session`, a
    * workflow's supervisor), which every rail nests it under; absent on a
    * session a person started. A delegate is told from a session merely
