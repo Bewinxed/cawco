@@ -22,9 +22,9 @@
     dock.el.querySelectorAll(".dk-ghost").forEach((g) => g.classList.toggle("play", held));
     const ms = held ? Math.min(320, Math.max(0, (t - 1700) / SLOW)) : dock.total;
     dock.setT(ms, held ? 320 : dock.total); dock.playing(held && t >= 1700 && t < 1700 + 320 * SLOW);
-    const pts = { rest: G.at(root, dock.el, 0.6, 0.6), hold: G.at(root, hold) };
-    const [x, y] = G.path(t, [[800, 1400, "rest", "hold"], [4800, 5600, "hold", "rest"]], pts);
-    cur.set(x, y, "arrow", held);
+    // The cursor shows only while it holds the button, its tip in the trailing corner, clear of the word.
+    const [x, y] = G.at(root, hold, 0.92, 0.8);
+    cur.set(x, y, "arrow", held, within(t, 1300, 4700));
   }, 2400);
   root.gdKeys = [600, 2400, 5000];
 })();

@@ -158,12 +158,16 @@ label { display: block; margin: 0 0 4px; font-size: 12px; color: var(--ink-muted
 .node p { font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
 .node.cur { background: var(--surface-pressed); border-color: var(--border-contrast); }
 .node.hov { background: var(--surface-hover); }
+/* Muted words on the current and kept fills take --ink-row: --ink-muted measures 3.92:1 on --surface-pressed and 4.49:1 on --selected-bg by day. */
+.node.cur p, .node.on p { color: var(--ink-row); }
 .var { font: var(--type-meta); border-radius: var(--radius-xs); }
 .var.on { background: var(--chip-chosen-bg); color: var(--chip-chosen-ink); border-color: transparent; }
 .var.cur { background: var(--surface-pressed); border-color: var(--border-contrast); color: var(--ink-strong); }
 .var.hov { background: var(--surface-hover); }
 /* Edge labels knock out their own line. */
 .world svg text { paint-order: stroke; stroke: var(--surface-well); stroke-width: 4px; stroke-linejoin: round; font: var(--type-meta); fill: var(--ink-muted); }
+/* The mockup's .world svg rule places the edge layer; an icon inside a node stays in its own row. */
+.world .node svg { position: static; overflow: hidden; }
 .world svg polyline.kept { stroke: var(--brand-solid); stroke-width: var(--c-block-drop-line); }
 .world svg .gd-disc { fill: var(--brand-solid); }
 /* The tool's controls are neutral. */
@@ -226,7 +230,7 @@ label { display: block; margin: 0 0 4px; font-size: 12px; color: var(--ink-muted
 .dk-chip { display: inline-flex; align-items: center; gap: 4px; block-size: var(--c-badge-h); padding-inline: 6px; border-radius: var(--radius-xs); background: var(--surface-recess); border: 1px solid var(--border-hairline); font: var(--type-meta); color: var(--ink-muted); white-space: nowrap; transition: background-color var(--dur-control) var(--ease-out), border-color var(--dur-control) var(--ease-out); }
 .dk-chip code { font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); line-height: 1; color: var(--ink-strong); }
 .dk-chip.free { border-style: dashed; border-color: var(--border-contrast); }
-.dk-chip.diff { background: var(--selected-bg); }
+.dk-chip.diff { background: var(--selected-bg); color: var(--ink-row); }
 .dk-chip.open { border-color: var(--ink-muted); background: var(--surface-raised); }
 .gd-curve path, .gd-curve polyline { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
 .dk-chip .gd-curve { color: var(--ink-row); }
@@ -249,7 +253,7 @@ label { display: block; margin: 0 0 4px; font-size: 12px; color: var(--ink-muted
 .dk-ph::before { content: ""; position: absolute; inset-block-start: calc(var(--c-block-drop-dot) / -2); inset-inline-start: calc(var(--c-block-drop-dot) / -2); inline-size: var(--c-block-drop-dot); block-size: var(--c-block-drop-dot); border-radius: var(--radius-pill); background: var(--brand-solid); }
 .dk-ph::after { content: ""; position: absolute; inset-block: 0; inset-inline-start: calc(var(--c-block-drop-line) / -2); inline-size: var(--c-block-drop-line); background: var(--brand-solid); }
 .dk-guide { position: absolute; inset-block-start: 28px; inset-block-end: 0; inline-size: 1px; translate: -0.5px 0; background: var(--ink-muted); }
-.dk-pill { position: absolute; translate: -50% 0; padding: 1px 7px; border-radius: var(--radius-pill); background: var(--brand-solid); color: var(--on-action); font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); line-height: 16px; white-space: nowrap; box-shadow: var(--shadow-tile); }
+.dk-pill { position: absolute; translate: -50% 0; padding: 1px 7px; border-radius: var(--radius-pill); background: var(--chip-chosen-bg); color: var(--chip-chosen-ink); font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); line-height: 16px; white-space: nowrap; box-shadow: var(--shadow-tile); }
 .dk-tick { position: absolute; inset-block-end: 0; inline-size: 1px; block-size: 6px; background: var(--border-contrast); }
 .dk-railwrap { grid-column: 1 / -1; display: grid; grid-template-rows: 0fr; }
 .dk-railwrap.open { grid-template-rows: 1fr; }
@@ -275,7 +279,7 @@ label { display: block; margin: 0 0 4px; font-size: 12px; color: var(--ink-muted
 .gd-cursor svg { position: absolute; inset: 0; overflow: visible; }
 .gd-cursor path { fill: var(--ink-strong); stroke: var(--surface-raised); stroke-width: 1.25; stroke-linejoin: round; }
 .gd-cursor.down { scale: 0.9; }
-.gd-key { position: absolute; z-index: 5; display: inline-grid; place-items: center; min-inline-size: 22px; block-size: 22px; padding-inline: 5px; border-radius: var(--radius-xs); border: 1px solid var(--border-control); background: var(--surface-raised); box-shadow: var(--shadow-tile); font: var(--type-meta); transition: opacity var(--dur-control) var(--ease-out); }
+.gd-key { position: absolute; inset: 0 auto auto 0; z-index: 5; display: inline-grid; place-items: center; min-inline-size: 22px; block-size: 22px; padding-inline: 5px; border-radius: var(--radius-xs); border: 1px solid var(--border-control); background: var(--surface-raised); box-shadow: var(--shadow-tile); font: var(--type-meta); transition: opacity var(--dur-control) var(--ease-out); }
 }
 @media (prefers-color-scheme: dark) {
   .gd .gd-cursor path { stroke: var(--surface-recess-deep); }
@@ -288,14 +292,10 @@ label { display: block; margin: 0 0 4px; font-size: 12px; color: var(--ink-muted
 .gd-ctx h3 { font: var(--type-label); color: var(--ink-muted); margin-block-end: var(--space-2); }
 .gd-ctx ol, .gd-ctx ul { margin: 0; padding-inline-start: 1.25em; display: grid; gap: var(--space-1); color: var(--ink-strong); }
 .gd-ctx li { text-wrap: pretty; }
-.gd-panes { display: grid; gap: var(--space-3); }
-/* A card's drawings run taller than the view: its options stay at the view's foot while the card is on screen,
-   so each drawing and its pick are seen together. */
-.dp-card > .dp-opts { position: sticky; inset-block-end: var(--page-inset-bottom, 0px); z-index: 6; padding-block: var(--space-3); background: var(--surface-raised); box-shadow: 0 -1px 0 var(--border-hairline); }
-.gd-panes.trio { grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); align-items: start; }
-.gd-panes .dp-pane > figcaption { display: flex; align-items: center; gap: var(--space-2); }
-.gd-panes .dp-pane > figcaption .dp-tag-s { font: var(--type-meta); color: var(--ink-muted); font-weight: var(--weight-body); }
-.gd-panes .dp-pane > figcaption kbd { display: inline-grid; place-items: center; min-inline-size: 17px; block-size: 17px; padding-inline: 4px; border-radius: var(--radius-xs); background: var(--surface-raised); font: var(--type-meta); color: var(--ink-strong); }
+/* Each option is its drawing with its pick right under it: one column, three side by side for a trio. */
+.dp-opts.gd-opts { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
+.dp-opts.gd-opts.trio { grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); align-items: start; }
+.gd-opt { display: grid; align-content: start; gap: var(--space-2); min-inline-size: 0; }
 </style>
 <script>
 /* The drawing kit every option on this page is drawn with: the mockup's data, its
@@ -659,10 +659,11 @@ window.GD = (() => {
       bar.classList.toggle("sel", within(t, 1500, 6000));
       const L = lane.getBoundingClientRect(), R = root.getBoundingClientRect();
       const reset = d.el.querySelector(".dk-text");
-      const pts = { rest: at(root, d.el, 0.9, 0.2), ptr: [L.left - R.left + (pointer(t) / d.span) * L.width, L.top - R.top + L.height / 2], reset: reset ? at(root, reset) : at(root, d.el, 0.95, 0.06) };
-      const [x, y] = path(t, [[700, 1300, "rest", "ptr"], [3800, 4500, "ptr", "rest"], [5200, 5800, "rest", "reset"], [6200, 6900, "reset", "rest"]], pts);
-      cur.set(x, y, within(t, 1300, 3600) ? "ew" : "arrow", within(t, 1500, 3600) || within(t, 5900, 6050));
-      key.style.translate = `${x + 16}px ${y + 14}px`;
+      // The cursor shows only while it works: on the handle through the drag, then on Reset's trailing edge.
+      const onReset = within(t, 5700, 6200) && reset;
+      const [x, y] = onReset ? at(root, reset, 1, 0.9) : [L.left - R.left + (pointer(t) / d.span) * L.width, L.top - R.top + L.height / 2];
+      cur.set(x, y, onReset ? "arrow" : "ew", within(t, 1500, 3600) || within(t, 5900, 6050), within(t, 1300, 3600) || onReset);
+      key.style.translate = `${x - 40}px ${y - 36}px`;
       key.style.opacity = mode === "snap" && within(t, 2600, 3600) ? 1 : 0;
     }, mode === "snap" ? 3300 : 2600);
     root.gdKeys = mode === "snap" ? [1400, 2300, 3300, 4400] : [1400, 2600, 4400];
@@ -710,12 +711,10 @@ window.GD = (() => {
       bar.classList.toggle("hov", within(t, 1200, 1400));
       bar.classList.toggle("sel", within(t, 1400, 6200));
       const L = lane.getBoundingClientRect(), R = root.getBoundingClientRect(), reset = d.el.querySelector(".dk-text");
-      const pts = { rest: at2(d.el, 0.88, 0.2), ptr: [L.left - R.left + ((startAt(t) + reveal.dur / 2) / d.span) * L.width, L.top - R.top + L.height / 2], play: at2(d.el.querySelector("[data-play]")), reset: reset ? at2(reset) : at2(d.el, 0.95, 0.06) };
-      const moves = replay
-        ? [[600, 1200, "rest", "ptr"], [2700, 3400, "ptr", "rest"], [5600, 6100, "rest", "reset"], [6600, 7400, "reset", "rest"]]
-        : [[600, 1200, "rest", "ptr"], [2700, 3500, "ptr", "play"], [5600, 6100, "play", "reset"], [6600, 7200, "reset", "rest"]];
-      const [x, y] = path(t, moves, pts);
-      cur.set(x, y, "arrow", dragging || within(t, 6200, 6350) || (!replay && within(t, 3700, 3850)));
+      // The cursor shows only while it works: on the bar through the drag, on Play (hold), on Reset's trailing edge.
+      const onBar = within(t, 1200, 2500), onPlay = !replay && within(t, 3500, 3900), onReset = within(t, 5900, 6400) && reset;
+      const [x, y] = onBar ? [L.left - R.left + ((startAt(t) + reveal.dur / 2) / d.span) * L.width, L.top - R.top + L.height / 2] : onPlay ? at2(d.el.querySelector("[data-play]")) : onReset ? at2(reset, 1, 0.9) : [0, 0];
+      cur.set(x, y, "arrow", dragging || within(t, 6200, 6350) || (!replay && within(t, 3700, 3850)), !!(onBar || onPlay || onReset));
     }, replay ? 3300 : 3000);
     root.gdKeys = replay ? [1900, 3300, 4600, 6900] : [1900, 3000, 4600];
     function at2(el, fx = 0.5, fy = 0.5) { return at(root, el, fx, fy); }
@@ -757,9 +756,8 @@ window.GD = (() => {
         svg.classList.toggle("on", hover);
       }
       hourNode.classList.toggle("hov", hover);
-      const pts = { rest: at(root, page, 0.97, 0.92), hour: at(root, hourNode, 0.62, 0.4) };
-      const [x, y] = path(t, [[500, 1200, "rest", "hour"], [3900, 4600, "hour", "rest"]], pts);
-      cursorEl.set(x, y, "arrow", false);
+      const [x, y] = at(root, hourNode, 0.9, 0.92);
+      cursorEl.set(x, y, "arrow", false, hover);
     }, 2400);
     root.gdKeys = [600, 2400];
   }
@@ -843,13 +841,11 @@ window.GD = (() => {
   <article class="dp-card" id="resize">
     <header><h2>How does the panel resize?</h2><span class="dp-state" data-dp-state="resize">Not picked</span></header>
     <p class="dp-why">Its edges are where every reference tool resizes a side panel, with nothing drawn at rest; a handle on the seam would cover the dials' first row by 4px.</p>
-    <div class="gd-panes">
-      <figure class="dp-pane"><figcaption><kbd>1</kbd>Its edges</figcaption>{{MK:resize-edges}}</figure>
-      <figure class="dp-pane"><figcaption><kbd>2</kbd>The graph's seam</figcaption>{{MK:resize-seam}}</figure>
-    </div>
-    <div class="dp-opts" data-cawco-choice="resize" role="group" aria-label="How does the panel resize">
-      <button class="dp-opt" type="button" data-option="edges"><span class="dp-tag">Recommended</span><b>Its edges</b><span>The left edge sets the width, the foot the graph's height, the corner both; the edge lights while you hold it.</span><span class="dp-cost">Cost: nothing at rest says it resizes until the pointer finds an edge.</span></button>
-      <button class="dp-opt" type="button" data-option="seam"><b>The graph's seam</b><span>Width on the left edge; the graph's height on the seam between the graph and the dials.</span><span class="dp-cost">Cost: the handle covers the dials' first row by 4px, and one drag moves the seam and the panel's foot.</span></button>
+    <div class="dp-opts gd-opts" data-cawco-choice="resize" role="group" aria-label="How does the panel resize">
+      <div class="gd-opt"><figure class="dp-pane">{{MK:resize-edges}}</figure>
+        <button class="dp-opt" type="button" data-option="edges"><span class="dp-tag">Recommended</span><b>Its edges</b><span>The left edge sets the width, the foot the graph's height, the corner both; the edge lights while you hold it.</span><span class="dp-cost">Cost: nothing at rest says it resizes until the pointer finds an edge.</span></button></div>
+      <div class="gd-opt"><figure class="dp-pane">{{MK:resize-seam}}</figure>
+        <button class="dp-opt" type="button" data-option="seam"><b>The graph's seam</b><span>Width on the left edge; the graph's height on the seam between the graph and the dials.</span><span class="dp-cost">Cost: the handle covers the dials' first row by 4px, and one drag moves the seam and the panel's foot.</span></button></div>
     </div>
     <label class="dp-note">Note<textarea data-dp-note="resize" rows="1" placeholder="Anything to add"></textarea></label>
   </article>
@@ -857,13 +853,11 @@ window.GD = (() => {
   <article class="dp-card" id="clip-controls">
     <header><h2>Where do a clip's controls open?</h2><span class="dp-state" data-dp-state="clip-controls">Not picked</span></header>
     <p class="dp-why">In the row the lanes stay wide and the dock is 250px tall at rest; an inspector takes 280px off every lane and holds the dock at 330px.</p>
-    <div class="gd-panes">
-      <figure class="dp-pane"><figcaption><kbd>1</kbd>In the row</figcaption>{{MK:controls-row}}</figure>
-      <figure class="dp-pane"><figcaption><kbd>2</kbd>An inspector column</figcaption>{{MK:controls-inspector}}</figure>
-    </div>
-    <div class="dp-opts" data-cawco-choice="clip-controls" role="group" aria-label="Where do a clip's controls open">
-      <button class="dp-opt" type="button" data-option="row"><span class="dp-tag">Recommended</span><b>In the row</b><span>A clip's chips open their field, or a rail of curves, under its bar.</span><span class="dp-cost">Cost: the dock grows while a rail is open.</span></button>
-      <button class="dp-opt" type="button" data-option="inspector"><b>An inspector column</b><span>A 280px column at the dock's trailing edge shows every value of the selected clip.</span><span class="dp-cost">Cost: 280px off the lanes, and a dock 330px tall at all times.</span></button>
+    <div class="dp-opts gd-opts" data-cawco-choice="clip-controls" role="group" aria-label="Where do a clip's controls open">
+      <div class="gd-opt"><figure class="dp-pane">{{MK:controls-row}}</figure>
+        <button class="dp-opt" type="button" data-option="row"><span class="dp-tag">Recommended</span><b>In the row</b><span>A clip's chips open their field, or a rail of curves, under its bar.</span><span class="dp-cost">Cost: the dock grows while a rail is open.</span></button></div>
+      <div class="gd-opt"><figure class="dp-pane">{{MK:controls-inspector}}</figure>
+        <button class="dp-opt" type="button" data-option="inspector"><b>An inspector column</b><span>A 280px column at the dock's trailing edge shows every value of the selected clip.</span><span class="dp-cost">Cost: 280px off the lanes, and a dock 330px tall at all times.</span></button></div>
     </div>
     <label class="dp-note">Note<textarea data-dp-note="clip-controls" rows="1" placeholder="Anything to add"></textarea></label>
   </article>
@@ -871,15 +865,13 @@ window.GD = (() => {
   <article class="dp-card" id="token-rule">
     <header><h2>While you drag a clip, what lengths can it take?</h2><span class="dp-state" data-dp-state="token-rule">Not picked</span></header>
     <p class="dp-why">Tokens are named by use, so snapping keeps most edits inside the system, and ⌥ still lets you try a length the ladder lacks, like 300ms, marked for the agent to name.</p>
-    <div class="gd-panes">
-      <figure class="dp-pane"><figcaption><kbd>1</kbd>Tokens only</figcaption>{{MK:tokens-only}}</figure>
-      <figure class="dp-pane"><figcaption><kbd>2</kbd>Free values</figcaption>{{MK:tokens-free}}</figure>
-      <figure class="dp-pane"><figcaption><kbd>3</kbd>Snap, and ⌥ frees it</figcaption>{{MK:tokens-snap}}</figure>
-    </div>
-    <div class="dp-opts" data-cawco-choice="token-rule" role="group" aria-label="While you drag a clip, what lengths can it take">
-      <button class="dp-opt" type="button" data-option="tokens"><b>Tokens only</b><span>Every edit lands on a token, so what reaches the agent is tokens alone.</span><span class="dp-cost">Cost: the ladder is uneven, 300ms can't be tried, and a borrowed token can name the wrong use.</span></button>
-      <button class="dp-opt" type="button" data-option="free"><b>Free values</b><span>Any length in 10ms steps; the agent makes the token after.</span><span class="dp-cost">Cost: the no-one-off rule holds only after the fact, and the token file grows.</span></button>
-      <button class="dp-opt" type="button" data-option="snap"><span class="dp-tag">Recommended</span><b>Snap, and ⌥ frees it</b><span>Drags snap to tokens; hold ⌥ for any length, and its chip turns dashed.</span><span class="dp-cost">Cost: one modifier to learn, and two chip styles.</span></button>
+    <div class="dp-opts gd-opts" data-cawco-choice="token-rule" role="group" aria-label="While you drag a clip, what lengths can it take">
+      <div class="gd-opt"><figure class="dp-pane">{{MK:tokens-only}}</figure>
+        <button class="dp-opt" type="button" data-option="tokens"><b>Tokens only</b><span>Every edit lands on a token, so what reaches the agent is tokens alone.</span><span class="dp-cost">Cost: the ladder is uneven, 300ms can't be tried, and a borrowed token can name the wrong use.</span></button></div>
+      <div class="gd-opt"><figure class="dp-pane">{{MK:tokens-free}}</figure>
+        <button class="dp-opt" type="button" data-option="free"><b>Free values</b><span>Any length in 10ms steps; the agent makes the token after.</span><span class="dp-cost">Cost: the no-one-off rule holds only after the fact, and the token file grows.</span></button></div>
+      <div class="gd-opt"><figure class="dp-pane">{{MK:tokens-snap}}</figure>
+        <button class="dp-opt" type="button" data-option="snap"><span class="dp-tag">Recommended</span><b>Snap, and ⌥ frees it</b><span>Drags snap to tokens; hold ⌥ for any length, and its chip turns dashed.</span><span class="dp-cost">Cost: one modifier to learn, and two chip styles.</span></button></div>
     </div>
     <label class="dp-note">Note<textarea data-dp-note="token-rule" rows="1" placeholder="Anything to add"></textarea></label>
   </article>
@@ -887,13 +879,11 @@ window.GD = (() => {
   <article class="dp-card" id="compare">
     <header><h2>How do you compare your edit with the agent's original?</h2><span class="dp-state" data-dp-state="compare">Not picked</span></header>
     <p class="dp-why">A two-way switch is in view and works from the keyboard; a button you hold is neither. The original's dashed outline shows under each edited bar either way.</p>
-    <div class="gd-panes">
-      <figure class="dp-pane"><figcaption><kbd>1</kbd>Original | Edited</figcaption>{{MK:compare-segments}}</figure>
-      <figure class="dp-pane"><figcaption><kbd>2</kbd>Hold to see</figcaption>{{MK:compare-hold}}</figure>
-    </div>
-    <div class="dp-opts" data-cawco-choice="compare" role="group" aria-label="How do you compare your edit with the agent's original">
-      <button class="dp-opt" type="button" data-option="segments"><span class="dp-tag">Recommended</span><b>Original | Edited</b><span>A switch in the dock's head swaps what the page plays, and the bars turn to outlines under Original.</span><span class="dp-cost">Cost: one more control in the head once there are edits.</span></button>
-      <button class="dp-opt" type="button" data-option="hold"><b>Hold to see</b><span>Hold a button and the page plays the original until you let go.</span><span class="dp-cost">Cost: hard to discover, and no keyboard way to hold it.</span></button>
+    <div class="dp-opts gd-opts" data-cawco-choice="compare" role="group" aria-label="How do you compare your edit with the agent's original">
+      <div class="gd-opt"><figure class="dp-pane">{{MK:compare-segments}}</figure>
+        <button class="dp-opt" type="button" data-option="segments"><span class="dp-tag">Recommended</span><b>Original | Edited</b><span>A switch in the dock's head swaps what the page plays, and the bars turn to outlines under Original.</span><span class="dp-cost">Cost: one more control in the head once there are edits.</span></button></div>
+      <div class="gd-opt"><figure class="dp-pane">{{MK:compare-hold}}</figure>
+        <button class="dp-opt" type="button" data-option="hold"><b>Hold to see</b><span>Hold a button and the page plays the original until you let go.</span><span class="dp-cost">Cost: hard to discover, and no keyboard way to hold it.</span></button></div>
     </div>
     <label class="dp-note">Note<textarea data-dp-note="compare" rows="1" placeholder="Anything to add"></textarea></label>
   </article>
@@ -901,13 +891,11 @@ window.GD = (() => {
   <article class="dp-card" id="springs">
     <header><h2>Can a clip use a spring?</h2><span class="dp-state" data-dp-state="springs">Not picked</span></header>
     <p class="dp-why">No component needs a spring yet, and a Spring tile can't name a token until two are added to the system.</p>
-    <div class="gd-panes">
-      <figure class="dp-pane"><figcaption><kbd>1</kbd>Add spring tokens first</figcaption>{{MK:springs-tokens}}</figure>
-      <figure class="dp-pane"><figcaption><kbd>2</kbd>The eight curves for now</figcaption>{{MK:springs-curves}}</figure>
-    </div>
-    <div class="dp-opts" data-cawco-choice="springs" role="group" aria-label="Can a clip use a spring">
-      <button class="dp-opt" type="button" data-option="spring-tokens"><b>Add spring tokens first</b><span>Settle, 400ms with bounce 0.15, and snap, 260ms with none, join the system; then a ninth tile, Spring.</span><span class="dp-cost">Cost: two tokens and a bounce chip to keep before anything uses them.</span></button>
-      <button class="dp-opt" type="button" data-option="curves"><span class="dp-tag">Recommended</span><b>The eight curves for now</b><span>The rail offers the system's eight curves; a spring comes when a component needs one.</span><span class="dp-cost">Cost: a move that wants a bounce can't be tried in the dock.</span></button>
+    <div class="dp-opts gd-opts" data-cawco-choice="springs" role="group" aria-label="Can a clip use a spring">
+      <div class="gd-opt"><figure class="dp-pane">{{MK:springs-tokens}}</figure>
+        <button class="dp-opt" type="button" data-option="spring-tokens"><b>Add spring tokens first</b><span>Settle, 400ms with bounce 0.15, and snap, 260ms with none, join the system; then a ninth tile, Spring.</span><span class="dp-cost">Cost: two tokens and a bounce chip to keep before anything uses them.</span></button></div>
+      <div class="gd-opt"><figure class="dp-pane">{{MK:springs-curves}}</figure>
+        <button class="dp-opt" type="button" data-option="curves"><span class="dp-tag">Recommended</span><b>The eight curves for now</b><span>The rail offers the system's eight curves; a spring comes when a component needs one.</span><span class="dp-cost">Cost: a move that wants a bounce can't be tried in the dock.</span></button></div>
     </div>
     <label class="dp-note">Note<textarea data-dp-note="springs" rows="1" placeholder="Anything to add"></textarea></label>
   </article>
@@ -915,13 +903,11 @@ window.GD = (() => {
   <article class="dp-card" id="after-edit">
     <header><h2>What plays after you change a clip?</h2><span class="dp-state" data-dp-state="after-edit">Not picked</span></header>
     <p class="dp-why">Seeing the move again is the point of an edit: one replay per drop shows it with no extra press, and keyboard nudges stay still.</p>
-    <div class="gd-panes">
-      <figure class="dp-pane"><figcaption><kbd>1</kbd>Replay once</figcaption>{{MK:edit-replay}}</figure>
-      <figure class="dp-pane"><figcaption><kbd>2</kbd>Hold the playhead</figcaption>{{MK:edit-hold}}</figure>
-    </div>
-    <div class="dp-opts" data-cawco-choice="after-edit" role="group" aria-label="What plays after you change a clip">
-      <button class="dp-opt" type="button" data-option="replay"><span class="dp-tag">Recommended</span><b>Replay once</b><span>Each drop, chip change or curve pick plays the move once from the start.</span><span class="dp-cost">Cost: the page moves on every committed edit.</span></button>
-      <button class="dp-opt" type="button" data-option="hold"><b>Hold the playhead</b><span>The playhead stays where it was; Play shows the edit.</span><span class="dp-cost">Cost: a press after every edit to see what it did.</span></button>
+    <div class="dp-opts gd-opts" data-cawco-choice="after-edit" role="group" aria-label="What plays after you change a clip">
+      <div class="gd-opt"><figure class="dp-pane">{{MK:edit-replay}}</figure>
+        <button class="dp-opt" type="button" data-option="replay"><span class="dp-tag">Recommended</span><b>Replay once</b><span>Each drop, chip change or curve pick plays the move once from the start.</span><span class="dp-cost">Cost: the page moves on every committed edit.</span></button></div>
+      <div class="gd-opt"><figure class="dp-pane">{{MK:edit-hold}}</figure>
+        <button class="dp-opt" type="button" data-option="hold"><b>Hold the playhead</b><span>The playhead stays where it was; Play shows the edit.</span><span class="dp-cost">Cost: a press after every edit to see what it did.</span></button></div>
     </div>
     <label class="dp-note">Note<textarea data-dp-note="after-edit" rows="1" placeholder="Anything to add"></textarea></label>
   </article>
@@ -929,13 +915,11 @@ window.GD = (() => {
   <article class="dp-card" id="machine-names">
     <header><h2>How does the graph name its state machines?</h2><span class="dp-state" data-dp-state="machine-names">Not picked</span></header>
     <p class="dp-why">Four machines stack to about 1,700px in a 520px well; a band keeps all four and their states in view and jumps to any of them, where a pinned header shows one at a time.</p>
-    <div class="gd-panes">
-      <figure class="dp-pane"><figcaption><kbd>1</kbd>An index band</figcaption>{{MK:names-band}}</figure>
-      <figure class="dp-pane"><figcaption><kbd>2</kbd>Pinned region headers</figcaption>{{MK:names-headers}}</figure>
-    </div>
-    <div class="dp-opts" data-cawco-choice="machine-names" role="group" aria-label="How does the graph name its state machines">
-      <button class="dp-opt" type="button" data-option="band"><span class="dp-tag">Recommended</span><b>An index band</b><span>A row of cells over the graph, each machine's name over its state; press one to jump there.</span><span class="dp-cost">Cost: 51px of graph at 448px wide, 98px at 380px.</span></button>
-      <button class="dp-opt" type="button" data-option="headers"><b>Pinned region headers</b><span>Each region's name and current state pin to the top while it scrolls past.</span><span class="dp-cost">Cost: you never see there are four, and you can't jump to one.</span></button>
+    <div class="dp-opts gd-opts" data-cawco-choice="machine-names" role="group" aria-label="How does the graph name its state machines">
+      <div class="gd-opt"><figure class="dp-pane">{{MK:names-band}}</figure>
+        <button class="dp-opt" type="button" data-option="band"><span class="dp-tag">Recommended</span><b>An index band</b><span>A row of cells over the graph, each machine's name over its state; press one to jump there.</span><span class="dp-cost">Cost: 51px of graph at 448px wide, 98px at 380px.</span></button></div>
+      <div class="gd-opt"><figure class="dp-pane">{{MK:names-headers}}</figure>
+        <button class="dp-opt" type="button" data-option="headers"><b>Pinned region headers</b><span>Each region's name and current state pin to the top while it scrolls past.</span><span class="dp-cost">Cost: you never see there are four, and you can't jump to one.</span></button></div>
     </div>
     <label class="dp-note">Note<textarea data-dp-note="machine-names" rows="1" placeholder="Anything to add"></textarea></label>
   </article>
@@ -943,13 +927,11 @@ window.GD = (() => {
   <article class="dp-card" id="change-marks">
     <header><h2>How does a hover show what it changed on the page?</h2><span class="dp-state" data-dp-state="change-marks">Not picked</span></header>
     <p class="dp-why">Rings add no colour beside the component's own error red, and a ringed field still looks like itself.</p>
-    <div class="gd-panes">
-      <figure class="dp-pane"><figcaption><kbd>1</kbd>Rings and ghosts</figcaption>{{MK:marks-rings}}</figure>
-      <figure class="dp-pane"><figcaption><kbd>2</kbd>Diff washes</figcaption>{{MK:marks-washes}}</figure>
-    </div>
-    <div class="dp-opts" data-cawco-choice="change-marks" role="group" aria-label="How does a hover show what it changed on the page">
-      <button class="dp-opt" type="button" data-option="rings"><span class="dp-tag">Recommended</span><b>Rings and ghosts</b><span>A ring around each value that changed, a dashed ghost where a field went.</span><span class="dp-cost">Cost: a new value and a changed one ring alike.</span></button>
-      <button class="dp-opt" type="button" data-option="washes"><b>Diff washes</b><span>Green behind what came in or changed, red where something went.</span><span class="dp-cost">Cost: red beside the component's error text, two more hues, and a washed field reads as a different field.</span></button>
+    <div class="dp-opts gd-opts" data-cawco-choice="change-marks" role="group" aria-label="How does a hover show what it changed on the page">
+      <div class="gd-opt"><figure class="dp-pane">{{MK:marks-rings}}</figure>
+        <button class="dp-opt" type="button" data-option="rings"><span class="dp-tag">Recommended</span><b>Rings and ghosts</b><span>A ring around each value that changed, a dashed ghost where a field went.</span><span class="dp-cost">Cost: a new value and a changed one ring alike.</span></button></div>
+      <div class="gd-opt"><figure class="dp-pane">{{MK:marks-washes}}</figure>
+        <button class="dp-opt" type="button" data-option="washes"><b>Diff washes</b><span>Green behind what came in or changed, red where something went.</span><span class="dp-cost">Cost: red beside the component's error text, two more hues, and a washed field reads as a different field.</span></button></div>
     </div>
     <label class="dp-note">Note<textarea data-dp-note="change-marks" rows="1" placeholder="Anything to add"></textarea></label>
   </article>
@@ -957,15 +939,13 @@ window.GD = (() => {
   <article class="dp-card" id="verdict">
     <header><h2>Where does your verdict on a state go?</h2><span class="dp-state" data-dp-state="verdict">Not picked</span></header>
     <p class="dp-why">Pins already reach the agent; recording the kept state's path makes a pin a verdict with one engine change and no new control on the page.</p>
-    <div class="gd-panes trio">
-      <figure class="dp-pane"><figcaption><kbd>1</kbd>Not now</figcaption>{{MK:verdict-none}}</figure>
-      <figure class="dp-pane"><figcaption><kbd>2</kbd>Pins carry the state</figcaption>{{MK:verdict-pins}}</figure>
-      <figure class="dp-pane"><figcaption><kbd>3</kbd>A mark on the kept node</figcaption>{{MK:verdict-mark}}</figure>
-    </div>
-    <div class="dp-opts" data-cawco-choice="verdict" role="group" aria-label="Where does your verdict on a state go">
-      <button class="dp-opt" type="button" data-option="not-now"><b>Not now</b><span>The tool stays a viewer.</span><span class="dp-cost">Cost: a verdict lives in chat, apart from the state it judges.</span></button>
-      <button class="dp-opt" type="button" data-option="pins"><span class="dp-tag">Recommended</span><b>Pins carry the state</b><span>A pin placed while a state is kept records its path, shown under your words.</span><span class="dp-cost">Cost: no tally, and "right" takes a word.</span></button>
-      <button class="dp-opt" type="button" data-option="mark"><b>A mark on the kept node</b><span>Check and cross at the kept node's title; a press marks it there and in its index cell.</span><span class="dp-cost">Cost: controls inside the node, shown on hover where hover means preview.</span></button>
+    <div class="dp-opts gd-opts trio" data-cawco-choice="verdict" role="group" aria-label="Where does your verdict on a state go">
+      <div class="gd-opt"><figure class="dp-pane">{{MK:verdict-none}}</figure>
+        <button class="dp-opt" type="button" data-option="not-now"><b>Not now</b><span>The tool stays a viewer.</span><span class="dp-cost">Cost: a verdict lives in chat, apart from the state it judges.</span></button></div>
+      <div class="gd-opt"><figure class="dp-pane">{{MK:verdict-pins}}</figure>
+        <button class="dp-opt" type="button" data-option="pins"><span class="dp-tag">Recommended</span><b>Pins carry the state</b><span>A pin placed while a state is kept records its path, shown under your words.</span><span class="dp-cost">Cost: no tally, and "right" takes a word.</span></button></div>
+      <div class="gd-opt"><figure class="dp-pane">{{MK:verdict-mark}}</figure>
+        <button class="dp-opt" type="button" data-option="mark"><b>A mark on the kept node</b><span>Check and cross at the kept node's title; a press marks it there and in its index cell.</span><span class="dp-cost">Cost: controls inside the node, shown on hover where hover means preview.</span></button></div>
     </div>
     <label class="dp-note">Note<textarea data-dp-note="verdict" rows="1" placeholder="Anything to add"></textarea></label>
   </article>

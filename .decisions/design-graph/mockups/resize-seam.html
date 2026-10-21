@@ -28,11 +28,11 @@
   G.run(root, 9000, (t) => {
     size(G.kf(t, [[1500, 448], [2500, 520], [5300, 520], [6300, 448]]), G.kf(t, [[3400, 300], [4400, 360], [7200, 360], [8000, 300]]));
     G.showKept(graph);
-    const pts = { p0: G.at(root, panel, 0, 0, -120, 150), edge: G.at(root, panel, 0, 0, 0, 170), seam: G.at(root, ss, 0.5, 0, 0, 4) };
-    const [x, y] = G.path(t, [[600, 1200, "p0", "edge"], [2700, 3200, "edge", "seam"], [4600, 5100, "seam", "edge"], [6500, 7000, "edge", "seam"], [8200, 8900, "seam", "p0"]], pts);
+    // The cursor shows only on an edge: the left edge, or the seam over the slider's track below it.
     const onW = within(t, 1200, 2700) || within(t, 5100, 6500), onS = within(t, 3200, 4600) || within(t, 7000, 8200);
+    const [x, y] = onW ? G.at(root, panel, 0, 0, 0, 170) : G.at(root, ss, 0.75, 0, 0, 4);
     const down = within(t, 1500, 2500) || within(t, 3400, 4400) || within(t, 5300, 6300) || within(t, 7200, 8000);
-    cur.set(x, y, onW ? "ew" : onS ? "ns" : "arrow", down);
+    cur.set(x, y, onW ? "ew" : "ns", down, onW || onS);
     sw.classList.toggle("lit", onW); ss.classList.toggle("lit", onS);
     sw.classList.toggle("drag", onW && down); ss.classList.toggle("drag", onS && down);
   }, 4000);

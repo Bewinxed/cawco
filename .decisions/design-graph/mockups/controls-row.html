@@ -26,9 +26,10 @@
     if (chosen !== ease) { ease = chosen; dock.chips("reveal", { ease: chosen, diffEase: chosen !== "--ease-out" }); row.querySelectorAll(".dk-tile").forEach((x) => x.classList.toggle("on", x.dataset.ease === chosen)); }
     chip().classList.toggle("open", open);
     row.querySelectorAll(".dk-tile").forEach((x) => x.classList.toggle("hov", within(t, 2450, 2800) && x.dataset.ease === pick));
-    const pts = { rest: G.at(root, dock.el, 0.82, 0.18), chip: G.at(root, chip(), 0.5, 0.5), tile: G.at(root, tile(pick), 0.5, 0.45) };
-    const [x, y] = G.path(t, [[600, 1300, "rest", "chip"], [1900, 2450, "chip", "tile"], [3100, 3900, "tile", "rest"]], pts);
-    cur.set(x, y, "arrow", within(t, 1400, 1550) || within(t, 2700, 2850));
+    // The cursor shows only while it presses: its tip on the chip's curve glyph, then in a tile's top corner, clear of the names.
+    const onChip = within(t, 1250, 1600), onTile = within(t, 2400, 2800);
+    const [x, y] = onChip ? G.at(root, chip().querySelector("svg")) : G.at(root, tile(pick), 0.9, 0.15);
+    cur.set(x, y, "arrow", within(t, 1400, 1550) || within(t, 2700, 2850), onChip || onTile);
   };
   G.run(root, 9000, (t) => (t < 4500 ? half(t, "--ease-drawer", "--ease-out") : half(t - 4500, "--ease-out", "--ease-drawer")), 2500);
   root.gdKeys = [400, 1400, 2500, 3400];

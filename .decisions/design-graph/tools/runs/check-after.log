@@ -1,0 +1,22 @@
+build: 21 mockups placed, missing 0, unused 0, leftover placeholders 0, contract faults 0
+build: page + mockups 107.4 KiB before the hub adds the kit (limit 512 KiB)
+card resize: 2 options [edges*, seam], 2 drawings, ok
+card clip-controls: 2 options [row*, inspector], 2 drawings, ok
+card token-rule: 3 options [tokens, free, snap*], 3 drawings, ok
+card compare: 2 options [segments*, hold], 2 drawings, ok
+card springs: 2 options [spring-tokens, curves*], 2 drawings, ok
+card after-edit: 2 options [replay*, hold], 2 drawings, ok
+card machine-names: 2 options [band*, headers], 2 drawings, ok
+card change-marks: 2 options [rings*, washes], 2 drawings, ok
+card verdict: 3 options [not-now, pins*, mark], 3 drawings, ok
+picks: 20/20 options pick and mark through the bridge; all nine picked → meter 9 of 9; all cleared → 0; card faults 0
+live: 17/21 drawings live and moving; still by design: springs-tokens, springs-curves, verdict-none, verdict-pins
+canary: planted overlap found, planted spill found
+sweep light: 21 drawings, each at 6 loop moments, its still and its key frames, overlays every 100ms; page 1440px wide in 1440px; findings 0
+sweep dark: 21 drawings, each at 6 loop moments, its still and its key frames, overlays every 100ms; page 1440px wide in 1440px; findings 0
+sweep total findings (light + dark): 0
+chrome light: 0 card elements over a drawing
+chrome dark: 0 card elements over a drawing
+chrome total (light + dark): 0
+CHECK PASSED
+script errors: none

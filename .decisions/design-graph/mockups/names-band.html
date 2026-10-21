@@ -8,6 +8,7 @@
 .mk-names-band .ix-s { font: var(--type-label); color: var(--ink-strong); }
 .mk-names-band .ix-cell.on { background: var(--selected-bg); }
 .mk-names-band .ix-cell.on .ix-s { color: var(--selected-ink); }
+.mk-names-band .ix-cell.on .ix-n { color: var(--ink-row); }
 .mk-names-band .ix-cell.hov { background: var(--surface-hover); }
 .mk-names-band .ix-cell.down { scale: var(--press-scale); }
 </style>
@@ -42,9 +43,10 @@
       cell(id).classList.toggle("hov", (id === "when" && within(t, 1300, 1500)) || (id === "types" && within(t, 3000, 3200)));
       cell(id).classList.toggle("down", (id === "when" && within(t, 1400, 1520)) || (id === "types" && within(t, 3100, 3220)) || (id === "save" && within(t, 4800, 4920)));
     }
-    const pts = { rest: G.at(root, graph, 0.7, 0.75), when: G.at(root, cell("when")), types: G.at(root, cell("types")), save: G.at(root, cell("save")) };
-    const [x, y] = G.path(t, [[700, 1300, "rest", "when"], [2400, 3000, "when", "types"], [4100, 4700, "types", "save"], [5800, 6600, "save", "rest"]], pts);
-    cursor.set(x, y, "arrow", within(t, 1400, 1520) || within(t, 3100, 3220) || within(t, 4800, 4920));
+    // The cursor shows only while it presses a cell, its tip in the cell's top trailing corner, past the end of its words.
+    const on = within(t, 1200, 1600) ? "when" : within(t, 2900, 3300) ? "types" : within(t, 4600, 5000) ? "save" : null;
+    const [x, y] = G.at(root, cell(on || "when"), 0.92, 0.3);
+    cursor.set(x, y, "arrow", within(t, 1400, 1520) || within(t, 3100, 3220) || within(t, 4800, 4920), !!on);
   }, 2200);
   root.gdKeys = [600, 2200, 3800, 5400];
 })();

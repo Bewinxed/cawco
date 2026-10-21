@@ -151,6 +151,27 @@ const sweep = (fractions) => {
   };
   const skip = (e) => e.closest(".gd-cursor, .gd-key, defs");
   const ownText = (e) => [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+  // A text's ink: the line boxes of its own words (a Range over its text nodes), not the padded box of the element holding them.
+  const ink = (e) => [...e.childNodes].filter((n) => n.nodeType === 3 && n.textContent.trim()).flatMap((n) => { const r = document.createRange(); r.selectNodeContents(n); return [...r.getClientRects()]; });
+  const opaqueBg = (e) => { const n = (getComputedStyle(e).backgroundColor.match(/[\d.]+/g) || []).map(Number); return n.length >= 3 && (n.length < 4 ? 1 : n.at(-1)) > 0.9; };
+  // Is e's text seen at (x, y), or covered by an opaque layer (a sticky band) that is not its own background?
+  const visibleAt = (e, x, y) => {
+    if (y < 0 || y > innerHeight) { const d = y + scrollY; scrollTo(0, d - innerHeight / 2); y = d - scrollY; }
+    const stack = document.elementsFromPoint(x, y).filter((el) => !el.closest(".gd-cursor, .gd-key"));
+    const i = stack.findIndex((el) => e.contains(el) || el.contains(e));
+    if (i < 0) return false;
+    return !stack.slice(0, i).some((el) => !el.contains(e) && opaqueBg(el));
+  };
+  // An overlay (the drawn cursor's arrow, a key cap) through a word: their boxes share more than 2px each way where the word is seen.
+  const through = (o, e, root) => {
+    const b = o.matches("svg") ? o.querySelector("path").getBoundingClientRect() : o.getBoundingClientRect();
+    const c = clipBox(e, root); if (!c) return null;
+    for (const r of ink(e)) {
+      const x0 = Math.max(b.left, r.left, c.x0), x1 = Math.min(b.right, r.right, c.x1), y0 = Math.max(b.top, r.top, c.y0), y1 = Math.min(b.bottom, r.bottom, c.y1);
+      if (x1 - x0 > 2 && y1 - y0 > 2 && visibleAt(e, (x0 + x1) / 2, (y0 + y1) / 2)) return `${(x1 - x0).toFixed(0)}×${(y1 - y0).toFixed(0)}px`;
+    }
+    return null;
+  };
   const res = [];
   // Hit-testing needs every drawn piece to take the pointer for the sweep (the drawings set pointer-events: none).
   const hitStyle = document.createElement("style");
@@ -160,14 +181,16 @@ const sweep = (fractions) => {
   for (const root of document.querySelectorAll(".mk")) {
     root.scrollIntoView({ block: "center" });
     const id = [...root.classList].find((c) => c.startsWith("mk-")).slice(3);
-    const times = root.gdPeriod ? fractions.map((f) => Math.round(f * root.gdPeriod)).concat(root.gdStill) : [0];
+    // Six moments of the loop, its still, and every key frame the captures take.
+    const times = root.gdPeriod ? [...new Set(fractions.map((f) => Math.round(f * root.gdPeriod)).concat(root.gdStill, root.gdKeys || []))] : [0];
     const found = new Map();
     for (const t of times) {
       root.gdSeek?.(t);
       const R = box(root);
       const all = [...root.querySelectorAll("*")].filter((e) => !skip(e) && shown(e, root));
-      // 1. Out of the drawing: a visible box past the drawing's own edge.
-      for (const e of all) {
+      // 1. Out of the drawing: a visible box past the drawing's own edge, the drawn cursor and key included.
+      const overlays = [...root.querySelectorAll(".gd-cursor svg, .gd-key")].filter((e) => shown(e, root));
+      for (const e of all.concat(overlays)) {
         const c = clipBox(e, root);
         if (c && (c.x0 < R.left - 0.5 || c.x1 > R.right + 0.5 || c.y0 < R.top - 0.5 || c.y1 > R.bottom + 0.5)) found.set("out:" + desc(e), `t=${t} past the drawing's edge by ${Math.max(R.left - c.x0, c.x1 - R.right, R.top - c.y0, c.y1 - R.bottom).toFixed(1)}px`);
       }
@@ -182,7 +205,7 @@ const sweep = (fractions) => {
       const lines = (e) => { const c = clipBox(e, root); if (!c) return []; return [...e.getClientRects()].map((r) => ({ x0: Math.max(r.left, c.x0), y0: Math.max(r.top, c.y0), x1: Math.min(r.right, c.x1), y1: Math.min(r.bottom, c.y1) })).filter((r) => r.x1 - r.x0 > 0.5 && r.y1 - r.y0 > 0.5); };
       const sy0 = scrollY;
       const texts = all.filter((e) => ownText(e) && !e.closest(".gd-xf")).map((e) => [e, lines(e)]).filter(([, c]) => c.length);
-      const boxes = all.filter((e) => e.matches(".node, .var, .dk-chip, .dk-tile, .btn, .input, .dk-badge, .dk-btn, .dk-hold, .t-tab, .zoom, .ix-cell")).map((e) => [e, clipBox(e, root)]).filter(([, c]) => c);
+      const boxes = all.filter((e) => e.matches(".node, .var, .dk-chip, .dk-tile, .btn, .input, .dk-badge, .dk-btn, .dk-hold, .t-tab, .zoom, .ix-cell, .gd-ic, .gd-curve")).map((e) => [e, clipBox(e, root)]).filter(([, c]) => c);
       // Two boxes overlap when they share more than 2px each way (line boxes of one wrapped span touch by a pixel).
       const inter = (a, b) => { const w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), h = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0); return w > 2 && h > 2 ? { w, h, cx: Math.max(a.x0, b.x0) + w / 2, cy: Math.max(a.y0, b.y0) + h / 2 } : null; };
       // …and both are seen there: the hit-test stack at the overlap's centre has no opaque layer (a sticky band, a pinned
@@ -200,6 +223,8 @@ const sweep = (fractions) => {
         return !stack.slice(0, Math.max(ia, ib)).some((e) => !e.contains(lower) && opaque(e));
       };
       const pairs = (la, lb) => { for (const p of la) for (const q of lb) { const r = inter(p, q); if (r) return r; } return null; };
+      // 4. An overlay through text: the drawn cursor's arrow or a key cap over any line of the drawing's text.
+      for (const o of overlays) for (const [a] of texts) { const r = through(o, a, root); if (r) found.set("overlay:" + (o.matches("svg") ? "cursor" : "key") + " × " + desc(a), `t=${t} ${r}`); }
       for (let i = 0; i < texts.length; i++) for (let j = i + 1; j < texts.length; j++) {
         const [a, la] = texts[i], [b, lb] = texts[j];
         if (a.contains(b) || b.contains(a)) continue;
@@ -211,6 +236,14 @@ const sweep = (fractions) => {
         const r = pairs(la, [cb]);
         if (r && seen(a, b, r.cx, r.cy)) found.set("over:" + desc(a) + " × " + desc(b), `t=${t} ${r.w.toFixed(0)}×${r.h.toFixed(0)}px`);
       }
+    }
+    // 5. The same overlay test every 100ms of the loop: a cursor or key that ever crosses a line of text is found.
+    for (let t = 0; root.gdPeriod && t < root.gdPeriod; t += 100) {
+      root.gdSeek(t);
+      const ov = [...root.querySelectorAll(".gd-cursor svg, .gd-key")].filter((e) => shown(e, root));
+      if (!ov.length) continue;
+      const tl = [...root.querySelectorAll("*")].filter((e) => !skip(e) && [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) && !e.closest(".gd-xf") && shown(e, root));
+      for (const o of ov) for (const e of tl) { const r = through(o, e, root); if (r) found.set("overlay:" + (o.matches("svg") ? "cursor" : "key") + " × " + desc(e), `t=${t} ${r}`); }
     }
     root.gdSeek?.(root.gdStill ?? 0);
     res.push([id, [...found.entries()]]);
@@ -248,7 +281,7 @@ for (const scheme of ["light", "dark"]) {
   const page = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, w: innerWidth }));
   const n = res.reduce((s, [, f]) => s + f.length, 0) + (page.sw > page.w ? 1 : 0);
   total += n;
-  console.log(`sweep ${scheme}: ${res.length} drawings × 7 moments; page ${page.sw}px wide in ${page.w}px; findings ${n}`);
+  console.log(`sweep ${scheme}: ${res.length} drawings, each at 6 loop moments, its still and its key frames, overlays every 100ms; page ${page.sw}px wide in ${page.w}px; findings ${n}`);
   for (const [id, f] of res) if (f.length) for (const [k, v] of f) console.log(`  ${id}: ${k} — ${v}`);
   // Captures: the page whole, each card, and each drawing at its still.
   await p.screenshot({ path: join(here, "captures", `page-${scheme}.png`), fullPage: true });
@@ -270,5 +303,39 @@ for (const scheme of ["light", "dark"]) {
   await p.close();
 }
 console.log(`sweep total findings (light + dark): ${total}`);
+
+// Card chrome over a drawing: any element of a card (its bars, labels, controls, a sticky row) that is not the drawing
+// and does not hold it, intersecting the drawing's visible box, read at three scroll positions per drawing, light and dark.
+let chromeTotal = 0;
+for (const scheme of ["light", "dark"]) {
+  const p = await open(scheme, true);
+  const hits = await p.evaluate(async () => {
+    const frame = () => new Promise((f) => requestAnimationFrame(() => requestAnimationFrame(f)));
+    const desc = (e) => e.tagName.toLowerCase() + (typeof e.className === "string" && e.className ? "." + e.className.trim().split(/\s+/).join(".") : "") + ((e.textContent || "").trim() ? ` "${e.textContent.trim().slice(0, 24)}"` : "");
+    const out = new Map();
+    for (const mk of document.querySelectorAll(".mk")) {
+      const id = [...mk.classList].find((c) => c.startsWith("mk-")).slice(3);
+      const chrome = [...mk.closest(".dp-card").querySelectorAll("*")].filter((e) => !e.closest(".mk") && !e.querySelector(".mk"));
+      const top = mk.getBoundingClientRect().top + scrollY, h = mk.offsetHeight;
+      for (const y of [top - 20, top + h / 2 - innerHeight / 2, top + h - innerHeight + 20]) {
+        scrollTo(0, y); await frame();
+        const R = mk.getBoundingClientRect(), v = { x0: R.left, y0: Math.max(R.top, 0), x1: R.right, y1: Math.min(R.bottom, innerHeight) };
+        if (v.y1 - v.y0 < 1) continue;
+        for (const e of chrome) {
+          if (getComputedStyle(e).visibility === "hidden") continue;
+          const b = e.getBoundingClientRect(), w = Math.min(b.right, v.x1) - Math.max(b.left, v.x0), hh = Math.min(b.bottom, v.y1) - Math.max(b.top, v.y0);
+          if (w > 1 && hh > 1) out.set(`${id}: ${desc(e)}`, `${Math.round(w)}×${Math.round(hh)}px at scroll ${Math.round(scrollY)}`);
+        }
+      }
+    }
+    return [...out.entries()];
+  });
+  chromeTotal += hits.length;
+  console.log(`chrome ${scheme}: ${hits.length} card elements over a drawing`);
+  for (const [k, v] of hits.slice(0, 40)) console.log(`  ${k} — ${v}`);
+  await p.close();
+}
+console.log(`chrome total (light + dark): ${chromeTotal}`);
+console.log(total + chromeTotal ? "CHECK FAILED" : "CHECK PASSED");
 console.log(errors.length ? "script errors:\n" + errors.join("\n") : "script errors: none");
 await browser.close();

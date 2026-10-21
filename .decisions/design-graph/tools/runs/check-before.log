@@ -1,0 +1,192 @@
+build: 21 mockups placed, missing 0, unused 0, leftover placeholders 0, contract faults 0
+build: page + mockups 108.9 KiB before the hub adds the kit (limit 512 KiB)
+card resize: 2 options [edges*, seam], 2 drawings, ok
+card clip-controls: 2 options [row*, inspector], 2 drawings, ok
+card token-rule: 3 options [tokens, free, snap*], 3 drawings, ok
+card compare: 2 options [segments*, hold], 2 drawings, ok
+card springs: 2 options [spring-tokens, curves*], 2 drawings, ok
+card after-edit: 2 options [replay*, hold], 2 drawings, ok
+card machine-names: 2 options [band*, headers], 2 drawings, ok
+card change-marks: 2 options [rings*, washes], 2 drawings, ok
+card verdict: 3 options [not-now, pins*, mark], 3 drawings, ok
+picks: 20/20 options pick and mark through the bridge; all nine picked → meter 9 of 9; all cleared → 0; card faults 0
+live: 17/21 drawings live and moving; still by design: springs-tokens, springs-curves, verdict-none, verdict-pins
+canary: planted overlap found, planted spill found
+sweep light: 21 drawings, each at 6 loop moments, its still and its key frames, overlays every 100ms; page 1440px wide in 1440px; findings 45
+  resize-edges: overlay:cursor × span "Corner radius" — t=3100 6×8px
+  resize-edges: overlay:cursor × p "The form closes; it's in the" — t=6900 12×3px
+  resize-seam: overlay:cursor × p "The form closes; it's in the" — t=6800 12×7px
+  controls-row: overlay:cursor × span "300" — t=8300 7×6px
+  controls-row: overlay:cursor × code "--ease-drawer" — t=6500 13×3px
+  controls-row: overlay:cursor × code "--ease-out" — t=7200 13×11px
+  controls-row: overlay:cursor × span.dk-chip "--dur-pop 260 ms" — t=1100 5×13px
+  controls-row: overlay:cursor × span.dk-of "Reason words" — t=7700 7×11px
+  controls-row: overlay:cursor × span.dk-chip "with Reason line" — t=7700 13×2px
+  controls-row: overlay:cursor × span.dk-does "fade in" — t=7700 2×11px
+  controls-inspector: overlay:cursor × code "--ease-drawer" — t=5300 13×8px
+  controls-inspector: overlay:cursor × code "--ease-out" — t=6700 13×5px
+  controls-inspector: overlay:cursor × span "200" — t=1000 13×9px
+  tokens-only: overlay:cursor × span "400" — t=5500 4×4px
+  tokens-only: overlay:cursor × span.dk-text "Reset" — t=5900 12×7px
+  tokens-free: overlay:cursor × span.dk-text "Reset" — t=5900 12×7px
+  tokens-snap: out:span.gd-key "⌥" — t=4400 past the drawing's edge by 92.8px
+  tokens-snap: overlay:cursor × span.dk-text "Reset" — t=5900 12×7px
+  compare-segments: overlay:cursor × button.t-tab "Original" — t=3800 6×9px
+  compare-segments: overlay:cursor × button.t-tab "Edited" — t=5000 13×9px
+  compare-segments: overlay:cursor × span "300" — t=1200 13×5px
+  compare-hold: overlay:cursor × span.dk-hold.down "Original" — t=4400 12×7px
+  compare-hold: overlay:cursor × span.dk-hold "Original" — t=4800 12×7px
+  edit-replay: overlay:cursor × span.dk-text "Reset" — t=6100 13×8px
+  edit-hold: overlay:cursor × span.dk-does "label swaps to “Create routi" — t=3300 13×5px
+  edit-hold: overlay:cursor × span.dk-ro "380 / 380 ms" — t=5700 13×10px
+  edit-hold: overlay:cursor × span "0" — t=5800 4×10px
+  edit-hold: overlay:cursor × span.dk-text "Reset" — t=6100 13×8px
+  names-band: overlay:cursor × span.ix-s "Every day" — t=2400 13×17px
+  names-band: overlay:cursor × span.ix-s "Loaded" — t=2900 13×17px
+  names-band: overlay:cursor × span.ix-s "Save failed" — t=5900 13×5px
+  names-band: overlay:cursor × p "The reason sits under the ac" — t=6500 13×11px
+  names-band: overlay:cursor × b "Save failed" — t=900 13×2px
+  names-band: overlay:cursor × span.ix-s "Read back" — t=2700 13×17px
+  names-band: overlay:cursor × text "Try again" — t=6300 13×8px
+  marks-rings: overlay:cursor × p "At swaps to the read-back; n" — t=4000 13×8px
+  marks-rings: overlay:cursor × span.var "Delegate type refused" — t=4200 13×14px
+  marks-rings: overlay:cursor × p "The reason sits under the ac" — t=4100 13×16px
+  marks-washes: overlay:cursor × p "At swaps to the read-back; n" — t=4000 13×8px
+  marks-washes: overlay:cursor × span.var "Delegate type refused" — t=4200 13×14px
+  marks-washes: overlay:cursor × p "The reason sits under the ac" — t=4100 13×16px
+  verdict-mark: out:svg — t=400 past the drawing's edge by 16.6px
+  verdict-mark: overlay:cursor × p "The reason sits under the ac" — t=5600 13×16px
+  verdict-mark: overlay:cursor × span.var "Delegate type refused" — t=5900 13×6px
+  verdict-mark: overlay:cursor × span.var.on "The hub didn't answer" — t=5800 13×5px
+sweep dark: 21 drawings, each at 6 loop moments, its still and its key frames, overlays every 100ms; page 1440px wide in 1440px; findings 45
+  resize-edges: overlay:cursor × span "Corner radius" — t=3100 6×8px
+  resize-edges: overlay:cursor × p "The form closes; it's in the" — t=6900 12×3px
+  resize-seam: overlay:cursor × p "The form closes; it's in the" — t=6800 12×7px
+  controls-row: overlay:cursor × span "300" — t=8300 7×6px
+  controls-row: overlay:cursor × code "--ease-drawer" — t=6500 13×3px
+  controls-row: overlay:cursor × code "--ease-out" — t=7200 13×11px
+  controls-row: overlay:cursor × span.dk-chip "--dur-pop 260 ms" — t=1100 5×13px
+  controls-row: overlay:cursor × span.dk-of "Reason words" — t=7700 7×11px
+  controls-row: overlay:cursor × span.dk-chip "with Reason line" — t=7700 13×2px
+  controls-row: overlay:cursor × span.dk-does "fade in" — t=7700 2×11px
+  controls-inspector: overlay:cursor × code "--ease-drawer" — t=5300 13×8px
+  controls-inspector: overlay:cursor × code "--ease-out" — t=6700 13×5px
+  controls-inspector: overlay:cursor × span "200" — t=1000 13×9px
+  tokens-only: overlay:cursor × span "400" — t=5500 4×4px
+  tokens-only: overlay:cursor × span.dk-text "Reset" — t=5900 12×7px
+  tokens-free: overlay:cursor × span.dk-text "Reset" — t=5900 12×7px
+  tokens-snap: out:span.gd-key "⌥" — t=4400 past the drawing's edge by 92.8px
+  tokens-snap: overlay:cursor × span.dk-text "Reset" — t=5900 12×7px
+  compare-segments: overlay:cursor × button.t-tab "Original" — t=3800 6×9px
+  compare-segments: overlay:cursor × button.t-tab "Edited" — t=5000 13×9px
+  compare-segments: overlay:cursor × span "300" — t=1200 13×5px
+  compare-hold: overlay:cursor × span.dk-hold.down "Original" — t=4400 12×7px
+  compare-hold: overlay:cursor × span.dk-hold "Original" — t=4800 12×7px
+  edit-replay: overlay:cursor × span.dk-text "Reset" — t=6100 13×8px
+  edit-hold: overlay:cursor × span.dk-does "label swaps to “Create routi" — t=3300 13×5px
+  edit-hold: overlay:cursor × span.dk-ro "380 / 380 ms" — t=5700 13×10px
+  edit-hold: overlay:cursor × span "0" — t=5800 4×10px
+  edit-hold: overlay:cursor × span.dk-text "Reset" — t=6100 13×8px
+  names-band: overlay:cursor × span.ix-s "Every day" — t=2400 13×17px
+  names-band: overlay:cursor × span.ix-s "Loaded" — t=2900 13×17px
+  names-band: overlay:cursor × span.ix-s "Save failed" — t=5900 13×5px
+  names-band: overlay:cursor × p "The reason sits under the ac" — t=6500 13×11px
+  names-band: overlay:cursor × b "Save failed" — t=900 13×2px
+  names-band: overlay:cursor × span.ix-s "Read back" — t=2700 13×17px
+  names-band: overlay:cursor × text "Try again" — t=6300 13×8px
+  marks-rings: overlay:cursor × p "At swaps to the read-back; n" — t=4000 13×8px
+  marks-rings: overlay:cursor × span.var "Delegate type refused" — t=4200 13×14px
+  marks-rings: overlay:cursor × p "The reason sits under the ac" — t=4100 13×16px
+  marks-washes: overlay:cursor × p "At swaps to the read-back; n" — t=4000 13×8px
+  marks-washes: overlay:cursor × span.var "Delegate type refused" — t=4200 13×14px
+  marks-washes: overlay:cursor × p "The reason sits under the ac" — t=4100 13×16px
+  verdict-mark: out:svg — t=400 past the drawing's edge by 16.6px
+  verdict-mark: overlay:cursor × p "The reason sits under the ac" — t=5600 13×16px
+  verdict-mark: overlay:cursor × span.var "Delegate type refused" — t=5900 13×6px
+  verdict-mark: overlay:cursor × span.var.on "The hub didn't answer" — t=5800 13×5px
+sweep total findings (light + dark): 90
+chrome light: 278 card elements over a drawing
+  resize-edges: div.dp-opts "Recommended1Its edgesThe" — 832×119px at scroll 1350
+  resize-edges: button.dp-opt "Recommended1Its edgesThe" — 413×108px at scroll 1350
+  resize-edges: span.dp-tag "Recommended" — 101×20px at scroll 1350
+  resize-edges: b "1Its edges" — 400×17px at scroll 1350
+  resize-edges: span.dp-kc "1" — 17×17px at scroll 1350
+  resize-edges: span "Its edges" — 56×17px at scroll 1350
+  resize-edges: span "The left edge sets the w" — 400×36px at scroll 1350
+  resize-edges: span.dp-cost "Cost: nothing at rest sa" — 400×16px at scroll 1350
+  resize-edges: button.dp-opt "2The graph's seamWidth o" — 413×108px at scroll 1350
+  resize-edges: b "2The graph's seam" — 400×17px at scroll 1350
+  resize-edges: span.dp-kc "2" — 17×17px at scroll 1350
+  resize-edges: span "The graph's seam" — 107×17px at scroll 1350
+  resize-edges: span "Width on the left edge; " — 400×36px at scroll 1350
+  resize-edges: span.dp-cost "Cost: the handle covers " — 400×34px at scroll 1350
+  resize-seam: div.dp-opts "Recommended1Its edgesThe" — 832×119px at scroll 1985
+  resize-seam: button.dp-opt "Recommended1Its edgesThe" — 413×108px at scroll 1985
+  resize-seam: span.dp-tag "Recommended" — 101×20px at scroll 1985
+  resize-seam: b "1Its edges" — 400×17px at scroll 1985
+  resize-seam: span.dp-kc "1" — 17×17px at scroll 1985
+  resize-seam: span "Its edges" — 56×17px at scroll 1985
+  resize-seam: span "The left edge sets the w" — 400×36px at scroll 1985
+  resize-seam: span.dp-cost "Cost: nothing at rest sa" — 400×16px at scroll 1985
+  resize-seam: button.dp-opt "2The graph's seamWidth o" — 413×108px at scroll 1985
+  resize-seam: b "2The graph's seam" — 400×17px at scroll 1985
+  resize-seam: span.dp-kc "2" — 17×17px at scroll 1985
+  resize-seam: span "The graph's seam" — 107×17px at scroll 1985
+  resize-seam: span "Width on the left edge; " — 400×36px at scroll 1985
+  resize-seam: span.dp-cost "Cost: the handle covers " — 400×34px at scroll 1985
+  controls-row: div.dp-opts "Recommended1In the rowA " — 832×100px at scroll 2845
+  controls-row: button.dp-opt "Recommended1In the rowA " — 413×89px at scroll 2845
+  controls-row: span.dp-tag "Recommended" — 101×20px at scroll 2845
+  controls-row: b "1In the row" — 400×17px at scroll 2845
+  controls-row: span.dp-kc "1" — 17×17px at scroll 2845
+  controls-row: span "In the row" — 62×17px at scroll 2845
+  controls-row: span "A clip's chips open thei" — 400×18px at scroll 2845
+  controls-row: span.dp-cost "Cost: the dock grows whi" — 400×15px at scroll 2845
+  controls-row: button.dp-opt "2An inspector columnA 28" — 413×89px at scroll 2845
+  controls-row: b "2An inspector column" — 400×17px at scroll 2845
+  controls-row: span.dp-kc "2" — 17×17px at scroll 2845
+  controls-row: span "An inspector column" — 126×17px at scroll 2845
+chrome dark: 278 card elements over a drawing
+  resize-edges: div.dp-opts "Recommended1Its edgesThe" — 832×119px at scroll 1350
+  resize-edges: button.dp-opt "Recommended1Its edgesThe" — 413×108px at scroll 1350
+  resize-edges: span.dp-tag "Recommended" — 101×20px at scroll 1350
+  resize-edges: b "1Its edges" — 400×17px at scroll 1350
+  resize-edges: span.dp-kc "1" — 17×17px at scroll 1350
+  resize-edges: span "Its edges" — 56×17px at scroll 1350
+  resize-edges: span "The left edge sets the w" — 400×36px at scroll 1350
+  resize-edges: span.dp-cost "Cost: nothing at rest sa" — 400×16px at scroll 1350
+  resize-edges: button.dp-opt "2The graph's seamWidth o" — 413×108px at scroll 1350
+  resize-edges: b "2The graph's seam" — 400×17px at scroll 1350
+  resize-edges: span.dp-kc "2" — 17×17px at scroll 1350
+  resize-edges: span "The graph's seam" — 107×17px at scroll 1350
+  resize-edges: span "Width on the left edge; " — 400×36px at scroll 1350
+  resize-edges: span.dp-cost "Cost: the handle covers " — 400×34px at scroll 1350
+  resize-seam: div.dp-opts "Recommended1Its edgesThe" — 832×119px at scroll 1985
+  resize-seam: button.dp-opt "Recommended1Its edgesThe" — 413×108px at scroll 1985
+  resize-seam: span.dp-tag "Recommended" — 101×20px at scroll 1985
+  resize-seam: b "1Its edges" — 400×17px at scroll 1985
+  resize-seam: span.dp-kc "1" — 17×17px at scroll 1985
+  resize-seam: span "Its edges" — 56×17px at scroll 1985
+  resize-seam: span "The left edge sets the w" — 400×36px at scroll 1985
+  resize-seam: span.dp-cost "Cost: nothing at rest sa" — 400×16px at scroll 1985
+  resize-seam: button.dp-opt "2The graph's seamWidth o" — 413×108px at scroll 1985
+  resize-seam: b "2The graph's seam" — 400×17px at scroll 1985
+  resize-seam: span.dp-kc "2" — 17×17px at scroll 1985
+  resize-seam: span "The graph's seam" — 107×17px at scroll 1985
+  resize-seam: span "Width on the left edge; " — 400×36px at scroll 1985
+  resize-seam: span.dp-cost "Cost: the handle covers " — 400×34px at scroll 1985
+  controls-row: div.dp-opts "Recommended1In the rowA " — 832×100px at scroll 2845
+  controls-row: button.dp-opt "Recommended1In the rowA " — 413×89px at scroll 2845
+  controls-row: span.dp-tag "Recommended" — 101×20px at scroll 2845
+  controls-row: b "1In the row" — 400×17px at scroll 2845
+  controls-row: span.dp-kc "1" — 17×17px at scroll 2845
+  controls-row: span "In the row" — 62×17px at scroll 2845
+  controls-row: span "A clip's chips open thei" — 400×18px at scroll 2845
+  controls-row: span.dp-cost "Cost: the dock grows whi" — 400×15px at scroll 2845
+  controls-row: button.dp-opt "2An inspector columnA 28" — 413×89px at scroll 2845
+  controls-row: b "2An inspector column" — 400×17px at scroll 2845
+  controls-row: span.dp-kc "2" — 17×17px at scroll 2845
+  controls-row: span "An inspector column" — 126×17px at scroll 2845
+chrome total (light + dark): 556
+CHECK FAILED
+script errors: none

@@ -26,9 +26,10 @@
     const play = m === "original" ? [1700, 1700 + 320 * SLOW] : [4500, 4500 + dock.total * SLOW];
     const ms = t < 1700 && m === "edited" ? dock.total : Math.min(len, Math.max(0, (t - play[0]) / SLOW));
     dock.setT(ms, len); dock.playing(t >= play[0] && t < play[1]);
-    const pts = { rest: G.at(root, dock.el, 0.6, 0.6), orig: G.at(root, orig), edit: G.at(root, edit) };
-    const [x, y] = G.path(t, [[800, 1400, "rest", "orig"], [3600, 4200, "orig", "edit"], [5000, 5800, "edit", "rest"]], pts);
-    cur.set(x, y, "arrow", within(t, 1500, 1650) || within(t, 4300, 4450));
+    // The cursor shows only while it presses a segment, its tip in the segment's trailing corner, clear of the word.
+    const onO = within(t, 1300, 1700), onE = within(t, 4100, 4500);
+    const [x, y] = G.at(root, onE ? edit : orig, 0.9, 0.85);
+    cur.set(x, y, "arrow", within(t, 1500, 1650) || within(t, 4300, 4450), onO || onE);
   }, 2400);
   root.gdKeys = [600, 2400, 5400];
 })();

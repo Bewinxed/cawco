@@ -31,11 +31,11 @@
   G.run(root, 7600, (t) => {
     size(G.kf(t, [[1500, 448], [2500, 520], [3400, 520], [4400, 448]]), G.kf(t, [[3400, 300], [4400, 360], [5300, 360], [6300, 300]]));
     G.showKept(graph);
-    const pts = { p0: G.at(root, panel, 0, 0, -120, 150), edge: G.at(root, panel, 0, 0, 0, 170), corner: G.at(root, panel, 0, 1, 2, -2), foot: G.at(root, panel, 0.55, 1, 0, 0) };
-    const [x, y] = G.path(t, [[600, 1200, "p0", "edge"], [2700, 3200, "edge", "corner"], [4600, 5100, "corner", "foot"], [6500, 7300, "foot", "p0"]], pts);
-    const kind = within(t, 1200, 2700) ? "ew" : within(t, 3200, 4600) ? "nesw" : within(t, 5100, 6500) ? "ns" : "arrow";
+    // The cursor shows only on an edge: the left edge, the corner just outside its curve, the foot over the slider's track.
+    const kind = within(t, 1200, 2700) ? "ew" : within(t, 3200, 4600) ? "nesw" : within(t, 5100, 6500) ? "ns" : null;
+    const [x, y] = kind === "ew" ? G.at(root, panel, 0, 0, 0, 170) : kind === "nesw" ? G.at(root, panel, 0, 1, -3, 3) : G.at(root, panel, 0.55, 1);
     const down = within(t, 1500, 2500) || within(t, 3400, 4400) || within(t, 5300, 6300);
-    cur.set(x, y, kind, down);
+    cur.set(x, y, kind || "arrow", down, !!kind);
     const onW = within(t, 1200, 2700) || within(t, 3200, 4600), onH = within(t, 3200, 4600) || within(t, 5100, 6500);
     sw.classList.toggle("lit", onW); sh.classList.toggle("lit", onH);
     sw.classList.toggle("drag", onW && down); sh.classList.toggle("drag", onH && down);

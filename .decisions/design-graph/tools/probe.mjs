@@ -77,19 +77,17 @@ for (const scheme of ["light", "dark"]) {
     out.contrast = `min ${min.toFixed(2)}; under 4.5: ${low.length}${low.length ? " → " + [...new Set(low)].slice(0, 12).join("; ") : ""}`;
     return out;
   });
-  // 9. Each drawing and its pick in one view: scroll every pane's top to the view's top and read where the options are.
+  // 9. Each drawing and its pick in one view: scroll every option's drawing to the view's top; its own button must be in view under it.
   r.together = await p.evaluate(async () => {
     const rows = [];
-    for (const card of document.querySelectorAll("article.dp-card")) {
-      const opts = card.querySelector(".dp-opts");
-      for (const pane of card.querySelectorAll(".dp-pane")) {
-        scrollTo(0, pane.getBoundingClientRect().top + scrollY - 24);
-        await new Promise((f) => requestAnimationFrame(() => requestAnimationFrame(f)));
-        const o = opts.getBoundingClientRect(), q = pane.getBoundingClientRect();
-        rows.push(o.top >= 0 && o.bottom <= innerHeight + 0.5 && q.top >= 0 && q.top < o.top);
-      }
+    for (const opt of document.querySelectorAll(".gd-opt")) {
+      const pane = opt.querySelector(".dp-pane"), btn = opt.querySelector("[data-option]");
+      scrollTo(0, pane.getBoundingClientRect().top + scrollY - 24);
+      await new Promise((f) => requestAnimationFrame(() => requestAnimationFrame(f)));
+      const o = btn.getBoundingClientRect(), q = pane.getBoundingClientRect();
+      rows.push(q.top >= 0 && o.top >= q.bottom && o.bottom <= innerHeight + 0.5);
     }
-    return `${rows.filter(Boolean).length} of ${rows.length} drawings share the view with their card's options`;
+    return `${rows.filter(Boolean).length} of ${rows.length} drawings stand in one view with their own pick button under them`;
   });
   console.log(`== ${scheme}`);
   for (const [k, v] of Object.entries(r)) console.log(`${k}: ${Array.isArray(v) ? v.join(" | ") : v}`);
