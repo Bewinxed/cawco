@@ -1,13 +1,5 @@
 import { execFileSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import type http from "node:http";
 import { dirname, join, relative } from "node:path";
 import {
@@ -17,7 +9,6 @@ import {
 } from "@cawco/core/browser-gate";
 import { unlayeredRules } from "@cawco/core/css-layers";
 import { CSS_TARGET } from "@cawco/core/css-target";
-import { houseFacePieces, houseFaceSheet } from "@cawco/core/house-faces";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
@@ -32,6 +23,7 @@ import {
 } from "vite";
 import { groupsAsCombinators } from "./group-selectors.ts";
 import { publicOrigin } from "./public-origin.js";
+import { FACES_DIR, writeHouseFaces } from "./scripts/house-faces.ts";
 
 /**
  * The hub a vite server (`vite dev`, `vite preview`) talks to: the one named in
@@ -68,12 +60,8 @@ const devHub = (): URL => {
 };
 
 /**
- * The house faces as every CawCo web surface serves them (core
- * house-faces.ts): each face's woff2 pieces, cut from the repository's own
- * Figtree and JetBrains Mono, and a rule per piece, written into
- * `src/house-faces/` (git-ignored, written by every build and dev server)
- * before Tailwind reads app.css, which imports its `faces.css`. Written only
- * where a file differs, so a dev server's restart reloads nothing.
+ * The house faces (scripts/house-faces.ts), written into `src/house-faces/`
+ * before Tailwind reads app.css, which imports its `faces.css`.
  *
  * The latin pieces are the faces the first paint sets its text in. The
  * build inlines them into the stylesheet, which the page waits for anyway,
@@ -84,34 +72,12 @@ const devHub = (): URL => {
  * the body is parsed. Every other asset keeps Vite's limit: the other
  * pieces and Fredoka load by URL when a page draws them.
  */
-const FACES_DIR = join(import.meta.dirname, "src/house-faces");
 const firstPaint = new Set<string>();
 
 const houseFaces = (): Plugin => ({
   name: "cawco:house-faces",
   async config() {
-    const [{ css, files }, pieces] = await Promise.all([
-      houseFaceSheet("./"),
-      houseFacePieces(),
-    ]);
-    mkdirSync(FACES_DIR, { recursive: true });
-    const wanted = new Map<string, string | Uint8Array>([
-      ["faces.css", css],
-      ...files,
-    ]);
-    for (const name of readdirSync(FACES_DIR)) {
-      if (!wanted.has(name)) {
-        rmSync(join(FACES_DIR, name));
-      }
-    }
-    for (const [name, body] of wanted) {
-      const path = join(FACES_DIR, name);
-      const bytes = typeof body === "string" ? Buffer.from(body) : body;
-      if (!(existsSync(path) && readFileSync(path).equals(bytes))) {
-        writeFileSync(path, bytes);
-      }
-    }
-    for (const piece of pieces) {
+    for (const piece of await writeHouseFaces()) {
       if (piece.cut === "latin") {
         firstPaint.add(join(FACES_DIR, piece.name));
       }
