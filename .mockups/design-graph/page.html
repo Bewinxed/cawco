@@ -6053,7 +6053,9 @@ function drawWashes(cid) {
   const live = [...st.querySelectorAll("[data-key], label, .btn, .line, .note, .rrow > b, .rmeta, .rstatus, .done")].filter((el) => !added.has(el.dataset.key) && !el.closest(added.size ? [...added].map((k) => '[data-key="' + k + '"]').join(",") : "#none")).map((el) => { const b = el.getBoundingClientRect(); return { x: b.left - sb.left, y: b.top - sb.top, w: b.width, h: b.height }; }).filter((b) => b.w > 0.5 && b.h > 0.5);
   const hits = (r) => live.some((b) => Math.min(r.x + r.w, b.x + b.w) - Math.max(r.x, b.x) > 0.5 && Math.min(r.y + r.h, b.y + b.h) - Math.max(r.y, b.y) > 0.5);
   marks.replaceChildren(...out.map(([kind, n, key]) => {
-    const pad = n.boxed ? 0 : gap, w = document.createElement("div");
+    // A bare element's wash stands its gap outside it plus the wash's own 1px stroke, so the stroke stands
+    // --c-target-gap clear of the text (the r25 review: the first letter sat on the stroke).
+    const pad = n.boxed ? 0 : gap + 1, w = document.createElement("div");
     w.className = "wash " + kind; w.dataset.wash = kind; w.dataset.of = key; w.dataset.pad = pad;
     w.dataset.box = [n.box.x, n.box.y, n.box.w, n.box.h].join(",");
     let r = { x: n.box.x - pad, y: n.box.y - pad, w: n.box.w + 2 * pad, h: n.box.h + 2 * pad };
@@ -6305,6 +6307,8 @@ function revealIn(cid, el, fromEl, fit) {
   const cuts = (s) => boxes.some(([t, b]) => (t < s - 0.5 && b > s + 0.5) || (t < s + H - 0.5 && b > s + H + 0.5));
   const clear = (s) => s <= 0.5 || (!solid.some(([t, b]) => t < s + pad - 0.5 && b > s + 0.5) && !frames.some(([t, b]) => t < s + pad - 0.5 && b > s + 0.5));
   const footClear = (s) => !solid.some(([t, b]) => t < s + H - 0.5 && b > s + H + 0.5);
+  // The clean view stands --space-2 clear at the foot as at the top (the r25 review).
+  const footRoom = (s) => s + H >= max + H - 0.5 || !solid.some(([t, b]) => t < s + H + 0.5 && b > s + H - pad + 0.5);
   const keeps = (s) => at(n.top) >= s - 0.5 && at(n.bottom) <= s + H + 0.5;
   const cands = [want, 0, max];
   for (const [t, b] of boxes.concat(frames, solid)) cands.push(t - pad, t, b + pad - H, b - H, b + pad, b, t - pad - H + (b - t));
@@ -6313,8 +6317,9 @@ function revealIn(cid, el, fromEl, fit) {
   // Where no scroll leaves --space-2 under the top edge, the foot still cuts nothing (the r25 review) and the
   // top cuts no state, name or label.
   const uncut = (s) => s <= 0.5 || !solid.some(([t, b]) => t < s - 0.5 && b > s + 0.5);
-  const strict = pickBy((s) => clear(s) && footClear(s)), footFirst = pickBy((s) => uncut(s) && footClear(s)), loose = pickBy((s) => !cuts(s));
-  const pick = (limit) => strict(limit) ?? footFirst(limit) ?? loose(limit);
+  // The foot's --space-2 is the first wish; the top's margin outranks it where both can't stand.
+  const strict = pickBy((s) => clear(s) && footClear(s) && footRoom(s)), topClear = pickBy((s) => clear(s) && footClear(s)), footFirst = pickBy((s) => uncut(s) && footClear(s)), loose = pickBy((s) => !cuts(s));
+  const pick = (limit) => strict(limit) ?? topClear(limit) ?? footFirst(limit) ?? loose(limit);
   let best = pick(max);
   // Where no view of the content as drawn shows the kept state whole and cuts nothing, the well gets room
   // past its last machine, so the view can open lower.

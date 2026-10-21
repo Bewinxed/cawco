@@ -204,6 +204,11 @@
       const w = s.frame.contentWindow;
       // The mockup draws once its faces have loaded; the loop starts after that.
       w.document.fonts.ready.then(() => requestAnimationFrame(() => requestAnimationFrame(() => {
+        // The frame's smallest type, so its scale never draws words under 10px.
+        let min = Infinity;
+        for (const el of w.document.querySelectorAll("body *")) { if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue; const cs = w.getComputedStyle(el); if (cs.display === "none" || cs.visibility === "hidden" || !el.getBoundingClientRect().width) continue; min = Math.min(min, parseFloat(cs.fontSize)); }
+        if (Number.isFinite(min)) s.fig.style.setProperty("--ds-min-s", String(Math.min(1, 10 / min)));
+        fit(s);
         start(s);
         // Still under reduced motion: each frame rests on its key scene, nothing moving.
         if (reduce) { const list = SCENES[s.id], k = list.find((x) => x.peek || x.face || x.pop || x.tab) || list[0]; w.__dg.apply(k, k.at); }
