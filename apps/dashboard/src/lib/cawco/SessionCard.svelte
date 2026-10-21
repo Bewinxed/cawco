@@ -63,6 +63,7 @@
   import {
     type NamedSession,
     sessionAnswer,
+    sessionPlace,
     sessionTitle,
   } from "./session-names.svelte";
   import DelegateTail, {
@@ -186,7 +187,7 @@
       data-slot="mark"
       aria-hidden="true"
       class="grid size-c-row-mark flex-none place-items-center rounded-xs bg-(--mark-bg) bg-mark-overlay"
-      style:--mark-bg="var(--mark-{markHue(row?.cwd || id)})"
+      style:--mark-bg="var(--mark-{markHue(sessionPlace(id))})"
       data-box
     >
       {#if caw}

@@ -55,7 +55,7 @@ import {
   wordsOf,
 } from "@cawco/core/find-match";
 import { status, t } from "elysia";
-import type { DbShape } from "./db";
+import { checkoutOf, type DbShape } from "./db";
 import type { FindInstanceRow, FindWorkItemRow } from "./db/find";
 import {
   artifactEntry,
@@ -466,6 +466,7 @@ const storedConversation = (
     task: null,
     project: null,
     machine,
+    cwd: hit.cwd ?? "",
     dir,
     role: "session",
     parent: null,
@@ -699,8 +700,15 @@ export const createFind = (deps: FindDeps) => {
     }
     const threads = new Map<string, Entry>();
     for (const [projectId, list] of Object.entries(deps.threads())) {
+      // Where its threads' board rows sit (the dashboard's `threadRowOf`):
+      // the primary checkout, else its first place, else its hub folder.
+      const project = projects.get(projectId);
+      const place = project
+        ? (checkoutOf(project) ?? project.places[0])
+        : undefined;
+      const cwd = place?.path ?? `projects/${projectId}`;
       for (const thread of list) {
-        threads.set(thread.id, threadEntry(thread, projectOf(projectId)));
+        threads.set(thread.id, threadEntry(thread, projectOf(projectId), cwd));
       }
     }
     const artifacts = db.find.artifacts().flatMap((artifact) => {

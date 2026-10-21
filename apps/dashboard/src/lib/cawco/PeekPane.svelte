@@ -81,6 +81,7 @@
   import RowFault from "./RowFault.svelte";
   import SessionMark from "./SessionMark.svelte";
   import { sessionAct, stopOnRow } from "./session-acts.svelte";
+  import { sessionPlace } from "./session-names.svelte";
   import { cawOf, sessionStatus } from "./session-status";
   import { startFork } from "./spawn/new-session.svelte";
   import { toast } from "./toasts";
@@ -407,7 +408,7 @@
     <SessionMark
       caw={cawOf(target.viewId)}
       id={target.viewId}
-      place={row?.cwd || row?.machineId || target.viewId}
+      place={sessionPlace(target.viewId)}
       status={sessionStatus(row)}
     />
     <!-- The state word in its own status ink: failed in crimson, needs you

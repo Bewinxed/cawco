@@ -21,7 +21,7 @@
   import { conversationHref } from "./links";
   import { markHue, sessionSprite } from "./mark";
   import SessionCard, { readThreadCard, tailOf } from "./SessionCard.svelte";
-  import { sessionAnswer } from "./session-names.svelte";
+  import { sessionAnswer, sessionPlace } from "./session-names.svelte";
   import { threadIdOf } from "./thread-tabs";
 
   /**
@@ -67,7 +67,7 @@
     data-slot="mark"
     aria-hidden="true"
     class="grid size-c-row-mark flex-none place-items-center rounded-xs bg-(--mark-bg) bg-mark-overlay"
-    style:--mark-bg="var(--mark-{markHue(row?.cwd || id)})"
+    style:--mark-bg="var(--mark-{markHue(sessionPlace(id))})"
     data-box
   >
     {#if caw}

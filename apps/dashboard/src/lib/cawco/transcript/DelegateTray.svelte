@@ -64,6 +64,7 @@
   import { land } from "../motion/share.svelte";
   import { pressOutside } from "../press-outside";
   import RowFault from "../RowFault.svelte";
+  import { sessionPlace } from "../session-names.svelte";
   import DelegateTail, { type TailNote } from "./DelegateTail.svelte";
   import { layoutScale } from "./grown";
   import { askDetailOf, askShortOf, matchesSession } from "./present";
@@ -1160,7 +1161,7 @@
     aria-hidden="true"
     class="flex-none size-c-row-mark rounded-xs grid place-items-center bg-mark-overlay bg-(--mark-bg)"
     data-box
-    style:--mark-bg="var(--mark-{markHue(item.instanceId)})"
+    style:--mark-bg="var(--mark-{markHue(sessionPlace(item.instanceId))})"
     {@attach land(() => (flies ? flightKey(item.instanceId) : undefined))}
     ><Sprite class="size-icon-sm block text-mark-glyph" /></span
   >

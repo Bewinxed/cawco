@@ -12,6 +12,7 @@
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   import SessionMark from "#lib/cawco/SessionMark.svelte";
+  import { sessionPlace } from "#lib/cawco/session-names.svelte.js";
   import { sessionStatus } from "#lib/cawco/session-status.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import { formatAgeShort } from "#lib/utils/time.js";
@@ -110,7 +111,7 @@
     >
       <SessionMark
         id={page.writer.instanceId}
-        place={row?.cwd || row?.machineId || page.writer.instanceId}
+        place={sessionPlace(page.writer.instanceId)}
         status={sessionStatus(row)}
       />
       <span

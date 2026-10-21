@@ -104,6 +104,7 @@
   import { fold, unfold } from "./motion/fold.svelte";
   import { departBox, land } from "./motion/share.svelte";
   import RowFault from "./RowFault.svelte";
+  import { sessionPlace } from "./session-names.svelte";
   import TreeMark from "./TreeMark.svelte";
   import { toast } from "./toasts";
 
@@ -704,7 +705,8 @@
 
   /* ── A row ───────────────────────────────────────────────────────── */
 
-  const fillOf = (s: RunningSession) => `var(--mark-${markHue(s.cwd)})`;
+  const fillOf = (s: RunningSession) =>
+    `var(--mark-${markHue(sessionPlace(s.id))})`;
 
   /** What a row says it is doing, before and through its stop. */
   function statusOf(row: Row) {

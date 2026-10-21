@@ -150,6 +150,12 @@ interface FindBase {
 export interface FindConversation extends FindBase {
   /** The delegates and attempts it started, and how many of them wait on you now. */
   children: { count: number; needsYou: number };
+  /**
+   * Where it works, whole, as its board row has it (`instances.cwd`): what
+   * its mark's hue is seeded from (with its machine's id when empty), so it
+   * wears one colour on the board and off it. "" when unknown.
+   */
+  cwd: string;
   /** The folder it was launched in, its leaf. */
   dir: string | null;
   harness: string | null;
@@ -184,6 +190,12 @@ export interface FindConversation extends FindBase {
 }
 
 export interface FindThread extends FindBase {
+  /**
+   * Where its board row places it: its project's primary checkout, else its
+   * first place, else its folder on the hub (`projects/<id>`), as the
+   * dashboard's thread row has it: what its mark's hue is seeded from.
+   */
+  cwd: string;
   kind: "thread";
   /** Its best messages that matched, best first: present when its words did. */
   moments: FindMoment[];

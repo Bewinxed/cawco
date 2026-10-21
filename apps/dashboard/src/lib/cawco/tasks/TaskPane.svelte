@@ -77,7 +77,7 @@
   } from "../project-tasks";
   import RowFault from "../RowFault.svelte";
   import SessionMark from "../SessionMark.svelte";
-  import { sessionTitle } from "../session-names.svelte";
+  import { sessionPlace, sessionTitle } from "../session-names.svelte";
   import SideSurface from "../side/SideSurface.svelte";
   import type { MarkStatus } from "../TreeMark.svelte";
   import { openBeside } from "./beside.svelte";
@@ -746,8 +746,7 @@
                   >
                     <SessionMark
                       id={attempt.instanceId}
-                      place={cawco.instanceIndex.byId.get(attempt.instanceId)
-                        ?.cwd ?? attempt.instanceId}
+                      place={sessionPlace(attempt.instanceId)}
                       status={TONE[word] ?? "idle"}
                     />
                     <span

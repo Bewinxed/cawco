@@ -21,6 +21,7 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { sessionPlace } from "#lib/cawco/session-names.svelte.js";
   import {
     cawOf,
     sessionStatus,
@@ -159,7 +160,7 @@
           title: row?.title || entry.nodeId,
           lead: {
             kind: "session" as const,
-            place: row?.cwd || row?.machineId || id,
+            place: sessionPlace(id),
             status,
             caw: cawOf(id),
           },

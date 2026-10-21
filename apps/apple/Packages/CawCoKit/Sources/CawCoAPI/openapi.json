@@ -49002,6 +49002,10 @@
               "needsYou"
             ]
           },
+          "cwd": {
+            "description": "Where it works, whole, as its board row has it (`instances.cwd`): what\nits mark's hue is seeded from (with its machine's id when empty), so it\nwears one colour on the board and off it. \"\" when unknown.",
+            "type": "string"
+          },
           "dir": {
             "description": "The folder it was launched in, its leaf.",
             "type": [
@@ -49186,6 +49190,7 @@
         },
         "required": [
           "children",
+          "cwd",
           "dir",
           "handle",
           "harness",
@@ -49276,6 +49281,10 @@
       "FindThread": {
         "type": "object",
         "properties": {
+          "cwd": {
+            "description": "Where its board row places it: its project's primary checkout, else its\nfirst place, else its folder on the hub (`projects/<id>`), as the\ndashboard's thread row has it: what its mark's hue is seeded from.",
+            "type": "string"
+          },
           "kind": {
             "type": "string",
             "enum": [
@@ -49349,6 +49358,7 @@
           }
         },
         "required": [
+          "cwd",
           "handle",
           "id",
           "kind",

@@ -197,6 +197,29 @@ export function sessionTitle(name: string): string | null {
 }
 
 /**
+ * Where a session works, as its mark's hue is seeded (`markHue`): its board
+ * row's folder, else its machine (SessionRow's own rule), and the same
+ * from the hub's answer for one the board does not hold, so a session wears
+ * one colour on the board, in a chip, a card, a task's attempt or a
+ * decision's tile, before and after it ages off the board. Its name alone
+ * only while the hub is asked, or when nothing knows it.
+ */
+export function sessionPlace(name: string): string {
+  const id = sessionNamed(name) ?? name;
+  const row = cawco.instanceIndex.byId.get(id);
+  if (row) {
+    return row.cwd || row.machineId;
+  }
+  const answer = answered.get(id);
+  if (answer) {
+    return answer.kind === "conversation"
+      ? answer.cwd || answer.machine.id
+      : answer.cwd;
+  }
+  return id;
+}
+
+/**
  * What the hub's names say of a session this browser holds no row of, as
  * a card or a tail says it in place of its live transcript: its state, its
  * row's facts (project, role, machine) and its age, the finder's words.

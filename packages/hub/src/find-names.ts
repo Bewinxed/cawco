@@ -245,6 +245,7 @@ export const conversationEntry = (
     children: { count: children, needsYou: 0 },
     project: sources.projectOf(row.projectId),
     machine: { id: row.machineId, name: sources.machineName(row.machineId) },
+    cwd: row.cwd,
     dir,
     role,
     task: role === "attempt" ? taskOf(item, sources.taskTitles) : null,
@@ -317,6 +318,7 @@ export const storedEntry = (
     task: null,
     project: null,
     machine,
+    cwd: info.cwd ?? "",
     dir,
     role: "session",
     parent: null,
@@ -347,7 +349,8 @@ export const storedEntry = (
 
 export const threadEntry = (
   thread: ThreadSummary,
-  project: { id: string; name: string } | null
+  project: { id: string; name: string } | null,
+  cwd: string
 ): Entry => ({
   asked: new Set(KIND_WORDS.thread),
   kin: 0,
@@ -360,6 +363,7 @@ export const threadEntry = (
     kind: "thread",
     moments: [],
     id: thread.id,
+    cwd,
     handle: `thread#${thread.id.slice(0, 8)}`,
     title: thread.title,
     project,

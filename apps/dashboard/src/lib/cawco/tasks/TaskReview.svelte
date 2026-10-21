@@ -61,7 +61,7 @@
   } from "../project-tasks";
   import RowFault from "../RowFault.svelte";
   import SessionMark from "../SessionMark.svelte";
-  import { sessionTitle } from "../session-names.svelte";
+  import { sessionPlace, sessionTitle } from "../session-names.svelte";
   import { sessionStatus } from "../session-status";
   import { openBeside } from "./beside.svelte";
   import Presented, { isPresented } from "./stage/Presented.svelte";
@@ -356,7 +356,7 @@
       >
         <SessionMark
           id={from.instanceId}
-          place={row?.cwd ?? from.instanceId}
+          place={sessionPlace(from.instanceId)}
           status={markStatus}
         />
         <span

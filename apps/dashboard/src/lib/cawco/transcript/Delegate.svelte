@@ -26,7 +26,11 @@
   import { tickingClock } from "../motion/clock.svelte.js";
   import { dur, easeOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
-  import { sessionAnswer, sessionTitle } from "../session-names.svelte";
+  import {
+    sessionAnswer,
+    sessionPlace,
+    sessionTitle,
+  } from "../session-names.svelte";
   import type {
     DelegateAskEvent,
     DelegateReportEvent,
@@ -418,6 +422,8 @@
 
   const agentName = $derived(harness || "delegate");
   const seed = $derived(id ?? meta.toolId);
+  /** Its mark's hue, seeded where it works as every mark of it is (session-names.svelte.ts). */
+  const hueSeed = $derived(id ? sessionPlace(id) : meta.toolId);
   const Sprite = $derived(sessionSprite(seed));
 </script>
 
@@ -448,7 +454,7 @@
           data-slot="mark"
           aria-hidden="true"
           class="rail-cell rounded-xs bg-mark-overlay bg-(--mark-bg)"
-          style:--mark-bg="var(--mark-{markHue(seed)})"
+          style:--mark-bg="var(--mark-{markHue(hueSeed)})"
           {@attach trayCard(() => (elsewhere ? null : id))}
           ><Sprite class="size-space-3 block text-mark-glyph" /></span
         >

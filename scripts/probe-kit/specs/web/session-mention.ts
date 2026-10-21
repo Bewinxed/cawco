@@ -37,6 +37,13 @@
  * - workflow runs: a run it supervised says "from <its title>".
  * - task attempt: a task's attempt on Details, and the session a Review is
  *   from, are named by its title.
+ *
+ * Its mark wears one hue on the board and off it (session-names.svelte.ts
+ * `sessionPlace`): `board row` reads its mark while the board still holds
+ * its row (seeded from the row's folder, markHue's rule checked against
+ * the fixture's `cwd`), and its chip and card (both engines), its
+ * delegate's row and its task attempt on Details and Review, drawn after
+ * it aged off, wear that same fill.
  */
 import type { Page, Route } from "playwright-core";
 import type {
@@ -60,6 +67,8 @@ import {
 const FAR_ID = "d9ba2a7a-5c1e-4b7a-9e2f-3c4d5e6f7a8b";
 const FAR_HANDLE = "bewinxed#d9ba2a7a";
 const FAR_TITLE = "Add image editing to Backlot";
+/** Where it worked: its board row's folder, and the seed of its mark's hue everywhere. */
+const FAR_CWD = "/home/bewinxed";
 const FAR: FindConversation = {
   kind: "conversation",
   id: FAR_ID,
@@ -74,6 +83,7 @@ const FAR: FindConversation = {
   task: null,
   project: { id: "backlot", name: "backlot" },
   machine: { id: "studio-machine", name: "studio" },
+  cwd: FAR_CWD,
   dir: "bewinxed",
   role: "session",
   parent: null,
@@ -263,6 +273,106 @@ const BOARD: Envelope<InstancesFrame> = {
   },
 };
 
+/** The board while the far session was still on it (it moved within a day): NEAR and FAR. */
+const BOARD_WITH_FAR: Envelope<InstancesFrame> = {
+  ...BOARD,
+  payload: {
+    ...BOARD.payload,
+    instances: [
+      ...BOARD.payload.instances,
+      {
+        cwd: FAR_CWD,
+        harness: "claude",
+        id: FAR_ID,
+        kind: "mainline",
+        launchDir: "known",
+        machineId: "studio-machine",
+        sessionId: null,
+        status: "stopped",
+        title: FAR_TITLE,
+      },
+    ],
+  },
+};
+
+/**
+ * The far session's mark fill on its board row (the rail's SessionRow),
+ * read by the `board row` scene while the board held it: every other mark
+ * of it, drawn after it aged off, is held to this.
+ */
+let boardFill: string | null = null;
+
+/** A mark's fill as drawn: a session mark's `--mark-bg`, a tree mark's `--fill`. */
+const fillOf = (page: Page, selector: string): Promise<string | null> =>
+  page
+    .locator(selector)
+    .first()
+    .evaluate(
+      (el) =>
+        (el as HTMLElement).style.getPropertyValue("--fill") ||
+        (el as HTMLElement).style.getPropertyValue("--mark-bg") ||
+        null
+    );
+
+/**
+ * A mark's hue from its seed, by markHue's rule (dashboard mark.ts, which
+ * the spec cannot load: it imports the icon components): the folder a
+ * board row seeds from gives the fill every mark of that session wears.
+ */
+const hueOf = (seed: string): string => {
+  let h = 0;
+  for (const c of seed) {
+    // biome-ignore lint/suspicious/noBitwiseOperators: markHue's 32-bit hash, as mark.ts writes it
+    h = (h * 31 + c.charCodeAt(0)) | 0;
+  }
+  return `var(--mark-${(Math.abs(h) % 8) + 1})`;
+};
+
+/**
+ * The far session while the board still held its row (it moved within a
+ * day): its chip, its mark seeded from its row's folder as its board row
+ * (SessionRow) seeds it. The benches draw no board row without a hub (the
+ * rail lists projects; Working and Finished need the hub's live frames),
+ * so its mark's fill is held to the row's folder by markHue's rule too.
+ */
+async function boardRow(kit: Kit, base: string): Promise<void> {
+  const page = await benchWith(
+    kit,
+    base,
+    [
+      {
+        id: "mention-held",
+        type: "user",
+        content: HIS,
+        timestamp: new Date().toISOString(),
+      },
+    ],
+    {},
+    BOARD_WITH_FAR
+  );
+  const chip = `[data-pane="${SHOWN}"] [data-session-chip="${FAR_ID}"] [data-slot="mark"]`;
+  await page.waitForSelector(chip, { timeout: 15_000 });
+  boardFill = await fillOf(page, chip);
+  kit.note(
+    `board row: the far session's mark on the board is ${boardFill}; its folder ${FAR_CWD} is ${hueOf(FAR_CWD)}`
+  );
+  kit.check(
+    "board row: while the board holds it, the far session's mark is seeded from its row's folder",
+    boardFill === hueOf(FAR_CWD),
+    JSON.stringify({ drawn: boardFill, folder: hueOf(FAR_CWD) })
+  );
+  await page.close();
+}
+
+/** Checks a mark of the far session drawn off the board wears its board row's fill. */
+const sameHue = (kit: Kit, what: string, fill: string | null): void => {
+  kit.check(
+    `${what}: the far session's mark wears its board row's hue (${boardFill})`,
+    boardFill !== null && fill === boardFill,
+    JSON.stringify({ board: boardFill, here: fill })
+  );
+};
+
 /** What one message's box reads: its chips, its words, its links and code. */
 const readMessage = (page: Page, holding: string) =>
   page.evaluate(
@@ -424,6 +534,16 @@ async function transcript(
       card.href === `/session/${FAR_ID}`,
     JSON.stringify(card)
   );
+  sameHue(
+    kit,
+    `transcript on ${engine}, its chip`,
+    await fillOf(page, `${farChip} [data-slot="mark"]`)
+  );
+  sameHue(
+    kit,
+    `transcript on ${engine}, its card`,
+    await fillOf(page, `${panel} [data-slot="head"] [data-slot="mark"]`)
+  );
   await page.keyboard.press("Escape");
   await page.close();
 }
@@ -433,7 +553,8 @@ async function benchWith(
   kit: Kit,
   base: string,
   messages: Record<string, unknown>[],
-  answers: Record<string, unknown> = {}
+  answers: Record<string, unknown> = {},
+  board: Envelope<InstancesFrame> = BOARD
 ): Promise<Page> {
   const page = await kit.page("desk", { engine: "chromium" });
   await hubNames(page);
@@ -447,7 +568,7 @@ async function benchWith(
   await page.routeWebSocket(
     (url) => url.pathname === "/ws/dashboard",
     (hubSide) => {
-      hubSide.send(JSON.stringify(BOARD));
+      hubSide.send(JSON.stringify(board));
     }
   );
   await open(page, `${base}/motion/head-tint`, "[data-head-tint]", 120_000);
@@ -551,6 +672,14 @@ async function readers(kit: Kit, base: string): Promise<void> {
     "readers: a delegate's row for the far session says it stopped and its harness, from the hub's answer",
     (read.pill ?? "").startsWith("stopped") && read.meta.includes("claude"),
     JSON.stringify(read)
+  );
+  sameHue(
+    kit,
+    "readers, a delegate's row",
+    await fillOf(
+      page,
+      `${pane} [data-slot="head"]:has([data-delegate-tone]) [data-slot="mark"]`
+    )
   );
   kit.check(
     "readers: a report's sender line links the far session by its short id, to its own view",
@@ -1001,6 +1130,11 @@ async function taskAttempt(kit: Kit, base: string): Promise<void> {
     attempted.includes(FAR_TITLE) && !attempted.includes("Its session"),
     attempted
   );
+  sameHue(
+    kit,
+    "task attempt, on Details",
+    await fillOf(page, '[data-slot="session"] [data-tree-mark]')
+  );
   const review = await sheet(
     "tsk-2",
     `[data-band="result"] [data-session="${FAR_ID}"]`
@@ -1011,6 +1145,14 @@ async function taskAttempt(kit: Kit, base: string): Promise<void> {
     review.includes(FAR_TITLE) && !review.includes("Its session"),
     review
   );
+  sameHue(
+    kit,
+    "task attempt, on Review",
+    await fillOf(
+      page,
+      `[data-band="result"] [data-session="${FAR_ID}"] [data-tree-mark]`
+    )
+  );
   await page.close();
 }
 
@@ -1019,6 +1161,8 @@ const spec: Spec = {
   async run(kit) {
     const base = await kit.bench();
     const scenes: [string, (k: Kit, b: string) => Promise<void>][] = [
+      // First: the hue every later mark of the far session is held to.
+      ["board row", boardRow],
       ["composer", composer],
       ["transcript on chromium", (k, b) => transcript(k, b, "chromium")],
       ["transcript on webkit", (k, b) => transcript(k, b, "webkit")],
