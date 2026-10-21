@@ -21,15 +21,24 @@
   import { conversationHref } from "./links";
   import { markHue, sessionSprite } from "./mark";
   import SessionCard, { readThreadCard, tailOf } from "./SessionCard.svelte";
+  import { namedSession } from "./session-names.svelte";
   import { threadIdOf } from "./thread-tabs";
 
-  /** The session, as the instance index holds it (references.ts `find`). */
+  /**
+   * The session, as the instance index holds it or the hub's names answered
+   * it (references.ts `find`, session-names.svelte.ts).
+   */
   let { id }: { id: string } = $props();
 
   const panelId = $props.id();
   const row = $derived(cawco.instanceIndex.byId.get(id));
   const thread = $derived(cawco.threadOf(id));
-  const title = $derived(sessionName(id));
+  /** The hub's answer, for a session this browser holds no row of. */
+  const named = $derived(row || thread ? undefined : namedSession(id));
+  const title = $derived(named ? named.title : sessionName(id));
+  const caw = $derived(
+    thread?.status ?? (named?.kind === "thread" ? named.state : null)
+  );
   const Sprite = $derived(sessionSprite(id));
 
   // A thread's card reads its messages as it opens.
@@ -61,8 +70,8 @@
     style:--mark-bg="var(--mark-{markHue(row?.cwd || id)})"
     data-box
   >
-    {#if thread}
-      <CawFace size={14} status={thread.status} />
+    {#if caw}
+      <CawFace size={14} status={caw} />
     {:else}
       <Sprite class="block size-icon-sm text-mark-glyph" />
     {/if}

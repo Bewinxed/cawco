@@ -10,7 +10,9 @@
    * have set it (dev's `__cawcoDebug`, set when client.svelte.ts loads,
    * which Composer imports ahead of this script). Its / menu holds two
    * skills and a built-in, which the field draws as chips (composer-chips);
-   * `window.__recall` holds the draft, and what was sent, in order.
+   * "@" names what the hub's names answer (`GET /api/find`, which a probe
+   * answers: session-mention); `window.__recall` holds the draft, and what
+   * was sent, in order.
    */
   import type { AvailableCommand } from "@cawco/core";
   import { blankSession, type SessionState } from "#lib/cawco/client.svelte.js";
@@ -88,6 +90,7 @@
   <Composer
     commands={COMMANDS}
     {draft}
+    mentionsFrom={ID}
     onstop={() => undefined}
     onsubmit={(text) => {
       sent.push(text);

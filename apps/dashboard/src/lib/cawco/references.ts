@@ -5,16 +5,15 @@
  * `REFERENCE_KINDS` and here, and nowhere else: the record is keyed by
  * that list, so a kind without its entry fails the type check.
  *
- * What a written link draws as (`referenceOf`): a known kind naming an id
- * the dashboard holds is that kind's element; a `cawco:` link of any other
- * kind, or naming an id the dashboard does not hold, is its label alone;
- * any other destination is a link.
+ * What a written link draws as (`referenceOf`): a known kind naming
+ * something the dashboard holds or the hub names is that kind's element; a
+ * `cawco:` link of any other kind, or naming nothing (or while the hub is
+ * asked), is its label alone; any other destination is a link.
  */
 import { parseReference, type ReferenceKind } from "@cawco/core";
 import type { Component } from "svelte";
-import { cawco } from "./client.svelte";
 import SessionReference from "./SessionReference.svelte";
-import { threadTabId } from "./thread-tabs";
+import { sessionNamed } from "./session-names.svelte";
 
 interface ReferenceElement {
   /** What draws it, given the id `find` answered. */
@@ -25,19 +24,14 @@ interface ReferenceElement {
 
 export const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
   /**
-   * A session, delegate, workflow run or Caw thread: a row of the instance
-   * index. A thread is written by its own id (hub caw.ts) and listed by its
-   * tab's, `thread:<id>` (thread-tabs.ts).
+   * A session, delegate, workflow run or Caw thread, by its full id, a
+   * short one or its handle (session-names.svelte.ts): a row of the
+   * instance index, else the session the hub's names hold. A thread is
+   * written by its own id (hub caw.ts) and listed by its tab's,
+   * `thread:<id>` (thread-tabs.ts).
    */
   session: {
-    find: (id) => {
-      const rows = cawco.instanceIndex.byId;
-      if (rows.has(id)) {
-        return id;
-      }
-      const thread = threadTabId(id);
-      return rows.has(thread) ? thread : null;
-    },
+    find: sessionNamed,
     // Read when drawn, not when this module loads: the element's own
     // imports reach the markdown that imports this registry.
     get element() {

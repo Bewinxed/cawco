@@ -24,7 +24,7 @@
     streaming?: boolean;
     /** Mounted streaming: each chunk's words fade in as they land. */
     fades?: boolean;
-    /** The person's own words: a skill they name is its chip. */
+    /** The person's own words: a skill they name is its chip, and so is every session they mention. */
     said?: boolean;
   } = $props();
 </script>

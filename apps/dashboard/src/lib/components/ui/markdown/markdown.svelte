@@ -29,7 +29,9 @@
     theme as streamdownTheme,
     type Theme,
   } from "svelte-streamdown";
+  import { markMentions } from "#lib/cawco/find/mention.svelte.js";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { outsideCode } from "#lib/cawco/outside-code.js";
   import { referenceOf } from "#lib/cawco/references.js";
   import SkillChip from "#lib/cawco/SkillChip.svelte";
   import {
@@ -67,7 +69,9 @@
     fades?: boolean;
     /**
      * The person's own words: each `/name` of a skill the session has is
-     * drawn as its chip (skill-chips.ts `markSkills`).
+     * drawn as its chip (skill-chips.ts `markSkills`), and every mention the
+     * composer wrote is a session's reference (mention.svelte.ts
+     * `markMentions`).
      */
     said?: boolean;
   } = $props();
@@ -160,9 +164,21 @@
     marked(streaming ? source.slice(0, source.search(/\S*$/)) : source)
   );
 
-  /** Words as drawn: the person's own with their skills marked. */
+  /**
+   * Words as drawn, outside their code: each mention a session's reference
+   * (mention.svelte.ts `markMentions`), and in the person's own each skill
+   * marked.
+   */
   function marked(words: string): string {
-    return said ? markSkills(words, skillWords(skills().keys())) : words;
+    // An agent's reply with no "@" holds no mention: drawn as written, with
+    // no walk of its lines on every chunk.
+    if (!(said || words.includes("@"))) {
+      return words;
+    }
+    const named = said ? skillWords(skills().keys()) : null;
+    return outsideCode(words, (run) =>
+      markMentions(run, said, (between) => markSkills(between, named))
+    );
   }
 
   /** A fence's opening or closing line: three or more backticks or tildes. */

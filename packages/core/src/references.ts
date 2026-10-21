@@ -20,6 +20,8 @@ const SCHEME = "cawco:";
 const REFERENCE = /^cawco:([a-z][a-z-]*)\/(.+)$/;
 /** What would end a link's label early. */
 const LABEL_SYNTAX = /[\\[\]]/g;
+/** What would end a link's destination early, past what `encodeURI` escapes. */
+const DESTINATION_SYNTAX = /[()]/g;
 
 /** A reference's markdown: `[label](cawco:<kind>/<id>)`. */
 export const referenceLink = (
@@ -27,9 +29,13 @@ export const referenceLink = (
   id: string,
   label: string
 ): string =>
-  `[${label.replace(/\s+/g, " ").trim().replace(LABEL_SYNTAX, "\\$&") || id}](${SCHEME}${kind}/${encodeURI(id)})`;
+  `[${label.replace(/\s+/g, " ").trim().replace(LABEL_SYNTAX, "\\$&") || id}](${SCHEME}${kind}/${encodeURI(id).replace(DESTINATION_SYNTAX, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)})`;
 
-/** A session, delegate or Caw thread named by its full id: its chip in the dashboard. */
+/**
+ * A session, delegate or Caw thread named by its full id (or, as the
+ * dashboard writes a mention, its handle `<dir>#<id8>`): its chip in the
+ * dashboard.
+ */
 export const sessionLink = (id: string, title: string): string =>
   referenceLink("session", id, title);
 

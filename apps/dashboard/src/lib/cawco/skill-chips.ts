@@ -58,41 +58,13 @@ export function skillWords(
   return new RegExp(`(?<=^|\\s)/(${list.join("|")})${after}`, "g");
 }
 
-/** A fence's opening or closing line (markdown.svelte's own). */
-const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
-/** A line cut at its code spans: every odd part is one. */
-const CODE_SPAN = /(`+[^`]*?`+)/;
-
 /**
- * The person's words with each `/name` of a skill the session has set as a
- * code span (`` `/name` ``), so the markdown draws it as the skill's chip
- * as it draws an agent's. Fenced code and code spans stay as written.
+ * Words of the person's (outside code, outside-code.ts) with each `/name`
+ * of a skill the session has set as a code span (`` `/name` ``), so the
+ * markdown draws it as the skill's chip as it draws an agent's.
  */
-export function markSkills(source: string, words: RegExp | null): string {
-  if (!words) {
-    return source;
-  }
-  let fence: string | null = null;
-  return source
-    .split("\n")
-    .map((line) => {
-      const marker = line.match(FENCE)?.[1];
-      if (marker && (fence === null || marker.startsWith(fence))) {
-        fence = fence === null ? marker : null;
-        return line;
-      }
-      if (fence !== null) {
-        return line;
-      }
-      return line
-        .split(CODE_SPAN)
-        .map((part, i) =>
-          i % 2 === 1 ? part : part.replace(words, (whole) => `\`${whole}\``)
-        )
-        .join("");
-    })
-    .join("\n");
-}
+export const markSkills = (words: string, skills: RegExp | null): string =>
+  skills ? words.replace(skills, (whole) => `\`${whole}\``) : words;
 
 const SKILLS = Symbol("skills");
 const NONE: ReadonlyMap<string, Skill> = new Map();

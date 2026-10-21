@@ -57,16 +57,38 @@
   import { IconAsk, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
   import { STOPPING_LABEL } from "./activity";
   import { isFailed } from "./client.svelte";
+  import { age, rowOf } from "./find/find-rows";
   import CawFace from "./home/CawFace.svelte";
   import { instanceTitle } from "./home/home-state.svelte";
   import { markHue, sessionSprite } from "./mark";
   import RunSteps from "./RunSteps.svelte";
+  import { type NamedSession, namedSession } from "./session-names.svelte";
   import DelegateTail, {
     type TailNote,
   } from "./transcript/DelegateTail.svelte";
   import { askDetailOf } from "./transcript/present";
 
   let { id, open }: { id: string; open?: string } = $props();
+
+  /** A session the hub's names answered for, in its state on the card's scale. */
+  const NAMED_TONE: Record<NamedSession["state"], Tone> = {
+    working: "live",
+    "needs-you": "needs",
+    idle: "idle",
+    sleeping: "idle",
+    ready: "idle",
+    unknown: "idle",
+    ended: "done",
+  };
+
+  /** What the hub's names say of a session this browser holds no row of: its state, its row's facts, its age. */
+  const factsOf = (answer: NamedSession): string => {
+    const now = Date.now();
+    const shown = rowOf(answer, now);
+    return [shown.state.word, ...shown.meta, age(answer.lastActivity, now)]
+      .filter(Boolean)
+      .join(" · ");
+  };
 
   /** A thread's newest line, as the card's tail ends on it. */
   const newestLine = (message: ThreadMessage | undefined): string | null => {
@@ -151,10 +173,15 @@
   };
 
   const row = $derived(cawco.instanceIndex.byId.get(id));
-  const tone = $derived(toneOf(id));
+  const thread = $derived(cawco.threadOf(id));
+  /** The hub's answer, for a session this browser holds no row of (session-names.svelte.ts). */
+  const named = $derived(row || thread ? undefined : namedSession(id));
+  const tone = $derived(named ? NAMED_TONE[named.state] : toneOf(id));
+  const caw = $derived(
+    thread?.status ?? (named?.kind === "thread" ? named.state : null)
+  );
   const Sprite = $derived(sessionSprite(id));
   const runId = $derived(runIdOf(id));
-  const thread = $derived(cawco.threadOf(id));
 </script>
 
 <div data-nest-host>
@@ -169,8 +196,8 @@
       style:--mark-bg="var(--mark-{markHue(row?.cwd || id)})"
       data-box
     >
-      {#if thread}
-        <CawFace size={14} status={thread.status} />
+      {#if caw}
+        <CawFace size={14} status={caw} />
       {:else}
         <Sprite />
       {/if}
@@ -178,7 +205,7 @@
     <span
       data-slot="title"
       class="min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap text-size-label font-medium text-ink-strong"
-      >{row ? instanceTitle(row) : "Session"}</span
+      >{row ? instanceTitle(row) : (named?.title ?? "Session")}</span
     >
     <span
       aria-label={WORD[tone]}
@@ -204,7 +231,13 @@
       {/if}
     </span>
   </div>
-  {#if thread}
+  {#if named}
+    <!-- A session this browser holds no row of (ended days ago, on another
+         machine): the facts the hub's names hold, its transcript unread. -->
+    <p data-slot="facts" class="min-w-0 truncate text-size-meta text-ink-muted">
+      {factsOf(named)}
+    </p>
+  {:else if thread}
     <!-- A thread's card: its newest line. -->
     {@const newest = cawco.threadMessagesOf(thread.id)?.at(-1)}
     {@const line = newestLine(newest)}
