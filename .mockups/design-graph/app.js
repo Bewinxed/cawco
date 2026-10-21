@@ -1,5 +1,5 @@
-// The design graph, round 21: the component on the page, its state machines as one graph in the panel, and
-// the kept move's choreography in the dock, editable.
+// The design graph, round 22: the component on the page, its state machines as one graph in the panel, and
+// the kept move's choreography in the dock, editable; on every screen (responsive-design.md).
 
 // ---- Glyphs ----
 const icon = (name, cls) => SOLAR[name].replace("<svg ", '<svg aria-hidden="true" focusable="false"' + (cls ? ' class="' + cls + '"' : "") + " ");
@@ -192,14 +192,46 @@ const views = { form: startAt(components[0], "save", "failed"), row: startAt(com
 let peek = null;
 let time = null; // the playhead in ms; null is the end of the move
 let playing = null, looping = false, scrubbing = false;
+// Compact screens: the face shown (graph | move), the drawer's stop (head | peek | full) and its height.
+let face = "graph", stop = "peek", drawerH = 0;
 const $ = (id) => document.getElementById(id);
 const comp = () => components.find((c) => c.id === tab);
 const machineOf = (c, id) => c.machines.find((m) => m.id === id);
 const stateOf = (m, id) => m.states.find((s) => s.id === id);
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-const phone = () => matchMedia("(width < 640px)").matches;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+// ---- The screen: the pane's class, its layout and its input (responsive-design.md, Frame) ----
+// Measured on the pane (this window), never the device: an iPad in a 50% split is a portrait tablet. Targets
+// size on any-pointer: coarse; hover behaviours key on (hover: hover).
+const BP = { short: 560, tablet: 640, desk: 900, wide: 1800, ultra: 2400 };
+const inputOf = () => (matchMedia("(any-pointer: coarse)").matches ? (matchMedia("(hover: hover)").matches ? "touch-hover" : "touch") : "fine");
+function screenOf(w, h, input) {
+  if (w < BP.tablet) return { screen: "phone-portrait", layout: "drawer" };
+  if (h < BP.short) return { screen: w < BP.desk ? "phone-landscape" : "short", layout: "sheet" };
+  if (w < BP.desk) return { screen: "tablet-portrait", layout: "drawer" };
+  if (w < BP.wide) return { screen: input === "fine" ? "desk" : "tablet-landscape", layout: "desk" };
+  return { screen: w < BP.ultra ? "wide" : "ultrawide", layout: "desk" };
+}
+let screen = null;
+// Sets html[data-screen], [data-layout] and [data-input]; answers whether the layout changed.
+function applyScreen() {
+  const input = inputOf(), s = screenOf(innerWidth, innerHeight, input), was = screen;
+  screen = { ...s, input };
+  rootEl.dataset.screen = s.screen; rootEl.dataset.layout = s.layout; rootEl.dataset.input = input;
+  return !was || was.layout !== s.layout;
+}
+const layoutIs = (l) => screen.layout === l;
+const compact = () => !layoutIs("desk");
+// A length token in px, whatever its unit (45dvh, 85vh): drawn once on a probe and measured.
+function lenOf(name) {
+  const p = document.createElement("div");
+  p.style.cssText = "position:absolute;visibility:hidden;inline-size:0;block-size:var(" + name + ")";
+  document.body.append(p); const h = p.getBoundingClientRect().height; p.remove();
+  return h;
+}
+applyScreen();
 
 // The page's fields: every machine's state applied in turn, the one in focus last so its words win.
 function fieldsOf(c, cur, top) {
@@ -416,25 +448,50 @@ function stateNode(m, it) {
   const t = document.createElement("b"); t.textContent = it.name; b.append(t);
   const d = document.createElement("p"); d.textContent = it.note; b.append(d);
   const enter = (vary) => { if (!hoverMatters(m.id, it.id, vary)) { if (peek) { peek = null; drawStage(); mark(); } return; } peek = { machine: m.id, state: it.id, vary }; drawStage(); mark(); };
-  b.onmouseenter = () => enter(varyOf(m.id, it.id));
-  b.onmouseleave = () => { peek = null; drawStage(); mark(); };
-  b.onclick = () => keep(m.id, it.id, varyOf(m.id, it.id));
+  const leave = () => { if (!peek) return; peek = null; drawStage(); mark(); };
+  hoverable(b, () => enter(varyOf(m.id, it.id)), leave);
+  pressable(b, () => enter(varyOf(m.id, it.id)), leave, () => keep(m.id, it.id, varyOf(m.id, it.id)));
   b.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); keep(m.id, it.id, varyOf(m.id, it.id)); } };
   if (it.vars) {
     const list = document.createElement("div"); list.className = "vars";
     it.vars.forEach((vv, i) => {
       const ch = document.createElement("button"); ch.className = "var"; ch.dataset.machine = m.id; ch.dataset.state = it.id; ch.dataset.vary = i; ch.dataset.label = vv.name; ch.textContent = vv.name;
-      ch.onmouseenter = () => enter(i);
-      ch.onclick = (e) => { e.stopPropagation(); keep(m.id, it.id, i); };
+      hoverable(ch, () => enter(i));
+      pressable(ch, () => enter(i), leave, () => keep(m.id, it.id, i));
       list.append(ch);
     });
     b.append(list);
   }
   return b;
 }
+// Hover previews on a pointer that hovers (a mouse, a trackpad, a hovering Pencil); a finger never hovers.
+function hoverable(el, on, off) {
+  el.addEventListener("pointerenter", (e) => { if (e.pointerType !== "touch") on(); });
+  if (off) el.addEventListener("pointerleave", (e) => { if (e.pointerType !== "touch") off(); });
+}
+// Pressing (touch and a Pencil's tip): a press held --dur-press-hold previews, as a hover does, until it lifts;
+// a tap keeps; a drag past 10px (a scroll) cancels both. A click from a mouse or a key keeps at once.
+function pressable(el, preview, unpreview, keepIt) {
+  el.addEventListener("pointerdown", (e) => {
+    el._noClick = false;
+    if (e.pointerType === "mouse") return;
+    e.stopPropagation();
+    const id = e.pointerId, x0 = e.clientX, y0 = e.clientY;
+    let shown = false, dead = false;
+    const timer = setTimeout(() => { shown = true; preview(); }, ms("--dur-press-hold"));
+    const off = () => { for (const [t, f] of [["pointermove", move], ["pointerup", done], ["pointercancel", done]]) removeEventListener(t, f, true); };
+    const move = (ev) => { if (ev.pointerId !== id || dead || Math.hypot(ev.clientX - x0, ev.clientY - y0) <= 10) return; dead = true; clearTimeout(timer); if (shown) { shown = false; unpreview(); } };
+    const done = (ev) => { if (ev.pointerId !== id) return; off(); clearTimeout(timer); el._noClick = ev.type === "pointerup" && (shown || dead); if (shown) unpreview(); };
+    for (const [t, f] of [["pointermove", move], ["pointerup", done], ["pointercancel", done]]) addEventListener(t, f, true);
+  });
+  el.addEventListener("click", (e) => { e.stopPropagation(); if (el._noClick) { el._noClick = false; return; } keepIt(); });
+  el.addEventListener("contextmenu", (e) => { if (screen.input !== "fine") e.preventDefault(); });
+}
 let zoom = 1, gw = 0, gh = 0;
 function drawGraph() {
   const c = comp(), graph = $("graph");
+  // A face out of view has no width; it draws when it comes back.
+  if (!graph.clientWidth) return;
   graph.innerHTML = "";
   const zoomer = document.createElement("div"); zoomer.className = "zoomer";
   const world = document.createElement("div"); world.className = "world";
@@ -444,9 +501,12 @@ function drawGraph() {
   zoomer.append(world); graph.append(zoomer);
   const margin = 10, room = graph.clientWidth - 2 * margin;
   // Two states side by side, the gap between them and their region's edges fit the graph's width, so the
-  // graph never opens with a state cut at its side (168px where there is room, 120px at least).
-  const chrome = 2 * (px("--space-2") + 1);
-  world.style.setProperty("--node-w", clamp(Math.floor((room - chrome - 22) / 2), 120, 168) + "px");
+  // graph never opens with a state cut at its side (168px where there is room, 120px at least). Where two
+  // machines fit side by side at that floor (the wide panel, a portrait tablet's drawer), each machine lays
+  // out in half the room, so two regions stand side by side.
+  const chrome = 2 * (px("--space-2") + 1), nodeMin = 120, gap = 22;
+  const mroom = room >= 2 * (2 * nodeMin + gap + chrome) + gap ? Math.floor((room - gap) / 2) : room;
+  world.style.setProperty("--node-w", clamp(Math.floor((mroom - chrome - gap) / 2), nodeMin, 168) + "px");
   const regions = {};
   c.machines.forEach((m, n) => {
     const r = document.createElement("section"); r.className = "region"; r.setAttribute("aria-label", m.name); r.dataset.machine = m.id;
@@ -456,7 +516,7 @@ function drawGraph() {
     const chrome = r.offsetWidth;
     const els = {};
     for (const it of m.states) { const b = stateNode(m, it); body.append(b); els[it.id] = b; }
-    const g = fitLayout(m.states.map((it) => ({ id: it.id, w: els[it.id].offsetWidth, h: els[it.id].offsetHeight })), m.edges, room - chrome, 0, { align: "UL" });
+    const g = fitLayout(m.states.map((it) => ({ id: it.id, w: els[it.id].offsetWidth, h: els[it.id].offsetHeight })), m.edges, mroom - chrome, 0, { align: "UL" });
     body.style.width = g.graph().width + "px"; body.style.height = g.graph().height + "px";
     for (const id of g.nodes()) { const p = g.node(id); els[id].style.left = p.x - p.width / 2 + "px"; els[id].style.top = p.y - p.height / 2 + "px"; }
     body.prepend(edgesSvg(g, "arrow-" + n));
@@ -479,15 +539,17 @@ function drawGraph() {
 }
 function applyZoom() {
   const zoomer = $("graph").querySelector(".zoomer");
+  if (!zoomer) return;
   zoomer.style.width = gw * zoom + "px"; zoomer.style.height = gh * zoom + "px";
   zoomer.firstChild.style.transform = "scale(" + zoom + ")";
   $("zoomLevel").textContent = Math.round(zoom * 100) + "%";
 }
-const setZoom = (z) => { zoom = clamp(z, 0.25, 1.6); applyZoom(); };
+const setZoom = (z, lo = 0.25) => { zoom = clamp(z, lo, 1.6); applyZoom(); };
 const fitZoom = () => { const g = $("graph"); zoom = clamp(Math.min((g.clientWidth - 8) / gw, (g.clientHeight - 8) / gh), 0.25, 1); applyZoom(); };
 // The kept state brought into view, with its from-node above it when there is room.
 function showKept() {
   const v = views[tab], g = $("graph");
+  if (!g.clientHeight) return;
   const el = g.querySelector('.node[data-machine="' + v.last + '"][data-state="' + v.cur[v.last].state + '"]');
   if (!el) return;
   const into = moveInto(comp(), v.last, v.cur[v.last].state);
@@ -544,6 +606,9 @@ function mark() {
   });
   document.querySelectorAll(".disc").forEach((d) => d.remove());
   updateDisc();
+  // The drawer's and the sheet's head name the kept state.
+  $("sheetState").textContent = stateOf(machineOf(comp(), v.last), v.cur[v.last].state).name;
+  labelHead();
 }
 // The disc rides the lit edge with the dock's playhead, one to one; shown while playing or scrubbing.
 function updateDisc() {
@@ -610,7 +675,9 @@ function readoutsHtml(e, c) {
 const anchorWords = (e, c) => (c.at.ref ? c.at.ref + " " + e.cur.concat(e.orig).find((x) => x.key === c.at.of).of : "");
 function buildDock() {
   const dock = $("dock"), km = keptMove();
-  if (!km) { dock.dataset.open = "false"; tl = null; placeDock(); return; }
+  const move = $("faces").querySelector('[data-face="move"]');
+  move.disabled = !km;
+  if (!km) { dock.dataset.open = "false"; tl = null; sizeDockRoom(); if (face === "move") setFace("graph"); return; }
   dock.dataset.open = String(panelOpen());
   dock.dataset.view = km.e.view;
   const m = machineOf(km.c, views[tab].last);
@@ -625,14 +692,16 @@ function buildDock() {
   html += '<div class="tl-row ruler-row"><div class="transport"><button class="tbtn" id="play" aria-label="Play">' + icon(ICON.play, "i-play") + icon(ICON.pause, "i-pause") + '</button><button class="tbtn" id="loop" aria-label="Loop" aria-pressed="' + looping + '">' + icon(ICON.loop) + '</button><span class="readout" id="readout"></span></div><div class="ruler" id="ruler"></div></div>';
   html += '<div class="rows" id="rows">' + km.clips.map((c) => '<div class="tl-row clip" data-key="' + c.key + '"><div class="clip-name"><p>' + esc(c.of) + " <span>" + esc(c.does) + '</span></p><div class="readouts">' + readoutsHtml(km.e, c) + '</div></div><div class="lane" data-key="' + c.key + '"><div class="ghost" hidden></div><div class="bar" role="button" tabindex="0" aria-pressed="false" data-key="' + c.key + '" aria-label="' + esc(c.of + " " + c.does) + '"' + (c.at.ref ? ' data-tip="' + esc(anchorWords(km.e, c)) + '"' : "") + '></div><div class="tail" hidden></div></div></div>').join("") + "</div>";
   html += '<div id="ties"></div><div class="playhead" id="playhead"></div></div>';
-  dock.innerHTML = html;
+  const refocus = pop && pop.inline && pop.el.contains(document.activeElement) ? document.activeElement.dataset.f : null;
+  $("dockBody").innerHTML = html;
   tl = { km };
+  if (pop && pop.inline) { attachInline(); if (refocus) { const f = pop.el.querySelector('[data-f="' + refocus + '"]'); if (f) f.focus({ preventScroll: true }); } }
   if (edited) { for (const b of dock.querySelectorAll("#compare .t-tab")) { b.setAttribute("aria-selected", String(b.dataset.view === km.e.view)); b.onclick = () => setView(b.dataset.view); } requestAnimationFrame(() => slidePill($("compare"), false)); $("resetAll").onclick = () => { if (commit(km.e, km.e.orig)) afterEdit(km, { replay: true }); }; }
   $("play").onclick = () => (playing ? stopPlay() : play());
   $("loop").onclick = () => { looping = !looping; $("loop").setAttribute("aria-pressed", String(looping)); if (looping && !playing) play(); };
   wireDock(km);
   layoutDock();
-  placeDock();
+  sizeDockRoom();
 }
 // A strip that scrolls fades the edge with more to scroll.
 function edgeFade(t) { const more = t.scrollWidth - t.clientWidth; if (more <= 1) { delete t.dataset.fade; return; } const s = t.scrollLeft > 1, e = t.scrollLeft < more - 1; t.dataset.fade = s && e ? "both" : s ? "start" : "end"; }
@@ -659,6 +728,8 @@ function setView(view) {
   play();
 }
 // Geometry: the lanes' x from time, from the first lane's box.
+// Stacked rows (a dock narrower than a name column and a lane): set by the dock's container query.
+const stacked = () => !!$("tl") && getComputedStyle($("tl")).getPropertyValue("--rows").trim() === "stacked";
 function laneGeo() {
   const lane = $("rows").querySelector(".lane"), tlb = $("tl").getBoundingClientRect(), lb = lane.getBoundingClientRect();
   return { x0: lb.left - tlb.left, w: lb.width, end: rulerEndOf(tl.km) };
@@ -668,6 +739,8 @@ function layoutDock(work) {
   if (!tl) return;
   const km = keptMove(); tl.km = km;
   const clips = work || km.clips, r = resolve(clips), e = km.e, g = laneGeo();
+  // A face out of view has no width; it lays out when it comes back.
+  if (!g.w) return;
   const ro = km.e.view === "original" ? null : resolve(e.orig);
   for (const c of clips) {
     const lane = $("rows").querySelector('.lane[data-key="' + c.key + '"]');
@@ -686,7 +759,9 @@ function layoutDock(work) {
   const total = lengthOf(r), endX = xOf(g, total);
   const area = $("endArea");
   area.style.left = endX + "px";
-  $("dock").querySelector(".ruler-row").style.background = "linear-gradient(to right, var(--surface-raised) " + endX + "px, var(--surface-recess-deep) 0)";
+  // Stacked, each lane and the ruler draw the end area themselves, from --end-x.
+  $("tl").style.setProperty("--end-x", endX - g.x0 + "px");
+  $("dock").querySelector(".ruler-row").style.background = stacked() ? "" : "linear-gradient(to right, var(--surface-raised) " + endX + "px, var(--surface-recess-deep) 0)";
   // The ruler: round times, every 100ms (50 under 300) where they fit, else the next step up a 1-2-5
   // ladder that leaves each label its own width and a half, plus --space-2, so no two ever meet.
   const ruler = $("ruler"), gap = px("--space-2");
@@ -708,18 +783,21 @@ function layoutDock(work) {
   updateTime();
 }
 // An anchored start draws its tie: a hairline from the anchor's edge to this bar's start, a foot at each end.
+// Stacked, the tie stays in its own lane: a hairline across the lane at the anchor, its foot along the lane's
+// middle to the bar's start, so it never crosses the names between two rows.
 function drawTies(clips, r, g) {
-  const tlb = $("tl").getBoundingClientRect(), html = [];
+  const tlb = $("tl").getBoundingClientRect(), html = [], st = stacked();
   for (const c of clips) {
     if (!c.at.ref) continue;
     const a = r[c.at.of], me = r[c.key];
     const aBar = $("rows").querySelector('.bar[data-key="' + c.at.of + '"]').getBoundingClientRect();
     const mBar = $("rows").querySelector('.bar[data-key="' + c.key + '"]').getBoundingClientRect();
     const ax = xOf(g, c.at.ref === "after" ? a.end : a.start), mx = xOf(g, me.start);
-    const y0 = aBar.top < mBar.top ? aBar.bottom - tlb.top : mBar.bottom - tlb.top;
-    const y1 = aBar.top < mBar.top ? mBar.top - tlb.top : aBar.top - tlb.top;
+    const y0 = st ? mBar.top - tlb.top : aBar.top < mBar.top ? aBar.bottom - tlb.top : mBar.bottom - tlb.top;
+    const y1 = st ? mBar.bottom - tlb.top : aBar.top < mBar.top ? mBar.top - tlb.top : aBar.top - tlb.top;
+    const foot = st ? Math.round((y0 + y1) / 2) : y1 - 1;
     html.push('<div class="tie" data-for="' + c.key + '" style="left:' + Math.round(ax) + "px;top:" + Math.min(y0, y1) + "px;height:" + Math.abs(y1 - y0) + 'px"></div>');
-    if (Math.abs(mx - ax) >= 1) html.push('<div class="tie" style="left:' + Math.min(ax, mx) + "px;top:" + (y1 - 1) + "px;height:1px;width:" + Math.abs(mx - ax) + 'px"></div>');
+    if (Math.abs(mx - ax) >= 1) html.push('<div class="tie" style="left:' + Math.min(ax, mx) + "px;top:" + foot + "px;height:1px;width:" + Math.abs(mx - ax) + 'px"></div>');
   }
   $("ties").innerHTML = html.join("");
 }
@@ -727,7 +805,9 @@ function updateTime() {
   if (!tl || !$("playhead")) return;
   const km = tl.km, r = km.r, total = playLengthOf(r), len = lengthOf(r), g = laneGeo();
   const t = time === null ? len : Math.min(time, total);
+  if (!g.w) return;
   $("playhead").style.left = xOf(g, Math.min(t, g.end)) + "px";
+  $("tl").style.setProperty("--ph-x", xOf(g, Math.min(t, g.end)) - g.x0 + "px");
   const rb = $("ruler").getBoundingClientRect(), tb = $("tl").getBoundingClientRect();
   $("playhead").style.setProperty("--ph-y", rb.bottom - tb.top - px("--space-1") / 2 + "px");
   $("readout").innerHTML = "<b>" + Math.round(t) + "</b> / " + Math.round(len) + " ms";
@@ -735,22 +815,20 @@ function updateTime() {
   $("play").setAttribute("aria-label", playing ? "Pause" : "Play");
   updateDisc();
 }
-function placeDock() {
-  const dock = $("dock"), wrap = document.querySelector(".stage-wrap");
-  const open = dock.dataset.open === "true" && !phone();
-  const need = px("--space-8") + wrap.offsetHeight + px("--space-5") + dock.offsetHeight + 2 * px("--space-5");
-  rootEl.toggleAttribute("data-stack", open && need > innerHeight);
-  sizeDockRoom();
-}
+// The page's room ends where the tool at its foot begins: the dock and its margins at a desk, the drawer.
 function sizeDockRoom() {
-  const dock = $("dock"), open = dock.dataset.open === "true" && !phone() && !rootEl.hasAttribute("data-stack");
-  rootEl.style.setProperty("--dock-room", open ? dock.offsetHeight + 2 * px("--space-5") + "px" : "0px");
+  let room = 0;
+  if (layoutIs("drawer")) room = drawerH;
+  else if (layoutIs("desk") && $("dock").dataset.open === "true") room = $("dock").offsetHeight + 2 * px("--space-5");
+  rootEl.style.setProperty("--dock-room", room + "px");
 }
 // Playback: the page plays the move from 0, once, or on a loop. A committed edit replays it once.
 function play() {
   const km = keptMove();
   if (!km) return;
   stopPlay();
+  // Play at full drops the drawer to peek, so the page is seen playing.
+  if (layoutIs("drawer") && stop === "full") setStop("peek");
   const total = playLengthOf(km.r);
   let start = null;
   const tick = (now) => {
@@ -800,11 +878,26 @@ function wireDock(km) {
   for (const bar of rows.querySelectorAll(".bar")) {
     bar.onpointermove = (e) => { if (bar.dataset.dragging || km.e.view === "original") return; const b = bar.getBoundingClientRect(), z = px("--bar-handle-zone"); const zone = e.clientX - b.left < z ? "start" : b.right - e.clientX < z ? "end" : ""; if (zone) bar.dataset.zone = zone; else delete bar.dataset.zone; };
     bar.onpointerleave = () => { delete bar.dataset.zone; };
-    bar.onpointerdown = (e) => barDown(bar, e);
+    bar.onpointerdown = (e) => barDown(bar, e, e.pointerType === "mouse" ? null : touchZone(bar, e.clientX));
     bar.onkeydown = (e) => barKey(bar, e);
   }
   // Empty lane space selects: a marquee.
-  for (const lane of rows.querySelectorAll(".lane")) lane.onpointerdown = (e) => { if (e.target.classList.contains("bar") || tl.km.e.view === "original") return; marquee(e); };
+  // Touch has no marquee: a press beside a selected bar's end takes that end (its 44px handle), else it
+  // clears the selection.
+  for (const lane of rows.querySelectorAll(".lane")) lane.onpointerdown = (e) => {
+    if (e.target.classList.contains("bar") || tl.km.e.view === "original") return;
+    if (e.pointerType !== "mouse") { const bar = lane.querySelector('.bar[aria-pressed="true"]'), z = bar && touchZone(bar, e.clientX); if (z) barDown(bar, e, z); else { tl.km.e.sel = new Set(); closePop(); layoutDock(); } return; }
+    marquee(e);
+  };
+}
+// A selected bar's end handles on touch: transparent, the touch floor wide, centred on each end. A bar
+// narrower than two handles keeps its middle third for moving it whole.
+function touchZone(bar, x) {
+  if (bar.getAttribute("aria-pressed") !== "true") return null;
+  const b = bar.getBoundingClientRect(), half = px("--c-touch-floor") / 2, ds = Math.abs(x - b.left), de = Math.abs(x - b.right);
+  if (Math.min(ds, de) > half) return null;
+  if (x > b.left && x < b.right && (b.width >= 2 * half ? x > b.left + half && x < b.right - half : Math.abs(x - (b.left + b.width / 2)) < b.width / 6)) return null;
+  return ds <= de ? "start" : "end";
 }
 function stopPlayKeepTime() { if (playing) { cancelAnimationFrame(playing); playing = null; } }
 function barClick(key, e, origin) {
@@ -818,10 +911,10 @@ function barClick(key, e, origin) {
   layoutDock();
   openPop(key, origin);
 }
-function barDown(bar, e) {
+function barDown(bar, e, touchEdge) {
   const km = keptMove();
   if (km.e.view === "original" || e.button !== 0) return;
-  const key = bar.dataset.key, zone = bar.dataset.zone || "body", x0 = e.clientX, g = laneGeo();
+  const key = bar.dataset.key, zone = touchEdge || bar.dataset.zone || "body", x0 = e.clientX, g = laneGeo();
   const base = clone(km.e.cur), r0 = resolve(base);
   let moved = false, work = base;
   bar.setPointerCapture(e.pointerId);
@@ -971,21 +1064,36 @@ function barKey(bar, e) {
 
 // ---- The clip popover (clip-popover-design.md) ----
 let pop = null;
-const popInset = () => (phone() ? px("--c-screen-margin") : px("--space-5"));
+const popInset = () => (compact() ? px("--c-screen-margin") : px("--space-5"));
+// The inline editor stands under its clip's row; a rebuilt dock takes it back there.
+function attachInline() {
+  const row = $("rows") && $("rows").querySelector('.clip[data-key="' + pop.key + '"]');
+  if (row && row.nextElementSibling !== pop.el) row.after(pop.el);
+}
+// While the inline editor unfolds or folds, the rows under it move: the lanes' marks follow, frame by frame.
+function followRows(anim) {
+  const step = () => { if (tl) layoutDock(); if (anim.playState === "running") requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+  anim.finished.then(() => { if (tl) layoutDock(); }, () => {});
+}
 function clipNow(key, work) { const km = keptMove(); return (work || km.e.cur).find((x) => x.key === key); }
 function openPop(key, origin) {
   const km = keptMove();
   if (!km || km.e.view === "original") return;
   if (pop && pop.key === key) { if (origin === "key") focusFirst(); return; }
   closePop(true);
-  const el = document.createElement("div");
-  el.className = "pop"; el.setAttribute("role", "dialog"); el.dataset.key = key;
-  document.body.append(el);
-  pop = { key, el, origin, held: false, committed: {} };
+  const el = document.createElement("div"), inline = stacked();
+  el.className = "pop" + (inline ? " inline" : ""); el.setAttribute("role", inline ? "group" : "dialog"); el.dataset.key = key;
+  pop = { key, el, origin, held: false, committed: {}, inline };
+  if (inline) attachInline(); else document.body.append(el);
   renderPop();
   placePop();
   el.setAttribute("aria-label", clipNow(key).of + " " + clipNow(key).does);
-  if (!reduced()) el.animate([{ opacity: 0, translate: "0 " + tok("--pop-rise"), scale: tok("--pop-scale") }, { opacity: 1, translate: "0 0", scale: 1 }], { duration: ms("--dur-pop"), easing: tok("--ease-drawer") });
+  if (inline) {
+    // It unfolds in place: its height from nothing, its words fading in.
+    const h = el.offsetHeight, frames = reduced() ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 0, height: "0px", marginBlockEnd: "0px" }, { opacity: 1, height: h + "px", marginBlockEnd: getComputedStyle(el).marginBlockEnd }];
+    followRows(el.animate(frames, { duration: ms("--dur-pop"), easing: tok("--ease-drawer") }));
+  } else if (!reduced()) el.animate([{ opacity: 0, translate: "0 " + tok("--pop-rise"), scale: tok("--pop-scale") }, { opacity: 1, translate: "0 0", scale: 1 }], { duration: ms("--dur-pop"), easing: tok("--ease-drawer") });
   else el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms("--dur-pop"), easing: tok("--ease-drawer") });
   if (origin === "key") focusFirst();
 }
@@ -993,9 +1101,16 @@ function focusFirst() { const i = pop.el.querySelector('input[data-f="at"]:not(:
 function closePop(instant) {
   closeMenu();
   if (!pop) return;
-  const el = pop.el; pop = null;
-  if (instant) { el.remove(); return; }
+  const el = pop.el, inline = pop.inline; pop = null;
+  if (instant) { el.remove(); if (inline && tl) layoutDock(); return; }
   el.style.pointerEvents = "none";
+  if (inline) {
+    const frames = reduced() ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 1, height: el.offsetHeight + "px" }, { opacity: 0, height: "0px", marginBlockEnd: "0px" }];
+    const a = el.animate(frames, { duration: ms("--dur-exit"), easing: tok("--ease-out"), fill: "forwards" });
+    a.finished.then(() => { el.remove(); if (tl) layoutDock(); }, () => {});
+    followRows(a);
+    return;
+  }
   // With reduced motion the kit's fade alone runs, open and close.
   const frames = reduced() ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 1, translate: "0 0", scale: 1 }, { opacity: 0, translate: "0 " + tok("--pop-rise"), scale: tok("--pop-scale") }];
   el.animate(frames, { duration: ms("--dur-exit"), easing: tok("--ease-out"), fill: "forwards" }).finished.then(() => el.remove());
@@ -1015,13 +1130,14 @@ function popPlace() {
   return { left, top, above, bottom: innerHeight - (b.top - gap) };
 }
 function placePop() {
+  if (pop.inline) { attachInline(); return; }
   const p = popPlace(); if (!p) return;
   const el = pop.el;
   el.style.left = p.left + "px";
   if (p.above) { el.style.top = "auto"; el.style.bottom = p.bottom + "px"; } else { el.style.bottom = "auto"; el.style.top = p.top + "px"; }
 }
 function movePop(from) {
-  if (!pop) return;
+  if (!pop || pop.inline) return;
   const r0 = from || pop.el.getBoundingClientRect();
   placePop();
   const r1 = pop.el.getBoundingClientRect();
@@ -1250,13 +1366,74 @@ function render(animateTab) {
   for (const b of $("tabs").querySelectorAll(".t-tab")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
   slidePill($("tabs"), !!animateTab);
   drawGraph(); drawStage(); keptSnap = snapStage(); mark(); buildDock(); drawDials(); showKept(); syncSashes();
+  slidePill($("faces"), false);
 }
+
+// ---- Compact screens: one surface, two faces, and the drawer's stops ----
+function setFace(f) {
+  if (f === "move" && !keptMove()) f = "graph";
+  const was = face; face = f; $("tools").dataset.face = f;
+  for (const b of $("faces").querySelectorAll(".t-tab")) b.setAttribute("aria-selected", String(b.dataset.face === f));
+  slidePill($("faces"), was !== f && !reduced());
+  if (was === f) return;
+  closePop(true);
+  // The face that comes back draws at its size.
+  if (f === "graph") { drawGraph(); mark(); showKept(); } else buildDock();
+}
+for (const b of $("faces").querySelectorAll(".t-tab")) b.onclick = () => setFace(b.dataset.face);
+// The stops: the head alone, peek (--c-graph-drawer-stop) and full (--c-sheet-max-h).
+const STOPS = ["head", "peek", "full"];
+const stopPx = (s) => (s === "head" ? $("sheetHead").offsetHeight + 1 : Math.round(lenOf(s === "full" ? "--c-sheet-max-h" : "--c-graph-drawer-stop")));
+function labelHead() { $("sheetTitle").setAttribute("aria-label", "Design graph, " + $("sheetState").textContent + (layoutIs("drawer") ? ". Drawer at " + stop + "; tap for the next stop" : "")); }
+function setDrawerH(h) { drawerH = Math.round(h); rootEl.style.setProperty("--drawer-h", drawerH + "px"); sizeDockRoom(); }
+function setStop(s) {
+  const was = stop; stop = s; $("tools").dataset.stop = s;
+  setDrawerH(stopPx(s));
+  labelHead();
+  // The graph's view follows the drawer's new height once it has settled.
+  if (was !== s && face === "graph") setTimeout(() => { if (stop === s && layoutIs("drawer")) showKept(); }, reduced() ? 0 : ms("--dur-panel"));
+}
+const nextStop = (dir) => STOPS[clamp(STOPS.indexOf(stop) + dir, 0, STOPS.length - 1)];
+// A tap on the head's title steps peek → full → head → peek; Up and Down step it by keys. In the side
+// sheet it brings the graph back to the kept state.
+$("sheetHead").addEventListener("click", (e) => {
+  if (e.target.closest(".faces, #sheetHide")) return;
+  if ($("sheetHead")._dragged) { $("sheetHead")._dragged = false; return; }
+  if (layoutIs("drawer")) setStop(stop === "peek" ? "full" : stop === "full" ? "head" : "peek");
+  else if (e.target.closest("#sheetTitle")) { setFace("graph"); showKept(); }
+});
+$("sheetTitle").onkeydown = (e) => { if (!layoutIs("drawer") || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return; e.preventDefault(); setStop(nextStop(e.key === "ArrowUp" ? 1 : -1)); };
+// Dragging the head moves the drawer with the finger; it settles on the nearest stop.
+$("sheetHead").addEventListener("pointerdown", (e) => {
+  const head = $("sheetHead");
+  if (!layoutIs("drawer") || e.button !== 0 || e.target.closest(".faces")) return;
+  const y0 = e.clientY, h0 = drawerH, lo = stopPx("head"), hi = stopPx("full");
+  let moved = false;
+  head.setPointerCapture(e.pointerId);
+  head.onpointermove = (ev) => { const dy = ev.clientY - y0; if (!moved && Math.abs(dy) < 6) return; if (!moved) { moved = true; rootEl.dataset.drawerDrag = ""; } setDrawerH(clamp(h0 - dy, lo, hi)); };
+  head.onpointerup = head.onpointercancel = () => {
+    head.onpointermove = head.onpointerup = head.onpointercancel = null;
+    delete rootEl.dataset.drawerDrag;
+    if (!moved) return;
+    head._dragged = true; setTimeout(() => { head._dragged = false; });
+    setStop(STOPS.slice().sort((a, b) => Math.abs(stopPx(a) - drawerH) - Math.abs(stopPx(b) - drawerH))[0]);
+  };
+});
 
 // ---- Resizing the panel: the width edge, the foot and the corner (resize-handle-design.md) ----
 const panel = $("panel");
-const widthFloor = () => px("--c-panel-w"), widthCeil = () => Math.round(innerWidth * 0.85);
+const widthFloor = () => px("--c-panel-w"), widthCeil = () => Math.round(Math.min(innerWidth, px("--c-review-max-w")) * 0.85);
 const graphFloor = () => { const g = $("graph"), r = g.querySelector(".region"), n = g.querySelector(".node"); return Math.ceil((r ? r.querySelector(".region-name").offsetHeight + px("--space-2") : 0) + (n ? n.offsetHeight : 0) + 2 * px("--space-2") + 2); };
 const graphCeil = () => Math.max(graphFloor(), innerHeight - 2 * px("--space-5") - (panel.offsetHeight - $("graph").offsetHeight));
+// The dock's height edge: its floor is its head, its ruler and one row, measured; its ceiling the room.
+function dockFloor() {
+  const d = $("dock"), head = d.querySelector(".dock-head"), ruler = d.querySelector(".ruler-row"), row = d.querySelector(".clip");
+  if (!head || !ruler) return 0;
+  const cs = getComputedStyle(d);
+  return Math.ceil(parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth) + head.offsetHeight + parseFloat(getComputedStyle(head).marginBottom) + ruler.offsetHeight + (row ? row.offsetHeight : 0));
+}
+const dockCeil = () => innerHeight - 2 * px("--space-5");
+function setDockH(h) { rootEl.style.setProperty("--dock-h", clamp(Math.round(h), dockFloor(), dockCeil()) + "px"); sizeDockRoom(); syncSashes(); }
 function setSize(w, h) {
   if (w != null) rootEl.style.setProperty("--panel-w", clamp(Math.round(w), widthFloor(), widthCeil()) + "px");
   if (h != null) rootEl.style.setProperty("--graph-h", clamp(Math.round(h), graphFloor(), graphCeil()) + "px");
@@ -1268,26 +1445,28 @@ function syncSashes() {
   set($("sashW"), w, widthFloor(), widthCeil());
   set($("sashH"), h, graphFloor(), graphCeil());
   set($("sashC"), w, widthFloor(), widthCeil(), w + " by " + h + " px");
+  set($("sashD"), $("dock").offsetHeight, dockFloor(), dockCeil());
 }
 function relayoutAfterResize() { drawGraph(); mark(); showKept(); if (tl) layoutDock(); sizeDockRoom(); if (pop) placePop(); }
-for (const sash of panel.querySelectorAll(".sash")) {
-  const edge = sash.dataset.edge;
-  sash.onpointerenter = () => { panel.dataset.edge = edge; };
-  sash.onfocus = () => { panel.dataset.edge = edge; };
+for (const sash of document.querySelectorAll(".sash")) {
+  const edge = sash.dataset.edge, owner = sash.closest(".tool");
+  sash.onpointerenter = () => { owner.dataset.edge = edge; };
+  sash.onfocus = () => { owner.dataset.edge = edge; };
   sash.onpointerdown = (e) => {
     e.preventDefault();
-    const x0 = e.clientX, y0 = e.clientY, w0 = panel.offsetWidth, h0 = $("graph").offsetHeight;
+    const x0 = e.clientX, y0 = e.clientY, w0 = panel.offsetWidth, h0 = $("graph").offsetHeight, d0 = $("dock").offsetHeight;
     sash.setPointerCapture(e.pointerId);
-    panel.dataset.edge = edge; panel.dataset.resizing = edge; rootEl.dataset.resizing = edge;
-    sash.onpointermove = (ev) => setSize(edge.includes("w") ? w0 + x0 - ev.clientX : null, edge.includes("h") ? h0 + ev.clientY - y0 : null);
-    sash.onpointerup = sash.onpointercancel = () => { sash.onpointermove = null; delete panel.dataset.resizing; delete rootEl.dataset.resizing; relayoutAfterResize(); };
+    owner.dataset.edge = edge; owner.dataset.resizing = edge; rootEl.dataset.resizing = edge;
+    sash.onpointermove = (ev) => { if (edge === "d") setDockH(d0 - (ev.clientY - y0)); else setSize(edge.includes("w") ? w0 + x0 - ev.clientX : null, edge.includes("h") ? h0 + ev.clientY - y0 : null); };
+    sash.onpointerup = sash.onpointercancel = () => { sash.onpointermove = null; delete owner.dataset.resizing; delete rootEl.dataset.resizing; relayoutAfterResize(); };
   };
   // The APG window splitter: arrows move the edge 8px, 32px with Shift; Home and End go to the floor and ceiling.
   let keyTimer = null;
   sash.onkeydown = (e) => {
-    const step = e.shiftKey ? 32 : 8, w = panel.offsetWidth, h = $("graph").offsetHeight;
-    let nw = null, nh = null;
-    if (edge.includes("w") && e.key === "ArrowLeft") nw = w + step;
+    const step = e.shiftKey ? 32 : 8, w = panel.offsetWidth, h = $("graph").offsetHeight, d = $("dock").offsetHeight;
+    let nw = null, nh = null, nd = null;
+    if (edge === "d") { if (e.key === "ArrowUp") nd = d + step; else if (e.key === "ArrowDown") nd = d - step; else if (e.key === "Home") nd = dockFloor(); else if (e.key === "End") nd = dockCeil(); else return; }
+    else if (edge.includes("w") && e.key === "ArrowLeft") nw = w + step;
     else if (edge.includes("w") && e.key === "ArrowRight") nw = w - step;
     else if (edge.includes("h") && e.key === "ArrowDown") nh = h + step;
     else if (edge.includes("h") && e.key === "ArrowUp") nh = h - step;
@@ -1295,10 +1474,10 @@ for (const sash of panel.querySelectorAll(".sash")) {
     else if (e.key === "End") { if (edge.includes("w")) nw = widthCeil(); if (edge.includes("h")) nh = graphCeil(); }
     else return;
     e.preventDefault();
-    panel.dataset.edge = edge; panel.dataset.resizing = edge;
-    setSize(nw, nh);
+    owner.dataset.edge = edge; owner.dataset.resizing = edge;
+    if (nd !== null) setDockH(nd); else setSize(nw, nh);
     clearTimeout(keyTimer);
-    keyTimer = setTimeout(() => { delete panel.dataset.resizing; relayoutAfterResize(); }, ms("--dur-control"));
+    keyTimer = setTimeout(() => { delete owner.dataset.resizing; relayoutAfterResize(); }, ms("--dur-control"));
   };
 }
 
@@ -1307,8 +1486,20 @@ $("zoomIn").onclick = () => setZoom(zoom * 1.2);
 $("zoomOut").onclick = () => setZoom(zoom / 1.2);
 $("zoomFit").onclick = () => fitZoom();
 $("graph").addEventListener("wheel", (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.1 : 0.9)); } }, { passive: false });
+// Touch: native scroll pans; two fingers pinch the zoom (0.5 to 1.6) about their midpoint.
+const pinch = { d0: 0, z0: 1 };
+const spread = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+$("graph").addEventListener("touchstart", (e) => { if (e.touches.length === 2) { pinch.d0 = spread(e.touches); pinch.z0 = zoom; } }, { passive: true });
+$("graph").addEventListener("touchmove", (e) => {
+  if (e.touches.length !== 2 || !pinch.d0) return;
+  e.preventDefault();
+  const g = $("graph"), b = g.getBoundingClientRect(), mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - b.left, my = (e.touches[0].clientY + e.touches[1].clientY) / 2 - b.top, z = zoom;
+  setZoom(clamp((pinch.z0 * spread(e.touches)) / pinch.d0, 0.5, 1.6), 0.5);
+  const k = zoom / z; g.scrollLeft = (g.scrollLeft + mx) * k - mx; g.scrollTop = (g.scrollTop + my) * k - my;
+}, { passive: false });
+$("graph").addEventListener("touchend", (e) => { if (e.touches.length < 2) pinch.d0 = 0; });
 $("graph").addEventListener("pointerdown", (e) => {
-  if (e.target.closest(".node")) return;
+  if (e.pointerType === "touch" || e.target.closest(".node")) return;
   const g = $("graph"), x0 = e.clientX, y0 = e.clientY, sl = g.scrollLeft, st = g.scrollTop;
   g.setPointerCapture(e.pointerId); g.classList.add("panning");
   g.onpointermove = (ev) => { g.scrollLeft = sl - (ev.clientX - x0); g.scrollTop = st - (ev.clientY - y0); };
@@ -1316,14 +1507,21 @@ $("graph").addEventListener("pointerdown", (e) => {
 });
 
 // ---- Hide and Show ----
+// At a desk Hide takes the panel and the dock away; the side sheet folds to its edge tab; the drawer
+// drops to its head.
 function setOpen(open) {
+  if (layoutIs("drawer")) { setStop(open ? "peek" : "head"); return; }
   panel.dataset.open = String(open);
+  rootEl.dataset.tools = open ? "open" : "hidden";
   $("show").hidden = open;
   if (!open) closePop(true);
   buildDock();
+  if (open && layoutIs("sheet")) { if (face === "graph") { drawGraph(); mark(); showKept(); } else buildDock(); }
 }
+const toolsOpen = () => (layoutIs("drawer") ? stop !== "head" : panelOpen());
 $("hide").onclick = () => { setOpen(false); $("show").focus(); };
-$("show").onclick = () => { setOpen(true); $("hide").focus(); };
+$("sheetHide").onclick = () => { setOpen(false); $("show").focus(); };
+$("show").onclick = () => { setOpen(true); (layoutIs("sheet") ? $("sheetHide") : $("hide")).focus(); };
 
 // ---- Keys ----
 const typing = (el) => el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
@@ -1339,7 +1537,7 @@ addEventListener("keydown", (e) => {
   }
   if (e.metaKey || e.ctrlKey || typing(document.activeElement)) return;
   if (e.key === "Escape" && pop && !menu) { e.preventDefault(); closeAndFocusBar(); return; }
-  if ((e.key === "h" || e.key === "H") && !e.altKey) { setOpen(!panelOpen()); return; }
+  if ((e.key === "h" || e.key === "H") && !e.altKey) { setOpen(!toolsOpen()); return; }
   if (!km || !tl) return;
   if (e.key === " " && !(document.activeElement && (document.activeElement.tagName === "BUTTON" || (document.activeElement.closest && document.activeElement.closest(".panel, .pop, .menu, .show"))))) { e.preventDefault(); playing ? stopPlay() : play(); }
   else if (e.key === "Home" && !e.target.closest(".sash")) { stopPlayKeepTime(); time = 0; drawStage(); updateTime(); }
@@ -1348,6 +1546,20 @@ addEventListener("keydown", (e) => {
 });
 
 new ResizeObserver(() => sizeDockRoom()).observe($("dock"));
-addEventListener("resize", () => { render(); });
+// A new size can be a new class: its layout is set first, then everything draws at it. A dragged dock height
+// stays inside the new room; the drawer's stop is re-measured on the new height.
+function onResize() {
+  if (applyScreen()) { closePop(true); stopPlay(); if (layoutIs("desk")) $("tools").dataset.face = face = "graph"; }
+  if (layoutIs("drawer")) setStop(stop);
+  if (layoutIs("desk") && rootEl.style.getPropertyValue("--dock-h")) setDockH(parseFloat(rootEl.style.getPropertyValue("--dock-h")));
+  if (layoutIs("drawer")) panel.dataset.open = "true";
+  rootEl.dataset.tools = panelOpen() ? "open" : "hidden";
+  $("show").hidden = panelOpen();
+  render();
+}
+addEventListener("resize", onResize);
+rootEl.dataset.tools = "open";
+if (layoutIs("drawer")) setStop("peek");
+setFace("graph");
 render();
-document.fonts.ready.then(() => render());
+document.fonts.ready.then(() => { if (layoutIs("drawer")) setStop(stop); render(); });
