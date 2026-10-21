@@ -4,6 +4,7 @@
 @layer mockup {
 :root {
   color-scheme: light dark;
+  scrollbar-gutter: stable;
   /* resize-handle-design.md, "New, in the JSON first". */
   --c-edge-grip-len: 36px;
   --c-edge-hit: var(--space-3);
@@ -22,6 +23,10 @@ button { font: inherit; color: inherit; }
    and nothing the tool does moves it. */
 .page { position: fixed; inset-block: 0 var(--dock-room, 0px); inset-inline: 0 calc(var(--panel-w, 448px) + 2 * var(--space-5)); overflow: auto; overscroll-behavior: contain; padding: var(--space-8) var(--space-5); display: grid; justify-items: center; align-content: start; }
 .stage-wrap { position: relative; inline-size: min(100%, 600px); }
+/* When the component and the dock don't both fit the height, the dock stands under the component in the
+   page's flow instead of over it, and the page scrolls; the component keeps its place and its width. */
+html[data-stack] .page { position: static; inset: auto; overflow: visible; padding-inline-end: calc(var(--panel-w, 448px) + 3 * var(--space-5)); }
+html[data-stack] .dock { position: relative; inset: auto; max-block-size: none; margin: 0 calc(var(--panel-w, 448px) + 2 * var(--space-5)) var(--space-5) var(--space-5); }
 .frame { padding: var(--space-6); border: 1px solid var(--border-control); border-radius: calc(var(--mock-radius, 8px) + var(--space-1)); background: var(--surface-raised); box-shadow: var(--shadow-tile); }
 .frame label { display: block; margin: 0 0 var(--space-1); font: var(--type-meta); color: var(--ink-muted); }
 .field { margin-block-end: var(--space-3); min-inline-size: 0; }
@@ -53,8 +58,11 @@ button { font: inherit; color: inherit; }
    a wash over every value that came in or changed, and one where a value went, at its old box. */
 .marks { position: absolute; inset: 0; pointer-events: none; }
 .wash { position: absolute; opacity: 0; transition: opacity var(--dur-control) var(--ease-out); }
-.wash.add { background: var(--diff-add-bg); }
-.wash.del { background: var(--diff-del-bg); }
+/* The wash is the fill; a 1px edge in its own hue's mark ink carries it at 3:1 against the field (the diff
+   tints alone are 1.2:1). data-ok and data-bad are success-9's and error-9's hues; error-9 itself measures
+   2.99:1 on its wash at night. */
+.wash.add { background: var(--diff-add-bg); box-shadow: inset 0 0 0 1px var(--data-ok); }
+.wash.del { background: var(--diff-del-bg); box-shadow: inset 0 0 0 1px var(--data-bad); }
 .wash.in { opacity: 1; }
 
 /* ---- The tool: the house floating panel ---- */
@@ -62,7 +70,8 @@ button { font: inherit; color: inherit; }
 .tool :focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 .panel { inset-block-start: var(--space-5); inset-inline-end: var(--space-5); inline-size: var(--panel-w, 448px); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border-radius: var(--radius-panel); padding: var(--space-2); }
 /* One row over the graph: the components' tabs, then the graph's zoom and Hide at the trailing end. */
-.toolbar { display: flex; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
+/* It wraps (zoom and Hide to a line of their own, at the end) before the tabs would be cut. */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
 .bar-end { display: flex; align-items: center; gap: var(--space-1); margin-inline-start: auto; flex: none; }
 .graph { position: relative; flex: 0 1 auto; min-block-size: 0; block-size: var(--graph-h, 520px); overflow: auto; overscroll-behavior: contain; cursor: grab; border-radius: calc(var(--radius-panel) - var(--space-2)); background: var(--surface-well); border: 1px solid var(--border-well); }
 .graph.panning { cursor: grabbing; }
@@ -81,7 +90,7 @@ button { font: inherit; color: inherit; }
 .world svg text { paint-order: stroke; stroke: var(--surface-well); stroke-width: 4px; stroke-linejoin: round; font: var(--type-meta); fill: var(--ink-muted); }
 .world svg .disc { fill: var(--brand-ink-strong); }
 /* A state: three tiers and one meaning for coral (clarity §1). */
-.node { position: absolute; inline-size: 168px; display: flex; flex-direction: column; gap: var(--space-row); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); cursor: pointer; transition: var(--transition-control); }
+.node { position: absolute; inline-size: var(--node-w, 168px); display: flex; flex-direction: column; gap: var(--space-row); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface-raised); border: 1px solid var(--border-control); box-shadow: var(--shadow-tile); cursor: pointer; transition: var(--transition-control); }
 .node b { font: var(--type-label); color: var(--ink-strong); }
 .node p { margin: 0; font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
 @media (hover: hover) { .node:not(.kept, .cur):hover, .node.peek:not(.kept, .cur) { background: var(--surface-hover); } }
@@ -383,10 +392,11 @@ html[data-dragging="edge"], html[data-dragging="edge"] * { cursor: ew-resize !im
   .tool[data-open="false"] { display: none; }
   .sash-w, .sash-c, .edge-pill-w, .corner-l { display: none; }
   .show { position: static; margin: 0 var(--c-screen-margin) var(--c-screen-margin); }
-  /* The dock's rows stack: the name and its readouts over the lane, which runs the dock's width. */
-  .tl-row { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-2); }
-  .lanes-col, .lane { grid-column: 1; }
-  .clip-name p { padding-inline-end: 0; }
+  /* The dock keeps its two columns, halved: the lanes stay clear of every name and readout, and the
+     readouts take a line each. */
+  .tl-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .readouts { flex-direction: column; align-items: flex-start; }
+  .readouts-break { display: none; }
   .pop { inline-size: calc(100vw - 2 * var(--c-screen-margin)); }
   /* The head keeps a line for the edit controls, so the first edit never grows the dock. */
   .dock-head { flex-wrap: wrap; }

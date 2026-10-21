@@ -431,6 +431,10 @@ function drawGraph() {
   const world = document.createElement("div"); world.className = "world";
   zoomer.append(world); graph.append(zoomer);
   const margin = 10, room = graph.clientWidth - 2 * margin;
+  // Two states side by side, the gap between them and their region's edges fit the graph's width, so the
+  // graph never opens with a state cut at its side (168px where there is room, 120px at least).
+  const chrome = 2 * (px("--space-2") + 1);
+  world.style.setProperty("--node-w", clamp(Math.floor((room - chrome - 22) / 2), 120, 168) + "px");
   const regions = {};
   c.machines.forEach((m, n) => {
     const r = document.createElement("section"); r.className = "region"; r.setAttribute("aria-label", m.name); r.dataset.machine = m.id;
@@ -477,9 +481,28 @@ function showKept() {
   const into = moveInto(comp(), v.last, v.cur[v.last].state);
   const fromEl = into ? g.querySelector('.node[data-machine="' + v.last + '"][data-state="' + into.from + '"]') : null;
   const box = g.getBoundingClientRect(), n = el.getBoundingClientRect(), r = el.closest(".region").getBoundingClientRect();
-  const at = (y) => y - box.top + g.scrollTop, pad = px("--space-2");
+  const at = (y) => y - box.top - g.clientTop + g.scrollTop, pad = px("--space-2");
   const topWant = Math.min(at(r.top) - pad, fromEl ? at(fromEl.getBoundingClientRect().top) - pad : Infinity, at(n.top) - pad);
-  g.scrollTop = Math.max(at(n.bottom) + pad - g.clientHeight, topWant);
+  const want = Math.max(at(n.bottom) + pad - g.clientHeight, topWant);
+  // Where the view's edges would cut a state or a machine's name, the nearest scroll that cuts none and still
+  // shows the kept state whole.
+  const H = g.clientHeight;
+  let max = g.scrollHeight - H;
+  const boxes = [...g.querySelectorAll(".node, .region-name")].map((el) => { const b = el.getBoundingClientRect(); return [at(b.top), at(b.bottom)]; });
+  const cuts = (s) => boxes.some(([t, b]) => (t < s - 0.5 && b > s + 0.5) || (t < s + H - 0.5 && b > s + H + 0.5));
+  const keeps = (s) => at(n.top) >= s - 0.5 && at(n.bottom) <= s + H + 0.5;
+  const cands = [want, 0, max];
+  for (const [t, b] of boxes) cands.push(t - pad, t, b + pad - H, b - H, b + pad, t - pad - H + (b - t));
+  // Scroll offsets land on whole pixels, so each candidate is tried rounded down and up.
+  const pick = (limit) => cands.flatMap((s) => [Math.floor(s), Math.ceil(s)]).map((s) => clamp(s, 0, Math.max(0, Math.floor(limit)))).filter((s) => !cuts(s) && keeps(s)).sort((a, b) => Math.abs(a - want) - Math.abs(b - want))[0];
+  let best = pick(max);
+  // Where no view of the content as drawn shows the kept state whole and cuts nothing, the well gets room
+  // past its last machine, so the view can open lower.
+  if (best === undefined) {
+    best = pick(Infinity);
+    if (best !== undefined && best > max) { const tail = document.createElement("div"); tail.className = "graph-tail"; tail.style.blockSize = Math.ceil(best - max) + "px"; g.append(tail); max = g.scrollHeight - H; }
+  }
+  g.scrollTop = best ?? want;
   g.scrollLeft += n.left + n.width / 2 - (box.left + box.width / 2);
 }
 // Three tiers: the kept state (coral), every other machine's current state, and the rest.
@@ -573,7 +596,7 @@ function readoutsHtml(e, c) {
 const anchorWords = (e, c) => (c.at.ref ? c.at.ref + " " + e.cur.concat(e.orig).find((x) => x.key === c.at.of).of : "");
 function buildDock() {
   const dock = $("dock"), km = keptMove();
-  if (!km) { dock.dataset.open = "false"; tl = null; sizeDockRoom(); return; }
+  if (!km) { dock.dataset.open = "false"; tl = null; placeDock(); return; }
   dock.dataset.open = String(panelOpen());
   dock.dataset.view = km.e.view;
   const m = machineOf(km.c, views[tab].last);
@@ -595,7 +618,7 @@ function buildDock() {
   $("loop").onclick = () => { looping = !looping; $("loop").setAttribute("aria-pressed", String(looping)); if (looping && !playing) play(); };
   wireDock(km);
   layoutDock();
-  sizeDockRoom();
+  placeDock();
 }
 // A strip that scrolls fades the edge with more to scroll.
 function edgeFade(t) { const more = t.scrollWidth - t.clientWidth; if (more <= 1) { delete t.dataset.fade; return; } const s = t.scrollLeft > 1, e = t.scrollLeft < more - 1; t.dataset.fade = s && e ? "both" : s ? "start" : "end"; }
@@ -649,7 +672,7 @@ function layoutDock(work) {
   const total = lengthOf(r), endX = xOf(g, total);
   const area = $("endArea");
   area.style.left = endX + "px";
-  $("dock").querySelector(".ruler-row").style.background = "linear-gradient(to right, var(--surface-raised) " + endX + "px, var(--border-row-outline) " + endX + "px " + (endX + 1) + "px, var(--surface-recess-deep) " + (endX + 1) + "px)";
+  $("dock").querySelector(".ruler-row").style.background = "linear-gradient(to right, var(--surface-raised) " + endX + "px, var(--surface-recess-deep) 0)";
   // The ruler: round times, every 100ms (50 under 300), mono, to the ruler's end.
   const step = total < 300 ? 50 : 100, ruler = $("ruler");
   const marks = [];
@@ -687,8 +710,15 @@ function updateTime() {
   $("play").setAttribute("aria-label", playing ? "Pause" : "Play");
   updateDisc();
 }
+function placeDock() {
+  const dock = $("dock"), wrap = document.querySelector(".stage-wrap");
+  const open = dock.dataset.open === "true" && !phone();
+  const need = px("--space-8") + wrap.offsetHeight + px("--space-5") + dock.offsetHeight + 2 * px("--space-5");
+  rootEl.toggleAttribute("data-stack", open && need > innerHeight);
+  sizeDockRoom();
+}
 function sizeDockRoom() {
-  const dock = $("dock"), open = dock.dataset.open === "true" && !phone();
+  const dock = $("dock"), open = dock.dataset.open === "true" && !phone() && !rootEl.hasAttribute("data-stack");
   rootEl.style.setProperty("--dock-room", open ? dock.offsetHeight + 2 * px("--space-5") + "px" : "0px");
 }
 // Playback: the page plays the move from 0, once, or on a loop. A committed edit replays it once.
@@ -939,9 +969,11 @@ function closePop(instant) {
   closeMenu();
   if (!pop) return;
   const el = pop.el; pop = null;
-  if (instant || reduced()) { el.remove(); return; }
+  if (instant) { el.remove(); return; }
   el.style.pointerEvents = "none";
-  el.animate([{ opacity: 1, translate: "0 0", scale: 1 }, { opacity: 0, translate: "0 " + tok("--pop-rise"), scale: tok("--pop-scale") }], { duration: ms("--dur-exit"), easing: tok("--ease-out"), fill: "forwards" }).finished.then(() => el.remove());
+  // With reduced motion the kit's fade alone runs, open and close.
+  const frames = reduced() ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 1, translate: "0 0", scale: 1 }, { opacity: 0, translate: "0 " + tok("--pop-rise"), scale: tok("--pop-scale") }];
+  el.animate(frames, { duration: ms("--dur-exit"), easing: tok("--ease-out"), fill: "forwards" }).finished.then(() => el.remove());
 }
 // Where it stands: 4px above its bar, its start on the bar's start, slid along the row inside the viewport;
 // below the bar's row only when the room above is shorter than it.
