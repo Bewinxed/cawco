@@ -35,7 +35,8 @@ const CLASS = { "phone-portrait": "phone-portrait", "tablet-portrait": "tablet-p
 const browser = await chromium.launch({ executablePath: CHROME });
 {
   const V = "page 1100";
-  const ctx = await browser.newContext({ viewport: { width: 1100, height: 2600 }, deviceScaleFactor: 1 });
+  // Tall enough that every frame is on screen, so all eight loops run at once.
+  const ctx = await browser.newContext({ viewport: { width: 1100, height: 9000 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
@@ -95,7 +96,7 @@ const browser = await chromium.launch({ executablePath: CHROME });
 }
 {
   const V = "page reduced";
-  const ctx = await browser.newContext({ viewport: { width: 1100, height: 2600 }, reducedMotion: "reduce", deviceScaleFactor: 1 });
+  const ctx = await browser.newContext({ viewport: { width: 1100, height: 9000 }, reducedMotion: "reduce", deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
@@ -108,6 +109,28 @@ const browser = await chromium.launch({ executablePath: CHROME });
   ok(V, "under reduced motion nothing moves: no loop runs, each frame rests on its key scene", r.running === 0 && !r.live && r.states.every((s, i) => s === r2[i]), "running " + r.running + "; " + r.states.map((s) => s.slice(0, 90)).join(" | "));
   await page.screenshot({ path: join(CAPS, "screens-reduced.jpg"), type: "jpeg", quality: 80, fullPage: true });
   ok(V, "no page errors", errors.length === 0, errors.join(" | "));
+  await ctx.close();
+}
+// r26 B4 and B5, at a desk's width and a phone's: every frame stands whole inside its card (its row scrolls
+// sideways where it is wider), and no frame draws its words under 10px.
+for (const [V, width] of [["page 1100", 1100], ["page 390", 390]]) {
+  const ctx = await browser.newContext({ viewport: { width, height: 900 }, deviceScaleFactor: 1 });
+  const page = await ctx.newPage();
+  await page.goto(URL_);
+  await page.waitForFunction(() => [...document.querySelectorAll(".ds-shot")].every((f) => f.style.getPropertyValue("--ds-min-s") && f.querySelector("iframe").contentWindow.__dg), null, { timeout: 30000 });
+  await page.waitForTimeout(300);
+  const r = await page.evaluate(() => {
+    const card = document.querySelector(".dp-card").getBoundingClientRect(), mk = document.querySelector(".mk").getBoundingClientRect();
+    return [...document.querySelectorAll(".ds-shot")].map((f) => {
+      const d = f.querySelector(".ds-device").getBoundingClientRect(), sc = f.querySelector(".ds-scroll"), sb = sc.getBoundingClientRect(), s = +getComputedStyle(f).getPropertyValue("--ds-s"), fd = f.querySelector("iframe").contentDocument;
+      let min = Infinity;
+      for (const el of fd.querySelectorAll("body *")) { if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue; const cs = fd.defaultView.getComputedStyle(el); if (cs.display === "none" || cs.visibility === "hidden" || !el.getBoundingClientRect().width) continue; min = Math.min(min, parseFloat(cs.fontSize)); }
+      const left = d.left - sb.left + sc.scrollLeft, right = d.right - sb.left + sc.scrollLeft;
+      return { loop: f.dataset.loop, drawn: Math.round(min * s * 100) / 100, whole: d.top >= card.top - 0.5 && d.bottom <= card.bottom + 0.5 && d.top >= mk.top - 0.5 && left >= -0.5 && right <= sc.scrollWidth + 0.5, scrolls: sc.scrollWidth > sc.clientWidth + 1 };
+    });
+  });
+  ok(V, "r26 B4: every frame stands whole inside its card (top to bottom, and across within its row's scroll)", r.every((x) => x.whole), r.map((x) => x.loop + (x.whole ? "" : " CUT")).join(", "));
+  ok(V, "r26 B5: no frame draws its words under 10px; a frame too wide at that size scrolls sideways in its row", r.every((x) => x.drawn >= 10 - 0.01), r.map((x) => x.loop + " " + x.drawn + "px" + (x.scrolls ? " (scrolls)" : "")).join(", "));
   await ctx.close();
 }
 await browser.close();
