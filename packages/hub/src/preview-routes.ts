@@ -8,6 +8,7 @@
  * preview origin.
  */
 import { PREVIEW_NAMES_PATH, type PreviewNames } from "@cawco/core/browser";
+import { PREVIEW_REACH_API } from "@cawco/core/preview-reach";
 import type { ServerWebSocket } from "bun";
 import { Elysia, t } from "elysia";
 import type { ArtifactSocket } from "./artifacts/sync";
@@ -65,6 +66,14 @@ export const previewRoutes = (deps: {
             return refused(error);
           }
         }
+      )
+      // Whether the hub reaches a preview origin itself now, which this
+      // browser didn't (core preview-reach.ts): the pane says which side
+      // fails.
+      .get(
+        PREVIEW_REACH_API,
+        { query: t.Object({ origin: t.String({ maxLength: 300 }) }) },
+        ({ query }) => deps.listeners.reach(query.origin)
       )
       // A session's preview origin, its listener started when it has none.
       .post("/api/instances/:id/preview-address", ({ params }) => {

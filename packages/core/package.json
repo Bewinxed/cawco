@@ -12,6 +12,7 @@
     "./css-layers": "./src/css-layers.ts",
     "./at-most": "./src/at-most.ts",
     "./bounded": "./src/bounded.ts",
+    "./preview-reach": "./src/preview-reach.ts",
     "./machine-path": "./src/machine-path.ts",
     "./capabilities": "./src/capabilities.ts",
     "./release-manifest": "./src/release-manifest.ts",

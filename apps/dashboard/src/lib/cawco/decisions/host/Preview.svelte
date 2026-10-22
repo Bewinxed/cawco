@@ -17,12 +17,22 @@
   words where it would stand.
 -->
 <script lang="ts">
+  import {
+    askHubReach,
+    PREVIEW_REACH_PATH,
+    type PreviewWays,
+    previewsNeedWords,
+    previewUnreachedWords,
+    probePreview,
+  } from "@cawco/core/preview-reach";
   import { CANVAS_EMBED_SIZE, canvasEmbedUrl } from "@cawco/core/stage";
   import {
     type FrameObserver,
     frameObserver,
   } from "#lib/cawco/frame-observer.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { IconRefresh } from "#lib/icons.js";
   import cawDark from "../../../../../../../packages/hub/skills/decision-page/kit/caw/dark-working.webp";
   import cawLight from "../../../../../../../packages/hub/skills/decision-page/kit/caw/light-working.webp";
   import { dur } from "../../motion/curves.svelte";
@@ -90,12 +100,15 @@
   $effect(() => () => watch?.disconnect());
 
   /**
-   * How often, and how many times, an embed's origin is asked whether it
-   * serves yet: once a second for 30 seconds. Our call: long enough for a
-   * dev server's cold start, short enough that a dead one is said.
+   * How often an embed's origin is asked whether it serves yet, and for how
+   * long an answer that it doesn't (a status: its server still starting)
+   * is waited out: once a second for 30 seconds. Our call: long enough for a
+   * dev server's cold start, short enough that a dead one is said. Any other
+   * failure is this browser's side or the hub's, said at once (core
+   * preview-reach.ts).
    */
   const PING_MS = 1000;
-  const PINGS = 30;
+  const START_MS = 30_000;
   /** `--dur-wait-grace` in ms, in the unit host.css writes it (motion `dur`: its minifier writes `1000ms` as `1s`): a wait shows nothing before it (DESIGN.md, The Real Wait Rule). */
   const grace = () => dur("--dur-wait-grace");
   /**
@@ -105,14 +118,15 @@
    * the frame would hold the browser's own error page for good.
    */
   let ready = $state<string | null>(null);
-  let waited = $state(false);
+  /** The ready frame finished loading: until then the wait stands over it, so no empty box shows. */
+  let drawn = $state(false);
   /**
-   * It stands at its own shape: a screen once its origin serves, a
+   * It stands at its own shape: a screen once its frame has loaded, a
    * component canvas once it has said its height (every Preview of a
    * canvas by that one rule, the first as the rest), never at a screen's
-   * 16:10 while it hasn't.
+   * 16:10 while it hasn't. Until then its wait stands.
    */
-  const shaped = $derived(screen ? ready !== null : tall !== null);
+  const shaped = $derived(screen ? drawn : tall !== null);
   /** What its frame's shape is now, for a reader: a screen's 16:10, drawn at the height its canvas said, or waiting for that. */
   const shape = $derived.by(() => {
     if (!shaped) {
@@ -120,12 +134,32 @@
     }
     return tall === null ? "screen" : "drawn";
   });
-  /** The wait has outlasted `--dur-wait-grace`: its line may show. */
+  /** Why the origin can't be reached, in the shared classifier's words (core `previewUnreachedWords`). */
+  let failed = $state<string | null>(null);
+  /** The wait has outlasted `--dur-wait-grace`: its line, or the failure, may show. */
   let slow = $state(false);
+  /** Each Try again asks the origin again from the start. */
+  let attempt = $state(0);
+  let asking = $state(false);
+  /** How this hub's previews are reached, as its reach answer says it (core `PreviewWays`); unknown until the hub was asked. */
+  let ways: PreviewWays | null = null;
+  /** What previews need from this browser: a host-mode name stands on another host than this page's; a port on this one. */
+  const previewsNeed = (at: URL) =>
+    at.hostname === location.hostname
+      ? previewsNeedWords({
+          byHost: false,
+          hostname: at.hostname,
+          ports: ways?.ports ?? null,
+          hostMode: ways?.hostMode ?? false,
+        })
+      : previewsNeedWords({ byHost: true, host: at.host });
   $effect(() => {
     const embed = held?.embed;
+    // biome-ignore lint/complexity/noVoid: read-only dependency — each Try again asks again
+    void attempt;
     ready = null;
-    waited = false;
+    drawn = false;
+    failed = null;
     slow = false;
     if (!embed) {
       return;
@@ -136,41 +170,52 @@
     const after = setTimeout(() => {
       slow = true;
     }, grace());
-    const ping = new URL("/__cawco/ping", embed).href;
+    const at = new URL(embed);
+    const deadline = Date.now() + START_MS;
+    asking = true;
     (async () => {
-      for (let tries = 0; tries < PINGS && !gone; tries += 1) {
+      for (;;) {
         // biome-ignore lint/performance/noAwaitInLoops: one ask a second until the origin serves, never several at once
-        const ok = await fetch(ping, { cache: "no-store" }).then(
-          (answer) => answer.ok,
-          () => false
+        const why = await probePreview(at.origin, (origin) =>
+          askHubReach(
+            `${PREVIEW_REACH_PATH}?origin=${encodeURIComponent(origin)}`,
+            (heard) => {
+              ways = heard;
+            }
+          )
         );
-        if (ok) {
-          if (!gone) {
-            ready = address;
-          }
+        if (gone) {
+          return;
+        }
+        if (!why) {
+          ready = address;
+          asking = false;
+          return;
+        }
+        if (why.cause !== "status" || Date.now() >= deadline) {
+          failed = previewUnreachedWords(at.host, why, previewsNeed(at));
+          asking = false;
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, PING_MS));
       }
-      if (!gone) {
-        waited = true;
-      }
     })();
     return () => {
       gone = true;
+      asking = false;
       clearTimeout(after);
     };
   });
 
-  /** What the embed's status says: nothing until the wait outlasts its grace, nothing once it serves. */
+  /** What the embed's status says: nothing until the wait outlasts its grace, nothing once it stands at its shape or failed. */
   const waitLine = $derived.by(() => {
-    if (!held?.embed || shaped || !slow) {
+    if (!held?.embed || shaped || failed || !slow) {
       return "";
     }
-    return waited
-      ? `The ${held.kind} ${held.name} isn't answering; reload the page once it runs.`
-      : `Opening the ${held.kind} ${held.name}…`;
+    return `Opening the ${held.kind} ${held.name}…`;
   });
+  /** The failure stands once the grace is over: inside it the wait shows nothing of its own. */
+  const fault = $derived(slow ? failed : null);
 </script>
 
 <Well
@@ -193,54 +238,99 @@
       title={held.name}
     ></iframe>
   {:else if held?.embed}
-    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it says it is one status row, a skeleton of its line before the grace, its frame loading at no height above it. Past the grace Caw and the wait's line stand in the row (The Real Wait Rule), over the screen's place; once it stands at its shape, the row stands over the frame, empty. The live region is the row's one line throughout. -->
+    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it says it is one status row, a skeleton of its line before the grace, its frame loading at no height above it. Past the grace Caw and the wait's line stand in the row (The Real Wait Rule), over the screen's place, until it stands at its shape (a screen's frame loaded, a canvas's height said); then the row stands over the frame, empty. An origin that can't be reached says why in its place past the grace, with Try again: never an empty box. The live region is the row's one line throughout. -->
     <div class="relative w-full">
-      {#if ready}
-        <iframe
-          bind:this={frame}
-          class={[
-            "block w-full rounded-xs border-0 bg-surface-page",
-            tall === null &&
-              (screen ? "aspect-16/10 max-h-c-media-max-h" : "h-0"),
-          ]}
-          data-cawco-artifact={id}
-          data-shape={shape}
-          data-slot="embed"
-          src={ready}
-          style:block-size={tall === null ? undefined : `${tall}px`}
-          title={held.name}
-        ></iframe>
-      {:else if screen}
-        {#if slow}
-          <div class="aspect-16/10 max-h-c-media-max-h w-full"></div>
-        {:else}
-          <Skeleton class="w-full" height="picture" />
-        {/if}
-      {/if}
-      <div
-        class={[
-          "mark-line flex items-center justify-center gap-space-2",
-          screen || shaped
-            ? "pointer-events-none absolute inset-0"
-            : "min-h-c-btn-h-lg",
-        ]}
-        data-slot="wait-row"
-      >
-        {#if !(shaped || slow || screen)}
-          <Skeleton data-box line="meta" width="title" />
-        {/if}
-        {#if slow && !waited && !shaped}
-          <img
-            alt=""
-            height="40"
-            src={scheme.now === "dark" ? cawDark : cawLight}
-            width="40"
+      {#if fault}
+        <div
+          class="flex w-full flex-col items-center justify-center gap-space-2 py-space-4 text-center"
+          data-slot="embed-fault"
+          role="alert"
+        >
+          <p class="type-label text-ink-strong wrap-anywhere">
+            The {held.kind}
+            {held.name} can't be reached.
+          </p>
+          <p
+            class="type-meta text-status-fail-ink wrap-anywhere"
+            data-slot="embed-cause"
+          >
+            {fault}
+          </p>
+          <Button
+            icon={IconRefresh}
+            label="Try again"
+            onclick={() => {
+              attempt += 1;
+            }}
+            pending={asking}
+            pendingLabel="Trying again…"
+            size="sm"
+            variant="outline"
           />
+        </div>
+      {:else}
+        {#if ready}
+          <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load says the frame is drawn, so the wait stands until then. -->
+          <iframe
+            bind:this={frame}
+            class={[
+              "block w-full rounded-xs border-0 bg-surface-page transition-opacity duration-(--dur-fade)",
+              tall === null &&
+                (screen ? "aspect-16/10 max-h-c-media-max-h" : "h-0"),
+              !drawn && "opacity-0",
+            ]}
+            data-cawco-artifact={id}
+            data-drawn={drawn || undefined}
+            data-shape={shape}
+            data-slot="embed"
+            onload={() => {
+              drawn = true;
+            }}
+            src={ready}
+            style:block-size={tall === null ? undefined : `${tall}px`}
+            title={held.name}
+          ></iframe>
+          {#if !(shaped || slow) && screen}
+            <!-- Inside the grace, the screen's skeleton over the frame still loading. -->
+            <div class="absolute inset-0">
+              <Skeleton class="w-full" height="picture" />
+            </div>
+          {/if}
+        {:else if screen}
+          {#if slow}
+            <div class="aspect-16/10 max-h-c-media-max-h w-full"></div>
+          {:else}
+            <Skeleton class="w-full" height="picture" />
+          {/if}
         {/if}
-        <p class="type-meta min-w-0 text-ink-muted wrap-anywhere" role="status">
-          {waitLine}
-        </p>
-      </div>
+        <div
+          class={[
+            "mark-line flex items-center justify-center gap-space-2",
+            screen || shaped
+              ? "pointer-events-none absolute inset-0"
+              : "min-h-c-btn-h-lg",
+          ]}
+          data-slot="wait-row"
+        >
+          {#if !(shaped || slow || screen)}
+            <Skeleton data-box line="meta" width="title" />
+          {/if}
+          {#if slow && !shaped}
+            <img
+              alt=""
+              height="40"
+              src={scheme.now === "dark" ? cawDark : cawLight}
+              width="40"
+            />
+          {/if}
+          <p
+            class="type-meta min-w-0 text-ink-muted wrap-anywhere"
+            role="status"
+          >
+            {waitLine}
+          </p>
+        </div>
+      {/if}
     </div>
   {:else}
     <!-- One line in its well where the preview would stand, never a slab of its size. -->

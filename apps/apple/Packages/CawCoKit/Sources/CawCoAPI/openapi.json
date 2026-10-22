@@ -87,6 +87,44 @@
         }
       }
     },
+    "/api/preview-reach": {
+      "get": {
+        "parameters": [
+          {
+            "name": "origin",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "maxLength": 300,
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiPreviewReach",
+        "responses": {
+          "200": {
+            "description": "getApiPreviewReach 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubReach"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiPreviewReach 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/preview-address": {
       "post": {
         "parameters": [
@@ -34288,6 +34326,43 @@
           "at",
           "id",
           "state"
+        ]
+      },
+      "HubReach": {
+        "description": "The hub's own try of the origin's ping, now: answered by CawCo's listener, or why not.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "reached": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              }
+            },
+            "required": [
+              "reached"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "reached": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "reached",
+              "why"
+            ]
+          }
         ]
       },
       "PreviewAddress": {

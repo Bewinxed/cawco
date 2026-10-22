@@ -4,7 +4,6 @@
     hostModeDomain,
     machineLabel,
     PREVIEW_LOCKED_MESSAGE,
-    PREVIEW_PING_PATH,
     type PreviewDown,
     type PreviewSettings,
     previewRoute,
@@ -13,7 +12,6 @@
     type ShownFailure,
     sheetWords,
   } from "@cawco/core";
-  import { readWithin } from "@cawco/core/bounded";
   import {
     type ChangedItem,
     newAnswer,
@@ -24,6 +22,13 @@
     previewMode,
   } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
+  import {
+    askHubReach,
+    PREVIEW_REACH_API,
+    previewsNeedWords,
+    previewUnreachedWords,
+    probePreview,
+  } from "@cawco/core/preview-reach";
   import {
     STAGE_CLONE_MS,
     STAGE_READY_MS,
@@ -362,23 +367,22 @@
    * Whether this tab reaches the preview's origin (its `/__cawco/ping`,
    * which answers any page with no credentials, and answers 502 with the
    * hub's words when the session's machine listener doesn't answer the hub),
-   * before the frame loads. Unreached, the pane says what failed, what
-   * previews need and where to switch how they are reached, and probes again
-   * by itself (`PROBE_FIRST_MS`, doubling to `PROBE_MOST_MS`, and at once
-   * when its tab is back in view) until one answers: never a fallback. Once
-   * reached, the frame loads, once.
+   * before the frame loads. Unreached, the pane says what failed by its own
+   * cause (core preview-reach.ts: offline, refused at once, no answer in
+   * time, answered without its CORS header, a status, and whether the hub
+   * itself reaches the origin), the fix, and probes again by itself
+   * (`PROBE_FIRST_MS`, doubling to `PROBE_MOST_MS`, and at once when its tab
+   * is back in view) until one answers: never a fallback. Once reached, the
+   * frame loads, once.
    */
   let reached = $state<
     | { origin: string; ok: true }
-    | { origin: string; ok: false; said: string; hub: boolean; tries: number }
+    | { origin: string; ok: false; said: string; tries: number }
     | null
   >(null);
   /** Each one probes the origin again: Try again's press, the backoff's timer, the tab back in view. */
   let probe = $state(0);
   let probing = $state(false);
-  let previewsNeedFor = $state({ origin: "", said: "" });
-  /** Our call: a probe that hasn't answered in 10 s is a failed one, and the next goes on the backoff. */
-  const PROBE_ANSWER_MS = 10_000;
   /** Our calls: the first probe again 2 s after a failure, doubling to every 30 s. */
   const PROBE_FIRST_MS = 2000;
   const PROBE_MOST_MS = 30_000;
@@ -391,15 +395,18 @@
     }
     let live = true;
     probing = true;
-    pingOrigin(origin).then(async (failed) => {
+    probePreview(origin, (asked) =>
+      askHubReach(`${PREVIEW_REACH_API}?origin=${encodeURIComponent(asked)}`)
+    ).then(async (failed) => {
+      const said = failed
+        ? previewUnreachedWords(
+            new URL(origin).host,
+            failed,
+            await previewsNeed(origin)
+          )
+        : "";
       if (!live) {
         return;
-      }
-      if (failed && !failed.hub && previewsNeedFor.origin !== origin) {
-        previewsNeedFor = { origin, said: await previewsNeed(origin) };
-        if (!live) {
-          return;
-        }
       }
       probing = false;
       const was = untrack(() => reached);
@@ -407,7 +414,7 @@
         ? {
             origin,
             ok: false,
-            ...failed,
+            said,
             tries: was?.origin === origin && !was.ok ? was.tries + 1 : 1,
           }
         : { origin, ok: true };
@@ -444,62 +451,24 @@
     reached && !reached.ok && reached.origin === paneOrigin ? reached : null
   );
   const unreached = $derived(!!paneOrigin && !!unreachedBy);
-  /**
-   * What `origin`'s probe failed on, after its host: no answer, a status,
-   * or the hub's own words (`hub`, so the origin itself was reached); null
-   * when it answered ok.
-   */
-  async function pingOrigin(
-    origin: string
-  ): Promise<{ said: string; hub: boolean } | null> {
-    const { host } = new URL(origin);
-    const read = await readWithin(PROBE_ANSWER_MS, (signal) =>
-      fetch(`${origin}${PREVIEW_PING_PATH}`, {
-        mode: "cors",
-        credentials: "omit",
-        cache: "no-store",
-        signal,
-      })
-    ).catch(() => null);
-    if (read?.kind !== "answered") {
-      return {
-        said: read
-          ? `${host} didn't answer within ${PROBE_ANSWER_MS / 1000} s`
-          : `${host} didn't answer`,
-        hub: false,
-      };
-    }
-    const answer = read.value;
-    if (answer.ok) {
-      return null;
-    }
-    const why = await answer
-      .json()
-      .then((body: { why?: unknown }) =>
-        typeof body?.why === "string"
-          ? body.why.replace(TRAILING_STOP, "")
-          : null
-      )
-      .catch(() => null);
-    return why
-      ? { said: `${host} answered ${answer.status}: ${why}`, hub: true }
-      : { said: `${host} answered ${answer.status}`, hub: false };
-  }
-  const TRAILING_STOP = /\.$/;
-  /** What previews need to be reached from this tab, by the route it took. */
+  /** What previews need to be reached from this tab, by the route it took (core `previewsNeedWords`); the hub's port range read once. */
+  let portsRead: Promise<PreviewSettings | null> | null = null;
   async function previewsNeed(origin: string): Promise<string> {
     if (byHost) {
-      return `Previews need ${new URL(origin).host} to reach the hub, or switch previews to ports`;
+      return previewsNeedWords({ byHost: true, host: new URL(origin).host });
     }
-    const settings = await fetch("/api/preview-settings")
+    portsRead ??= fetch("/api/preview-settings")
       .then((answer) =>
         answer.ok ? (answer.json() as Promise<PreviewSettings>) : null
       )
       .catch(() => null);
-    const ports = `Previews need ports ${settings?.ports ?? "of the hub's range"} reachable on ${location.hostname}`;
-    return settings?.mode === "host"
-      ? ports
-      : `${ports}, or switch previews to a hostname pattern`;
+    const settings = await portsRead;
+    return previewsNeedWords({
+      byHost: false,
+      hostname: location.hostname,
+      ports: settings?.ports ?? null,
+      hostMode: settings?.mode === "host",
+    });
   }
   const artifact = $derived(preview?.artifact);
   const frameKey = $derived(`${preview?.revision}:${reload}`);
@@ -3222,9 +3191,8 @@
       bind:this={canvasSlot}
     ></div>
   {:else if unreached}
-    <!-- This tab can't reach the preview's own origin: what failed, what
-         previews need unless the hub itself answered, and where to switch
-         how they are reached. -->
+    <!-- This tab can't reach the preview's own origin: what failed, by its
+         own cause, its fix, and where to switch how previews are reached. -->
     <div
       data-slot="down"
       class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
@@ -3233,8 +3201,7 @@
     >
       <EmptyState icon={IconAlert} title="This preview can't be reached">
         {#snippet line()}
-          {unreachedBy?.said}.
-          {#if !unreachedBy?.hub && previewsNeedFor.origin === paneOrigin}{previewsNeedFor.said}.{/if}
+          {unreachedBy?.said}
           Trying again on its own.
         {/snippet}
         {#snippet action()}

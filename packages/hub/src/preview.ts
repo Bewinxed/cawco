@@ -40,6 +40,11 @@ import {
   versionAssets,
   versionedFile,
 } from "@cawco/core/preview-proxy";
+import {
+  type HubReach,
+  PREVIEW_PING_HEADER,
+  PREVIEW_REACH_PATH,
+} from "@cawco/core/preview-reach";
 import type { StageState } from "@cawco/core/stage";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
@@ -528,8 +533,10 @@ const ping = (): Response =>
   new Response("ok", {
     headers: {
       "access-control-allow-origin": "*",
+      "access-control-expose-headers": PREVIEW_PING_HEADER,
       "cache-control": "no-store",
       "content-type": "text/plain",
+      [PREVIEW_PING_HEADER]: "1",
     },
   });
 
@@ -541,7 +548,9 @@ const pingFailed = (why: string): Response =>
       status: 502,
       headers: {
         "access-control-allow-origin": "*",
+        "access-control-expose-headers": PREVIEW_PING_HEADER,
         "cache-control": "no-store",
+        [PREVIEW_PING_HEADER]: "1",
       },
     }
   );
@@ -1118,6 +1127,17 @@ export function createPreviewListeners(
       if (stopped) {
         return framedBy(stopped, ancestorsOf(instanceId));
       }
+      // A page served here (a decision page) asks whether the hub reaches
+      // one of its embeds' origins, which this browser didn't.
+      const asked = new URL(request.url);
+      if (asked.pathname === PREVIEW_REACH_PATH) {
+        return Response.json({
+          ...(await reachOrigin(asked.searchParams.get("origin") ?? "")),
+          // What the page can't read from the hub's API, for its words.
+          ports: PREVIEW_PORTS_TEXT,
+          hostMode: settings.mode === "host",
+        });
+      }
       // Port mode: every listener is one session's, so a route names it.
       if (!instanceId) {
         previewFailed(
@@ -1171,6 +1191,58 @@ export function createPreviewListeners(
         return plain.stop(true);
       },
     };
+  };
+
+  /**
+   * Whether the hub reaches `origin`'s ping itself now, as a browser asks it
+   * (core preview-reach.ts): the origin must be one of this hub's previews,
+   * a port of its range or a name under host mode's domain, and only its
+   * ping is asked. Reached is CawCo's own answer, which carries
+   * `PREVIEW_PING_HEADER`; anything else that answered (a proxy, a CDN's
+   * own page) is said with its status.
+   */
+  const reachOrigin = async (origin: string): Promise<HubReach> => {
+    let at: URL;
+    try {
+      at = new URL(origin);
+    } catch {
+      return { reached: false, why: "not an origin" };
+    }
+    const port = Number(at.port);
+    const ours =
+      (at.protocol === "http:" || at.protocol === "https:") &&
+      ((port >= PREVIEW_PORTS.first && port <= PREVIEW_PORTS.last) ||
+        (!!hostPattern &&
+          (at.hostname === hostPattern.domain ||
+            at.hostname.endsWith(`.${hostPattern.domain}`))));
+    if (!ours) {
+      return { reached: false, why: "not one of this hub's preview origins" };
+    }
+    try {
+      const read = await readWithin(PING_RELAY_MS, (signal) =>
+        fetch(`${at.origin}${PREVIEW_PING_PATH}`, {
+          cache: "no-store",
+          redirect: "manual",
+          signal,
+        })
+      );
+      if (read.kind !== "answered") {
+        return {
+          reached: false,
+          why: `no answer within ${PING_RELAY_MS / 1000} s`,
+        };
+      }
+      const answer = read.value;
+      await answer.body?.cancel();
+      return answer.headers.get(PREVIEW_PING_HEADER) === "1"
+        ? { reached: true }
+        : {
+            reached: false,
+            why: `something other than CawCo answered it ${answer.status}`,
+          };
+    } catch (thrown) {
+      return { reached: false, why: causeOf(thrown) };
+    }
   };
 
   let settings = db.settings();
@@ -1600,6 +1672,9 @@ export function createPreviewListeners(
 
     /** The origin's owner ended (a session, a project): its listener stops and its port is free again. */
     release,
+
+    /** Whether the hub reaches a preview origin's ping itself now ({@link reachOrigin}). */
+    reach: reachOrigin,
 
     /**
      * Host mode's names as a browser's resolver takes them (Chromium's
