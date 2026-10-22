@@ -4653,13 +4653,19 @@ export const SURFACES: Surface[] = [
       },
       {
         // Its pairing asked of a hub it can't reach just then: "Pairing
-        // didn't start", and the reason opened whole.
+        // didn't start", and the reason opened whole. A tab that holds no
+        // code yet: the route's first load started one and kept it in the
+        // tab's storage, which a reload shows again rather than asking anew
+        // (hub-auth.svelte.ts `resumePairing`, since 57846636c).
         name: "start-failed",
         hub: "pairing",
         act: async (page) => {
-          await reloadedWith((p) =>
-            p.route(PAIR_START, (route) => route.abort("connectionrefused"))
-          )(page);
+          await reloadedWith(async (p) => {
+            await p.route(PAIR_START, (route) =>
+              route.abort("connectionrefused")
+            );
+            await p.evaluate(() => window.sessionStorage.clear());
+          })(page);
           await page.getByTitle("Show the whole error").first().click();
         },
         root: "body",
