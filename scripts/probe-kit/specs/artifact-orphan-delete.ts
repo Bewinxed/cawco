@@ -17,7 +17,8 @@
  *   naming who deletes it: the writer, the sessions up its tree, the person;
  * - (c) the parent discards the workspace (a carry holds the commit), and the
  *   child can no longer act: the parent's handoff to it is refused naming
- *   the discard;
+ *   the discard; the discard's answer names the page the child left, by
+ *   link and id, and says artifact_delete removes it from here;
  * - (d) the outsider is still refused, with the same words;
  * - (e) the parent's artifact_delete succeeds, and the page is gone.
  *
@@ -261,6 +262,15 @@ const run = async (kit: Kit) => {
         `its workspace ${started.workspaceId} was discarded`
       ),
     `discard: ${discarded.text.slice(0, 300)}; handoff: ${handoff.text.slice(0, 600)}`
+  );
+  check(
+    "(c) the discard's answer names the page the child left, by its link and id, and says artifact_delete removes it from here",
+    discarded.text.includes(`cawco:artifact/${page.id}`) &&
+      discarded.text.includes(`(page ${page.id})`) &&
+      discarded.text.includes(
+        "Their sessions can no longer act, so artifact_delete removes them from here."
+      ),
+    discarded.text.slice(0, 900)
   );
 
   // (d) The outsider is refused still.

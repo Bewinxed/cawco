@@ -137,6 +137,7 @@ import {
   archiveRefusal,
   artifactCommentsNotice,
   artifactHandedNotice,
+  artifactLink,
   artifactResponsesNotice,
   asLastErrorKind,
   atProviderLimit,
@@ -12230,6 +12231,55 @@ export const createServer = (
     }
     return { machineId, workspace: workspace.id, result: answer.result };
   };
+  /**
+   * Whether a session can no longer act, ever: no one can give it a turn
+   * again, the person included. What refuses even their words for good,
+   * never a refusal they could clear (a sign-in, a machine coming back, a
+   * mode to pick). Its artifacts are then deleted up its delegation tree
+   * (artifacts/service.ts `deletable`).
+   */
+  const stranded = (instance: InstanceRow): boolean => {
+    if (relaunchOf(instance).kind === "refused") {
+      return true;
+    }
+    const refused = workItems.refusal(instance, { kind: "human" })?.refusal
+      .kind;
+    return refused === "workspace-archived" || refused === "item-superseded";
+  };
+  /**
+   * What `discard_workspace` answers past its carry: the artifacts the
+   * workspace's sessions still hold in their panels, each by its link and
+   * id, and who removes them now. Empty when they hold none.
+   */
+  const leftoverWords = (workspaceId: string, from: string): string => {
+    const sessions = db
+      .getInstancesByIds([
+        ...new Set(
+          db
+            .workItemsIn(workspaceId)
+            .flatMap((item) =>
+              item.instanceId && item.instanceId !== from
+                ? [item.instanceId]
+                : []
+            )
+        ),
+      ])
+      .flatMap((session) =>
+        db.artifacts.ofInstance(session.id).map((row) => ({ row, session }))
+      );
+    if (sessions.length === 0) {
+      return "";
+    }
+    const listed = sessions
+      .map(
+        ({ row }) => `${artifactLink(row.id, row.name)} (${row.kind} ${row.id})`
+      )
+      .join(", ");
+    const now = sessions.every(({ session }) => stranded(session));
+    return now
+      ? ` Its delegates left ${sessions.length === 1 ? "this artifact" : `these ${sessions.length} artifacts`} in the person's panel: ${listed}. Their sessions can no longer act, so artifact_delete removes them from here.`
+      : ` Its delegates left ${sessions.length === 1 ? "this artifact" : `these ${sessions.length} artifacts`} in the person's panel: ${listed}. Their sessions can still act, as a handoff cuts their workspace again: a handoff to each asks it to delete what it left.`;
+  };
   const artifacts: Artifacts = createArtifacts({
     // The panel closes at once; a preview's machine that can't stop its
     // listener now drops it when it next registers (reconcilePreviews).
@@ -12259,17 +12309,7 @@ export const createServer = (
     instance: (id) => db.getInstancesByIds([id])[0],
     ended: (instance) =>
       !!inputRefusal(instance.id, { kind: "system", name: ARTIFACT_ORIGIN }),
-    // No one can give it a turn again, the person included: what refuses
-    // even their words for good, never a refusal they could clear (a
-    // sign-in, a machine coming back, a mode to pick).
-    stranded: (instance) => {
-      if (relaunchOf(instance).kind === "refused") {
-        return true;
-      }
-      const refused = workItems.refusal(instance, { kind: "human" })?.refusal
-        .kind;
-      return refused === "workspace-archived" || refused === "item-superseded";
-    },
+    stranded,
     // Caw answers the pins of his project's sessions whose writer ended, and
     // reads every page of his project (decisions.ts).
     ledProjects: (instance) =>
@@ -29674,9 +29714,11 @@ export const createServer = (
             );
             workspaceArchived(workspace);
             return {
-              text: carry
-                ? `Discarded workspace ${workspace.id}: what it held that was nowhere else is in the carry ${carry} on its machine, and its clone is gone.`
-                : `Archived workspace ${workspace.id}: it held nothing that is nowhere else, so no carry was written, and its clone is gone.`,
+              text: `${
+                carry
+                  ? `Discarded workspace ${workspace.id}: what it held that was nowhere else is in the carry ${carry} on its machine, and its clone is gone.`
+                  : `Archived workspace ${workspace.id}: it held nothing that is nowhere else, so no carry was written, and its clone is gone.`
+              }${leftoverWords(workspace.id, body.from)}`,
             };
           } catch (error) {
             const message =
