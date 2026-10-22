@@ -15,6 +15,10 @@
  * Each answers 201 and reads back with no typecheck problem: (b) and (c)
  * with `problems: []`, (a) with only its graph's own "An End must be
  * reachable from Start."
+ * (d) The hub started again with its lib folder pointed at an empty one
+ *     (stand-ins/workflow-lib.ts): the program's save is refused 400 with one
+ *     problem, the checker's setup named broken and the compiler's
+ *     "Cannot find global type 'Array'", never a clean check.
  *
  * The released binary's typecheck is proven by its own build:
  * `bun scripts/build-binary.ts linux-x64 <out> 0.1.0-dev dev --proof`, then
@@ -23,8 +27,9 @@
  *
  *   bun scripts/probe-kit/run.ts workflow-stdlib
  */
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { BROKEN_CHECKER } from "../../../packages/core/src/workflow-sandbox";
 import type { Kit, Spec } from "../kit";
 
 /** The dashboard's New workflow → New graph body. */
@@ -165,6 +170,31 @@ async function run(kit: Kit): Promise<void> {
           : `problems ${JSON.stringify(read.problems)}`
       );
     }
+
+    // (d) a hub whose lib folder is empty: the checker's setup is broken.
+    const emptyLib = join(fleet.sandbox, "empty-lib");
+    await mkdir(emptyLib, { recursive: true });
+    await fleet.stop("hub");
+    fleet.standIns.workflowLib = emptyLib;
+    fleet.launch("hub");
+    await fleet.hubUp();
+    const refused = await fetch(`${fleet.base}/api/workflows`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Broken checker", program: PROGRAM }),
+    });
+    const said = await refused.text();
+    const { problems } = JSON.parse(said) as {
+      problems?: { message: string }[];
+    };
+    kit.check(
+      "d: with no lib files the save is refused with one problem naming the checker's setup",
+      refused.status === 400 &&
+        problems?.length === 1 &&
+        problems[0].message.startsWith(BROKEN_CHECKER) &&
+        problems[0].message.includes("Cannot find global type 'Array'"),
+      `${refused.status} ${said}`
+    );
   } finally {
     await writeFile(
       join(kit.out, "hub.log"),
