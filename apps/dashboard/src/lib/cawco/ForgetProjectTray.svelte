@@ -141,8 +141,9 @@
     <StopTray class={className} {job} />
   {/if}
   <!-- Caw's off tray put away in his settings is said there while they
-       stand open (CawLeadSwitch); here once they close. -->
-  {#if parksHere && !(job.kind === "caw-off" && stopWork.drawn(job.at))}
+       stand open (CawLeadSwitch); here once they close. Reopened here (his
+       settings closed meanwhile), this is its place, and it parks here. -->
+  {#if parksHere && !(job.kind === "caw-off" && job.at !== at && stopWork.drawn(job.at))}
     <StopParked {at} class={className} {job} />
   {/if}
 {/each}

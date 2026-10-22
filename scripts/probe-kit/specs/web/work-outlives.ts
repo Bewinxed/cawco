@@ -1180,6 +1180,37 @@ async function cawOffLeg(
       (await shown(page, `${parked} button`)),
     JSON.stringify({ row, places: await page.locator(parked).count() })
   );
+  // Reopened from the project's row (his settings closed), the tray stands
+  // there; put away again, the failure parks there again, never nowhere.
+  await pick(
+    kit,
+    page,
+    pass,
+    page.locator(parked).getByRole("button", { name: "Reopen" })
+  );
+  await until(
+    async () =>
+      (await page
+        .locator(tray)
+        .getAttribute("data-phase")
+        .catch(() => null)) === "fail",
+    5000
+  );
+  await pick(kit, page, pass, page.locator(`${tray} [data-stop-cancel]`));
+  await until(
+    async () => (await textOf(page, parked)).includes(STOP_FAILED),
+    10_000
+  );
+  kit.check(
+    "caw off: reopened from the project's row and put away again, the failure parks there again",
+    (await textOf(page, parked)).includes(STOP_FAILED) &&
+      (await page.locator(parked).count()) === 1,
+    JSON.stringify({
+      row: await textOf(page, parked),
+      places: await page.locator(parked).count(),
+      state: await page.evaluate(stateRead),
+    })
+  );
 }
 
 /* ── (e) pairing ──────────────────────────────────────────────────── */
