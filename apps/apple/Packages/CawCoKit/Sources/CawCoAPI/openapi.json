@@ -7828,6 +7828,22 @@
                   "saidAt": {
                     "minimum": 0,
                     "type": "number"
+                  },
+                  "alerts": {
+                    "type": "boolean"
+                  },
+                  "idleMs": {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "machine": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "idle",
+                      "locked",
+                      "asleep"
+                    ]
                   }
                 },
                 "required": [
@@ -7855,6 +7871,124 @@
           },
           "422": {
             "description": "postApiPresence 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/person": {
+      "get": {
+        "operationId": "getApiPerson",
+        "responses": {
+          "200": {
+            "description": "getApiPerson 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/person/away": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "on": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "on"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiPersonAway",
+        "responses": {
+          "200": {
+            "description": "postApiPersonAway 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiPersonAway 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/person/devices/{machineId}": {
+      "post": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "counts": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "counts"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiPersonDevicesByMachineId",
+        "responses": {
+          "200": {
+            "description": "postApiPersonDevicesByMachineId 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiPersonDevicesByMachineId 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33257,6 +33391,12 @@
             "$ref": "#/components/schemas/LawsBrokenFrame"
           },
           {
+            "$ref": "#/components/schemas/PersonFrame"
+          },
+          {
+            "$ref": "#/components/schemas/DeskAlertFrame"
+          },
+          {
             "$ref": "#/components/schemas/MovesFrame"
           },
           {
@@ -33331,6 +33471,8 @@
             "delegate_event": "#/components/schemas/DelegateEventFrame",
             "fleet_watch.notices": "#/components/schemas/FleetWatchNoticesFrame",
             "laws.broken": "#/components/schemas/LawsBrokenFrame",
+            "person": "#/components/schemas/PersonFrame",
+            "desk_alert": "#/components/schemas/DeskAlertFrame",
             "moves": "#/components/schemas/MovesFrame",
             "move_progress": "#/components/schemas/MoveProgressFrame",
             "command_queue": "#/components/schemas/CommandQueueFrame",
@@ -40505,6 +40647,73 @@
           "pruned",
           "reason",
           "status"
+        ]
+      },
+      "PersonView": {
+        "description": "`GET /api/person` and the socket's `person` frame: the person, and the machines that can count toward it.",
+        "type": "object",
+        "properties": {
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PresenceDevice"
+            }
+          },
+          "manual": {
+            "description": "The person turned Appear away on.",
+            "type": "boolean"
+          },
+          "on": {
+            "description": "The chat in front and read on a device in use, when here on one.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "since": {
+            "description": "Away: since their last input or the lock, epoch ms; null when here, or no device has ever said.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/PersonViewState"
+          }
+        },
+        "required": [
+          "devices",
+          "manual",
+          "on",
+          "since",
+          "state"
+        ]
+      },
+      "PresenceDevice": {
+        "description": "One device as the person's presence menu lists it: a machine whose agent reads its desktop.",
+        "type": "object",
+        "properties": {
+          "counts": {
+            "description": "It counts toward whether you're here: the person turned it on (off until they do).",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The machine's id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The machine's name, as the fleet shows it.",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PresenceDeviceState",
+            "description": "What its desktop says now; null when it hasn't said for {@link MACHINE_TTL_MS}."
+          }
+        },
+        "required": [
+          "counts",
+          "id",
+          "name"
         ]
       },
       "ProjectOfferSummary": {
@@ -59655,6 +59864,66 @@
           "running-session-machine-connected"
         ]
       },
+      "PersonFrame": {
+        "description": "Hub-originated: the person and the machines that count, whole, on each change.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "person"
+            ]
+          },
+          "person": {
+            "$ref": "#/components/schemas/PersonView"
+          }
+        },
+        "required": [
+          "kind",
+          "person"
+        ]
+      },
+      "DeskAlertFrame": {
+        "description": "The socket frame that shows something that needs the person on the\ndesk they are at, in place of a phone push (hub push.ts): the tab named\n`to` shows it as a desktop notification. Its words are the real ones:\nit never leaves the person's network.",
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "collapseId": {
+            "description": "The notification's tag: a newer one under it replaces the older.",
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "desk_alert"
+            ]
+          },
+          "session": {
+            "description": "Where it opens: the session it is about; null opens Needs you.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "to": {
+            "description": "The tab to show it: the one in use, by its presence id.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body",
+          "collapseId",
+          "kind",
+          "session",
+          "title",
+          "to"
+        ]
+      },
       "MovesFrame": {
         "description": "Hub → dashboards and apps: every move job, whole, on each change.",
         "type": "object",
@@ -60876,6 +61145,13 @@
           "deny"
         ]
       },
+      "PersonViewState": {
+        "type": "string",
+        "enum": [
+          "away",
+          "here"
+        ]
+      },
       "PhoneDoneAction": {
         "type": "string",
         "enum": [
@@ -60914,6 +61190,15 @@
           "high",
           "low",
           "medium"
+        ]
+      },
+      "PresenceDeviceState": {
+        "type": "string",
+        "enum": [
+          "active",
+          "asleep",
+          "idle",
+          "locked"
         ]
       },
       "PreviewFrameState": {

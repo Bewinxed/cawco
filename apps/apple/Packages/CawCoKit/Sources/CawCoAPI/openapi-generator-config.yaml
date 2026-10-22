@@ -129,6 +129,7 @@ typeOverrides:
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
     PermissionUpdateBehavior: OpenEnums.PermissionUpdateBehavior
     PermissionUpdateDestination: OpenEnums.PermissionUpdateDestination
+    PersonViewState: OpenEnums.PersonViewState
     PhoneDoneAction: OpenEnums.PhoneDoneAction
     PhoneDoneDecidedBy: OpenEnums.PhoneDoneDecidedBy
     PinKind: OpenEnums.PinKind
@@ -139,6 +140,7 @@ typeOverrides:
     PlanStepPriority: OpenEnums.PlanStepPriority
     PlanStepStatus: OpenEnums.PlanStepStatus
     PostApiInstancesByIdAccount200State: OpenEnums.PostApiInstancesByIdAccount200State
+    PresenceDeviceState: OpenEnums.PresenceDeviceState
     PreviewDown: OpenEnums.PreviewDown
     PreviewFrameState: OpenEnums.PreviewFrameState
     ProjectOfferReason: OpenEnums.ProjectOfferReason

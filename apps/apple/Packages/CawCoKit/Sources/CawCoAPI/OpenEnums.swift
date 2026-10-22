@@ -5285,6 +5285,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/PersonViewState`.
+    public enum PersonViewState: OpenEnum {
+        case away
+        case here
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "away": self = .away
+            case "here": self = .here
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .away: "away"
+            case .here: "here"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.away, .here]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/PhoneDoneAction`.
     public enum PhoneDoneAction: OpenEnum {
         case caw
@@ -5694,6 +5732,50 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.moved, .pending]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/PresenceDeviceState`.
+    public enum PresenceDeviceState: OpenEnum {
+        case active
+        case asleep
+        case idle
+        case locked
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "active": self = .active
+            case "asleep": self = .asleep
+            case "idle": self = .idle
+            case "locked": self = .locked
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .active: "active"
+            case .asleep: "asleep"
+            case .idle: "idle"
+            case .locked: "locked"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.active, .asleep, .idle, .locked]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
