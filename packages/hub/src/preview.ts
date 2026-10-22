@@ -712,13 +712,10 @@ async function relay(
       redirect: "manual",
     });
   } catch (error) {
-    previewFailed(
-      HOP,
-      instanceId,
-      `its machine's listener at ${address}:${at.port} didn't answer: ${causeOf(error)}`
-    );
+    const why = `its machine's listener at ${address}:${at.port} didn't answer the hub: ${causeOf(error)}`;
+    previewFailed(HOP, instanceId, why);
     deps.unreachable(instanceId, at);
-    return downResponse("machine");
+    return downResponse("machine", 502, why);
   }
   const down = downstreamHeaders(response, direct);
   if (down.get(PREVIEW_SERVED_HEADER) === "1") {
@@ -1096,8 +1093,9 @@ export function createPreviewListeners(
         : proxy.close?.(socket, code, reason),
   };
   const error = (thrown: Error) => {
-    previewFailed(HOP, null, causeOf(thrown));
-    return downResponse("machine");
+    const why = `the hub's preview listener failed serving it: ${causeOf(thrown)}`;
+    previewFailed(HOP, null, why);
+    return downResponse("machine", 502, why);
   };
   /**
    * A listener on `port`, each request's session from `route`, and its TLS
