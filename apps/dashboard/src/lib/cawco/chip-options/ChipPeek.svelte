@@ -1,12 +1,13 @@
 <script lang="ts">
   /**
    * The chip's peek, the same in both options: one house hover panel
-   * (HoverPanel) over the chip, its head "Kind · state" in meta, the full
+   * (HoverPanelFrame, HoverPanel's surface without its session watch) over
+   * the chip, its head "Kind · state" in meta, the full
    * name in label, the kind's body, then its Open action. A press on the
    * chip opens it; the chip never navigates by itself.
    */
   import { Button } from "#lib/components/ui/button/index.js";
-  import HoverPanel from "../HoverPanel.svelte";
+  import HoverPanelFrame from "../HoverPanelFrame.svelte";
   import { type ChipSpec, headOf, PEEK_BODY } from "./kinds";
 
   let { chip, open, id }: { chip: ChipSpec; open: boolean; id: string } =
@@ -16,7 +17,7 @@
   const body = $derived(chip.body ?? PEEK_BODY[chip.kind] ?? []);
 </script>
 
-<HoverPanel
+<HoverPanelFrame
   aria-label={head}
   {id}
   key={open ? chip.kind : null}
@@ -34,4 +35,4 @@
       <Button class="mt-space-2" size="xs" variant="outline">Open</Button>
     </div>
   {/snippet}
-</HoverPanel>
+</HoverPanelFrame>

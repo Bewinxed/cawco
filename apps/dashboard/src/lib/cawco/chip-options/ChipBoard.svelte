@@ -7,16 +7,16 @@
    * - `list`: chips one to a line of text, each over its "Kind · state" in
    *   meta, so a frame of every kind or every state reads as a sheet.
    * - `sentence`: the spec's five-kind sentence in a transcript message (the
-   *   speaker line, Who, then MessageBody's measure and PROSE), or the
+   *   speaker line as Who draws it, then MessageBody's measure and PROSE), or the
    *   40-word name in one (`long`).
    * - `single`: one chip in a line, for its hover, focus and press.
    * - `peek`: one chip with its peek open over it.
    */
   import { PROSE } from "#lib/prose.js";
-  import Who from "../turn/Who.svelte";
   import ChipA from "./ChipA.svelte";
   import ChipB from "./ChipB.svelte";
   import { type ChipSpec, headOf, LONG_NAME, sample } from "./kinds";
+  import SpeakerLine from "./SpeakerLine.svelte";
 
   let {
     option = "A",
@@ -54,7 +54,7 @@
     </ul>
   {:else if scene === "sentence"}
     <article class="grid grid-cols-1 gap-space-1">
-      <Who name="Caw" timestamp="2026-10-22T09:41:00Z" />
+      <SpeakerLine clock="09:41" name="Caw" />
       <div
         class="max-w-c-measure text-size-body leading-body font-normal text-ink-strong"
         data-slot="msg"
@@ -113,7 +113,12 @@
     </article>
   {:else}
     <p class="text-size-body leading-body">
-      Picked up <Chip {...first} open={scene === "peek"} /> after lunch.
+      {#if scene === "peek"}
+        <!-- The chip leads its line, so its peek stands at the frame's padding. -->
+        <Chip {...first} open /> is waiting on you.
+      {:else}
+        Picked up <Chip {...first} /> after lunch.
+      {/if}
     </p>
   {/if}
 </div>
