@@ -503,7 +503,7 @@ const dropPin = async (page: Page): Promise<void> => {
   const pill = await until(
     "the new pin's pill measured where it is drawn",
     () => face.boundingBox(),
-    (box) => box !== null && box.width > 0,
+    (measured) => measured !== null && measured.width > 0,
     5000
   ).catch(() => null);
   if (!pill) {
