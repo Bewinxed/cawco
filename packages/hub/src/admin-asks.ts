@@ -17,17 +17,24 @@
  * shown; denied, nothing runs — and the calling session is told either way.
  *
  * Only the person answers it: a parent's `answer_delegate` is refused
- * (server.ts), and no session mode answers it for them — the ask never
- * reaches the harness, so Full Send has nothing to answer.
+ * (server.ts). A session in Full Send is never asked (the owner, 2026-10-22:
+ * "FULL SEND LITERALLY MEANS FULL SEND"): its write still needs its
+ * `reason`, then runs at once, approved by Full Send, with the same record
+ * an approved ask leaves in the hub's log, saying Full Send approved it.
+ * Nothing parks, so no screen holds it. Every other mode asks.
  */
 import type {
   Envelope,
   InstanceRow,
+  PermissionMode,
   PermissionResult,
   SourceFacts,
 } from "@cawco/core";
 
 const ADMIN_WRITE = /^admin_[a-z_]+_write$/;
+
+/** The mode that approves every ask for its session (core `PermissionMode`). */
+const FULL_SEND: PermissionMode = "fullSend";
 
 /**
  * Why a write is refused before anyone is asked: an `admin_*_write` with no
@@ -176,7 +183,8 @@ export const createAdminAsks = ({
      * the tool call it gates (`toolUseId`, Claude Code's `_meta`), so it is
      * drawn and answered there. An install or a link without a reason is
      * refused before anything parks ({@link askRefusal}); one with a reason
-     * parks with its source's facts.
+     * parks with its source's facts. A session in Full Send is approved at
+     * once and nothing parks.
      */
     async ask(
       actor: InstanceRow,
@@ -188,8 +196,16 @@ export const createAdminAsks = ({
       if (refusal) {
         throw new Error(refusal);
       }
-      const facts = await sourceFacts(name, input);
       const requestId = crypto.randomUUID();
+      if (actor.permissionMode === FULL_SEND) {
+        const why =
+          typeof input.reason === "string" ? `: ${input.reason.trim()}` : "";
+        console.log(
+          `[admin-asks] ${actor.id} asks to run ${name} (${requestId}); approved by Full Send${why}`
+        );
+        return;
+      }
+      const facts = await sourceFacts(name, input);
       const answered = new Promise<void>((resolve, reject) => {
         waiting.set(requestId, { name, resolve, reject });
       });

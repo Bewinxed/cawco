@@ -97,9 +97,13 @@ export const harnessNamed = (value: unknown): HarnessKind | undefined =>
 
 /**
  * How a session answers tool permissions. The union is Claude Code's, plus
- * `fullSend`, CawCo's own: Claude Code's `bypassPermissions` with the host
- * also answering the safety checks the CLI still raises in that mode. Each
- * adapter maps `fullSend` onto its harness; none hands it to an SDK as is.
+ * `fullSend`, CawCo's own: bypass, with every approval approved for the
+ * session (the owner, 2026-10-22: "FULL SEND LITERALLY MEANS FULL SEND"):
+ * on Claude Code the host answers the checks and ask rules the CLI still
+ * raises in bypass, and on every harness the hub approves CawCo's admin
+ * writes (hub admin-asks.ts). A question to the person still asks; a
+ * fleet-denied tool still never runs. Each adapter maps `fullSend` onto its
+ * harness; none hands it to an SDK as is.
  */
 export type PermissionMode =
   | "default"

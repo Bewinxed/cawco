@@ -1187,12 +1187,6 @@ const sessionEnv = (
   ...CLAUDE_QUIET_ENV,
 });
 
-/** Tools that put a question to the person: never answered for them, in any mode. */
-const INTERACTIVE_TOOLS: ReadonlySet<string> = new Set([
-  ASK_USER_QUESTION,
-  "ExitPlanMode",
-]);
-
 /** The `canUseTool` callback, parked until `resolvePermission` answers it. */
 type PermissionResolver = (result: PermissionResult) => void;
 
@@ -1264,14 +1258,20 @@ class SessionMode {
 
   /**
    * Whether an ask is answered here rather than put to the owner: Full Send,
-   * with the CLI in bypass, and never a question to him, a plan approval, or
-   * an ask his own `permissions.ask` rule forced.
+   * with the CLI in bypass, approves every one (the owner, 2026-10-22: "FULL
+   * SEND LITERALLY MEANS FULL SEND"): the CLI's safety checks, a plan
+   * approval, an ask his own `permissions.ask` rule forced. Never a question
+   * to him, which needs his answer, and never a project's Caw's shell or
+   * edit call (`lead`, {@link LEAD_SETTINGS}): the hub's gate decides those.
+   * The CLI does not say which rule forced an ask (no `matchedAskRule` on a
+   * rule's own ask, 2.1.302), so the lead's calls are known by the tool.
    */
-  answersHostSide(toolName: string, matchedAskRule: unknown): boolean {
+  answersHostSide(toolName: string, lead: boolean): boolean {
     return (
       this.#fullSend &&
       this.#cli === "bypassPermissions" &&
-      !(matchedAskRule || INTERACTIVE_TOOLS.has(toolName))
+      toolName !== ASK_USER_QUESTION &&
+      !(lead && LEAD_GATED_ON_CLAUDE.has(toolName))
     );
   }
 }
@@ -1289,11 +1289,11 @@ const askLine = (
   }: {
     decisionReason?: string;
     blockedPath?: string;
-    matchedAskRule?: unknown;
+    matchedAskRule?: { source: string };
   },
   answered: boolean
 ): string =>
-  `[claude] permission asked: ${toolName}${decisionReason ? ` — ${decisionReason}` : ""}${blockedPath ? ` (path ${blockedPath})` : ""}${matchedAskRule ? " [ask rule]" : ""}${answered ? " [full send: answered]" : ""}`;
+  `[claude] permission asked: ${toolName}${decisionReason ? ` — ${decisionReason}` : ""}${blockedPath ? ` (path ${blockedPath})` : ""}${matchedAskRule ? ` [ask rule: ${matchedAskRule.source}]` : ""}${answered ? " [full send: answered]" : ""}`;
 
 /** Whether an SDK frame is the main loop's word on its mode: an `init`, or a `status` that names one. */
 const modeFrame = (
@@ -1350,12 +1350,17 @@ const FENCE_SETTINGS = { disableClaudeAiConnectors: true } as const;
  * hub's gate, lead-gate.ts) whatever his mode: "If an ask rule matches, the
  * call falls through to your `canUseTool` callback for confirmation, even in
  * `bypassPermissions` mode" (code.claude.com/docs/en/agent-sdk/permissions).
- * Full Send never answers an ask a rule forced ({@link SessionMode}). Flag
+ * Full Send never answers one of his gated calls ({@link SessionMode}). Flag
  * settings outrank every settings file, so none in his place turns it off.
  */
 const LEAD_SETTINGS: { permissions: { ask: string[] } } = {
   permissions: { ask: [...LEAD_GATED_TOOLS.claude] },
 };
+
+/** Caw's gated tools on Claude Code, by the CLI's names ({@link LEAD_SETTINGS}). */
+const LEAD_GATED_ON_CLAUDE: ReadonlySet<string> = new Set(
+  LEAD_GATED_TOOLS.claude
+);
 
 /**
  * {@link claudeBoundaryOptions} with {@link SESSION_SETTINGS} in its
@@ -2104,10 +2109,7 @@ class ClaudeSession implements HarnessSession {
         ) =>
           new Promise<PermissionResult>((resolve) => {
             // Full Send answers here what the CLI still asks in bypass ({@link SessionMode}); plain bypass does not.
-            const answered = this.#mode.answersHostSide(
-              toolName,
-              matchedAskRule
-            );
+            const answered = this.#mode.answersHostSide(toolName, lead);
             console.log(
               askLine(
                 toolName,

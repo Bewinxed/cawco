@@ -178,7 +178,8 @@ export function messageId(): string {
 /**
  * Whether a parked permission should be auto-allowed by the daemon itself.
  * A question always routes — the parent session, or the user, answers it.
- * Full Send is bypass here: bypass answers every tool ask OpenCode raises.
+ * Full Send is bypass here: bypass answers every tool ask OpenCode raises
+ * (what Full Send adds, CawCo's admin writes, the hub approves).
  */
 export function autoAllows(
   permissionMode: string | undefined,

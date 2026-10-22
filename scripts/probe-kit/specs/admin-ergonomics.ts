@@ -30,10 +30,31 @@
  *    it loads before → after, and the reason; the unchanged command is not
  *    on it.
  *
+ * Full Send approves every approval for its session (the owner,
+ * 2026-10-22: "FULL SEND LITERALLY MEANS FULL SEND"; hub admin-asks.ts,
+ * agent claude.ts `SessionMode`). Each call below is the mock's, from inside
+ * the session, through the harness's own door to CawCo's MCP server:
+ *
+ * 7. Bypass, unchanged: the session of 3 is in Bypass, and its
+ *    admin_memory_write parked an ask for the person.
+ * 8. A Claude Code session in Full Send: its admin_memory_write runs at once,
+ *    answering a hash; no ask of it is ever on `/api/pending`; the hub's log
+ *    records it as approved by Full Send, with its reason.
+ * 9. The same session: a Bash call an ask rule in its place's own Claude Code
+ *    settings (`permissions.ask`) forces runs, answered "allow" by Full Send.
+ * 10. The same session: a question to the person (AskUserQuestion) still
+ *    parks on `/api/pending`.
+ * 11. The same session: a tool the fleet denies (TodoWrite, core
+ *    `OWN_LIST_DENIED`) is still refused, and nothing is asked.
+ * 12. An OpenCode session in Full Send: its admin_memory_write runs at once,
+ *    no ask parks, and the hub's log records it as approved by Full Send.
+ *
  *   bun scripts/probe-kit/run.ts admin-ergonomics
  */
+// biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: one scenario, read in order, one check after another.
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { projectClaudeDir } from "../../../packages/core/src/paths";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, pressAt, type Spec, settle } from "../kit";
 import { docOf, type On, pageFrame, screenBox } from "./ink";
@@ -61,11 +82,137 @@ const memoryText = (lines: number, changed?: number) =>
     i === changed ? `Line ${i + 1}, changed.` : `Line ${i + 1} of the memory.`
   ).join("\n");
 
-/** The session is never asked to call anything: every tool goes through the REST door. */
-const respond = (request: Seen): Reply => ({
+/** The reason every Full Send leg's admin write gives. */
+const FULL_SEND_REASON =
+  "The probe checks that Full Send approves a fleet change.";
+/** The command the Full Send place's own Claude Code settings put an ask rule on. */
+const ASK_RULE_COMMAND = "echo probe-ask-rule";
+/** A Full Send leg's step, named in the person's words. */
+const STEP_TAG = /PROBE-FS-[a-z-]+/;
+
+/** The call each Full Send step has the mock make, by the tool's short name. */
+const STEP_CALLS: Record<string, { input: object; name: string }> = {
+  "PROBE-FS-memory": {
+    name: "admin_memory_write",
+    input: {
+      action: "set",
+      content: memoryText(200, 7),
+      reason: FULL_SEND_REASON,
+    },
+  },
+  "PROBE-FS-ask-rule": {
+    name: "Bash",
+    input: { command: ASK_RULE_COMMAND, description: "Probe an ask rule" },
+  },
+  "PROBE-FS-question": {
+    name: "AskUserQuestion",
+    input: {
+      questions: [
+        {
+          question: "Which way?",
+          header: "Way",
+          multiSelect: false,
+          options: [
+            { label: "Left", description: "The left way." },
+            { label: "Right", description: "The right way." },
+          ],
+        },
+      ],
+    },
+  },
+  "PROBE-FS-denied": {
+    name: "TodoWrite",
+    input: {
+      todos: [{ content: "probe", status: "pending", activeForm: "Probing" }],
+    },
+  },
+  "PROBE-FS-memory-opencode": {
+    name: "admin_memory_write",
+    input: {
+      action: "set",
+      content: memoryText(200, 9),
+      reason: FULL_SEND_REASON,
+    },
+  },
+};
+
+/** One Full Send step as the mock plays it: its call made, then what came back. */
+interface Step {
+  called: boolean;
+  /** The request that carried the call's result. */
+  result?: { body: string; failed: boolean };
+  searched: boolean;
+  tag: string;
+}
+
+/** The step under way; undefined before the first. */
+let step: Step | undefined;
+
+const words = (said: string): Reply => ({ everyMs: 5, words: [said] });
+const calling = (name: string, input: object): Reply => ({
   everyMs: 5,
-  words: [request.tools ? "ok" : "Probe title"],
+  words: [],
+  tool: { name, input },
 });
+
+/**
+ * The call of `short` as the harness offers it: Claude Code's built-in or
+ * MCP name (found with ToolSearch first when deferred), OpenCode's own
+ * name or its Code Mode catalog. A fleet-denied tool is called as named,
+ * offered or not, as a model that calls it anyway does.
+ */
+const callOf = (request: Seen, now: Step): Reply => {
+  const { name: short, input } = STEP_CALLS[now.tag] ?? {};
+  if (!(short && input)) {
+    return words(`No step ${now.tag}.`);
+  }
+  const names = [short, `mcp__cawco__${short}`, `cawco_${short}`];
+  const offered = request.toolNames.find((name) => names.includes(name));
+  if (offered || now.tag === "PROBE-FS-denied") {
+    now.called = true;
+    return calling(offered ?? short, input);
+  }
+  if (!now.searched && request.toolNames.includes("ToolSearch")) {
+    now.searched = true;
+    const wanted = short.startsWith("admin_") ? `mcp__cawco__${short}` : short;
+    return calling("ToolSearch", { query: `select:${wanted}`, max_results: 1 });
+  }
+  if (request.toolNames.includes("execute")) {
+    now.called = true;
+    return calling("execute", {
+      code: `return await tools.cawco.${short}(${JSON.stringify(input)});`,
+    });
+  }
+  now.called = true;
+  return words(`${short} is not offered.`);
+};
+
+/**
+ * Every tool of legs 1 to 6 goes through the REST door, so the session only
+ * says "ok"; a Full Send leg's step (its tag in the person's words) makes
+ * its one call and reads what came back.
+ */
+const respond = (request: Seen): Reply => {
+  if (!request.tools) {
+    return words("Probe title");
+  }
+  const tag = STEP_TAG.exec(request.last)?.[0];
+  if (tag && !request.afterTool && step?.tag !== tag) {
+    step = { tag, called: false, searched: false };
+  }
+  const now = step;
+  if (!now || now.result) {
+    return words("ok");
+  }
+  if (now.called) {
+    if (request.afterTool) {
+      now.result = { body: request.body, failed: request.toolFailed };
+      return words("done");
+    }
+    return words("ok");
+  }
+  return callOf(request, now);
+};
 
 interface Ask {
   instanceId: string;
@@ -402,6 +549,148 @@ const run = async (kit: Kit) => {
       !JSON.stringify(shown6?.fields ?? []).includes(project.id) &&
       shown6?.summary === `Change MCP server ${MCP_NAME}`,
     JSON.stringify(shown6)
+  );
+
+  // ── 7. Bypass still asks ─────────────────────────────────────────────
+  const modeOf = (id: string) =>
+    fleet.query<{ permission_mode: string | null }>(
+      "SELECT permission_mode FROM instances WHERE id = ?",
+      id
+    )[0]?.permission_mode;
+  kit.check(
+    "7: in Bypass, admin_memory_write parks an ask for the person",
+    modeOf(session) === "bypassPermissions" &&
+      first.ask?.payload.toolName === "mcp__cawco__admin_memory_write",
+    `mode ${modeOf(session)}; ask ${first.ask?.requestId ?? "none"}`
+  );
+
+  // ── 8–12. Full Send ──────────────────────────────────────────────────
+  /**
+   * A step played out: the person's words naming it, then what came back,
+   * with what the hub and the agent logged meanwhile. An ask put to the
+   * person is logged as it parks: an admin write's by the hub ("asks the
+   * person to approve"), a harness's by the agent ("permission asked", with
+   * "[full send: answered]" only when Full Send answered it instead).
+   */
+  const play = async (instanceId: string, tag: string) => {
+    const hubMark = await fleet.logMark("hub");
+    const agentMark = await fleet.logMark("agent");
+    await fleet.send(instanceId, `Run step ${tag}.`);
+    const result = await until(
+      `step ${tag} answered`,
+      () => (step?.tag === tag ? step.result : undefined),
+      Boolean,
+      120_000
+    ).catch(() => undefined);
+    const hub = (await hubMark.since()).split("\n");
+    const agent = (await agentMark.since()).split("\n");
+    return {
+      result,
+      /** What came back, from the step's tag on: the call's result as its request carried it. */
+      cameBack: result ? result.body.slice(result.body.lastIndexOf(tag)) : "",
+      /** Asks put to the person while it ran. */
+      asked: [
+        ...hub.filter((line) =>
+          line.includes(`[admin-asks] ${instanceId} asks the person`)
+        ),
+        ...agent.filter(
+          (line) =>
+            line.includes("[claude] permission asked:") &&
+            !line.includes("[full send: answered]")
+        ),
+      ],
+      approved: hub.find(
+        (line) =>
+          line.includes(`[admin-asks] ${instanceId} asks to run`) &&
+          line.includes(`approved by Full Send: ${FULL_SEND_REASON}`)
+      ),
+      answered: agent.find((line) => line.includes("[full send: answered]")),
+    };
+  };
+  /** Whether `instanceId` has nothing on `/api/pending`. */
+  const nothingPending = async (instanceId: string) =>
+    !(await pending()).some((ask) => ask.instanceId === instanceId);
+
+  const fullSendPlace = join(fleet.sandbox, "full-send-place");
+  await mkdir(projectClaudeDir(fullSendPlace), { recursive: true });
+  await writeFile(
+    projectClaudeDir(fullSendPlace, "settings.json"),
+    JSON.stringify({
+      permissions: { ask: [`Bash(${ASK_RULE_COMMAND})`] },
+    })
+  );
+  const sent = await fleet.spawn("claude", "Full Send", fullSendPlace, {
+    permissionMode: "fullSend",
+  });
+
+  const memory = await play(sent, "PROBE-FS-memory");
+  kit.check(
+    "8: Claude Code in Full Send: admin_memory_write runs at once, no ask parks, and the hub's log records it approved by Full Send",
+    modeOf(sent) === "fullSend" &&
+      memory.result?.failed === false &&
+      memory.cameBack.includes("hash") &&
+      memory.asked.length === 0 &&
+      (await nothingPending(sent)) &&
+      memory.approved !== undefined,
+    `mode ${modeOf(sent)}; failed ${memory.result?.failed}; asked ${JSON.stringify(memory.asked)}; log: ${memory.approved ?? "none"}`
+  );
+
+  // In bypass an `echo` asks nothing: an ask of it is the rule's. The CLI
+  // does not name the rule on the ask (no `matchedAskRule`, 2.1.302).
+  const rule = await play(sent, "PROBE-FS-ask-rule");
+  kit.check(
+    "9: Claude Code in Full Send: a Bash call its permissions.ask rule forces is answered allow and runs",
+    rule.result?.failed === false &&
+      rule.cameBack.includes("probe-ask-rule") &&
+      rule.asked.length === 0 &&
+      (rule.answered ?? "").includes("permission asked: Bash"),
+    `failed ${rule.result?.failed}; asked ${JSON.stringify(rule.asked)}; log: ${rule.answered ?? "none"}`
+  );
+
+  const questionRun = play(sent, "PROBE-FS-question");
+  const question = await until(
+    "the question on /api/pending",
+    async () =>
+      (await pending()).find(
+        (ask) =>
+          ask.instanceId === sent && ask.payload.toolName === "AskUserQuestion"
+      ),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  if (question) {
+    await answer(question, false);
+  }
+  const asked10 = await questionRun;
+  kit.check(
+    "10: Claude Code in Full Send: a question to the person still parks on /api/pending",
+    question !== undefined,
+    `${question ? `asked ${question.requestId}` : "no question parked"}; log: ${JSON.stringify(asked10.asked)}`
+  );
+
+  const denied = await play(sent, "PROBE-FS-denied");
+  kit.check(
+    "11: Claude Code in Full Send: a fleet-denied tool (TodoWrite) is still refused, and nothing is asked",
+    denied.result?.failed === true &&
+      denied.asked.length === 0 &&
+      denied.answered === undefined &&
+      (await nothingPending(sent)),
+    `failed ${denied.result?.failed}; asked ${JSON.stringify(denied.asked)}; came back ${denied.cameBack.slice(-300)}`
+  );
+
+  const opencode = await fleet.spawn("opencode", "Full Send OpenCode", place, {
+    permissionMode: "fullSend",
+  });
+  const written = await play(opencode, "PROBE-FS-memory-opencode");
+  kit.check(
+    "12: OpenCode in Full Send: admin_memory_write runs at once, no ask parks, and the hub's log records it approved by Full Send",
+    modeOf(opencode) === "fullSend" &&
+      written.result?.failed === false &&
+      written.cameBack.includes("hash") &&
+      written.asked.length === 0 &&
+      (await nothingPending(opencode)) &&
+      written.approved !== undefined,
+    `mode ${modeOf(opencode)}; failed ${written.result?.failed}; asked ${JSON.stringify(written.asked)}; log: ${written.approved ?? "none"}`
   );
 };
 

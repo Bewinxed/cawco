@@ -188,7 +188,7 @@
   });
   const modes = $derived(
     harness
-      ? permissionModesFor(harness, session?.permissionMode).filter((mode) =>
+      ? permissionModesFor(harness).filter((mode) =>
           report?.capabilities.permissionModes.includes(mode.value)
         )
       : []

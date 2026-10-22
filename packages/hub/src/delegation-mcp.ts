@@ -309,7 +309,8 @@ export function createDelegationMcp(options: {
   connections?: Pick<Connections, "callAs" | "sessionTools">;
   /**
    * Parks an admin write as the person's ask and waits: resolves when they
-   * approve it, rejects with the refusal when they deny it (admin-asks.ts).
+   * approve it, rejects with the refusal when they deny it; a session in
+   * Full Send is approved at once (admin-asks.ts).
    */
   askPerson: (
     actor: InstanceRow,
@@ -548,7 +549,8 @@ export function createDelegationMcp(options: {
   /**
    * An `admin_*` call, its role already checked. A write, from any door,
    * waits for the person to approve it (admin-asks.ts) and then runs once,
-   * with the arguments they were shown; a refusal is the caller's error.
+   * with the arguments they were shown; a refusal is the caller's error. A
+   * session in Full Send is approved at once.
    */
   const administer = async (
     actor: InstanceRow,

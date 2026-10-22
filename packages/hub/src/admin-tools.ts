@@ -183,7 +183,7 @@ const wholeHash = async (
 
 const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/;
 
-/** Whether a tool is an admin write: the hub asks the person before each call runs (admin-asks.ts). */
+/** Whether a tool is an admin write: the hub asks the person before each call runs, unless its session is in Full Send (admin-asks.ts). */
 export const isAdminWrite = (name: string): boolean =>
   ADMIN_WRITE_TOOL.test(name);
 
@@ -215,7 +215,7 @@ export const answeredWithoutAsking = (
  * `admin_<group>_read`, which takes only its read actions, and
  * `admin_<group>_write`, which takes the rest with the fields they need. One
  * handler serves both, through the hub's own REST routes; a write runs only
- * once the person approves it (admin-asks.ts).
+ * once the person approves it, or at once in Full Send (admin-asks.ts).
  */
 function admin<T extends z.ZodRawShape>(
   group: string,
@@ -247,7 +247,7 @@ function admin<T extends z.ZodRawShape>(
   );
   const write = tool(
     `admin_${group}_write`,
-    `Change what admin_${group}_read reads. \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} Waits for the person to approve it.`,
+    `Change what admin_${group}_read reads. \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} Waits for the person to approve it, unless in Full Send.`,
     { action: z.enum(writes), reason, ...input },
     // The reason is the person's to read on the approval, not a setting.
     (args) => {
