@@ -13,6 +13,7 @@ import type {
   LaunchAsk,
   LaunchGrant,
   LentAccess,
+  MachineActivity,
   MachineHarnessReport,
   MachineProviderLists,
   NamedSpawn,
@@ -155,6 +156,7 @@ import {
   claudeSignins,
   onSigninsChanged,
 } from "./accounts";
+import { type Activity, watchActivity } from "./activity";
 import { resolveClaudeExecutable, unlockKeychain } from "./auth";
 import { keepAwakeWhileWorking } from "./awake";
 import {
@@ -406,6 +408,19 @@ import { workspaceRefs } from "./workspace-records";
 
 const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
+
+/**
+ * This machine's desktop as the person uses it (activity.ts), read once the
+ * daemon starts: on every beat, and a beat of its own on each change, on
+ * whichever connection is up.
+ */
+let machineActivity: Activity | undefined;
+const activityHeard = new Set<(activity: MachineActivity) => void>();
+/** The beat's `activity`, while the desktop is read. */
+const activityNow = (): { activity?: MachineActivity } => {
+  const activity = machineActivity?.now();
+  return activity ? { activity } : {};
+};
 /**
  * How long after a ping the hub's link may stay silent before it is dropped
  * as dead. Our choice: a whole beat's interval, so a hub that is slow under
@@ -2940,6 +2955,7 @@ const attach = (
             ...(latestBinaryUpdate()
               ? { binaryUpdate: latestBinaryUpdate() }
               : {}),
+            ...activityNow(),
           } satisfies HeartbeatPayload;
           // A connection waiting to be admitted says nothing more until it is
           // (`send`).
@@ -2955,6 +2971,25 @@ const attach = (
         Schedule.spaced(HEARTBEAT_INTERVAL)
       )
     );
+
+    // The desktop's change of state goes at once, on a beat of its own.
+    const tellActivity = (activity: MachineActivity): void => {
+      if (socket.readyState === WebSocket.OPEN) {
+        send(socket, {
+          verb: "heartbeat",
+          machineId: identity.machineId,
+          payload: {
+            at: Date.now(),
+            instances: supervisor.instanceIds,
+            activity,
+          } satisfies HeartbeatPayload,
+        });
+      }
+    };
+    activityHeard.add(tellActivity);
+    socket.addEventListener("close", () => activityHeard.delete(tellActivity), {
+      once: true,
+    });
 
     // A turn on an account reads its windows shortly after; they go to the
     // hub on this connection as they come.
@@ -3144,6 +3179,21 @@ export const startDaemon = (rediscover = false) =>
     // While a turn, a gate step, a boundary's command or a heavy run is live
     // here, the OS does not idle-sleep this machine (awake.ts).
     keepAwakeWhileWorking(() => supervisor.turnsRunning());
+    // How the person uses this machine, toward whether they are here.
+    watchActivity()
+      .then((activity) => {
+        machineActivity = activity;
+        activity.onChange((now) => {
+          for (const tell of activityHeard) {
+            tell(now);
+          }
+        });
+      })
+      .catch((error: unknown) =>
+        console.warn(
+          `[activity] this machine's desktop is not read: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
     // A sign-in moves what a workspace's policy denies: every boundary is
     // checked for a narrowed access at once (boundary.ts `recheckNarrowed`).
     onSigninsChanged(accountsChangedHere);
