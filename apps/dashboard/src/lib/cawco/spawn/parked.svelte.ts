@@ -120,11 +120,14 @@ export function shownStart(): string | null {
   return open ? spawning.shown : null;
 }
 
-/** The row's name for a start: its prompt's first line, or what it starts. */
+/**
+ * The row's name for a start: its prompt's first line (the row's own
+ * ellipsis cuts it where the row ends), or what it starts.
+ */
 function titleOf(draft: SessionDraft, continueFrom?: ContinueSource): string {
   const first = draft.prompt.trim().split("\n")[0]?.trim() ?? "";
   if (first) {
-    return first.length > 60 ? `${first.slice(0, 59).trimEnd()}…` : first;
+    return first;
   }
   return continueFrom ? `Continue ${continueFrom.title}` : "New session";
 }

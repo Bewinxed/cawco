@@ -22,6 +22,14 @@
  *  and for Continue, a reload while its job runs (the source busy with a
  *  slow turn): the form is back open on it, Start pending with the job's
  *  stage, and it leaves for the new session when the job starts it.
+ * And on a phone at 390 (touch, real taps), New session as the bottom
+ * sheet: a reload with the sheet open reopens it with the same words and
+ * chip; the sheet's own Close mid-start runs the drawer's exit
+ * (`getAnimations()` on the sheet) and parks the start as a row on the
+ * phone's home page, running, breathing, no toast; a tap on the row
+ * reopens the sheet at the same step; a 40-word prompt's row keeps its
+ * press and both its lines inside it; a refusal's words stand on the row
+ * (RowFault) and Reopen brings the sheet back with them.
  *
  *   bun scripts/probe-kit/run.ts web parked-start
  */
@@ -30,10 +38,15 @@ import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen } from "../../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../../kit";
 
-const POPOVER = "[data-ns-popover]";
+/** The form on a desk: the popover. */
+const DESK_FORM = "[data-ns-popover]";
+/** The form on a phone: the kit's bottom sheet. */
+const PHONE_FORM = "[data-session-card][data-vaul-drawer]";
+/** The form the legs under way read: the desk's popover, then the phone's sheet. */
+let FORM = DESK_FORM;
 const RAIL_START = 'button[aria-label="Start session"]';
-const PROMPT = `${POPOVER} [aria-label="First prompt"]`;
-const START = `${POPOVER} #session-start`;
+const PROMPT = () => `${FORM} [aria-label="First prompt"]`;
+const START = () => `${FORM} #session-start`;
 const ROW = "[data-parked]";
 const TOAST = "[data-sonner-toast]";
 const SOCKET = /\/ws\/dashboard/;
@@ -162,7 +175,7 @@ const readForm = (page: Page) =>
         card?.querySelector('[data-slot="reading"]')?.textContent?.trim() ?? "",
       toasts: document.querySelectorAll("[data-sonner-toast]").length,
     };
-  }, POPOVER);
+  }, FORM);
 
 /** Waits for the one parked row to stand in `state`. */
 async function rowIn(page: Page, state: string, timeout = 60_000) {
@@ -203,7 +216,7 @@ async function escapeIntoRow(kit: Kit, page: Page, label: string) {
           }) ?? false
         );
       },
-      POPOVER,
+      FORM,
       { timeout: 2000, polling: 16 }
     )
     .then(
@@ -214,15 +227,15 @@ async function escapeIntoRow(kit: Kit, page: Page, label: string) {
     `${label}: Esc mid-start closes the form into its row (a flight on the form to the row's box, fading out)`,
     flew
   );
-  await page.waitForSelector(POPOVER, { state: "detached", timeout: 15_000 });
+  await page.waitForSelector(FORM, { state: "detached", timeout: 15_000 });
 }
 
 /** Types `words` into the open form's prompt and attaches the probe's file. */
 async function fill(page: Page, words: string) {
-  await page.locator(PROMPT).click();
+  await page.locator(PROMPT()).click();
   await page.keyboard.type(words);
   await page
-    .locator(`${POPOVER} input[type="file"]`)
+    .locator(`${FORM} input[type="file"]`)
     .first()
     .setInputFiles({
       name: FILE,
@@ -234,7 +247,7 @@ async function fill(page: Page, words: string) {
       [...document.querySelectorAll(`${popover} [data-slot="att-name"]`)].some(
         (one) => one.textContent?.includes(file)
       ),
-    { popover: POPOVER, file: FILE },
+    { popover: FORM, file: FILE },
     { timeout: 30_000 }
   );
   // The draft store's write rests 250ms (keep-draft).
@@ -243,9 +256,7 @@ async function fill(page: Page, words: string) {
 
 /** A permission mode picked, when the form waits for one. */
 async function pickMode(page: Page) {
-  const chip = page
-    .locator(`${POPOVER} [aria-label^="Permission mode"]`)
-    .first();
+  const chip = page.locator(`${FORM} [aria-label^="Permission mode"]`).first();
   if ((await chip.textContent())?.trim() !== "Choose a mode") {
     return;
   }
@@ -263,14 +274,16 @@ async function pressStart(page: Page) {
   await page.waitForFunction(
     (start) =>
       document.querySelector<HTMLButtonElement>(start)?.disabled === false,
-    START,
+    START(),
     { timeout: 60_000 }
   );
-  await page.locator(START).click();
+  await (FORM === PHONE_FORM
+    ? page.locator(START()).tap()
+    : page.locator(START()).click());
   await page.waitForFunction(
     (start) =>
       document.querySelector(start)?.getAttribute("aria-busy") === "true",
-    START,
+    START(),
     { timeout: 10_000 }
   );
 }
@@ -282,18 +295,7 @@ async function newSessionLegs(
   instances: () => string[],
   spawnLink: string
 ) {
-  /** The form opened on the fleet's machine and folder, as "Spawn here" opens it. */
-  const openNew = async () => {
-    await page.goto(spawnLink, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector(POPOVER, { state: "visible", timeout: 60_000 });
-    await page.waitForFunction(
-      () => !location.search.includes("spawn="),
-      null,
-      {
-        timeout: 15_000,
-      }
-    );
-  };
+  const openNew = () => openSpawnLink(page, spawnLink);
   const label = "New session";
   // 1. Typed, attached, reloaded: the same form.
   await openNew();
@@ -302,10 +304,10 @@ async function newSessionLegs(
   await pickMode(page);
   await page.waitForTimeout(300);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForSelector(POPOVER, { state: "visible", timeout: 60_000 });
+  await page.waitForSelector(FORM, { state: "visible", timeout: 60_000 });
   await page.waitForFunction(
     (prompt) => (document.querySelector(prompt)?.textContent ?? "").length > 0,
-    PROMPT,
+    PROMPT(),
     { timeout: 30_000 }
   );
   await settle(page, 400);
@@ -337,7 +339,7 @@ async function newSessionLegs(
 
   // 3. A press on the running row: the form back on the same start.
   await page.locator(`${ROW} [data-parked-row]`).first().click();
-  await page.waitForSelector(POPOVER, { state: "visible", timeout: 15_000 });
+  await page.waitForSelector(FORM, { state: "visible", timeout: 15_000 });
   await settle(page, 300);
   const back = await readForm(page);
   const hidden = await readRows(page);
@@ -383,7 +385,7 @@ async function newSessionLegs(
 
   // 4. A refusal: its words on the row and, reopened, in the form; no toast.
   await openNew();
-  await page.locator(PROMPT).click();
+  await page.locator(PROMPT()).click();
   await page.keyboard.type("PROBE-PARK refused");
   await pickMode(page);
   hold.spawn = { ms: 2500, refuse: true };
@@ -403,7 +405,7 @@ async function newSessionLegs(
     .locator(`${ROW} [data-parked-fault] button`, { hasText: "Reopen" })
     .first()
     .click();
-  await page.waitForSelector(POPOVER, { state: "visible", timeout: 15_000 });
+  await page.waitForSelector(FORM, { state: "visible", timeout: 15_000 });
   await settle(page, 300);
   const reopened = await readForm(page);
   kit.check(
@@ -416,9 +418,9 @@ async function newSessionLegs(
   );
   // Cancel is the form's own end: the start and its row go.
   await page
-    .locator(`${POPOVER} [data-ns-footer] button`, { hasText: "Cancel" })
+    .locator(`${FORM} [data-ns-footer] button`, { hasText: "Cancel" })
     .click();
-  await page.waitForSelector(POPOVER, { state: "detached", timeout: 15_000 });
+  await page.waitForSelector(FORM, { state: "detached", timeout: 15_000 });
   kit.check(
     `${label}: Cancel drops the failed start: no row stands`,
     (await readRows(page)).length === 0
@@ -439,7 +441,7 @@ async function openContinue(page: Page, sourceUrl: string) {
     .first();
   await item.waitFor({ state: "visible", timeout: 10_000 });
   await item.click();
-  await page.waitForSelector(POPOVER, { state: "visible", timeout: 15_000 });
+  await page.waitForSelector(FORM, { state: "visible", timeout: 15_000 });
 }
 
 async function continueLegs(
@@ -459,11 +461,11 @@ async function continueLegs(
   await pickMode(page);
   await page.waitForTimeout(300);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForSelector(POPOVER, { state: "visible", timeout: 60_000 });
+  await page.waitForSelector(FORM, { state: "visible", timeout: 60_000 });
   await page.waitForFunction(
     (prompt) =>
       (document.querySelector(prompt)?.textContent ?? "").includes("PROBE"),
-    PROMPT,
+    PROMPT(),
     { timeout: 30_000 }
   );
   await settle(page, 400);
@@ -494,7 +496,7 @@ async function continueLegs(
   );
   // 3. Back into the form on it.
   await page.locator(`${ROW} [data-parked-row]`).first().click();
-  await page.waitForSelector(POPOVER, { state: "visible", timeout: 15_000 });
+  await page.waitForSelector(FORM, { state: "visible", timeout: 15_000 });
   await settle(page, 300);
   const back = await readForm(page);
   kit.check(
@@ -531,7 +533,7 @@ async function continueLegs(
   await fleet.send(source, SLOW);
   await page.waitForTimeout(1500);
   await openContinue(page, sourceUrl);
-  await page.locator(PROMPT).click();
+  await page.locator(PROMPT()).click();
   await page.keyboard.type("PROBE-PARK across a reload");
   await pickMode(page);
   await pressStart(page);
@@ -543,7 +545,7 @@ async function continueLegs(
   );
   const beforeReload = new Set(instances());
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForSelector(POPOVER, { state: "visible", timeout: 60_000 });
+  await page.waitForSelector(FORM, { state: "visible", timeout: 60_000 });
   await settle(page, 300);
   const held = await readForm(page);
   kit.check(
@@ -575,7 +577,7 @@ async function continueLegs(
 
   // 4. A refusal: on the row and in the form.
   await openContinue(page, sourceUrl);
-  await page.locator(PROMPT).click();
+  await page.locator(PROMPT()).click();
   await page.keyboard.type("PROBE-PARK refused continue");
   await pickMode(page);
   hold.post = { ms: 2500, refuse: true };
@@ -595,7 +597,7 @@ async function continueLegs(
     .locator(`${ROW} [data-parked-fault] button`, { hasText: "Reopen" })
     .first()
     .click();
-  await page.waitForSelector(POPOVER, { state: "visible", timeout: 15_000 });
+  await page.waitForSelector(FORM, { state: "visible", timeout: 15_000 });
   await settle(page, 300);
   const reopened = await readForm(page);
   kit.check(
@@ -606,6 +608,281 @@ async function continueLegs(
       reopened.toasts === 0,
     JSON.stringify(reopened)
   );
+}
+
+/** The form opened on the fleet's machine and folder, as "Spawn here" opens it. */
+async function openSpawnLink(page: Page, spawnLink: string) {
+  await page.goto(spawnLink, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector(FORM, { state: "visible", timeout: 60_000 });
+  await page.waitForFunction(() => !location.search.includes("spawn="), null, {
+    timeout: 15_000,
+  });
+}
+
+/**
+ * The sheet closed by its own Close mid-start: the drawer's exit runs on the
+ * sheet (an animation on it, read from the engine), and the sheet leaves.
+ */
+async function closeSheet(kit: Kit, page: Page, label: string) {
+  await page
+    .locator(`${PHONE_FORM} button[aria-label="Close"]`)
+    .filter({ visible: true })
+    .first()
+    .tap();
+  const exited = await page
+    .waitForFunction(
+      (sheet) => {
+        const card = document.querySelector<HTMLElement>(sheet);
+        return (
+          card
+            ?.getAnimations()
+            .some((run) => run.playState === "running" || run.pending) ?? false
+        );
+      },
+      PHONE_FORM,
+      { timeout: 2000, polling: 16 }
+    )
+    .then(
+      () => true,
+      () => false
+    );
+  kit.check(
+    `${label}: the sheet's Close mid-start runs the drawer's exit on the sheet (getAnimations)`,
+    exited
+  );
+  await page.waitForSelector(PHONE_FORM, {
+    state: "detached",
+    timeout: 15_000,
+  });
+}
+
+/** Whether the visible parked rows stand on the phone's home page. */
+const onHomePage = (page: Page) =>
+  page.evaluate((row) => {
+    const shown = [...document.querySelectorAll<HTMLElement>(row)].filter(
+      (one) => one.getClientRects().length > 0
+    );
+    return (
+      shown.length > 0 &&
+      shown.every((one) => one.closest('[data-home-variant="page"]') !== null)
+    );
+  }, ROW);
+
+/** A visible parked row's boxes at 390: the row, its press, its two lines. */
+const readFit = (page: Page) =>
+  page.evaluate((row) => {
+    const li = [...document.querySelectorAll<HTMLElement>(row)].find(
+      (one) => one.getClientRects().length > 0
+    );
+    const measure = (el: Element | null | undefined) => {
+      if (!el) {
+        return null;
+      }
+      const box = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return {
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+        left: box.left,
+        right: box.right,
+        overflowX: style.overflowX,
+        textOverflow: style.textOverflow,
+      };
+    };
+    return {
+      viewport: innerWidth,
+      li: measure(li),
+      press: measure(li?.querySelector("[data-parked-row]")),
+      title: measure(li?.querySelector('[data-slot="title"]')),
+      doing: measure(li?.querySelector('[data-slot="doing"]')),
+      titleText:
+        li?.querySelector('[data-slot="title"]')?.textContent?.trim() ?? "",
+    };
+  }, ROW);
+
+/** Taps the one visible parked row's own press. */
+const tapRow = (page: Page) =>
+  page
+    .locator(`${ROW} [data-parked-row]`)
+    .filter({ visible: true })
+    .first()
+    .tap();
+
+async function phoneLegs(
+  kit: Kit,
+  page: Page,
+  hold: Hold,
+  instances: () => string[],
+  spawnLink: string
+) {
+  FORM = PHONE_FORM;
+  const label = "Phone 390";
+  // 3. A reload with the sheet open: the same words and chip.
+  await openSpawnLink(page, spawnLink);
+  const words = "PROBE-PARK phone prompt kept";
+  await fill(page, words);
+  await pickMode(page);
+  await page.waitForTimeout(300);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForSelector(FORM, { state: "visible", timeout: 60_000 });
+  await page.waitForFunction(
+    (prompt) => (document.querySelector(prompt)?.textContent ?? "").length > 0,
+    PROMPT(),
+    { timeout: 30_000 }
+  );
+  await settle(page, 400);
+  const reloaded = await readForm(page);
+  kit.check(
+    `${label}: a reload with the sheet open reopens the sheet with the same words and the same attachment chip`,
+    reloaded.open &&
+      reloaded.prompt === words &&
+      reloaded.chips.some((chip) => chip.includes(FILE)),
+    JSON.stringify(reloaded)
+  );
+
+  // 1. The sheet closed mid-start: the start parks as a row on the home page.
+  const before = new Set(instances());
+  hold.spawn = { ms: 6000, refuse: false };
+  await pressStart(page);
+  await closeSheet(kit, page, label);
+  await rowIn(page, "running", 10_000);
+  await settle(page, 200);
+  const [live] = await readRows(page);
+  kit.check(
+    `${label}: the parked row stands on the phone's home page, running, its stage, the Working glyph on the breath keyframes, no toast`,
+    (await onHomePage(page)) &&
+      live?.state === "running" &&
+      SPAWN_STAGE.test(live.doing) &&
+      live.breath.includes("breath") &&
+      live.title === words &&
+      live.toasts === 0,
+    JSON.stringify(live)
+  );
+
+  // 2. A tap on the row: the sheet back at the same step.
+  await tapRow(page);
+  await page.waitForSelector(FORM, { state: "visible", timeout: 15_000 });
+  await settle(page, 300);
+  const back = await readForm(page);
+  kit.check(
+    `${label}: a tap on the row reopens the sheet at the same step: the same words and chip, Start pending with its stage`,
+    back.open &&
+      back.prompt === words &&
+      back.chips.some((chip) => chip.includes(FILE)) &&
+      back.busy &&
+      SPAWN_STAGE.test(back.startWords),
+    JSON.stringify(back)
+  );
+  await closeSheet(kit, page, `${label} (again)`);
+  await rowIn(page, "started", 60_000);
+  const [done] = await readRows(page);
+  kit.check(
+    `${label}: the row says it started once the hub answers, the session on the hub, no toast`,
+    done?.state === "started" &&
+      done.doing.includes("Started on") &&
+      instances().some((id) => !before.has(id)) &&
+      done.toasts === 0,
+    JSON.stringify(done)
+  );
+  await page
+    .locator(`${ROW} [data-parked-dismiss]`)
+    .filter({ visible: true })
+    .first()
+    .tap();
+
+  // 5. Overflow at 390: a 40-word prompt as the title.
+  await openSpawnLink(page, spawnLink);
+  const long = Array.from(
+    { length: 40 },
+    (_, at) => `word${at + 1}-PROBE-PARK`
+  ).join(" ");
+  await page.locator(PROMPT()).click();
+  await page.keyboard.type(long);
+  await pickMode(page);
+  hold.spawn = { ms: 6000, refuse: false };
+  await pressStart(page);
+  await closeSheet(kit, page, `${label} (40 words)`);
+  await rowIn(page, "running", 10_000);
+  await settle(page, 300);
+  const fit = await readFit(page);
+  type Fit = NonNullable<typeof fit.li>;
+  const row = fit.li;
+  /** A box that keeps to the row: no wider than its own box, inside the row's. */
+  const fits = (box: Fit | null) =>
+    box !== null &&
+    row !== null &&
+    box.scrollWidth <= box.clientWidth &&
+    box.left >= row.left - 0.5 &&
+    box.right <= row.right + 0.5;
+  /**
+   * A line of text that keeps to the row: its box inside the row's, and
+   * what runs past it clipped behind an ellipsis, drawn nowhere. (A line cut
+   * by `text-overflow: ellipsis` reports its whole text in `scrollWidth`.)
+   */
+  const clipped = (box: Fit | null) =>
+    box !== null &&
+    row !== null &&
+    box.left >= row.left - 0.5 &&
+    box.right <= row.right + 0.5 &&
+    (box.scrollWidth <= box.clientWidth ||
+      ((box.overflowX === "clip" || box.overflowX === "hidden") &&
+        box.textOverflow === "ellipsis"));
+  kit.check(
+    `${label}: with a 40-word prompt as its title, the row and its press keep scrollWidth <= clientWidth inside the viewport, and both lines stay inside the row, what runs past clipped behind an ellipsis`,
+    fits(row) &&
+      (row?.right ?? Number.POSITIVE_INFINITY) <= fit.viewport &&
+      fits(fit.press) &&
+      clipped(fit.title) &&
+      clipped(fit.doing) &&
+      fit.titleText.startsWith("word1-PROBE-PARK"),
+    JSON.stringify(fit)
+  );
+  await rowIn(page, "started", 60_000);
+  await page
+    .locator(`${ROW} [data-parked-dismiss]`)
+    .filter({ visible: true })
+    .first()
+    .tap();
+
+  // 4. A refusal: the hub's words on the phone's row, and Reopen.
+  await openSpawnLink(page, spawnLink);
+  await page.locator(PROMPT()).click();
+  await page.keyboard.type("PROBE-PARK phone refused");
+  await pickMode(page);
+  hold.spawn = { ms: 2500, refuse: true };
+  await pressStart(page);
+  await closeSheet(kit, page, `${label} (refused)`);
+  await rowIn(page, "failed", 30_000);
+  hold.spawn = { ms: 0, refuse: false };
+  const [refused] = await readRows(page);
+  kit.check(
+    `${label}: the hub's refusal stands on the phone's row in its words (RowFault), no toast`,
+    (await onHomePage(page)) &&
+      refused?.state === "failed" &&
+      refused.fault.includes(BAD_HARNESS) &&
+      refused.toasts === 0,
+    JSON.stringify(refused)
+  );
+  await page
+    .locator(`${ROW} [data-parked-fault] button`, { hasText: "Reopen" })
+    .filter({ visible: true })
+    .first()
+    .tap();
+  await page.waitForSelector(FORM, { state: "visible", timeout: 15_000 });
+  await settle(page, 300);
+  const reopened = await readForm(page);
+  kit.check(
+    `${label}: Reopen reopens the sheet on it, the refusal's words on its line, the prompt as it was, no toast`,
+    reopened.reading.includes(BAD_HARNESS) &&
+      reopened.prompt === "PROBE-PARK phone refused" &&
+      !reopened.busy &&
+      reopened.toasts === 0,
+    JSON.stringify(reopened)
+  );
+  await page
+    .locator(`${FORM} [data-ns-footer] button`, { hasText: "Cancel" })
+    .tap();
+  await page.waitForSelector(FORM, { state: "detached", timeout: 15_000 });
 }
 
 const respond = (seen: Seen): Reply =>
@@ -651,13 +928,8 @@ const spec: Spec = {
     });
     await open(page, `${base}/session`, RAIL_START, 120_000);
     await settle(page, 400);
-    await newSessionLegs(
-      kit,
-      page,
-      hold,
-      instances,
-      `${base}/session?spawn=${encodeURIComponent(MACHINE)}&cwd=${encodeURIComponent(fleet.workdir)}`
-    );
+    const spawnLink = `${base}/session?spawn=${encodeURIComponent(MACHINE)}&cwd=${encodeURIComponent(fleet.workdir)}`;
+    await newSessionLegs(kit, page, hold, instances, spawnLink);
     await continueLegs(
       kit,
       page,
@@ -667,6 +939,12 @@ const spec: Spec = {
       instances,
       `${base}/session/${source}`
     );
+    // The phone: the same form as the bottom sheet, its rows on the home page.
+    const phone = await kit.page("phone", { theme: "light" });
+    const phoneHold = await holding(phone);
+    await open(phone, `${base}/session`, "body", 120_000);
+    await settle(phone, 400);
+    await phoneLegs(kit, phone, phoneHold, instances, spawnLink);
   },
 };
 
