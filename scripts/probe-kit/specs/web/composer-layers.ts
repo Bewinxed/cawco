@@ -455,19 +455,10 @@ const SURFACES: Surface[] = [
   },
   {
     name: "delegate panel",
-    // Opened and shut once first: the delegate's tail is read on its first
-    // open and lands in the panel as it does (a size tween, HoverPanel's
-    // morph), which is that content arriving, not the panel's own open.
-    async present(page) {
-      if (!(await visible(page, CHIP))) {
-        return "no working chip in the row";
-      }
-      await page.locator(CHIP).first().click();
-      await settle(page, 600);
-      await page.locator(CHIP).first().click();
-      await settle(page, 600);
-      return null;
-    },
+    // Its first open, as the person meets it: the tail drawn in it as it
+    // comes in is part of that one motion (HoverPanel `entered`).
+    present: async (page) =>
+      (await visible(page, CHIP)) ? null : "no working chip in the row",
     within: async (page) =>
       `[id="${await page.locator(CHIP).first().getAttribute("aria-controls")}"]`,
     open: (page) => page.locator(CHIP).first().click(),
