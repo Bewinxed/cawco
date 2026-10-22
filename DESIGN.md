@@ -528,6 +528,14 @@ The question card is the worked answer: minimized, it folds to its bar over the 
 
 **Theme switch.** The new theme is drawn at once under a wash of the old background, which fades off over 200ms on ease-out (`theme.svelte.ts`, `.theme-wash`). Element transitions are switched off for the flip. With reduced motion the theme flips with no wash.
 
+**The House Helper Rule.** Each kind of motion above has one helper, and a component takes it rather than writing its own (paths from `apps/dashboard/src/lib`). Each already keeps the curves, the clocks, interruption and reduced motion these rules ask for.
+- **`morph()`** (`cawco/motion/morph.svelte.ts`, `{@attach morph()}`): a container whose content changes size tweens to its new size over `--dur-morph` on the drawer curve, instead of jumping (a popover's list arriving, an error line appearing, a card switching what it shows). The words themselves change through MorphText (The Steady Swap Rule).
+- **`NsPopoverGroup`** (`cawco/spawn/NsPopoverGroup.svelte`, its state in `popover-group.svelte.ts`, its surface `components/ui/glide-popover`): sibling popovers sharing one surface, so moving from one trigger to the next glides that surface and morphs its width and height rather than closing one and opening another.
+- **`reflow()` with `data-flip`** (`cawco/motion/rows.svelte.ts`): a list's reorders, arrivals and departures (The Nothing Jumps Rule). Attach `{@attach reflow()}` to the container and mark what travels: `data-flip` on a row, `"pop"` on a chip, badge or count, `"box"` on a card whose edge is drawn.
+- **`unfold`** (`cawco/motion/fold.svelte.ts`): a disclosure's height, as a Svelte transition on what an `{#if}` mounts: `in:unfold` grows it from nothing to its measured height over `--dur-pop`, `out:unfold` folds it back over `--dur-exit`, fading with the height, so what sits below slides.
+- **`fluid-tabs`** (`components/ui/fluid-tabs`): segmented and tab switches, their sheet sliding under the choice (Segmented controls and tabs).
+- **The harness switch** (`cawco/motion/Rail.svelte`, down the New session form's harness rail in `cawco/spawn/ModelSection.svelte`, across the home's Working/Finished switch) is the reference tab switch: a thumb that slides under the chosen item and one label that travels to the item under the pointer or the keyboard and resizes to its name, rather than a tooltip per item, both gliding over `--dur-morph` on ease-in-out. A new switch is measured against it.
+
 ### Sound and touch
 
 **The Quiet Feel Rule.** Sound and touch accompany a gesture the reader is making; they never announce anything on their own, never stand in for a word or a glyph, and never play for something the reader did not do. Sound is Cuelume (synthesized live, no files), always at its `subtle` emphasis. It is off until the reader turns it on with the Sound switch beside the theme in the rail's footer, and the choice is kept in this browser (`feel.svelte.ts`). Touch is web-haptics: the Vibration API on Android, and on iOS Safari, which has none, the system tick of a switch toggled out of sight. It answers only a finger on a coarse pointer and has no setting. Both libraries load on the first press or key, never with the page, and Cuelume's audio graph is built while idle right after with an inaudible play, so the first cue costs no frame (built on the first real cue it cost the frame that cue landed in: 76ms against 4ms warm). The moments, all in the composer today:
@@ -741,6 +749,8 @@ Logins moved into CawCo are one group: a head led by the group glyph (Solar duot
 The kit lives in `apps/dashboard/src/lib/components/ui`. Shared recipes are the `kit-*` classes in `app.css`'s components layer; everything else a component draws is the theme's utilities and variants on its own elements (`theme.css`, `variants.css`).
 
 **The Earned Count Rule.** A count on a control is drawn only above 0: a count of none says nothing. On the web and in the app alike, at 0 the count element is gone and the control's name drops it too. A figure whose 0 is itself the reading (a measurement, a share, a total the control reports rather than a number of things it opens) is not a count.
+
+**The Spend Stays On Usage Rule.** Spend never shows in a view. No cost, token spend or price figure appears anywhere in CawCo except the surfaces built for it: the Usage page (`/usage`, its parts in `lib/cawco/usage/`) and Configure › Spend (`/config/spend`). A session, a row, a card, a notice or a panel says what happened in words (a project reached its budget, Caw paused), never the amount.
 
 ### Buttons
 Buttons: shadcn/ui button and Base UI; prominence per Apple HIG.
@@ -1011,5 +1021,7 @@ The surface that set the language. It hangs from the trigger pressed, a popover 
 - **Don't** swap Solar for another icon set or for SF Symbols, or drop the duotone layer.
 - **Don't** use pill-shaped buttons; full rounding is for state pills, switches and dots.
 - **Don't** put a third control between Approve and Deny, or make one more salient than the other.
+- **Don't** show a cost, token spend or price figure outside the Usage page and Configure › Spend.
+- **Don't** write your own size tween, list reflow, disclosure fold, popover glide or tab switch; take the house helper (The House Helper Rule).
 - **Don't** show an empty state while data is loading, or claim zero while the hub connection is not live.
 - **Don't** use a `group-has-*` utility anywhere in the dashboard: one such rule in the sheet makes every element put into the page restyle the whole rail, 20ms and more, whether its group is on the page or not. Style from a state the component sets on itself or its group (`group-data-*`), or from a sibling. `grep -rn "group-has-" apps/dashboard/src` finds none.
