@@ -13,8 +13,20 @@ import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { failureClause, hubFailure, hubRefusal } from "#lib/cawco/hub-read.js";
 import { newId } from "../id";
 import { readJson, writeJson } from "../storage";
-import { toast } from "../toasts";
 import { installable, type Refusal, type UpdateMachine } from "./model";
+
+/** A setting on Configure › Updates whose save the hub can refuse. */
+export type UpdateSetting = "channel" | "auto" | "check";
+
+/**
+ * What the hub refused of a setting: said under that setting in words,
+ * with Try again, until the reader acts on it. `policy` is what was asked
+ * for, so Try again asks for it again.
+ */
+export interface SettingRefusal {
+  policy?: BinaryUpdatePolicy;
+  reason: string;
+}
 
 /**
  * What this tab asked of the machines' updates, kept in the tab's own
@@ -28,6 +40,7 @@ const KEPT = "cawco:update-commands";
 interface Kept {
   commanded: string[];
   refused: [string, Refusal][];
+  settings?: [UpdateSetting, SettingRefusal][];
 }
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
@@ -51,6 +64,12 @@ class Updates {
    * acts on it (Retry, or the notice's ✕).
    */
   readonly refused: SvelteMap<string, Refusal>;
+  /**
+   * What the hub refused of a setting (the channel, automatic updates, the
+   * check for new builds), by setting: said under it on Configure ›
+   * Updates, never a toast, until a try goes.
+   */
+  readonly settingRefused: SvelteMap<UpdateSetting, SettingRefusal>;
 
   constructor() {
     const kept = readJson<Kept>(
@@ -60,13 +79,18 @@ class Updates {
     );
     this.commanded = new SvelteSet(kept.commanded);
     this.refused = new SvelteMap(kept.refused);
+    this.settingRefused = new SvelteMap(kept.settings ?? []);
   }
 
   /** Writes what this tab asked to the tab's storage, so a reload keeps it. */
   private keep(): void {
     writeJson(
       KEPT,
-      { commanded: [...this.commanded], refused: [...this.refused] },
+      {
+        commanded: [...this.commanded],
+        refused: [...this.refused],
+        settings: [...this.settingRefused],
+      },
       "session"
     );
   }
@@ -143,7 +167,17 @@ class Updates {
     await this.loadChannels();
   }
 
-  async savePolicy(next: BinaryUpdatePolicy): Promise<boolean> {
+  /**
+   * Saves the channel or automatic updates. A refusal is kept under the
+   * setting it was for (`settingRefused`), in words: what did not change,
+   * the hub's why, what stays as it is.
+   */
+  async savePolicy(
+    next: BinaryUpdatePolicy,
+    setting: "channel" | "auto"
+  ): Promise<boolean> {
+    this.settingRefused.delete(setting);
+    this.keep();
     const response = await fetch("/api/binary-updates/settings", {
       method: "PUT",
       headers: JSON_HEADERS,
@@ -153,7 +187,17 @@ class Updates {
       }),
     }).catch(() => null);
     if (!response?.ok) {
-      toast.error("Couldn't save the setting. Nothing changed.");
+      const why = response
+        ? await errorText(response)
+        : "the hub did not answer";
+      this.settingRefused.set(setting, {
+        policy: next,
+        reason:
+          setting === "channel"
+            ? `The channel was not switched to ${next.channel === "nightly" ? "Nightly" : "Stable"}: ${why}. Machines keep the build they run; Try again to switch.`
+            : `Automatic updates were not turned ${next.autoUpdate ? "on" : "off"}: ${why}. Nothing changed; Try again to save it.`,
+      });
+      this.keep();
       return false;
     }
     this.policy = (await response.json()) as BinaryUpdatePolicy;
@@ -170,14 +214,21 @@ class Updates {
     }
   }
 
+  /** Asks the release server for new builds; a refusal is kept under Check for updates. */
   async refreshChannels(): Promise<boolean> {
+    this.settingRefused.delete("check");
+    this.keep();
     const response = await fetch("/api/binary-updates/channels", {
       method: "POST",
     }).catch(() => null);
     if (!response?.ok) {
-      toast.error(
-        "Couldn't reach the release server. Machines keep the build they run."
-      );
+      const why = response
+        ? await errorText(response)
+        : "the hub did not answer";
+      this.settingRefused.set("check", {
+        reason: `No new builds could be looked for: ${why}. Machines keep the build they run; Try again to check.`,
+      });
+      this.keep();
       return false;
     }
     this.channels = (await response.json()) as BinaryUpdateChannels;

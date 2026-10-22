@@ -5,7 +5,8 @@
    * asked (forget.svelte.ts): the project head's `⋯` or a folder's row in
    * the rail. Each of those places draws one of these with its own `at`;
    * the tray shows at the one it stands at, and the forget parked meanwhile
-   * shows its line (StopParked) under the project's row in the rail alone.
+   * shows its line (StopParked) under the project's row in the rail, or,
+   * while that row is not drawn (a phone's closed sheet), under the head.
    * Caw turned off with what he started still stopping (CawLeadSwitch) is
    * the same kind of work on the same project, so it parks here too.
    *
@@ -27,7 +28,7 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { cn } from "#lib/utils.js";
   import { type ProjectRow, projectRunning } from "./client.svelte";
-  import { forgetHost } from "./forget.svelte";
+  import { forgetAtRail, forgetHost } from "./forget.svelte";
   import RowFault from "./RowFault.svelte";
   import StopParked from "./StopParked.svelte";
   import StopTray from "./StopTray.svelte";
@@ -44,8 +45,10 @@
     /** The project this place belongs to. */
     projectId: string;
     /**
-     * This place is where the project's stops are parked (its rail row):
-     * one place, never also the head, so the line is never drawn twice.
+     * This place is where the project's stops are parked (its rail row).
+     * Any other place (the head) parks them only while that row is not
+     * drawn (a phone's rail is a sheet, drawn only while open), so the line
+     * stands in one place, one press from the page.
      */
     parks?: boolean;
     class?: string;
@@ -54,6 +57,8 @@
   const project = $derived(forgetHost.at === at ? forgetHost.project : null);
   /** The project's stop jobs: its forget, and Caw turned off; parked, each shows here. */
   const jobs = $derived(stopWork.on(projectId));
+  /** The rail's row stands for the project's parked stops; this place does while it is not drawn. */
+  const parksHere = $derived(parks || !stopWork.drawn(forgetAtRail(projectId)));
   /** Reading what runs was refused: said here, with Try again. */
   let unread = $state<string | null>(null);
   /** Reading what runs for the forget asked here. */
@@ -135,7 +140,9 @@
   {#if job.at === at}
     <StopTray class={className} {job} />
   {/if}
-  {#if parks}
+  <!-- Caw's off tray put away in his settings is said there while they
+       stand open (CawLeadSwitch); here once they close. -->
+  {#if parksHere && !(job.kind === "caw-off" && stopWork.drawn(job.at))}
     <StopParked {at} class={className} {job} />
   {/if}
 {/each}

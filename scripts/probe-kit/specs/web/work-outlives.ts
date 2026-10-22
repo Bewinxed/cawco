@@ -1,14 +1,16 @@
 /**
  * Work that outlives its surface (DESIGN.md, The Work Outlives Its Surface
  * Rule), read from the engine on a scratch fleet (a real hub, one machine)
- * at the desk. The hub's refusals are its answers swapped in the page
+ * on three passes: Chromium and WebKit at the desk, and Chromium on a 390
+ * phone, each on its own fixtures. The hub's refusals are its answers swapped in the page
  * (`page.route`), and a stop's landing is the hub's own `project.stop` frame
  * said on the page's socket (`routeWebSocket`). Per surface:
  *
  *  (a) machine updates: Install now refused (the machine not connected) is
  *      said in Caw's panel, where the update is parked, and under the
  *      machine's row in Configure › Updates, where it was asked; a reload
- *      says it in both again; Retry asks again;
+ *      says it in both again; Retry asks again; a refused setting (automatic
+ *      updates, the check for new builds) is said under it, through a reload;
  *  (b) workflow launch: a reload keeps the form open with what was typed;
  *      a refusal is said in the form and, the form put away, under the
  *      workflow's row with Reopen, through a reload; Reopen brings the form
@@ -18,13 +20,14 @@
  *      reload;
  *  (d) the forget tray: a reload mid-stop brings the tray back at the same
  *      step, a stop landed in the meantime gone from it; Escape parks it in
- *      one place, under the project's rail row, live, with no navigation;
+ *      one place, under the project's rail row (on a phone, whose rail is a
+ *      sheet, under the project's head), live, one press away, with no navigation;
  *      Show brings it back at the same step where it was asked; a stop that failed is said in
  *      the tray and, parked, on the project's row;
  *  (d′) Caw turned off with what he started still running: the same
  *      tray in his settings, through a reload (his settings open again with
- *      it), parked on the project's rail row, back on Show, a failure in
- *      words in both;
+ *      it), parked under his switch while they stand and on the project's
+ *      row once they close, back on Show, a failure in words in each;
  *  (e) pairing: a reload shows the same code again, and the hub was asked
  *      for one code only;
  *
@@ -34,7 +37,52 @@
  */
 import type { Page, WebSocketRoute } from "playwright-core";
 import { MACHINE } from "../../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../../kit";
+import {
+  type Engine,
+  type Kit,
+  open,
+  type Spec,
+  settle,
+  type View,
+} from "../../kit";
+
+/** One run of every leg: an engine at a size. */
+interface Pass {
+  engine: Engine;
+  label: string;
+  /** Under 640px: the launch form is a sheet, the rail a sheet drawn only while open. */
+  phone: boolean;
+  view: View;
+}
+
+const PASSES: Pass[] = [
+  { label: "chromium desk", engine: "chromium", view: "desk", phone: false },
+  { label: "webkit desk", engine: "webkit", view: "desk", phone: false },
+  {
+    label: "chromium phone 390",
+    engine: "chromium",
+    view: "phone",
+    phone: true,
+  },
+];
+
+/**
+ * The passes this run takes: every one, or those whose label holds a word
+ * `WORK_OUTLIVES_PASSES` names (`phone`, `webkit`), for a leg read again alone.
+ */
+const passes = (): Pass[] => {
+  const only = process.env.WORK_OUTLIVES_PASSES?.split(",").filter(Boolean);
+  return only?.length
+    ? PASSES.filter((pass) => only.some((word) => pass.label.includes(word)))
+    : PASSES;
+};
+
+/** The kit with every assertion named for its pass. */
+const named = (kit: Kit, pass: Pass): Kit => ({
+  ...kit,
+  check: (assertion, ok, detail) =>
+    kit.check(`${pass.label}: ${assertion}`, ok, detail),
+});
 
 /** Whether `ok` holds within `ms`, looked at every 100 ms. */
 async function until(
@@ -132,22 +180,143 @@ const shown = (page: Page, selector: string) =>
     .isVisible()
     .catch(() => false);
 
+/**
+ * A press as the pass's hand makes it: a click at the desk, a tap of a
+ * finger on the phone at the element's centre once it is drawn (as
+ * upstream-guard presses its menus). A phone's menu item drawn under a
+ * finger is read on ten frames first, its centre each frame, and noted:
+ * whether it holds still is the item's own fact, read, not assumed.
+ */
+async function pick(
+  kit: Kit,
+  page: Page,
+  pass: Pass,
+  target: ReturnType<Page["locator"]>
+): Promise<void> {
+  await target.waitFor({ state: "visible", timeout: 10_000 });
+  if (!pass.phone) {
+    await target.click();
+    return;
+  }
+  await settle(page, 300);
+  const tops = await target.evaluate(
+    (el) =>
+      new Promise<number[]>((done) => {
+        const seen: number[] = [];
+        const look = () => {
+          seen.push(Math.round(el.getBoundingClientRect().top * 10) / 10);
+          if (seen.length < 10) {
+            requestAnimationFrame(look);
+          } else {
+            done(seen);
+          }
+        };
+        requestAnimationFrame(look);
+      })
+  );
+  if (new Set(tops).size > 1) {
+    kit.note(
+      `${pass.label}: a pressed item moved across ten frames: ${tops.join(", ")}`
+    );
+  }
+  const box = await target.boundingBox();
+  if (!box) {
+    throw new Error("nothing drawn to press");
+  }
+  // A finger presses what is drawn on top at the point: anything else there takes the press.
+  const over = await target.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint(
+      r.left + r.width / 2,
+      r.top + r.height / 2
+    );
+    return top === el || el.contains(top)
+      ? null
+      : (top?.closest("[data-slot]")?.getAttribute("data-slot") ?? "") +
+          " " +
+          (top?.outerHTML.slice(0, 120) ?? "nothing");
+  });
+  if (over) {
+    throw new Error(`a finger here presses what stands over it: ${over}`);
+  }
+  await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+}
+
+/**
+ * The tray put away as the pass's hand does it: Escape from inside it at
+ * the desk; on a phone, which has no Escape, a tap on its own Stop waiting.
+ */
+async function putAway(
+  kit: Kit,
+  page: Page,
+  pass: Pass,
+  tray: string
+): Promise<void> {
+  if (pass.phone) {
+    await pick(kit, page, pass, page.locator(`${tray} [data-stop-cancel]`));
+    return;
+  }
+  await page.locator(`${tray} [data-stop-cancel]`).focus();
+  await page.keyboard.press("Escape");
+}
+
+/** What the page holds, said when a step finds nothing: the open menu, the trays, the stop jobs kept. */
+function stateRead() {
+  return {
+    menu: !!document.querySelector(
+      "[data-slot=dropdown-menu-content][data-state=open]"
+    ),
+    trays: [...document.querySelectorAll("[data-stop-tray]")].map(
+      (tray) =>
+        `${tray.getAttribute("data-stop-kind")}:${tray.getAttribute("data-phase")}`
+    ),
+    parked: document.querySelectorAll("[data-stop-parked]").length,
+    switch: !!document.querySelector("[data-caw-lead-switch]"),
+    focus: document.activeElement?.outerHTML.slice(0, 80) ?? null,
+    drawers: [
+      ...document.querySelectorAll(
+        "[data-slot=drawer-content][data-state=open]"
+      ),
+    ].map(
+      (drawer) =>
+        drawer.getAttribute("aria-label") ??
+        drawer.querySelector("[data-slot=drawer-title]")?.textContent ??
+        drawer.textContent?.slice(0, 60)
+    ),
+    items: [
+      ...document.querySelectorAll(
+        "[data-slot=dropdown-menu-content][data-state=open] [role=menuitem]"
+      ),
+    ].map((item) => {
+      const r = item.getBoundingClientRect();
+      const top = document.elementFromPoint(
+        r.left + r.width / 2,
+        r.top + r.height / 2
+      );
+      return `${item.textContent?.trim()}@${Math.round(r.top)} hit:${top === item || item.contains(top) ? "self" : top?.outerHTML.slice(0, 60)}`;
+    }),
+    jobs: sessionStorage.getItem("cawco:stop-work")?.slice(0, 400) ?? null,
+  };
+}
+
 /* ── (a) machine updates ──────────────────────────────────────────── */
 
+/** The machine reports a build to install, as its updater would. */
+function updateAvailable(hub: string): Promise<Response> {
+  return fetch(`${hub}/api/binary-updates/machines/${MACHINE}/state`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      phase: "available",
+      installedVersion: "0.0.1",
+      availableVersion: "9.9.9-probe",
+      channel: "stable",
+    }),
+  });
+}
+
 async function updatesLeg(kit: Kit, page: Page, base: string, hub: string) {
-  const put = await fetch(
-    `${hub}/api/binary-updates/machines/${MACHINE}/state`,
-    {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        phase: "available",
-        installedVersion: "0.0.1",
-        availableVersion: "9.9.9-probe",
-        channel: "stable",
-      }),
-    }
-  );
+  const put = await updateAvailable(hub);
   // The machine not connected, as the hub answers it.
   await page.route(`**/api/agents/${MACHINE}/update`, (route) =>
     route.fulfill({
@@ -158,11 +327,9 @@ async function updatesLeg(kit: Kit, page: Page, base: string, hub: string) {
   );
   await open(page, `${base}/session`, SHELL, 90_000);
   const panel = async () => {
-    if (
-      (await page.locator("[data-needs-caw]").getAttribute("aria-expanded")) !==
-      "true"
-    ) {
-      await page.locator("[data-needs-caw]").click();
+    const caw = page.locator("[data-needs-caw]:visible").first();
+    if ((await caw.getAttribute("aria-expanded")) !== "true") {
+      await caw.click();
     }
     await settle(page, 600);
   };
@@ -215,6 +382,62 @@ async function updatesLeg(kit: Kit, page: Page, base: string, hub: string) {
     await textOf(page, "[data-row-fault]")
   );
   await page.unroute(`**/api/agents/${MACHINE}/update`);
+
+  // A setting the hub refuses is said under it, never a toast, through a reload.
+  await page.route("**/api/binary-updates/settings", (route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "The update policy file is locked" }),
+        })
+      : route.fallback()
+  );
+  await page.route("**/api/binary-updates/channels", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 502,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "The release server did not answer" }),
+        })
+      : route.fallback()
+  );
+  await page.locator("#auto-update").click();
+  await page.getByRole("button", { name: "Check for updates" }).click();
+  const auto = '[data-setting-refusal="auto"]';
+  const checked = '[data-setting-refusal="check"]';
+  const told = await until(
+    async () =>
+      (await textOf(page, auto)).includes("locked") &&
+      (await textOf(page, checked)).includes("did not answer"),
+    10_000
+  );
+  kit.check(
+    "updates: a refused setting is said under it in words, with Try again",
+    told &&
+      (await textOf(page, auto)).includes(
+        "Automatic updates were not turned on"
+      ) &&
+      (await textOf(page, checked)).includes(
+        "No new builds could be looked for"
+      ),
+    JSON.stringify({
+      auto: await textOf(page, auto),
+      check: await textOf(page, checked),
+    })
+  );
+  await reload(page);
+  kit.check(
+    "updates: a reload keeps each setting's refusal under it",
+    (await textOf(page, auto)).includes("locked") &&
+      (await textOf(page, checked)).includes("did not answer"),
+    JSON.stringify({
+      auto: await textOf(page, auto),
+      check: await textOf(page, checked),
+    })
+  );
+  await page.unroute("**/api/binary-updates/settings");
+  await page.unroute("**/api/binary-updates/channels");
 }
 
 /* ── (b) workflow launch ──────────────────────────────────────────── */
@@ -224,14 +447,18 @@ async function launchLeg(
   page: Page,
   base: string,
   workflow: { id: string; name: string },
-  repo: string
+  repo: string,
+  pass: Pass
 ) {
   await page.goto(`${base}/workflows`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector(`[data-run-workflow="${workflow.id}"]`, {
     timeout: 60_000,
   });
   await settle(page, 400);
-  const form = "[data-slot=popover-content][data-state=open]";
+  // A popover at the desk, the house sheet on a phone.
+  const form = pass.phone
+    ? "[data-slot=drawer-content][data-state=open]"
+    : "[data-slot=popover-content][data-state=open]";
   await page.locator(`[data-run-workflow="${workflow.id}"]`).click();
   await page.waitForSelector(form);
   await page.locator(form).getByLabel("Machine").selectOption(MACHINE);
@@ -241,7 +468,8 @@ async function launchLeg(
     .fill("probe-refused");
   await settle(page, 300);
   await reload(page);
-  const reopened = await shown(page, form);
+  // The form comes back once its workflow's row is read again.
+  const reopened = await until(() => shown(page, form), 10_000);
   const typed = reopened
     ? await page
         .locator(form)
@@ -251,7 +479,13 @@ async function launchLeg(
   kit.check(
     "launch: a reload keeps the form open, with what was typed",
     reopened && typed === "probe-refused",
-    JSON.stringify({ reopened, typed })
+    JSON.stringify({
+      reopened,
+      typed,
+      kept: await page.evaluate(() =>
+        sessionStorage.getItem("cawco:workflow-launches")
+      ),
+    })
   );
 
   // A refusal: said in the form, then where the launch is parked.
@@ -427,7 +661,8 @@ async function forgetLeg(
   page: Page,
   base: string,
   project: { id: string; name: string },
-  say: (payload: object) => void
+  say: (payload: object) => void,
+  pass: Pass
 ) {
   let running = [session("stop-a"), session("stop-b")];
   await page.route(`**/api/projects/${project.id}/running`, (route) =>
@@ -445,10 +680,38 @@ async function forgetLeg(
   });
   await page.waitForSelector(SHELL, { timeout: 60_000 });
   await settle(page, 600);
-  await page.getByRole("button", { name: `More for ${project.name}` }).click();
-  await page.getByRole("menuitem", { name: "Forget project…" }).click();
+  await pick(
+    kit,
+    page,
+    pass,
+    page.getByRole("button", { name: `More for ${project.name}` })
+  );
+  // Every item of the open menu is the topmost thing at its own centre:
+  // pressable, whatever else stands (on a phone, Caw's panel over an empty
+  // board's foot stands at the page's sheet layer, under the floating surfaces).
+  await settle(page, 400);
+  const opened = await page.evaluate(stateRead);
+  kit.check(
+    "the project's ⋯ menu stands over every other float: each item pressable where it is drawn",
+    opened.menu &&
+      opened.items.length > 0 &&
+      opened.items.every((item) => item.endsWith("hit:self")),
+    JSON.stringify({ drawers: opened.drawers, items: opened.items })
+  );
+  await pick(
+    kit,
+    page,
+    pass,
+    page.getByRole("menuitem", { name: "Forget project…" })
+  );
   const tray = `[data-stop-tray="${project.id}"]`;
-  await page.waitForSelector(`${tray}[data-phase="list"]`, { timeout: 10_000 });
+  await page
+    .waitForSelector(`${tray}[data-phase="list"]`, { timeout: 10_000 })
+    .catch(async (error: unknown) => {
+      throw new Error(
+        `${String(error)} ${JSON.stringify(await page.evaluate(stateRead))}`
+      );
+    });
   await page.locator(`${tray} [data-stop-confirm]`).click();
   await settle(page, 500);
   await page.locator(`${tray} [data-stop-confirm]`).click();
@@ -486,30 +749,36 @@ async function forgetLeg(
     JSON.stringify({ backAt, rows })
   );
 
-  // Escape: parked under the project's rail row and its head, live, no navigation.
+  // Escape: parked in one place, live, no navigation: the project's rail row
+  // at the desk; on a phone, whose rail is a sheet drawn only while open,
+  // under the project's head, one press from the page.
   const at = page.url();
-  await page.locator(`${tray} [data-stop-cancel]`).focus();
-  await page.keyboard.press("Escape");
+  await putAway(kit, page, pass, tray);
   await settle(page, 500);
   const parked = `[data-stop-parked="${project.id}"]`;
+  const where = pass.phone
+    ? `[data-slot="project-forget"] ${parked}`
+    : `[data-slot="sidebar-forget"] ${parked}`;
   const places = await page.locator(parked).count();
-  const live = await textOf(page, parked);
+  const live = await textOf(page, where);
   kit.check(
-    "forget: put away, the stops park in one place, the project's rail row, live, and nothing navigated",
+    `forget: put away, the stops park in one place (${pass.phone ? "under the project's head" : "the project's rail row"}), live, one press away, and nothing navigated`,
     !(await shown(page, tray)) &&
       places === 1 &&
-      (await page.locator(`[data-slot="sidebar-forget"] ${parked}`).count()) ===
-        1 &&
+      (await shown(page, `${where} button`)) &&
       live.includes("stopped 1 of 2") &&
       page.url() === at,
-    JSON.stringify({ places, live, at, now: page.url() })
+    JSON.stringify({
+      places,
+      live,
+      at,
+      now: page.url(),
+      state: await page.evaluate(stateRead),
+    })
   );
 
-  // One press back: the tray at the same step.
-  await page
-    .locator(`[data-slot="sidebar-forget"] ${parked}`)
-    .getByRole("button", { name: "Show" })
-    .click();
+  // One press back: the tray at the same step, where it was asked.
+  await page.locator(where).getByRole("button", { name: "Show" }).click();
   const reshown = await until(
     async () =>
       (await page
@@ -544,18 +813,19 @@ async function forgetLeg(
   );
   await page.locator(`${tray} [data-stop-cancel]`).click();
   await settle(page, 500);
-  const said = await textOf(page, `[data-slot="sidebar-forget"] ${parked}`);
+  const said = await textOf(page, where);
   kit.check(
-    "forget: put away, the failure stands on the project's row in words, with Reopen",
+    "forget: put away, the failure stands where it is parked in words, with Reopen",
     said.includes(STOP_FAILED) &&
       said.includes("kept") &&
-      said.includes("Reopen"),
+      said.includes("Reopen") &&
+      (await page.locator(parked).count()) === 1,
     said
   );
   await reload(page);
-  const kept = await textOf(page, `[data-slot="sidebar-forget"] ${parked}`);
+  const kept = await textOf(page, where);
   kit.check(
-    "forget: a reload keeps the failure on the project's row",
+    "forget: a reload keeps the failure where it is parked",
     kept.includes(STOP_FAILED),
     kept
   );
@@ -575,7 +845,8 @@ async function cawOffLeg(
   base: string,
   hub: string,
   project: { id: string; name: string },
-  say: (payload: object) => void
+  say: (payload: object) => void,
+  pass: Pass
 ) {
   const on = await fetch(`${hub}/api/projects/${project.id}/caw`, {
     method: "PATCH",
@@ -604,14 +875,54 @@ async function cawOffLeg(
   });
   await page.waitForSelector(SHELL, { timeout: 60_000 });
   await settle(page, 600);
-  await page.getByRole("button", { name: `More for ${project.name}` }).click();
-  await page.getByRole("menuitem", { name: "Caw settings…" }).click();
-  await page.locator("[data-caw-lead-switch]").click();
+  await pick(
+    kit,
+    page,
+    pass,
+    page.getByRole("button", { name: `More for ${project.name}` })
+  );
+  await pick(
+    kit,
+    page,
+    pass,
+    page.getByRole("menuitem", { name: "Caw settings…" })
+  );
+  await page
+    .locator("[data-caw-lead-switch]")
+    .waitFor({ timeout: 10_000 })
+    .catch(async (error: unknown) => {
+      throw new Error(
+        `${String(error)} ${JSON.stringify(await page.evaluate(stateRead))}`
+      );
+    });
+  await pick(kit, page, pass, page.locator("[data-caw-lead-switch]"));
   const tray = `[data-stop-tray="${project.id}"][data-stop-kind="caw-off"]`;
-  await page.waitForSelector(`${tray}[data-phase="list"]`, { timeout: 10_000 });
-  await page.locator(`${tray} [data-stop-confirm]`).click();
+  try {
+    await page.waitForSelector(`${tray}[data-phase="list"]`, {
+      timeout: 10_000,
+    });
+  } catch (error) {
+    // What the switch and the page say, for a tray that never came.
+    let checked: string | null = null;
+    try {
+      checked = await page
+        .locator("[data-caw-lead-switch]")
+        .getAttribute("aria-checked", { timeout: 2000 });
+    } catch {
+      checked = null;
+    }
+    throw new Error(
+      `${String(error)} ${JSON.stringify({
+        state: await page.evaluate(stateRead),
+        checked,
+        refused: await textOf(page, '[data-slot="refused"]'),
+      })}`,
+      { cause: error }
+    );
+  }
+  await pick(kit, page, pass, page.locator(`${tray} [data-stop-confirm]`));
   await settle(page, 500);
-  await page.locator(`${tray} [data-stop-confirm]`).click();
+  await pick(kit, page, pass, page.locator(`${tray} [data-stop-confirm]`));
   await page.waitForSelector(`${tray}[data-phase="stopping"]`, {
     timeout: 5000,
   });
@@ -637,28 +948,37 @@ async function cawOffLeg(
   );
   const rows = await page
     .locator(`${tray} [data-row]`)
-    .evaluateAll((all) => all.map((row) => row.getAttribute("data-row")));
+    .evaluateAll((all) => all.map((one) => one.getAttribute("data-row")));
   kit.check(
     "caw off: a reload brings his settings and the tray back at the same step, the stop landed meanwhile gone from it",
     on.ok && backAt && rows.includes("caw-b") && !rows.includes("caw-a"),
     JSON.stringify({ on: on.status, backAt, rows })
   );
   const at = page.url();
-  await page.locator(`${tray} [data-stop-cancel]`).focus();
-  await page.keyboard.press("Escape");
+  await putAway(kit, page, pass, tray);
   await settle(page, 500);
   const parked = `[data-stop-parked="${project.id}"][data-stop-kind="caw-off"]`;
-  const rail = `[data-slot="sidebar-forget"] ${parked}`;
-  const live = await textOf(page, rail);
+  const live = await textOf(page, parked);
   kit.check(
-    "caw off: put away, the stops park on the project's rail row, live, and nothing navigated",
+    "caw off: put away, the stops are said in one place (under his switch while his settings stand, else on the project's row), live, and nothing navigated",
     !(await shown(page, tray)) &&
+      (await page.locator(parked).count()) === 1 &&
       live.includes("Caw is off") &&
       live.includes("Stopped 1 of 2") &&
       page.url() === at,
-    JSON.stringify({ live, at, now: page.url() })
+    JSON.stringify({
+      live,
+      at,
+      now: page.url(),
+      state: await page.evaluate(stateRead),
+    })
   );
-  await page.locator(rail).getByRole("button", { name: "Show" }).click();
+  await pick(
+    kit,
+    page,
+    pass,
+    page.locator(parked).getByRole("button", { name: "Show" })
+  );
   const reshown = await until(
     async () =>
       (await page
@@ -682,15 +1002,38 @@ async function cawOffLeg(
     failed && (await textOf(page, tray)).includes(STOP_FAILED),
     await textOf(page, tray)
   );
-  await page.locator(`${tray} [data-stop-cancel]`).click();
+  await pick(kit, page, pass, page.locator(`${tray} [data-stop-cancel]`));
   await settle(page, 500);
-  const said = await textOf(page, rail);
+  const said = await textOf(page, parked);
   kit.check(
-    "caw off: put away, the failure stands on the project's row in words, with Reopen",
+    "caw off: put away, the failure stands where it is parked in words, with Reopen",
     said.includes(STOP_FAILED) &&
       said.includes("Caw is off") &&
       said.includes("Reopen"),
     said
+  );
+  // His settings closed (Escape at the desk; a phone's sheet by its own
+  // Close): the failure stands on the project's row, one press away.
+  if (pass.phone) {
+    await pick(
+      kit,
+      page,
+      pass,
+      page.locator(
+        "[data-slot=drawer-content][data-state=open]:not([data-caw-float-sheet]) [aria-label=Close]"
+      )
+    );
+  } else {
+    await page.keyboard.press("Escape");
+  }
+  await settle(page, 600);
+  const row = await textOf(page, parked);
+  kit.check(
+    "caw off: his settings closed, the failure stands on the project's row, one place, with Reopen",
+    row.includes(STOP_FAILED) &&
+      (await page.locator(parked).count()) === 1 &&
+      (await shown(page, `${parked} button`)),
+    JSON.stringify({ row, places: await page.locator(parked).count() })
   );
 }
 
@@ -739,70 +1082,83 @@ const spec: Spec = {
     fleet.fileAccount();
     fleet.launch("agent");
     await fleet.agentUp();
-    const project = await fleet.api<{ id: string; name: string }>(
-      "/api/projects",
-      { name: "Probe" }
-    );
-    const workflow = await fleet.api<{ id: string; name: string }>(
-      "/api/workflows",
-      {
-        name: "Probe launch",
-        program:
-          'import { z } from "zod";\n\nexport const inputs = z.object({});\n\nexport default async function () {\n  return {};\n}\n',
-      }
-    );
-    const cawProject = await fleet.api<{ id: string; name: string }>(
-      "/api/projects",
-      { name: "Probe Caw" }
-    );
-    const routine = { id: "routine-probe", name: "Probe digest" };
-    const now = Date.now();
-    fleet.write(
-      "INSERT INTO routines (id, project_id, name, cron, time_zone, target, prompt, lands, enabled, created_by, keep, expires_at, next_slot, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'none', 1, 'session', 0, ?, ?, ?)",
-      routine.id,
-      project.id,
-      routine.name,
-      "0 9 * * 1",
-      "UTC",
-      "delegate",
-      "Write the digest.",
-      now + 7 * 86_400_000,
-      now + 365 * 86_400_000,
-      now
-    );
+    const program =
+      'import { z } from "zod";\n\nexport const inputs = z.object({});\n\nexport default async function () {\n  return {};\n}\n';
+    /** Each pass its own project, Caw's project, workflow and routine, so no pass reads another's. */
+    const fixtures = async (n: number) => {
+      const project = await fleet.api<{ id: string; name: string }>(
+        "/api/projects",
+        { name: `Probe ${n}` }
+      );
+      const cawProject = await fleet.api<{ id: string; name: string }>(
+        "/api/projects",
+        { name: `Probe Caw ${n}` }
+      );
+      const workflow = await fleet.api<{ id: string; name: string }>(
+        "/api/workflows",
+        { name: `Probe launch ${n}`, program }
+      );
+      const routine = { id: `routine-probe-${n}`, name: `Probe digest ${n}` };
+      const now = Date.now();
+      fleet.write(
+        "INSERT INTO routines (id, project_id, name, cron, time_zone, target, prompt, lands, enabled, created_by, keep, expires_at, next_slot, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'none', 1, 'session', 0, ?, ?, ?)",
+        routine.id,
+        project.id,
+        routine.name,
+        "0 9 * * 1",
+        "UTC",
+        "delegate",
+        "Write the digest.",
+        now + 7 * 86_400_000,
+        now + 365 * 86_400_000,
+        now
+      );
+      return { project, cawProject, workflow, routine };
+    };
 
-    const page = await kit.page("desk");
-    await page.context().addInitScript(countToasts);
-    const say = await socketOf(page);
-    const legs: [string, () => Promise<void>][] = [
-      ["updates", () => updatesLeg(kit, page, base, fleet.base)],
-      ["launch", () => launchLeg(kit, page, base, workflow, fleet.repo)],
-      ["routine", () => routineLeg(kit, page, base, project.id, routine)],
-      ["forget", () => forgetLeg(kit, page, base, project, say)],
-      [
-        "caw off",
-        () => cawOffLeg(kit, page, base, fleet.base, cawProject, say),
-      ],
-    ];
-    for (const [name, leg] of legs) {
-      try {
-        // biome-ignore lint/performance/noAwaitInLoops: one leg after another, on one page
-        await leg();
-      } catch (error) {
-        kit.check(`${name}: ran to its end`, false, String(error));
+    for (const [n, pass] of passes().entries()) {
+      const k = named(kit, pass);
+      // biome-ignore lint/performance/noAwaitInLoops: one pass after another, each on its own fixtures
+      const { project, cawProject, workflow, routine } = await fixtures(n);
+      const page = await kit.page(pass.view, { engine: pass.engine });
+      await page.context().addInitScript(countToasts);
+      const say = await socketOf(page);
+      const legs: [string, () => Promise<void>][] = [
+        ["updates", () => updatesLeg(k, page, base, fleet.base)],
+        ["launch", () => launchLeg(k, page, base, workflow, fleet.repo, pass)],
+        ["routine", () => routineLeg(k, page, base, project.id, routine)],
+        ["forget", () => forgetLeg(k, page, base, project, say, pass)],
+        [
+          "caw off",
+          () => cawOffLeg(k, page, base, fleet.base, cawProject, say, pass),
+        ],
+      ];
+      for (const [name, leg] of legs) {
+        try {
+          // biome-ignore lint/performance/noAwaitInLoops: one leg after another, on one page
+          await leg();
+        } catch (error) {
+          k.check(`${name}: ran to its end`, false, String(error));
+        }
       }
+      await tallyToasts(page);
     }
-    await tallyToasts(page);
-    const stranger = await kit.page("desk");
-    await stranger.context().addInitScript(countToasts);
-    try {
-      await pairingLeg(kit, stranger, base, fleet.base);
-    } catch (error) {
-      kit.check("pairing: ran to its end", false, String(error));
+
+    // Pairing last: once the hub requires paired devices, every page is a stranger.
+    for (const pass of passes()) {
+      const k = named(kit, pass);
+      // biome-ignore lint/performance/noAwaitInLoops: one stranger after another
+      const stranger = await kit.page(pass.view, { engine: pass.engine });
+      await stranger.context().addInitScript(countToasts);
+      try {
+        await pairingLeg(k, stranger, base, fleet.base);
+      } catch (error) {
+        k.check("pairing: ran to its end", false, String(error));
+      }
+      await tallyToasts(stranger);
     }
-    await tallyToasts(stranger);
     kit.check(
-      "no toast was drawn in any leg",
+      "no toast was drawn in any leg of any pass",
       toasts.count === 0,
       `${toasts.count} toast(s)`
     );

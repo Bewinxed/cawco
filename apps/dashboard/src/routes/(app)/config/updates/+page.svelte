@@ -9,6 +9,7 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { notices } from "#lib/cawco/notices.svelte.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import ChannelCards from "#lib/cawco/updates/ChannelCards.svelte";
   import {
@@ -58,10 +59,10 @@
     }
     switching = true;
     switchFailed = false;
-    const ok = await updates.savePolicy({
-      channel: chosen,
-      autoUpdate: policy.autoUpdate,
-    });
+    const ok = await updates.savePolicy(
+      { channel: chosen, autoUpdate: policy.autoUpdate },
+      "channel"
+    );
     switching = false;
     switchFailed = !ok;
     if (ok) {
@@ -97,10 +98,10 @@
     if (!policy) {
       return;
     }
-    const ok = await updates.savePolicy({
-      channel: policy.channel,
-      autoUpdate: next,
-    });
+    const ok = await updates.savePolicy(
+      { channel: policy.channel, autoUpdate: next },
+      "auto"
+    );
     if (!ok) {
       switchKey += 1;
     }
@@ -115,6 +116,28 @@
     checking = true;
     checkFailed = !(await updates.refreshChannels());
     checking = false;
+  }
+
+  /**
+   * What the hub refused of each setting, said under it with Try again
+   * (DESIGN.md, The Work Outlives Its Surface Rule: kept until acted on,
+   * never a toast). A try asks for what was asked before.
+   */
+  const refusedChannel = $derived(updates.settingRefused.get("channel"));
+  const refusedAuto = $derived(updates.settingRefused.get("auto"));
+  const refusedCheck = $derived(updates.settingRefused.get("check"));
+  async function againChannel() {
+    const asked = refusedChannel?.policy;
+    if (asked) {
+      chosen = asked.channel;
+      await switchChannel();
+    }
+  }
+  async function againAuto() {
+    const asked = refusedAuto?.policy;
+    if (asked) {
+      await setAuto(asked.autoUpdate);
+    }
   }
 
   // A person on this page has seen what landed: each landing is acknowledged for every tab and device.
@@ -197,6 +220,11 @@
         current={policy.channel}
         bind:chosen
       />
+      <RowFault
+        data-setting-refusal="channel"
+        again={againChannel}
+        reason={refusedChannel?.reason}
+      />
       <div class="overflow-hidden" {@attach morph()}>
         {#key pendingText}
           {#if pendingText}
@@ -274,6 +302,11 @@
           </div>
         {/snippet}
       </SectionHeader>
+      <RowFault
+        data-setting-refusal="check"
+        again={check}
+        reason={refusedCheck?.reason}
+      />
       {#key switchKey}
         <SwitchField
           checked={policy.autoUpdate}
@@ -285,6 +318,11 @@
           onchange={setAuto}
         />
       {/key}
+      <RowFault
+        data-setting-refusal="auto"
+        again={againAuto}
+        reason={refusedAuto?.reason}
+      />
       <UpdateTable {machines} {policy} />
     </div>
   {/if}

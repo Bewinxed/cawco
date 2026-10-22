@@ -12,8 +12,9 @@
    * about one thing. Sessions he started still run: the stop tray
    * (StopTray, its Caw-off job in stop-work.svelte.ts) unfolds under the
    * switch and names each one first, as a forget does: "Let them finish",
-   * or stop them and he is off. Put away part-way, the stops go on and park
-   * on the project's row in the rail (The Work Outlives Its Surface Rule).
+   * or stop them and he is off. Put away part-way, the stops go on and are
+   * said under the switch while it is drawn, then on the project's row
+   * once his settings close (The Work Outlives Its Surface Rule).
    * What runs is read again as you flip, so the choice is about what is true
    * now. The hub's answer is the switch's state: a refusal leaves it where
    * the hub says Caw is, its words under it.
@@ -21,6 +22,7 @@
   import type { CawInitiated, CawRunning } from "@cawco/core";
   import { onProjectStop } from "#lib/cawco/client.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import StopParked from "#lib/cawco/StopParked.svelte";
   import StopTray from "#lib/cawco/StopTray.svelte";
   import { cawOffAt, stopWork } from "#lib/cawco/stop-work.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -149,6 +151,9 @@
 {#if offJob}
   {#if offJob.at === at}
     <StopTray job={offJob} />
+    <!-- Put away here, the stops are said here while his settings stand
+         open; closed, on the project's row (ForgetProjectTray). -->
+    <StopParked {at} job={offJob} />
   {/if}
 {/if}
 {#if lead.refused}

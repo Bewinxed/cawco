@@ -1311,7 +1311,7 @@ public enum Layer {
     public static let layerBar: Double = 60
     /// A toolbar fixed over the page (the task board's bulk bar): over the bar and the dock, under the phone's preview sheet.
     public static let layerToolbar: Double = 70
-    /// The phone's preview sheet host (SideSheet): over every page layer, under the floating surfaces.
+    /// A phone's sheet that is part of the page, holding nothing (no scrim, the page above it live): the preview sheet host (SideSheet) and Caw's panel on a project's page (CawFloat). Over every page layer, under the floating surfaces, so a menu or a sheet opened from the page stands over it.
     public static let layerSheet: Double = 80
     /// A canvas stage standing in the phone's preview sheet: just over the sheet it stands in.
     public static let layerSheetStage: Double = 90

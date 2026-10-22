@@ -418,6 +418,11 @@ class StopWork {
     this.keep();
   }
 
+  /** Whether the place `at` is drawn now. */
+  drawn(at: string): boolean {
+    return this.places.has(at);
+  }
+
   /** A place that can hold a tray is drawn; it is gone when the returned call runs. */
   place(at: string): () => void {
     this.places.add(at);

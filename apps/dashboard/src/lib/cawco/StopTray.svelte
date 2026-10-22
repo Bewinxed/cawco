@@ -45,6 +45,7 @@
    * shorter armed, a row shorter per landing, the short "Stopped 3
    * sessions." at the end, a line taller for a failure.
    */
+  import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
@@ -141,6 +142,19 @@
       now = Date.now();
     }, 1000);
     return () => clearInterval(ticker);
+  });
+
+  // Taken off the page while its job still stands here (what holds it
+  // closed: Caw's settings put away, the page left): the tray is put away
+  // as Escape puts it, so stops under way park and are said where they
+  // are parked, never left standing in a place no one can see.
+  $effect(() => {
+    const place = untrack(() => job.at);
+    return () => {
+      if (job.open && job.at === place) {
+        stopWork.dismiss(job);
+      }
+    };
   });
 
   // Drawn and standing: its stopped rows fly into its button.
