@@ -1016,7 +1016,8 @@ interface Caller {
   id: string;
 }
 
-const NOTED_ID = /"id":"(n-[^"]+)"/;
+/** A note's id in memory_note's words: "Noted in the inbox as n-20261022-075232-7b9e3c." */
+const NOTED_ID = /\b(n-\d{8}-\d{6}-[0-9a-f]+)\b/;
 
 /** The card that appears after `before` (a set of request ids) whose files include `path`. */
 const newCard = (

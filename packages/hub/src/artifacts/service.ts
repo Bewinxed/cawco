@@ -700,6 +700,10 @@ export interface Created {
  */
 export type Opened = { opened: true } | { opened: false; why: string };
 
+/** What `artifact_show` answers: {@link Opened}, with the artifact's link, `[name](cawco:artifact/<id>)`, which the agent names it by and its tool row draws. */
+export type Shown =
+  { link: string; opened: true } | { link: string; opened: false; why: string };
+
 /**
  * What `artifact_browse` answers: the address the session's own browser
  * loads, and when it stops opening (ISO); null where previews are reached
@@ -6033,7 +6037,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       instanceId: string,
       id: string,
       by: PanelHand
-    ): Promise<Opened> => {
+    ): Promise<Shown> => {
       const instance = sessionOf(instanceId);
       const found = viewable(instance, id);
       let row = found.heldFor === null ? found : db.get(found.heldFor);
@@ -6055,7 +6059,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (by === "agent" && row.instanceId === instance.id) {
         askedNow(instance, row.id);
       }
-      return openedOf(shown);
+      // Its link: what the agent names it by, and its tool row draws.
+      return { ...openedOf(shown), link: artifactLink(row.id, row.name) };
     },
 
     /**
@@ -6067,7 +6072,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * address ({@link ArtifactServiceDeps.workspaceReach}) is refused, in
      * words saying why, rather than handed an address it cannot open.
      */
-    browse: async (instanceId: string, id: string): Promise<Browsed> => {
+    browse: async (
+      instanceId: string,
+      id: string
+    ): Promise<Browsed & { link: string }> => {
       const instance = sessionOf(instanceId);
       const row = readTarget(instance, id);
       if (row.kind === "browser") {
@@ -6088,7 +6096,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           `${unreached}. Ask your parent with handoff for what you need of ${row.name}.`
         );
       }
-      return pass;
+      return { ...pass, link: artifactLink(row.id, row.name) };
     },
 
     /**

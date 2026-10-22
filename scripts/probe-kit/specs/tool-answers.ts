@@ -22,8 +22,9 @@
  *    an address it loads whole), no 64-hex hash, no ISO time (comment_read's
  *    cursor aside, which its `since` takes back), no `null`.
  * c. A detailed answer is the hub's whole record: JSON that parses.
- * d. A concise answer is never longer than its detailed one, past the
- *    one sentence that says what there is ("No relays." beside `[]`).
+ * d. A concise answer's words (what it copies whole aside) are never longer
+ *    than its detailed one, past the one sentence that says what there is
+ *    ("No relays." beside `[]`).
  *
  *   bun scripts/probe-kit/run.ts tool-answers
  */
@@ -738,6 +739,7 @@ const checkOne = (kit: Kit, one: Measured) => {
     !(one.concise.refused || one.detailed.refused),
     shortOf(one.concise.text || one.detailed.text)
   );
+  // What the agent copies whole (an address, a link's destination, a cursor) is not its words.
   const words = one.concise.text
     .replace(REFERENCE_DESTINATION, "(cawco:…)")
     .replace(SINCE_CURSOR, "")
@@ -758,9 +760,9 @@ const checkOne = (kit: Kit, one: Measured) => {
   );
   kit.check(
     `d: ${tag}'s concise answer is no longer than its detailed one, past a sentence saying what there is`,
-    Buffer.byteLength(one.concise.text) <=
+    Buffer.byteLength(words) <=
       Math.max(Buffer.byteLength(one.detailed.text), SENTENCE_BYTES),
-    `${Buffer.byteLength(one.concise.text)} > ${Buffer.byteLength(one.detailed.text)}`
+    `${Buffer.byteLength(words)} of words (${Buffer.byteLength(one.concise.text)} in all) > ${Buffer.byteLength(one.detailed.text)}`
   );
 };
 

@@ -141,7 +141,11 @@ const run = async (kit: Kit) => {
           "content-type": "application/json",
           authorization: `Bearer ${credential}`,
         },
-        body: JSON.stringify({ name, arguments: args }),
+        // The hub's record (mcp-tool.ts), which this spec reads.
+        body: JSON.stringify({
+          name,
+          arguments: { response_format: "detailed", ...args },
+        }),
       }
     );
     return `${response.status} ${await response.text()}`;

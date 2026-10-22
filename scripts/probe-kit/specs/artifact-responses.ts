@@ -118,12 +118,7 @@ const respond = (request: Seen): Reply => {
     return text("Probe title");
   }
   // The agent's read, answered: what artifact_read returned.
-  if (
-    reading.issued &&
-    request.afterTool &&
-    !reading.answer &&
-    request.last.includes('"state"')
-  ) {
+  if (reading.issued && request.afterTool && !reading.answer) {
     reading.answer = request.last;
     return text("Read the responses.");
   }
@@ -432,22 +427,16 @@ const run = async (kit: Kit) => {
     (BUSY_S + 90) * 1000
   ).catch(() => undefined);
   const answer = reading.answer ?? "";
-  const parsed = (() => {
-    const at = answer.indexOf("{");
-    try {
-      return JSON.parse(answer.slice(at, answer.lastIndexOf("}") + 1)) as {
-        state?: Record<string, { note: string | null; options: string[] }>;
-      };
-    } catch {
-      return null;
-    }
-  })();
+  // The words it reads (hub presenters/artifacts.ts): the choice's pick, and
+  // its note whole as typed, in JSON's quotes, so its line break is kept.
+  const songLine = answer.split("\n").find((line) => line.includes("song"));
   kit.check(
     "5: the agent calls artifact_read with the notice's id and since, and reads the pick and the final note as typed, no Return at its end",
     reading.input?.id === id &&
       reading.input.since === since &&
-      parsed?.state?.song?.options.join() === "cover" &&
-      parsed.state.song.note === FINAL_NOTE,
+      !!songLine?.includes("cover") &&
+      answer.includes(JSON.stringify(FINAL_NOTE)) &&
+      !answer.includes(JSON.stringify(`${FINAL_NOTE}\n`)),
     `heard: ${reading.heard?.last.slice(0, 240)}; called with ${JSON.stringify(reading.input)}; answered ${answer.slice(0, 400)}`
   );
 

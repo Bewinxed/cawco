@@ -209,10 +209,10 @@ async function call(
   n += 1;
   const marker = String(n);
   asks.set(marker, {
-      name,
-      // The hub's record of the answer, which this spec reads (mcp-tool.ts).
-      input: { response_format: "detailed", ...input },
-    });
+    name,
+    // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+    input: { response_format: "detailed", ...input },
+  });
   await fleet.send(session, `PROBE-CALL:${marker}`);
   return (await until(
     `${name}'s answer (${marker})`,

@@ -27908,6 +27908,9 @@
           {
             "type": "object",
             "properties": {
+              "link": {
+                "type": "string"
+              },
               "opened": {
                 "type": "boolean",
                 "enum": [
@@ -27916,12 +27919,16 @@
               }
             },
             "required": [
+              "link",
               "opened"
             ]
           },
           {
             "type": "object",
             "properties": {
+              "link": {
+                "type": "string"
+              },
               "opened": {
                 "type": "boolean",
                 "enum": [
@@ -27933,6 +27940,7 @@
               }
             },
             "required": [
+              "link",
               "opened",
               "why"
             ]
@@ -38739,13 +38747,6 @@
       "ArtifactRead": {
         "type": "object",
         "properties": {
-          "decisions": {
-            "description": "A page's choices in page order, each answered or not ({@link DecisionAnswer}); on a whole read of a page that asks any.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DecisionAnswer"
-            }
-          },
           "changed": {
             "description": "A canvas's elements the person changed since `since` (or since your last read).",
             "type": "array",
@@ -38758,6 +38759,13 @@
             "type": "array",
             "items": {
               "type": "string"
+            }
+          },
+          "decisions": {
+            "description": "A page's choices in page order, each answered or not ({@link DecisionAnswer}); on a whole read of a page that asks any.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DecisionAnswer"
             }
           },
           "deleted": {

@@ -22,6 +22,7 @@ import type {
   Promoted,
   Removed,
   Revised,
+  Shown,
 } from "../artifacts/service";
 import type { Picture, Presented } from "../mcp-tool";
 import { LISTED } from "./sessions";
@@ -34,6 +35,7 @@ import {
   listed,
   quote,
   valueWords,
+  verbatim,
 } from "./words";
 
 /** What `artifact_update`'s `ask` answers. */
@@ -145,7 +147,7 @@ const answerLine = (answer: DecisionAnswer, now: number): string => {
   const asked = `${answer.id}${answer.question ? ` ${quote(answer.question, 100)}` : ""}`;
   const note =
     answer.answer !== "open" && answer.note
-      ? `; note ${quote(answer.note, 300)}`
+      ? `; note ${verbatim(answer.note)}`
       : "";
   const earlier =
     answer.answer !== "open" && answer.earlierRevision
@@ -153,7 +155,7 @@ const answerLine = (answer: DecisionAnswer, now: number): string => {
       : "";
   switch (answer.answer) {
     case "open":
-      return `- ${asked}: no pick yet${answer.note ? `; note ${quote(answer.note, 300)}` : ""}`;
+      return `- ${asked}: no pick yet${answer.note ? `; note ${verbatim(answer.note)}` : ""}`;
     case "picked":
       return `- ${asked}: picked ${listed(answer.options.map((option) => (option.label ? `${option.id} ${quote(option.label, 60)}` : option.id)))} ${ago(answer.at, now)}${earlier}${note}`;
     case "cleared":
@@ -180,7 +182,7 @@ const valueLines = (read: ArtifactRead, now: number): string[] => {
         ...(entry.value === null || entry.value === undefined
           ? []
           : [`set ${valueWords(entry.value)}`]),
-        ...(entry.note ? [`note ${quote(entry.note, 300)}`] : []),
+        ...(entry.note ? [`note ${verbatim(entry.note)}`] : []),
       ];
       return `- ${key}: ${said.length > 0 ? said.join("; ") : "cleared"} ${ago(entry.at, now)}${entry.earlierRevision ? ", on an earlier revision" : ""}`;
     });
@@ -193,7 +195,7 @@ const sentWords = (read: ArtifactRead, now: number): string => {
   }
   return read.sentAt === null
     ? "The person has not pressed Send yet."
-    : `The person pressed Send ${ago(read.sentAt, now)}${read.sentText ? `, the page sending ${quote(read.sentText, 300)}` : ""}.`;
+    : `The person pressed Send ${ago(read.sentAt, now)}${read.sentText ? `, the page sending ${verbatim(read.sentText)}` : ""}.`;
 };
 
 /** A stage or served preview's state, in words. */
@@ -417,8 +419,24 @@ export const artifactReadWords = (read: ArtifactRead): Presented => {
   return pictures.length > 0 ? { text, pictures } : text;
 };
 
+/**
+ * An answer as the hub keeps it, less its `route`: a bare path on the hub's
+ * preview listener that opens nowhere an agent can reach (artifact_browse
+ * answers the address its browser loads). The HTTP wire keeps it: installed
+ * apps decode it.
+ */
+const withoutRoute = <T extends object>(answer: T): Omit<T, "route"> => {
+  const { route: _route, ...rest } = answer as T & { route?: string };
+  return rest;
+};
+
+/** `artifact_create`, detailed: the hub's whole answer as JSON, less its route. */
+export const artifactCreatedDetailed = (created: Created): Presented =>
+  JSON.stringify(withoutRoute(created));
+
 /** `artifact_read`, detailed: the hub's whole read as JSON, its picture as an image beside it. */
-export const artifactReadDetailed = (read: ArtifactRead): Presented => {
+export const artifactReadDetailed = (whole: ArtifactRead): Presented => {
+  const read = withoutRoute(whole) as ArtifactRead;
   const { png, ...rest } = read;
   const pictures = picturesOf(read);
   const text = JSON.stringify(
@@ -586,15 +604,17 @@ export const artifactUpdatedWords = (updated: Updated): Presented => {
 export const artifactUpdatedDetailed = (updated: Updated): Presented =>
   updated.change === "page"
     ? artifactReadDetailed(updated.answer)
-    : JSON.stringify(updated.answer);
+    : JSON.stringify(withoutRoute(updated.answer));
 
-/** `artifact_show`. */
-export const artifactShownWords = (opened: Opened): string =>
-  openedWords(opened);
+/** `artifact_show`: the artifact by its link, and whether it is on the person's screen. */
+export const artifactShownWords = (shown: Shown): string =>
+  `${shown.link}: ${openedWords(shown)}`;
 
 /** `artifact_browse`: the address to load, and until when. */
-export const artifactBrowsedWords = (browsed: Browsed): string =>
-  `Load ${browsed.url} once in your browser tool. ${browsed.expiresAt === null ? "It needs no pass: it opens for as long as this session runs." : `It opens until ${ahead(browsed.expiresAt)} (15 minutes) or this session ends; call again for a fresh one.`}`;
+export const artifactBrowsedWords = (
+  browsed: Browsed & { link: string }
+): string =>
+  `Load ${browsed.url} once in your browser tool to open ${browsed.link}. ${browsed.expiresAt === null ? "It needs no pass: it opens for as long as this session runs." : `It opens until ${ahead(browsed.expiresAt)} (15 minutes) or this session ends; call again for a fresh one.`}`;
 
 /** `artifact_promote`. */
 export const artifactPromotedWords = (promoted: Promoted): string =>
@@ -618,7 +638,7 @@ const threadLines = (thread: ThreadEntry[], now: number): string[] =>
       : "";
     const unsent =
       entry.by === "person" && !entry.sentAt ? ", not sent yet" : "";
-    return `  - ${who}, ${ago(entry.at, now)}${unsent}: ${entry.text.trim() ? quote(entry.text, 600) : "no words"}${attached}${files}`;
+    return `  - ${who}, ${ago(entry.at, now)}${unsent}: ${entry.text.trim() ? verbatim(entry.text) : "no words"}${attached}${files}`;
   });
 
 /** A whole id in a line of words. */

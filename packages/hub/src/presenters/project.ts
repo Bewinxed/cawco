@@ -18,16 +18,18 @@ import type {
 } from "../ingress";
 import type { FolderFile, FolderListing } from "../project-folder";
 import type { RelayCreated } from "../relay";
-import type { RoutineRunView, RoutineView } from "../routines";
+import { type RoutineRunView, type RoutineView, slotLabel } from "../routines";
 import {
   ago,
   ahead,
   count,
   handle,
+  lasted,
   lines,
   listed,
   quote,
   valueWords,
+  verbatim,
 } from "./words";
 
 /** A list line's mark, which a single answer says as its kind. */
@@ -44,7 +46,7 @@ const threadLine = (
 const messageLine = (message: ThreadMessage, now: number): string => {
   switch (message.author) {
     case "you":
-      return `- the person, ${ago(message.createdAt, now)}: ${quote(message.body, 1200)}${message.attachments?.length ? ` (attached ${count(message.attachments.length, "file")})` : ""}${message.question ? " (asked a question)" : ""}`;
+      return `- the person, ${ago(message.createdAt, now)}: ${verbatim(message.body)}${message.attachments?.length ? ` (attached ${count(message.attachments.length, "file")})` : ""}${message.question ? " (asked a question)" : ""}`;
     case "caw":
       return `- you, ${ago(message.createdAt, now)}: ${quote(message.body, 1200)}${message.tasks?.length ? ` (tasks ${listed(message.tasks)})` : ""}${message.files?.length ? ` (files ${listed(message.files)})` : ""}`;
     case "event":
@@ -180,9 +182,17 @@ export const memoryReadWords = (read: unknown): string => {
   return folderReadWords(read as FolderFile);
 };
 
-/** A routine's run, a line. */
-const runLine = (run: RoutineRunView, now: number): string =>
-  `  - ${run.slot}: ${run.state}${run.outcome ? `, ${run.outcome}` : ""} ${ago(run.startedAt, now)}${run.endedAt ? `, ended ${ago(run.endedAt, now)}` : ""}${run.usd === null ? "" : `, $${run.usd.toFixed(2)}`}${run.reason ? `; ${run.reason}` : ""}${run.output ? `: ${quote(run.output, 300)}` : ""}`;
+/** What a run came to: its outcome once it has one, else its state. */
+const runState = (run: RoutineRunView, now: number): string => {
+  const took = run.endedAt
+    ? `, after ${lasted(run.endedAt - run.startedAt)}`
+    : "";
+  return `${run.outcome ?? run.state}, started ${ago(run.startedAt, now)}${took}`;
+};
+
+/** A routine's run, a line: its slot as the dashboard says it (`09:00`, test, by-hand). */
+const runLine = (run: RoutineRunView, timeZone: string, now: number): string =>
+  `  - ${slotLabel(run.slot, timeZone)} run ${handle(run.id)}: ${runState(run, now)}${run.usd === null ? "" : `, $${run.usd.toFixed(2)}`}${run.reason ? `; ${run.reason}` : ""}${run.output ? `: ${quote(run.output, 300)}` : ""}`;
 
 /** Whether a routine is kept past its week, or when it turns itself off. */
 const keptWords = (routine: RoutineView, now: number): string => {
@@ -199,7 +209,7 @@ const routineLines = (routine: RoutineView, now: number): string[] => [
   `- ${routine.name} ${handle(routine.id)} · ${routine.enabled ? "on" : `off${routine.disabledReason ? `: ${routine.disabledReason}` : ""}`} · ${routine.schedule.words}${routine.schedule.nextAt === null ? "" : `, next ${ahead(routine.schedule.nextAt, now)}`} · ${routine.target === "lead" ? "messages Caw" : `a delegate${routine.delegateType ? ` of type ${routine.delegateType}` : ""}, lands ${routine.lands}`}${keptWords(routine, now)}${routine.dailyCapUsd === null ? "" : ` · $${routine.dailyCapUsd} a day`}${routine.budget ? ` · each run ${valueWords(routine.budget)}` : ""}`,
   `  Prompt: ${quote(routine.prompt, 400)}`,
   ...(routine.runs.length > 0
-    ? routine.runs.map((run) => runLine(run, now))
+    ? routine.runs.map((run) => runLine(run, routine.timeZone, now))
     : ["  No runs yet."]),
 ];
 
@@ -228,7 +238,7 @@ export const deletedWords =
 
 /** `routine_run_now` and `routine_result`: the run. */
 export const routineRunWords = (run: RoutineRunView): string =>
-  `Run ${handle(run.id)} for ${run.slot}: ${run.state}${run.outcome ? `, ${run.outcome}` : ""}${run.reason ? `; ${run.reason}` : ""}.`;
+  `Run ${handle(run.id)}: ${runState(run, Date.now())}${run.reason ? `; ${run.reason}` : ""}.`;
 
 const routeLine = (route: EventRouteView, now: number): string =>
   `- ${handle(route.id)} · ${route.enabled ? "on" : "off"} · ${route.source}${route.kinds.length > 0 ? ` ${listed(route.kinds)}` : " any kind"}${route.author ? ` by ${route.author}` : ""}${route.label ? ` labelled ${route.label}` : ""}${route.branch ? ` on ${route.branch}` : ""}${route.regex ? ` matching /${route.regex}/` : ""} → routine ${handle(route.routineId)} · ${route.lastDeliveryAt === null ? "nothing delivered yet" : `last delivered ${ago(route.lastDeliveryAt, now)}`}`;

@@ -145,7 +145,9 @@ const historyLine = (event: TaskHistoryEvent, now: number): string =>
 /** A task's edges to other tasks, in words. */
 const edgeWords = (task: TaskView): string[] => [
   ...(task.after.length > 0 ? [`waits for ${listed(task.after)}`] : []),
-  ...(task.blockedBy.length > 0 ? [`blocked by ${listed(task.blockedBy)}`] : []),
+  ...(task.blockedBy.length > 0
+    ? [`blocked by ${listed(task.blockedBy)}`]
+    : []),
   ...(task.parent ? [`under ${task.parent}`] : []),
   ...(task.related.length > 0 ? [`related to ${listed(task.related)}`] : []),
   ...(task.foundIn ? [`found in ${task.foundIn}`] : []),

@@ -89,6 +89,9 @@ export const quote = (text: string, max = 200): string => {
   return `“${flat.length > max ? `${flat.slice(0, max - 1)}…` : flat}”`;
 };
 
+/** The person's own words, whole and exactly as typed (line breaks kept), in JSON's quotes as a delivery says them. */
+export const verbatim = (text: string): string => JSON.stringify(text);
+
 /** A list in words: "a", "a and b", "a, b and c". */
 export const listed = (items: readonly string[]): string => {
   if (items.length <= 1) {

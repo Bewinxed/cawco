@@ -14,10 +14,10 @@ import type {
   Browsed,
   CommentRead,
   Created,
-  Opened,
   Promoted,
   Removed,
   Revised,
+  Shown,
 } from "./artifacts/service";
 import {
   artifactBrowse,
@@ -43,6 +43,7 @@ import { sentence, tool } from "./mcp-tool";
 import {
   type AskChanged,
   artifactBrowsedWords,
+  artifactCreatedDetailed,
   artifactCreatedWords,
   artifactListWords,
   artifactPromotedWords,
@@ -947,7 +948,8 @@ export function handoffTools(deps: HandoffDeps) {
           { ...artifactCreate.input, ...artifactCreateToParent.input },
           (input) =>
             actions.artifactCall("POST", "", input) as Promise<Created>,
-          artifactCreatedWords
+          artifactCreatedWords,
+          { detailed: artifactCreatedDetailed }
         )
       : tool(
           artifactCreate.name,
@@ -955,7 +957,8 @@ export function handoffTools(deps: HandoffDeps) {
           artifactCreate.input,
           (input) =>
             actions.artifactCall("POST", "", input) as Promise<Created>,
-          artifactCreatedWords
+          artifactCreatedWords,
+          { detailed: artifactCreatedDetailed }
         ),
     tool(
       artifactUpdate.name,
@@ -1074,7 +1077,7 @@ export function handoffTools(deps: HandoffDeps) {
         actions.artifactCall(
           "POST",
           `/${encodeURIComponent(id)}/show?by=agent`
-        ) as Promise<Opened>,
+        ) as Promise<Shown>,
       artifactShownWords
     ),
     tool(
@@ -1085,7 +1088,7 @@ export function handoffTools(deps: HandoffDeps) {
         actions.artifactCall(
           "POST",
           `/${encodeURIComponent(id)}/browse`
-        ) as Promise<Browsed>,
+        ) as Promise<Browsed & { link: string }>,
       artifactBrowsedWords,
       {
         annotations: {
@@ -1308,6 +1311,10 @@ const loadingLine = (listable: Listable): string => {
   return `On Claude, ${upfront.join(", ")} load upfront; every other CawCo tool is deferred: load it with ToolSearch by its name (select:mcp__cawco__<name>) or its group's prefix before saying it is unavailable. ${[...groups, ...(rest.length > 0 ? [`also ${rest.join(", ")}`] : [])].join("; ")}.`;
 };
 
+/** How CawCo's tools answer (mcp-tool.ts), said once for every tool's `response_format`. */
+const ANSWERS =
+  "CawCo's tools answer in words, each thing by the name or handle they take back. response_format: \"detailed\" answers the hub's whole record as JSON instead, every id and time: ask for it only when the words leave out what you need.";
+
 /** The server's instructions for one session, from what it can be listed. */
 export function handoffInstructions(
   deps: HandoffDeps,
@@ -1316,7 +1323,7 @@ export function handoffInstructions(
   const { names } = listable;
   // How a session names another in its words (core references.ts): the
   // dashboard draws the link as that session's chip.
-  const naming = `Name this session with set_title in 3 to 6 plain words once its task is clear; call it again only when the task changes.\n\n${REFERENCE_GUIDANCE}`;
+  const naming = `Name this session with set_title in 3 to 6 plain words once its task is clear; call it again only when the task changes.\n\n${REFERENCE_GUIDANCE}\n\n${ANSWERS}`;
   // Sessions said image generation was unavailable on models without it:
   // the tool is the hub's, on every model, and stays the session's own.
   const images = names.includes("generate_image")
