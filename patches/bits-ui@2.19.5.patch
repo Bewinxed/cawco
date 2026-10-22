@@ -1,3 +1,64 @@
+diff --git a/dist/bits/select/select.svelte.js b/dist/bits/select/select.svelte.js
+index c4f493361bdb1616796ae1fb4a6639a6a5ac5d29..25acf0ecd0d054375f76fe61d1fa788d22636907 100644
+--- a/dist/bits/select/select.svelte.js
++++ b/dist/bits/select/select.svelte.js
+@@ -1176,6 +1176,26 @@ export class SelectViewportState {
+         ...this.attachment,
+     }));
+ }
++/**
++ * `read` a frame after `node` changes size, never inside the observer's own
++ * delivery; returns the teardown.
++ */
++function onResize(node, read) {
++    let frame = 0;
++    const observer = new ResizeObserver(() => {
++        if (frame === 0) {
++            frame = requestAnimationFrame(() => {
++                frame = 0;
++                read();
++            });
++        }
++    });
++    observer.observe(node);
++    return () => {
++        cancelAnimationFrame(frame);
++        observer.disconnect();
++    };
++}
+ export class SelectScrollButtonImplState {
+     opts;
+     content;
+@@ -1268,9 +1288,17 @@ export class SelectScrollDownButtonState {
+             const onUserScroll = () => {
+                 this.content.userHasScrolled = true;
+             };
++            // Read again whenever the viewport's own size changes: positioned,
++            // the content can still be settling (its height capped to the room
++            // floating-ui measures a frame later), and read before that the list
++            // did not overflow yet, so the button stayed unmounted until a scroll.
++            // Read a frame after the observer says so: the button it mounts
++            // resizes the viewport, which inside the observer's delivery is a
++            // ResizeObserver loop.
++            const resized = onResize(viewport, () => this.handleScroll(true));
+             // not `scroll`: the realign below scrolls the viewport itself, so `scroll`
+             // fires for our own writes and cannot tell the user's gesture from ours
+-            return executeCallbacks(on(viewport, "scroll", () => this.handleScroll()), on(viewport, "wheel", onUserScroll, { passive: true }), on(viewport, "touchmove", onUserScroll, { passive: true }));
++            return executeCallbacks(resized, on(viewport, "scroll", () => this.handleScroll()), on(viewport, "wheel", onUserScroll, { passive: true }), on(viewport, "touchmove", onUserScroll, { passive: true }));
+         });
+         /**
+          * If the input value changes, this means that the filtered items may have changed,
+@@ -1346,7 +1374,9 @@ export class SelectScrollUpButtonState {
+             if (!this.root.viewportNode || !this.content.isPositioned)
+                 return;
+             this.handleScroll(true);
+-            return on(this.root.viewportNode, "scroll", () => this.handleScroll());
++            // Read again whenever the viewport's own size changes (as the scroll down button does).
++            const resized = onResize(this.root.viewportNode, () => this.handleScroll(true));
++            return executeCallbacks(resized, on(this.root.viewportNode, "scroll", () => this.handleScroll()));
+         });
+     }
+     /**
 diff --git a/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js b/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js
 index 40a4a6e6679a32b4f8048dfcdb342944427243fe..04e6d033b824673b3ba7d0d004e788d5f49e5fef 100644
 --- a/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js
