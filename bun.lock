@@ -326,6 +326,7 @@
   ],
   "patchedDependencies": {
     "vaul-svelte@1.0.0-next.7": "patches/vaul-svelte@1.0.0-next.7.patch",
+    "bits-ui@2.19.5": "patches/bits-ui@2.19.5.patch",
   },
   "overrides": {
     "@types/bun": "^1.4.3",

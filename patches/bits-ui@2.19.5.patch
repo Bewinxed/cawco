@@ -1,0 +1,13 @@
+diff --git a/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js b/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js
+index 40a4a6e6679a32b4f8048dfcdb342944427243fe..04e6d033b824673b3ba7d0d004e788d5f49e5fef 100644
+--- a/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js
++++ b/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js
+@@ -123,7 +123,7 @@ export class DismissibleLayerState {
+         if (event.defaultPrevented) {
+             event = createWrappedEvent(e);
+         }
+-        this.#interactOutsideProp.current(e);
++        this.#interactOutsideProp.current(event);
+     };
+     #interactOutside = (e) => {
+         if (!this.opts.ref.current) {

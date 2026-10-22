@@ -24,6 +24,7 @@
     drawn,
     own,
     pressable,
+    pressedAway,
   } from "#lib/components/ui/floating-presence.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
@@ -39,6 +40,9 @@
     portalProps,
     class: className,
     forceMount = false,
+    preventScroll = false,
+    onInteractOutside,
+    onCloseAutoFocus,
     width,
     min,
     child: callerChild,
@@ -56,6 +60,14 @@
   const inset = $derived(
     collisionPadding ?? (browser ? numberOf("--space-5") : 0)
   );
+
+  /* No lock on the page (`preventScroll` false, floating-presence): a press
+     outside closes the menu and lands on what it was pressed on, the focus
+     left there (`pressedAway`). */
+  const away = pressedAway({
+    onInteractOutside: () => onInteractOutside,
+    onCloseAutoFocus: () => onCloseAutoFocus,
+  });
 
   // One ghost glides from item to item under the pointer and arrow keys.
   $effect(() => {
@@ -82,6 +94,9 @@
     collisionPadding={inset}
     data-slot="dropdown-menu-content"
     forceMount
+    onCloseAutoFocus={away.onCloseAutoFocus}
+    onInteractOutside={away.onInteractOutside}
+    {preventScroll}
     {sideOffset}
     bind:ref
     {...restProps}

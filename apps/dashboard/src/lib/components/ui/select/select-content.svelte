@@ -20,7 +20,7 @@
     sideOffset = 4,
     portalProps,
     children,
-    preventScroll = true,
+    preventScroll = false,
     forceMount = false,
     ...restProps
   }: WithoutChild<SelectPrimitive.ContentProps> & {
@@ -41,7 +41,10 @@
 <!-- At most the room bits-ui measures between the trigger and the
      viewport's edge (`--bits-select-content-available-height`), so a long
      list scrolls inside it and its scroll buttons show. Mounted by bits-ui's forceMount and drawn while its presence says so:
-     the page has its pointer back at the dismissal (floating-presence). -->
+     the page has its pointer back at the dismissal (floating-presence).
+     No lock on the page (`preventScroll` false): a press outside closes the
+     list and lands on what it was pressed on. -->
+
 <SelectPortal {...portalProps}>
   <SelectPrimitive.Content
     class={cn(

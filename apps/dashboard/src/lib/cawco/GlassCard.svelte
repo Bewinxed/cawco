@@ -397,20 +397,22 @@
   });
   /**
    * The card opened with something asked: what had the focus is kept to give
-   * it back, and the focus goes where the new contents put it.
+   * it back, and the focus goes where the new contents put it. `had`: what
+   * had the focus when the open was asked for, where the focus is taken a
+   * frame later (a real open ending the rehearsal), by when the page may
+   * have moved it.
    */
-  function takeFocus() {
+  function takeFocus(had: Element | null = document.activeElement) {
     // Rehearsed (opened with nothing asked), the focus stays where it is.
     if (asked === null) {
       return;
     }
     // What invoked it, or what invoked the opener that has gone (the
-    // phone's sheet hands over its burger, bar-glass `invoker`).
+    // phone's sheet hands over its burger, bar-glass `invoker`). Never the
+    // card's own contents, which go inert as it closes.
     returnTo =
       barGlass.invoker ??
-      (document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null);
+      (had instanceof HTMLElement && !content?.contains(had) ? had : null);
     barGlass.invoker = null;
     const card = asked;
     const node = content?.querySelector<HTMLElement>(`[data-face="${card}"]`);
@@ -443,8 +445,9 @@
   // once the face asked for has mounted.
   $effect.pre(() => {
     if (asked !== null && untrack(() => rehearsing)) {
+      const had = document.activeElement;
       endRehearsal();
-      requestAnimationFrame(() => takeFocus());
+      requestAnimationFrame(() => takeFocus(had));
     }
   });
 

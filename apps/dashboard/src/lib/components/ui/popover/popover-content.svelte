@@ -82,6 +82,7 @@
     drawn,
     own,
     pressable,
+    pressedAway,
   } from "#lib/components/ui/floating-presence.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { browser } from "$app/env";
@@ -106,6 +107,9 @@
     look,
     motion,
     forceMount = false,
+    trapFocus = false,
+    onInteractOutside,
+    onCloseAutoFocus,
     child: callerChild,
     children,
     ...restProps
@@ -145,6 +149,15 @@
   /* A hanging card (motion `hang`) frames its own width, a bare one is what
      it holds, and an `ownWidth` site sizes it to its own room. */
   const phoneWide = $derived(motion !== "hang" && !bare && !ownWidth);
+
+  /* A popover is not modal: the page beside it keeps its presses and its
+     focus. It traps the focus only where its site asks (`trapFocus`), and a
+     press outside closes it, leaving the focus where that press put it
+     (floating-presence `pressedAway`). */
+  const away = pressedAway({
+    onInteractOutside: () => onInteractOutside,
+    onCloseAutoFocus: () => onCloseAutoFocus,
+  });
 
   // A popover whose content changes (a list arrives, an error appears)
   // tweens to its new height instead of jumping.
@@ -186,7 +199,10 @@
     collisionPadding={inset}
     data-slot="popover-content"
     forceMount
+    onCloseAutoFocus={away.onCloseAutoFocus}
+    onInteractOutside={away.onInteractOutside}
     {sideOffset}
+    {trapFocus}
     bind:ref
     {...restProps}
   >

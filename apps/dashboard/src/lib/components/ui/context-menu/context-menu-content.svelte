@@ -5,6 +5,7 @@
     drawn,
     own,
     pressable,
+    pressedAway,
   } from "#lib/components/ui/floating-presence.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
@@ -20,6 +21,9 @@
     portalProps,
     class: className,
     forceMount = false,
+    preventScroll = false,
+    onInteractOutside,
+    onCloseAutoFocus,
     motion,
     child: callerChild,
     children,
@@ -30,6 +34,14 @@
         ComponentProps<typeof ContextMenuPortal>
       >;
     } = $props();
+
+  /* No lock on the page (`preventScroll` false, floating-presence): a press
+     outside closes the menu and lands on what it was pressed on (a row of
+     the rail), the focus left there (`pressedAway`). */
+  const away = pressedAway({
+    onInteractOutside: () => onInteractOutside,
+    onCloseAutoFocus: () => onCloseAutoFocus,
+  });
 
   // One ghost glides from item to item under the pointer and arrow keys.
   $effect(() => {
@@ -53,6 +65,9 @@
     )}
     data-slot="context-menu-content"
     forceMount
+    onCloseAutoFocus={away.onCloseAutoFocus}
+    onInteractOutside={away.onInteractOutside}
+    {preventScroll}
     bind:ref
     {...restProps}
   >
