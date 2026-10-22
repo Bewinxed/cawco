@@ -29,7 +29,7 @@ import {
 import { caw } from "../caw-head";
 import { APPLE_GATE, declareGate, MAC_ONLINE, NO_MAC } from "../gate";
 import type { KitFleet } from "../kit";
-import { callsInOrder, listedAs, say } from "./mock";
+import { callCount, callsInOrder, listedAs, say } from "./mock";
 import {
   type Data,
   eventually,
@@ -55,7 +55,6 @@ const GATE_CHECK = "iOS build compiles";
 /** The review's actions (TaskReview.svelte): Approve → its next stage, Send back → its stage. */
 const APPROVE = /^Approve →/;
 const SEND_BACK_TO = /^Send back →/;
-const FINISHED = /"name":"mcp__cawco__finish_item"/g;
 /** The hub's end of a wait it declared (work-items.ts `endWait`). */
 const WAIT_OVER = "Your wait is over";
 const REGEX_SIGNS = /[.*+?^${}()|[\]\\]/g;
@@ -363,7 +362,7 @@ function attempt(seen: Seen, task: string, title: string): Reply {
     name: "finish_item",
     input: { headline: `Did ${task}.`, summary: `Committed ${file}.` },
   };
-  const finishes = (seen.body.match(FINISHED) ?? []).length;
+  const finishes = callCount(seen, "finish_item");
   const refusals = seen.body.split(NO_MAC).length - 1;
   const wakes =
     seen.all.split(MAC_ONLINE).length -
