@@ -66,8 +66,8 @@ import {
 import { signInWarning } from "../machine";
 import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
-import { asksHere, person } from "../person.svelte";
 import { notices } from "../notices.svelte";
+import { asksHere, person } from "../person.svelte";
 import {
   listTasksWaiting,
   stageLabel,

@@ -1399,6 +1399,8 @@ export interface ArtifactServiceDeps {
    * the ask did, one sentence.
    */
   verify: (requester: InstanceRow, artifact: AskedArtifact) => Promise<string>;
+  /** The session's current step waits on the artifact; the step that does, or null (plans.ts `waitOn`). */
+  waitOn: (instanceId: string, artifactId: string) => string | null;
   /**
    * Why a browser in a workspace on machine `machineId` cannot open `url`,
    * or null when it can (server.ts, core boundary-reach.ts
@@ -1406,8 +1408,6 @@ export interface ArtifactServiceDeps {
    * only; a Mac's dials as its host does.
    */
   workspaceReach: (url: string, machineId: string) => Promise<string | null>;
-  /** The session's current step waits on the artifact; the step that does, or null (plans.ts `waitOn`). */
-  waitOn: (instanceId: string, artifactId: string) => string | null;
   /** The workspaces an id or its prefix names, each with the machine it is on. */
   workspaces: (needle: string) => { id: string; machineId: string }[];
 }
