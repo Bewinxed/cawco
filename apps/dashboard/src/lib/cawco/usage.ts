@@ -50,11 +50,7 @@ const CAP_HOLDS = {
 /** What period a cap's budget covers, in words. */
 const CAP_PERIODS = { day: "daily", month: "monthly" } as const;
 
-/**
- * A project's reached cap in one line, words only: "Reached its daily budget
- * · Caw paused". The amounts stay on the Usage page (DESIGN.md, The Spend
- * Stays On Usage Rule).
- */
+/** A project's reached cap in one line: "Reached its daily budget · Caw paused". */
 export const capLine = (cap: ProjectCap): string =>
   `Reached its ${CAP_PERIODS[cap.period]} budget · ${CAP_HOLDS[cap.onCap]}`;
 
