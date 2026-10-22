@@ -88,7 +88,9 @@
  *    and never past its room (a worded page 920); each card's options per
  *    row on their stories' pitch (190px on a worded page; one per row
  *    under the phone's line), a pictured option alone on its last row
- *    spanning it; each pictured well hugging its picture, its frame the
+ *    spanning it; at 1440 and 1900 a card's two phone stories side by side
+ *    at the house option gap from the row's start, never stretched apart;
+ *    each pictured well hugging its picture, its frame the
  *    drawn story's width within 1px and the well never past its cell (on a
  *    phone, the screen); before any scroll every picture at the height
  *    its canvas says, below the fold too, the first as the rest; each story
@@ -905,6 +907,7 @@ function readWidths() {
           ...box(frame),
           // The well round it and the cell it stands in: a well hugs its picture, never past its cell.
           well: box(frame.closest("figure")).w,
+          wellX: box(frame.closest("figure")).x,
           cell: box(
             frame.closest("[data-slot=option-cell], [data-slot=decision-media]")
           ).w,
@@ -1102,6 +1105,7 @@ async function loadsClean(
     leg: "1440px light, loading clean",
     pictured: true,
     view: "desk",
+    w: 1440,
   });
   await settle(page, 1500);
   // The page names its icon and the icon answers: a browser asks a page
@@ -1140,6 +1144,8 @@ interface WidthLeg {
   leg: string;
   pictured: boolean;
   view: "desk" | "phone";
+  /** The panel's width, px. */
+  w: number;
 }
 
 /** The chrome round a story at 1:1, px: the page's and the card's insets each side, a well's edge and inset each side, the gap between options. */
@@ -1295,14 +1301,43 @@ async function checkFoot(
   );
 }
 
+/** At 1440 and 1900 the phone card's two pictures: side by side at the house option gap, from the row's start. */
+function checkPhoneGap(
+  kit: Kit,
+  read: Awaited<ReturnType<typeof readWidths>>,
+  { leg, view, w }: Pick<WidthLeg, "leg" | "view" | "w">
+) {
+  // Phone stories in a desk column stand side by side at the house option gap, packed from the row's start (the words' edge), never stretched apart.
+  if (!(view === "desk" && w >= 1440)) {
+    return;
+  }
+  const phone = read.cards.find((card) => card.id === "phone");
+  const [first, second] = phone?.embeds ?? [];
+  const gap =
+    first && second
+      ? Math.round((second.wellX - (first.wellX + first.well)) * 10) / 10
+      : Number.NaN;
+  const startGap =
+    phone && first ? Math.round((first.wellX - phone.cardLeft) * 10) / 10 : 0;
+  kit.check(
+    `${leg}: the phone card's two pictures stand ${gap}px apart, the house option gap (${CHROME.gap}px), from the row's start (${startGap}px in from the card's edge, the words' ${phone ? Math.round((phone.wordsLeft - phone.cardLeft) * 10) / 10 : 0}px)`,
+    Math.abs(gap - CHROME.gap) <= 1 &&
+      !!phone &&
+      !!first &&
+      Math.abs(first.wellX - phone.wordsLeft) <= 1,
+    JSON.stringify(phone?.embeds)
+  );
+}
+
 /** Each option's picture: as tall as its canvas says, at 1:1 from its start where its room holds it, else zoomed to fit; on a phone its well at the screen's edges. */
 async function checkPictures(
   kit: Kit,
   page: Page,
   read: Awaited<ReturnType<typeof readWidths>>,
-  { leg, view }: WidthLeg
+  { leg, view, w }: WidthLeg
 ) {
   kit.check(`${leg}: the page reads as pictured`, read.pictured === true);
+  checkPhoneGap(kit, read, { leg, view, w });
   for (const card of read.cards) {
     kit.check(
       `${leg}: card ${card.id}'s ${card.embeds.length} option pictures each stand at the height their canvas says (${card.embeds.map((one) => `${one.caption} ${one.shape} ${one.h}px`).join(", ")})`,
@@ -1374,6 +1409,7 @@ async function widthLegs(
           leg: `${w}px ${theme}, ${name}`,
           pictured: name === PICTURED_PAGE,
           view,
+          w,
         };
         const page = await kit.page(view, {
           theme,

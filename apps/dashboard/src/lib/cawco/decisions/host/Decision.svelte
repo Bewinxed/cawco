@@ -184,8 +184,8 @@
    * the row (Option.svelte), so no empty cell stands beside it, its chip,
    * words and picture still on the first column's edge as every row's are
    * (a centred last row would stand them on no column's). Read from the
-   * grid's own tracks as it mounts and as it resizes; the tracks auto-fit
-   * leaves empty are 0px.
+   * grid's own tracks as it mounts and as it resizes (`grid-cols-fit-story`:
+   * every track its stories' pitch, as many as the row holds).
    */
   let lone = $state(false);
   $effect(() => {

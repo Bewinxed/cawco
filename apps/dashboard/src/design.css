@@ -1085,12 +1085,15 @@
 @utility grid-rows-page-foot {
   grid-template-rows: minmax(0, 1fr) auto;
 }
-/* Options with pictures: as many abreast as fit at their stories' own width
-   in their wells (`--story-w`, decisions/host Decision.svelte), each story at 1:1. */
+/* Options with pictures: as many abreast as fit, each track exactly its
+   stories' own width in their wells (`--story-w`, decisions/host
+   Decision.svelte), each story at 1:1, packed from the row's start as the
+   words are and the house gap between them, never stretched apart; a track
+   never wider than the row, where a story is scaled to fit. */
 @utility grid-cols-fit-story {
   grid-template-columns: repeat(
-    auto-fit,
-    minmax(min(100%, calc(var(--story-w) + 2 * var(--well-in))), 1fr)
+    auto-fill,
+    min(100%, calc(var(--story-w) + 2 * var(--well-in)))
   );
 }
 /* A picture's well hugging its story (`--picture-w`, the width a decision
