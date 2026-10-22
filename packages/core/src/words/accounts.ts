@@ -106,6 +106,7 @@ export const accountsWords = {
     sendKey: "Send key",
     /** A sign-in under way, its popover put away: one press opens it again as it was. */
     openSignIn: "Open sign-in",
+    pasteCode: "Paste code",
     /** What a row says while its sign-in waits, the popover put away. */
     waitingCode: "Waiting for the code",
     waitingPaste: "Waiting for the pasted code",

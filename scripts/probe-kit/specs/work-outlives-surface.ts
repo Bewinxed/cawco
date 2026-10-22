@@ -195,6 +195,9 @@ const OPEN_SIGN_IN_ON = new RegExp(
   `^${accountsWords.machines.openSignIn} .+ on `
 );
 
+/** The same trigger while a Claude sign-in waits on its pasted code. */
+const PASTE_CODE_ON = new RegExp(`^${accountsWords.machines.pasteCode} .+ on `);
+
 /** The setup's provider row for Claude. */
 const CLAUDE_ROW = /^Claude$/;
 
@@ -615,7 +618,7 @@ async function accountLeg({ kit, fleet, page, base }: Leg): Promise<void> {
       .textContent()
       .catch(() => null)
   );
-  const openAgain = page.getByRole("button", { name: OPEN_SIGN_IN_ON });
+  const openAgain = page.getByRole("button", { name: PASTE_CODE_ON });
   const openLabel = await openAgain.count();
   await openAgain.first().click();
   const backHref = await until(
@@ -625,11 +628,11 @@ async function accountLeg({ kit, fleet, page, base }: Leg): Promise<void> {
     10_000
   );
   check(
-    "account · put away, the row says it waits on the pasted code and offers Open sign-in, which shows the same link",
+    "account · put away, the row says it waits on the pasted code and offers Paste code, which shows the same link and focuses the code field",
     parkedState === accountsWords.machines.waitingPaste &&
       openLabel === 1 &&
       backHref === LINK,
-    `${JSON.stringify(parkedState)}; Open sign-in ${openLabel}; ${backHref === LINK}`
+    `${JSON.stringify(parkedState)}; Paste code ${openLabel}; ${backHref === LINK}`
   );
   await page
     .getByRole("textbox", { name: accountsWords.signin.codeLabel })

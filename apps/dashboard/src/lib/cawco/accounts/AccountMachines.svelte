@@ -203,6 +203,10 @@
       {@const open = openOn === machine.machineId}
       {@const block = claude ? harnessBlockOf(machine, "claude") : null}
       {@const parked = open ? null : parkedWord(machine.machineId)}
+      {@const resume =
+        parked === words.machines.waitingPaste
+          ? words.machines.pasteCode
+          : words.machines.openSignIn}
       {@const landed = claude ? landedOn(machine, "claude") : undefined}
       <li
         class="col-span-full grid min-h-c-btn-h-lg grid-cols-subgrid items-center gap-x-space-4 px-space-2 py-space-1 not-first:border-t not-first:border-t-border-hairline"
@@ -237,7 +241,7 @@
                 align="end"
                 id="signin-{account.id}-{machine.machineId}"
                 label={words.machines.signInOn(
-                  parked ? words.machines.openSignIn : verb,
+                  parked ? resume : verb,
                   nameOf(account),
                   name
                 )}
@@ -250,7 +254,7 @@
                 width="var(--c-signin-pop-w)"
               >
                 {#snippet trigger()}
-                  {parked ? words.machines.openSignIn : verb}
+                  {parked ? resume : verb}
                 {/snippet}
                 <div class="flex flex-col gap-space-3 p-space-2">
                   <p data-slot="title" class="type-label text-ink-strong">

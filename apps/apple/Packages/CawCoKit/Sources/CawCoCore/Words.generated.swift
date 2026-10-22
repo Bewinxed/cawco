@@ -260,6 +260,8 @@ public enum Words {
             /// A sign-in under way, its popover put away: one press opens it again as it was.
             public static let openSignIn = "Open sign-in"
 
+            public static let pasteCode = "Paste code"
+
             /// What a row says while its sign-in waits, the popover put away.
             public static let waitingCode = "Waiting for the code"
 
