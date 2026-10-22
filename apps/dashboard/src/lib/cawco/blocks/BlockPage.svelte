@@ -57,7 +57,7 @@
   } from "@cawco/core";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -90,7 +90,11 @@
   // --- the grid: its columns, and each block's span ----------------------------
 
   let grid = $state<HTMLElement | null>(null);
+  /** The grid's width: read as it mounts, and a change in the next frame (frameSize). */
   let gridWidth = $state(0);
+  const measureGrid = frameSize<HTMLElement>((node) => {
+    gridWidth = node.clientWidth;
+  });
   /** The tokens the grid is laid by, in px, read once the grid is drawn. */
   let px = $state<{
     four: number;
@@ -278,7 +282,7 @@
     <div
       data-slot="blocks"
       bind:this={grid}
-      bind:clientWidth={gridWidth}
+      {@attach measureGrid}
       class="grid grid-flow-row grid-cols-(--block-cols) items-box-start gap-space-group min-w-0"
       style:--block-fill={fill === null ? undefined : `${fill}px`}
       style:--columns={columns}

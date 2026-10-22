@@ -43,6 +43,7 @@
    * growing, with the same outcomes.
    */
   import { onMount, tick, untrack } from "svelte";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { IconSearch } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
@@ -215,7 +216,11 @@
   };
 
   let ghosts = $state<HTMLElement>();
+  /** The query chip's width: read as it mounts, and a change in the next frame (frameSize). */
   let chipWidth = $state(0);
+  const measureChip = frameSize<HTMLElement>((node) => {
+    chipWidth = node.offsetWidth;
+  });
   /** The row on the line. */
   let pick = $state(0);
   $effect(() => {
@@ -968,7 +973,7 @@
   >
     <span
       class="mark-line inline-flex items-center gap-space-1 max-w-9/20 py-space-row px-space-2 rounded-pill bg-surface-recess inset-ring-1 inset-ring-border-hairline text-size-meta font-medium text-ink-strong whitespace-nowrap"
-      bind:offsetWidth={chipWidth}
+      {@attach measureChip}
     >
       <IconSearch
         aria-hidden="true"

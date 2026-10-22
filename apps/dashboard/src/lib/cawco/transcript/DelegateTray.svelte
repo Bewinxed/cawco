@@ -28,9 +28,10 @@
    * stays in the work zone, says "failed", and leaves as a finished one does.
    */
   import { tick, untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { SvelteMap } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
@@ -432,15 +433,45 @@
   /* ---- overflow ------------------------------------------------------ */
 
   /**
-   * The row's width, as the size observer delivers it after a layout. The
-   * tray is mounted afresh on every tab switch (Composer's `{#key
-   * delegatesOf}`), and a `clientWidth` binding reads the width as it
-   * mounts: that read laid the page out in the click, with the pane just
-   * shown still to be styled, ~1,900 elements in that task. The delivery
-   * comes before the frame is painted, so the first frame drawn has the fit.
+   * The row's width, its content box: taken inside the size observer's
+   * delivery, where the layout is the one just done and a read costs none,
+   * and written in the next frame (frameObserver `read`). Written inside the
+   * delivery, the fit swapped chips for "+N" there and resized chips the
+   * delivery had passed ("ResizeObserver loop completed with undelivered
+   * notifications").
+   *
+   * The tray is mounted afresh on every tab switch (Composer's `{#key
+   * delegatesOf}`): a width read as it mounts laid the page out in the
+   * click, with the pane just shown still to be styled, ~1,900 elements in
+   * that task. So it is read as it mounts only with chips to fit, whose
+   * floors (`measureFloor`) lay the row out as they mount anyway, and the
+   * first frame drawn has the fit.
    */
-  let hostBox = $state<DOMRectReadOnly>();
-  const rowWidth = $derived(hostBox?.width ?? 0);
+  let rowWidth = $state(0);
+  const measureHost: Attachment<HTMLElement> = (node) => {
+    if (untrack(() => chips.length) > 0) {
+      const style = getComputedStyle(node);
+      rowWidth =
+        node.clientWidth -
+        Number.parseFloat(style.paddingInlineStart) -
+        Number.parseFloat(style.paddingInlineEnd);
+    }
+    let delivered = 0;
+    const sized = frameObserver(
+      () => {
+        rowWidth = delivered;
+      },
+      {
+        read: (entries) => {
+          for (const entry of entries) {
+            delivered = entry.contentRect.width;
+          }
+        },
+      }
+    );
+    sized.observe(node);
+    return () => sized.disconnect();
+  };
   /**
    * Each chip's floor as drawn, by item: what does not give way in it (its
    * mark, its state glyph, its padding and gaps), its title's floor and its
@@ -498,8 +529,14 @@
       };
     };
   }
-  /** The "N failed" chip's width as drawn: it never gives way. */
+  /**
+   * The "N failed" chip's width as drawn: it never gives way. Read as it
+   * mounts, and a change in the next frame (frameSize).
+   */
   let countWidth = $state(0);
+  const measureCount = frameSize<HTMLElement>((node) => {
+    countWidth = node.offsetWidth;
+  });
   /** What the failure chip and its gap take from the working zone. */
   const failRoom = $derived(
     failures.length === 0
@@ -784,8 +821,14 @@
   let shelfEl = $state<HTMLElement>();
   /** The chip that opened the shelf: focus goes back to it as it shuts. */
   let opener = "";
-  /** The shelf's height as drawn, frame by frame while it unfolds. */
+  /**
+   * The shelf's height as drawn, frame by frame while it unfolds: read as it
+   * mounts, and each change in the next frame (frameSize).
+   */
   let shelfPx = $state(0);
+  const measureShelf = frameSize<HTMLElement>((node) => {
+    shelfPx = node.clientHeight;
+  });
 
   function toggleShelf(
     kind: "failed" | "more",
@@ -1497,7 +1540,7 @@
   data-slot="host"
   class="pointer-events-none pe-(--host-end)"
   style:--host-end="var(--ring-room, 0px)"
-  bind:contentRect={hostBox}
+  {@attach measureHost}
 >
   {#if chips.length}
     <!-- The row of chips, standing a step off the composer's top edge: no
@@ -1586,7 +1629,7 @@
             onpointerenter={() => onchipenter("failed")}
             tabindex={current === keys.length - 1 ? 0 : -1}
             type="button"
-            bind:offsetWidth={countWidth}
+            {@attach measureCount}
           >
             <span
               data-slot="slot"
@@ -1612,7 +1655,7 @@
             shelfPx = 0;
           }}
           style:--slot-end="calc(-1 * var(--ring-room, 0px))"
-          bind:clientHeight={shelfPx}
+          {@attach measureShelf}
           in:shelfIn
           out:shelfOut
         >

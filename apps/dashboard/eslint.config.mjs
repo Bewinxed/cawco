@@ -294,6 +294,19 @@ export default defineConfig([
           message:
             "Read a duration token with dur() (lib/cawco/motion/curves.svelte.ts): the built stylesheet writes `1000ms` as `1s`, so its bare number isn't milliseconds.",
         },
+        // A Svelte dimension binding is a ResizeObserver that writes its
+        // state inside the delivery: what that state lays out resizes boxes
+        // the delivery has passed ("ResizeObserver loop completed with
+        // undelivered notifications", PaneTabs on WebKit, c4313c3d8). The
+        // markup half of biome.jsonc's ResizeObserver ban (aca304eaf), which
+        // reads no Svelte markup. A site that must write inside the delivery
+        // says why in its eslint-disable.
+        {
+          selector:
+            "SvelteDirective[kind='Binding'][key.name.name=/^(offsetHeight|offsetWidth|clientHeight|clientWidth|contentRect|contentBoxSize|borderBoxSize|devicePixelContentBoxSize)$/]",
+          message:
+            "A dimension binding writes inside its ResizeObserver's delivery. Measure with frameObserver ($lib/cawco/frame-observer): `{@attach frameSize((node) => { … })}` reads the size as it mounts and a change in the next frame, as PaneTabs' details height and ModelSection's chosen row do.",
+        },
       ],
     },
   },

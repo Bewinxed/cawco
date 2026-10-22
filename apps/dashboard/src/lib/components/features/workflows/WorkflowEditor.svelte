@@ -10,6 +10,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { loadDelegateTypes } from "#lib/cawco/delegate-types.js";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { newId } from "#lib/cawco/id.js";
   import { crossIn, dur } from "#lib/cawco/motion/curves.svelte.js";
@@ -74,7 +75,11 @@
   let paletteOpen = $state(false);
   let inspectorOpen = $state(false);
   let paletteCollapsed = $state(false);
+  /** The editor's width, which the panes' shares are of: read as it mounts, and a change in the next frame (frameSize). */
   let panelWidth = $state(940);
+  const measurePanel = frameSize<HTMLElement>((editor) => {
+    panelWidth = editor.clientWidth;
+  });
   let palettePane = $state<{ collapse: () => void; expand: () => void }>();
   /**
    * The palette folded to its 48px rail, as a share of the editor. paneforge
@@ -591,7 +596,7 @@
 <div
   data-slot="editor"
   class="flex h-full min-h-0 min-w-0 flex-1 flex-col type-body text-ink-strong"
-  bind:clientWidth={panelWidth}
+  {@attach measurePanel}
 >
   <header
     class="flex min-w-0 flex-col gap-space-4 border-b border-b-border-hairline bg-surface-raised px-space-5 py-space-3 max-wide:p-space-3"

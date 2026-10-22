@@ -77,7 +77,7 @@
   import { flushSync, type Snippet, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
   import { autosize } from "#lib/cawco/motion/autosize.svelte.js";
   import {
     CURVE,
@@ -387,8 +387,14 @@
    * measured, not the viewport: a narrow pane on a wide screen is narrow.
    */
   let hint = $state(untrack(() => HINT_SHORT));
-  /** How far the perch stands above the pill: the parked cards stand clear of it, above. */
+  /**
+   * How far the perch stands above the pill: the parked cards stand clear of
+   * it, above. Read as it mounts, and a change in the next frame (frameSize).
+   */
   let perchHeight = $state(0);
+  const measurePerch = frameSize<HTMLElement>((node) => {
+    perchHeight = node.clientHeight;
+  });
   const fitHint = (node: HTMLElement) => {
     const probe = document.createElement("span");
     probe.setAttribute("aria-hidden", "true");
@@ -2978,11 +2984,22 @@
   /**
    * The panel's own height, the delegate tray's standing on it, and the
    * prompt stack's standing on that (what the desk's toasts rise above).
+   * Each of these sizes is read as its box mounts, and a change in the next
+   * frame (frameSize).
    */
   let panel = $state(0);
+  const measurePanel = frameSize<HTMLElement>((node) => {
+    panel = node.clientHeight;
+  });
   let lift = $state(0);
+  const measureLift = frameSize<HTMLElement>((node) => {
+    lift = node.clientHeight;
+  });
   /** The plan's ring's width: the delegate tray's row keeps clear of it. */
   let ringWidth = $state(0);
+  const measureRing = frameSize<HTMLElement>((node) => {
+    ringWidth = node.clientWidth;
+  });
   /**
    * Each conversation's offer as it is laid out, by id, kept as it stands
    * whether shown or not: handed the next conversation, the stack is the
@@ -2990,6 +3007,10 @@
    * column to say so.
    */
   const offerHeights: Record<string, number> = $state({});
+  const measureOffer = (id: string) =>
+    frameSize<HTMLElement>((node) => {
+      offerHeights[id] = node.clientHeight;
+    });
   const stack = $derived(offerHeights[showing] ?? 0);
 
   /** The rows with an offer to stand on the tray row, and those with a tray. */
@@ -3105,7 +3126,7 @@
           <div
             data-composer-away={row.id !== showing || undefined}
             class="absolute inset-x-0 bottom-0 pointer-events-auto has-[>*]:pb-space-3 data-composer-away:invisible"
-            bind:clientHeight={offerHeights[row.id]}
+            {@attach measureOffer(row.id)}
           >
             {@render row.prompts?.()}
           </div>
@@ -3123,7 +3144,7 @@
     data-slot="lift"
     class="relative flex-none w-c-composer-w pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
     inert={askRaised}
-    bind:clientHeight={lift}
+    {@attach measureLift}
     style:--shelf-rise={shelves[showing] ? `${shelves[showing]}px` : null}
   >
     {#if minimized && ask && askQuestions}
@@ -3196,7 +3217,7 @@
       <div
         data-slot="progress-slot"
         class="absolute bottom-(--progress-foot) end-0 z-1 flex items-end h-c-tray-row pb-c-tray-gap pointer-events-auto transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
-        bind:clientWidth={ringWidth}
+        {@attach measureRing}
         style:--progress-foot="var(--shelf-rise, 0px)"
       >
         {@render planRing()}
@@ -3248,7 +3269,7 @@
     data-slot="composer"
     class="relative flex-none w-c-composer-w flex flex-col gap-space-3 pointer-events-none not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
     bind:this={column}
-    bind:clientHeight={panel}
+    {@attach measurePanel}
     in:rise
     out:fade
   >
@@ -3472,7 +3493,7 @@
             data-slot="perch"
             aria-hidden="true"
             class="absolute bottom-full start-space-3 pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide"
-            bind:clientHeight={perchHeight}
+            {@attach measurePerch}
           >
             {@render perch()}
           </div>

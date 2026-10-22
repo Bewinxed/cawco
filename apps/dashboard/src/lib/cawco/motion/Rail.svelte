@@ -21,7 +21,7 @@
    * less motion they move at once and only the label's fade runs).
    */
   import type { Snippet } from "svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
 
   let {
     items,
@@ -109,7 +109,11 @@
       one so the label fades out where it was instead of jumping. */
   let tip = $state(-1);
   let shownTip = $state(0);
+  /** The label's width, which the tip glides to: read as it mounts, and a change in the next frame (frameSize). */
   let tipWidth = $state(0);
+  const measureTip = frameSize<HTMLElement>((node) => {
+    tipWidth = node.offsetWidth;
+  });
   $effect(() => {
     if (tip >= 0) {
       shownTip = tip;
@@ -243,7 +247,7 @@
         <span
           data-slot="tip-text"
           class="inline-flex items-center gap-space-2 px-space-3 font-body text-size-meta leading-none font-normal whitespace-nowrap motion-safe:animate-rail-label-in"
-          bind:offsetWidth={tipWidth}
+          {@attach measureTip}
           >{items[shownTip]?.label}
           {#if tipExtra && items[shownTip]}
             {@render tipExtra(items[shownTip])}

@@ -197,7 +197,7 @@
    * Archive) stands left of it, so a row with neither is not measured: a
    * tree in the rail wrote the width on every row it drew, and each write
    * restyled its row. Written from a size observer, after layout: read
-   * where the row renders (`bind:offsetWidth`), it laid the page out in the
+   * where the row renders (an offsetWidth binding), it laid the page out in the
    * middle of the update that opened a tree, once a row.
    */
   const trailWidth: Attachment<HTMLElement> | undefined = $derived(

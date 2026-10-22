@@ -62,7 +62,7 @@
   /**
    * The content's height, read in the frame after it changed
    * (frameObserver) and held on the surface there. Written inside the
-   * observer's delivery (a `bind:offsetHeight`), the surface's height
+   * observer's delivery (an offsetHeight binding), the surface's height
    * changed under the floating wrapper floating-ui's `autoUpdate` watches, at
    * a depth the delivery had already passed: picking Full Send swapped the
    * content for its confirm and the page raised "ResizeObserver loop

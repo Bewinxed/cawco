@@ -29,6 +29,7 @@
   import { FIT, ZOOM } from "#lib/components/features/flow/fit.js";
   import WorkflowCanvasTools from "#lib/components/features/workflows/WorkflowCanvasTools.svelte";
   import { theme } from "#lib/theme.svelte.js";
+  import { frameSize } from "../frame-observer";
   import { numberOf } from "../motion/curves.svelte";
   import TaskCanvasFit from "./canvas/TaskCanvasFit.svelte";
   import TaskEdgeLine from "./canvas/TaskEdgeLine.svelte";
@@ -94,9 +95,16 @@
     }
   });
   const ESTIMATE = { width: 240, height: 64 };
-  /** The canvas's own size: which way the graph runs is the one it holds larger. */
+  /**
+   * The canvas's own size: which way the graph runs is the one it holds
+   * larger. Read as it mounts, and a change in the next frame (frameSize).
+   */
   let canvasWidth = $state(0);
   let canvasHeight = $state(0);
+  const measureCanvas = frameSize<HTMLElement>((node) => {
+    canvasWidth = node.clientWidth;
+    canvasHeight = node.clientHeight;
+  });
   /** The least zoom at which a card's smallest text (--text-meta) is 11px. */
   let floor = $state(1);
   let fitter = $state<ReturnType<typeof TaskCanvasFit>>();
@@ -205,8 +213,7 @@
   class="relative h-full min-h-c-canvas-min-h min-w-0 overflow-hidden rounded-lg bg-surface-recess inset-ring inset-ring-border-hairline"
   data-settled={eased || undefined}
   data-slot="view-canvas"
-  bind:clientHeight={canvasHeight}
-  bind:clientWidth={canvasWidth}
+  {@attach measureCanvas}
 >
   <!-- The arrow every `after` edge ends in, filled from the tokens. -->
   <svg aria-hidden="true" class="absolute h-0 w-0">

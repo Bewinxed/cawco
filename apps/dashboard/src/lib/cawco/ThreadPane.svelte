@@ -64,6 +64,7 @@
     watchDelegate,
     watchPlan,
   } from "./client.svelte";
+  import { frameSize } from "./frame-observer";
   import Caw, { CAW_HEADROOM, LEDGE_LINE } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { failureWords, THREAD_SEND_UNREACHED, unreachable } from "./hub-read";
@@ -152,28 +153,17 @@
   );
   setTaskProject(() => projectId);
 
-  let paneWidth = $state(0);
   /**
-   * The pane's width as the layout below reads it. Its first width (none laid
-   * yet) is taken as the binding reports it, so the first frame painted is
-   * the split or the sheet the pane's width asks for. Every change after it
-   * is taken in the next frame's callbacks: the binding hears it in a
-   * ResizeObserver callback, and read there, a pane crossing 900px swapped
-   * the split for the sheet (and resized Caw's box) inside that delivery, at
-   * a depth the delivery had passed ("ResizeObserver loop completed with
-   * undelivered notifications").
+   * The pane's width as the layout below reads it: read as the pane mounts,
+   * so the first frame painted is the split or the sheet the pane's width
+   * asks for, and a change in the next frame (frameSize). Read inside a
+   * ResizeObserver delivery, a pane crossing 900px swapped the split for the
+   * sheet (and resized Caw's box) there, at a depth the delivery had passed
+   * ("ResizeObserver loop completed with undelivered notifications").
    */
   let laidWidth = $state(0);
-  $effect(() => {
-    const width = paneWidth;
-    if (untrack(() => laidWidth) === 0) {
-      laidWidth = width;
-      return;
-    }
-    const frame = requestAnimationFrame(() => {
-      laidWidth = width;
-    });
-    return () => cancelAnimationFrame(frame);
+  const measurePane = frameSize<HTMLElement>((node) => {
+    laidWidth = node.clientWidth;
   });
   const coarse = new MediaQuery("(pointer: coarse)");
   /** Caw's still box on the composer: 56px at a desk, 48px on a phone. */
@@ -798,8 +788,14 @@
   const fadeSolid = $derived(
     `max(calc(var(--space-4) + ${foot.stack + foot.perch}px), calc(${latestFoot} + var(--c-btn-h-sm)))`
   );
-  /** The problem line's height, standing where the composer would: the foot clears it. */
+  /**
+   * The problem line's height, standing where the composer would: the foot
+   * clears it. Read as it mounts, and a change in the next frame (frameSize).
+   */
   let offHeight = $state(0);
+  const measureOff = frameSize<HTMLElement>((node) => {
+    offHeight = node.clientHeight;
+  });
   /**
    * Room at the transcript's foot for what stands over it: the composer and
    * Caw's rise above the pill (his slot over the ledge line, and the
@@ -1088,7 +1084,7 @@
 <div
   data-slot="pane"
   class="@container flex flex-col flex-auto min-w-0 min-h-0 bg-surface-recess"
-  bind:clientWidth={paneWidth}
+  {@attach measurePane}
 >
   <div
     data-slot="body"
@@ -1162,7 +1158,7 @@
         class="absolute inset-x-0 bottom-(--off-bottom) z-(--layer-dock) w-c-composer-w mx-auto"
         data-safe-bottom
         style:--off-bottom="calc(var(--space-4) + var(--safe-bottom))"
-        bind:clientHeight={offHeight}
+        {@attach measureOff}
         in:crossIn
         out:crossOut
       >

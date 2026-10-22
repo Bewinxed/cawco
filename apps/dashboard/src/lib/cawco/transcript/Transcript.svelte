@@ -53,6 +53,7 @@
   } from "../client.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
   import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
+  import { frameSize } from "../frame-observer";
   import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
@@ -2027,9 +2028,14 @@
    * is wholly above the view; scrolling up, a row it had only estimated
    * (`ROW_ESTIMATE`) that came into view unmeasured — any page put in front,
    * met by a wheel longer than its default 200px — grew there and pushed
-   * the rows under it down by the difference.
+   * the rows under it down by the difference. Read as the scroller mounts,
+   * and a change in the next frame (frameSize): the rows it mounts lay the
+   * list out again.
    */
   let viewHeight = $state(0);
+  const measureView = frameSize<HTMLElement>((node) => {
+    viewHeight = node.clientHeight;
+  });
   /** virtua's imperative handle: its sizes, its cache, and `scrollToIndex` for
       a row that is not the tail (the tray's reveal). */
   let list = $state<VirtualizerHandle | undefined>();
@@ -3885,7 +3891,7 @@
   {onscroll}
   role="log"
   bind:this={scroller}
-  bind:clientHeight={viewHeight}
+  {@attach measureView}
 >
   <!-- Empty is what is drawn: a conversation whose one row is folding away
        as its retry comes in is not empty for the frame between the two, and

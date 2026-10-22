@@ -1,3 +1,6 @@
+import { untrack } from "svelte";
+import type { Attachment } from "svelte/attachments";
+
 /**
  * A ResizeObserver whose answer comes in the next frame's callbacks
  * (`requestAnimationFrame`): once, however many deliveries came before it,
@@ -32,6 +35,30 @@ export interface FrameObserver {
   /** The answer in the next frame, with nothing resized (`changed` empty unless something also was). */
   request: () => void;
   unobserve: (target: Element) => void;
+}
+
+/**
+ * An element's size, as a Svelte attachment: `take` reads it as the element
+ * mounts, so the first frame painted is laid out from it, and again in the
+ * next frame after each resize (frameObserver). The dashboard's one way to
+ * hold a box's size in state: Svelte's dimension bindings (`bind:clientWidth`
+ * and its kin, lint: none stands unexempted) are ResizeObservers that write
+ * inside the delivery, and WebKit reported "ResizeObserver loop completed
+ * with undelivered notifications" when what they wrote laid the page out
+ * again (PaneTabs' card height, c4313c3d8).
+ *
+ * `take` only reads the element and writes state: its first read is
+ * untracked, so nothing it reads re-runs the attachment.
+ */
+export function frameSize<T extends Element>(
+  take: (node: T) => void
+): Attachment<T> {
+  return (node) => {
+    untrack(() => take(node));
+    const sized = frameObserver(() => take(node));
+    sized.observe(node);
+    return () => sized.disconnect();
+  };
 }
 
 export function frameObserver(

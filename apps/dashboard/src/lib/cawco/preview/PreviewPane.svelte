@@ -92,7 +92,7 @@
     letGo,
     type Stage,
   } from "../canvas/stage.svelte";
-  import { frameObserver } from "../frame-observer";
+  import { frameObserver, frameSize } from "../frame-observer";
   import { resolveSessionTitle } from "../links";
   import {
     appear,
@@ -1440,8 +1440,16 @@
   let cardError = $state<string | null>(null);
   /** The open thread's reply is on its way. */
   let replying = $state(false);
+  /**
+   * The room over the page a pin's card stands in: read as it mounts, and a
+   * change in the next frame (frameSize).
+   */
   let roomW = $state(0);
   let roomH = $state(0);
+  const measureRoom = frameSize<HTMLElement>((node) => {
+    roomW = node.clientWidth;
+    roomH = node.clientHeight;
+  });
   const cardPin = $derived(pins.find((pin) => pin.id === openPin) ?? null);
   /** The open thread's element's nearest parent, as the page names its chain (`cawco:pin-chain`). */
   let cardParent = $state<{ id: string; name: string | null } | null>(null);
@@ -3586,8 +3594,7 @@
     class="absolute inset-0 pointer-events-none"
     data-mode={mode !== "interact" && !isCanvas ? mode : undefined}
     bind:this={pinRoom}
-    bind:clientHeight={roomH}
-    bind:clientWidth={roomW}
+    {@attach measureRoom}
   >
     {#if composing && kit && nextDraft}
       {@const Composer = kit.CommentComposer}

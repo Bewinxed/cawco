@@ -7,7 +7,7 @@
   import { accountsWords, HARNESSES, type HarnessKind } from "@cawco/core";
   import { untrack } from "svelte";
   import { crossfade } from "svelte/transition";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { autowidth } from "#lib/cawco/motion/autosize.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { pressVariants } from "#lib/components/ui/button/index.js";
@@ -127,17 +127,11 @@
    * whole of it.
    */
   let chosenHeight = $state(44);
-  const chosen = (node: HTMLElement) => {
-    // Read now, and a change in the next frame (frameObserver): the fill
-    // stands on it.
-    const read = () => {
-      chosenHeight = node.offsetHeight;
-    };
-    read();
-    const sized = frameObserver(read);
-    sized.observe(node);
-    return () => sized.disconnect();
-  };
+  // Read now, and a change in the next frame (frameSize): the fill stands
+  // on it.
+  const chosen = frameSize<HTMLElement>((node) => {
+    chosenHeight = node.offsetHeight;
+  });
 
   /**
    * The chosen model's run settings glide from the row it leaves to the one

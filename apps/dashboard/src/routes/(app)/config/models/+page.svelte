@@ -6,6 +6,7 @@
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import {
     failureClause,
     failureWords,
@@ -138,7 +139,11 @@
     }
     return "Jev is off. Save a TypeSafe key here, or connect OpenRouter above.";
   });
+  /** The key's status lines' height, which their box glides to: read as it mounts, and a change in the next frame (frameSize). */
   let keyHeight = $state(0);
+  const measureKey = frameSize<HTMLElement>((node) => {
+    keyHeight = node.clientHeight;
+  });
 
   /**
    * OpenRouter returns only to https (its OAuth `callback_url` takes "https
@@ -269,8 +274,11 @@
       ? "connected"
       : "off";
   });
-  /** A problem fades in over 300ms on the settle-in curve. */
+  /** OpenRouter's status lines' height, which their box glides to: read as it mounts, and a change in the next frame (frameSize). */
   let openrouterHeight = $state(0);
+  const measureOpenrouter = frameSize<HTMLElement>((node) => {
+    openrouterHeight = node.clientHeight;
+  });
 
   /**
    * OpenRouter's redirect lands here with `?code=`: exchange it, then strip it
@@ -339,7 +347,7 @@
       style:block-size={openrouterHeight ? `${openrouterHeight}px` : undefined}
     >
       <!-- A status line that swaps: the lines cross-fade over each other in one grid cell. -->
-      <div data-slot="stack" class="grid" bind:clientHeight={openrouterHeight}>
+      <div data-slot="stack" class="grid" {@attach measureOpenrouter}>
         {#key phase}
           <p
             data-slot="num"
@@ -483,7 +491,7 @@
       class="overflow-hidden motion-safe:transition-[block-size] motion-safe:duration-(--dur-morph) motion-safe:ease-drawer"
       style:block-size={keyHeight ? `${keyHeight}px` : undefined}
     >
-      <div data-slot="stack" class="grid" bind:clientHeight={keyHeight}>
+      <div data-slot="stack" class="grid" {@attach measureKey}>
         {#key keyPhase}
           <p
             data-slot="num"

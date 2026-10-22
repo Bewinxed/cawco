@@ -26,6 +26,7 @@
   import type { TransitionConfig } from "svelte/transition";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Resizable from "#lib/components/ui/resizable/index.js";
+  import { frameSize } from "../frame-observer";
   import { dur, easeOut, motionOk } from "../motion/curves.svelte";
   import { waiting as departing, land } from "../motion/share.svelte";
   import { store, stored, unstore } from "../storage";
@@ -74,7 +75,6 @@
     after?: Snippet;
   } = $props();
 
-  let width = $state(0);
   let sidePane = $state<ReturnType<typeof Resizable.Pane>>();
   /** The page's own width for the surface, in percent: read untracked. */
   let savedWidth = untrack(() => defaultWidth);
@@ -122,24 +122,15 @@
    */
   const DIVIDER = 1;
   /**
-   * The split's width as the panes are sized from it. Its first width (none
-   * laid yet) is taken as the binding reports it, so the first frame painted
-   * stands the panes at their sizes. Every change after it is taken in the
-   * next frame's callbacks: the binding hears it in a ResizeObserver
-   * callback, and read there, the floor and the panes' sizes it sets resized
-   * the panes inside that delivery.
+   * The split's width as the panes are sized from it: read as the split
+   * mounts, so the first frame painted stands the panes at their sizes, and a
+   * change in the next frame (frameSize). Read inside a ResizeObserver
+   * delivery, the floor and the panes' sizes it sets resized the panes inside
+   * that delivery.
    */
   let laidWidth = $state(0);
-  $effect(() => {
-    const now = width;
-    if (untrack(() => laidWidth) === 0) {
-      laidWidth = now;
-      return;
-    }
-    const frame = requestAnimationFrame(() => {
-      laidWidth = now;
-    });
-    return () => cancelAnimationFrame(frame);
+  const measureSplit = frameSize<HTMLElement>((node) => {
+    laidWidth = node.clientWidth;
   });
   /** The surface's floor (SIDE_FLOOR_PX), as a share of the panes' room; null until measured. */
   const sideMin = $derived(
@@ -397,7 +388,7 @@
   onkeydowncapture={handleKey}
   role="presentation"
   bind:this={root}
-  bind:clientWidth={width}
+  {@attach measureSplit}
 >
   <Resizable.PaneGroup direction="horizontal">
     <!-- Dragged past its narrowest, the page collapses to nothing
