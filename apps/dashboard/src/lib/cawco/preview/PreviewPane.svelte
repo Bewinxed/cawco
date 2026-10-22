@@ -3291,6 +3291,7 @@
     class="@container flex flex-col flex-1 min-h-0"
     bind:this={section}
   >
+    {@render changesBar()}
     <div
       class="relative flex flex-col flex-1 min-h-0 overflow-hidden border border-border-well rounded-sm bg-surface-well"
       bind:this={well}
@@ -3311,6 +3312,7 @@
     subtitleId={`${paneId}-line`}
     {switcher}
     titleControl={artifact ? artifactTitle : undefined}
+    above={changesBar}
     beside={railBeside}
     bind:section
     bind:subtitleStands={lineStands}
@@ -3319,6 +3321,65 @@
     {@render framed()}
   </SideSurface>
 {/if}
+
+<!-- Changed since you looked, in its own room above the well (DESIGN.md, Changed since you looked). -->
+{#snippet changesBar()}
+  {#if changeStops.length > 0 && !isCanvas}
+    {@const total = tour?.length ?? changeStops.length}
+    <!-- Changed since you looked: its own bar between the head and the
+           well, so it never stands over the page (the page starts under
+           it), stepping through the stops (‹ ›; J and K while it holds the
+           focus). -->
+    <div
+      data-slot="changes-bar"
+      class="flex flex-none justify-center min-w-0 pb-space-2"
+      in:rise={"--dur-panel"}
+      out:rise={"--dur-exit"}
+    >
+      <fieldset
+        data-slot="changes-tag"
+        aria-label={commentWords.changedSince(total)}
+        class="mark-line w-fit max-w-full p-0 m-0 min-w-0 flex items-center h-c-btn-h-sm coarse:h-c-btn-h-lg border border-border-hairline rounded-md bg-surface-raised text-size-label font-medium text-ink-strong"
+      >
+        <button
+          aria-label={commentWords.previousChange}
+          class="touch-hit grid place-items-center h-full px-space-2 rounded-s-md text-ink-muted can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
+          data-box
+          data-slot="change-previous"
+          onkeydown={tagKey}
+          onclick={() => stepChange(-1)}
+          title={commentWords.previousChange}
+          type="button"
+        >
+          <IconChevronLeft class="size-icon-md" />
+        </button>
+        <button
+          class="touch-hit min-w-0 h-full px-space-1 overflow-clip text-ellipsis whitespace-nowrap num can-hover:hover:bg-surface-hover"
+          data-slot="change-count"
+          onkeydown={tagKey}
+          onclick={() => stepChange(tour ? 0 : 1)}
+          type="button"
+        >
+          {tour
+            ? commentWords.changeOf(tourAt + 1, total)
+            : commentWords.changedSince(total)}
+        </button>
+        <button
+          aria-label={commentWords.nextChange}
+          class="touch-hit grid place-items-center h-full px-space-2 rounded-e-md text-ink-muted can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
+          data-box
+          data-slot="change-next"
+          onkeydown={tagKey}
+          onclick={() => stepChange(1)}
+          title={commentWords.nextChange}
+          type="button"
+        >
+          <IconChevronRight class="size-icon-md" />
+        </button>
+      </fieldset>
+    </div>
+  {/if}
+{/snippet}
 
 <!-- The page in the well, and what stands over it: the panel's and an
      inset's alike. -->
@@ -3786,53 +3847,6 @@
     {/if}
     {#if peekPin && peekAt}
       <PinPeek mark={peekAt.mark} pin={peekPin} room={{ w: roomW, h: roomH }} />
-    {/if}
-    {#if changeStops.length > 0 && !isCanvas}
-      {@const total = tour?.length ?? changeStops.length}
-      <!-- Changed since you looked: the floating tag at the well's top centre, stepping through the stops (‹ ›; J and K while it holds the focus). -->
-      <fieldset
-        data-slot="changes-tag"
-        aria-label={commentWords.changedSince(total)}
-        class="mark-line pointer-events-auto absolute top-space-2 inset-x-space-2 mx-auto w-fit p-0 min-w-0 flex items-center h-c-btn-h-sm coarse:h-c-btn-h-lg border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-label font-medium text-ink-strong"
-        in:rise={"--dur-panel"}
-        out:rise={"--dur-exit"}
-      >
-        <button
-          aria-label={commentWords.previousChange}
-          class="touch-hit grid place-items-center h-full px-space-2 rounded-s-md text-ink-muted can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
-          data-box
-          data-slot="change-previous"
-          onkeydown={tagKey}
-          onclick={() => stepChange(-1)}
-          title={commentWords.previousChange}
-          type="button"
-        >
-          <IconChevronLeft class="size-icon-md" />
-        </button>
-        <button
-          class="touch-hit min-w-0 h-full px-space-1 overflow-clip text-ellipsis whitespace-nowrap num can-hover:hover:bg-surface-hover"
-          data-slot="change-count"
-          onkeydown={tagKey}
-          onclick={() => stepChange(tour ? 0 : 1)}
-          type="button"
-        >
-          {tour
-            ? commentWords.changeOf(tourAt + 1, total)
-            : commentWords.changedSince(total)}
-        </button>
-        <button
-          aria-label={commentWords.nextChange}
-          class="touch-hit grid place-items-center h-full px-space-2 rounded-e-md text-ink-muted can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
-          data-box
-          data-slot="change-next"
-          onkeydown={tagKey}
-          onclick={() => stepChange(1)}
-          title={commentWords.nextChange}
-          type="button"
-        >
-          <IconChevronRight class="size-icon-md" />
-        </button>
-      </fieldset>
     {/if}
   </div>
   {#if failure || paneRefused}

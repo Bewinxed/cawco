@@ -7260,7 +7260,14 @@ const changedPage = (revised: boolean) => `<!doctype html>
   <p id="a">Alpha stays as it is.</p>
   <p id="b">${revised ? "Beta, written again." : "Beta, as first written."}</p>
   ${revised ? '<p id="c">Delta, new here.</p>' : '<p id="gone">Gamma, soon taken out.</p>'}
+  <section id="more">${MORE_LINES}</section>
 </main></body></html>`;
+/** Words enough that the page scrolls, the same in both revisions: no change. */
+const MORE_LINES = Array.from(
+  { length: 30 },
+  (_, i) =>
+    `<p>Line ${i + 1} of the page, words that stand at its top as it scrolls.</p>`
+).join("");
 
 /**
  * WCAG 2 contrast of `selector`'s words over its ground with the change
@@ -7387,6 +7394,179 @@ const changedRead = (frame: Frame) =>
  * marks it seen in the doc and fades its wash off over `--dur-fade`; every
  * stop seen, the tag leaves, and a reload washes nothing.
  */
+/** The widths the bar is swept at: a phone, a narrow pane, a desk. */
+const SWEEP_WIDTHS = [390, 680, 1440] as const;
+
+/**
+ * The page's text boxes in the viewport, in the top page's px (through its
+ * frame's offset), each with whether it is the first block's (#a).
+ */
+const textBoxesOf = async (
+  screen: Page,
+  frame: Frame
+): Promise<
+  { first: boolean; x: number; y: number; w: number; h: number }[]
+> => {
+  const outer = await screen.locator(FRAME).boundingBox();
+  if (!outer) {
+    return [];
+  }
+  const inner = await frame.evaluate(() => {
+    const first = document.querySelector("#a");
+    const out: {
+      first: boolean;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    }[] = [];
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT
+    );
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent?.trim()) {
+        continue;
+      }
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const r of range.getClientRects()) {
+        if (r.width > 0 && r.bottom > 0 && r.top < innerHeight) {
+          out.push({
+            first: !!first?.contains(node),
+            x: r.x,
+            y: r.y,
+            w: r.width,
+            h: r.height,
+          });
+        }
+      }
+    }
+    return out;
+  });
+  return inner.map((one) => ({
+    ...one,
+    x: one.x + outer.x,
+    y: one.y + outer.y,
+  }));
+};
+
+/** Whether two boxes share any area. */
+const meets = (
+  a: { x: number; y: number; w: number; h: number },
+  b: { x: number; y: number; w: number; h: number }
+) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/** One look at the Changed since you looked bar: the page scrolled to its top or its middle, the bar's box against the frame, the page's text and the pane. */
+const barLook = async (
+  on: On,
+  frame: Frame,
+  at: string,
+  scroll: "top" | "mid"
+) => {
+  await frame.evaluate((where) => {
+    const room = document.scrollingElement;
+    if (room) {
+      room.scrollTop =
+        where === "top" ? 0 : (room.scrollHeight - innerHeight) / 2;
+    }
+  }, scroll);
+  await settle(on.page, 200);
+  const bar = await on.page
+    .locator('[data-slot="changes-bar"]')
+    .boundingBox()
+    .catch(() => null);
+  const outer = await on.page.locator(FRAME).boundingBox();
+  const pane = await on.page.locator(PANE).boundingBox();
+  const cut = await on.page
+    .locator('[data-slot="changes-tag"]')
+    .evaluate((tag) => tag.scrollWidth > tag.clientWidth + 1)
+    .catch(() => true);
+  const texts = await textBoxesOf(on.page, frame);
+  const boxed = bar && { x: bar.x, y: bar.y, w: bar.width, h: bar.height };
+  const inPane =
+    !!(bar && pane) &&
+    bar.x >= pane.x - 0.5 &&
+    bar.x + bar.width <= pane.x + pane.width + 0.5;
+  return {
+    at,
+    above: !!(bar && outer) && bar.y + bar.height <= outer.y + 0.5,
+    firstOverlaps: boxed
+      ? texts.filter((one) => one.first && meets(one, boxed)).length
+      : -1,
+    overlaps: boxed ? texts.filter((one) => meets(one, boxed)).length : -1,
+    overflows: inPane && !cut ? 0 : 1,
+    bar: boxed as unknown,
+  };
+};
+
+/**
+ * Changed since you looked never stands over the page it describes: its bar
+ * takes its own room between the head and the well. At 390, 680 and 1440,
+ * scrolled to the page's top and to its middle, the bar ends above the
+ * page's frame, no text box of the page (the first block's named) meets it,
+ * and it overflows neither the pane nor its own box: the overlap and
+ * overflow sweeps total 0.
+ */
+const changesBarSweep = async (on: On, id: string) => {
+  const was = on.page.viewportSize();
+  const looks: {
+    at: string;
+    above: boolean;
+    firstOverlaps: number;
+    overlaps: number;
+    overflows: number;
+    bar: unknown;
+  }[] = [];
+  for (const width of SWEEP_WIDTHS) {
+    // biome-ignore lint/performance/noAwaitInLoops: one width, then the next
+    await on.page.setViewportSize({ width, height: 900 });
+    const frame = await frameHolding(
+      on.page,
+      id,
+      `the changed page at ${width}`
+    );
+    if (!frame) {
+      looks.push({
+        at: `${width}`,
+        above: false,
+        firstOverlaps: -1,
+        overlaps: -1,
+        overflows: -1,
+        bar: "no frame",
+      });
+      continue;
+    }
+    await settle(on.page, 400);
+    for (const scroll of ["top", "mid"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one scroll, then the next
+      looks.push(await barLook(on, frame, `${width} ${scroll}`, scroll));
+    }
+  }
+  if (was) {
+    await on.page.setViewportSize(was);
+  }
+  await settle(on.page, 400);
+  const overlapTotal = looks.reduce(
+    (n, one) => n + Math.max(0, one.overlaps),
+    0
+  );
+  const overflowTotal = looks.reduce(
+    (n, one) => n + Math.max(0, one.overflows),
+    0
+  );
+  on.kit.check(
+    "changed: the Changed since you looked bar takes its own room between the head and the well: at 390, 680 and 1440, scrolled to the top and to mid-page, it ends above the page's frame and meets no text box of the page, its first block's included; the overlap and overflow sweeps total 0",
+    looks.length === SWEEP_WIDTHS.length * 2 &&
+      looks.every(
+        (one) => one.above && one.firstOverlaps === 0 && one.overlaps === 0
+      ) &&
+      overlapTotal === 0 &&
+      overflowTotal === 0,
+    `overlap total ${overlapTotal}; overflow total ${overflowTotal}; ${JSON.stringify(looks)}`
+  );
+};
+
 const changedChecks = async (on: On) => {
   const { origin } = new URL(on.page.url());
   const made = await on.call(CREATE, {
@@ -7463,6 +7643,8 @@ const changedChecks = async (on: On) => {
       (readable?.night ?? 0) >= 4.5,
     `contrast ${JSON.stringify(readable)}; items ${JSON.stringify(items)}; washes ${JSON.stringify(before?.washes)}; wash ${JSON.stringify(washRgb)} done ${JSON.stringify(doneRgb)}; tag ${said}`
   );
+
+  await changesBarSweep(on, id);
 
   // A step: #b brought out and chosen, seen in the doc, its wash fading off over --dur-fade.
   await frame.evaluate(() => {

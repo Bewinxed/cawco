@@ -67,6 +67,7 @@
     well = $bindable(),
     section = $bindable(),
     beside,
+    above,
     children,
   }: {
     /** What the card is, read out. */
@@ -117,6 +118,12 @@
      * its width.
      */
     beside?: Snippet;
+    /**
+     * What stands between the head and the well, in its own room: the
+     * preview's Changed since you looked bar. It never stands over the
+     * well's content, which starts under it.
+     */
+    above?: Snippet;
     /** The well's content. */
     children: Snippet;
   } = $props();
@@ -528,6 +535,7 @@
       variant="ghost"
     />
   </header>
+  {@render above?.()}
   {#if recessed}
     <!-- The content's ground: a well inside its edge (surface-well,
          border-well: the recess and hairline by day, deeper with a clear
