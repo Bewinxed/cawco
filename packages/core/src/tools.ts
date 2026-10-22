@@ -89,6 +89,12 @@ export interface ToolSpec {
   id: string;
   /** Ordered by preference. Empty for a platform = unsupported there. */
   install: ToolInstallMethod[];
+  /**
+   * The oldest version CawCo runs, for a tool whose own updates CawCo rides
+   * (Claude Code updates itself): a copy older than it is reported `failed`
+   * with why, and an install brings it to this version or newer.
+   */
+  minVersion?: string;
   /** What the dashboard calls it. */
   name: string;
   /** Set on no tool; declared for installable apps only, as {@link ToolInstallMethod.native} is. */
@@ -144,11 +150,76 @@ export interface ToolPolicy {
 export const OPENCODE_VERSION = "2.0.29";
 
 /**
+ * The oldest Claude Code CawCo runs at all (agent claude-version.ts
+ * `claudeToStart`), and the floor of its catalog entry ({@link
+ * ToolSpec.minVersion}). Its reason, Claude Code's CHANGELOG under 2.1.301:
+ * "Fixed sign-in refresh timeouts and unexpected sign-outs after a short
+ * command such as `claude auth status` or `claude plugin list` exited in the
+ * middle of a token refresh". Below it, a refresh cut short can leave an
+ * account dir's stored login blank (anthropics/claude-code#88583: the lock
+ * "protect[s] the save, not the network call"), and every process on that
+ * dir is signed out after.
+ */
+export const CLAUDE_VERSION_FLOOR = "2.1.301";
+
+const VERSION_PARTS = /^(\d+)\.(\d+)\.(\d+)/;
+
+/** Whether `version` (`x.y.z`, anything after it ignored) is older than `than`. */
+export const olderThan = (version: string, than: string): boolean => {
+  const a = VERSION_PARTS.exec(version)?.slice(1).map(Number) ?? [0, 0, 0];
+  const b = VERSION_PARTS.exec(than)?.slice(1).map(Number) ?? [0, 0, 0];
+  for (const [at, part] of a.entries()) {
+    const other = b[at] ?? 0;
+    if (part !== other) {
+      return part < other;
+    }
+  }
+  return false;
+};
+
+/**
  * The catalog. Order is display order. Verified against each tool's official
  * docs on 2026-08-06 — when an entry drifts from what an installer really
  * does, fix the entry and note the drift in NEW.md.
  */
 export const TOOL_CATALOG: ToolSpec[] = [
+  {
+    id: "claude",
+    name: "Claude Code",
+    homepage: "https://code.claude.com",
+    bin: "claude",
+    versionCommand: "claude --version",
+    minVersion: CLAUDE_VERSION_FLOOR,
+    // The native installer's link (code.claude.com/docs/en/setup), for a
+    // daemon whose PATH lacks it.
+    wellKnownPaths: ["~/.local/bin/claude"],
+    // No footprints: whatever put Claude Code here, its own updater is asked
+    // first, as the machine's user and with no sudo ("To apply an update
+    // immediately without waiting for the next background check, run:
+    // claude update", code.claude.com/docs/en/setup, read 2026-10-22). The
+    // same page: "Installs managed by Homebrew, WinGet, or apk report `Claude
+    // is up to date!` instead", so the version is read again after it and a
+    // copy still below the floor fails with what the updater said. A machine
+    // without one gets the official installer, which puts the newest build in
+    // ~/.local/bin, or the build a pin names ("curl -fsSL
+    // https://claude.ai/install.sh | bash -s 2.1.89", the same page).
+    install: [
+      {
+        label: "claude update",
+        platforms: ["linux", "darwin", "win32"],
+        needs: "claude",
+        command: "claude update",
+      },
+      {
+        label: "curl script",
+        platforms: ["linux", "darwin"],
+        needs: "curl",
+        command: "curl -fsSL https://claude.ai/install.sh | bash",
+        pinnedCommand:
+          "curl -fsSL https://claude.ai/install.sh | bash -s {version}",
+      },
+    ],
+  },
   {
     id: "opencode",
     name: "opencode",

@@ -1549,6 +1549,15 @@ export interface HarnessReport {
    */
   modelsUnread?: string;
   /**
+   * Claude only: why the machine's version gate refuses every start of its
+   * Claude Code (agent claude-version.ts `ClaudeRefused`), its sentence in
+   * {@link authReason}: `not-installed`, or `version` (older than core's
+   * `CLAUDE_VERSION_FLOOR`, or no version said). Absent when it runs. Where
+   * the dashboard puts the refusal in place of what it blocks, with the
+   * catalog's install of `claude` as its one press (`ClaudeBlock`).
+   */
+  refused?: "not-installed" | "version";
+  /**
    * OpenCode only: each of the machine's own OpenCode sign-ins (not a CawCo
    * account) whose provider refused it the last time a session here used
    * it, until a turn on that provider succeeds. The home says each on the

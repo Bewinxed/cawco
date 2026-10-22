@@ -16,7 +16,7 @@ import type {
   ToolSpec,
   ToolStatus,
 } from "@cawco/core";
-import { TOOL_CATALOG, toolSpec } from "@cawco/core";
+import { olderThan, TOOL_CATALOG, toolSpec } from "@cawco/core";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { expandHome } from "./fs";
 import { probeStarted } from "./probe-count";
@@ -119,12 +119,18 @@ const TAIL_LINES = 4;
 const tail = (output: string): string =>
   output.trim().split("\n").slice(-TAIL_LINES).join("\n");
 
+/** An installer's tail, as one line for a sentence. */
+const oneLine = (said: string | undefined): string =>
+  (said ?? "").trim().replaceAll(/\s*\n\s*/g, "; ");
+
 /**
  * Installs that did not land since this daemon started. Reported in place of
- * the `missing` a re-probe would say, because `missing` is exactly what the hub
- * auto-installs: without this, every reconnect sends the same doomed install
- * out again. Per boot on purpose — restarting the daemon is a deliberate
- * second try, and so is a click.
+ * whatever short of `installed` a re-probe would say: `missing` is exactly
+ * what the hub auto-installs, so without this every reconnect sends the same
+ * doomed install out again; and a copy still too old reads as the attempt
+ * that failed on it, in the installer's words, not as one nobody tried. Per
+ * boot on purpose — restarting the daemon is a deliberate second try, and so
+ * is a click.
  */
 const failures = new Map<string, ToolStatus>();
 
@@ -442,6 +448,17 @@ export const probeTool = async (
   const version = await probeVersion(spec, at.path);
   sawTool(spec.id, version ?? "unsaid");
   const method = at.method ? { method: at.method.label } : {};
+  // A tool whose own updates CawCo rides runs at its floor or newer.
+  if (spec.minVersion && !(version && !olderThan(version, spec.minVersion))) {
+    return {
+      id: spec.id,
+      state: "failed",
+      detail: `${spec.bin} ${version ?? "of no version it will say"} is installed${at.method ? ` with ${at.method.label}` : ""}; CawCo runs ${spec.name} ${spec.minVersion} or newer. Update it to put a newer one on.`,
+      ...(version ? { version } : {}),
+      ...method,
+      at: Date.now(),
+    };
+  }
   // A tool CawCo is built against is installed only at its one version.
   if (want && version !== want) {
     const refused = refusal(spec, at, want);
@@ -469,13 +486,37 @@ export const probeTool = async (
  */
 export const probeTools = async (): Promise<ToolStatus[]> => {
   probeStarted();
-  return await Promise.all(
-    TOOL_CATALOG.map(async (spec) => {
-      const status = await probeTool(spec);
-      const failure = failures.get(spec.id);
-      return status.state === "missing" && failure ? failure : status;
-    })
-  );
+  return await Promise.all(TOOL_CATALOG.map(probeReported));
+};
+
+/**
+ * The installs this agent runs now, by tool id, and when each last ended.
+ * A probe reads a binary an install may be replacing under it: one that
+ * read it mid-install was a read of the old copy, sent after the install's
+ * own answer, and the hub kept it as the newer word (a cell's last write
+ * stands), so the dashboard put an update that had landed back in front of
+ * the person. While one runs the tool is reported as `installing`; one that
+ * ended while the probe read is read again.
+ */
+const installing = new Set<string>();
+const installEnded = new Map<string, number>();
+
+/** One catalog tool, as {@link probeTools} reports it. */
+const probeReported = async (spec: ToolSpec): Promise<ToolStatus> => {
+  const started = Date.now();
+  let status = await probeTool(spec);
+  if (installing.has(spec.id)) {
+    return { id: spec.id, state: "installing", at: Date.now() };
+  }
+  if ((installEnded.get(spec.id) ?? 0) >= started) {
+    status = await probeTool(spec);
+  }
+  if (status.state === "installed") {
+    // Put right by hand since: the attempt's failure no longer stands.
+    failures.delete(spec.id);
+    return status;
+  }
+  return failures.get(spec.id) ?? status;
 };
 
 const eligible = (method: ToolInstallMethod): boolean =>
@@ -503,23 +544,26 @@ const noMethod = (spec: ToolSpec): ToolStatus => {
   };
 };
 
-/** What the method said when it did not work — the tail of it, anyway. */
+/**
+ * Runs a method: whether it exited 0, and the tail of what it said (its
+ * errors first when it failed). An updater can exit 0 and change nothing
+ * (Claude Code's `claude update` on a Homebrew install says "Claude is up to
+ * date!"), so its words are kept either way.
+ */
 const runMethod = async (
   spec: ToolSpec,
   method: ToolInstallMethod,
   version?: string
-): Promise<string | undefined> => {
+): Promise<{ ok: boolean; said: string }> => {
   const command = commandOf(method, version);
   console.info(`[tools] ${spec.name}: ${method.label}: ${command}`);
   const ran = await Bun.$`${{ raw: command }}`.quiet().nothrow().env(toolEnv());
+  const out = tail(Bun.stripANSI(ran.stdout.toString()));
+  const err = tail(Bun.stripANSI(ran.stderr.toString()));
   if (ran.exitCode === 0) {
-    return undefined;
+    return { ok: true, said: out || err };
   }
-  return (
-    tail(ran.stderr.toString()) ||
-    tail(ran.stdout.toString()) ||
-    `exited ${ran.exitCode}`
-  );
+  return { ok: false, said: err || out || `exited ${ran.exitCode}` };
 };
 
 /**
@@ -552,16 +596,25 @@ const install = async (
     return remember(noMethod(spec));
   }
 
-  const said = await runMethod(spec, method, version);
+  const ran = await runMethod(spec, method, version);
   const probed = await probeTool(spec, version ?? spec.exactVersion);
   if (probed.state === "installed") {
     return remember({ ...probed, method: method.label });
   }
+  // It ran clean and left a copy CawCo still does not run: what the probe
+  // found, then what the method said of itself.
+  const left =
+    ran.ok && probed.version
+      ? `${method.label} finished, and ${spec.bin} still says ${probed.version}; CawCo runs ${spec.name} ${spec.minVersion ? `${spec.minVersion} or newer` : (version ?? spec.exactVersion)}.${ran.said ? ` ${method.label} said: ${oneLine(ran.said)}.` : ""} Update it on the machine the way it was installed, then Retry.`
+      : undefined;
   return remember({
     id: spec.id,
     state: "failed",
     detail:
-      said ?? `${method.label} finished without leaving ${spec.bin} anywhere`,
+      left ??
+      (ran.ok
+        ? `${method.label} finished without leaving ${spec.bin} anywhere`
+        : ran.said),
     method: method.label,
     at: Date.now(),
   });
@@ -588,17 +641,16 @@ export const installTool = async (
       at: Date.now(),
     };
   }
+  installing.add(spec.id);
   try {
     // A tool CawCo is built against goes on at its one version, whatever is pinned.
     return await install(spec, spec.exactVersion ?? version);
   } finally {
+    installing.delete(spec.id);
+    installEnded.set(spec.id, Date.now());
     toolsMoved();
   }
 };
-
-/** An installer's tail, as one line for a sentence. */
-const oneLine = (said: string | undefined): string =>
-  (said ?? "").trim().replaceAll(/\s*\n\s*/g, "; ");
 
 /** A tool {@link putOnPins} moved: from the version it said (when it said one) to `to`, with `method`. */
 export interface PinMove {

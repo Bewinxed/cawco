@@ -104,6 +104,10 @@
   {@const pending = asked[cellKey(machine.machineId, spec.id)] === true}
   {@const shown = toolStatus?.state ?? "unknown"}
   {@const failed = cellKey(machine.machineId, spec.id) in refused}
+  <!-- A copy there at a version CawCo doesn't run (older than its floor, or
+       not its one version) is the probe's, and carries that version; an
+       attempt that failed carries none (agent tools.ts). -->
+  {@const outdated = toolStatus?.state === "failed" && !!toolStatus.version}
 
   {#if shown === "installed"}
     <!-- Installed is the quiet state: the check and the version in ink, no
@@ -156,14 +160,20 @@
           {#snippet child({ props })}
             <Badge
               {...props}
-              aria-label="Why {spec.name} did not install on {machineLabel(
-                machine.hostname
-              )}"
+              aria-label="Why {spec.name} {outdated
+                ? `${toolStatus?.version} can't run`
+                : 'did not install'} on {machineLabel(machine.hostname)}"
               size="cell"
               variant="destructive"
             >
               <IconWarningTriangle class="size-icon-sm shrink-0" />
-              <span>Failed</span>
+              {#if outdated}
+                <code data-slot="num" class="num type-code"
+                  >{toolStatus?.version}</code
+                >
+              {:else}
+                <span>Failed</span>
+              {/if}
             </Badge>
           {/snippet}
         </Popover.Trigger>
@@ -178,7 +188,9 @@
           >
             <span class="type-label text-ink-strong"
               >{spec.name}
-              did not install</span
+              {outdated
+                ? `${toolStatus?.version} isn't one CawCo runs`
+                : "did not install"}</span
             >
             {#if toolStatus?.method}
               <code class="ml-auto shrink-0 type-code text-ink-muted"
@@ -198,10 +210,10 @@
             <Button
               disabled={!online}
               {failed}
-              label="Retry"
+              label={outdated ? "Update" : "Retry"}
               onclick={() => install(machine, spec)}
               {pending}
-              pendingLabel="Installing…"
+              pendingLabel={outdated ? "Updating…" : "Installing…"}
               size="xs"
               variant="outline"
             />
@@ -211,10 +223,10 @@
       <Button
         disabled={!online}
         {failed}
-        label="Retry"
+        label={outdated ? "Update" : "Retry"}
         onclick={() => install(machine, spec)}
         {pending}
-        pendingLabel="Installing…"
+        pendingLabel={outdated ? "Updating…" : "Installing…"}
         size="xs"
         tone="muted"
         variant="ghost"

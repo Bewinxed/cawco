@@ -195,6 +195,17 @@ export interface InstallsDeps {
   >;
   /** An install's outcome, for the person wherever they are (push.ts). */
   readonly outcome: (install: Install) => void;
+  /**
+   * Brings the joined machine's Claude Code to the oldest CawCo runs: asks
+   * the machine what it has, and runs the catalog's install of `claude`
+   * there when it is missing or older (server.ts). Each line it says goes
+   * into the install's output; it answers whether Claude Code now runs, and
+   * the machine's words.
+   */
+  readonly readyClaude: (
+    machineId: string,
+    say: (line: string) => void
+  ) => Promise<{ ok: boolean; said: string }>;
   /** An outcome the person acted on: its push comes down. */
   readonly settled: (id: string) => void;
   readonly tunnels: SshTunnels;
@@ -469,6 +480,56 @@ export const createInstalls = (deps: InstallsDeps) => {
     changed();
   };
 
+  /** The installs whose Claude Code step runs now, by id: the step's work. */
+  const readying = new Map<string, Promise<void>>();
+
+  /**
+   * The machine is listed online: its Claude Code is brought to the oldest
+   * CawCo runs (`readyClaude`), and only then is the install joined. A
+   * machine whose Claude Code could not be brought up fails at this step in
+   * the machine's words; it is in the fleet all the same. Asked again while
+   * it runs, it answers the same work.
+   */
+  const ready = (entry: Kept): Promise<void> => {
+    const { install } = entry;
+    const running = readying.get(install.id);
+    if (running !== undefined) {
+      return running;
+    }
+    const { machineId } = install;
+    mark(entry, "claude");
+    const say = (line: string) => take(entry, `${INSTALL_STEP_PREFIX}${line}`);
+    const work = (
+      machineId
+        ? deps.readyClaude(machineId, say)
+        : Promise.resolve({
+            ok: false,
+            said: "The hub doesn't know which machine joined, so its Claude Code wasn't checked.",
+          })
+    )
+      .then(({ ok, said }) => {
+        if (install.state !== "running") {
+          return;
+        }
+        if (ok) {
+          say(said);
+          end(entry, "joined");
+        } else {
+          end(entry, "failed", { kind: "step", said });
+        }
+      })
+      .catch((error: Error) => {
+        if (install.state === "running") {
+          end(entry, "failed", { kind: "step", said: error.message });
+        }
+      })
+      .finally(() => {
+        readying.delete(install.id);
+      });
+    readying.set(install.id, work);
+    return work;
+  };
+
   /** Every check passed, as the installer goes past them all. */
   const passChecks = (entry: Kept): void => {
     const done = new Set(entry.install.checks.map((one) => one.check));
@@ -671,8 +732,15 @@ export const createInstalls = (deps: InstallsDeps) => {
     }
   };
 
-  /** An exit of 0 waits out the hub's grace for the machine to come online. */
-  const settle = async (entry: Kept, record: string): Promise<void> => {
+  /**
+   * An exit of 0 waits out the hub's grace for the machine to come online,
+   * then its Claude Code step ({@link ready}), which a Stop cuts short.
+   */
+  const settle = async (
+    entry: Kept,
+    run: Run,
+    record: string
+  ): Promise<void> => {
     const { install } = entry;
     if (entry.exitCode === 0 && install.machineId) {
       const deadline = Date.now() + INSTALL_GRACE_MS;
@@ -681,7 +749,7 @@ export const createInstalls = (deps: InstallsDeps) => {
         await Bun.sleep(500);
       }
       if (machineOf(install.machineId)?.online) {
-        end(entry, "joined");
+        await Promise.race([ready(entry), run.halt]);
         return;
       }
     }
@@ -821,8 +889,16 @@ export const createInstalls = (deps: InstallsDeps) => {
     // A machine already joined over this connection installs nothing new and
     // says no `joined as`: it is the machine the connection was held for.
     install.machineId ??= tunnel.machineId;
-    await settle(entry, tunnel.id);
-    if (install.state === "joined" && install.machineId) {
+    await settle(entry, run, tunnel.id);
+    if (run.stopped) {
+      return;
+    }
+    // Joined, or in the fleet with a Claude Code it couldn't bring up: the
+    // machine's forward stays either way.
+    if (
+      install.machineId &&
+      (install.state === "joined" || install.problemStep === "claude")
+    ) {
       deps.tunnels.joined(tunnel.id, install.machineId);
     } else if (tunnel.fresh) {
       deps.tunnels.abandon(tunnel.id);
@@ -1064,10 +1140,11 @@ export const createInstalls = (deps: InstallsDeps) => {
       if (
         install.state === "running" &&
         install.route === "command" &&
-        machine?.online
+        machine?.online &&
+        !readying.has(install.id)
       ) {
         install.hostname = machine.hostname;
-        end(entry, "joined");
+        detach(ready(entry), "machine install's Claude Code step");
       }
     }
   });
@@ -1342,7 +1419,8 @@ export const createInstalls = (deps: InstallsDeps) => {
       }
       mark(entry, "listed");
       deps.lifetime.after(INSTALL_GRACE_MS, () => {
-        if (install.state === "running") {
+        // Online by now, it is on its Claude Code step, which ends it.
+        if (install.state === "running" && !readying.has(install.id)) {
           end(
             entry,
             "failed",

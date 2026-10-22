@@ -44,10 +44,14 @@ export const SSH_STEPS = [
   "install",
   "agent",
   "listed",
+  "claude",
 ] as const;
 
-/** The steps of an install by a command: the three the hub can see. */
-export const COMMAND_STEPS = ["run", "install", "listed"] as const;
+/**
+ * The steps of an install by a command: the three the hub can see, then
+ * Claude Code brought up to the oldest CawCo runs.
+ */
+export const COMMAND_STEPS = ["run", "install", "listed", "claude"] as const;
 
 export type InstallStep =
   (typeof SSH_STEPS)[number] | (typeof COMMAND_STEPS)[number];
@@ -111,7 +115,11 @@ export type InstallProblem =
   | { kind: "offer"; said: string }
   /** A check of the installer's failed on the machine. */
   | { kind: "check"; check: InstallCheck; said: string; user: string | null }
-  /** A step of the installer's failed for another reason (a checksum, no build, a command in the way). */
+  /**
+   * A step failed for another reason (a checksum, no build, a command in the
+   * way); on the `claude` step, the machine joined and its Claude Code could
+   * not be brought to the oldest CawCo runs, said in the machine's words.
+   */
   | { kind: "step"; said: string }
   /** Everything ran, but the hub never listed the machine online. */
   | { kind: "never-online"; mac: boolean; local: boolean; keyRefused: boolean }
@@ -120,7 +128,8 @@ export type InstallProblem =
 
 /**
  * `running` while it goes; `failed`, `stopped` and `lost` stand until the
- * person acts on them; `joined` once the fleet lists the machine online.
+ * person acts on them; `joined` once the fleet lists the machine online and
+ * its Claude Code runs.
  */
 export type InstallState = "running" | "failed" | "stopped" | "lost" | "joined";
 
@@ -255,6 +264,7 @@ const SSH_STEP_WORDS: Record<InstallStep, string> = {
   install: "Installing",
   agent: "Starting the agent",
   listed: "Waiting for the hub to list it",
+  claude: "Bringing Claude Code up to date",
   run: "Waiting for the command to run on it",
 };
 

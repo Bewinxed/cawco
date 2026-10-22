@@ -1212,6 +1212,12 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
+/**
+ * How long a tool install the hub runs itself (a joined machine's Claude
+ * Code, `readyClaude`) may take to answer: the dashboard's own install wait
+ * (dashboard config.ts `INSTALL_TIMEOUT_MS`), so the two never disagree.
+ */
+const TOOL_INSTALL_MS = 300_000;
 /** How long an approved post may take its machine (agent upstream-posts.ts makes it within five minutes). */
 const UPSTREAM_POST_MS = 6 * 60_000;
 
@@ -6472,6 +6478,8 @@ export const createServer = (
       } satisfies Envelope<FramePayload>),
     outcome: (install) => push.install(install),
     settled: (id) => push.installSettled(id),
+    // Stands further down, beside the installs a tool policy sends.
+    readyClaude: (machineId, say) => readyClaude(machineId, say),
     // Read when an add asks, once the hub has started: both stand further down.
     offered: () => binaryUpdates.offered(),
     heard: (record) => {
@@ -17764,6 +17772,122 @@ export const createServer = (
     if (sent) {
       publishInstances(machineId);
     }
+  };
+
+  /**
+   * Puts a catalog tool on a machine and waits for its answer, as a press
+   * on the dashboard does: the machine's cell reads `installing` for every
+   * dashboard until the machine answers, and its answer is the cell (the
+   * `pendingInstalls` path). Unanswered past {@link TOOL_INSTALL_MS}.
+   */
+  const installAwaited = (
+    machineId: string,
+    toolId: string
+  ): Promise<Bounded<ControlResult>> => {
+    const agent = registry.agent(machineId);
+    if (!agent) {
+      return Promise.resolve({ kind: "unanswered", reason: "dead", after: 0 });
+    }
+    const requestId = crypto.randomUUID();
+    pendingInstalls.set(requestId, { machineId, toolId });
+    db.setAgentToolCell(machineId, {
+      id: toolId,
+      state: "installing",
+      at: Date.now(),
+    });
+    publishInstances(machineId);
+    return awaitReply(machineId, requestId, TOOL_INSTALL_MS, () => {
+      const frame = {
+        verb: "control",
+        machineId,
+        payload: {
+          requestId,
+          method: "installTool",
+          args: [toolId],
+        },
+      } satisfies Envelope<ControlPayload>;
+      sendFrame(agent, frame);
+      return frame;
+    });
+  };
+
+  /**
+   * ADDING A MACHINE LEAVES IT READY (installs.ts `ready`): a machine that
+   * just joined is asked what tools it has, and its Claude Code is installed
+   * when missing or updated when older than core's `CLAUDE_VERSION_FLOOR`
+   * (the catalog's `claude`: its own updater, else the official installer),
+   * so it joins able to start sessions and sign accounts in. Answers whether
+   * Claude Code runs there now, in words; `say` takes each step's line.
+   */
+  const readyClaude = async (
+    machineId: string,
+    say: (line: string) => void
+  ): Promise<{ ok: boolean; said: string }> => {
+    const name = machineName(machineId);
+    const fix =
+      "It is in the fleet: update Claude Code from its row in Configure → CLI tools.";
+    const runsOn = (version: string | undefined): string =>
+      `Claude Code${version ? ` ${version}` : ""} runs on ${name}.`;
+    say(`asking ${name} which Claude Code it has`);
+    const has = await claudeToolOn(machineId);
+    if ("said" in has) {
+      return { ok: false, said: `${has.said} ${fix}` };
+    }
+    if (has.state === "installed") {
+      return { ok: true, said: runsOn(has.version) };
+    }
+    const verb = has.state === "missing" ? "install" : "update";
+    say(
+      verb === "install"
+        ? `installing Claude Code on ${name}`
+        : `updating Claude Code${has.version ? ` ${has.version}` : ""} on ${name}`
+    );
+    const answer = await installAwaited(machineId, "claude");
+    if (answer.kind === "unanswered") {
+      return {
+        ok: false,
+        said: `${name} didn't answer while Claude Code was being put on (${silentWords(machineId, answer)}), so whether it finished isn't known. ${fix}`,
+      };
+    }
+    const status = peekToolStatus({ result: answer.value.result });
+    if (status?.state === "installed") {
+      return { ok: true, said: runsOn(status.version) };
+    }
+    const why =
+      status?.detail ?? answer.value.error ?? "the machine didn't say why";
+    return {
+      ok: false,
+      said: `Claude Code didn't ${verb} on ${name}: ${why} ${fix}`,
+    };
+  };
+
+  /**
+   * The machine's Claude Code, as its tool probe finds it (`listTools`): its
+   * catalog row, or why there is none to read, in words.
+   */
+  const claudeToolOn = async (
+    machineId: string
+  ): Promise<ToolStatus | { said: string }> => {
+    const name = machineName(machineId);
+    const listed = await callAgent(machineId, "listTools", [], READ_TIMEOUT_MS);
+    if (listed.kind === "unanswered") {
+      return {
+        said: `${name} didn't say which Claude Code it has (${silentWords(machineId, listed)}).`,
+      };
+    }
+    if (!listed.value.ok) {
+      return {
+        said: `${name} didn't say which Claude Code it has (${listed.value.error ?? "its agent refused the ask"}).`,
+      };
+    }
+    const tools = Array.isArray(listed.value.result)
+      ? listed.value.result.filter(isToolStatus)
+      : [];
+    return (
+      tools.find((tool) => tool.id === "claude") ?? {
+        said: `${name} runs a CawCo build that doesn't manage Claude Code, so it wasn't checked. Update CawCo there from Configure → Updates.`,
+      }
+    );
   };
 
   /**
@@ -30978,11 +31102,17 @@ export const createServer = (
                 // A report with no word (Claude's, its dirs unanswered) is
                 // filed with the last word kept of that harness; with none
                 // kept, it is not filed, and the harness reads as not
-                // reported yet.
+                // reported yet. One whose machine refuses to run it (its
+                // Claude Code too old: no dir was asked) is filed all the
+                // same, its word `unauthenticated` (no account can run on
+                // it; the machine's own word stays): the refusal is the report, and
+                // the dashboard puts it, with its fix, where Claude would
+                // start (dashboard claude-block.svelte.ts).
                 const filed = reported.flatMap((report): HarnessReport[] => {
                   const auth =
                     report.auth ??
-                    harnessReportOf(message.machineId, report.harness)?.auth;
+                    harnessReportOf(message.machineId, report.harness)?.auth ??
+                    (report.refused ? "unauthenticated" : undefined);
                   return auth ? [{ ...report, auth }] : [];
                 });
                 db.mergeAgentHarnesses(message.machineId, filed);

@@ -37,6 +37,7 @@ import {
 } from "@cawco/core";
 import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { claudeBlockOf, claudeWords } from "../claude-block.svelte";
 import {
   type BlockedRequest,
   type BoardRow,
@@ -832,6 +833,12 @@ export interface MachineException {
 function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
   if (machine.status !== "online") {
     return "unreachable";
+  }
+  // Claude Code refused here (too old, none): nothing Claude starts on it
+  // until it is brought up, from its row in Configure → CLI tools.
+  const claude = claudeBlockOf(machine);
+  if (claude) {
+    return claudeWords.row(claude);
   }
   // Every harness's sign-in words: one never hides another's.
   const signIn = [

@@ -1929,21 +1929,31 @@ const attach = (
     };
     // An install this agent ran, or a harness finding its binary at another
     // version than it last did (tools.ts `toolsMoved`): the tools are probed
-    // again and sent now, not at the next connect. Only the tools: a
-    // harness's own report is its `detect`, which may start its server, and a
-    // version moving is no reason to start one. A burst is read once, a
-    // second on.
+    // again and sent now, not at the next connect, and so is Claude's
+    // report, whose word on the version gate (`refused`) is what stands
+    // between a sign-in or a start and the machine's Claude Code: an update
+    // the dashboard pressed clears it here, not at the next minute's read.
+    // No other harness's: its `detect` may start its server, and a version
+    // moving is no reason to start one. A burst is read once, a second on.
     let toolsSoon: ReturnType<typeof setTimeout> | undefined;
     const reportTools = async (): Promise<void> => {
-      const tools = await readPart("tools", probeTools);
-      if (tools && socket.readyState === WebSocket.OPEN) {
+      const claude = harnesses().find((adapter) => adapter.kind === "claude");
+      const [tools, claudeReport] = await Promise.all([
+        readPart("tools", probeTools),
+        claude ? readHarness(claude) : undefined,
+      ]);
+      if (claudeReport) {
+        keepReport(claudeReport);
+      }
+      if ((tools || claudeReport) && socket.readyState === WebSocket.OPEN) {
         send(socket, {
           verb: "heartbeat",
           machineId: identity.machineId,
           payload: {
             at: Date.now(),
             instances: supervisor.instanceIds,
-            tools,
+            ...(tools ? { tools } : {}),
+            ...(claudeReport ? { harnesses: [claudeReport] } : {}),
           } satisfies HeartbeatPayload,
         });
       }

@@ -16,6 +16,12 @@
    * code's wait goes on) and its button reads Open sign-in, which opens the
    * same link or code again; a refusal stays said on the row. A reload opens
    * the popover again, on the link or code the hub kept.
+   *
+   * A machine whose Claude Code CawCo refuses (too old, or none) offers no
+   * sign-in that can't succeed: the popover holds why and Update Claude Code
+   * in its place (ClaudeBlock), the row says so, and an update in flight
+   * parks on the row. Once it lands the popover offers the sign-in, saying
+   * which Claude Code is there now.
    */
   import { type Account, accountsWords as words } from "@cawco/core";
   import { SvelteMap } from "svelte/reactivity";
@@ -29,6 +35,14 @@
   import { TabDraft } from "#lib/cawco/tab-draft.svelte.js";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
   import { IconLogout, IconWarningTriangle } from "#lib/icons.js";
+  import ClaudeBlock from "../ClaudeBlock.svelte";
+  import {
+    claudeWords as blockWords,
+    claudeBlockOf,
+    landedOn,
+    settleClaude,
+  } from "../claude-block.svelte";
+  import Check from "./Check.svelte";
   import DevicePanel from "./DevicePanel.svelte";
   import { DeviceFlow } from "./device.svelte";
   import {
@@ -137,6 +151,8 @@
     if (on === null || !landed(on)) {
       return;
     }
+    // The Claude Code this tab brought up has done its work: said no more.
+    settleClaude(on);
     const timer = setTimeout(() => setOpen(on, false), dur("--dur-hold"));
     return () => clearTimeout(timer);
   });
@@ -185,7 +201,9 @@
       {@const word = online ? state : "offline"}
       {@const flow = heldFlow(flowKey(account.id, machine.machineId))}
       {@const open = openOn === machine.machineId}
+      {@const block = claude ? claudeBlockOf(machine) : null}
       {@const parked = open ? null : parkedWord(machine.machineId)}
+      {@const landed = claude ? landedOn(machine) : undefined}
       <li
         class="col-span-full grid min-h-c-btn-h-lg grid-cols-subgrid items-center gap-x-space-4 px-space-2 py-space-1 not-first:border-t not-first:border-t-border-hairline"
         data-flip
@@ -205,7 +223,12 @@
                   class="size-icon-sm flex-none"
                 />
               {/if}
-              <span>{parked && online ? parked : WORDS[word]}</span>
+              <span
+                >{#if block && online}{blockWords.row(block)}{:else}{parked &&
+                  online
+                    ? parked
+                    : WORDS[word]}{/if}</span
+              >
             </span>
           {/if}
           <span class="flex min-w-0 justify-end">
@@ -241,7 +264,23 @@
                         sent.set(machine.machineId, true);
                       }}
                     />
+                  {:else if block}
+                    <ClaudeBlock
+                      {block}
+                      machineId={machine.machineId}
+                      {online}
+                    />
                   {:else if flow instanceof SigninFlow}
+                    {#if landed && flow.phase === "idle"}
+                      <p
+                        data-slot="landed"
+                        class="type-meta flex items-start gap-space-2 text-ink-muted"
+                        role="status"
+                      >
+                        <Check />
+                        <span>{landed}</span>
+                      </p>
+                    {/if}
                     <SigninPanel
                       expected={account.email}
                       {flow}

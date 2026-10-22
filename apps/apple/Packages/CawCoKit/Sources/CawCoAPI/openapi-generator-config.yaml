@@ -88,6 +88,7 @@ typeOverrides:
     GetApiRulesByIdActivity200Status: OpenEnums.GetApiRulesByIdActivity200Status
     HarnessKind: OpenEnums.HarnessKind
     HarnessNoteKind: OpenEnums.HarnessNoteKind
+    HarnessReportRefused: OpenEnums.HarnessReportRefused
     HomeCredentialKind: OpenEnums.HomeCredentialKind
     HomeStore: OpenEnums.HomeStore
     HookCommandHandlerShell: OpenEnums.HookCommandHandlerShell

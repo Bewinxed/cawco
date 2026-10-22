@@ -3403,6 +3403,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/HarnessReportRefused`.
+    public enum HarnessReportRefused: OpenEnum {
+        case notInstalled
+        case version
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "not-installed": self = .notInstalled
+            case "version": self = .version
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .notInstalled: "not-installed"
+            case .version: "version"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.notInstalled, .version]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/HomeCredentialKind`.
     public enum HomeCredentialKind: OpenEnum {
         case apiKey
@@ -3906,6 +3944,7 @@ public enum OpenEnums {
     /// `#/components/schemas/InstallStep`.
     public enum InstallStep: OpenEnum {
         case agent
+        case claude
         case fetch
         case install
         case key
@@ -3919,6 +3958,7 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "agent": self = .agent
+            case "claude": self = .claude
             case "fetch": self = .fetch
             case "install": self = .install
             case "key": self = .key
@@ -3933,6 +3973,7 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .agent: "agent"
+            case .claude: "claude"
             case .fetch: "fetch"
             case .install: "install"
             case .key: "key"
@@ -3948,7 +3989,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.agent, .fetch, .install, .key, .listed, .path, .run, .signIn]
+        public static let allCases: [Self] = [.agent, .claude, .fetch, .install, .key, .listed, .path, .run, .signIn]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

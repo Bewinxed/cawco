@@ -76,6 +76,8 @@
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+  import ClaudeBlock from "../ClaudeBlock.svelte";
+  import { claudeBlockOf } from "../claude-block.svelte";
   import { TabDraft } from "../tab-draft.svelte";
   import AccountName from "./AccountName.svelte";
   import AccountTile from "./AccountTile.svelte";
@@ -928,6 +930,7 @@
           {@const done = doneOn(machine.machineId)}
           {@const paste = pasteOn(machine.machineId)}
           {@const device = deviceOn(machine.machineId)}
+          {@const block = paste ? claudeBlockOf(machine) : null}
           {#if device}
             <li
               class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-areas-(--mrow-areas-stack) @max-setup/setup:grid-cols-(--mrow-cols-two) data-device:items-box-start"
@@ -990,7 +993,7 @@
                   /><span>{words.someoneElse}</span>
                 {:else if !online}
                   <span>{words.offline}</span>
-                {:else if !asked}
+                {:else if !(asked || block)}
                   <Button
                     data-box
                     label={words.signIn}
@@ -1000,7 +1003,18 @@
                   />
                 {/if}
               </span>
-              {#if asked && !done}
+              {#if block && !done && online}
+                <!-- No sign-in that can't succeed: why, and Update Claude
+                     Code, in its place (ClaudeBlock). -->
+                <div
+                  data-slot="controls"
+                  class="col-(--area) row-(--area) min-w-0 group-data-paste:pt-space-2 @max-setup/setup:pt-space-2"
+                  in:unfold
+                  style:--area="controls"
+                >
+                  <ClaudeBlock {block} machineId={machine.machineId} {online} />
+                </div>
+              {:else if asked && !done}
                 <div
                   data-slot="controls"
                   class="col-(--area) row-(--area) flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 group-data-paste:pt-space-2 @max-setup/setup:pt-space-2"

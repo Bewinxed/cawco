@@ -208,6 +208,7 @@ import {
   sessiondBridge,
 } from "../sessiond-client";
 import { ChildActivity, type RingLine, readRing } from "../sessiond-custody";
+import { sawTool } from "../tools";
 import {
   forgetWakeups,
   keepWakeups,
@@ -3990,12 +3991,14 @@ export class ClaudeHarness implements Harness {
   async detect(): Promise<MachineHarnessReport> {
     probeStarted();
     if (resolveClaudeExecutable() === undefined) {
+      sawTool("claude", "missing");
       this.auth = "unauthenticated";
       return {
         harness: "claude",
         installed: false,
         auth: "unauthenticated",
         authReason: CLAUDE_NOT_INSTALLED,
+        refused: "not-installed",
         capabilities: CLAUDE_CAPABILITIES,
       };
     }
@@ -4009,12 +4012,16 @@ export class ClaudeHarness implements Harness {
     this.auth = signins.auth ?? this.auth;
     const version = said.kind === "answered" ? said.value : undefined;
     const refused = versionRefusal(said);
+    // A hand update (or one the catalog ran) moves the machine's tool row too.
+    if (version) {
+      sawTool("claude", version);
+    }
     return {
       harness: "claude",
       installed: true,
       ...(version ? { version } : {}),
       ...signins,
-      ...(refused ? { authReason: refused } : {}),
+      ...(refused ? { authReason: refused, refused: "version" as const } : {}),
       capabilities: CLAUDE_CAPABILITIES,
     };
   }

@@ -103,7 +103,9 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconChevronUp, IconSend, IconStop } from "#lib/icons.js";
+  import ClaudeBlock from "../ClaudeBlock.svelte";
   import { handBack, stages } from "../canvas/stage.svelte";
+  import { claudeBlockOf, relaunchUnblocked } from "../claude-block.svelte";
   import {
     cawco,
     readOlderPage,
@@ -1235,6 +1237,29 @@
     const next = (at + by + entries.length) % entries.length;
     highlight = entries[next].id;
   }
+
+  /**
+   * This Claude session's start was refused for its machine's Claude Code
+   * (claude-block.svelte.ts): the refusal stands over the field with its
+   * fix, Update Claude Code, and once that lands the session starts again
+   * with nothing more to press (`relaunchUnblocked`).
+   */
+  const claudeStart = $derived.by(() => {
+    const row = recallOf ? cawco.instanceIndex.byId.get(recallOf) : undefined;
+    if (!(row && row.status === "error" && row.harness === "claude")) {
+      return null;
+    }
+    const machine = cawco.machines.find(
+      (one) => one.machineId === row.machineId
+    );
+    const block = machine ? claudeBlockOf(machine) : null;
+    return machine && block ? { machine, block } : null;
+  });
+  // Any session this tab saw refused whose machine's Claude Code now runs
+  // goes again, whichever composer is on screen.
+  $effect(() => {
+    relaunchUnblocked(cawco.machines);
+  });
 
   let sendBlock = $state("");
   const sendNotice = $derived(
@@ -3300,7 +3325,20 @@
          back stands on the line that says what failed, after its words.
          While the canvas stands, it stands in the grown shape over the
          field, above its surface. -->
-    {#if sendNotice}
+    {#if claudeStart && recallOf}
+      <div
+        data-slot="claude-block"
+        class="pointer-events-auto px-space-3 group-data-drawing/dock:relative group-data-drawing/dock:z-2"
+        transition:unfold
+      >
+        <ClaudeBlock
+          block={claudeStart.block}
+          machineId={claudeStart.machine.machineId}
+          online={claudeStart.machine.status === "online"}
+          relaunch={recallOf}
+        />
+      </div>
+    {:else if sendNotice}
       <div
         data-slot="send-error"
         class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-status-fail-ink text-size-meta font-normal group-data-drawing/dock:relative group-data-drawing/dock:z-2"
