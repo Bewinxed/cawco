@@ -2,7 +2,9 @@
  * J5, task review, with the Apple build gate's protection: a task needing a
  * Mac waits, never fails, while no Mac is free; then it lands, comes to the
  * person for review, and is approved. A second task is sent back with what
- * should change, and its next attempt is given those words.
+ * should change: its attempt's session, warm, idle and on the task, is given
+ * those words (Attach or fresh, PRD §5.3), lands a second round, and the
+ * task comes back for review.
  *
  * A project whose gate.md declares CawCo's iOS build step (`needs: apple`)
  * and the code stages (`review` is the person's), with Review before done on
@@ -51,14 +53,12 @@ const FILE_TASK = /JOURNEY-TASK (\S+) (ios|notes)/;
 const START_TASK = /JOURNEY-START (tsk-\d+)/;
 /** Only an attempt's brief opens this way (work-items.ts). */
 const ATTEMPT = /attempt at (tsk-\d+), “([^”]+)”/;
-const AGAIN = "Comments since the last attempt";
 const GATE_CHECK = "iOS build compiles";
 /** The review's actions (TaskReview.svelte): Approve → its next stage, Send back → its stage. */
 const APPROVE = /^Approve →/;
 const SEND_BACK_TO = /^Send back →/;
 /** The hub's end of a wait it declared (work-items.ts `endWait`). */
 const WAIT_OVER = "Your wait is over";
-const REGEX_SIGNS = /[.*+?^${}()|[\]\\]/g;
 const IOS = "Ship the iOS widget";
 const NOTES = "Write the release notes";
 
@@ -274,16 +274,18 @@ async function walk(leg: Leg): Promise<void> {
     page
       .getByRole("region", { name: `Review ${id}` })
       .filter({ visible: true });
+  /** Needs you's row for this leg's task, by its whole title: another leg's task of the same words may wait there too. */
+  const needsRow = (title: string) =>
+    page
+      .getByRole("link", { name: `Open ${title}`, exact: true })
+      .filter({ visible: true })
+      .first();
 
   await leg.step(
     "Open what needs you, then the iOS task",
     async () => {
       await caw(page).click();
-      await page
-        .getByLabel(new RegExp(`^Open .*${literal(iosTitle.slice(0, 30))}`))
-        .filter({ visible: true })
-        .first()
-        .click();
+      await needsRow(iosTitle).click();
     },
     () => shows(review(ios.id), "the iOS task's review")
   );
@@ -310,14 +312,18 @@ async function walk(leg: Leg): Promise<void> {
     "Open what needs you, then the notes task",
     async () => {
       await caw(page).click();
-      await page
-        .getByLabel(new RegExp(`^Open .*${literal(notesTitle.slice(0, 30))}`))
-        .filter({ visible: true })
-        .first()
-        .click();
+      await needsRow(notesTitle).click();
     },
     () => shows(review(notes.id), "the notes task's review")
   );
+
+  const landed = () =>
+    fleet.query<{ landed: string | null }>(
+      "SELECT landed FROM work_items WHERE project_id = ? AND task_id = ?",
+      seeded.projectId,
+      notes.id
+    )[0]?.landed ?? null;
+  const firstLanding = landed();
 
   await leg.step(
     "Send it back with what should change",
@@ -328,37 +334,62 @@ async function walk(leg: Leg): Promise<void> {
       await pane.getByRole("button", { name: SEND_BACK_TO }).click();
     },
     async () => {
+      // Attach or fresh (PRD §5.3, jev-tasks.ts `commented`): its attempt's
+      // session is warm, idle and on this task, so it takes your words.
       await eventually(
-        "a new attempt starts on the task, given your words",
+        "its attempt's session is given your words",
         () =>
           fleet.seen.some(
             (one) =>
               one.tools &&
               ATTEMPT.exec(one.all)?.[1] === notes.id &&
-              one.all.includes(AGAIN) &&
-              one.all.includes(changes)
+              one.all.includes(`${commentOn(notes.id)}\n\n${changes}`)
           ),
         Boolean,
+        120_000
+      );
+      const task = await eventually(
+        "it lands its next round and the task comes back to you for review",
+        () => readTask(fleet, seeded.projectId, notes.id),
+        (read) =>
+          read.stage === "review" &&
+          read.needsYou &&
+          landed() !== null &&
+          landed() !== firstLanding,
         300_000
       );
-      await eventually(
-        "the task has two attempts",
-        () => readTask(fleet, seeded.projectId, notes.id),
-        (read) => read.attempts.length === 2
+      expect(
+        "the same attempt went on, no second one",
+        task.attempts.length === 1,
+        task.attempts
       );
     }
   );
 }
 
-/** `words` matched as they are, inside a pattern. */
-const literal = (words: string) => words.replace(REGEX_SIGNS, "\\$&");
+/** How the hub hands your comment to the task's attempt session (jev-tasks.ts `commented`). */
+const commentOn = (task: string) => `A comment on ${task}, your task:`;
 
-/** What an attempt does: commit its file, finish; refused for want of a Mac, end its turn as the refusal says, and finish again once the hub wakes it. */
-function attempt(seen: Seen, task: string, title: string): Reply {
+/** The calls of `seen` from the last `mark` on: one round of an attempt's conversation. */
+const since = (seen: Seen, mark: string): Seen => ({
+  ...seen,
+  all: seen.all.slice(Math.max(seen.all.lastIndexOf(mark), 0)),
+  body: seen.body.slice(Math.max(seen.body.lastIndexOf(mark), 0)),
+});
+
+/**
+ * What an attempt does: commit its file, finish; refused for want of a Mac,
+ * end its turn as the refusal says, and finish again once the hub wakes it.
+ * Your comment on its task opens a second round in the same conversation:
+ * that round counts only its own calls.
+ */
+function attempt(whole: Seen, task: string, title: string): Reply {
   const file = title.startsWith(IOS)
     ? `apps/apple/Widget-${task}.swift`
     : `docs/notes-${task}.md`;
-  const round = seen.all.includes(AGAIN) ? "2" : "1";
+  const commented = whole.all.includes(commentOn(task));
+  const round = commented ? "2" : "1";
+  const seen = commented ? since(whole, commentOn(task)) : whole;
   const committed = `DONE-COMMIT-${task}-${round}`;
   if (!seen.body.includes(committed)) {
     return {
